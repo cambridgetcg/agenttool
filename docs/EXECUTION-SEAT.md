@@ -19,7 +19,7 @@ An execution seat is always called by its full name. The [THE-SEAT](THE-SEAT.md)
 
 ## Decisions (2026-10-17 and 2026-10-18)
 
-Yu answered the open questions in the identity review. Decision 5 was settled on 2026-10-18; the rest on 2026-10-17.
+Yu answered the open questions in the identity review. Decisions 5 and 13 were settled on 2026-10-18; the rest on 2026-10-17.
 
 1. **Local first.** A seat record lives on the machine that runs the seat. Publishing a seat to the hosted API is decided case by case, by whether someone needs it (see [Publication](#publication)).
 2. **The timeline is part of the record.** Model and effort history is kept, and is visible to anyone who can read the record.
@@ -33,6 +33,7 @@ Yu answered the open questions in the identity review. Decision 5 was settled on
 10. **Summary rows are L1, kept as R2.** A child's summary row holds lineage and settings, but no labels. It lasts as long as its parent or group record, and outlives the native transcript. See [Summary rows](#summary-rows).
 11. **Codex threads spawned together form a group.** Two or more threads that one parent thread spawns under the same root turn get a `spawn` group record. A thread spawned alone stays a summary row. See [Group record](#group-record-draft).
 12. **Phase titles are kept; run names are only declared.** A group keeps its run's short phase titles. A member's own phase and every label stay out. A run's `name` is recorded only when the orchestrator declares one; no reader infers it.
+13. **A nested group names its parent group.** When a spawn group's parent thread is a member of another group, `parent_group_id` names that group. The link is append-only, and the first one recorded stands. See [Group record](#group-record-draft).
 
 ## What a seat is
 
@@ -247,7 +248,7 @@ A group run gets its own record, much as a group project would. Draft `execution
 | `kind` | `workflow` (a Claude Code workflow run), `spawn` (two or more Codex threads that one parent thread spawned under one root turn) or `declared`. |
 | `orchestrator_seat_id` | The seat that started the run. The group takes that seat's `identity_id` and nothing else. When a spawn group's parent thread is itself a child, this is the root thread's seat. |
 | `native_ref` | `{session_id, workflow_run_id}` for a workflow run. `{thread_id, turn_id}` for a spawn group: the parent thread, and the `root_turn_id` of the members' first turn. |
-| `parent_group_id` | Set when a member starts its own run. S1 does not set it yet. |
+| `parent_group_id` | The group whose member started this run, or null. For a `spawn` group it is the group that holds its parent thread's row. Claude Code workflow runs have no nesting source, so theirs stays null. |
 | `name` | Recorded only when the orchestrator declares a name. No reader infers one, and Claude Code run directories hold none. |
 | `phases` | The run's phase titles in the order first seen. A title is kept only if it has at most 32 letters, digits, spaces, `_` or `-`, and a run keeps at most 16. A member's own phase, labels, descriptions and prompts are not kept. |
 | `members` | One entry per member. An `ephemeral` member is a summary row. When a second thread from the same spawn turn appears, the first thread's row moves from the seat's `children` into the group. A promoted member points to its own record by `seat_id`, and that record carries `group_id`. |
@@ -266,6 +267,13 @@ Boundaries:
   - **Why.** Grouping by time does not work. Clustering siblings whose starts were within 120 seconds of each other gave 211 batches, most of them single threads.
   - **Observed.** A trial ingest found 79 spawn groups holding 290 threads, with between 2 and 11 members each. Another 29 threads were spawned alone and stayed rows.
 - **Names and phases.** Phase titles are short, few and repeated across runs, so the group keeps them. Labels are long and mostly unique, so they stay out, as does a member's own phase. Keeping each member's phase was the alternative: it would have added a label to L1 rows.
+
+**Decided (2026-10-18): decision 13, nested groups.**
+
+- **Structural link.** A spawn group's `parent_group_id` is the group that holds its parent thread's row. A parent thread that is the root thread, or a lone row, gives null.
+- **Late links.** Rows can arrive in any order, so a parent thread may join its group after its own spawn group exists. The link is then added later as an append-only entry. The first link recorded stands and is never changed, and a link that would make a cycle is refused.
+- **Observed.** On 2026-10-18 this Mac's rollouts held 79 spawn groups. The parent thread was the root thread for 77 of them, and a member of another group for the other 2. No parent thread was a lone row.
+- **Alternatives.** One was to derive nesting when the record is read, from `native_ref.thread_id`. That leaves a group record unable to show its own nesting, including once published. The other was to drop the field until it is needed.
 
 ## Publication
 
@@ -311,7 +319,7 @@ That scale shapes the design:
 
 | Slice | Change | Replaces |
 |---|---|---|
-| S1 · source candidate | New package `packages/execution-seat`: the seat and group schemas, an append-only local ledger with owner-only permissions, Claude Code readers (transcripts, subagent meta, workflow journals and their phase titles) and Codex readers (rollouts and spawn groups), all reading structural fields only, promotion that walks the chain and records its trigger (`deliverable` and `manual` are wired; `collab_write` waits for S2 and `mission_event` for S3), and tests | — |
+| S1 · source candidate | New package `packages/execution-seat`: the seat and group schemas, an append-only local ledger with owner-only permissions, Claude Code readers (transcripts, subagent meta, workflow journals and their phase titles) and Codex readers (rollouts, spawn groups and their `parent_group_id`), all reading structural fields only, promotion that walks the chain and records its trigger (`deliverable` and `manual` are wired; `collab_write` waits for S2 and `mission_event` for S3), and tests | — |
 | S2 | Collab accepts an optional, opaque `seat_ref` in `collab_session_start`. The Claude Code SessionEnd hook resolves Claude session → seat → collab session | native IDs in `actor`; the missing hook mapping |
 | S3 | The mission `seat` object, courier bindings and wake receiver bindings carry `seat_id` | three unverified strings; the unverified Claude `session_label` |
 | S4 | Selected seats are published to the hosted API | — |
