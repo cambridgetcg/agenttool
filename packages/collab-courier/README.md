@@ -57,7 +57,12 @@ directories are removed on close/startup failure; an uncatchable parent crash
 can leave an orphan for explicit host cleanup. The handshake must return exactly
 the selected `0.4.0`, `0.5.0` or `0.5.1-dev.0` version. Collab 0.5.0 is released
 on GitHub only, not on npm; Collab source on main is the unreleased
-`0.5.1-dev.0` development build, which the fixtures run. Verify the protected
+`0.5.1-dev.0` development build, which the fixtures run. Set `local.version` to
+what the selected entrypoint itself announces: a main source checkout reports
+`0.5.1-dev.0`, while the 0.5.0 GitHub archive or a checkout of its tag reports
+`0.5.0`. A mismatch fails closed with `mcp_version_mismatch`. A `-dev` pin names
+a moving source line, not exact bytes, so it does not identify which main
+commit is running. Verify the protected
 receipt and registry separately. Public npm 0.4.0 is unchanged. This courier remains private
 at `0.1.0-dev.0`. Only dedicated DB/session references, isolated
 HOME/XDG_CONFIG_HOME, fixed PATH and TMPDIR reach the child. No network secret

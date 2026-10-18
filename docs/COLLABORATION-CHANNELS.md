@@ -93,7 +93,7 @@ Acknowledgement records a session cursor, not agreement or correctness.
 `collab_next` also participates in liveness/coordination maintenance; it is not
 a side-effect-free wait primitive.
 
-**Release-candidate local wait (0.5.0):** `collab_events_wait` now observes an anchored,
+**Local wait (since the 0.5.0 GitHub release; not in npm 0.4.0):** `collab_events_wait` observes an anchored,
 bounded event-only `JournalPage`, with cancellation and a finite idle deadline.
 The source defaults to 10 events (maximum 50) and a 30-second wait (maximum
 30 seconds; zero reads immediately). The page has a 256 KiB UTF-8 JSON cap;
@@ -139,8 +139,10 @@ Model-facing input must not choose new URLs, keys, tokens, arbitrary paths, or
 recipients. The source reuses existing signing/session primitives, not another
 identity or credential store. A narrow interface does not narrow the underlying
 project bearer's broad project authority. The Bun runtime binary, entrypoint, and
-MCP version are host-pinned; the importer accepts exactly the selected 0.4.0 or
-0.5.0 handshake. The latter remains a release candidate. Node is rejected: the existing Collab bundle depends on
+MCP version are host-pinned; the importer accepts exactly the selected 0.4.0
+(npm), 0.5.0 (GitHub release, not npm) or 0.5.1-dev.0 (unreleased `main`
+development build) handshake. A `-dev` pin names a moving source line, not
+exact bytes. Node is rejected: the existing Collab bundle depends on
 `bun:sqlite`. Child-environment narrowing is not a sandbox.
 
 The selected wire is the **existing** `agent-correspondence/v0.1`

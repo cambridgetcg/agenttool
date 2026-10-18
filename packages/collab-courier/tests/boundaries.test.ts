@@ -5,11 +5,18 @@ import { test, expect, spyOn } from 'bun:test';
 import { chmodSync, writeFileSync, readFileSync, mkdirSync, existsSync, rmSync, statSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fixture, FakeNetwork, FakeTelegram, key, sender } from './helpers.js';
-import { parseBinding, summary, decimal, bindingKey, readBinding, until, type Binding } from '../src/binding.js';
+import { bindingSchema, parseBinding, summary, decimal, bindingKey, readBinding, until, type Binding } from '../src/binding.js';
 import { Ledger, ExclusiveOwner, type Ingress, type Selection } from '../src/ledger.js';
 import { CorrespondenceWire, signSelection, wakeHint } from '../src/correspondence.js';
 import { createSignedCorrespondenceEvent } from '@agenttool/sdk';
 import { McpImporter } from '../src/importer.js';
+import { COLLAB_PACKAGE_VERSION } from '../../collab/src/version.js';
+
+test('exact local pin accepts the version the source-tree Collab MCP announces',()=>{
+  // Fixtures run packages/collab from source. Bumping its src/version.ts needs a deliberate
+  // widening of bindingSchema.local.version; otherwise every fixture fails at parse or handshake.
+  expect(bindingSchema.shape.local.shape.version.options).toContain(COLLAB_PACKAGE_VERSION);
+});
 
 for(const value of ['', 'x'.repeat(1001),'\ud800','\udfff','a\0b'])test(`summary refuses invalid bounded scalar text ${JSON.stringify(value).slice(0,30)}`,()=>{expect(()=>summary(value)).toThrow('invalid_summary');});
 test('summary preserves exact Unicode scalars including supplementary characters',()=>{expect(summary('🙂'.repeat(1000))).toBe('🙂'.repeat(1000));});

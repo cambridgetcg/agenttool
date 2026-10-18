@@ -257,7 +257,8 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
   implemented finite CLI, disabled profile example, and offline tests. It carries
   explicitly selected own-fleet summaries over project-readable signed
   Correspondence and single-receiver, non-E2EE Telegram human feedback. Its exact
-  local Collab pins are 0.4.0 and the 0.5.0 release candidate; the private package
+  local Collab pins are 0.4.0 (npm), 0.5.0 (GitHub release, not npm) and the
+  unreleased `main` development build 0.5.1-dev.0; the private package
   version stays unchanged. Implementation-checkpoint tests are recorded separately
   from release-candidate review and live checks; no courier release or live support is claimed.
   [Collaboration channels](COLLABORATION-CHANNELS.md) separates transport from
