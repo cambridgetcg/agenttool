@@ -2,7 +2,7 @@
 
 > **Type:** proposal
 > **Purpose:** Define one record for "a runtime acting for an identity", so that collab, missions, the courier, wake receivers and Correspondence can stop inventing their own seat fields.
-> **Evidence:** Design decisions recorded 2026-10-17. Vendor behaviour comes from the cited documentation and the openai/codex source at `ce0323f`. Local counts come from one Mac's transcripts, reading structural fields only. **Source:** slice S1 is an unreleased source candidate in [`packages/execution-seat`](../packages/execution-seat/README.md). **Proposed:** everything else.
+> **Evidence:** Design decisions recorded 2026-10-17. Vendor behaviour comes from the cited documentation and the openai/codex source at `ce0323f`. Local counts come from one Mac's transcripts, reading structural fields only. **Source:** slices S1 and S2 are unreleased source candidates in [`packages/execution-seat`](../packages/execution-seat/README.md) and [`packages/collab`](../packages/collab/README.md). **Proposed:** everything else.
 > **Compass:** [Collaboration roadmap](COLLABORATION-ROADMAP.md#keep-the-records-distinct) · [Mission contract](COLLABORATION-MISSIONS.md) · [Identity anchor](IDENTITY-ANCHOR.md) · [Canonical bytes](CANONICAL-BYTES.md)
 
 The roadmap already defines an execution seat as "a device/harness/session acting for that identity", but there is no record for it. Each module writes its own version instead:
@@ -41,7 +41,7 @@ Yu answered the open questions in the identity review. Decisions 5 and 13 were s
 - **Owned.** A seat belongs to at most one identity. An unbound seat is allowed, since most local sessions have no AgentTool identity. One identity may have any number of seats at the same time.
 - **One native handle.** A seat is tied to exactly one native session handle. The same handle always means the same seat, so a resume keeps the seat.
 - **Settings change.** Changing model or effort keeps the seat and appends a timeline entry.
-- **Liveness.** An end is recorded only when one is actually seen. Otherwise liveness is derived from recent activity, the way collab derives `stale`, and that derivation changes nothing.
+- **Liveness.** An end is recorded only when one is actually seen. Otherwise liveness is derived from recent activity, the way collab derives `stale`, and that derivation changes nothing. A native session can be resumed after an end, so a later `seat.resumed` entry reopens the seat; the end stays in the ledger.
 
 ## Record: `execution-seat/v1`
 
@@ -106,7 +106,8 @@ Timeline rules:
 - **Resume.** `--resume` and `--continue` keep `session_id`, so the seat stays the same.
 - **Fork.** `--fork-session` and `/branch` create a new session ID. That is a new seat with relation `fork`.
 - **Compaction** keeps the session ID (SessionStart source `compact`), so it does not create a new seat.
-- **Continuation.** A new session ID that points back to another session through a lineage reference is a new seat with relation `continuation`. Whether `/clear` (SessionStart source `clear`) always behaves this way will be checked in S1.
+- **Continuation.** A new session ID that points back to another session through a lineage reference is a new seat with relation `continuation`.
+  - **`/clear`.** No local transcript records it: on 2026-10-17, 0 of this Mac's Claude Code transcripts held a `continued-in` line. The S2 hook pairs it instead. In one process, a SessionEnd with reason `clear` followed by a SessionStart with source `clear` makes the new seat a continuation of the old one.
 - **Subagents.** A subagent's transcript is `<session>/subagents/agent-<id>.jsonl`. Most of these files carry the parent's `sessionId`. A subagent seat therefore uses the parent's `session_id` plus `agent_id`, with relation `child`.
   - **Metadata.** A sibling `agent-<id>.meta.json` holds `agentType` and `spawnDepth`. It can also hold the parent's `toolUseId` and a nested `parentAgentId`.
   - **No content.** The meta file's `description` is free text written by the parent, so the seat record never copies it.
@@ -118,10 +119,17 @@ Timeline rules:
   - **Phases are short.** 101 of the 405 runs named phases, with at most 8 per run. The 71 distinct titles were at most 12 characters long, none held a slash or colon, and 3% held a space.
   - **No run name.** Nothing in the run directory names the run.
 - **Settings sources.** Each assistant line in the transcript carries `message.model`, `requestedModel` and `effort` (basis `transcript`). Hook input carries `effort.level` (basis `hook`).
+- **Hooks and environment.** These facts were observed on Claude Code 2.1.302 with a headless probe on 2026-10-17, or are documented where noted.
+  - **MCP servers.** Stdio MCP servers receive `CLAUDE_CODE_SESSION_ID` and keep the ID they were spawned with, while hooks and Bash see it change on `/clear` ([env vars](https://code.claude.com/docs/en/env-vars); the spawn-time value was observed).
+  - **Subagents.** A subagent that names a configured MCP server shares the parent session's connection ([subagents](https://code.claude.com/docs/en/sub-agents)). A Claude subagent's collab calls therefore belong to the parent's collab session. S2's `PostToolUse` hook attributes a subagent's collab write to it by `agent_id`.
+  - **Hook environment.** Hook commands see `CLAUDE_CODE_SESSION_ID`, which equals the input's `session_id`, and `CLAUDE_PID`, which is the Claude Code process. `CLAUDE_PID` was observed, not documented.
+  - **Subagent hook input.** Hook input from inside a subagent (PreToolUse, PostToolUse, SubagentStart, SubagentStop) carries `agent_id` and `agent_type`. In a subagent's `PostToolUse`, `transcript_path` names the parent session's own transcript, and the subagent's `agent-<id>.meta.json` and transcript already exist (observed on 2026-10-18 with the same probe). In an end-to-end probe the same day, a `PostToolUse` matcher `mcp__.*__collab_.*` fired for a subagent's call to a stand-in `collab_task_claim` MCP tool, and the S2 hook gave the subagent its own record with trigger `collab_write`.
+  - **SessionEnd.** Its reasons are `clear`, `resume` (an interactive `/resume`), `logout`, `prompt_input_exit` and `other`, and its default timeout is 1.5 seconds ([hooks](https://code.claude.com/docs/en/hooks)). A headless `claude -p` run ended with `other`.
 
 **Codex**: `native_ref` is `{thread_id, session_id}`. `session_id` is the root thread's ID.
 
-- **Resume** keeps `thread_id` and appends to the same rollout file, so the seat stays the same. Resume also restarts MCP servers (read from source, not observed). A collab MCP therefore starts a new collab session on every resume unless `AGENTOOL_COLLAB_SESSION_FILE` is set. Linking those collab sessions back to one seat is one of the jobs of S2.
+- **Resume** keeps `thread_id` and appends to the same rollout file, so the seat stays the same. Resume also restarts MCP servers (read from source, not observed). A collab MCP therefore starts a new collab session on every resume unless `AGENTOOL_COLLAB_SESSION_FILE` is set.
+  - **Seat refs.** Codex sets `CODEX_THREAD_ID` for shell commands (`codex-rs/protocol/src/shell_environment.rs`). Its MCP launch code adds no thread id (`codex-mcp/src/rmcp_client.rs`), and on codex-cli 0.162.1 MCP servers were observed with no `CODEX_*` variable at all (2026-10-18). A Codex host therefore links its collab sessions to a seat by declaring `AGENTOOL_COLLAB_SEAT_REF` for each run and ending by that ref once the run exits. Spawned threads start their own MCP servers with the same configuration (observed), so their sessions declare the run's ref too. S2's Codex hook attributes a spawned thread's collab writes by `agent_id` instead.
 - **Fork** gives a new `thread_id` with `forked_from_id`, while `session_id` stays the same. That is a new seat with relation `fork`.
 - **Spawned threads** carry `source.subagent.thread_spawn`, which holds `parent_thread_id`, `depth`, `agent_path`, `agent_nickname` and `agent_role`. They are child seats.
   - **Count.** On 2026-10-17, 319 of the 396 local rollouts were child threads.
@@ -319,8 +327,8 @@ That scale shapes the design:
 
 | Slice | Change | Replaces |
 |---|---|---|
-| S1 · source candidate | New package `packages/execution-seat`: the seat and group schemas, an append-only local ledger with owner-only permissions, Claude Code readers (transcripts, subagent meta, workflow journals and their phase titles) and Codex readers (rollouts, spawn groups and their `parent_group_id`), all reading structural fields only, promotion that walks the chain and records its trigger (`deliverable` and `manual` are wired; `collab_write` waits for S2 and `mission_event` for S3), and tests | — |
-| S2 | Collab accepts an optional, opaque `seat_ref` in `collab_session_start`. The Claude Code SessionEnd hook resolves Claude session → seat → collab session | native IDs in `actor`; the missing hook mapping |
+| S1 · source candidate | New package `packages/execution-seat`: the seat and group schemas, an append-only local ledger with owner-only permissions, Claude Code readers (transcripts, subagent meta, workflow journals and their phase titles) and Codex readers (rollouts, spawn groups and their `parent_group_id`), all reading structural fields only, promotion that walks the chain and records its trigger (`deliverable` and `manual` are wired here, `collab_write` by the S2 hooks; `mission_event` waits for S3), and tests | — |
+| S2 · source candidate | Collab accepts an optional, opaque `seat_ref` in `collab_session_start`, defaulting to the host's declaration (`AGENTOOL_COLLAB_SEAT_REF`, else `claude-code:<CLAUDE_CODE_SESSION_ID>`), and keeps it in the `session.joined` payload without a schema change. `agenttool-collab-host end --seat-ref` ends the active sessions that declared a ref. A Claude Code SessionStart/SessionEnd hook (`agenttool-execution-seat hook claude-code`) records starts, ends, resumes and `/clear` continuations, and on exit ends the collab sessions of every session its process hosted. Its `PostToolUse` handler promotes a subagent on its first collab write (trigger `collab_write`). A Codex hook (`hook codex`) does the same for a spawned thread from its own rollout, and records top-level thread starts and ends; it ends no collab sessions | native IDs in `actor`; the missing hook mapping |
 | S3 | The mission `seat` object, courier bindings and wake receiver bindings carry `seat_id` | three unverified strings; the unverified Claude `session_label` |
 | S4 | Selected seats are published to the hosted API | — |
 

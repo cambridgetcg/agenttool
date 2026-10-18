@@ -11,6 +11,7 @@ import {
 import { dirname, isAbsolute, join, posix, resolve } from "node:path";
 import { canonicalJson } from "./canonical.js";
 import { CollabError } from "./errors.js";
+import { validateSeatRef } from "./seat-ref.js";
 import {
   COLLAB_COORDINATION_PROTOCOL,
   COLLAB_SESSION_PROTOCOL,
@@ -1659,9 +1660,11 @@ export class CollabStore {
     role?: string;
     parent_session_id?: string;
     repository_key?: string;
+    seat_ref?: string | null;
   }): SessionHandle {
     const actor = validateActor(input.actor);
     const role = optionalText(input.role, "role", 200);
+    const seatRef = input.seat_ref == null ? null : validateSeatRef(input.seat_ref);
     const identity = inspectRepository(input.root_path, input.repository_key);
     const partitions = this.db.query(`
       SELECT id FROM workspaces
@@ -1728,6 +1731,8 @@ export class CollabStore {
         worktree_id: worktreeRow.id,
         role,
         parent_session_id: parentSessionId,
+        // Only when declared, so a session without one keeps the old payload shape.
+        ...(seatRef ? { seat_ref: seatRef } : {}),
         identity_boundary:
           "session_credentials_fence_cooperating_local_clients_but_do_not_authenticate_a_person_or_model",
       }, id);
@@ -1998,6 +2003,30 @@ export class CollabStore {
     const row = this.db.query(`SELECT * FROM coordination_sessions WHERE id = ?`)
       .get(id) as CoordinationSessionRow | null;
     return row ? this.sessionProjection(row) : null;
+  }
+
+  /** The seat ref a session declared when it joined, or null. An unverified routing hint. */
+  sessionSeatRef(sessionId: string): string | null {
+    const id = validateId(sessionId, "session_id");
+    const row = this.db.query(`
+      SELECT json_extract(payload_json, '$.seat_ref') AS seat_ref FROM events
+      WHERE type = 'session.joined' AND entity_id = ?
+    `).get(id) as { seat_ref: unknown } | null;
+    return typeof row?.seat_ref === "string" ? row.seat_ref : null;
+  }
+
+  /** Active coordination sessions that declared one of these seat refs when they joined, oldest first. */
+  activeSessionIdsForSeatRefs(seatRefs: string[]): string[] {
+    const refs = [...new Set(seatRefs.map(validateSeatRef))];
+    if (refs.length === 0) return [];
+    const rows = this.db.query(`
+      SELECT s.id FROM coordination_sessions s
+      JOIN events e ON e.type = 'session.joined' AND e.entity_id = s.id
+      WHERE s.status = 'active'
+        AND json_extract(e.payload_json, '$.seat_ref') IN (${refs.map(() => "?").join(", ")})
+      ORDER BY s.joined_at, s.id
+    `).all(...refs) as Array<{ id: string }>;
+    return rows.map((row) => row.id);
   }
 
   /**

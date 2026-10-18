@@ -352,6 +352,11 @@ export class SeatLedger {
             seat.end_reason = (body.end_reason as string | null) ?? null;
           }
           break;
+        case "seat.resumed":
+          // A native session can be resumed after an observed end; the end stays in the ledger.
+          seat.ended_at = null;
+          seat.end_reason = null;
+          break;
         case "seat.child": {
           const row = normalizeRow(body as unknown as SummaryRow);
           children.set(row.child_ref, mergeRow(children.get(row.child_ref), row));
@@ -469,6 +474,17 @@ export class SeatLedger {
     return this.transaction(() => {
       if (this.requireSeat(seatId).ended_at) return false;
       this.append(seatId, "seat.end", { ended_at: at, end_reason: token(reason) });
+      return true;
+    });
+  }
+
+  /** Reopen a seat whose end was observed, when the same native session is seen running again. */
+  resumeSeat(seatId: string, resumedAt: string): boolean {
+    const at = timestamp(resumedAt);
+    if (!at) throw new SeatError("invalid_time", "resumed_at must be a timestamp");
+    return this.transaction(() => {
+      if (!this.requireSeat(seatId).ended_at) return false;
+      this.append(seatId, "seat.resumed", { at });
       return true;
     });
   }

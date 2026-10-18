@@ -399,3 +399,17 @@ test("a fresh home under a missing parent is created privately", () => {
   ledger = SeatLedger.open(nested);
   expect(statSync(nested).mode & 0o777).toBe(0o700);
 });
+
+describe("ends and resumes", () => {
+  test("an observed end can be followed by a resume, and both stay in the ledger", () => {
+    const { seat } = ledger.openSeat({ harness: "claude-code", native_ref: { session_id: CLAUDE_SESSION } });
+    expect(ledger.resumeSeat(seat.seat_id, "2026-10-17T09:00:00.000Z")).toBe(false);
+    expect(ledger.endSeat(seat.seat_id, "2026-10-17T09:10:00.000Z", "prompt_input_exit")).toBe(true);
+    expect(ledger.endSeat(seat.seat_id, "2026-10-17T09:11:00.000Z", "other")).toBe(false);
+    expect(ledger.resumeSeat(seat.seat_id, "2026-10-17T10:00:00.000Z")).toBe(true);
+    expect(ledger.getSeat(seat.seat_id)).toMatchObject({ ended_at: null, end_reason: null });
+    expect(ledger.endSeat(seat.seat_id, "2026-10-17T10:30:00.000Z", "logout")).toBe(true);
+    expect(ledger.getSeat(seat.seat_id)).toMatchObject({ ended_at: "2026-10-17T10:30:00.000Z", end_reason: "logout" });
+    expect(() => ledger.resumeSeat(seat.seat_id, "not a time")).toThrow("timestamp");
+  });
+});

@@ -94,6 +94,20 @@ token or absolute credential-file path. The journal stores only a token hash.
 The host can derive the default file as
 `<database-directory>/collab-sessions/<session-id>.json`.
 
+**Seat ref (unreleased).** A session may declare a `seat_ref`: an opaque,
+unverified routing hint naming the execution seat that started it, 1 to 200
+characters of letters, digits and `. _ : @ / + -`. Without one, the MCP
+process declares `AGENTOOL_COLLAB_SEAT_REF` when the host set it, else
+`claude-code:<CLAUDE_CODE_SESSION_ID>` (Claude Code gives stdio MCP servers
+the session ID current when it spawned them; the server keeps that ID after
+`/clear`), else `codex:<CODEX_THREAD_ID>` (Codex sets that variable for shell
+commands; its MCP launch code does not add it, so this applies only where a
+host forwards it). The ref is kept only
+in the `session.joined` event payload and returned by `collab_session_start`;
+a session without one keeps the old payload shape, and the schema is
+unchanged. It authenticates nothing and grants nothing, exactly like `actor`;
+its one use inside Collab is the host-side end by seat ref below.
+
 The planes may be used together but are not linked identities: matching labels
 or one shared workspace do not make a presence record the credential-bound
 session. Use presence only for optional discovery and routing. Use the bound
@@ -243,7 +257,9 @@ Most sessions need only this loop. Each step names the tool and the field that
 carries the next step.
 
 1. **Start.** `collab_session_start` with `root_path`, an `actor` label, an
-   optional free-text `role`, and, for a delegated child, `parent_session_id`.
+   optional free-text `role`, for a delegated child `parent_session_id`, and
+   optionally a `seat_ref` (unreleased; usually left to the host's
+   declaration).
 2. **Poll and acknowledge.** `collab_next`, process the page, then
    `collab_cursor_ack` with its `next_anchor`. Reconcile new reports, reviews,
    handoffs, and lease changes; query history with `collab_report_list` when
@@ -351,6 +367,29 @@ credential file stayed; remove it by hand. `--db` defaults to the database the
 MCP server would use, and the CLI never creates one (`journal_not_found`). It
 is not an MCP tool.
 
+**End by seat ref (unreleased).** A host whose agent process is exiting, or
+already gone, can end the sessions that process started without knowing their
+IDs:
+
+```bash
+agenttool-collab-host end --seat-ref <ref> [--seat-ref <ref>...] --reason <text> [--release-leases] [--db <path>]
+```
+
+It ends every **active** session that declared one of the refs, oldest first,
+from its credential file at the default path, exactly as `--session-file`
+would. It prints one line, `status: "ended_by_seat_ref"`, with `seat_refs` and
+one entry per matching session: `ended`, `already_ended`, `credential_missing`
+(no credential file, so the session stays open), or `error` with its code (for
+example `session_has_active_leases` without `--release-leases`). One session's
+refusal does not stop the others, and the exit code is 1 only when an entry is
+`error`. No match is an empty `sessions` list. `--seat-ref` and
+`--session-file` are mutually exclusive.
+
+A seat ref is an unverified hint, and ending resumes the session host-side,
+which fences any process still bound to it. Use it only for a process that is
+exiting or gone. Two live processes that declared the same ref (for example
+the same Claude Code session resumed in two terminals) both match it.
+
 ### Host doorbell wait (unreleased)
 
 `agenttool-collab-host wait` lets a host wait between model turns, for
@@ -402,7 +441,13 @@ thread: start it in the first round, set `AGENTOOL_COLLAB_SESSION_FILE` to
 its credential file for later rounds so the MCP process resumes it, and end
 it after the final round. A one-off run ends its session before it exits, or
 the host ends it with `agenttool-collab-host end` afterwards. Otherwise every
-round leaves another active session behind.
+round leaves another active session behind. A host that does not learn the
+session ID can declare a ref per run instead (unreleased), for example
+`codex exec -c 'mcp_servers.agenttool-collab.env.AGENTOOL_COLLAB_SEAT_REF="run:<name>"' ...`,
+and run `agenttool-collab-host end --seat-ref run:<name> --reason <text>`
+once the run has exited. Codex starts separate MCP servers for each spawned
+thread with the same configuration (read from the Codex source), so a spawned
+thread's session declares the same ref and is ended with the run.
 
 ### Delegation and lineage
 

@@ -12,6 +12,7 @@ import {
   type SessionHandle,
   type TaskStatus,
 } from "./protocol.js";
+import { defaultSeatRef, MAX_SEAT_REF } from "./seat-ref.js";
 import {
   removeSessionCredentialFile,
   writeSessionCredentialFile,
@@ -78,6 +79,8 @@ export interface CollabMcpServerOptions {
     handle: SessionHandle;
     credential_file: string;
   };
+  /** Where a session start without seat_ref looks for one (defaults to process.env). */
+  environment?: Record<string, string | undefined>;
 }
 
 interface BoundSession {
@@ -90,6 +93,7 @@ export function buildCollabMcpServer(
   options: CollabMcpServerOptions = {},
 ): McpServer {
   let binding: BoundSession | null = options.resumed_session ?? null;
+  const environment = options.environment ?? process.env;
   const server = new McpServer(
     { name: "agenttool-collab", version: "0.5.0" },
     {
@@ -252,6 +256,12 @@ export function buildCollabMcpServer(
         role: z.string().max(200).optional(),
         parent_session_id: z.string().min(1).optional(),
         repository_key: z.string().min(1).max(1000).optional(),
+        seat_ref: z.string().min(1).max(MAX_SEAT_REF).optional()
+          .describe(
+            "Opaque, unverified routing hint naming the execution seat that started this session. " +
+              "Omit it to use the host's declaration (AGENTOOL_COLLAB_SEAT_REF, else claude-code:<CLAUDE_CODE_SESSION_ID>); " +
+              "it authenticates nothing",
+          ),
       },
     },
     async (input) => call(() => {
@@ -262,12 +272,13 @@ export function buildCollabMcpServer(
           { session_id: binding.handle.session.id },
         );
       }
-      const handle = store.startSession(input);
+      const seatRef = input.seat_ref ?? defaultSeatRef(environment);
+      const handle = store.startSession({ ...input, seat_ref: seatRef });
       const credentialFile = store.defaultSessionCredentialPath(handle.session.id);
       try {
         const path = writeSessionCredentialFile(credentialFile, handle.credential);
         binding = { handle, credential_file: path };
-        return publicSessionBinding(binding);
+        return publicSessionBinding(binding, seatRef);
       } catch (error) {
         try {
           store.endSession({ ...handle.credential, reason: "credential_file_write_failed" });
@@ -1130,11 +1141,12 @@ function leaseMutationSchema<T extends z.ZodRawShape>(extra: T) {
   };
 }
 
-function publicSessionBinding(binding: BoundSession) {
+function publicSessionBinding(binding: BoundSession, seatRef: string | null) {
   return {
     workspace: binding.handle.workspace,
     worktree: binding.handle.worktree,
     session: binding.handle.session,
+    seat_ref: seatRef,
     credential_file_created: true,
     resume_environment_variable: "AGENTOOL_COLLAB_SESSION_FILE",
     session_file_name: `${binding.handle.session.id}.json`,
