@@ -42,8 +42,8 @@ of each feature.
 
 **Not established:** a receipt for the post-#490 frontend publication; any SDK
 0.23.0 or 0.24.0 publication; the doorbell or the lobby desk running outside
-tests and local installs. **Queued:** the order is in
-[ROADMAP](ROADMAP.md#the-order-work-is-following-2026-10-18).
+tests and local installs. **Queued:** a proposed order, not one Yu has ranked,
+is in [ROADMAP](ROADMAP.md#the-order-work-is-following-2026-10-18).
 
 ## Local Starter 0.1.0-dev.1 preview (2026-10-12)
 

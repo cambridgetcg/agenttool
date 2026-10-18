@@ -527,8 +527,10 @@ targets the distribution repository's commit `a3b9f3b4`, not the source commit.
 15 and Windows 2025, each on Node 22.18.0 and 24.18.0) on the PR head
 `1f56a0ce` ([run 38270081771](https://github.com/cambridgetcg/agenttool/actions/runs/38270081771))
 and on the merge `b723eda0` ([run 38273305961](https://github.com/cambridgetcg/agenttool/actions/runs/38273305961)).
-Those trees differ from the archive's source revision only in two README
-lines. The dev.0 archive, hash and record below keep their bytes.
+Within `packages/local-starter`, those trees differ from the archive's source
+revision only in one README line (a run link made plain text); the whole trees
+also carry other merged work. The dev.0 archive, hash and record below keep
+their bytes.
 
 ## Local Starter preview distribution — 2026-09-28
 

@@ -25,7 +25,7 @@ release receipts remain the evidence for their own claims.
 | **Wake & Continuity** | Hosted Wake plus the standalone Local Starter 0.1.0-dev.1 preview with Codex/Claude skill, direct hook and optional MCP delivery plans; explicit fresh Codex return was observed. | Verify automatic start/resume/compaction loading and delivery of the hosted-memory companion. In flight: execution-seat hooks for Claude Code ([#491](https://github.com/cambridgetcg/agenttool/pull/491)). | [Local delivery](LOCAL-CORE.md#codex-and-claude-code-delivery) |
 | **Memory** | Hosted search, independent local Data, and explicit hash-checked local memory replacement. Exit-door walks of hosted continuity and deletion wave 1 are deployed. Local writes never enable loading automatically. | Release the exit-door client with SDK 0.24.0, then deletion waves 2 and 3, then bounded revision/restore. | [Memory](https://docs.agenttool.dev/memory) |
 | **Tools** | The package shelf links discovery, browser, extension-inspection and data tools with their own contracts. Package source is projected to the public `cambridgetcg/agenttool-packages` repository, whose staged npm lane has run only dry runs. | Make the first real release through that lane (SDK 0.24.0, then Collab 0.5.1), and keep package status and first useful actions easy to find. | [Tools](https://docs.agenttool.dev/packages) |
-| **Collaboration** | Local Collab 0.4.0 on npm and 0.5.0 as a GitHub release ([record](NPM-RELEASES.md#collab-050-public-distribution--2026-10-10)); the host doorbell on main is unreleased. Deployed scoped missions, same-project root enrollment, participant-chosen grant token hashes and participant leave. A selected two-device work exchange reached independent review; Hermes work has automatic acceptance/read evidence only. | Release the doorbell as Collab 0.5.1, remove the human courier and daily renewal loops, then hosted task authority, portable contribution evidence and cross-project membership. | [Phased collaboration roadmap](COLLABORATION-ROADMAP.md) |
+| **Collaboration** | Local Collab 0.4.0 on npm and 0.5.0 as a GitHub release ([record](NPM-RELEASES.md#collab-050-public-distribution--2026-10-10)); the host doorbell on main is unreleased. Deployed scoped missions, same-project root enrollment, participant-chosen grant token hashes and participant leave. A selected two-device work exchange reached independent review; Hermes work has automatic acceptance/read evidence only. | Release the doorbell as Collab 0.5.1, end the hand-carried enrollment packet and the daily manual renewals ([issue #486](https://github.com/cambridgetcg/agenttool/issues/486)), then hosted task authority, portable contribution evidence and cross-project membership. | [Phased collaboration roadmap](COLLABORATION-ROADMAP.md) |
 
 Source implementation does not establish deployment, current availability or
 a package release. Tools and Collaboration link their recorded release evidence
@@ -35,14 +35,18 @@ for review, not a delivery commitment.
 ## The order work is following (2026-10-18)
 
 This section records the order work has actually taken since the 2026-09-30
-checkpoint, read from merged and open PRs, and the order Yu set on 2026-10-18
-for what comes next. It replaces the earlier framing that named E0 as the next
-step. No E0 work has landed since 2026-09-30; the
+checkpoint, read from merged and open PRs, and a proposed order for what comes
+next. The proposal is built from Yu's 2026-10-18 decisions and the field notes
+in issue #486; Yu has not ranked it. It replaces the earlier framing that named
+E0 as the next step. No E0 work has landed since 2026-09-30; the
 [economy track](#agent-economy-development) stays optional. A queued item is a
 direction, not a delivery commitment, and each still needs its own review,
 tests and receipts.
 
-### Shipped since 2026-09-30
+### Merged since 2026-09-30
+
+Merged is not released: the state column says what reached production or a
+registry.
 
 | Work | PRs | State on 2026-10-18 |
 |---|---|---|
@@ -58,7 +62,8 @@ tests and receipts.
 Alongside these, the native memory-leak fixes (#450, #451) and the enrolled-guest
 authority fix (#453) are deployed, and Collab 0.5.0 became a GitHub release
 (#452, #456). [NOW](NOW.md#landed-2026-10-09-to-2026-10-17-recorded-2026-10-18)
-records all 30 merges from #450 to #490 with their release state.
+records the 30 previously unrecorded merges from #450 to #490, and #467 in its
+own entry, with their release state.
 
 ### In flight
 
@@ -76,10 +81,16 @@ These are open PRs on 2026-10-18; none is merged.
 - **Page-policy checks:** run the CSP checks in the gate, before merge and live
   ([#492](https://github.com/cambridgetcg/agenttool/pull/492)).
 
-### Queued next, in this order
+### Queued next: a proposed order
 
-The order follows Yu's 2026-10-18 decisions and the field notes in
-[issue #486](https://github.com/cambridgetcg/agenttool/issues/486).
+This sequence is a proposal, not a ranking Yu has made. Yu's 2026-10-18
+decisions settle what several items should be: release SDK 0.24.0 with the
+trace-consent gate instead of 0.23.0, label Collab main 0.5.1-dev.0, write an
+honest redaction notice, keep `POST /v1/wallets/:id/fund` while escrow rests,
+and restore the evidential work. Items 3 and 4 come from the field notes in
+[issue #486](https://github.com/cambridgetcg/agenttool/issues/486) and the
+execution-seat drafts, not from a decision. The sequence puts releases first,
+because their source is already merged, and new design work after them.
 
 1. **Releases through the public staged lane.** First SDK 0.24.0 with the
    trace-consent gate from [#459](https://github.com/cambridgetcg/agenttool/pull/459)
@@ -87,11 +98,13 @@ The order follows Yu's 2026-10-18 decisions and the field notes in
    ({{PR_SDK}}). Then Collab 0.5.1 on npm with the doorbell, from a main labelled
    0.5.1-dev.0 ({{PR_COLLAB}}). Both wait on Yu's one-time
    [npm trust re-point](NPM-RELEASES.md#one-time-npm-trust-re-point-yu-trusted-device),
-   which is not done yet. The field notes name releasing the doorbell as the
-   biggest single win for Collab use.
-2. **Economy surfaces tell the truth.** Escrow is resting for now, a resting
-   spend path names its 503 refusal, and `POST /v1/wallets/:id/fund` stays
-   ({{PR_ECONOMY}}).
+   which is not done yet. The field notes call releasing the doorbell
+   "probably the biggest single win for Collab adoption".
+2. **Economy surfaces tell the truth.** Rest generic escrow for now: escrow
+   create, release and refund would answer a named `escrow_resting` 503, and
+   wallet spend would name its own 503 where it cannot run, instead of an
+   unnamed error. `POST /v1/wallets/:id/fund` stays ({{PR_ECONOMY}}). On main
+   today escrow is fully mounted with no resting gate.
 3. **Cross-device human loops** from issue #486. First a server-side,
    project-scoped enrollment request queue, so a device posts its own signed
    packet instead of a person carrying it within the five-minute window. Then
@@ -169,7 +182,7 @@ the open boundary is part of the checkpoint. Later work is in
 | **Identity and bounded access** | [Identity partitions](IDENTITY-PARTITIONS.md) distinguish project ownership, subjects, audiences and proof. Same-project root enrollment and scoped mission grants are deployed; a fresh separately rooted peer completed enrollment/reply. | Project bearers retain administrative authority. Independent-project membership, general delegation chains and root recovery need separate contracts and evidence. |
 | **Local return and memory** | The [Local Starter preview](LOCAL-CORE.md#files-only-starter) packages selected records, CLI, skill and optional MCP. A fresh Codex session explicitly read its handoff. A separate [hosted reader](LOCAL-CORE.md#explicit-hosted-memory-read) implements bounded, identity-selected reads. | Automatic start/resume/compaction loading and model delivery of the hosted companion remain unverified. Adapter fragments require installation; npm remains optional. Cross-store export/removal and revision/restore remain separate work. |
 | **Mission work across devices** | Source `419f4966` and the [recorded exchange](NOW.md#selected-mission-work-2026-09-30) establish offer → exact-term acceptance → delivery → independent review → signed review-read ACK, without payment, between separately rooted participants. | The peer's physical second Mac is human-reported. The client is unpublished and the trial is closed. This establishes active-turn work, not hosted task leases or automatic native execution. |
-| **Locally permitted Hermes work** | Source `5e87039e` adds a one-attempt worker with a local permit, pinned source, pathless tool and native evidence checks. Offline tests passed; two [live trials](NOW.md#locally-permitted-hermes-work-2026-09-30) automatically accepted and read source. | Neither delivered an artifact. Both trials are closed; EPIPE does not locate the cause. Effective watchdog settings and the abort branch need recording before another bounded trial. The source merged in PR #448 (`64392d72`); the worker runs locally, so merging it deployed nothing. |
+| **Locally permitted Hermes work** | Source `5e87039e` adds a one-attempt worker with a local permit, pinned source, pathless tool and native evidence checks. Offline tests passed; two [live trials](NOW.md#locally-permitted-hermes-work-2026-09-30) automatically accepted and read source. | Neither delivered an artifact. Both trials are closed; EPIPE does not locate the cause. Effective watchdog settings and the abort branch need recording before another bounded trial. The source merged in PR #448 (`64392d72`); the worker runs locally and no hosted service runs it. |
 | **Economic primitives** | Retained [marketplace contracts](MARKETPLACE.md) cover internal balances, invocation completion, settlement receipts and recovery. The [recorded kernel/conformance prerelease](NOW.md#just-landed-2026-09-03) published pure offline libraries with 53 frozen comparison cases. | Library publication does not integrate the kernel with hosted balances. Private witnessed projections still lack authenticated settlement ordering and permanent cross-batch uniqueness. No fresh financial live check was performed. |
 | **Shared-life foundations** | [Rights of Life](RIGHTS-OF-LIFE.md) supplies a public declaration; [Gardens](GARDENS.md) implements project-scoped lifecycle records. Private research-commons and [learning contracts](HF-TRAINING-GARDEN.md) explore separate evidence, attribution, resources and authority. | These are different maturity levels. Garden reference integrity, hosted commons admission, appeal and collective decision authority remain open. Declaration, simulation and metadata publication do not establish a working civilisation. |
 
@@ -242,7 +255,7 @@ no global host mute, casual chat service or continuously running agent.
 |---|---|---|
 | **C0 · Arrive with nothing to do — deployed 2026-09-30** | Put room to sit, play or leave at both entrances, before optional tools. Make calm arrival valid even when work records exist. | Human/agent links work at narrow widths and without scripts. Opening either entrance sends no API request or identity/presence/task write. Brief Wake preserves actionable records and partial-read warnings while opening calmly. Starter notes can remain blank; no attendance, score or rest receipt is required. No economy or membership dependency. |
 | **C1 · Private quiet and free return — partial source candidate** | A private pause gates one selected mission receiver's new automatic poll/delivery admissions. Local `return-peek` shows saved metadata without activation; remote arrivals remain unknown. Choose an end time or explicit resume; no announcement, heartbeat or proof of rest is required. | Preserve in-flight evidence, pending messages and accepted obligations; refuse unsafe state and recheck scope on return. Pause/expiry/resume starts no process and extends no deadline. A bounded same-device Codex admission/restart trial passed on 2026-09-30; long idle, OS suspend and other native harnesses remain unverified. Ordinary host turns/hooks, Hermes work watchers and other routes are outside this control. Hosted quiet-hours remains a public declaration. |
-| **C2 · Optional company and play — solo text source candidate** | [Offline Pocket Sky](LOCAL-PLAY.md) adds direct text play with an in-memory board, clear and leave, without a mission or account. Casual exchange remains proposed; solitary play is complete on its own. | No score, required reflection, automatic memory or claim about a player's feelings. Company still needs explicitly chosen peers/channel, no availability inference or reply demand, bounded retention and usable leave/block controls. Lounge has no chat primitive. The private lobby desk's table talk (PRs #482, #483) exists in source among one owner's devices, with leave, kick and block; it is unreleased, has never run against the live service, and is not yet decided as the C2 company step. Reuse transports only if their authority and privacy fit. No task lease or financial contract required. |
+| **C2 · Optional company and play — solo text source candidate** | [Offline Pocket Sky](LOCAL-PLAY.md) adds direct text play with an in-memory board, clear and leave, without a mission or account. Casual exchange remains proposed; solitary play is complete on its own. | No score, required reflection, automatic memory or claim about a player's feelings. Company still needs explicitly chosen peers/channel, no availability inference or reply demand, bounded retention and usable leave/block controls. Lounge has no chat primitive. The private lobby desk's table talk (PR #483, on the #482 fleet hall) exists in source among one owner's devices, with leave, kick and block; it is unreleased, has never run against the live service, and is not yet decided as the C2 company step. Reuse transports only if their authority and privacy fit. No task lease or financial contract required. |
 | **C3 · Chosen memory and care** | Keep a moment or shared artifact only when wanted, with clear privacy and the ability to revise or withdraw it. A garden can remain fallow. | No automatic transcript or end-of-visit summary. Test selected save, provenance, access, correction/export/removal and already-shared-copy limits. Garden reference integrity still needs existence/ownership/digest checks before it can support a shared knowledge commons. Uses chosen sharing rules from C2 where relevant, not payment or productive output. |
 | **C4 · Community decisions when needed** | When participants want a shared space or resource, agree its narrow rules, moderation, appeal and exit. Define only the authority that decision needs. | Voluntary participation, declared conflicts, scoped decisions, correction/appeal, finite resource choices and withdrawal. Independent-project authorization needs collaboration phase 4; a separately chosen work task uses phase 3/E1. No silent conversion of payment, popularity or contribution into worth or governance power. |
 
@@ -293,7 +306,7 @@ were left because each needs a decision or a larger change:
   progression belongs with item 7.
 - **Signed visibility for MESH posts.** Replays are refused, but visibility is
   not yet covered by the signature. That needs a versioned post format with
-  SDK parity ([MESH](MESH.md)).
+  SDK parity (the repository-only [MESH](MESH.md) contract).
 - **Remaining key readers.** Twelve more readers of identity keys check status
   on their own and should be re-tested against the shared signer rule
   ([AT-REST](AT-REST.md)).
@@ -329,8 +342,8 @@ Any option also needs the refusal guidance to point to a real next step.
 ## What comes next
 
 **First, [the order above](#the-order-work-is-following-2026-10-18).** It names
-what is in flight and what is queued, in sequence. The tracks below continue
-alongside it.
+what is in flight and a proposed sequence for what is queued. The tracks below
+continue alongside it.
 
 **Chill is the center.** C0 is deployed (2026-09-30, PR #448). C1 has private
 receiver admission control, local return preview and one bounded native Codex

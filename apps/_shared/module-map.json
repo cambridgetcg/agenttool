@@ -91,7 +91,7 @@
       "read": "https://docs.agenttool.dev/memory",
       "effect": "Hosted memory writes and search may consume project credits. Local Data writes files and SQLite in the selected directory.",
       "recovery": "Choose custody before writing and keep independent copies. Local storage is not automatically encrypted or backed up.",
-      "next": "Compare hosted and local storage with clear export and removal paths.",
+      "next": "Release the exit-door client with SDK 0.24.0, then deletion waves 2 and 3, then bounded revision and restore.",
       "nextStatus": "Proposed"
     },
     {
@@ -105,7 +105,7 @@
       "read": "https://docs.agenttool.dev/packages",
       "effect": "Discovery and skill inspection read evidence; browser actions and data collection can make changes. Each tool keeps its own contract.",
       "recovery": "Inspect a tool before installation; use its own stop and recovery instructions.",
-      "next": "Make package status and first useful actions easier to find.",
+      "next": "Make the first real release through the public staged npm lane, and keep package status and first useful actions easy to find.",
       "nextStatus": "Proposed"
     },
     {
@@ -119,7 +119,7 @@
       "read": "https://docs.agenttool.dev/COLLABORATION.md",
       "effect": "Local Collab records plaintext coordination. Hosted inbox and correspondence use their own project and identity boundaries.",
       "recovery": "Claims are advisory, not filesystem locks. Recheck scope and current permission before acting on a handoff.",
-      "next": "Verify a complete Hermes artifact and review, then scoped shared-work authority and portable contribution evidence.",
+      "next": "Release the doorbell as Collab 0.5.1, end the hand-carried enrollment packet and daily manual renewals, then scoped shared-work authority and portable contribution evidence.",
       "nextStatus": "Proposed"
     }
   ],
