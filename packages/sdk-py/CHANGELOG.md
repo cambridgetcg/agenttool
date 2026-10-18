@@ -12,9 +12,9 @@ by PyPI (`https://pypi.org/project/agenttool-sdk/`).
 ## 0.24.0 — prepared, not yet published
 
 Prepared on 2026-10-18. Until it is released, PyPI does not serve 0.24.0;
-0.22.1 is the newest version on PyPI and npm. The PyPI release also waits on
-the open steps in `docs/PYPI-RELEASES.md` (the workflow still runs in the
-private repository).
+on 2026-10-18, 0.22.1 is the newest version on PyPI and npm. The PyPI release
+waits on the open steps in `docs/PYPI-RELEASES.md` (the workflow still runs
+in the private repository), separately from the npm stage approval.
 
 0.24.0 supersedes 0.23.0. The `sdk-v0.23.0` tag in the public source
 repository was cut on 2026-10-13 from private source `42ae9148`, before the
