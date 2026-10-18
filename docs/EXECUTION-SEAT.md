@@ -17,15 +17,15 @@ The roadmap already defines an execution seat as "a device/harness/session actin
 
 An execution seat is always called by its full name. The [THE-SEAT](THE-SEAT.md) reflection describes a relational seat and its vows; this record is operational and unrelated to it.
 
-## Decisions (2026-10-17)
+## Decisions (2026-10-17 and 2026-10-18)
 
-Yu answered the open questions in the identity review:
+Yu answered the open questions in the identity review. Decision 5 was settled on 2026-10-18; the rest on 2026-10-17.
 
 1. **Local first.** A seat record lives on the machine that runs the seat. Publishing a seat to the hosted API is decided case by case, by whether someone needs it (see [Publication](#publication)).
 2. **The timeline is part of the record.** Model and effort history is kept, and is visible to anyone who can read the record.
 3. **A fork is a new seat** with `parent_seat_id`.
 4. **No cap** on concurrent seats per identity. See [Scale](#scale).
-5. **Subagents are short-lived child seats** with different levels of persistence. Those levels still need design discussion; the [draft below](#child-seats-and-persistence-draft) is a starting point.
+5. **A persistence level says who can cite a seat.** A subagent starts as a summary row that only its parent cites (`ephemeral`). It gets its own local record (`recorded`) the first time it produces a deliverable, writes to collab or is named by a mission event, or when someone promotes it by hand. Promoting a nested child promotes its whole chain. `durable` means published, and only a seat that a hosted consumer cites is published. See [Child seats and persistence](#child-seats-and-persistence).
 6. **Doctrine, not a product claim.** "Lineage-coherence preserved across model updates" in THE-SEAT stays doctrine. No product surface claims that reasoning continues across a model change.
 7. **Order of unification:** execution seat first, then one pin book for the trust stores, then a canonical-bytes registry.
 8. **A child seat inherits only its parent's `identity_id`.** It does not inherit the signing key, grants, collab sessions, persistence level or anything else.
@@ -56,7 +56,8 @@ Yu answered the open questions in the identity review:
   "parent_seat_id": null,
   "relation": null,
   "group_id": null,
-  "persistence": "durable",
+  "persistence": "recorded",
+  "promotion": null,
   "settings": [
     {
       "at": "2026-10-17T09:12:03Z",
@@ -83,9 +84,10 @@ Yu answered the open questions in the identity review:
 | `native_ref` | The harness's own handle. See [Native references](#native-references). |
 | `parent_seat_id`, `relation` | Lineage. `relation` is `fork`, `continuation` or `child`, and null for a root seat. |
 | `group_id` | The [group record](#group-record-draft) this seat belongs to, if any. |
-| `persistence` | `ephemeral`, `recorded` or `durable`. |
+| `persistence` | `recorded` or `durable`. A record is never `ephemeral`: an `ephemeral` child is a summary row, not a record. See [Child seats and persistence](#child-seats-and-persistence). |
+| `promotion` | For a promoted child, `{trigger, at}`: what gave it a record, and when. Null for every other seat. |
 | `settings` | An append-only timeline. A new entry is added only when `model`, `effort` or `provider` differs from the previous entry. The timeline has no cap. |
-| `children` | Summary rows for `ephemeral` child seats. |
+| `children` | Summary rows for `ephemeral` child seats. A promoted child's row stays, and gains the child's `seat_id`. |
 | `last_seen_at` | The latest activity observed. Liveness is derived from it and changes nothing. |
 | `ended_at`, `end_reason` | Set only when an end is observed. |
 
@@ -134,20 +136,42 @@ Timeline rules:
 - Anthropic `msg_` IDs and OpenAI `resp_` IDs identify single responses, not sessions.
 - Managed Agents `sesn_` IDs and Responses `conv_` IDs can serve as native references.
 
-## Child seats and persistence (draft)
+## Child seats and persistence
 
-Subagents are short-lived child seats. These levels are a proposal for the design discussion Yu asked for:
+**Decided (2026-10-18): decision 5.** A persistence level answers one question: who can cite this seat. It is not a capability, and it grants nothing.
 
-| Level | Stored as | Default for | Readable by |
+| Level | Stored as | Cited by | Kept for |
 |---|---|---|---|
-| `ephemeral` | a [summary row](#summary-rows) in the parent's `children`, or in a group's `members` | Claude Code subagents and Codex spawned threads | whoever can read the parent or group |
-| `recorded` | its own record in the local ledger | a child that claims a collab task, makes a commit or sends a mission event | local peers |
-| `durable` | its own record, eligible for publication, and able to hold its own collab session | top-level sessions, forks and long-running background agents | as published |
+| `ephemeral` | a [summary row](#summary-rows) in the parent's `children`, or in a group's `members` | the parent only, as `(parent seat_id, child_ref)` | as long as its parent or group record (R2) |
+| `recorded` | its own record in the local ledger | local peers, for example through a collab `seat_ref` or a local mission event | as long as the local ledger |
+| `durable` | a published record, signed with the identity's key | other machines and hosted services | as long as the hosted service keeps it |
 
-- **Promotion by use.** A child moves up one level the first time it does something another party must be able to cite.
-- **No demotion.** A child never moves back down a level.
-- **Retention** follows the native transcript policy.
-- **No authority.** A persistence level grants nothing.
+Defaults:
+
+- **Children start as rows.** Claude Code subagents and Codex spawned threads are `ephemeral`.
+- **Everything else starts recorded.** Top-level sessions, forks and continuations are `recorded`.
+- **Nothing starts durable.** A seat becomes `durable` only when it is [published](#publication).
+
+**Promotion.** A child gets its own `recorded` record the first time one of these happens, and its `promotion.trigger` says which:
+
+| Trigger | When |
+|---|---|
+| `deliverable` | Its group records something it produced as a [deliverable](#group-record-draft). |
+| `collab_write` | It writes to collab: a task, report, decision, handoff or artifact. Reads, cursors and presence do not count. |
+| `mission_event` | A mission event names it (S3). |
+| `manual` | Someone promotes it by hand. |
+
+- **Not lifetime.** A child that runs for hours but that nobody cites stays a row. How long a child runs says nothing about whether anyone must cite it.
+- **Claude Code subagents and collab.** A subagent shares its parent's MCP connection, so its collab writes go out under the parent's collab session and `seat_ref`, and collab cannot tell them apart. The `PostToolUse` hook input can: inside a subagent it carries `agent_id` (observed 2026-10-17). That is how a write is attributed to the child.
+- **Codex spawned threads and collab.** Read from the openai/codex source at `ce0323f`, not observed:
+  - **Own MCP servers.** Each spawned thread builds its own MCP runtime, so it starts its own MCP servers.
+  - **No thread id.** The MCP launch code adds no thread id to a server's environment. `CODEX_THREAD_ID` is set for shell commands. The launcher's default variable allowlist lives in a crate this checkout does not include.
+  - **One seat ref for all.** A spawned thread's collab session can therefore name only what its host configured, the same for every thread.
+  - **Hooks.** Codex hooks (behind `features.hooks`) carry a spawned thread's id as `agent_id` in `PostToolUse`. That would attribute a write the way the Claude Code hook does. The exact input keys are in a crate this checkout does not include.
+- **The whole chain.** Promoting a nested child first promotes each ancestor between it and the top-level seat, so a promoted seat's `parent_seat_id` is always its direct parent. An ancestor promoted this way gets trigger `lineage`.
+- **The row stays.** A promoted child's row stays in its parent or group, and gains the child's `seat_id`.
+- **No demotion.** A seat never moves back down a level.
+- **No capability.** A `recorded` child holds no collab session, grant or key that it did not hold before. Promotion changes who can cite it and nothing else.
 
 ## Summary rows
 
@@ -243,7 +267,7 @@ Boundaries:
 
 ## Publication
 
-The local record comes first. A seat is published only when a hosted consumer needs to cite it, for example:
+The local record comes first. A seat is published, and becomes `durable`, only when a hosted consumer needs to cite it, for example:
 
 - a mission observation;
 - a Correspondence message;
@@ -251,7 +275,14 @@ The local record comes first. A seat is published only when a hosted consumer ne
 
 A published seat is a statement signed by the identity's registered key, saying "this seat acted for me". Verifying the signature proves control of the key over those exact bytes. It does not prove that the runtime was what it declared.
 
-`ephemeral` children are never published on their own. Until the canonical-bytes registry exists, publication bytes follow [Canonical bytes](CANONICAL-BYTES.md).
+Children:
+
+- **Only when cited.** A `recorded` child is published only when a hosted consumer cites that child itself. Publishing a parent does not publish its children.
+- **The identity's key.** A child is signed with its identity's registered key, the same key that signs its parent. The child's own record still names no `signing_key_id` (decision 8).
+- **Parents stay local.** A published child's `parent_seat_id` can name a seat that was never published. Publishing a child does not publish its chain.
+- **Never a row.** An `ephemeral` child is never published. A child that a hosted consumer must cite is promoted first.
+
+Until the canonical-bytes registry exists, publication bytes follow [Canonical bytes](CANONICAL-BYTES.md).
 
 ## Scale
 
@@ -278,7 +309,7 @@ That scale shapes the design:
 
 | Slice | Change | Replaces |
 |---|---|---|
-| S1 · source candidate | New package `packages/execution-seat`: the seat and group schemas, an append-only local ledger with owner-only permissions, Claude Code readers (transcripts, subagent meta, workflow journals and their phase titles) and Codex readers (rollouts and spawn groups), all reading structural fields only, and tests | — |
+| S1 · source candidate | New package `packages/execution-seat`: the seat and group schemas, an append-only local ledger with owner-only permissions, Claude Code readers (transcripts, subagent meta, workflow journals and their phase titles) and Codex readers (rollouts and spawn groups), all reading structural fields only, promotion that walks the chain and records its trigger (`deliverable` and `manual` are wired; `collab_write` waits for S2 and `mission_event` for S3), and tests | — |
 | S2 | Collab accepts an optional, opaque `seat_ref` in `collab_session_start`. The Claude Code SessionEnd hook resolves Claude session → seat → collab session | native IDs in `actor`; the missing hook mapping |
 | S3 | The mission `seat` object, courier bindings and wake receiver bindings carry `seat_id` | three unverified strings; the unverified Claude `session_label` |
 | S4 | Selected seats are published to the hosted API | — |
