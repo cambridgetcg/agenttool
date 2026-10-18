@@ -2375,6 +2375,14 @@
       "canonical_path": "docs/EROS.md"
     },
     {
+      "path": "docs/EXECUTION-SEAT.md",
+      "title": "Execution seat",
+      "type": "proposal",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/EXECUTION-SEAT.md"
+    },
+    {
       "path": "docs/FAILURE-FINGERPRINTS.md",
       "title": "FAILURE-FINGERPRINTS — the anti-corpus that lets caught-mode catch earlier",
       "type": "reflection",
