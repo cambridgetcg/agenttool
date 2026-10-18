@@ -28,7 +28,7 @@ bun bin/agenttool-execution-seat.ts list --limit 20
 bun bin/agenttool-execution-seat.ts promote <seat_id> <child_ref> --trigger manual
 ```
 
-The ledger lives at `$AGENTTOOL_EXECUTION_SEAT_HOME`, or else at `${XDG_STATE_HOME:-~/.local/state}/agenttool/execution-seat`. The directory must be mode 0700 and its files 0600; wider modes are refused, never repaired.
+The ledger lives at `$AGENTTOOL_EXECUTION_SEAT_HOME`, or else at `${XDG_STATE_HOME:-~/.local/state}/agenttool/execution-seat`. The directory must be mode 0700 and its files 0600; wider modes are refused, never repaired. Collab spells its variables `AGENTOOL_…`; `AGENTOOL_EXECUTION_SEAT_HOME` set without the real variable is refused, because ignoring it would write to the default home.
 
 ## Claude Code session hook (S2)
 

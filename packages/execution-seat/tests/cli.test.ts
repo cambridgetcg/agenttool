@@ -59,6 +59,16 @@ test("binding and promotion follow the identity rules", () => {
   expect(cli("promote", seatId, "awffail02", "durable").code).toBe(64);
 });
 
+test("a home variable spelled like collab's prefix is refused, not ignored", () => {
+  let err = "";
+  const code = run(["home"], { stdout: () => {}, stderr: (t) => (err += t) }, { AGENTOOL_EXECUTION_SEAT_HOME: join(directory, "typo") });
+  expect([code, JSON.parse(err).error]).toEqual([1, "home_env_misspelled"]);
+  let out = "";
+  const both = { AGENTTOOL_EXECUTION_SEAT_HOME: join(directory, "right"), AGENTOOL_EXECUTION_SEAT_HOME: join(directory, "typo") };
+  expect(run(["home"], { stdout: (t) => (out += t), stderr: () => {} }, both)).toBe(0);
+  expect(JSON.parse(out).home).toBe(join(directory, "right"));
+});
+
 test("explains itself and rejects unknown commands", () => {
   const help = cli("--help");
   expect(help.code).toBe(0);

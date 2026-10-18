@@ -12,11 +12,16 @@ import { SeatError } from "./errors.js";
 type Environment = Record<string, string | undefined>;
 
 export const SEAT_HOME_ENV = "AGENTTOOL_EXECUTION_SEAT_HOME";
+/** Collab spells its prefix `AGENTOOL_`. That spelling here would silently fall back to the real home, so it is refused. */
+const MISSPELLED_HOME_ENV = "AGENTOOL_EXECUTION_SEAT_HOME";
 export const DATABASE_FILE = "seats.sqlite";
 const SQLITE_SIDECARS = ["-journal", "-wal", "-shm"] as const;
 
 export function resolveSeatHome(env: Environment = process.env): string {
   const explicit = env[SEAT_HOME_ENV];
+  if ((explicit === undefined || explicit === "") && env[MISSPELLED_HOME_ENV]) {
+    throw new SeatError("home_env_misspelled", `${MISSPELLED_HOME_ENV} is set, but the variable is ${SEAT_HOME_ENV}`);
+  }
   if (explicit !== undefined && explicit !== "") {
     if (!isAbsolute(explicit)) throw new SeatError("home_not_absolute", `${SEAT_HOME_ENV} must be an absolute path`);
     return explicit;
