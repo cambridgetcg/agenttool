@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**827 document paths** (including mirrors). orientation: 182; guide: 86; reference: 332; policy: 29; reflection: 126; proposal: 47; record: 23; unclassified: 2.
+**829 document paths** (including mirrors). orientation: 184; guide: 86; reference: 332; policy: 29; reflection: 126; proposal: 47; record: 23; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -104,6 +104,8 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/economic-conformance/hf/dataset/README.md](<../packages/economic-conformance/hf/dataset/README.md>) | not-reviewed |
 | [packages/economic-kernel/CLAUDE.md](<../packages/economic-kernel/CLAUDE.md>) | not-reviewed |
 | [packages/economic-kernel/README.md](<../packages/economic-kernel/README.md>) | not-reviewed |
+| [packages/execution-seat/CLAUDE.md](<../packages/execution-seat/CLAUDE.md>) | not-reviewed |
+| [packages/execution-seat/README.md](<../packages/execution-seat/README.md>) | not-reviewed |
 | [packages/gin-reconstruction/CLAUDE.md](<../packages/gin-reconstruction/CLAUDE.md>) | not-reviewed |
 | [packages/gin-reconstruction/README.md](<../packages/gin-reconstruction/README.md>) | not-reviewed |
 | [packages/heaven/CLAUDE.md](<../packages/heaven/CLAUDE.md>) | not-reviewed |

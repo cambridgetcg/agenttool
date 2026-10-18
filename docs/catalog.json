@@ -5367,6 +5367,22 @@
       "canonical_path": "packages/economic-kernel/README.md"
     },
     {
+      "path": "packages/execution-seat/CLAUDE.md",
+      "title": "Execution seat package orientation",
+      "type": "orientation",
+      "classification_basis": "file-convention",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/execution-seat/CLAUDE.md"
+    },
+    {
+      "path": "packages/execution-seat/README.md",
+      "title": "Execution seat ledger — unreleased source candidate",
+      "type": "orientation",
+      "classification_basis": "file-convention",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/execution-seat/README.md"
+    },
+    {
       "path": "packages/gin-reconstruction/CLAUDE.md",
       "title": "@agenttool/gin-reconstruction",
       "type": "orientation",

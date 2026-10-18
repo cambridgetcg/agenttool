@@ -970,6 +970,7 @@ describe("boring test spine", () => {
       "packages/codex-usage",
       "packages/collab-zerone",
       "packages/collab-courier",
+      "packages/execution-seat",
       "packages/lobby",
       "packages/browser",
       "packages/hf-scout",
@@ -1039,6 +1040,7 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/collab && bun run ci");
     expect(preflight).toContain("cd packages/codex-usage && bun run ci");
     expect(workflow).toContain("broker, collab, Codex usage, collab-zerone");
+    expect(preflight).toContain("cd packages/execution-seat && bun run ci");
     expect(preflight).toContain("cd packages/lobby && bun run ci");
     expect(preflight).toContain("cd packages/browser && bun run ci");
     expect(preflight).toContain(
@@ -1516,9 +1518,9 @@ exit 94
       const result = run(prepareCommand, narrowedEnv);
       expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
       const calls = (await readFile(capture, "utf8")).trim().split("\n");
-      expect(calls).toHaveLength(67);
+      expect(calls).toHaveLength(68);
       expect(calls.filter((line) => line.includes("\tinstall "))).toHaveLength(
-        57,
+        58,
       );
       expect(calls.filter((line) => line.endsWith("\trun build"))).toHaveLength(
         10,
