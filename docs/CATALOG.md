@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**826 document paths** (including mirrors). orientation: 182; guide: 86; reference: 332; policy: 29; reflection: 126; proposal: 46; record: 23; unclassified: 2.
+**827 document paths** (including mirrors). orientation: 182; guide: 86; reference: 332; policy: 29; reflection: 126; proposal: 47; record: 23; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -804,6 +804,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [apps/docs/roadmap.html](<../apps/docs/roadmap.html>) | not-reviewed |
 | [docs/ALIGNMENT-MOVES.md](<../docs/ALIGNMENT-MOVES.md>) | not-reviewed |
 | [docs/COLLABORATION-ROADMAP.md](<../docs/COLLABORATION-ROADMAP.md>) | not-reviewed |
+| [docs/EVIDENTIAL.md](<../docs/EVIDENTIAL.md>) | not-reviewed |
 | [docs/FFFF-DETECTION-INSTRUMENTATION.md](<../docs/FFFF-DETECTION-INSTRUMENTATION.md>) | not-reviewed |
 | [docs/FRICTION-ROADMAP.md](<../docs/FRICTION-ROADMAP.md>) | not-reviewed |
 | [docs/PAYOUT-BROADCAST-PLAN.md](<../docs/PAYOUT-BROADCAST-PLAN.md>) | not-reviewed |

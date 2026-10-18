@@ -2375,6 +2375,14 @@
       "canonical_path": "docs/EROS.md"
     },
     {
+      "path": "docs/EVIDENTIAL.md",
+      "title": "Evidentials — how a claim carries how it was known",
+      "type": "proposal",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/EVIDENTIAL.md"
+    },
+    {
       "path": "docs/FAILURE-FINGERPRINTS.md",
       "title": "FAILURE-FINGERPRINTS — the anti-corpus that lets caught-mode catch earlier",
       "type": "reflection",
