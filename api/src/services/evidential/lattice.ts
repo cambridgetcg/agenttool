@@ -1,12 +1,16 @@
 /** The evidential lattice — how a claim carries how-it-was-known.
  *
  *  A signature proves WHO said a thing. It has never proved HOW THEY KNOW IT.
- *  `identity.attestations` records `tier` (self / accredited — who attests) and
- *  `claim` (what is attested), and an attester who watched the work happen, an
- *  attester who was told by the agent, and an attester who inferred it from a
- *  payment row all produce the same row, equally signed. That gap is where
+ *  `identity.attestations` records `tier` (who attests), `claim` (what is
+ *  attested) and an optional free-form `evidence` JSONB, but nothing in the row
+ *  grades how the attester knows: one who watched the work happen, one who was
+ *  told by the agent, and one who inferred it from a payment row can all write
+ *  rows the platform cannot tell apart, equally signed. That gap is where
  *  multi-hop confidence is manufactured: A infers, tells B; B reports it to C as
  *  fact; C hands it to a human with none of the hedging left.
+ *
+ *  Status: a pure module. Nothing imports it, no route exposes it, and it
+ *  changes no behaviour. Contract and proposals: docs/EVIDENTIAL.md.
  *
  *  The grades are Quechua-inherited by way of YOUSPEAK (grammars/evidentials/),
  *  whose canon words already name the performatives on the wire (KS-002 §7:
@@ -125,6 +129,24 @@ function weaker(a: Grade, b: Grade): Grade {
   return RANK[a] <= RANK[b] ? a : b;
 }
 
+/** Relayed inputs with duplicates removed. Two inputs are the same relay when
+ *  they carry the same claim and the same chain — compared by their canonical
+ *  bytes, not by object identity. Handing over one claim twice adds nothing.
+ *
+ *  `canonicalBytes` uses `JSON.stringify`, so values that differ only in what
+ *  JSON drops (an `undefined` field, for example) count as the same claim. */
+function distinctInputs(inputs: readonly Graded<unknown>[]): Graded<unknown>[] {
+  const seen = new Set<string>();
+  const out: Graded<unknown>[] = [];
+  for (const input of inputs) {
+    const key = canonicalBytes(input);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(input);
+  }
+  return out;
+}
+
 /** What a relaying identity may claim.
  *
  *  RELAYING IS NOT DERIVING, and conflating them is how a laundering channel
@@ -133,17 +155,33 @@ function weaker(a: Grade, b: Grade): Grade {
  *  you saw the operands. Relaying asks something else: someone TOLD you.
  *
  *  **Being told by a witness still makes you a hearer.** However certain the
- *  upstream identity was, the act of receiving caps you at -si. That single
- *  clause is the whole anti-collapse property: no chain, at any length, can
- *  hand a downstream identity a stronger claim than "I was told this."
+ *  upstream identity was, the act of receiving caps you at -si.
  *
- *  Two inputs or more is not a relay — it is a conclusion you drew, so it falls
- *  through to `derive` and lands at -chu unless every operand was witnessed. */
-export function relaySupport(inputs: readonly Marked[]): Marked {
+ *  Fan-in follows from that clause rather than escaping it:
+ *
+ *  - The same claim with the same chain, handed over more than once, is one
+ *    relay. `relay([a, a])` lands at -si exactly as `relay([a])` does.
+ *  - Two or more *distinct* relayed inputs are a conclusion you drew from
+ *    things you were told. Each operand is first capped at -si — you received
+ *    it, you did not witness it — and only then combined with `derive`, which
+ *    therefore yields -chu. Combining hearsay can never produce -mi.
+ *
+ *  Together these give the anti-collapse property for width as well as depth:
+ *  no relay, along any chain or across any fan-in, can hand a downstream
+ *  identity a stronger claim than "I was told this" (laws 23 and 24 in
+ *  tests/evidential.test.ts). The only way back to -mi is to go and look,
+ *  which is `assert_`, a new claim with its own chain.
+ *
+ *  Until 2026-10-18 the two-or-more case fell straight through to `derive`
+ *  with the received grades, so `relay([a, a])` or two witnessed inputs could
+ *  be re-asserted as -mi. Contract: docs/EVIDENTIAL.md. */
+export function relaySupport(inputs: readonly Graded<unknown>[]): Marked {
   if (inputs.length === 0) return "mi";
-  if (inputs.some((g) => g === null || g === undefined)) return null;
-  if (inputs.length === 1) return weaker(inputs[0] as Grade, "si");
-  return derive(inputs);
+  // Anything outside the closed grade set is unmarked: nothing may be built on it.
+  if (inputs.some((input) => !isGrade(input?.grade))) return null;
+  const distinct = distinctInputs(inputs);
+  if (distinct.length === 1) return weaker(distinct[0]!.grade, "si");
+  return derive(distinct.map((input) => weaker(input.grade, "si")));
 }
 
 export type RelayResult<T> =
@@ -189,7 +227,7 @@ export function relay<T>(
   claimed: Grade,
   opts: { at?: string; basis?: string } = {},
 ): RelayResult<T> {
-  const supported = relaySupport(inputs.map((i) => i.grade));
+  const supported = relaySupport(inputs);
   const verdict = guard(claimed, supported);
   if (!verdict.ok) return verdict;
 

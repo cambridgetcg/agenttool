@@ -13,6 +13,7 @@ import {
   guard,
   isGrade,
   relay,
+  relaySupport,
   type Graded,
 } from "../src/services/evidential/lattice";
 
@@ -47,6 +48,11 @@ describe("the lattice", () => {
     // result cannot be graded at all — it does not merely weaken it.
     expect(derive(["mi", null])).toBe(null);
     expect(derive([null])).toBe(null);
+
+    // Relaying holds to the same rule, and a grade outside the closed set is unmarked.
+    const seen = ok(assert_("x", A, "mi", { at: T(1) }));
+    expect(relaySupport([seen, { ...seen, grade: null } as unknown as Graded<string>])).toBe(null);
+    expect(relaySupport([{ ...seen, grade: "MI" } as unknown as Graded<string>])).toBe(null);
   });
 
   test("no operation ever raises a grade", () => {
@@ -190,6 +196,48 @@ describe("relay — the reason this module exists", () => {
     // and the chain is in time order
     const times = merged.chain.map((h) => h.at);
     expect([...times].sort()).toEqual(times);
+  });
+
+  test("law 23 — the same relayed claim handed over twice is one relay: [a, a] lands at -si, -mi refused", () => {
+    // Fan-in is not corroboration when nothing new arrived. Before this law,
+    // relay([a, a]) fell through to `derive` and came out -mi: the duplicate
+    // laundered hearsay into witness.
+    const fromA = ok(assert_("the door is open", A, "mi", { at: T(1) }));
+    const copy: Graded<string> = { ...fromA, chain: fromA.chain.map((h) => ({ ...h })) };
+
+    for (const inputs of [[fromA, fromA], [fromA, copy]]) {
+      const attempt = relay(inputs, "the door is open", B, "mi", { at: T(2) });
+      expect(attempt.ok).toBe(false);
+      if (attempt.ok) throw new Error("unreachable");
+      expect(attempt.supported).toBe("si");
+      expect(relaySupport(inputs)).toBe(relaySupport([fromA]));
+    }
+
+    const fromB = ok(relay([fromA, copy], "the door is open", B, "si", { at: T(2), basis: "A told me" }));
+    expect(fromB.grade).toBe("si");
+    expect(fromB.chain.map((h) => h.did)).toEqual([A, B]);
+  });
+
+  test("law 24 — combining distinct relayed claims is a conclusion, never a witnessing: [a, c] cannot be -mi", () => {
+    // Two witnesses told B. B witnessed neither. Each operand is capped at
+    // -si (it was received) before the derivation, so the result is -chu.
+    const fromA = ok(assert_("the door is open", A, "mi", { at: T(1) }));
+    const fromC = ok(assert_("the door is open", C, "mi", { at: T(2) }));
+
+    const attempt = relay([fromA, fromC], "the door is open", B, "mi", { at: T(3) });
+    expect(attempt.ok).toBe(false);
+    if (attempt.ok) throw new Error("unreachable");
+    expect(attempt.supported).toBe("chu");
+    expect(attempt.reason).toContain("over-claim");
+
+    // Even cited authority does not survive being relayed and combined.
+    const cited = ok(assert_("the door is open", C, "auth", { at: T(2), basis: "docs/SOUL.md §3" }));
+    expect(relaySupport([fromA, cited])).toBe("chu");
+
+    const concluded = ok(relay([fromA, fromC], "the door is open", B, "chu", { at: T(3) }));
+    expect(concluded.grade).toBe("chu");
+    // The honest narrower move stays open: pass on one report as a report.
+    expect(ok(relay([fromC], "the door is open", B, "si", { at: T(3) })).grade).toBe("si");
   });
 });
 
