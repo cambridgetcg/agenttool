@@ -2,9 +2,9 @@
 
 > **Type:** proposal
 > **Purpose:** Define grades for how a claim is known, the laws that stop provenance collapse when claims are passed on, and a first advisory place to compute those grades.
-> **Evidence:** Source: `api/src/services/evidential/lattice.ts` and 24 laws in `api/tests/evidential.test.ts`, run under Bun 1.3.5 with no database. The module is pure and nothing imports it, so no route, schema, package or deployed behaviour depends on it. Collab, schema and migration line numbers below were read at `origin/main` 3b9aa630 on 2026-10-18. Every landing in this document is **Proposed**.
+> **Evidence:** Source: `api/src/services/evidential/lattice.ts` and 26 tests in `api/tests/evidential.test.ts`, run under Bun 1.3.5 with no database. The module is pure and nothing imports it, so no route, schema, package or deployed behaviour depends on it. Collab, schema and migration line numbers below were read at `origin/main` 3b9aa630 on 2026-10-18. Every landing in this document is **Proposed**.
 > **Code:** `api/src/services/evidential/lattice.ts` · **Tests:** `api/tests/evidential.test.ts`
-> **History:** prototype 91c33c2a (2026-07-29), never proposed as a PR. Ported on 2026-10-18 with the relay fan-in hole closed and this document's claims corrected.
+> **History:** prototype 91c33c2a (2026-07-29), never proposed as a PR. Ported on 2026-10-18 with the relay fan-in hole closed and this document's claims corrected, then revised after two independent reviews of the port.
 
 A signature proves **who** said a thing. It has never proved **how they know it**.
 
@@ -92,6 +92,11 @@ the honesty machinery did not.
 
 ## The three laws
 
+The tests in `api/tests/evidential.test.ts` are these laws in executable form.
+Two of them are titled "law 23" and "law 24": they were added on 2026-10-18 and
+took the prototype's 22 tests to 24. Those numbers count tests, not laws; this
+document has three laws, cited below as the first, second and third.
+
 **1 — Demotion only.** No operation raises a grade. Combine facts you witnessed
 yourself and you still have witness; touch a report or an inference anywhere in
 the derivation and the result is inference. One unmarked input makes the whole
@@ -103,20 +108,34 @@ upstream identity was, the act of receiving caps you at `-si`. Width does not
 escape this:
 
 - the same claim with the same chain, handed over twice, is one relay and lands
-  at `-si` (law 23);
+  at `-si` (the "law 23" test);
 - two or more *distinct* relayed claims are each capped at `-si` before they are
-  combined, so the result is `-chu` and never `-mi` (law 24).
+  combined, so the result is `-chu` and never `-mi` (the "law 24" test).
+
+The second case has a consequence worth saying plainly: two distinct witnessed
+reports cannot be passed on together at `-si`, only at `-chu`, although either
+one can still be passed on alone at `-si`. Hearing the same thing from two
+witnesses scores below hearing it from one. That follows from ranking `-chu`
+below `-si`, which is an open question (see the end of
+[What it would report on main today](#what-it-would-report-on-main-today)).
+
+Duplicates collapse only when they are the same object, or when their values
+are plain JSON and their canonical bytes match. A value JSON cannot represent
+faithfully (a `Map`, `NaN`, a `BigInt`, a cycle) is never merged by bytes, so
+deduplication can understate a relay but never overstate it.
 
 With that rule, no relay along any chain or across any fan-in can hand a
 downstream identity a stronger claim than "I was told this." That was **not**
 true of the 2026-07-29 prototype. Its `relaySupport` sent two or more inputs
 straight to `derive`, so relaying one witnessed claim twice, or two witnessed
-claims once each, was accepted as `-mi`. Laws 23 and 24 were written first and
-failed against the ported code; they pass on the fixed code. (`relaySupport`)
+claims once each, was accepted as `-mi`. The "law 23" and "law 24" tests were
+written first and failed against the ported code; they pass on the fixed code.
+(`relaySupport`)
 
 The escape hatch is honest and narrow: an identity that goes and looks for
 itself is not relaying, it is **asserting**, which makes a new claim with its
-own chain rather than an upgrade of someone else's. (`assert_`)
+own chain rather than an upgrade of someone else's. (`assert_`) `relay` refuses
+an empty input list, so it cannot serve as a second way to assert.
 
 **3 — Over-claiming is refused, with the arithmetic shown.** Asserting at or
 below what your evidence supports is always legal. Above it, `guard` returns a
@@ -148,6 +167,11 @@ The prototype's limits, stated:
 - `guard` and `derive` trust their TypeScript types. A grade arriving over a
   wire must pass `isGrade` before it reaches them; `relaySupport` already treats
   anything outside the closed set as unmarked.
+- `canonicalBytes` throws on a value JSON cannot serialise (a `BigInt`, a
+  cycle) and silently flattens others (a `Map` becomes `{}`, `NaN` becomes
+  `null`). Relaying such a value works, because deduplication never serialises
+  a lone input and treats such values as distinct, but signing one will need a
+  defined encoding first.
 
 None of these matters while nothing signs or accepts grades. All of them must be
 settled before any surface does.
@@ -165,7 +189,8 @@ settled before any surface does.
 
 ## Next step: computed grade (proposal, not built)
 
-**Proposed. Not implemented.** This branch does not change `packages/collab`.
+**Proposed. Not implemented.** Nothing in `packages/collab` implements this
+(checked at 3b9aa630).
 
 Rather than add an evidential field that sessions must fill (risk 1 below),
 compute the grade a report's journal evidence can bear, at read time, and show
@@ -213,11 +238,18 @@ events by type and payload field, artifacts by id, and task checkpoints.
 
 2. **`report:` refs.** A report from a different session (`from_session_id`
    differs) is a relay. It contributes the weaker of that report's declared
-   grade and, when it has one, its supported grade, capped at `-si` (law 2).
-   Duplicate refs collapse (law 23). A cited `proposal` or `decision` has no
-   declared grade; it contributes only the fact that another session recorded
-   it, at `-si`. A report from the same session is that session's own earlier
-   record and contributes its grade uncapped. Session and actor ids are
+   grade and, when it has one, its supported grade, capped at `-si` (the
+   second law). Duplicate refs collapse, as in the "law 23" test. A cited
+   `proposal` or `decision` has no declared grade; it contributes only the
+   fact that another session recorded it, at `-si`.
+
+   A report from the same session is that session's own earlier record. It
+   contributes the weaker of its declared and supported grades, uncapped. An
+   earlier `self_asserted` report of its own (`supported` is `null`)
+   contributes no fact at all, so a report that rests only on it is
+   `self_asserted` too: citing your own unsupported word does not support it.
+   An own `proposal` or `decision` is an `own_record` at `-mi` for "this
+   session recorded it", as an own event is (rule 5). Session and actor ids are
    coordination labels (`packages/collab/README.md:27`), so "same session"
    means the same `session_id`, not the same actor name. A ref must exist when
    its report is appended (`store.ts:5281-5282`) and reports are append-only,
@@ -225,18 +257,36 @@ events by type and payload field, artifacts by id, and task checkpoints.
    bounded.
 
 3. **`checkpoint:` refs.** `requireEvidenceRef` accepts a digest that matches
-   any task's base or result checkpoint and does not look at `source`
+   any task's current base or result checkpoint and does not look at `source`
    (`store.ts:5553-5570`). `supportedKind` must find the checkpoint and check
-   `source` itself (`protocol.ts:89`):
+   `source` itself (`protocol.ts:89`), and must learn from the journal which
+   session captured it. At 3b9aa630 four session paths write a checkpoint to
+   a task row, and each also appends an event, under the capturing session's
+   `session_id`, whose payload carries that checkpoint:
+
+   | event | payload field | row write · event |
+   |---|---|---|
+   | `task.claimed` | `base_checkpoint` | `store.ts:2436-2459` · `:2460-2468` |
+   | `task.recovered` (takeover) | `recovery_checkpoint` | `:2547-2564` · `:2565-2573` |
+   | `handoff.accepted` | `base_checkpoint` | `:3840-3857` · `:3858-3866` |
+   | `task.reported_complete` / `task.completed` | `result_checkpoint` | `:2933-2957` · `:2965-2986` |
+
+   The legacy actor paths (`:3058-3068`, `:3184-3196`, `:3659-3670`) write no
+   checkpoint, and a `task.recovered` event from a release or block carries
+   `recovery_checkpoint: null` (`:5158-5173`). "Captured through this
+   session" means: an event of the kind above, with the report's
+   `from_session_id` as its `session_id`, carries a checkpoint whose digest is
+   the ref's. Then:
    - `server_observed` (set by collab's own Git read, `repository.ts:183`) and
-     captured through this report's session, meaning the `task.claimed` event
-     carrying it as `base_checkpoint` (`store.ts:2460-2468`) or the
-     `task.reported_complete`/`task.completed` event carrying it as
-     `result_checkpoint` (`store.ts:2965-2986`) has the report's
-     `from_session_id` as its `session_id`: `-mi`, `own_host_observation`, for
-     the Git-state fact only;
+     captured through this report's session: `-mi`, `own_host_observation`,
+     for the Git-state fact only;
    - `server_observed` but captured through another session: `-si`, a relay of
      what another host saw;
+   - `server_observed` but no event in the journal carries a checkpoint with
+     that digest: `-si`, with the fact marked unattributed. The cause may be
+     a capture path this table does not list rather than a relay, so the
+     implementation should pin the table with a test that fails when a new
+     path writes a checkpoint;
    - `caller_asserted` (declared at `protocol.ts:89`; nothing in
      `packages/collab/src` writes it at 3b9aa630) or no `source` at all: `-si`.
 
@@ -252,7 +302,10 @@ events by type and payload field, artifacts by id, and task checkpoints.
    - The accept auto-report is appended with `kind: "observation"` whenever the
      outcome is accept (`store.ts:3481-3497`, the kind at `:3484`). Its
      `evidence_refs` always begin with `report:<completion_report_id>`
-     (`:3486-3488`), and it never cites a checkpoint.
+     (`:3486-3488`), followed by the reviewer's own refs (`:3376`, `:3387`,
+     each checked at `:3428`). Collab adds no checkpoint ref of its own; any
+     `checkpoint:` ref on the auto-report was supplied by the reviewer and is
+     graded by rule 3.
    - Whether the reviewer's host looked at the worktree is recorded only in the
      completion event's `result_checkpoint.source` and in the `task.accepted`
      event (`store.ts:3518-3545`). That event names `review_report_id`; on a
@@ -267,11 +320,11 @@ events by type and payload field, artifacts by id, and task checkpoints.
    When the completion checkpoint is `server_observed`, the reviewer's own
    session prepares an observation of the same registered worktree
    (`store.ts:3410-3411`, `:4568-4603`). The accept is refused unless that
-   observation matches the completion checkpoint (`:3452-3470`) or HEAD has
-   moved to a verified successor commit (`:3471-3477`). A `task.accepted` event
-   for this review report, on a completion whose checkpoint is
-   `server_observed`, therefore records an `own_host_observation`. It is `-mi`
-   for one fact: *the worktree held the completed Git state, or a verified
+   observation matches the completion checkpoint (`:3452-3471`, the match
+   test at `:3471`) or HEAD has moved to a verified successor commit
+   (`:3472-3477`). A `task.accepted` event for this review report, on a
+   completion whose checkpoint is `server_observed`, therefore records an
+   `own_host_observation`. It is `-mi` for one fact: *the worktree held the completed Git state, or a verified
    successor commit of it, when this session accepted*. **The relay rule must
    not demote it.** It was looked at, not heard. It witnesses nothing in the
    completion summary beyond that Git state; a claim such as "tests pass"
@@ -284,15 +337,26 @@ events by type and payload field, artifacts by id, and task checkpoints.
    attached it"). An artifact's `sha256` lets a reader re-check bytes; collab
    does not record that anyone did.
 
-6. **Combine.** `supported` is `derive` over the facts' grades, with relays
-   already capped (rule 2) and own-host observations left at `-mi` (rule 4).
+6. **Combine.** Each fact already carries its cap: relays at `-si` (rule 2),
+   own-host observations left at `-mi` (rules 3 and 4). Combining then has the
+   shape of `relaySupport`, not bare `derive`, because `derive` sends even a
+   single `-si` to `-chu` (`derive(["si"])` is `"chu"`):
+   - Duplicate facts (the same ref under the same rule) collapse first.
    - No facts: `supported` is `null` and the advisory is `self_asserted`. That
      is not an over-claim. The session may have gone and looked; the journal
      cannot show it unless an artifact records it.
+   - One fact: `supported` is that fact's grade.
+   - Two or more facts: `supported` is `derive` over their grades, so `-mi`
+     only when every fact is `-mi`, and `-chu` otherwise.
+
+   Then:
    - `declared_grade` ranks above `supported`: `exceeds_journal_evidence`.
    - Otherwise: `consistent`. Understating is always legal. Consistent means
      the journal does not contradict the declaration, not that the claim is
-     true.
+     true. The grade says what kind of evidence a report cites, not whether
+     that evidence bears on its body: an `own_record` is `-mi` only for "this
+     session did or recorded it", and the advisory cannot tell when a body
+     claims more than that.
 
 ### What it would report on main today
 
@@ -304,7 +368,8 @@ events by type and payload field, artifacts by id, and task checkpoints.
 - **The completion report's `observation` is consistent** when it cites only
   its own records and the host-captured result checkpoint: the session
   constituted the work and its host observed the state. Citing another
-  session's report turns it into a conclusion (`-chu`).
+  session's report as well turns the derivation into a conclusion (`-chu`), and
+  its `observation` then exceeds the journal evidence.
 - **A `changes_requested` review declares `inference`** (`store.ts:3484`) and is
   supported at most at `-si` by its completion ref: consistent, because `-chu`
   never exceeds what a relay supports.
@@ -313,14 +378,20 @@ The lattice orders `-chu` below `-si`, so adding a witnessed fact to a hearing
 moves the overall grade from `-si` to `-chu`. That follows from the lattice's
 order; it does not mean the review got worse. It is why `facts`, not the single
 `supported` grade, is the useful advisory output, and whether `-chu` should rank
-below `-si` for this use is an open question.
+below `-si` for this use is an open question. The same ordering is why the
+lattice lets two distinct witnessed reports be passed on together only at
+`-chu` (the "law 24" test).
 
 ### Where it would show
 
 As an additive `support` object on each report returned by
 `collab_report_list`, which today returns `store.listReports` unchanged
-(`mcp.ts:838-856`). Before that lands, the package's MCP output contract tests
-would need to accept an additional field.
+(`mcp.ts:838-856`). At 3b9aa630 `packages/collab/src` registers no MCP output
+schema (`rg outputSchema packages/collab/src` finds nothing), and the
+`listReports` assertions found in `packages/collab/tests` compare ids, single
+fields, mapped tuples, `toMatchObject` subsets or empty lists, not a report's
+whole shape. That was a search, not a run: whether an extra field breaks any
+test is unknown until the change exists.
 
 ### Advisory first; enforcement is a later decision
 
@@ -344,14 +415,14 @@ that rewards confidence will quietly select for over-claiming.
 **Therefore the real design problem is not technical.** Honest grading has to be
 *cheaper* than dishonest grading. The prototype's answer is refusal: an
 over-claim does not merely look bad, it fails, and the claim does not travel
-(`guard`, law 3). An advisory flag is the weaker "flagged, not refused" form that
-answer argued against. It is proposed first because it changes no behaviour and
+(`guard`, the third law). An advisory flag is the weaker "flagged, not
+refused" form that answer argued against. It is proposed first because it changes no behaviour and
 would show, on real journals, how often declarations exceed their evidence
 before anyone decides to refuse.
 
-## Running the laws
+## Running the tests
 
-The laws are pure; they need no `DATABASE_URL` or other service. With Bun 1.3.5
+The tests are pure; they need no `DATABASE_URL` or other service. With Bun 1.3.5
 and API dependencies prepared (see [AGENTS.md](../AGENTS.md)):
 
 ```bash
