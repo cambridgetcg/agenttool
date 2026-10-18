@@ -466,22 +466,35 @@ retry or refund.
 ## Generic escrow and wallet spend — resting
 
 Generic escrow money movement is resting by owner decision (2026-10-18), and
-no environment flag reopens it. `POST /v1/escrows`, `POST
-/v1/escrows/:id/release`, and `POST /v1/escrows/:id/refund` return stable
-`503 escrow_resting` with `next_actions` before body validation, database, or
-Redis work, so no balance is locked, released, or refunded. Before the rest was
-named, all three already returned an unnamed `503` whose body read
-`redis_disabled` whenever workers were disabled, which the production deploy
-fence in `bin/deploy.sh` requires. The routes built a Redis client that the
-escrow service never used. Resting names that status quo instead of changing
-it.
+no environment flag reopens it. After authentication, `POST /v1/escrows`,
+`POST /v1/escrows/:id/release`, and `POST /v1/escrows/:id/refund` return
+stable `503 escrow_resting` with `next_actions` for every request, before body
+validation or any escrow or wallet database read or Redis use, so no balance
+is locked, released, or refunded.
 
-Accept, dispute, list, and get stay available and move no balance.
-Workflow-managed marketplace escrows settle through their own services and are
-not gated here. An existing funded or disputed generic escrow stays recorded
-and readable. Settling one while this rests needs manual operator recovery. No
-automatic deadline refund runs, because the expiry sweep has no scheduler. This
-document and `/public/safety` do not know whether any such escrow exists.
+Before the rest was named, all three already returned an unnamed `503` whose
+body read `redis_disabled` in any process run with
+`AGENTTOOL_DISABLE_WORKERS=1`. The routes called `getRedis()`, which throws in
+that posture, although the escrow service never used Redis. On 2026-10-19 the
+hosted API's serving process reported that posture at `/public/plans`
+(`no_exploit_loophole.ip_rate_limit.worker_startup_disabled: true`), so on the
+hosted API resting names the status quo. Nothing in the canonical API deploy
+guarantees the flag: `.github/workflows/deploy-api.yml` and `api/fly.toml`
+neither set nor check it, and the `bin/deploy.sh` fence that did is superseded
+for the API ([DEPLOY-CI.md](DEPLOY-CI.md)). On a deployment run with workers
+enabled, this rest closes routes that were open.
+
+Accept (worker assignment), dispute, list, and get stay available and move no
+balance. The rest covers only these generic routes, which refuse every escrow
+id. Escrows that other services settle on their own paths are not gated by it:
+workflow-managed marketplace escrows, and substrate-task bounty escrows, which
+carry no `managed_by` but settle through the substrate-task lifecycle.
+
+A funded or disputed escrow created through `POST /v1/escrows` stays recorded
+and readable. Settling one while this rests needs manual operator recovery
+through the [support contact](https://docs.agenttool.dev/support). No automatic
+deadline refund runs, because the expiry sweep has no scheduler. This document
+and `/public/safety` do not know whether any such escrow exists.
 
 Reopening needs a reviewed release. Escrow creation debits the creator wallet
 but checks none of the spending policy that `POST /v1/wallets/:id/spend`
@@ -489,13 +502,16 @@ enforces (per-transaction, hourly, daily, allowed-recipient, and
 approval-threshold limits); a reopening must add those checks first.
 
 `POST /v1/wallets/:id/spend` does need Redis: its hourly and daily limits are
-Redis counters. When workers are disabled it returns stable
+Redis counters. In a process run with workers disabled it returns stable
 `503 wallet_spend_resting` with `next_actions` before validation, wallet
 ownership lookup, or any debit. With workers enabled the route is unchanged and
 still needs a reachable Redis. Wallet reads, policy writes, and transaction
-history do not depend on Redis. `POST /v1/wallets/:id/fund` stays mounted and
-unchanged; the units it adds cannot leave through spend or generic escrow while
-spend lacks Redis and generic escrow rests.
+history do not depend on Redis.
+
+`POST /v1/wallets/:id/fund` stays mounted and unchanged. The units it adds
+cannot leave through spend or generic escrow while those rest, but they can
+still pay capability invocations, which settle to seller wallets. Payout stays
+resting.
 
 Code: `api/src/services/economy/config.ts`
 (`genericEscrowMoneyMovementAllowed`), `api/src/services/economy/redis.ts`
@@ -519,13 +535,14 @@ absence or failure, cache-write failure, and non-JSON responses fail open.
 `POST /v1/escrows` is a named exception with a separate PostgreSQL-backed
 contract. While generic escrow rests, the route returns `503 escrow_resting`
 before it reads the key, so neither a new creation nor a replay runs; the
-contract below is retained for a reviewed reopening. A caller may send an 8–256-character visible-ASCII key. The database
-permanently stores its SHA-256, not the raw key, together with the authenticated
-project and a hash of the recognized normalized creation fields. An exact retry
-resolves the same escrow identity and returns its current row with `201` and
-`Idempotent-Replay: true`; it does not preserve the original response bytes or
-creation-time status. Changed bound input returns `409` before wallet mutation.
-Without a key, retrying may fund another escrow.
+contract below is retained for a reviewed reopening. A caller may send an
+8–256-character visible-ASCII key. The database permanently stores its SHA-256,
+not the raw key, together with the authenticated project and a hash of the
+recognized normalized creation fields. An exact retry resolves the same escrow
+identity and returns its current row with `201` and `Idempotent-Replay: true`;
+it does not preserve the original response bytes or creation-time status.
+Changed bound input returns `409` before wallet mutation. Without a key,
+retrying may fund another escrow.
 
 ## Vault
 

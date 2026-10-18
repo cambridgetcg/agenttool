@@ -4,7 +4,7 @@
  *
  *  Path layout (crypto-only; Stripe billing layer dropped 2026-05-17):
  *    /v1/wallets/...                       — wallet CRUD + fund + spend + policy + transactions
- *                                             (spend: 503 wallet_spend_resting without Redis)
+ *                                             (spend: 503 wallet_spend_resting with workers disabled)
  *    /v1/wallets/:id/deposit-address       — crypto deposit addresses (disclosure resting)
  *    /v1/wallets/:id/onchain/{challenge,verify} — sovereign wallet binding (EIP-191)
  *    /v1/wallets/:id/{payout,payouts}      — outgoing crypto transfers
@@ -14,7 +14,8 @@
  *                                             crypto transfer ingestion (mounted at parent)
  *
  *  Doctrine: docs/CRYPTO-PAYMENT.md · docs/AGENTS-ONLY.md (no fiat / no
- *  subscriptions — per-call x402 micropayments are the only paid path). */
+ *  subscriptions). New platform credit purchases, x402 top-ups included,
+ *  are retired (#431, docs/BUSINESS-MODEL.md). */
 
 import { Hono } from "hono";
 

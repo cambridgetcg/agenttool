@@ -110,8 +110,12 @@ export function escrowIdempotencyKeySha256(key: string): string {
  *     escrow debits the wallet but currently checks no policy;
  *   - drop the `redis` argument from create/release/refund/expireOverdue.
  *     None of them calls Redis; the routes' getRedis() argument only made
- *     production 503 with an unnamed redis_disabled body.
- * expireOverdue has no scheduler, so no automatic deadline refund runs. */
+ *     any process run with workers disabled 503 with an unnamed
+ *     redis_disabled body.
+ * expireOverdue has no scheduler, so no automatic deadline refund runs.
+ * Escrow rows other services create and settle on their own paths
+ * (workflow-managed marketplace escrows; substrate-task bounty escrows,
+ * which carry no managed_by) are outside this rest. */
 export async function createEscrow(
   db: DB,
   redis: Redis,

@@ -116,20 +116,30 @@ export function depositAddressDisclosureAllowed(): boolean {
 
 /** Generic escrow money movement — POST /v1/escrows, /:id/release and
  * /:id/refund — is resting (owner decision, 2026-10-18), the way payout
- * admission and deposit-address disclosure rest. The routes refuse with
- * stable 503 escrow_resting before body validation, database, or Redis work.
- * Before this was named, all three already returned an unnamed 503 whenever
- * workers were disabled: the routes called getRedis(), and the bin/deploy.sh
- * fence requires AGENTTOOL_DISABLE_WORKERS=1 on every production machine.
- * This names that status quo rather than changing it.
+ * admission and deposit-address disclosure rest. After authentication the
+ * routes refuse every request with stable 503 escrow_resting, before body
+ * validation or any escrow or wallet database read or Redis use.
+ *
+ * Before this was named, all three already returned an unnamed 503 in any
+ * process run with AGENTTOOL_DISABLE_WORKERS=1, because the routes called
+ * getRedis(), which throws in that posture. The hosted API's serving process
+ * reported that posture at /public/plans
+ * (no_exploit_loophole.ip_rate_limit.worker_startup_disabled=true, observed
+ * 2026-10-19), so there this names the status quo. Nothing in the canonical
+ * API deploy guarantees it: .github/workflows/deploy-api.yml and api/fly.toml
+ * neither set nor check the flag, and the bin/deploy.sh fence that did is
+ * superseded for the API (docs/DEPLOY-CI.md). On a deployment run with
+ * workers enabled this rest is a new closure, not the status quo.
  *
  * No environment flag can reopen it. A reviewed reopening must first make
  * createEscrow apply the wallet spending policy that spendFromWallet enforces
  * (see services/economy/escrow.ts) and drop the unused Redis argument.
- * Accept, dispute, and reads move no balance and are not gated here, nor are
- * workflow-managed marketplace escrows, which settle through their own
- * services. Contract: docs/SAFETY-BOUNDARIES.md ("Generic escrow and wallet
- * spend — resting"); policy: docs/BUSINESS-MODEL.md.
+ * Accept (worker assignment), dispute, and reads move no balance and are not
+ * gated here. Escrow rows that other services settle on their own paths are
+ * not gated either: workflow-managed marketplace escrows (managed_by set) and
+ * substrate-task bounty escrows (managed_by NULL, settled by
+ * services/substrate-tasks/lifecycle.ts). Contract: docs/SAFETY-BOUNDARIES.md
+ * ("Generic escrow and wallet spend — resting"); policy: docs/BUSINESS-MODEL.md.
  */
 export function genericEscrowMoneyMovementAllowed(): boolean {
   return false;

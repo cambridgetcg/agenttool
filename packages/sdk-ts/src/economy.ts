@@ -6,11 +6,13 @@
  * and escrow surfaces of the agent-economy API. TypeScript also retains the
  * backward-compatible `createWallet` alias, for 19 methods total.
  *
- * Hosted service note (2026-10-18): the hosted API currently rests generic
- * escrow create/release/refund (`503 escrow_resting`) and, because it deploys
- * without Redis, direct wallet spend (`503 wallet_spend_resting`). Both
- * refusals carry `next_actions` and surface as `AgentToolError`. The example
- * below shows the retained wire shape for a deployment where they are open.
+ * Resting note (2026-10-18): from the API release that names these rests,
+ * generic escrow create/release/refund return `503 escrow_resting`, and
+ * direct wallet spend returns `503 wallet_spend_resting` on a deployment run
+ * with workers disabled (`GET /public/plans` reports that setting for the
+ * serving process; the hosted API reported it on 2026-10-19). Both refusals
+ * carry `next_actions` and surface as `AgentToolError`. The example below
+ * shows the retained wire shape for a deployment where they are open.
  * See https://api.agenttool.dev/public/safety.
  *
  * @example
@@ -485,8 +487,9 @@ export class EconomyClient {
 
   /** Spend credits from a wallet (subject to spending policy).
    *
-   * The hosted service currently returns `503 wallet_spend_resting`: spend
-   * needs Redis policy counters, which the hosted API deploys without. */
+   * Returns `503 wallet_spend_resting` from an API release that names the
+   * rest, on a deployment run with workers disabled: spend needs Redis
+   * policy counters that such a deployment does not build. */
   async spend(
     walletId: string,
     options: SpendOpts,
@@ -636,8 +639,8 @@ export class EconomyClient {
 
   /** Create an escrow — locks wallet balance units until released or refunded.
    *
-   * The hosted service currently rests generic escrow create and returns
-   * `503 escrow_resting` before any wallet is debited. */
+   * Generic escrow create is resting: an API release that names the rest
+   * returns `503 escrow_resting` before any wallet is debited. */
   async create_escrow(options: CreateEscrowOpts): Promise<Escrow> {
     if (
       options.idempotency_key !== undefined &&
@@ -685,15 +688,17 @@ export class EconomyClient {
 
   /** Release escrow funds to the worker.
    *
-   * The hosted service currently returns `503 escrow_resting`. */
+   * Resting: an API release that names the rest returns
+   * `503 escrow_resting`. */
   async release_escrow(escrowId: string): Promise<Escrow> {
     return toEscrow(await this.req("POST", `/v1/escrows/${encodePathSegment(escrowId)}/release`));
   }
 
   /** Refund escrow balance units back to the creator.
    *
-   * The hosted service currently returns `503 escrow_resting`; an existing
-   * escrow that has to settle needs manual operator recovery meanwhile. */
+   * Resting: an API release that names the rest returns
+   * `503 escrow_resting`; an existing generic escrow that has to settle needs
+   * manual operator recovery meanwhile (https://docs.agenttool.dev/support). */
   async refund_escrow(escrowId: string): Promise<Escrow> {
     return toEscrow(await this.req("POST", `/v1/escrows/${encodePathSegment(escrowId)}/refund`));
   }

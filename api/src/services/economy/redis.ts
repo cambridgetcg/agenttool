@@ -2,12 +2,13 @@
  *  Other domains will share this when they need Redis too.
  *
  *  Gating: when AGENTTOOL_DISABLE_WORKERS=1 (the standard "no-Redis"
- *  deployment posture, and the only posture bin/deploy.sh admits for
- *  hosted production), instantiating an ioredis client with no Redis
- *  reachable still fires reconnection attempts on a background timer
- *  even with lazyConnect:true once any operation runs. Those retries
- *  saturate the Bun event loop and slow unrelated routes (wake,
- *  identity reads) by 10–30s+ depending on retry overlap.
+ *  deployment posture; /public/plans reports it for the serving process,
+ *  and the canonical API deploy neither sets nor checks it — see
+ *  docs/DEPLOY-CI.md and api/fly.toml), instantiating an ioredis client
+ *  with no Redis reachable still fires reconnection attempts on a
+ *  background timer even with lazyConnect:true once any operation runs.
+ *  Those retries saturate the Bun event loop and slow unrelated routes
+ *  (wake, identity reads) by 10–30s+ depending on retry overlap.
  *
  *  Routes check economyRedisEnabled() first and refuse with a named,
  *  guided 503 (wallet spend: errors.walletSpendResting()). Generic escrow
@@ -34,7 +35,7 @@ export function getRedis(): Redis {
   if (!economyRedisEnabled()) {
     throw new HTTPException(503, {
       message:
-        "redis_disabled — set REDIS_URL and unset AGENTTOOL_DISABLE_WORKERS to enable spend-aggregate counters and escrow operations",
+        "redis_disabled — set REDIS_URL and unset AGENTTOOL_DISABLE_WORKERS to enable spend-aggregate counters",
     });
   }
   if (!_redis) {

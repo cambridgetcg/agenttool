@@ -330,10 +330,10 @@ describe("GET /public/safety", () => {
       /POST \/v1\/escrows is currently resting.*503 escrow_resting.*before the Idempotency-Key is read.*separate.*SHA-256.*raw key is not retained.*current row.*changed.*409.*without a key.*another escrow/is,
     );
     expect(SAFETY_BOUNDARIES.conditional_services.escrow).toMatch(
-      /create.*release.*refund.*resting by owner decision.*no environment flag reopens.*stable 503 escrow_resting.*next_actions.*before body validation, database, or Redis work.*accept, dispute, list, and get.*move no balance.*manual operator recovery.*does not know whether any such escrow exists.*spending policy at creation/is,
+      /create.*release.*refund.*resting by owner decision.*no environment flag reopens.*after authentication.*stable 503 escrow_resting.*next_actions.*before body validation or any escrow or wallet database read or Redis use.*accept \(worker assignment\), dispute, list, and get.*move no balance.*substrate-task bounty escrows.*manual operator recovery.*does not know whether any such escrow exists.*spending policy at creation/is,
     );
     expect(SAFETY_BOUNDARIES.conditional_services.wallet_spend).toMatch(
-      /POST \/v1\/wallets\/:id\/spend.*Redis counters.*workers are disabled.*stable 503 wallet_spend_resting.*next_actions.*before validation, wallet ownership lookup, or any debit.*workers enabled the route is unchanged/is,
+      /POST \/v1\/wallets\/:id\/spend.*Redis counters.*workers disabled.*stable 503 wallet_spend_resting.*next_actions.*before validation, wallet ownership lookup, or any debit.*workers enabled the route is unchanged/is,
     );
     expect(SAFETY_BOUNDARIES.conditional_services.browse).toMatch(
       /return 503 redis_disabled.*mounted route is not proof/is,

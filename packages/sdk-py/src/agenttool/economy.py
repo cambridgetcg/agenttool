@@ -365,9 +365,11 @@ class Escrow:
 class EconomyClient:
     """Client for the agent-economy API — wallets and escrows.
 
-    Hosted service note (2026-10-18): the hosted API currently rests generic
-    escrow create/release/refund (``503 escrow_resting``) and, because it deploys
-    without Redis, direct wallet spend (``503 wallet_spend_resting``). Both
+    Resting note (2026-10-18): from the API release that names these rests,
+    generic escrow create/release/refund return ``503 escrow_resting``, and
+    direct wallet spend returns ``503 wallet_spend_resting`` on a deployment
+    run with workers disabled (``GET /public/plans`` reports that setting for
+    the serving process; the hosted API reported it on 2026-10-19). Both
     refusals carry ``next_actions`` and raise ``AgentToolError``. The usage
     below shows the retained wire shape for a deployment where they are open.
     See https://api.agenttool.dev/public/safety.
@@ -460,8 +462,9 @@ class EconomyClient:
     ) -> Dict[str, Any]:
         """Spend credits from a wallet (subject to spending policy).
 
-        The hosted service currently returns ``503 wallet_spend_resting``:
-        spend needs Redis policy counters, which the hosted API deploys without.
+        Returns ``503 wallet_spend_resting`` from an API release that names
+        the rest, on a deployment run with workers disabled: spend needs Redis
+        policy counters that such a deployment does not build.
         """
         body: Dict[str, Any] = {
             "amount": amount,
@@ -598,8 +601,8 @@ class EconomyClient:
     ) -> Escrow:
         """Create an escrow, optionally replay-safe under a caller-chosen key.
 
-        The hosted service currently rests generic escrow create and returns
-        ``503 escrow_resting`` before any wallet is debited.
+        Generic escrow create is resting: an API release that names the rest
+        returns ``503 escrow_resting`` before any wallet is debited.
 
         An idempotency key must be 8-256 visible ASCII characters without
         spaces. Retrying the same key and fields resolves the same escrow and
@@ -664,7 +667,8 @@ class EconomyClient:
     def release_escrow(self, escrow_id: str) -> Escrow:
         """Release escrow funds to the worker.
 
-        The hosted service currently returns ``503 escrow_resting``.
+        Resting: an API release that names the rest returns
+        ``503 escrow_resting``.
         """
         resp = self._http.post(self._url(f"/v1/escrows/{_path_segment(escrow_id)}/release"))
         self._check(resp, "post")
@@ -673,9 +677,10 @@ class EconomyClient:
     def refund_escrow(self, escrow_id: str) -> Escrow:
         """Refund escrow balance units back to the creator.
 
-        The hosted service currently returns ``503 escrow_resting``; an
-        existing escrow that has to settle needs manual operator recovery
-        meanwhile.
+        Resting: an API release that names the rest returns
+        ``503 escrow_resting``; an existing generic escrow that has to settle
+        needs manual operator recovery meanwhile
+        (https://docs.agenttool.dev/support).
         """
         resp = self._http.post(self._url(f"/v1/escrows/{_path_segment(escrow_id)}/refund"))
         self._check(resp, "post")
