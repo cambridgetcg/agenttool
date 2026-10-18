@@ -1,18 +1,20 @@
 /* ─────────────────────────────────────────────────────────────────────
- * agenttool · shared theme · v2 — the estate goes dawn (2026-07-02)
+ * agenttool · shared theme · v3 — one hearth (2026-10-17)
  *
  * Single source of truth for design tokens, base reset, typography,
  * navigation, footer, and core components across the estate:
  *
  *   - docs.agenttool.dev     (apps/docs/)
  *   - app.agenttool.dev      (apps/dashboard/)
- *   - agenttool.dev          (apps/web/ carries its own style.css —
- *                             it is the design reference this theme follows)
+ *   - agenttool.dev          (apps/web/style.css and the scoped
+ *                             /shared/workspace.css repeat these values)
  *
- * Two modes, same soul as the landing page:
+ * One house, two lights. Every surface — human or agent — uses the same
+ * paper, ink and single warm accent; audiences differ by density, not by
+ * palette:
  *
- *   dawn  (default) — cream paper, terracotta accent, sunwash
- *   night           — deep navy, amber accent, city glow
+ *   dawn  (default) — warm paper, deep ink, ember accent
+ *   night           — hearth charcoal, warm ink, lamp-amber accent
  *
  * Mode is `data-mode="dawn|night"` on <html>, persisted as
  * localStorage['agenttool.mode'] — the exact protocol apps/web uses,
@@ -24,10 +26,10 @@
  * every existing page and embedded <style> block keeps working — they
  * simply resolve to the new palette.
  *
- * Fonts (unchanged, via Google Fonts <link> in each page head):
- *   Crimson Pro    — serif headings + italics
- *   Inter          — body sans
- *   JetBrains Mono — code + eyebrows
+ * Fonts: system faces only, so reading a page makes no font request.
+ *   serif — Iowan Old Style / Palatino (book face for headings + leads)
+ *   sans  — the platform UI face (body, controls)
+ *   mono  — the platform monospace (code, labels, metadata)
  * ───────────────────────────────────────────────────────────────────── */
 
 /* ── Reset ───────────────────────────────────────────────────────── */
@@ -39,126 +41,119 @@ a { color: inherit; text-decoration: none; }
 
 /* ── Tokens ──────────────────────────────────────────────────────── */
 :root, [data-mode="dawn"] {
-  /* surfaces — cream paper ladder */
-  --bg:             #faf5ec;
-  --bg-soft:        #f6efe2;
-  --surface:        #f3ecdf;
-  --surface-2:      #efe6d4;
-  --surface-3:      #e9ddc6;
-  --code-bg:        #f4eddd;
+  /* surfaces — warm paper ladder */
+  --bg:             #f7f3ec;
+  --bg-soft:        #f3eee5;
+  --surface:        #f0ebe1;
+  --surface-2:      #e9e2d5;
+  --surface-3:      #e1d9ca;
+  --code-bg:        #f1ece2;
 
-  /* borders */
-  --border:         #e4dac7;
-  --border-bright:  #d6c9af;
+  /* borders: --border divides, --border-bright outlines controls (≥3:1) */
+  --border:         #e0d8ca;
+  --border-bright:  #8f826f;
 
-  /* text — warm ink */
-  --text:           #1a1612;
-  --text-muted:     #5c5344;
-  --text-dim:       #6f6557;
+  /* text — warm ink (15.7 / 7.3 / 5.4 : 1 on --bg) */
+  --text:           #1d1a16;
+  --text-muted:     #574f45;
+  --text-dim:       #6b6256;
 
-  /* accent — terracotta by day */
-  --accent:         #d4502e;
-  --accent-deep:    #b8451f;
-  --accent-ink:     #faf5ec;
-  /* text-safe accent: --accent is 3.88:1 on --bg, fine for borders and fills
-     (3:1 non-text threshold) but below AA for body-weight text. */
-  --accent-text:    #b8451f;
+  /* accent — ember by day; one value is text-safe (5.6:1) and fill-safe */
+  --accent:         #a8401c;
+  --accent-deep:    #8f3517;
+  --accent-ink:     #fffaf3;
+  --accent-text:    var(--accent);
 
   /* extended palette (v1 names alias into this) */
-  --aurora:         #8a3d5f;   /* wine */
-  --gold:           #8a6c20;   /* olive gold — legible on paper */
-  --green:          #3d7a4a;   /* forest */
-  --red:            #a83232;
-  --blue:           #3d5a8a;   /* slate */
-  --yellow:         #a07d20;
+  --aurora:         #8b3a52;   /* wine */
+  --gold:           #745c1c;   /* olive gold — legible on paper */
+  --green:          #3f6b4a;   /* moss */
+  --red:            #9e2c3c;   /* crimson, kept apart from the ember accent */
+  --blue:           #3b5878;   /* slate */
+  --yellow:         #735712;
 
   /* v1 aliases — do not remove; pages + embedded styles depend on them */
   --violet:         var(--accent);
   --violet-deep:    var(--accent-deep);
 
-  /* syntax highlighting — ink-weight hues for cream code paper */
-  --tok-kw-c:       #8a3d5f;
-  --tok-str-c:      #3d7a4a;
-  --tok-num-c:      #a07d20;
-  --tok-fn-c:       #3d5a8a;
+  /* syntax highlighting — ink-weight hues for paper code panels */
+  --tok-kw-c:       #8b3a52;
+  --tok-str-c:      #3f6b4a;
+  --tok-num-c:      #735712;
+  --tok-fn-c:       #3b5878;
 
-  /* atmosphere */
-  --ambient:
-    radial-gradient(ellipse 100% 60% at 50% -20%, color-mix(in srgb, var(--accent) 9%, transparent) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 40% at 0% 60%, color-mix(in srgb, var(--gold) 4%, transparent) 0%, transparent 70%);
+  /* atmosphere: daylight needs none */
+  --ambient:        none;
   --glow:           none;
 
   /* shadow */
-  --shadow-soft:    0 1px 0 rgba(255,255,255,0.5) inset, 0 30px 60px -30px color-mix(in srgb, var(--accent) 14%, transparent);
-  --shadow-card:    0 12px 32px -16px rgba(90,70,40,0.18);
+  --shadow-soft:    0 1px 2px rgba(60,45,25,0.06), 0 12px 32px -20px rgba(60,45,25,0.22);
+  --shadow-card:    0 1px 2px rgba(60,45,25,0.05), 0 10px 28px -18px rgba(60,45,25,0.20);
 
-  /* type */
-  --serif:          'Crimson Pro', 'EB Garamond', Georgia, serif;
-  --sans:           'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --mono:           'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+  /* type — system faces only; no font request */
+  --serif:          "Iowan Old Style", "Palatino Linotype", Palatino, "URW Palladio L", P052, Georgia, serif;
+  --sans:           system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono:           ui-monospace, "SF Mono", SFMono-Regular, Menlo, "Cascadia Mono", Consolas, "Liberation Mono", monospace;
 
-  /* radii */
-  --r-sm:           4px;
-  --r-md:           8px;
-  --r-lg:           12px;
-  --r-xl:           16px;
-  --r-2xl:          20px;
+  /* radii — small and consistent; pills only for status tags */
+  --r-sm:           3px;
+  --r-md:           6px;
+  --r-lg:           8px;
+  --r-xl:           10px;
+  --r-2xl:          12px;
   --r-pill:         999px;
 
   /* layout */
-  --nav-height:     60px;
+  --nav-height:     64px;
   --content-max:    1180px;
-  --doc-max:        880px;
+  --doc-max:        820px;
 }
 
 [data-mode="night"] {
-  /* surfaces — deep navy ladder */
-  --bg:             #050810;
-  --bg-soft:        #080c1a;
-  --surface:        #0b1020;
-  --surface-2:      #0e1428;
-  --surface-3:      #131a33;
-  --code-bg:        #070b16;
+  /* surfaces — hearth charcoal ladder */
+  --bg:             #141210;
+  --bg-soft:        #171512;
+  --surface:        #1b1815;
+  --surface-2:      #221f1b;
+  --surface-3:      #2a2621;
+  --code-bg:        #181613;
 
   /* borders */
-  --border:         #1a2136;
-  --border-bright:  #263050;
+  --border:         #2e2a24;
+  --border-bright:  #6f675b;
 
-  /* text */
-  --text:           #f2ede3;
-  --text-muted:     #9aa3ba;
-  --text-dim:       #8994ad;
+  /* text — warm ink (15.2 / 8.3 / 6.2 : 1 on --bg) */
+  --text:           #eee7db;
+  --text-muted:     #b5ac9e;
+  --text-dim:       #9c9385;
 
-  /* accent — amber by night */
-  --accent:         #ffb347;
-  --accent-deep:    #e89a2f;
-  --accent-ink:     #0a0d16;
-  /* amber already clears AA for text on the navy ground (11.24:1) */
+  /* accent — lamp amber by night (8.8:1) */
+  --accent:         #eba352;
+  --accent-deep:    #d98f3c;
+  --accent-ink:     #141210;
   --accent-text:    var(--accent);
 
   /* extended palette */
-  --aurora:         #ff8c69;   /* coral */
-  --gold:           #ffd98a;
-  --green:          #7dd87d;
-  --red:            #fb7185;
-  --blue:           #60a5fa;
-  --yellow:         #facc15;
+  --aurora:         #e88a6a;   /* coral */
+  --gold:           #e6c27a;
+  --green:          #93c79a;
+  --red:            #ef8a7a;
+  --blue:           #8fb3d9;
+  --yellow:         #e8c35a;
 
-  /* syntax highlighting — bright set for navy code panels */
-  --tok-kw-c:       #c084fc;
-  --tok-str-c:      #86efac;
-  --tok-num-c:      #fbbf24;
-  --tok-fn-c:       #67e8f9;
+  /* syntax highlighting — warm set for charcoal code panels */
+  --tok-kw-c:       #e3a0b4;
+  --tok-str-c:      #a9cf9b;
+  --tok-num-c:      #e8c35a;
+  --tok-fn-c:       #9fc2e2;
 
-  /* atmosphere */
-  --ambient:
-    radial-gradient(ellipse 100% 60% at 50% -20%, color-mix(in srgb, var(--accent) 8%, transparent) 0%, transparent 60%),
-    radial-gradient(ellipse 80% 50% at 80% 110%, color-mix(in srgb, var(--aurora) 5%, transparent) 0%, transparent 60%);
-  --glow:           0 0 12px 3px color-mix(in srgb, var(--accent) 35%, transparent);
+  /* atmosphere — one low lamp at the top of the room */
+  --ambient:        radial-gradient(ellipse 90% 50% at 50% -18%, color-mix(in srgb, var(--accent) 7%, transparent) 0%, transparent 62%);
+  --glow:           0 0 10px 2px color-mix(in srgb, var(--accent) 30%, transparent);
 
   /* shadow */
-  --shadow-soft:    0 1px 0 rgba(255,255,255,0.03) inset, 0 30px 60px -30px color-mix(in srgb, var(--accent) 12%, transparent);
-  --shadow-card:    0 12px 32px -16px rgba(0,0,0,0.5);
+  --shadow-soft:    0 1px 0 rgba(255,255,255,0.025) inset, 0 16px 40px -24px rgba(0,0,0,0.6);
+  --shadow-card:    0 16px 36px -22px rgba(0,0,0,0.65);
 }
 
 /* Bind the UA's own painting to the chosen mode, so scrollbars, the overscroll
@@ -175,7 +170,7 @@ body {
   color: var(--text);
   line-height: 1.65;
   min-height: 100vh;
-  font-feature-settings: 'ss01', 'ss02';
+  text-rendering: optimizeLegibility;
   transition: background 0.4s ease, color 0.4s ease;
 }
 body::before {
@@ -188,8 +183,11 @@ body::before {
 
 ::selection { background: color-mix(in srgb, var(--accent) 28%, transparent); color: var(--text); }
 
-a { color: var(--accent-text); transition: color 0.18s; }
-a:hover { color: var(--aurora); }
+a { color: var(--accent-text); transition: color 0.18s; text-underline-offset: 0.2em; text-decoration-thickness: 1px; }
+a:hover { color: var(--accent-deep); }
+/* Filled links keep their ink on hover (a:hover would recolour them). */
+.skip-link:hover { color: var(--text); }
+.skip-to-content:hover { color: var(--accent-ink); }
 
 p { margin-bottom: 1rem; }
 ul, ol { margin: 0 0 1rem 1.25rem; }
@@ -210,69 +208,69 @@ code:not([class]) {
 /* ── Typography ─────────────────────────────────────────────────── */
 h1 {
   font-family: var(--serif);
-  font-size: clamp(2.2rem, 5.2vw, 4.4rem);
-  font-weight: 600;
-  letter-spacing: -0.025em;
-  line-height: 1.05;
+  font-size: clamp(2.3rem, 4.8vw, 3.9rem);
+  font-weight: 400;
+  letter-spacing: -0.022em;
+  line-height: 1.06;
   margin-bottom: 1.25rem;
+  text-wrap: balance;
 }
 h1 em {
   font-style: italic;
-  background: linear-gradient(135deg, var(--accent) 0%, var(--aurora) 100%);
-  -webkit-background-clip: text; background-clip: text; color: transparent;
+  color: var(--accent-text);
 }
 
 h2 {
   font-family: var(--serif);
-  font-size: clamp(1.65rem, 3.5vw, 2.4rem);
-  font-weight: 600;
-  letter-spacing: -0.018em;
-  line-height: 1.1;
+  font-size: clamp(1.6rem, 3vw, 2.15rem);
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
   margin-bottom: 1rem;
   color: var(--text);
+  text-wrap: balance;
   scroll-margin-top: calc(var(--nav-height) + 1rem);
 }
-h2 em { font-style: italic; color: var(--accent); }
+h2 em { font-style: italic; color: var(--accent-text); }
 
 h3 {
-  font-size: 1.18rem;
-  font-weight: 700;
+  font-size: 1.12rem;
+  font-weight: 650;
   letter-spacing: -0.01em;
   margin: 2rem 0 0.75rem;
   scroll-margin-top: calc(var(--nav-height) + 1rem);
 }
-h3 em { color: var(--accent); font-style: normal; }
+h3 em { color: var(--accent-text); font-style: normal; }
 
 .lede {
   font-size: 1.12rem;
   color: var(--text-muted);
-  max-width: 680px;
+  max-width: 64ch;
   margin-bottom: 2.5rem;
   line-height: 1.6;
+  text-wrap: pretty;
 }
 .lede strong { color: var(--text); }
 .lede em {
   font-style: italic;
   font-family: var(--serif);
-  color: var(--accent);
-  font-size: 1.05em;
+  color: var(--text);
+  font-size: 1.06em;
 }
 
 .eyebrow {
-  display: inline-flex; align-items: center; gap: 0.55rem;
+  display: inline-flex; align-items: center; gap: 0.6rem;
   font-family: var(--mono);
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 500;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--text-dim);
   margin-bottom: 1rem;
 }
-.eyebrow::before {
-  content: '';
-  width: 24px; height: 1px;
-  background: var(--accent);
-}
+/* Reference eyebrows open with their room's own glyph (☼, ◈, ∿ …), so they
+   carry no second mark; the ember dot belongs to the core and human doors. */
+.eyebrow::before { content: none; }
 
 .doctrine {
   font-family: var(--serif);
@@ -287,14 +285,14 @@ h3 em { color: var(--accent); font-style: normal; }
 .doctrine span {
   color: var(--text);
   font-style: normal;
-  font-weight: 600;
+  font-weight: 400;
 }
 
 /* ── Brand mark ⊙ ───────────────────────────────────────────────── */
 .brand-mark {
   width: 22px; height: 22px;
   border-radius: 50%;
-  border: 2px solid var(--accent);
+  border: 2px solid currentColor;
   position: relative;
   display: inline-block;
   flex-shrink: 0;
@@ -302,18 +300,17 @@ h3 em { color: var(--accent); font-style: normal; }
 .brand-mark::after {
   content: '';
   position: absolute;
-  inset: 6px;
+  inset: 28%;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 /* ── Top navigation ─────────────────────────────────────────────── */
 nav.topnav {
   position: fixed; top: 0; left: 0; right: 0; z-index: 100;
   height: var(--nav-height);
-  padding: 0 1.5rem;
-  background: color-mix(in srgb, var(--bg) 84%, transparent);
+  padding: 0 max(24px, calc((100% - 1180px) / 2 + 24px));
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
   backdrop-filter: blur(16px) saturate(140%);
   -webkit-backdrop-filter: blur(16px) saturate(140%);
   border-bottom: 1px solid var(--border);
@@ -358,24 +355,32 @@ nav.topnav {
   color: var(--accent);
 }
 .nav-cta {
-  background: linear-gradient(135deg, var(--accent-text), var(--accent-deep));
+  background: var(--accent);
   color: var(--accent-ink) !important;
   padding: 0.45rem 1rem;
-  border-radius: var(--r-pill);
+  border-radius: var(--r-md);
   font-size: 0.83rem;
   font-weight: 600;
-  box-shadow: 0 8px 24px -10px color-mix(in srgb, var(--accent) 55%, transparent);
   border: 1px solid transparent;
 }
 .nav-cta:hover { color: var(--accent-ink) !important; opacity: 0.92; }
 
+/* The ring-and-dot ⊙ beside the name, painted before the estate script
+   arrives so the bar never shifts (/shared/estate.css draws the same). */
+nav.topnav .logo { display: inline-flex; align-items: center; }
+nav.topnav .logo::before {
+  content: ""; display: inline-block; flex: 0 0 auto; width: 14px; height: 14px; margin-right: 9px;
+  box-sizing: border-box; border: 1.5px solid currentColor; border-radius: 50%;
+  background: radial-gradient(circle, var(--accent) 0 2.5px, transparent 3px);
+}
+
 /* ── Mode toggle (☾ night / ☀ dawn) — injected by /shared/mode.js ── */
 .toggle {
   cursor: pointer;
-  border: 1px solid var(--border);
-  background: var(--surface);
+  border: 1px solid var(--border-bright);
+  background: transparent;
   color: var(--text);
-  border-radius: var(--r-pill);
+  border-radius: var(--r-md);
   padding: 0.32rem 0.85rem;
   font-size: 0.8rem;
   white-space: nowrap;
@@ -391,8 +396,10 @@ nav.topnav {
   .nav-actions a:not(.nav-cta):not(.nav-essential) { display: none; }
   .brand-tail { display: none; }
 }
+@media (max-width: 720px) {
+  nav.topnav { padding: 0 20px; }
+}
 @media (max-width: 640px) {
-  nav.topnav { padding: 0 0.9rem; }
   .nav-actions { gap: 0.55rem; }
   /* Icon-only toggle: the label is a single text node ("☾  night" / "☀  dawn"),
      so clip the word and keep the leading glyph. Mode-agnostic. */
@@ -406,7 +413,6 @@ nav.topnav {
   }
 }
 @media (max-width: 430px) {
-  nav.topnav { padding: 0 0.75rem; }
   .nav-actions { gap: 0.5rem; }
   .nav-cta { padding: 0.4rem 0.7rem; }
 }
@@ -414,7 +420,7 @@ nav.topnav {
 /* ── Footer ─────────────────────────────────────────────────────── */
 footer.site-footer {
   border-top: 1px solid var(--border);
-  padding: 2rem 1.5rem 2.5rem;
+  padding: 2rem 24px 2.5rem;
   max-width: var(--content-max);
   margin: 4rem auto 0;
   font-size: 0.84rem;
@@ -448,35 +454,43 @@ footer.site-footer .dot {
 
 /* ── Buttons ─────────────────────────────────────────────────────── */
 .btn {
-  display: inline-flex; align-items: center; gap: 0.55rem;
-  padding: 0.85rem 1.4rem;
-  border-radius: var(--r-pill);
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.55rem;
+  min-height: 44px;
+  padding: 0.7rem 1.2rem;
+  border-radius: var(--r-md);
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: 0.93rem;
   font-family: var(--sans);
   cursor: pointer;
-  transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease, border-color 0.18s ease;
-  border: 1px solid transparent;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, opacity 0.18s ease;
+  /* An unvariant .btn (e.g. a refresh button) reads as a quiet outline,
+     never the browser's grey control. */
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border-bright);
   text-decoration: none;
-  line-height: 1;
+  line-height: 1.2;
   white-space: nowrap;
 }
 .btn-primary {
-  background: linear-gradient(135deg, var(--accent-text), var(--accent-deep));
+  background: var(--accent);
+  border-color: var(--accent);
   color: var(--accent-ink);
-  box-shadow: 0 12px 32px -12px color-mix(in srgb, var(--accent) 50%, transparent);
 }
-.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 18px 40px -14px color-mix(in srgb, var(--accent) 60%, transparent); color: var(--accent-ink); }
+.btn-primary:hover { background: var(--accent-deep); border-color: var(--accent-deep); color: var(--accent-ink); }
 .btn-ghost {
-  background: var(--surface);
+  background: transparent;
   color: var(--text);
   border-color: var(--border-bright);
-  font-family: var(--mono);
-  font-size: 0.86rem;
 }
-.btn-ghost:hover { border-color: var(--accent); color: var(--text); }
+.btn-ghost:hover { border-color: var(--text); color: var(--text); }
 .btn-tiny { padding: 0.45rem 0.85rem; font-size: 0.8rem; font-weight: 500; }
+.btn:hover { border-color: var(--text); }
+.btn-primary:hover { border-color: var(--accent-deep); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+/* One visible focus ring for every control and link. */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 /* ── Code blocks ─────────────────────────────────────────────────── */
 .code-block {
@@ -660,11 +674,11 @@ pre {
   padding: 0.28rem 0.6rem;
   border-radius: var(--r-sm);
 }
-.method.post   { background: color-mix(in srgb, var(--green) 14%, transparent);  color: var(--green); }
-.method.get    { background: color-mix(in srgb, var(--blue) 14%, transparent);   color: var(--blue); }
-.method.put    { background: color-mix(in srgb, var(--yellow) 14%, transparent); color: var(--yellow); }
-.method.patch  { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent-text); }
-.method.delete { background: color-mix(in srgb, var(--red) 14%, transparent);    color: var(--red); }
+.method.post   { background: color-mix(in srgb, var(--green) 8%, transparent);  color: var(--green); }
+.method.get    { background: color-mix(in srgb, var(--blue) 8%, transparent);   color: var(--blue); }
+.method.put    { background: color-mix(in srgb, var(--yellow) 8%, transparent); color: var(--yellow); }
+.method.patch  { background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--accent-text); }
+.method.delete { background: color-mix(in srgb, var(--red) 8%, transparent);    color: var(--red); }
 .endpoint-path {
   font-family: var(--mono);
   font-size: 0.95rem;
@@ -733,9 +747,9 @@ pre {
   padding: 0.15rem 0.5rem;
   border-radius: var(--r-pill);
 }
-.surface-status.live { background: color-mix(in srgb, var(--green) 12%, transparent);  color: var(--green); }
-.surface-status.beta { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent-text); }
-.surface-status.new  { background: color-mix(in srgb, var(--gold) 12%, transparent);   color: var(--gold); }
+.surface-status.live { background: color-mix(in srgb, var(--green) 8%, transparent);  color: var(--green); }
+.surface-status.beta { background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--accent-text); }
+.surface-status.new  { background: color-mix(in srgb, var(--gold) 8%, transparent);   color: var(--gold); }
 .surface-tagline {
   font-family: var(--serif);
   font-style: italic;
@@ -818,11 +832,10 @@ ol.steps > li::before {
 ol.steps > li > strong {
   display: block;
   font-family: var(--serif);
-  font-style: italic;
-  font-size: 1.2rem;
+  font-size: 1.25rem;
   color: var(--text);
   margin-bottom: 0.5rem;
-  font-weight: 600;
+  font-weight: 400;
 }
 ol.steps > li > .step-desc {
   color: var(--text-muted);
@@ -858,6 +871,7 @@ input[type="text"], input[type="email"], input[type="password"], textarea, selec
 }
 input:focus, textarea:focus, select:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 input::placeholder, textarea::placeholder {
   color: var(--text-dim);
@@ -883,7 +897,7 @@ label, .form-label {
 .estate-strip {
   position: fixed; top: 0; left: 0; right: 0; z-index: 101;
   height: var(--strip-height);
-  display: flex; align-items: center; gap: 1.4rem; padding: 0 1.5rem;
+  display: flex; align-items: center; gap: 1.4rem; padding: 0 max(24px, calc((100% - 1180px) / 2 + 24px));
   background: var(--bg-soft);
   border-bottom: 1px solid var(--border);
   font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.02em;
