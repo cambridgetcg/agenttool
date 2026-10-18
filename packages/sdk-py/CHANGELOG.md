@@ -9,25 +9,106 @@ numbers; the TypeScript changes are in
 A version listed here is a source version. Whether PyPI serves it is answered
 by PyPI (`https://pypi.org/project/agenttool-sdk/`).
 
-## Unreleased — after 0.23.0
+## 0.24.0 — prepared, not yet published
 
-Not in the 0.23.0 tag; details under "Unreleased" in [`README.md`](README.md).
+Prepared on 2026-10-18. Until it is released, PyPI does not serve 0.24.0;
+0.22.1 is the newest version on PyPI and npm. The PyPI release also waits on
+the open steps in `docs/PYPI-RELEASES.md` (the workflow still runs in the
+private repository).
+
+0.24.0 supersedes 0.23.0. The `sdk-v0.23.0` tag in the public source
+repository was cut on 2026-10-13 from private source `42ae9148`, before the
+trace-consent change below merged (`4d75dc35`, #459). It was never published
+to PyPI or npm, and it will not be (owner decision, 2026-10-18): publishing
+it would ship an adapter that writes model-authored `<trace>` markup by
+default. The tag stays; release tags are never moved or reused. 0.24.0
+carries everything listed under 0.23.0 below, plus these changes.
+
+### Migration: model-written `<trace>` markup now needs consent
+
+- **What changes.** In 0.22.1 and in the 0.23.0 tag, `AnthropicAdapter` turns
+  a well-formed `<trace>` in the model's final response into a `/v1/traces`
+  write by default, from `create()` and from the managed stream, even when
+  the caller asked for no trace. From 0.24.0 it writes one only when the new
+  `before_trace_write` hook returns literal `True`. With no hook, nothing is
+  written. A hook that returns anything else, or raises, also writes nothing;
+  the call still returns, and the refusal appears in
+  `response.agenttool.markup_emissions` with `id=None` and an error message.
+- **Who is affected.** Only callers that rely on model-written `<trace>`
+  markup reaching `/v1/traces`. The opt-in decision trace
+  (`metadata={"agenttool": {"trace": "decision"}}` or `with at.deciding(...)`)
+  is unchanged and needs no hook. `<chronicle>` markup already needed
+  `before_chronicle_write` and still does. Callers that set
+  `disable_markup_parsing=True` or `skip_markup` see no difference.
+- **How to opt in.** Pass a synchronous hook and return `True` only after
+  your own review. It receives a frozen `TraceBeforeWriteContext`
+  (`source="anthropic_markup"`, `type`, `decision`, `conclusion`,
+  `observations`, `confidence`); its return value is neither stored nor
+  signed.
+
+  ```python
+  from agenttool import AnthropicAdapter, TraceBeforeWriteContext
+
+
+  def review_trace(context: TraceBeforeWriteContext) -> bool:
+      # `ask_operator` is your own review step.
+      return ask_operator(f"{context.type}: {context.decision} → {context.conclusion}") is True
+
+
+  adapter = AnthropicAdapter(Anthropic(), at, before_trace_write=review_trace)
+  ```
+
+  A hook that always returns `True` restores the old behaviour. The default
+  changed because a model can repeat markup it was shown in a user message,
+  tool result or document, and recent project traces return in later full
+  wakes.
+- New exports: `TraceBeforeWriteContext`, `TraceBeforeWriteHook`.
+
+### Migration: asynchronous Anthropic clients are refused
+
+`AnthropicAdapter` raises `AgentToolError`
+(`anthropic_async_client_unsupported`) at construction when
+`messages.create`, or a function it wraps through `__wrapped__`, is a
+coroutine function. That covers `AsyncAnthropic`, and also a synchronous
+`functools.wraps` shim over an async function. A provider call that still
+returns an awaitable is closed and refused before any trace or markup
+request. 0.22.1 accepted `AsyncAnthropic` but never worked with it: the call
+returned an object that could not be awaited, sent no provider request, and,
+with tracing on, posted a decision trace whose conclusion was
+`(empty response)`. Use the synchronous `Anthropic` client.
 
 ### Changed
 
-- `AnthropicAdapter` writes a model-written `<trace>` only when the new
-  `before_trace_write` hook returns literal `True`; with no hook nothing is
-  written (0.23.0 and earlier write it by default). New exports:
-  `TraceBeforeWriteContext`, `TraceBeforeWriteHook`.
-- `AnthropicAdapter` refuses asynchronous clients (`AsyncAnthropic`) at
-  construction with `anthropic_async_client_unsupported`.
-- Trace limits count UTF-16 units, as the server does, and never split a
-  character.
-- `OpenAIResponsesAdapter` accepts any mapping as `metadata` and treats the
-  `openai` package's `NOT_GIVEN` / `omit` as an omitted `store` (sent as
-  `False`).
+- `AnthropicAdapter` counts trace limits in UTF-16 units, as the server's
+  limit and the TypeScript SDK do: summaries at 200, conclusions at 4,000,
+  and the decision trace's observation at 1,000. It never splits a
+  character. 0.22.1 cut by code points, so text heavy in characters outside
+  the Basic Multilingual Plane (most emoji) could exceed the server's limit
+  and the server rejected the trace.
+- `OpenAIResponsesAdapter` accepts any mapping as `metadata`. In 0.22.1 a
+  non-dict mapping was ignored, so `skip_wake` had no effect and
+  `metadata["agenttool"]` reached the provider. The `openai` package's
+  `NOT_GIVEN` / `omit` now count as an omitted `store`, which is sent as
+  `False`; in 0.22.1 they dropped `store` from the request and the
+  provider's default applied.
+- Docstrings only: `at.x402` says the rail is retired for AgentTool (the
+  top-up route has answered `410 purchases_retired` since 2026-09-23, so
+  `top_up` raises and nothing is signed; `payment(id)` still reads recorded
+  payments), and `canonical_wallet_address_claim_bytes` no longer says that
+  `POST /v1/wallets/:id/addresses` verifies its digest, since no such route
+  is on main.
 
-## 0.23.0 — unreleased
+### Documentation
+
+- The README marks the x402 rail retired, adds the "Provider adapters — what
+  each call sends" section, and says the wallet address-claim helpers have
+  no server route on main.
+
+## 0.23.0 — tagged, never published; superseded by 0.24.0
+
+Tagged `sdk-v0.23.0` in the public source repository on 2026-10-13 and never
+published to PyPI or npm; see 0.24.0. The changes below first reach a
+registry in 0.24.0.
 
 ### Added
 

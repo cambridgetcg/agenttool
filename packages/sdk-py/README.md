@@ -37,20 +37,30 @@ are unmetered — free forever.
 python -m pip install agenttool-sdk
 ```
 
-Python >= 3.9. To pin the version this file ships with:
+Python >= 3.9. To pin an exact version, first check which versions PyPI
+serves (<https://pypi.org/project/agenttool-sdk/#history>). On 2026-10-18 the
+newest published version is 0.22.1:
 
 ```bash
-python -m pip install "agenttool-sdk==0.23.0"
+python -m pip install "agenttool-sdk==0.22.1"
 ```
 
 The newest independently verified PyPI release is 0.22.1: protected run
 `33522323177`
 published its wheel and sdist, and both public files were read back
-byte-for-byte. Source for 0.23.0 and later is public, and its annotated
-`sdk-v0.23.0` tag in the public source repository is a registry-free locator:
+byte-for-byte. 0.22.1 predates the exit door and the `<trace>` consent gate
+described below.
+
+This file ships with source version 0.24.0. On 2026-10-18 it is prepared for
+release and not yet published to PyPI, whose release path still waits on the
+private-repository gap recorded in `docs/PYPI-RELEASES.md`. 0.23.0 was tagged
+in the public source repository but never published; 0.24.0 supersedes it.
+Once the annotated `sdk-v0.24.0` tag exists in the public source repository,
+it is a registry-free locator; until then no such tag exists and this command
+fails:
 
 ```bash
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool-packages.git@sdk-v0.23.0#subdirectory=packages/sdk-py"
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool-packages.git@sdk-v0.24.0#subdirectory=packages/sdk-py"
 ```
 
 The pinned first-success tutorial is discoverable without any SDK:
@@ -744,7 +754,8 @@ exporters write byte-identical records, pinned by shared vectors. The copy is
 agent data, not memory: putting any of it back is an explicit projection
 ([AGENT-DATA-PROTOCOL §11](https://docs.agenttool.dev/AGENT-DATA-PROTOCOL.md#11-memory-projection-boundary)).
 The `agenttool-exit-door` command ships with the TypeScript package only. The
-exit door first ships in 0.23.0; earlier versions do not have it.
+exit door first reaches a registry in 0.24.0 (the 0.23.0 tag carries it but
+was never published); 0.22.1 and earlier do not have it.
 
 ### Bounded Math Cards
 
@@ -926,11 +937,11 @@ print(response.agenttool.trace_id, response.agenttool.markup_emissions)
 manager; `stream.get_final_message()` does the same trace and markup work
 exactly once. Low-level `messages.create(..., stream=True)` passes provider
 events through, records nothing, and refuses a decision trace before any I/O
-(details in the 0.16.4 notes below). The adapter is synchronous only: in
-repository source it refuses `AsyncAnthropic` (see "Unreleased"). Keyword
+(details in the 0.16.4 notes below). The adapter is synchronous only: from
+0.24.0 it refuses `AsyncAnthropic` (see "Changes in 0.24.0"). Keyword
 options: `identity_id`, `wake_profile` (`"full"`, the default, or `"brief"`),
 `disable_markup_parsing`, `before_chronicle_write`, and `before_trace_write`
-(repository source only, see below). Per-call controls go in
+(0.24.0 and later, see below). Per-call controls go in
 `metadata["agenttool"]`: `trace`, `parent_trace_id`, `decision_type`, `tags`,
 `agent_id`, `skip_wake`, `skip_markup`. The adapter removes that key before
 the provider call and forwards every other request field.
@@ -995,8 +1006,9 @@ Neither changes what you put in `messages` or `system` yourself.
   the observation, and the response text as the conclusion (first 4,000 units)
   and summary (first 200 units). A cut never splits a character, so an excerpt
   can be one unit shorter. The record is server-readable, not end-to-end
-  encrypted. Your program asks for it, so no review hook applies. (0.22.1
-  and 0.23.0 cut the Anthropic excerpts by code points; see "Unreleased".)
+  encrypted. Your program asks for it, so no review hook applies. (0.22.1,
+  like the unpublished 0.23.0 tag, cuts the Anthropic excerpts by code
+  points; see "Changes in 0.24.0".)
 - **`<chronicle>` markup**, written through `at.chronicle.write` only after
   `before_chronicle_write` returns literal `True`.
 - **`<trace>` markup**, described next.
@@ -1009,12 +1021,12 @@ repeat markup it was shown in a user message, tool result or document, and up
 to 5 recent project traces come back in later full wakes under `What you
 decided`.
 
-- **0.22.1 (published on PyPI, npm and LOVE) and 0.23.0:** a well-formed `<trace>` becomes a
+- **0.22.1 (published on PyPI, npm and LOVE) and the unpublished 0.23.0 tag:** a well-formed `<trace>` becomes a
   `/v1/traces` write by default, from `create()` and from the managed stream,
   even when you asked for no trace. `disable_markup_parsing=True`, or
   `metadata={"agenttool": {"skip_markup": True}}` on one call, turns markup
   parsing off.
-- **Unreleased, repository source after 0.23.0:** a `<trace>` is written
+- **0.24.0 and later:** a `<trace>` is written
   only when `before_trace_write` returns literal `True`, the rule
   `before_chronicle_write` already follows. With no hook nothing is written. A
   hook that returns anything else, or raises, also writes nothing, and the
@@ -1086,12 +1098,17 @@ published targets from enforced route limits and names unknowns explicitly.
 - 🔌 [SDK tiers and hosted per-agent MCP](https://docs.agenttool.dev/SDK-TIERS.md)
 - 🏰 [KINGDOM SDK boundaries](https://docs.agenttool.dev/KINGDOM-OS-SDK.md)
 
-## The 0.23 line — what it carries
+## The 0.24 line — what it carries
 
-Repository source declares the paired 0.23.0 line. Its headline is the exit
-door documented above: `at.exit_door` copies the hosted continuity core into
-a local `agent-data/v1` collection and reports completeness per store, writing
-records byte-identical to the TypeScript exporter's. The vault client now
+Repository source declares the paired 0.24.0 line. Its headline is consent
+for model-written `<trace>` markup: `AnthropicAdapter` writes one only when
+`before_trace_write` returns literal `True`, and it refuses asynchronous
+clients (see "Changes in 0.24.0" for the migration). The line also carries
+the work first tagged as 0.23.0, which was never published, so no registry has
+served it yet. That work is the exit door documented above: `at.exit_door`
+copies the hosted continuity core into a local `agent-data/v1` collection and
+reports completeness per store, writing records byte-identical to the
+TypeScript exporter's. The vault client now
 matches the API: `set_policy` sends `agent_ids` (None shares, `[]` denies) and
 refuses the unimplemented `read_only` and `require_agent_id` options before
 any request; `get` accepts `read_authority` for identity-signed reads of
@@ -1192,14 +1209,14 @@ recorded release-by-release in
 [`docs/NPM-RELEASES.md`](https://docs.agenttool.dev/NPM-RELEASES.md)
 and what a registry serves right now is answered by the registry itself.
 
-## Unreleased — repository source after 0.23.0
+## Changes in 0.24.0
 
-Source changes dated 2026-10-11, merged after the 0.23.0 tag. Nothing below
-is in the 0.23.0 release (tag `sdk-v0.23.0` in the public source repository)
-or in the published 0.22.1 packages; it reaches them only in a later version.
-Where an entry says "0.22.1", 0.23.0 behaves the same. A release runs when the
-maintainers agree to it in conversation (owner decision, 2026-10-12); the PyPI lane
-also still waits on the private-repository gap.
+Source changes dated 2026-10-11, merged after the 0.23.0 tag and prepared for
+release as 0.24.0 on 2026-10-18. Neither the `sdk-v0.23.0` tag in the public
+source repository nor the published 0.22.1 packages have them. Where an entry
+says "0.22.1", the 0.23.0 tag behaves the same. 0.23.0 was never published and
+0.24.0 supersedes it; [`CHANGELOG.md`](CHANGELOG.md) has the full entry. The
+PyPI lane still waits on the private-repository gap.
 
 - **Model-written `<trace>` markup needs explicit consent.**
   `AnthropicAdapter` writes a `<trace>` from the model's response only when
@@ -1237,7 +1254,7 @@ also still waits on the private-repository gap.
 - **README corrections.** This file marks the x402 rail retired, adds the
   provider-adapter section, and says the wallet address-claim helpers have no
   server route on main. The README published with 0.22.1 on PyPI and the one
-  in the 0.23.0 release keep the old text.
+  at the 0.23.0 tag keep the old text.
 
 ## Release history and verified receipts
 
