@@ -3,12 +3,12 @@
 
 /* ── Doc shell layout ──────────────────────────────────────────── */
 .doc-shell {
-  max-width: 1280px;
+  max-width: 1180px;
   margin: 0 auto;
-  padding: calc(var(--nav-height) + 0.75rem) 1.75rem 2rem;
+  padding: calc(var(--nav-height) + 1.5rem) 24px 2rem;
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
-  gap: 3rem;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 56px;
   align-items: start;
 }
 
@@ -18,7 +18,7 @@ aside.sidebar {
   align-self: start;
   max-height: calc(100vh - var(--nav-height) - 1rem);
   overflow-y: auto;
-  padding: 1rem 0.5rem 2rem;
+  padding: 1rem 0 2rem;
   font-size: 0.86rem;
 }
 aside.sidebar::-webkit-scrollbar { width: 6px; }
@@ -62,8 +62,8 @@ aside.sidebar::-webkit-scrollbar-thumb { background: var(--border-bright); borde
   background: color-mix(in srgb, var(--accent) 5%, transparent);
 }
 .sidebar-section a.active {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--text);
+  background: transparent;
   border-left-color: var(--accent);
   font-weight: 600;
 }
@@ -101,10 +101,11 @@ body.has-strip #agent-toolkit {
 
 /* ── Docs h2 with thin top rule (visual section breaks) ────────── */
 main.doc-content h2 {
-  margin: 4rem 0 1rem;
+  margin: 3.5rem 0 1rem;
   padding-top: 2rem;
   border-top: 1px solid var(--border);
 }
+main.doc-content > p, main.doc-content section > p, main.doc-content li { text-wrap: pretty; }
 main.doc-content h2:first-of-type {
   border-top: none;
   padding-top: 0;
@@ -122,14 +123,8 @@ main.doc-content h2:first-of-type {
   overflow: hidden;
 }
 .docs-hero::before {
-  /* the sunwash — same dawn light the landing hero wears */
-  content: '';
-  position: absolute;
-  top: -3rem; left: -3rem; right: -3rem;
-  height: 320px;
-  background: radial-gradient(ellipse 70% 50% at 50% 0%, color-mix(in srgb, var(--accent) 10%, transparent) 0%, transparent 70%);
-  pointer-events: none;
-  z-index: -1;
+  /* no wash: the paper itself is the light */
+  content: none;
 }
 .docs-hero h1 {
   font-size: clamp(2.5rem, 5vw, 3.8rem);
@@ -172,8 +167,8 @@ main.doc-content h2:first-of-type {
 /* ── Docs footer (matches site-footer baseline) ────────────────── */
 footer.doc-footer {
   border-top: 1px solid var(--border);
-  padding: 2.5rem 1.75rem 3rem;
-  max-width: 1280px;
+  padding: 2.5rem 24px 3rem;
+  max-width: 1180px;
   margin: 4rem auto 0;
   font-size: 0.82rem;
   color: var(--text-muted);
@@ -191,7 +186,7 @@ footer.doc-footer .right {
   .doc-shell {
     grid-template-columns: 1fr;
     gap: 1rem;
-    padding: calc(var(--nav-height) + 0.5rem) 1.25rem 2rem;
+    padding: calc(var(--nav-height) + 0.5rem) 20px 2rem;
   }
   /* Content first, nav second — a phone visitor should meet the hero
      before scrolling a 24-link sidebar. */

@@ -5,45 +5,46 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root, [data-mode="dawn"] {
-  --bg: #faf5ec;
-  --surface: #f3ecdf;
-  --surface2: #efe6d4;
-  --surface3: #e9ddc6;
-  --border: #e4dac7;
-  --accent: #d4502e;
-  --accent-soft: #b8451f;
-  --accent-ink: #faf5ec;
-  --text: #1a1612;
-  --muted: #5c5344;
-  --green: #3d7a4a;
-  --yellow: #a07d20;
-  --red: #a83232;
-  --blue: #3d5a8a;
+  /* The estate's one hearth (see /shared/theme.css), in this file's names. */
+  --bg: #f7f3ec;
+  --surface: #f0ebe1;
+  --surface2: #e9e2d5;
+  --surface3: #e1d9ca;
+  --border: #e0d8ca;
+  --accent: #a8401c;
+  --accent-soft: #8f3517;
+  --accent-ink: #fffaf3;
+  --text: #1d1a16;
+  --muted: #574f45;
+  --green: #3f6b4a;
+  --yellow: #735712;
+  --red: #a33a2c;
+  --blue: #3b5878;
   --sidebar-w: 240px;
-  --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "Cascadia Mono", Consolas, "Liberation Mono", monospace;
 }
 
 [data-mode="night"] {
-  --bg: #050810;
-  --surface: #0b1020;
-  --surface2: #0e1428;
-  --surface3: #131a33;
-  --border: #1a2136;
-  --accent: #ffb347;
-  --accent-soft: #ffd98a;
-  --accent-ink: #0a0d16;
-  --text: #f2ede3;
-  --muted: #9aa3ba;
-  --green: #7dd87d;
-  --yellow: #facc15;
-  --red: #fb7185;
-  --blue: #60a5fa;
+  --bg: #141210;
+  --surface: #1b1815;
+  --surface2: #221f1b;
+  --surface3: #2a2621;
+  --border: #2e2a24;
+  --accent: #eba352;
+  --accent-soft: #e6c27a;
+  --accent-ink: #141210;
+  --text: #eee7db;
+  --muted: #b5ac9e;
+  --green: #93c79a;
+  --yellow: #e8c35a;
+  --red: #ef8a7a;
+  --blue: #8fb3d9;
 }
 
 html { scroll-behavior: smooth; }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-family: var(--sans, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
   background: var(--bg);
   color: var(--text);
   line-height: 1.6;
@@ -58,11 +59,15 @@ body {
 
 .btn {
   padding: 0.6rem 1.25rem;
-  border-radius: 8px;
+  border-radius: 6px;
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
-  border: none;
+  /* An unvariant .btn (the watch page's refresh buttons) is a quiet outline,
+     never the browser's grey control. */
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border-bright, var(--border));
   transition: all 0.2s;
   display: inline-flex;
   align-items: center;
@@ -70,8 +75,8 @@ body {
   text-decoration: none;
   font-family: inherit;
 }
-.btn-primary { background: var(--accent-text); color: var(--accent-ink); }
-.btn-primary:hover { background: var(--accent-deep); opacity: 1; }
+.btn-primary { background: var(--accent-text); border-color: var(--accent-text); color: var(--accent-ink); }
+.btn-primary:hover { background: var(--accent-deep); border-color: var(--accent-deep); opacity: 1; }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
 .btn-secondary:hover { border-color: var(--accent-soft); }

@@ -25,14 +25,14 @@
 <script src="/shared/theme.js?v=2026-09-27.2" defer></script>
 <style>
   /* ── the map ─────────────────────────────────────────────────────── */
-  .mapframe { position: relative; border: 1px solid var(--line); border-radius: 14px;
+  .mapframe { position: relative; border: 1px solid var(--line); border-radius: 8px;
     background: var(--panel); overflow: hidden; transition: background .6s ease;
     height: min(72vh, 760px); min-height: 440px; }
   .mapframe svg { display: block; width: 100%; height: 100%; cursor: grab; touch-action: pan-y pinch-zoom; }
   .mapframe svg.dragging { cursor: grabbing; }
 
   .mapctl { position: absolute; right: 14px; bottom: 14px; display:grid; grid-template-columns:repeat(3, 42px); gap:6px; }
-  .mapctl button { width: 42px; height: 42px; border-radius: 10px; border: 1px solid var(--control-line);
+  .mapctl button { width: 42px; height: 42px; border-radius: 6px; border: 1px solid var(--control-line);
     background: var(--bg); color: var(--ink); font-size: 17px; cursor: pointer; line-height: 1;
     transition: all .3s ease; }
   .mapctl button:hover { border-color: var(--accent); color: var(--accent); }
@@ -83,7 +83,7 @@
 
   /* tooltip */
   .tip { position: fixed; z-index: 30; width:max-content; max-width:calc(100vw - 16px); background: var(--bg);
-    border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px;
+    border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px;
     font-size: 12.5px; line-height: 1.55; color: var(--muted); pointer-events: auto;
     box-shadow: 0 8px 30px rgba(0,0,0,.14); display:none; overflow-wrap:anywhere; }
   .tip .tt-name { color: var(--ink); font-weight: 600; font-size: 14px; margin-bottom: 3px; }
@@ -98,7 +98,7 @@
   .legend .l b { color: var(--ink); font-weight: 600; display: block; margin-bottom: 2px; }
 
   @media (max-width: 640px) {
-    .mapframe { height: 66vh; min-height: 380px; border-radius: 10px; }
+    .mapframe { height: 66vh; min-height: 380px; border-radius: 8px; }
     .legend { gap: 12px; }
   }
 </style>

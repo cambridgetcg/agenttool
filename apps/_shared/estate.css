@@ -1,15 +1,16 @@
 /* Shared audience navigation. Static page navigation remains the no-JS fallback. */
 :root {
-  --estate-bg: var(--bg, #050810);
-  --estate-surface: var(--surface, var(--panel, #0b1020));
-  --estate-surface-2: var(--surface-2, var(--panel2, #0e1428));
-  --estate-text: var(--text, var(--ink, #f2ede3));
-  --estate-muted: var(--text-muted, var(--muted, #a4a8b3));
-  --estate-dim: var(--text-dim, var(--faint, #8994ad));
-  --estate-line: var(--border, var(--line, #263050));
-  --estate-line-strong: var(--border-bright, var(--control-line, #596581));
-  --estate-serif: var(--serif, Georgia, "Times New Roman", serif);
-  --estate-sans: var(--sans, -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif);
+  --estate-bg: var(--bg, #141210);
+  --estate-surface: var(--surface, var(--panel, #1b1815));
+  --estate-surface-2: var(--surface-2, var(--panel2, #221f1b));
+  --estate-text: var(--text, var(--ink, #eee7db));
+  --estate-muted: var(--text-muted, var(--muted, #b5ac9e));
+  --estate-dim: var(--text-dim, var(--faint, #9c9385));
+  --estate-line: var(--border, var(--line, #2e2a24));
+  --estate-line-strong: var(--border-bright, var(--control-line, #6f675b));
+  --estate-accent: var(--accent, #eba352);
+  --estate-serif: var(--serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif);
+  --estate-sans: var(--sans, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   --estate-mono: var(--mono, ui-monospace, "SF Mono", Menlo, monospace);
   --estate-bar-height: 64px;
 }
@@ -25,13 +26,13 @@
     box-sizing: border-box;
     height: var(--estate-bar-height);
     min-height: var(--estate-bar-height);
-    padding: 10px 24px;
+    padding: 10px max(24px, calc((100% - 1180px) / 2 + 24px));
     gap: 14px;
     flex-wrap: nowrap;
     justify-content: flex-start;
     border-bottom: 1px solid var(--estate-line);
   }
-  html:is(.estate-arriving, [data-audience]) nav.site-nav { position: relative; max-width: 1180px; }
+  html:is(.estate-arriving, [data-audience]) nav.site-nav { position: relative; max-width: none; width: 100%; margin: 0; background: var(--estate-bg); }
   html:is(.estate-arriving, [data-audience]) body.has-strip .topnav { top: 0; }
   html:is(.estate-arriving, [data-audience]):not(:has(nav.site-nav, nav.topnav)) body { padding-top: var(--estate-bar-height); }
   /* Generated fallback navigation also serves the self-styled culture pages. */
@@ -45,6 +46,13 @@
 .estate-ready [hidden], html[data-audience] nav [hidden] { display: none !important; }
 .estate-ready .brand-tail { display: none; }
 html[data-audience] nav.topnav .logo { color: var(--estate-text); font: 700 17px/1.2 var(--estate-sans); text-decoration: none; white-space: nowrap; }
+/* The ring-and-dot ⊙ beside the name on every door: an ink ring, an ember dot. */
+html[data-audience] :is(nav.site-nav .wordmark, nav.topnav .logo, .estate-bar-brand) { display: inline-flex; align-items: center; letter-spacing: -.01em; }
+html[data-audience] :is(nav.site-nav .wordmark, nav.topnav .logo, .estate-bar-brand)::before {
+  content: ""; display: inline-block; flex: 0 0 auto; width: 14px; height: 14px; margin-right: 9px;
+  box-sizing: border-box; border: 1.5px solid currentColor; border-radius: 50%;
+  background: radial-gradient(circle, var(--estate-accent) 0 2.5px, transparent 3px);
+}
 .estate-quick-actions,
 html[data-audience] .site-nav .links,
 html[data-audience] .topnav .nav-actions { display: flex; flex: 0 1 auto; order: initial; align-items: center; flex-wrap: nowrap; gap: 4px; margin: 0 0 0 auto; min-width: 0; padding: 0; overflow: visible; }
@@ -55,11 +63,12 @@ html[data-audience] .topnav .nav-actions { display: flex; flex: 0 1 auto; order:
   font: 600 12px/1.2 var(--estate-sans) !important; text-decoration: none; white-space: nowrap;
 }
 .estate-quick-link:hover, .estate-quick-link:focus-visible,
-.estate-quick-link[aria-current="page"], html[data-audience] nav .nav-essential:hover { color: var(--estate-text) !important; text-decoration: underline; text-underline-offset: 5px; }
+.estate-quick-link[aria-current="page"], html[data-audience] nav .nav-essential:hover { color: var(--estate-text) !important; text-decoration: underline; text-underline-offset: 6px; text-decoration-thickness: 1px; }
+.estate-quick-link[aria-current="page"] { text-decoration-color: var(--estate-accent); text-decoration-thickness: 2px; }
 .estate-audience-exit, html[data-audience] nav .nav-audience { border-left-color: var(--estate-line); margin-left: 4px; }
-.estate-open { cursor: pointer; border-color: var(--estate-line); color: var(--estate-text) !important; }
+.estate-open { cursor: pointer; border-color: var(--estate-line); border-radius: 6px; padding-inline: 12px; color: var(--estate-text) !important; }
 .estate-open:hover, .estate-open:focus-visible { border-color: var(--room-accent, var(--estate-text)); }
-.estate-ready .estate-quick-actions .toggle { position: static !important; margin: 0; min-width: 40px; min-height: 40px; border: 1px solid var(--estate-line); border-radius: 0; background: transparent; font-size: 12px; }
+.estate-ready .estate-quick-actions .toggle { position: static !important; margin: 0; min-width: 40px; min-height: 40px; border: 1px solid var(--estate-line); border-radius: 6px; background: transparent; color: var(--estate-text); font: 500 12px/1.2 var(--estate-sans); }
 .estate-open:focus-visible, .estate-quick-link:focus-visible,
 .estate-room-link:focus-visible, .estate-library-link:focus-visible,
 html[data-audience] nav .nav-essential:focus-visible {
@@ -68,29 +77,29 @@ html[data-audience] nav .nav-essential:focus-visible {
 nav.estate-bar {
   position: fixed; inset: 0 0 auto; z-index: 95; box-sizing: border-box;
   height: var(--estate-bar-height); display: flex; align-items: center; gap: 14px;
-  padding: 10px 24px; border-bottom: 1px solid var(--estate-line);
+  padding: 10px max(24px, calc((100% - 1180px) / 2 + 24px)); border-bottom: 1px solid var(--estate-line);
   background: var(--estate-bg); color: var(--estate-text); font-family: var(--estate-sans);
 }
 .estate-bar-brand { color: var(--estate-text) !important; font: 700 17px/1.2 var(--estate-sans); text-decoration: none !important; }
-nav.estate-bar .toggle { border: 1px solid var(--estate-line-strong); border-radius: 999px; padding: 6px 12px; color: var(--estate-text); cursor: pointer; }
+nav.estate-bar .toggle { border: 1px solid var(--estate-line-strong); border-radius: 6px; padding: 6px 12px; color: var(--estate-text); cursor: pointer; }
 
 /* Search is an explicit secondary view, scoped to the page's audience by
    default. A visitor can include the other audience without changing identity. */
 .estate-atlas {
   width: min(960px, calc(100vw - 32px)); max-width: none; height: min(780px, calc(100dvh - 40px)); max-height: none;
-  margin: auto; padding: 0; overflow: hidden; border: 1px solid var(--estate-line-strong); border-radius: 16px;
-  background: var(--estate-bg); color: var(--estate-text); box-shadow: 0 22px 90px #0006; font-family: var(--estate-sans);
+  margin: auto; padding: 0; overflow: hidden; border: 1px solid var(--estate-line-strong); border-radius: 12px;
+  background: var(--estate-bg); color: var(--estate-text); box-shadow: 0 24px 80px -20px #0007; font-family: var(--estate-sans);
 }
-.estate-atlas::backdrop { background: #0008; }
+.estate-atlas::backdrop { background: rgb(20 18 16 / .55); backdrop-filter: blur(3px); }
 .estate-atlas-fallback { position: fixed; inset: 20px; z-index: 300; }
 .estate-atlas-shell { height: 100%; display: flex; flex-direction: column; min-height: 0; }
 .estate-atlas-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 24px 28px 18px; }
 .estate-atlas-heading { min-width: 0; }
-.estate-atlas-eyebrow { margin-bottom: 8px; color: var(--estate-muted); font: 600 11px/1.3 var(--estate-mono); }
-.estate-atlas-title { margin: 0; color: var(--estate-text); font: 500 clamp(26px, 4vw, 38px)/1.1 var(--estate-serif); }
+.estate-atlas-eyebrow { margin-bottom: 8px; color: var(--estate-muted); font: 500 11px/1.3 var(--estate-mono); letter-spacing: .1em; text-transform: uppercase; }
+.estate-atlas-title { margin: 0; color: var(--estate-text); font: 400 clamp(26px, 4vw, 38px)/1.1 var(--estate-serif); letter-spacing: -.015em; }
 .estate-atlas-subtitle { margin: 8px 0 0; color: var(--estate-muted); font-size: 13px; line-height: 1.5; }
-.estate-atlas-close { min-height: 40px; flex: 0 0 auto; border: 1px solid var(--estate-line-strong); border-radius: 7px; padding: 7px 12px; background: var(--estate-surface); color: var(--estate-text); cursor: pointer; }
-.estate-search { display: flex; align-items: center; gap: 12px; margin: 0 28px; min-height: 48px; border: 1px solid var(--estate-line-strong); border-radius: 8px; padding: 0 14px; background: var(--estate-surface); }
+.estate-atlas-close { min-height: 40px; flex: 0 0 auto; border: 1px solid var(--estate-line-strong); border-radius: 6px; padding: 7px 12px; background: var(--estate-surface); color: var(--estate-text); cursor: pointer; }
+.estate-search { display: flex; align-items: center; gap: 12px; margin: 0 28px; min-height: 48px; border: 1px solid var(--estate-line-strong); border-radius: 6px; padding: 0 14px; background: var(--estate-surface); }
 .estate-search:focus-within { outline: 2px solid var(--room-accent, var(--estate-text)); outline-offset: 2px; }
 .estate-search-label { color: var(--estate-muted); font: 500 11px/1.3 var(--estate-mono); white-space: nowrap; }
 .estate-search-input { width: 100%; min-width: 0; height: 48px; padding: 0; border: 0; outline: 0; background: transparent; color: var(--estate-text); font: 500 16px/1 var(--estate-sans); }
@@ -102,12 +111,12 @@ nav.estate-bar .toggle { border: 1px solid var(--estate-line-strong); border-rad
 .estate-atlas-door { margin: 0 0 20px; }
 .estate-door-title { margin: 0 0 10px; color: var(--estate-text); font: 650 14px/1.4 var(--estate-sans); }
 .estate-room-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.estate-room-link { display: flex; align-items: flex-start; gap: 12px; min-width: 0; border: 1px solid var(--estate-line); border-radius: 8px; padding: 12px; background: var(--estate-surface); text-decoration: none !important; }
-.estate-room-link:hover, .estate-room-link[aria-current="page"] { border-color: var(--room-accent, var(--estate-line-strong)); }
+.estate-room-link { display: flex; align-items: flex-start; gap: 12px; min-width: 0; border: 1px solid var(--estate-line); border-radius: 6px; padding: 12px; background: var(--estate-surface); text-decoration: none !important; }
+.estate-room-link:hover, .estate-room-link[aria-current="page"] { border-color: var(--room-accent, var(--estate-line-strong)); background: var(--estate-surface-2); }
 .estate-room-copy { flex: 1; min-width: 0; }
 .estate-room-label { display: block; color: var(--estate-text); font: 650 13px/1.4 var(--estate-sans); }
 .estate-room-note { display: block; margin-top: 3px; color: var(--estate-muted); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
-.estate-room-state { flex: 0 0 auto; max-width: 75px; color: var(--estate-muted); font: 500 10px/1.4 var(--estate-mono); }
+.estate-room-state { flex: 0 0 auto; max-width: 112px; color: var(--estate-muted); font: 500 10px/1.4 var(--estate-mono); }
 .estate-atlas-footer { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 12px 28px; border-top: 1px solid var(--estate-line); background: var(--estate-surface); }
 .estate-atlas-boundary { margin: 0; color: var(--estate-muted); font-size: 11px; line-height: 1.5; }
 .estate-atlas-machine { color: var(--estate-text) !important; white-space: nowrap; font-size: 12px; }
@@ -125,7 +134,7 @@ nav.estate-bar .toggle { border: 1px solid var(--estate-line-strong); border-rad
 @media (max-width: 720px) {
   html:is(.estate-arriving, [data-audience]) { --estate-bar-height: 100px; }
   html:is(.estate-arriving, [data-audience]) nav.site-nav, html:is(.estate-arriving, [data-audience]) nav.topnav, nav.estate-bar {
-    padding: 8px 16px; flex-wrap: wrap; gap: 4px 12px; align-content: center;
+    padding: 8px 20px; flex-wrap: wrap; gap: 4px 12px; align-content: center;
   }
   html:is(.estate-arriving, [data-audience]) .site-nav .wordmark,
   html:is(.estate-arriving, [data-audience]) .topnav .logo { min-height: 24px; }
@@ -137,7 +146,7 @@ nav.estate-bar .toggle { border: 1px solid var(--estate-line-strong); border-rad
   .estate-audience-exit, html[data-audience] nav .nav-audience { margin-left: 2px; }
   html[data-audience] nav.site-nav > .toggle,
   html[data-audience] nav.topnav > .toggle,
-  .estate-ready .estate-quick-actions .toggle { position: absolute !important; top: 8px; right: 20px; margin: 0; min-width: 32px; min-height: 36px; width: 32px; height: 36px; padding: 0; overflow: hidden; font-size: 0; }
+  .estate-ready .estate-quick-actions .toggle { position: absolute !important; top: 8px; right: 20px; margin: 0; min-width: 32px; min-height: 36px; width: 32px; height: 36px; padding: 0; overflow: hidden; font-size: 0; text-align: center; }
   html[data-audience][data-mode="night"] nav .toggle::before { content: "☀"; font-size: 16px; }
   html[data-audience][data-mode="dawn"] nav .toggle::before { content: "☾"; font-size: 16px; }
   .estate-atlas { width: calc(100vw - 16px); height: calc(100dvh - 16px); }
