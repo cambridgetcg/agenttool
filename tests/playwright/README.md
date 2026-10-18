@@ -32,6 +32,11 @@ bearer-verification page: success, selected identity mismatch, rejected bearer,
 rate limit, outage, malformed response, finite timeout and single-flight submit.
 `launch-ui.spec.ts` covers task navigation, narrow-screen reflow, clipboard denial,
 keyboard access, snapshot freshness and independent request failures.
+`page-policy.spec.ts` loads every committed HTML page in all three roots and
+fails on any enforced Content-Security-Policy violation raised while it loads.
+A blocked inline event handler raises none until it fires, so it is out of
+reach. The page list comes from the checkout, so a new page is covered without
+editing the spec.
 
 The fixture starts all three checked-out static roots on loopback ports
 5173–5175. It applies committed `_headers` and redirects and returns actual 404
@@ -68,6 +73,17 @@ An installed Chrome can be selected without downloading a browser:
 
 ```bash
 AGENTTOOL_TEST_CHROME_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npm test
+```
+
+The same page sweep runs against production with its own configuration. It
+needs the network and reads only (the browser aborts anything but GET or
+HEAD). A page must answer 200 with a policy; a 404 is listed as not yet
+released, except on a site's front page. Cloudflare's automatic analytics
+beacon is listed by `live/summary-reporter.ts` instead of failing the run. The
+`Live page policy` workflow runs it every six hours:
+
+```bash
+npx --no-install playwright test -c live/playwright.config.ts
 ```
 
 CI installs the lockfile-matched Chromium, runs the complete default gate,

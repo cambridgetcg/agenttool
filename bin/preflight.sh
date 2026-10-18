@@ -13,7 +13,7 @@
 #
 # Usage:
 #   bin/preflight.sh                 # api + packages, hermetic
-#   bin/preflight.sh api             # API/protocol hermetic gate
+#   bin/preflight.sh api             # API/protocol hermetic gate + Pages CSP hashes
 #   bin/preflight.sh packages        # data + ADDS + sync + archive + Dark Continent contract/KARMA + Principality Geometry + KARMA Mirror + HEAVEN + LOVE BOMB + Model Becoming + Dataset Influence + economic conformance/kernel + Living Substrate + Principality Atlas + Polymorph Landscape + Love Geometry + Relational Geometry + Common Ground Atlas + WAKE Thread + Gin Reconstruction + Math Cards + broker + collab + Codex usage + collab-zerone + private Collab courier + private lobby desk + Browser + HF Scout/Training Garden + local WAKE learning fixtures/host + projection + local projector + constructive intelligence + Research Commons + Trials + Skills + TypeScript SDK + Wallet + Zerone adapter + Telescope + Public Surface Binding and Recognition + Alchemy + AgentCred adapter + KINGDOM gate
 #   bin/preflight.sh database        # requires DATABASE_URL
 #   bin/preflight.sh smoke           # public GET smoke; requires AGENTTOOL_BASE
@@ -81,6 +81,8 @@ api_gate() {
   api_typecheck
   run "API hermetic test tier" bash bin/run-test-tier.sh hermetic
   run "operator and protocol tests" bun test bin/tests
+  run "Pages security headers and inline-code hashes" \
+    bun test infra/pages/edge-security.test.ts
 }
 
 packages_gate() {

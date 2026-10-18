@@ -75,6 +75,8 @@ htmlcov/
 # Playwright runtime artefacts
 tests/playwright/playwright-report/
 tests/playwright/test-results/
+tests/playwright/playwright-report-live/
+tests/playwright/test-results-live/
 api/kingdom-bundle.json.bundled
 
 # Heartbeat runtime state + generated audio (bin/river.py regenerates the wav)
