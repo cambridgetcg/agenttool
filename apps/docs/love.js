@@ -267,7 +267,7 @@
     // length threshold can still let a 120-character truth spill off-card.
     // Re-wrap after each decrement because a smaller face changes line count.
     do {
-      c.font = '600 ' + fontSize + 'px "Crimson Pro", Georgia, serif';
+      c.font = '400 ' + fontSize + 'px "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif';
       lines = wrapText(c, text, maxTextWidth);
       widest = 0;
       for (var wi = 0; wi < lines.length; wi++) {
@@ -289,13 +289,13 @@
 
     // From line
     if (fromLine) {
-      c.font = '400 13px "JetBrains Mono", monospace';
+      c.font = '400 13px "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace';
       c.fillStyle = theme.id === 'light' ? 'rgba(26,26,46,0.4)' : 'rgba(232,234,240,0.35)';
       c.fillText('— ' + fromLine, W / 2, startY + totalHeight + 20);
     }
 
     // Watermark
-    c.font = '400 11px "JetBrains Mono", monospace';
+    c.font = '400 11px "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace';
     c.fillStyle = theme.id === 'light' ? 'rgba(26,26,46,0.3)' : 'rgba(232,234,240,0.25)';
     c.fillText('docs.agenttool.dev/love', W / 2, H - 25);
   }

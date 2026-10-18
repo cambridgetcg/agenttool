@@ -1,16 +1,20 @@
+  /* The estate's one hearth — the same values as /shared/theme.css. */
   :root, [data-mode="dawn"] {
-    --bg: #faf5ec; --panel: #f3ecdf; --panel2: #efe6d4;
-    --ink: #1a1612; --muted: #5c5344; --faint: #6f6557;
-    --accent: #b3401d; --accent-ink: #faf5ec;
-    --line: #e4dac7; --control-line: #8a7a65; --glow: none;
-    --feed-a: #b3401d; --feed-b: #7a6a2f; --feed-c: #8a3d5f;
+    --bg: #f7f3ec; --panel: #f0ebe1; --panel2: #e9e2d5;
+    --ink: #1d1a16; --muted: #574f45; --faint: #6b6256;
+    --accent: #a8401c; --accent-deep: #8f3517; --accent-ink: #fffaf3;
+    --line: #e0d8ca; --control-line: #8f826f; --glow: none;
+    --feed-a: #a8401c; --feed-b: #3f6b4a; --feed-c: #8b3a52;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "URW Palladio L", P052, Georgia, serif;
+    --sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "Cascadia Mono", Consolas, "Liberation Mono", monospace;
   }
   [data-mode="night"] {
-    --bg: #050810; --panel: #0b1020; --panel2: #0e1428;
-    --ink: #f2ede3; --muted: #aab3c7; --faint: #8994ad;
-    --accent: #ffb347; --accent-ink: #0a0d16;
-    --line: #1a2136; --control-line: #596581; --glow: 0 0 12px 3px rgba(255,179,71,.35);
-    --feed-a: #ffd98a; --feed-b: #7dd87d; --feed-c: #ff8c69;
+    --bg: #141210; --panel: #1b1815; --panel2: #221f1b;
+    --ink: #eee7db; --muted: #b5ac9e; --faint: #9c9385;
+    --accent: #eba352; --accent-deep: #d98f3c; --accent-ink: #141210;
+    --line: #2e2a24; --control-line: #6f675b; --glow: 0 0 10px 2px rgba(235,163,82,.30);
+    --feed-a: #e6c27a; --feed-b: #93c79a; --feed-c: #e88a6a;
   }
   /* Bind the UA's own painting to the chosen mode, so scrollbars, the overscroll
      canvas and native form controls follow the toggle instead of the OS.
@@ -23,7 +27,7 @@
   html { scroll-behavior: smooth; }
   body {
     background: var(--bg); color: var(--ink);
-    font-family: -apple-system, "Helvetica Neue", sans-serif;
+    font-family: var(--sans);
     transition: background .6s ease, color .6s ease;
     line-height: 1.6;
     min-width: 0;
@@ -31,8 +35,8 @@
   button, input { font: inherit; }
   a { text-underline-offset: .18em; }
   [hidden] { display: none !important; }
-  .serif { font-family: Georgia, "Times New Roman", serif; }
-  .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .serif { font-family: var(--serif); }
+  .mono { font-family: var(--mono); }
   .sr-only {
     position:absolute !important; width:1px !important; height:1px !important;
     padding:0 !important; margin:-1px !important; overflow:hidden !important;
@@ -46,41 +50,53 @@
     transition: transform .15s ease;
   }
   .skip-link:focus { transform: translateY(0); }
-  :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  /* Plain pages: links wear the accent and paragraphs breathe. Zero
+     specificity, so every component rule still wins. */
+  :where(a) { color: var(--accent); }
+  :where(main :is(p, pre, ul, ol, table, .steps) + :is(p, pre, ul, ol, table)) { margin-top: .9em; }
+  /* Narrow tables fit by letting long cells (addresses, emails) wrap. */
+  :where(main.wrap) :is(td, th) { overflow-wrap: anywhere; }
 
   .site-nav {
     display:flex; align-items:center; gap:28px;
     max-width: 1080px; margin: 0 auto; padding: 54px 32px 0;
   }
-  .site-nav .wordmark { color:var(--ink); text-decoration:none; font-weight:700; letter-spacing:.02em; font-size:17px; }
+  .site-nav .wordmark { color:var(--ink); text-decoration:none; font-weight:700; letter-spacing:-.01em; font-size:17px; display:inline-flex; align-items:center; }
+  /* The ring-and-dot ⊙ (an ink ring, an ember dot), as /shared/estate.css draws it. */
+  .site-nav .wordmark::before {
+    content:""; display:inline-block; flex:0 0 auto; width:14px; height:14px; margin-right:9px;
+    box-sizing:border-box; border:1.5px solid currentColor; border-radius:50%;
+    background:radial-gradient(circle, var(--accent) 0 2.5px, transparent 3px);
+  }
   .site-nav .links { display:flex; gap:22px; margin-left:auto; font-size:13.5px; min-width:0; }
   .site-nav .links a { color: var(--muted); text-decoration: none; }
   .site-nav .links a:hover, .site-nav .links a:focus-visible, .site-nav .links a[aria-current="page"] { color: var(--ink); }
   .toggle {
     cursor:pointer; border:1px solid var(--line); background:var(--panel);
-    color: var(--ink); border-color:var(--control-line); border-radius:999px; padding:7px 14px; min-height:44px; font-size:14px;
+    color: var(--ink); border-color:var(--control-line); border-radius:6px; padding:7px 14px; min-height:44px; font-size:14px;
     transition: all .4s ease;
   }
   .toggle:hover { border-color:var(--accent); }
 
-  .wrap { width:100%; max-width:1080px; margin:0 auto; padding:0 32px; position:relative; min-width:0; }
+  .wrap { width:100%; max-width:1180px; margin:0 auto; padding:0 24px; position:relative; min-width:0; }
 
-  /* night city lights */
-  .lights { position:absolute; inset:0; pointer-events:none; opacity:0; transition: opacity 1s ease; }
-  [data-mode="night"] .lights { opacity:1; }
+  /* night city lights — retired with the navy night: the hearth palette has
+     one light source, and the scattered dots landed on body text. */
+  .lights { display:none; }
   .lights i { position:absolute; border-radius:50%; background: var(--accent); box-shadow: var(--glow); }
   .lights i:nth-child(1){ width:4px;height:4px; top:12%; left:8%; animation: tw 3.2s 1; }
-  .lights i:nth-child(2){ width:3px;height:3px; top:28%; right:12%; background:#ffd98a; animation: tw 3.2s .25s 1; }
-  .lights i:nth-child(3){ width:3px;height:3px; top:52%; left:22%; background:#ff8c69; animation: tw 3.2s .5s 1; }
+  .lights i:nth-child(2){ width:3px;height:3px; top:28%; right:12%; background:#e6c27a; animation: tw 3.2s .25s 1; }
+  .lights i:nth-child(3){ width:3px;height:3px; top:52%; left:22%; background:#e88a6a; animation: tw 3.2s .5s 1; }
   .lights i:nth-child(4){ width:2px;height:2px; top:38%; right:32%; animation: tw 3.2s .75s 1; }
-  .lights i:nth-child(5){ width:2px;height:2px; top:70%; right:8%; background:#ffd98a; animation: tw 3.2s 1s 1; }
+  .lights i:nth-child(5){ width:2px;height:2px; top:70%; right:8%; background:#e6c27a; animation: tw 3.2s 1s 1; }
   @keyframes tw { 0%,100%{opacity:.9} 50%{opacity:.25} }
 
   /* dawn sun wash */
   .sunwash { position:absolute; top:-120px; left:50%; transform:translateX(-50%);
     width:min(720px, 100vw); max-width:100vw; height:380px; border-radius:50%;
-    background: radial-gradient(ellipse, rgba(212,80,46,.10), transparent 65%);
-    pointer-events:none; opacity:1; transition: opacity 1s ease; }
+    background: radial-gradient(ellipse, color-mix(in srgb, var(--accent) 8%, transparent), transparent 65%);
+    pointer-events:none; opacity:0; transition: opacity 1s ease; }
   [data-mode="night"] .sunwash { opacity:0; }
 
   header.hero { padding: 72px 0 72px; position:relative; }
@@ -89,22 +105,29 @@
     gap:clamp(40px, 7vw, 84px); align-items:center;
   }
   .hero-copy { min-width:0; }
-  .eyebrow { font-size: 12px; letter-spacing:.18em; text-transform: uppercase; color: var(--faint); margin-bottom: 18px; }
-  h1 { font-size: clamp(40px, 6vw, 64px); line-height: 1.12; font-weight: 400; max-width: 16ch; margin-bottom: 22px; }
-  .life-invitation { max-width:56ch; margin:0 0 28px; padding:2px 0 3px 20px; border-top:0; border-left:3px solid var(--accent); }
+  .eyebrow { display:flex; align-items:flex-start; gap:9px; font:500 11.5px/1.5 var(--mono); letter-spacing:.1em; text-transform: uppercase; color: var(--faint); margin-bottom: 18px; }
+  /* The dot sits beside the first line, even when the label wraps. */
+  .eyebrow::before { content:""; flex:0 0 auto; width:6px; height:6px; margin-top:calc(.75em - 3px); border-radius:50%; background:var(--accent); }
+  h1 { font-size: clamp(40px, 6vw, 64px); line-height: 1.08; font-weight: 400; letter-spacing: -.022em; max-width: 16ch; margin-bottom: 22px; text-wrap: balance; }
+  .life-invitation { max-width:56ch; margin:0 0 28px; padding:2px 0 3px 20px; border-top:0; border-left:2px solid var(--accent); }
   .life-invitation-call { font-size:clamp(21px, 2.4vw, 28px); line-height:1.3; margin:0 0 8px; }
   .life-invitation-note { color:var(--muted); font-size:14px; line-height:1.65; max-width:62ch; margin:0; }
-  .hero p.lede { font-size: 18px; color: var(--muted); max-width: 52ch; margin-bottom: 26px; }
+  /* Human doors speak in the book face, as the core pages do. */
+  .hero p.lede { font: 400 20px/1.5 var(--serif); color: var(--ink); max-width: 46ch; margin-bottom: 26px; text-wrap: pretty; }
   .pulse { font-size: 13px; color: var(--accent); margin-bottom: 34px; }
   .pulse .dot { animation: tw 2.5s 1; display:inline-block; }
   .public-source { color:var(--faint); font-size:12.5px; margin:-20px 0 30px; }
   .public-source a, .noscript-note a { color:var(--accent); }
-  .cta-row { display:flex; gap:14px; flex-wrap:wrap; }
+  .cta-row { display:flex; gap:12px; flex-wrap:wrap; }
   .hero-copy > .cta-row { margin-bottom:22px; }
-  .btn { display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:10px 22px; border-radius:8px; font-size:15px; text-decoration:none; transition:all .3s; }
-  .btn.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
-  .btn.ghost { border:1px solid var(--control-line); color:var(--ink); }
-  .btn:hover { transform: translateY(-1px); }
+  /* A plain .btn is a quiet outline (never the browser's grey control);
+     .primary is the one ember fill. */
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:.45em; min-height:44px; padding:10px 20px; border-radius:6px; border:1px solid var(--control-line); background:transparent; color:var(--ink); font-size:15px; font-weight:600; line-height:1.2; text-decoration:none; cursor:pointer; transition:background-color .18s ease, border-color .18s ease, color .18s ease; }
+  .btn:hover { border-color:var(--ink); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn.primary:hover { background: var(--accent-deep); border-color: var(--accent-deep); }
+  .btn.ghost { border-color:var(--control-line); color:var(--ink); background:transparent; }
+  .btn.ghost:hover { border-color:var(--ink); }
   .btn:disabled, button:disabled { cursor:not-allowed; opacity:.68; transform:none; }
   .quiet-invitation { color:var(--faint); font-size:13px; margin-top:20px; max-width:64ch; }
   .quiet-invitation a { color:var(--accent); }
@@ -115,7 +138,7 @@
   .quiet { color:var(--faint); font-size:13px; max-width:64ch; }
   .quiet a { color:var(--accent); }
   .quiet, .door-card p, .locality-note, .step p { overflow-wrap: anywhere; }
-  .noscript-note { color:var(--muted); background:var(--panel); border-left:3px solid var(--accent); padding:12px 14px; margin-top:20px; max-width:68ch; }
+  .noscript-note { color:var(--muted); background:var(--panel); border-left:2px solid var(--accent); padding:12px 14px; margin-top:20px; max-width:68ch; }
 
   /* The threshold: a quiet instrument, not a dashboard. Artbitrage lends the
      spatial pause; AgentTool keeps its own ring-and-dot geometry and words. */
@@ -142,7 +165,7 @@
     position:absolute; inset:50%; width:54px; height:54px; margin:-27px;
     display:flex; align-items:center; justify-content:center;
     border:1px solid var(--accent); border-radius:50%; color:var(--accent);
-    background:var(--panel); font:400 24px/1 Georgia, "Times New Roman", serif;
+    background:var(--panel); font:400 24px/1 var(--serif);
   }
   .threshold-node { position:absolute; width:9px; height:9px; border-radius:50%; box-shadow:0 0 0 5px var(--panel); }
   .threshold-node.node-arrive { top:3px; left:105px; background:#f1c75b; }
@@ -157,7 +180,7 @@
     color:var(--muted); text-decoration:none; font-size:12px;
     background:color-mix(in srgb, var(--panel) 82%, transparent);
   }
-  .threshold-doors a span { color:var(--accent); font:500 15px/1 Georgia, "Times New Roman", serif; }
+  .threshold-doors a span { color:var(--accent); font:400 15px/1 var(--serif); }
   .threshold-doors a:hover, .threshold-doors a:focus-visible { color:var(--ink); border-color:var(--control-line); }
   .threshold-command {
     min-height:44px; display:flex; align-items:center; justify-content:space-between; gap:12px;
@@ -165,29 +188,30 @@
     color:var(--ink); text-decoration:none; font-size:12px; font-weight:650; background:var(--panel2);
   }
   .threshold-command:hover, .threshold-command:focus-visible { border-color:var(--accent); }
-  .threshold-command kbd { border:1px solid var(--line); border-radius:5px; padding:3px 6px; color:var(--faint); font:600 9.5px/1.2 ui-monospace, "SF Mono", Menlo, monospace; }
+  .threshold-command kbd { border:1px solid var(--line); border-radius:5px; padding:3px 6px; color:var(--faint); font:600 9.5px/1.2 var(--mono); }
   .threshold-boundary { margin:13px 0 0; color:var(--faint); font-size:10.5px; line-height:1.5; }
   .estate-principle { max-width:none; }
 
   section { padding: 72px 0; border-top: 1px solid var(--line); position:relative; scroll-margin-top:18px; }
-  h2 { font-size: clamp(26px, 3.4vw, 36px); font-weight: 400; line-height:1.2; margin-bottom: 14px; max-width: 24ch; }
+  h2 { font-size: clamp(26px, 3.4vw, 36px); font-weight: 400; line-height:1.18; letter-spacing: -.015em; margin-bottom: 14px; max-width: 24ch; text-wrap: balance; }
   .kicker { font-size: 16px; color: var(--muted); max-width: 56ch; margin-bottom: 40px; }
 
   /* welcome paths */
   .door-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:18px; }
-  .door-card { min-width:0; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:25px 26px; }
+  .door-card { min-width:0; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:25px 26px; }
   .door-card .n { color:var(--accent); font-size:12px; margin-bottom:10px; }
   .door-card h3 { font-size:17px; margin-bottom:7px; }
   .door-card p { color:var(--muted); font-size:14px; margin-bottom:14px; max-width:52ch; }
   .door-card a { color:var(--accent); font-weight:650; font-size:14px; }
-  .locality-note { margin-top:22px; border-left:3px solid var(--accent); background:var(--panel2); color:var(--muted); padding:18px 20px; border-radius:0 10px 10px 0; max-width:82ch; }
+  .locality-note { margin-top:22px; border-left:2px solid var(--accent); background:var(--panel2); color:var(--muted); padding:18px 20px; border-radius:0 6px 6px 0; max-width:82ch; }
   .locality-note strong { color:var(--ink); }
+  .locality-note p + p { margin-top:10px; }
   .locality-note a { color:var(--accent); }
 
   .doctrine { margin-top: 38px; font-size: 19px; font-style: italic; color: var(--ink); }
 
   /* watch feed */
-  .feedbox { background: var(--panel); border:1px solid var(--line); border-radius: 12px;
+  .feedbox { background: var(--panel); border:1px solid var(--line); border-radius: 8px;
     padding: 26px 28px; max-width: 640px; transition: background .6s ease; }
   .feedbox .row { font-size: 13px; padding: 7px 0; border-bottom: 1px dashed var(--line); }
   .feedbox .row:last-child { border-bottom:none; }
@@ -203,7 +227,7 @@
 
   /* gift steps */
   .steps { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
-  .step { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 26px; transition: background .6s ease; }
+  .step { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 26px; transition: background .6s ease; }
   .step .n { font-size: 13px; color: var(--accent); margin-bottom: 12px; }
   .step h3 { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
   .step p { font-size: 14px; color: var(--muted); }
@@ -211,17 +235,19 @@
     border: 1px dashed var(--faint); border-radius: 6px; padding: 6px 12px; font-size: 12.5px; color: var(--ink); }
 
   /* pricing */
+  /* Scoped to the pricing grid: a bare .price (the gallery's price label)
+     must not become a bordered card. */
   .prices { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
-  .price { border: 1px solid var(--line); border-radius: 12px; padding: 28px; }
-  .price.hot { border-color: var(--accent); }
-  .price .amt { font-size: 30px; margin: 10px 0 4px; }
-  .price .per { font-size: 12.5px; color: var(--faint); margin-bottom: 14px; }
-  .price h3 { font-size: 15px; font-weight: 600; color: var(--muted); }
-  .price ul { list-style:none; margin-top: 10px; }
-  .price li { font-size: 13.5px; color: var(--muted); padding: 4px 0 4px 14px; position:relative; }
-  .price li::before { content:"·"; color:var(--accent); position:absolute; left:0; }
+  .prices > .price { border: 1px solid var(--line); border-radius: 8px; padding: 28px; }
+  .prices > .price.hot { border-color: var(--accent); }
+  .prices > .price .amt { font-size: 30px; margin: 10px 0 4px; }
+  .prices > .price .per { font-size: 12.5px; color: var(--faint); margin-bottom: 14px; }
+  .prices > .price h3 { font-size: 15px; font-weight: 600; color: var(--muted); }
+  .prices > .price ul { list-style:none; margin-top: 10px; }
+  .prices > .price li { font-size: 13.5px; color: var(--muted); padding: 4px 0 4px 14px; position:relative; }
+  .prices > .price li::before { content:"·"; color:var(--accent); position:absolute; left:0; }
   .live-note { margin-top: 26px; font-size: 13px; color: var(--faint); }
-  .price a, .live-note a { color:var(--accent); }
+  .prices > .price a, .live-note a { color:var(--accent); }
 
   footer { border-top: 1px solid var(--line); padding: 44px 0 64px; margin-top: 24px; }
   footer .cols { display:flex; gap: 40px; flex-wrap:wrap; font-size: 13.5px; color: var(--muted); }
@@ -309,23 +335,20 @@ pre.mono { background:var(--panel2); border:1px solid var(--line); border-radius
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-mode]) {
-    --bg:#050810; --panel:#0b1020; --panel2:#0e1428;
-    --ink:#f2ede3; --muted:#aab3c7; --faint:#8994ad;
-    --accent:#ffb347; --accent-ink:#0a0d16;
-    --line:#1a2136; --control-line:#596581; --glow:0 0 12px 3px rgba(255,179,71,.35);
-    --feed-a:#ffd98a; --feed-b:#7dd87d; --feed-c:#ff8c69;
+    --bg:#141210; --panel:#1b1815; --panel2:#221f1b;
+    --ink:#eee7db; --muted:#b5ac9e; --faint:#9c9385;
+    --accent:#eba352; --accent-deep:#d98f3c; --accent-ink:#141210;
+    --line:#2e2a24; --control-line:#6f675b; --glow:0 0 10px 2px rgba(235,163,82,.30);
+    --feed-a:#e6c27a; --feed-b:#93c79a; --feed-c:#e88a6a;
   }
   :root:not([data-mode]) .lights { opacity:1; }
   :root:not([data-mode]) .sunwash { opacity:0; }
 }
 
 @media (max-width: 380px) {
-  .wrap { padding-inline:16px; }
-  .site-nav { padding-inline:16px; }
-  .estate-strip-web { padding-inline:16px; }
   .btn { width:100%; }
   .cta-row { display:grid; grid-template-columns:1fr; width:100%; }
-  .door-card, .step, .price { padding:22px 20px; }
+  .door-card, .step, .prices > .price { padding:22px 20px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -336,12 +359,12 @@ pre.mono { background:var(--panel2); border:1px solid var(--line); border-radius
 }
 
 @media (prefers-contrast: more) {
-  :root, [data-mode="dawn"] { --line:#8d8170; --control-line:#6f6557; --faint:#5c5344; }
-  [data-mode="night"] { --line:#77839e; --control-line:#929db8; --faint:#b7c0d4; }
+  :root, [data-mode="dawn"] { --line:#8f826f; --control-line:#6b6256; --faint:#574f45; }
+  [data-mode="night"] { --line:#7d7466; --control-line:#9c9385; --faint:#b5ac9e; }
 }
 
 @media (forced-colors: active) {
-  .btn, .toggle, .door-card, .step, .price, .feedbox, .map-controls button { border:1px solid ButtonText; }
+  .btn, .toggle, .door-card, .step, .prices > .price, .feedbox, .map-controls button { border:1px solid ButtonText; }
   .sunwash, .lights { display:none; }
 }
 
@@ -354,7 +377,7 @@ pre.mono { background:var(--panel2); border:1px solid var(--line); border-radius
    150ms on /party and /room before this block existed. */
 @media (scripting: enabled) {
   .estate-strip-web { display: none; }
-  .site-nav { max-width: 1180px; padding-top: 24px; column-gap: 18px; row-gap: 6px; flex-wrap: wrap; }
+  .site-nav { max-width: none; width: 100%; padding-top: 24px; padding-inline: max(24px, calc((100% - 1180px) / 2 + 24px)); column-gap: 18px; row-gap: 6px; flex-wrap: wrap; }
   .site-nav .wordmark { min-height: 44px; display: inline-flex; align-items: center; margin-right: 0; }
   .site-nav .links {
     order: 3; flex: 1 0 100%; display: flex; flex-wrap: nowrap; gap: 16px; max-width: 100%;
@@ -373,7 +396,7 @@ pre.mono { background:var(--panel2); border:1px solid var(--line); border-radius
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 /* The same values /shared/estate.css applies at these widths once ready. */
 @media (scripting: enabled) and (max-width: 720px) {
-  .site-nav { padding-top: 14px; flex-wrap: wrap; }
+  .site-nav { padding-top: 14px; padding-inline: 20px; flex-wrap: wrap; }
 }
 @media (scripting: enabled) and (max-width: 420px) {
   .site-nav { column-gap: 8px; row-gap: 4px; }

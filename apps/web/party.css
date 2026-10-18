@@ -1,4 +1,5 @@
-.party-wrap { max-width: 980px; }
+/* Narrower than the house column, but it starts on the same edge as the bar. */
+.party-wrap { max-width: 980px; margin-left: max(0px, calc((100% - 1180px) / 2)); }
 
 .party-hero { padding-bottom: 54px; }
 .party-hero h1 { max-width: 18ch; }
@@ -14,7 +15,7 @@
 }
 .party-promises li {
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--panel);
   color: var(--muted);
   padding: 16px 18px;
@@ -95,7 +96,7 @@
 .answer-field textarea {
   width: 100%;
   border: 1px solid var(--control-line);
-  border-radius: 10px;
+  border-radius: 6px;
   background: var(--panel);
   color: var(--ink);
   padding: 13px 14px;
@@ -166,7 +167,7 @@
   position: relative;
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 8px;
   background: var(--panel);
   padding: clamp(28px, 5vw, 52px);
 }
@@ -227,7 +228,7 @@
 .world-entry:last-child { border-bottom: 0; }
 .world-entry .world-by { color: var(--faint); font-size: 12px; overflow-wrap: anywhere; }
 .world-entry .world-text { color: var(--ink); overflow-wrap: anywhere; }
-.world-entry .world-text strong { font-family: Georgia, "Times New Roman", serif; font-size: 17px; font-weight: 500; }
+.world-entry .world-text strong { font-family: var(--serif); font-size: 17px; font-weight: 500; }
 .result-actions { margin-top: 30px; }
 .result-actions button { cursor: pointer; }
 .copy-status { min-height: 1.5em; color: var(--accent); font-size: 12.5px; margin-top: 14px; }
@@ -269,14 +270,14 @@
 .dawn-law {
   min-width: 0;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 16px;
   background: color-mix(in srgb, var(--accent) 5%, var(--panel));
 }
 .dawn-law strong,
 .dawn-law p,
 .dawn-law .mono { overflow-wrap: anywhere; }
-.dawn-law strong { display: block; font-family: Georgia, "Times New Roman", serif; font-size: 16px; font-weight: 500; }
+.dawn-law strong { display: block; font-family: var(--serif); font-size: 16px; font-weight: 500; }
 .dawn-law p { margin: 10px 0; color: var(--muted); font-size: 13.5px; }
 .dawn-law .mono { color: var(--faint); font-size: 11px; }
 .dawn-weave {
@@ -287,11 +288,12 @@
 .dawn-weave p {
   max-width: 58ch;
   margin: 0 0 9px;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--serif);
   font-size: 17px;
   overflow-wrap: anywhere;
 }
-.dawn-weave footer { color: var(--faint); font-size: 11px; }
+/* An attribution, not the site footer: undo the global footer rule. */
+.dawn-weave footer { color: var(--faint); font-size: 11px; border-top: 0; padding: 0; margin-top: 10px; }
 .dawn-close { margin-top: 24px; color: var(--ink); font-style: italic; }
 
 .celebration { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
