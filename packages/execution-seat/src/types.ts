@@ -4,7 +4,10 @@ export const SEAT_TYPE = "execution-seat/v1";
 export const GROUP_TYPE = "execution-seat-group/v1";
 
 export type Relation = "fork" | "continuation" | "child";
+/** Who can cite a seat: its parent only (a summary row), local peers (a record), or anyone (published). */
 export type Persistence = "ephemeral" | "recorded" | "durable";
+/** What gave a child its own record. `lineage`: an ancestor promoted along with a descendant. */
+export type PromotionTrigger = "deliverable" | "collab_write" | "mission_event" | "manual" | "lineage";
 export type Basis = "transcript" | "hook" | "rollout" | "declared";
 export type EndState = "result" | "failed" | "unknown";
 /** `spawn`: two or more Codex threads spawned by one parent thread under one root turn. */
@@ -16,6 +19,11 @@ export const PERSISTENCE_ORDER: readonly Persistence[] = ["ephemeral", "recorded
 
 /** The harness's own handle, e.g. `{session_id}` for Claude Code or `{thread_id, session_id}` for Codex. */
 export type NativeRef = Readonly<Record<string, string>>;
+
+export interface Promotion {
+  trigger: PromotionTrigger;
+  at: string;
+}
 
 export interface SettingsEntry {
   at: string;
@@ -60,7 +68,10 @@ export interface ExecutionSeat {
   parent_seat_id: string | null;
   relation: Relation | null;
   group_id: string | null;
-  persistence: Persistence;
+  /** A record is never `ephemeral`. It is `recorded` until it is published. */
+  persistence: Exclude<Persistence, "ephemeral">;
+  /** Set when a child's row was promoted to this record. Null for every other seat. */
+  promotion: Promotion | null;
   settings: SettingsEntry[];
   children: SummaryRow[];
   started_at: string | null;

@@ -10,7 +10,6 @@ import { earliest, latest, nonNegativeInt, phases, ref, requireUuid, sameSetting
 import { assertPrivateStateFiles, preparePrivateHome, resolveSeatHome } from "./home.js";
 import {
   GROUP_TYPE,
-  PERSISTENCE_ORDER,
   SEAT_TYPE,
   type Basis,
   type Deliverable,
@@ -21,7 +20,8 @@ import {
   type GroupKind,
   type GroupOutcome,
   type NativeRef,
-  type Persistence,
+  type Promotion,
+  type PromotionTrigger,
   type Relation,
   type SettingsEntry,
   type SummaryRow,
@@ -34,6 +34,7 @@ const END_STATES: readonly EndState[] = ["result", "failed", "unknown"];
 const GROUP_KINDS: readonly GroupKind[] = ["workflow", "spawn", "declared"];
 const OUTCOMES: readonly GroupOutcome[] = ["completed", "failed", "stopped", "unknown"];
 const DELIVERABLE_KINDS: readonly DeliverableKind[] = ["commit", "pr", "collab_event", "artifact"];
+const PROMOTION_TRIGGERS: readonly PromotionTrigger[] = ["deliverable", "collab_write", "mission_event", "manual", "lineage"];
 const NATIVE_KEY = /^[a-z][a-z_]{0,31}$/;
 const DELIVERABLE_REF = /^[A-Za-z0-9][A-Za-z0-9_.:\/#@\-]{0,255}$/;
 
@@ -77,7 +78,6 @@ export interface OpenSeatInput {
   parent_seat_id?: string | null;
   relation?: Relation | null;
   group_id?: string | null;
-  persistence?: Persistence;
   started_at?: string | null;
 }
 
@@ -170,12 +170,6 @@ function mergeRow(previous: SummaryRow | undefined, next: SummaryRow): SummaryRo
   };
 }
 
-function rank(level: Persistence): number {
-  const index = PERSISTENCE_ORDER.indexOf(level);
-  if (index < 0) throw new SeatError("invalid_persistence", "persistence is ephemeral, recorded or durable");
-  return index;
-}
-
 export class SeatLedger {
   private constructor(
     private readonly db: Database,
@@ -246,7 +240,15 @@ export class SeatLedger {
 
   // ── seats ──────────────────────────────────────────────────────────────
 
+  /**
+   * Open the seat for a native handle, or return the one already open. A seat opens as `recorded`:
+   * `durable` means published, and nothing here publishes.
+   */
   openSeat(input: OpenSeatInput): { seat: ExecutionSeat; created: boolean } {
+    return this.open(input, null);
+  }
+
+  private open(input: OpenSeatInput, promotion: Promotion | null): { seat: ExecutionSeat; created: boolean } {
     const key = nativeKey(input.harness, input.native_ref);
     return this.transaction(() => {
       const existing = this.db.query("SELECT seat_id FROM seats WHERE native_key = ?").get(key) as { seat_id: string } | null;
@@ -260,8 +262,6 @@ export class SeatLedger {
         throw new SeatError("invalid_lineage", "relation is fork, continuation or child");
       }
       const group = input.group_id ? this.requireGroup(requireUuid(input.group_id, "group_id")) : null;
-      const persistence = input.persistence ?? "durable";
-      rank(persistence);
       const seatId = Bun.randomUUIDv7();
       const seq = this.append(seatId, "seat.open", {
         harness: token(input.harness),
@@ -270,7 +270,8 @@ export class SeatLedger {
         parent_seat_id: parent?.seat_id ?? null,
         relation,
         group_id: group?.group_id ?? null,
-        persistence,
+        persistence: "recorded",
+        promotion,
         device_id: this.deviceId,
         started_at: timestamp(input.started_at),
       });
@@ -307,7 +308,8 @@ export class SeatLedger {
       parent_seat_id: (b.parent_seat_id as string | null) ?? null,
       relation: (b.relation as Relation | null) ?? null,
       group_id: (b.group_id as string | null) ?? null,
-      persistence: b.persistence as Persistence,
+      persistence: b.persistence as ExecutionSeat["persistence"],
+      promotion: (b.promotion as Promotion | null) ?? null,
       settings: [],
       children: [],
       started_at: (b.started_at as string | null) ?? null,
@@ -343,9 +345,6 @@ export class SeatLedger {
             seat.identity_id = body.identity_id as string;
             seat.signing_key_id = (body.signing_key_id as string | null) ?? null;
           }
-          break;
-        case "seat.persistence":
-          seat.persistence = body.persistence as Persistence;
           break;
         case "seat.end":
           if (!seat.ended_at) {
@@ -464,19 +463,6 @@ export class SeatLedger {
     });
   }
 
-  /** Raise a seat's persistence. A level never goes back down. */
-  setPersistence(seatId: string, level: Persistence): boolean {
-    return this.transaction(() => {
-      const seat = this.requireSeat(seatId);
-      if (rank(level) < rank(seat.persistence)) {
-        throw new SeatError("persistence_downgrade", "persistence never moves back down");
-      }
-      if (level === seat.persistence) return false;
-      this.append(seatId, "seat.persistence", { persistence: level });
-      return true;
-    });
-  }
-
   endSeat(seatId: string, endedAt: string, reason: string | null = null): boolean {
     const at = timestamp(endedAt);
     if (!at) throw new SeatError("invalid_time", "ended_at must be a timestamp");
@@ -503,37 +489,62 @@ export class SeatLedger {
     });
   }
 
-  /** Promote an ephemeral child to its own seat record. Its identity follows the parent. */
-  promoteChild(seatId: string, childRef: string, level: Exclude<Persistence, "ephemeral"> = "recorded"): ExecutionSeat {
-    return this.transaction(() => {
-      const parent = this.requireSeat(seatId);
-      const row = parent.children.find((child) => child.child_ref === childRef);
-      if (!row) throw new SeatError("child_unknown", "this seat has no child with that ref");
-      const seat = this.promoteRow(parent, row, level, null);
-      if (!row.seat_id) this.recordChild(seatId, { ...row, seat_id: seat.seat_id });
-      return this.requireSeat(seat.seat_id);
-    });
+  /**
+   * Give a child its own `recorded` record. Its row can be in the seat's `children` or in a group
+   * the seat orchestrates, and it stays there with the new `seat_id`. A nested child's ancestors
+   * are promoted first (trigger `lineage`), so `parent_seat_id` is always the direct parent.
+   * Promoting a child that already has a record changes nothing. Its identity follows the parent.
+   */
+  promote(seatId: string, childRef: string, trigger: Exclude<PromotionTrigger, "lineage"> = "manual"): ExecutionSeat {
+    // `lineage` is set only by the chain walk; callers name the event that needs a record.
+    if (!PROMOTION_TRIGGERS.includes(trigger) || (trigger as PromotionTrigger) === "lineage") {
+      throw new SeatError("invalid_trigger", "a promotion trigger is deliverable, collab_write, mission_event or manual");
+    }
+    return this.transaction(() => this.promoteChain(this.requireSeat(seatId), childRef, trigger, 0));
   }
 
-  private promoteRow(parent: ExecutionSeat, row: SummaryRow, level: Persistence, groupId: string | null): ExecutionSeat {
-    if (row.seat_id) {
-      const existing = this.requireSeat(row.seat_id);
-      if (rank(level) > rank(existing.persistence)) this.setPersistence(existing.seat_id, level);
-      return this.requireSeat(row.seat_id);
+  /** A child's row, in the seat's `children` or in a group the seat orchestrates. */
+  findChild(seatId: string, childRef: string): { row: SummaryRow; group_id: string | null } | null {
+    return this.findRow(this.requireSeat(seatId), childRef);
+  }
+
+  private findRow(seat: ExecutionSeat, childRef: string): { row: SummaryRow; group_id: string | null } | null {
+    const row = seat.children.find((child) => child.child_ref === childRef);
+    if (row) return { row, group_id: null };
+    for (const group of this.groupsFor(seat.seat_id)) {
+      const member = group.members.find((candidate) => candidate.child_ref === childRef);
+      if (member) return { row: member, group_id: group.group_id };
     }
-    const { seat } = this.openSeat({
-      harness: parent.harness.name,
-      version: parent.harness.version,
-      native_ref: childNativeRef(parent, row.child_ref),
-      parent_seat_id: parent.seat_id,
-      relation: "child",
-      group_id: groupId,
-      persistence: level,
-      started_at: row.started_at,
-    });
+    return null;
+  }
+
+  private promoteChain(holder: ExecutionSeat, childRef: string, trigger: PromotionTrigger, hops: number): ExecutionSeat {
+    if (hops > MAX_LINEAGE) throw new SeatError("lineage_cycle", "a child cannot descend from itself");
+    const found = this.findRow(holder, childRef);
+    if (!found) {
+      if (hops === 0) throw new SeatError("child_unknown", "this seat has no child with that ref");
+      throw new SeatError("parent_row_unknown", "a nested child's parent has no row under this seat");
+    }
+    const { row, group_id: groupId } = found;
+    if (row.seat_id) return this.requireSeat(row.seat_id);
+    const parent = row.parent_ref ? this.promoteChain(holder, row.parent_ref, "lineage", hops + 1) : holder;
+    const { seat } = this.open(
+      {
+        harness: holder.harness.name,
+        version: holder.harness.version,
+        native_ref: childNativeRef(holder, row.child_ref),
+        parent_seat_id: parent.seat_id,
+        relation: "child",
+        group_id: groupId,
+        started_at: row.started_at,
+      },
+      { trigger, at: new Date().toISOString() },
+    );
     this.recordSettings(seat.seat_id, row.settings);
     if (row.ended_at) this.endSeat(seat.seat_id, row.ended_at, row.end_state);
-    return seat;
+    if (groupId) this.recordMember(groupId, { ...row, seat_id: seat.seat_id });
+    else this.recordChild(holder.seat_id, { ...row, seat_id: seat.seat_id });
+    return this.requireSeat(seat.seat_id);
   }
 
   /**
@@ -662,17 +673,6 @@ export class SeatLedger {
     });
   }
 
-  promoteMember(groupId: string, childRef: string, level: Exclude<Persistence, "ephemeral"> = "recorded"): ExecutionSeat {
-    return this.transaction(() => {
-      const group = this.requireGroup(groupId);
-      const row = group.members.find((member) => member.child_ref === childRef);
-      if (!row) throw new SeatError("member_unknown", "this group has no member with that ref");
-      const seat = this.promoteRow(this.requireSeat(group.orchestrator_seat_id), row, level, group.group_id);
-      if (!row.seat_id) this.recordMember(groupId, { ...row, seat_id: seat.seat_id });
-      return this.requireSeat(seat.seat_id);
-    });
-  }
-
   /** Record a pointer to something the group produced. A member that produced it is promoted to `recorded`. */
   addDeliverable(groupId: string, deliverable: Deliverable, byChildRef: string | null = null): boolean {
     if (!DELIVERABLE_KINDS.includes(deliverable.kind) || !DELIVERABLE_REF.test(deliverable.ref)) {
@@ -680,7 +680,12 @@ export class SeatLedger {
     }
     return this.transaction(() => {
       const group = this.requireGroup(groupId);
-      if (byChildRef) this.promoteMember(groupId, byChildRef, "recorded");
+      if (byChildRef) {
+        if (!group.members.some((member) => member.child_ref === byChildRef)) {
+          throw new SeatError("member_unknown", "this group has no member with that ref");
+        }
+        this.promote(group.orchestrator_seat_id, byChildRef, "deliverable");
+      }
       if (group.deliverables.some((d) => d.kind === deliverable.kind && d.ref === deliverable.ref)) return false;
       this.append(groupId, "group.deliverable", { kind: deliverable.kind, ref: deliverable.ref });
       return true;

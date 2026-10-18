@@ -93,7 +93,8 @@ describe("seats", () => {
     expect(seat).toMatchObject({
       type: "execution-seat/v1",
       seat_id: first.seat_id,
-      persistence: "durable",
+      persistence: "recorded",
+      promotion: null,
       relation: null,
       device_id: ledger.deviceId,
       harness: { name: "claude-code", version: "2.1.302" },
@@ -127,9 +128,9 @@ describe("seats", () => {
     expect(ledger.bindIdentity(first.seat_id, IDENTITY, "key-01")).toBe(true);
     expect(ledger.bindIdentity(first.seat_id, IDENTITY, "key-01")).toBe(false);
     expect(() => ledger.bindIdentity(first.seat_id, OTHER_IDENTITY)).toThrow("already bound");
-    const child = ledger.promoteChild(first.seat_id, "aplain01");
+    const child = ledger.promote(first.seat_id, "aplain01");
     expect(child).toMatchObject({
-      relation: "child", parent_seat_id: first.seat_id, persistence: "recorded",
+      relation: "child", parent_seat_id: first.seat_id, persistence: "recorded", promotion: { trigger: "manual" },
       identity_id: IDENTITY, signing_key_id: null, native_ref: { session_id: CLAUDE_SESSION, agent_id: "aplain01" },
     });
     expect(child.settings.map((e) => e.model)).toEqual(["claude-sonnet-5-5"]);
@@ -138,12 +139,55 @@ describe("seats", () => {
     expect(ledger.getSeat(first.seat_id)?.children.find((row) => row.child_ref === "aplain01")?.seat_id).toBe(child.seat_id);
   });
 
-  test("persistence never moves back down", () => {
+  test("every seat opens as recorded: durable means published, and nothing here publishes", () => {
+    ingestClaudeSession(ledger, writeClaudeProject(directory));
+    for (const path of Object.values(writeCodexSessions(join(directory, "codex")))) ingestCodexRollout(ledger, path);
+    const seats = ledger.listSeats({ limit: 100 }).items;
+    expect(seats.length).toBeGreaterThan(3);
+    expect(seats.every((seat) => seat.persistence === "recorded" && seat.promotion === null)).toBe(true);
+  });
+
+  test("promoting a nested child promotes its chain, so parent_seat_id is the direct parent", () => {
     const first = ingestClaudeSession(ledger, writeClaudeProject(directory));
-    const child = ledger.promoteChild(first.seat_id, "aplain01", "recorded");
-    expect(ledger.setPersistence(child.seat_id, "durable")).toBe(true);
-    expect(() => ledger.setPersistence(child.seat_id, "recorded")).toThrow("never moves back down");
-    expect(ledger.promoteChild(first.seat_id, "aplain01", "recorded").persistence).toBe("durable");
+    expect(ledger.findChild(first.seat_id, "awfok01")).toMatchObject({ row: { child_ref: "awfok01" }, group_id: expect.any(String) });
+    expect(ledger.findChild(first.seat_id, "anested02")).toMatchObject({ row: { parent_ref: "aplain01", seat_id: null }, group_id: null });
+    const nested = ledger.promote(first.seat_id, "anested02", "collab_write");
+    const rows = Object.fromEntries(ledger.getSeat(first.seat_id)!.children.map((row) => [row.child_ref, row]));
+    const middle = ledger.getSeat(rows.aplain01!.seat_id!)!;
+    expect(middle).toMatchObject({ parent_seat_id: first.seat_id, relation: "child", promotion: { trigger: "lineage" } });
+    expect(nested).toMatchObject({
+      seat_id: rows.anested02!.seat_id, parent_seat_id: middle.seat_id, relation: "child", persistence: "recorded",
+      promotion: { trigger: "collab_write" }, native_ref: { session_id: CLAUDE_SESSION, agent_id: "anested02" },
+    });
+    // Promoting again, or promoting the ancestor by hand, changes nothing.
+    const count = () => (new Database(join(home, DATABASE_FILE), { readonly: true }).query("SELECT COUNT(*) AS n FROM entries").get() as { n: number }).n;
+    const before = count();
+    expect(ledger.promote(first.seat_id, "anested02").seat_id).toBe(nested.seat_id);
+    expect(ledger.promote(first.seat_id, "aplain01").promotion?.trigger).toBe("lineage");
+    expect(count()).toBe(before);
+  });
+
+  test("a Codex grandchild's chain runs through its parent thread", () => {
+    const paths = writeCodexSessions(directory);
+    for (const path of [paths.child, paths.grandchild, paths.root]) ingestCodexRollout(ledger, path);
+    const root = ledger.findSeat("codex", { thread_id: CODEX_ROOT })!;
+    const grandchild = ledger.promote(root.seat_id, CODEX_GRANDCHILD, "mission_event");
+    const child = ledger.findSeat("codex", { thread_id: CODEX_CHILD })!;
+    expect(child).toMatchObject({ parent_seat_id: root.seat_id, promotion: { trigger: "lineage" } });
+    expect(grandchild).toMatchObject({
+      parent_seat_id: child.seat_id, promotion: { trigger: "mission_event" },
+      native_ref: { thread_id: CODEX_GRANDCHILD, session_id: CODEX_ROOT },
+    });
+  });
+
+  test("a chain with a missing parent row, an unknown child or an unknown trigger is refused", () => {
+    const paths = writeCodexSessions(directory);
+    const placed = ingestCodexRollout(ledger, paths.grandchild);
+    expect(() => ledger.promote(placed.seat_id, CODEX_GRANDCHILD)).toThrow("parent has no row");
+    expect(ledger.findSeat("codex", { thread_id: CODEX_GRANDCHILD })).toBeNull();
+    expect(() => ledger.promote(placed.seat_id, CODEX_SOLO)).toThrow("no child with that ref");
+    ingestCodexRollout(ledger, paths.child);
+    expect(() => ledger.promote(placed.seat_id, CODEX_CHILD, "lineage" as never)).toThrow("trigger");
   });
 
   test("summary rows outlive the native transcript (R2) and are marked gone once", () => {
@@ -224,7 +268,10 @@ describe("groups", () => {
     const after = ledger.getGroup(group!.group_id)!;
     expect(after.deliverables).toEqual([{ kind: "commit", ref: "9405412" }]);
     const member = after.members.find((row) => row.child_ref === "awfok01")!;
-    expect(ledger.getSeat(member.seat_id!)).toMatchObject({ group_id: group!.group_id, relation: "child", persistence: "recorded" });
+    expect(ledger.getSeat(member.seat_id!)).toMatchObject({
+      group_id: group!.group_id, relation: "child", persistence: "recorded", promotion: { trigger: "deliverable" },
+    });
+    expect(() => ledger.addDeliverable(group!.group_id, { kind: "pr", ref: "489" }, "aplain01")).toThrow("no member");
     expect(ledger.endGroup(group!.group_id, "2026-10-17T09:20:00.000Z", "completed")).toBe(true);
     expect(ledger.getGroup(group!.group_id)).toMatchObject({ ended_at: "2026-10-17T09:20:00.000Z", outcome: "completed" });
   });
@@ -275,7 +322,7 @@ describe("Codex ingest", () => {
   test("grouping keeps a promoted child's seat, and re-ingesting appends nothing", () => {
     const paths = writeCodexSessions(directory);
     const root = ingestCodexRollout(ledger, paths.child);
-    const promoted = ledger.promoteChild(root.seat_id, CODEX_CHILD);
+    const promoted = ledger.promote(root.seat_id, CODEX_CHILD);
     expect(promoted.group_id).toBeNull();
     const sibling = ingestCodexRollout(ledger, paths.sibling);
     expect(sibling.group_ids).toHaveLength(1);
@@ -296,7 +343,7 @@ test("no free text from native files reaches the ledger bytes", () => {
   const paths = writeCodexSessions(join(directory, "codex"));
   for (const path of Object.values(paths)) ingestCodexRollout(ledger, path);
   const first = ledger.findSeat("claude-code", { session_id: CLAUDE_SESSION })!;
-  ledger.promoteChild(first.seat_id, "aplain01");
+  ledger.promote(first.seat_id, "anested02");
   ledger.close();
   const raw = new Database(join(home, DATABASE_FILE));
   raw.exec("PRAGMA wal_checkpoint(TRUNCATE)");

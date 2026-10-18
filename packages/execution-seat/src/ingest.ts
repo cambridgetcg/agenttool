@@ -49,7 +49,6 @@ export function ingestClaudeSession(ledger: SeatLedger, transcriptPath: string):
       harness: CLAUDE_CODE,
       version: session.transcript.version,
       native_ref: { session_id: session.session_id },
-      persistence: "durable",
       started_at: session.transcript.started_at,
     });
     const result: IngestResult = {
@@ -64,7 +63,7 @@ export function ingestClaudeSession(ledger: SeatLedger, transcriptPath: string):
     });
     if (session.transcript.continued_in) {
       const next = ledger.openSeat({
-        harness: CLAUDE_CODE, native_ref: { session_id: session.transcript.continued_in }, persistence: "durable",
+        harness: CLAUDE_CODE, native_ref: { session_id: session.transcript.continued_in },
       }).seat;
       try {
         ledger.linkParent(next.seat_id, seat.seat_id, "continuation");
@@ -142,7 +141,7 @@ export function ingestCodexRollout(ledger: SeatLedger, rolloutPath: string): Ing
       // A spawned thread is an ephemeral row under its root thread's seat.
       const root = rollout.session_id !== rollout.thread_id ? rollout.session_id : rollout.parent_thread_id;
       const { seat, created } = ledger.openSeat({
-        harness: CODEX, native_ref: { thread_id: root, session_id: root }, persistence: "durable",
+        harness: CODEX, native_ref: { thread_id: root, session_id: root },
       });
       const placed = recordSpawnedThread(ledger, seat.seat_id, root, {
         child_ref: rollout.thread_id,
@@ -171,7 +170,6 @@ export function ingestCodexRollout(ledger: SeatLedger, rolloutPath: string): Ing
       harness: CODEX,
       version: rollout.version,
       native_ref: { thread_id: rollout.thread_id, session_id: rollout.session_id },
-      persistence: "durable",
       started_at: rollout.started_at,
     });
     const result: IngestResult = { ...empty, seat_id: seat.seat_id, created, child_ref: null };
@@ -179,7 +177,7 @@ export function ingestCodexRollout(ledger: SeatLedger, rolloutPath: string): Ing
     ledger.observe(seat.seat_id, { started_at: rollout.started_at, last_seen_at: rollout.last_at, version: rollout.version });
     if (rollout.forked_from_id) {
       const parent = ledger.openSeat({
-        harness: CODEX, native_ref: { thread_id: rollout.forked_from_id, session_id: rollout.session_id }, persistence: "durable",
+        harness: CODEX, native_ref: { thread_id: rollout.forked_from_id, session_id: rollout.session_id },
       }).seat;
       try {
         ledger.linkParent(seat.seat_id, parent.seat_id, "fork");

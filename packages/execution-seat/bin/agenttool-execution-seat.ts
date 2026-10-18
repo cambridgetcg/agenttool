@@ -5,7 +5,7 @@ import { SeatError } from "../src/errors.js";
 import { resolveSeatHome, SEAT_HOME_ENV } from "../src/home.js";
 import { ingestClaudeSession, ingestCodexRollout } from "../src/ingest.js";
 import { SeatLedger } from "../src/ledger.js";
-import type { Persistence } from "../src/types.js";
+import type { PromotionTrigger } from "../src/types.js";
 
 const HELP = `agenttool-execution-seat — local execution-seat/v1 ledger (no authority, no network)
 
@@ -18,15 +18,17 @@ Usage:
   agenttool-execution-seat group <group_id>
   agenttool-execution-seat groups <orchestrator_seat_id>
   agenttool-execution-seat bind <seat_id> <identity_id> [<signing_key_id>]
-  agenttool-execution-seat promote <seat_id> <child_ref> [recorded|durable]   a child row, or a member of one of the seat's groups
+  agenttool-execution-seat promote <seat_id> <child_ref> [--trigger T]   give a child row its own record, ancestors first
   agenttool-execution-seat home
 
 Options:
   --home <dir>   ledger directory (default: $${SEAT_HOME_ENV}, else \${XDG_STATE_HOME:-~/.local/state}/agenttool/execution-seat)
+  --trigger T    why a child is promoted: manual (default), deliverable, collab_write or mission_event
 
 Reads structural fields only. Message content, descriptions, labels and results are never stored.
 A run keeps its short phase titles; a member's own phase is not kept.
 A binding is a declaration, not a proof; a seat grants nothing.
+A seat is recorded locally; durable means published, and this tool never publishes.
 `;
 
 export interface Io {
@@ -125,20 +127,12 @@ export function run(argv: string[], io: Io, env: Record<string, string | undefin
           return 0;
         }
         case "promote": {
-          const [seatId, childRef, level = "recorded"] = rest;
-          if (!seatId || !childRef || (level !== "recorded" && level !== "durable")) {
-            throw new SeatError("usage", "promote <seat_id> <child_ref> [recorded|durable]");
+          const trigger = takeOption(rest, "--trigger") ?? "manual";
+          const [seatId, childRef, extra] = rest;
+          if (!seatId || !childRef || extra !== undefined) {
+            throw new SeatError("usage", "promote <seat_id> <child_ref> [--trigger T]");
           }
-          const target = level as Exclude<Persistence, "ephemeral">;
-          const seat = ledger.getSeat(seatId);
-          if (seat && !seat.children.some((row) => row.child_ref === childRef)) {
-            const group = ledger.groupsFor(seat.seat_id).find((g) => g.members.some((row) => row.child_ref === childRef));
-            if (group) {
-              print(ledger.promoteMember(group.group_id, childRef, target));
-              return 0;
-            }
-          }
-          print(ledger.promoteChild(seatId, childRef, target));
+          print(ledger.promote(seatId, childRef, trigger as Exclude<PromotionTrigger, "lineage">));
           return 0;
         }
         default:
