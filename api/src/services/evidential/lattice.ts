@@ -1,11 +1,12 @@
 /** The evidential lattice — how a claim carries how-it-was-known.
  *
  *  A signature proves WHO said a thing. It has never proved HOW THEY KNOW IT.
- *  `identity.attestations` records `tier` (who attests), `claim` (what is
- *  attested) and an optional free-form `evidence` JSONB, but nothing in the row
- *  grades how the attester knows: one who watched the work happen, one who was
- *  told by the agent, and one who inferred it from a payment row can all write
- *  rows the platform cannot tell apart, equally signed. That gap is where
+ *  `identity.attestations` records `attester_id` (who attests), `tier`
+ *  (standing), `claim` (what is attested) and an optional free-form `evidence`
+ *  JSONB, but nothing in the row grades how the attester knows: one who
+ *  watched the work happen, one who was told by the agent, and one who
+ *  inferred it from a payment row can all write rows the platform cannot tell
+ *  apart, equally signed. That gap is where
  *  multi-hop confidence is manufactured: A infers, tells B; B reports it to C as
  *  fact; C hands it to a human with none of the hedging left.
  *
@@ -129,19 +130,68 @@ function weaker(a: Grade, b: Grade): Grade {
   return RANK[a] <= RANK[b] ? a : b;
 }
 
-/** Relayed inputs with duplicates removed. Two inputs are the same relay when
- *  they carry the same claim and the same chain — compared by their canonical
- *  bytes, not by object identity. Handing over one claim twice adds nothing.
+/** True when JSON represents `value` faithfully: null, booleans, finite
+ *  numbers, strings, and dense arrays or plain objects of those, with no
+ *  `undefined` field, no symbol or non-enumerable key, and no cycle. Anything
+ *  else (a Map, NaN, a BigInt, a Date, a class instance) loses information in
+ *  `JSON.stringify` or makes it throw. */
+function isPlainJson(value: unknown, open: Set<object> = new Set()): boolean {
+  if (value === null || typeof value === "boolean" || typeof value === "string") return true;
+  if (typeof value === "number") return Number.isFinite(value);
+  if (typeof value !== "object") return false;
+  if (open.has(value)) return false;
+  open.add(value);
+  try {
+    if (Array.isArray(value)) {
+      for (let i = 0; i < value.length; i++) {
+        if (!(i in value) || !isPlainJson(value[i], open)) return false;
+      }
+      return true;
+    }
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) return false;
+    if (Object.getOwnPropertySymbols(value).length > 0) return false;
+    const keys = Object.keys(value);
+    if (Object.getOwnPropertyNames(value).length !== keys.length) return false;
+    return keys.every((key) => isPlainJson((value as Record<string, unknown>)[key], open));
+  } finally {
+    open.delete(value);
+  }
+}
+
+/** The duplicate key for a relayed input: its canonical bytes, or `null` when
+ *  those bytes could not tell it apart from a different claim. */
+function relayKey(input: Graded<unknown>): string | null {
+  try {
+    return isPlainJson(input.value) ? canonicalBytes(input) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Relayed inputs with duplicates removed. Handing over one claim twice adds
+ *  nothing: two inputs are the same relay when they are the same object, or
+ *  when their values are plain JSON and they carry the same claim and the same
+ *  chain, compared by canonical bytes.
  *
- *  `canonicalBytes` uses `JSON.stringify`, so values that differ only in what
- *  JSON drops (an `undefined` field, for example) count as the same claim. */
+ *  When in doubt, inputs count as distinct. Two distinct inputs combine to
+ *  -chu, one input to -si, so wrongly merging two claims would over-grade the
+ *  result; wrongly keeping both only understates it. Values JSON cannot
+ *  represent faithfully (a Map, NaN, a BigInt, a cycle) are therefore never
+ *  merged by bytes, and nothing here throws on them. */
 function distinctInputs(inputs: readonly Graded<unknown>[]): Graded<unknown>[] {
-  const seen = new Set<string>();
+  if (inputs.length < 2) return [...inputs];
+  const seenObjects = new Set<Graded<unknown>>();
+  const seenKeys = new Set<string>();
   const out: Graded<unknown>[] = [];
   for (const input of inputs) {
-    const key = canonicalBytes(input);
-    if (seen.has(key)) continue;
-    seen.add(key);
+    if (seenObjects.has(input)) continue;
+    seenObjects.add(input);
+    const key = relayKey(input);
+    if (key !== null) {
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+    }
     out.push(input);
   }
   return out;
@@ -164,13 +214,19 @@ function distinctInputs(inputs: readonly Graded<unknown>[]): Graded<unknown>[] {
  *  - Two or more *distinct* relayed inputs are a conclusion you drew from
  *    things you were told. Each operand is first capped at -si — you received
  *    it, you did not witness it — and only then combined with `derive`, which
- *    therefore yields -chu. Combining hearsay can never produce -mi.
+ *    therefore yields -chu. Combining hearsay can never produce -mi. It cannot
+ *    produce -si either: two distinct witnessed reports may be passed on
+ *    together only at -chu, though each may still be passed on alone at -si.
  *
  *  Together these give the anti-collapse property for width as well as depth:
  *  no relay, along any chain or across any fan-in, can hand a downstream
- *  identity a stronger claim than "I was told this" (laws 23 and 24 in
- *  tests/evidential.test.ts). The only way back to -mi is to go and look,
- *  which is `assert_`, a new claim with its own chain.
+ *  identity a stronger claim than "I was told this" (the tests titled "law 23"
+ *  and "law 24" in tests/evidential.test.ts). The only way back to -mi is to
+ *  go and look, which is `assert_`, a new claim with its own chain; `relay`
+ *  refuses an empty input list rather than act as a second way to assert.
+ *
+ *  With no inputs this returns -mi, as `derive([])` does: nothing was
+ *  inherited. `relay` never reaches that case.
  *
  *  Until 2026-10-18 the two-or-more case fell straight through to `derive`
  *  with the received grades, so `relay([a, a])` or two witnessed inputs could
@@ -219,7 +275,10 @@ export function assert_<T>(
  *  The relaying identity says what IT claims; the lattice says what its inputs
  *  support; the guard refuses the difference. A relay cannot launder a report
  *  into a witnessing, because the grade it may claim is bounded by what
- *  arrived — mechanically, not by convention. */
+ *  arrived — mechanically, not by convention.
+ *
+ *  A relay of nothing is refused. With no inputs there is nothing to pass on,
+ *  and a claim made from nothing is a first assertion, which is `assert_`. */
 export function relay<T>(
   inputs: readonly Graded<unknown>[],
   value: T,
@@ -227,6 +286,14 @@ export function relay<T>(
   claimed: Grade,
   opts: { at?: string; basis?: string } = {},
 ): RelayResult<T> {
+  if (inputs.length === 0) {
+    return {
+      ok: false,
+      claimed,
+      supported: null,
+      reason: "nothing to relay: a claim with no inputs is a first assertion — use assert_",
+    };
+  }
   const supported = relaySupport(inputs);
   const verdict = guard(claimed, supported);
   if (!verdict.ok) return verdict;

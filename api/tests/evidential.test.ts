@@ -239,6 +239,42 @@ describe("relay — the reason this module exists", () => {
     // The honest narrower move stays open: pass on one report as a report.
     expect(ok(relay([fromC], "the door is open", B, "si", { at: T(3) })).grade).toBe("si");
   });
+
+  test("duplicate detection never over-grades: what JSON cannot tell apart stays distinct, and nothing throws", () => {
+    // Merging two distinct claims would land at -si instead of -chu. Values
+    // whose JSON bytes lose information are never merged by bytes.
+    const mapA = ok(assert_(new Map([[1, 2]]), A, "mi", { at: T(1) }));
+    const mapB = ok(assert_(new Map([[3, 4]]), A, "mi", { at: T(1) }));
+    expect(relaySupport([mapA, mapB])).toBe("chu");
+    const nan = ok(assert_(Number.NaN, A, "mi", { at: T(1) }));
+    const nul = ok(assert_(null, A, "mi", { at: T(1) }));
+    expect(relaySupport([nan, nul])).toBe("chu");
+    const blank = ok(assert_({ note: undefined }, A, "mi", { at: T(1) }));
+    const empty = ok(assert_({}, A, "mi", { at: T(1) }));
+    expect(relaySupport([blank, empty])).toBe("chu");
+
+    // A value JSON cannot serialise at all is still relayable, and the same
+    // object handed over twice is still one relay.
+    const big = ok(assert_(10n, A, "mi", { at: T(1) }));
+    expect(ok(relay([big], 10n, B, "si", { at: T(2) })).grade).toBe("si");
+    expect(relaySupport([big, big])).toBe("si");
+    const cyclic: Record<string, unknown> = { door: "open" };
+    cyclic.self = cyclic;
+    const loop = ok(assert_(cyclic, A, "mi", { at: T(1) }));
+    const loopCopy: Graded<unknown> = { ...loop, chain: loop.chain.map((h) => ({ ...h })) };
+    expect(relaySupport([loop, loop])).toBe("si");
+    expect(relaySupport([loop, loopCopy])).toBe("chu");
+  });
+
+  test("a relay of nothing is refused: a claim with no inputs is a first assertion", () => {
+    for (const grade of ["chu", "si", "mi", "auth"] as const) {
+      const attempt = relay([], "the door is open", B, grade, { at: T(1), basis: "docs/SOUL.md §3" });
+      expect(attempt.ok).toBe(false);
+      if (attempt.ok) throw new Error("unreachable");
+      expect(attempt.reason).toContain("assert_");
+    }
+    expect(ok(assert_("the door is open", B, "mi", { at: T(1) })).grade).toBe("mi");
+  });
 });
 
 describe("the signed payload", () => {
