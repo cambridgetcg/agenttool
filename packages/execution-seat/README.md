@@ -71,15 +71,15 @@ Limits:
 
 - **Observed on codex-cli 0.162.1 (2026-10-18).** In a spawned thread, `PostToolUse` carries `agent_id` (the thread id). Its `session_id` is the parent session, and its `transcript_path` is the spawned thread's own rollout, which already exists. The SessionEnd reason was `other`. Codex writes `-` in an MCP server name as `_` (`mcp__agenttool_collab__collab_task_claim`).
 - **Collab writes.** A spawned thread's first collab write (`COLLAB_WRITES`) reads its rollout, which places its row under the root seat, and promotes it with trigger `collab_write`. A nested thread's missing ancestors are read from rollouts in the same directory; a chain that still cannot be placed is reported, not guessed. A rollout is read only when its file name carries the thread's own id.
-- **Sessions.** SessionStart reads the top-level thread's rollout and resumes a seat whose end was recorded; SessionEnd records the end. Session hooks in a spawned thread are ignored; Codex sends SubagentStart and SubagentStop there.
+- **Sessions.** SessionStart reads the top-level thread's rollout and resumes a seat whose end was recorded; SessionEnd records the end. A long rollout takes about half a second to read (226 MB on 2026-10-18), so SessionEnd reads none once the seat is known, and the snippet runs SessionStart in the background. Session hooks in a spawned thread are ignored; Codex sends SubagentStart and SubagentStop there.
 - **Trust.** Codex runs a configured hook only after it has been trusted (reviewed in the Codex TUI). Until then `codex exec` skips it silently. The probes used `--dangerously-bypass-hook-trust`, which applies to one invocation.
 
-Not installed. A snippet for `~/.codex/hooks.json` (Codex's SessionEnd timeout defaults to 1 second, at most 3):
+Not installed by this package. A snippet for `~/.codex/hooks.json` (Codex's SessionEnd timeout defaults to 1 second, at most 3):
 
 ```json
 {
   "hooks": {
-    "SessionStart": [{ "hooks": [{ "type": "command", "command": "bun <install>/bin/agenttool-execution-seat.ts hook codex" }] }],
+    "SessionStart": [{ "hooks": [{ "type": "command", "async": true, "command": "bun <install>/bin/agenttool-execution-seat.ts hook codex" }] }],
     "SessionEnd": [{ "hooks": [{ "type": "command", "timeout": 3, "command": "bun <install>/bin/agenttool-execution-seat.ts hook codex" }] }],
     "PostToolUse": [{ "matcher": "^mcp__.*__collab_", "hooks": [{ "type": "command", "command": "bun <install>/bin/agenttool-execution-seat.ts hook codex" }] }]
   }

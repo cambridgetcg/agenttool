@@ -93,7 +93,12 @@ export function handleCodexHook(ledger: SeatLedger, raw: unknown, options: { now
   if (input.agent_id) return result;
 
   let seatId: string;
-  if (input.transcript_path && existsSync(input.transcript_path)) {
+  const known = ledger.findSeat(CODEX, { thread_id: input.session_id });
+  // SessionEnd must finish within Codex's 1-second default, and a long rollout takes about half a
+  // second to read (226 MB, 2026-10-18), so an end reads no rollout once the seat is known.
+  if (input.event === "SessionEnd" && known) {
+    seatId = known.seat_id;
+  } else if (input.transcript_path && existsSync(input.transcript_path)) {
     const ingested = ingestCodexRollout(ledger, input.transcript_path);
     result.actions.push("ingested");
     if (ingested.created) result.actions.push("opened");

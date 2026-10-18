@@ -95,7 +95,7 @@ describe("Codex hooks", () => {
     const seat = ledger.getSeat(start.seat_id!)!;
     expect(seat).toMatchObject({ native_ref: { thread_id: CODEX_ROOT }, persistence: "recorded", ended_at: null });
     expect(seat.settings.length).toBeGreaterThan(0);
-    expect(handleCodexHook(ledger, input("SessionEnd", { reason: "other", transcript_path: paths.root })).actions).toEqual(["ingested", "ended"]);
+    expect(handleCodexHook(ledger, input("SessionEnd", { reason: "other", transcript_path: paths.root })).actions).toEqual(["ended"]);
     expect(ledger.getSeat(start.seat_id!)?.end_reason).toBe("other");
     expect(handleCodexHook(ledger, input("SessionStart", { source: "resume", transcript_path: paths.root })).actions).toEqual([
       "ingested",
