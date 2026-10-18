@@ -1,6 +1,6 @@
 /** Synthetic native files. Every free-text field carries a marker that must never reach a record. */
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 export const MARKERS = [
   "seat-marker-user-content",
@@ -24,6 +24,7 @@ export const CODEX_GRANDCHILD = "019a0000-0000-7000-8000-000000000003";
 export const CODEX_FORK = "019a0000-0000-7000-8000-000000000004";
 export const CODEX_SIBLING = "019a0000-0000-7000-8000-000000000005";
 export const CODEX_SOLO = "019a0000-0000-7000-8000-000000000006";
+export const CODEX_GRANDCHILD_2 = "019a0000-0000-7000-8000-000000000007";
 export const CODEX_TURN_A = "019a0000-0000-7000-8000-0000000000a1";
 export const CODEX_TURN_B = "019a0000-0000-7000-8000-0000000000b1";
 export const PHASES = ["Review", "Verify"] as const;
@@ -150,6 +151,21 @@ export interface CodexPaths {
 }
 
 /** Root, three children, a grandchild and a fork. Returns their paths. */
+function spawn(parent: string, depth: number) {
+  return {
+    parent_thread_id: parent,
+    source: { subagent: { thread_spawn: { parent_thread_id: parent, depth, agent_path: MARKERS[9], agent_nickname: MARKERS[7], agent_role: "explorer" } } },
+    agent_nickname: MARKERS[7],
+  };
+}
+
+/** One more spawned thread's rollout, written beside `nextTo`. Returns its path. */
+export function writeSpawnedThread(nextTo: string, id: string, parent: string, depth: number, at: string, rootTurn = CODEX_TURN_A): string {
+  const path = join(dirname(nextTo), `rollout-2026-10-17T10-00-00-${id}.jsonl`);
+  writeFileSync(path, jsonl([sessionMeta(id, spawn(parent, depth)), turnContext(at, "gpt-6-astra", "medium", rootTurn)]));
+  return path;
+}
+
 export function writeCodexSessions(root: string): CodexPaths {
   const day = join(root, "sessions", "2026", "10", "17");
   mkdirSync(day, { recursive: true });
@@ -171,11 +187,6 @@ export function writeCodexSessions(root: string): CodexPaths {
       { timestamp: "2026-10-17T10:09:30.000Z", type: "response_item", payload: { type: "message", content: MARKERS[1] } },
     ]),
   );
-  const spawn = (parent: string, depth: number) => ({
-    parent_thread_id: parent,
-    source: { subagent: { thread_spawn: { parent_thread_id: parent, depth, agent_path: MARKERS[9], agent_nickname: MARKERS[7], agent_role: "explorer" } } },
-    agent_nickname: MARKERS[7],
-  });
   writeFileSync(
     path(CODEX_CHILD),
     jsonl([

@@ -12,6 +12,7 @@ import {
   CODEX_CHILD,
   CODEX_FORK,
   CODEX_GRANDCHILD,
+  CODEX_GRANDCHILD_2,
   CODEX_ROOT,
   CODEX_SIBLING,
   CODEX_SOLO,
@@ -20,6 +21,7 @@ import {
   PHASES,
   writeClaudeProject,
   writeCodexSessions,
+  writeSpawnedThread,
 } from "./fixtures.js";
 
 const IDENTITY = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
@@ -317,6 +319,44 @@ describe("Codex ingest", () => {
         other.close();
       }
     }
+  });
+
+  test("a spawn group started by a member of another group names that group, in any ingest order (decision 13)", () => {
+    const paths = writeCodexSessions(directory);
+    const second = writeSpawnedThread(paths.grandchild, CODEX_GRANDCHILD_2, CODEX_CHILD, 2, "2026-10-17T10:03:30.000Z");
+    const orders = {
+      groupsFirst: [paths.child, paths.sibling, paths.grandchild, second, paths.root],
+      nestedFirst: [paths.grandchild, second, paths.child, paths.sibling, paths.root],
+    };
+    for (const [name, order] of Object.entries(orders)) {
+      const other = SeatLedger.open(join(directory, `state-${name}`));
+      try {
+        for (const path of order) expect(ingestCodexRollout(other, path).warnings).toEqual([]);
+        const seat = other.findSeat("codex", { thread_id: CODEX_ROOT })!;
+        const outer = other.findGroup("spawn", { thread_id: CODEX_ROOT, turn_id: CODEX_TURN_A })!;
+        const inner = other.findGroup("spawn", { thread_id: CODEX_CHILD, turn_id: CODEX_TURN_A })!;
+        expect(outer.parent_group_id).toBeNull();
+        expect(inner).toMatchObject({ parent_group_id: outer.group_id, orchestrator_seat_id: seat.seat_id });
+        expect(inner.members.map((row) => row.child_ref).sort()).toEqual([CODEX_GRANDCHILD, CODEX_GRANDCHILD_2].sort());
+        // Re-ingesting adds no second link.
+        const count = () => (new Database(join(directory, `state-${name}`, DATABASE_FILE), { readonly: true }).query("SELECT COUNT(*) AS n FROM entries WHERE kind = 'group.parent'").get() as { n: number }).n;
+        for (const path of order) ingestCodexRollout(other, path);
+        expect(count()).toBe(1);
+      } finally {
+        other.close();
+      }
+    }
+  });
+
+  test("a parent group link stands once recorded, and a cycle is refused", () => {
+    const { seat } = ledger.openSeat({ harness: "declared-harness", native_ref: { run: "r1" } });
+    const open = (run: string) => ledger.openGroup({ kind: "declared", orchestrator_seat_id: seat.seat_id, native_ref: { run } }).group.group_id;
+    const [a, b, c] = [open("a"), open("b"), open("c")];
+    expect(ledger.linkParentGroup(b, a)).toBe(true);
+    expect(ledger.linkParentGroup(b, a)).toBe(false);
+    expect(() => ledger.linkParentGroup(b, c)).toThrow("different parent group");
+    expect(() => ledger.linkParentGroup(a, b)).toThrow("inside itself");
+    expect(ledger.getGroup(b)?.parent_group_id).toBe(a);
   });
 
   test("grouping keeps a promoted child's seat, and re-ingesting appends nothing", () => {
