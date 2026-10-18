@@ -1,9 +1,9 @@
 # Execution seat ledger — unreleased source candidate
 
 > **Compass:** [Execution seat](../../docs/EXECUTION-SEAT.md) · [Collaboration roadmap](../../docs/COLLABORATION-ROADMAP.md#keep-the-records-distinct)
-> **Implements:** slices S1 and S2 of `execution-seat/v1` and `execution-seat-group/v1`, as a local, append-only ledger with Claude Code and Codex readers and a Claude Code session hook. It grants no authority and publishes nothing.
-> **Code:** `src/{types,fields,lines,claude-code,codex,ledger,ingest,home,claude-hook}.ts` · `bin/agenttool-execution-seat.ts`
-> **Tests:** `tests/{readers,ledger,cli,hook}.test.ts`
+> **Implements:** slices S1 and S2 of `execution-seat/v1` and `execution-seat-group/v1`, as a local, append-only ledger with Claude Code and Codex readers and Claude Code and Codex hooks. It grants no authority and publishes nothing.
+> **Code:** `src/{types,fields,lines,claude-code,codex,ledger,ingest,home,collab-writes,claude-hook,codex-hook}.ts` · `bin/agenttool-execution-seat.ts`
+> **Tests:** `tests/{readers,ledger,cli,hook,codex-hook}.test.ts`
 
 ## What it records
 
@@ -63,7 +63,28 @@ Limits:
 - Two processes that resume the same session at once both declared its seat ref, so the first to exit ends both collab sessions.
 - A Claude subagent shares its parent's MCP connection (Claude Code subagents documentation), so its collab calls belong to the parent's collab session. The `PostToolUse` hook promotes the subagent, but the collab event itself still names the parent's seat ref.
 - A collab tool is matched by name under any MCP server, so another server that exposes a tool called `collab_task_claim` would also count.
-- Codex is not covered. Codex has hooks of this kind behind `features.hooks`, and its `PostToolUse` carries a spawned thread's id as `agent_id` (read from the Codex source, not observed); no adapter is built. A Codex host can declare `AGENTOOL_COLLAB_SEAT_REF` per run and end by that ref (see the collab README).
+- Codex has its own hook; see the next section. It ends no collab sessions, because Codex MCP servers learn no thread id to declare. A Codex host can declare `AGENTOOL_COLLAB_SEAT_REF` per run and end by that ref (see the collab README).
+
+## Codex hook
+
+`hook codex` handles Codex `SessionStart`, `SessionEnd` and `PostToolUse` hooks. It reads only the event name, `session_id`, `source`, `reason`, the tool name and `agent_id`, prints nothing (Codex adds a SessionStart hook's stdout to the model's context too) and always exits 0. It takes no `--collab-host`.
+
+- **Observed on codex-cli 0.162.1 (2026-10-18).** In a spawned thread, `PostToolUse` carries `agent_id` (the thread id). Its `session_id` is the parent session, and its `transcript_path` is the spawned thread's own rollout, which already exists. The SessionEnd reason was `other`. Codex writes `-` in an MCP server name as `_` (`mcp__agenttool_collab__collab_task_claim`).
+- **Collab writes.** A spawned thread's first collab write (`COLLAB_WRITES`) reads its rollout, which places its row under the root seat, and promotes it with trigger `collab_write`. A nested thread's missing ancestors are read from rollouts in the same directory; a chain that still cannot be placed is reported, not guessed. A rollout is read only when its file name carries the thread's own id.
+- **Sessions.** SessionStart reads the top-level thread's rollout and resumes a seat whose end was recorded; SessionEnd records the end. Session hooks in a spawned thread are ignored; Codex sends SubagentStart and SubagentStop there.
+- **Trust.** Codex runs a configured hook only after it has been trusted (reviewed in the Codex TUI). Until then `codex exec` skips it silently. The probes used `--dangerously-bypass-hook-trust`, which applies to one invocation.
+
+Not installed. A snippet for `~/.codex/hooks.json` (Codex's SessionEnd timeout defaults to 1 second, at most 3):
+
+```json
+{
+  "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "bun <install>/bin/agenttool-execution-seat.ts hook codex" }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "command", "timeout": 3, "command": "bun <install>/bin/agenttool-execution-seat.ts hook codex" }] }],
+    "PostToolUse": [{ "matcher": "^mcp__.*__collab_", "hooks": [{ "type": "command", "command": "bun <install>/bin/agenttool-execution-seat.ts hook codex" }] }]
+  }
+}
+```
 
 ## Boundaries
 

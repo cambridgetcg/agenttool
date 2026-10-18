@@ -7,8 +7,10 @@ This package keeps the local `execution-seat/v1` ledger described in
 - `src/fields.ts` holds the allowlisted field shapes.
 - `src/ledger.ts` owns the append-only SQLite ledger and its fold.
 - `src/ingest.ts` maps readings into the ledger idempotently.
-- `src/claude-hook.ts` handles Claude Code SessionStart and SessionEnd hook input
-  and the per-process host files under `hosts/`.
+- `src/claude-hook.ts` handles Claude Code SessionStart, SessionEnd and PostToolUse
+  hook input and the per-process host files under `hosts/`.
+- `src/codex-hook.ts` handles Codex SessionStart, SessionEnd and PostToolUse hook input.
+- `src/collab-writes.ts` classifies collab MCP tools; a test keeps it in step with collab.
 - `bin/agenttool-execution-seat.ts` is the operator CLI.
 
 Keep these boundaries load-bearing:

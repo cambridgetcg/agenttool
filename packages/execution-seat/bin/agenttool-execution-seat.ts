@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { handleClaudeHook, readClaudeHookInput } from "../src/claude-hook.js";
+import { handleCodexHook, readCodexHookInput } from "../src/codex-hook.js";
 import { SeatError } from "../src/errors.js";
 import { resolveSeatHome, SEAT_HOME_ENV } from "../src/home.js";
 import { ingestClaudeSession, ingestCodexRollout } from "../src/ingest.js";
@@ -26,6 +27,9 @@ Usage:
       a Claude Code SessionStart/SessionEnd/PostToolUse hook: reads the hook JSON on stdin, prints nothing,
       always exits 0; on exit, ends that process's collab sessions by seat ref when --collab-host is given;
       a subagent's first collab write gives it its own record (trigger collab_write)
+  agenttool-execution-seat hook codex
+      the same for Codex SessionStart/SessionEnd/PostToolUse hooks; a spawned thread's first collab
+      write gives it its own record; Codex hooks end no collab sessions
 
 Options:
   --home <dir>   ledger directory (default: $${SEAT_HOME_ENV}, else \${XDG_STATE_HOME:-~/.local/state}/agenttool/execution-seat)
@@ -60,8 +64,8 @@ function processId(value: string | undefined): number | null {
 }
 
 /**
- * A hook never blocks or talks to the model: stdout stays empty (Claude Code adds a SessionStart
- * hook's stdout to the context), every failure is one stderr line, and the exit code is 0.
+ * A hook never blocks or talks to the model: stdout stays empty (Claude Code and Codex both add a
+ * SessionStart hook's stdout to the context), every failure is one stderr line, and the exit code is 0.
  */
 function runHook(
   args: string[],
@@ -74,8 +78,8 @@ function runHook(
     const [runtime, ...flags] = args;
     const collabHost = takeOption(flags, "--collab-host");
     const collabDb = takeOption(flags, "--collab-db");
-    if (runtime !== "claude-code" || flags.length > 0) {
-      throw new SeatError("usage", "hook claude-code [--collab-host <path>] [--collab-db <path>]");
+    if ((runtime !== "claude-code" && runtime !== "codex") || flags.length > 0 || (runtime === "codex" && collabHost)) {
+      throw new SeatError("usage", "hook claude-code [--collab-host <path>] [--collab-db <path>] | hook codex");
     }
     // Read all of stdin either way, so the harness never sees a broken pipe.
     const text = readInput();
@@ -86,12 +90,16 @@ function runHook(
     } catch {
       throw new SeatError("invalid_hook_input", "hook input is not JSON");
     }
-    const input = readClaudeHookInput(raw);
+    const input = runtime === "codex" ? readCodexHookInput(raw) : readClaudeHookInput(raw);
     if (!input.event) return 0;
     // Only a subagent's collab write does anything on PostToolUse; nothing else opens the ledger.
     if (input.event === "PostToolUse" && (!input.agent_id || !input.collab_write)) return 0;
     const ledger = SeatLedger.open(home);
     try {
+      if (runtime === "codex") {
+        handleCodexHook(ledger, raw);
+        return 0;
+      }
       const result = handleClaudeHook(ledger, raw, {
         pid: processId(env.CLAUDE_PID) ?? process.ppid,
         collab: collabHost ? { host: resolve(collabHost), db: collabDb ? resolve(collabDb) : null } : null,

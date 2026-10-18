@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "../bin/agenttool-execution-seat.js";
-import { COLLAB_WRITES, handleClaudeHook, HOSTS_DIRECTORY, type ClaudeHookOptions, type CollabRun } from "../src/claude-hook.js";
+import { handleClaudeHook, HOSTS_DIRECTORY, type ClaudeHookOptions, type CollabRun } from "../src/claude-hook.js";
+import { COLLAB_WRITES } from "../src/collab-writes.js";
 import { DATABASE_FILE } from "../src/home.js";
 import { SeatLedger } from "../src/ledger.js";
 import { CLAUDE_NEXT, CLAUDE_SESSION, expectNoMarkers, hookInput, writeClaudeProject } from "./fixtures.js";

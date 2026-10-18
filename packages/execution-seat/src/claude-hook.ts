@@ -18,6 +18,7 @@ import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync
 import { basename, isAbsolute, join } from "node:path";
 import { CLAUDE_CODE } from "./claude-code.js";
 import { SeatError } from "./errors.js";
+import { collabWrite } from "./collab-writes.js";
 import { ref, token, uuid } from "./fields.js";
 import { assertPrivateDirectory, assertPrivateFile } from "./home.js";
 import { ingestClaudeSession } from "./ingest.js";
@@ -31,29 +32,6 @@ const IN_PROCESS_REASONS = new Set(["clear", "resume"]);
 /** SessionEnd reasons the hooks documentation gives for a process that is exiting. */
 const EXIT_REASONS = new Set(["prompt_input_exit", "logout", "other"]);
 const COLLAB_HOST_TIMEOUT_MS = 8_000;
-/** An MCP tool name, `mcp__<server>__<tool>`, whatever the server is called. */
-const MCP_TOOL = /^mcp__.{1,128}__(collab_[a-z_]{1,64})$/;
-/**
- * Collab tools whose call leaves something another party cites: a task, report, decision,
- * handoff or artifact. Reads, cursors, presence and session lifecycle are left out.
- */
-export const COLLAB_WRITES: ReadonlySet<string> = new Set([
-  "collab_task_create",
-  "collab_task_claim",
-  "collab_task_recover",
-  "collab_task_renew",
-  "collab_task_progress",
-  "collab_task_release",
-  "collab_task_block",
-  "collab_task_unblock",
-  "collab_task_complete",
-  "collab_task_review",
-  "collab_artifact_attach",
-  "collab_report_append",
-  "collab_decision_record",
-  "collab_handoff_offer",
-  "collab_handoff_respond",
-]);
 
 export interface ClaudeHookInput {
   event: "SessionStart" | "SessionEnd" | "PostToolUse" | null;
@@ -76,7 +54,6 @@ export function readClaudeHookInput(raw: unknown): ClaudeHookInput {
   const name = input.hook_event_name;
   const effort = input.effort !== null && typeof input.effort === "object" ? (input.effort as Record<string, unknown>).level : null;
   const sessionId = uuid(input.session_id);
-  const tool = typeof input.tool_name === "string" ? MCP_TOOL.exec(input.tool_name)?.[1] : undefined;
   const transcript = input.transcript_path;
   const ownTranscript =
     typeof transcript === "string" && isAbsolute(transcript) && sessionId !== null && basename(transcript) === `${sessionId}.jsonl`;
@@ -87,7 +64,7 @@ export function readClaudeHookInput(raw: unknown): ClaudeHookInput {
     reason: token(input.reason),
     model: token(input.model),
     effort: token(effort),
-    collab_write: tool && COLLAB_WRITES.has(tool) ? tool : null,
+    collab_write: collabWrite(input.tool_name),
     agent_id: ref(input.agent_id),
     transcript_path: ownTranscript ? transcript : null,
   };
