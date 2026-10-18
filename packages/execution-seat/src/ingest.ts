@@ -35,7 +35,8 @@ function claudeRow(child: ClaudeChild): SummaryRow {
 }
 
 function lineageWarning(error: unknown, what: string): string {
-  if (error instanceof SeatError && (error.code === "lineage_conflict" || error.code === "lineage_cycle")) {
+  const codes = ["lineage_conflict", "lineage_cycle", "group_lineage_conflict", "group_lineage_cycle"];
+  if (error instanceof SeatError && codes.includes(error.code)) {
     return `${what}: ${error.code}`;
   }
   throw error;
@@ -133,6 +134,26 @@ function recordSpawnedThread(
   return { recorded: ledger.recordMember(group.group_id, row), group_id: group.group_id };
 }
 
+/**
+ * Decision 13: a spawn group whose parent thread is a member of another group names that group.
+ * Rows arrive in any order, so every spawn group of the seat is checked after each placement.
+ */
+function linkNestedGroups(ledger: SeatLedger, seatId: string, rootThread: string): string[] {
+  const warnings: string[] = [];
+  for (const group of ledger.groupsFor(seatId)) {
+    const parentThread = group.native_ref.thread_id;
+    if (group.kind !== "spawn" || group.parent_group_id || !parentThread || parentThread === rootThread) continue;
+    const parentGroup = ledger.findChild(seatId, parentThread)?.group_id;
+    if (!parentGroup) continue;
+    try {
+      ledger.linkParentGroup(group.group_id, parentGroup);
+    } catch (error) {
+      warnings.push(lineageWarning(error, "parent_group_id"));
+    }
+  }
+  return warnings;
+}
+
 export function ingestCodexRollout(ledger: SeatLedger, rolloutPath: string): IngestResult {
   const rollout = readCodexRollout(rolloutPath);
   return ledger.transaction(() => {
@@ -164,6 +185,7 @@ export function ingestCodexRollout(ledger: SeatLedger, rolloutPath: string): Ing
         child_ref: rollout.thread_id,
         rows_recorded: placed.recorded ? 1 : 0,
         group_ids: placed.group_id ? [placed.group_id] : [],
+        warnings: linkNestedGroups(ledger, seat.seat_id, root),
       };
     }
     const { seat, created } = ledger.openSeat({

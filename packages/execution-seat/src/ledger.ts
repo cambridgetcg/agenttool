@@ -646,6 +646,9 @@ export class SeatLedger {
       } else if (kind === "group.end" && !group.ended_at) {
         group.ended_at = body.ended_at as string;
         group.outcome = body.outcome as GroupOutcome;
+      } else if (kind === "group.parent") {
+        // Decision 13: the first parent link recorded stands.
+        group.parent_group_id ??= String(body.parent_group_id);
       }
     }
     group.members = [...members.values()];
@@ -665,6 +668,28 @@ export class SeatLedger {
       .query("SELECT group_id FROM seat_groups WHERE orchestrator_seat_id = ? ORDER BY open_seq")
       .all(orchestratorSeatId) as { group_id: string }[];
     return rows.map((row) => this.requireGroup(row.group_id));
+  }
+
+  /**
+   * Give a group with no parent group its parent: the group whose member started this run. The
+   * first link stands; a different later one is refused, and so is one that would make a cycle.
+   */
+  linkParentGroup(groupId: string, parentGroupId: string): boolean {
+    return this.transaction(() => {
+      const group = this.requireGroup(groupId);
+      const parent = this.requireGroup(parentGroupId);
+      if (group.parent_group_id) {
+        if (group.parent_group_id === parent.group_id) return false;
+        throw new SeatError("group_lineage_conflict", "this group already has a different parent group");
+      }
+      for (let at: ExecutionSeatGroup | null = parent, hops = 0; at; at = at.parent_group_id ? this.getGroup(at.parent_group_id) : null) {
+        if (at.group_id === group.group_id || ++hops > MAX_LINEAGE) {
+          throw new SeatError("group_lineage_cycle", "a group cannot nest inside itself");
+        }
+      }
+      this.append(groupId, "group.parent", { parent_group_id: parent.group_id });
+      return true;
+    });
   }
 
   /** Add phase titles the group has not recorded yet. Returns whether any were added. */

@@ -100,7 +100,7 @@ Not installed. A snippet for `~/.codex/hooks.json` (Codex's SessionEnd timeout d
   - a workflow run's phase titles, when each is at most 32 letters, digits, spaces, `_` or `-` (at most 16 per run).
 
   Message content, task descriptions, workflow labels, a member's own phase, results, nicknames, paths, account ids and instructions are never stored. A token that does not look like an identifier becomes null.
-- **Groups.** A Claude Code workflow run is one group. Two or more Codex threads that one parent thread spawned under the same root turn form a `spawn` group, and their rows move there; a thread spawned alone stays a row under its root seat. A group's `name` is set only when the orchestrator declares one.
+- **Groups.** A Claude Code workflow run is one group. Two or more Codex threads that one parent thread spawned under the same root turn form a `spawn` group, and their rows move there; a thread spawned alone stays a row under its root seat. A spawn group whose parent thread is a member of another group names that group as `parent_group_id` (decision 13); rows arrive in any order, so the link may be added on a later ingest, the first link stands, and a cycle is refused. A group's `name` is set only when the orchestrator declares one.
 - **Provider.** It is recorded only when the native file names it. Claude Code transcripts do not, so their provider stays null.
 - **Reasoning continuity.** It is never claimed. A Claude Code `thinking_drop` reason is kept as evidence on the timeline entry for that model.
 - **Append-only.** Triggers refuse every update and delete. Summary rows outlive native transcripts (R2). When a later scan finds a transcript gone, it sets `native_gone_at`; it never deletes the row.
@@ -114,7 +114,6 @@ Not installed. A snippet for `~/.codex/hooks.json` (Codex's SessionEnd timeout d
 
 - **Hooks beyond sessions.** SubagentStart, SubagentStop and tool hooks are not handled. Subagents are still read from their transcripts.
 - **Forks.** A Claude Code `--fork-session` or `/branch` leaves no marker in the transcript that this reader recognises, so forks are linked only when declared. A Codex fork is read from `forked_from_id`.
-- **Nested groups.** A spawn group started by a thread that is itself a group member does not yet set `parent_group_id`.
 - **Group endings.** A workflow group's end and outcome are recorded only through `endGroup`. The journal is not read as proof that a run ended.
 
 **Observed on 2026-10-17:** a trial ingest of one Mac's 98 Claude Code transcripts and 396 Codex rollouts finished in about 17 seconds with no errors. It produced:
