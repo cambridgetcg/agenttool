@@ -504,7 +504,16 @@ Remaining steps, in order. None has been taken.
    [one-time trust re-point](#one-time-npm-trust-re-point-yu-trusted-device).
    No record of it exists in this repository on 2026-10-18, and the trust
    state cannot be read anonymously. Without it, an OIDC stage from the public
-   repository is expected to fail as `math-cards-v0.1.0-dev.1` did.
+   repository is expected to fail as `math-cards-v0.1.0-dev.1` did. The
+   [public release path](#public-release-path-from-2026-10-12) lists two more
+   once-only steps before the first real dispatch. Revoking the private
+   repository's scope-wide, bypass-2FA `NPM_TOKEN` ([settings](#public-repository-settings-yu-once))
+   closes a direct-publish route; nothing in this repository records that it
+   was done. It does not block the stage, which uses OIDC and not that token.
+   The public `npm-bootstrap` environment already exists: an anonymous
+   `GET /repos/cambridgetcg/agenttool-packages/environments` on 2026-10-18
+   returned it with one `*-v*` tag deployment policy, admin bypass off and no
+   required reviewer.
 2. Merge the release PR. Then project the merged `main` commit into
    `cambridgetcg/agenttool-packages` with `bun bin/project-public.ts` and push
    public `main` fast-forward ([step 2](#2-project-and-push)), and wait for
@@ -522,11 +531,30 @@ Remaining steps, in order. None has been taken.
 6. Dispatch once more with `dry_run=false`; the receipt must record
    `already_published_exact` ([step 8](#8-verify)). Then record the
    publication in this file.
+7. In a follow-up private PR, update the surfaces that say 0.24.0 is not yet
+   published. These are dated, so they do not become false, but they go stale:
+   - the `0.24.0 — prepared, not yet published` headings and their first
+     paragraphs in `packages/sdk-ts/CHANGELOG.md` and
+     `packages/sdk-py/CHANGELOG.md` (the PyPI heading changes only when PyPI
+     serves it);
+   - the availability callout in `apps/docs/data.html` (exit door section) and
+     the SDK paragraph in `apps/docs/packages.html`;
+   - the "0.24.0 is prepared and not yet published" clauses in
+     `packages/sdk-ts/CLAUDE.md` and `packages/sdk-py/CLAUDE.md`;
+   - the exit-door sentence in `apps/web/privacy.html` ("not yet in a
+     published SDK release"), pinned by `api/tests/public-retention.test.ts`;
+     it is privacy-notice text, and that notice keeps dated earlier versions
+     under `apps/web/privacy/versions/`;
+   - the 0.24.0 paragraph in `PYPI-RELEASES.md`, once PyPI is decided.
+
+   Then revisit Home's `full_export`
+   (`api/src/services/home/build.ts`), which stays `not_available` until a
+   client release containing the exit door is actually published. The SDK
+   READMEs ship inside the artifacts and are worded to stay true after
+   publication, so they need no change.
 
 The PyPI release of `agenttool-sdk` 0.24.0 waits on items 1, 2 and 4 of the
 [private-repository gap](PYPI-RELEASES.md#blocked-while-the-source-repository-is-private-2026-10-12).
-Home's `full_export` stays `not_available` until a client release containing
-the exit door is actually published.
 
 ## Collab 0.5.0 public distribution — 2026-10-10
 
