@@ -101,7 +101,8 @@ process declares `AGENTOOL_COLLAB_SEAT_REF` when the host set it, else
 `claude-code:<CLAUDE_CODE_SESSION_ID>` (Claude Code gives stdio MCP servers
 the session ID current when it spawned them; the server keeps that ID after
 `/clear`), else `codex:<CODEX_THREAD_ID>` (Codex sets that variable for shell
-commands; it has not been observed reaching MCP servers). The ref is kept only
+commands; its MCP launch code does not add it, so this applies only where a
+host forwards it). The ref is kept only
 in the `session.joined` event payload and returned by `collab_session_start`;
 a session without one keeps the old payload shape, and the schema is
 unchanged. It authenticates nothing and grants nothing, exactly like `actor`;
@@ -444,7 +445,9 @@ round leaves another active session behind. A host that does not learn the
 session ID can declare a ref per run instead (unreleased), for example
 `codex exec -c 'mcp_servers.agenttool-collab.env.AGENTOOL_COLLAB_SEAT_REF="run:<name>"' ...`,
 and run `agenttool-collab-host end --seat-ref run:<name> --reason <text>`
-once the run has exited.
+once the run has exited. Codex starts separate MCP servers for each spawned
+thread with the same configuration (read from the Codex source), so a spawned
+thread's session declares the same ref and is ended with the run.
 
 ### Delegation and lineage
 

@@ -1,8 +1,11 @@
 /**
- * Claude Code SessionStart and SessionEnd hooks. Reads allowlisted hook fields
- * only: the event name, `session_id`, `source`, `reason`, `model` and
- * `effort.level`. Prompts, tool input and output, messages, paths and
- * transcript contents are never read or copied.
+ * Claude Code SessionStart, SessionEnd and PostToolUse hooks. Reads allowlisted
+ * hook fields only: the event name, `session_id`, `source`, `reason`, `model`,
+ * `effort.level`, and for PostToolUse the tool name and `agent_id`. Prompts,
+ * tool input and output, and messages are never read or copied. The
+ * `transcript_path` is used only when it names the session's own transcript,
+ * to read the subagent tree with the same structural reader as ingest; it is
+ * never stored.
  *
  * One Claude Code process can host several sessions in turn (`/clear`,
  * interactive `/resume`), while its MCP servers live on and keep the session
@@ -12,11 +15,12 @@
  * ended by seat ref. Nothing here grants, verifies or contacts anything.
  */
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 import { CLAUDE_CODE } from "./claude-code.js";
 import { SeatError } from "./errors.js";
-import { token, uuid } from "./fields.js";
+import { ref, token, uuid } from "./fields.js";
 import { assertPrivateDirectory, assertPrivateFile } from "./home.js";
+import { ingestClaudeSession } from "./ingest.js";
 import type { SeatLedger } from "./ledger.js";
 
 export const HOSTS_DIRECTORY = "hosts";
@@ -27,14 +31,43 @@ const IN_PROCESS_REASONS = new Set(["clear", "resume"]);
 /** SessionEnd reasons the hooks documentation gives for a process that is exiting. */
 const EXIT_REASONS = new Set(["prompt_input_exit", "logout", "other"]);
 const COLLAB_HOST_TIMEOUT_MS = 8_000;
+/** An MCP tool name, `mcp__<server>__<tool>`, whatever the server is called. */
+const MCP_TOOL = /^mcp__.{1,128}__(collab_[a-z_]{1,64})$/;
+/**
+ * Collab tools whose call leaves something another party cites: a task, report, decision,
+ * handoff or artifact. Reads, cursors, presence and session lifecycle are left out.
+ */
+export const COLLAB_WRITES: ReadonlySet<string> = new Set([
+  "collab_task_create",
+  "collab_task_claim",
+  "collab_task_recover",
+  "collab_task_renew",
+  "collab_task_progress",
+  "collab_task_release",
+  "collab_task_block",
+  "collab_task_unblock",
+  "collab_task_complete",
+  "collab_task_review",
+  "collab_artifact_attach",
+  "collab_report_append",
+  "collab_decision_record",
+  "collab_handoff_offer",
+  "collab_handoff_respond",
+]);
 
 export interface ClaudeHookInput {
-  event: "SessionStart" | "SessionEnd" | null;
+  event: "SessionStart" | "SessionEnd" | "PostToolUse" | null;
   session_id: string | null;
   source: string | null;
   reason: string | null;
   model: string | null;
   effort: string | null;
+  /** PostToolUse: the collab write that was called, e.g. `collab_task_claim`. Null for any other tool. */
+  collab_write: string | null;
+  /** PostToolUse inside a subagent: the subagent's id. */
+  agent_id: string | null;
+  /** The session's own transcript, only when its file name is `<session_id>.jsonl`. */
+  transcript_path: string | null;
 }
 
 /** Pick the allowlisted fields; anything else in the hook input is ignored. */
@@ -42,13 +75,21 @@ export function readClaudeHookInput(raw: unknown): ClaudeHookInput {
   const input = raw !== null && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   const name = input.hook_event_name;
   const effort = input.effort !== null && typeof input.effort === "object" ? (input.effort as Record<string, unknown>).level : null;
+  const sessionId = uuid(input.session_id);
+  const tool = typeof input.tool_name === "string" ? MCP_TOOL.exec(input.tool_name)?.[1] : undefined;
+  const transcript = input.transcript_path;
+  const ownTranscript =
+    typeof transcript === "string" && isAbsolute(transcript) && sessionId !== null && basename(transcript) === `${sessionId}.jsonl`;
   return {
-    event: name === "SessionStart" || name === "SessionEnd" ? name : null,
-    session_id: uuid(input.session_id),
+    event: name === "SessionStart" || name === "SessionEnd" || name === "PostToolUse" ? name : null,
+    session_id: sessionId,
     source: token(input.source),
     reason: token(input.reason),
     model: token(input.model),
     effort: token(effort),
+    collab_write: tool && COLLAB_WRITES.has(tool) ? tool : null,
+    agent_id: ref(input.agent_id),
+    transcript_path: ownTranscript ? transcript : null,
   };
 }
 
@@ -79,7 +120,9 @@ export interface ClaudeHookOptions {
 export interface ClaudeHookResult {
   event: ClaudeHookInput["event"];
   seat_id: string | null;
-  /** What the hook did, in order: opened, resumed, settings, continuation, ended, collab, … */
+  /** PostToolUse: the subagent's own record, once it has one. */
+  child_seat_id: string | null;
+  /** What the hook did, in order: opened, resumed, settings, continuation, ended, collab, ingested, promoted, … */
   actions: string[];
   collab: { seat_refs: string[]; summary: string } | null;
 }
@@ -181,12 +224,49 @@ function summarize(run: CollabRun): string {
   return `collab sessions: ${parts.length > 0 ? parts.join(", ") : "none matched"}`;
 }
 
+/** Child refs a promotion cannot place; the hook reports the code and changes nothing. */
+const UNPLACED = new Set(["child_unknown", "parent_row_unknown", "lineage_cycle"]);
+
+/**
+ * A subagent shares its parent's MCP connection, so collab cannot tell its writes from the
+ * parent's. The PostToolUse input can: inside a subagent it carries `agent_id`. The first collab
+ * write gives the subagent its own `recorded` record (trigger `collab_write`), chain first.
+ */
+function promoteCollabWriter(ledger: SeatLedger, input: ClaudeHookInput, result: ClaudeHookResult): ClaudeHookResult {
+  if (!input.agent_id || !input.collab_write) return result;
+  const agentId = input.agent_id;
+  const { seat, created } = ledger.openSeat({ harness: CLAUDE_CODE, native_ref: { session_id: input.session_id! } });
+  result.seat_id = seat.seat_id;
+  if (created) result.actions.push("opened");
+  let found = ledger.findChild(seat.seat_id, agentId);
+  // The subagent's meta file exists by its first tool call (observed on 2026-10-17), so one read places its row.
+  if (!found && input.transcript_path) {
+    ingestClaudeSession(ledger, input.transcript_path);
+    result.actions.push("ingested");
+    found = ledger.findChild(seat.seat_id, agentId);
+  }
+  if (found?.row.seat_id) {
+    result.child_seat_id = found.row.seat_id;
+    result.actions.push("already_recorded");
+    return result;
+  }
+  try {
+    result.child_seat_id = ledger.promote(seat.seat_id, agentId, "collab_write").seat_id;
+    result.actions.push("promoted");
+  } catch (error) {
+    if (!(error instanceof SeatError) || !UNPLACED.has(error.code)) throw error;
+    result.actions.push(error.code);
+  }
+  return result;
+}
+
 /** Handle one hook input. Throws only SeatError and I/O errors; the CLI reports them and still exits 0. */
 export function handleClaudeHook(ledger: SeatLedger, raw: unknown, options: ClaudeHookOptions): ClaudeHookResult {
   const input = readClaudeHookInput(raw);
-  const result: ClaudeHookResult = { event: input.event, seat_id: null, actions: [], collab: null };
+  const result: ClaudeHookResult = { event: input.event, seat_id: null, child_seat_id: null, actions: [], collab: null };
   if (!input.event) return result;
   if (!input.session_id) throw new SeatError("invalid_hook_input", "a session hook names a session_id");
+  if (input.event === "PostToolUse") return promoteCollabWriter(ledger, input, result);
   if (!Number.isSafeInteger(options.pid) || options.pid <= 1) throw new SeatError("invalid_hook_input", "the Claude Code process id is unknown");
   const now = options.now ?? (() => new Date().toISOString());
   const alive = options.alive ?? processAlive;

@@ -24,6 +24,7 @@ Keep these boundaries load-bearing:
 - promotion walks the chain, so `parent_seat_id` is always the direct parent;
 - an end is recorded only when seen; a resume is a new `seat.resumed` entry, never an edit;
 - a hook prints nothing to stdout and always exits 0, and reads only the allowlisted hook fields;
+  it reads a transcript only when the path names the session's own `<session_id>.jsonl`, and never stores the path;
 - never infer a provider from a harness, or claim reasoning continued across a model change;
 - no network, no hooks installed (the hook command exists; installing it is the operator's step), nothing activated on import.
 

@@ -3,10 +3,10 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { run } from "../bin/agenttool-execution-seat.js";
-import { handleClaudeHook, HOSTS_DIRECTORY, type ClaudeHookOptions, type CollabRun } from "../src/claude-hook.js";
+import { COLLAB_WRITES, handleClaudeHook, HOSTS_DIRECTORY, type ClaudeHookOptions, type CollabRun } from "../src/claude-hook.js";
 import { DATABASE_FILE } from "../src/home.js";
 import { SeatLedger } from "../src/ledger.js";
-import { CLAUDE_NEXT, CLAUDE_SESSION, expectNoMarkers, hookInput } from "./fixtures.js";
+import { CLAUDE_NEXT, CLAUDE_SESSION, expectNoMarkers, hookInput, writeClaudeProject } from "./fixtures.js";
 
 const PID = 4242;
 const STARTED = "Sat Oct 17 09:00:00 2026";
@@ -195,6 +195,63 @@ describe("Claude Code session hooks", () => {
   });
 });
 
+describe("a subagent's collab write", () => {
+  const COLLAB = "mcp__agenttool-collab__";
+  const write = (agentId: string | null, tool: string, fields: Record<string, unknown> = {}) =>
+    hook("PostToolUse", CLAUDE_SESSION, { tool_name: tool, ...(agentId ? { agent_id: agentId, agent_type: "Explore" } : {}), ...fields });
+
+  test("promotes the subagent, chain first, reading its row from the session's own transcript", () => {
+    const transcript = writeClaudeProject(directory);
+    hook("SessionStart", CLAUDE_SESSION, { source: "startup", model: "claude-opus-5-5" });
+    const first = write("anested02", `${COLLAB}collab_task_claim`, { transcript_path: transcript });
+    expect(first.actions).toEqual(["ingested", "promoted"]);
+    const root = seatOf(CLAUDE_SESSION);
+    const child = ledger.getSeat(first.child_seat_id!)!;
+    const middle = ledger.findSeat("claude-code", { session_id: CLAUDE_SESSION, agent_id: "aplain01" })!;
+    expect(child).toMatchObject({ relation: "child", parent_seat_id: middle.seat_id, persistence: "recorded", promotion: { trigger: "collab_write" } });
+    expect(middle).toMatchObject({ parent_seat_id: root.seat_id, promotion: { trigger: "lineage" } });
+    // Later writes find the record; a workflow member is promoted from its group.
+    expect(write("anested02", `${COLLAB}collab_report_append`, { transcript_path: transcript }).actions).toEqual(["already_recorded"]);
+    const member = write("awfok01", "mcp__plugin_any_collab__collab_handoff_offer", { transcript_path: transcript });
+    expect(member.actions).toEqual(["promoted"]);
+    expect(ledger.getSeat(member.child_seat_id!)?.group_id).not.toBeNull();
+  });
+
+  test("main-thread calls, reads, other tools and unknown subagents change nothing", () => {
+    const transcript = writeClaudeProject(directory);
+    expect(write(null, `${COLLAB}collab_task_claim`, { transcript_path: transcript }).actions).toEqual([]);
+    for (const tool of [`${COLLAB}collab_task_list`, `${COLLAB}collab_next`, `${COLLAB}collab_session_start`, "Bash", "collab_task_claim"]) {
+      expect(write("aplain01", tool, { transcript_path: transcript })).toMatchObject({ seat_id: null, actions: [] });
+    }
+    expect(ledger.listSeats().items).toHaveLength(0);
+    // A transcript that is not the session's own is never read.
+    const elsewhere = write("aplain01", `${COLLAB}collab_task_claim`, { transcript_path: join(directory, "agent-aplain01.jsonl") });
+    expect(elsewhere.actions).toEqual(["opened", "child_unknown"]);
+    expect(seatOf(CLAUDE_SESSION).children).toEqual([]);
+  });
+
+  test("every collab tool is classified, so a new one cannot slip in or out unnoticed", () => {
+    const source = readFileSync(join(import.meta.dir, "..", "..", "collab", "src", "mcp.ts"), "utf8");
+    const tools = [...source.matchAll(/registerTool\(\s*"(collab_[a-z_]+)"/g)].map((match) => match[1]!);
+    const notCited = [
+      "collab_session_join", "collab_session_list", "collab_session_heartbeat", "collab_session_leave", "collab_session_start",
+      "collab_session_end", "collab_workspace_open", "collab_workspace_status", "collab_next", "collab_cursor_ack",
+      "collab_cursor_reset", "collab_task_list", "collab_task_get", "collab_report_list", "collab_events_since",
+      "collab_events_wait", "collab_journal_verify", "collab_anchor_status",
+    ];
+    expect(tools.length).toBeGreaterThan(30);
+    expect([...tools].sort()).toEqual([...COLLAB_WRITES, ...notCited].sort());
+  });
+
+  test("no hook free text reaches the ledger", () => {
+    const transcript = writeClaudeProject(directory);
+    write("anested02", `${COLLAB}collab_decision_record`, { transcript_path: transcript });
+    ledger.close();
+    expect(expectNoMarkers(ledgerBytes())).toEqual([]);
+    ledger = SeatLedger.open(home);
+  });
+});
+
 describe("agenttool-execution-seat hook claude-code", () => {
   function hookCli(input: string, flags: string[] = [], env: Record<string, string> = { CLAUDE_PID: String(PID) }) {
     let out = "";
@@ -245,6 +302,8 @@ describe("agenttool-execution-seat hook claude-code", () => {
     expect(bad.out).toBe("");
     expect(bad.err).toBe("agenttool-execution-seat hook: invalid_hook_input: hook input is not JSON\n");
     expect(hookCli(JSON.stringify(hookInput("PostToolUse", CLAUDE_SESSION)))).toEqual({ code: 0, out: "", err: "" });
+    const read = hookInput("PostToolUse", CLAUDE_SESSION, { tool_name: "mcp__agenttool-collab__collab_task_list", agent_id: "aplain01" });
+    expect(hookCli(JSON.stringify(read))).toEqual({ code: 0, out: "", err: "" });
     expect(hookCli("x".repeat(1_000_001))).toEqual({ code: 0, out: "", err: "" });
     expect(existsSync(join(directory, "cli-state"))).toBe(false);
     const usage = hookCli("{}", ["--unknown"]);
