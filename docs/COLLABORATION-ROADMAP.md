@@ -2,7 +2,7 @@
 
 > **Type:** proposal
 > **Purpose:** Make agents in different harnesses and devices able to contribute to a shared purpose through explicit membership, bounded permissions and reviewable evidence.
-> **Evidence:** Published local Collab 0.4.0; deployed scoped missions and same-project root enrollment; observed active-turn peer exchange. Local Collab 0.5.0, the courier and Hermes receiver remain source candidates. See the [current checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30). The phases below are acceptance criteria, not deployment promises.
+> **Evidence:** Reviewed 2026-10-18. Local Collab 0.4.0 is on npm; 0.5.0 is a GitHub release in `cambridgetcg/agenttool-collab` ([distribution record](NPM-RELEASES.md#collab-050-public-distribution--2026-10-10)); the host doorbell on main is unreleased. Deployed: scoped missions, same-project root enrollment, and participant-chosen grant token hashes with participant leave (PR #479, live API `593ce404`). Observed: active-turn peer exchange. The courier, the Hermes receiver and the lobby desk remain source candidates. See the [record of recent merges](NOW.md#landed-2026-10-09-to-2026-10-17-recorded-2026-10-18) and the [2026-09-30 checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30). The phases below are acceptance criteria, not deployment promises.
 > **Start:** [Practical collaboration guide](COLLABORATION.md) · [Mission contract](COLLABORATION-MISSIONS.md) · [API coverage](API-COVERAGE.md)
 
 The [economy roadmap](ROADMAP.md#agent-economy-development) builds chosen work,
@@ -27,8 +27,11 @@ identity nor merges existing identities. Principality references never mint
 membership, permission, consent or execution authority.
 
 Today, local Collab coordinates independent sessions sharing one SQLite journal.
-Published 0.4.0 provides 32 tools. Source-candidate 0.5.0 adds bounded waiting as
-the 33rd tool. The private courier candidate exchanges selected messages between
+The npm 0.4.0 release provides 32 tools. The 0.5.0 GitHub release adds bounded
+waiting as the 33rd tool. Main adds an unreleased host doorbell: `agenttool-collab-host wait`
+lets a host wait between model turns (PR #484). PR #485 adds an addressed mode,
+which rings only for events routed to the waiting session, and a Claude Code watcher.
+The next npm candidate is 0.5.1. The private courier candidate exchanges selected messages between
 enrolled own-fleet peers; it does not replicate leases, accepted reviews or task
 authority. The courier's native reception and physical second-device operation
 still need their own receipts; the mission API trials use a separate transport.
@@ -117,8 +120,9 @@ does not prove peer presence during that empty read.
 | Codex / Claude Code | Local stdio MCP and packaged coordination guidance; one-Mac Codex processing and explicit Local Starter return observed. Claude channel processing remains unverified. | Independently controlled native delivery, restart/resume and disconnect in the selected versions. |
 | Hermes Agent — local source candidate | One-Mac production API → fresh Sol Hermes review job → native read evidence → signed ACK and participant readback passed on 2026-09-29; two grants shared one root identity. | Runtime path confinement before unattended untrusted input; interruption/recovery and independently controlled device/identity trials. See the adapter contract below. |
 | Local wake / memory | External selected notes and explicit loading/saving through [Local Starter](LOCAL-CORE.md); fresh native session independently read the handoff and current API on 2026-09-29. | Fresh-session return across the other harness, explicit progress saving, interruption/deduplication and expired-grant refusal. Memory never silently restores an expired grant. |
-| Hosted API | Project-scoped Correspondence plus deployed mission grants and same-project root enrollment; fresh enrollment-to-wrapper-reply observed with the reported second Mac. [Release receipts](NOW.md#consolidated-release-checkpoint-2026-09-30). | Expired-grant return, distributed task authority and cross-project admission remain separate work. |
-| Distribution | Published Collab 0.4.0 archive and optional npm installation. | A separate reviewed release for 0.5.0 before recommending its wait tool; a release/install contract for any future courier. |
+| Hosted API | Project-scoped Correspondence plus deployed mission grants and same-project root enrollment; fresh enrollment-to-wrapper-reply observed with the reported second Mac. [Release receipts](NOW.md#consolidated-release-checkpoint-2026-09-30). Participant-chosen grant token hashes and participant [leave](COLLABORATION-MISSIONS.md#leaving-a-mission) are deployed (PR #479, live API `593ce404`). | Next, from the 2026-10-17 field notes (issue #486): a server-side enrollment request queue, so a device posts its own signed packet instead of a person carrying it, and participant renewal by signature within an administrator-set budget. Expired-grant return, distributed task authority and cross-project admission remain separate work. |
+| Lobby desk — private source | `packages/lobby` (PRs #478, #482, #483): a device-only local hall, a fleet hall on missions among the owner's own devices, and table talk with renewal, leave, kick and block. Hermetic tests, including the API's own mission gateway run in process. | Not released, installed or run against the live service. First watched live use, a Collab bridge and hosted `/v1/lobby` routes are separate steps; a public hall needs its own decision. |
+| Distribution | Collab 0.4.0 archive and optional npm installation; Collab 0.5.0 as a checksummed GitHub release ([record](NPM-RELEASES.md#collab-050-public-distribution--2026-10-10)), not on npm. | Collab 0.5.1 with the doorbell through the [public staged npm path](NPM-RELEASES.md#public-release-path-from-2026-10-12), once Yu has done the one-time npm trust re-point; a release/install contract for any future courier. |
 
 No phase requires npm specifically. Packages deliver software, skills explain
 workflows, MCP exposes operations, hooks invoke selected host events, local

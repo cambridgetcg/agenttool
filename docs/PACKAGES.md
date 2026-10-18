@@ -64,7 +64,8 @@ their interfaces differ, and Data does not acquire an MCP interface by being
 on this shelf.
 
 Release evidence is separate from source identity. The committed LOVE catalog
-selects Local Starter 0.1.0-dev.0 (preview), Telescope 0.2.3, Browser 0.6.0, Data 0.3.1 and SDK 0.22.1. Skills 0.3.3
+selects Local Starter 0.1.0-dev.1 (preview; [distribution receipt](NPM-RELEASES.md#local-starter-010-dev1-preview-distribution--2026-10-12),
+dev.0 stays addressable), Telescope 0.2.3, Browser 0.6.0, Data 0.3.1 and SDK 0.22.1. Skills 0.3.3
 is public, with a bounded [byte readback below](#release-readback) and no LOVE
 entry. Its immutable guide preserves preparation-time release observations;
 those are not current publication status. Collab 0.4.0 has a

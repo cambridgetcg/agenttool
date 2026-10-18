@@ -498,6 +498,38 @@ frozen at the tag; the next source release should update it. The 0.5.0 bytes
 name the private repository, so the next npm candidate is 0.5.1 through the
 [public release path](#public-release-path-from-2026-10-12).
 
+## Local Starter 0.1.0-dev.1 preview distribution — 2026-10-12
+
+`@agenttool/local-starter@0.1.0-dev.1` is distributed the same way as dev.0:
+a public GitHub prerelease and a LOVE manifest. **It is not published to
+npm**; the registry answered 404 for the package name on 2026-10-18. Its
+frozen `package.json.repository` names the private source repository, as
+dev.0's does, so npm still needs a new version with public repository metadata
+and the [bootstrap steps](#first-publication-of-local-starter-bootstrap-yu).
+
+| Exact artifact | Recorded identity |
+|---|---|
+| Version | `0.1.0-dev.1` |
+| Archive | `agenttool-local-starter-0.1.0-dev.1.tgz` · 231,625 bytes |
+| SHA-256 | `e49bf41b72ec546c52ae7987e2086c8dbaa2065e15bec847fd2f7ceb66981f02` |
+| Source revision | `70d7241e93b4f739129637ad61917bc66a032d97`, merged in PR #467 as `b723eda0` |
+| GitHub prerelease | [`local-starter-v0.1.0-dev.1`](https://github.com/cambridgetcg/agenttool-local-starter/releases/tag/local-starter-v0.1.0-dev.1), published 2026-10-12T15:52:42Z with the archive, `manifest.json`, `receipt.json` and `SHA256SUMS` |
+| LOVE manifest | [`0.1.0-dev.1/manifest.json`](https://docs.agenttool.dev/packages/v1/@agenttool/local-starter/0.1.0-dev.1/manifest.json) · 1,398 bytes · SHA-256 `19ed857372445f9b65d9faabdbf872e6d2cd6c1da18c625e613cd91598480603`; the package index names it `latest` |
+
+**Observed 2026-10-18 (anonymous GETs):** the archive downloaded from the docs
+mirror and from the GitHub prerelease was 231,625 bytes with the SHA-256 above
+in both cases, and `SHA256SUMS` lists the same hash. The live manifest matched
+the committed bytes. The prerelease `receipt.json` records the same source
+revision, size and hash, and a byte-identical fresh-clone rebuild. The release
+targets the distribution repository's commit `a3b9f3b4`, not the source commit.
+
+**CI:** the `Local starter` workflow passed all six jobs (Ubuntu 24.04, macOS
+15 and Windows 2025, each on Node 22.18.0 and 24.18.0) on the PR head
+`1f56a0ce` ([run 38270081771](https://github.com/cambridgetcg/agenttool/actions/runs/38270081771))
+and on the merge `b723eda0` ([run 38273305961](https://github.com/cambridgetcg/agenttool/actions/runs/38273305961)).
+Those trees differ from the archive's source revision only in two README
+lines. The dev.0 archive, hash and record below keep their bytes.
+
 ## Local Starter preview distribution — 2026-09-28
 
 `@agenttool/local-starter@0.1.0-dev.0` has a standalone preview artifact and
