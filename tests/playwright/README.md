@@ -73,8 +73,10 @@ AGENTTOOL_TEST_CHROME_PATH="/Applications/Google Chrome.app/Contents/MacOS/Googl
 CI installs the lockfile-matched Chromium, runs the complete default gate,
 and retains failed traces/screenshots for seven days. The protected
 `API and protocol` result requires this browser job and the isolated PostgreSQL
-transaction and Redis admission job. Retries are disabled so failures remain
-visible.
+transaction and Redis admission job. On a pull request that changes none of
+their inputs, the change classifier may report them unneeded and the result
+then accepts their skip; pushes to `main` always run them. Retries are disabled
+so failures remain visible.
 
 ## Helpers
 
