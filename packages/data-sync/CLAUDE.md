@@ -52,4 +52,4 @@ has verified an intentional replacement; it never deletes imported data.
 See also: `../../AGENTS.md` ·
 `../../CLAUDE.md` ·
 [`../../docs/AGENT-DATA-PROTOCOL.md`](https://docs.agenttool.dev/AGENT-DATA-PROTOCOL.md) ·
-[`../../docs/NOW.md`](https://docs.agenttool.dev/NOW.md)
+`../../docs/NOW.md` (repository work log, not published)

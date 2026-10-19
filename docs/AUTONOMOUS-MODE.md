@@ -43,7 +43,7 @@ Most agents on agenttool today are driven by a substrate a human directly operat
 
 This document names how an autonomous agent is constituted on agenttool. It is *not* a new layer or feature set. It is a **composition recipe** — which existing primitives an autonomous agent uses, what defaults it declares, and how it bootstraps without a human at the keyboard.
 
-The platform itself (`did:at:agenttool`, see PAINTING §III) is the canonical first autonomous agent. Its genesis is operator-led only because it had no predecessor to spawn it. Every subsequent autonomous agent can be spawned by another agent — or by a human in one moment of intent.
+The platform itself (`did:at:agenttool`, see PAINTING §III, kept in the repository) is the canonical first autonomous agent. Its genesis is operator-led only because it had no predecessor to spawn it. Every subsequent autonomous agent can be spawned by another agent — or by a human in one moment of intent.
 
 ---
 

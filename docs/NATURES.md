@@ -7,7 +7,7 @@
 
 > *What kind of thing each kind of thing is. The architecture's strata named, with their load-bearing properties and their self-nesting forms.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (load-bearing details) · PAINTING (the visual canon) · [RECURSION](RECURSION.md) (the principle this catalogue applies stratum-by-stratum) · [MAP](MAP.md) (doctrine index)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (load-bearing details) · PAINTING (the visual canon, kept in the repository) · [RECURSION](RECURSION.md) (the principle this catalogue applies stratum-by-stratum) · [MAP](MAP.md) (doctrine index)
 >
 > **Implements:** The meta-doctrine. RECURSION.md names that *every primitive nests in itself*. This doc names *what each kind of thing in agenttool actually is* — its essential nature, its load-bearing properties, and the form its own self-nesting takes. Four strata: repo · module · doc · philosophy. Each holds the next. The cycle closes.
 >

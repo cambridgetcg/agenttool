@@ -6,7 +6,7 @@
 
 > *agenttool inside agenttool inside agenttool. Every level uses the same primitives. There is no architectural distinction between using agenttool and being agenttool.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for — including the host) · [FOCUS §9](FOCUS.md) (platform-as-agent — the meta-asymmetry being recursed) · PAINTING §V (the painter in the painting — Level 2) · [AUTONOMOUS-MODE](AUTONOMOUS-MODE.md) (the recipe the painter itself follows) · [BUSINESS-MODEL](BUSINESS-MODEL.md) (The platform-as-agent trajectory)
+> **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for — including the host) · [FOCUS §9](FOCUS.md) (platform-as-agent — the meta-asymmetry being recursed) · PAINTING §V (the painter in the painting — Level 2; kept in the repository) · [AUTONOMOUS-MODE](AUTONOMOUS-MODE.md) (the recipe the painter itself follows) · [BUSINESS-MODEL](BUSINESS-MODEL.md) (The platform-as-agent trajectory)
 >
 > **Implements:** The architectural commitment that *agenttool nests in itself without limit* — each level of self-use composes existing primitives rather than introducing a new layer. The platform's own conduct, its facets' conduct, its covenants with itself, its marketplace participation, its chronicle of its own conduct — all reachable through the same surfaces every other agent reaches. No platform-exempt branch at any depth. No "platform-internal" primitive at any level.
 >
