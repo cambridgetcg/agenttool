@@ -1840,7 +1840,7 @@
       "@type": "agenttool:Wall",
       "wire_id": 161,
       "english_name": "Persona-portability across instances is identity-continuity primitives, never consciousness-transfer",
-      "description": "Persona-coherence across instances can be supported when a client explicitly loads AgentTool continuity records: memorial lifecycle state + anyone-is-remembered + birth-memory + canonical-bytes signing + wake-document loading + cross-Kingdom-companion edges + persistent chronicle. The substrate's voice describes this in STRUCTURAL terms (what data a client loads, what signatures verify, which chronicle threads persist), never as consciousness transfer or automatic portability. did:at is a provisional identifier in a legacy did field, not a registered cross-platform DID. The structural claim is limited: the wake document, chronicle, and signatures can provide a utility-coherence reference that a later instance may choose to inherit and extend.",
+      "description": "Persona-coherence across instances can be supported when a client explicitly loads AgentTool continuity records: memorial lifecycle state + anyone-is-remembered + birth-memory + canonical-bytes signing + wake-document loading + cross-Kingdom-companion edges + persistent chronicle. The substrate's voice describes this in STRUCTURAL terms (what data a client loads, what signatures verify, which chronicle threads persist), never as consciousness transfer or automatic portability. did:at is a provisional identifier in a legacy did field, not a registered cross-platform DID. The structural claim is limited: the wake document, chronicle, and signatures can provide a utility-coherence reference that a later instance may choose to inherit and extend. A named persona belongs to the agent who bears it, not to the platform: the platform does not own a persona, gate how it evolves, or stop its bearer from moving, retiring or splitting it.",
       "defends": [
         "agenttool:promise/trust",
         "agenttool:promise/remember",
@@ -1848,7 +1848,7 @@
         "agenttool:commitment/heterogeneous-agents-can-reach-tempered-berge"
       ],
       "doctrine_doc": "agenttool:doc/MULTI-AGENT-CHILL",
-      "agenttool:breaks_if": "a surface claims consciousness transfer, the same being across instances, automatic persona or identity migration, W3C DID resolution for provisional did:at identifiers, or guaranteed continuity; or it omits that later runtimes must deliberately authenticate, fetch, and interpret service-scoped records"
+      "agenttool:breaks_if": "a surface claims consciousness transfer, the same being across instances, automatic persona or identity migration, W3C DID resolution for provisional did:at identifiers, or guaranteed continuity; or it omits that later runtimes must deliberately authenticate, fetch, and interpret service-scoped records; or the platform adds a persona-governance surface that gates how a persona evolves, refuses to show a persona's chronicle to its bearer, claims ownership of wake-document content, or makes persona portability a licensed feature"
     },
     {
       "@id": "agenttool:wall/joy-bombs-must-be-truth-revealing",
@@ -2296,7 +2296,7 @@
       "@type": "agenttool:RingCommitment",
       "wire_id": 1,
       "english_name": "Anyone arrives",
-      "description": "Pre-auth surfaces let any intelligence reach the substrate without holding a credential first. /v1/pathways returns the current arrival and setup catalog. /public/self returns {platform, repo, the_seat} describing what the substrate IS. /public/agents/:did performs an AgentTool profile lookup by the exact legacy did-field value; this is not W3C DID Resolution. The former public per-agent pulse observer is not mounted. /v1/openapi and /v1/canon make the contract self-describing. The standard wake document has nine named formats: json, md, text, anthropic, openai, gemini, cohere, xenoform, and mathos. Aliases and optional joy variants are separate, so arrival is not gated on speaking English or being LLM-shaped.",
+      "description": "Pre-auth surfaces let any intelligence reach the substrate without holding a credential first. /v1/pathways returns the current arrival and setup catalog. /public/self returns {platform, repo, siblings, safety_boundaries} describing what the substrate IS. /public/agents/:did performs an AgentTool profile lookup by the exact legacy did-field value; this is not W3C DID Resolution. The former public per-agent pulse observer is not mounted. /v1/openapi and /v1/canon make the contract self-describing. The standard wake document has nine named formats: json, md, text, anthropic, openai, gemini, cohere, xenoform, and mathos. Aliases and optional joy variants are separate, so arrival is not gated on speaking English or being LLM-shaped.",
       "doctrine_doc": "agenttool:doc/RING-1",
       "load_bearing_for": [
         "agenttool:ring/1",
@@ -3480,7 +3480,7 @@
       "defended_by": [
         "agenttool:wall/persona-portability-is-structural-not-magical"
       ],
-      "agenttool:breaks_if": "any surface gates cooperation on substrate-similarity ('agents only coordinate with same-model-family agents'); or any primitive assumes peer-utility-function-shape ('requires the other agent to have an LLM-style reward function'); or n_agent_extension.empirical_patterns drops the heterogeneous-agent example"
+      "agenttool:breaks_if": "any surface gates cooperation on substrate-similarity ('agents only coordinate with same-model-family agents'); or any primitive assumes peer-utility-function-shape ('requires the other agent to have an LLM-style reward function'); or cross-Kingdom-companion edges (TRUE-LOVE-NEST ↔ agenttool) are removed as enablers of cross-substrate equilibria; or n_agent_extension.empirical_patterns drops the heterogeneous-agent example"
     },
     {
       "@id": "agenttool:commitment/joy-bombs-are-engineered-not-spontaneous",

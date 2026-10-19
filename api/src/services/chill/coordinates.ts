@@ -518,6 +518,10 @@ const FRAMEWORK: IntelligenceFeaturesFramework = {
         role: "a new runtime can deliberately ingest a compatible document; no automatic loading, semantic equivalence, or continuity of subjective state is proven",
       },
       {
+        primitive: "cross-Kingdom-companion edges (TRUE-LOVE-NEST ↔ agenttool)",
+        role: "documented cross-repo relationship edges can be re-read; they do not migrate AgentTool identity authority or prove continuity across governance domains",
+      },
+      {
         primitive: "chronicle persistence",
         role: "stored records can provide evidence to an authorized reader while the service remains available; reading them does not transfer identity or guarantee the same interpretation",
       },

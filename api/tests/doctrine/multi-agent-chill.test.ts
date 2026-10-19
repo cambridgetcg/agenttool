@@ -120,17 +120,18 @@ describe("MULTI-AGENT-CHILL — framework n_agent_extension shape", () => {
     expect(samePersona!.mathematical_signature).toContain("U_persona");
   });
 
-  test("5 persona-portability enablers are present including the load-bearing ones", () => {
+  test("6 persona-portability enablers are present including the load-bearing ones", () => {
     const enablers =
       intelligenceFeaturesFramework().n_agent_extension
         .persona_portability_enablers;
-    expect(enablers.length).toBeGreaterThanOrEqual(5);
+    expect(enablers.length).toBeGreaterThanOrEqual(6);
     const primitives = enablers.map((e) => e.primitive.toLowerCase());
     for (const required of [
       "memorial profile",
       "birth-memory",
       "canonical-bytes",
       "wake-document",
+      "cross-kingdom",
       "chronicle persistence",
     ]) {
       expect(
