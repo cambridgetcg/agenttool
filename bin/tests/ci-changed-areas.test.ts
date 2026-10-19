@@ -702,29 +702,38 @@ describe("ci.yml consumes the classifier fail-closed", () => {
     expect(notice?.env).toBeUndefined();
   });
 
-  test("a pull request records its tested tree, and only a push to main looks it up", () => {
+  test("a pull request into main records its tested tree and parent, and only a push to main looks them up", () => {
     const [tree, record, proof] = jobs.changes!.steps!.slice(3);
-    // The tree of GITHUB_SHA (GitHub's test merge) names the record. Either
-    // step may fail without failing the job: the push then runs every job.
+    // The tree of GITHUB_SHA (GitHub's test merge) and that merge's first
+    // parent, the main commit it tested on, name the record. A pull request
+    // stacked on another branch records nothing. Either step may fail without
+    // failing the job: the push then runs every job.
     expect(tree).toEqual({
-      name: "Name the tree this pull request tests",
+      name: "Name the tree this pull request tests and the main commit under it",
       id: "tree",
-      if: "${{ github.event_name == 'pull_request' }}",
+      if: "${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}",
       "continue-on-error": true,
+      env: { CI_PR_HEAD_SHA: "${{ github.event.pull_request.head.sha }}" },
       run: [
         'tree="$(git rev-parse --verify "$GITHUB_SHA^{tree}")"',
+        "# GitHub's test merge: its first parent is the main commit it tested",
+        "# on and its second is the pull request's head.",
+        'read -r _ parent head rest <<<"$(git rev-list --parents -n 1 "$GITHUB_SHA")"',
+        'test -n "$head"',
+        'test "$head" = "$CI_PR_HEAD_SHA"',
+        'test -z "$rest"',
         `printf '%s\\n' "$GITHUB_SHA" >"$RUNNER_TEMP/ci-tested-tree.txt"`,
-        `printf 'tree=%s\\n' "$tree" >>"$GITHUB_OUTPUT"`,
+        `printf 'tree=%s\\nparent=%s\\n' "$tree" "$parent" >>"$GITHUB_OUTPUT"`,
         "",
       ].join("\n"),
     });
     expect(record).toEqual({
       name: "Record the tested tree for the push to main",
-      if: "${{ github.event_name == 'pull_request' && steps.tree.outputs.tree != '' }}",
+      if: "${{ github.event_name == 'pull_request' && steps.tree.outputs.tree != '' && steps.tree.outputs.parent != '' }}",
       "continue-on-error": true,
       uses: "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f",
       with: {
-        name: "ci-tested-tree-${{ steps.tree.outputs.tree }}",
+        name: "ci-tested-tree-${{ steps.tree.outputs.tree }}-on-${{ steps.tree.outputs.parent }}",
         path: "${{ runner.temp }}/ci-tested-tree.txt",
         "retention-days": 14,
         "if-no-files-found": "error",
@@ -736,14 +745,72 @@ describe("ci.yml consumes the classifier fail-closed", () => {
       name: "Look for a green pull-request run of this exact tree",
       id: "proof",
       if: "${{ github.event_name == 'push' }}",
-      env: { GH_TOKEN: "${{ github.token }}" },
+      env: { GH_TOKEN: "${{ github.token }}", CI_PUSH_BEFORE_SHA: "${{ github.event.before }}" },
       run: "bin/bash-without-env-hooks.sh bin/ci-tree-proof.sh",
     });
     expect(workflowSource.match(/github\.token/g)).toHaveLength(1);
-    // bin/ci-tree-proof.sh looks the record up by this exact name.
+    // bin/ci-tree-proof.sh looks the record up by this exact name, with the
+    // push's `before` in the parent's place.
     expect(readFileSync(join(ROOT, "bin", "ci-tree-proof.sh"), "utf8")).toContain(
-      'readonly artifact_name="ci-tested-tree-$tree"',
+      'readonly artifact_name="ci-tested-tree-$tree-on-$before_sha"',
     );
+  });
+
+  test("the tree step names GitHub's two-parent test merge and fails on any other shape", () => {
+    const step = jobs.changes!.steps!.find((candidate) => candidate.id === "tree")!;
+    withFixture((fixture) => {
+      const base = fixture.git("rev-parse", "HEAD");
+      fixture.git("checkout", "-q", "-b", "topic");
+      fixture.write("docs/SOUL.md", "soul, revised\n");
+      const head = fixture.commit("docs");
+      fixture.git("checkout", "-q", "-b", "other", base);
+      fixture.write("docs/OTHER.md", "other\n");
+      const other = fixture.commit("other");
+      const merge = fixture.merge(base, head);
+      fixture.git("checkout", "-q", "--detach", base);
+      fixture.git("merge", "-q", "--no-ff", "-m", "octopus", head, other);
+      const octopus = fixture.git("rev-parse", "HEAD");
+      // GitHub runs an unconfigured step as `bash -e {0}`.
+      const runStep = (tested: string, prHead: string) => {
+        const scratch = mkdtempSync(join(tmpdir(), "ci-tree-step-"));
+        try {
+          const script = join(scratch, "step.sh");
+          const output = join(scratch, "github-output");
+          writeFileSync(script, step.run!);
+          writeFileSync(output, "");
+          const result = Bun.spawnSync(["/bin/bash", "--noprofile", "--norc", "-e", script], {
+            cwd: fixture.dir,
+            env: {
+              PATH: SYSTEM_PATH,
+              HOME: fixture.dir,
+              ...GIT_ENV,
+              GITHUB_SHA: tested,
+              CI_PR_HEAD_SHA: prHead,
+              RUNNER_TEMP: scratch,
+              GITHUB_OUTPUT: output,
+            },
+            stdout: "pipe",
+            stderr: "pipe",
+          });
+          return { code: result.exitCode, outputs: readFileSync(output, "utf8") };
+        } finally {
+          rmSync(scratch, { recursive: true, force: true });
+        }
+      };
+      const tested = runStep(merge, head);
+      expect(tested.code).toBe(0);
+      expect(tested.outputs).toBe(`tree=${fixture.git("rev-parse", `${merge}^{tree}`)}\nparent=${base}\n`);
+      for (const [label, sha, prHead] of [
+        ["another head", merge, other],
+        ["no head", merge, ""],
+        ["a single-parent commit", head, head],
+        ["an octopus merge", octopus, head],
+      ] as Array<[string, string, string]>) {
+        const refused = runStep(sha, prHead);
+        expect(refused.code, label).not.toBe(0);
+        expect(refused.outputs, label).toBe("");
+      }
+    });
   });
 
   test("pull requests cancel superseded runs; pushes to main are never cancelled or replaced", () => {

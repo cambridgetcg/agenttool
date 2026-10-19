@@ -19,10 +19,10 @@ permissions:
 
 concurrency:
   # Pull requests: a newer commit cancels the older run. Pushes to main: one
-  # group per commit, never cancelled, because a later proven push must not
-  # cancel an earlier unproven push's full run (the later pull-request run may
-  # have skipped the earlier push's areas). Scheduled and manual runs share
-  # refs/heads/main with pushes, so they get groups of their own.
+  # group per commit, never cancelled. Each push run must finish: the next
+  # push can be proven only once this one has passed, because its
+  # pull-request run may have skipped this push's areas. Scheduled and manual
+  # runs share refs/heads/main with pushes, so they get groups of their own.
   group: ${{ github.event_name == 'push' && format('ci-{0}-push-{1}', github.workflow, github.sha) || format('ci-{0}-{1}-{2}', github.workflow, github.event_name, github.ref) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
@@ -32,13 +32,16 @@ jobs:
     # changed paths to jobs, and a job below is skipped only when it succeeded
     # and reported that job "false"; git failures, unknown paths, and changes
     # to this workflow, bin/ci-changed-areas.sh, or bin/ci-tree-proof.sh select
-    # every job. A pull request also records the tree it tested and carries
-    # the YUTABASE coverage notice. On a push to main, bin/ci-tree-proof.sh
-    # looks for a green pull-request run of ci.yml on the identical tree; when
-    # it finds one ("proven"), every job but the YUTABASE projector is skipped
-    # and that run is the evidence. Scheduled and manual runs select every
-    # job. Every job but the push-only YUTABASE projector skips a draft pull
-    # request; GitHub runs CI again when it is marked ready for review.
+    # every job. A pull request into main also records the tree it tested and
+    # the main commit it tested on, and every pull request carries the
+    # YUTABASE coverage notice. On a push to main, bin/ci-tree-proof.sh looks
+    # for a green pull-request run of ci.yml that tested the identical tree on
+    # the commit main pointed to before the push, and for a green push run of
+    # ci.yml on that commit. When it finds both ("proven"), every job but the
+    # YUTABASE projector is skipped and that pull-request run is the evidence.
+    # Scheduled and manual runs select every job. Every job but the push-only
+    # YUTABASE projector skips a draft pull request; GitHub runs CI again when
+    # it is marked ready for review.
     name: Changed areas
     if: ${{ github.event.pull_request.draft != true }}
     runs-on: ubuntu-24.04
@@ -79,23 +82,34 @@ jobs:
             echo 'YUTABASE PostgreSQL integration is not run for pull requests. The private fixture is available only to trusted pushes to cambridgetcg/agenttool main.'
             echo 'The Data, ADDS, and SDK job still checks the credential-free projector tests. This notice is not a PostgreSQL integration pass.'
           } | tee -a "$GITHUB_STEP_SUMMARY"
-      - name: Name the tree this pull request tests
+      - name: Name the tree this pull request tests and the main commit under it
         id: tree
-        if: ${{ github.event_name == 'pull_request' }}
+        # Only a pull request into main: one stacked on another branch tested
+        # its change against that branch, not against main.
+        if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}
         # A failure here only means the push to main runs every job.
         continue-on-error: true
+        env:
+          CI_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           tree="$(git rev-parse --verify "$GITHUB_SHA^{tree}")"
+          # GitHub's test merge: its first parent is the main commit it tested
+          # on and its second is the pull request's head.
+          read -r _ parent head rest <<<"$(git rev-list --parents -n 1 "$GITHUB_SHA")"
+          test -n "$head"
+          test "$head" = "$CI_PR_HEAD_SHA"
+          test -z "$rest"
           printf '%s\n' "$GITHUB_SHA" >"$RUNNER_TEMP/ci-tested-tree.txt"
-          printf 'tree=%s\n' "$tree" >>"$GITHUB_OUTPUT"
+          printf 'tree=%s\nparent=%s\n' "$tree" "$parent" >>"$GITHUB_OUTPUT"
       - name: Record the tested tree for the push to main
-        # The push trusts this record only after this whole run has passed. A
-        # missing record only means that push runs every job.
-        if: ${{ github.event_name == 'pull_request' && steps.tree.outputs.tree != '' }}
+        # The push trusts this record only after this whole run has passed and
+        # only when main has not moved since. A missing record only means that
+        # push runs every job.
+        if: ${{ github.event_name == 'pull_request' && steps.tree.outputs.tree != '' && steps.tree.outputs.parent != '' }}
         continue-on-error: true
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: ci-tested-tree-${{ steps.tree.outputs.tree }}
+          name: ci-tested-tree-${{ steps.tree.outputs.tree }}-on-${{ steps.tree.outputs.parent }}
           path: ${{ runner.temp }}/ci-tested-tree.txt
           retention-days: 14
           if-no-files-found: error
@@ -105,14 +119,15 @@ jobs:
         if: ${{ github.event_name == 'push' }}
         env:
           GH_TOKEN: ${{ github.token }}
+          CI_PUSH_BEFORE_SHA: ${{ github.event.before }}
         run: bin/bash-without-env-hooks.sh bin/ci-tree-proof.sh
 
   api-protocol-linux:
     name: API and protocol (Linux)
     needs:
       - changes
-    # Never filtered by path. Skipped only for a draft, or for a push whose
-    # exact tree a green pull-request run already tested.
+    # Never filtered by path. Skipped only for a draft, or for a proven push
+    # to main (see Changed areas).
     if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.proven == 'true') }}
     runs-on: ubuntu-24.04
     # The complete gate can exceed 20m on shared runners; match deploy-api's
@@ -582,7 +597,7 @@ jobs:
     # gate pass and every other prerequisite passes. A prerequisite may be
     # skipped only when the classifier succeeded and reported it "false".
     # A draft pull request skips this result along with everything else, as
-    # does a push whose exact tree a green pull-request run already tested.
+    # does a proven push to main (see Changed areas).
     name: API and protocol
     if: ${{ always() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.proven == 'true') }}
     needs:
