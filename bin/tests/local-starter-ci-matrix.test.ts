@@ -4,10 +4,11 @@ import { readFileSync } from "node:fs";
 type Trigger = { branches?: string[]; paths?: string[]; types?: string[] } | null;
 type Job = {
   name: string;
+  if?: string;
   "runs-on": string;
   "continue-on-error"?: boolean;
-  strategy: { "fail-fast": boolean; matrix: { os: string; node: string[] } };
-  steps: { "continue-on-error"?: boolean }[];
+  strategy: { "fail-fast": boolean; matrix: { os: string; node: string[] } & Record<string, unknown> };
+  steps: { if?: string; "continue-on-error"?: boolean }[];
 };
 const source = readFileSync(new URL("../../.github/workflows/local-starter.yml", import.meta.url), "utf8");
 const workflow = Bun.YAML.parse(source) as {
@@ -54,6 +55,11 @@ describe("Local starter CI matrix", () => {
     expect(workflow.on.push?.paths).toEqual(workflow.on.pull_request?.paths);
     expect(workflow.on.push?.paths).toContain(".github/workflows/local-starter.yml");
     expect(workflow.on.merge_group?.types).toEqual(["checks_requested"]);
+    // Nothing else may narrow the legs the os expression selects: no job or
+    // step condition, and no matrix include or exclude.
+    expect(job.if).toBeUndefined();
+    expect(Object.keys(job.strategy.matrix).sort()).toEqual(["node", "os"]);
+    expect(job.steps.every((step) => step.if === undefined)).toBe(true);
   });
 
   test("cancels superseded pull request runs but never a main push", () => {
