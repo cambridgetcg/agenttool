@@ -7,6 +7,10 @@
 # $GITHUB_OUTPUT. `proven=true` requires all of:
 #   - a push to refs/heads/main with a valid pushed commit and a valid
 #     `before` commit (CI_PUSH_BEFORE_SHA, from github.event.before);
+#   - the run's first attempt. Re-running a push run, whether all of it or
+#     this job, runs every job, so a proof found later cannot turn a red
+#     attempt green by skipping what failed. "Re-run failed jobs" keeps this
+#     job's first answer and repeats only the jobs that failed;
 #   - an unexpired artifact named ci-tested-tree-<tree>-on-<before>, from this
 #     repository rather than a fork. A pull-request run that targets main
 #     uploads it from its Changed areas job, naming the tree of GitHub's test
@@ -25,13 +29,14 @@
 # `proven=false`, and the workflow then runs every job.
 #
 # `reason` (logged and written to the step summary, not to $GITHUB_OUTPUT) is
-# one of: unchecked, not-a-main-push, bad-repository, bad-sha, bad-before,
-# no-token, git-failure, artifact-lookup-failed, no-recorded-run,
+# one of: unchecked, not-a-main-push, rerun, bad-repository, bad-sha,
+# bad-before, no-token, git-failure, artifact-lookup-failed, no-recorded-run,
 # before-lookup-failed, before-run-not-green, run-lookup-failed,
 # recorded-run-red, recorded-run-not-green, green-pull-request-run.
 #
 # Needs GH_TOKEN (actions: read), CI_PUSH_BEFORE_SHA, GITHUB_EVENT_NAME,
-# GITHUB_REF, GITHUB_REPOSITORY, GITHUB_SHA, and GITHUB_OUTPUT. Makes at most
+# GITHUB_REF, GITHUB_REPOSITORY, GITHUB_RUN_ATTEMPT, GITHUB_SHA, and
+# GITHUB_OUTPUT. Makes at most
 # 2 + MAX_CANDIDATES read-only REST calls, all GET.
 
 set -euo pipefail
@@ -62,6 +67,10 @@ trap finish EXIT
 
 if [[ ${GITHUB_EVENT_NAME:-} != push || ${GITHUB_REF:-} != refs/heads/main ]]; then
   reason=not-a-main-push
+  exit 0
+fi
+if [[ ${GITHUB_RUN_ATTEMPT:-} != 1 ]]; then
+  reason=rerun
   exit 0
 fi
 if [[ ! ${GITHUB_REPOSITORY:-} =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then

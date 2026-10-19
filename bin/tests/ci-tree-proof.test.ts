@@ -178,6 +178,7 @@ function prove(options: {
     GITHUB_REF: "refs/heads/main",
     GITHUB_REPOSITORY: REPOSITORY,
     GITHUB_SHA: SHA,
+    GITHUB_RUN_ATTEMPT: "1",
     CI_PUSH_BEFORE_SHA: BEFORE,
     GH_TOKEN: "test-token-not-a-secret",
   };
@@ -353,12 +354,18 @@ describe("bin/ci-tree-proof.sh", () => {
     expect(result.calls).toHaveLength(22);
   });
 
-  test("refuses before any API call outside a main push or without a usable commit, previous commit, or token", () => {
+  test("refuses before any API call on a re-run, outside a main push, or without a usable commit, previous commit, or token", () => {
     for (const [env, reason] of [
       [{ GITHUB_EVENT_NAME: "pull_request" }, "not-a-main-push"],
       [{ GITHUB_EVENT_NAME: "schedule" }, "not-a-main-push"],
       [{ GITHUB_EVENT_NAME: undefined }, "not-a-main-push"],
       [{ GITHUB_REF: "refs/heads/feature" }, "not-a-main-push"],
+      // Any re-run, of the whole run or of this job, runs every job.
+      [{ GITHUB_RUN_ATTEMPT: "2" }, "rerun"],
+      [{ GITHUB_RUN_ATTEMPT: "10" }, "rerun"],
+      [{ GITHUB_RUN_ATTEMPT: "01" }, "rerun"],
+      [{ GITHUB_RUN_ATTEMPT: "" }, "rerun"],
+      [{ GITHUB_RUN_ATTEMPT: undefined }, "rerun"],
       [{ GITHUB_REPOSITORY: "cambridgetcg/agenttool/../x" }, "bad-repository"],
       [{ GITHUB_REPOSITORY: undefined }, "bad-repository"],
       [{ GITHUB_SHA: SHA.toUpperCase() }, "bad-sha"],

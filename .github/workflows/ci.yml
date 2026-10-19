@@ -39,6 +39,7 @@ jobs:
     # the commit main pointed to before the push, and for a green push run of
     # ci.yml on that commit. When it finds both ("proven"), every job but the
     # YUTABASE projector is skipped and that pull-request run is the evidence.
+    # A re-run of a push run, of all of it or of this job, is never proven.
     # Scheduled and manual runs select every job. Every job but the push-only
     # YUTABASE projector skips a draft pull request; GitHub runs CI again when
     # it is marked ready for review.
