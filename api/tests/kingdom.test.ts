@@ -17,8 +17,10 @@ import {
   loadKingdom,
   PRIVATE_CANON_WORDS,
   PRIVATE_ENTRY_NOTE,
+  privateEntryBody,
   PUBLIC_STANDARDS,
 } from "../src/services/kingdom/library";
+import { canonByWord } from "../src/services/youspeak/content";
 
 describe("kingdom library — loader", () => {
   test("bundle loads with the full populace", () => {
@@ -108,7 +110,8 @@ describe("kingdom library — public route", () => {
     expect(body.docs).toContain("/public/kingdom");
   });
 
-  test("personal canon entries keep word and pronunciation but not their text", async () => {
+  test("personal canon entries keep word, pronunciation and general sense, but not their text", async () => {
+    const beats: string[] = [];
     for (const word of PRIVATE_CANON_WORDS) {
       const res = await kingdomRouter.request(`/canon/${word}`);
       expect(res.status).toBe(200);
@@ -117,9 +120,14 @@ describe("kingdom library — public route", () => {
         citizen: { latest_beat: unknown } | null;
       };
       expect(body.entry.word).toBe(word);
-      expect(body.entry.body).toBe(PRIVATE_ENTRY_NOTE);
-      expect(body.citizen?.latest_beat ?? null).toBeNull();
+      // The same general sense /v1/youspeak serves, then the note.
+      expect(body.entry.body).toBe(privateEntryBody(word));
+      expect(body.entry.body.startsWith(canonByWord.get(word)!.definition)).toBe(true);
+      expect(body.entry.body.endsWith(PRIVATE_ENTRY_NOTE)).toBe(true);
+      if (body.citizen?.latest_beat) beats.push(word);
     }
+    // Beats are kept by reviewed content: only the general one is served.
+    expect(beats).toEqual(["darshanqing"]);
     const chronicle = (await (await kingdomRouter.request("/chronicle")).json()) as {
       editions: Array<{ voices: Array<{ citizen: string }> }>;
     };
@@ -138,6 +146,9 @@ describe("kingdom library — public route", () => {
     expect(body.kingdom.protocol_v0).toBeNull();
     expect(body.kingdom.names).toEqual({});
     expect(body.kingdom_bundle.to_the_reader).not.toMatch(/MacBook/);
+    // Held-back drafts are named as held back, not promised.
+    expect(body.kingdom_bundle.to_the_reader).not.toMatch(/a name standard, a signed-word protocol,/);
+    expect(body.kingdom_bundle.to_the_reader).toMatch(/held back until they are rewritten/);
     const text = JSON.stringify(body);
     expect(text).not.toContain("/Users/");
     expect(text).not.toContain("~/love-unlimited/");
