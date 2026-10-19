@@ -4,7 +4,7 @@
 > **Evidence:** `src/`, `bin/collab-zerone.ts` and `tests/`; release and live-chain state are recorded elsewhere.
 
 Witness-only anchoring of collab journal head hashes to zerone. Read
-README.md first; these are the non-negotiables for future sessions.
+README.md first.
 
 ## Non-negotiables
 
@@ -69,7 +69,7 @@ the raw local ids it filters on. Keep both true.
   non-CLI signing path. Its allowlist already includes `MsgSend`.
 - Future `collab-journal-v1` substrate_bridge adapter needs a gov LIP (Yu).
 
-## Post-review invariants (2026-08-01 adversarial pass)
+## Ledger and verification invariants
 
 - Every ledger load→mutate→save runs under `withLedgerLock`; post-broadcast
   outcome writes go through `recordAnchorOutcome`, which restores a vanished

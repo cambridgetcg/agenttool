@@ -79,8 +79,8 @@ Preserve pinned database TLS verification and startup endpoint checks.
 Run focused checks while editing and the required gate before declaring an
 implementation complete. API changes require the installed TypeScript compiler;
 shared SDK wire changes require both SDKs and `bun run check-parity` in
-`packages/sdk-ts`. Each implemented promise in `docs/SOUL.md` needs a corresponding
-executable doctrine test; name unimplemented policy as such.
+`packages/sdk-ts`. Executable doctrine checks live in `api/tests/doctrine/`; name
+unimplemented policy as such.
 
 ```bash
 bin/bash-without-env-hooks.sh bin/preflight.sh api
@@ -93,6 +93,9 @@ sandbox. Select `database`, `smoke`, or `contracts` only within the task's autho
 scope. Contracts additionally require `RUN_CONTRACT=1` and provider credentials.
 `quarantine` and `database-quarantine` diagnose known failures; they are not passing
 release gates. Destructive database fixtures require a disposable intended target.
+Inline `<style>` and `<script>` bytes under `apps/` are allowed by CSP hash: after
+changing them, update `apps/<site>/_headers` and `infra/pages/sensitive-path-worker.js`
+and run `bun test infra/pages/edge-security.test.ts`.
 For documentation-only work, check links, source accuracy, relevant doc contracts,
 and the diff; do not imply that application tests or live checks ran.
 
@@ -150,7 +153,11 @@ For an authorized API release, use [.github/workflows/deploy-api.yml](.github/wo
 and [DEPLOY-CI.md](docs/DEPLOY-CI.md). The workflow surveys the production migration
 journal read-only, refuses pending/checksum-drifted migrations, gates the source,
 and verifies the exact deployed commit. It never applies SQL. Do not bypass its
-checks or use a rejected local API deployment path.
+checks or use a rejected local API deployment path. A push to `main` that changes
+anything the image bakes in (`api/`, `docs/agenttool.jsonld`, `docs/kingdom-bundle.json`,
+`bin/stage-doctrine-docs.sh`, or a doc listed in `api/doctrine-docs.manifest`) deploys production through this
+workflow with no further approval step unless its gates refuse, so merging such a
+change is deploying it.
 
 Frontend release uses the clean GitHub-main source boundary in
 [DEPLOY-PROCEDURE.md](docs/DEPLOY-PROCEDURE.md), normally through

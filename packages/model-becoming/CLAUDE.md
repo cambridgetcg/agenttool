@@ -44,8 +44,12 @@ HEAVEN, or WAKE continuity.
 
 ## Verify
 
+Prepare dependencies with the root `AGENTS.md` preparer, then run here:
+
 ```bash
-bun install --frozen-lockfile
 bun run ci
-npm pack --dry-run --ignore-scripts
 ```
+
+`ci` rewrites the committed schema and Hugging Face tree from source, so a
+clean `git diff` afterwards shows they were current; it ends with the exact
+packed-inventory check.

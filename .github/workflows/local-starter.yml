@@ -16,13 +16,19 @@ on:
       - packages/local-starter-mcp/**
       - docs/LOCAL-CORE.md
       - .github/workflows/local-starter.yml
+  # Runs every leg on a chosen branch before merging a macOS- or
+  # Windows-sensitive change: gh workflow run local-starter.yml --ref <branch>
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+# A newer push to the same pull request supersedes its older run. Every other
+# event gets a group of its own, so a main push is never cancelled or replaced
+# while pending: those runs carry the only macOS and Windows evidence.
 concurrency:
-  group: local-starter-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: local-starter-${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   files-and-adapters:
@@ -32,7 +38,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-15, windows-2025]
+        # Pull requests run the Ubuntu legs only. The macOS (billed 10x) and
+        # Windows (2x) legs each take under two minutes yet cost most of this
+        # workflow's billed minutes. Every other event, including main pushes,
+        # the merge queue and manual dispatch, runs all three systems.
+        # bin/tests/local-starter-ci-matrix.test.ts pins this rule.
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-24.04"]' || '["ubuntu-24.04", "macos-15", "windows-2025"]') }}
         node: ["22.18.0", "24.18.0"]
     defaults:
       run:

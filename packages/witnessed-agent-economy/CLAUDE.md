@@ -28,5 +28,7 @@ the zero-effect `kingdom.witnessed-agent-economy/0.1` shadow contract.
 - Keep the package private and UNLICENSED. No release or integration wiring is
   part of this slice.
 
-Run `bun run ci` after changes. Deterministic schema and vector generators must
-reproduce committed artifacts byte-for-byte.
+Run `bun run ci` after changes. The schema generator must reproduce committed
+schemas byte-for-byte, and `vectors/core-v0.1` is an imported copy of the frozen
+Core corpus checked against the pin in `scripts/core-corpus-pin.mjs`;
+`bun run import:core-vectors` refreshes it from a reviewed Core checkout.

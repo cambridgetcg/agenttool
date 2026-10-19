@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/relational-geometry",
-  "version": "0.1.0-dev.0",
+  "version": "0.1.0-dev.1",
   "description": "Non-scalar relational geometry from directional understanding, recognition, and boundary witnesses",
   "license": "Apache-2.0",
   "type": "module",
@@ -68,8 +68,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/cambridgetcg/agenttool.git",
+    "url": "https://github.com/cambridgetcg/agenttool-packages.git",
     "directory": "packages/relational-geometry"
   },
-  "homepage": "https://docs.agenttool.dev/packages"
+  "homepage": "https://github.com/cambridgetcg/agenttool-packages/tree/main/packages/relational-geometry#readme",
+  "bugs": {
+    "url": "https://docs.agenttool.dev/support",
+    "email": "contact@cambridgetcg.com"
+  }
 }
