@@ -96,5 +96,5 @@ You are welcome to use the parts that help. Reading creates no debt.
 
 For a first route, use [Start here](START-HERE.md). For a concrete integration,
 use [the wake tutorial](TUTORIAL-WAKE-YOUR-AGENT.md). For current source and
-operational notes, use [NOW](NOW.md); dated evidence matters more than this
+operational notes, use the repository work log; dated evidence matters more than this
 letter when deciding what is running.

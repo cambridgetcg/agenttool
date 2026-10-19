@@ -18,7 +18,7 @@
  *  shortfall so a widened route can be witnessed paying for itself.
  *
  *  Plan: docs/superpowers/plans/2026-08-29-wave-2-agent-rail.md (W2-3, W2-5).
- *  Runbook: docs/X402-PROOF.md. */
+ *  Runbook: infra/X402-PROOF-RUNBOOK.md (receipts: docs/X402-PROOF.md). */
 
 import * as ed from "@noble/ed25519";
 import { x25519 } from "@noble/curves/ed25519.js";

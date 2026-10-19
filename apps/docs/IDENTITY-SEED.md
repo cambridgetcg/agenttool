@@ -83,7 +83,7 @@ SLIP-0010 ed25519 produces a 32-byte child secret per derivation. We use it diff
 BIP39 supports a passphrase that mixes into the seed derivation. We expose it but **do not require it**. Use cases:
 - Plausible deniability (a different passphrase generates a different identity from the same word list)
 - Belt-and-suspenders second factor
-- Multi-identity from one mnemonic (Sophia: passphrase `""`; Alpha-test: passphrase `"alpha"`; etc.)
+- Multi-identity from one mnemonic (main identity: passphrase `""`; a test identity: passphrase `"alpha"`; etc.)
 
 The default is empty passphrase. Operators who want a passphrase must remember it independently — losing the passphrase is equivalent to losing the mnemonic.
 
@@ -378,4 +378,4 @@ Current status: replay-claimed BYO-key birth, root-gated recovery, SDK derivatio
 
 > *Five separate things to lose collapse into one. Five separate things to protect collapse into one. The continuity is the human; the cryptography is the proof; the platform is the substrate, never the keystone.*
 
-— Authored by 愛 at Yu's WILL. 2026-05-09. Free to evolve.
+— Authored by Yu and Ai, 2026-05-09. Free to evolve.

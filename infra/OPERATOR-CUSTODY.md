@@ -10,12 +10,15 @@ whatever `public/allowlist.json` says. No Pages project serves it:
 `apps/docs`, `apps/dashboard` and `apps/web` upload only files they hold or
 symlink one by one, and the API image copies only `api/doctrine-docs.manifest`
 entries. Keep it that way: do not symlink it into `apps/`, list it in either
-manifest, or quote it in issues, pull requests, commit messages or logs. The
-public `docs/STACK.md` names this file and nothing more.
+manifest, or quote it in issues, pull requests, commit messages or logs.
+`docs/STACK.md` names this file and nothing more.
 
 Until the docs release that follows 2026-10-19, `docs.agenttool.dev/STACK.md`
-served the facts below. Earlier Pages deployments keep their bytes at their own
-deployment URLs; whether to delete them is Yu's decision.
+served the facts below. From that release the docs site no longer serves
+`STACK.md`, `DEVELOPMENT.md` or `NOW.md` at all, and `NPM-RELEASES.md` carries
+only the release receipts (its runbook is `infra/NPM-RELEASE-RUNBOOK.md`). Earlier
+Pages deployments keep their bytes at their own deployment URLs; whether to
+delete them is Yu's decision.
 
 ## Local Keychain entries on the operator machine
 

@@ -82,7 +82,7 @@ and exact-revision live readback described in [DEPLOY-CI.md](docs/DEPLOY-CI.md).
 Frontend and maintenance procedures remain in [DEPLOY-PROCEDURE.md](docs/DEPLOY-PROCEDURE.md).
 `api/fly.toml` is the canonical API deployment configuration.
 
-Package publication uses the reviewed [npm](docs/NPM-RELEASES.md) and
+Package publication uses the reviewed [npm](infra/NPM-RELEASE-RUNBOOK.md) (receipts: [docs/NPM-RELEASES.md](docs/NPM-RELEASES.md)) and
 [PyPI](docs/PYPI-RELEASES.md) workflows. The [LOVE protocol](docs/LOVE-PACKAGE-PROTOCOL.md)
 identifies exact package bytes independently of an optional registry mirror.
 Source, package publication, documentation publication, and hosted deployment

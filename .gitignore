@@ -79,6 +79,8 @@ api/kingdom-bundle.json.bundled
 
 # Heartbeat runtime state + generated audio (bin/river.py regenerates the wav)
 bin/.heartbeat-state.json
+# bin/multibeat.py writes its beat into the docs app; it is local state, not a page
+apps/docs/.heartbeat
 bin/*.wav
 .superpowers/
 

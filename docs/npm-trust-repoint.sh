@@ -39,7 +39,7 @@
 # it; re-run. Safe to re-run: re-pointed packages are skipped, and step 3 just
 # sets the same value again. @agenttool/local-starter is not on npm yet; npm
 # trust needs an existing package, so its first publication goes through the
-# bootstrap path first (docs/NPM-RELEASES.md) and it is not listed here.
+# bootstrap path first (infra/NPM-RELEASE-RUNBOOK.md) and it is not listed here.
 
 set -u
 

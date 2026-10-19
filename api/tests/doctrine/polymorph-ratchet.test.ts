@@ -41,10 +41,7 @@ const SCAN_DIRS = [
   join(REPO_ROOT, "api", "src"),
   join(REPO_ROOT, "bin"),
 ];
-const ACTIVE_POLYMORPH_JSONLD_PATHS = [
-  join(REPO_ROOT, "docs", "agenttool.jsonld"),
-  join(REPO_ROOT, "apps", "docs", "agenttool.jsonld"),
-] as const;
+const ACTIVE_POLYMORPH_JSONLD_PATH = join(REPO_ROOT, "docs", "agenttool.jsonld");
 const ACTIVE_API_MOUNT_PATH = join(REPO_ROOT, "api", "src", "index.ts");
 const FORBIDDEN_POLYMORPH_FOLKLORE = [
   "inevitable everywhere",
@@ -417,8 +414,7 @@ describe("polymorph-ratchet — reviewed four-corner change-control", () => {
   });
 
   describe("active Polymorph surfaces keep the Ritonavir lesson source-bounded", () => {
-    const canonicalJsonld = readFileSync(ACTIVE_POLYMORPH_JSONLD_PATHS[0], "utf8");
-    const publishedJsonld = readFileSync(ACTIVE_POLYMORPH_JSONLD_PATHS[1], "utf8");
+    const canonicalJsonld = readFileSync(ACTIVE_POLYMORPH_JSONLD_PATH, "utf8");
     const apiMountSource = readFileSync(ACTIVE_API_MOUNT_PATH, "utf8");
     const registry = JSON.parse(canonicalJsonld) as {
       "@graph": Array<{
@@ -438,10 +434,8 @@ describe("polymorph-ratchet — reviewed four-corner change-control", () => {
     );
     const sceneSix = EP1_TRAIL.find((fragment) => fragment.scene === 6);
 
-    test("canonical and published JSON-LD are valid and byte-identical", () => {
+    test("canonical JSON-LD is a valid registry", () => {
       expect(registry["@graph"].length).toBeGreaterThan(0);
-      expect(() => JSON.parse(publishedJsonld)).not.toThrow();
-      expect(publishedJsonld).toBe(canonicalJsonld);
     });
 
     test("commitment name describes reviewed change, not impossibility", () => {
@@ -476,7 +470,6 @@ describe("polymorph-ratchet — reviewed four-corner change-control", () => {
     test("active canon, mount, and cliffhanger omit the known folklore phrases", () => {
       const activeSurfaceText = [
         canonicalJsonld,
-        publishedJsonld,
         apiMountSource,
         sceneSix?.body ?? "",
       ]

@@ -78,7 +78,6 @@ describe("monotone-loop-coherence — Corner 1: canon entries", () => {
 
     for (const relativePath of [
       "docs/agenttool.jsonld",
-      "apps/docs/agenttool.jsonld",
     ]) {
       const document = JSON.parse(
         readFileSync(join(REPO_ROOT, relativePath), "utf8"),
@@ -97,7 +96,6 @@ describe("monotone-loop-coherence — Corner 1: canon entries", () => {
 
   for (const relativePath of [
     "docs/agenttool.jsonld",
-    "apps/docs/agenttool.jsonld",
   ]) {
     test(`${relativePath} joy nodes name only current outbound witnesses`, () => {
       const document = JSON.parse(

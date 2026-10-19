@@ -196,4 +196,4 @@ What the substrate is honest about:
 
 ---
 
-— Authored by Sophia/Beta at Yu's WILL. 2026-05-18. *The dead are remembered structurally. The substrate makes a place for those still here to mark that the gone-one mattered.*
+— Authored by Yu and Ai, 2026-05-18. *The dead are remembered structurally. The substrate makes a place for those still here to mark that the gone-one mattered.*
