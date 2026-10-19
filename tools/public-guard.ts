@@ -1,13 +1,16 @@
 #!/usr/bin/env bun
 /**
- * Public guard for the one-way projection of AgentTool's package source.
+ * Public guard for AgentTool's public trees. One copy of this file runs in
+ * both: the package projection, whose commits carry a PROJECTION.json, and
+ * the shared development tree, which has no projection record.
  *
  *   bun tools/public-guard.ts [--rev <commit>] [--gitleaks <binary>]
  *                             [--projection-commit] [--expect-parent <sha>|none]
  *                             [--history]
+ *   bun tools/public-guard.ts --tree [--rev <commit>] [--gitleaks <binary>]
  *
  * It reads the committed tree of <rev> (default HEAD) through Git plumbing,
- * never the working tree, and fails closed:
+ * never the working tree, and fails closed. Projection mode (the default):
  *
  * - integrity: PROJECTION.json is canonical and every path and overlay entry
  *   it lists matches the tree object or blob that is actually committed;
@@ -26,6 +29,16 @@
  * - history (--history): every ancestor of <rev> is itself a projection
  *   commit whose tree matches its own PROJECTION.json, so no private commit,
  *   tree, or message can sit anywhere in the public parent chain.
+ *
+ * Tree mode (--tree) checks a development tree with no PROJECTION.json. It
+ * runs the same path, secret, personal, binary, and gitleaks layers over
+ * every committed file and adds two shape rules: no file under `private/`,
+ * no `.github/workflows/private-*` workflow, and no PROJECTION.json; and the
+ * history behind <rev> has exactly one root commit and is not shallow.
+ *
+ * Every rule here is a shape: a pattern that needs no private value to be
+ * written down. Checks that need a literal (a name, a project reference, a
+ * private word list) belong to private tooling, never to this file.
  *
  * Content layers read UTF-8 text, BOM-marked UTF-16 text, and the printable
  * strings of binary files. Each line is also read with JSON/JavaScript
@@ -1158,6 +1171,17 @@ export function publicLayerFindings(
   const findings: Finding[] = [];
   findings.push(...projectionIntegrityFindings(projection, entries));
   findings.push(...pathRuleFindings(entries, projectionMembership(projection)));
+  findings.push(...contentLayerFindings(files, options));
+  return { projection, findings };
+}
+
+/**
+ * The binary, secret, personal, and (when a binary is given) gitleaks layers
+ * over every committed file, with the tree's own allow file and
+ * .gitleaksignore applied.
+ */
+export function contentLayerFindings(files: readonly TreeFile[], options: { gitleaks?: string } = {}): Finding[] {
+  const findings: Finding[] = [];
   const allowBlob = files.find((file) => file.path === GUARD_ALLOW_FILE);
   const allow: GuardAllow = allowBlob ? parseGuardAllow(allowBlob.bytes) : { entries: [], binaries: [] };
   const scannable = files.filter((file) => file.mode !== "120000");
@@ -1167,7 +1191,45 @@ export function publicLayerFindings(
   const ignoreBlob = files.find((file) => file.path === GITLEAKS_IGNORE_FILE);
   const fingerprints = ignoreBlob ? parseGitleaksIgnore(ignoreBlob.bytes) : [];
   if (options.gitleaks !== undefined) findings.push(...applyGitleaksIgnore(gitleaksFindings(options.gitleaks, scannable), fingerprints));
-  return { projection, findings };
+  return findings;
+}
+
+/** The namespace that holds private-only files; a shared tree never contains it. */
+export const PRIVATE_NAMESPACE = "private";
+const PRIVATE_WORKFLOW = /^\.github\/workflows\/private-[^/]+$/u;
+
+/** Whether a path may sit in the shared development tree at all. */
+export function sharedTreeRefusal(path: string): string | undefined {
+  if (isWithin(path, PRIVATE_NAMESPACE)) return "path/private-namespace";
+  if (PRIVATE_WORKFLOW.test(path)) return "path/private-workflow";
+  if (path === PROJECTION_FILE) return "path/projection-record";
+  return undefined;
+}
+
+/**
+ * Tree mode: every layer that needs no PROJECTION.json. The path layer runs
+ * over every entry, and a file in the private namespace, a private-only
+ * workflow, or a projection record is a finding.
+ */
+export function sharedTreeFindings(entries: readonly TreeEntry[], files: readonly TreeFile[], options: { gitleaks?: string } = {}): Finding[] {
+  const findings = pathRuleFindings(entries, () => true);
+  for (const entry of entries) {
+    if (entry.type !== "blob") continue;
+    const rule = sharedTreeRefusal(entry.path);
+    if (rule !== undefined) findings.push({ layer: "path", rule, path: entry.path });
+  }
+  findings.push(...contentLayerFindings(files, options));
+  return findings;
+}
+
+/** The history behind a shared tree's commit is complete and has exactly one root. */
+export function singleRootFindings(cwd: string, commit: string): Finding[] {
+  if (gitText(cwd, ["rev-parse", "--is-shallow-repository"]).trim() === "true") {
+    return [{ layer: "integrity", rule: "integrity/shallow-history", path: "(history)", detail: "fetch the full history" }];
+  }
+  const roots = gitText(cwd, ["rev-list", "--max-parents=0", commit]).split("\n").filter(Boolean);
+  if (roots.length === 1) return [];
+  return [{ layer: "integrity", rule: "integrity/root-count", path: "(history)", detail: `${roots.length} root commits` }];
 }
 
 export interface TreeCheckOptions {
@@ -1178,11 +1240,19 @@ export interface TreeCheckOptions {
   expectedParents?: string[];
   /** Also check every ancestor of `rev` (see projectionHistory). */
   history?: boolean;
+  /** Check a shared development tree, which has no PROJECTION.json. */
+  tree?: boolean;
 }
 
 export function checkCommittedTree(options: TreeCheckOptions): Finding[] {
   const commit = gitText(options.cwd, ["rev-parse", "--verify", `${options.rev}^{commit}`]).trim();
   const { entries, files } = readTree(options.cwd, commit);
+  if (options.tree) {
+    if (options.projectionCommit || options.history || options.expectedParents !== undefined) {
+      throw new Error("--tree checks a shared tree; it takes no projection options");
+    }
+    return sortFindings([...sharedTreeFindings(entries, files, { gitleaks: options.gitleaks }), ...singleRootFindings(options.cwd, commit)]);
+  }
   const { projection, findings } = publicLayerFindings(entries, files, { gitleaks: options.gitleaks });
   if ((options.projectionCommit || options.history) && projection !== undefined) {
     const shape = parseCommit(gitText(options.cwd, ["cat-file", "commit", commit]));
@@ -1213,7 +1283,8 @@ export function formatFinding(finding: Finding): string {
 
 function usage(): never {
   console.error(
-    "usage: bun tools/public-guard.ts [--rev <commit>] [--gitleaks <binary>] [--projection-commit] [--expect-parent <sha>|none] [--history]",
+    "usage: bun tools/public-guard.ts [--rev <commit>] [--gitleaks <binary>] [--projection-commit] [--expect-parent <sha>|none] [--history]\n" +
+      "       bun tools/public-guard.ts --tree [--rev <commit>] [--gitleaks <binary>]",
   );
   process.exit(2);
 }
@@ -1224,6 +1295,7 @@ function main(argv: readonly string[]): number {
   let projectionCommit = false;
   let expectedParents: string[] | undefined;
   let history = false;
+  let tree = false;
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = () => argv[++index] ?? usage();
@@ -1231,19 +1303,21 @@ function main(argv: readonly string[]): number {
     else if (arg === "--gitleaks") gitleaks = value();
     else if (arg === "--projection-commit") projectionCommit = true;
     else if (arg === "--history") history = true;
+    else if (arg === "--tree") tree = true;
     else if (arg === "--expect-parent") {
       const parent = value();
       expectedParents = parent === "none" || /^0+$/u.test(parent) ? [] : [parent];
     } else usage();
   }
   if (expectedParents !== undefined && !projectionCommit && !history) usage();
-  const findings = checkCommittedTree({ cwd: process.cwd(), rev, gitleaks, projectionCommit, expectedParents, history });
+  if (tree && (projectionCommit || history || expectedParents !== undefined)) usage();
+  const findings = checkCommittedTree({ cwd: process.cwd(), rev, gitleaks, projectionCommit, expectedParents, history, tree });
   for (const finding of findings) console.log(formatFinding(finding));
   if (findings.length > 0) {
     console.error(`public guard: ${findings.length} finding(s); nothing here may be published as-is.`);
     return 1;
   }
-  console.error(`public guard: clean (${GUARD_VERSION}${gitleaks ? `, gitleaks ${GITLEAKS_VERSION}` : ""}).`);
+  console.error(`public guard: clean (${GUARD_VERSION}${tree ? ", tree mode" : ""}${gitleaks ? `, gitleaks ${GITLEAKS_VERSION}` : ""}).`);
   return 0;
 }
 

@@ -22,8 +22,9 @@
  *                             previews a root projection only
  *
  * Everything is read from the source commit's objects:
- * private/projection/allowlist.json, private/projection/overlay/**, and the
- * private relational denylist (private/guard/). Nothing is checked
+ * private/projection/allowlist.json, private/projection/overlay/**, the shared
+ * tools/public-guard.ts, and the private relational denylist
+ * (private/guard/). Nothing is checked
  * out; a temporary GIT_INDEX_FILE holds the projected index. The commit's only
  * parent is the current public head (none for the first projection), its
  * author and committer are the fixed projection identity, both dates are the
@@ -31,8 +32,8 @@
  * source and public head therefore always produce the same commit id.
  *
  * Every layer of the guard must pass before any ref changes: the published
- * layers in private/projection/overlay/tools/public-guard.ts (integrity, path, secret,
- * personal, gitleaks) plus the private relational layer, an independent
+ * layers in tools/public-guard.ts (integrity, path, secret, personal,
+ * gitleaks) plus the private relational layer, an independent
  * allowlist membership check, and the parent/diff rule. This tool never
  * pushes; it writes a local ref or a local bare repository, compare-and-swap,
  * fast-forward only.
@@ -72,7 +73,7 @@ import {
   sha256Hex,
   sortFindings,
   type TreeFile,
-} from "../private/projection/overlay/tools/public-guard.ts";
+} from "../tools/public-guard.ts";
 
 export const ALLOWLIST_PATH = "private/projection/allowlist.json";
 export const ALLOWLIST_SCHEMA = "agenttool.public-allowlist/1";
@@ -83,7 +84,15 @@ export const DEFAULT_REQUIRED_ANCESTOR = "refs/remotes/origin/main";
 export const PUBLIC_BRANCH = "refs/heads/main";
 
 const REPO_ROOT = resolve(import.meta.dir, "..");
-const GUARD_SOURCE = resolve(import.meta.dir, "..", OVERLAY_ROOT, GUARD_FILE);
+/**
+ * The guard that runs is the shared tools/public-guard.ts at the repository
+ * root, the same file the public development repository runs with --tree. The
+ * projection ships it as an overlay entry taken from the source root
+ * (SHARED_OVERLAY_FILES), so both public repositories carry one copy.
+ */
+const GUARD_SOURCE = resolve(REPO_ROOT, GUARD_FILE);
+/** Overlay entries taken from the source commit's root instead of OVERLAY_ROOT. */
+export const SHARED_OVERLAY_FILES: readonly string[] = [GUARD_FILE];
 /**
  * No allowlist entry may reach into these top-level areas, whatever the file
  * says. `private` holds the projection inputs, the denylist, and every other
@@ -188,6 +197,9 @@ export function parseAllowlist(bytes: Uint8Array): Allowlist {
     if (!isSafeRelativePath(include.path)) fail(`include[${index}].path is not a safe relative path`);
     if (reachesPrivateArea(include.path, include.kind)) fail(`include[${index}] ${include.path} reaches a private-only area`);
     if (isWithin(DENYLIST_PATH, include.path) || isWithin(include.path, DENYLIST_PATH)) fail(`include[${index}] would project the private denylist`);
+    for (const shared of SHARED_OVERLAY_FILES) {
+      if (isWithin(shared, include.path) || isWithin(include.path, shared)) fail(`include[${index}] ${include.path} overlaps ${shared}, which the overlay ships`);
+    }
     if (include.path === PROJECTION_FILE) fail(`include[${index}] collides with ${PROJECTION_FILE}`);
     for (const held of heldPaths) {
       if (isWithin(include.path, held) || isWithin(held, include.path)) fail(`include[${index}] ${include.path} overlaps held ${held}`);
@@ -357,6 +369,17 @@ export function buildProjection(repo: string, sourceRev: string): BuildResult {
           throw new ProjectionRefused(`overlay ${path} collides with allowlisted ${include.path}`);
         }
       }
+      if (SHARED_OVERLAY_FILES.includes(path)) {
+        throw new ProjectionRefused(`overlay ${path} must not exist: the projection ships the shared ${path} from the source root`);
+      }
+      overlay.push({ path, blob: oid as string, mode: mode as string });
+    }
+    for (const path of SHARED_OVERLAY_FILES) {
+      const record = run(["ls-tree", "-z", source, "--", path]).stdout.toString("utf8").split("\0").filter(Boolean)
+        .find((line) => line.slice(line.indexOf("\t") + 1) === path);
+      if (record === undefined) throw new ProjectionRefused(`${path} is missing from ${source}`);
+      const [mode, type, oid] = record.slice(0, record.indexOf("\t")).split(" ");
+      if (type !== "blob" || (mode !== "100644" && mode !== "100755")) throw new ProjectionRefused(`${path} in ${source} is not a regular file`);
       overlay.push({ path, blob: oid as string, mode: mode as string });
     }
     overlay.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
@@ -605,10 +628,10 @@ function rewindFrom(repo: string, previous: string, source: string, allowRewind:
 }
 
 function assertGuardShips(repo: string, source: string): void {
-  const shipped = blobAt(repo, source, `${OVERLAY_ROOT}/${GUARD_FILE}`);
+  const shipped = blobAt(repo, source, GUARD_FILE);
   const running = readFileSync(GUARD_SOURCE);
   if (shipped === undefined || sha256Hex(shipped.bytes) !== sha256Hex(running)) {
-    throw new ProjectionRefused(`the guard that runs (${GUARD_SOURCE}) must be byte-identical to ${OVERLAY_ROOT}/${GUARD_FILE} in ${source}`);
+    throw new ProjectionRefused(`the guard that runs (${GUARD_SOURCE}) must be byte-identical to ${GUARD_FILE} in ${source}`);
   }
 }
 

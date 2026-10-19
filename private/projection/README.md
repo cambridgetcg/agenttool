@@ -1,7 +1,7 @@
 # Public package projection
 
 > **Type:** guide · **Purpose:** explain how allowlisted package source becomes the public `cambridgetcg/agenttool-packages` tree.
-> **Evidence:** [`bin/project-public.ts`](../../bin/project-public.ts), [`overlay/tools/public-guard.ts`](overlay/tools/public-guard.ts), and [`bin/tests/project-public.test.ts`](../../bin/tests/project-public.test.ts).
+> **Evidence:** [`bin/project-public.ts`](../../bin/project-public.ts), [`tools/public-guard.ts`](../../tools/public-guard.ts), and [`bin/tests/project-public.test.ts`](../../bin/tests/project-public.test.ts).
 
 This directory decides what may leave the private repository. Nothing here
 publishes anything by itself.
@@ -9,7 +9,8 @@ publishes anything by itself.
 | Path | Projected? | Role |
 |---|---|---|
 | [`allowlist.json`](allowlist.json) | No | The only paths that may be copied, the globs removed inside them, and any packages held back (none since 2026-10-11). Its SHA-256 is recorded in each projection. |
-| [`overlay/`](overlay) | Yes, at the public root | Files that exist only in the public tree: README, LICENSE, NOTICE, licensing and security notes, `.gitignore`, `.gitleaksignore`, the public CI, the npm publish workflow, and the public guard with its allow entries. |
+| [`overlay/`](overlay) | Yes, at the public root | Files that exist only in the public tree: README, LICENSE, NOTICE, licensing and security notes, `.gitignore`, `.gitleaksignore`, the public CI, the npm publish workflow, and the guard's allow entries. |
+| [`tools/public-guard.ts`](../../tools/public-guard.ts) | Yes, as an overlay entry | The one shared guard. The projection takes it from the source root, not from `overlay/`, so the package mirror and the public development repository run the same file. |
 | [`../guard/`](../guard) | **Never** | The relational denylist: terms, blob digests, and their allow entries. Publishing the terms would publish what they protect, so guard output names only rule ids and line hashes. |
 
 Top-level areas such as `private/`, `bin/`, `api/`, `apps/`, and `.github/`
@@ -57,7 +58,8 @@ Content layers also read decoded escapes and NFC/NFKC forms of each line.
 The public head and every commit behind it must be projection commits that
 match their own `PROJECTION.json` (the guard's `--history` check, which the
 public CI also runs on every push). The tool refuses to run when the guard it
-imports differs from the overlay copy it ships. It never pushes. Pushing to
+imports differs from the `tools/public-guard.ts` it ships, and refuses an
+overlay copy of that file. It never pushes. Pushing to
 the public repository is a separate, reviewed step.
 
 ## Exceptions

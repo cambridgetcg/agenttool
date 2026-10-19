@@ -15,14 +15,14 @@ import {
   type FetchJson,
   type WorkflowRun,
 } from "../public-release-tag.ts";
-import { GITLEAKS_VERSION } from "../../private/projection/overlay/tools/public-guard.ts";
+import { GITLEAKS_VERSION } from "../../tools/public-guard.ts";
 
 // These tests spawn git, bun and shell processes. A loaded CI runner needs
 // more than bun's 5 s default (agenttool run 38274838631: 7.0 s).
 setDefaultTimeout(60_000);
 
 const ROOT = resolve(import.meta.dir, "..", "..");
-const GUARD = join(ROOT, "private", "projection", "overlay", "tools", "public-guard.ts");
+const GUARD = join(ROOT, "tools", "public-guard.ts");
 const scratch = mkdtempSync(join(tmpdir(), "public-release-tag-test-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
@@ -119,7 +119,8 @@ function publicFixture(options: { url?: string } = {}): { privateRepo: string; b
   write(privateRepo, "private/projection/overlay/README.md", "# Public packages\n");
   write(privateRepo, "private/projection/overlay/.gitleaksignore", "");
   write(privateRepo, "private/projection/overlay/tools/public-guard-allow.json", '{\n  "schema": "agenttool.public-guard-allow/1",\n  "entries": []\n}\n');
-  copyFileSync(GUARD, join(privateRepo, "private/projection/overlay/tools/public-guard.ts"));
+  mkdirSync(join(privateRepo, "tools"), { recursive: true });
+  copyFileSync(GUARD, join(privateRepo, "tools/public-guard.ts"));
   write(privateRepo, "packages/math-cards/package.json", mathCardsManifest("0.1.0-dev.2", options.url));
   write(privateRepo, "packages/math-cards/index.ts", "export const card = 1;\n");
   const sourceCommit = commitAll(privateRepo, "fixture");

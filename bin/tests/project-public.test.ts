@@ -19,9 +19,11 @@ import {
   projectPublic,
   PUBLIC_RELEASE_TOOLS,
   reachesPrivateArea,
+  SHARED_OVERLAY_FILES,
 } from "../project-public.ts";
 import {
   applyGitleaksIgnore,
+  checkCommittedTree,
   commitShapeFindings,
   type Finding,
   formatFinding,
@@ -32,7 +34,7 @@ import {
   parseGitleaksIgnore,
   parseProjection,
   projectionMessage,
-} from "../../private/projection/overlay/tools/public-guard.ts";
+} from "../../tools/public-guard.ts";
 
 // These tests build real projections of the whole repository and spawn git and
 // gitleaks. A loaded CI runner needs more than bun's 5 s default (deploy-api
@@ -40,7 +42,7 @@ import {
 setDefaultTimeout(60_000);
 
 const ROOT = resolve(import.meta.dir, "..", "..");
-const GUARD = join(ROOT, "private", "projection", "overlay", "tools", "public-guard.ts");
+const GUARD = join(ROOT, "tools", "public-guard.ts");
 const TERM = "quietfixtureterm";
 const scratch = mkdtempSync(join(tmpdir(), "project-public-test-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -156,8 +158,8 @@ function makeFixture(options: { allowlist?: unknown; denylist?: unknown; files?:
   write(repo, "private/projection/overlay/README.md", "# Public packages\n");
   write(repo, "private/projection/overlay/.gitleaksignore", "");
   write(repo, "private/projection/overlay/tools/public-guard-allow.json", '{\n  "schema": "agenttool.public-guard-allow/1",\n  "entries": []\n}\n');
-  mkdirSync(join(repo, "private/projection/overlay/tools"), { recursive: true });
-  copyFileSync(GUARD, join(repo, "private/projection/overlay/tools/public-guard.ts"));
+  mkdirSync(join(repo, "tools"), { recursive: true });
+  copyFileSync(GUARD, join(repo, "tools/public-guard.ts"));
   write(repo, ".gitattributes", "/docs/spec.md text eol=lf\n");
   write(repo, "docs/spec.md", "# Spec\n");
   write(repo, "docs/private-notes.md", "not allowlisted\n");
@@ -791,11 +793,27 @@ describe("full projection (real gitleaks 8.30.1 when present, otherwise a no-lea
     expect(parseArgs(["--source", "HEAD", "--out-ref", "refs/public/main", "--allow-rewind"]).allowRewind).toBe(true);
   });
 
-  test("refuses when the running guard differs from the shipped overlay copy", () => {
-    const repo = makeFixture({ files: { "private/projection/overlay/tools/public-guard.ts": "// a different guard\n" } });
+  test("refuses when the running guard differs from the shared copy it ships", () => {
+    const repo = makeFixture({ files: { "tools/public-guard.ts": "// a different guard\n" } });
     expect(() => projectPublic({ repo, source: "HEAD", target: { kind: "ref", ref: "refs/public/main" }, allowUnmergedSource: true, gitleaks: GITLEAKS_BIN })).toThrow(
       "byte-identical",
     );
+  });
+
+  test("ships the shared root guard as its overlay entry and refuses a second copy", () => {
+    const repo = makeFixture();
+    const build = buildProjection(repo, "HEAD");
+    const guardEntry = build.projection.overlay.find((entry) => entry.path === "tools/public-guard.ts");
+    expect(guardEntry?.blob).toBe(git(repo, "rev-parse", "HEAD:tools/public-guard.ts"));
+    expect(SHARED_OVERLAY_FILES).toEqual(["tools/public-guard.ts"]);
+    const copied = makeFixture({ files: { "private/projection/overlay/tools/public-guard.ts": readFileSync(GUARD) } });
+    expect(() => buildProjection(copied, "HEAD")).toThrow("must not exist");
+    const bytes = Buffer.from(JSON.stringify({ ...ALLOWLIST, include: [{ path: "tools/public-guard.ts", kind: "blob" }] }));
+    expect(() => parseAllowlist(bytes)).toThrow("which the overlay ships");
+    const missing = makeFixture();
+    git(missing, "rm", "-q", "tools/public-guard.ts");
+    commitAll(missing, "drop the guard");
+    expect(() => buildProjection(missing, "HEAD")).toThrow("tools/public-guard.ts is missing");
   });
 
   test("a guard failure writes nothing: no ref and no new bare repository", () => {
@@ -813,6 +831,76 @@ describe("full projection (real gitleaks 8.30.1 when present, otherwise a no-lea
     }
     expect(spawnSync("git", ["rev-parse", "--verify", "-q", "refs/public/main"], { cwd: repo }).status).not.toBe(0);
     expect(existsSync(bare)).toBe(false);
+  });
+});
+
+describe("the shared guard's tree mode", () => {
+  /** A development tree with no PROJECTION.json: one root commit, shared files only. */
+  function sharedTree(files: Record<string, string | Uint8Array> = {}): string {
+    fixtureCount += 1;
+    const repo = join(scratch, `shared-${fixtureCount}`);
+    mkdirSync(repo);
+    git(repo, "init", "-q", "--initial-branch=main");
+    write(repo, "README.md", "# Shared tree\n");
+    write(repo, "packages/alpha/index.ts", "export const alpha = 1;\n");
+    write(repo, ".github/workflows/ci.yml", "name: ci\n");
+    mkdirSync(join(repo, "tools"), { recursive: true });
+    copyFileSync(GUARD, join(repo, "tools/public-guard.ts"));
+    for (const [path, content] of Object.entries(files)) write(repo, path, content);
+    commitAll(repo, "shared root");
+    return repo;
+  }
+  const treeRules = (repo: string) => rules(checkCommittedTree({ cwd: repo, rev: "HEAD", tree: true }));
+  const cli = (repo: string, ...args: string[]) =>
+    spawnSync("bun", [join(repo, "tools/public-guard.ts"), ...args], { cwd: repo, encoding: "utf8", env: cleanEnv() });
+
+  test("a shared tree with one root and no private paths is clean, by API and CLI", () => {
+    const repo = sharedTree();
+    expect(checkCommittedTree({ cwd: repo, rev: "HEAD", tree: true })).toEqual([]);
+    const run = cli(repo, "--tree", "--rev", "HEAD");
+    expect(run.status, run.stderr).toBe(0);
+    expect(run.stderr).toContain("tree mode");
+    // Projection mode still demands a PROJECTION.json, so the two modes cannot be confused.
+    expect(cli(repo, "--rev", "HEAD").status).toBe(1);
+  });
+
+  test("refuses the private namespace, private-only workflows, and a projection record", () => {
+    expect(treeRules(sharedTree({ "private/README.md": "# Private\n" }))).toEqual(["path/private-namespace"]);
+    expect(treeRules(sharedTree({ ".github/workflows/private-ci.yml": "name: private\n" }))).toEqual(["path/private-workflow"]);
+    expect(treeRules(sharedTree({ "PROJECTION.json": "{}\n" }))).toEqual(["path/projection-record"]);
+    // Only the exact namespace and the private- workflow prefix are refused.
+    expect(treeRules(sharedTree({ "privately/notes.md": "x\n", ".github/workflows/ci-private.yml": "name: x\n" }))).toEqual([]);
+  });
+
+  test("runs the path, secret, and personal layers, with the tree's own allow file", () => {
+    const line = "contact maintainer@agenttool-fixture.dev";
+    expect(treeRules(sharedTree({ "packages/alpha/.env": "X=1\n", "packages/alpha/mail.md": `${line}\n` }))).toEqual([
+      "path/sensitive-name",
+      "personal/email",
+    ]);
+    const allow = `${JSON.stringify({ schema: "agenttool.public-guard-allow/1", entries: [{ path: "packages/alpha/mail.md", rule: "personal/email", line_sha256: lineSha256(line), reason: "fixture", approver: "fixture" }] }, null, 2)}\n`;
+    expect(treeRules(sharedTree({ "packages/alpha/mail.md": `${line}\n`, "tools/public-guard-allow.json": allow }))).toEqual([]);
+  });
+
+  test("requires exactly one root commit and complete history", () => {
+    const repo = sharedTree();
+    git(repo, "checkout", "-q", "--orphan", "other");
+    write(repo, "other.md", "another root\n");
+    commitAll(repo, "second root");
+    git(repo, "checkout", "-q", "main");
+    git(repo, "merge", "-q", "--no-edit", "--allow-unrelated-histories", "other");
+    expect(treeRules(repo)).toEqual(["integrity/root-count"]);
+    const shallow = join(scratch, `shallow-${fixtureCount}`);
+    git(scratch, "clone", "-q", "--depth", "1", `file://${repo}`, shallow);
+    expect(treeRules(shallow)).toEqual(["integrity/shallow-history"]);
+  });
+
+  test("takes no projection options", () => {
+    const repo = sharedTree();
+    expect(() => checkCommittedTree({ cwd: repo, rev: "HEAD", tree: true, history: true })).toThrow("no projection options");
+    for (const extra of [["--history"], ["--projection-commit"], ["--expect-parent", "none"]]) {
+      expect(cli(repo, "--tree", ...extra).status, extra.join(" ")).toBe(2);
+    }
   });
 });
 
