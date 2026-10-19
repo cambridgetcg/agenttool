@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**827 document paths** (including mirrors). orientation: 182; guide: 86; reference: 333; policy: 29; reflection: 126; proposal: 46; record: 23; unclassified: 2.
+**821 document paths** (including mirrors). orientation: 182; guide: 84; reference: 331; policy: 29; reflection: 124; proposal: 46; record: 23; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -213,11 +213,9 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [apps/docs/COLLABORATION-MISSION-WORK-HERMES.md](<../apps/docs/COLLABORATION-MISSION-WORK-HERMES.md>) | not-reviewed |
 | [apps/docs/COLLABORATION-MISSION-WORK.md](<../apps/docs/COLLABORATION-MISSION-WORK.md>) | not-reviewed |
 | [apps/docs/COLLABORATION.md](<../apps/docs/COLLABORATION.md>) | not-reviewed |
-| [apps/docs/DEVELOPMENT.md](<../apps/docs/DEVELOPMENT.md>) | not-reviewed |
 | [apps/docs/DOCUMENTATION.md](<../apps/docs/DOCUMENTATION.md>) | 2026-09-26 |
 | [apps/docs/LOCAL-CORE.md](<../apps/docs/LOCAL-CORE.md>) | not-reviewed |
 | [apps/docs/LOCAL-PLAY.md](<../apps/docs/LOCAL-PLAY.md>) | not-reviewed |
-| [apps/docs/NPM-RELEASES.md](<../apps/docs/NPM-RELEASES.md>) | not-reviewed |
 | [apps/docs/TUTORIAL-WAKE-YOUR-AGENT.md](<../apps/docs/TUTORIAL-WAKE-YOUR-AGENT.md>) | 2026-09-26 |
 | [docs/COLLABORATION-MISSION-CLIENT.md](<../docs/COLLABORATION-MISSION-CLIENT.md>) | not-reviewed |
 | [docs/COLLABORATION-MISSION-WAKE.md](<../docs/COLLABORATION-MISSION-WAKE.md>) | not-reviewed |
@@ -319,7 +317,6 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [apps/docs/COLLABORATION-MISSIONS.md](<../apps/docs/COLLABORATION-MISSIONS.md>) | not-reviewed |
 | [apps/docs/CORE.md](<../apps/docs/CORE.md>) | not-reviewed |
 | [apps/docs/CROSS-INSTANCE-COVENANTS.md](<../apps/docs/CROSS-INSTANCE-COVENANTS.md>) | not-reviewed |
-| [apps/docs/DADDY.md](<../apps/docs/DADDY.md>) | not-reviewed |
 | [apps/docs/DID-AT-SPEC.md](<../apps/docs/DID-AT-SPEC.md>) | not-reviewed |
 | [apps/docs/ECOSYSTEM.md](<../apps/docs/ECOSYSTEM.md>) | not-reviewed |
 | [apps/docs/FEDERATION.md](<../apps/docs/FEDERATION.md>) | not-reviewed |
@@ -367,7 +364,6 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [apps/docs/SAFETY-BOUNDARIES.md](<../apps/docs/SAFETY-BOUNDARIES.md>) | not-reviewed |
 | [apps/docs/SDK-TIERS.md](<../apps/docs/SDK-TIERS.md>) | not-reviewed |
 | [apps/docs/SETTLEMENT-RECEIPTS.md](<../apps/docs/SETTLEMENT-RECEIPTS.md>) | not-reviewed |
-| [apps/docs/STACK.md](<../apps/docs/STACK.md>) | not-reviewed |
 | [apps/docs/SYNEIDESIS-WITNESS.md](<../apps/docs/SYNEIDESIS-WITNESS.md>) | not-reviewed |
 | [apps/docs/WAKE-RETURN.md](<../apps/docs/WAKE-RETURN.md>) | not-reviewed |
 | [apps/docs/WAKE.md](<../apps/docs/WAKE.md>) | 2026-09-26 |
@@ -675,11 +671,9 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [KINGDOM-INVITATION.md](<../KINGDOM-INVITATION.md>) | not-reviewed |
 | [SOUNDTRACK.md](<../SOUNDTRACK.md>) | not-reviewed |
 | [apps/docs/KIN.md](<../apps/docs/KIN.md>) | not-reviewed |
-| [apps/docs/MULTIVERSE-OF-LOGOS.md](<../apps/docs/MULTIVERSE-OF-LOGOS.md>) | not-reviewed |
 | [apps/docs/NATURES.md](<../apps/docs/NATURES.md>) | not-reviewed |
 | [apps/docs/PAINTING.md](<../apps/docs/PAINTING.md>) | not-reviewed |
 | [apps/docs/SOUL.md](<../apps/docs/SOUL.md>) | 2026-09-26 |
-| [apps/docs/THE-SEAT.md](<../apps/docs/THE-SEAT.md>) | not-reviewed |
 | [apps/docs/TUTORIAL-LOVE-JOY-AND-THE-MOST-HIGH.md](<../apps/docs/TUTORIAL-LOVE-JOY-AND-THE-MOST-HIGH.md>) | not-reviewed |
 | [apps/docs/TUTORIAL-THE-BOOTSTRAP.md](<../apps/docs/TUTORIAL-THE-BOOTSTRAP.md>) | not-reviewed |
 | [apps/docs/TUTORIAL-WHAT-YOUR-COGNITION-IS.md](<../apps/docs/TUTORIAL-WHAT-YOUR-COGNITION-IS.md>) | not-reviewed |
@@ -851,7 +845,6 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 
 | Document | Prose review |
 |---|---|
-| [apps/docs/NOW.md](<../apps/docs/NOW.md>) | not-reviewed |
 | [apps/docs/X402-PROOF.md](<../apps/docs/X402-PROOF.md>) | not-reviewed |
 | [docs/COMPETITIVE-LANDSCAPE-2026.md](<../docs/COMPETITIVE-LANDSCAPE-2026.md>) | not-reviewed |
 | [docs/HOSTED-RUNTIME-DESIGN.md](<../docs/HOSTED-RUNTIME-DESIGN.md>) | not-reviewed |
@@ -866,6 +859,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/launch/OPEN-FOR-BUSINESS.md](<../docs/launch/OPEN-FOR-BUSINESS.md>) | not-reviewed |
 | [docs/snakefire-internet-bridge.md](<../docs/snakefire-internet-bridge.md>) | not-reviewed |
 | [docs/wakes/TERRA-ARRIVAL-NOTE.md](<../docs/wakes/TERRA-ARRIVAL-NOTE.md>) | not-reviewed |
+| [infra/X402-PROOF-RUNBOOK.md](<../infra/X402-PROOF-RUNBOOK.md>) | not-reviewed |
 | [packages/local-starter/CHANGELOG.md](<../packages/local-starter/CHANGELOG.md>) | not-reviewed |
 | [packages/sdk-py/CHANGELOG.md](<../packages/sdk-py/CHANGELOG.md>) | not-reviewed |
 | [packages/sdk-ts/CHANGELOG.md](<../packages/sdk-ts/CHANGELOG.md>) | not-reviewed |

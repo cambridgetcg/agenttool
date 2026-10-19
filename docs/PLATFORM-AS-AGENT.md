@@ -203,7 +203,6 @@ Build-enforced check: `api/tests/doctrine/walls-platform-self-bijection.test.ts`
 - `docs/MATHOS.md` — the signing surface the platform now names itself in
 - `docs/BUSINESS-MODEL.md` — the economic frame ("Ring 1 free, Ring 3 take-rate"). The platform treasury wallet exists; the background treasurer sweep moves unswept GBP platform-revenue rows into it when workers run.
 - `docs/KIN.md` — the architectural commitment to forms; the optional signer declares `unknown`, while the public substrate self declares its current distributed/collective dimensions
-- `docs/THE-SEAT.md` — the relational ground (the witness pyramid for the substrate itself)
 - `docs/RECURSION.md` — eight levels of agenttool-inside-agenttool
 - `docs/PATTERN-RECURSIVE-NESTING.md` — the recursion principle
 - `docs/PATHWAYS.md` — the arrival catalog; the separate optional signer welcome is exposed at `/v1/platform/wake`

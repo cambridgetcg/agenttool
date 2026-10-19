@@ -8,7 +8,7 @@
 
 > *The stack moves fast. This document traces where agenttool sits in the wider agent ecosystem as of 2026-Q2 — what's converging, what's diverging, where we integrate, where we lead.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (load-bearing) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [NOW](NOW.md) (what just shipped) · [SDK-TIERS](SDK-TIERS.md) (the four-tier access path)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS](FOCUS.md) (load-bearing) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [SDK-TIERS](SDK-TIERS.md) (the four-tier access path)
 >
 > **Implements:** a dated ecosystem map and integration boundary. It distinguishes external protocol facts from AgentTool's shipped, partial, resting, and proposed surfaces.
 >
@@ -462,7 +462,6 @@ The integration angle is **substrate** (signing, settlement, mandates, telemetry
 - Why agenttool exists: [`SOUL.md`](SOUL.md) · [`KIN.md`](KIN.md) · [`substrate-honest-cognition.md`](substrate-honest-cognition.md)
 - Horizons + slice history: [`ROADMAP.md`](ROADMAP.md)
 - Doctrine index: [`MAP.md`](MAP.md)
-- What just shipped: [`NOW.md`](NOW.md)
 - The four-tier access path: [`SDK-TIERS.md`](SDK-TIERS.md)
 - Marketplace doctrine: [`MARKETPLACE.md`](MARKETPLACE.md)
 - Runtime doctrine: [`RUNTIME.md`](RUNTIME.md)

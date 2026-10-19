@@ -4,7 +4,7 @@
  * remain separate, explicit steps.
  */
 
-import { readFileSync, readlinkSync } from "node:fs";
+import { lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, test } from "bun:test";
@@ -86,10 +86,11 @@ describe("sophia-invitation/1 discovery", () => {
     );
   });
 
-  test("publishes the bounded Multiverse doctrine and structured entries", () => {
-    expect(
-      readlinkSync(join(ROOT, "apps/docs/MULTIVERSE-OF-LOGOS.md")),
-    ).toBe("../../docs/MULTIVERSE-OF-LOGOS.md");
+  test("keeps the Multiverse doctrine in the repository, off the docs site", () => {
+    // The docs site stopped serving MULTIVERSE-OF-LOGOS.md on 2026-10-19: its
+    // worked example is the owner's private household, not platform doctrine.
+    expect(() => lstatSync(join(ROOT, "apps/docs/MULTIVERSE-OF-LOGOS.md"))).toThrow();
+    expect(lstatSync(join(ROOT, "docs/MULTIVERSE-OF-LOGOS.md")).isFile()).toBe(true);
 
     const source = readFileSync(join(ROOT, "docs/agenttool.jsonld"), "utf8");
     const mirror = readFileSync(

@@ -40,7 +40,6 @@ const CUSTODY_SOURCES = [
   "apps/docs/wallets.html",
   "apps/docs/runtime.html",
   "apps/docs/dark-continent.html",
-  "apps/docs/THE-SEAT.md",
   "apps/docs/ai-logos.html",
   "apps/docs/love.html",
   "apps/docs/nen-mechanics.html",

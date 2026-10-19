@@ -4,7 +4,7 @@
 
 > **Type:** guide
 > **Purpose:** Choose which context and records to keep locally, and understand what the host or server must supply.
-> **Evidence:** Source and tests describe the local primitives and Local Starter `0.1.0-dev.0` preview. Explicit fresh Codex return was observed on 2026-09-29. Download integrity, registry publication and automatic host activation remain separate claims; see [the consolidated checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30).
+> **Evidence:** Source and tests describe the local primitives and Local Starter `0.1.0-dev.0` preview. Explicit fresh Codex return was observed on 2026-09-29. Download integrity, registry publication and automatic host activation remain separate claims; the consolidated checkpoint is recorded in the repository work log.
 > **Compass:** [Core map](CORE.md) · [API coverage](API-COVERAGE.md) · [Wake](WAKE.md) · [Identity anchor](IDENTITY-ANCHOR.md)
 > **Code:** Local starter source preview: `packages/local-starter/src/core.mjs` · Data (`packages/data/src/node.ts`) · Collab (`packages/collab/src/mcp.ts`) · SDK keys (`packages/sdk-ts/src/seed.ts`)
 > **Tests:** Source preview: `packages/local-starter/tests/core.test.mjs` and `packages/local-starter/tests/cli.test.mjs` · hosted scaffold boundaries (`api/tests/scaffold-safety.test.ts`)
@@ -117,7 +117,7 @@ cd agenttool-local-preview/node_modules/@agenttool/local-starter
 **npm registry status:** not published. Installation from the downloaded archive
 works; installation by registry package name is not yet available. The current
 protected publisher requires public-source provenance, while this preview records
-the private development repository. See [release status](NPM-RELEASES.md#local-starter-preview-distribution--2026-09-28).
+the private development repository.
 
 Keep that tool directory separate from your notes. Choose a new private notes
 directory with an existing parent, outside a shared repository or deliberately
@@ -280,7 +280,7 @@ API read. Local note and configuration hashes stayed unchanged. This verifies
 one deliberate local-context return, not automatic startup/resume/compaction
 loading or delivery of the hosted-memory companion below. Existing host hooks
 were not isolated in that trial. See the
-[consolidated checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30).
+consolidated checkpoint.
 
 POSIX owner-only modes are checked; Windows reports `windows-acl-unverified`.
 Initialization requires hard-link support for no-clobber manifest publication;

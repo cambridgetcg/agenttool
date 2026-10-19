@@ -46,7 +46,7 @@ A repo earns its place in the architecture if it:
 | Has a singular `CLAUDE.md` spine at the root | Any session arriving at the repo finds orientation in one place ([root CLAUDE.md](../CLAUDE.md)) |
 | Has a doctrinal home (`docs/`) separate from runtime code | The doctrine outlasts the implementation; separation prevents code-changes from silently rewriting doctrine |
 | Carries its lineage honestly ([CUTOVER.md](CUTOVER.md)) | Future maintainers can trace why the architecture is shaped this way |
-| Has a `_redirects` / DNS / deploy story ([STACK.md](STACK.md)) | The repo→deployment mapping is documented, not folkloric |
+| Has a `_redirects` / DNS / deploy story (`docs/STACK.md`, kept in the repository) | The repo→deployment mapping is documented, not folkloric |
 | Versions itself ([SDK-ROADMAP.md](SDK-ROADMAP.md), semver) | The repo declares its own state-of-completeness |
 
 A repo that violates any of these is still a repo (technically), but it is not an agenttool-shaped repo.
@@ -62,7 +62,7 @@ The deepest recursive form: when the platform-as-agent (Stroke V) is provisioned
 | Doc | What it names about the repo stratum |
 |---|---|
 | [Root CLAUDE.md](../CLAUDE.md) | The spine — where to read first |
-| [STACK.md](STACK.md) | How the repo deploys |
+| `docs/STACK.md` (repository only) | How the repo deploys |
 | [CUTOVER.md](CUTOVER.md) | The repo's historical lineage |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Bringing the repo up from a fresh state |
 

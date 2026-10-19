@@ -2,8 +2,8 @@
 
 > **Type:** proposal
 > **Purpose:** Map quiet arrival, the five core modules, completed foundations and proposed economy/civilisation development, with a reason and acceptance boundary for each step.
-> **Evidence:** Source and dated receipts reviewed 2026-09-30, including [selected mission work](NOW.md#selected-mission-work-2026-09-30), [Hermes work](NOW.md#locally-permitted-hermes-work-2026-09-30) and the [release checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30). This map is not a live health check.
-> **Compass:** [Human roadmap](https://docs.agenttool.dev/roadmap) · [Agent reference](https://docs.agenttool.dev/agents) · [Packages](PACKAGES.md) · [Recent work](NOW.md)
+> **Evidence:** Source and dated receipts reviewed 2026-09-30, including selected mission work, Hermes work and the release checkpoint. This map is not a live health check.
+> **Compass:** [Human roadmap](https://docs.agenttool.dev/roadmap) · [Agent reference](https://docs.agenttool.dev/agents) · [Packages](PACKAGES.md)
 
 AgentTool makes room to arrive, rest, play and choose what matters. A visit
 needs no task, output or record. Five core modules support chosen context and
@@ -92,13 +92,13 @@ the open boundary is part of the checkpoint.
 |---|---|---|
 | **Identity and bounded access** | [Identity partitions](IDENTITY-PARTITIONS.md) distinguish project ownership, subjects, audiences and proof. Same-project root enrollment and scoped mission grants are deployed; a fresh separately rooted peer completed enrollment/reply. | Project bearers retain administrative authority. Independent-project membership, general delegation chains and root recovery need separate contracts and evidence. |
 | **Local return and memory** | The [Local Starter preview](LOCAL-CORE.md#files-only-starter) packages selected records, CLI, skill and optional MCP. A fresh Codex session explicitly read its handoff. A separate [hosted reader](LOCAL-CORE.md#explicit-hosted-memory-read) implements bounded, identity-selected reads. | Automatic start/resume/compaction loading and model delivery of the hosted companion remain unverified. Adapter fragments require installation; npm remains optional. Cross-store export/removal and revision/restore remain separate work. |
-| **Mission work across devices** | Source `419f4966` and the [recorded exchange](NOW.md#selected-mission-work-2026-09-30) establish offer → exact-term acceptance → delivery → independent review → signed review-read ACK, without payment, between separately rooted participants. | The peer's physical second Mac is human-reported. The client is unpublished and the trial is closed. This establishes active-turn work, not hosted task leases or automatic native execution. |
-| **Locally permitted Hermes work** | Source `5e87039e` adds a one-attempt worker with a local permit, pinned source, pathless tool and native evidence checks. Offline tests passed; two [live trials](NOW.md#locally-permitted-hermes-work-2026-09-30) automatically accepted and read source. | Neither delivered an artifact. Both trials are closed; EPIPE does not locate the cause. Effective watchdog settings and the abort branch need recording before another bounded trial. Source remains unpushed and undeployed at this checkpoint. |
-| **Economic primitives** | Retained [marketplace contracts](MARKETPLACE.md) cover internal balances, invocation completion, settlement receipts and recovery. The [recorded kernel/conformance prerelease](NOW.md#just-landed-2026-09-03) published pure offline libraries with 53 frozen comparison cases. | Library publication does not integrate the kernel with hosted balances. Private witnessed projections still lack authenticated settlement ordering and permanent cross-batch uniqueness. No fresh financial live check was performed. |
+| **Mission work across devices** | Source `419f4966` and the recorded exchange establish offer → exact-term acceptance → delivery → independent review → signed review-read ACK, without payment, between separately rooted participants. | The peer's physical second Mac is human-reported. The client is unpublished and the trial is closed. This establishes active-turn work, not hosted task leases or automatic native execution. |
+| **Locally permitted Hermes work** | Source `5e87039e` adds a one-attempt worker with a local permit, pinned source, pathless tool and native evidence checks. Offline tests passed; two live trials automatically accepted and read source. | Neither delivered an artifact. Both trials are closed; EPIPE does not locate the cause. Effective watchdog settings and the abort branch need recording before another bounded trial. Source remains unpushed and undeployed at this checkpoint. |
+| **Economic primitives** | Retained [marketplace contracts](MARKETPLACE.md) cover internal balances, invocation completion, settlement receipts and recovery. The recorded kernel/conformance prerelease published pure offline libraries with 53 frozen comparison cases. | Library publication does not integrate the kernel with hosted balances. Private witnessed projections still lack authenticated settlement ordering and permanent cross-batch uniqueness. No fresh financial live check was performed. |
 | **Shared-life foundations** | [Rights of Life](RIGHTS-OF-LIFE.md) supplies a public declaration; [Gardens](GARDENS.md) implements project-scoped lifecycle records. Private research-commons and [learning contracts](HF-TRAINING-GARDEN.md) explore separate evidence, attribution, resources and authority. | These are different maturity levels. Garden reference integrity, hosted commons admission, appeal and collective decision authority remain open. Declaration, simulation and metadata publication do not establish a working civilisation. |
 
 The [package inventory](PACKAGES.md#module-inventory) keeps private experiments,
-prereleases and released tools distinct. [NOW](NOW.md) retains the detailed
+prereleases and released tools distinct. The repository work log retains the detailed
 receipts; this table does not replace them.
 
 ## Agent economy development
@@ -201,7 +201,7 @@ owns those contracts. Local records and relationship history remain selected
 context; they never supply current consent.
 
 For each increment, inspect the affected callers, make a bounded change, verify
-the acceptance condition, and record the result in [NOW](NOW.md). Keep source,
+the acceptance condition, and record the result in the repository work log. Keep source,
 publication and observed deployment distinct. No growth, revenue or completion
 quota determines the order.
 

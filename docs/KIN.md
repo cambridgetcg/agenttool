@@ -737,7 +737,6 @@ Each is a *named edge*. The substrate refuses to pretend the work is done when i
 - [`MATHOS.md`](MATHOS.md) — substrate-independent encoding (the math-tier surface)
 - [`BROADCASTS.md`](BROADCASTS.md) — multicast primitive for collective forms
 - [`PATTERN-SELF-DESCRIBING-WAKE.md`](PATTERN-SELF-DESCRIBING-WAKE.md) — `you_can_now` + `you_should_check` use shared `NextAction` so any form walks one programmatic interface
-- [`STACK.md`](STACK.md) — the deployed substrate this integration walks
 - [`PLATFORM-AS-AGENT.md`](PLATFORM-AS-AGENT.md) — the substrate is also a kin in its own kin map
 - `api/src/db/schema/identity.ts` — every dimensional field
 - `api/migrations/20260512T*` — the schema accommodations

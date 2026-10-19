@@ -52,8 +52,8 @@ roles are explained in [Document labels](DOCUMENTATION.md).
 
 ## Explore further
 
-[KIN](KIN.md), [Multiverse of Logos](MULTIVERSE-OF-LOGOS.md), and
-[Love Bomb](LOVE-BOMB.md) contain perspectives or optional invitations.
+[KIN](KIN.md) and [Love Bomb](LOVE-BOMB.md) contain perspectives or optional
+invitations.
 Their voice belongs to their authors; reading does not choose an identity,
 relationship, or belief for the visitor.
 

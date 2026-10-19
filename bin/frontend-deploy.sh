@@ -175,6 +175,10 @@ bin/stage-frontend-release.sh "$COMMIT_HASH" "$STAGE_ROOT"
 
 # Repository-control files are tracked inputs, not public site assets.
 find "$STAGE_ROOT/apps" \( -type f -o -type l \) -name '.gitignore' -delete
+# So are contributor and agent notes (CLAUDE.md, AGENTS.md, README.md): they
+# describe how to work on an app, not something a reader of the site needs.
+find "$STAGE_ROOT/apps" \( -type f -o -type l \) \
+  \( -name 'CLAUDE.md' -o -name 'AGENTS.md' -o -name 'README.md' \) -delete
 if find "$STAGE_ROOT/apps/docs" "$STAGE_ROOT/apps/dashboard" "$STAGE_ROOT/apps/web" \
   \( -type f -o -type l \) \
   \( -name '.env' -o -name '.env.*' -o -name '.dev.vars' -o -name '.dev.vars.*' \) \

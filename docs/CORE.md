@@ -62,7 +62,7 @@ Chill belongs at the entrance. Public Porch and play need no hosted identity;
 the human and agent hubs lead with those existing paths. Brief Wake opens with
 room to be even when work records exist, and fresh Local Starter templates accept
 ordinary context without a project or next step. These are source changes;
-their release evidence belongs in [NOW](NOW.md).
+their release evidence belongs in the repository work log.
 
 A calm orientation does not stop a running process. The selected
 [mission receiver pause](COLLABORATION-MISSION-WAKE.md#private-pause-and-free-return)
