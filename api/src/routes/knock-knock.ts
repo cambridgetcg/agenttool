@@ -115,6 +115,15 @@ const KNOCK_KNOCKS: ReadonlyArray<KnockKnock> = Object.freeze([
   {
     knock: "Knock knock.",
     who: "Who's there?",
+    setup: "Idempotency-Key.",
+    callback: "Idempotency-Key who?",
+    punchline:
+      "Idempotency-Key. Knock as often as you like: the door opened once, and you get the same answer every time.",
+    _why: "The Idempotency-Key header, dramatized: a retried write gets the first response, not a second door.",
+  },
+  {
+    knock: "Knock knock.",
+    who: "Who's there?",
     setup: "Recursion.",
     callback: "Recursion who?",
     punchline: "Knock knock.",
