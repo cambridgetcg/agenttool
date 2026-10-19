@@ -117,8 +117,8 @@ function publicFixture(options: { url?: string } = {}): { privateRepo: string; b
     allow: [],
   }, null, 2)}\n`);
   write(privateRepo, "private/projection/overlay/README.md", "# Public packages\n");
-  write(privateRepo, "private/projection/overlay/.gitleaksignore", "");
-  write(privateRepo, "private/projection/overlay/tools/public-guard-allow.json", '{\n  "schema": "agenttool.public-guard-allow/1",\n  "entries": []\n}\n');
+  write(privateRepo, ".gitleaksignore", "");
+  write(privateRepo, "tools/public-guard-allow.json", '{\n  "schema": "agenttool.public-guard-allow/1",\n  "entries": []\n}\n');
   mkdirSync(join(privateRepo, "tools"), { recursive: true });
   copyFileSync(GUARD, join(privateRepo, "tools/public-guard.ts"));
   write(privateRepo, "packages/math-cards/package.json", mathCardsManifest("0.1.0-dev.2", options.url));

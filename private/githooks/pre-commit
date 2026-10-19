@@ -7,7 +7,10 @@
 # path in the shared scope (the export allowlist's include paths and root
 # files, and every path the last merged public tip holds) unless the staged
 # result equals that tip, origin/public-sync. Without origin/public-sync it
-# refuses every staged change to an allowlisted path.
+# refuses every staged change to an allowlisted path. A staged allowlist that
+# narrows the shared scope (an include or root file removed, an export exclude
+# or exclude glob added) is refused too unless ALLOW_SCOPE_CHANGE=1 (the
+# owner's go): a narrowed tree would let later adds pass every drift check.
 #
 # It runs from a pinned copy (install-guards.sh), so a checkout on an older
 # branch still runs it; such a checkout, which has no private/guard, is
@@ -20,6 +23,10 @@ set -euo pipefail
 
 hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 pin="$(cd "$hook_dir/../.." && pwd -P)"
+# This tool's own Bun reads no bunfig.toml or .env from the checkout it
+# runs in: a committed preload would otherwise run before, or instead of,
+# every check.
+bun_guard=(bun --config=/dev/null --no-env-file)
 
 die() {
   printf 'private pre-commit: %s\n' "$*" >&2
@@ -39,5 +46,5 @@ if [ "${ALLOW_SHARED_EDIT:-}" = 1 ]; then
   printf 'private pre-commit: ALLOW_SHARED_EDIT=1, so shared edits are let through; merge-back and pre-push still check them\n' >&2
   exit 0
 fi
-bun "$pin/private/bin/shared-scope.ts" staged --repo . --public refs/remotes/origin/public-sync ||
+"${bun_guard[@]}" "$pin/private/bin/shared-scope.ts" staged --repo . --public refs/remotes/origin/public-sync ||
   die "make shared changes in the public development repository (private/README.md)"

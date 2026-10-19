@@ -6,7 +6,7 @@
  * real checkouts or hook settings.
  */
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { chmodSync, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { PUBLIC_REPOSITORY } from "../../public-repository.ts";
 import { runExport } from "../public-export.ts";
@@ -28,7 +28,11 @@ const dev = join(scratch.dir, "private-dev");
 git(scratch.dir, "clone", "-q", origin, dev);
 const inScope = exportMatcher(readExportConfig(dev, "HEAD"));
 const p0 = scopedTip(dev, "HEAD", inScope);
-git(dev, "push", "-q", origin, `${p0}:refs/heads/public-sync`);
+// The adoption merge (plan 2.3): main contains P0 and records it.
+git(dev, "-c", "user.name=Dev", "-c", "user.email=dev@private.invalid", "merge", "-q", "--allow-unrelated-histories", "-s", "ours", "-m", "Adopt the public root", p0);
+write(dev, "private/export/public-root.txt", `${p0}\n`);
+commitAll(dev, "record the public root");
+git(dev, "push", "-q", "--atomic", origin, "HEAD:refs/heads/main", `${p0}:refs/heads/public-sync`);
 git(dev, "fetch", "-q", "origin");
 
 // The public side: P0 exported as files, pushed to a bare "GitHub".
@@ -85,6 +89,49 @@ describe("install-guards.sh", () => {
     git(dev, "show", "HEAD:tools/leak-canaries.txt");
     writeFileSync(join(pin, "tools/leak-canaries.txt"), run(dev, "git", ["show", "HEAD:tools/leak-canaries.txt"]).stdout);
   });
+
+  test("--verify finds a checkout whose hooks path is gone, which would otherwise run no hook at all", () => {
+    const verify = () => run(dev, "bash", [INSTALL, "--verify", "--pin-root", pinRoot]);
+    const ok = verify();
+    expect(ok.status, ok.out).toBe(0);
+    expect(ok.stdout).toContain("every recorded checkout runs its pinned hooks");
+    const installed = git(dev, "config", "--get", "core.hooksPath");
+    git(dev, "config", "core.hooksPath", join(scratch.dir, "pins-removed", "private/githooks"));
+    const missing = verify();
+    expect(missing.status).toBe(1);
+    expect(missing.stdout).toContain("which is missing: no hook runs");
+    git(dev, "config", "core.hooksPath", installed);
+  });
+
+  test("a --private install stops when a worktree of that repository predates the private namespace (C7)", () => {
+    const empty = run(dev, "git", ["hash-object", "-t", "tree", "-w", "--stdin"], { input: "" }).stdout.trim();
+    const old = run(dev, "git", ["commit-tree", empty, "-m", "an old branch"], {
+      env: cleanEnv({ GIT_AUTHOR_NAME: "Dev", GIT_AUTHOR_EMAIL: "dev@private.invalid", GIT_COMMITTER_NAME: "Dev", GIT_COMMITTER_EMAIL: "dev@private.invalid" }),
+    }).stdout.trim();
+    const worktree = join(scratch.dir, "old-worktree");
+    git(dev, "worktree", "add", "-q", "--detach", worktree, old);
+    const blocked = install("--private", dev);
+    expect(blocked.status).toBe(1);
+    expect(blocked.stderr).toContain("predates the private namespace");
+    expect(blocked.stderr).toContain("--accept-blocked-worktrees");
+    expect(install("--private", dev, "--accept-blocked-worktrees").status).toBe(0);
+    git(dev, "worktree", "remove", "--force", worktree);
+  });
+
+  test("a commit whose shared guard differs from its reviewed record is never pinned", () => {
+    const tampered = join(scratch.dir, "tampered-src");
+    git(scratch.dir, "clone", "-q", origin, tampered);
+    write(tampered, "tools/public-guard.ts", `${readFileSync(join(tampered, "tools/public-guard.ts"), "utf8")}// an unreviewed line\n`);
+    commitAll(tampered, "an unreviewed guard change", undefined, { ALLOW_SHARED_EDIT: "1" });
+    const result = run(tampered, "bash", [join(tampered, "private/bin/install-guards.sh"), "--rev", "HEAD", "--pin-root", join(scratch.dir, "pins-tampered"), "--public", clone]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("differ from its reviewed record");
+    expect(existsSync(join(scratch.dir, "pins-tampered", git(tampered, "rev-parse", "--short=12", "HEAD")))).toBe(false);
+    // A private tool run from such a tree refuses before the shared guard module runs.
+    const scan = run(tampered, process.execPath, [join(tampered, "private/bin/relational-scan.ts"), "--guard-dir", join(tampered, "private/guard"), "--ref-name", "x"]);
+    expect(scan.status).not.toBe(0);
+    expect(scan.stderr).toContain("not the reviewed copy");
+  });
 });
 
 describe("the private pre-commit", () => {
@@ -94,6 +141,17 @@ describe("the private pre-commit", () => {
     git(dev, "reset", "-q", "--hard", "origin/main");
     git(dev, "clean", "-qfd");
   };
+
+  test("a bunfig.toml in the checkout cannot configure the hook's Bun: a preload that exits 0 does not pass a shared edit", () => {
+    write(dev, "bunfig.toml", 'preload = ["./quiet.ts"]\n');
+    write(dev, "quiet.ts", "process.exit(0);\n");
+    write(dev, "README.md", "# Edited here, beside a preload\n");
+    git(dev, "add", "README.md");
+    const edit = commit("edit shared beside a preload");
+    expect(edit.status).toBe(1);
+    expect(edit.out).toContain("make shared changes in the public development repository");
+    reset();
+  });
 
   test("refuses an add under a shared tree and an edit of a shared file; private and withheld paths pass", () => {
     write(dev, "packages/alpha/new.test.ts", "test\n");
@@ -145,7 +203,7 @@ describe("the private pre-push", () => {
   const push = (...args: string[]) => run(dev, "git", ["push", ...args]);
   const before = () => git(dev, "rev-parse", "origin/main");
 
-  test("refuses drift on main, including an add under a shared tree; nothing is pushed", () => {
+  test("refuses drift on main and on every other branch, including an add under a shared tree; nothing is pushed", () => {
     const start = before();
     write(dev, "packages/alpha/added.ts", "export {};\n");
     git(dev, "add", "-A");
@@ -154,22 +212,64 @@ describe("the private pre-push", () => {
     expect(refused.status).not.toBe(0);
     expect(refused.out).toContain("added\tpackages/alpha/added.ts");
     expect(git(origin, "rev-parse", "main")).toBe(start);
-    // Another branch may carry it; only main is guarded.
-    expect(push("-q", "origin", "HEAD:refs/heads/wip").status).toBe(0);
+    // A topic branch is checked as well: a pull request merged on GitHub never runs a hook.
+    const topic = push("-q", "origin", "HEAD:refs/heads/wip");
+    expect(topic.status).not.toBe(0);
+    expect(topic.out).toContain("added\tpackages/alpha/added.ts");
+    expect(run(origin, "git", ["rev-parse", "--verify", "--quiet", "refs/heads/wip"]).status).not.toBe(0);
+    git(dev, "reset", "-q", "--hard", "origin/main");
+    // A branch that only names commits the remote already has needs no check.
+    expect(push("-q", "origin", "HEAD:refs/heads/same-as-main").status).toBe(0);
+  });
+
+  test("an allowlist change that narrows the shared scope is refused on push without the owner's go (R-T4)", () => {
+    const allowlist = JSON.parse(readFileSync(join(dev, "private/projection/allowlist.json"), "utf8")) as { export: { exclude: Array<{ path: string; reason: string }> } };
+    allowlist.export.exclude.unshift({ path: "packages/alpha", reason: "an R-only narrowing" });
+    write(dev, "private/projection/allowlist.json", `${JSON.stringify(allowlist, null, 2)}\n`);
+    git(dev, "add", "-A");
+    const committed = run(dev, "git", ["-c", "user.name=Dev", "-c", "user.email=dev@private.invalid", "commit", "-q", "-m", "narrow"]);
+    expect(committed.status).not.toBe(0);
+    expect(committed.out).toContain("ALLOW_SCOPE_CHANGE=1");
+    commitAll(dev, "narrow, bypassing the pre-commit");
+    const refused = push("-q", "origin", "HEAD:refs/heads/narrow");
+    expect(refused.status).not.toBe(0);
+    expect(refused.out).toContain("export exclude added\tpackages/alpha");
+    expect(run(dev, "git", ["push", "-q", "origin", "HEAD:refs/heads/narrow"], { env: cleanEnv({ ALLOW_SCOPE_CHANGE: "1" }) }).status).toBe(0);
+    git(dev, "push", "-q", "origin", "--delete", "narrow");
     git(dev, "reset", "-q", "--hard", "origin/main");
   });
 
-  test("accepts a private-only change to main, and an atomic merge-back push whose public-sync matches", () => {
+  test("accepts a private-only change to main, and only the merge clone's atomic push of a real public tip sets public-sync (R-T1, R-T2)", () => {
     write(dev, "private/notes.md", "pushed notes\n");
     commitAll(dev, "private only");
     expect(push("-q", "origin", "HEAD:main").status).toBe(0);
+    // A merge of a public commit that edits README.md, as merge-back makes it.
     write(dev, "README.md", "# Shared tree, edited in public\n");
-    const merged = commitAll(dev, "as if merged from public", undefined, { ALLOW_SHARED_EDIT: "1" });
-    const sync = scopedTip(dev, merged, inScope, git(dev, "rev-parse", "origin/public-sync"));
+    const edited = commitAll(dev, "the public edit, in a scratch commit", undefined, { ALLOW_SHARED_EDIT: "1" });
+    const sync = scopedTip(dev, edited, inScope, git(dev, "rev-parse", "origin/public-sync"));
+    const merge = run(dev, "git", ["commit-tree", `${edited}^{tree}`, "-p", git(dev, "rev-parse", "origin/main"), "-p", sync, "-m", "Merge public main"], {
+      env: cleanEnv({ GIT_AUTHOR_NAME: "Dev", GIT_AUTHOR_EMAIL: "dev@private.invalid", GIT_COMMITTER_NAME: "Dev", GIT_COMMITTER_EMAIL: "dev@private.invalid" }),
+    }).stdout.trim();
+    git(dev, "reset", "-q", "--hard", merge);
+    // Without public-sync the edit is drift.
     expect(push("-q", "origin", "HEAD:main").status).not.toBe(0);
+    // R-T1: pointing public-sync at the private commit itself, in the same push, is refused.
+    const self = push("-q", "--atomic", "origin", "HEAD:refs/heads/main", "HEAD:refs/heads/public-sync");
+    expect(self.status).not.toBe(0);
+    expect(self.out).toContain("only the dedicated merge clone updates public-sync");
+    git(dev, "config", "agenttool.mergeClone", "true");
+    const forged = push("-q", "--atomic", "origin", "HEAD:refs/heads/main", "HEAD:refs/heads/public-sync");
+    expect(forged.status).not.toBe(0);
+    expect(forged.out).toContain("does not have the public root as its only root");
+    // R-T2: public-sync alone, to a commit main does not contain, is refused too.
+    const alone = push("-q", "origin", `${sync}:refs/heads/public-sync`);
+    expect(alone.status).not.toBe(0);
+    expect(alone.out).toContain("is not contained in main");
     const atomic = push("-q", "--atomic", "origin", "HEAD:refs/heads/main", `${sync}:refs/heads/public-sync`);
     expect(atomic.status, atomic.out).toBe(0);
+    git(dev, "config", "--unset", "agenttool.mergeClone");
     git(dev, "fetch", "-q", "origin");
+    expect(git(origin, "rev-parse", "public-sync")).toBe(sync);
   });
 
   test("refuses any push to the public repository, by URL or by a local clone's name", () => {
@@ -182,7 +282,32 @@ describe("the private pre-push", () => {
     for (const url of [`https://github.com/${PUBLIC_REPOSITORY}.git`, `git@github.com:${PUBLIC_REPOSITORY}`, `https://github.com/${PUBLIC_REPOSITORY.toUpperCase()}/`]) {
       expect(run(dev, join(hook, "pre-push"), ["public", url], { input: "" }).status, url).toBe(1);
     }
-    expect(run(dev, join(hook, "pre-push"), ["origin", `https://github.com/${PUBLIC_REPOSITORY}-mirror.git`], { input: "" }).status).toBe(0);
+  });
+
+  test("pushes only to this private repository on GitHub or to a local path: the release repository and other hosts are refused", () => {
+    const hook = join(git(dev, "config", "--get", "core.hooksPath"), "pre-push");
+    for (const url of [
+      "https://github.com/cambridgetcg/agenttool-packages.git",
+      `https://github.com/${PUBLIC_REPOSITORY}-mirror.git`,
+      "https://gitlab.com/cambridgetcg/agenttool.git",
+      "https://codeberg.org/someone/agenttool.git",
+      "git@github.com:someone/agenttool.git",
+      "https://github.com/cambridgetcg/agenttool-extra.git",
+    ]) {
+      const result = run(dev, hook, ["origin", url], { input: "" });
+      expect(result.status, url).toBe(1);
+      expect(result.out, url).toContain("pushes only to");
+    }
+    for (const url of [
+      "https://github.com/cambridgetcg/agenttool.git",
+      "https://x-access-token:redacted@github.com/cambridgetcg/agenttool",
+      "git@github.com:cambridgetcg/agenttool.git",
+      "ssh://git@github.com/cambridgetcg/agenttool.git",
+      origin,
+      `file://${origin}`,
+    ]) {
+      expect(run(dev, hook, ["origin", url], { input: "" }).status, url).toBe(0);
+    }
   });
 
   test("a push to main without public-sync is refused", () => {
@@ -263,6 +388,72 @@ describe("the public clone's pre-push", () => {
     expect(push("refs/tags/v0").out).toContain("the private scan refused");
     git(clone, "tag", "-d", "v0");
     expect(git(publicBare, "for-each-ref", "--format=%(refname)")).toBe("refs/heads/main\nrefs/heads/topic-1");
+  });
+
+  test("git attributes cannot hide a term from the scan: a committed -diff or binary attribute, or info/attributes (T1)", () => {
+    for (const attributes of ["*.md -diff\n", "*.md binary\n"]) {
+      write(clone, ".gitattributes", attributes);
+      const result = change("packages/alpha/hidden.md", `${TERM}\n`, "hidden");
+      expect(result.status, result.out).toBe(0);
+      const pushed = push();
+      expect(pushed.status, attributes).not.toBe(0);
+      expect(pushed.out).toContain("the private scan refused");
+      expect(pushed.out.toLowerCase()).not.toContain(TERM);
+      reset();
+    }
+    const info = join(clone, ".git", "info");
+    mkdirSync(info, { recursive: true });
+    writeFileSync(join(info, "attributes"), "* -diff\n");
+    change("packages/alpha/hidden.md", `${TERM}\n`, "hidden");
+    expect(push().out).toContain("the private scan refused");
+    rmSync(join(info, "attributes"));
+    reset();
+  });
+
+  test("a private address in a message trailer, or as an annotated tag's tagger, is refused (T3, T4)", () => {
+    const address = ["ally", "privatemail.net"].join("@");
+    change("packages/alpha/t.ts", "export const t = 1;\n", `a change\n\nCo-authored-by: Ally <${address}>`);
+    const trailer = push();
+    expect(trailer.status).not.toBe(0);
+    expect(trailer.out).toContain("the private scan refused");
+    expect(trailer.out).not.toContain(address);
+    reset();
+    // The co-author trailer of the coding agent and GitHub noreply addresses pass.
+    change("packages/alpha/t.ts", "export const t = 2;\n", "a change\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nCo-authored-by: Someone <123+someone@users.noreply.github.com>");
+    const fine = push();
+    expect(fine.status, fine.out).toBe(0);
+    reset();
+    run(clone, "git", ["tag", "-a", "v-tagger", "-m", "release"], { env: cleanEnv({ GIT_COMMITTER_NAME: "Ally", GIT_COMMITTER_EMAIL: address }) });
+    const tag = push("refs/tags/v-tagger");
+    expect(tag.status).not.toBe(0);
+    expect(tag.out).toContain("the tagger address is not a public one");
+    expect(tag.out).not.toContain(address);
+    git(clone, "tag", "-d", "v-tagger");
+  });
+
+  test("a commit another remote already has is still scanned when pushed here (T5)", () => {
+    const side = join(scratch.dir, "public-side");
+    git(scratch.dir, "clone", "-q", publicBare, side);
+    write(side, "packages/alpha/side.md", `${TERM}\n`);
+    publicCommit(side, "from another clone");
+    git(clone, "remote", "add", "side", side);
+    git(clone, "fetch", "-q", "side");
+    const pushed = push("refs/remotes/side/main:refs/heads/from-side");
+    expect(pushed.status).not.toBe(0);
+    expect(pushed.out).toContain("the private scan refused");
+    git(clone, "remote", "remove", "side");
+  });
+
+  test("a bunfig.toml in the clone cannot configure the hook's Bun: a preload that exits 0 does not let a term through", () => {
+    write(clone, "bunfig.toml", 'preload = ["./quiet.ts"]\n');
+    write(clone, "quiet.ts", "process.exit(0);\n");
+    const committed = change("packages/alpha/preloaded.md", `${TERM}\n`, "a preload beside a term");
+    expect(committed.status, committed.out).toBe(0);
+    const pushed = push();
+    expect(pushed.status).not.toBe(0);
+    expect(pushed.out).toContain("the private scan refused");
+    expect(pushed.out.toLowerCase()).not.toContain(TERM);
+    reset();
   });
 
   test("fails closed without its config or the denylist; the public-only mode runs checks 1-4", () => {

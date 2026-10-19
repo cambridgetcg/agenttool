@@ -59,18 +59,23 @@ The public head and every commit behind it must be projection commits that
 match their own `PROJECTION.json` (the guard's `--history` check, which the
 public CI also runs on every push). The tool refuses to run when the guard it
 imports differs from the `tools/public-guard.ts` it ships, and refuses an
-overlay copy of that file. It never pushes. Pushing to
+overlay copy of that file or of the two exception files. Once the source
+records the public development repository's root, it refuses a source whose
+shared paths differ from the public tip it contains (`--public-sync`, default
+`refs/remotes/origin/public-sync`). It never pushes. Pushing to
 the public repository is a separate, reviewed step.
 
 ## Exceptions
 
-- A gitleaks false positive goes in `overlay/.gitleaksignore` as a
+- A gitleaks false positive goes in the root `.gitleaksignore` (the
+  projection ships the root copy, as it ships the root guard; there is no
+  overlay copy) as a
   `path:rule:line` fingerprint with a `# line_sha256=<hex>` comment directly
   above it: the SHA-256 of the flagged line, which gitleaks findings print.
   The guard hides the file from gitleaks and applies it itself, so a
   fingerprint whose line moved or changed matches nothing and is reported.
-- A secret or personal-layer exception goes in
-  `overlay/tools/public-guard-allow.json`: path, rule, the SHA-256 of the whole
+- A secret or personal-layer exception goes in the root
+  `tools/public-guard-allow.json` (also shipped from the root): path, rule, the SHA-256 of the whole
   line (never its text), reason, and approver.
 - A binary file (a NUL byte in its first 8000 bytes, which includes UTF-16
   without a byte-order mark) is a `path/binary` finding unless the same file's

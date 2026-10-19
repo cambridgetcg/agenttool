@@ -221,8 +221,11 @@ git -C ../agenttool-packages.git push origin refs/heads/main:refs/heads/main
 ```
 
 The projection runs every guard layer before it writes and builds only on the
-current public head. Push with the `cambridgetcg` GitHub identity, fast-forward
-only; never `--force`.
+current public head. Once the source records the public development
+repository's root (`private/export/public-root.txt`, written by the adoption
+merge), it also refuses a source whose shared paths differ from the public tip
+it contains, so run `git fetch origin public-sync` first. Push with the
+`cambridgetcg` GitHub identity, fast-forward only; never `--force`.
 
 ### 3. Public CI
 

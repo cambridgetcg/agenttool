@@ -17,7 +17,7 @@ import { dirname, join, resolve } from "node:path";
 
 import { PRIVATE_REPOSITORY, PUBLIC_REPOSITORY } from "../../private/public-repository.ts";
 import { parseExportConfig } from "../../private/bin/shared-scope.ts";
-import { ALLOWLIST_PATH, DENYLIST_PATH, parseAllowlist, parseDenylist } from "../project-public.ts";
+import { ALLOWLIST_PATH, DENYLIST_PATH, parseAllowlist, parseDenylist, SHARED_OVERLAY_FILES } from "../project-public.ts";
 import { contentFindings, formatFinding, PERSONAL_RULES, SECRET_RULES } from "../../tools/public-guard.ts";
 import { lintWorkflow, repositoryGuarded } from "../../tools/workflow-lint.ts";
 
@@ -50,9 +50,15 @@ describe("the root split", () => {
       expect(existsSync(join(ROOT, privateText)), privateText).toBe(true);
       expect(read(privateText), name).not.toBe(read(name));
     }
-    // The package projection keeps its own root files; it never takes these.
-    for (const path of ["README.md", "LICENSING.md", "NOTICE", "SECURITY.md", ".gitignore", ".gitleaksignore", ".github/workflows/ci.yml"]) {
+    // The package projection keeps its own root texts and CI; it takes the
+    // guard and its two exception files from the shared root
+    // (SHARED_OVERLAY_FILES), so there is one copy of each.
+    for (const path of ["README.md", "LICENSING.md", "NOTICE", "SECURITY.md", ".gitignore", ".github/workflows/ci.yml"]) {
       expect(existsSync(join(ROOT, "private", "projection", "overlay", path)), path).toBe(true);
+    }
+    for (const path of SHARED_OVERLAY_FILES) {
+      expect(SHARED_ROOT_FILES, path).toContain(path);
+      expect(existsSync(join(ROOT, "private", "projection", "overlay", path)), path).toBe(false);
     }
     expect(existsSync(join(ROOT, ".github", "workflows", "private-ci.yml"))).toBe(true);
     expect(existsSync(join(ROOT, "private", "README.md"))).toBe(true);

@@ -156,8 +156,8 @@ function makeFixture(options: { allowlist?: unknown; denylist?: unknown; files?:
   write(repo, ALLOWLIST_PATH, `${JSON.stringify(options.allowlist ?? ALLOWLIST, null, 2)}\n`);
   write(repo, DENYLIST_PATH, `${JSON.stringify(options.denylist ?? DENYLIST, null, 2)}\n`);
   write(repo, "private/projection/overlay/README.md", "# Public packages\n");
-  write(repo, "private/projection/overlay/.gitleaksignore", "");
-  write(repo, "private/projection/overlay/tools/public-guard-allow.json", '{\n  "schema": "agenttool.public-guard-allow/1",\n  "entries": []\n}\n');
+  write(repo, ".gitleaksignore", "");
+  write(repo, "tools/public-guard-allow.json", '{\n  "schema": "agenttool.public-guard-allow/1",\n  "entries": []\n}\n');
   mkdirSync(join(repo, "tools"), { recursive: true });
   copyFileSync(GUARD, join(repo, "tools/public-guard.ts"));
   write(repo, ".gitattributes", "/docs/spec.md text eol=lf\n");
@@ -439,13 +439,13 @@ describe("guard layers", () => {
     const allowFile = (binaries: unknown[]) =>
       `${JSON.stringify({ schema: "agenttool.public-guard-allow/1", entries: [], binaries }, null, 2)}\n`;
     const entry = (sha256: string) => ({ path: "packages/alpha/logo.png", sha256, reason: "fixture image", approver: "test" });
-    const allowed = makeFixture({ files: { "packages/alpha/logo.png": image, "private/projection/overlay/tools/public-guard-allow.json": allowFile([entry(digest)]) } });
+    const allowed = makeFixture({ files: { "packages/alpha/logo.png": image, "tools/public-guard-allow.json": allowFile([entry(digest)]) } });
     expect(guardProjection(allowed, buildProjection(allowed, "HEAD"))).toEqual([]);
     const unlisted = makeFixture({ files: { "packages/alpha/logo.png": image } });
     expect(guardProjection(unlisted, buildProjection(unlisted, "HEAD")).map(formatFinding)).toEqual([
       `packages/alpha/logo.png: path/binary (sha256 ${digest})`,
     ]);
-    const stale = makeFixture({ files: { "packages/alpha/logo.png": image, "private/projection/overlay/tools/public-guard-allow.json": allowFile([entry("b".repeat(64))]) } });
+    const stale = makeFixture({ files: { "packages/alpha/logo.png": image, "tools/public-guard-allow.json": allowFile([entry("b".repeat(64))]) } });
     expect(rules(guardProjection(stale, buildProjection(stale, "HEAD")))).toEqual(["integrity/unused-binary-entry", "path/binary"]);
   });
 
@@ -489,10 +489,10 @@ describe("guard layers", () => {
     });
     const allowFile = (entries: unknown[]) => `${JSON.stringify({ schema: "agenttool.public-guard-allow/1", entries }, null, 2)}\n`;
     const covered = makeFixture({
-      files: { "packages/alpha/mail.md": `${line}\n`, "private/projection/overlay/tools/public-guard-allow.json": allowFile([entry(lineSha256(line))]) },
+      files: { "packages/alpha/mail.md": `${line}\n`, "tools/public-guard-allow.json": allowFile([entry(lineSha256(line))]) },
     });
     expect(guardProjection(covered, buildProjection(covered, "HEAD"))).toEqual([]);
-    const stale = makeFixture({ files: { "private/projection/overlay/tools/public-guard-allow.json": allowFile([entry("a".repeat(64))]) } });
+    const stale = makeFixture({ files: { "tools/public-guard-allow.json": allowFile([entry("a".repeat(64))]) } });
     expect(rules(guardProjection(stale, buildProjection(stale, "HEAD")))).toEqual(["integrity/unused-allow-entry"]);
   });
 
@@ -530,12 +530,12 @@ describe("guard layers", () => {
     expect(findings[0]?.lineSha256).toBe(lineSha256(leakLine));
     const ignoreFile = (configSha: string, extra = "") =>
       `# fixture\n# line_sha256=${configSha}\npackages/alpha/config.ts:generic-api-key:1\n# line_sha256=${lineSha256(inlineLine)}\npackages/alpha/inline.ts:generic-api-key:1\n${extra}`;
-    write(repo, "private/projection/overlay/.gitleaksignore", ignoreFile(lineSha256(leakLine)));
+    write(repo, ".gitleaksignore", ignoreFile(lineSha256(leakLine)));
     commitAll(repo, "ignore");
     expect(guardProjection(repo, buildProjection(repo, "HEAD"), { gitleaks: "gitleaks" })).toEqual([]);
 
     // A fingerprint whose line moved away is reported, not kept silently.
-    write(repo, "private/projection/overlay/.gitleaksignore", ignoreFile(lineSha256(leakLine), `# line_sha256=${"e".repeat(64)}\npackages/alpha/old.ts:github-pat:5\n`));
+    write(repo, ".gitleaksignore", ignoreFile(lineSha256(leakLine), `# line_sha256=${"e".repeat(64)}\npackages/alpha/old.ts:github-pat:5\n`));
     commitAll(repo, "stale fingerprint");
     expect(guardProjection(repo, buildProjection(repo, "HEAD"), { gitleaks: "gitleaks" }).map(formatFinding)).toEqual([
       "packages/alpha/old.ts:5: integrity/unused-gitleaksignore (.gitleaksignore: github-pat)",
@@ -543,7 +543,7 @@ describe("guard layers", () => {
 
     // A different credential at the fingerprinted position is still a finding:
     // gitleaks never sees the ignore file, and the guard checks the line's hash.
-    write(repo, "private/projection/overlay/.gitleaksignore", ignoreFile(lineSha256(leakLine)));
+    write(repo, ".gitleaksignore", ignoreFile(lineSha256(leakLine)));
     write(repo, "packages/alpha/config.ts", `${leakLine.replace(key, key.split("").reverse().join(""))}\n`);
     commitAll(repo, "edited line");
     expect(rules(guardProjection(repo, buildProjection(repo, "HEAD"), { gitleaks: "gitleaks" }))).toEqual([
@@ -805,9 +805,15 @@ describe("full projection (real gitleaks 8.30.1 when present, otherwise a no-lea
     const build = buildProjection(repo, "HEAD");
     const guardEntry = build.projection.overlay.find((entry) => entry.path === "tools/public-guard.ts");
     expect(guardEntry?.blob).toBe(git(repo, "rev-parse", "HEAD:tools/public-guard.ts"));
-    expect(SHARED_OVERLAY_FILES).toEqual(["tools/public-guard.ts"]);
+    expect(SHARED_OVERLAY_FILES).toEqual([".gitleaksignore", "tools/public-guard.ts", "tools/public-guard-allow.json"]);
+    for (const path of SHARED_OVERLAY_FILES) {
+      const entry = build.projection.overlay.find((overlay) => overlay.path === path);
+      expect(entry?.blob, path).toBe(git(repo, "rev-parse", `HEAD:${path}`));
+    }
     const copied = makeFixture({ files: { "private/projection/overlay/tools/public-guard.ts": readFileSync(GUARD) } });
     expect(() => buildProjection(copied, "HEAD")).toThrow("must not exist");
+    const ignoreCopy = makeFixture({ files: { "private/projection/overlay/.gitleaksignore": "" } });
+    expect(() => buildProjection(ignoreCopy, "HEAD")).toThrow("must not exist");
     const bytes = Buffer.from(JSON.stringify({ ...ALLOWLIST, include: [{ path: "tools/public-guard.ts", kind: "blob" }] }));
     expect(() => parseAllowlist(bytes)).toThrow("which the overlay ships");
     const missing = makeFixture();

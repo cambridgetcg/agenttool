@@ -150,13 +150,26 @@ describe("staged changes and merge results in a real repository", () => {
     git(repo, "reset", "-q", "--hard");
   });
 
-  test("narrowing the allowlist in the same commit does not hide an edit", () => {
+  test("narrowing the allowlist is refused without the owner's go, and even with it the same commit does not hide an edit", () => {
     const narrowed = fixtureAllowlist();
     narrowed.include = narrowed.include.filter((entry) => entry.path !== "packages/alpha");
     write(repo, "private/projection/allowlist.json", `${JSON.stringify(narrowed, null, 2)}\n`);
     write(repo, "packages/alpha/index.ts", "export const alpha = 3;\n");
     git(repo, "add", "-A");
-    expect(stagedViolations(repo, "refs/remotes/origin/public-sync").map((entry) => entry.path)).toEqual(["packages/alpha/index.ts"]);
+    expect(() => stagedViolations(repo, "refs/remotes/origin/public-sync")).toThrow("include removed packages/alpha");
+    expect(stagedViolations(repo, "refs/remotes/origin/public-sync", { allowScopeChange: true }).map((entry) => entry.path)).toEqual(["packages/alpha/index.ts"]);
+    git(repo, "reset", "-q", "--hard");
+  });
+
+  test("an export exclude added for a shared tree is a narrowing too (R-T4a), so a later add under it cannot slip through", () => {
+    const narrowed = fixtureAllowlist();
+    (narrowed.export.exclude as Array<{ path: string; reason: string }>).unshift({ path: "packages/alpha", reason: "an R-only edit" });
+    write(repo, "private/projection/allowlist.json", `${JSON.stringify(narrowed, null, 2)}\n`);
+    git(repo, "add", "-A");
+    expect(() => stagedViolations(repo, "refs/remotes/origin/public-sync")).toThrow("export exclude added packages/alpha");
+    const cli = run(repo, process.execPath, [join(repo, "private/bin/shared-scope.ts"), "staged", "--repo", repo, "--public", "refs/remotes/origin/public-sync"]);
+    expect(cli.status).toBe(2);
+    expect(cli.stderr).toContain("ALLOW_SCOPE_CHANGE=1");
     git(repo, "reset", "-q", "--hard");
   });
 
