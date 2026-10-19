@@ -1,4 +1,4 @@
-/** Pull-request path filtering for .github/workflows/ci.yml.
+/** Pull-request path filtering for .github/workflows/private-ci.yml.
  *
  * The classifier may only turn a job off for a pull request whose every
  * changed path it recognises. These tests drive bin/ci-changed-areas.sh as CI
@@ -24,7 +24,7 @@ import { dirname, join, posix, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dir, "../..");
 const SCRIPT = join(ROOT, "bin", "ci-changed-areas.sh");
-const WORKFLOW_PATH = join(ROOT, ".github", "workflows", "ci.yml");
+const WORKFLOW_PATH = join(ROOT, ".github", "workflows", "private-ci.yml");
 const SYSTEM_PATH = "/usr/bin:/bin";
 
 type Outputs = Record<string, string>;
@@ -199,7 +199,7 @@ describe("change classification rules", () => {
 
   test("the workflow, classifier, shared preparation, and lockfiles select every job", () => {
     for (const path of [
-      ".github/workflows/ci.yml",
+      ".github/workflows/private-ci.yml",
       "bin/ci-changed-areas.sh",
       "bin/ci-tree-proof.sh",
       "bin/bash-without-env-hooks.sh",
@@ -522,7 +522,7 @@ describe("CI mode against Git fixtures", () => {
     withFixture((fixture) => {
       const base = fixture.git("rev-parse", "HEAD");
       fixture.git("checkout", "-q", "-b", "topic");
-      fixture.write(".github/workflows/ci.yml", "name: CI\n");
+      fixture.write(".github/workflows/private-ci.yml", "name: CI\n");
       const head = fixture.commit("workflow");
       const result = fixture.pullRequest(base, head, fixture.merge(base, head));
       expectEverything(result.outputs, "rule-selects-everything");
@@ -1232,7 +1232,7 @@ describe("rule table drift guards", () => {
     // The mode itself reports what it should.
     const probeResult = Bun.spawnSync(["/bin/bash", SCRIPT, "--unmatched"], {
       env: { PATH: SYSTEM_PATH },
-      stdin: new TextEncoder().encode("docs/SOUL.md\0brand-new/x\0.github/workflows/ci.yml\0packages/new/x\0"),
+      stdin: new TextEncoder().encode("docs/SOUL.md\0brand-new/x\0.github/workflows/private-ci.yml\0packages/new/x\0"),
       stdout: "pipe",
     });
     expect(probeResult.stdout.toString()).toBe("brand-new/x\0packages/new/x\0");

@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**826 document paths** (including mirrors). orientation: 182; guide: 86; reference: 332; policy: 29; reflection: 126; proposal: 46; record: 23; unclassified: 2.
+**830 document paths** (including mirrors). orientation: 183; guide: 87; reference: 332; policy: 31; reflection: 126; proposal: 46; record: 23; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -20,7 +20,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | Document | Prose review |
 |---|---|
 | [KINGDOM.md](<../KINGDOM.md>) | not-reviewed |
-| [README.md](<../README.md>) | 2026-09-26 |
+| [README.md](<../README.md>) | not-reviewed |
 | [api/CLAUDE.md](<../api/CLAUDE.md>) | not-reviewed |
 | [api/README.md](<../api/README.md>) | not-reviewed |
 | [api/migrations/README.md](<../api/migrations/README.md>) | not-reviewed |
@@ -196,6 +196,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/witnessed-agent-economy/CLAUDE.md](<../packages/witnessed-agent-economy/CLAUDE.md>) | not-reviewed |
 | [packages/witnessed-agent-economy/README.md](<../packages/witnessed-agent-economy/README.md>) | not-reviewed |
 | [private/projection/overlay/README.md](<../private/projection/overlay/README.md>) | not-reviewed |
+| [private/root/README.md](<../private/root/README.md>) | 2026-09-26 |
 | [review/launch-20260904/README.md](<../review/launch-20260904/README.md>) | not-reviewed |
 | [review/launch-cleanup-20260904/README.md](<../review/launch-cleanup-20260904/README.md>) | not-reviewed |
 | [review/provider-adapters/v1/README.md](<../review/provider-adapters/v1/README.md>) | not-reviewed |
@@ -291,6 +292,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/skills/skills/use-agentcred-safely/SKILL.md](<../packages/skills/skills/use-agentcred-safely/SKILL.md>) | not-reviewed |
 | [packages/telescope/integrations/hermes/skills/inspect-agent-surfaces-hermes/SKILL.md](<../packages/telescope/integrations/hermes/skills/inspect-agent-surfaces-hermes/SKILL.md>) | not-reviewed |
 | [packages/telescope/skills/inspect-agent-surfaces/SKILL.md](<../packages/telescope/skills/inspect-agent-surfaces/SKILL.md>) | not-reviewed |
+| [private/README.md](<../private/README.md>) | not-reviewed |
 | [private/projection/README.md](<../private/projection/README.md>) | not-reviewed |
 
 ## reference
@@ -663,6 +665,8 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/credential-broker/AGENTS.md](<../packages/credential-broker/AGENTS.md>) | not-reviewed |
 | [private/projection/overlay/LICENSING.md](<../private/projection/overlay/LICENSING.md>) | not-reviewed |
 | [private/projection/overlay/SECURITY.md](<../private/projection/overlay/SECURITY.md>) | not-reviewed |
+| [private/root/LICENSING.md](<../private/root/LICENSING.md>) | not-reviewed |
+| [private/root/SECURITY.md](<../private/root/SECURITY.md>) | not-reviewed |
 
 ## reflection
 

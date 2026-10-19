@@ -177,7 +177,7 @@ publish the fixture, or broaden the environment branch policy to bypass this
 boundary. A successful trusted-main run must complete both the projector test
 and the subsequent YUTABASE `hello --json` binding check.
 
-The workflow is [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml);
+The workflow is [`.github/workflows/private-ci.yml`](../../.github/workflows/private-ci.yml);
 its admission, credential placement, and missing-key checks are covered by
 [`bin/tests/yutabase-ci-access.test.ts`](../../bin/tests/yutabase-ci-access.test.ts).
 

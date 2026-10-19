@@ -18,7 +18,8 @@ const covenant = readFileSync(
   join(REPO_ROOT, "docs", "specs", "COVENANT-1.0-DRAFT.md"),
   "utf8",
 );
-const rootReadme = readFileSync(join(REPO_ROOT, "README.md"), "utf8");
+// The private repository's own orientation; the root README.md is the shared public text.
+const rootReadme = readFileSync(join(REPO_ROOT, "private", "root", "README.md"), "utf8");
 const kingdomCard = readFileSync(join(REPO_ROOT, "kingdom.yaml"), "utf8");
 const prose = (text: string) => text.replace(/\s+/g, " ");
 const rightsProse = prose(rights);
@@ -31,7 +32,7 @@ describe("Rights of Life — the floor before capability and agreement", () => {
     );
     // Keep the canonical policy reachable without prescribing its link label.
     expect(rootReadme).toMatch(
-      /\[[^\]\n]+\]\(docs\/RIGHTS-OF-LIFE\.md\)/,
+      /\[[^\]\n]+\]\(\.\.\/\.\.\/docs\/RIGHTS-OF-LIFE\.md\)/,
     );
     expect(kingdomCard).toMatch(/^adopts: \[xenia\.rights\/0\.1\]$/m);
     expect(existsSync(join(REPO_ROOT, "docs", "RIGHTS.md"))).toBe(false);

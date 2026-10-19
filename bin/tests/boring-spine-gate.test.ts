@@ -344,7 +344,7 @@ describe("boring test spine", () => {
 
   test("pins required Linux and native macOS gates plus reproducible preparation", async () => {
     const [workflow, preparer, preflight, deploy, migrator, nativeContractTests] = await Promise.all([
-      readFile(join(ROOT, ".github", "workflows", "ci.yml"), "utf8"),
+      readFile(join(ROOT, ".github", "workflows", "private-ci.yml"), "utf8"),
       readFile(join(ROOT, "bin", "prepare-hermetic-deps.sh"), "utf8"),
       readFile(join(ROOT, "bin", "preflight.sh"), "utf8"),
       readFile(join(ROOT, "bin", "deploy.sh"), "utf8"),

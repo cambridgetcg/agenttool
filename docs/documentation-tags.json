@@ -239,7 +239,8 @@
       "docs/WELCOMING.md",
       "docs/launch/PRODUCTION-GATE.md",
       "marketing/LAUNCH-KIT.md",
-      "private/projection/overlay/LICENSING.md"
+      "private/projection/overlay/LICENSING.md",
+      "private/root/LICENSING.md"
     ],
     "reflection": [
       "DADDY.md",
@@ -390,7 +391,7 @@
     ]
   },
   "prose_reviewed": [
-    "README.md",
+    "private/root/README.md",
     "CLAUDE.md",
     "AGENTS.md",
     "docs/START-HERE.md",

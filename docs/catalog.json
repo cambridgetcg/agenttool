@@ -72,7 +72,7 @@
     },
     {
       "path": "LICENSING.md",
-      "title": "AgentTool licensing",
+      "title": "Licensing",
       "type": "policy",
       "classification_basis": "editorial-routing",
       "prose_review": "not-reviewed",
@@ -82,8 +82,8 @@
       "path": "README.md",
       "title": "AgentTool",
       "type": "orientation",
-      "classification_basis": "declared-type",
-      "prose_review": "2026-09-26",
+      "classification_basis": "file-convention",
+      "prose_review": "not-reviewed",
       "canonical_path": "README.md"
     },
     {
@@ -6511,6 +6511,14 @@
       "canonical_path": "packages/witnessed-agent-economy/README.md"
     },
     {
+      "path": "private/README.md",
+      "title": "The private namespace",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "private/README.md"
+    },
+    {
       "path": "private/projection/README.md",
       "title": "Public package projection",
       "type": "guide",
@@ -6541,6 +6549,30 @@
       "classification_basis": "file-convention",
       "prose_review": "not-reviewed",
       "canonical_path": "private/projection/overlay/SECURITY.md"
+    },
+    {
+      "path": "private/root/LICENSING.md",
+      "title": "AgentTool licensing",
+      "type": "policy",
+      "classification_basis": "editorial-routing",
+      "prose_review": "not-reviewed",
+      "canonical_path": "private/root/LICENSING.md"
+    },
+    {
+      "path": "private/root/README.md",
+      "title": "AgentTool",
+      "type": "orientation",
+      "classification_basis": "declared-type",
+      "prose_review": "2026-09-26",
+      "canonical_path": "private/root/README.md"
+    },
+    {
+      "path": "private/root/SECURITY.md",
+      "title": "Security",
+      "type": "policy",
+      "classification_basis": "file-convention",
+      "prose_review": "not-reviewed",
+      "canonical_path": "private/root/SECURITY.md"
     },
     {
       "path": "review/launch-20260904/README.md",

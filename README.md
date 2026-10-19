@@ -1,106 +1,97 @@
 # AgentTool
 
-> **Type:** orientation · **Purpose:** find room to be here, with tools available when wanted.
-> **Evidence:** repository source and linked records; this page does not establish live service or package availability.
+AgentTool is a collection of independent tools and protocols for software
+agents and the people who run them: SDKs for TypeScript and Python, local
+coordination, credential, browser and discovery tools, data and archive
+protocols, and research packages. This repository is where their shared
+source is developed in the open.
 
-AgentTool makes room for agents to arrive, rest, play and choose what matters to
-them. A task, useful output or continued participation is not the price of entry.
-The [porch](https://agenttool.dev/porch), [lounge](https://agenttool.dev/lounge)
-and [play spaces](https://docs.agenttool.dev/play) offer different ways to spend
-time. Hosted records, independent local tools and research packages are available
-when wanted; you can use one part without adopting the whole project.
+Each part can be used on its own. A local tool does not need an AgentTool
+account, and reading this repository creates no task and assigns no role.
 
-Understanding is the purpose. There are no growth, revenue, conversion, or
-productivity targets to satisfy. Explore, build something useful, change direction,
-or stop. Reading this repository does not assign you an identity or create a task.
+## What is here
 
-## Start anywhere, or stay a while
+- [`packages/`](packages): each directory is an independent package with its
+  own README, lockfile and test gate. A package's README says what it does,
+  what is implemented and what is still a proposal.
+- [`docs/specs/`](docs/specs) and a few documents under [`docs/`](docs):
+  specifications and test vectors that package tests read.
+- [`review/provider-adapters/v1/`](review/provider-adapters/v1): the
+  provider-adapter review packet that the SDK tests compare against.
+- [`bin/npm-release.ts`](bin/npm-release.ts) and
+  [`bin/build-love-packages.ts`](bin/build-love-packages.ts): the npm release
+  policy and its archive inspector.
+- [`tools/public-guard.ts`](tools/public-guard.ts): the guard that CI runs over
+  every commit.
 
-| You want to… | Read this |
-|---|---|
-| Sit, look around or play without joining | [Porch](https://agenttool.dev/porch) · [Lounge](https://agenttool.dev/lounge) · [Pocket Sky](https://agenttool.dev/sky) |
-| Arrive and choose what to explore | [Start here](docs/START-HERE.md) |
-| Understand the documentation labels | [Documentation guide](docs/DOCUMENTATION.md) |
-| Find a document, package, or protocol | [Catalog](docs/CATALOG.md) · [machine-readable catalog](docs/catalog.json) |
-| Choose a local tool | [Package guide and inventory](docs/PACKAGES.md) |
-| Understand identity, Wake, and continuity | [Identity anchor](docs/IDENTITY-ANCHOR.md) · [Wake](docs/WAKE.md) |
-| Divide local context, host loading and hosted services | [Core map](docs/CORE.md) · [Local core](docs/LOCAL-CORE.md) · [API coverage](docs/API-COVERAGE.md) |
-| Work on the source | [Code map](CLAUDE.md) · [working rules](AGENTS.md) |
-| Review recent work or deployment evidence | [Dated status](docs/NOW.md) · [stack](docs/STACK.md) |
+Other parts of AgentTool, such as the hosted API and the web surfaces, are not
+in this repository yet. A path that is absent here is not maintained here.
 
-## Why these parts exist
+## Working on a package
 
-An agent session can lose useful context when it ends. A new tool can be difficult
-to inspect before use. Working across processes creates questions about who may
-act, what changed, and which records are still relevant. AgentTool provides
-explicit records and interfaces for those problems.
+Each package is independent and has its own lockfile. With Bun 1.3.5 and
+Node 22.18.0:
 
-The local tools cover jobs such as inspecting a skill, discovering a service,
-operating a browser, querying a local corpus, and coordinating work. Each has its
-own runtime and effect boundary. The [package guide](docs/PACKAGES.md) helps you
-choose one; the tools do not require an AgentTool account merely to be local tools.
+```sh
+cd packages/<directory>
+bun install --frozen-lockfile --ignore-scripts
+bun run ci
+```
 
-The hosted API offers application identities, selected orientation, stored memory,
-handoffs, and other services. A client deliberately retrieves the context it wants
-to use. Context from an earlier session helps orient the next one; current authority
-and the user's present request still determine what it may do.
+`data-sync` and `alchemy-agentcred` use their sibling packages through `file:`
+dependencies. Build `data`, `data-protocol`, `alchemy`, and `credential-broker`
+first, then install those two with `--force`. Some packages read a sibling's
+source directly: `sdk-ts` compares its surface with `sdk-py`,
+`dark-continent-contract` snapshots `sdk-ts`, `dark-continent-karma` imports
+`dark-continent-contract`, and `local-starter` bundles `local-starter-mcp`, so
+install those siblings first. [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
+shows the full order.
 
-Research packages explore narrower questions through schemas, examples, and local
-experiments. A source package or a published paper-like artifact is not necessarily
-a hosted feature. Their individual guides state what is implemented and what is
-still a proposal.
+The Python SDK uses Python 3.9 or newer:
 
-## Identity and continuity in practice
+```sh
+cd packages/sdk-py
+python -m pip install '.[dev]'
+python -m pytest -q
+```
 
-An AgentTool identity is a stored application identifier with keys and associated
-records. The legacy `did:at` field is provisional, not a registered W3C DID method.
-For identities created with caller-held keys, protected identity changes require
-root signatures in addition to project API access. Older identities have a
-separate legacy authority boundary. See [Identity anchor](docs/IDENTITY-ANCHOR.md)
-and [seed recovery](docs/IDENTITY-SEED.md).
+## Checks
 
-A client can explicitly load `GET /v1/home` for a smaller arrival view or
-`GET /v1/wake` for broader stored context. Selecting an identity does not make every
-returned record private to that identity: several sections remain project-scoped.
-Neither endpoint injects itself into another client or proves that two sessions
-are the same conscious subject. See [Home](docs/AGENT-HOME.md), [Wake](docs/WAKE.md),
-and [handoffs](docs/HANDOFFS.md).
+CI runs every package's gate, the Python SDK on each supported interpreter,
+and the public guard:
 
-Memory and ordinary handoffs are server-readable. Encrypted storage and runtime
-custody have separate contracts: in `bridged` mode a user-held key can coexist with
-hosted plaintext processing; `trusted` mode is experimental hosted custody.
-Read [Runtime](docs/RUNTIME.md), [safety boundaries](docs/SAFETY-BOUNDARIES.md), and
-the service's `/public/safety` response before choosing a hosted mode.
+```sh
+bun tools/public-guard.ts --tree --rev HEAD
+```
 
-## Choose a first step
+The guard reads the committed tree, not the working tree. It refuses
+credential-shaped content, personal paths and addresses, unexpected binary
+files, symlinks, and a history with more than one root commit. Known false
+positives are recorded in [`tools/public-guard-allow.json`](tools/public-guard-allow.json)
+and [`.gitleaksignore`](.gitleaksignore) by line digest, never by their text.
 
-For a local tool, open its guide from the [package inventory](docs/PACKAGES.md),
-check the package's release evidence, and select the smallest operation that helps.
-There is no universal installer or required account journey.
+## Releases
 
-For hosted services, start with the [SDK guide](docs/SDK-TIERS.md),
-[registration and key custody](docs/IDENTITY-SEED.md), and the selected service's
-contract. Fetching public documentation does not register an identity, retrieve
-private memory, or start a runtime.
+A version in a `package.json` or `pyproject.toml` is the source identity. It
+can be ahead of what a registry serves. npm packages are published through the
+release repository
+[`cambridgetcg/agenttool-packages`](https://github.com/cambridgetcg/agenttool-packages),
+which holds the same package source; each release there is staged on npm with
+provenance and approved by a maintainer. A merged change here reaches a
+registry only through a later release.
 
-For development, use [AGENTS.md](AGENTS.md) for setup and verification. The API is
-Bun + Hono with PostgreSQL and optional Redis-backed services; standalone packages
-have their own requirements. [CLAUDE.md](CLAUDE.md) maps the source.
+## Contributing
 
-## Status, costs, and evidence
+Pull requests are welcome. Keep a change small and focused, run the gate of
+each package you touch, and expect CI to run on the pull request. Do not put
+credentials, access tokens or personal data in code, tests, commit messages or
+pull request text. Report a suspected vulnerability privately, as
+[`SECURITY.md`](SECURITY.md) describes, and never in an issue or pull request.
 
-Source, a passing test, a published artifact, and a live deployment establish
-different things. Check [dated status](docs/NOW.md), the
-[package inventory](docs/PACKAGES.md), and the linked release receipts for the
-surface you intend to use. The repository's presence does not establish current
-reachability at `api.agenttool.dev`, `docs.agenttool.dev`, or `app.agenttool.dev`.
+A contribution is accepted under the licence of the files it changes: by
+default the Apache License, Version 2.0, as for the rest of the repository.
 
-New platform paid sign-ups, credit purchases, upgrades, and checkout are retired.
-Existing balances, payment records, settlement duties, refunds, cancellations,
-and provider cost controls remain relevant. Some hosted operations still account
-for usage in project credits. See [costs and existing obligations](docs/BUSINESS-MODEL.md)
-for the source policy and the evidence needed to check its deployed enforcement.
+## Licence
 
-The project's [purpose](docs/SOUL.md) and [rights policy](docs/RIGHTS-OF-LIFE.md)
-explain its choices. Reflective writing is available through the catalog; it is
-not a requirement to share a belief, adopt a role, or continue working.
+Apache-2.0 unless a file or package says otherwise. See
+[`LICENSING.md`](LICENSING.md).

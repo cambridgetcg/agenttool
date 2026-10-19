@@ -148,9 +148,9 @@ describe("optional npm package discovery", () => {
   });
 
   test("root orientation discovers exact install guidance and non-authoritative mirror receipts", () => {
-    const rootReadme = read("README.md");
-    expect(rootReadme).toContain("](docs/SDK-TIERS.md)");
-    expect(rootReadme).toContain("](docs/PACKAGES.md)");
+    const rootReadme = read("private/root/README.md");
+    expect(rootReadme).toContain("](../../docs/SDK-TIERS.md)");
+    expect(rootReadme).toContain("](../../docs/PACKAGES.md)");
     const packageGuide = read("docs/PACKAGES.md");
     expect(packageGuide).toContain("NPM-RELEASES.md");
     expect(packageGuide).toContain("PYPI-RELEASES.md");

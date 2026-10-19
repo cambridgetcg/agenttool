@@ -19,7 +19,7 @@ type Job = {
   steps: Step[];
   "continue-on-error"?: boolean;
 };
-const source = readFileSync(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
+const source = readFileSync(new URL("../../.github/workflows/private-ci.yml", import.meta.url), "utf8");
 const workflow = Bun.YAML.parse(source) as {
   on: Record<string, unknown>;
   jobs: Record<string, Job>;

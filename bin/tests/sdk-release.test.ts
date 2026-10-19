@@ -662,9 +662,10 @@ describe("SDK source and builder identity", () => {
       `/@agenttool/sdk/${version}/manifest.json`,
     );
 
-    const rootReadme = read("README.md");
-    expect(rootReadme).toContain("](docs/SDK-TIERS.md)");
-    expect(rootReadme).toContain("](docs/PACKAGES.md)");
+    // The private repository's own orientation; the root README.md is the shared public text.
+    const rootReadme = read("private/root/README.md");
+    expect(rootReadme).toContain("](../../docs/SDK-TIERS.md)");
+    expect(rootReadme).toContain("](../../docs/PACKAGES.md)");
     const packageGuide = read("docs/PACKAGES.md");
     expect(packageGuide).toContain("docs/NPM-RELEASES.md");
     expect(packageGuide).toContain("PYPI-RELEASES.md");
@@ -912,7 +913,7 @@ describe("SDK source and builder identity", () => {
     expect(read("docs/NPM-RELEASES.md")).toContain(
       "Correction, 2026-10-11: `@agenttool/kingdom@0.1.2` is published.",
     );
-    expect(read("README.md")).toContain("](docs/PACKAGES.md)");
+    expect(read("private/root/README.md")).toContain("](../../docs/PACKAGES.md)");
     for (const path of [
       "docs/NOW.md",
       "docs/NPM-RELEASES.md",
@@ -1325,7 +1326,7 @@ describe("SDK source and builder identity", () => {
       matchesCloudflarePathPattern(LOVE_ARTIFACT_HEADER_PATTERN, `/${artifactPath}`),
     ).toBe(true);
 
-    const ci = read(".github/workflows/ci.yml");
+    const ci = read(".github/workflows/private-ci.yml");
     expect(ci).toContain(`apps/docs/${manifestPath}`);
     expect(ci).toContain(`apps/docs/${artifactPath}`);
 
@@ -1483,7 +1484,7 @@ describe("SDK source and builder identity", () => {
     expect(read("docs/NOW.md")).toContain(
       "SDK 0.17.0 — bounded local KINGDOM OS discovery plus a closed public card",
     );
-    expect(read("README.md")).toContain("](docs/PACKAGES.md)");
+    expect(read("private/root/README.md")).toContain("](../../docs/PACKAGES.md)");
     expect(read("docs/PACKAGES.md")).toContain("NPM-RELEASES.md");
     expect(read("docs/PACKAGES.md")).toContain("PYPI-RELEASES.md");
 

@@ -9,28 +9,34 @@ __pycache__/
 *.pyo
 *.egg-info/
 
-# Build artefacts
+# Build output. Two packages commit their MCP bundles; CI compares them with
+# a fresh build.
 dist/
 !packages/collab/dist/
 packages/collab/dist/*
 !packages/collab/dist/agenttool-collab-mcp.js
 !packages/collab/dist/agenttool-collab-host.js
+!packages/telescope/dist/
+packages/telescope/dist/*
+!packages/telescope/dist/agenttool-telescope-mcp.js
 build/
 .next/
 .turbo/
 out/
 *.tsbuildinfo
+# Archives that `npm pack` writes inside a package directory.
+packages/**/*.tgz
 
 # Native SwiftPM scratch output
 native/**/.build/
 native/**/.swiftpm/
 
-# Pre-deploy staging — see bin/deploy.sh Phase 3 + api/Dockerfile.
-# Copy of docs/agenttool.jsonld dropped into api/ so the Fly build
-# context can ship it into the image. Written/deleted by the deploy
-# script; should never appear in source control.
+# Deploy staging: copies written into api/ for the image build and removed
+# afterwards; never committed.
 api/agenttool.jsonld.bundled
 api/doctrine-docs.bundled/
+api/kingdom-bundle.json.bundled
+api/src/private/
 
 # Env & secrets
 .env
@@ -66,21 +72,18 @@ coverage/
 htmlcov/
 .wrangler/
 
-# Local Claude Code session state (scheduled tasks, etc.)
+# Local agent and session state
 .claude/
-
-# Local agent-data/v1 node state
 .agent-data/
+.superpowers/
 
 # Playwright runtime artefacts
 tests/playwright/playwright-report/
 tests/playwright/test-results/
-api/kingdom-bundle.json.bundled
 
-# Heartbeat runtime state + generated audio (bin/river.py regenerates the wav)
+# Local runtime state and generated audio
 bin/.heartbeat-state.json
 bin/*.wav
-.superpowers/
 
-# local play scripts — never published
+# Local scratch scripts
 api/scratch/

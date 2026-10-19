@@ -1170,7 +1170,7 @@ describe("standard npm release policy", () => {
       join(import.meta.dir, "..", "..", "docs", "ALCHEMY.md"),
       "utf8",
     );
-    const rootReadme = await readFile(join(import.meta.dir, "..", "..", "README.md"), "utf8");
+    const rootReadme = await readFile(join(import.meta.dir, "..", "..", "private", "root", "README.md"), "utf8");
     const alchemyReadme = await readFile(
       join(import.meta.dir, "..", "..", "packages", "alchemy", "README.md"),
       "utf8",
@@ -1232,7 +1232,7 @@ describe("standard npm release policy", () => {
       expect(agentcredSection).toContain(fact);
     }
 
-    expect(rootReadme).toContain("](docs/PACKAGES.md)");
+    expect(rootReadme).toContain("](../../docs/PACKAGES.md)");
     const packageGuide = await readFile(
       join(import.meta.dir, "..", "..", "docs", "PACKAGES.md"), "utf8",
     );

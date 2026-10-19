@@ -1,0 +1,1279 @@
+name: CI
+
+on:
+  pull_request:
+    # A draft runs nothing; marking it ready for review runs CI.
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches:
+      - main
+  schedule:
+    # Weekly full run on main: the backstop for drift outside the tree and
+    # for path-filter mapping gaps behind skipped or proven runs.
+    - cron: "23 4 * * 1"
+  # A manual run selects every job (the YUTABASE projector stays push-only).
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Pull requests: a newer commit cancels the older run. Pushes to main: one
+  # group per commit, never cancelled. Each push run must finish: the next
+  # push can be proven only once this one has passed, because its
+  # pull-request run may have skipped this push's areas. Scheduled and manual
+  # runs share refs/heads/main with pushes, so they get groups of their own.
+  group: ${{ github.event_name == 'push' && format('ci-{0}-push-{1}', github.workflow, github.sha) || format('ci-{0}-{1}-{2}', github.workflow, github.event_name, github.ref) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  changes:
+    # Keep this display name stable. On a pull request the classifier maps
+    # changed paths to jobs, and a job below is skipped only when it succeeded
+    # and reported that job "false"; git failures, unknown paths, and changes
+    # to this workflow, bin/ci-changed-areas.sh, or bin/ci-tree-proof.sh select
+    # every job. A pull request into main also records the tree it tested and
+    # the main commit it tested on, and every pull request carries the
+    # YUTABASE coverage notice. On a push to main, bin/ci-tree-proof.sh looks
+    # for a green pull-request run of private-ci.yml that tested the identical tree on
+    # the commit main pointed to before the push, and for a green push run of
+    # private-ci.yml on that commit. When it finds both ("proven"), every job but the
+    # YUTABASE projector is skipped and that pull-request run is the evidence,
+    # except that the Python SDK job tests the versions a pull request skips
+    # when that run tested the Python SDK ("sdk-python-rest").
+    # A re-run of a push run, of all of it or of this job, is never proven.
+    # Scheduled and manual runs select every job. Every job but the push-only
+    # YUTABASE projector skips a draft pull request; GitHub runs CI again when
+    # it is marked ready for review.
+    name: Changed areas
+    if: ${{ github.event.pull_request.draft != true }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # actions: read lets a push to main look up the pull-request run that
+    # recorded its tree. Nothing in this job writes through the token.
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      everything: ${{ steps.classify.outputs.everything }}
+      reason: ${{ steps.classify.outputs.reason }}
+      api-protocol-postgres: ${{ steps.classify.outputs.api-protocol-postgres }}
+      launch-core: ${{ steps.classify.outputs.launch-core }}
+      launch-browser: ${{ steps.classify.outputs.launch-browser }}
+      native-macos-secret: ${{ steps.classify.outputs.native-macos-secret }}
+      care-before-learning: ${{ steps.classify.outputs.care-before-learning }}
+      witnessed-agent-economy: ${{ steps.classify.outputs.witnessed-agent-economy }}
+      packages: ${{ steps.classify.outputs.packages }}
+      sdk-python: ${{ steps.classify.outputs.sdk-python }}
+      proven: ${{ steps.proof.outputs.proven }}
+      sdk-python-rest: ${{ steps.proof.outputs.sdk-python-rest }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Classify the pull request's changed paths
+        id: classify
+        env:
+          CI_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CI_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bin/bash-without-env-hooks.sh bin/ci-changed-areas.sh
+      - name: Explain the private YUTABASE fixture coverage boundary
+        if: github.event_name == 'pull_request'
+        run: |
+          {
+            echo 'YUTABASE PostgreSQL integration is not run for pull requests. The private fixture is available only to trusted pushes to cambridgetcg/agenttool main.'
+            echo 'The Data, ADDS, and SDK job still checks the credential-free projector tests. This notice is not a PostgreSQL integration pass.'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Name the tree this pull request tests and the main commit under it
+        id: tree
+        # Only a pull request into main: one stacked on another branch tested
+        # its change against that branch, not against main.
+        if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}
+        # A failure here only means the push to main runs every job.
+        continue-on-error: true
+        env:
+          CI_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          tree="$(git rev-parse --verify "$GITHUB_SHA^{tree}")"
+          # GitHub's test merge: its first parent is the main commit it tested
+          # on and its second is the pull request's head.
+          read -r _ parent head rest <<<"$(git rev-list --parents -n 1 "$GITHUB_SHA")"
+          test -n "$head"
+          test "$head" = "$CI_PR_HEAD_SHA"
+          test -z "$rest"
+          printf '%s\n' "$GITHUB_SHA" >"$RUNNER_TEMP/ci-tested-tree.txt"
+          printf 'tree=%s\nparent=%s\n' "$tree" "$parent" >>"$GITHUB_OUTPUT"
+      - name: Record the tested tree for the push to main
+        # The push trusts this record only after this whole run has passed and
+        # only when main has not moved since. A missing record only means that
+        # push runs every job.
+        if: ${{ github.event_name == 'pull_request' && steps.tree.outputs.tree != '' && steps.tree.outputs.parent != '' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: ci-tested-tree-${{ steps.tree.outputs.tree }}-on-${{ steps.tree.outputs.parent }}
+          path: ${{ runner.temp }}/ci-tested-tree.txt
+          retention-days: 14
+          if-no-files-found: error
+          overwrite: true
+      - name: Look for a green pull-request run of this exact tree
+        id: proof
+        if: ${{ github.event_name == 'push' }}
+        # The script reports every expected failure as `proven=false`. Should
+        # it still crash, `proven` stays unset and this push runs every job;
+        # the crash must not also fail the required aggregate.
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: bin/bash-without-env-hooks.sh bin/ci-tree-proof.sh
+
+  api-protocol-linux:
+    name: API and protocol (Linux)
+    needs:
+      - changes
+    # Never filtered by path. Skipped only for a draft, or for a proven push
+    # to main (see Changed areas).
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.proven == 'true') }}
+    runs-on: ubuntu-24.04
+    # The complete gate can exceed 20m on shared runners; match deploy-api's
+    # bounded allowance while keeping every test and the required aggregate.
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Bun 1.3.5
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.5
+      - name: Prepare API and protocol dependencies from lockfiles
+        run: bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh api
+      - name: Run hermetic API and protocol gate
+        run: bin/bash-without-env-hooks.sh bin/preflight.sh api
+
+  api-protocol-postgres:
+    # One job for the PostgreSQL 16 and 17 holds and the launch transaction and
+    # admission proofs, which were each under a billed minute on their own and
+    # are selected by exactly the same paths. Once dependencies are prepared,
+    # every proof step runs even after another fails, and a failed step's name
+    # says which proof and which PostgreSQL version.
+    name: API PostgreSQL holds and launch transactions
+    needs:
+      - changes
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.api-protocol-postgres == 'false')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    services:
+      postgres-16:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: generation-hold-test-only
+          POSTGRES_DB: agenttool_generation_hold
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d agenttool_generation_hold"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      postgres-17:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: generation-hold-test-only
+          POSTGRES_DB: agenttool_generation_hold
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d agenttool_generation_hold"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Bun 1.3.5
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.5
+      - name: Prepare API dependencies from lockfiles
+        id: prepare
+        run: bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh api
+      - name: Prove the durable generation hold (PostgreSQL 16)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          FEDERATION_GENERATION_HOLD_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_generation_hold
+        run: bun test tests/integration/federation-generation-hold-postgres.test.ts
+      - name: Create an isolated context-grant fixture database (PostgreSQL 16)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          PGPASSWORD: generation-hold-test-only
+        run: createdb --host=127.0.0.1 --port=5432 --username=postgres agenttool_local_context_grants_test
+      - name: Prove context-grant lifecycle, constraints and lock ordering (PostgreSQL 16)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          LOCAL_CONTEXT_GRANT_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_local_context_grants_test
+        run: bun test tests/integration/local-context-grants-postgres.test.ts
+      - name: Create an isolated collaboration mission fixture database (PostgreSQL 16)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          PGPASSWORD: generation-hold-test-only
+        run: createdb --host=127.0.0.1 --port=5432 --username=postgres agenttool_collaboration_missions_test
+      - name: Prove mission participation, revocation and exact replay (PostgreSQL 16)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          COLLABORATION_MISSION_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_collaboration_missions_test
+        run: bun test tests/integration/collaboration-missions-postgres.test.ts
+      - name: Create an isolated identity enrollment fixture database (PostgreSQL 16)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          PGPASSWORD: generation-hold-test-only
+        run: createdb --host=127.0.0.1 --port=5432 --username=postgres agenttool_identity_enrollment_test
+      - name: Prove atomic enrollment and concurrent replay refusal (PostgreSQL 16)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          IDENTITY_ENROLLMENT_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_identity_enrollment_test
+        run: bun test tests/integration/identity-enrollment-postgres.test.ts
+      - name: Prove the durable generation hold (PostgreSQL 17)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          FEDERATION_GENERATION_HOLD_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5433/agenttool_generation_hold
+        run: bun test tests/integration/federation-generation-hold-postgres.test.ts
+      - name: Create an isolated context-grant fixture database (PostgreSQL 17)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          PGPASSWORD: generation-hold-test-only
+        run: createdb --host=127.0.0.1 --port=5433 --username=postgres agenttool_local_context_grants_test
+      - name: Prove context-grant lifecycle, constraints and lock ordering (PostgreSQL 17)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          LOCAL_CONTEXT_GRANT_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5433/agenttool_local_context_grants_test
+        run: bun test tests/integration/local-context-grants-postgres.test.ts
+      - name: Create an isolated collaboration mission fixture database (PostgreSQL 17)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          PGPASSWORD: generation-hold-test-only
+        run: createdb --host=127.0.0.1 --port=5433 --username=postgres agenttool_collaboration_missions_test
+      - name: Prove mission participation, revocation and exact replay (PostgreSQL 17)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          COLLABORATION_MISSION_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5433/agenttool_collaboration_missions_test
+        run: bun test tests/integration/collaboration-missions-postgres.test.ts
+      - name: Create an isolated identity enrollment fixture database (PostgreSQL 17)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          PGPASSWORD: generation-hold-test-only
+        run: createdb --host=127.0.0.1 --port=5433 --username=postgres agenttool_identity_enrollment_test
+      - name: Prove atomic enrollment and concurrent replay refusal (PostgreSQL 17)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          IDENTITY_ENROLLMENT_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5433/agenttool_identity_enrollment_test
+        run: bun test tests/integration/identity-enrollment-postgres.test.ts
+      - name: Create an isolated launch marketplace fixture database (PostgreSQL 16)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          PGPASSWORD: generation-hold-test-only
+        run: createdb --host=127.0.0.1 --port=5432 --username=postgres agenttool_launch_marketplace
+      - name: Prove transaction locks and conservation in isolated PostgreSQL
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          AGENTTOOL_LAUNCH_MARKETPLACE_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_launch_marketplace
+          AGENTTOOL_DISABLE_WORKERS: "1"
+        run: bun test tests/integration/launch-marketplace-postgres.test.ts
+      - name: Prove shared admission windows with workers held
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          AGENTTOOL_LAUNCH_ADMISSION_TEST_REDIS_URL: redis://127.0.0.1:6379/15
+          AGENTTOOL_DISABLE_WORKERS: "1"
+        run: bun test tests/integration/launch-admission-redis.test.ts
+
+  launch-core:
+    name: Launch core outsider journey
+    needs:
+      - changes
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.launch-core == 'false')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Bun 1.3.5
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.5
+      - name: Prepare API dependencies from lockfiles
+        run: bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh api
+      - name: Build real PostgreSQL extension fixture
+        run: docker build --tag agenttool-launch-postgres:ci tests/launch-postgres
+      - name: Start a loopback-only database with scheduled jobs held
+        run: |
+          set -euo pipefail
+          launch_bun="$(readlink -f "$(command -v bun)")"
+          docker run --detach --name agenttool-launch-core-db \
+            --network none --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=512m \
+            --tmpfs /var/run/postgresql:rw,nosuid,size=16m \
+            --mount "type=bind,source=$GITHUB_WORKSPACE,target=$GITHUB_WORKSPACE,readonly" \
+            --mount "type=bind,source=$launch_bun,target=/usr/local/bin/bun,readonly" \
+            --env POSTGRES_USER=agenttool_test \
+            --env POSTGRES_DB=agenttool_launch_core \
+            --env POSTGRES_HOST_AUTH_METHOD=trust \
+            agenttool-launch-postgres:ci
+          test "$(docker inspect --format '{{.HostConfig.NetworkMode}}' agenttool-launch-core-db)" = none
+          docker exec agenttool-launch-core-db /usr/local/bin/bun --version | grep -Fx 1.3.5
+          for attempt in $(seq 1 60); do
+            if docker exec agenttool-launch-core-db psql --no-psqlrc \
+              --host 127.0.0.1 --port 56268 --username agenttool_test --dbname agenttool_launch_core \
+              --set ON_ERROR_STOP=1 --command 'SELECT 1' >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+      - name: Apply every canonical application migration while quiesced
+        run: |
+          set -euo pipefail
+          docker exec --workdir "$GITHUB_WORKSPACE" agenttool-launch-core-db \
+            env -i PATH=/usr/local/bin:/usr/bin:/bin \
+            DATABASE_URL='postgres://agenttool_test@127.0.0.1:56268/agenttool_launch_core?application_name=launch-core-survey' \
+            DATABASE_SESSION_URL='postgres://agenttool_test@127.0.0.1:56268/agenttool_launch_core?application_name=launch-core-migrations' \
+            bin/bash-without-env-hooks.sh bin/migrate-pending.sh --maintenance-quiesced
+          docker exec --workdir "$GITHUB_WORKSPACE" agenttool-launch-core-db \
+            env -i PATH=/usr/local/bin:/usr/bin:/bin \
+            DATABASE_URL='postgres://agenttool_test@127.0.0.1:56268/agenttool_launch_core?application_name=launch-core-survey' \
+            bin/bash-without-env-hooks.sh bin/migrate-pending.sh --dry-run
+          expected_migrations="$(find api/migrations -maxdepth 1 -type f -name '*.sql' | wc -l | tr -d ' ')"
+          actual_migrations="$(docker exec agenttool-launch-core-db psql --no-psqlrc --host 127.0.0.1 --port 56268 --username agenttool_test --dbname agenttool_launch_core --tuples-only --no-align --command 'SELECT count(*) FROM meta._migrations')"
+          test "$actual_migrations" = "$expected_migrations"
+          docker exec agenttool-launch-core-db psql --no-psqlrc --host 127.0.0.1 --port 56268 --username agenttool_test --dbname agenttool_launch_core --file /opt/agenttool-launch/verify.sql
+      - name: Prove the real outsider journey in two fresh API processes
+        run: |
+          docker exec --workdir "$GITHUB_WORKSPACE/api" agenttool-launch-core-db \
+            env -i PATH=/usr/local/bin:/usr/bin:/bin \
+            AGENTTOOL_LAUNCH_CORE_TEST_DATABASE_URL=postgres://agenttool_test@127.0.0.1:56268/agenttool_launch_core \
+            bun --no-env-file test tests/integration/launch-core-journey.test.ts
+      - name: Verify the database job and outbound-request hold after the journey
+        run: docker exec agenttool-launch-core-db psql --no-psqlrc --host 127.0.0.1 --port 56268 --username agenttool_test --dbname agenttool_launch_core --file /opt/agenttool-launch/verify.sql
+      - name: Show failed fixture startup evidence
+        if: failure()
+        run: docker logs --tail 100 agenttool-launch-core-db
+      - name: Remove only the disposable launch fixture
+        if: always()
+        run: |
+          docker rm --force --volumes agenttool-launch-core-db || true
+
+  launch-browser:
+    name: Launch browser journeys
+    needs:
+      - changes
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.launch-browser == 'false')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node 20.19.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20.19.0
+          package-manager-cache: false
+      - name: Install the locked browser test dependencies
+        working-directory: tests/playwright
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install the matching Chromium browser
+        working-directory: tests/playwright
+        run: npx --no-install playwright install --with-deps chromium
+      - name: Exercise static origins with contained API fixtures
+        working-directory: tests/playwright
+        run: npm test
+      - name: Retain failed browser evidence
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: launch-browser-failures
+          path: tests/playwright/test-results
+          retention-days: 7
+
+  native-macos-secret:
+    name: Native macOS secret helper
+    needs:
+      - changes
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.native-macos-secret == 'false')) }}
+    runs-on: macos-15
+    timeout-minutes: 8
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify the native toolchain
+        shell: /bin/bash --noprofile --norc -eo pipefail {0}
+        run: |
+          set -euo pipefail
+          test "$(/usr/bin/xcodebuild -version | /usr/bin/sed -n '1p')" = "Xcode 16.4"
+          test "$(/usr/bin/xcodebuild -version | /usr/bin/sed -n '2p')" = "Build version 16F6"
+          /usr/bin/xcrun swift --version | /usr/bin/grep -F "Apple Swift version 6.1.2" >/dev/null
+      - name: Build the fixed disposable integration executable
+        shell: /bin/bash --noprofile --norc -eo pipefail {0}
+        run: >-
+          /usr/bin/xcrun swift build
+          --package-path native/agenttool-secret-macos
+          --scratch-path "$RUNNER_TEMP/agenttool-secret-macos-integration"
+          --disable-keychain
+          --disable-netrc
+          --disable-prefetching
+          -Xswiftc -DAGENTTOOL_KEYCHAIN_INTEGRATION_BUILD
+      - name: Build the unsigned review artifact without publishing it
+        shell: /bin/bash --noprofile --norc -eo pipefail {0}
+        run: |
+          set -euo pipefail
+          /usr/bin/xcrun swift build \
+            --package-path native/agenttool-secret-macos \
+            --disable-keychain \
+            --disable-netrc \
+            --disable-prefetching \
+            --configuration release
+          native_release_bin_dir="$(/usr/bin/xcrun swift build \
+            --package-path native/agenttool-secret-macos \
+            --disable-keychain \
+            --disable-netrc \
+            --disable-prefetching \
+            --configuration release \
+            --show-bin-path)"
+          test -x "$native_release_bin_dir/agenttool-secret-macos"
+          if native_release_output="$(
+            "$native_release_bin_dir/agenttool-secret-macos" fixture-attest 2>&1
+          )"; then
+            exit 1
+          else
+            native_release_status=$?
+          fi
+          test "$native_release_status" -eq 2
+          test "$native_release_output" = 'agenttool-secret-macos:invalid_invocation'
+      - name: Run native contract and disposable Keychain integration tests
+        env:
+          AGENTTOOL_KEYCHAIN_INTEGRATION: "1"
+        shell: /bin/bash --noprofile --norc -eo pipefail {0}
+        run: |
+          set -euo pipefail
+          native_bin_dir="$(/usr/bin/xcrun swift build \
+            --package-path native/agenttool-secret-macos \
+            --scratch-path "$RUNNER_TEMP/agenttool-secret-macos-integration" \
+            --disable-keychain \
+            --disable-netrc \
+            --disable-prefetching \
+            -Xswiftc -DAGENTTOOL_KEYCHAIN_INTEGRATION_BUILD \
+            --show-bin-path)"
+          test -x "$native_bin_dir/agenttool-secret-macos"
+          export AGENTTOOL_SECRET_MACOS_BINARY="$native_bin_dir/agenttool-secret-macos"
+          native_production_bin_dir="$(/usr/bin/xcrun swift build \
+            --package-path native/agenttool-secret-macos \
+            --disable-keychain \
+            --disable-netrc \
+            --disable-prefetching \
+            --configuration release \
+            --show-bin-path)"
+          test -x "$native_production_bin_dir/agenttool-secret-macos"
+          export AGENTTOOL_SECRET_MACOS_PRODUCTION_BINARY="$native_production_bin_dir/agenttool-secret-macos"
+          /usr/bin/xcrun swift test \
+            --package-path native/agenttool-secret-macos \
+            --disable-keychain \
+            --disable-netrc \
+            --disable-prefetching \
+            --no-parallel
+
+  care-before-learning:
+    # One job, not a Node matrix: each leg was under a billed minute. The
+    # Python steps never start Node, so they run once; the Dataset conformance
+    # reference runs under both pinned Node versions. The conformance runs and
+    # the HF smoke still run after an earlier step fails, so one failure does
+    # not hide another.
+    name: Care before learning (Node 22.18.0 and 25.2.1)
+    needs:
+      - changes
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.care-before-learning == 'false')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out exact CI source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Set up Node 22.18.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.18.0
+          package-manager-cache: false
+      - name: Set up Python 3.12.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12.12"
+      - name: Test release tooling without credentials
+        run: env -i PATH="$PATH" LANG=C TZ=UTC GITHUB_SHA="$GITHUB_SHA" python3 -I -B -m unittest discover -s bin/tests -p test_care_before_learning_hf_release.py
+      - name: Verify the fixed public artifact inventory
+        run: env -i PATH="$PATH" LANG=C TZ=UTC GITHUB_SHA="$GITHUB_SHA" python3 bin/care-before-learning-hf-release.py verify
+      - name: Run the public Dataset conformance reference (Node 22.18.0)
+        if: ${{ !cancelled() }}
+        run: |
+          test "$(node --version)" = v22.18.0
+          env -i PATH="$PATH" LANG=C TZ=UTC node packages/hf-listening-room/hf/dataset/conformance/run.mjs --json
+      - name: Smoke the hash-locked Linux HF SDK without provider calls
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          smoke_venv="$RUNNER_TEMP/care-hf-smoke"
+          env -i PATH="$PATH" LANG=C TZ=UTC python3 -I -B -m venv "$smoke_venv"
+          env -i PATH="$PATH" LANG=C TZ=UTC HOME="$RUNNER_TEMP" \
+            "$smoke_venv/bin/python" -I -B -m pip --isolated install \
+            --require-hashes --only-binary=:all: --no-input --disable-pip-version-check \
+            -r bin/care-before-learning-hf-requirements.txt
+          env -i PATH="$PATH" LANG=C TZ=UTC HOME="$RUNNER_TEMP" \
+            HF_HUB_OFFLINE=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 HF_HUB_DISABLE_TELEMETRY=1 \
+            "$smoke_venv/bin/python" -I -B - <<'PY'
+          import inspect
+          import huggingface_hub
+          from huggingface_hub import HfApi, CommitOperationAdd, set_client_factory
+
+          assert huggingface_hub.__version__ == "1.29.0"
+          assert callable(set_client_factory)
+          assert {"operations", "parent_commit", "revision", "create_pr", "run_as_future"} <= set(
+              inspect.signature(HfApi.create_commit).parameters
+          )
+          operation = CommitOperationAdd(
+              path_in_repo="README.md", path_or_fileobj=b"offline-reference-smoke"
+          )
+          assert operation.path_in_repo == "README.md"
+          with operation.as_file() as content:
+              assert content.read() == b"offline-reference-smoke"
+          print("Hash-locked HF SDK import and offline API smoke passed.")
+          PY
+          env -i PATH="$PATH" LANG=C TZ=UTC HOME="$RUNNER_TEMP" GITHUB_SHA="$GITHUB_SHA" \
+            HF_HUB_OFFLINE=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 HF_HUB_DISABLE_TELEMETRY=1 \
+            "$smoke_venv/bin/python" -I -B -m unittest discover \
+            -s bin/tests -p test_care_before_learning_hf_release.py
+      - name: Set up Node 25.2.1
+        if: ${{ !cancelled() }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 25.2.1
+          package-manager-cache: false
+      - name: Run the public Dataset conformance reference (Node 25.2.1)
+        if: ${{ !cancelled() }}
+        run: |
+          test "$(node --version)" = v25.2.1
+          env -i PATH="$PATH" LANG=C TZ=UTC node packages/hf-listening-room/hf/dataset/conformance/run.mjs --json
+
+  api-protocol:
+    # Keep this display name stable for the protected-branch status context.
+    # The required result fails unless the change classifier and the Linux
+    # gate pass and every other prerequisite passes. A prerequisite may be
+    # skipped only when the classifier succeeded and reported it "false".
+    # A draft pull request skips this result along with everything else, as
+    # does a proven push to main (see Changed areas).
+    name: API and protocol
+    if: ${{ always() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.proven == 'true') }}
+    needs:
+      - changes
+      - api-protocol-linux
+      - api-protocol-postgres
+      - launch-core
+      - launch-browser
+      - native-macos-secret
+      - care-before-learning
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Require Linux API, PostgreSQL, and native macOS results
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          API_PROTOCOL_LINUX_RESULT: ${{ needs.api-protocol-linux.result }}
+          API_PROTOCOL_POSTGRES_RESULT: ${{ needs.api-protocol-postgres.result }}
+          API_PROTOCOL_POSTGRES_NEEDED: ${{ needs.changes.outputs.api-protocol-postgres }}
+          LAUNCH_CORE_RESULT: ${{ needs.launch-core.result }}
+          LAUNCH_CORE_NEEDED: ${{ needs.changes.outputs.launch-core }}
+          LAUNCH_BROWSER_RESULT: ${{ needs.launch-browser.result }}
+          LAUNCH_BROWSER_NEEDED: ${{ needs.changes.outputs.launch-browser }}
+          NATIVE_MACOS_SECRET_RESULT: ${{ needs.native-macos-secret.result }}
+          NATIVE_MACOS_SECRET_NEEDED: ${{ needs.changes.outputs.native-macos-secret }}
+          CARE_BEFORE_LEARNING_RESULT: ${{ needs.care-before-learning.result }}
+          CARE_BEFORE_LEARNING_NEEDED: ${{ needs.changes.outputs.care-before-learning }}
+        run: |
+          set -euo pipefail
+          test "$CHANGES_RESULT" = "success"
+          test "$API_PROTOCOL_LINUX_RESULT" = "success"
+          for prerequisite in \
+            "$API_PROTOCOL_POSTGRES_RESULT:$API_PROTOCOL_POSTGRES_NEEDED" \
+            "$LAUNCH_CORE_RESULT:$LAUNCH_CORE_NEEDED" \
+            "$LAUNCH_BROWSER_RESULT:$LAUNCH_BROWSER_NEEDED" \
+            "$NATIVE_MACOS_SECRET_RESULT:$NATIVE_MACOS_SECRET_NEEDED" \
+            "$CARE_BEFORE_LEARNING_RESULT:$CARE_BEFORE_LEARNING_NEEDED"
+          do
+            case "$prerequisite" in
+              success:* | skipped:false) ;;
+              *)
+                echo "A required prerequisite did not pass: $prerequisite" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+  witnessed-agent-economy:
+    # Keep this display name stable for the protected-branch status context.
+    name: Witnessed agent economy
+    needs:
+      - changes
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.witnessed-agent-economy == 'false')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Bun 1.3.5
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.5
+      - name: Set up Node 20.19.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20.19.0
+          package-manager-cache: false
+      - name: Build exact local source dependencies from frozen locks
+        shell: /usr/bin/env -u BASH_ENV -u ENV /bin/bash --noprofile --norc -eo pipefail {0}
+        run: |
+          set -euo pipefail
+          source bin/hermetic-env.sh
+          sanitize_hermetic_env
+          for package in \
+            public-surface-binding \
+            public-surface-recognition \
+            wallet
+          do
+            (cd "packages/$package" && bun install --frozen-lockfile && bun run build)
+          done
+      - name: Install witnessed-agent-economy from its frozen lock
+        shell: /usr/bin/env -u BASH_ENV -u ENV /bin/bash --noprofile --norc -eo pipefail {0}
+        run: |
+          set -euo pipefail
+          source bin/hermetic-env.sh
+          sanitize_hermetic_env
+          cd packages/witnessed-agent-economy
+          bun install --frozen-lockfile
+      - name: Run the offline projection gate
+        shell: /usr/bin/env -u BASH_ENV -u ENV /bin/bash --noprofile --norc -eo pipefail {0}
+        run: |
+          set -euo pipefail
+          source bin/hermetic-env.sh
+          sanitize_hermetic_env
+          cd packages/witnessed-agent-economy
+          bun run ci
+      - name: Dry-run package inventory and smoke every export target
+        shell: /usr/bin/env -u BASH_ENV -u ENV /bin/bash --noprofile --norc -eo pipefail {0}
+        run: |
+          set -euo pipefail
+          source bin/hermetic-env.sh
+          sanitize_hermetic_env
+          cd packages/witnessed-agent-economy
+          pack_inventory="$RUNNER_TEMP/witnessed-agent-economy-pack.json"
+          npm pack --dry-run --ignore-scripts --json >"$pack_inventory"
+          node --input-type=module - "$pack_inventory" <<'NODE'
+          import { readFileSync, statSync } from "node:fs";
+          import { resolve } from "node:path";
+          import { pathToFileURL } from "node:url";
+
+          const inventory = JSON.parse(readFileSync(process.argv[2], "utf8"));
+          const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
+          const packed = new Set(inventory[0].files.map(({ path }) => path));
+          const schemaFiles = [...packed].filter((path) =>
+            path.startsWith("schema/") && path.endsWith(".schema.json"));
+          if (schemaFiles.length !== 15) process.exit(1);
+          const targets = [
+            packageJson.exports["."].import,
+            packageJson.exports["."].types,
+            packageJson.exports["./vectors.json"],
+            ...schemaFiles.map((path) => packageJson.exports["./schemas/*"].replace(
+              "*",
+              path.slice("schema/".length),
+            )),
+          ];
+          for (const target of targets) {
+            if (typeof target !== "string" || !target.startsWith("./")) process.exit(1);
+            if (!statSync(resolve(target)).isFile() || !packed.has(target.slice(2))) process.exit(1);
+          }
+          const vectors = JSON.parse(readFileSync(packageJson.exports["./vectors.json"], "utf8"));
+          if (
+            vectors.freeze_state !== "FROZEN"
+            || vectors.schema_set_digest !== "sha256:d62e44643c8e1986336416237df26b76663728403d417a5ee9e83b6aa5baaaa5"
+            || vectors.corpus_digest !== "sha256:b26b5cce4899aa62d6dee03e25471e2c80810008fbd07c2c3ac9170164e5352a"
+          ) process.exit(1);
+          const module = await import(pathToFileURL(resolve(packageJson.exports["."].import)).href);
+          if (
+            module.WITNESS_PROTOCOL !== "kingdom.witnessed-agent-economy/0.1"
+            || typeof module.verifyWitnessRecordBytes !== "function"
+          ) process.exit(1);
+          NODE
+
+  packages:
+    # Keep this display name aligned with the protected-branch status context.
+    # The job still installs and gates data-sync below.
+    name: Data, ADDS, and SDK
+    needs:
+      - changes
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.packages == 'false')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Bun 1.3.5
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.5
+      - name: Set up Node 22.18.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.18.0
+          package-manager-cache: false
+      - name: Set up Python 3.14 for the private HF training host
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: packages/hf-training-host/pyproject.toml
+      - name: Prepare package-gate dependencies
+        run: bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh packages
+      - name: Run hermetic data, ADDS, sync, archive, Dark Continent, WAKE continuity, Principality Geometry and Atlas, Polymorph and Memetic Landscapes, Common Ground Atlas, KINGDOM research, KARMA Mirror, HEAVEN, LOVE BOMB, Living Substrate, Dataset Influence, Economic Kernel, WAKE Thread, Gin Reconstruction, Math Cards, broker, collab, Codex usage, collab-zerone, Browser, HF Scout, HF Training Garden/host, local learning fixtures, projection, constructive-intelligence, Trials, Skills, SDK, Wallet, Zerone adapter, Telescope, Public Surface Binding and Recognition, Alchemy, and KINGDOM gate
+        run: bin/bash-without-env-hooks.sh bin/preflight.sh packages
+      - name: Smoke packed Alchemy read package under Node and Bun
+        working-directory: packages/alchemy
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
+          smoke='import("@agenttool/alchemy").then(m=>{if(m.PACKAGE_VERSION!=="0.1.0-dev.1"||Object.keys(m.ALCHEMY_NETWORKS).length!==10||typeof m.createAlchemyReadClient!=="function"||typeof m.createEvmObservationEvidence!=="function"||typeof m.parseEvmObservationEvidence!=="function"||typeof m.canonicalEvmObservationEvidenceBytes!=="function"||typeof m.compareEvmFinality!=="function"||typeof m.createEvmEvidenceTransitionReceipt!=="function"||typeof m.parseEvmEvidenceTransitionReceipt!=="function"||typeof m.canonicalEvmEvidenceTransitionReceiptBytes!=="function"||typeof m.projectEvmEvidenceMeasurement!=="function"||typeof m.EVM_OBSERVATION_EVIDENCE_FORMAT!=="string"||typeof m.EVM_EVIDENCE_TRANSITION_RECEIPT_FORMAT!=="string"||typeof m.EVM_MEASUREMENT_PROJECTION_FORMAT!=="string"||typeof m.EVM_EVIDENCE_NON_GRANTS!=="object"||m.EVM_EVIDENCE_NON_GRANTS===null||"rawRpc"in m||"request"in m)process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke")
+          (cd "$install_dir" && bun -e "$smoke")
+      - name: Smoke the packed TypeScript SDK under Node and Bun
+        working-directory: packages/sdk-ts
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
+          smoke='import("@agenttool/sdk").then(m=>{const p={subject_id:"550e8400-e29b-41d4-a716-446655440002",attester_id:"550e8400-e29b-41d4-a716-446655440001",kid:"550e8400-e29b-41d4-a716-446655440010",claim:"packed"};if(typeof m.AgentTool!=="function"||m.canonicalIdentityAttestationBytes(p).length!==32)process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke")
+          (cd "$install_dir" && bun -e "$smoke")
+      - name: Smoke packed credential broker under Node and Bun
+        working-directory: packages/credential-broker
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
+          smoke='Promise.all([import("@agenttool/credential-broker"),import("@agenttool/credential-broker/testing")]).then(([m,t])=>{if(m.AGENTCRED_PROTOCOL!=="agentcred/0.1"||typeof m.AgentCredClient!=="function"||typeof t.InMemoryCredentialSource!=="function")process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke")
+          (cd "$install_dir" && bun -e "$smoke")
+          cli="$install_dir/node_modules/@agenttool/credential-broker/dist/cli.js"
+          test -x "$install_dir/node_modules/.bin/agentcred"
+          set +e
+          node "$cli" >"$install_dir/cli.stdout" 2>"$install_dir/cli.stderr"
+          cli_status="$?"
+          set -e
+          test "$cli_status" -eq 2
+          test ! -s "$install_dir/cli.stdout"
+          grep -q '^usage: agentcred serve --config ' "$install_dir/cli.stderr"
+      - name: Smoke packed Alchemy, AgentCred, and adapter together under Node and Bun
+        shell: bash
+        run: |
+          set -euo pipefail
+          alchemy_archive_name="$(cd packages/alchemy && npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          broker_archive_name="$(cd packages/credential-broker && npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          adapter_archive_name="$(cd packages/alchemy-agentcred && npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          alchemy_tarball="$PWD/packages/alchemy/$alchemy_archive_name"
+          broker_tarball="$PWD/packages/credential-broker/$broker_archive_name"
+          adapter_tarball="$PWD/packages/alchemy-agentcred/$adapter_archive_name"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$alchemy_tarball" "$broker_tarball" "$adapter_tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$alchemy_tarball" "$broker_tarball" "$adapter_tarball"
+          smoke='Promise.all([import("@agenttool/alchemy"),import("@agenttool/credential-broker"),import("@agenttool/alchemy-agentcred")]).then(([a,c,x])=>{if(a.PACKAGE_VERSION!=="0.1.0-dev.1"||typeof a.createAlchemyReadClient!=="function"||typeof a.createEvmObservationEvidence!=="function"||typeof a.createEvmEvidenceTransitionReceipt!=="function"||typeof a.projectEvmEvidenceMeasurement!=="function"||c.AGENTCRED_PROTOCOL!=="agentcred/0.1"||typeof c.AgentCredClient!=="function"||x.PACKAGE_VERSION!=="0.1.0-dev.1"||x.ADAPTER_PROTOCOL!=="agenttool.alchemy-agentcred/0.1"||typeof x.createAlchemyAgentCredTransport!=="function"||"rawRpc"in x||"request"in x)process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke")
+          (cd "$install_dir" && bun -e "$smoke")
+          node --input-type=module --eval '
+            import { readFileSync } from "node:fs";
+            const pkg = JSON.parse(readFileSync(process.argv[1], "utf8"));
+            if (
+              Object.hasOwn(pkg, "dependencies")
+              || JSON.stringify(pkg.peerDependencies) !== JSON.stringify({
+                "@agenttool/alchemy": "^0.1.0-dev.1",
+                "@agenttool/credential-broker": "^0.3.0",
+              })
+            ) process.exit(1);
+          ' "$install_dir/node_modules/@agenttool/alchemy-agentcred/package.json"
+      - name: Smoke packed Agent Skills under Node and Bun
+        working-directory: packages/skills
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
+          smoke='import("@agenttool/skills").then(m=>{if(typeof m.inspectLocalSkills!=="function"||typeof m.stableStringify!=="function")process.exit(1)})'
+          schema_smoke='import("@agenttool/skills/report.schema.json",{with:{type:"json"}}).then(m=>{if(m.default.title!=="AgentTool Skills inspection report v0.1")process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke" && node -e "$schema_smoke")
+          (cd "$install_dir" && bun -e "$smoke" && bun -e "$schema_smoke")
+          package_root="$install_dir/node_modules/@agenttool/skills"
+          cli="$package_root/dist/bin.js"
+          test -x "$install_dir/node_modules/.bin/agenttool-skill"
+          test "$("$install_dir/node_modules/.bin/agenttool-skill" --version)" = "0.3.3"
+          test "$(node "$cli" --version)" = "0.3.3"
+          test "$(bun "$cli" --version)" = "0.3.3"
+          node "$cli" validate "$package_root/skills/use-agentcred-safely" >"$install_dir/report.json"
+          node --input-type=module --eval '
+            import { readFileSync } from "node:fs";
+            const report = JSON.parse(readFileSync(process.argv[1], "utf8"));
+            if (
+              report.valid !== true
+              || report.kind !== "agenttool.skills.inspection"
+              || report.skills.length !== 1
+              || report.skills[0].name !== "use-agentcred-safely"
+              || Object.hasOwn(report, "installPlan")
+            ) process.exit(1);
+          ' "$install_dir/report.json"
+          node "$cli" validate "$package_root/skills/manage-agentcred-lifecycle" >"$install_dir/manage-agentcred-lifecycle-report.json"
+          node --input-type=module --eval '
+            import { readFileSync } from "node:fs";
+            const report = JSON.parse(readFileSync(process.argv[1], "utf8"));
+            if (
+              report.valid !== true
+              || report.kind !== "agenttool.skills.inspection"
+              || report.skills.length !== 1
+              || report.skills[0].name !== "manage-agentcred-lifecycle"
+              || report.skills[0].scripts.length !== 0
+              || report.skills[0].resources.length !== 1
+              || report.skills[0].resources[0] !== "agents/openai.yaml"
+              || Object.hasOwn(report, "installPlan")
+            ) process.exit(1);
+          ' "$install_dir/manage-agentcred-lifecycle-report.json"
+          node "$cli" validate "$package_root/skills/capability-conductor" >"$install_dir/capability-conductor-report.json"
+          node --input-type=module --eval '
+            import { readFileSync } from "node:fs";
+            const report = JSON.parse(readFileSync(process.argv[1], "utf8"));
+            if (
+              report.valid !== true
+              || report.kind !== "agenttool.skills.inspection"
+              || report.skills.length !== 1
+              || report.skills[0].name !== "capability-conductor"
+              || report.skills[0].scripts.length !== 0
+              || Object.hasOwn(report, "installPlan")
+            ) process.exit(1);
+          ' "$install_dir/capability-conductor-report.json"
+          node "$cli" validate "$package_root/skills/learn-by-contact" >"$install_dir/learn-by-contact-report.json"
+          node --input-type=module --eval '
+            import { readFileSync } from "node:fs";
+            const report = JSON.parse(readFileSync(process.argv[1], "utf8"));
+            if (
+              report.valid !== true
+              || report.kind !== "agenttool.skills.inspection"
+              || report.skills.length !== 1
+              || report.skills[0].name !== "learn-by-contact"
+              || report.skills[0].scripts.length !== 0
+              || Object.hasOwn(report, "installPlan")
+            ) process.exit(1);
+          ' "$install_dir/learn-by-contact-report.json"
+          for skill_name in \
+            nen-common-ground \
+            nen-math-card \
+            nen-contract-mantle \
+            nen-dependency-perimeter \
+            nen-concealed-trace \
+            nen-critical-path-forge \
+            nen-smoke-squad \
+            nen-verification-ledger \
+            nen-godspeed-loop \
+            nen-vow-forge
+          do
+            report_path="$install_dir/$skill_name-report.json"
+            node "$cli" validate "$package_root/skills/$skill_name" >"$report_path"
+            node --input-type=module --eval '
+              import { readFileSync } from "node:fs";
+              const report = JSON.parse(readFileSync(process.argv[1], "utf8"));
+              const expectedName = process.argv[2];
+              if (
+                report.valid !== true
+                || report.kind !== "agenttool.skills.inspection"
+                || report.skills.length !== 1
+                || report.skills[0].name !== expectedName
+                || report.skills[0].scripts.length !== 0
+                || report.skills[0].resources.length !== 1
+                || report.skills[0].resources[0] !== "agents/openai.yaml"
+                || Object.hasOwn(report, "installPlan")
+              ) process.exit(1);
+            ' "$report_path" "$skill_name"
+          done
+          (cd "$install_dir" && node --input-type=module --eval '
+            import { readFileSync } from "node:fs";
+            import { join } from "node:path";
+            import { parse } from "yaml";
+            const packageRoot = process.argv[1];
+            const names = [
+              "use-agentcred-safely",
+              "manage-agentcred-lifecycle",
+              "capability-conductor",
+              "learn-by-contact",
+              "nen-common-ground",
+              "nen-math-card",
+              "nen-contract-mantle",
+              "nen-dependency-perimeter",
+              "nen-concealed-trace",
+              "nen-critical-path-forge",
+              "nen-smoke-squad",
+              "nen-verification-ledger",
+              "nen-godspeed-loop",
+              "nen-vow-forge",
+            ];
+            for (const name of names) {
+              const sidecar = parse(readFileSync(
+                join(packageRoot, "skills", name, "agents", "openai.yaml"),
+                "utf8",
+              ));
+              if (sidecar.policy?.allow_implicit_invocation !== false) {
+                process.exit(1);
+              }
+            }
+          ' "$package_root")
+          test ! -e "$package_root/.codex-plugin/plugin.json"
+          test ! -e "$package_root/.claude-plugin/plugin.json"
+      - name: Smoke canonical Telescope LOVE artifact under Node and Bun
+        working-directory: packages/telescope
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/telescope/0.2.3/agenttool-telescope-0.2.3.tgz"
+          test -f "$tarball"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$tarball"
+          package_root="$install_dir/node_modules/@agenttool/telescope"
+          node -e 'const p=require(process.argv[1]);if(p.version!=="0.2.3")process.exit(1)' "$package_root/package.json"
+          smoke='import("@agenttool/telescope").then(m=>{const t=m.normalizeTarget("example.com");if(t.origin!=="https://example.com"||m.TOOL_VERSION!=="0.2.3"||m.REPORT_SCHEMA!=="agenttool-telescope/v0.2")process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke")
+          (cd "$install_dir" && bun -e "$smoke")
+          schema_smoke='import("@agenttool/telescope/report.schema.json",{with:{type:"json"}}).then(m=>{if(m.default.title!=="AgentTool Telescope report v0.2")process.exit(1)})'
+          (cd "$install_dir" && node -e "$schema_smoke")
+          (cd "$install_dir" && bun -e "$schema_smoke")
+          cli="$package_root/dist/cli.js"
+          test "$(node "$cli" --version)" = "0.2.3"
+          test "$(bun "$cli" --version)" = "0.2.3"
+          node "$cli" --help >/dev/null
+          bun "$cli" --help >/dev/null
+          manifest="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/sdk/0.22.1/manifest.json"
+          artifact="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/sdk/0.22.1/agenttool-sdk-0.22.1.tgz"
+          size="$(node --input-type=module --eval "import{readFileSync}from'node:fs';const m=JSON.parse(readFileSync(process.argv[1],'utf8'));process.stdout.write(String(m.artifact.size))" "$manifest")"
+          sha256="$(node --input-type=module --eval "import{readFileSync}from'node:fs';const m=JSON.parse(readFileSync(process.argv[1],'utf8'));process.stdout.write(m.artifact.sha256)" "$manifest")"
+          node "$cli" verify-package "$artifact" --size "$size" --sha256 "$sha256" --name @agenttool/sdk --version 0.22.1 --json >/dev/null
+          bun "$cli" verify-package "$artifact" --size "$size" --sha256 "$sha256" --name @agenttool/sdk --version 0.22.1 --json >/dev/null
+      - name: Smoke packed Agent Wallet and Zerone adapter together under Node and Bun
+        shell: bash
+        run: |
+          set -euo pipefail
+          wallet_archive_name="$(cd packages/wallet && npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          zerone_archive_name="$(cd packages/wallet-zerone && npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          wallet_tarball="$PWD/packages/wallet/$wallet_archive_name"
+          zerone_tarball="$PWD/packages/wallet-zerone/$zerone_archive_name"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$wallet_tarball" "$zerone_tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$wallet_tarball" "$zerone_tarball"
+          smoke='Promise.all([import("@agenttool/wallet"),import("@agenttool/wallet-zerone")]).then(([w,z])=>{const forbidden=/mnemonic|private.?key|secret|seed|signAndSend|custody/iu;if(w.PACKAGE_VERSION!=="0.1.3"||w.AGENT_WALLET_PROTOCOL!=="agent-wallet/0.1"||w.canonicalJson({b:2,a:1})!==JSON.stringify({a:1,b:2})||z.PACKAGE_VERSION!=="0.1.2"||z.ZERONE_ADAPTER_PROTOCOL!=="agent-wallet-zerone/0.1"||z.ZERONE_CORE_COMMIT!=="35284a22192df8fc6273135f14e8549c804778b6"||typeof z.createZeroneDirectSignPlan!=="function"||typeof z.createZeroneAdapterClient!=="function"||Object.keys(z).some(name=>forbidden.test(name)))process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke")
+          (cd "$install_dir" && bun -e "$smoke")
+          schema_smoke='import("@agenttool/wallet/schema.json",{with:{type:"json"}}).then(m=>{if(m.default.title!=="Agent Wallet 0.1 signed records")process.exit(1)})'
+          wallet_vectors_smoke='import("@agenttool/wallet/vectors.json",{with:{type:"json"}}).then(m=>{if(m.default.protocol!=="agent-wallet/0.1"||m.default.records.length!==6)process.exit(1)})'
+          zerone_vectors_smoke='import("@agenttool/wallet-zerone/vectors.json",{with:{type:"json"}}).then(m=>{const v=m.default;if(v.schema!=="agent-wallet-zerone.go-cosmos-vectors/0.1"||v.provenance.zerone_core_commit!=="35284a22192df8fc6273135f14e8549c804778b6"||!Object.values(v.verified).every(Boolean))process.exit(1)})'
+          (cd "$install_dir" && node -e "$schema_smoke" && node -e "$wallet_vectors_smoke" && node -e "$zerone_vectors_smoke")
+          (cd "$install_dir" && bun -e "$schema_smoke" && bun -e "$wallet_vectors_smoke" && bun -e "$zerone_vectors_smoke")
+      - name: Smoke canonical Agent Browser LOVE artifact under Node and Bun
+        working-directory: packages/browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$GITHUB_WORKSPACE/apps/docs/packages/v1/@agenttool/browser/0.6.0/agenttool-browser-0.6.0.tgz"
+          test -f "$tarball"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$tarball"
+          package_root="$install_dir/node_modules/@agenttool/browser"
+          node -e 'const p=require(process.argv[1]);if(p.version!=="0.6.0")process.exit(1)' "$package_root/package.json"
+          smoke='Promise.all([import("@agenttool/browser"),import("@agenttool/browser/protocol"),import("@agenttool/browser/understanding")]).then(([m,p,u])=>{const sovereign=m.resolveBrowserCapabilities({authority:"sovereign"});const navigation=m.planBrowserAction({kind:"navigate",url:"https://example.com/?token=secret"},sovereign);const typed=m.planBrowserAction({kind:"type",ref:"e1",snapshotId:"snapshot-1",text:"must-not-cross"},sovereign);if(m.BROWSER_PACKAGE_VERSION!=="0.6.0"||typeof m.AgentBrowser!=="function"||typeof m.buildBrowserMcpServer!=="function"||typeof m.serveBrowserMcpStdio!=="function"||typeof m.resolveBrowserCapabilities!=="function"||typeof m.planBrowserAction!=="function"||m.OBSERVATION_SCHEMA!=="agent-browser-observation/0.2"||m.BROWSER_CAPABILITIES_SCHEMA!=="agent-browser-capabilities/0.4"||m.BROWSER_CONSEQUENCE_PLAN_SCHEMA!=="agent-browser-consequence-plan/0.2"||m.BROWSER_ACTION_RECEIPT_SCHEMA!=="agent-browser-action-receipt/0.1"||u.BROWSER_MATERIAL_SCHEMA!=="agent-browser-material/0.1"||u.BROWSER_RHETORIC_SCHEMA!=="agent-browser-rhetoric-observation/0.1"||u.BROWSER_MODEL_OBSERVATION_SCHEMA!=="agent-browser-model-observation/0.1"||u.BROWSER_UNDERSTANDING_SCHEMA!=="agent-browser-understanding/0.1"||typeof u.createBrowserMaterial!=="function"||typeof u.analyzeBrowserMaterial!=="function"||typeof u.interpretBrowserMaterial!=="function"||typeof u.assembleBrowserUnderstanding!=="function"||u.BROWSER_UNDERSTANDING_BOUNDARY.truth!=="not_determined"||sovereign.features.browserActReceipts!=="enabled"||sovereign.features.nonRefObservationBasis!=="enabled"||sovereign.interfaces.jsonl.version!=="agenttool-browser-jsonl/0.1"||sovereign.interfaces.mcp.modernRevision!=="2026-07-28"||sovereign.interfaces.mcp.legacyCompatibility!=="2025-era"||p.JSONL_PROTOCOL_VERSION!=="agenttool-browser-jsonl/0.1"||p.MCP_MODERN_PROTOCOL_REVISION!=="2026-07-28"||p.MCP_LEGACY_COMPATIBILITY!=="2025-era"||p.BROWSER_OPERATIONS.length!==9||JSON.stringify(sovereign.modelFacingOperations)!==JSON.stringify(p.BROWSER_OPERATIONS)||sovereign.network.reserved!==true||sovereign.network.webSockets!=="browser"||sovereign.network.redirectRevalidation!==false||sovereign.runtime.serviceWorkers!=="allow"||navigation.action.url.includes("secret")||Object.hasOwn(typed.action,"text")||JSON.stringify(typed).includes("must-not-cross"))process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke")
+          (cd "$install_dir" && bun -e "$smoke")
+          cli="$package_root/dist/bin/agenttool-browser.js"
+          test -x "$install_dir/node_modules/.bin/agenttool-browser"
+          node "$cli" help | grep -q '^agenttool-browser 0.6.0$'
+          bun "$cli" help | grep -q '^agenttool-browser 0.6.0$'
+          plugin_manifest="$package_root/.codex-plugin/plugin.json"
+          plugin_bundle="$package_root/dist/agenttool-browser-mcp.js"
+          node -e 'const p=require(process.argv[1]);if(p.name!=="agenttool-browser"||p.version!=="0.6.0"||p.mcpServers["agenttool-browser"].args[0]!=="dist/agenttool-browser-mcp.js")process.exit(1)' "$plugin_manifest"
+          test -f "$package_root/dist/THIRD_PARTY_LICENSES"
+          test -f "$package_root/dist/vendor/playwright-core/index.mjs"
+          node "$plugin_bundle" help | grep -q '^agenttool-browser 0.6.0$'
+      - name: Smoke packed Repo Archive under Node and Bun
+        working-directory: packages/repo-archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(npm pack --ignore-scripts --json | node -e 'let s=""; process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s)[0].filename))')"
+          install_dir="$(mktemp -d)"
+          trap 'rm -rf "$install_dir" "$tarball"' EXIT
+          npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
+          smoke='import("@agenttool/repo-archive").then(m=>{if(m.ARCHIVE_PROTOCOL!=="agent-repo-archive/v0.1"||typeof m.archiveRepository!=="function"||typeof m.restoreRepository!=="function")process.exit(1)})'
+          schema_smoke='import("@agenttool/repo-archive/schema.json",{with:{type:"json"}}).then(m=>{if(m.default.title!=="Agent Repo Archive 0.1 signed control records")process.exit(1)})'
+          vectors_smoke='import("@agenttool/repo-archive/vectors.json",{with:{type:"json"}}).then(m=>{if(m.default.protocol!=="agent-repo-archive/v0.1")process.exit(1)})'
+          (cd "$install_dir" && node -e "$smoke" && node -e "$schema_smoke" && node -e "$vectors_smoke")
+          (cd "$install_dir" && bun -e "$smoke" && bun -e "$schema_smoke" && bun -e "$vectors_smoke")
+          package_root="$install_dir/node_modules/@agenttool/repo-archive"
+          cli="$package_root/dist/cli.js"
+          test -x "$install_dir/node_modules/.bin/agent-repo-archive"
+          node "$cli" --help | grep -q '^Usage:$'
+          bun "$cli" --help | grep -q '^Usage:$'
+      - name: Verify the checked-in LOVE package registry
+        run: bun bin/build-love-packages.ts verify apps/docs
+
+  yutabase-projector-postgres:
+    name: YUTABASE projector (PostgreSQL ${{ matrix.postgres }})
+    # The environment separately permits only the main branch. PR code must
+    # receive neither the read key nor the private fixture it can download.
+    if: github.repository == 'cambridgetcg/agenttool' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: yutabase-fixture-read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ["16", "17"]
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: projector-test-only
+          POSTGRES_DB: yutabase_projector
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d yutabase_projector"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGPASSWORD: projector-test-only
+      AGENTTOOL_YUTABASE_TEST_DATABASE_URL: postgresql://postgres:projector-test-only@127.0.0.1:5432/yutabase_projector
+    steps:
+      - name: Require dedicated YUTABASE fixture read access
+        env:
+          YUTABASE_FIXTURE_SSH_KEY: ${{ secrets.YUTABASE_FIXTURE_SSH_KEY }}
+        run: |
+          if [ -z "${YUTABASE_FIXTURE_SSH_KEY:-}" ]; then
+            echo '::error::YUTABASE_FIXTURE_SSH_KEY is missing from the main-only yutabase-fixture-read environment. Provision a read-only deploy key for cambridgetcg/yutabase; local GitHub login does not grant runner access.'
+            exit 1
+          fi
+      - name: Check out AgentTool
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check out exact YUTABASE fixture
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: cambridgetcg/yutabase
+          ref: 2948ae3cd88a5e630257549f1e233f5f46a8129b
+          path: _yutabase-fixture
+          ssh-key: ${{ secrets.YUTABASE_FIXTURE_SSH_KEY }}
+          ssh-strict: true
+          persist-credentials: false
+      - name: Set up Bun 1.3.5
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.5
+      - name: Set up Node 20.19.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20.19.0
+          package-manager-cache: false
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+      - name: Install and build projection dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd packages/correspondence-yutabase && bun install --frozen-lockfile && bun run build)
+          (cd packages/correspondence-yutabase-projector && bun install --frozen-lockfile)
+          (cd _yutabase-fixture/packages/sdk-ts && bun install --frozen-lockfile)
+      - name: Install exact YUTABASE candidate schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$AGENTTOOL_YUTABASE_TEST_DATABASE_URL" \
+            --no-psqlrc \
+            --single-transaction \
+            --set=ON_ERROR_STOP=1 \
+            --file "_yutabase-fixture/sql/0001_yu_core.sql" \
+            --file "_yutabase-fixture/sql/0002_starter_lexicon.sql"
+          for migration in \
+            0004_candidate_hardening.sql \
+            0005_candidate_integrity.sql
+          do
+            psql "$AGENTTOOL_YUTABASE_TEST_DATABASE_URL" \
+              --no-psqlrc \
+              --single-transaction \
+              --set=ON_ERROR_STOP=1 \
+              --file "_yutabase-fixture/sql/$migration"
+          done
+      - name: Run destructive disposable-database integration gate
+        working-directory: packages/correspondence-yutabase-projector
+        run: bun run test:postgres
+      - name: Revalidate exact YUTABASE binding after projector activity
+        working-directory: _yutabase-fixture/packages/sdk-ts
+        run: >-
+          bun src/cli.ts hello
+          --conn "$AGENTTOOL_YUTABASE_TEST_DATABASE_URL"
+          --json
+          >/dev/null
+
+  sdk-python:
+    name: Python SDK (${{ matrix.python-version }})
+    needs:
+      - changes
+    # A proven push to main runs this job only when its pull-request run
+    # tested the Python SDK, and then only on the versions that run skipped.
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && ((needs.changes.outputs.proven == 'true' && needs.changes.outputs.sdk-python-rest != 'true') || needs.changes.outputs.sdk-python == 'false')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # Pull requests test the SDK floor (3.9), the HF training host floor
+        # (3.10), and the newest version (3.14, which also smokes the uv lock).
+        # A proven push tests the rest on the same tree, so every tree that
+        # reaches main with a Python SDK change has passed on every version.
+        # Every other run tests each supported version.
+        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.9", "3.10", "3.14"]' || needs.changes.result == 'success' && needs.changes.outputs.proven == 'true' && '["3.11", "3.12", "3.13"]' || '["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]') }}
+    defaults:
+      run:
+        working-directory: packages/sdk-py
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            packages/sdk-py/pyproject.toml
+            packages/hf-training-host/pyproject.toml
+      - name: Set up release-pinned uv 0.9.26
+        if: ${{ matrix.python-version == '3.14' }}
+        uses: astral-sh/setup-uv@1e862dfacbd1d6d858c55d9b792c756523627244 # v7.1.4
+        with:
+          version: 0.9.26
+          enable-cache: false
+      - name: Smoke the locked release environment command
+        if: ${{ matrix.python-version == '3.14' }}
+        run: uv sync --locked --extra dev --no-install-project --no-sources --no-python-downloads --dry-run --no-cache
+      - name: Install SDK and test tools
+        run: python -m pip install '.[dev]' build
+      - name: Install private HF training host and test tools
+        if: ${{ matrix.python-version != '3.9' }}
+        working-directory: packages/hf-training-host
+        run: python -m pip install '.[dev]'
+      - name: Run Python SDK tests
+        run: python -m pytest -q
+      - name: Run private HF training host tests
+        if: ${{ matrix.python-version != '3.9' }}
+        working-directory: packages/hf-training-host
+        run: python -m pytest -q
+      - name: Build and smoke the wheel
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf dist build
+          python -m build
+          python -m pip install --force-reinstall --no-deps dist/*.whl
+          python -I -c 'import agenttool, importlib.metadata; assert agenttool.__version__ == importlib.metadata.version("agenttool-sdk"); assert len(agenttool.soul()) > 100'
+      - name: Build and smoke the private HF training host wheel
+        if: ${{ matrix.python-version != '3.9' }}
+        working-directory: packages/hf-training-host
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf dist build
+          python -m build
+          python - <<'PY'
+          from pathlib import Path
+          import tarfile
+          import zipfile
+
+          [sdist] = Path("dist").glob("*.tar.gz")
+          [wheel] = Path("dist").glob("*.whl")
+          with tarfile.open(sdist, "r:gz") as archive:
+              assert not any("bridge" in Path(name).parts for name in archive.getnames())
+          with zipfile.ZipFile(wheel) as archive:
+              names = archive.namelist()
+          assert not any("bridge" in Path(name).parts for name in names)
+          assert "agenttool_hf_training_host/schema/hf-training-host-decision-v0.1.schema.json" in names
+          assert "agenttool_hf_training_host/schema/hf-training-host-decision-v0.2.schema.json" in names
+          assert "agenttool_hf_training_host/schema/hf-training-host-freedom-decision-v0.1.schema.json" in names
+          PY
+          python -m pip install --force-reinstall --no-deps dist/*.whl
+          python -I -c 'import agenttool_hf_training_host as h, importlib.metadata; assert importlib.metadata.version("agenttool-hf-training-host") == "0.2.0.dev0"; assert h.TRANSFORMERS_VERSION == "5.14.1"; assert h.ACCELERATE_VERSION == "1.14.0"; assert h.TORCH_MIN_VERSION == "2.6"'

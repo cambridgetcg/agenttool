@@ -57,7 +57,7 @@ describe("static tool public documentation", () => {
   });
 
   test("separates the transport deadline from the terminable parser boundary", () => {
-    expect(read("README.md")).toContain("(docs/SAFETY-BOUNDARIES.md)");
+    expect(read("private/root/README.md")).toContain("(../../docs/SAFETY-BOUNDARIES.md)");
     const sources = [
       read("api/README.md"),
       read("docs/SAFETY-BOUNDARIES.md"),
