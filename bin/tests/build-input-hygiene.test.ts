@@ -618,7 +618,9 @@ esac
       );
       expect(await readFile(wranglerLog, "utf8")).toBe("");
     }
-  }, 30_000);
+    // Each deploy run reads every served file, package tarballs member by
+    // member (bin/served-surface-guard.ts), before it may upload anything.
+  }, 90_000);
 
   test("rejects unsafe committed frontend archive manifests before extraction", async () => {
     const fixtureRoot = await mkdtemp(join(tmpdir(), "agenttool-pages-manifest-"));
