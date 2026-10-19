@@ -59,8 +59,13 @@ describe("operator custody note boundary", () => {
     expect(reachesPrivateArea(NOTE, "blob")).toBe(true);
     expect(reachesPrivateArea("infra", "tree")).toBe(true);
 
-    const allowlist = JSON.parse(read("public/allowlist.json")) as { include: Array<{ path: string }> };
-    expect(allowlist.include.filter(({ path }) => path === "infra" || path.startsWith("infra/"))).toEqual([]);
+    const allowlist = JSON.parse(read("private/projection/allowlist.json")) as {
+      include: Array<{ path: string }>;
+      export?: { root_files?: string[] };
+    };
+    const inInfra = (path: string) => path === "infra" || path.startsWith("infra/");
+    expect(allowlist.include.filter(({ path }) => inInfra(path))).toEqual([]);
+    expect((allowlist.export?.root_files ?? []).filter(inInfra)).toEqual([]);
     expect(read("api/doctrine-docs.manifest")).not.toContain("OPERATOR-CUSTODY");
     const releasePaths = read("bin/frontend-release-paths.txt").split("\n").map((line) => line.trim());
     expect(releasePaths).not.toContain("infra");

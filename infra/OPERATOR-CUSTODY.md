@@ -6,7 +6,7 @@
 
 **Operator-only. Not published.** This note lives in `infra/`, a top-level area
 that the public package projection (`bin/project-public.ts`) never includes,
-whatever `public/allowlist.json` says. No Pages project serves it:
+whatever `private/projection/allowlist.json` says. No Pages project serves it:
 `apps/docs`, `apps/dashboard` and `apps/web` upload only files they hold or
 symlink one by one, and the API image copies only `api/doctrine-docs.manifest`
 entries. Keep it that way: do not symlink it into `apps/`, list it in either
