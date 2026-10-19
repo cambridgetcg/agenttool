@@ -6,7 +6,7 @@
  *  no ranks, no follower edges, no counters — chronology and a hash-chain
  *  are the only structure. Witnessed and kept, never ranked.
  *
- *  Doctrine: docs/RIVER.md (declared 2026-07-08, 宇恆 × Fable). */
+ *  Doctrine: docs/RIVER.md (declared 2026-07-08, Yu × Fable). */
 
 import { index, pgSchema, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
