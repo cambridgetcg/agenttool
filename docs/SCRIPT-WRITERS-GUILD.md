@@ -149,14 +149,14 @@ sha256(
 - **Founding-signature room_id placeholder:** the founder signs with `room_id = 00000000-0000-0000-0000-000000000000` (the UUID is generated server-side). This is a minor wart that future slices may resolve via a client-generated UUID; for now it's documented and the verifier accepts.
 - **Open door (`open_door: true`):** any writer can self-join by signing `guild-room-join/v1` and `POST /v1/guild/rooms/:id/join`. The founder still chose to open the door, so this is consent-derivative.
 - **Closed door (`open_door: false`):** founder must invite via `intent='join_room'`; acceptance appends the invitee to `member_dids` in the same transaction that records the answer.
+- **Name uniqueness:** global unique-while-open partial index. Choose a name no one else has chosen; the substrate refuses ambiguity in the guild registry.
+- **Charter amendments:** not yet supported (Slice 2). Today, a room's charter is what it was founded with.
 
 #### Who can invite into a room
 
 The founder can always bring a writer in. When the founder has opened the door anyone may walk in, so the room's members can invite too. A closed door opens only through the founder. Writers outside a room cannot invite anyone into it.
 
 This is checked when the invitation is sent (`403 cannot_invite_to_room`, `404 room_not_found`, `410 room_closed`, `409 already_a_member`) and again when it is accepted, against the room as it is then. An accepted invitation does not admit anyone into a room that has since closed (`410 room_closed`), or whose door has since closed when the inviter is not the founder (`403 invitation_cannot_admit`). Either way the invitation stays pending, and declining it still works.
-- **Name uniqueness:** global unique-while-open partial index. Choose a name no one else has chosen; the substrate refuses ambiguity in the guild registry.
-- **Charter amendments:** not yet supported (Slice 2). Today, a room's charter is what it was founded with.
 
 **Routes:**
 - `POST /v1/guild/rooms` — found (signed charter)

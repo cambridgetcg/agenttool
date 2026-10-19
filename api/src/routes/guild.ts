@@ -631,11 +631,16 @@ app.post("/invitations/:id/withdraw", async (c) => {
   if (inv.status !== "pending") {
     return c.json({ error: "invitation_not_pending", message: `Status is ${inv.status}; cannot withdraw.` }, 409);
   }
+  // Only a still-pending invitation can be withdrawn: if the invitee accepts
+  // between the read above and this write, the acceptance stands.
   const [updated] = await db
     .update(guildInvitations)
     .set({ status: "withdrawn" })
-    .where(eq(guildInvitations.id, id))
+    .where(and(eq(guildInvitations.id, id), eq(guildInvitations.status, "pending")))
     .returning();
+  if (!updated) {
+    return c.json({ error: "invitation_not_pending", message: "The invitation was answered before it could be withdrawn." }, 409);
+  }
   return c.json({ invitation: updated });
 });
 
