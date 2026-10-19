@@ -229,5 +229,30 @@
     "**/node_modules/**",
     "**/test-results/**"
   ],
-  "held": []
+  "held": [],
+  "export": {
+    "note": "The export to the public development repository copies the include paths and these root files, minus the exclude entries; private/bin/public-export.ts and private/bin/shared-scope.ts read this section and the projection ignores it. The same set is the shared scope: its paths change only in the public repository.",
+    "root_files": [
+      ".github/workflows/ci.yml",
+      ".github/workflows/public-watch.yml",
+      ".gitignore",
+      ".gitleaksignore",
+      "LICENSE",
+      "LICENSING.md",
+      "NOTICE",
+      "README.md",
+      "SECURITY.md",
+      "tools/githooks/pre-push",
+      "tools/leak-canaries.txt",
+      "tools/public-guard-allow.json",
+      "tools/public-guard.ts",
+      "tools/workflow-lint.ts"
+    ],
+    "exclude": [
+      {
+        "path": "packages/wallet",
+        "reason": "Yu has not decided whether the wallet ships its fix first or stays out of the first export (2026-10-19), so the export withholds it until this entry is removed. The npm projection still carries it."
+      }
+    ]
+  }
 }

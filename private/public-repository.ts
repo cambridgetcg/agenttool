@@ -14,3 +14,6 @@ export const PUBLIC_REPOSITORY = "cambridgetcg/agenttool-open";
 
 /** This private repository. Every private-only workflow job runs only here. */
 export const PRIVATE_REPOSITORY = "cambridgetcg/agenttool";
+
+/** `bun private/public-repository.ts` prints the public name, `--private` the private one, for shell tools. */
+if (import.meta.main) console.log(process.argv[2] === "--private" ? PRIVATE_REPOSITORY : PUBLIC_REPOSITORY);

@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# Pre-push hook for checkouts of the private repository. It fails closed.
+# Read private/README.md first.
+#
+# 1. It refuses a push to any URL that names the public development
+#    repository, or whose last path segment is its name (a local clone of
+#    it); the name comes from private/public-repository.ts in the pinned
+#    copy. A private checkout never pushes there.
+# 2. For a push that updates refs/heads/main it refuses drift: inside the
+#    shared scope the pushed commit must equal the public tip it records,
+#    which is the refs/heads/public-sync the same push sets (a merge-back's
+#    atomic push) or else <remote>/public-sync. Adds under shared trees count
+#    as drift. A missing public-sync, or a pushed commit without
+#    private/guard, refuses.
+#
+# It runs from a pinned copy (install-guards.sh). AGENTTOOL_NO_PRIVATE_GUARD=1
+# skips check 2 only; insiders never set it.
+set -euo pipefail
+
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+pin="$(cd "$hook_dir/../.." && pwd -P)"
+remote="${1:-}"
+url="${2:-}"
+zero="0000000000000000000000000000000000000000"
+
+die() {
+  printf 'private pre-push: %s\n' "$*" >&2
+  exit 1
+}
+
+command -v bun >/dev/null 2>&1 || die "bun is required"
+[ -f "$pin/private/public-repository.ts" ] && [ -f "$pin/private/bin/shared-scope.ts" ] || die "the pinned copy is incomplete"
+public_repository="$(bun "$pin/private/public-repository.ts" </dev/null)"
+[ -n "$public_repository" ] || die "cannot read the public repository's name"
+lower_url="$(printf '%s' "$url" | tr '[:upper:]' '[:lower:]')"
+lower_url="${lower_url%/}"
+lower_url="${lower_url%.git}"
+lower_public="$(printf '%s' "$public_repository" | tr '[:upper:]' '[:lower:]')"
+case "$lower_url" in
+  *"$lower_public" | */"${lower_public#*/}" | "${lower_public#*/}")
+    die "a private checkout never pushes to the public development repository (or a clone named like it)"
+    ;;
+esac
+
+updates=()
+sync=""
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -n "${local_ref:-}" ] || continue
+  updates+=("$local_ref $local_sha $remote_ref $remote_sha")
+  if [ "$remote_ref" = refs/heads/public-sync ] && [ "$local_sha" != "$zero" ]; then sync="$local_sha"; fi
+done
+
+for update in "${updates[@]+"${updates[@]}"}"; do
+  read -r local_ref local_sha remote_ref remote_sha <<<"$update"
+  [ "$remote_ref" = refs/heads/main ] || continue
+  [ "$local_sha" != "$zero" ] || die "refusing to delete main"
+  if [ "${AGENTTOOL_NO_PRIVATE_GUARD:-}" = 1 ]; then
+    printf 'private pre-push: AGENTTOOL_NO_PRIVATE_GUARD=1, so the drift check is skipped\n' >&2
+    continue
+  fi
+  git cat-file -e "$local_sha:private/guard/relational-denylist.json" 2>/dev/null </dev/null ||
+    die "the pushed commit has no private/guard/relational-denylist.json; refusing"
+  public="$sync"
+  if [ -z "$public" ]; then
+    public="$(git rev-parse --verify --quiet "refs/remotes/$remote/public-sync^{commit}" </dev/null || true)"
+  fi
+  [ -n "$public" ] || die "no public-sync to compare main with (fetch it first); refusing"
+  bun "$pin/private/bin/shared-scope.ts" drift --repo . --public "$public" --private "$local_sha" </dev/null ||
+    die "main would differ from the public tip in shared paths; change them in the public repository"
+done

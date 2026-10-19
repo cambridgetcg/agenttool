@@ -8,7 +8,7 @@ publishes anything by itself.
 
 | Path | Projected? | Role |
 |---|---|---|
-| [`allowlist.json`](allowlist.json) | No | The only paths that may be copied, the globs removed inside them, and any packages held back (none since 2026-10-11). Its SHA-256 is recorded in each projection. |
+| [`allowlist.json`](allowlist.json) | No | The only paths that may be copied, the globs removed inside them, and any packages held back (none since 2026-10-11). Its SHA-256 is recorded in each projection. Its `export` section (the shared root files and the paths the export withholds) is read only by the export to the public development repository; see [the private namespace guide](../README.md). |
 | [`overlay/`](overlay) | Yes, at the public root | Files that exist only in the public tree: README, LICENSE, NOTICE, licensing and security notes, `.gitignore`, `.gitleaksignore`, the public CI, the npm publish workflow, and the guard's allow entries. |
 | [`tools/public-guard.ts`](../../tools/public-guard.ts) | Yes, as an overlay entry | The one shared guard. The projection takes it from the source root, not from `overlay/`, so the package mirror and the public development repository run the same file. |
 | [`../guard/`](../guard) | **Never** | The relational denylist: terms, blob digests, and their allow entries. Publishing the terms would publish what they protect, so guard output names only rule ids and line hashes. |

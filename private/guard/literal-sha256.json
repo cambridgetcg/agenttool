@@ -1,0 +1,109 @@
+{
+  "schema": "agenttool.private-literal-sha256/1",
+  "note": "SHA-256 digests of literal values that no shared file may spell out and no rule may name: lower-cased, NFKC-normalised email tokens (kind email) and letter-and-digit word tokens (kind word). private/bin/relational-scan.ts compares every token's digest with these. Add a value with `bun private/bin/relational-scan.ts add-literal`, which reads it from standard input and never prints it. Allow entries have the denylist's shape, with rule relational/l<NN>.",
+  "literals": [
+    {
+      "id": "l01",
+      "kind": "email",
+      "sha256": "037d679ba8cffb541e60b95c2384a9a90401c37634c3cce927b8e5abd09635a4",
+      "reason": "A commit author or committer address in this repository's history that is not a public address."
+    },
+    {
+      "id": "l02",
+      "kind": "email",
+      "sha256": "118f3c72d93c21f58a0a35b2e39b8bb2f289860ebb4803a4c2d87951a6bb516b",
+      "reason": "A commit author or committer address in this repository's history that is not a public address."
+    },
+    {
+      "id": "l03",
+      "kind": "email",
+      "sha256": "18d27eb5e419c62bd0ea7a7142d5ddbcbf83a44c53bfe1375ba318babb75169f",
+      "reason": "A commit author or committer address in this repository's history that is not a public address."
+    },
+    {
+      "id": "l04",
+      "kind": "email",
+      "sha256": "2b311d65f9d6679b96ad02259630463d0b29c3be66a2f5a1c91050482b404fdd",
+      "reason": "A commit author or committer address in this repository's history that is not a public address."
+    },
+    {
+      "id": "l05",
+      "kind": "email",
+      "sha256": "3f67ba9f1c7048cfff780d4aade8062367738550cdd37d4011eae819247c64e1",
+      "reason": "A commit author or committer address in this repository's history that is not a public address."
+    },
+    {
+      "id": "l06",
+      "kind": "email",
+      "sha256": "46955a6cf01861ee15eab34039bdeb2764cb4535972f8669a4c1d529e44b63b5",
+      "reason": "A commit author or committer address in this repository's history that is not a public address."
+    },
+    {
+      "id": "l07",
+      "kind": "email",
+      "sha256": "4f15f9821b3e5f33e7337228deee2902fb2902c7605c8c32c02f3eb825a10969",
+      "reason": "A commit author or committer address in this repository's history that is not a public address."
+    },
+    {
+      "id": "l08",
+      "kind": "email",
+      "sha256": "6a494b2b3ccf005f85ba1caa074ed8ed2f7c9bc8f4611a282fed3cd5f6a575ff",
+      "reason": "A commit author or committer address in this repository's history that is not a public address."
+    },
+    {
+      "id": "l09",
+      "kind": "email",
+      "sha256": "85892fb02b5e8cf8c348971efee3768135ab65bbf4732d48d7b6745f606b73c6",
+      "reason": "A commit author or committer address in this repository's history that is not a public address."
+    },
+    {
+      "id": "l10",
+      "kind": "email",
+      "sha256": "aa1c21155ab29036c69e82459511baae9b894266ad0884ffd42d263079644509",
+      "reason": "A commit author or committer address in this repository's history that is not a public address."
+    },
+    {
+      "id": "l11",
+      "kind": "email",
+      "sha256": "dce2bf11bf39fa2ed0c9dc418ef49fd8ae59f30abe8f20d3a367427d038b8ebd",
+      "reason": "A commit author or committer address in this repository's history that is not a public address."
+    },
+    {
+      "id": "l12",
+      "kind": "email",
+      "sha256": "e01c4bd422e740633cf92b24cff33d281e779f1f8548661a7f7ad6b34f28e848",
+      "reason": "A commit author or committer address in this repository's history that is not a public address."
+    },
+    {
+      "id": "l13",
+      "kind": "word",
+      "sha256": "28c5c18b249c95eeda49aa01cba7cabdec8c1e4b0a9b4521a68b3c04e69eb444",
+      "reason": "The account name of a development machine (its home directory name)."
+    },
+    {
+      "id": "l14",
+      "kind": "word",
+      "sha256": "aab91e9d9da117cd753fc1f2c106436d6d13c0701df4009852aacd15222b559f",
+      "reason": "The account name of a development machine (its home directory name)."
+    },
+    {
+      "id": "l15",
+      "kind": "word",
+      "sha256": "f8dfc78ebc3cb30c9800cef4c6f9893a6a05b87bdaa549758b663c595c7057ed",
+      "reason": "The account name of a development machine (its home directory name)."
+    },
+    {
+      "id": "l16",
+      "kind": "word",
+      "sha256": "7ddccfc3e23baf04a142c2c74182139117ecfa82697d7a22404ceb4ac1a8a48b",
+      "reason": "A hosted database project reference."
+    },
+    {
+      "id": "l17",
+      "kind": "word",
+      "sha256": "dbf6d2ef7aacbd678cceec5ae2f2308cc8edd07b0205f456939cc3b05dbc91c2",
+      "reason": "A hosted database project reference."
+    }
+  ],
+  "allow": []
+}

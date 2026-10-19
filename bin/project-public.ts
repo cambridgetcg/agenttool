@@ -139,6 +139,11 @@ export interface Allowlist {
   include: AllowlistInclude[];
   exclude: string[];
   held: Array<{ path: string; reason: string }>;
+  /**
+   * The export to the public development repository reads `include` and this
+   * section; the projection ignores it. private/bin/shared-scope.ts parses it.
+   */
+  export?: unknown;
 }
 
 /** Converts a small glob (`*` within a segment, `**` across segments) to an anchored RegExp. */
@@ -170,7 +175,11 @@ export function parseAllowlist(bytes: Uint8Array): Allowlist {
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) fail("must be an object");
   const record = parsed as Record<string, unknown>;
   const keys = ["schema", "public_repository", "overlay", "include", "exclude", "held"];
-  if (Object.keys(record).join(",") !== keys.join(",")) fail(`must have exactly ${keys.join(", ")} in that order`);
+  const present = Object.keys(record).join(",");
+  if (present !== keys.join(",") && present !== [...keys, "export"].join(",")) {
+    fail(`must have exactly ${keys.join(", ")} in that order, and optionally export after them`);
+  }
+  if ("export" in record && (typeof record.export !== "object" || record.export === null || Array.isArray(record.export))) fail("export must be an object");
   if (record.schema !== ALLOWLIST_SCHEMA) fail(`schema must be ${ALLOWLIST_SCHEMA}`);
   if (typeof record.public_repository !== "string" || !/^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/u.test(record.public_repository)) {
     fail("public_repository must be owner/name");

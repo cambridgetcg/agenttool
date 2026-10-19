@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 import { PRIVATE_REPOSITORY, PUBLIC_REPOSITORY } from "../../private/public-repository.ts";
+import { parseExportConfig } from "../../private/bin/shared-scope.ts";
 import { ALLOWLIST_PATH, DENYLIST_PATH, parseAllowlist, parseDenylist } from "../project-public.ts";
 import { contentFindings, formatFinding, PERSONAL_RULES, SECRET_RULES } from "../../tools/public-guard.ts";
 import { lintWorkflow, repositoryGuarded } from "../../tools/workflow-lint.ts";
@@ -23,22 +24,12 @@ import { lintWorkflow, repositoryGuarded } from "../../tools/workflow-lint.ts";
 const ROOT = resolve(import.meta.dir, "..", "..");
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 
-/** Root paths whose bytes the shared tree and this repository hold alike. */
-const SHARED_ROOT_FILES = [
-  ".github/workflows/ci.yml",
-  ".github/workflows/public-watch.yml",
-  ".gitignore",
-  ".gitleaksignore",
-  "LICENSE",
-  "LICENSING.md",
-  "NOTICE",
-  "README.md",
-  "SECURITY.md",
-  "tools/leak-canaries.txt",
-  "tools/public-guard-allow.json",
-  "tools/public-guard.ts",
-  "tools/workflow-lint.ts",
-];
+/**
+ * Root paths whose bytes the shared tree and this repository hold alike: the
+ * allowlist's export root files, the one list the export and the shared
+ * scope read.
+ */
+const SHARED_ROOT_FILES = parseExportConfig(parseAllowlist(readFileSync(join(ROOT, ALLOWLIST_PATH)))).rootFiles;
 /** The shared tree's workflows; every other workflow is private-only. */
 const SHARED_WORKFLOWS = ["ci.yml", "public-watch.yml"];
 /** The private repository's own texts for the root files that were split. */
@@ -51,6 +42,7 @@ const sharedCi = Bun.YAML.parse(sharedCiSource) as { name: string; on: Record<st
 
 describe("the root split", () => {
   test("the shared root files are present and the private texts live under private/root", () => {
+    expect(SHARED_ROOT_FILES).toEqual(expect.arrayContaining([".github/workflows/ci.yml", "README.md", "SECURITY.md", "tools/public-guard.ts", "tools/githooks/pre-push"]));
     expect(SHARED_ROOT_FILES.filter((path) => path.startsWith(".github/workflows/")).map((path) => path.slice(".github/workflows/".length))).toEqual(SHARED_WORKFLOWS);
     for (const path of SHARED_ROOT_FILES) expect(existsSync(join(ROOT, path)), path).toBe(true);
     for (const name of PRIVATE_ROOT_TEXTS) {
