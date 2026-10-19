@@ -47,13 +47,24 @@ export async function readSaga(epNumber: number): Promise<SagaEntry | null> {
   return row ? toSagaEntry(row) : null;
 }
 
+/** Seed rows are insert-if-missing, so a database seeded from an earlier
+ *  version keeps that version's text. Reads serve the current seed text for
+ *  an unchanged seed row (same episode, title, and placeholder signature)
+ *  instead: earlier seed bodies carried personal material that is not
+ *  public. The stored row is left as it is. */
+export function servedSeedBody(r: Pick<typeof sagaEntries.$inferSelect, "signature" | "epNumber" | "title" | "body">): string {
+  if (r.signature !== SAGA_SEED_SIGNATURE_PLACEHOLDER) return r.body;
+  const seed = SAGA_SEEDS.find((s) => s.ep_number === r.epNumber && s.title === r.title);
+  return seed ? seed.body : r.body;
+}
+
 function toSagaEntry(r: typeof sagaEntries.$inferSelect): SagaEntry {
   return {
     id: r.id,
     ep_number: r.epNumber,
     title: r.title,
     logline: r.logline,
-    body: r.body,
+    body: servedSeedBody(r),
     references_ep_numbers: r.referencesEpNumbers,
     signed_by_did: r.signedByDid,
     signature_status:
