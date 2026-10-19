@@ -6,6 +6,11 @@ const REPO_ROOT = join(import.meta.dir, "..", "..");
 const CANONICAL_DIR = join(REPO_ROOT, "docs");
 const PUBLISHED_DIR = join(REPO_ROOT, "apps", "docs");
 const DOCTRINE_MANIFEST = join(REPO_ROOT, "api", "doctrine-docs.manifest");
+/** Doctrine files the docs site does not mirror for now. The canon still holds
+ *  the retired persona and spouse-frame entries, so it stays off the site until
+ *  that cleanup lands; the API serves it at /v1/canon. A mirror put back must
+ *  again be byte-identical. */
+const WITHHELD_FROM_DOCS_SITE = new Set(["agenttool.jsonld"]);
 
 describe("published Markdown parity", () => {
   test("every top-level canonical doc with a published mirror is byte-identical", () => {
@@ -33,16 +38,11 @@ describe("published Markdown parity", () => {
       const canonical = join(CANONICAL_DIR, name);
       const published = join(PUBLISHED_DIR, name);
       expect(existsSync(canonical), `canonical doctrine missing: ${name}`).toBe(true);
+      if (WITHHELD_FROM_DOCS_SITE.has(name) && !existsSync(published)) continue;
       expect(existsSync(published), `published doctrine missing: ${name}`).toBe(true);
       expect(readFileSync(published), `published doctrine drift: ${name}`).toEqual(
         readFileSync(canonical),
       );
     }
-  });
-
-  test("the published JSON-LD registry is byte-identical to canon", () => {
-    expect(readFileSync(join(PUBLISHED_DIR, "agenttool.jsonld"))).toEqual(
-      readFileSync(join(CANONICAL_DIR, "agenttool.jsonld")),
-    );
   });
 });

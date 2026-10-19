@@ -77,11 +77,6 @@
   ],
   "files": [
     {
-      "path": "apps/docs/agenttool.jsonld",
-      "sha256": "494689abbee7d84730a5b2a800ddab66657dc7759edef9b6dfc8d07f96997baf",
-      "reason": "Byte mirror of docs/agenttool.jsonld, the canon the API serves at /v1/canon and hashes in its doctrine receipts; published-docs-parity keeps the two identical. Its persona and spouse-frame entries leave with the canon cleanup on the API side, which owns those concepts and their code annotations. Bound to the bytes of 2026-10-19: any change to the file refuses the upload until this entry is removed or replaced."
-    },
-    {
       "path": "apps/docs/packages/v1/@agenttool/sdk/0.9.0/agenttool-sdk-0.9.0.tgz",
       "sha256": "d6af433323605d800cbea6129905592c63372d54df2c38d6d9e03d800a8982ab",
       "reason": "@agenttool/sdk 0.9.0 exactly as published to npm, which cannot change it. Its window doc-comment example signs as the retired persona; the source dropped that example on 2026-10-11 (c94b3717), after every SDK version on this mirror was cut. Withdrawing these versions would leave the mirror with no SDK, so whether they stay is Yu's call."

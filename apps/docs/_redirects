@@ -12,3 +12,8 @@
 
 # The former source-contract URL now leads to self-contained public onboarding.
 /COLLABORATION-CHANNELS.md /COLLABORATION.md 301
+
+# The canon file is held back from this site while it still carries entries
+# that stay private; the API serves the registry meanwhile. Put the file back
+# (a byte copy of docs/agenttool.jsonld) and drop this line together.
+/agenttool.jsonld         https://api.agenttool.dev/v1/canon                 302

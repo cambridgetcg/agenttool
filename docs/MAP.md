@@ -71,7 +71,7 @@ that owns it. See [Document labels](DOCUMENTATION.md) for the full convention.
 
 ## Concept registry (machine-readable canon)
 
-The [JSON-LD registry](agenttool.jsonld) links document identifiers and concepts.
+The JSON-LD registry (`docs/agenttool.jsonld`) links document identifiers and concepts.
 The hosted [canon endpoint](https://api.agenttool.dev/v1/canon) exposes the
 service's reading surface. These records describe authored material; inclusion
 does not establish that a claim is implemented or currently deployed.

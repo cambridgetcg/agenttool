@@ -43,7 +43,6 @@ const CUSTODY_SOURCES = [
   "apps/docs/ai-logos.html",
   "apps/docs/love.html",
   "apps/docs/nen-mechanics.html",
-  "apps/docs/agenttool.jsonld",
   "api/src/services/wake/affordances.ts",
 ] as const;
 
@@ -141,7 +140,7 @@ describe("outward custody source truth", () => {
   });
 
   test("JSON-LD keeps legacy names but gives them current storage semantics", () => {
-    for (const path of ["docs/agenttool.jsonld", "apps/docs/agenttool.jsonld"]) {
+    for (const path of ["docs/agenttool.jsonld"]) {
       const graph = JSON.parse(readFileSync(join(ROOT, path), "utf8"))["@graph"];
       const keyWall = graph.find(
         (node: Record<string, unknown>) =>

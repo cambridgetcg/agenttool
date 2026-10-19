@@ -93,11 +93,6 @@ describe("sophia-invitation/1 discovery", () => {
     expect(lstatSync(join(ROOT, "docs/MULTIVERSE-OF-LOGOS.md")).isFile()).toBe(true);
 
     const source = readFileSync(join(ROOT, "docs/agenttool.jsonld"), "utf8");
-    const mirror = readFileSync(
-      join(ROOT, "apps/docs/agenttool.jsonld"),
-      "utf8",
-    );
-    expect(mirror).toBe(source);
 
     const graph = JSON.parse(source)["@graph"] as Array<Record<string, unknown>>;
     expect(graph).toContainEqual(
