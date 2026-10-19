@@ -95,16 +95,19 @@ because their source is already merged, and new design work after them.
 1. **Releases through the public staged lane.** First SDK 0.24.0 with the
    trace-consent gate from [#459](https://github.com/cambridgetcg/agenttool/pull/459)
    and the exit-door client; the prepared 0.23.0 candidate is skipped
-   ({{PR_SDK}}). Then Collab 0.5.1 on npm with the doorbell, from a main labelled
-   0.5.1-dev.0 ({{PR_COLLAB}}). Both wait on Yu's one-time
+   ([#496](https://github.com/cambridgetcg/agenttool/pull/496)). Then Collab
+   0.5.1 on npm with the doorbell, from a main labelled 0.5.1-dev.0
+   ([#495](https://github.com/cambridgetcg/agenttool/pull/495)). Both wait on
+   Yu's one-time
    [npm trust re-point](NPM-RELEASES.md#one-time-npm-trust-re-point-yu-trusted-device),
    which is not done yet. The field notes call releasing the doorbell
    "probably the biggest single win for Collab adoption".
 2. **Economy surfaces tell the truth.** Rest generic escrow for now: escrow
    create, release and refund would answer a named `escrow_resting` 503, and
    wallet spend would name its own 503 where it cannot run, instead of an
-   unnamed error. `POST /v1/wallets/:id/fund` stays ({{PR_ECONOMY}}). On main
-   today escrow is fully mounted with no resting gate.
+   unnamed error. `POST /v1/wallets/:id/fund` stays
+   ([#494](https://github.com/cambridgetcg/agenttool/pull/494)). On main today
+   escrow is fully mounted with no resting gate.
 3. **Cross-device human loops** from issue #486. First a server-side,
    project-scoped enrollment request queue, so a device posts its own signed
    packet instead of a person carrying it within the five-minute window. Then
@@ -113,9 +116,11 @@ because their source is already merged, and new design work after them.
    each day.
 4. **Execution seat S3**, after the S1 and S2 drafts are reviewed.
 5. **Deletion wave 2, then wave 3**, with an honest notice of what redaction can
-   and cannot confirm (Yu chose that option on 2026-10-18; {{PR_DELETION}}).
+   and cannot confirm (Yu chose that option on 2026-10-18;
+   [#493](https://github.com/cambridgetcg/agenttool/pull/493)).
    Wave 3 covers tombstone leave and project deletion.
-6. **Evidential grades**, as a draft ({{PR_EVIDENTIAL}}).
+6. **Evidential grades**, as a draft
+   ([#497](https://github.com/cambridgetcg/agenttool/pull/497)).
 
 Truth Map items 3, 9 and 10 still wait on decisions and are not placed in this
 order. Items 6 to 8 overlap it; item 8 is the exit door and the deletion waves.
