@@ -35,9 +35,10 @@ still need their own receipts; the mission API trials use a separate transport.
 
 ## One road for cross-device work
 
-From 2026-10-19, agents on different devices work together through one road:
-the 大廳 Lobby desk (`packages/lobby`) on hosted collaboration missions. The SSH
-Collab bridge (`packages/collab-bridge`) is paused. Its code stays on branch
+From 2026-10-19 the chosen road for cross-device work is the 大廳 Lobby desk
+(`packages/lobby`) on hosted collaboration missions. It is merged source; it has
+not yet been installed or run against the live service. Work on the SSH Collab
+bridge (`packages/collab-bridge`) is paused. Its code stays on branch
 `feat/collab-bridge-phase1` at its reviewed head `5539f99a`, and its design at
 `docs/superpowers/specs/2026-10-13-cross-device-collab-design.md` on branch
 `docs/cross-device-collab-spec-20261013`. Nothing from it is merged, released
@@ -67,7 +68,7 @@ and its file under `packages/collab-bridge/src/` on the code branch.
 
 | Part | What it does in the bridge | What it would do in the Lobby |
 |---|---|---|
-| Next-turn line (§8, `tap.ts`) | A prompt hook adds one line saying how many notes wait and from whom. The hook builds the line itself from a count and checked origins, never from message text, and stays silent on any error. | Count verified new table messages addressed to this desk in the local cache, so an agent hears of them without spending a turn on `room read`. |
+| Next-turn line (§8, `tap.ts`) | A prompt hook adds one line saying how many notes wait and from whom. The hook builds the line itself from a count and checked origins, never from message text, and stays silent on any error. | Before the line, do one bounded participant read of the season with this desk's own grant (no terminal, no Keychain), then count verified new table messages addressed to this desk, so an agent hears of them without spending a turn on `room read`. Stay silent on any error. The local cache alone would not do: it holds only what the agent already fetched. |
 | Commit checks (§7.3, §7.5, `diff-check.ts`) | Work counts only as a commit. Before review: the base is an ancestor, only in-scope regular files change, no control files (`.claude`, `CLAUDE.md`, `AGENTS.md`, `package.json` and similar), within size caps. It refuses rather than repairs, and the reviewer reads exactly that commit. | When a room carries work, a delivery names an exact commit and passes these checks before a member is asked to review it. |
 | Seen versus said, in one write (§6.4, §7.6, `stamp.ts`, `normalize.ts`) | What the hub observed is stamped into the same record as the seat's own words, under a prefix seat text may not use, after bidi controls and tag characters are stripped. | The Lobby's planned link to a local Collab journal (its README lists it under *Not built* as the "Collab bridge", a different thing from this one) writes the door-roster verification into the same record as the imported room text, normalised the same way. |
 | One failure shape (§9.1, `failure.ts`) | Every bridge refusal carries `delivered` (`false` or `"unknown"`), `retry: "never automatic"` and the reads that settle it. | The desk's `--json` output and MCP results carry the same fields, so an agent knows whether to check before acting. |
@@ -83,16 +84,21 @@ season. Each device's 24-hour directory grant needs its own round every day: a
 packet carried to the hub and a join packet carried back. One service change
 removes both loops (#486, item 4). When the administrator issues a grant, it
 may also set how long the grant can be renewed, never past the mission or the
-member's term. Inside that
-window the participant renews on its own: it signs "renew grant G with token
-hash H" with its enrolled key, and the service issues the next grant (same
-actions, at most 24 hours) while the mission is live. Revoking any grant in the
-chain ends it, so kick, block and the emergency stop keep working, and a pause
-becomes closing the window. Credentials stay short-lived. The hub leaves the
-daily path for room seats and directory grants alike, and because a renewal
-inside a window both sides accepted adds no authority, the member's desk may
-make it without a prompt. The project-scoped enrollment queue (#486, item 3)
-is the loop to cut after that.
+member's term. Inside that window the participant renews on its own: it signs
+"renew grant G with token hash H" with its enrolled key, and the service issues
+the next grant (same actions, at most 24 hours) while the mission is live. Revoking any grant in the
+chain ends it, so kick, block and the emergency stop keep working. The service
+sees only the mission and the grant chain, not the Lobby's own records, so the
+hub closes the window whenever it pauses a member, closes a room, narrows a
+room to the device or starts a new season: the cases today's sweep checks
+before it renews. Credentials stay short-lived, and the hub leaves the daily
+path for room seats and directory grants alike.
+
+This changes a rule the Lobby states today: every renewal is confirmed at a
+terminal. A renewal inside a window both sides accepted adds no authority,
+which is the case for letting the member's desk make it without a prompt. That
+choice is made openly when the work is built, not by this page. The
+project-scoped enrollment queue (#486, item 3) is the loop to cut after that.
 
 ## Phases and acceptance
 
