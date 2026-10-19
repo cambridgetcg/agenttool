@@ -692,11 +692,12 @@ describe("boring test spine", () => {
       "fail-fast": false,
       matrix: { "node-version": ["22.18.0", "25.2.1"] },
     });
-    // Pull requests may skip it only when the change classifier succeeded and
-    // reported its inputs untouched; bin/tests/ci-changed-areas.test.ts pins
-    // the classifier and every filtered job.
+    // A draft skips it; a ready pull request may skip it only when the change
+    // classifier succeeded and reported its inputs untouched.
+    // bin/tests/ci-changed-areas.test.ts pins the classifier and every
+    // filtered job.
     expect(careBeforeLearning?.if).toBe(
-      "${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.care-before-learning == 'false') }}",
+      "${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.care-before-learning == 'false') }}",
     );
     expect(careBeforeLearning?.needs).toEqual(["changes"]);
     expect(careBeforeLearning?.["continue-on-error"]).toBeUndefined();
@@ -724,7 +725,7 @@ describe("boring test spine", () => {
     expect(careJob).not.toContain("care-before-learning-hf-release.py publish");
 
     expect(requiredApi?.name).toBe("API and protocol");
-    expect(requiredApi?.if).toBe("${{ always() }}");
+    expect(requiredApi?.if).toBe("${{ always() && github.event.pull_request.draft != true }}");
     expect(requiredApi?.needs).toEqual([
       "changes",
       "api-protocol-linux",

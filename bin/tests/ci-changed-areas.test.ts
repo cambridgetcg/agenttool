@@ -49,7 +49,10 @@ type Job = {
 };
 
 const workflowSource = readFileSync(WORKFLOW_PATH, "utf8");
-const workflow = Bun.YAML.parse(workflowSource) as { jobs: Record<string, Job> };
+const workflow = Bun.YAML.parse(workflowSource) as {
+  on: Record<string, Record<string, unknown> | null>;
+  jobs: Record<string, Job>;
+};
 const jobs = workflow.jobs;
 
 function runScript(
@@ -630,8 +633,14 @@ describe("CI mode against Git fixtures", () => {
   });
 });
 
+// A draft pull request runs nothing: every job but the push-only YUTABASE
+// projector carries this clause, the classifier included.
+const NOT_DRAFT = "github.event.pull_request.draft != true";
+const CHANGES_IF = `\${{ ${NOT_DRAFT} }}`;
+const LINUX_IF = `\${{ ${NOT_DRAFT} }}`;
+const AGGREGATE_IF = `\${{ always() && ${NOT_DRAFT} }}`;
 const FILTER_IF = (area: string) =>
-  `\${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.${area} == 'false') }}`;
+  `\${{ !cancelled() && ${NOT_DRAFT} && !(needs.changes.result == 'success' && needs.changes.outputs.${area} == 'false') }}`;
 
 const AREA_JOB_NAMES: Record<string, string> = {
   "api-protocol-postgres": "API generation hold (PostgreSQL ${{ matrix.postgres }})",
@@ -661,7 +670,7 @@ describe("ci.yml consumes the classifier fail-closed", () => {
     expect(changes.name).toBe("Changed areas");
     expect(changes["runs-on"]).toBe("ubuntu-24.04");
     expect(changes.needs).toBeUndefined();
-    expect(changes.if).toBeUndefined();
+    expect(changes.if).toBe(CHANGES_IF);
     expect(changes.steps).toHaveLength(3);
     expect(changes.steps?.[0]?.uses).toBe("actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1");
     expect(changes.steps?.[0]?.with).toEqual({ "fetch-depth": 0, "persist-credentials": false });
@@ -697,7 +706,7 @@ describe("ci.yml consumes the classifier fail-closed", () => {
     }
     // Jobs outside the classifier are never filtered by it.
     expect(jobs["api-protocol-linux"]?.needs).toBeUndefined();
-    expect(jobs["api-protocol-linux"]?.if).toBeUndefined();
+    expect(jobs["api-protocol-linux"]?.if).toBe(LINUX_IF);
     for (const [name, job] of Object.entries(jobs)) {
       if (AREAS.includes(name) || name === "api-protocol") continue;
       expect(JSON.stringify(job), name).not.toContain("needs.changes");
@@ -712,7 +721,7 @@ describe("ci.yml consumes the classifier fail-closed", () => {
   test("the required aggregate needs the classifier and maps each result to its area", () => {
     const aggregate = jobs["api-protocol"]!;
     expect(aggregate.name).toBe("API and protocol");
-    expect(aggregate.if).toBe("${{ always() }}");
+    expect(aggregate.if).toBe(AGGREGATE_IF);
     expect(aggregate.needs).toEqual(["changes", "api-protocol-linux", ...AGGREGATED.map(([job]) => job)]);
     const env: Record<string, string> = {
       CHANGES_RESULT: "${{ needs.changes.result }}",
@@ -775,6 +784,174 @@ describe("ci.yml consumes the classifier fail-closed", () => {
         expect(code === 0 ? 0 : 1, `${job} ${result}/${needed}`).toBe(expected);
       }
     }
+  });
+});
+
+type Value = string | boolean | null;
+
+/** GitHub's evaluation of the small `if` grammar ci.yml uses: string, boolean
+ * and null literals, context paths, !, ==, !=, &&, ||, parentheses, always(),
+ * and cancelled() for a run nobody cancelled. Strings compare without case;
+ * mixed types compare as numbers (null 0, false 0, true 1, '' 0). An unknown
+ * context, function, or token throws, so a new kind of condition has to be
+ * modelled here before these tests can pass. */
+function evaluateIf(expression: string, context: Record<string, Value>): boolean {
+  let source = expression.trim();
+  if (source.startsWith("${{") && source.endsWith("}}")) source = source.slice(3, -2);
+  const tokens = source.match(/'(?:[^']|'')*'|&&|\|\||[!=]=|!|\(|\)|[A-Za-z_][\w.-]*(?:\(\))?|\S/g) ?? [];
+  let position = 0;
+  const take = (expected?: string): string => {
+    const token = tokens[position++];
+    if (token === undefined || (expected !== undefined && token !== expected)) {
+      throw new Error(`unexpected ${token} in ${expression}`);
+    }
+    return token;
+  };
+  const toNumber = (value: Value) =>
+    value === null ? 0 : typeof value === "boolean" ? Number(value) : value.trim() === "" ? 0 : Number(value);
+  const equal = (left: Value, right: Value) =>
+    typeof left === "string" && typeof right === "string"
+      ? left.toLowerCase() === right.toLowerCase()
+      : typeof left === typeof right
+        ? left === right
+        : toNumber(left) === toNumber(right);
+  const truthy = (value: Value) => value !== null && value !== false && value !== "";
+  function primary(): Value {
+    const token = take();
+    if (token === "(") {
+      const value = or();
+      take(")");
+      return value;
+    }
+    if (token === "!") return !truthy(primary());
+    if (token.startsWith("'")) return token.slice(1, -1).replaceAll("''", "'");
+    if (token === "true" || token === "false") return token === "true";
+    if (token === "null") return null;
+    if (token === "always()") return true;
+    if (token === "cancelled()") return false;
+    if (!(token in context)) throw new Error(`unmodelled ${token} in ${expression}`);
+    return context[token]!;
+  }
+  function comparison(): Value {
+    let value = primary();
+    while (tokens[position] === "==" || tokens[position] === "!=") {
+      const same = take() === "==";
+      value = equal(value, primary()) === same;
+    }
+    return value;
+  }
+  function and(): Value {
+    let value = comparison();
+    while (tokens[position] === "&&") {
+      take();
+      const right = comparison();
+      value = truthy(value) ? right : value;
+    }
+    return value;
+  }
+  function or(): Value {
+    let value = and();
+    while (tokens[position] === "||") {
+      take();
+      const right = and();
+      value = truthy(value) ? value : right;
+    }
+    return value;
+  }
+  const result = or();
+  if (position !== tokens.length) throw new Error(`trailing ${tokens.slice(position).join(" ")} in ${expression}`);
+  return truthy(result);
+}
+
+type Scenario = {
+  event: string;
+  /** Pull requests only. */
+  draft?: boolean;
+  /** The classifier job's result when it runs. */
+  changes?: "success" | "failure";
+  /** The classifier job's outputs when it runs; an unset output reads as ''. */
+  outputs?: Record<string, string>;
+};
+
+/** The jobs GitHub would start, in workflow order, if every started job
+ * other than the classifier succeeded. */
+function jobsStarted(scenario: Scenario): string[] {
+  const results: Record<string, string> = {};
+  const started: string[] = [];
+  const pullRequest = scenario.event === "pull_request";
+  for (const [name, job] of Object.entries(jobs)) {
+    const context: Record<string, Value> = {
+      "github.event_name": scenario.event,
+      "github.event.pull_request.draft": pullRequest ? (scenario.draft ?? false) : null,
+      "github.repository": "cambridgetcg/agenttool",
+      "github.ref": pullRequest ? "refs/pull/1/merge" : "refs/heads/main",
+    };
+    for (const need of job.needs ?? []) {
+      expect(results[need], `${name} needs ${need}, which must come first`).toBeDefined();
+      context[`needs.${need}.result`] = results[need]!;
+      for (const output of Object.keys(jobs[need]?.outputs ?? {})) {
+        context[`needs.${need}.outputs.${output}`] =
+          results[need] === "skipped" ? null : (scenario.outputs?.[output] ?? "");
+      }
+    }
+    const expression = job.if ?? "";
+    let runs = expression === "" || evaluateIf(expression, context);
+    // Without a status function GitHub adds success(): every need succeeded.
+    if (!/\b(?:always|cancelled|success|failure)\(\)/.test(expression)) {
+      runs &&= (job.needs ?? []).every((need) => results[need] === "success");
+    }
+    results[name] = runs ? (name === "changes" ? (scenario.changes ?? "success") : "success") : "skipped";
+    if (runs) started.push(name);
+  }
+  return started;
+}
+
+describe("which jobs start, under GitHub's expression rules", () => {
+  const every = Object.keys(jobs);
+  const exceptYutabase = every.filter((name) => name !== "yutabase-projector-postgres");
+  const everythingSelected = Object.fromEntries(
+    ["everything", ...AREAS].map((name) => [name, "true"]),
+  );
+
+  test("the evaluator follows GitHub's coercions", () => {
+    const context = { "a.null": null, "a.true": true, "a.text": "TRUE", "a.empty": "" };
+    expect(evaluateIf("${{ a.null != true }}", context)).toBe(true);
+    expect(evaluateIf("${{ a.true != true }}", context)).toBe(false);
+    expect(evaluateIf("${{ a.text == 'true' }}", context)).toBe(true);
+    expect(evaluateIf("${{ a.empty == 'false' }}", context)).toBe(false);
+    expect(evaluateIf("${{ !a.null && (a.empty || a.text) }}", context)).toBe(true);
+    expect(() => evaluateIf("${{ a.unknown }}", context)).toThrow();
+    expect(() => evaluateIf("${{ success() }}", context)).toThrow();
+  });
+
+  test("pull requests trigger on readiness as well as new commits", () => {
+    expect(workflow.on.pull_request).toEqual({
+      types: ["opened", "synchronize", "reopened", "ready_for_review"],
+    });
+  });
+
+  test("a draft pull request starts nothing", () => {
+    expect(jobsStarted({ event: "pull_request", draft: true })).toEqual([]);
+  });
+
+  test("a ready docs-only pull request starts the Linux gate and the jobs its paths select", () => {
+    const outputs = classify(["docs/SOUL.md"]);
+    expect(jobsStarted({ event: "pull_request", outputs })).toEqual(
+      every.filter((name) =>
+        ["changes", "api-protocol-linux", "launch-core", "launch-browser", "api-protocol"].includes(name),
+      ),
+    );
+  });
+
+  test("a failed classifier starts every pull-request job", () => {
+    expect(jobsStarted({ event: "pull_request", changes: "failure" })).toEqual(exceptYutabase);
+    expect(
+      jobsStarted({ event: "pull_request", changes: "failure", outputs: { "launch-core": "false" } }),
+    ).toEqual(exceptYutabase);
+  });
+
+  test("a push to main starts every job", () => {
+    expect(jobsStarted({ event: "push", outputs: everythingSelected })).toEqual(every);
   });
 });
 

@@ -2,6 +2,8 @@ name: CI
 
 on:
   pull_request:
+    # A draft runs nothing; marking it ready for review runs CI.
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches:
       - main
@@ -20,7 +22,10 @@ jobs:
     # other events, git failures, unknown paths, and changes to this workflow
     # or bin/ci-changed-areas.sh select every job. On pull requests it also
     # carries the YUTABASE coverage notice, which needs no job of its own.
+    # Every job but the push-only YUTABASE projector skips a draft pull
+    # request; GitHub runs CI again when it is marked ready for review.
     name: Changed areas
+    if: ${{ github.event.pull_request.draft != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
@@ -57,6 +62,7 @@ jobs:
 
   api-protocol-linux:
     name: API and protocol (Linux)
+    if: ${{ github.event.pull_request.draft != true }}
     runs-on: ubuntu-24.04
     # The complete gate can exceed 20m on shared runners; match deploy-api's
     # bounded allowance while keeping every test and the required aggregate.
@@ -80,7 +86,7 @@ jobs:
     name: API generation hold (PostgreSQL ${{ matrix.postgres }})
     needs:
       - changes
-    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.api-protocol-postgres == 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.api-protocol-postgres == 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
@@ -149,7 +155,7 @@ jobs:
     name: Launch transactions and admission
     needs:
       - changes
-    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.launch-stateful == 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.launch-stateful == 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     services:
@@ -203,7 +209,7 @@ jobs:
     name: Launch core outsider journey
     needs:
       - changes
-    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.launch-core == 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.launch-core == 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -280,7 +286,7 @@ jobs:
     name: Launch browser journeys
     needs:
       - changes
-    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.launch-browser == 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.launch-browser == 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
@@ -314,7 +320,7 @@ jobs:
     name: Native macOS secret helper
     needs:
       - changes
-    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.native-macos-secret == 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.native-macos-secret == 'false') }}
     runs-on: macos-15
     timeout-minutes: 8
     env:
@@ -405,7 +411,7 @@ jobs:
     name: Care before learning (Node ${{ matrix.node-version }})
     needs:
       - changes
-    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.care-before-learning == 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.care-before-learning == 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
@@ -474,8 +480,9 @@ jobs:
     # The required result fails unless the change classifier and the Linux
     # gate pass and every other prerequisite passes. A prerequisite may be
     # skipped only when the classifier succeeded and reported it "false".
+    # A draft pull request skips this result along with everything else.
     name: API and protocol
-    if: ${{ always() }}
+    if: ${{ always() && github.event.pull_request.draft != true }}
     needs:
       - changes
       - api-protocol-linux
@@ -530,7 +537,7 @@ jobs:
     name: Witnessed agent economy
     needs:
       - changes
-    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.witnessed-agent-economy == 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.witnessed-agent-economy == 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -628,7 +635,7 @@ jobs:
     name: Data, ADDS, and SDK
     needs:
       - changes
-    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.packages == 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.packages == 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -1064,7 +1071,7 @@ jobs:
     name: Python SDK (${{ matrix.python-version }})
     needs:
       - changes
-    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.sdk-python == 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.sdk-python == 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
