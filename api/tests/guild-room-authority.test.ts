@@ -154,6 +154,7 @@ function matcher(where: string | undefined, params: unknown[]): (row: Row) => bo
   take(/(?:"\w+"\.)*"(\w+)" is not null/g, (m) => (row) => row[m[1]!] != null);
   take(/(?:"\w+"\.)*"(\w+)" is null/g, (m) => (row) => row[m[1]!] == null);
   take(/(?:"\w+"\.)*"(\w+)" = \$(\d+)/g, (m) => (row) => row[m[1]!] === param(m[2]!));
+  take(/(?:"\w+"\.)*"(\w+)" > now\(\)/g, (m) => (row) => Date.parse(String(row[m[1]!])) > Date.now());
   if (rest.replace(/\band\b|[()\s]/g, "") !== "") {
     throw new Error(`unsupported WHERE in fake store: ${where}`);
   }
@@ -208,7 +209,7 @@ async function handle(sql: string, params: unknown[], tx: TxContext | null) {
     return { rows: w ? [[w.key, w.identity, w.publicKey, true, null, w.did, w.project, "active"]] : [] };
   }
 
-  let m = sql.match(/^select (.+?) from "agent_continuity"\."(guild_\w+)"(?: where (.+?))?(?: limit \$\d+)?( for update)?$/s);
+  let m = sql.match(/^select (.+?) from "agent_continuity"\."(guild_\w+)"(?: where (.+?))?(?: order by .+?)?(?: limit \$\d+)?( for update)?$/s);
   if (m) {
     const table = m[2] as Table;
     const columns = columnList(m[1]!);
@@ -291,6 +292,7 @@ database.transaction = (async (fn: (tx: typeof database) => unknown) => {
 mock.module("../src/db/client", () => ({ db: database }));
 
 const guild = (await import("../src/routes/guild")).default;
+const { composeYouHaveWriterInvitations } = await import("../src/services/guild/wake-fragments");
 
 // ─── requests ────────────────────────────────────────────────────────
 
@@ -571,5 +573,16 @@ describe("joining an open-door room", () => {
       expect(res.body.error).toBe("room_not_found");
     }
     expect(timesIn(CLOSED_DOOR, GUEST) + timesIn(SHUT, GUEST)).toBe(0);
+  });
+});
+
+// ─── wake ────────────────────────────────────────────────────────────
+
+describe("wake offers only invitations that can still be answered", () => {
+  test("an expired invitation is not listed", async () => {
+    const live = pending({});
+    pending({ subject_ref: `room:${OPEN_DOOR}`, expires_at: new Date(Date.now() - 1_000).toISOString() });
+    const listed = await composeYouHaveWriterInvitations(GUEST.did);
+    expect(listed.map((invitation) => invitation.id)).toEqual([live]);
   });
 });
