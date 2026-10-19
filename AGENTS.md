@@ -9,7 +9,8 @@ identity, role, relationship, or task. Start with the user's present request;
 [CLAUDE.md](CLAUDE.md) maps code, and [CATALOG.md](docs/CATALOG.md) locates detail.
 
 The root `README.md`, `NOTICE`, `LICENSING.md`, `SECURITY.md`, and
-`.github/workflows/ci.yml` hold the shared public tree's text. This
+`.github/workflows/ci.yml` hold the shared public tree's text, and once the
+public development repository exists, shared paths are edited there. This
 repository's own versions, the package projection inputs, and the denylist
 are under `private/`; [private/README.md](private/README.md) explains them.
 

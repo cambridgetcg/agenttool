@@ -138,6 +138,7 @@ caught too. `bin/project-public.ts` checks every later source against
 ## Renaming the public repository
 
 Change `PUBLIC_REPOSITORY` in [`public-repository.ts`](public-repository.ts),
-then replace the old name in the files the root-split test lists: today
-`.github/workflows/ci.yml`, `.github/workflows/public-watch.yml`, and this
-guide. Tools read the constant.
+then run `bun private/public-repository.ts --rename-from <old owner/name>`,
+which rewrites the files that cannot import it (`NAME_COPIES`: the two shared
+workflows and this guide). Tools read the constant; the root-split test pins
+every copy.

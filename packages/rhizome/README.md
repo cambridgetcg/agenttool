@@ -373,7 +373,7 @@ is accurate. Suppressing it would mean exempting rhizome's own files from
 rhizome, which is the one thing this package may not do.
 
 Rhizome also reports its own absence from this repository's CI enumerations,
-because `.github/workflows/ci.yml` and `bin/preflight.sh` each spell the
+because `.github/workflows/private-ci.yml` and `bin/preflight.sh` each spell the
 package list out by hand and neither names `packages/rhizome`. That is left as
 a finding rather than fixed here: rhizome reports, and wiring it into a shared
 gate is Yu's call.

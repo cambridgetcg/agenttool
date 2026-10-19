@@ -11,11 +11,11 @@
 
 import { afterAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
-import { PRIVATE_REPOSITORY, PUBLIC_REPOSITORY } from "../../private/public-repository.ts";
+import { NAME_COPIES, PRIVATE_REPOSITORY, PUBLIC_REPOSITORY, renameCopies } from "../../private/public-repository.ts";
 import { parseExportConfig } from "../../private/bin/shared-scope.ts";
 import { ALLOWLIST_PATH, DENYLIST_PATH, parseAllowlist, parseDenylist, SHARED_OVERLAY_FILES } from "../project-public.ts";
 import { contentFindings, formatFinding, PERSONAL_RULES, SECRET_RULES } from "../../tools/public-guard.ts";
@@ -103,7 +103,7 @@ describe("the root split", () => {
 describe("the shared CI", () => {
   test("every shared workflow passes the workflow lint for the public name", () => {
     for (const file of SHARED_WORKFLOWS) expect(lintWorkflow(file, read(`.github/workflows/${file}`), PUBLIC_REPOSITORY), file).toEqual([]);
-    expect(sharedCiSource).toContain('bun tools/workflow-lint.ts --repository "$REPOSITORY"');
+    expect(sharedCiSource).toContain('bun --config=/dev/null --no-env-file tools/workflow-lint.ts --repository "$REPOSITORY"');
   });
 
   test("every job runs only in the public repository and holds no secret", () => {
@@ -117,7 +117,7 @@ describe("the shared CI", () => {
     expect(sharedCiSource).not.toMatch(/secrets\.|id-token|environment:|private\/|pull_request_target|workflow_run/u);
     for (const match of sharedCiSource.matchAll(/uses:\s*(\S+)/gu)) expect(match[1]).toMatch(/^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/u);
     const guardRun = sharedCi.jobs.guard?.steps?.map((step) => step.run ?? "").join("\n") ?? "";
-    expect(guardRun).toContain('bun tools/public-guard.ts --tree --rev HEAD --gitleaks "$GITLEAKS_BIN"');
+    expect(guardRun).toContain('bun --config=/dev/null --no-env-file tools/public-guard.ts --tree --rev HEAD --gitleaks "$GITLEAKS_BIN"');
     expect(sharedCiSource).toContain("fetch-depth: 0");
     expect(sharedCiSource).toContain("551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb");
   });
@@ -162,13 +162,35 @@ describe("the shared CI", () => {
       .split("\n")
       .filter(Boolean)
       .sort();
-    // A rename is the constant plus these files. Tools read the constant
-    // (shell scripts through `bun private/public-repository.ts`).
-    expect(files).toEqual([".github/workflows/ci.yml", ".github/workflows/public-watch.yml", "private/README.md", "private/public-repository.ts"]);
+    // A rename is the constant plus `--rename-from`, which rewrites these
+    // files. Tools read the constant (shell scripts through
+    // `bun private/public-repository.ts`).
+    expect(files).toEqual([...NAME_COPIES, "private/public-repository.ts"].sort());
     expect(sharedCiSource.split(PUBLIC_REPOSITORY).length - 1).toBe(Object.keys(sharedCi.jobs).length);
     const watch = read(".github/workflows/public-watch.yml");
     expect(watch.split(PUBLIC_REPOSITORY).length - 1).toBe(Object.keys((Bun.YAML.parse(watch) as { jobs: object }).jobs).length);
     expect(read("private/public-repository.ts")).toContain("has not confirmed");
+  });
+
+  test("--rename-from rewrites every copy of the public name, and only whole names", () => {
+    const dir = mkdtempSync(join(tmpdir(), "public-name-"));
+    try {
+      for (const path of NAME_COPIES) {
+        mkdirSync(dirname(join(dir, path)), { recursive: true });
+        writeFileSync(join(dir, path), read(path));
+      }
+      const extra = `\nNot renamed: ${PRIVATE_REPOSITORY} and ${PUBLIC_REPOSITORY}-extra.\n`;
+      writeFileSync(join(dir, "private/README.md"), `${read("private/README.md")}${extra}`);
+      const counts = renameCopies(dir, PUBLIC_REPOSITORY, "cambridgetcg/agenttool-renamed");
+      for (const path of NAME_COPIES) {
+        expect(counts[path], path).toBe(read(path).split(PUBLIC_REPOSITORY).length - 1);
+        expect(readFileSync(join(dir, path), "utf8"), path).not.toContain(`${PUBLIC_REPOSITORY}'`);
+      }
+      expect(readFileSync(join(dir, "private/README.md"), "utf8")).toContain(extra);
+      expect(() => renameCopies(dir, PRIVATE_REPOSITORY, "cambridgetcg/x")).toThrow("never renamed");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -252,7 +274,9 @@ describe("the shared CI's commit-identity check", () => {
       "  shift",
       "done",
       'printf "%s\\n" "$endpoint" >>"$STUB_LOG"',
-      'if [ -n "$jqexpr" ]; then jq -r "$jqexpr" "$STUB_JSON"; else cat "$STUB_JSON"; fi',
+      'json="$STUB_JSON"',
+      'case "$endpoint" in */commits/*/pulls) json="${STUB_PULLS:-/dev/null}"; [ -s "$json" ] || { echo "[]" >"$RUNNER_TEMP/empty-pulls.json"; json="$RUNNER_TEMP/empty-pulls.json"; } ;; esac',
+      'if [ -n "$jqexpr" ]; then jq -r "$jqexpr" "$json"; else cat "$json"; fi',
       "",
     ].join("\n"),
     { mode: 0o755 },
@@ -267,11 +291,13 @@ describe("the shared CI's commit-identity check", () => {
     commit: { author: { email: commit.authorEmail }, committer: { email: commit.committerEmail ?? commit.authorEmail } },
   });
   let runs = 0;
-  function runCheck(env: Record<string, string>, body: unknown) {
+  function runCheck(env: Record<string, string>, body: unknown, pulls?: unknown) {
     runs += 1;
     const json = join(scratch, `response-${runs}.json`);
     const log = join(scratch, `calls-${runs}.log`);
     writeFileSync(json, JSON.stringify(body));
+    const pullsJson = join(scratch, `pulls-${runs}.json`);
+    writeFileSync(pullsJson, pulls === undefined ? "" : JSON.stringify(pulls));
     writeFileSync(log, "");
     const result = Bun.spawnSync(["/bin/bash", "--noprofile", "--norc", "-eo", "pipefail", join(scratch, "step.sh")], {
       env: {
@@ -279,6 +305,7 @@ describe("the shared CI's commit-identity check", () => {
         RUNNER_TEMP: scratch,
         STUB_JSON: json,
         STUB_LOG: log,
+        STUB_PULLS: pullsJson,
         REPOSITORY: "example/shared",
         EVENT_NAME: "pull_request",
         PULL_NUMBER: "7",
@@ -314,6 +341,28 @@ describe("the shared CI's commit-identity check", () => {
 
     const fixed = runCheck({ PULL_COMMITS: "3" }, commits.map((commit) => (commit.sha === sha("a") ? commitJson({ sha: sha("a"), author: "maintainer-one", authorEmail: "Contact@CambridgeTCG.com" }) : commit)));
     expect(fixed.code, fixed.out).toBe(0);
+  });
+
+  test.skipIf(JQ === null)("checks every commit of a pull request a maintainer opened, linked to an account or not", () => {
+    const commits = [commitJson({ sha: sha("a"), author: null, committer: null, authorEmail: PRIVATE_ADDRESS })];
+    const byMaintainer = runCheck({ PULL_COMMITS: "1", PULL_AUTHOR: "maintainer-one" }, commits);
+    expect(byMaintainer.code).toBe(1);
+    expect(byMaintainer.out).toContain(`${"a".repeat(12)}: the author address is not a public one`);
+    const byOutsider = runCheck({ PULL_COMMITS: "1", PULL_AUTHOR: "outside-contributor" }, commits);
+    expect(byOutsider.code, byOutsider.out).toBe(0);
+    expect(byOutsider.out).toContain("checked 0 commit(s)");
+  });
+
+  test.skipIf(JQ === null)("on a push, an unlinked commit is checked unless an outsider's pull request brought it", () => {
+    const body = { total_commits: 1, commits: [commitJson({ sha: sha("5"), author: null, committer: null, authorEmail: PRIVATE_ADDRESS })] };
+    const direct = runCheck({ EVENT_NAME: "push", BEFORE: sha("9") }, body);
+    expect(direct.code).toBe(1);
+    expect(direct.out).not.toContain(PRIVATE_ADDRESS);
+    expect(direct.calls).toContain(`repos/example/shared/commits/${sha("5")}/pulls`);
+    const viaMaintainer = runCheck({ EVENT_NAME: "push", BEFORE: sha("9") }, body, [{ user: { login: "maintainer-two" } }]);
+    expect(viaMaintainer.code).toBe(1);
+    const viaOutsider = runCheck({ EVENT_NAME: "push", BEFORE: sha("9") }, body, [{ user: { login: "outside-contributor" } }]);
+    expect(viaOutsider.code, viaOutsider.out).toBe(0);
   });
 
   test.skipIf(JQ === null)("checks every commit while the maintainer list is unset", () => {

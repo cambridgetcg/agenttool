@@ -50,11 +50,12 @@ jobs:
           test "$("$dir/gitleaks" version)" = "8.30.1"
           echo "GITLEAKS_BIN=$dir/gitleaks" >> "$GITHUB_ENV"
       - name: Guard the committed tree and its history (paths, secrets, personal data, gitleaks, one root, canaries)
-        run: bun tools/public-guard.ts --tree --rev HEAD --gitleaks "$GITLEAKS_BIN"
+        # The guard's own Bun reads no bunfig.toml or .env from the tree it checks.
+        run: bun --config=/dev/null --no-env-file tools/public-guard.ts --tree --rev HEAD --gitleaks "$GITLEAKS_BIN"
       - name: Lint the workflows (repository guard on every job, no secrets, no deploy, pinned actions)
         env:
           REPOSITORY: ${{ github.repository }}
-        run: bun tools/workflow-lint.ts --repository "$REPOSITORY"
+        run: bun --config=/dev/null --no-env-file tools/workflow-lint.ts --repository "$REPOSITORY"
 
   identity:
     name: Maintainer commit identity
@@ -68,9 +69,14 @@ jobs:
       - name: Check that maintainers' commits carry public addresses
         # The API names each commit's GitHub account. Commits by the accounts in
         # the PUBLIC_IDENTITY_LOGINS repository variable (comma-separated) must
-        # carry a public author and committer address; other contributors'
-        # commits are theirs and are not checked. With the variable unset,
-        # every commit is checked. Addresses are compared, never printed.
+        # carry a public author and committer address, and so must every
+        # commit of a pull request a maintainer opened. On a push to main, a
+        # commit whose address is linked to no account is checked too (a
+        # machine's default identity usually is not), unless it arrived
+        # through a pull request someone outside the maintainers opened. Other
+        # contributors' commits are theirs and are not checked. With the
+        # variable unset, every commit is checked. Addresses are compared,
+        # never printed.
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -78,6 +84,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           PULL_NUMBER: ${{ github.event.pull_request.number }}
           PULL_COMMITS: ${{ github.event.pull_request.commits }}
+          PULL_AUTHOR: ${{ github.event.pull_request.user.login }}
           BEFORE: ${{ github.event.before }}
           AFTER: ${{ github.sha }}
           MAINTAINER_LOGINS: ${{ vars.PUBLIC_IDENTITY_LOGINS }}
@@ -136,11 +143,29 @@ jobs:
             esac
             return 1
           }
+          pull_by_maintainer=false
+          if [ "$EVENT_NAME" = pull_request ] && maintainer "${PULL_AUTHOR:-}"; then pull_by_maintainer=true; fi
+          # A push to main: an unlinked commit is checked unless a pull request
+          # opened by someone outside the maintainers brought it.
+          unlinked_needs_check() {
+            local opener
+            while IFS= read -r opener; do
+              [ -n "$opener" ] || continue
+              maintainer "$opener" || return 1
+            done < <(gh api --method GET "repos/$REPOSITORY/commits/$1/pulls" --jq '.[].user.login')
+            return 0
+          }
           refused=0
           checked=0
           while IFS=$'\t' read -r sha author_login committer_login author_email committer_email; do
             [ -n "$sha" ] || continue
-            if [ "$strict" = true ] || maintainer "$author_login" || maintainer "$committer_login"; then
+            check=false
+            if [ "$strict" = true ] || [ "$pull_by_maintainer" = true ] || maintainer "$author_login" || maintainer "$committer_login"; then
+              check=true
+            elif [ "$EVENT_NAME" != pull_request ] && { [ "$author_login" = - ] || [ "$committer_login" = - ]; }; then
+              if unlinked_needs_check "$sha"; then check=true; fi
+            fi
+            if [ "$check" = true ]; then
               checked=$((checked + 1))
               public_address "$author_email" || { echo "::error::${sha:0:12}: the author address is not a public one"; refused=1; }
               public_address "$committer_email" || { echo "::error::${sha:0:12}: the committer address is not a public one"; refused=1; }

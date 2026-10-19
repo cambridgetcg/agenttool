@@ -6,7 +6,8 @@
 #       [--dir <path>] [--url <url>] [--root <commit>] [--hooks <dir>]
 #       [--name <name>] [--email <address>]
 #
-# It clones fresh (default ~/agenttool-open; an existing path is refused),
+# It clones fresh (default ~/<public repository name>; an existing path is
+# refused),
 # never adds this private repository as a remote, and sets, in the clone's
 # own config:
 #
@@ -27,7 +28,7 @@
 
 main() {
   set -euo pipefail
-  local here root dir="${HOME}/agenttool-open" url="" p0="" hooks="" name="" email="" gitleaks=""
+  local here root dir="" url="" p0="" hooks="" name="" email="" gitleaks=""
   here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
   root="$(cd "$here/../.." && pwd -P)"
   while [ "$#" -gt 0 ]; do
@@ -52,7 +53,8 @@ main() {
   fi
   [ -f "$root/private/guard/relational-denylist.json" ] || fail "this checkout has no private/guard; the clone's hook would refuse every push"
   local slug
-  slug="$(bun "$root/private/public-repository.ts")"
+  slug="$(bun --config=/dev/null --no-env-file "$root/private/public-repository.ts")"
+  [ -n "$dir" ] || dir="$HOME/${slug#*/}"
   [ -n "$url" ] || url="https://github.com/$slug.git"
   if [ -z "$p0" ]; then
     p0="$(git -C "$root" show refs/remotes/origin/main:private/export/public-root.txt 2>/dev/null | tr -d '[:space:]' || true)"
