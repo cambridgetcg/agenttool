@@ -740,11 +740,13 @@ describe("ci.yml consumes the classifier fail-closed", () => {
         overwrite: true,
       },
     });
-    // The token reaches only the lookup script, and only on a push.
+    // The token reaches only the lookup script, and only on a push. A crash
+    // leaves `proven` unset, which runs every job without failing the job.
     expect(proof).toEqual({
       name: "Look for a green pull-request run of this exact tree",
       id: "proof",
       if: "${{ github.event_name == 'push' }}",
+      "continue-on-error": true,
       env: { GH_TOKEN: "${{ github.token }}", CI_PUSH_BEFORE_SHA: "${{ github.event.before }}" },
       run: "bin/bash-without-env-hooks.sh bin/ci-tree-proof.sh",
     });

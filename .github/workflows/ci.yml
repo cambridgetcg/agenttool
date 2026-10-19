@@ -118,6 +118,10 @@ jobs:
       - name: Look for a green pull-request run of this exact tree
         id: proof
         if: ${{ github.event_name == 'push' }}
+        # The script reports every expected failure as `proven=false`. Should
+        # it still crash, `proven` stays unset and this push runs every job;
+        # the crash must not also fail the required aggregate.
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
           CI_PUSH_BEFORE_SHA: ${{ github.event.before }}
