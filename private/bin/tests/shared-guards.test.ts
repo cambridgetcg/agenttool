@@ -7,7 +7,7 @@
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { checkCommittedTree, contentFindings, SECRET_RULES, watchFindings } from "../../../tools/public-guard.ts";
+import { checkCommittedTree, contentFindings, isPublicAddress, parseWatchAck, SECRET_RULES, sharedTreeRefusal, watchFindings, watchRefKey } from "../../../tools/public-guard.ts";
 import { lintWorkflow, repositoryGuarded } from "../../../tools/workflow-lint.ts";
 import { PRIVATE_REPOSITORY, PUBLIC_REPOSITORY } from "../../public-repository.ts";
 import { gitBlobId, loadPrivateGuard, scanFiles } from "../relational-scan.ts";
@@ -120,6 +120,47 @@ describe("tree-mode history checks and watch mode", () => {
     expect(cli.status).toBe(1);
     expect(run(repo, process.execPath, [join(ROOT, "tools/public-guard.ts"), "--watch", "--tree"]).status).toBe(2);
   });
+
+  test("private paths are refused in any case and NFKC form, as a case-insensitive file system sees them; so is the retired public/private-guard", () => {
+    for (const path of ["private/x", "Private/guard/relational-denylist.json", "PRIVATE/x", "\uff50rivate/x", ".github/workflows/Private-ci.yml", ".GitHub/workflows/PRIVATE-x.yml", "projection.json", "public/private-guard/relational-denylist.json", "Public/Private-Guard/x"]) {
+      expect(sharedTreeRefusal(path), path).toBeDefined();
+    }
+    for (const path of ["privateer/x", "docs/private.md", "packages/private-notes/x", "public/index.html"]) expect(sharedTreeRefusal(path), path).toBeUndefined();
+    const { repo } = sharedRepo();
+    write(repo, "Private/guard/relational-denylist.json", "{}\n");
+    publicCommit(repo, "a case variant of the private namespace");
+    expect(treeRules(repo)).toEqual(["path/history-private-namespace", "path/private-namespace"]);
+  });
+
+  test("watch mode skips a ref acknowledged at its current commit, rechecks it when it moves, and checks annotated taggers", () => {
+    const { repo } = sharedRepo();
+    git(repo, "switch", "-q", "--orphan", "foreign");
+    write(repo, "x.md", "x\n");
+    const foreign = publicCommit(repo, "foreign");
+    git(repo, "switch", "-q", "-f", "main");
+    git(repo, "update-ref", "refs/remotes/pull/3", foreign);
+    git(repo, "branch", "-q", "-D", "foreign");
+    expect(watchFindings(repo).length).toBeGreaterThan(0);
+    expect(watchFindings(repo, "HEAD", { ack: new Map([["pull/3", foreign]]) })).toEqual([]);
+    write(repo, "tools/public-watch-ack.txt", `# handled\npull/3 ${foreign} # closed fork pull request\n`);
+    publicCommit(repo, "acknowledge");
+    expect(watchFindings(repo)).toEqual([]);
+    // An explicit list (the private scan's) replaces the tree's.
+    expect(watchFindings(repo, "HEAD", { ack: new Map() }).length).toBeGreaterThan(0);
+    expect(watchFindings(repo, "HEAD", { ack: new Map([["pull/3", "f".repeat(40)]]) }).length).toBeGreaterThan(0);
+    git(repo, "update-ref", "-d", "refs/remotes/pull/3");
+    expect(() => parseWatchAck(Buffer.from("pull/3 nothex\n"))).toThrow("full commit id");
+    expect(watchRefKey("refs/remotes/pull/12")).toBe("pull/12");
+    expect(watchRefKey("refs/remotes/origin/topic/x")).toBe("heads/topic/x");
+    expect(watchRefKey("refs/public-scan/tags/v1")).toBe("tags/v1");
+    // Annotated tags must carry a public tagger address.
+    run(repo, "git", ["tag", "-a", "v1", "-m", "release"], { env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_COMMITTER_NAME: "AgentTool", GIT_COMMITTER_EMAIL: "contact@cambridgetcg.com" } });
+    expect(watchFindings(repo)).toEqual([]);
+    run(repo, "git", ["tag", "-a", "v2", "-m", "release"], { env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_COMMITTER_NAME: "Ally", GIT_COMMITTER_EMAIL: ["ally", "privatemail.net"].join("@") } });
+    expect(watchFindings(repo).map((finding) => `${finding.path} ${finding.rule}`)).toEqual(["refs/tags/v2 personal/tagger-address"]);
+    expect(isPublicAddress("1+someone@users.noreply.github.com") && isPublicAddress("noreply@github.com") && isPublicAddress("contact@cambridgetcg.com")).toBe(true);
+    expect(isPublicAddress("someone@github.com") || isPublicAddress("a@b@users.noreply.github.com")).toBe(false);
+  });
 });
 
 describe("the workflow lint", () => {
@@ -136,6 +177,11 @@ describe("the workflow lint", () => {
     expect(problems("ci.yml", ok().replace("example/shared'", "example/shared' || true"))).toContain("does not start with if");
     expect(problems("ci.yml", ok("      - run: echo ${{ secrets.FLY_API_TOKEN }}\n"))).toContain("reads secret FLY_API_TOKEN");
     expect(problems("ci.yml", ok("      - run: echo ${{ secrets.GITHUB_TOKEN }}\n"))).not.toContain("reads secret");
+    expect(problems("ci.yml", ok("      - run: echo '${{ toJSON(secrets) }}'\n"))).toContain("reads the secrets context");
+    expect(problems("ci.yml", ok("      - run: echo ${{ secrets['NPM_TOKEN'] }}\n"))).toContain("reads secret NPM_TOKEN");
+    expect(problems("ci.yml", ok("      - run: echo ${{ format('{0}', secrets) }}\n"))).toContain("reads the secrets context");
+    expect(problems("ci.yml", ok().replace("    runs-on:", "    secrets: inherit\n    runs-on:"))).toContain("secrets: inherit");
+    expect(problems("ci.yml", ok("      - name: Check that no secrets are used\n        run: echo none\n"))).not.toContain("secret");
     expect(problems("ci.yml", ok().replace("    runs-on:", "    environment: production\n    runs-on:"))).toContain("deployment environment");
     expect(problems("ci.yml", ok().replace("  contents: read", "  contents: write"))).toContain("write permission at the top level");
     expect(problems("ci.yml", ok().replace("  contents: read", "  id-token: write"))).toContain("write permission");

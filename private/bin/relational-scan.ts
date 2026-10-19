@@ -3,14 +3,16 @@
  * The private relational scanner: every check that needs a literal private
  * value. Read private/README.md first.
  *
- *   bun private/bin/relational-scan.ts [scan] [--repo <dir>] [--guard-dir <dir>] [--json]
+ *   bun private/bin/relational-scan.ts [scan] [--repo <dir>] [--guard-dir <dir> | --guard-rev <commit>] [--json]
  *       [--tree <commit>]                          every blob of a tree, its path names, and its allow misses
- *       [--diff] [--messages] [--names] [--objects] [--shapes] [-- <rev-list arguments>]
+ *       [--diff] [--messages] [--names] [--objects] [--shapes] [--addresses] [-- <rev-list arguments>]
  *       [--ref-name <name>]... [--tag <ref>]...
  *       [--github <owner/name> [--since <ISO 8601 time>]]
  *       [--text <label>]                           text on standard input
  *   bun private/bin/relational-scan.ts add-literal --kind email|word --id l<NN> --reason <text>
  *                                                  (the value on standard input, never echoed)
+ *   bun private/bin/relational-scan.ts add-literal --github-account
+ *                                                  (every private address of the signed-in GitHub account)
  *
  * The shared tools/public-guard.ts holds shape rules only (MUST 1 of the
  * 2026-10-19 plan). Rules that need a literal live here and load their terms
@@ -30,15 +32,23 @@
  * - ../CANARY: random bytes whose blob id must never leave this repository;
  *   the denylist's own bytes are checked the same way.
  *
- * --diff reads added lines (merges against their first parent), --messages
- * commit messages and identity headers, --names added path names, --objects
- * every new blob's identity and the printable strings of new binary blobs.
- * --shapes also applies the public secret and personal shapes, with the
- * tree's tools/public-guard-allow.json. Findings print a location, a rule id,
+ * --diff reads added lines (merges against their first parent; Git
+ * attributes cannot hide them), --messages commit messages and identity
+ * headers, --names added path names, --objects every new blob's identity and
+ * the whole text of every new blob that is not UTF-8 text (binary printable
+ * strings, decoded UTF-16). --shapes also applies the public secret and
+ * personal shapes, with the tree's tools/public-guard-allow.json (shape
+ * entries only). --addresses, for a push of new commits, also refuses
+ * non-public addresses in commit and tag messages and a non-public tagger.
+ * --guard-rev reads the guard from a commit of the private repository
+ * instead of a directory. A copy of the denylist or of the literal digest
+ * list is a finding too. Findings print a location, a rule id,
  * and the flagged line's SHA-256; never matched text. A path or ref name that
  * hits is printed only as its SHA-256. Exit 0 clean, 1 findings, 2 error
  * (including a missing guard file: the scanner fails closed).
  */
+// First: refuse before the shared guard module runs unless it is the reviewed copy.
+import "./reviewed-shared.ts";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -55,14 +65,16 @@ import {
   formatFinding,
   git,
   GUARD_ALLOW_FILE,
+  isPermittedEmail,
+  isPublicAddress,
   lineSha256,
   parseAllowEntries,
   parseCommit,
   parseGuardAllow,
   PERSONAL_RULES,
-  printableStrings,
   readObjects,
   readTree,
+  repositoryEnv,
   scannableText,
   scanText,
   SECRET_RULES,
@@ -77,6 +89,10 @@ export const LITERALS_FILE = "literal-sha256.json";
 export const LITERALS_SCHEMA = "agenttool.private-literal-sha256/1";
 export const CANARY_FILE = "CANARY";
 export const DEFAULT_GUARD_DIR = resolve(import.meta.dir, "..", "guard");
+/** The guard directory's path inside a commit of the private repository. */
+export const GUARD_PATH = "private/guard";
+/** Addresses a commit or tag message may name besides the public ones: the co-author trailer of the coding agent. */
+const MESSAGE_ADDRESSES = new Set(["noreply@anthropic.com"]);
 /** Below this many remaining core requests the GitHub reader stops instead of spending the budget. */
 export const GITHUB_MIN_REMAINING = 500;
 
@@ -94,6 +110,9 @@ export interface PrivateGuard {
   /** Git blob ids (SHA-1 and SHA-256 object formats) of the denylist's bytes. */
   denylistBlobIds: Set<string>;
   literals: LiteralSet;
+  /** Git blob ids (both formats) and the SHA-256 of literal-sha256.json: its digests are a guess-confirm surface, so a copy is a leak too. */
+  literalListIds: Set<string>;
+  literalListSha256: string;
   /** Git blob ids of the canary file. */
   canaryIds: Set<string>;
   /** The denylist's and the literal file's allow entries together. */
@@ -151,27 +170,60 @@ export function parseLiterals(bytes: Uint8Array, source = LITERALS_FILE): Litera
   return set;
 }
 
-/** Loads the denylist, the literal digests, and the canary; any missing file refuses. */
-export function loadPrivateGuard(dir = DEFAULT_GUARD_DIR): PrivateGuard {
-  const guardDir = resolve(dir);
-  const denylistBytes = readRequired(join(guardDir, DENYLIST_FILE), "the relational denylist");
-  const denylist = parseDenylist(denylistBytes);
-  const literals = parseLiterals(readRequired(join(guardDir, LITERALS_FILE), "the literal digest list"));
+/** Builds the private guard from the three files' bytes; `where` names their source in errors. */
+export function privateGuardFromBytes(files: { denylist: Buffer; literals: Buffer; canary: Buffer }, where: string): PrivateGuard {
+  const denylist = parseDenylist(files.denylist);
+  const literals = parseLiterals(files.literals);
   for (const id of [...literals.email.values(), ...literals.word.values()]) {
     if (denylist.rules.some((rule) => rule.id === `relational/${id}`) || denylist.blobs.some((blob) => blob.id === id)) {
       throw new Error(`${LITERALS_FILE}: id ${id} collides with the denylist`);
     }
   }
-  const canary = readRequired(join(dirname(guardDir), CANARY_FILE), "the private canary");
-  if (canary.length < 16) throw new Error(`${CANARY_FILE} must hold at least 16 random bytes`);
+  if (files.canary.length < 16) throw new Error(`${CANARY_FILE} must hold at least 16 random bytes`);
   return {
-    dir: guardDir,
+    dir: where,
     denylist,
-    denylistBlobIds: new Set([gitBlobId(denylistBytes), gitBlobId(denylistBytes, "sha256")]),
+    denylistBlobIds: new Set([gitBlobId(files.denylist), gitBlobId(files.denylist, "sha256")]),
     literals,
-    canaryIds: new Set([gitBlobId(canary), gitBlobId(canary, "sha256")]),
+    literalListIds: new Set([gitBlobId(files.literals), gitBlobId(files.literals, "sha256")]),
+    literalListSha256: sha256Hex(files.literals),
+    canaryIds: new Set([gitBlobId(files.canary), gitBlobId(files.canary, "sha256")]),
     allow: [...denylist.allow, ...literals.allow],
   };
+}
+
+/** Loads the denylist, the literal digests, and the canary from a directory; any missing file refuses. */
+export function loadPrivateGuard(dir = DEFAULT_GUARD_DIR): PrivateGuard {
+  const guardDir = resolve(dir);
+  return privateGuardFromBytes(
+    {
+      denylist: readRequired(join(guardDir, DENYLIST_FILE), "the relational denylist"),
+      literals: readRequired(join(guardDir, LITERALS_FILE), "the literal digest list"),
+      canary: readRequired(join(dirname(guardDir), CANARY_FILE), "the private canary"),
+    },
+    guardDir,
+  );
+}
+
+/**
+ * Loads the private guard from a commit's objects (private/guard/* and
+ * private/CANARY), never from a working tree: a working tree can hold bytes
+ * a merge or a case-folding file system put there.
+ */
+export function loadPrivateGuardFromRev(repo: string, rev: string): PrivateGuard {
+  const blob = (path: string, what: string): Buffer => {
+    const result = git(repo, ["cat-file", "blob", `${rev}:${path}`], { allowFailure: true });
+    if (result.status !== 0) throw new GuardMissing(`${what} is missing from ${rev} (${path}); the private scan cannot run, so it refuses`);
+    return result.stdout;
+  };
+  return privateGuardFromBytes(
+    {
+      denylist: blob(`${GUARD_PATH}/${DENYLIST_FILE}`, "the relational denylist"),
+      literals: blob(`${GUARD_PATH}/${LITERALS_FILE}`, "the literal digest list"),
+      canary: blob(`private/${CANARY_FILE}`, "the private canary"),
+    },
+    `${rev}:${GUARD_PATH}`,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -266,6 +318,9 @@ export function blobIdentityFindings(blobs: ReadonlyArray<{ path: string; oid: s
     if (guard.denylistBlobIds.has(blob.oid) || digest === guard.denylist.sha256) {
       findings.push({ layer: "relational", rule: "relational/denylist-copy", path: blob.path });
     }
+    if (guard.literalListIds.has(blob.oid) || digest === guard.literalListSha256) {
+      findings.push({ layer: "relational", rule: "relational/literal-list-copy", path: blob.path });
+    }
     const rule = withheld.get(digest);
     if (rule !== undefined) findings.push({ layer: "relational", rule, path: blob.path });
   }
@@ -318,9 +373,37 @@ export function scanTree(repo: string, rev: string, guard: PrivateGuard, shapes:
   return scanFiles(files, guard, { wholeTree: true, shapes, publicAllow: shapes === "none" ? [] : publicAllowEntries(files) });
 }
 
+/**
+ * The shared tree's own allow entries, for the public shapes only. The
+ * shared file is edited in public, so an entry for a relational rule is
+ * dropped here whatever the shared parser accepts.
+ */
 function publicAllowEntries(files: readonly TreeFile[]): AllowEntry[] {
   const allow = files.find((file) => file.path === GUARD_ALLOW_FILE);
-  return allow === undefined ? [] : parseGuardAllow(allow.bytes).entries;
+  return allow === undefined ? [] : shapeOnly(parseGuardAllow(allow.bytes).entries);
+}
+
+function shapeOnly(entries: readonly AllowEntry[]): AllowEntry[] {
+  return entries.filter((entry) => !entry.rule.startsWith("relational/"));
+}
+
+/**
+ * Email addresses in a message that are not public ones (the project
+ * contact, GitHub noreply addresses, reserved example domains, and the coding
+ * agent's co-author address). Only the push of new commits applies it:
+ * merged contributions carry their authors' own sign-off lines.
+ */
+export function messageAddressFindings(path: string, text: string): Finding[] {
+  const findings: Finding[] = [];
+  for (const [index, line] of text.split("\n").entries()) {
+    for (const match of line.matchAll(new RegExp(EMAIL_PATTERN.source, "gu"))) {
+      const address = match[0].toLowerCase();
+      if (isPublicAddress(address) || isPermittedEmail(address) || MESSAGE_ADDRESSES.has(address)) continue;
+      findings.push({ layer: "personal", rule: "personal/message-address", path, line: index + 1, lineSha256: lineSha256(line) });
+      break;
+    }
+  }
+  return findings;
 }
 
 // ---------------------------------------------------------------------------
@@ -355,26 +438,48 @@ export interface AddedLine {
   text: string;
 }
 
-/** Added lines of every commit the rev-list arguments select; merges against their first parent. */
+/**
+ * Added lines of every commit the rev-list arguments select; merges against
+ * their first parent. Git attributes cannot hide a line: the diff is forced
+ * to text (`--text`), no attributes file outside the repository is read, and
+ * no textconv or external diff runs, so a `-diff` or `binary` attribute in
+ * .gitattributes, $GIT_DIR/info/attributes, or core.attributesFile changes
+ * nothing. Whether a file is binary is decided by its new blob's bytes
+ * instead: lines of a blob that is not UTF-8 text are left to the object
+ * scan, which reads its whole decoded text or printable strings.
+ */
 export function addedLines(repo: string, revArgs: readonly string[]): AddedLine[] {
-  const output = git(repo, [
-    "-c",
-    "core.quotePath=false",
-    "log",
-    "--no-color",
-    "--no-ext-diff",
-    "--no-textconv",
-    "--no-renames",
-    "--diff-merges=first-parent",
-    "-p",
-    "-U0",
-    "--format=%x00%H",
-    ...revArgs,
-    "--",
-  ]).stdout.toString("utf8");
-  const lines: AddedLine[] = [];
+  const output = git(
+    repo,
+    [
+      "-c",
+      "core.quotePath=false",
+      "-c",
+      "core.attributesFile=/dev/null",
+      "-c",
+      "diff.relative=false",
+      "log",
+      "--no-color",
+      "--no-ext-diff",
+      "--no-textconv",
+      "--text",
+      "--full-index",
+      "--src-prefix=a/",
+      "--dst-prefix=b/",
+      "--no-renames",
+      "--diff-merges=first-parent",
+      "-p",
+      "-U0",
+      "--format=%x00%H",
+      ...revArgs,
+      "--",
+    ],
+    { env: { ...repositoryEnv(), GIT_ATTR_NOSYSTEM: "1", GIT_CONFIG_NOSYSTEM: "1" } },
+  ).stdout.toString("utf8");
+  const lines: Array<AddedLine & { blob: string }> = [];
   let commit = "";
   let path: string | undefined;
+  let blob = "";
   let next = 0;
   let inHunk = false;
   for (const raw of output.split("\n")) {
@@ -386,8 +491,16 @@ export function addedLines(repo: string, revArgs: readonly string[]): AddedLine[
     }
     if (raw.startsWith("diff --git ")) {
       path = undefined;
+      blob = "";
       inHunk = false;
       continue;
+    }
+    if (!inHunk) {
+      const index = /^index [0-9a-f]+\.\.([0-9a-f]+)/u.exec(raw);
+      if (index !== null) {
+        blob = index[1] as string;
+        continue;
+      }
     }
     if (!inHunk && raw.startsWith("+++ ")) {
       const target = raw.slice(4);
@@ -402,11 +515,14 @@ export function addedLines(repo: string, revArgs: readonly string[]): AddedLine[
     }
     if (!inHunk || path === undefined) continue;
     if (raw.startsWith("+")) {
-      lines.push({ commit, path, line: next, text: raw.slice(1) });
+      lines.push({ commit, path, line: next, text: raw.slice(1), blob });
       next += 1;
     }
   }
-  return lines;
+  const blobs = [...new Set(lines.map((line) => line.blob).filter((oid) => /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/u.test(oid)))];
+  const contents = readObjects(repo, blobs);
+  const textBlobs = new Set(blobs.filter((oid) => blobKind(contents.get(oid) ?? Buffer.alloc(0)) === "text"));
+  return lines.filter((line) => textBlobs.has(line.blob)).map(({ blob: _blob, ...line }) => line);
 }
 
 function commitList(repo: string, revArgs: readonly string[]): string[] {
@@ -419,6 +535,8 @@ export interface CommitScanOptions {
   names?: boolean;
   objects?: boolean;
   shapes?: boolean;
+  /** Also refuse non-public email addresses in commit messages (the push of new commits; see messageAddressFindings). */
+  addresses?: boolean;
 }
 
 /** Private layers (and, with `shapes`, the public shapes) over the commits a rev-list selects. */
@@ -429,7 +547,7 @@ export function scanCommits(repo: string, revArgs: readonly string[], guard: Pri
   let publicAllow: AllowEntry[] = [];
   if (options.shapes) {
     const tip = git(repo, ["cat-file", "blob", `${commits[0]}:${GUARD_ALLOW_FILE}`], { allowFailure: true });
-    if (tip.status === 0) publicAllow = parseGuardAllow(tip.stdout).entries;
+    if (tip.status === 0) publicAllow = shapeOnly(parseGuardAllow(tip.stdout).entries);
   }
   if (options.messages) {
     const objects = readObjects(repo, commits);
@@ -437,6 +555,7 @@ export function scanCommits(repo: string, revArgs: readonly string[], guard: Pri
       const shape = parseCommit(decodeText(objects.get(commit) ?? Buffer.alloc(0)), { strict: false });
       const where = `commit:${commit.slice(0, 12)}`;
       findings.push(...privateTextFindings(`${where}:message`, shape.message, guard, options.shapes ? "secret" : "none"));
+      if (options.addresses) findings.push(...messageAddressFindings(`${where}:message`, shape.message));
       for (const [label, header] of [["author", shape.author], ["committer", shape.committer]] as const) {
         const identity = header.replace(/ \d+ [+-]\d{4}$/u, "");
         findings.push(...literalFindings(`${where}:${label}`, identity, guard.literals));
@@ -483,16 +602,18 @@ export function scanCommits(repo: string, revArgs: readonly string[], guard: Pri
     const contents = readObjects(repo, blobs.map((blob) => blob.oid));
     const files = blobs.map((blob) => ({ path: blob.path || `(object ${blob.oid.slice(0, 12)})`, oid: blob.oid, bytes: contents.get(blob.oid) ?? Buffer.alloc(0) }));
     findings.push(...blobIdentityFindings(files, guard));
+    // A blob that is not UTF-8 text (binary, or BOM-marked UTF-16) has no
+    // added lines above; its whole decoded text or printable strings are read.
     for (const file of files) {
-      if (blobKind(file.bytes) !== "binary") continue;
-      findings.push(...privateTextFindings(file.path, printableStrings(file.bytes), guard, options.shapes ? "secret" : "none"));
+      if (blobKind(file.bytes) === "text") continue;
+      findings.push(...privateTextFindings(file.path, scannableText(file.bytes), guard, options.shapes ? "secret" : "none"));
     }
   }
   return sortFindings(dedupe(findings));
 }
 
-/** An annotated tag's message (a lightweight tag has none). */
-export function tagFindings(repo: string, ref: string, guard: PrivateGuard): Finding[] {
+/** An annotated tag's message and tagger (a lightweight tag has neither); with `addresses`, both must hold public addresses only. */
+export function tagFindings(repo: string, ref: string, guard: PrivateGuard, options: { addresses?: boolean } = {}): Finding[] {
   const type = git(repo, ["cat-file", "-t", ref], { allowFailure: true });
   if (type.status !== 0) throw new Error(`cannot read ${nameLabel("ref", ref)}`);
   if (type.stdout.toString("utf8").trim() !== "tag") return [];
@@ -502,10 +623,18 @@ export function tagFindings(repo: string, ref: string, guard: PrivateGuard): Fin
   const where = `tag:${oid.slice(0, 12)}`;
   const headers = split < 0 ? raw : raw.slice(0, split);
   const tagger = /^tagger (.*) \d+ [+-]\d{4}$/mu.exec(headers)?.[1] ?? "";
-  return [
-    ...privateTextFindings(`${where}:message`, split < 0 ? "" : raw.slice(split + 2), guard, "secret"),
+  const message = split < 0 ? "" : raw.slice(split + 2);
+  const findings = [
+    ...privateTextFindings(`${where}:message`, message, guard, "secret"),
     ...literalFindings(`${where}:tagger`, tagger, guard.literals),
+    ...scanText(`${where}:tagger`, tagger, guard.denylist.rules),
   ];
+  if (options.addresses) {
+    const address = /<([^>]*)>\s*$/u.exec(tagger)?.[1] ?? "";
+    if (!isPublicAddress(address)) findings.push({ layer: "personal", rule: "personal/tagger-address", path: `${where}:tagger` });
+    findings.push(...messageAddressFindings(`${where}:message`, message));
+  }
+  return findings;
 }
 
 // ---------------------------------------------------------------------------
@@ -590,15 +719,47 @@ export function addLiteral(guardDir: string, options: { kind: "email" | "word"; 
   writeFileSync(path, text);
 }
 
+/**
+ * Adds every address of the signed-in GitHub account (`gh api --method GET
+ * user/emails`, which needs the user:email scope) that is not a public one
+ * and not yet listed. Returns counts only; no address is printed.
+ */
+export function addGithubAccountLiterals(guardDir: string, gh: GhRunner = defaultGh): { listed: number; public: number; added: number } {
+  const addresses = [...new Set(gh(["user/emails", "--jq", ".[].email"]).split("\n").map((line) => line.normalize("NFKC").trim().toLowerCase()).filter(Boolean))];
+  const counts = { listed: 0, public: 0, added: 0 };
+  for (const address of addresses) {
+    if (isPublicAddress(address)) {
+      counts.public += 1;
+      continue;
+    }
+    const path = join(resolve(guardDir), LITERALS_FILE);
+    const current = JSON.parse(readFileSync(path, "utf8")) as { literals: Array<{ id: string; sha256: string }> };
+    if (current.literals.some((entry) => entry.sha256 === sha256Hex(address))) {
+      counts.listed += 1;
+      continue;
+    }
+    const next = Math.max(0, ...current.literals.map((entry) => Number(entry.id.slice(1)))) + 1;
+    addLiteral(guardDir, {
+      kind: "email",
+      id: `l${String(next).padStart(2, "0")}`,
+      reason: "an address of the owner's GitHub account (user/emails): never in a public commit, tag, message, file, or pull request text",
+      value: address,
+    });
+    counts.added += 1;
+  }
+  return counts;
+}
+
 // ---------------------------------------------------------------------------
 // CLI
 
 function usage(): never {
   console.error(
-    "usage: bun private/bin/relational-scan.ts [scan] [--repo <dir>] [--guard-dir <dir>] [--json] [--tree <commit>]\n" +
-      "         [--diff] [--messages] [--names] [--objects] [--shapes] [--ref-name <name>]... [--tag <ref>]...\n" +
+    "usage: bun private/bin/relational-scan.ts [scan] [--repo <dir>] [--guard-dir <dir> | --guard-rev <commit>] [--json] [--tree <commit>]\n" +
+      "         [--diff] [--messages] [--names] [--objects] [--shapes] [--addresses] [--ref-name <name>]... [--tag <ref>]...\n" +
       "         [--github <owner/name> [--since <time>]] [--text <label>] [-- <rev-list arguments>]\n" +
-      "       bun private/bin/relational-scan.ts add-literal --kind email|word --id l<NN> --reason <text> [--guard-dir <dir>]",
+      "       bun private/bin/relational-scan.ts add-literal --kind email|word --id l<NN> --reason <text> [--guard-dir <dir>]\n" +
+      "       bun private/bin/relational-scan.ts add-literal --github-account [--guard-dir <dir>]   (needs gh's user:email scope)",
   );
   process.exit(2);
 }
@@ -608,6 +769,7 @@ async function main(argv: readonly string[]): Promise<number> {
   const command = args[0] === "scan" || args[0] === "add-literal" ? (args.shift() as string) : "scan";
   let repo = ".";
   let guardDir = DEFAULT_GUARD_DIR;
+  let guardRev: string | undefined;
   let json = false;
   let tree: string | undefined;
   const commitOptions: CommitScanOptions = {};
@@ -620,6 +782,7 @@ async function main(argv: readonly string[]): Promise<number> {
   let kind: string | undefined;
   let id: string | undefined;
   let reason: string | undefined;
+  let githubAccount = false;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index] as string;
     const value = () => {
@@ -632,6 +795,8 @@ async function main(argv: readonly string[]): Promise<number> {
       break;
     } else if (arg === "--repo") repo = value();
     else if (arg === "--guard-dir") guardDir = value();
+    else if (arg === "--guard-rev") guardRev = value();
+    else if (arg === "--addresses") commitOptions.addresses = true;
     else if (arg === "--json") json = true;
     else if (arg === "--tree") tree = value();
     else if (arg === "--diff") commitOptions.diff = true;
@@ -647,7 +812,13 @@ async function main(argv: readonly string[]): Promise<number> {
     else if (arg === "--kind") kind = value();
     else if (arg === "--id") id = value();
     else if (arg === "--reason") reason = value();
+    else if (arg === "--github-account") githubAccount = true;
     else usage();
+  }
+  if (command === "add-literal" && githubAccount) {
+    const counts = addGithubAccountLiterals(guardDir);
+    console.error(`relational scan: account addresses: ${counts.added} added, ${counts.listed} already listed, ${counts.public} public; no address was printed`);
+    return 0;
   }
   if (command === "add-literal") {
     if ((kind !== "email" && kind !== "word") || id === undefined || reason === undefined) usage();
@@ -656,7 +827,7 @@ async function main(argv: readonly string[]): Promise<number> {
     console.error(`relational scan: added ${id} (${kind}); the value was not printed`);
     return 0;
   }
-  const guard = loadPrivateGuard(guardDir);
+  const guard = guardRev === undefined ? loadPrivateGuard(guardDir) : loadPrivateGuardFromRev(resolve(repo), guardRev);
   const wantsCommits = commitOptions.diff || commitOptions.messages || commitOptions.names || commitOptions.objects;
   if (wantsCommits && revArgs.length === 0) usage();
   if (!wantsCommits && revArgs.length > 0) usage();
@@ -671,7 +842,7 @@ async function main(argv: readonly string[]): Promise<number> {
   }
   if (wantsCommits) findings.push(...scanCommits(repoDir, revArgs, guard, commitOptions));
   for (const name of refNames) findings.push(...nameFindings("ref", name, guard));
-  for (const tag of tags) findings.push(...tagFindings(repoDir, tag, guard));
+  for (const tag of tags) findings.push(...tagFindings(repoDir, tag, guard, { addresses: commitOptions.addresses }));
   if (github !== undefined) findings.push(...githubFindings(githubTexts(github, { since }), guard));
   if (textLabel !== undefined) {
     const text = await new Response(Bun.stdin.stream()).text();
@@ -701,4 +872,3 @@ if (import.meta.main) {
     },
   );
 }
-

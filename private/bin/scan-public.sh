@@ -7,8 +7,9 @@
 #
 # It keeps a bare mirror of the public repository in <state>/mirror.git
 # (default state: ~/.local/state/agenttool/public-scan), so public objects
-# never enter a private checkout, and reads its private terms from this
-# checkout's private/guard. Each run:
+# never enter a private checkout. Its scanner, the shared guard, and the
+# private terms come from origin/main's committed objects (committed-tools.sh),
+# never from this checkout's working tree. Each run:
 #
 #   1. fetches every public branch, pull request head, and tag into
 #      refs/public-scan/* of the mirror;
@@ -29,11 +30,20 @@
 # finding is written to <state>/alerts/<time>.txt, optionally shown as a
 # macOS notification (--notify), and exits 1. The scanned marks and the
 # --github time advance only after a clean run, so an alert repeats until
-# someone handles it. --print-launchd-plist prints a LaunchAgent for a daily
-# run and changes nothing.
+# someone handles it. A handled ref that cannot be deleted (a closed pull
+# request's head) is listed in <state>/acknowledged.txt as
+# `<heads/…|pull/…|tags/…> <full commit id>` (see tools/public-guard.ts
+# parseWatchAck): it is skipped while it stays at that commit. That list is
+# this machine's own; the public repository's tools/public-watch-ack.txt
+# never silences this scan. --print-launchd-plist prints a LaunchAgent for a
+# daily run and changes nothing.
 
 main() {
   set -euo pipefail
+  # This tool's own Bun reads no bunfig.toml or .env from the checkout it
+  # runs in: a committed preload would otherwise run before, or instead of,
+  # every check.
+  local bun_guard=(bun --config=/dev/null --no-env-file)
   local here root url="" state="${HOME}/.local/state/agenttool/public-scan" github=0 notify=0 plist=0
   here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
   root="$(cd "$here/../.." && pwd -P)"
@@ -50,7 +60,7 @@ main() {
   done
   command -v bun >/dev/null 2>&1 || fail 2 "bun is required"
   local slug
-  slug="$(bun "$root/private/public-repository.ts")"
+  slug="$("${bun_guard[@]}" "$root/private/public-repository.ts")"
   [ -n "$url" ] || url="https://github.com/$slug.git"
 
   if [ "$plist" = 1 ]; then
@@ -59,6 +69,14 @@ main() {
   fi
 
   [ -f "$root/private/guard/relational-denylist.json" ] || fail 2 "this checkout has no private/guard; the scan refuses to run without it"
+  # shellcheck source=private/bin/committed-tools.sh
+  source "$here/committed-tools.sh"
+  hooks_path_present "$root" || fail 2 "this checkout's core.hooksPath names a missing directory, so git runs no hook here; reinstall the guards (install-guards.sh --verify)"
+  local tools
+  tools="$(mktemp -d "${TMPDIR:-/tmp}/scan-public-tools.XXXXXX")"
+  trap 'rm -rf "${tools:-}" "${report:-}"' EXIT
+  committed_tools "$root" refs/remotes/origin/main "$tools" || fail 2 "cannot use origin/main's committed tools (see above)"
+  local guard_dir="$tools/private/guard"
   local p0
   p0="$(git -C "$root" show refs/remotes/origin/main:private/export/public-root.txt 2>/dev/null | tr -d '[:space:]' || true)"
   [[ "$p0" =~ ^[0-9a-f]{40}$ ]] || fail 2 "origin/main has no private/export/public-root.txt yet"
@@ -78,7 +96,36 @@ main() {
   local started findings=0
   started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   report="$(mktemp)"
-  trap 'rm -f "${report:-}"' EXIT
+
+  # Marks of refs the public side deleted are dropped, so a mark never keeps a
+  # handled commit in view after its ref is gone.
+  local mark
+  while read -r mark; do
+    [ -n "$mark" ] || continue
+    git -C "$mirror" rev-parse --verify --quiet "refs/public-scan/${mark#refs/public-scanned/}" >/dev/null || git -C "$mirror" update-ref -d "$mark"
+  done < <(git -C "$mirror" for-each-ref --format='%(refname)' refs/public-scanned)
+
+  # Acknowledged refs: marked scanned at their acknowledged commit and left
+  # out of the root check, so one handled ref does not hold every other back.
+  local ack="$state/acknowledged.txt"
+  [ -f "$ack" ] || : >"$ack"
+  local acked
+  acked="$("${bun_guard[@]}" -e 'const { parseWatchAck } = await import(process.argv[1]); for (const [key, oid] of parseWatchAck(await Bun.file(process.argv[2]).bytes(), process.argv[2])) console.log(`${key} ${oid}`);' "$tools/tools/public-guard.ts" "$ack")" ||
+    fail 2 "$ack is not a valid acknowledgement list"
+  local key oid
+  while read -r key oid; do
+    [ -n "${key:-}" ] || continue
+    if [ "$(git -C "$mirror" rev-parse --verify --quiet "refs/public-scan/$key^{commit}" || true)" = "$oid" ]; then
+      git -C "$mirror" update-ref "refs/public-scanned/$key" "$oid"
+    fi
+  done <<<"$acked"
+  is_acked() {
+    local wanted="${1#refs/public-scan/}" commit="$2" key oid
+    while read -r key oid; do
+      [ "$key" = "$wanted" ] && [ "$oid" = "$commit" ] && return 0
+    done <<<"$acked"
+    return 1
+  }
 
   # 2. Roots and the public watch mode.
   local ref commit roots
@@ -88,13 +135,14 @@ main() {
       echo "$ref: integrity/ref-not-commit" >>"$report"
       continue
     fi
+    is_acked "$ref" "$commit" && continue
     roots="$(git -C "$mirror" rev-list --max-parents=0 "$commit")"
     [ "$roots" = "$p0" ] || echo "$ref: integrity/foreign-root (${commit:0:12})" >>"$report"
   done < <(git -C "$mirror" for-each-ref --format='%(refname)' refs/public-scan/heads refs/public-scan/pull refs/public-scan/tags)
-  check watch bash -c 'cd "$1" && exec bun "$2" --watch --rev refs/public-scan/heads/main' _ "$mirror" "$root/tools/public-guard.ts"
+  check watch bash -c 'cd "$1" && exec bun --config=/dev/null --no-env-file "$2" --watch --rev refs/public-scan/heads/main --ack "$3"' _ "$mirror" "$tools/tools/public-guard.ts" "$ack"
 
   # 3. New commits, ref names, and tag messages.
-  local scan_args=(--repo "$mirror" --guard-dir "$root/private/guard")
+  local scan_args=(--repo "$mirror" --guard-dir "$guard_dir")
   local name tag
   while read -r name; do
     scan_args+=(--ref-name "${name#refs/public-scan/}")
@@ -105,16 +153,16 @@ main() {
   if [ -n "$(git -C "$mirror" rev-list --glob='refs/public-scan/*' --not --glob='refs/public-scanned/*' -- | head -n 1)" ]; then
     scan_args+=(--diff --messages --names --objects --shapes -- --glob='refs/public-scan/*' --not --glob='refs/public-scanned/*')
   fi
-  check commits bun "$root/private/bin/relational-scan.ts" "${scan_args[@]}"
+  check commits "${bun_guard[@]}" "$tools/private/bin/relational-scan.ts" "${scan_args[@]}"
 
   # 4. Public main's whole tree.
-  check tree bun "$root/private/bin/relational-scan.ts" --repo "$mirror" --guard-dir "$root/private/guard" --tree refs/public-scan/heads/main
+  check tree "${bun_guard[@]}" "$tools/private/bin/relational-scan.ts" --repo "$mirror" --guard-dir "$guard_dir" --tree refs/public-scan/heads/main
 
   # 5. Pull request and issue text.
   if [ "$github" = 1 ]; then
     local since_args=()
     [ -f "$state/github-since" ] && since_args=(--since "$(cat "$state/github-since")")
-    check github bun "$root/private/bin/relational-scan.ts" --guard-dir "$root/private/guard" --github "$slug" "${since_args[@]+"${since_args[@]}"}"
+    check github "${bun_guard[@]}" "$tools/private/bin/relational-scan.ts" --guard-dir "$guard_dir" --github "$slug" "${since_args[@]+"${since_args[@]}"}"
   fi
 
   findings="$(grep -c . "$report" || true)"

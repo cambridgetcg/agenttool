@@ -8,6 +8,7 @@ import { userInfo } from "node:os";
 import { join } from "node:path";
 import { lineSha256 } from "../../../tools/public-guard.ts";
 import {
+  addGithubAccountLiterals,
   addLiteral,
   gitBlobId,
   githubFindings,
@@ -15,6 +16,8 @@ import {
   GuardMissing,
   literalHits,
   loadPrivateGuard,
+  loadPrivateGuardFromRev,
+  messageAddressFindings,
   nameFindings,
   parseLiterals,
   scanCommits,
@@ -123,6 +126,17 @@ describe("text, names, and blobs", () => {
       "x/corpus.txt relational/b01",
       "x/words.json relational/denylist-copy",
     ]);
+    // The literal digest list is a guess-confirm surface: a copy of it is a leak too.
+    const literals = readFileSync(join(fixture.guardDir, "literal-sha256.json"));
+    expect(rules(scanFiles([file("x/digests.json", literals)], guard).findings)).toEqual(["relational/literal-list-copy"]);
+  });
+
+  test("the guard loads from a commit's objects as well as from a directory, and the two agree", () => {
+    const fromRev = loadPrivateGuardFromRev(fixture.repo, "HEAD");
+    expect(fromRev.denylist.sha256).toBe(guard.denylist.sha256);
+    expect([...fromRev.canaryIds]).toEqual([...guard.canaryIds]);
+    expect([...fromRev.literalListIds]).toEqual([...guard.literalListIds]);
+    expect(() => loadPrivateGuardFromRev(publicRepo("no-guard"), "HEAD")).toThrow(GuardMissing);
   });
 
   test("allow entries silence an exact line; in a whole-tree scan an unused entry is an allow miss, reported apart", () => {
@@ -185,6 +199,38 @@ describe("commits, refs, tags, and the CLI", () => {
     expect(cli.status).toBe(1);
     expect(cli.out.toLowerCase()).not.toContain(TERM);
     expect(cli.out.toLowerCase()).not.toContain(OWNER_ADDRESS);
+    git(repo, "reset", "-q", "--hard", clean);
+  });
+
+  test("git attributes cannot hide added lines: -diff and binary in .gitattributes or info/attributes (T1)", () => {
+    for (const [where, attributes] of [[".gitattributes", "*.md -diff\n"], [".gitattributes", "*.md binary\n"], ["info", "* -diff\n"]] as const) {
+      if (where === "info") writeFileSync(join(repo, ".git/info/attributes"), attributes);
+      else write(repo, ".gitattributes", attributes);
+      write(repo, "hidden.md", `${TERM}\n`);
+      publicCommit(repo, "attributes");
+      expect(rules(scanCommits(repo, [`${clean}..HEAD`], guard, { diff: true })), `${where} ${attributes}`).toEqual(["relational/r01"]);
+      rmSync(join(repo, ".git/info/attributes"), { force: true });
+      git(repo, "reset", "-q", "--hard", clean);
+    }
+  });
+
+  test("a UTF-16 file has no added lines, so its whole decoded text is read with the objects", () => {
+    const utf16 = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(`${TERM}\n`, "utf16le")]);
+    write(repo, "notes.txt", utf16);
+    publicCommit(repo, "utf-16");
+    expect(rules(scanCommits(repo, [`${clean}..HEAD`], guard, { diff: true }))).toEqual([]);
+    expect(rules(scanCommits(repo, [`${clean}..HEAD`], guard, { diff: true, objects: true }))).toEqual(["relational/r01"]);
+    git(repo, "reset", "-q", "--hard", clean);
+  });
+
+  test("with addresses, a message may name only public addresses; merged contributions are not held to it", () => {
+    const address = ["ally", "privatemail.net"].join("@");
+    expect(rules(messageAddressFindings("m", `Fix\n\nCo-authored-by: Ally <${address}>\n`))).toEqual(["personal/message-address"]);
+    expect(messageAddressFindings("m", "Fix\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nSigned-off-by: X <1+x@users.noreply.github.com>\nSee contact@cambridgetcg.com or a@example.com\n")).toEqual([]);
+    write(repo, "m.md", "m\n");
+    commitAll(repo, `trailer\n\nCo-authored-by: Ally <${address}>`, { name: "AgentTool", email: "contact@cambridgetcg.com" });
+    expect(scanCommits(repo, [`${clean}..HEAD`], guard, { messages: true })).toEqual([]);
+    expect(rules(scanCommits(repo, [`${clean}..HEAD`], guard, { messages: true, addresses: true }))).toEqual(["personal/message-address"]);
     git(repo, "reset", "-q", "--hard", clean);
   });
 
@@ -254,6 +300,23 @@ describe("pull request and issue text through GET only", () => {
 });
 
 describe("add-literal", () => {
+  test("adds the signed-in account's private addresses as digests, skipping public and listed ones, printing counts only", () => {
+    const dir = join(scratch.dir, "account-literals");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "literal-sha256.json"), readFileSync(join(fixture.guardDir, "literal-sha256.json")));
+    const second = ["second", "privatemail.net"].join("@");
+    const calls: string[][] = [];
+    const counts = addGithubAccountLiterals(dir, (args) => {
+      calls.push([...args]);
+      return `${OWNER_ADDRESS}\n${second.toUpperCase()}\n123+owner@users.noreply.github.com\n`;
+    });
+    expect(counts).toEqual({ listed: 1, public: 1, added: 1 });
+    expect(calls).toEqual([["user/emails", "--jq", ".[].email"]]);
+    const text = readFileSync(join(dir, "literal-sha256.json"), "utf8");
+    expect(text).not.toContain(second);
+    expect(literalHits(`to ${second}`, parseLiterals(Buffer.from(text))).size).toBe(1);
+  });
+
   test("appends a digest from standard input without echoing the value", () => {
     const dir = join(scratch.dir, "literal-guard");
     mkdirSync(dir, { recursive: true });

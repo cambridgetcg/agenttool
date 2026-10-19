@@ -51,7 +51,11 @@ type Job = { if?: unknown; environment?: unknown; permissions?: unknown; uses?: 
 const PINNED = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_./-]+@[0-9a-f]{40}$/u;
 const FORBIDDEN_TRIGGERS = ["pull_request_target", "workflow_run"];
 const FLY = /superfly\/|\bflyctl\b|\bfly\s+(?:deploy|ssh|secrets|machine|machines|apps|auth|scale|releases)\b|\bFLY_[A-Z0-9_]+/u;
-const SECRET = /\bsecrets\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)|\bsecrets\s*\[|\bsecrets\s*:\s*inherit\b/gu;
+/** An expression (`${{ ... }}`); job and step `if:` values are expressions without the braces. */
+const EXPRESSION = /\$\{\{([\s\S]*?)\}\}/gu;
+const SECRET_NAME = /\bsecrets\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)|\bsecrets\s*\[\s*'([^']*)'\s*\]/gu;
+const SECRETS_CONTEXT = /\bsecrets\b/u;
+const INHERIT = /^\s*secrets\s*:\s*inherit\b/mu;
 
 function pinned(uses: string): boolean {
   return uses.startsWith("./") || PINNED.test(uses) || /^docker:\/\/[^@\s]+@sha256:[0-9a-f]{64}$/u.test(uses);
@@ -93,9 +97,25 @@ export function lintWorkflow(file: string, source: string, repository: string): 
   }
   if (workflow.permissions === undefined) add("declares no top-level permissions");
   if (writes(workflow.permissions)) add("grants a write permission at the top level");
-  for (const match of source.matchAll(SECRET)) {
-    if (match[1] !== "GITHUB_TOKEN") add(match[1] === undefined ? "reads secrets indirectly" : `reads secret ${match[1]}`);
+  // Any use of the secrets context but secrets.GITHUB_TOKEN: a named secret,
+  // an indexed one, the whole context (toJSON(secrets), format('{0}', secrets)),
+  // or `secrets: inherit`. Only expressions are read, so prose that says
+  // "secrets" (a step name, a comment) is not a use.
+  const expressions = [...source.matchAll(EXPRESSION)].map((match) => match[1] as string);
+  for (const job of Object.values(typeof workflow.jobs === "object" && workflow.jobs !== null ? workflow.jobs : {})) {
+    if (typeof job?.if === "string") expressions.push(job.if);
+    for (const step of job?.steps ?? []) if (typeof (step as { if?: unknown })?.if === "string") expressions.push((step as { if: string }).if);
   }
+  for (const expression of expressions) {
+    let rest = expression;
+    for (const match of expression.matchAll(SECRET_NAME)) {
+      const name = match[1] ?? match[2];
+      if (name !== "GITHUB_TOKEN") add(`reads secret ${name}`);
+      rest = rest.replace(match[0], "");
+    }
+    if (SECRETS_CONTEXT.test(rest)) add("reads the secrets context");
+  }
+  if (INHERIT.test(source)) add("passes secrets: inherit");
   if (FLY.test(source)) add("names a Fly.io deploy action, command, or variable");
   const jobs = workflow.jobs;
   if (typeof jobs !== "object" || jobs === null || Object.keys(jobs).length === 0) {

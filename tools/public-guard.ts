@@ -42,8 +42,14 @@
  * tools/leak-canaries.txt, which the tree must carry.
  *
  * Watch mode (--watch) runs only those history shape rules, over every ref
- * in the repository, for a scheduled job that fetches all branches and pull
- * request heads. It needs no private value, so it can run in public.
+ * in the repository, for a scheduled job that fetches all branches, pull
+ * request heads, and tags, and checks that an annotated tag's tagger address
+ * is a public one. Refs listed in tools/public-watch-ack.txt (or the --ack
+ * file) at their current commit are skipped. It needs no private value, so it
+ * can run in public.
+ *
+ * Path shape rules compare a path case-insensitively (NFKC, lower case): on a
+ * case-insensitive file system `Private/` is `private/`.
  *
  * Every rule here is a shape: a pattern that needs no private value to be
  * written down. Checks that need a literal (a name, a project reference, a
@@ -420,7 +426,14 @@ export function mixedCase(body: string): boolean {
   return /[a-z]/u.test(body) && /[A-Z]/u.test(body);
 }
 
-/** A documented fixture: a body spelling out a run like 0123456 or abcdef, or a word such as SECRET or EXAMPLE. */
+/**
+ * A documented fixture: a body spelling out a run like 0123456 or abcdef, or a
+ * word such as SECRET or EXAMPLE. The words are matched case-insensitively
+ * anywhere in the body, so a random 43-character body contains one by chance
+ * with probability about 4e-5 (almost all of it `fake`), more for longer
+ * bodies. That miss rate is what readable fixtures cost; gitleaks and the
+ * private scan run beside this layer.
+ */
 export function placeholderBody(body: string): boolean {
   return /0123456|abcdef|secret|example|placeholder|dummy|fake|redacted|x{6}/iu.test(body);
 }
@@ -1254,13 +1267,42 @@ export function contentLayerFindings(files: readonly TreeFile[], options: { gitl
 /** The namespace that holds private-only files; a shared tree never contains it. */
 export const PRIVATE_NAMESPACE = "private";
 const PRIVATE_WORKFLOW = /^\.github\/workflows\/private-[^/]+$/u;
+/** Where the private projection inputs lived before 2026-10-19; a shared tree never holds it either. */
+const RETIRED_PRIVATE_GUARD = "public/private-guard";
 
-/** Whether a path may sit in the shared development tree at all. */
+/**
+ * A path as a case-insensitive file system sees it: NFKC, lower case. On such
+ * a file system (macOS by default) `Private/x` and `private/x` are one file,
+ * so a shape rule that compares only the exact spelling can be walked around.
+ */
+export function foldPath(path: string): string {
+  return path.normalize("NFKC").toLowerCase();
+}
+
+/** Whether a path may sit in the shared development tree at all, compared case-insensitively. */
 export function sharedTreeRefusal(path: string): string | undefined {
-  if (isWithin(path, PRIVATE_NAMESPACE)) return "path/private-namespace";
-  if (PRIVATE_WORKFLOW.test(path)) return "path/private-workflow";
-  if (path === PROJECTION_FILE) return "path/projection-record";
+  const folded = foldPath(path);
+  if (isWithin(folded, PRIVATE_NAMESPACE)) return "path/private-namespace";
+  if (PRIVATE_WORKFLOW.test(folded)) return "path/private-workflow";
+  if (folded === PROJECTION_FILE.toLowerCase()) return "path/projection-record";
+  if (isWithin(folded, RETIRED_PRIVATE_GUARD)) return "path/retired-private-guard";
   return undefined;
+}
+
+/**
+ * Commit and tag addresses that may appear in the shared tree's history: the
+ * project contact, GitHub's noreply address, and an account's users.noreply
+ * address. A shape, so it names no private value.
+ */
+export function isPublicAddress(address: string): boolean {
+  const lower = address.trim().toLowerCase();
+  const at = lower.lastIndexOf("@");
+  if (at <= 0 || lower.indexOf("@") !== at) return false;
+  const local = lower.slice(0, at);
+  const domain = lower.slice(at + 1);
+  if (domain === "users.noreply.github.com") return local.length > 0;
+  if (domain === "github.com") return local === "noreply";
+  return lower === PROJECTION_AUTHOR_EMAIL;
 }
 
 /**
@@ -1356,38 +1398,91 @@ export function sharedHistoryFindings(cwd: string, commits: readonly string[], f
   return findings;
 }
 
+/** Refs a maintainer has handled (a closed pull request head the owner cannot delete): the watch skips them while they stay at the listed commit. */
+export const WATCH_ACK_FILE = "tools/public-watch-ack.txt";
+
+/** A ref's watch key: heads/<branch>, pull/<number>, or tags/<name>, whatever namespace a fetch put it in. */
+export function watchRefKey(ref: string): string {
+  for (const [prefix, replacement] of [
+    ["refs/remotes/origin/", "heads/"],
+    ["refs/remotes/pull/", "pull/"],
+    ["refs/public-scan/", ""],
+    ["refs/public-scanned/", ""],
+    ["refs/heads/", "heads/"],
+    ["refs/tags/", "tags/"],
+  ] as const) {
+    if (ref.startsWith(prefix)) return `${replacement}${ref.slice(prefix.length)}`.replace(/^pull\/(\d+)\/head$/u, "pull/$1");
+  }
+  return ref;
+}
+
+/**
+ * Parses an acknowledgement list: `<key> <full commit id>` per line, where
+ * the key is heads/<branch>, pull/<number>, or tags/<name>; blank lines and
+ * `#` comments are skipped. An acknowledgement covers that commit only: a ref
+ * that moves is checked again.
+ */
+export function parseWatchAck(bytes: Uint8Array, source = WATCH_ACK_FILE): Map<string, string> {
+  const ack = new Map<string, string>();
+  for (const [index, raw] of decodeText(bytes).split("\n").entries()) {
+    const line = raw.replace(/#.*$/u, "").trim();
+    if (line === "") continue;
+    const [key, oid, ...rest] = line.split(/\s+/u);
+    if (rest.length > 0 || key === undefined || !/^(?:heads|pull|tags)\/[A-Za-z0-9._\/-]+$/u.test(key) || !isOid(oid)) {
+      throw new Error(`${source}:${index + 1}: expected <heads/…|pull/…|tags/…> <full commit id>`);
+    }
+    if (ack.has(key)) throw new Error(`${source}:${index + 1}: ${key} is listed twice`);
+    ack.set(key, oid as string);
+  }
+  return ack;
+}
+
 /**
  * Watch mode: the public-safe shape checks over every ref in the repository
- * (a scheduled job fetches all branches and pull-request heads first). Each
- * ref must peel to a commit; together they must have exactly one root, which
- * tools/public-root.txt in `rev` names when present; and the history shape of
- * sharedHistoryFindings holds for all of them. No content layer runs, so this
- * needs no private value and no gitleaks.
+ * (a scheduled job fetches all branches, pull-request heads, and tags first).
+ * Each ref must peel to a commit; together they must have exactly one root,
+ * which tools/public-root.txt in `rev` names when present; the history shape
+ * of sharedHistoryFindings holds for all of them; and an annotated tag's
+ * tagger address is a public one. A ref the acknowledgement list names at its
+ * current commit is skipped; the list is tools/public-watch-ack.txt in `rev`
+ * unless the caller passes its own (the private daily scan passes its own, so
+ * the public list never silences it). No content layer runs, so this needs no
+ * private value and no gitleaks.
  */
-export function watchFindings(cwd: string, rev = "HEAD"): Finding[] {
+export function watchFindings(cwd: string, rev = "HEAD", options: { ack?: Map<string, string> } = {}): Finding[] {
   if (gitText(cwd, ["rev-parse", "--is-shallow-repository"]).trim() === "true") {
     return [{ layer: "integrity", rule: "integrity/shallow-history", path: "(history)", detail: "fetch the full history" }];
   }
   const findings: Finding[] = [];
+  const head = gitText(cwd, ["rev-parse", "--verify", `${rev}^{commit}`]).trim();
+  const config = listTree(cwd, head).filter(
+    (entry) => entry.type === "blob" && (entry.path === LEAK_CANARIES_FILE || entry.path === PUBLIC_ROOT_FILE || entry.path === WATCH_ACK_FILE),
+  );
+  const contents = readObjects(cwd, config.map((entry) => entry.oid));
+  const files = config.map((entry) => ({ path: entry.path, mode: entry.mode, oid: entry.oid, bytes: contents.get(entry.oid) ?? Buffer.alloc(0) }));
+  const ackFile = files.find((file) => file.path === WATCH_ACK_FILE);
+  const ack = options.ack ?? (ackFile === undefined ? new Map<string, string>() : parseWatchAck(ackFile.bytes));
   const commits = new Set<string>();
-  for (const line of gitText(cwd, ["for-each-ref", "--format=%(refname)"]).split("\n").filter(Boolean)) {
+  const refs = gitText(cwd, ["for-each-ref", "--format=%(refname)%00%(objecttype)%00%(taggeremail)"]).split("\n").filter(Boolean);
+  for (const record of refs) {
+    const [line, type, tagger] = record.split("\0") as [string, string, string];
     const peeled = git(cwd, ["rev-parse", "--verify", "--quiet", `${line}^{commit}`], { allowFailure: true });
     if (peeled.status !== 0) {
       findings.push({ layer: "integrity", rule: "integrity/ref-not-commit", path: line });
       continue;
     }
     const commit = peeled.stdout.toString("utf8").trim();
+    if (ack.get(watchRefKey(line)) === commit) continue;
     commits.add(commit);
+    if (type === "tag" && !isPublicAddress(tagger.replace(/^<|>$/gu, ""))) {
+      findings.push({ layer: "personal", rule: "personal/tagger-address", path: line });
+    }
     const roots = gitText(cwd, ["rev-list", "--max-parents=0", commit, "--"]).split("\n").filter(Boolean);
     if (roots.length !== 1) findings.push({ layer: "integrity", rule: "integrity/root-count", path: line, detail: `${roots.length} root commits` });
   }
-  const head = gitText(cwd, ["rev-parse", "--verify", `${rev}^{commit}`]).trim();
   commits.add(head);
   const roots = new Set(gitText(cwd, ["rev-list", "--max-parents=0", ...commits, "--"]).split("\n").filter(Boolean));
   if (roots.size !== 1) findings.push({ layer: "integrity", rule: "integrity/root-count", path: "(all refs)", detail: `${roots.size} root commits` });
-  const config = listTree(cwd, head).filter((entry) => entry.type === "blob" && (entry.path === LEAK_CANARIES_FILE || entry.path === PUBLIC_ROOT_FILE));
-  const contents = readObjects(cwd, config.map((entry) => entry.oid));
-  const files = config.map((entry) => ({ path: entry.path, mode: entry.mode, oid: entry.oid, bytes: contents.get(entry.oid) ?? Buffer.alloc(0) }));
   findings.push(...sharedHistoryFindings(cwd, [...commits].sort(), files));
   return sortFindings(findings);
 }
@@ -1447,7 +1542,7 @@ function usage(): never {
   console.error(
     "usage: bun tools/public-guard.ts [--rev <commit>] [--gitleaks <binary>] [--projection-commit] [--expect-parent <sha>|none] [--history]\n" +
       "       bun tools/public-guard.ts --tree [--rev <commit>] [--gitleaks <binary>]\n" +
-      "       bun tools/public-guard.ts --watch [--rev <commit>]",
+      "       bun tools/public-guard.ts --watch [--rev <commit>] [--ack <file>]",
   );
   process.exit(2);
 }
@@ -1460,6 +1555,7 @@ function main(argv: readonly string[]): number {
   let history = false;
   let tree = false;
   let watch = false;
+  let ackFile: string | undefined;
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = () => argv[++index] ?? usage();
@@ -1469,6 +1565,7 @@ function main(argv: readonly string[]): number {
     else if (arg === "--history") history = true;
     else if (arg === "--tree") tree = true;
     else if (arg === "--watch") watch = true;
+    else if (arg === "--ack") ackFile = value();
     else if (arg === "--expect-parent") {
       const parent = value();
       expectedParents = parent === "none" || /^0+$/u.test(parent) ? [] : [parent];
@@ -1477,8 +1574,9 @@ function main(argv: readonly string[]): number {
   if (expectedParents !== undefined && !projectionCommit && !history) usage();
   if (tree && (projectionCommit || history || expectedParents !== undefined)) usage();
   if (watch && (tree || projectionCommit || history || expectedParents !== undefined || gitleaks !== undefined)) usage();
+  if (ackFile !== undefined && !watch) usage();
   const findings = watch
-    ? watchFindings(process.cwd(), rev)
+    ? watchFindings(process.cwd(), rev, { ack: ackFile === undefined ? undefined : parseWatchAck(readFileSync(ackFile), ackFile) })
     : checkCommittedTree({ cwd: process.cwd(), rev, gitleaks, projectionCommit, expectedParents, history, tree });
   for (const finding of findings) console.log(formatFinding(finding));
   if (findings.length > 0) {

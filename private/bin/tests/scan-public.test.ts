@@ -87,6 +87,33 @@ describe("scan-public.sh", () => {
     expect(scan().status).toBe(0);
   });
 
+  test("a handled pull request head that cannot be deleted is acknowledged in this machine's own list, never by the public one", () => {
+    git(pdev, "switch", "-q", "--orphan", "fork-pr");
+    write(pdev, "y.md", "an unrelated root from a fork\n");
+    const head = publicCommit(pdev, "fork root");
+    git(pdev, "push", "-q", "origin", "HEAD:refs/pull/9/head");
+    git(pdev, "switch", "-q", "-f", "main");
+    expect(scan().stdout).toContain("refs/public-scan/pull/9: integrity/foreign-root");
+    // The public side's own acknowledgement list does not silence this scan.
+    write(pdev, "tools/public-watch-ack.txt", `pull/9 ${head} # closed fork pull request\n`);
+    publicCommit(pdev, "acknowledge the closed pull request for the public watch");
+    git(pdev, "push", "-q", "origin", "HEAD:main");
+    expect(scan().status).toBe(1);
+    writeFileSync(join(state, "acknowledged.txt"), `pull/9 ${head} # handled 2026-10-19\n`);
+    const acked = scan();
+    expect(acked.status, acked.out).toBe(0);
+    // A head that moves is checked again.
+    git(pdev, "switch", "-q", "fork-pr");
+    write(pdev, "y.md", "moved\n");
+    publicCommit(pdev, "moved");
+    git(pdev, "push", "-q", "-f", "origin", "HEAD:refs/pull/9/head");
+    git(pdev, "switch", "-q", "-f", "main");
+    expect(scan().stdout).toContain("refs/public-scan/pull/9: integrity/foreign-root");
+    git(publicBare, "update-ref", "-d", "refs/pull/9/head");
+    writeFileSync(join(state, "acknowledged.txt"), "");
+    expect(scan().status).toBe(0);
+  });
+
   test("pull request and issue text are read with GET through gh, and a missing guard is an error, never a clean run", () => {
     const bin = join(scratch.dir, "stub-gh");
     mkdirSync(bin, { recursive: true });

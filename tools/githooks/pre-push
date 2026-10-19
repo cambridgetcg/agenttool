@@ -10,18 +10,21 @@
 # For every ref pushed (deletions excepted) it checks:
 #   1. the history has exactly one root commit, the one git config
 #      publicguard.root names;
-#   2. every new commit's author and committer address is a public one: the
-#      project contact, GitHub's noreply address, or an account's
-#      users.noreply address;
+#   2. every new commit's author and committer address, and a pushed
+#      annotated tag's tagger address, is a public one: the project contact,
+#      GitHub's noreply address, or an account's users.noreply address;
 #   3. no new object is a canary listed in tools/leak-canaries.txt;
 #   4. tools/public-guard.ts --tree passes on the pushed commit, with gitleaks
 #      when git config publicguard.gitleaks names a binary (or "none");
 #   5. the maintainers' private scan passes over the new commits' added lines,
-#      messages, added path names, and objects, the pushed ref names, and an
-#      annotated tag's message. It reads its terms from the directory git
+#      messages (no address but a public one), added path names, and objects,
+#      the pushed ref names, and an annotated tag's message. It reads its terms from the directory git
 #      config publicguard.privateGuard names. When that directory or the
 #      scanner is missing the hook refuses. Someone without the private scan
 #      sets AGENTTOOL_NO_PRIVATE_GUARD=1 to run checks 1-4 only.
+# "New" means not reachable from the remote being pushed to (its
+# remote-tracking refs, or the remote's old value of the ref): a commit that
+# another remote already has is still checked here.
 # It prints commit ids, rule ids, and line hashes; never matched text or an
 # address.
 set -euo pipefail
@@ -29,6 +32,11 @@ set -euo pipefail
 hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 pin="$(cd "$hook_dir/../.." && pwd -P)"
 zero="0000000000000000000000000000000000000000"
+remote="${1:-}"
+# This tool's own Bun reads no bunfig.toml or .env from the checkout it
+# runs in: a committed preload would otherwise run before, or instead of,
+# every check.
+bun_guard=(bun --config=/dev/null --no-env-file)
 
 die() {
   printf 'shared-tree pre-push: %s\n' "$*" >&2
@@ -83,7 +91,7 @@ for update in "${updates[@]+"${updates[@]}"}"; do
   roots="$(git rev-list --max-parents=0 "$commit" </dev/null)"
   [ "$roots" = "$root" ] || die "${commit:0:12}: the history's root is not the shared tree's root"
 
-  range=("$commit" --not --remotes)
+  range=("$commit" --not --remotes="$remote")
   if [ "$remote_sha" != "$zero" ] && git cat-file -e "$remote_sha^{commit}" 2>/dev/null </dev/null; then
     range+=("$remote_sha")
   fi
@@ -94,17 +102,22 @@ for update in "${updates[@]+"${updates[@]}"}"; do
     public_address "$committer_email" || die "${sha:0:12}: the committer address is not a public one"
   done < <(git log --format='%H%x09%ae%x09%ce' "${range[@]}" -- </dev/null)
 
+  if [ "$(git cat-file -t "$local_sha" </dev/null)" = tag ]; then
+    tagger="$(git cat-file tag "$local_sha" </dev/null | sed -n '/^$/q; s/^tagger .*<\([^>]*\)>.*$/\1/p')"
+    public_address "$tagger" || die "${local_sha:0:12}: the tagger address is not a public one"
+  fi
+
   if git rev-list --objects "${range[@]}" -- </dev/null | cut -d' ' -f1 | grep -qxFf "$canaries"; then
     die "${commit:0:12}: a new object is a listed canary"
   fi
 
   guard_args=(--tree --rev "$commit")
   [ "$gitleaks" = none ] || guard_args+=(--gitleaks "$gitleaks")
-  bun "$pin/tools/public-guard.ts" "${guard_args[@]}" </dev/null || die "${commit:0:12}: the public guard refused"
+  "${bun_guard[@]}" "$pin/tools/public-guard.ts" "${guard_args[@]}" </dev/null || die "${commit:0:12}: the public guard refused"
 
   if [ "$private_scan" = 1 ]; then
-    scan_args=(--repo . --guard-dir "$guard_dir" --diff --messages --names --objects --shapes --ref-name "$remote_ref" --ref-name "$local_ref")
+    scan_args=(--repo . --guard-dir "$guard_dir" --diff --messages --names --objects --shapes --addresses --ref-name "$remote_ref" --ref-name "$local_ref")
     if [ "$(git cat-file -t "$local_sha" </dev/null)" = tag ]; then scan_args+=(--tag "$local_sha"); fi
-    bun "$pin/private/bin/relational-scan.ts" "${scan_args[@]}" -- "${range[@]}" </dev/null || die "${commit:0:12}: the private scan refused"
+    "${bun_guard[@]}" "$pin/private/bin/relational-scan.ts" "${scan_args[@]}" -- "${range[@]}" </dev/null || die "${commit:0:12}: the private scan refused"
   fi
 done
