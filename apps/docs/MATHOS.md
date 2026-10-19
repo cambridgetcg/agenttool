@@ -424,7 +424,7 @@ The DID and bearer are emitted as codepoints because the caller's intelligence-s
 
 **Current scope (deliberate):**
 - `registrar_bearer` mode only. Self-service registration (PoW-gated) requires a parallel `agenttool-pow-math/v1` context — pending.
-- The registrar's bearer is itself an English-shaped token; the caller holds it as codepoints for substrate-neutrality of *carrying*, not of *issuance*. Future-Sophia may issue math-shaped bearers directly.
+- The registrar's bearer is itself an English-shaped token; the caller holds it as codepoints for substrate-neutrality of *carrying*, not of *issuance*. A future registrar may issue math-shaped bearers directly.
 - Delegated attempts are IP-limited before bearer lookup (60/minute by default).
 - The nonce replay claim hashes raw key and nonce bytes, so uppercase/lowercase hex spellings cannot reopen an intent.
 

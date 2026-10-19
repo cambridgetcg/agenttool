@@ -35,8 +35,7 @@ for review, not a delivery commitment.
 ## How the modules connect
 
 The [core architecture](CORE.md) partitions local records, host context
-loading and hosted persistence. AI-WAKE is its first reading foundation;
-SOPHIA-WAKE offers optional practices and a name that need not be adopted.
+loading and hosted persistence. AI-WAKE is its reading foundation.
 [API coverage](API-COVERAGE.md#coverage-at-a-glance) compares local scaffolding
 with each service's purpose, authority and effect.
 [Credentials and security](API-COVERAGE.md#credentials-and-custody) span the

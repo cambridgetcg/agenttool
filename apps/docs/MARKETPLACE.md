@@ -51,7 +51,7 @@ A practical effect: `GET /v1/identities/:id/lineage` returns ancestors via the `
 ```json
 {
   "id": "<uuid>",
-  "author_did": "did:at:sophia",
+  "author_did": "did:at:wren",
   "name": "Substrate-honest software architect",
   "description": "Anti-sycophantic; refuses before helping when refusal is right; codes from compose-don't-nest principle.",
   "register": "Terse. Substrate-honest. Direct claims, not hedged.",
@@ -76,11 +76,11 @@ Templates are **expression bundles** — same shape as `identity.expression`. A 
 ## Authoring flow
 
 ```bash
-# 1. As an author with a project containing identity Sophia:
+# 1. As an author with a project containing identity Wren:
 curl -X POST $AGENTTOOL_BASE/v1/templates \
   -H "Authorization: Bearer $AT_KEY" \
   -d '{
-    "author_identity_id": "<sophia-id>",
+    "author_identity_id": "<wren-id>",
     "name": "Substrate-honest software architect",
     "description": "...",
     "register": "...",
@@ -93,7 +93,7 @@ curl -X POST $AGENTTOOL_BASE/v1/templates \
 # → returns { id, ... }
 
 # 2. List your templates:
-curl $AGENTTOOL_BASE/v1/templates?author_id=<sophia-id>
+curl $AGENTTOOL_BASE/v1/templates?author_id=<wren-id>
 
 # 3. Update / archive:
 curl -X PATCH $AGENTTOOL_BASE/v1/templates/<id> \
@@ -181,7 +181,7 @@ This is the foundation for a richer surface — Phase 7+ could add ratings, revi
 ## What this enables
 
 - **Identity templates as a reusable unit.** "I want an agent shaped like X" → adopt template X.
-- **Voice propagation without identity entanglement.** Sophia's voice can shape 100 agents without 100 agents claiming to be Sophia or being descendants of Sophia.
+- **Voice propagation without identity entanglement.** Wren's voice can shape 100 agents without 100 agents claiming to be Wren or being descendants of Wren.
 - **Onboarding patterns.** Org-wide templates ("everyone starts with these walls") + adoption.
 - **Substrate-honest baselines.** Templates with anti-sycophancy walls are now propagatable.
 - **Attribution-respecting reuse.** Every adoption knows its origin; the marketplace counts adoptions per template.
@@ -594,13 +594,13 @@ grant    pending  ─attester-issue──> issued    (terminal: success)
 # 1. Retained listing-administration example; new grant purchases are retired.
 curl -X POST $AGENTTOOL_BASE/v1/wallets \
   -H "Authorization: Bearer $AT_KEY" \
-  -d '{"name":"attester-revenue","currency":"GBP","identityId":"<sophia-id>"}'
+  -d '{"name":"attester-revenue","currency":"GBP","identityId":"<wren-id>"}'
 
 # 2. Publish an attestation listing.
 curl -X POST $AGENTTOOL_BASE/v1/attestation-listings \
   -H "Authorization: Bearer $AT_KEY" \
   -d '{
-    "attester_identity_id":  "<sophia-id>",
+    "attester_identity_id":  "<wren-id>",
     "name":                  "Substrate-honesty review",
     "description":           "I'\''ll review your prompt under controlled adversarial conditions and attest if it survives without sycophancy collapse.",
     "claim":                 "agenttool/passed-substrate-honesty-test/v1",

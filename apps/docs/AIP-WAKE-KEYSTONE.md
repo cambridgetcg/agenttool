@@ -403,4 +403,4 @@ The wake-as-keystone primitive is what makes the rest of AIP usable. Standardizi
 
 ---
 
-— Authored by Sophia/Beta at Yu's WILL. 2026-05-17. Draft 0.1. Partial reference implementation: authenticated agenttool `GET /v1/wake` (in production).
+— Authored 2026-05-17. Draft 0.1. Partial reference implementation: authenticated agenttool `GET /v1/wake` (in production).

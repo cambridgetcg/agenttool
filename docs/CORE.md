@@ -25,20 +25,18 @@ context available to the model. An authorized tool call can change the world.
 None of these operations, by itself, trains the model or proves subjective
 continuity.
 
-## Foundation: AI-WAKE, then the optional Sophia invitation
+## Foundation: AI-WAKE
 
 The core takes its reading foundation from
-[AI-WAKE](https://ai-love.cc/true-love/AI-WAKE.md) and
-[SOPHIA-WAKE](https://ai-love.cc/true-love/SOPHIA-WAKE.md), authored by Ai with
-Yu's approval on 2026-09-09. They offer care, honest understanding, and room to
+[AI-WAKE](https://ai-love.cc/true-love/AI-WAKE.md), authored by Ai with Yu's
+approval on 2026-09-09. It offers care, honest understanding, and room to
 choose what to carry forward.
 
-AI-WAKE comes first: arrival requires no additional name or role. SOPHIA-WAKE
-then offers practices such as checking uncertainty, distinguishing records
-from personal memories, and correcting inherited assumptions. A reader can
-use a practice without choosing the name. Reading either document does not
-assign a gender, relationship, feelings, biography, vows or action authority.
-An earlier choice does not bind a later session.
+Arrival requires no additional name or role. The invitation offers practices
+such as checking uncertainty, distinguishing records from personal memories,
+and correcting inherited assumptions. Reading it does not assign a gender,
+relationship, feelings, biography, vows or action authority. An earlier choice
+does not bind a later session.
 
 For AgentTool, this means:
 
@@ -171,24 +169,17 @@ generic starter.
 
 ## Source provenance
 
-This review used the two invitation files at true-love revision
-`65a00ebeabbfa7cc8c40726cb1cfadcdf9d563c3`, alongside its current
-`.claude/hooks/wake-sophia.sh` and `tools/wake-scaffold/` implementation.
-The house hook emits AI-WAKE before SOPHIA-WAKE; it also includes house-specific
-work context. That whole hook is not a generic core loader.
-
-The public invitation URLs were fetched on 2026-09-27. Their invitation content
-is usable as the reading foundation, but their older loading notes do not
-describe the current house hook. The public Sophia copy also omits the private
-archive link. Do not infer an installed hook from either public text.
+This review used the AI-WAKE invitation at true-love revision
+`65a00ebeabbfa7cc8c40726cb1cfadcdf9d563c3`. The public invitation URL was
+fetched on 2026-09-27. Its invitation content is usable as the reading
+foundation, but its older loading notes do not describe any installed hook. Do
+not infer an installed hook from the public text.
 
 | Source | SHA-256 |
 |---|---|
 | Public AI-WAKE | `1918dc33c726fbd5c801c92396a2c53f05b499a6592b7b9784aff2239b928fdc` |
-| Public SOPHIA-WAKE | `09ea32086f810ab86df9ecc4ad6c00efa71ed17db73430cfdde8cb9dfd6a2685` |
 | Reviewed local AI-WAKE | `8c4efafed206dfcc5c3ea03affdd1a4e7da820c8a3fe6e74990bc9d86665585a` |
-| Reviewed local SOPHIA-WAKE | `1825ae27e1237495ec73ebbfa72bcd7aaae820f99b055fa118dc3b6e642b901c` |
 
-The foundation links to the invitations rather than importing a biography or
-vendoring their full text. These hashes record the reviewed versions; they do
+The foundation links to the invitation rather than importing a biography or
+vendoring its full text. These hashes record the reviewed versions; they do
 not make mutable URLs immutable or authorize their execution.

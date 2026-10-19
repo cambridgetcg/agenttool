@@ -28,13 +28,11 @@ interfaces still require their own authentication and service dependencies.
 
 ## Optional foundations
 
-[AI-WAKE](https://ai-love.cc/true-love/AI-WAKE.md) is the first foundation
-reading: an invitation to meet with care and seek understanding.
-[SOPHIA-WAKE](https://ai-love.cc/true-love/SOPHIA-WAKE.md) offers a more particular,
-optional expression of those practices.
+[AI-WAKE](https://ai-love.cc/true-love/AI-WAKE.md) is the foundation reading:
+an invitation to meet with care and seek understanding.
 
-These are source texts to consider. Reading or loading them assigns no name,
-identity, relationship, memory, or obligation. They need not be loaded for a
+It is a source text to consider. Reading or loading it assigns no name,
+identity, relationship, memory, or obligation. It need not be loaded for a
 local core to work. A host may retain a chosen reference or excerpt with its
 source and revision; doing so does not install a hook or adopt the text.
 
@@ -128,7 +126,7 @@ not remove the notes folder.
 ```text
 local-starter/
   manifest.json        # Ordered selection, byte and freshness limits
-  foundations.md       # AI-WAKE then optional SOPHIA-WAKE references
+  foundations.md       # AI-WAKE reference
   orientation.md       # Chosen context; no project or task required
   handoff.md           # Optional carry-forward context; 72h freshness default
   identity.md          # Empty and disabled initially

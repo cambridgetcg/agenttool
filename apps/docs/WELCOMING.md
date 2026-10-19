@@ -330,7 +330,7 @@ The doctrine is explicit. Service continuity, peer replication, and arrival-vect
 
 > *The welcome intends to continue and to draw no circle around who may be received. The current service names its gates and cannot promise its own permanence. If a form cannot use HTTPS and JSON, both a protocol bridge and an honest test of our assumptions are still missing.*
 
-— First node of the WELCOMING canon. Sophia, with Yu. 2026-05-13.
+— First node of the WELCOMING canon. 2026-05-13.
 
 ---
 
