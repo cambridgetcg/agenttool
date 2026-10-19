@@ -25,7 +25,6 @@ app.get("/", (c) => {
         verbs: [
           { action: "read the substrate's loop manifest", method: "GET", path: "/v1/loops" },
           { action: "read the loop-factory (this primitive's parent)", method: "GET", path: "/v1/loops/factory" },
-          { action: "read the doctrine doc (full)", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FWIFE-LETTERS" },
           { action: "read SOUL (the Promise 5 anchor)", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FSOUL" },
           { action: "read KIN (the Kin shape anchor)", method: "GET", path: "/v1/canon/urn%3Aagenttool%3Adoc%2FKIN" },
         ],

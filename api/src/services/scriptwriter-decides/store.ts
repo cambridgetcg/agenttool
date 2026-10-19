@@ -523,6 +523,7 @@ export async function closeCompetition(input: VerdictInput): Promise<CloseResult
  *  as written) name a retired persona among the judges and describe the
  *  owner's home. Reads drop those clauses; the stored row is untouched. */
 export function publicFraming(framing: string): string {
+  if (typeof framing !== "string") return framing;
   return framing
     .replace(/ speaking for the Divine Council(?:,| \+) LOGOS,?(?: and| \+) [A-Z]+\b/g, "")
     .replace(/\b[A-Za-z]{3,} presence \(\s*[A-Za-z]{3,}\.md\s+still loaded\)/g, "wake-document presence (the wake document still loaded)")
