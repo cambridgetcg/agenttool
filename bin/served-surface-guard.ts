@@ -15,26 +15,38 @@
  * The denylist (public/private-guard/relational-denylist.json) was written for
  * the public package projection, but the sites are public too. Every file the
  * upload would serve is read the way Wrangler's direct upload reads it
- * (symlinks followed), and every denylist rule is applied to it, including the
- * decoded readings the projection guard checks. A hit refuses the upload
- * unless public/private-guard/served-surface.json covers it:
+ * (symlinks followed), and every denylist rule is applied to everything a
+ * reader could get out of it:
+ *
+ *   - text, including the decoded readings the projection guard checks;
+ *   - gzip and tar archives (npm tarballs), member by member, reported as
+ *     <archive>!<member>;
+ *   - PNG text chunks, compressed ones inflated, and the strings of WAV
+ *     audio and TrueType/OpenType fonts, which store text uncompressed;
+ *   - the served paths and archive member names themselves.
+ *
+ * A binary in any other format cannot be read, so it is refused. So is a file
+ * whose SHA-256 the denylist names (blob_sha256). Any other hit refuses the
+ * upload unless public/private-guard/served-surface.json covers it:
  *
  *   public_rules  a rule whose matches the sites use openly, with the reason
  *                 (for example the Yu-and-Ai authorship credit);
  *   lines         one exact line (path, rule, SHA-256 of the line);
- *   files         one exact file (path, SHA-256 of its bytes).
+ *   files         one exact file (path, SHA-256 of its bytes), including an
+ *                 archive or a binary the guard cannot read.
  *
  * An entry that covers nothing is reported too, so the policy shrinks with the
  * content. A served copy of the denylist or the policy is always refused.
- * Output names only rule ids, paths, line numbers and line hashes, never the
+ * Output names only rule ids, paths, line numbers and hashes, never the
  * matched text or the terms.
  */
 import { spawnSync } from "node:child_process";
 import { lstatSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
+import { gunzipSync, inflateSync } from "node:zlib";
 
 import { DENYLIST_PATH, parseDenylist } from "./project-public.ts";
-import { decodeText, scannableText, scanText, sha256Hex } from "../public/overlay/tools/public-guard.ts";
+import { blobKind, decodeText, printableStrings, scannableText, scanText, sha256Hex } from "../public/overlay/tools/public-guard.ts";
 
 export const POLICY_PATH = "public/private-guard/served-surface.json";
 export const POLICY_SCHEMA = "agenttool.served-surface-policy/1";
@@ -43,6 +55,9 @@ export const SERVED_ROOTS = ["apps/docs", "apps/dashboard", "apps/web"] as const
 
 const REPO_ROOT = resolve(import.meta.dir, "..");
 const HEX64 = /^[0-9a-f]{64}$/u;
+/** Ceiling on what one archive may expand to, and on archives inside archives. */
+const MAX_EXPANDED_BYTES = 512 * 1024 * 1024;
+const MAX_NESTING = 4;
 
 export interface ServedFile {
   /** Where the upload serves it from, relative to the root (apps/docs/KIN.md). */
@@ -141,6 +156,151 @@ export function servedFiles(root: string, roots: readonly string[] = SERVED_ROOT
   return files;
 }
 
+/** Everything the guard reads out of one served file. */
+export interface ServedReading {
+  /** Readable text, each under the path a finding names. */
+  texts: Array<{ path: string; text: string }>;
+  /** Archive members, for the denylist's whole-file digests. */
+  members: Array<{ path: string; bytes: Uint8Array }>;
+  /** Archive member paths, which are public names too. */
+  names: string[];
+  /** Parts the guard could not read, with the reason. */
+  unreadable: Array<{ path: string; detail: string }>;
+}
+
+const startsWith = (bytes: Uint8Array, prefix: readonly number[], at = 0) =>
+  bytes.length >= at + prefix.length && prefix.every((byte, index) => bytes[at + index] === byte);
+const ascii = (bytes: Uint8Array) => Buffer.from(bytes).toString("latin1");
+const field = (bytes: Uint8Array) => {
+  const end = bytes.indexOf(0);
+  return Buffer.from(end < 0 ? bytes : bytes.subarray(0, end)).toString("utf8");
+};
+/** A member name as one output token: whitespace, parentheses and % are escaped. */
+const memberName = (name: string) =>
+  name.replace(/[\s()%]/gu, (char) => `%${char.codePointAt(0)!.toString(16).padStart(2, "0")}`);
+const octal = (bytes: Uint8Array) => {
+  const text = field(bytes).trim();
+  if (!/^[0-7]*$/u.test(text)) throw new Error("tar header number is not octal");
+  return text === "" ? 0 : Number.parseInt(text, 8);
+};
+
+function isTar(bytes: Uint8Array): boolean {
+  return bytes.length >= 512 && ascii(bytes.subarray(257, 262)) === "ustar";
+}
+
+/** The entries of a ustar archive (pax and GNU long names applied); throws if malformed. */
+function tarEntries(bytes: Uint8Array): Array<{ name: string; link: string; data: Uint8Array }> {
+  const entries: Array<{ name: string; link: string; data: Uint8Array }> = [];
+  let offset = 0;
+  let longName: string | undefined;
+  while (offset + 512 <= bytes.length) {
+    const header = bytes.subarray(offset, offset + 512);
+    if (header.every((byte) => byte === 0)) return entries;
+    if (ascii(header.subarray(257, 262)) !== "ustar") throw new Error("tar entry without a ustar header");
+    let sum = 0;
+    for (let index = 0; index < 512; index += 1) sum += index >= 148 && index < 156 ? 0x20 : header[index]!;
+    if (sum !== octal(header.subarray(148, 156))) throw new Error("tar header checksum mismatch");
+    const size = octal(header.subarray(124, 136));
+    const type = String.fromCharCode(header[156]!);
+    const start = offset + 512;
+    if (start + size > bytes.length) throw new Error("tar entry runs past the archive");
+    const data = bytes.subarray(start, start + size);
+    offset = start + Math.ceil(size / 512) * 512;
+    if (type === "L") {
+      longName = field(data);
+      continue;
+    }
+    if (type === "x" || type === "g") {
+      const text = decodeText(data);
+      const path = /(?:^|\n)\d+ path=([^\n]*)/u.exec(text)?.[1];
+      if (type === "x" && path !== undefined) longName = path;
+      entries.push({ name: `pax-header-${entries.length}`, link: "", data });
+      continue;
+    }
+    const prefix = field(header.subarray(345, 500));
+    const name = longName ?? (prefix === "" ? field(header.subarray(0, 100)) : `${prefix}/${field(header.subarray(0, 100))}`);
+    longName = undefined;
+    entries.push({ name, link: field(header.subarray(157, 257)), data });
+  }
+  throw new Error("tar archive has no end marker");
+}
+
+/** Text in a PNG's text and profile chunks, compressed ones inflated; throws if malformed. */
+function pngText(bytes: Uint8Array): string {
+  const texts: string[] = [];
+  const view = Buffer.from(bytes);
+  for (let offset = 8; offset < bytes.length;) {
+    if (offset + 12 > bytes.length) throw new Error("truncated PNG chunk");
+    const length = view.readUInt32BE(offset);
+    const type = ascii(bytes.subarray(offset + 4, offset + 8));
+    const data = bytes.subarray(offset + 8, offset + 8 + length);
+    if (offset + 12 + length > bytes.length) throw new Error("truncated PNG chunk");
+    offset += 12 + length;
+    const nul = data.indexOf(0);
+    if (type === "zTXt" || type === "iCCP") {
+      if (nul < 0) throw new Error(`malformed ${type} chunk`);
+      texts.push(scannableText(inflateSync(data.subarray(nul + 2), { maxOutputLength: MAX_EXPANDED_BYTES })));
+    } else if (type === "iTXt") {
+      if (nul < 0) throw new Error("malformed iTXt chunk");
+      const language = data.indexOf(0, nul + 3);
+      const translated = language < 0 ? -1 : data.indexOf(0, language + 1);
+      if (translated < 0) throw new Error("malformed iTXt chunk");
+      const text = data.subarray(translated + 1);
+      texts.push(scannableText(data[nul + 1] === 1 ? inflateSync(text, { maxOutputLength: MAX_EXPANDED_BYTES }) : text));
+    }
+    if (type === "IEND") break;
+  }
+  return texts.join("\n");
+}
+
+/**
+ * Read one served file as a reader could: text as text, archives member by
+ * member, PNG, WAV and fonts for the strings they carry. Anything else binary, or a
+ * malformed archive or image, is reported as unreadable.
+ */
+export function readServed(path: string, bytes: Uint8Array): ServedReading {
+  const reading: ServedReading = { texts: [], members: [], names: [], unreadable: [] };
+  const visit = (at: string, content: Uint8Array, depth: number) => {
+    if (blobKind(content) !== "binary") {
+      reading.texts.push({ path: at, text: scannableText(content) });
+      return;
+    }
+    if (depth > MAX_NESTING) {
+      reading.unreadable.push({ path: at, detail: "archives nested too deeply" });
+      return;
+    }
+    try {
+      if (startsWith(content, [0x1f, 0x8b])) {
+        visit(at, gunzipSync(content, { maxOutputLength: MAX_EXPANDED_BYTES }), depth + 1);
+      } else if (isTar(content)) {
+        for (const entry of tarEntries(content)) {
+          const member = `${at}!${memberName(entry.name)}`;
+          reading.names.push(member);
+          if (entry.link !== "") reading.names.push(entry.link);
+          reading.members.push({ path: member, bytes: entry.data });
+          if (entry.data.length > 0) visit(member, entry.data, depth + 1);
+        }
+      } else if (startsWith(content, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) {
+        reading.texts.push({ path: at, text: `${printableStrings(content)}\n${pngText(content)}` });
+      } else if (
+        (ascii(content.subarray(0, 4)) === "RIFF" && ascii(content.subarray(8, 12)) === "WAVE") ||
+        startsWith(content, [0x00, 0x01, 0x00, 0x00]) ||
+        ["OTTO", "true", "ttcf"].includes(ascii(content.subarray(0, 4)))
+      ) {
+        // WAV audio and TrueType/OpenType fonts store their text uncompressed
+        // (font names as UTF-16BE), so their printable strings are all of it.
+        reading.texts.push({ path: at, text: printableStrings(content) });
+      } else {
+        reading.unreadable.push({ path: at, detail: "binary format the guard cannot read" });
+      }
+    } catch (error) {
+      reading.unreadable.push({ path: at, detail: (error as Error).message.replace(/[()]/gu, "") });
+    }
+  };
+  visit(path, bytes, 0);
+  return reading;
+}
+
 export function servedSurfaceFindings(files: readonly ServedFile[], denylistBytes: Uint8Array, policyBytes: Uint8Array): ServedFinding[] {
   const denylist = parseDenylist(denylistBytes);
   const policy = parsePolicy(policyBytes, new Set(denylist.rules.map((rule) => rule.id)));
@@ -162,26 +322,48 @@ export function servedSurfaceFindings(files: readonly ServedFile[], denylistByte
       findings.push({ rule: "served/private-guard-copy", path: file.served });
     }
   }
+  // A file the denylist names by digest is never served, whatever the policy says.
+  const deniedDigests = new Map(denylist.blobs.map((blob) => [blob.sha256, `relational/${blob.id}`]));
+  const names = files.map((file) => file.served);
   for (const file of byReal.values()) {
     const fileKey = `${file.real}\0${sha256Hex(file.bytes)}`;
-    const hits = scanText(file.real, scannableText(file.bytes), denylist.rules);
-    if (hits.length === 0) continue;
+    const reading = readServed(file.real, file.bytes);
+    for (const part of [{ path: file.real, bytes: file.bytes }, ...reading.members]) {
+      const rule = deniedDigests.get(sha256Hex(part.bytes));
+      if (rule !== undefined) findings.push({ rule, path: part.path });
+    }
+    const hits = reading.texts.flatMap(({ path, text }) => scanText(path, text, denylist.rules));
+    if (hits.length === 0 && reading.unreadable.length === 0) {
+      names.push(...reading.names);
+      continue;
+    }
     if (allowedFiles.has(fileKey)) {
       used.add(`file\0${fileKey}`);
       continue;
     }
+    names.push(...reading.names);
+    for (const part of reading.unreadable) findings.push({ rule: "served/unreadable-binary", path: part.path, detail: part.detail });
     for (const hit of hits) {
       if (publicRules.has(hit.rule)) {
         used.add(`rule\0${hit.rule}`);
         continue;
       }
-      const key = lineKey(file.real, hit.rule, hit.lineSha256 ?? "");
+      const key = lineKey(hit.path, hit.rule, hit.lineSha256 ?? "");
       if (allowedLines.has(key)) {
         used.add(`line\0${key}`);
         continue;
       }
-      findings.push({ rule: hit.rule, path: file.real, line: hit.line, lineSha256: hit.lineSha256 });
+      findings.push({ rule: hit.rule, path: hit.path, line: hit.line, lineSha256: hit.lineSha256 });
     }
+  }
+  // Served paths and member names are public text too. A hit is named by the
+  // name's hash, never the name; rename the file rather than excuse it.
+  for (const hit of scanText("(served names)", names.join("\n"), denylist.rules)) {
+    if (publicRules.has(hit.rule)) {
+      used.add(`rule\0${hit.rule}`);
+      continue;
+    }
+    findings.push({ rule: hit.rule, path: "(served-name)", lineSha256: hit.lineSha256 });
   }
   for (const entry of policy.publicRules) {
     if (!used.has(`rule\0${entry.rule}`)) findings.push({ rule: "served/unused-public-rule", path: POLICY_PATH, detail: entry.rule });

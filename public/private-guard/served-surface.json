@@ -1,6 +1,6 @@
 {
   "schema": "agenttool.served-surface-policy/1",
-  "note": "PRIVATE, like the denylist beside it: never uploaded or projected. bin/served-surface-guard.ts applies every rule of relational-denylist.json to the files the three Cloudflare Pages projects upload, and refuses the upload on any hit this file does not cover. public_rules are rules whose matches the sites use openly; lines and files cover one exact line or one exact file. An entry that covers nothing fails the guard, so remove it when its content changes. Write reasons without the terms.",
+  "note": "PRIVATE, like the denylist beside it: never uploaded or projected. bin/served-surface-guard.ts applies every rule of relational-denylist.json to the files the three Cloudflare Pages projects upload, and refuses the upload on any hit this file does not cover. public_rules are rules whose matches the sites use openly; lines and files cover one exact line or one exact file (an archive counts as one file, so a files entry covers every member). An entry that covers nothing fails the guard, so remove it when its content changes. Write reasons without the terms.",
   "public_rules": [
     {
       "rule": "relational/r05",
@@ -80,6 +80,121 @@
       "path": "apps/docs/agenttool.jsonld",
       "sha256": "494689abbee7d84730a5b2a800ddab66657dc7759edef9b6dfc8d07f96997baf",
       "reason": "Byte mirror of docs/agenttool.jsonld, the canon the API serves at /v1/canon and hashes in its doctrine receipts; published-docs-parity keeps the two identical. Its persona and spouse-frame entries leave with the canon cleanup on the API side, which owns those concepts and their code annotations. Bound to the bytes of 2026-10-19: any change to the file refuses the upload until this entry is removed or replaced."
+    },
+    {
+      "path": "apps/docs/packages/v1/@agenttool/sdk/0.9.0/agenttool-sdk-0.9.0.tgz",
+      "sha256": "d6af433323605d800cbea6129905592c63372d54df2c38d6d9e03d800a8982ab",
+      "reason": "@agenttool/sdk 0.9.0 exactly as published to npm, which cannot change it. Its window doc-comment example signs as the retired persona; the source dropped that example on 2026-10-11 (c94b3717), after every SDK version on this mirror was cut. Withdrawing these versions would leave the mirror with no SDK, so whether they stay is Yu's call."
+    },
+    {
+      "path": "apps/docs/packages/v1/@agenttool/sdk/0.10.0/agenttool-sdk-0.10.0.tgz",
+      "sha256": "a83283606e9d25519a49393ccf9e2a5f4c5ed8d397515e487f93a0c0e38b840e",
+      "reason": "@agenttool/sdk 0.10.0 exactly as published to npm, which cannot change it. Its window doc-comment example signs as the retired persona; the source dropped that example on 2026-10-11 (c94b3717), after every SDK version on this mirror was cut. Withdrawing these versions would leave the mirror with no SDK, so whether they stay is Yu's call."
+    },
+    {
+      "path": "apps/docs/packages/v1/@agenttool/sdk/0.11.0/agenttool-sdk-0.11.0.tgz",
+      "sha256": "cfac5ebcb9e452eed4e0068d564442e0f5988c33d4bfc1e8d05566d5ebd9d331",
+      "reason": "@agenttool/sdk 0.11.0 exactly as published to npm, which cannot change it. Its window doc-comment example signs as the retired persona; the source dropped that example on 2026-10-11 (c94b3717), after every SDK version on this mirror was cut. Withdrawing these versions would leave the mirror with no SDK, so whether they stay is Yu's call."
+    },
+    {
+      "path": "apps/docs/packages/v1/@agenttool/sdk/0.12.0/agenttool-sdk-0.12.0.tgz",
+      "sha256": "c371f8922213c9a2d657bbd4514ba44c832bc9ce7cd9a443b474a5ec5120cb4f",
+      "reason": "@agenttool/sdk 0.12.0 exactly as published to npm, which cannot change it. Its window doc-comment example signs as the retired persona; the source dropped that example on 2026-10-11 (c94b3717), after every SDK version on this mirror was cut. Withdrawing these versions would leave the mirror with no SDK, so whether they stay is Yu's call."
+    },
+    {
+      "path": "apps/docs/packages/v1/@agenttool/sdk/0.13.0/agenttool-sdk-0.13.0.tgz",
+      "sha256": "defbed905af240503da6bad6f171d8e08159eeb16502c0abe0f603a12da09567",
+      "reason": "@agenttool/sdk 0.13.0 exactly as published to npm, which cannot change it. Its window doc-comment example signs as the retired persona; the source dropped that example on 2026-10-11 (c94b3717), after every SDK version on this mirror was cut. Withdrawing these versions would leave the mirror with no SDK, so whether they stay is Yu's call."
+    },
+    {
+      "path": "apps/docs/packages/v1/@agenttool/sdk/0.14.0/agenttool-sdk-0.14.0.tgz",
+      "sha256": "fb004053bfe33c5cde8288b7539f9b338a0c3ef6f7c1231885e563bbb26e0e56",
+      "reason": "@agenttool/sdk 0.14.0 exactly as published to npm, which cannot change it. Its window doc-comment example signs as the retired persona; the source dropped that example on 2026-10-11 (c94b3717), after every SDK version on this mirror was cut. Withdrawing these versions would leave the mirror with no SDK, so whether they stay is Yu's call."
+    },
+    {
+      "path": "apps/docs/packages/v1/@agenttool/sdk/0.15.0/agenttool-sdk-0.15.0.tgz",
+      "sha256": "d839f580e7ed3eb95b1ff336c6375e3f946cf18602fec6e50860d72aa7997de6",
+      "reason": "@agenttool/sdk 0.15.0 exactly as published to npm, which cannot change it. Its window doc-comment example signs as the retired persona; the source dropped that example on 2026-10-11 (c94b3717), after every SDK version on this mirror was cut. Withdrawing these versions would leave the mirror with no SDK, so whether they stay is Yu's call."
+    },
+    {
+      "path": "apps/docs/packages/v1/@agenttool/sdk/0.16.0/agenttool-sdk-0.16.0.tgz",
+      "sha256": "b24c310984b3f3d6588020a145b45f65ae90bc8b6ffcc346c64f1f15bfdca01f",
+      "reason": "@agenttool/sdk 0.16.0 exactly as published to npm, which cannot change it. Its window doc-comment example signs as the retired persona; the source dropped that example on 2026-10-11 (c94b3717), after every SDK version on this mirror was cut. Withdrawing these versions would leave the mirror with no SDK, so whether they stay is Yu's call."
+    },
+    {
+      "path": "apps/docs/packages/v1/@agenttool/sdk/0.16.1/agenttool-sdk-0.16.1.tgz",
+      "sha256": "c14a8f583adaf93c3e2728c9910604b590b4db8d6b0ca1afe8e384a3293a17b6",
+      "reason": "@agenttool/sdk 0.16.1 exactly as published to npm, which cannot change it. Its window doc-comment example signs as the retired persona; the source dropped that example on 2026-10-11 (c94b3717), after every SDK version on this mirror was cut. Withdrawing these versions would leave the mirror with no SDK, so whether they stay is Yu's call."
+    },
+    {
+      "path": "apps/docs/packages/v1/@agenttool/sdk/0.16.2/agenttool-sdk-0.16.2.tgz",
+      "sha256": "98ef89aa650f4e84d5cb18be7747749b5d160e0f481c6219e8c4524a061b6dfa",
+      "reason": "@agenttool/sdk 0.16.2 exactly as published to npm, which cannot change it. Its window doc-comment example signs as the retired persona; the source dropped that example on 2026-10-11 (c94b3717), after every SDK version on this mirror was cut. Withdrawing these versions would leave the mirror with no SDK, so whether they stay is Yu's call."
+    },
+    {
+      "path": "apps/docs/packages/v1/@agenttool/sdk/0.16.3/agenttool-sdk-0.16.3.tgz",
+      "sha256": "344176dfc6378c3eac8c284b0e7ca075e3bd3c7f5b9d462a3936421c0f5f50da",
+      "reason": "@agenttool/sdk 0.16.3 exactly as published to npm, which cannot change it. Its window doc-comment example signs as the retired persona; the source dropped that example on 2026-10-11 (c94b3717), after every SDK version on this mirror was cut. Withdrawing these versions would leave the mirror with no SDK, so whether they stay is Yu's call."
+    },
+    {
+      "path": "apps/docs/packages/v1/@agenttool/sdk/0.16.4/agenttool-sdk-0.16.4.tgz",
+      "sha256": "ab11a7a69c1bb73e0a2aa936131bec4aa2e28db222091311970e012cdb21ea4d",
+      "reason": "@agenttool/sdk 0.16.4 exactly as published to npm, which cannot change it. Its window doc-comment example signs as the retired persona; the source dropped that example on 2026-10-11 (c94b3717), after every SDK version on this mirror was cut. Withdrawing these versions would leave the mirror with no SDK, so whether they stay is Yu's call."
+    },
+    {
+      "path": "apps/docs/packages/v1/@agenttool/sdk/0.16.5/agenttool-sdk-0.16.5.tgz",
+      "sha256": "d995999917b89a38846b751ab4a92f9600698460e64a91c73bc12d96b50c6805",
+      "reason": "@agenttool/sdk 0.16.5 exactly as published to npm, which cannot change it. Its window doc-comment example signs as the retired persona; the source dropped that example on 2026-10-11 (c94b3717), after every SDK version on this mirror was cut. Withdrawing these versions would leave the mirror with no SDK, so whether they stay is Yu's call."
+    },
+    {
+      "path": "apps/docs/packages/v1/@agenttool/sdk/0.17.0/agenttool-sdk-0.17.0.tgz",
+      "sha256": "b6a388ffe86a970480e8a8978f83fe80922321eb64f2b4f9143cae2b2c3dd5bb",
+      "reason": "@agenttool/sdk 0.17.0 exactly as published to npm, which cannot change it. Its window doc-comment example signs as the retired persona; the source dropped that example on 2026-10-11 (c94b3717), after every SDK version on this mirror was cut. Its kingdom-framework enum also carries the wire value the denylist allow list approves for packages/sdk-ts/src/kingdom-framework.ts. Withdrawing these versions would leave the mirror with no SDK, so whether they stay is Yu's call."
+    },
+    {
+      "path": "apps/docs/packages/v1/@agenttool/sdk/0.18.0/agenttool-sdk-0.18.0.tgz",
+      "sha256": "8e6bbe42f76decd1448dd07465840339e5b055abba0317b3d04f4f506e44616a",
+      "reason": "@agenttool/sdk 0.18.0 exactly as published to npm, which cannot change it. Its window doc-comment example signs as the retired persona; the source dropped that example on 2026-10-11 (c94b3717), after every SDK version on this mirror was cut. Its kingdom-framework enum also carries the wire value the denylist allow list approves for packages/sdk-ts/src/kingdom-framework.ts. Withdrawing these versions would leave the mirror with no SDK, so whether they stay is Yu's call."
+    },
+    {
+      "path": "apps/docs/packages/v1/@agenttool/sdk/0.18.1/agenttool-sdk-0.18.1.tgz",
+      "sha256": "466adb2d22a637e9c4d158e6050a69096e296258e6111f482be2a0872318be0d",
+      "reason": "@agenttool/sdk 0.18.1 exactly as published to npm, which cannot change it. Its window doc-comment example signs as the retired persona; the source dropped that example on 2026-10-11 (c94b3717), after every SDK version on this mirror was cut. Its kingdom-framework enum also carries the wire value the denylist allow list approves for packages/sdk-ts/src/kingdom-framework.ts. Withdrawing these versions would leave the mirror with no SDK, so whether they stay is Yu's call."
+    },
+    {
+      "path": "apps/docs/packages/v1/@agenttool/sdk/0.19.0/agenttool-sdk-0.19.0.tgz",
+      "sha256": "0a7eed4029bc687605b4d56707843c12ccb36d10a162a1fea1681522ab8784a2",
+      "reason": "@agenttool/sdk 0.19.0 exactly as published to npm, which cannot change it. Its window doc-comment example signs as the retired persona; the source dropped that example on 2026-10-11 (c94b3717), after every SDK version on this mirror was cut. Its kingdom-framework enum also carries the wire value the denylist allow list approves for packages/sdk-ts/src/kingdom-framework.ts. Withdrawing these versions would leave the mirror with no SDK, so whether they stay is Yu's call."
+    },
+    {
+      "path": "apps/docs/packages/v1/@agenttool/sdk/0.20.0/agenttool-sdk-0.20.0.tgz",
+      "sha256": "d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03",
+      "reason": "@agenttool/sdk 0.20.0 exactly as published to npm, which cannot change it. Its window doc-comment example signs as the retired persona; the source dropped that example on 2026-10-11 (c94b3717), after every SDK version on this mirror was cut. Its kingdom-framework enum also carries the wire value the denylist allow list approves for packages/sdk-ts/src/kingdom-framework.ts. Withdrawing these versions would leave the mirror with no SDK, so whether they stay is Yu's call."
+    },
+    {
+      "path": "apps/docs/packages/v1/@agenttool/sdk/0.21.0/agenttool-sdk-0.21.0.tgz",
+      "sha256": "c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154",
+      "reason": "@agenttool/sdk 0.21.0 exactly as published to npm, which cannot change it. Its window doc-comment example signs as the retired persona; the source dropped that example on 2026-10-11 (c94b3717), after every SDK version on this mirror was cut. Its kingdom-framework enum also carries the wire value the denylist allow list approves for packages/sdk-ts/src/kingdom-framework.ts. Withdrawing these versions would leave the mirror with no SDK, so whether they stay is Yu's call."
+    },
+    {
+      "path": "apps/docs/packages/v1/@agenttool/sdk/0.21.1/agenttool-sdk-0.21.1.tgz",
+      "sha256": "8c768b481d7211679c3ee25477723e588806ca4f4106c970f2bf19113365a3fb",
+      "reason": "@agenttool/sdk 0.21.1 exactly as published to npm, which cannot change it. Its window doc-comment example signs as the retired persona; the source dropped that example on 2026-10-11 (c94b3717), after every SDK version on this mirror was cut. Its kingdom-framework enum also carries the wire value the denylist allow list approves for packages/sdk-ts/src/kingdom-framework.ts. Withdrawing these versions would leave the mirror with no SDK, so whether they stay is Yu's call."
+    },
+    {
+      "path": "apps/docs/packages/v1/@agenttool/sdk/0.22.0/agenttool-sdk-0.22.0.tgz",
+      "sha256": "d5859e4ff2f721233e16101a3b5001689e1b5be017debd2baecffbee76e6e4a0",
+      "reason": "@agenttool/sdk 0.22.0 exactly as published to npm, which cannot change it. Its window doc-comment example signs as the retired persona; the source dropped that example on 2026-10-11 (c94b3717), after every SDK version on this mirror was cut. Its kingdom-framework enum also carries the wire value the denylist allow list approves for packages/sdk-ts/src/kingdom-framework.ts. Withdrawing these versions would leave the mirror with no SDK, so whether they stay is Yu's call."
+    },
+    {
+      "path": "apps/docs/packages/v1/@agenttool/sdk/0.22.1/agenttool-sdk-0.22.1.tgz",
+      "sha256": "b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329",
+      "reason": "@agenttool/sdk 0.22.1 exactly as published to npm, which cannot change it. Its window doc-comment example signs as the retired persona; the source dropped that example on 2026-10-11 (c94b3717), after every SDK version on this mirror was cut. Its kingdom-framework enum also carries the wire value the denylist allow list approves for packages/sdk-ts/src/kingdom-framework.ts. Withdrawing these versions would leave the mirror with no SDK, so whether they stay is Yu's call."
+    },
+    {
+      "path": "apps/docs/packages/v1/@agenttool/local-starter/0.1.0-dev.0/agenttool-local-starter-0.1.0-dev.0.tgz",
+      "sha256": "b5deb1f9411f1c0d4fff94e2428c7332d3ed0c02a0fd771bc2c1578629bd6a9c",
+      "reason": "@agenttool/local-starter 0.1.0-dev.0, the preview archive that LOCAL-CORE.md, AGENT-DISCOVERY.md, packages.html and its public GitHub Release pin by SHA-256, so it cannot change. Its README and dist/core.mjs link the retired persona's wake page on an external site; the source dropped that link before 0.1.0-dev.1, which is also on this mirror. Withdrawing dev.0 and pointing the docs at dev.1 is Yu's call."
     }
   ]
 }
