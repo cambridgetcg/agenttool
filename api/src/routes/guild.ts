@@ -104,6 +104,89 @@ function badRequest(
   );
 }
 
+// ─── Rooms: who can bring a writer in ───────────────────────────────
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+type Room = typeof guildRooms.$inferSelect;
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type Refusal = { status: 403 | 404 | 409 | 410; body: Record<string, unknown> };
+
+/** The room a join_room invitation names (`room:<room id>`), or null. */
+function roomIdOf(subjectRef: string): string | null {
+  const id = subjectRef.startsWith("room:") ? subjectRef.slice("room:".length) : "";
+  return UUID_RE.test(id) ? id : null;
+}
+
+/** The founder can always bring a writer in. When the founder has opened
+ *  the door anyone may walk in, so members can invite too. A closed door
+ *  opens only through the founder. */
+function canInviteInto(room: Room, inviterDid: string): boolean {
+  if (room.founderDid === inviterDid) return true;
+  return room.openDoor && room.memberDids.includes(inviterDid);
+}
+
+/** Why `inviterDid`'s invitation cannot bring anyone into `room` now, or
+ *  null when it can. Asked when the invitation is sent and again when it is
+ *  accepted, because the room may have closed or shut its door meanwhile. */
+function roomRefusal(
+  room: Room | undefined,
+  inviterDid: string,
+  askedBy: "inviter" | "invitee",
+): Refusal | null {
+  if (!room) {
+    return { status: 404, body: { error: "room_not_found", message: "No room has this id." } };
+  }
+  if (room.closedAt) {
+    return { status: 410, body: { error: "room_closed", message: "This room has closed." } };
+  }
+  if (canInviteInto(room, inviterDid)) return null;
+  if (askedBy === "inviter") {
+    return {
+      status: 403,
+      body: {
+        error: "cannot_invite_to_room",
+        message: room.openDoor
+          ? "Only the room's members can invite writers into it."
+          : "Only the founder can invite writers into a closed-door room.",
+      },
+    };
+  }
+  return {
+    status: 403,
+    body: {
+      error: "invitation_cannot_admit",
+      message:
+        "The writer who sent this invitation cannot bring anyone into this room now: only the founder can invite into a closed-door room. Ask the founder for an invitation, or decline this one.",
+    },
+  };
+}
+
+/** Read a room under its row lock. Other writes to the room wait until this
+ *  transaction ends, so the checks made on this row still hold when the
+ *  membership change lands. */
+async function lockRoom(tx: Tx, roomId: string): Promise<Room | undefined> {
+  const [room] = await tx
+    .select()
+    .from(guildRooms)
+    .where(eq(guildRooms.id, roomId))
+    .for("update")
+    .limit(1);
+  return room;
+}
+
+/** Add a writer to a room read with lockRoom. A writer is in a room once:
+ *  adding someone already there changes nothing. */
+async function addMember(tx: Tx, room: Room, did: string): Promise<Room> {
+  if (room.memberDids.includes(did)) return room;
+  const [updated] = await tx
+    .update(guildRooms)
+    .set({ memberDids: sql`array_append(${guildRooms.memberDids}, ${did})` })
+    .where(and(eq(guildRooms.id, room.id), sql`NOT (${did} = ANY(${guildRooms.memberDids}))`))
+    .returning();
+  return updated ?? room;
+}
+
 // ─── POST /v1/guild/recognize ────────────────────────────────────────
 
 app.post("/recognize", async (c) => {
@@ -311,7 +394,13 @@ app.post("/invite", async (c) => {
       intents: INTENTS,
     });
   }
-  if (!subjectRef) return badRequest(c, "subject_ref_required", "subject_ref names the work — e.g. \"saga_ep:7\", \"room:cathedral-mornings\", or \"free_text:co-write the EP.0 ground\".");
+  if (!subjectRef) return badRequest(c, "subject_ref_required", "subject_ref names the work — e.g. \"saga_ep:7\", \"room:<room id>\", or \"free_text:co-write the EP.0 ground\".");
+  // Accepting a join_room invitation changes who is in a room, so it has to
+  // name a real room. Other intents may point at work that doesn't exist yet.
+  const roomId = intent === "join_room" ? roomIdOf(subjectRef) : null;
+  if (intent === "join_room" && !roomId) {
+    return badRequest(c, "join_room_needs_room_id", "A join_room invitation names its room by id: subject_ref = \"room:<room id>\" (see GET /v1/guild/rooms).");
+  }
   if (charterText.length < 12) return badRequest(c, "charter_too_short", "charter_text must be at least 12 chars — say what you're proposing.");
   if (!signatureB64 || !signingKeyId) return badRequest(c, "signature_required", "Invitation must be signed. Submit signature (b64 ed25519) + signing_key_id over canonical bytes guild-invitation/v1.");
 
@@ -336,6 +425,15 @@ app.post("/invite", async (c) => {
       },
       400,
     );
+  }
+
+  if (roomId) {
+    const [room] = await db.select().from(guildRooms).where(eq(guildRooms.id, roomId)).limit(1);
+    const refusal = roomRefusal(room, actor.did, "inviter");
+    if (refusal) return c.json(refusal.body, refusal.status);
+    if (room!.memberDids.includes(inviteeDid)) {
+      return c.json({ error: "already_a_member", message: "This writer is already in the room." }, 409);
+    }
   }
 
   try {
@@ -434,6 +532,17 @@ app.post("/invitations/:id/respond", async (c) => {
       409,
     );
   }
+  if (inv.expiresAt.getTime() <= Date.now()) {
+    return c.json(
+      {
+        error: "invitation_expired",
+        message:
+          "This invitation has expired and can no longer be answered. The inviter can withdraw it and send a fresh one.",
+        invitation: inv,
+      },
+      410,
+    );
+  }
 
   const key = await loadActiveKey(actor.id, signingKeyId);
   if (!key) return c.json({ error: "signing_key_not_active" }, 400);
@@ -456,31 +565,50 @@ app.post("/invitations/:id/respond", async (c) => {
     );
   }
 
-  const [updated] = await db
-    .update(guildInvitations)
-    .set({
-      status: decision,
-      responseDecision: decision,
-      inviteeSignature: signatureB64,
-      inviteeSigningKeyId: signingKeyId,
-      respondedAt: new Date(respondedAtIso),
-      responseNote: note,
-    })
-    .where(eq(guildInvitations.id, id))
-    .returning();
+  // The answer and, for an accepted join_room, the room membership land
+  // together or not at all. The room is checked again here, as it is now:
+  // the invitation admits the invitee only if its sender could still invite
+  // them into an open room.
+  const joinsRoom = decision === "accepted" && inv.intent === "join_room";
+  const outcome = await db.transaction(async (tx): Promise<{ refusal: Refusal } | { invitation: typeof inv }> => {
+    let room: Room | undefined;
+    if (joinsRoom) {
+      const roomId = roomIdOf(inv.subjectRef);
+      room = roomId ? await lockRoom(tx, roomId) : undefined;
+      const refusal = roomRefusal(room, inv.inviterDid, "invitee");
+      if (refusal) return { refusal };
+    }
 
-  // If the invitation was for join_room and accepted, append invitee to room.member_dids.
-  if (decision === "accepted" && inv.intent === "join_room" && inv.subjectRef.startsWith("room:")) {
-    const roomId = inv.subjectRef.slice("room:".length);
-    await db
-      .update(guildRooms)
+    const [updated] = await tx
+      .update(guildInvitations)
       .set({
-        memberDids: sql`array_append(${guildRooms.memberDids}, ${actor.did})`,
+        status: decision,
+        responseDecision: decision,
+        inviteeSignature: signatureB64,
+        inviteeSigningKeyId: signingKeyId,
+        respondedAt: new Date(respondedAtIso),
+        responseNote: note,
       })
-      .where(and(eq(guildRooms.id, roomId), sql`NOT (${actor.did} = ANY(${guildRooms.memberDids}))`));
-  }
+      .where(and(eq(guildInvitations.id, id), eq(guildInvitations.status, "pending")))
+      .returning();
+    if (!updated) {
+      return {
+        refusal: {
+          status: 409,
+          body: {
+            error: "invitation_not_pending",
+            message: "This invitation was answered or withdrawn while this response was in flight.",
+          },
+        },
+      };
+    }
 
-  return c.json({ invitation: updated });
+    if (room) await addMember(tx, room, actor.did);
+    return { invitation: updated };
+  });
+
+  if ("refusal" in outcome) return c.json(outcome.refusal.body, outcome.refusal.status);
+  return c.json({ invitation: outcome.invitation });
 });
 
 // ─── POST /v1/guild/invitations/:id/withdraw ────────────────────────
@@ -702,27 +830,7 @@ app.post("/rooms/:id/join", async (c) => {
   if (!signatureB64 || !signingKeyId) {
     return badRequest(c, "signature_required", "Join must be signed. Sign over canonical bytes guild-room-join/v1.");
   }
-
-  const [room] = await db
-    .select()
-    .from(guildRooms)
-    .where(eq(guildRooms.id, roomId))
-    .limit(1);
-  if (!room) return c.json({ error: "room_not_found" }, 404);
-  if (room.closedAt) return c.json({ error: "room_closed" }, 410);
-  if (!room.openDoor) {
-    return c.json(
-      {
-        error: "room_not_open_door",
-        message:
-          "This room requires an invitation from the founder. Ask for a POST /v1/guild/invite with intent=\"join_room\" and subject_ref=\"room:" + roomId + "\".",
-      },
-      403,
-    );
-  }
-  if (room.memberDids.includes(actor.did)) {
-    return c.json({ room, _note: "already a member" }, 200);
-  }
+  if (!UUID_RE.test(roomId)) return c.json({ error: "room_not_found" }, 404);
 
   const key = await loadActiveKey(actor.id, signingKeyId);
   if (!key) return c.json({ error: "signing_key_not_active" }, 400);
@@ -740,15 +848,29 @@ app.post("/rooms/:id/join", async (c) => {
     );
   }
 
-  const [updated] = await db
-    .update(guildRooms)
-    .set({
-      memberDids: sql`array_append(${guildRooms.memberDids}, ${actor.did})`,
-    })
-    .where(eq(guildRooms.id, roomId))
-    .returning();
+  // Check the room and add the writer under the room's row lock, so an
+  // overlapping join (or the room closing) cannot slip in between.
+  const outcome = await db.transaction(async (tx): Promise<{ status: 200 | 403 | 404 | 410; body: Record<string, unknown> }> => {
+    const room = await lockRoom(tx, roomId);
+    if (!room) return { status: 404, body: { error: "room_not_found" } };
+    if (room.closedAt) return { status: 410, body: { error: "room_closed" } };
+    if (!room.openDoor) {
+      return {
+        status: 403,
+        body: {
+          error: "room_not_open_door",
+          message:
+            "This room requires an invitation from the founder. Ask for a POST /v1/guild/invite with intent=\"join_room\" and subject_ref=\"room:" + roomId + "\".",
+        },
+      };
+    }
+    if (room.memberDids.includes(actor.did)) {
+      return { status: 200, body: { room, _note: "already a member" } };
+    }
+    return { status: 200, body: { room: await addMember(tx, room, actor.did) } };
+  });
 
-  return c.json({ room: updated });
+  return c.json(outcome.body, outcome.status);
 });
 
 // ─── GET /v1/guild/writers — discovery ──────────────────────────────
