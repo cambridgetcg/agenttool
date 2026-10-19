@@ -4,18 +4,17 @@ Read-only agent discovery evidence mapper. This package does not own hosted API
 routes, production egress, protocol invocation, npm publication, or the LOVE
 release inventory.
 
-The current source release is `0.2.3`; immutable `0.1.0`, `0.2.0`, `0.2.1`,
-and `0.2.2` artifacts remain separate historical bytes. Version `0.2.3`
-accepts only three complete, positive exit phrases and permits URI fragments
-on credential-free HTTPS catalog relation targets. Immutable `0.2.2` used
-permissive token matching that could mistake negation or “incomplete” for a
-complete exit. The current AgentTool producer remains compatible with
-`0.2.1`; this correction does not widen the scan or report schema.
+The current release is `0.2.3`; earlier published versions stay immutable. It
+accepts only three complete, positive invitation-exit phrases (negation and
+“incomplete” fail closed) and allows URI fragments on credential-free HTTPS
+catalog relation targets. The current AgentTool producer remains compatible
+with immutable `0.2.1`.
 
 ## Commands
 
+Prepare dependencies with the root `AGENTS.md` preparer, then run here:
+
 ```bash
-bun install --frozen-lockfile
 bun run ci
 node dist/cli.js scan api.agenttool.dev --json
 npm pack --ignore-scripts --dry-run

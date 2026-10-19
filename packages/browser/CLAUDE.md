@@ -8,8 +8,7 @@ LOVE, npm, and GitHub Releases does not change that runtime boundary.
 
 ## Authority direction
 
-Version `0.6.0` carries forward the exact `0.5.0` authority model built around
-one rule:
+The authority model is built around one rule:
 **sandbox consequences, not curiosity**.
 Destination reach, state persistence, data disclosure, and executable powers
 are separate capabilities. Do not turn a restriction on one into an
@@ -147,39 +146,28 @@ those powers.
 
 ## Verification
 
+Prepare dependencies with the root `AGENTS.md` preparer, then run here:
+
 ```bash
-bun install --frozen-lockfile
 bun run ci
-npm pack --dry-run --ignore-scripts
 ```
+
+`ci` typechecks, builds the package and its MCP bundle, runs the tests and the
+Node/Bun runtime smoke, and dry-runs the package pack.
 
 Hermetic tests use fakes and fixtures. A system browser may be used only in an
 explicit local dogfood check; it is never a required CI dependency.
+`AGENTOOL_BROWSER_SYSTEM_CHROME=1` opts `tests/system-chrome.test.ts` in.
 
 ## Release boundary
 
-Versions `0.1.0`, `0.2.0`, `0.3.0`, `0.5.0`, `0.5.1`, and `0.6.0` are exact LOVE
-releases with optional npm and GitHub Release mirrors. Version `0.4.0` was
-prepared but not distributed; its reviewed work is carried by `0.5.0`.
-Version `0.5.1` adds the package-root Codex manifest and self-contained packed
-MCP bundle without changing the exact `0.5.0` runtime, tool, protocol, or
-authority contracts. Version `0.6.0` adds the direct-only understanding
-subpath, exact material binding, local RhetorLint 0.1.2, and an explicitly
-injected model-observation seam while preserving those same nine operations
-and authority contracts. Release work must
+Version `0.6.0` is the current exact LOVE release, with optional npm and GitHub
+Release mirrors; `README.md` and `docs/NOW.md` record what each earlier version
+carried. Release work must
 keep each released version's bytes immutable and keep the current LOVE, npm,
 and GitHub Release bytes identical through the protected allowlisted workflow.
-The deployed docs/catalog is a distribution surface, not a hosted
-arbitrary-target browser or permission to add one.
-Retained observations, structural accessibility context, race hardening, and
-the `agent-browser-capabilities/0.3` contract belong to the exact `0.3.0`
-artifact, not the immutable `0.1.0` or `0.2.0` bytes. The `blockedNavigation`
-observation diagnostic and the JSONL snake_case rename hint were prepared at
-the unreleased `0.4.0` boundary. Browser-act receipts, non-ref observation
-bases, observation-local receipt context, backend-neutral capability
-inventory, and current/legacy MCP negotiation belong to exact `0.5.0`.
-The Codex plugin manifest and isolated packed MCP bundle belong to exact
-`0.5.1`; the understanding subpath belongs to exact `0.6.0`. Those bytes are
-frozen: any later source change—especially a
+Those bytes are frozen: any later source change—especially a
 machine-readable capability contract change—requires a new package version
 before publication.
+The deployed docs/catalog is a distribution surface, not a hosted
+arbitrary-target browser or permission to add one.

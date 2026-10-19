@@ -8,10 +8,17 @@ conformance and reject undeclared payload fields. Schema
 acceptance is structural conformance, not semantic validation of derived
 fields, digests, counts, or report truth.
 
+`src/revocable-feedback.ts` also generates a synthetic revocable-feedback
+benchmark; `bun run hf:write` regenerates its dataset companion in
+`hf/revocable-feedback/`, and `bun run hf:check` (part of `ci`) checks that it
+reproduces. Its classifier is not a consent detector. The formal contract is
+`docs/REVOCABLE-FEEDBACK.md`.
+
 ## Commands
 
+Prepare dependencies as root `AGENTS.md` describes, then:
+
 ```bash
-bun install --frozen-lockfile
 bun run ci
 npm pack --dry-run --ignore-scripts
 ```

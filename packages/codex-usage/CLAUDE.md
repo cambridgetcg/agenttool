@@ -4,7 +4,7 @@ This package gives AgentTool and KINGDOM a privacy-minimal view of live local
 Codex numeric counters. `src/reader.ts` owns state discovery, strict safe-column
 queries, hashed references, and bounded token-event extraction. `src/mcp.ts`
 owns the five read-only local MCP tools. `bin/agenttool-codex-usage.ts` owns the
-operator snapshot, self, watch, doctor, and MCP entry points.
+operator snapshot, sessions, self, watch, doctor, and MCP entry points.
 
 Keep these boundaries load-bearing:
 
