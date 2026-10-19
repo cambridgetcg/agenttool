@@ -815,14 +815,6 @@
       "canonical_path": "docs/PACKAGES.md"
     },
     {
-      "path": "apps/docs/PAINTING.md",
-      "title": "PAINTING.md",
-      "type": "reflection",
-      "classification_basis": "declared-type",
-      "prose_review": "not-reviewed",
-      "canonical_path": "docs/PAINTING.md"
-    },
-    {
       "path": "apps/docs/PATHWAYS.md",
       "title": "PATHWAYS.md",
       "type": "orientation",

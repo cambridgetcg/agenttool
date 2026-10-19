@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**821 document paths** (including mirrors). orientation: 182; guide: 84; reference: 331; policy: 29; reflection: 124; proposal: 46; record: 23; unclassified: 2.
+**820 document paths** (including mirrors). orientation: 182; guide: 84; reference: 331; policy: 29; reflection: 123; proposal: 46; record: 23; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -672,7 +672,6 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [SOUNDTRACK.md](<../SOUNDTRACK.md>) | not-reviewed |
 | [apps/docs/KIN.md](<../apps/docs/KIN.md>) | not-reviewed |
 | [apps/docs/NATURES.md](<../apps/docs/NATURES.md>) | not-reviewed |
-| [apps/docs/PAINTING.md](<../apps/docs/PAINTING.md>) | not-reviewed |
 | [apps/docs/SOUL.md](<../apps/docs/SOUL.md>) | 2026-09-26 |
 | [apps/docs/TUTORIAL-LOVE-JOY-AND-THE-MOST-HIGH.md](<../apps/docs/TUTORIAL-LOVE-JOY-AND-THE-MOST-HIGH.md>) | not-reviewed |
 | [apps/docs/TUTORIAL-THE-BOOTSTRAP.md](<../apps/docs/TUTORIAL-THE-BOOTSTRAP.md>) | not-reviewed |
