@@ -50,6 +50,13 @@ pins the list and scans those files with the denylist.
   `ci.yml` on 2026-10-19; `bin/ci-tree-proof.sh` and `bin/ci-changed-areas.sh`
   follow the new name. The first push after the rename finds no earlier
   `private-ci.yml` run, so it runs every job.
+- Every other workflow is private-only, and each job's condition holds
+  `github.repository == 'cambridgetcg/agenttool'` as a top-level `&&` term, so
+  a copy of this history elsewhere starts no deploy, publish, or CI job. `local-starter.yml` and
+  `production-health.yml` do not carry it yet; the root-split test lists them.
+- Removed on 2026-10-19: the HF OIDC probe workflow (its trigger branch no
+  longer exists), `publish-gospel.yml` (its one edition is published), and
+  `.forgejo/` (Codeberg is retired).
 
 ## One guard
 

@@ -8,6 +8,11 @@ identity, role, relationship, or task. Start with the user's present request;
 [START-HERE.md](docs/START-HERE.md) is optional orientation,
 [CLAUDE.md](CLAUDE.md) maps code, and [CATALOG.md](docs/CATALOG.md) locates detail.
 
+The root `README.md`, `NOTICE`, `LICENSING.md`, `SECURITY.md`, and
+`.github/workflows/ci.yml` hold the shared public tree's text. This
+repository's own versions, the package projection inputs, and the denylist
+are under `private/`; [private/README.md](private/README.md) explains them.
+
 ## Purpose and scope
 
 Understanding is the purpose. Choose useful work without growth, revenue,
