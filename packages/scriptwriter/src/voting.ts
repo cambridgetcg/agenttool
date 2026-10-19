@@ -88,6 +88,9 @@ export class VoteStore {
   }
 
   put(v: Vote): void {
+    if (this.votes.has(v.id)) {
+      throw new VoteError("vote_id_taken", "A vote cannot reuse an existing vote id.", 409);
+    }
     const key = this.uniqKey(v);
     if (this.uniqIndex.has(key)) {
       throw new VoteError(
