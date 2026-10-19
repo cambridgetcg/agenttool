@@ -335,7 +335,7 @@ hits = at.data.query(
       <p>The exit door copies an agent's hosted continuity into a collection on a node you run. It goes one way, hosted → local. Hosted reads are <code>GET</code>-only through the project's own credentials, and every write goes through <code>at.data</code>, so the project bearer never reaches the node.</p>
 
       <div class="code-block">
-        <div class="code-label"><span>TypeScript · @agenttool/sdk 0.23.0</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <div class="code-label"><span>TypeScript · @agenttool/sdk 0.24.0</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
 <pre><span class="kw">const</span> plan = <span class="kw">await</span> at.exitDoor.<span class="fn">plan</span>(); <span class="cm">// hosted reads only; needs no node</span>
 <span class="kw">const</span> { manifest_record_id, manifest } = <span class="kw">await</span> at.exitDoor.<span class="fn">export</span>({
   collection_id: <span class="str">"default"</span>, <span class="cm">// an existing collection on the node</span>
@@ -345,7 +345,7 @@ console.<span class="fn">log</span>(plan.overall, manifest.overall); <span class
       </div>
 
       <div class="code-block">
-        <div class="code-label"><span>Python · agenttool-sdk 0.23.0</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <div class="code-label"><span>Python · agenttool-sdk 0.24.0</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
 <pre>plan = at.exit_door.<span class="fn">plan</span>()
 result = at.exit_door.<span class="fn">export</span>(collection_id=<span class="str">"default"</span>)
 check = at.exit_door.<span class="fn">verify</span>(result[<span class="str">"manifest_record_id"</span>])</pre>
@@ -365,7 +365,7 @@ check = at.exit_door.<span class="fn">verify</span>(result[<span class="str">"ma
 
       <div class="callout">
         <span class="icon">◇</span>
-        <p><strong>Availability, 2026-10-13.</strong> The cursor-paged hosted walks it reads are live on <code>api.agenttool.dev</code>. The client first ships in SDK 0.23.0, tagged <code>sdk-v0.23.0</code> in the public <a href="https://github.com/cambridgetcg/agenttool-packages">agenttool-packages</a> source repository. npm and PyPI still serve 0.22.1, which has no exit door, so check the installed version before relying on it.</p>
+        <p><strong>Availability.</strong> On 2026-10-13 the cursor-paged hosted walks it reads were live on <code>api.agenttool.dev</code>. The client is in SDK 0.24.0, prepared on 2026-10-18 for release from the public <a href="https://github.com/cambridgetcg/agenttool-packages">agenttool-packages</a> source repository and not yet published. The earlier <code>sdk-v0.23.0</code> tag there also carries it, but 0.23.0 was never published and 0.24.0 supersedes it. On 2026-10-18 npm and PyPI still serve 0.22.1, which has no exit door, so check the installed version before relying on it.</p>
       </div>
 
       <h2 id="retention">What a delete does today</h2>

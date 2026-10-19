@@ -9,29 +9,91 @@ numbers; the Python changes are in
 A version listed here is a source version. Whether a registry serves it is
 answered by the registry (`npm view @agenttool/sdk versions`).
 
-## Unreleased — after 0.23.0
+## 0.24.0 — prepared, not yet published
 
-Not in the 0.23.0 tag; details under "Unreleased" in [`README.md`](README.md).
+Prepared on 2026-10-18 for the staged release from the public source
+repository. Until its npm stage is approved, npm does not serve 0.24.0; the
+PyPI release waits separately on the open steps in `docs/PYPI-RELEASES.md`.
+On 2026-10-18 both registries serve 0.22.1 as their newest version.
+
+0.24.0 supersedes 0.23.0. The `sdk-v0.23.0` tag in the public source
+repository was cut on 2026-10-13 from private source `42ae9148`, before the
+trace-consent change below merged (`4d75dc35`, #459). It had one dry run and
+was never staged or published to npm or PyPI, and it will not be (owner
+decision, 2026-10-18): publishing it would ship an adapter that writes
+model-authored `<trace>` markup by default. The tag stays; release tags are
+never moved or reused. 0.24.0 carries everything listed under 0.23.0 below,
+plus these changes.
+
+### Migration: model-written `<trace>` markup now needs consent
+
+- **What changes.** In 0.22.1 and in the 0.23.0 tag, `AnthropicAdapter` turns
+  a well-formed `<trace>` in the model's final response into a `/v1/traces`
+  write by default, from `create()` and from the managed stream, even when
+  the caller asked for no trace. From 0.24.0 it writes one only when the new
+  `beforeTraceWrite` option returns literal `true`. With no hook, nothing is
+  written. A hook that returns anything else, or throws, also writes nothing;
+  the call still returns, and the refusal appears in
+  `response.agenttool.markup_emissions` with `id: null` and an error message.
+- **Who is affected.** Only callers that rely on model-written `<trace>`
+  markup reaching `/v1/traces`. The opt-in decision trace
+  (`metadata.agenttool.trace: "decision"` or `at.deciding(...)`) is unchanged
+  and needs no hook. `<chronicle>` markup already needed
+  `beforeChronicleWrite` and still does. Callers that set
+  `disableMarkupParsing` or `skip_markup` see no difference.
+- **How to opt in.** Pass a hook and return `true` only after your own
+  review. The hook receives a frozen `{ source: "anthropic_markup", type,
+  decision, conclusion, observations, confidence? }`; its return value is
+  neither stored nor signed.
+
+  ```typescript
+  const adapter = new AnthropicAdapter(new Anthropic(), at, {
+    // `askOperator` is your own review step.
+    beforeTraceWrite: async ({ type, decision, conclusion }) =>
+      (await askOperator(`${type}: ${decision} → ${conclusion}`)) === true,
+  });
+  ```
+
+  A hook that always returns `true` restores the old behaviour. The default
+  changed because a model can repeat markup it was shown in a user message,
+  tool result or document, and recent project traces return in later full
+  wakes.
+- New exported types: `TraceBeforeWriteContext`, `TraceBeforeWriteHook`.
 
 ### Changed
 
-- `AnthropicAdapter` writes a model-written `<trace>` only when the new
-  `beforeTraceWrite` hook returns literal `true`; with no hook nothing is
-  written (0.23.0 and earlier write it by default). New exported types:
-  `TraceBeforeWriteContext`, `TraceBeforeWriteHook`.
 - A managed stream aborted while a `beforeChronicleWrite` or
-  `beforeTraceWrite` hook is pending writes nothing.
-- Trace excerpts never end on a lone high surrogate.
+  `beforeTraceWrite` hook is pending writes nothing: the adapter checks for
+  cancellation again after the hook resolves. In 0.22.1 a chronicle entry
+  approved after the abort was still written.
+- Trace excerpts never end on a lone high surrogate. `AnthropicAdapter` keeps
+  the 200, 1,000 and 4,000 UTF-16-unit limits and now cuts where the Python
+  adapter cuts; the cut is shared with `OpenAIResponsesAdapter`.
 - `adapter.messages.create({ ..., stream: true })` written as an inline
   object literal types as `AdaptedLowLevelStream`, so `for await` over it
-  compiles.
+  compiles. In 0.22.1 it fell through to the `AdaptedResponse` overload
+  (TS2504).
+- Documentation comments only: `at.x402` says the rail is retired for
+  AgentTool (the top-up route has answered `410 purchases_retired` since
+  2026-09-23, so `topUp` throws and nothing is signed; `payment(id)` still
+  reads recorded payments), and `canonicalWalletAddressClaimBytes` no longer
+  says that `POST /v1/wallets/:id/addresses` verifies its digest, since no
+  such route is on main.
 
-## 0.23.0 — unreleased
+### Documentation
 
-The first version released from the public source repository
-[`cambridgetcg/agenttool-packages`](https://github.com/cambridgetcg/agenttool-packages).
-It has no LOVE artifact; 0.22.1 remains the newest version on the
-docs.agenttool.dev LOVE mirror.
+- The README marks the x402 rail retired, adds the "Provider adapters — what
+  each call sends" section, uses `inputSchema` in the Vercel AI example, and
+  says the wallet address-claim helpers have no server route on main.
+
+## 0.23.0 — tagged, never published; superseded by 0.24.0
+
+Tagged `sdk-v0.23.0` in the public source repository
+[`cambridgetcg/agenttool-packages`](https://github.com/cambridgetcg/agenttool-packages)
+on 2026-10-13 and never staged or published to a registry; see 0.24.0. The
+changes below first reach a registry in 0.24.0. Versions from the public
+source repository have no LOVE artifact; 0.22.1 remains the newest version on
+the docs.agenttool.dev LOVE mirror.
 
 ### Added
 

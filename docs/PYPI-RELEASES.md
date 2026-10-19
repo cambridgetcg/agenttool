@@ -68,7 +68,16 @@ anything is built or published; no such run was made. npm releases moved to
 the public repository on 2026-10-12 and no longer have this gap; PyPI has not
 moved yet.
 
-From 0.23.0 the distributions' `Repository` URL names the public repository
+Superseded, 2026-10-18: `agenttool-sdk` 0.23.0 will not be published. Its
+`sdk-v0.23.0` tag predates the `<trace>` consent change (#459), so the owner
+decided to skip it and prepare 0.24.0 from `main` instead; the
+[npm record](NPM-RELEASES.md#sdk-0240-prepared-0230-superseded--2026-10-18)
+has the tag and dry-run evidence. The next PyPI candidate is 0.24.0, with the
+same `sdk-v0.24.0` tag as npm. It is prepared in source and waits on items 1,
+2 and 4 below; PyPI still serves 0.22.1 (anonymous JSON read, 2026-10-18).
+
+From source 0.23.0 on (first planned for publication as 0.24.0) the
+distributions' `Repository` URL names the public repository
 `cambridgetcg/agenttool-packages` (`EXPECTED_REPOSITORY` in the release tool);
 `SOURCE_REPOSITORY` still names the private repository where the workflow runs.
 The PyPI trusted publisher recorded for 0.22.1 binds `cambridgetcg/agenttool`,

@@ -482,7 +482,7 @@ class TestExport:
         manifest = result["manifest"]
         assert manifest["schema"] == "agenttool-exit-manifest/v1"
         assert manifest["overall"] == "complete"
-        assert manifest["exporter"] == {"package": "agenttool-sdk", "version": "0.23.0"}
+        assert manifest["exporter"] == {"package": "agenttool-sdk", "version": "0.24.0"}
         assert manifest["hosted"] == {"origin": HOSTED, "auth_mode": "api_key", "identity_id": None}
         assert manifest["node"] == {"node_id": "node-py-fake", "collection_id": "agenttool-exit",
                                     "max_body_bytes": 1024 * 1024}
