@@ -449,7 +449,8 @@ test("live: the quarantine list is held by a gate that runs and released by one 
   );
   expect(finding?.verdict).toBe("gap");
   expect(finding?.evidence).toContain("bin/preflight.sh");
-  expect(finding?.evidence).toContain(".github/workflows/ci.yml");
+  // This repository's own CI is private-ci.yml since the 2026-10-19 root split.
+  expect(finding?.evidence).toContain(".github/workflows/private-ci.yml");
 });
 
 test("live: the two copies of the doctrine quarantine list are still copies, and are reported either way", async () => {
