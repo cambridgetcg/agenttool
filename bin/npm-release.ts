@@ -8,7 +8,7 @@
  * receipt already exist. The split keeps package scripts away from write
  * credentials and makes an accepted-but-not-yet-visible publish recoverable.
  *
- * Releases run from the public source repository, RELEASE_REPOSITORY. By
+ * Releases run from the public release repository, RELEASE_REPOSITORY. By
  * default `publish` stages the exact artifact with `npm stage publish`; a
  * maintainer approves it with 2FA, and a later run takes the verify-existing
  * path to confirm the public registry bytes.
@@ -21,10 +21,11 @@ import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { inspectNpmTarball } from "./build-love-packages";
 
 /**
- * The public source repository. Its tags are the only release tags, its
- * `main` must contain them, its GitHub Releases mirror the exact bytes, and
- * it is the only workflow identity that may publish. Package metadata, the
- * release remote, the GitHub API, and the Actions identity all derive from it.
+ * The public release repository, which holds projection commits of the
+ * package sources. Its tags are the only release tags, its `main` must
+ * contain them, its GitHub Releases mirror the exact bytes, and it is the
+ * only workflow identity that may publish. Package metadata, the release
+ * remote, the GitHub API, and the Actions identity all derive from it.
  */
 export const RELEASE_REPOSITORY = "cambridgetcg/agenttool-packages" as const;
 export const RELEASE_REPOSITORY_URL = `https://github.com/${RELEASE_REPOSITORY}` as const;
