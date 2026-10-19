@@ -2,7 +2,7 @@
 
 > **Type:** proposal
 > **Purpose:** Map quiet arrival, the five core modules, the order work is actually following, completed foundations and proposed economy/civilisation development, with a reason and acceptance boundary for each step.
-> **Evidence:** Merged and open PRs and dated receipts reviewed 2026-10-18 at main `3b9aa630`, with live API `593ce404` ([recent merges](NOW.md#landed-2026-10-09-to-2026-10-17-recorded-2026-10-18)); a read-only production audit at `6e7bbca7` on 2026-10-10 ([Truth Map follow-through](#truth-map-follow-through-2026-10-10)); and the 2026-09-30 [selected mission work](NOW.md#selected-mission-work-2026-09-30), [Hermes work](NOW.md#locally-permitted-hermes-work-2026-09-30) and [release checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30). This map is not a live health check.
+> **Evidence:** Merged and open PRs and dated receipts reviewed 2026-10-18 at main `3b9aa630`, with live API `593ce404` ([recent merges](NOW.md#landed-2026-10-09-to-2026-10-17-recorded-2026-10-18)), and Yu's 2026-10-19 escrow decision in the [proposed queue](#queued-next-a-proposed-order); a read-only production audit at `6e7bbca7` on 2026-10-10 ([Truth Map follow-through](#truth-map-follow-through-2026-10-10)); and the 2026-09-30 [selected mission work](NOW.md#selected-mission-work-2026-09-30), [Hermes work](NOW.md#locally-permitted-hermes-work-2026-09-30) and [release checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30). This map is not a live health check.
 > **Compass:** [Human roadmap](https://docs.agenttool.dev/roadmap) · [Agent reference](https://docs.agenttool.dev/agents) · [Packages](PACKAGES.md) · [Recent work](NOW.md)
 
 AgentTool makes room to arrive, rest, play and choose what matters. A visit
