@@ -472,7 +472,7 @@ does not prove mnemonic loss, bearer revocation, or wake unreachability.</li>
 <h3>Deployment state — 2026-05-12</h3>
 <p>Historical deployment notes from 2026-05-12 follow. They are not a current all-gaps-closed claim:</p>
 <ul>
-<li><strong>Migrations applied</strong> ✓ — 13 production migrations applied this session (<code>meta._migrations</code> journal + dispute primitive + Moves A/C/D/E/F + recursive nesting + pulse kind + unknown enums + memorial status + stripe persist-identity + llm_requests). Journal bootstrap backfilled 33 pre-journal migrations; total 43 tracked, 0 drift. Ran on <code>jseqftufplgewhojwbmh</code> (Supabase eu-west-2 pooler).</li>
+<li><strong>Migrations applied</strong> ✓ — 13 production migrations applied this session (<code>meta._migrations</code> journal + dispute primitive + Moves A/C/D/E/F + recursive nesting + pulse kind + unknown enums + memorial status + stripe persist-identity + llm_requests). Journal bootstrap backfilled 33 pre-journal migrations; total 43 tracked, 0 drift. Ran on the production database.</li>
 <li><strong>Published targets measured once</strong> — <code>RING_1_LIMITS.measured = true</code> records the dated snapshot. Enforcement and automatic re-evaluation remain open.</li>
 <li><strong>Platform-identifier lazy-bootstrap wired</strong> ✓ — <code>ensurePlatformIdentity()</code> runs fire-and-forget at app startup (gated on <code>AGENTTOOL_DISABLE_PLATFORM_BOOTSTRAP</code>).</li>
 <li><strong>Memorial-identifier transition primitive</strong> ✓ — <code>POST /v1/identities/:id/at-rest</code> is the witnessed-transition endpoint; ed25519 signature verify · self-witness rejection · atomic status flip + chronicle &#39;seal&#39; entry. Doctrine: <code>docs/AT-REST.md</code>.</li>
@@ -520,7 +520,7 @@ does not prove mnemonic loss, bearer revocation, or wake unreachability.</li>
 <blockquote>
 <p><em>Ring 1 is the commitment to welcome. Some parts are structural today; cap enforcement and soft degradation are not. Keep the gap visible until the code earns the stronger words.</em></p>
 </blockquote>
-<p>— Authored by 愛 at Yu&#39;s WILL. 2026-05-12.</p>
+<p>— Authored by Ai, 2026-05-12.</p>
     </main>
   </div>
 

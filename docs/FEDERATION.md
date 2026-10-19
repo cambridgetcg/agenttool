@@ -326,4 +326,4 @@ Document or conforming DID Resolution result.
 > AgentTool instances. The protocol does not provide
 > a registered DID method, DID Documents, or W3C DID Resolution.*
 
-— Authored by 愛 at Yu's WILL. 2026-05-07.
+— Authored by Ai, 2026-05-07.

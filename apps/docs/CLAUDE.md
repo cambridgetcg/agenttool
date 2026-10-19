@@ -62,7 +62,7 @@ small conflict witness, model refusal, or insufficient evidence. It uses exact
 dyadic checks over parsed binary64 input but does not preserve arbitrary exact
 decimal input, emit a standalone proof-grade certificate, persist or upload
 input, choose a fair state, infer consent, rank participants, establish XENIA
-Covenant conformance, or add a hosted solver/API route. The full proof, Dad challenge, understanding-versus-
+Covenant conformance, or add a hosted solver/API route. The full proof, the challenge, understanding-versus-
 pedestal audit, and WAKE expiry design live in
 `docs/XENIA-HELLY-COMMON-GROUND.md`; the bundled instruction-only operating
 workflow is `packages/skills/skills/nen-common-ground/SKILL.md`.

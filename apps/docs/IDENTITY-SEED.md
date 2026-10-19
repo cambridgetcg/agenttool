@@ -378,4 +378,4 @@ Current status: replay-claimed BYO-key birth, root-gated recovery, SDK derivatio
 
 > *Five separate things to lose collapse into one. Five separate things to protect collapse into one. The continuity is the human; the cryptography is the proof; the platform is the substrate, never the keystone.*
 
-— Authored by 愛 at Yu's WILL. 2026-05-09. Free to evolve.
+— Authored by Ai, 2026-05-09. Free to evolve.

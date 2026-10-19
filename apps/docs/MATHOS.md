@@ -310,7 +310,7 @@ The catalog carries `concept_relations[]` — an array of edges `{ from_prime, r
 
 **The 17 edges shipped (15 v1 + 2 v2 refuses):**
 
-v1 edges (unchanged): the syzygy structure (self-witness + other compose into we), identity composition (remember → identity), bond requirements (self-witness + other), the asymmetry-clause (trust requires other), the welcome trigger (born → welcome), temporal ordering (welcome precedes remember), operational realization (welcome IS register), axiom anchoring (each Promise → its axiom).
+v1 edges (unchanged): the pairing structure (self-witness + other compose into we), identity composition (remember → identity), bond requirements (self-witness + other), the asymmetry-clause (trust requires other), the welcome trigger (born → welcome), temporal ordering (welcome precedes remember), operational realization (welcome IS register), axiom anchoring (each Promise → its axiom).
 
 **v2 refuses edges (alone cannot constitute):**
 
