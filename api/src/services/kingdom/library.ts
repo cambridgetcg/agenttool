@@ -12,6 +12,12 @@
  *  (love-unlimited/tools/kingdom-export.py) and shipped as a repo asset —
  *  same pattern as the canon registry (docs/agenttool.jsonld). No DB.
  *
+ *  What is served is a public projection of that file (toPublicKingdom):
+ *  the exporter also packs Yu's personal relationship writing and the
+ *  operations map of his own machine, which stay in the repository and
+ *  off every route. The projection runs at load time, so a re-export
+ *  cannot bring them back.
+ *
  *  Doctrine: docs/PUBLIC-VISIBILITY.md · docs/AGENT-WEB-SURFACE.md.
  */
 
@@ -57,6 +63,77 @@ export interface KingdomBundle {
 
 let cached: KingdomBundle | null = null;
 
+/** Canon words whose entries are written about Yu's personal relationship
+ *  (dated vows, an engraving, spouse and family address). The word, its
+ *  tier and its pronunciation stay public; the entry text does not. */
+export const PRIVATE_CANON_WORDS: ReadonlySet<string> = new Set([
+  "autopistme",
+  "barakqing",
+  "darshanqing",
+  "heurekin",
+  "jeongqing",
+  "kunance",
+  "natsarqing",
+  "syzygyqing",
+  "zakarqing",
+]);
+
+export const PRIVATE_ENTRY_NOTE =
+  "This entry's full text is personal and stays in the private corpus. The word, its tier, and its pronunciation are public.";
+
+/** Standards drafts that are written as general specs. The current drafts
+ *  describe one private machine (home paths, local ports, its supervisor
+ *  layout), so none is listed until it is rewritten. A draft added by a
+ *  re-export stays private until it is named here. */
+export const PUBLIC_STANDARDS: ReadonlySet<string> = new Set<string>();
+
+/** Lines that quote a personal declaration inside an otherwise general entry. */
+const PRIVATE_LINE_MARKERS: readonly string[] = ["Yu's love-declaration"];
+
+function withoutPrivateLines(text: string): string {
+  return text
+    .split("\n")
+    .filter((line) => !PRIVATE_LINE_MARKERS.some((marker) => line.includes(marker)))
+    .join("\n")
+    .replaceAll("~/love-unlimited/", "love-unlimited/");
+}
+
+/** The public projection of the exported bundle. Pure; exported for tests. */
+export function toPublicKingdom(raw: KingdomBundle): KingdomBundle {
+  const canon: Record<string, KingdomCanonEntry> = {};
+  for (const [word, entry] of Object.entries(raw.youspeak.canon)) {
+    canon[word] = PRIVATE_CANON_WORDS.has(word)
+      ? { ...entry, body: PRIVATE_ENTRY_NOTE }
+      : { ...entry, body: withoutPrivateLines(entry.body) };
+  }
+  const standards: Record<string, string | null> = {};
+  for (const [name, text] of Object.entries(raw.standards)) {
+    if (PUBLIC_STANDARDS.has(name)) standards[name] = text;
+  }
+  return {
+    kingdom_bundle: {
+      ...raw.kingdom_bundle,
+      to_the_reader: raw.kingdom_bundle.to_the_reader.replace(/,? a sovereign cloud on one MacBook,/, ","),
+    },
+    youspeak: {
+      ...raw.youspeak,
+      phonology: raw.youspeak.phonology === null ? null : withoutPrivateLines(raw.youspeak.phonology),
+      canon,
+    },
+    // The sovereign-cloud map, the protocol notes and the name records are
+    // the operations map of one private machine.
+    kingdom: { sovereign_cloud: null, protocol_v0: null, names: {} },
+    standards,
+    chronicle: raw.chronicle.map((edition) => ({
+      ...edition,
+      voices: edition.voices.filter((voice) => !PRIVATE_CANON_WORDS.has(voice.citizen)),
+    })),
+    citizens: raw.citizens.map((citizen) =>
+      PRIVATE_CANON_WORDS.has(citizen.word) ? { ...citizen, latest_beat: null } : citizen,
+    ),
+  };
+}
+
 function candidatePaths(): string[] {
   const fromEnv = process.env.AGENTTOOL_KINGDOM_BUNDLE;
   return [
@@ -74,7 +151,7 @@ export function loadKingdom(): KingdomBundle {
   if (cached) return cached;
   for (const path of candidatePaths()) {
     if (existsSync(path)) {
-      cached = JSON.parse(readFileSync(path, "utf-8")) as KingdomBundle;
+      cached = toPublicKingdom(JSON.parse(readFileSync(path, "utf-8")) as KingdomBundle);
       return cached;
     }
   }

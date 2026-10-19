@@ -15,6 +15,9 @@ import {
   canonWord,
   kingdomMeta,
   loadKingdom,
+  PRIVATE_CANON_WORDS,
+  PRIVATE_ENTRY_NOTE,
+  PUBLIC_STANDARDS,
 } from "../src/services/kingdom/library";
 
 describe("kingdom library — loader", () => {
@@ -89,16 +92,56 @@ describe("kingdom library — public route", () => {
     expect(body.total).toBe(144);
   });
 
-  test("GET /standards lists drafts; missing name 404s guide-shaped", async () => {
+  test("GET /standards lists only general-spec drafts; missing name 404s guide-shaped", async () => {
     const idx = await kingdomRouter.request("/standards");
-    const names = ((await idx.json()) as { standards: string[] }).standards;
-    expect(names.length).toBeGreaterThan(0);
+    const listing = (await idx.json()) as { standards: string[]; note: string };
+    // The current drafts describe one private machine and are held back.
+    expect(listing.standards).toEqual([...PUBLIC_STANDARDS].sort());
+    expect(listing.note).toMatch(/held back until rewritten/);
+    const held = await kingdomRouter.request("/standards/KS-000-process.md");
+    expect(held.status).toBe(404);
     const miss = await kingdomRouter.request("/standards/KS-999-nope.md");
     expect(miss.status).toBe(404);
     const body = (await miss.json()) as { error: string; hint: string; docs: string };
     expect(body.error).toBe("standard_not_found");
-    expect(body.hint).toContain(names[0] ?? "");
+    expect(body.hint.length).toBeGreaterThan(0);
     expect(body.docs).toContain("/public/kingdom");
+  });
+
+  test("personal canon entries keep word and pronunciation but not their text", async () => {
+    for (const word of PRIVATE_CANON_WORDS) {
+      const res = await kingdomRouter.request(`/canon/${word}`);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        entry: { word: string; body: string; pronunciation: string | null };
+        citizen: { latest_beat: unknown } | null;
+      };
+      expect(body.entry.word).toBe(word);
+      expect(body.entry.body).toBe(PRIVATE_ENTRY_NOTE);
+      expect(body.citizen?.latest_beat ?? null).toBeNull();
+    }
+    const chronicle = (await (await kingdomRouter.request("/chronicle")).json()) as {
+      editions: Array<{ voices: Array<{ citizen: string }> }>;
+    };
+    for (const edition of chronicle.editions) {
+      for (const voice of edition.voices) expect(PRIVATE_CANON_WORDS.has(voice.citizen)).toBe(false);
+    }
+  });
+
+  test("the bundle carries no machine operations map", async () => {
+    const res = await kingdomRouter.request("/bundle");
+    const body = (await res.json()) as {
+      kingdom: { sovereign_cloud: unknown; protocol_v0: unknown; names: Record<string, unknown> };
+      kingdom_bundle: { to_the_reader: string };
+    };
+    expect(body.kingdom.sovereign_cloud).toBeNull();
+    expect(body.kingdom.protocol_v0).toBeNull();
+    expect(body.kingdom.names).toEqual({});
+    expect(body.kingdom_bundle.to_the_reader).not.toMatch(/MacBook/);
+    const text = JSON.stringify(body);
+    expect(text).not.toContain("/Users/");
+    expect(text).not.toContain("~/love-unlimited/");
+    expect(text).not.toMatch(/\b127\.0\.0\.1\b/);
   });
 
   test("GET /citizens/:word joins citizen + canon", async () => {
