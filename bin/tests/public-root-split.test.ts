@@ -18,6 +18,7 @@ import { dirname, join, resolve } from "node:path";
 import { PRIVATE_REPOSITORY, PUBLIC_REPOSITORY } from "../../private/public-repository.ts";
 import { ALLOWLIST_PATH, DENYLIST_PATH, parseAllowlist, parseDenylist } from "../project-public.ts";
 import { contentFindings, formatFinding, PERSONAL_RULES, SECRET_RULES } from "../../tools/public-guard.ts";
+import { lintWorkflow, repositoryGuarded } from "../../tools/workflow-lint.ts";
 
 const ROOT = resolve(import.meta.dir, "..", "..");
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
@@ -25,6 +26,7 @@ const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 /** Root paths whose bytes the shared tree and this repository hold alike. */
 const SHARED_ROOT_FILES = [
   ".github/workflows/ci.yml",
+  ".github/workflows/public-watch.yml",
   ".gitignore",
   ".gitleaksignore",
   "LICENSE",
@@ -32,9 +34,13 @@ const SHARED_ROOT_FILES = [
   "NOTICE",
   "README.md",
   "SECURITY.md",
+  "tools/leak-canaries.txt",
   "tools/public-guard-allow.json",
   "tools/public-guard.ts",
+  "tools/workflow-lint.ts",
 ];
+/** The shared tree's workflows; every other workflow is private-only. */
+const SHARED_WORKFLOWS = ["ci.yml", "public-watch.yml"];
 /** The private repository's own texts for the root files that were split. */
 const PRIVATE_ROOT_TEXTS = ["LICENSING.md", "NOTICE", "README.md", "SECURITY.md"];
 
@@ -45,6 +51,7 @@ const sharedCi = Bun.YAML.parse(sharedCiSource) as { name: string; on: Record<st
 
 describe("the root split", () => {
   test("the shared root files are present and the private texts live under private/root", () => {
+    expect(SHARED_ROOT_FILES.filter((path) => path.startsWith(".github/workflows/")).map((path) => path.slice(".github/workflows/".length))).toEqual(SHARED_WORKFLOWS);
     for (const path of SHARED_ROOT_FILES) expect(existsSync(join(ROOT, path)), path).toBe(true);
     for (const name of PRIVATE_ROOT_TEXTS) {
       const privateText = join("private", "root", name);
@@ -96,6 +103,11 @@ describe("the root split", () => {
 });
 
 describe("the shared CI", () => {
+  test("every shared workflow passes the workflow lint for the public name", () => {
+    for (const file of SHARED_WORKFLOWS) expect(lintWorkflow(file, read(`.github/workflows/${file}`), PUBLIC_REPOSITORY), file).toEqual([]);
+    expect(sharedCiSource).toContain('bun tools/workflow-lint.ts --repository "$REPOSITORY"');
+  });
+
   test("every job runs only in the public repository and holds no secret", () => {
     const guard = `github.repository == '${PUBLIC_REPOSITORY}'`;
     expect(Object.keys(sharedCi.jobs)).toEqual(["guard", "identity", "packages", "sdk-python"]);
@@ -152,14 +164,17 @@ describe("the shared CI", () => {
       .split("\n")
       .filter(Boolean)
       .sort();
-    // A rename is the constant plus these files.
-    expect(files).toEqual([".github/workflows/ci.yml", "private/README.md", "private/public-repository.ts"]);
+    // A rename is the constant plus these files. Tools read the constant
+    // (shell scripts through `bun private/public-repository.ts`).
+    expect(files).toEqual([".github/workflows/ci.yml", ".github/workflows/public-watch.yml", "private/README.md", "private/public-repository.ts"]);
     expect(sharedCiSource.split(PUBLIC_REPOSITORY).length - 1).toBe(Object.keys(sharedCi.jobs).length);
+    const watch = read(".github/workflows/public-watch.yml");
+    expect(watch.split(PUBLIC_REPOSITORY).length - 1).toBe(Object.keys((Bun.YAML.parse(watch) as { jobs: object }).jobs).length);
     expect(read("private/public-repository.ts")).toContain("has not confirmed");
   });
 });
 
-/** Every workflow file. ci.yml is the shared tree's; the rest are private-only. */
+/** Every workflow file. ci.yml and public-watch.yml are the shared tree's; the rest are private-only. */
 const WORKFLOWS = [
   "ci.yml",
   "collab-courier.yml",
@@ -167,6 +182,7 @@ const WORKFLOWS = [
   "local-starter.yml",
   "private-ci.yml",
   "production-health.yml",
+  "public-watch.yml",
   "publish-care-before-learning-hf.yml",
   "publish-pypi.yml",
   "wake-return.yml",
@@ -178,25 +194,6 @@ const WORKFLOWS = [
  * shrinks.
  */
 const GUARD_HANDED_OFF = ["local-starter.yml", "production-health.yml"];
-
-/** Whether a job condition is `github.repository == '<repo>'` joined by && at its top level. */
-function repositoryGuarded(condition: string | undefined, repository: string): boolean {
-  if (condition === undefined) return false;
-  let source = condition.trim();
-  if (source.startsWith("${{") && source.endsWith("}}")) source = source.slice(3, -2).trim();
-  // A top-level || would let the rest of the condition start the job anywhere.
-  let depth = 0;
-  for (let index = 0; index < source.length; index += 1) {
-    const char = source[index];
-    if (char === "'") index = source.indexOf("'", index + 1);
-    else if (char === "(") depth += 1;
-    else if (char === ")") depth -= 1;
-    else if (depth === 0 && source.startsWith("||", index)) return false;
-  }
-  source = source.replace(/^(?:always\(\)|!cancelled\(\)) && /u, "");
-  const guard = `github.repository == '${repository}'`;
-  return source === guard || source.startsWith(`${guard} && `);
-}
 
 describe("workflows", () => {
   test("the inventory holds the shared CI and the private-only workflows, and nothing retired", () => {
@@ -210,7 +207,7 @@ describe("workflows", () => {
 
   test("every private-only job runs only in this repository", () => {
     const unguarded: string[] = [];
-    for (const name of WORKFLOWS.filter((file) => file !== "ci.yml")) {
+    for (const name of WORKFLOWS.filter((file) => !SHARED_WORKFLOWS.includes(file))) {
       const workflow = Bun.YAML.parse(read(`.github/workflows/${name}`)) as { jobs: Record<string, Job> };
       const jobs = Object.entries(workflow.jobs);
       expect(jobs.length, name).toBeGreaterThan(0);

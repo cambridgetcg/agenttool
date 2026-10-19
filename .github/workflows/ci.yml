@@ -1,7 +1,8 @@
 name: Public CI
 
-# The shared AgentTool tree: the public guard in tree mode, the identity of
-# maintainers' commits, every package's own gate, and the Python SDK. Bun and
+# The shared AgentTool tree: the public guard in tree mode, the workflow lint,
+# the identity of maintainers' commits, every package's own gate, and the
+# Python SDK. Bun and
 # Node are pinned to the versions the package gates use, and every action is
 # pinned by commit. Every job runs only in the public development repository,
 # so a copy of this file elsewhere starts nothing.
@@ -48,8 +49,12 @@ jobs:
           tar -xzf "$dir/gitleaks.tar.gz" -C "$dir" gitleaks
           test "$("$dir/gitleaks" version)" = "8.30.1"
           echo "GITLEAKS_BIN=$dir/gitleaks" >> "$GITHUB_ENV"
-      - name: Guard the committed tree and its history (paths, secrets, personal data, gitleaks, one root)
+      - name: Guard the committed tree and its history (paths, secrets, personal data, gitleaks, one root, canaries)
         run: bun tools/public-guard.ts --tree --rev HEAD --gitleaks "$GITLEAKS_BIN"
+      - name: Lint the workflows (repository guard on every job, no secrets, no deploy, pinned actions)
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: bun tools/workflow-lint.ts --repository "$REPOSITORY"
 
   identity:
     name: Maintainer commit identity
