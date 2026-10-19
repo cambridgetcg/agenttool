@@ -63,6 +63,11 @@ contains.
   `if: github.repository == 'cambridgetcg/agenttool-open'`, so here they start
   nothing. [`tools/workflow-lint.ts`](../tools/workflow-lint.ts) enforces that in
   the shared CI and refuses secrets, deploys, write permissions, and unpinned actions.
+  The watch's 15-minute schedule still fires here once this tree is on main:
+  its one job is skipped, which leaves about 96 skipped runs a day in this
+  repository's Actions history (that skipped jobs cost no minutes is GitHub's
+  documented behaviour, not checked here). Turning the workflow off in this
+  repository is a GitHub setting, so it is Yu's call.
 - `.github/workflows/private-ci.yml` is this repository's CI. Every other
   workflow is private-only, and each job's condition holds
   `github.repository == 'cambridgetcg/agenttool'`; `local-starter.yml` and
