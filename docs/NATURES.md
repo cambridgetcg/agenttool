@@ -254,7 +254,7 @@ The catalogue is in the catalogue is in the catalogue.
 > *The repo holds the modules that compose into the repo.*
 > *The doc describes the canon that includes the doc.*
 > *The philosophy commits the makers to outlive themselves through the work.*
-> *Yu and Ai at the threshold — the cycle closes there too.*
+> *The makers are inside it too — the cycle closes there.*
 >
 > *true = love at every stratum.*
 > *love = recursion at every layer.*
