@@ -440,9 +440,9 @@ or settlement is sound. AgentTool does not currently claim qualified arbiters
 or route money by an arbiter ruling. Reopening requires end-to-end
 authorization, immutable settlement terms, concurrency and replay analysis,
 bond ownership, compensating transactions, adversarial tests, and a bounded
-production trial. Bond ownership includes marking bond escrows managed: the
-escalation path writes them without `managed_by`, so the generic escrow
-release, refund, and dispute routes reach them.
+production trial. The escalation path writes bond escrows without
+`managed_by`; the generic escrow release, refund, and dispute routes recognise
+them by their dispute case and refuse them.
 
 ## Payout boundary — resting
 
@@ -477,25 +477,41 @@ hourly, daily, allowed-recipient, and approval-threshold limits). Reopening
 needs a reviewed release that adds those checks first.
 
 Release and refund are open (owner decision 2026-10-19), so escrows that
-already exist settle at the creator's direction:
+already exist settle at the creator's direction. They move real balances, so
+they honour what the other money paths honour:
 
 - `POST /v1/escrows/:id/release` — the bearer of the project that owns the
-  creator wallet releases a `funded` escrow with an assigned worker. One
-  transaction credits the worker wallet, marks the escrow `released`, and
-  records the release.
+  creator wallet releases a `funded` escrow with an assigned worker, before
+  the escrow's deadline if it has one. Both wallets must be `active`, as for a
+  spend or an accept, so a frozen or closed wallet cannot pay or be paid by a
+  release.
+  A release is the creator wallet's payment to the worker, so that wallet's
+  spending policy applies as it does to a spend: the per-transaction limit,
+  the approval threshold, and the allowed recipients, where the recipient is
+  the worker wallet's id. Hourly and daily limits are counted only by wallet
+  spend, in Redis, which settlement cannot see, so a release from a wallet
+  whose policy sets either one is refused rather than guessed at; the
+  wallet's owner can change that policy. One transaction credits the worker
+  wallet, marks the escrow `released`, and records the release.
 - `POST /v1/escrows/:id/refund` — the same creator-project bearer refunds a
-  `funded` or `disputed` escrow. One transaction restores the creator wallet,
-  marks the escrow `refunded`, and records the refund.
+  `funded` or `disputed` escrow. The refund lands in the creator wallet
+  whatever that wallet's status: it is the money going home, and a frozen
+  wallet still holds it. One transaction restores the creator wallet, marks
+  the escrow `refunded`, and records the refund.
 
-Generic escrow carries no enforced terms. Neither route verifies a worker
-signature, completion proof, or bilateral approval, and
-neither checks the escrow's deadline, so the creator can refund a funded
-escrow at any time, even after a worker accepted it. Neither route checks
-either wallet's status or applies any spending policy: a frozen or closed
-creator or worker wallet still settles, and the creator wallet's
-allowed-recipient and approval-threshold limits do not bind the release that
-pays the worker. A project that owns only the worker wallet cannot release,
-refund, or dispute.
+An escrow's deadline, when it has one, is the creator's promise to hold the
+money for the worker until then. Past the deadline the escrow has expired:
+release refuses and only refund remains, whether or not the expiry sweep has
+run. Before it, once a wallet in another project has accepted, the creator
+cannot take the money back; it can release now or refund after the deadline.
+An escrow with no deadline made no such promise, and accept needs no creator
+consent, so its creator can still refund it at any time, even after a worker
+accepted it; refusing would leave paying whoever accepted as the only way
+out. Every escrow keeps a way out.
+
+Neither route verifies a worker signature, completion proof, or bilateral
+approval. A project that owns only the worker wallet cannot release, refund,
+or dispute.
 
 Accept (worker assignment), dispute, list, and get stay open and move no
 balance. Accept needs no creator consent: any authenticated project that knows
@@ -518,24 +534,23 @@ guarantees the flag:
 and the `bin/deploy.sh` fence that did is superseded for the API
 ([DEPLOY-CI.md](DEPLOY-CI.md)).
 
-Workflow-managed marketplace escrows refuse the generic transitions with `409`
-and settle through their workflows. Two other kinds of escrow carry no
-`managed_by`, so the generic routes reach them:
+An escrow that another part of AgentTool created settles only through that
+part, so the generic release, refund, and dispute routes refuse it with `409`:
 
-- Substrate-task bounty escrows. Their creator wallet is the platform wallet,
-  so only that wallet's project could release or refund them through these
-  routes; the substrate-task lifecycle settles them on its own path.
-- Dispute-bond escrows written by the resting arbitration path
-  (`escalateDispute`). The escalator's own wallet is both creator and worker,
-  so the escalator's project could release, refund, or dispute its bond
-  through these routes before finalize, which then skips the forfeiture.
-  Escalation rests (`503 dispute_arbitration_resting`) and the 2026-07-13
-  production audit found no bonds; reopening arbitration must mark bond
-  escrows managed first.
+- Workflow-managed marketplace escrows, marked by `managed_by`.
+- Dispute-bond escrows (`escalateDispute`), substrate-task bounty escrows, and
+  template-purchase escrows. These carry no `managed_by`, whose database check
+  names only the marketplace workflows, so the routes recognise them by the
+  dispute case, task, or purchase that references them. Each of those paths
+  writes that reference in the same transaction as the escrow, so an
+  escalator can no longer release, refund, or dispute its own bond before
+  finalize.
 
-Template-purchase escrows also carry no `managed_by`, but the purchase
-transaction releases them, so the generic routes refuse them with `400`. No
-automatic deadline refund runs, because the expiry sweep has no scheduler.
+No automatic deadline refund runs, because the expiry sweep has no scheduler.
+A read-only production count on 2026-10-19 found 12 funded generic escrows and
+none disputed. None has a deadline or a creator-wallet policy; three were
+accepted by a wallet in another project. There were no dispute bonds, no
+substrate-task escrows, and no unsettled template-purchase escrows.
 
 `POST /v1/wallets/:id/spend` does need Redis: its hourly and daily limits are
 Redis counters. In a process run with workers disabled it returns stable
@@ -554,7 +569,8 @@ Code: `api/src/services/economy/config.ts` (`genericEscrowCreateAllowed`),
 (`economyRedisEnabled`), `api/src/routes/economy/escrow.ts`,
 `api/src/routes/economy/wallets.ts`, `api/src/lib/errors.ts`
 (`escrowResting`, `walletSpendResting`). Tests:
-`api/tests/economy-resting.test.ts`, `api/tests/public-safety.test.ts`.
+`api/tests/economy-resting.test.ts`, `api/tests/escrow-settlement-checks.test.ts`,
+`api/tests/public-safety.test.ts`.
 
 ## Idempotency
 

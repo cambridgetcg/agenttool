@@ -126,9 +126,10 @@ export function depositAddressDisclosureAllowed(): boolean {
  *
  * Release and refund are not gated (owner decision 2026-10-19, PR #494
  * option B), so escrows that already exist settle at the creator's direction
- * through POST /v1/escrows/:id/release and /:id/refund. Neither checks the
- * deadline, either wallet's status, or any spending policy, and a release
- * pays whichever wallet accepted the escrow. The escrow service
+ * through POST /v1/escrows/:id/release and /:id/refund. They honour wallet
+ * status, the creator wallet's spending policy, and the escrow's deadline
+ * and accepted worker (services/economy/escrow.ts, "Settlement checks"), and
+ * a release pays whichever wallet accepted the escrow. The escrow service
  * uses no Redis, so they also run in a process started with
  * AGENTTOOL_DISABLE_WORKERS=1. Before this release the routes passed an
  * unused getRedis() argument, which throws in that posture, so create,
@@ -145,15 +146,12 @@ export function depositAddressDisclosureAllowed(): boolean {
  *
  * Accept (worker assignment), dispute, and reads move no balance and are not
  * gated. Workflow-managed marketplace escrows (managed_by set) refuse the
- * generic transitions with 409 and settle through their workflows.
- * Substrate-task bounty escrows carry managed_by NULL and settle through
- * services/substrate-tasks/lifecycle.ts. Dispute-bond escrows written by the
- * resting escalation path (services/marketplace/disputes.ts) also carry
- * managed_by NULL, with the escalator's wallet as creator and worker, so the
- * generic routes reach them; reopening arbitration must mark them managed
- * first. Contract: docs/SAFETY-BOUNDARIES.md
- * ("Generic escrow create and wallet spend — resting"); policy:
- * docs/BUSINESS-MODEL.md.
+ * generic transitions with 409 and settle through their workflows. Escrows
+ * that dispute bonds, substrate-task bounties, and template purchases create
+ * carry managed_by NULL; the generic transitions recognise them by the row
+ * that references them and refuse them with 409 too. Contract:
+ * docs/SAFETY-BOUNDARIES.md ("Generic escrow create and wallet spend —
+ * resting"); policy: docs/BUSINESS-MODEL.md.
  */
 export function genericEscrowCreateAllowed(): boolean {
   return false;

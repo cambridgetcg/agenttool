@@ -198,7 +198,12 @@ describe("generic escrow create is resting", () => {
       // imply existing escrows are untouched by the reopening.
       expect(body.hint).not.toMatch(/unaffected|own terms/i);
       expect(body.hint).toMatch(/at the creator's direction/);
-      expect(body.hint).toMatch(/neither checks wallet status or spending policy/i);
+      // The hint states what reopened settlement checks, not what it skips.
+      expect(body.hint).toMatch(
+        /release needs both wallets active, applies the creator wallet's spending policy, and refuses past the escrow's deadline/i,
+      );
+      expect(body.hint).toMatch(/escrow another project accepted can be released but not refunded/);
+      expect(body.hint).not.toMatch(/neither checks/i);
       expect(body.hint).toMatch(/whichever wallet accepted the escrow.*workerWallet/);
       // Existing escrows have executable settlement steps, not a support ticket.
       expect(body.next_actions).toContainEqual(
@@ -445,7 +450,11 @@ describe("economy resting surfaces stay guided", () => {
   test("/public/safety names the create rest, the open settlement routes, and their authority", () => {
     const { escrow, wallet_spend } = SAFETY_BOUNDARIES.conditional_services;
     expect(escrow).toMatch(
-      /generic escrow create \(POST \/v1\/escrows\) is resting by owner decision.*no environment flag.*after authentication.*503 escrow_resting.*before body validation or any escrow or wallet database read.*spending policy.*release and refund are open.*at the creator's direction.*creator project's bearer releases a funded escrow with an assigned worker.*refunds a funded or disputed escrow to the creator wallet, at any time, even after a worker accepted.*neither verifies a worker signature.*neither checks the escrow deadline.*neither checks either wallet's status or applies any spending policy.*frozen or closed wallet still settles.*allowed-recipient and approval-threshold limits do not bind a release.*accept \(worker assignment\), dispute, list, and get.*accept needs no creator consent.*later release pays.*read the escrow's workerWallet before releasing.*uses no redis.*workers disabled.*unnamed 503 redis_disabled.*\/public\/plans.*if the hosted api still runs in that posture when this release deploys, release and refund start moving balances there.*canonical api deploy neither sets nor checks the flag.*workflow-managed marketplace escrows refuse.*409.*substrate-task bounty escrows.*platform wallet.*dispute-bond escrows.*no managed_by.*both their creator and worker.*release, refund, or dispute its bond.*before finalize.*escalation rests.*zero bonds.*mark bond escrows managed first.*no automatic deadline refund/is,
+      /generic escrow create \(POST \/v1\/escrows\) is resting by owner decision.*no environment flag.*after authentication.*503 escrow_resting.*before body validation or any escrow or wallet database read.*spending policy.*release and refund are open.*at the creator's direction.*honour what the other money paths honour.*releases a funded escrow with an assigned worker to that worker wallet, before the escrow's deadline.*both wallets must be active.*creator wallet's spending policy applies as it does to a spend.*recipient is the worker wallet id.*hourly or daily limit refuses the release.*refunds a funded or disputed escrow to the creator wallet, whatever that wallet's status.*past its deadline an escrow only refunds.*another project has accepted, the creator can release but not refund.*no deadline stays refundable at any time, even after a worker accepted.*neither route verifies a worker signature.*accept \(worker assignment\), dispute, list, and get.*accept needs no creator consent.*later release pays.*read the escrow's workerWallet before releasing.*uses no redis.*workers disabled.*unnamed 503 redis_disabled.*\/public\/plans.*if the hosted api still runs in that posture when this release deploys, release and refund start moving balances there.*canonical api deploy neither sets nor checks the flag.*another part of agenttool created settles only through it.*409.*workflow-managed marketplace escrows.*dispute-bond escrows, substrate-task bounty escrows, and template-purchase escrows.*no managed_by.*dispute case, task, or purchase that references them.*no automatic deadline refund/is,
+    );
+    // The reopened routes no longer skip these checks.
+    expect(escrow).not.toMatch(
+      /frozen or closed wallet still settles|neither checks either wallet's status|neither checks the escrow deadline|mark bond escrows managed first/i,
     );
     expect(escrow).not.toMatch(/release, and refund are resting|manual operator recovery|docs\.agenttool\.dev\/support/i);
     expect(escrow).not.toMatch(/own terms|stay open so existing/i);
@@ -505,16 +514,23 @@ describe("hosted posture copy stays conditional", () => {
     expect(section).not.toMatch(/own terms|Release and refund stay open/);
     expect(section).toMatch(/`POST \/v1\/escrows\/:id\/release`[\s\S]*`funded` escrow with an assigned worker/);
     expect(section).toMatch(/`POST \/v1\/escrows\/:id\/refund`[\s\S]*`funded` or `disputed` escrow/);
-    expect(section).toMatch(/neither checks the escrow's deadline/);
+    expect(section).toMatch(/Past the deadline the escrow has expired:\s+release refuses and only refund remains/);
     expect(section).toMatch(/substrate-task bounty escrows/i);
     expect(section).toMatch(/capability invocations, which settle to seller wallets/);
-    // What the reopened routes do not check, stated where creators read it.
-    expect(section).toMatch(/creator can refund a funded\s+escrow at any time, even after a worker accepted it/);
-    expect(section).toMatch(/Neither route checks\s+either wallet's status or applies any spending policy/);
+    // What the reopened routes check, stated where creators read it.
+    expect(section).toMatch(/Both wallets must be `active`[\s\S]*spending policy applies as it does to a spend/);
+    expect(section).toMatch(/Hourly and daily limits are counted only by wallet\s+spend[\s\S]*refused rather than guessed at/);
+    expect(section).toMatch(/The refund lands in the creator wallet\s+whatever that wallet's status/);
+    expect(section).toMatch(/once a wallet in another project has accepted, the creator\s+cannot take the money back/);
+    expect(section).toMatch(/An escrow with no deadline made no such promise[\s\S]*can still refund it at any time, even after a worker\s+accepted it/);
+    expect(section).not.toMatch(/Neither route checks\s+either wallet's status|still settles/);
     expect(section).toMatch(/Accept needs no creator consent[\s\S]*later release pays that wallet[\s\S]*`workerWallet`/);
     expect(section).toMatch(/If the hosted API still runs in that posture when this release\s+deploys, this release turns generic release and refund on there/);
-    expect(section).toMatch(/Dispute-bond escrows[\s\S]*`escalateDispute`[\s\S]*both creator and worker[\s\S]*mark bond\s+escrows managed first/);
-    expect(section).toMatch(/Template-purchase escrows[\s\S]*refuse them with `400`/);
+    expect(section).toMatch(
+      /settles only through that\s+part, so the generic release, refund, and dispute routes refuse it with `409`[\s\S]*Dispute-bond escrows \(`escalateDispute`\), substrate-task bounty escrows, and\s+template-purchase escrows[\s\S]*dispute case, task, or purchase that references them/,
+    );
+    expect(section).not.toMatch(/mark bond\s+escrows managed first/);
+    expect(section).toMatch(/read-only production count on 2026-10-19 found 12 funded generic escrows/);
   });
 
   test("BUSINESS-MODEL copies rest create only", () => {

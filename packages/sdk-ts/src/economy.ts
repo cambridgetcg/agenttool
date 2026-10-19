@@ -531,8 +531,9 @@ export class EconomyClient {
 
   /** Freeze a wallet: spend and other new debits from it refuse.
    *
-   * Escrow release and refund check no wallet status, so an escrow this
-   * wallet funded, or would be paid by, still settles while it is frozen. */
+   * An escrow release refuses while the wallet that funded it, or the one
+   * it would pay, is frozen. An escrow refund still lands in a frozen
+   * creator wallet, which keeps the balance until it is unfrozen. */
   async freeze_wallet(walletId: string): Promise<Wallet> {
     return toWallet(await this.req("POST", `/v1/wallets/${encodePathSegment(walletId)}/freeze`));
   }
