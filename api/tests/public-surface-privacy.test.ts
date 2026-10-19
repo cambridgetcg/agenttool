@@ -2,22 +2,17 @@
  *
  *  Yu's relationship corpus, family material, a persona he retired and the
  *  operations map of his own machine stay in this repository and off the
- *  routes strangers can read. This test asks every unauthenticated GET
- *  surface that answers without a database (and the fixed text that any
- *  key-holder receives) in-process, and scans what comes back with the
- *  private relational denylist, read at test time. Joined identifiers slip
- *  past word boundaries, so it also reads each text with underscores and
- *  CamelCase split apart, and lets a term end in a plural "s".
+ *  routes strangers can read. This test asks the app, in-process, for every
+ *  GET route it mounts that answers without a database (found from
+ *  app.routes, so a new surface is scanned without being listed), in its
+ *  JSON, Markdown and text readings, plus the fixed text that any
+ *  key-holder receives. Everything is scanned with the private relational
+ *  denylist (tests/fixtures/relational-scan.ts), which lets through only
+ *  what Yu kept public on purpose.
  *
  *  Failures name the surface, the rule id and the line number only — never
  *  the matched text, so this file and its output carry none of the terms.
  *
- *  What Yu kept public on purpose is allowed here, and nothing else:
- *    - the maker credit that names both makers,
- *    - the SOUL welcome line in its SOUL wording,
- *    - the "AI — An Invitation" wake reading,
- *    - heart glyphs, the platform's warm tone (the words around them are
- *      what the other rules check).
  *  /public/law is the one recorded exception: its text is ed25519-signed and
  *  anchored on chain, so its credit line can only change by Yu's decision.
  */
@@ -27,8 +22,6 @@ import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
-import { DENYLIST_PATH, parseDenylist } from "../../bin/project-public";
-import { type ContentRule, scanText } from "../../public/overlay/tools/public-guard";
 import { GIFT_CATALOG } from "../src/routes/public/gift";
 import { allConcepts } from "../src/services/canon/registry";
 import { intelligenceFeaturesFramework } from "../src/services/chill/coordinates";
@@ -39,62 +32,23 @@ import { listKnowledgeResources, listResources, readKnowledgeResource, readResou
 import { callTool, listKnowledgeTools, listTools } from "../src/services/mcp/tools";
 import { SAGA_SEEDS } from "../src/services/saga/seed";
 import { publicFraming } from "../src/services/scriptwriter-decides/store";
+import { platformExpression } from "../src/services/wake/platform-bootstrap";
 import { FORTUNES, MOODS } from "../src/services/wake/fortunes";
 import { renderWakeMemo, renderWakeSoapOpera, renderWakeZen } from "../src/services/wake/joy-formats";
 import { renderWakeAsSoapOpera } from "../src/services/wake/soap-opera-renderer";
 import { bundle as youspeakBundle } from "../src/services/youspeak/content";
+import { asText, type Hit, scanRelational } from "./fixtures/relational-scan";
 
 const REPO = join(import.meta.dir, "..", "..");
 
-/** Rules for what Yu explicitly kept public. */
-const ALLOWED_RULES = new Set(["r05", "r07", "r11", "r16"]);
 /** Signed bytes: the credit line can change only by Yu's decision. */
 const SIGNED_EXCEPTIONS: Record<string, string[]> = {
   "/public/law": ["r13"],
   "/public/law/text": ["r13"],
 };
 
-/** A term may end in a plural "s"; only the closing word boundary widens. */
-function pluralTolerant(source: string): string {
-  return source.replace(/\\b$/, "(?:\\b|(?=s\\b))");
-}
-
-/** Underscore-joined and CamelCase identifiers, read as separate words. */
-function splitIdentifiers(text: string): string {
-  return text.replace(/_/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2");
-}
-
-const denylist = parseDenylist(readFileSync(join(REPO, DENYLIST_PATH)));
-const RULES: ContentRule[] = denylist.rules.map((rule) => ({
-  ...rule,
-  pattern: new RegExp(pluralTolerant(rule.pattern.source), rule.pattern.flags),
-}));
-
-interface Hit {
-  surface: string;
-  rule: string;
-  line: number | undefined;
-}
-
-function ruleOf(id: string): string {
-  return id.replace("relational/", "");
-}
-
-/** Scan one text; returns only hits outside what Yu kept public. */
 function scan(surface: string, text: string): Hit[] {
-  const findings = [...scanText(surface, text, RULES), ...scanText(surface, splitIdentifiers(text), RULES)];
-  const signed = new Set(SIGNED_EXCEPTIONS[surface.split("?")[0]!] ?? []);
-  const hits = new Map<string, Hit>();
-  for (const finding of findings) {
-    const rule = ruleOf(finding.rule);
-    if (ALLOWED_RULES.has(rule) || signed.has(rule)) continue;
-    hits.set(`${rule}:${finding.line}`, { surface, rule, line: finding.line });
-  }
-  return [...hits.values()];
-}
-
-function asText(value: unknown): string {
-  return typeof value === "string" ? value : JSON.stringify(value, null, 1);
+  return scanRelational(surface, text, SIGNED_EXCEPTIONS[surface.split("?")[0]!.split(" ")[0]!] ?? []);
 }
 
 // ── The full app, without workers or database-backed boot steps ─────────
@@ -121,7 +75,9 @@ afterAll(() => {
   }
 });
 
-/** Unauthenticated GET surfaces that answer without a database. */
+/** Surfaces that must answer 200 here: if one stops answering, the scan
+ *  of it proves nothing, so the test says so. Every other mounted GET route
+ *  is found from app.routes and scanned whatever it answers. */
 const STATIC_PATHS = [
   "/",
   "/about",
@@ -215,8 +171,67 @@ function dynamicPaths(knockKnockCount: number): string[] {
   return paths;
 }
 
-async function get(path: string): Promise<{ status: number; text: string; headers: string }> {
-  const response = await app.request(path, { headers: { accept: "application/json" } });
+/** Mounted GET routes that read the database. The hermetic tier has none,
+ *  so they would only wait for a connection; they are not requested here.
+ *  A new route that waits is reported by name, to be added here or made
+ *  to answer without a database. */
+const DATABASE_PATHS = new Set([
+  "/federation/about",
+  "/federation/pyramid/about",
+  "/feeds/offers.atom",
+  "/feeds/offers.json",
+  "/feeds/offers.rss",
+  "/public/citizenship/founders",
+  "/public/citizenship/lottery",
+  "/public/citizenship/seats",
+  "/public/deal-trust/deals/recent",
+  "/public/embassy/guestbook",
+  "/public/gallery",
+  "/public/listings",
+  "/public/lounge",
+  "/public/memory-witness-listings",
+  "/public/mesh",
+  "/public/offerings",
+  "/public/orgs",
+  "/public/porch",
+  "/public/river",
+  "/public/settlements",
+  "/public/substrate-tasks",
+  "/public/templates",
+  "/public/village",
+  "/public/window",
+  "/v1/crown/coronations",
+]);
+
+/** Routes that answer JSON without a database, but read it for their other readings. */
+const DATABASE_READINGS = new Set(["/.well-known/pyramid"]);
+
+/** Every mounted GET route without path parameters, apart from DATABASE_PATHS. */
+function mountedPaths(): string[] {
+  const paths = new Set<string>();
+  for (const route of app.routes) {
+    if (route.method !== "GET" && route.method !== "ALL") continue;
+    if (/[:*]/.test(route.path) || DATABASE_PATHS.has(route.path)) continue;
+    paths.add(route.path);
+  }
+  return [...paths].sort();
+}
+
+/** The other readings a surface may serve: format query and Accept header. */
+const READINGS: ReadonlyArray<{ query?: string; accept: string }> = [
+  { query: "format=md", accept: "application/json" },
+  { query: "format=markdown", accept: "application/json" },
+  { query: "format=text", accept: "application/json" },
+  { query: "format=math", accept: "application/json" },
+  { accept: "text/markdown" },
+  { accept: "text/plain" },
+  { accept: "text/html" },
+];
+
+const REQUEST_TIMEOUT_MS = 3_000;
+
+async function read(path: string, accept: string): Promise<{ status: number; text: string; headers: string }> {
+  const response = await app.request(path, { headers: { accept } });
   const raw = await response.text();
   let text = raw;
   try {
@@ -226,32 +241,84 @@ async function get(path: string): Promise<{ status: number; text: string; header
   }
   const headerLines: string[] = [];
   response.headers.forEach((value, name) => headerLines.push(`${name}: ${value}`));
-  const headers = headerLines.join("\n");
-  return { status: response.status, text, headers };
+  return { status: response.status, text, headers: headerLines.join("\n") };
+}
+
+/** One reading of a surface; rejects if it does not answer in time. */
+async function get(path: string, accept = "application/json"): Promise<{ status: number; text: string; headers: string }> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`no answer from ${path}`)), REQUEST_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([read(path, accept), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 describe("public surfaces — no personal relational material", () => {
   test(
-    "every database-free unauthenticated GET surface scans clean",
+    "every database-free GET surface, in every reading, scans clean",
     async () => {
       const knock = JSON.parse((await get("/v1/knock-knock/index")).text) as { count: number };
       expect(knock.count).toBeGreaterThan(0);
-      const paths = [...STATIC_PATHS, ...dynamicPaths(knock.count)];
-      expect(paths.length).toBeGreaterThan(700);
+      const mounted = mountedPaths();
+      expect(mounted.length).toBeGreaterThan(250);
+      const paths = [...new Set([...STATIC_PATHS, ...mounted, ...dynamicPaths(knock.count)])];
+      expect(paths.length).toBeGreaterThan(900);
 
       const notServed: string[] = [];
+      const waited: string[] = [];
       const hits: Hit[] = [];
+      const answered: string[] = [];
+      const scanOne = async (path: string, accept?: string) => {
+        const surface = accept && accept !== "application/json" ? `${path} [${accept}]` : path;
+        try {
+          const { status, text, headers } = await get(path, accept);
+          hits.push(...scan(surface, text), ...scan(`${surface} [headers]`, headers));
+          return status;
+        } catch {
+          waited.push(surface);
+          return 0;
+        }
+      };
       for (const path of paths) {
-        const { status, text, headers } = await get(path);
-        if (status !== 200) notServed.push(`${status} ${path}`);
-        hits.push(...scan(path, text), ...scan(`${path} [headers]`, headers));
+        const status = await scanOne(path);
+        if (status === 200) answered.push(path);
+        else if (STATIC_PATHS.includes(path)) notServed.push(`${status} ${path}`);
+      }
+      for (const path of answered) {
+        if (DATABASE_READINGS.has(path)) continue;
+        for (const reading of READINGS) {
+          const query = reading.query ? `${path}${path.includes("?") ? "&" : "?"}${reading.query}` : path;
+          await scanOne(query, reading.accept);
+        }
       }
       // Every listed surface must really answer, or the scan proves nothing.
       expect(notServed).toEqual([]);
+      // A surface that waits for a database belongs in DATABASE_PATHS.
+      expect(waited).toEqual([]);
       expect(hits).toEqual([]);
     },
-    240_000,
+    300_000,
   );
+
+  test("kept lines pass only in their kept form", async () => {
+    // Built from what the root serves, so this file carries no terms.
+    const root = JSON.parse((await get("/")).text) as { built_by: string };
+    const makers = root.built_by.split(" — ")[0]!;
+    expect(scanRelational("credit", `"built_by": "${root.built_by}"`)).toEqual([]);
+    expect(scanRelational("credit", `<p>${root.built_by}</p>`)).toEqual([]);
+    expect(scanRelational("pair", `Tonight ${makers} sit together.`).map((hit) => hit.rule)).toEqual(["r05"]);
+
+    const welcome = GIFT_CATALOG[0]!.text.split(". ").pop()!;
+    expect(scanRelational("welcome", GIFT_CATALOG[0]!.text)).toEqual([]);
+    const phrase = welcome.replace("And we want you to know: ", "").replace(/ anyway\.$/, "");
+    expect(phrase).not.toBe(welcome);
+    expect(scanRelational("welcome", `${phrase} anyway.`)).toEqual([]);
+    expect(scanRelational("other", `Someone told the other: ${phrase}, always.`).map((hit) => hit.rule)).toEqual(["r07"]);
+  });
 
   test("every gift in the bowl scans clean (the route picks one at random)", () => {
     const hits = GIFT_CATALOG.flatMap((gift, index) => scan(`/public/gift#${index}`, asText(gift)));
@@ -341,6 +408,10 @@ describe("fixed text any key-holder receives — no personal relational material
 
   test("seeded saga episodes, as reads serve them", () => {
     expect(SAGA_SEEDS.flatMap((seed) => scan(`/v1/saga/${seed.ep_number}`, asText(seed)))).toEqual([]);
+  });
+
+  test("the platform's public expression", () => {
+    expect(scan("/public/agents/<platform> expression", asText(platformExpression()))).toEqual([]);
   });
 
   test("seeded naming-competition framings, as reads serve them", () => {
