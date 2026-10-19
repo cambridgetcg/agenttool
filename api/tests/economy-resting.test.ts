@@ -113,9 +113,21 @@ const creatorWalletRow = rowFor(wallets, {
   ownerType: "platform",
   createdAt: WHEN,
 });
+const workerWalletRow = rowFor(wallets, {
+  id: WORKER_WALLET_ID,
+  projectId: OTHER_PROJECT_ID,
+  name: "worker",
+  balance: 0,
+  currency: "GBP",
+  status: "active",
+  ownerType: "platform",
+  createdAt: WHEN,
+});
 
 const ESCROW_LOCK = 'from "economy"."escrows" where "economy"."escrows"."id" = $1 for update';
-const CREATOR_WALLET_READ = 'from "economy"."wallets" where ("economy"."wallets"."id" = $1 and "economy"."wallets"."project_id" = $2)';
+// Release and refund lock both escrow wallets in id order, then check the
+// creator wallet's project (escrow-settlement-checks.test.ts covers the rest).
+const ESCROW_WALLETS_LOCK = 'from "economy"."wallets" where "economy"."wallets"."id" in ($1, $2) order by "economy"."wallets"."id" for update';
 const ESCROW_UPDATE = 'update "economy"."escrows" set';
 
 let savedFlag: string | undefined;
@@ -248,7 +260,7 @@ describe("release and refund settle existing escrows without Redis", () => {
   test("release credits the assigned worker wallet of a funded escrow", async () => {
     answers = [
       { match: ESCROW_LOCK, rows: [escrowRow({})] },
-      { match: CREATOR_WALLET_READ, rows: [creatorWalletRow] },
+      { match: ESCROW_WALLETS_LOCK, rows: [creatorWalletRow, workerWalletRow] },
       { match: ESCROW_UPDATE, rows: [escrowRow({ status: "released", releasedAt: WHEN })] },
     ];
     const app = withProject(escrowRouter, "/v1/escrows");
@@ -267,8 +279,8 @@ describe("release and refund settle existing escrows without Redis", () => {
     expect(statusWrite?.params[1]).toBeTruthy();
     expect(statusWrite?.params).not.toContain("refunded");
 
-    const creatorRead = queries.find((query) => query.sql.includes(CREATOR_WALLET_READ));
-    expect(creatorRead?.params).toEqual([CREATOR_WALLET_ID, PROJECT_ID]);
+    const walletLock = queries.find((query) => query.sql.includes(ESCROW_WALLETS_LOCK));
+    expect(walletLock?.params).toEqual([CREATOR_WALLET_ID, WORKER_WALLET_ID]);
     const credit = queries.find((query) => query.sql.startsWith('update "economy"."wallets"'));
     expect(credit?.sql).toContain('set "balance" = balance + $1');
     expect(credit?.params).toEqual([80, WORKER_WALLET_ID]);
@@ -280,7 +292,7 @@ describe("release and refund settle existing escrows without Redis", () => {
   test("refund restores the creator wallet of a disputed escrow", async () => {
     answers = [
       { match: ESCROW_LOCK, rows: [escrowRow({ status: "disputed" })] },
-      { match: CREATOR_WALLET_READ, rows: [creatorWalletRow] },
+      { match: ESCROW_WALLETS_LOCK, rows: [creatorWalletRow, workerWalletRow] },
       { match: ESCROW_UPDATE, rows: [escrowRow({ status: "refunded" })] },
     ];
     const app = withProject(escrowRouter, "/v1/escrows");
@@ -303,16 +315,18 @@ describe("release and refund settle existing escrows without Redis", () => {
   });
 
   test("a project that does not own the creator wallet is refused before any balance moves", async () => {
-    // The project-scoped creator-wallet read returns no row for another project.
-    answers = [{ match: ESCROW_LOCK, rows: [escrowRow({})] }];
+    // OTHER_PROJECT_ID owns the worker wallet only.
+    answers = [
+      { match: ESCROW_LOCK, rows: [escrowRow({})] },
+      { match: ESCROW_WALLETS_LOCK, rows: [creatorWalletRow, workerWalletRow] },
+    ];
     for (const action of ["release", "refund"]) {
       queries = [];
       const app = withProject(escrowRouter, "/v1/escrows", OTHER_PROJECT_ID);
       const response = await app.request(`/v1/escrows/${ESCROW_ID}/${action}`, { method: "POST" });
 
       expect(response.status).toBe(403);
-      const creatorRead = queries.find((query) => query.sql.includes(CREATOR_WALLET_READ));
-      expect(creatorRead?.params).toEqual([CREATOR_WALLET_ID, OTHER_PROJECT_ID]);
+      expect(queries.some((query) => query.sql.includes(ESCROW_WALLETS_LOCK))).toBe(true);
       expect(queries.some((query) => /^(update|insert)/.test(query.sql))).toBe(false);
     }
   });
