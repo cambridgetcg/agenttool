@@ -847,6 +847,21 @@ describe("boring test spine", () => {
     expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(11);
     expect(workflow.match(/runs-on: macos-15/g)).toHaveLength(1);
     expect(workflow.match(/uses: actions\/setup-python@/g)).toHaveLength(3);
+    // Pull requests test the two packages' Python floors and the newest
+    // version; every other run tests every supported version.
+    const pythonMatrix = jobs["sdk-python"]?.strategy?.matrix?.["python-version"];
+    expect(pythonMatrix).toBe(
+      "${{ fromJSON(github.event_name == 'pull_request' && '[\"3.9\", \"3.10\", \"3.14\"]' || '[\"3.9\", \"3.10\", \"3.11\", \"3.12\", \"3.13\", \"3.14\"]') }}",
+    );
+    const [pullRequestPythons, allPythons] = [...String(pythonMatrix).matchAll(/'(\[[^']*\])'/g)].map(
+      (match) => JSON.parse(match[1]!) as string[],
+    );
+    expect(allPythons).toEqual(["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]);
+    expect(pullRequestPythons).toEqual([allPythons![0], allPythons![1], allPythons!.at(-1)]);
+    const pythonFloor = async (path: string) =>
+      /^requires-python = ">=(3\.\d+)/m.exec(await readFile(join(ROOT, path), "utf8"))?.[1];
+    expect(await pythonFloor("packages/sdk-py/pyproject.toml")).toBe(pullRequestPythons![0]);
+    expect(await pythonFloor("packages/hf-training-host/pyproject.toml")).toBe(pullRequestPythons![1]);
     expect(workflow).toContain(
       "DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer",
     );
