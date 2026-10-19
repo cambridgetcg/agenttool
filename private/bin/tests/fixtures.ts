@@ -10,6 +10,8 @@ import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpath
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { GITLEAKS_VERSION } from "../../../tools/public-guard.ts";
+import { recordText, REVIEWED_RECORD } from "../reviewed-shared.ts";
+import { PUBLIC_REPOSITORY } from "../../public-repository.ts";
 
 export const ROOT = resolve(import.meta.dir, "..", "..", "..");
 export const TERM = "quiet fixture";
@@ -21,11 +23,13 @@ export const PUBLIC_EMAIL = "contact@cambridgetcg.com";
 /** The tooling files a fixture private repository carries, copied from this checkout's working tree. */
 export const TOOLING = [
   "bin/project-public.ts",
+  "private/bin/committed-tools.sh",
   "private/bin/install-guards.sh",
   "private/bin/merge-back.sh",
   "private/bin/public-clone.sh",
   "private/bin/public-export.ts",
   "private/bin/relational-scan.ts",
+  "private/bin/reviewed-shared.ts",
   "private/bin/scan-public.sh",
   "private/bin/shared-scope.ts",
   "private/githooks/pre-commit",
@@ -211,7 +215,7 @@ export function makePrivateRepo(dir: string, options: { allowlist?: unknown; den
   write(repo, ".gitattributes", "/docs/spec.md text eol=lf\n");
   write(repo, ".gitleaksignore", "");
   write(repo, "tools/public-guard-allow.json", '{\n  "schema": "agenttool.public-guard-allow/1",\n  "entries": []\n}\n');
-  write(repo, ".github/workflows/ci.yml", "name: ci\non: push\npermissions:\n  contents: read\njobs:\n  x:\n    if: github.repository == 'example/shared'\n    runs-on: ubuntu-24.04\n    steps:\n      - run: echo ok\n");
+  write(repo, ".github/workflows/ci.yml", `name: ci\non: push\npermissions:\n  contents: read\njobs:\n  x:\n    if: github.repository == '${PUBLIC_REPOSITORY}'\n    runs-on: ubuntu-24.04\n    steps:\n      - run: echo ok\n`);
   write(repo, "docs/spec.md", "# Spec\n");
   write(repo, "packages/alpha/index.ts", "export const alpha = 1;\n");
   write(repo, "packages/alpha/run.sh", "#!/bin/sh\necho alpha\n", 0o755);
@@ -220,6 +224,8 @@ export function makePrivateRepo(dir: string, options: { allowlist?: unknown; den
   git(repo, "add", "private/CANARY");
   const canaryId = git(repo, "hash-object", "private/CANARY");
   write(repo, "tools/leak-canaries.txt", `# fixture canaries\n${canaryId}\n`);
+  // The fixture's own reviewed record: its leak-canaries list differs from this checkout's.
+  write(repo, REVIEWED_RECORD, recordText(repo));
   const head = commitAll(repo, "private root");
   return { repo, guardDir: join(repo, "private", "guard"), canary, head };
 }
