@@ -1,7 +1,8 @@
 /** Guarded pool against a real PostgreSQL — the mechanism, end to end.
  *
- *  Runs in CI's "API generation hold" job (real postgres service) and skips
- *  wherever FEDERATION_GENERATION_HOLD_TEST_DATABASE_URL is absent. Proves
+ *  Runs in CI's "API PostgreSQL holds and launch transactions" job (real
+ *  PostgreSQL 16 and 17 services) and skips wherever
+ *  FEDERATION_GENERATION_HOLD_TEST_DATABASE_URL is absent. Proves
  *  (1) a verified pool with the guard installed answers queries —
  *  postgres.js expects the socket factory to hand back a CONNECTED socket,
  *  and (2) a connection the server stays silent on is closed at the bound

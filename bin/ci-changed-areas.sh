@@ -38,7 +38,7 @@ set -euo pipefail
 set -f
 export LC_ALL=C
 
-readonly AREAS="api-protocol-postgres launch-stateful launch-core launch-browser native-macos-secret care-before-learning witnessed-agent-economy packages sdk-python"
+readonly AREAS="api-protocol-postgres launch-core launch-browser native-macos-secret care-before-learning witnessed-agent-economy packages sdk-python"
 
 # A pull request with more distinct changed paths than this runs every job
 # rather than spend its classifier time limit matching them one by one.
@@ -62,7 +62,7 @@ readonly EXACT_RULES=(
 # rule it matches. A path that matches no rule selects every job, so a new
 # top-level entry, a new package, or a new file directly under packages/ runs
 # everything until someone classifies it here.
-readonly API_PREP="api-protocol-postgres,launch-stateful,launch-core"
+readonly API_PREP="api-protocol-postgres,launch-core"
 readonly RULES=(
   # The workflow, this classifier, shared preparation, and anything that can
   # change dependency resolution or checked-out bytes select every job.

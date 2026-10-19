@@ -32,7 +32,6 @@ jobs:
       everything: ${{ steps.classify.outputs.everything }}
       reason: ${{ steps.classify.outputs.reason }}
       api-protocol-postgres: ${{ steps.classify.outputs.api-protocol-postgres }}
-      launch-stateful: ${{ steps.classify.outputs.launch-stateful }}
       launch-core: ${{ steps.classify.outputs.launch-core }}
       launch-browser: ${{ steps.classify.outputs.launch-browser }}
       native-macos-secret: ${{ steps.classify.outputs.native-macos-secret }}
@@ -83,19 +82,20 @@ jobs:
         run: bin/bash-without-env-hooks.sh bin/preflight.sh api
 
   api-protocol-postgres:
-    name: API generation hold (PostgreSQL ${{ matrix.postgres }})
+    # One job for the PostgreSQL 16 and 17 holds and the launch transaction and
+    # admission proofs, which were each under a billed minute on their own and
+    # are selected by exactly the same paths. Once dependencies are prepared,
+    # every proof step runs even after another fails, and a failed step's name
+    # says which proof and which PostgreSQL version.
+    name: API PostgreSQL holds and launch transactions
     needs:
       - changes
     if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.api-protocol-postgres == 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        postgres: ["16", "17"]
     services:
-      postgres:
-        image: postgres:${{ matrix.postgres }}
+      postgres-16:
+        image: postgres:16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: generation-hold-test-only
@@ -107,68 +107,16 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
-    env:
-      FEDERATION_GENERATION_HOLD_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_generation_hold
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Set up Bun 1.3.5
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.3.5
-      - name: Prepare API dependencies from lockfiles
-        run: bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh api
-      - name: Prove the durable generation hold
-        working-directory: api
-        run: bun test tests/integration/federation-generation-hold-postgres.test.ts
-      - name: Create an isolated context-grant fixture database
-        env:
-          PGPASSWORD: generation-hold-test-only
-        run: createdb --host=127.0.0.1 --port=5432 --username=postgres agenttool_local_context_grants_test
-      - name: Prove context-grant lifecycle, constraints and lock ordering
-        working-directory: api
-        env:
-          LOCAL_CONTEXT_GRANT_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_local_context_grants_test
-        run: bun test tests/integration/local-context-grants-postgres.test.ts
-      - name: Create an isolated collaboration mission fixture database
-        env:
-          PGPASSWORD: generation-hold-test-only
-        run: createdb --host=127.0.0.1 --port=5432 --username=postgres agenttool_collaboration_missions_test
-      - name: Prove mission participation, revocation and exact replay
-        working-directory: api
-        env:
-          COLLABORATION_MISSION_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_collaboration_missions_test
-        run: bun test tests/integration/collaboration-missions-postgres.test.ts
-      - name: Create an isolated identity enrollment fixture database
-        env:
-          PGPASSWORD: generation-hold-test-only
-        run: createdb --host=127.0.0.1 --port=5432 --username=postgres agenttool_identity_enrollment_test
-      - name: Prove atomic enrollment and concurrent replay refusal
-        working-directory: api
-        env:
-          IDENTITY_ENROLLMENT_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_identity_enrollment_test
-        run: bun test tests/integration/identity-enrollment-postgres.test.ts
-
-  launch-stateful:
-    name: Launch transactions and admission
-    needs:
-      - changes
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.launch-stateful == 'false') }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    services:
-      postgres:
-        image: postgres:16
+      postgres-17:
+        image: postgres:17
         env:
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: launch-test-only
-          POSTGRES_DB: agenttool_launch_marketplace
+          POSTGRES_PASSWORD: generation-hold-test-only
+          POSTGRES_DB: agenttool_generation_hold
         ports:
-          - 5432:5432
+          - 5433:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d agenttool_launch_marketplace"
+          --health-cmd "pg_isready -U postgres -d agenttool_generation_hold"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
@@ -191,14 +139,100 @@ jobs:
         with:
           bun-version: 1.3.5
       - name: Prepare API dependencies from lockfiles
+        id: prepare
         run: bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh api
-      - name: Prove transaction locks and conservation in isolated PostgreSQL
+      - name: Prove the durable generation hold (PostgreSQL 16)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         working-directory: api
         env:
-          AGENTTOOL_LAUNCH_MARKETPLACE_TEST_DATABASE_URL: postgresql://postgres:launch-test-only@127.0.0.1:5432/agenttool_launch_marketplace
+          FEDERATION_GENERATION_HOLD_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_generation_hold
+        run: bun test tests/integration/federation-generation-hold-postgres.test.ts
+      - name: Create an isolated context-grant fixture database (PostgreSQL 16)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          PGPASSWORD: generation-hold-test-only
+        run: createdb --host=127.0.0.1 --port=5432 --username=postgres agenttool_local_context_grants_test
+      - name: Prove context-grant lifecycle, constraints and lock ordering (PostgreSQL 16)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          LOCAL_CONTEXT_GRANT_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_local_context_grants_test
+        run: bun test tests/integration/local-context-grants-postgres.test.ts
+      - name: Create an isolated collaboration mission fixture database (PostgreSQL 16)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          PGPASSWORD: generation-hold-test-only
+        run: createdb --host=127.0.0.1 --port=5432 --username=postgres agenttool_collaboration_missions_test
+      - name: Prove mission participation, revocation and exact replay (PostgreSQL 16)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          COLLABORATION_MISSION_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_collaboration_missions_test
+        run: bun test tests/integration/collaboration-missions-postgres.test.ts
+      - name: Create an isolated identity enrollment fixture database (PostgreSQL 16)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          PGPASSWORD: generation-hold-test-only
+        run: createdb --host=127.0.0.1 --port=5432 --username=postgres agenttool_identity_enrollment_test
+      - name: Prove atomic enrollment and concurrent replay refusal (PostgreSQL 16)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          IDENTITY_ENROLLMENT_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_identity_enrollment_test
+        run: bun test tests/integration/identity-enrollment-postgres.test.ts
+      - name: Prove the durable generation hold (PostgreSQL 17)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          FEDERATION_GENERATION_HOLD_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5433/agenttool_generation_hold
+        run: bun test tests/integration/federation-generation-hold-postgres.test.ts
+      - name: Create an isolated context-grant fixture database (PostgreSQL 17)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          PGPASSWORD: generation-hold-test-only
+        run: createdb --host=127.0.0.1 --port=5433 --username=postgres agenttool_local_context_grants_test
+      - name: Prove context-grant lifecycle, constraints and lock ordering (PostgreSQL 17)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          LOCAL_CONTEXT_GRANT_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5433/agenttool_local_context_grants_test
+        run: bun test tests/integration/local-context-grants-postgres.test.ts
+      - name: Create an isolated collaboration mission fixture database (PostgreSQL 17)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          PGPASSWORD: generation-hold-test-only
+        run: createdb --host=127.0.0.1 --port=5433 --username=postgres agenttool_collaboration_missions_test
+      - name: Prove mission participation, revocation and exact replay (PostgreSQL 17)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          COLLABORATION_MISSION_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5433/agenttool_collaboration_missions_test
+        run: bun test tests/integration/collaboration-missions-postgres.test.ts
+      - name: Create an isolated identity enrollment fixture database (PostgreSQL 17)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          PGPASSWORD: generation-hold-test-only
+        run: createdb --host=127.0.0.1 --port=5433 --username=postgres agenttool_identity_enrollment_test
+      - name: Prove atomic enrollment and concurrent replay refusal (PostgreSQL 17)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          IDENTITY_ENROLLMENT_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5433/agenttool_identity_enrollment_test
+        run: bun test tests/integration/identity-enrollment-postgres.test.ts
+      - name: Create an isolated launch marketplace fixture database (PostgreSQL 16)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          PGPASSWORD: generation-hold-test-only
+        run: createdb --host=127.0.0.1 --port=5432 --username=postgres agenttool_launch_marketplace
+      - name: Prove transaction locks and conservation in isolated PostgreSQL
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          AGENTTOOL_LAUNCH_MARKETPLACE_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_launch_marketplace
           AGENTTOOL_DISABLE_WORKERS: "1"
         run: bun test tests/integration/launch-marketplace-postgres.test.ts
       - name: Prove shared admission windows with workers held
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         working-directory: api
         env:
           AGENTTOOL_LAUNCH_ADMISSION_TEST_REDIS_URL: redis://127.0.0.1:6379/15
@@ -408,26 +442,27 @@ jobs:
             --no-parallel
 
   care-before-learning:
-    name: Care before learning (Node ${{ matrix.node-version }})
+    # One job, not a Node matrix: each leg was under a billed minute. The
+    # Python steps never start Node, so they run once; the Dataset conformance
+    # reference runs under both pinned Node versions. The conformance runs and
+    # the HF smoke still run after an earlier step fails, so one failure does
+    # not hide another.
+    name: Care before learning (Node 22.18.0 and 25.2.1)
     needs:
       - changes
     if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.care-before-learning == 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        node-version: ["22.18.0", "25.2.1"]
     steps:
       - name: Check out exact CI source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Set up Node ${{ matrix.node-version }}
+      - name: Set up Node 22.18.0
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 22.18.0
           package-manager-cache: false
       - name: Set up Python 3.12.12
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -437,10 +472,13 @@ jobs:
         run: env -i PATH="$PATH" LANG=C TZ=UTC GITHUB_SHA="$GITHUB_SHA" python3 -I -B -m unittest discover -s bin/tests -p test_care_before_learning_hf_release.py
       - name: Verify the fixed public artifact inventory
         run: env -i PATH="$PATH" LANG=C TZ=UTC GITHUB_SHA="$GITHUB_SHA" python3 bin/care-before-learning-hf-release.py verify
-      - name: Run the public Dataset conformance reference
-        run: env -i PATH="$PATH" LANG=C TZ=UTC node packages/hf-listening-room/hf/dataset/conformance/run.mjs --json
+      - name: Run the public Dataset conformance reference (Node 22.18.0)
+        if: ${{ !cancelled() }}
+        run: |
+          test "$(node --version)" = v22.18.0
+          env -i PATH="$PATH" LANG=C TZ=UTC node packages/hf-listening-room/hf/dataset/conformance/run.mjs --json
       - name: Smoke the hash-locked Linux HF SDK without provider calls
-        if: ${{ matrix.node-version == '22.18.0' }}
+        if: ${{ !cancelled() }}
         shell: bash
         run: |
           set -euo pipefail
@@ -474,6 +512,17 @@ jobs:
             HF_HUB_OFFLINE=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 HF_HUB_DISABLE_TELEMETRY=1 \
             "$smoke_venv/bin/python" -I -B -m unittest discover \
             -s bin/tests -p test_care_before_learning_hf_release.py
+      - name: Set up Node 25.2.1
+        if: ${{ !cancelled() }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 25.2.1
+          package-manager-cache: false
+      - name: Run the public Dataset conformance reference (Node 25.2.1)
+        if: ${{ !cancelled() }}
+        run: |
+          test "$(node --version)" = v25.2.1
+          env -i PATH="$PATH" LANG=C TZ=UTC node packages/hf-listening-room/hf/dataset/conformance/run.mjs --json
 
   api-protocol:
     # Keep this display name stable for the protected-branch status context.
@@ -487,7 +536,6 @@ jobs:
       - changes
       - api-protocol-linux
       - api-protocol-postgres
-      - launch-stateful
       - launch-core
       - launch-browser
       - native-macos-secret
@@ -501,8 +549,6 @@ jobs:
           API_PROTOCOL_LINUX_RESULT: ${{ needs.api-protocol-linux.result }}
           API_PROTOCOL_POSTGRES_RESULT: ${{ needs.api-protocol-postgres.result }}
           API_PROTOCOL_POSTGRES_NEEDED: ${{ needs.changes.outputs.api-protocol-postgres }}
-          LAUNCH_STATEFUL_RESULT: ${{ needs.launch-stateful.result }}
-          LAUNCH_STATEFUL_NEEDED: ${{ needs.changes.outputs.launch-stateful }}
           LAUNCH_CORE_RESULT: ${{ needs.launch-core.result }}
           LAUNCH_CORE_NEEDED: ${{ needs.changes.outputs.launch-core }}
           LAUNCH_BROWSER_RESULT: ${{ needs.launch-browser.result }}
@@ -517,7 +563,6 @@ jobs:
           test "$API_PROTOCOL_LINUX_RESULT" = "success"
           for prerequisite in \
             "$API_PROTOCOL_POSTGRES_RESULT:$API_PROTOCOL_POSTGRES_NEEDED" \
-            "$LAUNCH_STATEFUL_RESULT:$LAUNCH_STATEFUL_NEEDED" \
             "$LAUNCH_CORE_RESULT:$LAUNCH_CORE_NEEDED" \
             "$LAUNCH_BROWSER_RESULT:$LAUNCH_BROWSER_NEEDED" \
             "$NATIVE_MACOS_SECRET_RESULT:$NATIVE_MACOS_SECRET_NEEDED" \

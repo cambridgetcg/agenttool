@@ -121,13 +121,12 @@ function expectEverything(outputs: Outputs, reason: string): void {
   expect(selected(outputs)).toEqual(AREAS);
 }
 
-const API_PREP = ["api-protocol-postgres", "launch-stateful", "launch-core"];
+const API_PREP = ["api-protocol-postgres", "launch-core"];
 
 describe("change classification rules", () => {
   test("lists exactly the filterable jobs and accepts every rule", () => {
     expect(AREAS).toEqual([
       "api-protocol-postgres",
-      "launch-stateful",
       "launch-core",
       "launch-browser",
       "native-macos-secret",
@@ -643,12 +642,11 @@ const FILTER_IF = (area: string) =>
   `\${{ !cancelled() && ${NOT_DRAFT} && !(needs.changes.result == 'success' && needs.changes.outputs.${area} == 'false') }}`;
 
 const AREA_JOB_NAMES: Record<string, string> = {
-  "api-protocol-postgres": "API generation hold (PostgreSQL ${{ matrix.postgres }})",
-  "launch-stateful": "Launch transactions and admission",
+  "api-protocol-postgres": "API PostgreSQL holds and launch transactions",
   "launch-core": "Launch core outsider journey",
   "launch-browser": "Launch browser journeys",
   "native-macos-secret": "Native macOS secret helper",
-  "care-before-learning": "Care before learning (Node ${{ matrix.node-version }})",
+  "care-before-learning": "Care before learning (Node 22.18.0 and 25.2.1)",
   "witnessed-agent-economy": "Witnessed agent economy",
   packages: "Data, ADDS, and SDK",
   "sdk-python": "Python SDK (${{ matrix.python-version }})",
@@ -656,7 +654,6 @@ const AREA_JOB_NAMES: Record<string, string> = {
 
 const AGGREGATED = [
   ["api-protocol-postgres", "API_PROTOCOL_POSTGRES"],
-  ["launch-stateful", "LAUNCH_STATEFUL"],
   ["launch-core", "LAUNCH_CORE"],
   ["launch-browser", "LAUNCH_BROWSER"],
   ["native-macos-secret", "NATIVE_MACOS_SECRET"],
