@@ -57,7 +57,7 @@ The bounded HTTP baseline uses one synthetic private identity, loopback Bun HTTP
 
 ## Promotion sequence
 
-1. Require protected CI on the complete candidate, including resolution of the recurring Linux constructive-intelligence CLI timeout. Preserve useful diagnostics; do not hide it by increasing deadlines.
+1. Require protected CI on the complete candidate, including resolution of the recurring Linux constructive-intelligence CLI timeout. Preserve useful diagnostics; do not hide it by increasing deadlines. A pull request runs only the jobs its changed paths select, and a push to `main` whose exact tree already passed as a pull request on the previous, green `main` commit runs none, so start the CI workflow manually (`workflow_dispatch`) on the candidate for a run of every job; the YUTABASE projector runs only on a push to `main`.
 2. Restore scoped deployment/survey credentials. Inspect current production topology, migration journal, worker holds, Redis and edge rules. Verify backup and recovery procedures before enabling wider admission.
 3. Use `bin/deploy.sh` from a clean checkout of the exact captured GitHub-main head. Keep the ordinary source, migration, preflight and compatibility gates. Deploy and read back all affected API/Pages/Worker surfaces together.
 4. Verify the ten-operation profile from an independent fresh runtime. Retain its root before registration; exercise ambiguity recovery, selected identity, memory, reconnect and explicit revocation. Include normal Python and TypeScript transports through the canonical hostname.

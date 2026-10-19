@@ -781,7 +781,9 @@ bridge, and one-Machine runtime comparison boundary; its tests must pass on
 macOS before the existing required `API and protocol` status can pass. A pull
 request that leaves `native/`, the CI workflow, and shared preparation untouched
 may skip that macOS job, and the status accepts the skip only from the change
-classifier; every push to `main` runs it. CI uses
+classifier. A push to `main` runs it unless a green pull-request run into
+`main` already tested that exact tree on the previous `main` commit, whose own
+push run passed; the weekly scheduled run always does. CI uses
 only a disposable Keychain tuple and fake flyctl. It does not contact Fly,
 publish an executable, or authorize an unsigned local build.
 

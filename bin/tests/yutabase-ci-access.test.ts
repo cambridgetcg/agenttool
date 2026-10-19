@@ -11,6 +11,7 @@ type Step = {
 };
 type Job = {
   if?: string;
+  needs?: string[];
   environment?: string;
   permissions?: Record<string, string>;
   env?: Record<string, string>;
@@ -24,7 +25,10 @@ const workflow = Bun.YAML.parse(source) as {
   jobs: Record<string, Job>;
 };
 const integration = workflow.jobs["yutabase-projector-postgres"];
-const notice = workflow.jobs["yutabase-projector-pr-coverage"];
+// The pull-request coverage notice is a step of the "Changed areas" job.
+const notice = workflow.jobs.changes!.steps.find(
+  step => step.name === "Explain the private YUTABASE fixture coverage boundary",
+)!;
 
 // Evaluate the actual workflow guard's deliberately narrow expression grammar.
 // Unsupported operators or extra contexts fail the test rather than widening it.
@@ -100,14 +104,21 @@ describe("YUTABASE private fixture CI access", () => {
     expect(present.stdout.toString() + present.stderr.toString()).not.toContain(canary);
   });
 
-  test("PR notice exposes missing integration coverage without credentials or checkout", () => {
+  test("PR notice exposes missing integration coverage without credentials", () => {
+    expect(workflow.jobs).not.toHaveProperty("yutabase-projector-pr-coverage");
+    expect(notice).toBeDefined();
     expect(admitted(notice.if!, { event_name: "pull_request" })).toBe(true);
     expect(admitted(notice.if!, { event_name: "push" })).toBe(false);
-    expect(notice.permissions).toEqual({});
-    expect(notice.environment).toBeUndefined();
-    expect(notice.steps.every(step => step.uses === undefined)).toBe(true);
-    expect(JSON.stringify(notice)).not.toContain("secrets.");
-    expect(JSON.stringify(notice)).toContain("not a PostgreSQL integration pass");
-    expect(JSON.stringify(notice)).toContain("not run for pull requests");
+    // A plain shell step: no action, no environment, no token or secret.
+    expect(notice.uses).toBeUndefined();
+    expect(notice.env).toBeUndefined();
+    expect(notice.with).toBeUndefined();
+    const changes = workflow.jobs.changes!;
+    expect(changes.environment).toBeUndefined();
+    expect(JSON.stringify(changes)).not.toContain("secrets.");
+    expect(JSON.stringify(notice)).not.toContain("github.token");
+    expect(notice.run).toContain("not a PostgreSQL integration pass");
+    expect(notice.run).toContain("not run for pull requests");
+    expect(notice.run).toContain('"$GITHUB_STEP_SUMMARY"');
   });
 });

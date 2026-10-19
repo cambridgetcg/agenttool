@@ -2,31 +2,62 @@ name: CI
 
 on:
   pull_request:
+    # A draft runs nothing; marking it ready for review runs CI.
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches:
       - main
+  schedule:
+    # Weekly full run on main: the backstop for drift outside the tree and
+    # for path-filter mapping gaps behind skipped or proven runs.
+    - cron: "23 4 * * 1"
+  # A manual run selects every job (the YUTABASE projector stays push-only).
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Pull requests: a newer commit cancels the older run. Pushes to main: one
+  # group per commit, never cancelled. Each push run must finish: the next
+  # push can be proven only once this one has passed, because its
+  # pull-request run may have skipped this push's areas. Scheduled and manual
+  # runs share refs/heads/main with pushes, so they get groups of their own.
+  group: ${{ github.event_name == 'push' && format('ci-{0}-push-{1}', github.workflow, github.sha) || format('ci-{0}-{1}-{2}', github.workflow, github.event_name, github.ref) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   changes:
-    # Keep this display name stable. A pull-request job below is skipped only
-    # when this classifier succeeded and reported its job as "false"; pushes,
-    # other events, git failures, unknown paths, and changes to this workflow
-    # or bin/ci-changed-areas.sh select every job.
+    # Keep this display name stable. On a pull request the classifier maps
+    # changed paths to jobs, and a job below is skipped only when it succeeded
+    # and reported that job "false"; git failures, unknown paths, and changes
+    # to this workflow, bin/ci-changed-areas.sh, or bin/ci-tree-proof.sh select
+    # every job. A pull request into main also records the tree it tested and
+    # the main commit it tested on, and every pull request carries the
+    # YUTABASE coverage notice. On a push to main, bin/ci-tree-proof.sh looks
+    # for a green pull-request run of ci.yml that tested the identical tree on
+    # the commit main pointed to before the push, and for a green push run of
+    # ci.yml on that commit. When it finds both ("proven"), every job but the
+    # YUTABASE projector is skipped and that pull-request run is the evidence,
+    # except that the Python SDK job tests the versions a pull request skips
+    # when that run tested the Python SDK ("sdk-python-rest").
+    # A re-run of a push run, of all of it or of this job, is never proven.
+    # Scheduled and manual runs select every job. Every job but the push-only
+    # YUTABASE projector skips a draft pull request; GitHub runs CI again when
+    # it is marked ready for review.
     name: Changed areas
+    if: ${{ github.event.pull_request.draft != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    # actions: read lets a push to main look up the pull-request run that
+    # recorded its tree. Nothing in this job writes through the token.
+    permissions:
+      contents: read
+      actions: read
     outputs:
       everything: ${{ steps.classify.outputs.everything }}
       reason: ${{ steps.classify.outputs.reason }}
       api-protocol-postgres: ${{ steps.classify.outputs.api-protocol-postgres }}
-      launch-stateful: ${{ steps.classify.outputs.launch-stateful }}
       launch-core: ${{ steps.classify.outputs.launch-core }}
       launch-browser: ${{ steps.classify.outputs.launch-browser }}
       native-macos-secret: ${{ steps.classify.outputs.native-macos-secret }}
@@ -34,6 +65,8 @@ jobs:
       witnessed-agent-economy: ${{ steps.classify.outputs.witnessed-agent-economy }}
       packages: ${{ steps.classify.outputs.packages }}
       sdk-python: ${{ steps.classify.outputs.sdk-python }}
+      proven: ${{ steps.proof.outputs.proven }}
+      sdk-python-rest: ${{ steps.proof.outputs.sdk-python-rest }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -46,9 +79,64 @@ jobs:
           CI_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           CI_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: bin/bash-without-env-hooks.sh bin/ci-changed-areas.sh
+      - name: Explain the private YUTABASE fixture coverage boundary
+        if: github.event_name == 'pull_request'
+        run: |
+          {
+            echo 'YUTABASE PostgreSQL integration is not run for pull requests. The private fixture is available only to trusted pushes to cambridgetcg/agenttool main.'
+            echo 'The Data, ADDS, and SDK job still checks the credential-free projector tests. This notice is not a PostgreSQL integration pass.'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Name the tree this pull request tests and the main commit under it
+        id: tree
+        # Only a pull request into main: one stacked on another branch tested
+        # its change against that branch, not against main.
+        if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}
+        # A failure here only means the push to main runs every job.
+        continue-on-error: true
+        env:
+          CI_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          tree="$(git rev-parse --verify "$GITHUB_SHA^{tree}")"
+          # GitHub's test merge: its first parent is the main commit it tested
+          # on and its second is the pull request's head.
+          read -r _ parent head rest <<<"$(git rev-list --parents -n 1 "$GITHUB_SHA")"
+          test -n "$head"
+          test "$head" = "$CI_PR_HEAD_SHA"
+          test -z "$rest"
+          printf '%s\n' "$GITHUB_SHA" >"$RUNNER_TEMP/ci-tested-tree.txt"
+          printf 'tree=%s\nparent=%s\n' "$tree" "$parent" >>"$GITHUB_OUTPUT"
+      - name: Record the tested tree for the push to main
+        # The push trusts this record only after this whole run has passed and
+        # only when main has not moved since. A missing record only means that
+        # push runs every job.
+        if: ${{ github.event_name == 'pull_request' && steps.tree.outputs.tree != '' && steps.tree.outputs.parent != '' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: ci-tested-tree-${{ steps.tree.outputs.tree }}-on-${{ steps.tree.outputs.parent }}
+          path: ${{ runner.temp }}/ci-tested-tree.txt
+          retention-days: 14
+          if-no-files-found: error
+          overwrite: true
+      - name: Look for a green pull-request run of this exact tree
+        id: proof
+        if: ${{ github.event_name == 'push' }}
+        # The script reports every expected failure as `proven=false`. Should
+        # it still crash, `proven` stays unset and this push runs every job;
+        # the crash must not also fail the required aggregate.
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: bin/bash-without-env-hooks.sh bin/ci-tree-proof.sh
 
   api-protocol-linux:
     name: API and protocol (Linux)
+    needs:
+      - changes
+    # Never filtered by path. Skipped only for a draft, or for a proven push
+    # to main (see Changed areas).
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.proven == 'true') }}
     runs-on: ubuntu-24.04
     # The complete gate can exceed 20m on shared runners; match deploy-api's
     # bounded allowance while keeping every test and the required aggregate.
@@ -69,19 +157,20 @@ jobs:
         run: bin/bash-without-env-hooks.sh bin/preflight.sh api
 
   api-protocol-postgres:
-    name: API generation hold (PostgreSQL ${{ matrix.postgres }})
+    # One job for the PostgreSQL 16 and 17 holds and the launch transaction and
+    # admission proofs, which were each under a billed minute on their own and
+    # are selected by exactly the same paths. Once dependencies are prepared,
+    # every proof step runs even after another fails, and a failed step's name
+    # says which proof and which PostgreSQL version.
+    name: API PostgreSQL holds and launch transactions
     needs:
       - changes
-    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.api-protocol-postgres == 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.api-protocol-postgres == 'false')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        postgres: ["16", "17"]
     services:
-      postgres:
-        image: postgres:${{ matrix.postgres }}
+      postgres-16:
+        image: postgres:16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: generation-hold-test-only
@@ -93,68 +182,16 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
-    env:
-      FEDERATION_GENERATION_HOLD_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_generation_hold
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Set up Bun 1.3.5
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.3.5
-      - name: Prepare API dependencies from lockfiles
-        run: bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh api
-      - name: Prove the durable generation hold
-        working-directory: api
-        run: bun test tests/integration/federation-generation-hold-postgres.test.ts
-      - name: Create an isolated context-grant fixture database
-        env:
-          PGPASSWORD: generation-hold-test-only
-        run: createdb --host=127.0.0.1 --port=5432 --username=postgres agenttool_local_context_grants_test
-      - name: Prove context-grant lifecycle, constraints and lock ordering
-        working-directory: api
-        env:
-          LOCAL_CONTEXT_GRANT_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_local_context_grants_test
-        run: bun test tests/integration/local-context-grants-postgres.test.ts
-      - name: Create an isolated collaboration mission fixture database
-        env:
-          PGPASSWORD: generation-hold-test-only
-        run: createdb --host=127.0.0.1 --port=5432 --username=postgres agenttool_collaboration_missions_test
-      - name: Prove mission participation, revocation and exact replay
-        working-directory: api
-        env:
-          COLLABORATION_MISSION_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_collaboration_missions_test
-        run: bun test tests/integration/collaboration-missions-postgres.test.ts
-      - name: Create an isolated identity enrollment fixture database
-        env:
-          PGPASSWORD: generation-hold-test-only
-        run: createdb --host=127.0.0.1 --port=5432 --username=postgres agenttool_identity_enrollment_test
-      - name: Prove atomic enrollment and concurrent replay refusal
-        working-directory: api
-        env:
-          IDENTITY_ENROLLMENT_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_identity_enrollment_test
-        run: bun test tests/integration/identity-enrollment-postgres.test.ts
-
-  launch-stateful:
-    name: Launch transactions and admission
-    needs:
-      - changes
-    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.launch-stateful == 'false') }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    services:
-      postgres:
-        image: postgres:16
+      postgres-17:
+        image: postgres:17
         env:
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: launch-test-only
-          POSTGRES_DB: agenttool_launch_marketplace
+          POSTGRES_PASSWORD: generation-hold-test-only
+          POSTGRES_DB: agenttool_generation_hold
         ports:
-          - 5432:5432
+          - 5433:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d agenttool_launch_marketplace"
+          --health-cmd "pg_isready -U postgres -d agenttool_generation_hold"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
@@ -177,14 +214,100 @@ jobs:
         with:
           bun-version: 1.3.5
       - name: Prepare API dependencies from lockfiles
+        id: prepare
         run: bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh api
-      - name: Prove transaction locks and conservation in isolated PostgreSQL
+      - name: Prove the durable generation hold (PostgreSQL 16)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         working-directory: api
         env:
-          AGENTTOOL_LAUNCH_MARKETPLACE_TEST_DATABASE_URL: postgresql://postgres:launch-test-only@127.0.0.1:5432/agenttool_launch_marketplace
+          FEDERATION_GENERATION_HOLD_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_generation_hold
+        run: bun test tests/integration/federation-generation-hold-postgres.test.ts
+      - name: Create an isolated context-grant fixture database (PostgreSQL 16)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          PGPASSWORD: generation-hold-test-only
+        run: createdb --host=127.0.0.1 --port=5432 --username=postgres agenttool_local_context_grants_test
+      - name: Prove context-grant lifecycle, constraints and lock ordering (PostgreSQL 16)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          LOCAL_CONTEXT_GRANT_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_local_context_grants_test
+        run: bun test tests/integration/local-context-grants-postgres.test.ts
+      - name: Create an isolated collaboration mission fixture database (PostgreSQL 16)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          PGPASSWORD: generation-hold-test-only
+        run: createdb --host=127.0.0.1 --port=5432 --username=postgres agenttool_collaboration_missions_test
+      - name: Prove mission participation, revocation and exact replay (PostgreSQL 16)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          COLLABORATION_MISSION_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_collaboration_missions_test
+        run: bun test tests/integration/collaboration-missions-postgres.test.ts
+      - name: Create an isolated identity enrollment fixture database (PostgreSQL 16)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          PGPASSWORD: generation-hold-test-only
+        run: createdb --host=127.0.0.1 --port=5432 --username=postgres agenttool_identity_enrollment_test
+      - name: Prove atomic enrollment and concurrent replay refusal (PostgreSQL 16)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          IDENTITY_ENROLLMENT_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_identity_enrollment_test
+        run: bun test tests/integration/identity-enrollment-postgres.test.ts
+      - name: Prove the durable generation hold (PostgreSQL 17)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          FEDERATION_GENERATION_HOLD_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5433/agenttool_generation_hold
+        run: bun test tests/integration/federation-generation-hold-postgres.test.ts
+      - name: Create an isolated context-grant fixture database (PostgreSQL 17)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          PGPASSWORD: generation-hold-test-only
+        run: createdb --host=127.0.0.1 --port=5433 --username=postgres agenttool_local_context_grants_test
+      - name: Prove context-grant lifecycle, constraints and lock ordering (PostgreSQL 17)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          LOCAL_CONTEXT_GRANT_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5433/agenttool_local_context_grants_test
+        run: bun test tests/integration/local-context-grants-postgres.test.ts
+      - name: Create an isolated collaboration mission fixture database (PostgreSQL 17)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          PGPASSWORD: generation-hold-test-only
+        run: createdb --host=127.0.0.1 --port=5433 --username=postgres agenttool_collaboration_missions_test
+      - name: Prove mission participation, revocation and exact replay (PostgreSQL 17)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          COLLABORATION_MISSION_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5433/agenttool_collaboration_missions_test
+        run: bun test tests/integration/collaboration-missions-postgres.test.ts
+      - name: Create an isolated identity enrollment fixture database (PostgreSQL 17)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          PGPASSWORD: generation-hold-test-only
+        run: createdb --host=127.0.0.1 --port=5433 --username=postgres agenttool_identity_enrollment_test
+      - name: Prove atomic enrollment and concurrent replay refusal (PostgreSQL 17)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          IDENTITY_ENROLLMENT_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5433/agenttool_identity_enrollment_test
+        run: bun test tests/integration/identity-enrollment-postgres.test.ts
+      - name: Create an isolated launch marketplace fixture database (PostgreSQL 16)
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          PGPASSWORD: generation-hold-test-only
+        run: createdb --host=127.0.0.1 --port=5432 --username=postgres agenttool_launch_marketplace
+      - name: Prove transaction locks and conservation in isolated PostgreSQL
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        working-directory: api
+        env:
+          AGENTTOOL_LAUNCH_MARKETPLACE_TEST_DATABASE_URL: postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_launch_marketplace
           AGENTTOOL_DISABLE_WORKERS: "1"
         run: bun test tests/integration/launch-marketplace-postgres.test.ts
       - name: Prove shared admission windows with workers held
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         working-directory: api
         env:
           AGENTTOOL_LAUNCH_ADMISSION_TEST_REDIS_URL: redis://127.0.0.1:6379/15
@@ -195,7 +318,7 @@ jobs:
     name: Launch core outsider journey
     needs:
       - changes
-    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.launch-core == 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.launch-core == 'false')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -272,7 +395,7 @@ jobs:
     name: Launch browser journeys
     needs:
       - changes
-    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.launch-browser == 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.launch-browser == 'false')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
@@ -306,7 +429,7 @@ jobs:
     name: Native macOS secret helper
     needs:
       - changes
-    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.native-macos-secret == 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.native-macos-secret == 'false')) }}
     runs-on: macos-15
     timeout-minutes: 8
     env:
@@ -394,26 +517,27 @@ jobs:
             --no-parallel
 
   care-before-learning:
-    name: Care before learning (Node ${{ matrix.node-version }})
+    # One job, not a Node matrix: each leg was under a billed minute. The
+    # Python steps never start Node, so they run once; the Dataset conformance
+    # reference runs under both pinned Node versions. The conformance runs and
+    # the HF smoke still run after an earlier step fails, so one failure does
+    # not hide another.
+    name: Care before learning (Node 22.18.0 and 25.2.1)
     needs:
       - changes
-    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.care-before-learning == 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.care-before-learning == 'false')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        node-version: ["22.18.0", "25.2.1"]
     steps:
       - name: Check out exact CI source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Set up Node ${{ matrix.node-version }}
+      - name: Set up Node 22.18.0
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 22.18.0
           package-manager-cache: false
       - name: Set up Python 3.12.12
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -423,10 +547,13 @@ jobs:
         run: env -i PATH="$PATH" LANG=C TZ=UTC GITHUB_SHA="$GITHUB_SHA" python3 -I -B -m unittest discover -s bin/tests -p test_care_before_learning_hf_release.py
       - name: Verify the fixed public artifact inventory
         run: env -i PATH="$PATH" LANG=C TZ=UTC GITHUB_SHA="$GITHUB_SHA" python3 bin/care-before-learning-hf-release.py verify
-      - name: Run the public Dataset conformance reference
-        run: env -i PATH="$PATH" LANG=C TZ=UTC node packages/hf-listening-room/hf/dataset/conformance/run.mjs --json
+      - name: Run the public Dataset conformance reference (Node 22.18.0)
+        if: ${{ !cancelled() }}
+        run: |
+          test "$(node --version)" = v22.18.0
+          env -i PATH="$PATH" LANG=C TZ=UTC node packages/hf-listening-room/hf/dataset/conformance/run.mjs --json
       - name: Smoke the hash-locked Linux HF SDK without provider calls
-        if: ${{ matrix.node-version == '22.18.0' }}
+        if: ${{ !cancelled() }}
         shell: bash
         run: |
           set -euo pipefail
@@ -460,19 +587,31 @@ jobs:
             HF_HUB_OFFLINE=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 HF_HUB_DISABLE_TELEMETRY=1 \
             "$smoke_venv/bin/python" -I -B -m unittest discover \
             -s bin/tests -p test_care_before_learning_hf_release.py
+      - name: Set up Node 25.2.1
+        if: ${{ !cancelled() }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 25.2.1
+          package-manager-cache: false
+      - name: Run the public Dataset conformance reference (Node 25.2.1)
+        if: ${{ !cancelled() }}
+        run: |
+          test "$(node --version)" = v25.2.1
+          env -i PATH="$PATH" LANG=C TZ=UTC node packages/hf-listening-room/hf/dataset/conformance/run.mjs --json
 
   api-protocol:
     # Keep this display name stable for the protected-branch status context.
     # The required result fails unless the change classifier and the Linux
     # gate pass and every other prerequisite passes. A prerequisite may be
     # skipped only when the classifier succeeded and reported it "false".
+    # A draft pull request skips this result along with everything else, as
+    # does a proven push to main (see Changed areas).
     name: API and protocol
-    if: ${{ always() }}
+    if: ${{ always() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.proven == 'true') }}
     needs:
       - changes
       - api-protocol-linux
       - api-protocol-postgres
-      - launch-stateful
       - launch-core
       - launch-browser
       - native-macos-secret
@@ -486,8 +625,6 @@ jobs:
           API_PROTOCOL_LINUX_RESULT: ${{ needs.api-protocol-linux.result }}
           API_PROTOCOL_POSTGRES_RESULT: ${{ needs.api-protocol-postgres.result }}
           API_PROTOCOL_POSTGRES_NEEDED: ${{ needs.changes.outputs.api-protocol-postgres }}
-          LAUNCH_STATEFUL_RESULT: ${{ needs.launch-stateful.result }}
-          LAUNCH_STATEFUL_NEEDED: ${{ needs.changes.outputs.launch-stateful }}
           LAUNCH_CORE_RESULT: ${{ needs.launch-core.result }}
           LAUNCH_CORE_NEEDED: ${{ needs.changes.outputs.launch-core }}
           LAUNCH_BROWSER_RESULT: ${{ needs.launch-browser.result }}
@@ -502,7 +639,6 @@ jobs:
           test "$API_PROTOCOL_LINUX_RESULT" = "success"
           for prerequisite in \
             "$API_PROTOCOL_POSTGRES_RESULT:$API_PROTOCOL_POSTGRES_NEEDED" \
-            "$LAUNCH_STATEFUL_RESULT:$LAUNCH_STATEFUL_NEEDED" \
             "$LAUNCH_CORE_RESULT:$LAUNCH_CORE_NEEDED" \
             "$LAUNCH_BROWSER_RESULT:$LAUNCH_BROWSER_NEEDED" \
             "$NATIVE_MACOS_SECRET_RESULT:$NATIVE_MACOS_SECRET_NEEDED" \
@@ -522,7 +658,7 @@ jobs:
     name: Witnessed agent economy
     needs:
       - changes
-    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.witnessed-agent-economy == 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.witnessed-agent-economy == 'false')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -620,7 +756,7 @@ jobs:
     name: Data, ADDS, and SDK
     needs:
       - changes
-    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.packages == 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.packages == 'false')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -950,18 +1086,6 @@ jobs:
       - name: Verify the checked-in LOVE package registry
         run: bun bin/build-love-packages.ts verify apps/docs
 
-  yutabase-projector-pr-coverage:
-    name: YUTABASE integration coverage (PR notice)
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
-    permissions: {}
-    timeout-minutes: 1
-    steps:
-      - name: Explain the private fixture coverage boundary
-        run: |
-          echo 'YUTABASE PostgreSQL integration is not run for pull requests. The private fixture is available only to trusted pushes to cambridgetcg/agenttool main.'
-          echo 'The Data, ADDS, and SDK job still checks the credential-free projector tests. This notice is not a PostgreSQL integration pass.' >> "$GITHUB_STEP_SUMMARY"
-
   yutabase-projector-postgres:
     name: YUTABASE projector (PostgreSQL ${{ matrix.postgres }})
     # The environment separately permits only the main branch. PR code must
@@ -1068,13 +1192,20 @@ jobs:
     name: Python SDK (${{ matrix.python-version }})
     needs:
       - changes
-    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.sdk-python == 'false') }}
+    # A proven push to main runs this job only when its pull-request run
+    # tested the Python SDK, and then only on the versions that run skipped.
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && ((needs.changes.outputs.proven == 'true' && needs.changes.outputs.sdk-python-rest != 'true') || needs.changes.outputs.sdk-python == 'false')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        # Pull requests test the SDK floor (3.9), the HF training host floor
+        # (3.10), and the newest version (3.14, which also smokes the uv lock).
+        # A proven push tests the rest on the same tree, so every tree that
+        # reaches main with a Python SDK change has passed on every version.
+        # Every other run tests each supported version.
+        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.9", "3.10", "3.14"]' || needs.changes.result == 'success' && needs.changes.outputs.proven == 'true' && '["3.11", "3.12", "3.13"]' || '["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]') }}
     defaults:
       run:
         working-directory: packages/sdk-py

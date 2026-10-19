@@ -7,8 +7,8 @@
 # changed path matches a rule below can turn a job off. Any other event, a
 # missing or malformed SHA, any git failure, an unexpected merge shape, an empty
 # diff, more than MAX_PATHS distinct paths, a path that no rule matches, or a
-# path whose rule selects `*` turns every job on. Jobs that always run (the
-# Linux API gate, which reads nearly the whole tree, and the PR notice) are not
+# path whose rule selects `*` turns every job on. The job this classifier never
+# turns off (the Linux API gate, which reads nearly the whole tree) is not
 # listed here.
 #
 # `reason` is one of: classified, not-a-pull-request, missing-or-malformed-sha,
@@ -38,7 +38,7 @@ set -euo pipefail
 set -f
 export LC_ALL=C
 
-readonly AREAS="api-protocol-postgres launch-stateful launch-core launch-browser native-macos-secret care-before-learning witnessed-agent-economy packages sdk-python"
+readonly AREAS="api-protocol-postgres launch-core launch-browser native-macos-secret care-before-learning witnessed-agent-economy packages sdk-python"
 
 # A pull request with more distinct changed paths than this runs every job
 # rather than spend its classifier time limit matching them one by one.
@@ -62,12 +62,14 @@ readonly EXACT_RULES=(
 # rule it matches. A path that matches no rule selects every job, so a new
 # top-level entry, a new package, or a new file directly under packages/ runs
 # everything until someone classifies it here.
-readonly API_PREP="api-protocol-postgres,launch-stateful,launch-core"
+readonly API_PREP="api-protocol-postgres,launch-core"
 readonly RULES=(
-  # The workflow, this classifier, shared preparation, and anything that can
-  # change dependency resolution or checked-out bytes select every job.
+  # The workflow, this classifier, the push-to-main tree proof, shared
+  # preparation, and anything that can change dependency resolution or
+  # checked-out bytes select every job.
   ".github/workflows/ci.yml *"
   "bin/ci-changed-areas.sh *"
+  "bin/ci-tree-proof.sh *"
   "bin/bash-without-env-hooks.sh *"
   "bin/hermetic-env.sh *"
   "bin/prepare-hermetic-deps.sh *"
@@ -223,8 +225,8 @@ readonly RULES=(
   "apps/docs/package.json packages"
   "bin/package.json packages"
 
-  # Read only by jobs that always run (the Linux API gate's whole-tree
-  # scanners, catalog, operator tests, and the PR notice).
+  # Read only by the job this classifier never turns off (the Linux API gate's
+  # whole-tree scanners, catalog, and operator tests).
   "bin/* -"
   ".github/workflows/* -"
   ".forgejo/* -"

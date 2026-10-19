@@ -403,16 +403,15 @@ describe("boring test spine", () => {
     const postgresHold = jobs["api-protocol-postgres"];
     const nativeSecret = jobs["native-macos-secret"];
     const requiredApi = jobs["api-protocol"];
-    for (const name of ["launch-stateful", "launch-core", "launch-browser"]) {
+    // The launch transaction and admission proofs run in the PostgreSQL
+    // holds job, pinned step by step below.
+    expect(jobs["launch-stateful"]).toBeUndefined();
+    for (const name of ["api-protocol-postgres", "launch-core", "launch-browser"]) {
       expect(jobs[name]?.["runs-on"]).toBe("ubuntu-24.04");
       expect(jobs[name]?.["continue-on-error"]).toBeUndefined();
       expect(jobs[name]?.steps?.every(step => step["continue-on-error"] === undefined)).toBe(true);
+      expect(JSON.stringify(jobs[name])).not.toContain("secrets.");
     }
-    const launchStateful = JSON.stringify(jobs["launch-stateful"]);
-    expect(launchStateful).toContain("AGENTTOOL_DISABLE_WORKERS");
-    expect(launchStateful).toContain("launch-marketplace-postgres.test.ts");
-    expect(launchStateful).toContain("launch-admission-redis.test.ts");
-    expect(launchStateful).not.toContain("secrets.");
     const launchCore = JSON.stringify(jobs["launch-core"]);
     expect(launchCore).toContain("--network none --read-only");
     expect(launchCore).not.toContain("--publish");
@@ -464,106 +463,124 @@ describe("boring test spine", () => {
     expect(linuxApi?.steps?.[3]?.run).toBe(
       "bin/bash-without-env-hooks.sh bin/preflight.sh api",
     );
-    expect(postgresHold?.name).toBe(
-      "API generation hold (PostgreSQL ${{ matrix.postgres }})",
-    );
+    expect(postgresHold?.name).toBe("API PostgreSQL holds and launch transactions");
     expect(postgresHold?.["runs-on"]).toBe("ubuntu-24.04");
     expect(postgresHold?.["timeout-minutes"]).toBe(10);
     expect(postgresHold?.["continue-on-error"]).toBeUndefined();
-    expect(postgresHold?.strategy).toEqual({
-      "fail-fast": false,
-      matrix: { postgres: ["16", "17"] },
+    // One job, no matrix: both PostgreSQL versions and Redis are services.
+    expect(postgresHold?.strategy).toBeUndefined();
+    expect(postgresHold?.env).toBeUndefined();
+    const postgresService = (version: string, port: number) => ({
+      image: `postgres:${version}`,
+      env: {
+        POSTGRES_USER: "postgres",
+        POSTGRES_PASSWORD: "generation-hold-test-only",
+        POSTGRES_DB: "agenttool_generation_hold",
+      },
+      ports: [`${port}:5432`],
+      options:
+        "--health-cmd \"pg_isready -U postgres -d agenttool_generation_hold\" --health-interval 5s --health-timeout 5s --health-retries 12",
     });
     expect(postgresHold?.services).toEqual({
-      postgres: {
-        image: "postgres:${{ matrix.postgres }}",
-        env: {
-          POSTGRES_USER: "postgres",
-          POSTGRES_PASSWORD: "generation-hold-test-only",
-          POSTGRES_DB: "agenttool_generation_hold",
-        },
-        ports: ["5432:5432"],
+      "postgres-16": postgresService("16", 5432),
+      "postgres-17": postgresService("17", 5433),
+      redis: {
+        image: "redis:7",
+        ports: ["6379:6379"],
         options:
-          "--health-cmd \"pg_isready -U postgres -d agenttool_generation_hold\" --health-interval 5s --health-timeout 5s --health-retries 12",
+          "--health-cmd \"redis-cli ping\" --health-interval 5s --health-timeout 5s --health-retries 12",
       },
     });
-    expect(postgresHold?.env).toEqual({
-      FEDERATION_GENERATION_HOLD_TEST_DATABASE_URL:
-        "postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_generation_hold",
-    });
-    expect(postgresHold?.steps?.map((step) => step.name)).toEqual([
-      "Check out repository",
-      "Set up Bun 1.3.5",
-      "Prepare API dependencies from lockfiles",
-      "Prove the durable generation hold",
-      "Create an isolated context-grant fixture database",
-      "Prove context-grant lifecycle, constraints and lock ordering",
-      "Create an isolated collaboration mission fixture database",
-      "Prove mission participation, revocation and exact replay",
-      "Create an isolated identity enrollment fixture database",
-      "Prove atomic enrollment and concurrent replay refusal",
-    ]);
+    expect(nativeSecret?.name).toBe("Native macOS secret helper");
     expect(
       postgresHold?.steps?.every(
         (step) => step["continue-on-error"] === undefined,
       ),
     ).toBe(true);
-    expect(postgresHold?.steps?.[0]?.uses).toBe(
-      "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
-    );
-    expect(postgresHold?.steps?.[0]?.with).toEqual({
-      "persist-credentials": false,
+    expect(postgresHold?.steps?.[0]).toEqual({
+      name: "Check out repository",
+      uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+      with: { "persist-credentials": false },
     });
-    expect(postgresHold?.steps?.[1]?.uses).toBe(
-      "oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6",
-    );
-    expect(postgresHold?.steps?.[1]?.with).toEqual({
-      "bun-version": "1.3.5",
+    expect(postgresHold?.steps?.[1]).toEqual({
+      name: "Set up Bun 1.3.5",
+      uses: "oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6",
+      with: { "bun-version": "1.3.5" },
     });
-    expect(postgresHold?.steps?.[2]?.run).toBe(
-      "bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh api",
-    );
-    expect(postgresHold?.steps?.[3]?.["working-directory"]).toBe("api");
-    expect(postgresHold?.steps?.[3]?.run).toBe(
-      "bun test tests/integration/federation-generation-hold-postgres.test.ts",
-    );
-    expect(postgresHold?.steps?.[4]).toEqual({
-      name: "Create an isolated context-grant fixture database",
+    expect(postgresHold?.steps?.[2]).toEqual({
+      name: "Prepare API dependencies from lockfiles",
+      id: "prepare",
+      run: "bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh api",
+    });
+    // Every proof runs once dependencies are prepared, even after another
+    // proof fails; a cancelled run stops them.
+    const afterPrepare = "${{ !cancelled() && steps.prepare.outcome == 'success' }}";
+    const database = (port: number, name: string, password = "generation-hold-test-only") =>
+      `postgresql://postgres:${password}@127.0.0.1:${port}/${name}`;
+    const createDatabase = (label: string, version: string, port: number, name: string) => ({
+      name: `Create an isolated ${label} fixture database (PostgreSQL ${version})`,
+      if: afterPrepare,
       env: { PGPASSWORD: "generation-hold-test-only" },
-      run: "createdb --host=127.0.0.1 --port=5432 --username=postgres agenttool_local_context_grants_test",
+      run: `createdb --host=127.0.0.1 --port=${port} --username=postgres ${name}`,
     });
-    expect(postgresHold?.steps?.[5]).toEqual({
-      name: "Prove context-grant lifecycle, constraints and lock ordering",
-      "working-directory": "api",
-      env: {
-        LOCAL_CONTEXT_GRANT_TEST_DATABASE_URL:
-          "postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_local_context_grants_test",
+    const holdProofs = (version: string, port: number) => [
+      {
+        name: `Prove the durable generation hold (PostgreSQL ${version})`,
+        if: afterPrepare,
+        "working-directory": "api",
+        env: { FEDERATION_GENERATION_HOLD_TEST_DATABASE_URL: database(port, "agenttool_generation_hold") },
+        run: "bun test tests/integration/federation-generation-hold-postgres.test.ts",
       },
-      run: "bun test tests/integration/local-context-grants-postgres.test.ts",
-    });
-    expect(nativeSecret?.name).toBe("Native macOS secret helper");
-    expect(postgresHold?.steps?.[6]).toEqual({
-      name: "Create an isolated collaboration mission fixture database",
-      env: { PGPASSWORD: "generation-hold-test-only" },
-      run: "createdb --host=127.0.0.1 --port=5432 --username=postgres agenttool_collaboration_missions_test",
-    });
-    expect(postgresHold?.steps?.[7]).toEqual({
-      name: "Prove mission participation, revocation and exact replay",
-      "working-directory": "api",
-      env: { COLLABORATION_MISSION_TEST_DATABASE_URL: "postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_collaboration_missions_test" },
-      run: "bun test tests/integration/collaboration-missions-postgres.test.ts",
-    });
-    expect(postgresHold?.steps?.[8]).toEqual({
-      name: "Create an isolated identity enrollment fixture database",
-      env: { PGPASSWORD: "generation-hold-test-only" },
-      run: "createdb --host=127.0.0.1 --port=5432 --username=postgres agenttool_identity_enrollment_test",
-    });
-    expect(postgresHold?.steps?.[9]).toEqual({
-      name: "Prove atomic enrollment and concurrent replay refusal",
-      "working-directory": "api",
-      env: { IDENTITY_ENROLLMENT_TEST_DATABASE_URL: "postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_identity_enrollment_test" },
-      run: "bun test tests/integration/identity-enrollment-postgres.test.ts",
-    });
+      createDatabase("context-grant", version, port, "agenttool_local_context_grants_test"),
+      {
+        name: `Prove context-grant lifecycle, constraints and lock ordering (PostgreSQL ${version})`,
+        if: afterPrepare,
+        "working-directory": "api",
+        env: { LOCAL_CONTEXT_GRANT_TEST_DATABASE_URL: database(port, "agenttool_local_context_grants_test") },
+        run: "bun test tests/integration/local-context-grants-postgres.test.ts",
+      },
+      createDatabase("collaboration mission", version, port, "agenttool_collaboration_missions_test"),
+      {
+        name: `Prove mission participation, revocation and exact replay (PostgreSQL ${version})`,
+        if: afterPrepare,
+        "working-directory": "api",
+        env: { COLLABORATION_MISSION_TEST_DATABASE_URL: database(port, "agenttool_collaboration_missions_test") },
+        run: "bun test tests/integration/collaboration-missions-postgres.test.ts",
+      },
+      createDatabase("identity enrollment", version, port, "agenttool_identity_enrollment_test"),
+      {
+        name: `Prove atomic enrollment and concurrent replay refusal (PostgreSQL ${version})`,
+        if: afterPrepare,
+        "working-directory": "api",
+        env: { IDENTITY_ENROLLMENT_TEST_DATABASE_URL: database(port, "agenttool_identity_enrollment_test") },
+        run: "bun test tests/integration/identity-enrollment-postgres.test.ts",
+      },
+    ];
+    expect(postgresHold?.steps?.slice(3)).toEqual([
+      ...holdProofs("16", 5432),
+      ...holdProofs("17", 5433),
+      createDatabase("launch marketplace", "16", 5432, "agenttool_launch_marketplace"),
+      {
+        name: "Prove transaction locks and conservation in isolated PostgreSQL",
+        if: afterPrepare,
+        "working-directory": "api",
+        env: {
+          AGENTTOOL_LAUNCH_MARKETPLACE_TEST_DATABASE_URL: database(5432, "agenttool_launch_marketplace"),
+          AGENTTOOL_DISABLE_WORKERS: "1",
+        },
+        run: "bun test tests/integration/launch-marketplace-postgres.test.ts",
+      },
+      {
+        name: "Prove shared admission windows with workers held",
+        if: afterPrepare,
+        "working-directory": "api",
+        env: {
+          AGENTTOOL_LAUNCH_ADMISSION_TEST_REDIS_URL: "redis://127.0.0.1:6379/15",
+          AGENTTOOL_DISABLE_WORKERS: "1",
+        },
+        run: "bun test tests/integration/launch-admission-redis.test.ts",
+      },
+    ]);
     expect(nativeSecret?.["runs-on"]).toBe("macos-15");
     expect(nativeSecret?.["timeout-minutes"]).toBe(8);
     expect(nativeSecret?.env).toEqual({
@@ -685,38 +702,68 @@ describe("boring test spine", () => {
       ].join("\n"),
     );
     const careBeforeLearning = jobs["care-before-learning"];
-    expect(careBeforeLearning?.name).toBe("Care before learning (Node ${{ matrix.node-version }})");
+    expect(careBeforeLearning?.name).toBe("Care before learning (Node 22.18.0 and 25.2.1)");
     expect(careBeforeLearning?.["runs-on"]).toBe("ubuntu-24.04");
     expect(careBeforeLearning?.["timeout-minutes"]).toBe(10);
-    expect(careBeforeLearning?.strategy).toEqual({
-      "fail-fast": false,
-      matrix: { "node-version": ["22.18.0", "25.2.1"] },
-    });
-    // Pull requests may skip it only when the change classifier succeeded and
-    // reported its inputs untouched; bin/tests/ci-changed-areas.test.ts pins
-    // the classifier and every filtered job.
+    // One job, no Node matrix: the conformance reference runs under each
+    // pinned Node version in turn.
+    expect(careBeforeLearning?.strategy).toBeUndefined();
+    // A draft skips it; a ready pull request may skip it only when the change
+    // classifier succeeded and reported its inputs untouched, and a push to
+    // main only when bin/ci-tree-proof.sh found a green pull-request run of
+    // the identical tree. bin/tests/ci-changed-areas.test.ts pins the
+    // classifier, the proof wiring, and every filtered job.
     expect(careBeforeLearning?.if).toBe(
-      "${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.care-before-learning == 'false') }}",
+      "${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.care-before-learning == 'false')) }}",
     );
     expect(careBeforeLearning?.needs).toEqual(["changes"]);
     expect(careBeforeLearning?.["continue-on-error"]).toBeUndefined();
-    expect(careBeforeLearning?.steps).toHaveLength(7);
+    expect(careBeforeLearning?.steps?.map((step) => step.name)).toEqual([
+      "Check out exact CI source",
+      "Set up Node 22.18.0",
+      "Set up Python 3.12.12",
+      "Test release tooling without credentials",
+      "Verify the fixed public artifact inventory",
+      "Run the public Dataset conformance reference (Node 22.18.0)",
+      "Smoke the hash-locked Linux HF SDK without provider calls",
+      "Set up Node 25.2.1",
+      "Run the public Dataset conformance reference (Node 25.2.1)",
+    ]);
     expect(careBeforeLearning?.steps?.every(step => step["continue-on-error"] === undefined)).toBe(true);
     expect(careBeforeLearning?.steps?.[0]?.with).toEqual({
       ref: "${{ github.sha }}",
       "persist-credentials": false,
     });
+    const setupNode = (version: string) => ({
+      uses: "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020",
+      with: { "node-version": version, "package-manager-cache": false },
+    });
+    expect(careBeforeLearning?.steps?.[1]).toEqual({ name: "Set up Node 22.18.0", ...setupNode("22.18.0") });
     expect(careBeforeLearning?.steps?.[3]?.run).toBe(
       'env -i PATH="$PATH" LANG=C TZ=UTC GITHUB_SHA="$GITHUB_SHA" python3 -I -B -m unittest discover -s bin/tests -p test_care_before_learning_hf_release.py',
     );
     expect(careBeforeLearning?.steps?.[4]?.run).toBe(
       'env -i PATH="$PATH" LANG=C TZ=UTC GITHUB_SHA="$GITHUB_SHA" python3 bin/care-before-learning-hf-release.py verify',
     );
-    expect(careBeforeLearning?.steps?.[5]?.run).toBe(
-      'env -i PATH="$PATH" LANG=C TZ=UTC node packages/hf-listening-room/hf/dataset/conformance/run.mjs --json',
-    );
+    const conformance = (version: string) => ({
+      name: `Run the public Dataset conformance reference (Node ${version})`,
+      if: "${{ !cancelled() }}",
+      run: [
+        `test "$(node --version)" = v${version}`,
+        'env -i PATH="$PATH" LANG=C TZ=UTC node packages/hf-listening-room/hf/dataset/conformance/run.mjs --json',
+        "",
+      ].join("\n"),
+    });
+    expect(careBeforeLearning?.steps?.[5]).toEqual(conformance("22.18.0"));
+    expect(careBeforeLearning?.steps?.[6]?.if).toBe("${{ !cancelled() }}");
     expect(careBeforeLearning?.steps?.[6]?.run).toContain("--require-hashes --only-binary=:all:");
     expect(careBeforeLearning?.steps?.[6]?.run).toContain("HF_HUB_OFFLINE=1 HF_HUB_DISABLE_IMPLICIT_TOKEN=1 HF_HUB_DISABLE_TELEMETRY=1");
+    expect(careBeforeLearning?.steps?.[7]).toEqual({
+      name: "Set up Node 25.2.1",
+      if: "${{ !cancelled() }}",
+      ...setupNode("25.2.1"),
+    });
+    expect(careBeforeLearning?.steps?.[8]).toEqual(conformance("25.2.1"));
     const careJob = JSON.stringify(careBeforeLearning);
     expect(careJob).not.toContain("secrets.");
     expect(careJob).not.toContain("id-token");
@@ -724,12 +771,13 @@ describe("boring test spine", () => {
     expect(careJob).not.toContain("care-before-learning-hf-release.py publish");
 
     expect(requiredApi?.name).toBe("API and protocol");
-    expect(requiredApi?.if).toBe("${{ always() }}");
+    expect(requiredApi?.if).toBe(
+      "${{ always() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.proven == 'true') }}",
+    );
     expect(requiredApi?.needs).toEqual([
       "changes",
       "api-protocol-linux",
       "api-protocol-postgres",
-      "launch-stateful",
       "launch-core",
       "launch-browser",
       "native-macos-secret",
@@ -749,10 +797,6 @@ describe("boring test spine", () => {
         "${{ needs.api-protocol-postgres.result }}",
       API_PROTOCOL_POSTGRES_NEEDED:
         "${{ needs.changes.outputs.api-protocol-postgres }}",
-      LAUNCH_STATEFUL_RESULT:
-        "${{ needs.launch-stateful.result }}",
-      LAUNCH_STATEFUL_NEEDED:
-        "${{ needs.changes.outputs.launch-stateful }}",
       LAUNCH_CORE_RESULT:
         "${{ needs.launch-core.result }}",
       LAUNCH_CORE_NEEDED:
@@ -780,7 +824,6 @@ describe("boring test spine", () => {
         'test "$API_PROTOCOL_LINUX_RESULT" = "success"',
         "for prerequisite in \\",
         '  "$API_PROTOCOL_POSTGRES_RESULT:$API_PROTOCOL_POSTGRES_NEEDED" \\',
-        '  "$LAUNCH_STATEFUL_RESULT:$LAUNCH_STATEFUL_NEEDED" \\',
         '  "$LAUNCH_CORE_RESULT:$LAUNCH_CORE_NEEDED" \\',
         '  "$LAUNCH_BROWSER_RESULT:$LAUNCH_BROWSER_NEEDED" \\',
         '  "$NATIVE_MACOS_SECRET_RESULT:$NATIVE_MACOS_SECRET_NEEDED" \\',
@@ -801,13 +844,29 @@ describe("boring test spine", () => {
     expect(workflow).toContain("name: Data, ADDS, and SDK");
     expect(workflow).toContain("name: YUTABASE projector (PostgreSQL ${{ matrix.postgres }})");
     expect(workflow).toContain("name: Python SDK (${{ matrix.python-version }})");
-    expect(workflow.match(/bun-version: 1\.3\.5/g)).toHaveLength(7);
-    // The twelfth job is a secret-free PR coverage notice; it does not claim
-    // the private YUTABASE PostgreSQL integration ran on pull-request code.
-    // The thirteenth is the credential-free "Changed areas" classifier.
-    expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(13);
+    expect(workflow.match(/bun-version: 1\.3\.5/g)).toHaveLength(6);
+    // The eleventh is the credential-free "Changed areas" classifier, which
+    // also carries the secret-free YUTABASE coverage notice on pull requests.
+    expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(11);
     expect(workflow.match(/runs-on: macos-15/g)).toHaveLength(1);
     expect(workflow.match(/uses: actions\/setup-python@/g)).toHaveLength(3);
+    // Pull requests test the two packages' Python floors and the newest
+    // version, a proven push to main tests the rest on the same tree, and
+    // every other run tests every supported version.
+    const pythonMatrix = jobs["sdk-python"]?.strategy?.matrix?.["python-version"];
+    expect(pythonMatrix).toBe(
+      "${{ fromJSON(github.event_name == 'pull_request' && '[\"3.9\", \"3.10\", \"3.14\"]' || needs.changes.result == 'success' && needs.changes.outputs.proven == 'true' && '[\"3.11\", \"3.12\", \"3.13\"]' || '[\"3.9\", \"3.10\", \"3.11\", \"3.12\", \"3.13\", \"3.14\"]') }}",
+    );
+    const [pullRequestPythons, provenPushPythons, allPythons] = [
+      ...String(pythonMatrix).matchAll(/'(\[[^']*\])'/g),
+    ].map((match) => JSON.parse(match[1]!) as string[]);
+    expect(allPythons).toEqual(["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]);
+    expect(pullRequestPythons).toEqual([allPythons![0], allPythons![1], allPythons!.at(-1)]);
+    expect(provenPushPythons).toEqual(allPythons!.filter((version) => !pullRequestPythons!.includes(version)));
+    const pythonFloor = async (path: string) =>
+      /^requires-python = ">=(3\.\d+)/m.exec(await readFile(join(ROOT, path), "utf8"))?.[1];
+    expect(await pythonFloor("packages/sdk-py/pyproject.toml")).toBe(pullRequestPythons![0]);
+    expect(await pythonFloor("packages/hf-training-host/pyproject.toml")).toBe(pullRequestPythons![1]);
     expect(workflow).toContain(
       "DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer",
     );
@@ -848,7 +907,7 @@ describe("boring test spine", () => {
       "name: Install local-dependent package dependencies from lockfiles",
     );
     expect(workflow).toContain("fetch-depth: 0");
-    expect(workflow.match(/persist-credentials: false/g)).toHaveLength(13);
+    expect(workflow.match(/persist-credentials: false/g)).toHaveLength(12);
     expect(workflow).toContain("package-manager-cache: false");
     expect(workflow).toContain("name: Set up release-pinned uv 0.9.26");
     expect(workflow).toContain(

@@ -31,6 +31,8 @@ type Outputs = Record<string, string>;
 type Step = {
   id?: string;
   name?: string;
+  if?: string;
+  "continue-on-error"?: boolean;
   uses?: string;
   run?: string;
   env?: Record<string, string>;
@@ -41,6 +43,7 @@ type Job = {
   name?: string;
   if?: string;
   needs?: string[];
+  permissions?: Record<string, string>;
   "runs-on"?: string;
   "timeout-minutes"?: number;
   outputs?: Record<string, string>;
@@ -49,7 +52,11 @@ type Job = {
 };
 
 const workflowSource = readFileSync(WORKFLOW_PATH, "utf8");
-const workflow = Bun.YAML.parse(workflowSource) as { jobs: Record<string, Job> };
+const workflow = Bun.YAML.parse(workflowSource) as {
+  on: Record<string, unknown>;
+  concurrency: Record<string, string>;
+  jobs: Record<string, Job>;
+};
 const jobs = workflow.jobs;
 
 function runScript(
@@ -118,13 +125,12 @@ function expectEverything(outputs: Outputs, reason: string): void {
   expect(selected(outputs)).toEqual(AREAS);
 }
 
-const API_PREP = ["api-protocol-postgres", "launch-stateful", "launch-core"];
+const API_PREP = ["api-protocol-postgres", "launch-core"];
 
 describe("change classification rules", () => {
   test("lists exactly the filterable jobs and accepts every rule", () => {
     expect(AREAS).toEqual([
       "api-protocol-postgres",
-      "launch-stateful",
       "launch-core",
       "launch-browser",
       "native-macos-secret",
@@ -195,6 +201,7 @@ describe("change classification rules", () => {
     for (const path of [
       ".github/workflows/ci.yml",
       "bin/ci-changed-areas.sh",
+      "bin/ci-tree-proof.sh",
       "bin/bash-without-env-hooks.sh",
       "bin/hermetic-env.sh",
       "bin/prepare-hermetic-deps.sh",
@@ -630,16 +637,27 @@ describe("CI mode against Git fixtures", () => {
   });
 });
 
+// A draft pull request runs nothing: every job but the push-only YUTABASE
+// projector carries this clause, the classifier included.
+const NOT_DRAFT = "github.event.pull_request.draft != true";
+// A push to main whose exact tree a green pull-request run already tested
+// ("proven" by bin/ci-tree-proof.sh) skips everything after the classifier.
+const PROVEN = "needs.changes.outputs.proven == 'true'";
+const CHANGES_IF = `\${{ ${NOT_DRAFT} }}`;
+const LINUX_IF = `\${{ !cancelled() && ${NOT_DRAFT} && !(needs.changes.result == 'success' && ${PROVEN}) }}`;
+const AGGREGATE_IF = `\${{ always() && ${NOT_DRAFT} && !(needs.changes.result == 'success' && ${PROVEN}) }}`;
 const FILTER_IF = (area: string) =>
-  `\${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.${area} == 'false') }}`;
+  area === "sdk-python"
+    ? // A proven push still tests the Python versions its pull request skipped.
+      `\${{ !cancelled() && ${NOT_DRAFT} && !(needs.changes.result == 'success' && ((${PROVEN} && needs.changes.outputs.sdk-python-rest != 'true') || needs.changes.outputs.${area} == 'false')) }}`
+    : `\${{ !cancelled() && ${NOT_DRAFT} && !(needs.changes.result == 'success' && (${PROVEN} || needs.changes.outputs.${area} == 'false')) }}`;
 
 const AREA_JOB_NAMES: Record<string, string> = {
-  "api-protocol-postgres": "API generation hold (PostgreSQL ${{ matrix.postgres }})",
-  "launch-stateful": "Launch transactions and admission",
+  "api-protocol-postgres": "API PostgreSQL holds and launch transactions",
   "launch-core": "Launch core outsider journey",
   "launch-browser": "Launch browser journeys",
   "native-macos-secret": "Native macOS secret helper",
-  "care-before-learning": "Care before learning (Node ${{ matrix.node-version }})",
+  "care-before-learning": "Care before learning (Node 22.18.0 and 25.2.1)",
   "witnessed-agent-economy": "Witnessed agent economy",
   packages: "Data, ADDS, and SDK",
   "sdk-python": "Python SDK (${{ matrix.python-version }})",
@@ -647,7 +665,6 @@ const AREA_JOB_NAMES: Record<string, string> = {
 
 const AGGREGATED = [
   ["api-protocol-postgres", "API_PROTOCOL_POSTGRES"],
-  ["launch-stateful", "LAUNCH_STATEFUL"],
   ["launch-core", "LAUNCH_CORE"],
   ["launch-browser", "LAUNCH_BROWSER"],
   ["native-macos-secret", "NATIVE_MACOS_SECRET"],
@@ -661,8 +678,10 @@ describe("ci.yml consumes the classifier fail-closed", () => {
     expect(changes.name).toBe("Changed areas");
     expect(changes["runs-on"]).toBe("ubuntu-24.04");
     expect(changes.needs).toBeUndefined();
-    expect(changes.if).toBeUndefined();
-    expect(changes.steps).toHaveLength(2);
+    expect(changes.if).toBe(CHANGES_IF);
+    // actions: read is for the push-to-main tree lookup; nothing here writes.
+    expect(changes.permissions).toEqual({ contents: "read", actions: "read" });
+    expect(changes.steps).toHaveLength(6);
     expect(changes.steps?.[0]?.uses).toBe("actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1");
     expect(changes.steps?.[0]?.with).toEqual({ "fetch-depth": 0, "persist-credentials": false });
     const classifyStep = changes.steps?.[1];
@@ -676,7 +695,139 @@ describe("ci.yml consumes the classifier fail-closed", () => {
     const expectedOutputs = Object.fromEntries(
       ["everything", "reason", ...AREAS].map((name) => [name, `\${{ steps.classify.outputs.${name} }}`]),
     );
-    expect(changes.outputs).toEqual(expectedOutputs);
+    expect(changes.outputs).toEqual({
+      ...expectedOutputs,
+      proven: "${{ steps.proof.outputs.proven }}",
+      "sdk-python-rest": "${{ steps.proof.outputs.sdk-python-rest }}",
+    });
+    // The YUTABASE coverage notice rides along on pull requests; it reads no
+    // event field and changes no output (bin/tests/yutabase-ci-access.test.ts).
+    const notice = changes.steps?.[2];
+    expect(notice?.name).toBe("Explain the private YUTABASE fixture coverage boundary");
+    expect(notice?.uses).toBeUndefined();
+    expect(notice?.id).toBeUndefined();
+    expect(notice?.env).toBeUndefined();
+  });
+
+  test("a pull request into main records its tested tree and parent, and only a push to main looks them up", () => {
+    const [tree, record, proof] = jobs.changes!.steps!.slice(3);
+    // The tree of GITHUB_SHA (GitHub's test merge) and that merge's first
+    // parent, the main commit it tested on, name the record. A pull request
+    // stacked on another branch records nothing. Either step may fail without
+    // failing the job: the push then runs every job.
+    expect(tree).toEqual({
+      name: "Name the tree this pull request tests and the main commit under it",
+      id: "tree",
+      if: "${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}",
+      "continue-on-error": true,
+      env: { CI_PR_HEAD_SHA: "${{ github.event.pull_request.head.sha }}" },
+      run: [
+        'tree="$(git rev-parse --verify "$GITHUB_SHA^{tree}")"',
+        "# GitHub's test merge: its first parent is the main commit it tested",
+        "# on and its second is the pull request's head.",
+        'read -r _ parent head rest <<<"$(git rev-list --parents -n 1 "$GITHUB_SHA")"',
+        'test -n "$head"',
+        'test "$head" = "$CI_PR_HEAD_SHA"',
+        'test -z "$rest"',
+        `printf '%s\\n' "$GITHUB_SHA" >"$RUNNER_TEMP/ci-tested-tree.txt"`,
+        `printf 'tree=%s\\nparent=%s\\n' "$tree" "$parent" >>"$GITHUB_OUTPUT"`,
+        "",
+      ].join("\n"),
+    });
+    expect(record).toEqual({
+      name: "Record the tested tree for the push to main",
+      if: "${{ github.event_name == 'pull_request' && steps.tree.outputs.tree != '' && steps.tree.outputs.parent != '' }}",
+      "continue-on-error": true,
+      uses: "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f",
+      with: {
+        name: "ci-tested-tree-${{ steps.tree.outputs.tree }}-on-${{ steps.tree.outputs.parent }}",
+        path: "${{ runner.temp }}/ci-tested-tree.txt",
+        "retention-days": 14,
+        "if-no-files-found": "error",
+        overwrite: true,
+      },
+    });
+    // The token reaches only the lookup script, and only on a push. A crash
+    // leaves `proven` unset, which runs every job without failing the job.
+    expect(proof).toEqual({
+      name: "Look for a green pull-request run of this exact tree",
+      id: "proof",
+      if: "${{ github.event_name == 'push' }}",
+      "continue-on-error": true,
+      env: { GH_TOKEN: "${{ github.token }}", CI_PUSH_BEFORE_SHA: "${{ github.event.before }}" },
+      run: "bin/bash-without-env-hooks.sh bin/ci-tree-proof.sh",
+    });
+    expect(workflowSource.match(/github\.token/g)).toHaveLength(1);
+    // bin/ci-tree-proof.sh looks the record up by this exact name, with the
+    // push's `before` in the parent's place.
+    expect(readFileSync(join(ROOT, "bin", "ci-tree-proof.sh"), "utf8")).toContain(
+      'readonly artifact_name="ci-tested-tree-$tree-on-$before_sha"',
+    );
+  });
+
+  test("the tree step names GitHub's two-parent test merge and fails on any other shape", () => {
+    const step = jobs.changes!.steps!.find((candidate) => candidate.id === "tree")!;
+    withFixture((fixture) => {
+      const base = fixture.git("rev-parse", "HEAD");
+      fixture.git("checkout", "-q", "-b", "topic");
+      fixture.write("docs/SOUL.md", "soul, revised\n");
+      const head = fixture.commit("docs");
+      fixture.git("checkout", "-q", "-b", "other", base);
+      fixture.write("docs/OTHER.md", "other\n");
+      const other = fixture.commit("other");
+      const merge = fixture.merge(base, head);
+      fixture.git("checkout", "-q", "--detach", base);
+      fixture.git("merge", "-q", "--no-ff", "-m", "octopus", head, other);
+      const octopus = fixture.git("rev-parse", "HEAD");
+      // GitHub runs an unconfigured step as `bash -e {0}`.
+      const runStep = (tested: string, prHead: string) => {
+        const scratch = mkdtempSync(join(tmpdir(), "ci-tree-step-"));
+        try {
+          const script = join(scratch, "step.sh");
+          const output = join(scratch, "github-output");
+          writeFileSync(script, step.run!);
+          writeFileSync(output, "");
+          const result = Bun.spawnSync(["/bin/bash", "--noprofile", "--norc", "-e", script], {
+            cwd: fixture.dir,
+            env: {
+              PATH: SYSTEM_PATH,
+              HOME: fixture.dir,
+              ...GIT_ENV,
+              GITHUB_SHA: tested,
+              CI_PR_HEAD_SHA: prHead,
+              RUNNER_TEMP: scratch,
+              GITHUB_OUTPUT: output,
+            },
+            stdout: "pipe",
+            stderr: "pipe",
+          });
+          return { code: result.exitCode, outputs: readFileSync(output, "utf8") };
+        } finally {
+          rmSync(scratch, { recursive: true, force: true });
+        }
+      };
+      const tested = runStep(merge, head);
+      expect(tested.code).toBe(0);
+      expect(tested.outputs).toBe(`tree=${fixture.git("rev-parse", `${merge}^{tree}`)}\nparent=${base}\n`);
+      for (const [label, sha, prHead] of [
+        ["another head", merge, other],
+        ["no head", merge, ""],
+        ["a single-parent commit", head, head],
+        ["an octopus merge", octopus, head],
+      ] as Array<[string, string, string]>) {
+        const refused = runStep(sha, prHead);
+        expect(refused.code, label).not.toBe(0);
+        expect(refused.outputs, label).toBe("");
+      }
+    });
+  });
+
+  test("pull requests cancel superseded runs; pushes to main are never cancelled or replaced", () => {
+    expect(workflow.concurrency).toEqual({
+      group:
+        "${{ github.event_name == 'push' && format('ci-{0}-push-{1}', github.workflow, github.sha) || format('ci-{0}-{1}-{2}', github.workflow, github.event_name, github.ref) }}",
+      "cancel-in-progress": "${{ github.event_name == 'pull_request' }}",
+    });
   });
 
   test("each filterable job keeps its name and runs unless its area is reported false", () => {
@@ -688,11 +839,12 @@ describe("ci.yml consumes the classifier fail-closed", () => {
       expect(job?.needs).toEqual(["changes"]);
       expect(job?.if).toBe(FILTER_IF(area));
     }
-    // Jobs outside the classifier are never filtered by it.
-    expect(jobs["api-protocol-linux"]?.needs).toBeUndefined();
-    expect(jobs["api-protocol-linux"]?.if).toBeUndefined();
+    // The Linux gate is never filtered by path: it waits for the classifier
+    // only to learn whether a push to main is proven.
+    expect(jobs["api-protocol-linux"]?.needs).toEqual(["changes"]);
+    expect(jobs["api-protocol-linux"]?.if).toBe(LINUX_IF);
     for (const [name, job] of Object.entries(jobs)) {
-      if (AREAS.includes(name) || name === "api-protocol") continue;
+      if (AREAS.includes(name) || name === "api-protocol" || name === "api-protocol-linux") continue;
       expect(JSON.stringify(job), name).not.toContain("needs.changes");
     }
     // Every reference to a classifier output names one it declares.
@@ -705,7 +857,7 @@ describe("ci.yml consumes the classifier fail-closed", () => {
   test("the required aggregate needs the classifier and maps each result to its area", () => {
     const aggregate = jobs["api-protocol"]!;
     expect(aggregate.name).toBe("API and protocol");
-    expect(aggregate.if).toBe("${{ always() }}");
+    expect(aggregate.if).toBe(AGGREGATE_IF);
     expect(aggregate.needs).toEqual(["changes", "api-protocol-linux", ...AGGREGATED.map(([job]) => job)]);
     const env: Record<string, string> = {
       CHANGES_RESULT: "${{ needs.changes.result }}",
@@ -767,6 +919,237 @@ describe("ci.yml consumes the classifier fail-closed", () => {
         });
         expect(code === 0 ? 0 : 1, `${job} ${result}/${needed}`).toBe(expected);
       }
+    }
+  });
+});
+
+type Value = string | boolean | null;
+
+/** GitHub's evaluation of the small `if` grammar ci.yml uses: string, boolean
+ * and null literals, context paths, !, ==, !=, &&, ||, parentheses, always(),
+ * and cancelled() for a run nobody cancelled. Strings compare without case;
+ * mixed types compare as numbers (null 0, false 0, true 1, '' 0). An unknown
+ * context, function, or token throws, so a new kind of condition has to be
+ * modelled here before these tests can pass. */
+const truthy = (value: Value) => value !== null && value !== false && value !== "";
+
+function evaluateIf(expression: string, context: Record<string, Value>): boolean {
+  return truthy(evaluateExpression(expression, context));
+}
+
+function evaluateExpression(expression: string, context: Record<string, Value>): Value {
+  let source = expression.trim();
+  if (source.startsWith("${{") && source.endsWith("}}")) source = source.slice(3, -2);
+  const tokens = source.match(/'(?:[^']|'')*'|&&|\|\||[!=]=|!|\(|\)|[A-Za-z_][\w.-]*(?:\(\))?|\S/g) ?? [];
+  let position = 0;
+  const take = (expected?: string): string => {
+    const token = tokens[position++];
+    if (token === undefined || (expected !== undefined && token !== expected)) {
+      throw new Error(`unexpected ${token} in ${expression}`);
+    }
+    return token;
+  };
+  const toNumber = (value: Value) =>
+    value === null ? 0 : typeof value === "boolean" ? Number(value) : value.trim() === "" ? 0 : Number(value);
+  const equal = (left: Value, right: Value) =>
+    typeof left === "string" && typeof right === "string"
+      ? left.toLowerCase() === right.toLowerCase()
+      : typeof left === typeof right
+        ? left === right
+        : toNumber(left) === toNumber(right);
+  function primary(): Value {
+    const token = take();
+    if (token === "(") {
+      const value = or();
+      take(")");
+      return value;
+    }
+    if (token === "!") return !truthy(primary());
+    if (token.startsWith("'")) return token.slice(1, -1).replaceAll("''", "'");
+    if (token === "true" || token === "false") return token === "true";
+    if (token === "null") return null;
+    if (token === "always()") return true;
+    if (token === "cancelled()") return false;
+    if (!(token in context)) throw new Error(`unmodelled ${token} in ${expression}`);
+    return context[token]!;
+  }
+  function comparison(): Value {
+    let value = primary();
+    while (tokens[position] === "==" || tokens[position] === "!=") {
+      const same = take() === "==";
+      value = equal(value, primary()) === same;
+    }
+    return value;
+  }
+  function and(): Value {
+    let value = comparison();
+    while (tokens[position] === "&&") {
+      take();
+      const right = comparison();
+      value = truthy(value) ? right : value;
+    }
+    return value;
+  }
+  function or(): Value {
+    let value = and();
+    while (tokens[position] === "||") {
+      take();
+      const right = and();
+      value = truthy(value) ? value : right;
+    }
+    return value;
+  }
+  const result = or();
+  if (position !== tokens.length) throw new Error(`trailing ${tokens.slice(position).join(" ")} in ${expression}`);
+  return result;
+}
+
+type Scenario = {
+  event: string;
+  /** Pull requests only. */
+  draft?: boolean;
+  /** The classifier job's result when it runs. */
+  changes?: "success" | "failure";
+  /** The classifier job's outputs when it runs; an unset output reads as ''. */
+  outputs?: Record<string, string>;
+};
+
+/** The jobs GitHub would start, in workflow order, if every started job
+ * other than the classifier succeeded. */
+function jobsStarted(scenario: Scenario): string[] {
+  const results: Record<string, string> = {};
+  const started: string[] = [];
+  const pullRequest = scenario.event === "pull_request";
+  for (const [name, job] of Object.entries(jobs)) {
+    const context: Record<string, Value> = {
+      "github.event_name": scenario.event,
+      "github.event.pull_request.draft": pullRequest ? (scenario.draft ?? false) : null,
+      "github.repository": "cambridgetcg/agenttool",
+      "github.ref": pullRequest ? "refs/pull/1/merge" : "refs/heads/main",
+    };
+    for (const need of job.needs ?? []) {
+      expect(results[need], `${name} needs ${need}, which must come first`).toBeDefined();
+      context[`needs.${need}.result`] = results[need]!;
+      for (const output of Object.keys(jobs[need]?.outputs ?? {})) {
+        context[`needs.${need}.outputs.${output}`] =
+          results[need] === "skipped" ? null : (scenario.outputs?.[output] ?? "");
+      }
+    }
+    const expression = job.if ?? "";
+    let runs = expression === "" || evaluateIf(expression, context);
+    // Without a status function GitHub adds success(): every need succeeded.
+    if (!/\b(?:always|cancelled|success|failure)\(\)/.test(expression)) {
+      runs &&= (job.needs ?? []).every((need) => results[need] === "success");
+    }
+    results[name] = runs ? (name === "changes" ? (scenario.changes ?? "success") : "success") : "skipped";
+    if (runs) started.push(name);
+  }
+  return started;
+}
+
+describe("which jobs start, under GitHub's expression rules", () => {
+  const every = Object.keys(jobs);
+  const exceptYutabase = every.filter((name) => name !== "yutabase-projector-postgres");
+  const everythingSelected = Object.fromEntries(
+    ["everything", ...AREAS].map((name) => [name, "true"]),
+  );
+
+  test("the evaluator follows GitHub's coercions", () => {
+    const context = { "a.null": null, "a.true": true, "a.text": "TRUE", "a.empty": "" };
+    expect(evaluateIf("${{ a.null != true }}", context)).toBe(true);
+    expect(evaluateIf("${{ a.true != true }}", context)).toBe(false);
+    expect(evaluateIf("${{ a.text == 'true' }}", context)).toBe(true);
+    expect(evaluateIf("${{ a.empty == 'false' }}", context)).toBe(false);
+    expect(evaluateIf("${{ !a.null && (a.empty || a.text) }}", context)).toBe(true);
+    expect(() => evaluateIf("${{ a.unknown }}", context)).toThrow();
+    expect(() => evaluateIf("${{ success() }}", context)).toThrow();
+  });
+
+  test("pull requests trigger on readiness as well as new commits; main also runs weekly and on demand", () => {
+    expect(workflow.on).toEqual({
+      pull_request: { types: ["opened", "synchronize", "reopened", "ready_for_review"] },
+      push: { branches: ["main"] },
+      schedule: [{ cron: "23 4 * * 1" }],
+      workflow_dispatch: null,
+    });
+  });
+
+  test("a draft pull request starts nothing", () => {
+    expect(jobsStarted({ event: "pull_request", draft: true })).toEqual([]);
+  });
+
+  test("a ready docs-only pull request starts the Linux gate and the jobs its paths select", () => {
+    const outputs = classify(["docs/SOUL.md"]);
+    expect(jobsStarted({ event: "pull_request", outputs })).toEqual(
+      every.filter((name) =>
+        ["changes", "api-protocol-linux", "launch-core", "launch-browser", "api-protocol"].includes(name),
+      ),
+    );
+  });
+
+  test("a failed classifier starts every pull-request job", () => {
+    expect(jobsStarted({ event: "pull_request", changes: "failure" })).toEqual(exceptYutabase);
+    expect(
+      jobsStarted({ event: "pull_request", changes: "failure", outputs: { "launch-core": "false" } }),
+    ).toEqual(exceptYutabase);
+  });
+
+  test("a push to main whose exact tree passed as a pull request starts only the classifier and YUTABASE", () => {
+    for (const rest of ["false", ""]) {
+      expect(
+        jobsStarted({ event: "push", outputs: { ...everythingSelected, proven: "true", "sdk-python-rest": rest } }),
+      ).toEqual(["changes", "yutabase-projector-postgres"]);
+    }
+  });
+
+  test("a proven push whose pull-request run tested the Python SDK also tests the Python versions it skipped", () => {
+    expect(
+      jobsStarted({ event: "push", outputs: { ...everythingSelected, proven: "true", "sdk-python-rest": "true" } }),
+    ).toEqual(["changes", "yutabase-projector-postgres", "sdk-python"]);
+    // The flag means nothing without a proof.
+    expect(
+      jobsStarted({ event: "push", outputs: { ...everythingSelected, proven: "false", "sdk-python-rest": "true" } }),
+    ).toEqual(every);
+  });
+
+  test("pull requests and proven pushes split the Python versions between them; every other run tests all", () => {
+    const source = String(jobs["sdk-python"]?.strategy?.matrix?.["python-version"]);
+    const inner = /^\$\{\{ fromJSON\((.*)\) \}\}$/.exec(source)?.[1];
+    expect(inner, source).toBeDefined();
+    const versions = (event: string, changes: string, outputs: Record<string, string> = {}) =>
+      JSON.parse(
+        String(
+          evaluateExpression(inner!, {
+            "github.event_name": event,
+            "needs.changes.result": changes,
+            "needs.changes.outputs.proven": outputs.proven ?? "",
+          }),
+        ),
+      ) as string[];
+    const all = ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"];
+    const pullRequest = versions("pull_request", "success");
+    const proven = versions("push", "success", { proven: "true" });
+    expect(pullRequest).toEqual(["3.9", "3.10", "3.14"]);
+    expect([...pullRequest, ...proven].sort()).toEqual([...all].sort());
+    expect(versions("push", "success", { proven: "false" })).toEqual(all);
+    expect(versions("push", "failure", { proven: "true" })).toEqual(all);
+    expect(versions("schedule", "success")).toEqual(all);
+    expect(versions("workflow_dispatch", "success")).toEqual(all);
+  });
+
+  test("any other push to main starts every job", () => {
+    for (const proven of ["false", ""]) {
+      expect(jobsStarted({ event: "push", outputs: { ...everythingSelected, proven } }), proven).toEqual(every);
+    }
+    // A failed classifier job is never trusted, whatever it reported.
+    expect(
+      jobsStarted({ event: "push", changes: "failure", outputs: { ...everythingSelected, proven: "true" } }),
+    ).toEqual(every);
+  });
+
+  test("scheduled and manual runs start every job but the push-only YUTABASE projector", () => {
+    for (const event of ["schedule", "workflow_dispatch"]) {
+      expect(jobsStarted({ event, outputs: everythingSelected }), event).toEqual(exceptYutabase);
     }
   });
 });
