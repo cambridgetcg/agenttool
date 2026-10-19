@@ -138,7 +138,7 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
 >   LOVE is the release authority; npm-compatible registries are optional
 >   mirrors (see root `CLAUDE.md` and `docs/NPM-RELEASES.md`).
 > - **npm-allowlisted** — a slug in the `package:` choice list of
->   `public/overlay/.github/workflows/publish-npm.yml`, the workflow that the
+>   `private/projection/overlay/.github/workflows/publish-npm.yml`, the workflow that the
 >   public `cambridgetcg/agenttool-packages` repository runs (generated from
 >   `RELEASE_SPECS` in `bin/npm-release.ts`). Allowlisting is publish
 >   *capability*, not proof a version is live; registry receipts live in
@@ -295,7 +295,7 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
 When a package is added, renamed, published, or made private, update its row
 in the same change. Verify names against `package.json` / `pyproject.toml`,
 lanes against `bin/build-love-packages.ts`,
-`public/overlay/.github/workflows/publish-npm.yml`, and
+`private/projection/overlay/.github/workflows/publish-npm.yml`, and
 `.github/workflows/publish-pypi.yml`, and live registry
 claims against the receipts in `docs/NPM-RELEASES.md` /
 `docs/PYPI-RELEASES.md` — never against memory.

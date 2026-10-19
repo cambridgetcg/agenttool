@@ -21,8 +21,9 @@
  *                             the exact commit a write would create; alone it
  *                             previews a root projection only
  *
- * Everything is read from the source commit's objects: public/allowlist.json,
- * public/overlay/**, and the private relational denylist. Nothing is checked
+ * Everything is read from the source commit's objects:
+ * private/projection/allowlist.json, private/projection/overlay/**, and the
+ * private relational denylist (private/guard/). Nothing is checked
  * out; a temporary GIT_INDEX_FILE holds the projected index. The commit's only
  * parent is the current public head (none for the first projection), its
  * author and committer are the fixed projection identity, both dates are the
@@ -30,7 +31,7 @@
  * source and public head therefore always produce the same commit id.
  *
  * Every layer of the guard must pass before any ref changes: the published
- * layers in public/overlay/tools/public-guard.ts (integrity, path, secret,
+ * layers in private/projection/overlay/tools/public-guard.ts (integrity, path, secret,
  * personal, gitleaks) plus the private relational layer, an independent
  * allowlist membership check, and the parent/diff rule. This tool never
  * pushes; it writes a local ref or a local bare repository, compare-and-swap,
@@ -71,20 +72,25 @@ import {
   sha256Hex,
   sortFindings,
   type TreeFile,
-} from "../public/overlay/tools/public-guard.ts";
+} from "../private/projection/overlay/tools/public-guard.ts";
 
-export const ALLOWLIST_PATH = "public/allowlist.json";
+export const ALLOWLIST_PATH = "private/projection/allowlist.json";
 export const ALLOWLIST_SCHEMA = "agenttool.public-allowlist/1";
-export const OVERLAY_ROOT = "public/overlay";
-export const DENYLIST_PATH = "public/private-guard/relational-denylist.json";
+export const OVERLAY_ROOT = "private/projection/overlay";
+export const DENYLIST_PATH = "private/guard/relational-denylist.json";
 export const DENYLIST_SCHEMA = "agenttool.public-relational-denylist/1";
 export const DEFAULT_REQUIRED_ANCESTOR = "refs/remotes/origin/main";
 export const PUBLIC_BRANCH = "refs/heads/main";
 
 const REPO_ROOT = resolve(import.meta.dir, "..");
 const GUARD_SOURCE = resolve(import.meta.dir, "..", OVERLAY_ROOT, GUARD_FILE);
-/** No allowlist entry may reach into these top-level areas, whatever the file says. */
-const PRIVATE_ONLY_ROOTS = ["public", "bin", "api", "apps", ".github", ".git", "infra", "supabase"];
+/**
+ * No allowlist entry may reach into these top-level areas, whatever the file
+ * says. `private` holds the projection inputs, the denylist, and every other
+ * private-only file; `public` is where they lived before 2026-10-19 and stays
+ * refused so nothing can reappear there and be projected.
+ */
+const PRIVATE_ONLY_ROOTS = ["private", "public", "bin", "api", "apps", ".github", ".git", "infra", "supabase"];
 /**
  * The only exceptions: the release tools that the public repository's
  * publish workflow runs, each as an exact blob entry. They import nothing
@@ -414,7 +420,7 @@ export function guardProjection(repo: string, build: BuildResult, options: Guard
   const member = allowlistMembership(build.allowlist, build.projection);
   for (const file of files) {
     if (!member(file.path)) findings.push({ layer: "path", rule: "path/outside-allowlist", path: file.path });
-    if (isWithin(file.path, "public")) findings.push({ layer: "path", rule: "path/private-area", path: file.path });
+    if (isWithin(file.path, "private") || isWithin(file.path, "public")) findings.push({ layer: "path", rule: "path/private-area", path: file.path });
   }
 
   // Private relational layer. Rule ids and line hashes are printed; terms never are.

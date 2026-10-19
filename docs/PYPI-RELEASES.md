@@ -77,7 +77,7 @@ The PyPI trusted publisher recorded for 0.22.1 binds `cambridgetcg/agenttool`,
 The proposed fix mirrors npm. Items 1, 2 and 4 are not implemented; item 3
 is done in source:
 
-1. Move the workflow to `public/overlay/.github/workflows/publish-pypi.yml`,
+1. Move the workflow to `private/projection/overlay/.github/workflows/publish-pypi.yml`,
    restricted to `cambridgetcg/agenttool-packages`, and project
    `bin/pypi-release.ts` with the other public release tools.
 2. Point `SOURCE_REPOSITORY` at the public repository. Its `main` fetch then

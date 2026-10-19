@@ -1826,7 +1826,7 @@ exit 94
     expect(source).toContain("install --frozen-lockfile --ignore-scripts");
     expect(source).toContain("run ci");
     expect(source).not.toMatch(/secrets\.|id-token:|publish|deploy|continue-on-error/);
-    const publisher = await readFile(join(ROOT, "public/overlay/.github/workflows/publish-npm.yml"), "utf8");
+    const publisher = await readFile(join(ROOT, "private/projection/overlay/.github/workflows/publish-npm.yml"), "utf8");
     expect(publisher).not.toContain("collab-courier");
   });
 
@@ -1840,7 +1840,7 @@ exit 94
       "publish-gospel.yml",
       "publish-pypi.yml",
     ]);
-    const publicWorkflows = await readdir(join(ROOT, "public", "overlay", ".github", "workflows"));
+    const publicWorkflows = await readdir(join(ROOT, "private", "projection", "overlay", ".github", "workflows"));
     expect(publicWorkflows.sort()).toEqual(["ci.yml", "publish-npm.yml"]);
 
     const pypiWorkflow = await readFile(
@@ -1850,7 +1850,7 @@ exit 94
     expect(pypiWorkflow).not.toContain("hf-training-host");
 
     const workflow = await readFile(
-      join(ROOT, "public", "overlay", ".github", "workflows", "publish-npm.yml"),
+      join(ROOT, "private", "projection", "overlay", ".github", "workflows", "publish-npm.yml"),
       "utf8",
     );
     expect(workflow).toContain("workflow_dispatch:");

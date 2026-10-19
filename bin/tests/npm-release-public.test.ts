@@ -47,7 +47,7 @@ import {
 setDefaultTimeout(60_000);
 
 const ROOT = resolve(import.meta.dir, "..", "..");
-const PUBLISH_WORKFLOW = join(ROOT, "public", "overlay", ".github", "workflows", "publish-npm.yml");
+const PUBLISH_WORKFLOW = join(ROOT, "private", "projection", "overlay", ".github", "workflows", "publish-npm.yml");
 const STAGE_ID = "0f1e2d3c-4b5a-4987-8a6b-5c4d3e2f1a0b";
 
 function preparedReceipt(): PreparedReceipt {

@@ -6511,36 +6511,36 @@
       "canonical_path": "packages/witnessed-agent-economy/README.md"
     },
     {
-      "path": "public/README.md",
+      "path": "private/projection/README.md",
       "title": "Public package projection",
       "type": "guide",
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
-      "canonical_path": "public/README.md"
+      "canonical_path": "private/projection/README.md"
     },
     {
-      "path": "public/overlay/LICENSING.md",
+      "path": "private/projection/overlay/LICENSING.md",
       "title": "Licensing",
       "type": "policy",
       "classification_basis": "editorial-routing",
       "prose_review": "not-reviewed",
-      "canonical_path": "public/overlay/LICENSING.md"
+      "canonical_path": "private/projection/overlay/LICENSING.md"
     },
     {
-      "path": "public/overlay/README.md",
+      "path": "private/projection/overlay/README.md",
       "title": "AgentTool packages",
       "type": "orientation",
       "classification_basis": "file-convention",
       "prose_review": "not-reviewed",
-      "canonical_path": "public/overlay/README.md"
+      "canonical_path": "private/projection/overlay/README.md"
     },
     {
-      "path": "public/overlay/SECURITY.md",
+      "path": "private/projection/overlay/SECURITY.md",
       "title": "Security",
       "type": "policy",
       "classification_basis": "file-convention",
       "prose_review": "not-reviewed",
-      "canonical_path": "public/overlay/SECURITY.md"
+      "canonical_path": "private/projection/overlay/SECURITY.md"
     },
     {
       "path": "review/launch-20260904/README.md",

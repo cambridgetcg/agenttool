@@ -32,7 +32,7 @@ import {
   parseGitleaksIgnore,
   parseProjection,
   projectionMessage,
-} from "../../public/overlay/tools/public-guard.ts";
+} from "../../private/projection/overlay/tools/public-guard.ts";
 
 // These tests build real projections of the whole repository and spawn git and
 // gitleaks. A loaded CI runner needs more than bun's 5 s default (deploy-api
@@ -40,7 +40,7 @@ import {
 setDefaultTimeout(60_000);
 
 const ROOT = resolve(import.meta.dir, "..", "..");
-const GUARD = join(ROOT, "public", "overlay", "tools", "public-guard.ts");
+const GUARD = join(ROOT, "private", "projection", "overlay", "tools", "public-guard.ts");
 const TERM = "quietfixtureterm";
 const scratch = mkdtempSync(join(tmpdir(), "project-public-test-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -127,7 +127,7 @@ function commitAll(repo: string, message: string): string {
 const ALLOWLIST = {
   schema: "agenttool.public-allowlist/1",
   public_repository: "example/public-packages",
-  overlay: "public/overlay",
+  overlay: "private/projection/overlay",
   include: [
     { path: ".gitattributes", kind: "blob" },
     { path: "docs/spec.md", kind: "blob" },
@@ -153,11 +153,11 @@ function makeFixture(options: { allowlist?: unknown; denylist?: unknown; files?:
   git(repo, "init", "-q", "--initial-branch=main");
   write(repo, ALLOWLIST_PATH, `${JSON.stringify(options.allowlist ?? ALLOWLIST, null, 2)}\n`);
   write(repo, DENYLIST_PATH, `${JSON.stringify(options.denylist ?? DENYLIST, null, 2)}\n`);
-  write(repo, "public/overlay/README.md", "# Public packages\n");
-  write(repo, "public/overlay/.gitleaksignore", "");
-  write(repo, "public/overlay/tools/public-guard-allow.json", '{\n  "schema": "agenttool.public-guard-allow/1",\n  "entries": []\n}\n');
-  mkdirSync(join(repo, "public/overlay/tools"), { recursive: true });
-  copyFileSync(GUARD, join(repo, "public/overlay/tools/public-guard.ts"));
+  write(repo, "private/projection/overlay/README.md", "# Public packages\n");
+  write(repo, "private/projection/overlay/.gitleaksignore", "");
+  write(repo, "private/projection/overlay/tools/public-guard-allow.json", '{\n  "schema": "agenttool.public-guard-allow/1",\n  "entries": []\n}\n');
+  mkdirSync(join(repo, "private/projection/overlay/tools"), { recursive: true });
+  copyFileSync(GUARD, join(repo, "private/projection/overlay/tools/public-guard.ts"));
   write(repo, ".gitattributes", "/docs/spec.md text eol=lf\n");
   write(repo, "docs/spec.md", "# Spec\n");
   write(repo, "docs/private-notes.md", "not allowlisted\n");
@@ -218,8 +218,11 @@ describe("allowlist enforcement", () => {
     const bytes = (include: unknown[]) => Buffer.from(JSON.stringify({ ...ALLOWLIST, include }));
     const refused = (include: unknown[]) => expect(() => parseAllowlist(bytes(include))).toThrow(ProjectionRefused);
     refused([{ path: DENYLIST_PATH, kind: "blob" }]);
+    refused([{ path: "private", kind: "tree" }]);
+    refused([{ path: "private/guard", kind: "tree" }]);
+    refused([{ path: "private/projection/allowlist.json", kind: "blob" }]);
+    // The retired location stays refused, so nothing reappearing there is projected.
     refused([{ path: "public", kind: "tree" }]);
-    refused([{ path: "public/private-guard", kind: "tree" }]);
     refused([{ path: "bin/private.ts", kind: "blob" }]);
     refused([{ path: ".github/workflows/ci.yml", kind: "blob" }]);
     refused([{ path: "packages/held", kind: "tree" }]);
@@ -253,7 +256,7 @@ describe("allowlist enforcement", () => {
     expect(reachesPrivateArea("bin/npm-release.ts", "blob")).toBe(false);
     expect(reachesPrivateArea("bin/npm-release.ts", "tree")).toBe(true);
     expect(reachesPrivateArea("packages/alpha", "tree")).toBe(false);
-    expect(reachesPrivateArea("public/allowlist.json", "blob")).toBe(true);
+    expect(reachesPrivateArea("private/projection/allowlist.json", "blob")).toBe(true);
   });
 
   test("refuses an allowlisted path whose kind does not match the source", () => {
@@ -262,7 +265,7 @@ describe("allowlist enforcement", () => {
   });
 
   test("refuses an overlay file that collides with an allowlisted path", () => {
-    const repo = makeFixture({ files: { "public/overlay/docs/spec.md": "# Shadow\n" } });
+    const repo = makeFixture({ files: { "private/projection/overlay/docs/spec.md": "# Shadow\n" } });
     expect(() => buildProjection(repo, "HEAD")).toThrow("collides with allowlisted");
   });
 
@@ -281,13 +284,13 @@ describe("the private denylist", () => {
     const build = buildProjection(repo, "HEAD");
     const denylistOid = git(repo, "rev-parse", `HEAD:${DENYLIST_PATH}`);
     const entries = listTree(repo, build.tree);
-    expect(entries.some((entry) => entry.path.startsWith("public/") || entry.path.includes("private-guard"))).toBe(false);
+    expect(entries.some((entry) => entry.path.startsWith("private/") || entry.path.startsWith("public/") || entry.path.includes("relational-denylist"))).toBe(false);
     expect(entries.some((entry) => entry.oid === denylistOid)).toBe(false);
   });
 
   test("a copy smuggled through the overlay is caught by object and by term", () => {
     const repo = makeFixture();
-    write(repo, "public/overlay/notes/guard.json", readFileSync(join(repo, DENYLIST_PATH)));
+    write(repo, "private/projection/overlay/notes/guard.json", readFileSync(join(repo, DENYLIST_PATH)));
     commitAll(repo, "smuggle");
     const findings = guardProjection(repo, buildProjection(repo, "HEAD"));
     expect(rules(findings)).toEqual(["relational/denylist-copy", "relational/r01"]);
@@ -434,13 +437,13 @@ describe("guard layers", () => {
     const allowFile = (binaries: unknown[]) =>
       `${JSON.stringify({ schema: "agenttool.public-guard-allow/1", entries: [], binaries }, null, 2)}\n`;
     const entry = (sha256: string) => ({ path: "packages/alpha/logo.png", sha256, reason: "fixture image", approver: "test" });
-    const allowed = makeFixture({ files: { "packages/alpha/logo.png": image, "public/overlay/tools/public-guard-allow.json": allowFile([entry(digest)]) } });
+    const allowed = makeFixture({ files: { "packages/alpha/logo.png": image, "private/projection/overlay/tools/public-guard-allow.json": allowFile([entry(digest)]) } });
     expect(guardProjection(allowed, buildProjection(allowed, "HEAD"))).toEqual([]);
     const unlisted = makeFixture({ files: { "packages/alpha/logo.png": image } });
     expect(guardProjection(unlisted, buildProjection(unlisted, "HEAD")).map(formatFinding)).toEqual([
       `packages/alpha/logo.png: path/binary (sha256 ${digest})`,
     ]);
-    const stale = makeFixture({ files: { "packages/alpha/logo.png": image, "public/overlay/tools/public-guard-allow.json": allowFile([entry("b".repeat(64))]) } });
+    const stale = makeFixture({ files: { "packages/alpha/logo.png": image, "private/projection/overlay/tools/public-guard-allow.json": allowFile([entry("b".repeat(64))]) } });
     expect(rules(guardProjection(stale, buildProjection(stale, "HEAD")))).toEqual(["integrity/unused-binary-entry", "path/binary"]);
   });
 
@@ -484,10 +487,10 @@ describe("guard layers", () => {
     });
     const allowFile = (entries: unknown[]) => `${JSON.stringify({ schema: "agenttool.public-guard-allow/1", entries }, null, 2)}\n`;
     const covered = makeFixture({
-      files: { "packages/alpha/mail.md": `${line}\n`, "public/overlay/tools/public-guard-allow.json": allowFile([entry(lineSha256(line))]) },
+      files: { "packages/alpha/mail.md": `${line}\n`, "private/projection/overlay/tools/public-guard-allow.json": allowFile([entry(lineSha256(line))]) },
     });
     expect(guardProjection(covered, buildProjection(covered, "HEAD"))).toEqual([]);
-    const stale = makeFixture({ files: { "public/overlay/tools/public-guard-allow.json": allowFile([entry("a".repeat(64))]) } });
+    const stale = makeFixture({ files: { "private/projection/overlay/tools/public-guard-allow.json": allowFile([entry("a".repeat(64))]) } });
     expect(rules(guardProjection(stale, buildProjection(stale, "HEAD")))).toEqual(["integrity/unused-allow-entry"]);
   });
 
@@ -525,12 +528,12 @@ describe("guard layers", () => {
     expect(findings[0]?.lineSha256).toBe(lineSha256(leakLine));
     const ignoreFile = (configSha: string, extra = "") =>
       `# fixture\n# line_sha256=${configSha}\npackages/alpha/config.ts:generic-api-key:1\n# line_sha256=${lineSha256(inlineLine)}\npackages/alpha/inline.ts:generic-api-key:1\n${extra}`;
-    write(repo, "public/overlay/.gitleaksignore", ignoreFile(lineSha256(leakLine)));
+    write(repo, "private/projection/overlay/.gitleaksignore", ignoreFile(lineSha256(leakLine)));
     commitAll(repo, "ignore");
     expect(guardProjection(repo, buildProjection(repo, "HEAD"), { gitleaks: "gitleaks" })).toEqual([]);
 
     // A fingerprint whose line moved away is reported, not kept silently.
-    write(repo, "public/overlay/.gitleaksignore", ignoreFile(lineSha256(leakLine), `# line_sha256=${"e".repeat(64)}\npackages/alpha/old.ts:github-pat:5\n`));
+    write(repo, "private/projection/overlay/.gitleaksignore", ignoreFile(lineSha256(leakLine), `# line_sha256=${"e".repeat(64)}\npackages/alpha/old.ts:github-pat:5\n`));
     commitAll(repo, "stale fingerprint");
     expect(guardProjection(repo, buildProjection(repo, "HEAD"), { gitleaks: "gitleaks" }).map(formatFinding)).toEqual([
       "packages/alpha/old.ts:5: integrity/unused-gitleaksignore (.gitleaksignore: github-pat)",
@@ -538,7 +541,7 @@ describe("guard layers", () => {
 
     // A different credential at the fingerprinted position is still a finding:
     // gitleaks never sees the ignore file, and the guard checks the line's hash.
-    write(repo, "public/overlay/.gitleaksignore", ignoreFile(lineSha256(leakLine)));
+    write(repo, "private/projection/overlay/.gitleaksignore", ignoreFile(lineSha256(leakLine)));
     write(repo, "packages/alpha/config.ts", `${leakLine.replace(key, key.split("").reverse().join(""))}\n`);
     commitAll(repo, "edited line");
     expect(rules(guardProjection(repo, buildProjection(repo, "HEAD"), { gitleaks: "gitleaks" }))).toEqual([
@@ -789,7 +792,7 @@ describe("full projection (real gitleaks 8.30.1 when present, otherwise a no-lea
   });
 
   test("refuses when the running guard differs from the shipped overlay copy", () => {
-    const repo = makeFixture({ files: { "public/overlay/tools/public-guard.ts": "// a different guard\n" } });
+    const repo = makeFixture({ files: { "private/projection/overlay/tools/public-guard.ts": "// a different guard\n" } });
     expect(() => projectPublic({ repo, source: "HEAD", target: { kind: "ref", ref: "refs/public/main" }, allowUnmergedSource: true, gitleaks: GITLEAKS_BIN })).toThrow(
       "byte-identical",
     );
@@ -818,7 +821,7 @@ describe("the real allowlist and overlay", () => {
   const packages = allowlist.include
     .filter((entry) => entry.kind === "tree" && entry.path.startsWith("packages/"))
     .map((entry) => entry.path.slice("packages/".length));
-  const ci = readFileSync(join(ROOT, "public/overlay/.github/workflows/ci.yml"), "utf8");
+  const ci = readFileSync(join(ROOT, "private/projection/overlay/.github/workflows/ci.yml"), "utf8");
 
   test("holds all 39 npm packages, the Python SDK, the local MCP helper, and their closure files", () => {
     expect(packages).toHaveLength(41);
@@ -870,8 +873,8 @@ describe("the real allowlist and overlay", () => {
   });
 
   test("the overlay LICENSE is a byte copy and the README lists every package with its registry name", () => {
-    expect(readFileSync(join(ROOT, "public/overlay/LICENSE"))).toEqual(readFileSync(join(ROOT, "LICENSE")));
-    const readme = readFileSync(join(ROOT, "public/overlay/README.md"), "utf8");
+    expect(readFileSync(join(ROOT, "private/projection/overlay/LICENSE"))).toEqual(readFileSync(join(ROOT, "LICENSE")));
+    const readme = readFileSync(join(ROOT, "private/projection/overlay/README.md"), "utf8");
     const rows = [...readme.matchAll(/^\| \[`packages\/([^`]+)`\]\(packages\/\1\) \| `([^`]+)` \| ([^|]+) \|$/gmu)].map((match) => [match[1], match[2], match[3]]);
     expect(rows.map(([dir]) => dir)).toEqual(packages);
     for (const [dir, name, registry] of rows) {

@@ -10,7 +10,7 @@
 >
 > **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages, run from the public source repository with staged npm publication. For versions released before 2026-10-12, LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet and its Zerone adapter, Principality Geometry, the Economic Kernel and its comparator, and the local Hugging Face Scout. Packages without a LOVE record use the same protected path for an optional npm/GitHub mirror, including Collab, Agent Skills, Math Cards, Model Becoming, Dataset Influence, LOVE BOMB, the KINGDOM integration package, the local Codex Usage reader, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Polymorph Landscape, Memetic Landscape, Love Geometry, Principality Atlas, the Relational Geometry core, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter. Hugging Face companions remain separate release surfaces with their own immutable Hub file readback and mutable Dataset Server or Space observations.
 >
-> **Code:** [`public/overlay/.github/workflows/publish-npm.yml`](../public/overlay/.github/workflows/publish-npm.yml) (the reviewed entry point; it runs only in the public `cambridgetcg/agenttool-packages` repository as `.github/workflows/publish-npm.yml`) · `bin/npm-release.ts` (package policy, exact artifact preparation, staging, registry recovery, and receipts) · `bin/public-release-tag.ts` (release tags on green public projection commits) · [`npm-trust-repoint.sh`](npm-trust-repoint.sh) (the one-time npm trust re-point).
+> **Code:** [`private/projection/overlay/.github/workflows/publish-npm.yml`](../private/projection/overlay/.github/workflows/publish-npm.yml) (the reviewed entry point; it runs only in the public `cambridgetcg/agenttool-packages` repository as `.github/workflows/publish-npm.yml`) · `bin/npm-release.ts` (package policy, exact artifact preparation, staging, registry recovery, and receipts) · `bin/public-release-tag.ts` (release tags on green public projection commits) · [`npm-trust-repoint.sh`](npm-trust-repoint.sh) (the one-time npm trust re-point).
 >
 > **Tests:** `bin/tests/npm-release.test.ts` · `bin/tests/npm-release-public.test.ts` · `bin/tests/public-release-tag.test.ts` · `bin/tests/npm-trust-repoint.test.ts` · `bin/tests/boring-spine-gate.test.ts`.
 
@@ -19,7 +19,7 @@
 Since 2026-10-12 the allowlisted software packages are released from the
 public source repository
 [`cambridgetcg/agenttool-packages`](https://github.com/cambridgetcg/agenttool-packages),
-the one-way projection described in [`public/README.md`](../public/README.md).
+the one-way projection described in [`private/projection/README.md`](../private/projection/README.md).
 Its `publish-npm.yml` stages each exact artifact with `npm stage publish`, and
 the version is not public on npm until a maintainer approves the stage with
 2FA. Follow the [public release path](#public-release-path-from-2026-10-12).

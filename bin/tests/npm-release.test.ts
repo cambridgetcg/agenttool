@@ -27,7 +27,7 @@ import {
 
 /** The publish workflow lives in the public overlay; the public repository runs it. */
 const PUBLISH_WORKFLOW = join(
-  import.meta.dir, "..", "..", "public", "overlay", ".github", "workflows", "publish-npm.yml",
+  import.meta.dir, "..", "..", "private", "projection", "overlay", ".github", "workflows", "publish-npm.yml",
 );
 
 function registryFixture(): {

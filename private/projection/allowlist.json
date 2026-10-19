@@ -1,7 +1,7 @@
 {
   "schema": "agenttool.public-allowlist/1",
   "public_repository": "cambridgetcg/agenttool-packages",
-  "overlay": "public/overlay",
+  "overlay": "private/projection/overlay",
   "include": [
     {
       "path": ".gitattributes",
