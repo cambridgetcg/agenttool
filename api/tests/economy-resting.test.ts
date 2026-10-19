@@ -252,6 +252,14 @@ describe("release and refund settle existing escrows without Redis", () => {
     expect(body.success).toBe(true);
     expect(body.data.status).toBe("released");
 
+    // The proxy answers the update with a canned row, so the status the
+    // service writes is read from the update's own parameters.
+    const statusWrite = queries.find((query) => query.sql.startsWith(ESCROW_UPDATE));
+    expect(statusWrite?.sql).toMatch(/set "status" = \$1, "released_at" = \$2 where/);
+    expect(statusWrite?.params[0]).toBe("released");
+    expect(statusWrite?.params[1]).toBeTruthy();
+    expect(statusWrite?.params).not.toContain("refunded");
+
     const creatorRead = queries.find((query) => query.sql.includes(CREATOR_WALLET_READ));
     expect(creatorRead?.params).toEqual([CREATOR_WALLET_ID, PROJECT_ID]);
     const credit = queries.find((query) => query.sql.startsWith('update "economy"."wallets"'));
@@ -275,7 +283,12 @@ describe("release and refund settle existing escrows without Redis", () => {
     const body = (await response.json()) as { data: Record<string, unknown> };
     expect(body.data.status).toBe("refunded");
 
-    const credit = queries.find((query) => query.sql.startsWith('update "economy"."wallets"'));
+    const statusWrite = queries.find((query) => query.sql.startsWith(ESCROW_UPDATE));
+    expect(statusWrite?.sql).toMatch(/set "status" = \$1 where/);
+    expect(statusWrite?.params[0]).toBe("refunded");
+    expect(statusWrite?.params).not.toContain("released");
+
+    const credit =queries.find((query) => query.sql.startsWith('update "economy"."wallets"'));
     expect(credit?.params).toEqual([80, CREATOR_WALLET_ID]);
     const ledger = queries.find((query) => query.sql.startsWith('insert into "economy"."transactions"'));
     expect(ledger?.params).toContain("escrow_refund");
