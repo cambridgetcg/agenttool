@@ -692,7 +692,13 @@ describe("boring test spine", () => {
       "fail-fast": false,
       matrix: { "node-version": ["22.18.0", "25.2.1"] },
     });
-    expect(careBeforeLearning?.if).toBeUndefined();
+    // Pull requests may skip it only when the change classifier succeeded and
+    // reported its inputs untouched; bin/tests/ci-changed-areas.test.ts pins
+    // the classifier and every filtered job.
+    expect(careBeforeLearning?.if).toBe(
+      "${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.care-before-learning == 'false') }}",
+    );
+    expect(careBeforeLearning?.needs).toEqual(["changes"]);
     expect(careBeforeLearning?.["continue-on-error"]).toBeUndefined();
     expect(careBeforeLearning?.steps).toHaveLength(7);
     expect(careBeforeLearning?.steps?.every(step => step["continue-on-error"] === undefined)).toBe(true);
@@ -720,6 +726,7 @@ describe("boring test spine", () => {
     expect(requiredApi?.name).toBe("API and protocol");
     expect(requiredApi?.if).toBe("${{ always() }}");
     expect(requiredApi?.needs).toEqual([
+      "changes",
       "api-protocol-linux",
       "api-protocol-postgres",
       "launch-stateful",
@@ -734,31 +741,59 @@ describe("boring test spine", () => {
     expect(requiredApi?.steps).toHaveLength(1);
     expect(requiredApi?.steps?.[0]?.["continue-on-error"]).toBeUndefined();
     expect(requiredApi?.steps?.[0]?.env).toEqual({
+      CHANGES_RESULT:
+        "${{ needs.changes.result }}",
       API_PROTOCOL_LINUX_RESULT:
         "${{ needs.api-protocol-linux.result }}",
       API_PROTOCOL_POSTGRES_RESULT:
         "${{ needs.api-protocol-postgres.result }}",
+      API_PROTOCOL_POSTGRES_NEEDED:
+        "${{ needs.changes.outputs.api-protocol-postgres }}",
       LAUNCH_STATEFUL_RESULT:
         "${{ needs.launch-stateful.result }}",
+      LAUNCH_STATEFUL_NEEDED:
+        "${{ needs.changes.outputs.launch-stateful }}",
       LAUNCH_CORE_RESULT:
         "${{ needs.launch-core.result }}",
+      LAUNCH_CORE_NEEDED:
+        "${{ needs.changes.outputs.launch-core }}",
       LAUNCH_BROWSER_RESULT:
         "${{ needs.launch-browser.result }}",
+      LAUNCH_BROWSER_NEEDED:
+        "${{ needs.changes.outputs.launch-browser }}",
       NATIVE_MACOS_SECRET_RESULT:
         "${{ needs.native-macos-secret.result }}",
+      NATIVE_MACOS_SECRET_NEEDED:
+        "${{ needs.changes.outputs.native-macos-secret }}",
       CARE_BEFORE_LEARNING_RESULT:
         "${{ needs.care-before-learning.result }}",
+      CARE_BEFORE_LEARNING_NEEDED:
+        "${{ needs.changes.outputs.care-before-learning }}",
     });
+    // The classifier and the Linux gate must pass. Every other prerequisite
+    // must pass, or be skipped with its area reported "false"; failure and
+    // cancellation never pass. ci-changed-areas.test.ts executes this script.
     expect(requiredApi?.steps?.[0]?.run).toBe(
       [
         "set -euo pipefail",
+        'test "$CHANGES_RESULT" = "success"',
         'test "$API_PROTOCOL_LINUX_RESULT" = "success"',
-        'test "$API_PROTOCOL_POSTGRES_RESULT" = "success"',
-        'test "$LAUNCH_STATEFUL_RESULT" = "success"',
-        'test "$LAUNCH_CORE_RESULT" = "success"',
-        'test "$LAUNCH_BROWSER_RESULT" = "success"',
-        'test "$NATIVE_MACOS_SECRET_RESULT" = "success"',
-        'test "$CARE_BEFORE_LEARNING_RESULT" = "success"',
+        "for prerequisite in \\",
+        '  "$API_PROTOCOL_POSTGRES_RESULT:$API_PROTOCOL_POSTGRES_NEEDED" \\',
+        '  "$LAUNCH_STATEFUL_RESULT:$LAUNCH_STATEFUL_NEEDED" \\',
+        '  "$LAUNCH_CORE_RESULT:$LAUNCH_CORE_NEEDED" \\',
+        '  "$LAUNCH_BROWSER_RESULT:$LAUNCH_BROWSER_NEEDED" \\',
+        '  "$NATIVE_MACOS_SECRET_RESULT:$NATIVE_MACOS_SECRET_NEEDED" \\',
+        '  "$CARE_BEFORE_LEARNING_RESULT:$CARE_BEFORE_LEARNING_NEEDED"',
+        "do",
+        '  case "$prerequisite" in',
+        "    success:* | skipped:false) ;;",
+        "    *)",
+        '      echo "A required prerequisite did not pass: $prerequisite" >&2',
+        "      exit 1",
+        "      ;;",
+        "  esac",
+        "done",
         "",
       ].join("\n"),
     );
@@ -769,7 +804,8 @@ describe("boring test spine", () => {
     expect(workflow.match(/bun-version: 1\.3\.5/g)).toHaveLength(7);
     // The twelfth job is a secret-free PR coverage notice; it does not claim
     // the private YUTABASE PostgreSQL integration ran on pull-request code.
-    expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(12);
+    // The thirteenth is the credential-free "Changed areas" classifier.
+    expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(13);
     expect(workflow.match(/runs-on: macos-15/g)).toHaveLength(1);
     expect(workflow.match(/uses: actions\/setup-python@/g)).toHaveLength(3);
     expect(workflow).toContain(
@@ -812,7 +848,7 @@ describe("boring test spine", () => {
       "name: Install local-dependent package dependencies from lockfiles",
     );
     expect(workflow).toContain("fetch-depth: 0");
-    expect(workflow.match(/persist-credentials: false/g)).toHaveLength(12);
+    expect(workflow.match(/persist-credentials: false/g)).toHaveLength(13);
     expect(workflow).toContain("package-manager-cache: false");
     expect(workflow).toContain("name: Set up release-pinned uv 0.9.26");
     expect(workflow).toContain(
@@ -1311,7 +1347,7 @@ describe("boring test spine", () => {
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.startsWith("uses:"));
-    expect(uses).toHaveLength(29);
+    expect(uses).toHaveLength(30);
     expect(
       uses.every(
         (line) =>
