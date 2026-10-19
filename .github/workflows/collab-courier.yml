@@ -29,6 +29,7 @@ concurrency:
 jobs:
   offline-collaboration:
     name: Private offline collaboration fixtures
+    if: github.repository == 'cambridgetcg/agenttool'
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:

@@ -231,7 +231,6 @@ readonly RULES=(
   # whole-tree scanners, catalog, and operator tests).
   "bin/* -"
   ".github/workflows/* -"
-  ".forgejo/* -"
   "cli/* -"
   "infra/* -"
   "marketing/* -"

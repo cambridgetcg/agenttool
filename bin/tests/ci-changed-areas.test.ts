@@ -637,20 +637,23 @@ describe("CI mode against Git fixtures", () => {
   });
 });
 
+// Every job runs only in this repository, so a copy of the workflow elsewhere
+// starts nothing (bin/tests/public-root-split.test.ts checks every workflow).
+const HERE = "github.repository == 'cambridgetcg/agenttool'";
 // A draft pull request runs nothing: every job but the push-only YUTABASE
 // projector carries this clause, the classifier included.
 const NOT_DRAFT = "github.event.pull_request.draft != true";
 // A push to main whose exact tree a green pull-request run already tested
 // ("proven" by bin/ci-tree-proof.sh) skips everything after the classifier.
 const PROVEN = "needs.changes.outputs.proven == 'true'";
-const CHANGES_IF = `\${{ ${NOT_DRAFT} }}`;
-const LINUX_IF = `\${{ !cancelled() && ${NOT_DRAFT} && !(needs.changes.result == 'success' && ${PROVEN}) }}`;
-const AGGREGATE_IF = `\${{ always() && ${NOT_DRAFT} && !(needs.changes.result == 'success' && ${PROVEN}) }}`;
+const CHANGES_IF = `\${{ ${HERE} && ${NOT_DRAFT} }}`;
+const LINUX_IF = `\${{ !cancelled() && ${HERE} && ${NOT_DRAFT} && !(needs.changes.result == 'success' && ${PROVEN}) }}`;
+const AGGREGATE_IF = `\${{ always() && ${HERE} && ${NOT_DRAFT} && !(needs.changes.result == 'success' && ${PROVEN}) }}`;
 const FILTER_IF = (area: string) =>
   area === "sdk-python"
     ? // A proven push still tests the Python versions its pull request skipped.
-      `\${{ !cancelled() && ${NOT_DRAFT} && !(needs.changes.result == 'success' && ((${PROVEN} && needs.changes.outputs.sdk-python-rest != 'true') || needs.changes.outputs.${area} == 'false')) }}`
-    : `\${{ !cancelled() && ${NOT_DRAFT} && !(needs.changes.result == 'success' && (${PROVEN} || needs.changes.outputs.${area} == 'false')) }}`;
+      `\${{ !cancelled() && ${HERE} && ${NOT_DRAFT} && !(needs.changes.result == 'success' && ((${PROVEN} && needs.changes.outputs.sdk-python-rest != 'true') || needs.changes.outputs.${area} == 'false')) }}`
+    : `\${{ !cancelled() && ${HERE} && ${NOT_DRAFT} && !(needs.changes.result == 'success' && (${PROVEN} || needs.changes.outputs.${area} == 'false')) }}`;
 
 const AREA_JOB_NAMES: Record<string, string> = {
   "api-protocol-postgres": "API PostgreSQL holds and launch transactions",
@@ -1006,6 +1009,8 @@ function evaluateExpression(expression: string, context: Record<string, Value>):
 
 type Scenario = {
   event: string;
+  /** The repository the run is in; this one by default. */
+  repository?: string;
   /** Pull requests only. */
   draft?: boolean;
   /** The classifier job's result when it runs. */
@@ -1024,7 +1029,7 @@ function jobsStarted(scenario: Scenario): string[] {
     const context: Record<string, Value> = {
       "github.event_name": scenario.event,
       "github.event.pull_request.draft": pullRequest ? (scenario.draft ?? false) : null,
-      "github.repository": "cambridgetcg/agenttool",
+      "github.repository": scenario.repository ?? "cambridgetcg/agenttool",
       "github.ref": pullRequest ? "refs/pull/1/merge" : "refs/heads/main",
     };
     for (const need of job.needs ?? []) {
@@ -1076,6 +1081,17 @@ describe("which jobs start, under GitHub's expression rules", () => {
 
   test("a draft pull request starts nothing", () => {
     expect(jobsStarted({ event: "pull_request", draft: true })).toEqual([]);
+  });
+
+  test("a copy of the workflow in another repository starts nothing", () => {
+    for (const event of ["pull_request", "push", "schedule", "workflow_dispatch"]) {
+      for (const changes of ["success", "failure"] as const) {
+        expect(
+          jobsStarted({ event, changes, repository: "example/elsewhere", outputs: { everything: "true" } }),
+          `${event} ${changes}`,
+        ).toEqual([]);
+      }
+    }
   });
 
   test("a ready docs-only pull request starts the Linux gate and the jobs its paths select", () => {

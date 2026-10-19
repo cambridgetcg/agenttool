@@ -46,7 +46,7 @@ jobs:
     # YUTABASE projector skips a draft pull request; GitHub runs CI again when
     # it is marked ready for review.
     name: Changed areas
-    if: ${{ github.event.pull_request.draft != true }}
+    if: ${{ github.repository == 'cambridgetcg/agenttool' && github.event.pull_request.draft != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     # actions: read lets a push to main look up the pull-request run that
@@ -136,7 +136,7 @@ jobs:
       - changes
     # Never filtered by path. Skipped only for a draft, or for a proven push
     # to main (see Changed areas).
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.proven == 'true') }}
+    if: ${{ !cancelled() && github.repository == 'cambridgetcg/agenttool' && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.proven == 'true') }}
     runs-on: ubuntu-24.04
     # The complete gate can exceed 20m on shared runners; match deploy-api's
     # bounded allowance while keeping every test and the required aggregate.
@@ -165,7 +165,7 @@ jobs:
     name: API PostgreSQL holds and launch transactions
     needs:
       - changes
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.api-protocol-postgres == 'false')) }}
+    if: ${{ !cancelled() && github.repository == 'cambridgetcg/agenttool' && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.api-protocol-postgres == 'false')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     services:
@@ -318,7 +318,7 @@ jobs:
     name: Launch core outsider journey
     needs:
       - changes
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.launch-core == 'false')) }}
+    if: ${{ !cancelled() && github.repository == 'cambridgetcg/agenttool' && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.launch-core == 'false')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -395,7 +395,7 @@ jobs:
     name: Launch browser journeys
     needs:
       - changes
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.launch-browser == 'false')) }}
+    if: ${{ !cancelled() && github.repository == 'cambridgetcg/agenttool' && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.launch-browser == 'false')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
@@ -429,7 +429,7 @@ jobs:
     name: Native macOS secret helper
     needs:
       - changes
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.native-macos-secret == 'false')) }}
+    if: ${{ !cancelled() && github.repository == 'cambridgetcg/agenttool' && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.native-macos-secret == 'false')) }}
     runs-on: macos-15
     timeout-minutes: 8
     env:
@@ -525,7 +525,7 @@ jobs:
     name: Care before learning (Node 22.18.0 and 25.2.1)
     needs:
       - changes
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.care-before-learning == 'false')) }}
+    if: ${{ !cancelled() && github.repository == 'cambridgetcg/agenttool' && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.care-before-learning == 'false')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -607,7 +607,7 @@ jobs:
     # A draft pull request skips this result along with everything else, as
     # does a proven push to main (see Changed areas).
     name: API and protocol
-    if: ${{ always() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.proven == 'true') }}
+    if: ${{ always() && github.repository == 'cambridgetcg/agenttool' && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.proven == 'true') }}
     needs:
       - changes
       - api-protocol-linux
@@ -658,7 +658,7 @@ jobs:
     name: Witnessed agent economy
     needs:
       - changes
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.witnessed-agent-economy == 'false')) }}
+    if: ${{ !cancelled() && github.repository == 'cambridgetcg/agenttool' && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.witnessed-agent-economy == 'false')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -756,7 +756,7 @@ jobs:
     name: Data, ADDS, and SDK
     needs:
       - changes
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.packages == 'false')) }}
+    if: ${{ !cancelled() && github.repository == 'cambridgetcg/agenttool' && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.packages == 'false')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -1194,7 +1194,7 @@ jobs:
       - changes
     # A proven push to main runs this job only when its pull-request run
     # tested the Python SDK, and then only on the versions that run skipped.
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && ((needs.changes.outputs.proven == 'true' && needs.changes.outputs.sdk-python-rest != 'true') || needs.changes.outputs.sdk-python == 'false')) }}
+    if: ${{ !cancelled() && github.repository == 'cambridgetcg/agenttool' && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && ((needs.changes.outputs.proven == 'true' && needs.changes.outputs.sdk-python-rest != 'true') || needs.changes.outputs.sdk-python == 'false')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:

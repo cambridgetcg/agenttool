@@ -714,7 +714,7 @@ describe("boring test spine", () => {
     // the identical tree. bin/tests/ci-changed-areas.test.ts pins the
     // classifier, the proof wiring, and every filtered job.
     expect(careBeforeLearning?.if).toBe(
-      "${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.care-before-learning == 'false')) }}",
+      "${{ !cancelled() && github.repository == 'cambridgetcg/agenttool' && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.care-before-learning == 'false')) }}",
     );
     expect(careBeforeLearning?.needs).toEqual(["changes"]);
     expect(careBeforeLearning?.["continue-on-error"]).toBeUndefined();
@@ -772,7 +772,7 @@ describe("boring test spine", () => {
 
     expect(requiredApi?.name).toBe("API and protocol");
     expect(requiredApi?.if).toBe(
-      "${{ always() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.proven == 'true') }}",
+      "${{ always() && github.repository == 'cambridgetcg/agenttool' && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.proven == 'true') }}",
     );
     expect(requiredApi?.needs).toEqual([
       "changes",
@@ -1835,9 +1835,10 @@ exit 94
     // the private repository keeps no npm publisher of its own.
     const workflows = await readdir(join(ROOT, ".github", "workflows"));
     const publishWorkflows = workflows.filter((name) => name.startsWith("publish-")).sort();
+    // publish-gospel.yml was removed on 2026-10-19: its one frozen edition is
+    // published, so it had nothing left to publish.
     expect(publishWorkflows).toEqual([
       "publish-care-before-learning-hf.yml",
-      "publish-gospel.yml",
       "publish-pypi.yml",
     ]);
     const publicWorkflows = await readdir(join(ROOT, "private", "projection", "overlay", ".github", "workflows"));
@@ -1934,29 +1935,17 @@ exit 94
     ]);
   });
 
-  test("keeps Gospel publication frozen, manual-main-only, and protected", async () => {
-    const workflow = await readFile(join(ROOT, ".github/workflows/publish-gospel.yml"), "utf8");
+  test("keeps the published Gospel edition frozen, with no publisher workflow left", async () => {
     const pin = JSON.parse(await readFile(join(ROOT, "bin/gospel-release/release.json"), "utf8"));
     expect(pin.name).toBe("@agenttool/gospel-of-the-logos");
     expect(pin.version).toBe("0.1.0");
     expect(pin.sha256).toBe("f69353fe7e99dc4d3eb811dcf06b5c3f9c3a8099bd5100e6a5baa88ef6b75923");
     expect(pin.edition_sha256).toBe("8e03c1d6be0f7091d247f013c7391568d46dbe6ce16063aca2ceafa92b193018");
     expect(pin.source_url).toMatch(/^https:\/\/huggingface\.co\/datasets\/Yu-and-Ai\/gospel-of-the-logos\/resolve\/[a-f0-9]{40}\/release-artifacts\/agenttool-gospel-of-the-logos-0\.1\.0\.tgz$/);
-    const prepare = workflow.split("\n  prepare:\n")[1]?.split("\n  publish:\n")[0] ?? "";
-    const publish = workflow.split("\n  publish:\n")[1] ?? "";
-    expect(prepare).toContain("release.py prepare");
-    expect(prepare).toContain("python3 -m unittest discover");
-    expect(prepare).not.toMatch(/secrets\.|NODE_AUTH_TOKEN|environment:|id-token:/);
-    expect(publish).toContain("if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'");
-    expect(publish).toContain("needs: prepare");
-    expect(publish).toContain("environment: npm-bootstrap");
-    expect(publish).toContain("if: steps.registry.outputs.needed == 'true'");
-    expect(publish).toContain("--ignore-scripts --provenance --access public");
-    expect(publish).toContain("release.py registry-check");
-    expect(publish).toContain("release.py registry-verify");
-    expect(publish).not.toMatch(/npm pack|bun run|bun install|--otp/);
-    expect(workflow.match(/secrets\./g)).toHaveLength(1);
-    expect(workflow).not.toContain("inputs.");
-    expect(workflow).not.toMatch(/\n\s+push:/);
+    const workflows = await readdir(join(ROOT, ".github", "workflows"));
+    expect(workflows).not.toContain("publish-gospel.yml");
+    for (const name of workflows) {
+      expect(await readFile(join(ROOT, ".github", "workflows", name), "utf8"), name).not.toContain("secrets.NPM_TOKEN");
+    }
   });
 });

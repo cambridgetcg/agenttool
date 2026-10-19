@@ -19,6 +19,7 @@ concurrency:
 jobs:
   changed-source-advisory:
     name: Redacted changed-source advisory
+    if: github.repository == 'cambridgetcg/agenttool'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

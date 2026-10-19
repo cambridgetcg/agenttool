@@ -11,11 +11,11 @@
 
 import { afterAll, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
-import { PUBLIC_REPOSITORY } from "../../private/public-repository.ts";
+import { PRIVATE_REPOSITORY, PUBLIC_REPOSITORY } from "../../private/public-repository.ts";
 import { ALLOWLIST_PATH, DENYLIST_PATH, parseAllowlist, parseDenylist } from "../project-public.ts";
 import { contentFindings, formatFinding, PERSONAL_RULES, SECRET_RULES } from "../../tools/public-guard.ts";
 
@@ -156,6 +156,82 @@ describe("the shared CI", () => {
     expect(files).toEqual([".github/workflows/ci.yml", "private/README.md", "private/public-repository.ts"]);
     expect(sharedCiSource.split(PUBLIC_REPOSITORY).length - 1).toBe(Object.keys(sharedCi.jobs).length);
     expect(read("private/public-repository.ts")).toContain("has not confirmed");
+  });
+});
+
+/** Every workflow file. ci.yml is the shared tree's; the rest are private-only. */
+const WORKFLOWS = [
+  "ci.yml",
+  "collab-courier.yml",
+  "deploy-api.yml",
+  "local-starter.yml",
+  "private-ci.yml",
+  "production-health.yml",
+  "publish-care-before-learning-hf.yml",
+  "publish-pypi.yml",
+  "wake-return.yml",
+  "whitehack.yml",
+];
+/**
+ * Workflows another session owns, whose repository guard is handed off
+ * (2026-10-19). The test fails once one gains its guard, so the list only
+ * shrinks.
+ */
+const GUARD_HANDED_OFF = ["local-starter.yml", "production-health.yml"];
+
+/** Whether a job condition is `github.repository == '<repo>'` joined by && at its top level. */
+function repositoryGuarded(condition: string | undefined, repository: string): boolean {
+  if (condition === undefined) return false;
+  let source = condition.trim();
+  if (source.startsWith("${{") && source.endsWith("}}")) source = source.slice(3, -2).trim();
+  // A top-level || would let the rest of the condition start the job anywhere.
+  let depth = 0;
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "'") index = source.indexOf("'", index + 1);
+    else if (char === "(") depth += 1;
+    else if (char === ")") depth -= 1;
+    else if (depth === 0 && source.startsWith("||", index)) return false;
+  }
+  source = source.replace(/^(?:always\(\)|!cancelled\(\)) && /u, "");
+  const guard = `github.repository == '${repository}'`;
+  return source === guard || source.startsWith(`${guard} && `);
+}
+
+describe("workflows", () => {
+  test("the inventory holds the shared CI and the private-only workflows, and nothing retired", () => {
+    expect(readdirSync(join(ROOT, ".github", "workflows")).sort()).toEqual(WORKFLOWS);
+    // Removed on 2026-10-19: a probe for a branch that no longer exists, the
+    // publisher of an already-published frozen edition, and Codeberg's CI.
+    for (const retired of [".github/workflows/care-before-learning-hf-probe.yml", ".github/workflows/publish-gospel.yml", ".forgejo"]) {
+      expect(existsSync(join(ROOT, retired)), retired).toBe(false);
+    }
+  });
+
+  test("every private-only job runs only in this repository", () => {
+    const unguarded: string[] = [];
+    for (const name of WORKFLOWS.filter((file) => file !== "ci.yml")) {
+      const workflow = Bun.YAML.parse(read(`.github/workflows/${name}`)) as { jobs: Record<string, Job> };
+      const jobs = Object.entries(workflow.jobs);
+      expect(jobs.length, name).toBeGreaterThan(0);
+      const guarded = jobs.map(([, job]) => repositoryGuarded(job.if, PRIVATE_REPOSITORY));
+      if (guarded.every(Boolean)) continue;
+      unguarded.push(name);
+      expect(GUARD_HANDED_OFF, `${name}: every job needs if: github.repository == '${PRIVATE_REPOSITORY}' && ...`).toContain(name);
+    }
+    expect(unguarded).toEqual(GUARD_HANDED_OFF);
+  });
+
+  test("the guard check reads conditions the way GitHub joins them", () => {
+    const repo = PRIVATE_REPOSITORY;
+    expect(repositoryGuarded(`github.repository == '${repo}'`, repo)).toBe(true);
+    expect(repositoryGuarded(`\${{ !cancelled() && github.repository == '${repo}' && (a || b) }}`, repo)).toBe(true);
+    expect(repositoryGuarded(`\${{ always() && github.repository == '${repo}' && x == 'a||b' }}`, repo)).toBe(true);
+    expect(repositoryGuarded(`github.repository == '${repo}' && a || b`, repo)).toBe(false);
+    expect(repositoryGuarded(`a && github.repository == '${repo}'`, repo)).toBe(false);
+    expect(repositoryGuarded(`github.repository == '${repo}-other'`, repo)).toBe(false);
+    expect(repositoryGuarded(`github.repository != '${repo}'`, repo)).toBe(false);
+    expect(repositoryGuarded(undefined, repo)).toBe(false);
   });
 });
 

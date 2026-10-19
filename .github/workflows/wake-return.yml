@@ -29,6 +29,7 @@ concurrency:
 jobs:
   local-observer:
     name: Private local observer fixtures (Node ${{ matrix.node }})
+    if: github.repository == 'cambridgetcg/agenttool'
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     strategy:

@@ -624,7 +624,6 @@ describe("Supabase database TLS", () => {
       procedure,
       verifier,
       packageJson,
-      forgejo,
     ] = await Promise.all([
       readFile(join(apiRoot, "Dockerfile"), "utf8"),
       readFile(join(apiRoot, ".dockerignore"), "utf8"),
@@ -632,10 +631,6 @@ describe("Supabase database TLS", () => {
       readFile(join(projectRoot, "docs", "DEPLOY-PROCEDURE.md"), "utf8"),
       readFile(join(apiRoot, "src", "db", "verify-connections.ts"), "utf8"),
       readFile(join(apiRoot, "package.json"), "utf8"),
-      readFile(
-        join(projectRoot, ".forgejo", "workflows", "ci.yml"),
-        "utf8",
-      ),
     ]);
     expect(dockerfile).toContain("COPY certs ./certs");
     expect(dockerfile).toContain("test -s certs/supabase-prod-ca-2021.crt");
@@ -662,8 +657,6 @@ describe("Supabase database TLS", () => {
     expect(packageJson).toContain("db:studio retired");
     expect(packageJson).not.toContain("drizzle-kit migrate");
     expect(packageJson).not.toContain("drizzle-kit studio");
-    expect(forgejo).toContain("AGENTTOOL_ALLOW_DISPOSABLE_CI_POSTGRES");
-    expect(forgejo).toContain("DATABASE_SESSION_URL:");
     expect(procedure).toMatch(/advisory direct query to a public\s+resolver/);
   });
 });

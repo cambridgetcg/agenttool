@@ -32,14 +32,17 @@ replaces, and the scope-wide, bypass-2FA `NPM_TOKEN` in this repository's
 [public repository settings](#public-repository-settings-yu-once)). Do not run
 `npm publish` from a normal local shell.
 
-The Gospel literary edition has one separate, exact-name route:
-[`publish-gospel.yml`](../.github/workflows/publish-gospel.yml), documented in
+The Gospel literary edition had one separate, exact-name route,
+`publish-gospel.yml`, documented in
 [`bin/gospel-release/README.md`](../bin/gospel-release/README.md). Its custom
 source permission is preserved; the software publisher's Apache-2.0 policy
-is unchanged. The route pins the reviewed external artifact and source edition,
-transfers only verified bytes, runs its publish job in the `npm-bootstrap`
-environment (no required reviewer; see the correction below),
-permits first-publication bootstrap only, and verifies the public npm tarball.
+is unchanged. The route pinned the reviewed external artifact and source
+edition, transferred only verified bytes, ran its publish job in the
+`npm-bootstrap` environment (no required reviewer; see the correction below),
+permitted first-publication bootstrap only, and verified the public npm
+tarball. It published `@agenttool/gospel-of-the-logos@0.1.0`, the only edition
+it could publish, and the workflow was removed on 2026-10-19 (npm's anonymous
+registry record lists exactly that version as `latest`, read 2026-10-19).
 
 **Release gate correction — 2026-10-11.** In this private repository, the
 reviewer described above and in step 7 below was no longer in place. Read
@@ -444,8 +447,9 @@ The private repository's own `npm-bootstrap` environment still holds an
 `NPM_TOKEN`. This runbook described it, before 2026-10-12, as a granular token
 with `@agenttool` read/write access and Bypass 2FA; its real scope was not read
 from npm. Such a token can publish any `@agenttool` package that does not
-disallow tokens, and create new package names in the scope. Its only consumer,
-`publish-gospel.yml`, publishes only while the exact version is absent, and
+disallow tokens, and create new package names in the scope. Its only consumer
+was `publish-gospel.yml` (removed on 2026-10-19), which published only while
+the exact version was absent, and
 `@agenttool/gospel-of-the-logos@0.1.0` has been on npm since 2026-09-08
 (anonymous registry read, 2026-10-12). So the token has no remaining use:
 revoke it on npm, then delete the secret
