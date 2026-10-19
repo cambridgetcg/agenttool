@@ -47,6 +47,35 @@ export const identityRegistrationProofs = identitySchema.table(
   (t) => [index("idx_identity_registration_proofs_root").on(t.rootPublicKey)],
 );
 
+/** Pairing codes for enrollment; see services/identity/pairing.ts and the
+ *  20261016T220000_identity_pairings migration for the state constraints. */
+export const identityPairings = identitySchema.table("pairings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  projectId: uuid("project_id").notNull(),
+  createdByApiKeyId: uuid("created_by_api_key_id").notNull(),
+  codeHmac: text("code_hmac").notNull().unique(),
+  status: text("status").notNull().default("open"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  claimedAt: timestamp("claimed_at", { withTimezone: true }),
+  claimBody: text("claim_body"),
+  claimSignature: text("claim_signature"),
+  fingerprint: text("fingerprint"),
+  identityId: uuid("identity_id"),
+  signingKeyId: uuid("signing_key_id"),
+  displayName: text("display_name"),
+  publicKey: text("public_key"),
+  pickupSha256: text("pickup_sha256"),
+  confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+  confirmedByApiKeyId: uuid("confirmed_by_api_key_id"),
+  grantMissionId: uuid("grant_mission_id"),
+  grantActions: text("grant_actions").array(),
+  grantTtlSeconds: integer("grant_ttl_seconds"),
+  grantId: uuid("grant_id"),
+  handoff: text("handoff"),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+});
+
 export const identities = identitySchema.table(
   "identities",
   {

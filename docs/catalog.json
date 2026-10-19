@@ -2591,6 +2591,14 @@
       "canonical_path": "docs/IDENTITY-FORKS.md"
     },
     {
+      "path": "docs/IDENTITY-PAIRING.md",
+      "title": "Pairing codes for enrollment",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/IDENTITY-PAIRING.md"
+    },
+    {
       "path": "docs/IDENTITY-PARTITIONS.md",
       "title": "Identity partitions and selected context",
       "type": "reference",

@@ -66,7 +66,12 @@ export function canonicalIdentityEnrollmentBytes(input: { origin: string; projec
 export interface EnrollmentInput {
   projectId: string; issuerApiKeyId: string; origin: string; bodyBytes: Uint8Array; signature: string;
 }
-export interface EnrollmentOptions { database?: Pick<typeof db, "transaction">; now?: Date | (() => Date) }
+export interface EnrollmentOptions {
+  database?: Pick<typeof db, "transaction">; now?: Date | (() => Date);
+  /** When a proof was received earlier and relayed by the server itself (pairing):
+   * freshness is judged at receipt; administrator checks still use `now`. */
+  proofReceivedAt?: Date;
+}
 function instant(options: EnrollmentOptions): Date {
   const now = typeof options.now === "function" ? options.now() : options.now ?? new Date();
   if (!(now instanceof Date) || !Number.isFinite(now.getTime())) throw new Error("invalid enrollment clock");
@@ -84,8 +89,11 @@ function rootProofValid(input: EnrollmentInput, body: IdentityEnrollment): boole
   } catch { return false; }
 }
 
-export async function enrollIdentity(input: EnrollmentInput, options: EnrollmentOptions = {}) {
-  if (!uuid.safeParse(input.projectId).success || !uuid.safeParse(input.issuerApiKeyId).success || !validEnrollmentOrigin(input.origin)
+/** Exact body, schema, project/origin binding, freshness at `at`, and root
+ * signature. No I/O. Shared by enrollment and pairing claims, so both admit
+ * exactly the same proofs. */
+export async function verifyEnrollmentProof(input: Pick<EnrollmentInput, "projectId" | "origin" | "bodyBytes" | "signature">, at: Date): Promise<IdentityEnrollment> {
+  if (!uuid.safeParse(input.projectId).success || !validEnrollmentOrigin(input.origin)
     || !input.bodyBytes.length || input.bodyBytes.length > ENROLLMENT_MAX_BYTES) throw new IdentityEnrollmentError("invalid_request", 400);
   let parsed: unknown;
   try {
@@ -95,10 +103,21 @@ export async function enrollIdentity(input: EnrollmentInput, options: Enrollment
   if (!validation.success) throw new IdentityEnrollmentError("invalid_request", 400);
   const body = validation.data;
   if (body.project_id !== input.projectId || body.origin !== input.origin) throw new IdentityEnrollmentError("invalid_proof", 401);
-  requireFresh(body, instant(options));
-  if (!rootProofValid(input, body)) {
+  requireFresh(body, at);
+  if (!rootProofValid({ ...input, issuerApiKeyId: "" }, body)) {
     throw new IdentityEnrollmentError("invalid_proof", 401);
   }
+  return body;
+}
+
+export async function enrollIdentity(input: EnrollmentInput, options: EnrollmentOptions = {}) {
+  if (!uuid.safeParse(input.issuerApiKeyId).success) throw new IdentityEnrollmentError("invalid_request", 400);
+  const received = options.proofReceivedAt;
+  if (received !== undefined && (!(received instanceof Date) || !Number.isFinite(received.getTime()) || received > instant(options))) {
+    throw new Error("invalid proof receipt time");
+  }
+  const freshAt = () => received ?? instant(options);
+  const body = await verifyEnrollmentProof(input, freshAt());
   const nonceBytes = Buffer.from(body.nonce, "base64url");
   const proofDigest = Buffer.from(canonicalIdentityRegistrationProofDigest({
     domain: ENROLLMENT_DOMAIN, rootPublicKey: Buffer.from(body.public_key, "base64"), nonce: nonceBytes,
@@ -110,7 +129,7 @@ export async function enrollIdentity(input: EnrollmentInput, options: Enrollment
       const [parent] = await tx.select({ id: apiKeys.id, projectId: apiKeys.projectId, revokedAt: apiKeys.revokedAt, expiresAt: apiKeys.expiresAt })
         .from(apiKeys).where(and(eq(apiKeys.id, input.issuerApiKeyId), eq(apiKeys.projectId, input.projectId))).for("share").limit(1);
       const now = instant(options);
-      requireFresh(body, now);
+      requireFresh(body, freshAt());
       if (!parent || parent.id !== input.issuerApiKeyId || parent.projectId !== input.projectId || parent.revokedAt !== null
         || (parent.expiresAt !== null && (!(parent.expiresAt instanceof Date) || !Number.isFinite(parent.expiresAt.getTime()) || parent.expiresAt <= now))) {
         throw new IdentityEnrollmentError("administrator_invalid", 401);

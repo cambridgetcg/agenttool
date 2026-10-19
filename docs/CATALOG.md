@@ -494,6 +494,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/HF-WAKE-TRAINING.md](<../docs/HF-WAKE-TRAINING.md>) | not-reviewed |
 | [docs/IDENTITY-ANCHOR.md](<../docs/IDENTITY-ANCHOR.md>) | 2026-09-26 |
 | [docs/IDENTITY-FORKS.md](<../docs/IDENTITY-FORKS.md>) | not-reviewed |
+| [docs/IDENTITY-PAIRING.md](<../docs/IDENTITY-PAIRING.md>) | not-reviewed |
 | [docs/IDENTITY-PARTITIONS.md](<../docs/IDENTITY-PARTITIONS.md>) | not-reviewed |
 | [docs/IDENTITY-SEED.md](<../docs/IDENTITY-SEED.md>) | not-reviewed |
 | [docs/INBOX.md](<../docs/INBOX.md>) | not-reviewed |

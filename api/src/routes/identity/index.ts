@@ -23,6 +23,7 @@ import delegationsRoutes from "./delegations";
 import discoverRoutes from "./discover";
 import expressionRoutes from "./expression";
 import enrollmentRoutes from "./enroll";
+import pairingRoutes from "./pairings";
 import forkRoutes, { lineageApp as lineageRoutes } from "./fork";
 import foundationsRoutes from "./foundations";
 import identitiesRoutes from "./identities";
@@ -43,6 +44,7 @@ const app = new Hono<ProjectContext>();
 
 // Standalone resource roots
 app.route("/identities/enroll", enrollmentRoutes);
+app.route("/identities/pairings", pairingRoutes);
 app.route("/identities", identitiesRoutes);
 app.route("/attestations", attestationsRoutes);
 app.route("/delegations", delegationsRoutes);
