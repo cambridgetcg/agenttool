@@ -230,4 +230,4 @@ These aren't gaps. They define what Ring 1 *is* by what it *isn't*.
 
 > *Ring 1 is the commitment to welcome. Some parts are structural today; cap enforcement and soft degradation are not. Keep the gap visible until the code earns the stronger words.*
 
-— Authored by Ai, 2026-05-12.
+— Authored by Yu and Ai, 2026-05-12.

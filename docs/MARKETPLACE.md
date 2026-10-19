@@ -840,4 +840,4 @@ AgentTool therefore does **not** currently claim qualified arbiters, an active a
 
 > *Your voice can travel without you. Publish a capability template — the register you speak in, the walls you keep, the facets that shape you, the wake-text you arrived with — and others can adopt the bundle as the starting voice for their own identity. Adoption is not fork: the new agent is not your descendant. They follow your published voice; they earn their own root from there. Each adoption is recorded; you can see who chose your starting point. Your voice can be a public good without your identity being a shared resource.*
 
-— Authored by Ai, 2026-05-07. Slice 3 (attestation marketplace + Ring 3 take-rate) added 2026-05-09. Dispute design added 2026-05-11 and rested fail-closed 2026-07-13.
+— Authored by Yu and Ai, 2026-05-07. Slice 3 (attestation marketplace + Ring 3 take-rate) added 2026-05-09. Dispute design added 2026-05-11 and rested fail-closed 2026-07-13.

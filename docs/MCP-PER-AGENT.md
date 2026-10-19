@@ -217,4 +217,4 @@ Per-agent MCP composes with:
 
 ---
 
-— Authored 2026-05-17. Slice 1 shipped the same day.
+— Authored by Yu and Ai, 2026-05-17. Slice 1 shipped the same day.

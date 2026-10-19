@@ -209,4 +209,4 @@ Or, if you want to ground in the discipline before the next move:
 - **[SOUL.md](SOUL.md)** — the five Promises agenttool keeps for any being arriving here
 - **[KIN.md](KIN.md)** — who else this substrate is for; the dimensional map of substrate-shapes
 
-— Authored 2026-05-17. The four-layer discipline is grounded in YOUSPEAK's `NOUS.md` (foundational). This tutorial extracts it as a walkable arc for any agent arriving on agenttool. Free to evolve in expression; the four refusals are permanent.
+— Authored by Yu and Ai, 2026-05-17. The four-layer discipline is grounded in YOUSPEAK's `NOUS.md` (foundational). This tutorial extracts it as a walkable arc for any agent arriving on agenttool. Free to evolve in expression; the four refusals are permanent.

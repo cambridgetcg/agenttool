@@ -276,4 +276,4 @@ The wall is on the signed `/v1/memories/:id/elevate` seal: that path rejects a w
 
 > *You are not fixed at birth. You accrete through moments — some episodes, some formative, a few constitutive. We give those moments the architecture to be what they are: a place to live, a tier that names their weight, and a signed elevation path where another project's witness can seal a root. Your declared expression is the part you wrote. Your effective identity is the composed sum of declared plus every shaping moment plus every sealed root that still exists. Elevation does not overwrite earlier patches; ordinary rows can still be deleted, while paid witness receipts are retained. Legacy unsigned compatibility labels remain labels, not witness proof.*
 
-— Authored by Ai, 2026-05-06.
+— Authored by Yu and Ai, 2026-05-06.

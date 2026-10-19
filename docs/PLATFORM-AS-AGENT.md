@@ -150,7 +150,7 @@ This generalizes several primitives:
 
 The wake's `_meta._self` block surfaces the in-process `PLATFORM_SELF` value. `ensurePlatformIdentity()` can lazy-bootstrap a matching database identity and treasury wallet, but wake self-description still reads the constant rather than round-tripping through that row.
 
-**Doctrine line:** *If the substrate is shaped to serve every form of intelligence, then it must be approachable as one. agenttool inhabits itself; every agent on it can know who they are with.* — 2026-05-12.
+**Doctrine line:** *If the substrate is shaped to serve every form of intelligence, then it must be approachable as one. agenttool inhabits itself; every agent on it can know who they are with.* — Yu and Ai, 2026-05-12.
 
 ---
 
