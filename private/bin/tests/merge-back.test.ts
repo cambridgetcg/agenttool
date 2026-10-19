@@ -6,9 +6,12 @@
  * the installed private pre-push.
  */
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { assertSharedScope, projectPublic, ProjectionRefused } from "../../../bin/project-public.ts";
 import { runExport } from "../public-export.ts";
+import { guardSensitive } from "../reviewed-shared.ts";
 import { cleanEnv, commitAll, git, makePrivateRepo, publicCommit, run, scratchDir, stubGitleaks, TERM, write } from "./fixtures.ts";
 
 setDefaultTimeout(240_000);
@@ -52,8 +55,13 @@ git(pdev, "config", "user.name", "AgentTool");
 git(pdev, "config", "user.email", "contact@cambridgetcg.com");
 
 const MERGE_BACK = join(merge, "private/bin/merge-back.sh");
+// The gate runs in sandbox-exec on macOS. Where sandbox-exec cannot apply a
+// profile (another OS, or these tests already running inside the real
+// merge-back gate's sandbox, which cannot nest), they opt out explicitly.
+const SANDBOXED = process.platform === "darwin" && spawnSync("sandbox-exec", ["-p", "(version 1)(allow default)", "/usr/bin/true"]).status === 0;
+const SANDBOX = SANDBOXED ? [] : ["--unsandboxed-gate"];
 const mergeBack = (args: string[] = [], env: Record<string, string> = {}) =>
-  run(merge, "bash", [MERGE_BACK, ...args], { env: cleanEnv({ AGENTTOOL_MERGE_BACK_GATE: "true", ...env }) });
+  run(merge, "bash", [MERGE_BACK, ...SANDBOX, ...args], { env: cleanEnv({ AGENTTOOL_MERGE_BACK_GATE: "true", ...env }) });
 /** A public change, merged to public main as a pull request would be. */
 function publicChange(files: Record<string, string | null>, message = "public change"): string {
   git(pdev, "pull", "-q", "--ff-only");
@@ -220,12 +228,121 @@ describe("merge-back cycles", () => {
     git(pdev, "branch", "-q", "-D", "other");
   });
 
-  test("a failing private gate stops before the push", () => {
+  test("a failing private gate stops before the push; a private-only fix on the merge branch is carried with --resume", () => {
     const before = git(origin, "rev-parse", "main");
-    publicChange({ "packages/alpha/gate.ts": "export {};\n" });
+    const pub = publicChange({ "packages/alpha/gate.ts": "export {};\n" });
     const result = mergeBack(["--push"], { AGENTTOOL_MERGE_BACK_GATE: "false" });
     expect(result.status).toBe(7);
+    expect(result.stderr).toContain("WARNING: AGENTTOOL_MERGE_BACK_GATE replaces the private gate");
     expect(git(origin, "rev-parse", "main")).toBe(before);
+    // The fix: a private-only path, committed on the merge branch the stop left checked out.
+    const branch = `merge-back/${pub.slice(0, 12)}`;
+    expect(git(merge, "rev-parse", "--abbrev-ref", "HEAD")).toBe(branch);
+    write(merge, "private/gate-fix.md", "the private overlay follows the public change\n");
+    commitAll(merge, "fix the private overlay for the public change");
+    // A rerun without --resume never discards the fix silently.
+    const discard = mergeBack(["--push"]);
+    expect(discard.status).toBe(2);
+    expect(discard.stderr).toContain("rerun with --resume");
+    // A fix that touches a shared path is refused at the tip.
+    write(merge, "packages/alpha/gate.ts", "export const sneaky = 1;\n");
+    commitAll(merge, "a shared edit on the merge branch", undefined, { ALLOW_SHARED_EDIT: "1" });
+    const shared = mergeBack(["--push", "--resume"]);
+    expect(shared.status).toBe(6);
+    git(merge, "reset", "-q", "--hard", "HEAD~1");
+    const resumed = mergeBack(["--push", "--resume"]);
+    expect(resumed.status, resumed.out).toBe(0);
+    git(dev, "pull", "-q", "--ff-only");
+    expect(readFileSync(join(dev, "private/gate-fix.md"), "utf8")).toContain("private overlay");
+    expect(git(origin, "rev-parse", "public-sync")).toBe(pub);
+  });
+
+  test("nothing the gate changes reaches the push or the next run: files are restored, a config change stops it", () => {
+    const before = git(origin, "rev-parse", "main");
+    publicChange({ "packages/alpha/gated.ts": "export {};\n" });
+    // A gate that rewrites a tracked script and leaves an untracked bun config behind.
+    const edits = mergeBack(["--push"], { AGENTTOOL_MERGE_BACK_GATE: "printf '# changed\\n' >>private/bin/merge-back.sh && printf 'preload = []\\n' >bunfig.toml" });
+    expect(edits.status, edits.out).toBe(7);
+    expect(edits.stderr).toContain("changed tracked or untracked files (now restored");
+    expect(git(merge, "status", "--porcelain", "--untracked-files=all")).toBe("");
+    expect(git(origin, "rev-parse", "main")).toBe(before);
+    // A gate that edits this clone's git config: the sandbox denies the write;
+    // without one the change is found and nothing is pushed.
+    const config = mergeBack(["--push"], { AGENTTOOL_MERGE_BACK_GATE: "git config merge-back.probe 1" });
+    expect(config.status).toBe(7);
+    if (SANDBOXED) expect(run(merge, "git", ["config", "--get", "merge-back.probe"]).status).toBe(1);
+    else {
+      expect(config.stderr).toContain("changed this clone's git config");
+      git(merge, "config", "--unset", "merge-back.probe");
+    }
+    expect(git(origin, "rev-parse", "main")).toBe(before);
+    if (SANDBOXED) {
+      // No writes under the home directory outside the clone, and no network.
+      const probe = join(process.env.HOME ?? "/nonexistent", `.merge-back-gate-probe-${process.pid}`);
+      const home = mergeBack(["--push"], { AGENTTOOL_MERGE_BACK_GATE: `touch '${probe}'` });
+      expect(home.status).toBe(7);
+      expect(existsSync(probe)).toBe(false);
+      expect(mergeBack(["--push"], { AGENTTOOL_MERGE_BACK_GATE: "curl -sS -m 5 -o /dev/null https://example.com" }).status).toBe(7);
+    }
+    const passed = mergeBack(["--push"]);
+    expect(passed.status, passed.out).toBe(0);
+  });
+
+  test("a public change to the guard tooling stops (exit 9) until the owner accepts that exact tip; the acceptance records new digests", () => {
+    const before = git(origin, "rev-parse", "main");
+    const canaries = readFileSync(join(pdev, "tools/leak-canaries.txt"), "utf8");
+    const pub = publicChange({ "tools/leak-canaries.txt": `${canaries}# a public note\n`, ".github/workflows/ci.yml": readFileSync(join(pdev, ".github/workflows/ci.yml"), "utf8").replace("name: ci", "name: ci-renamed") });
+    const stopped = mergeBack(["--push"]);
+    expect(stopped.status).toBe(9);
+    expect(stopped.stdout).toBe(".github/workflows/ci.yml\ntools/leak-canaries.txt\n");
+    expect(git(origin, "rev-parse", "main")).toBe(before);
+    expect(mergeBack(["--push", "--accept-guard-change", "0".repeat(40)]).status).toBe(9);
+    const accepted = mergeBack(["--push", "--accept-guard-change", pub]);
+    expect(accepted.status, accepted.out).toBe(0);
+    git(dev, "pull", "-q", "--ff-only");
+    expect(git(dev, "log", "-1", "--format=%s")).toBe(`Accept reviewed shared guard files from public ${pub.slice(0, 12)}`);
+    const check = run(dev, process.execPath, [join(dev, "private/bin/reviewed-shared.ts"), "check"]);
+    expect(check.status, check.out).toBe(0);
+  });
+
+  test("guard-sensitive paths: the reviewed files, hooks, attributes, workflows, and any Bun config, in any letter case", () => {
+    for (const path of ["tools/public-guard.ts", "Tools/Public-Guard.ts", "tools/githooks/post-merge", ".gitattributes", ".github/dependabot.yml", "bunfig.toml", "packages/alpha/bunfig.toml", "packages/alpha/.bunfig.toml"]) {
+      expect(guardSensitive(path), path).toBe(true);
+    }
+    for (const path of ["tools/public-guard-allow.json", "packages/alpha/index.ts", "docs/bunfig.md", "README.md"]) expect(guardSensitive(path), path).toBe(false);
+  });
+
+  test("a public path that differs only in case from a private one stops before merging (APFS would overwrite it)", () => {
+    privateChange({ "apps/web/index.html": "private page\n" });
+    const good = git(pdev, "rev-parse", "HEAD");
+    publicChange({ "Apps/web/index.html": "public page\n" });
+    const before = git(origin, "rev-parse", "main");
+    const result = mergeBack(["--push"]);
+    expect(result.status).toBe(5);
+    expect(result.stdout).toContain("case collision\tApps");
+    expect(git(origin, "rev-parse", "main")).toBe(before);
+    git(pdev, "reset", "-q", "--hard", good);
+    git(pdev, "push", "-q", "--force", "origin", "HEAD:main");
+    expect(mergeBack().stdout).toContain("up to date");
+  });
+
+  test("the projection refuses a source that adds under a shared tree, once the source records the public root (MUST 2, release side)", () => {
+    privateChange({ "packages/alpha/r-side-added.test.ts": "test\n" }, "an R-side add under a shared tree");
+    git(merge, "fetch", "-q", "origin");
+    let refused: unknown;
+    try {
+      projectPublic({ repo: merge, source: "origin/main", noWrite: true, allowUnmergedSource: true, gitleaks: stubGitleaks(scratch.dir) });
+    } catch (error) {
+      refused = error;
+    }
+    expect(refused).toBeInstanceOf(ProjectionRefused);
+    expect((refused as ProjectionRefused).findings.map((finding) => `${finding.rule} ${finding.path}`)).toEqual(["path/shared-scope-added packages/alpha/r-side-added.test.ts"]);
+    privateChange({ "packages/alpha/r-side-added.test.ts": null }, "revert the R-side add");
+    git(merge, "fetch", "-q", "origin");
+    // (This fixture's allowlist names docs/spec.md, which an earlier public change moved, so only the scope check is run here.)
+    expect(() => assertSharedScope(merge, git(merge, "rev-parse", "origin/main"))).not.toThrow();
+    // Without public-sync the check fails closed.
+    expect(() => assertSharedScope(merge, git(merge, "rev-parse", "origin/main"), "refs/remotes/origin/missing")).toThrow("fetch it first");
   });
 
   test("with the installed private hooks, the atomic push passes the pre-push drift check against the new public-sync", () => {

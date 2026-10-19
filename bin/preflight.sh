@@ -14,7 +14,7 @@
 # Usage:
 #   bin/preflight.sh                 # api + packages, hermetic
 #   bin/preflight.sh api             # API/protocol hermetic gate
-#   bin/preflight.sh private         # merge-back gate: API typecheck, operator and split-tooling tests
+#   bin/preflight.sh private         # merge-back gate: the API gate plus private-only packages that depend on shared ones
 #   bin/preflight.sh packages        # data + ADDS + sync + archive + Dark Continent contract/KARMA + Principality Geometry + KARMA Mirror + HEAVEN + LOVE BOMB + Model Becoming + Dataset Influence + economic conformance/kernel + Living Substrate + Principality Atlas + Polymorph Landscape + Love Geometry + Relational Geometry + Common Ground Atlas + WAKE Thread + Gin Reconstruction + Math Cards + broker + collab + Codex usage + collab-zerone + private Collab courier + private lobby desk + Browser + HF Scout/Training Garden + local WAKE learning fixtures/host + projection + local projector + constructive intelligence + Research Commons + Trials + Skills + TypeScript SDK + Wallet + Zerone adapter + Telescope + Public Surface Binding and Recognition + Alchemy + AgentCred adapter + KINGDOM gate
 #   bin/preflight.sh database        # requires DATABASE_URL
 #   bin/preflight.sh smoke           # public GET smoke; requires AGENTTOOL_BASE
@@ -87,11 +87,22 @@ api_gate() {
 }
 
 # The merge-back gate (private/bin/merge-back.sh): the private-only checks a
-# merge of public main must keep green. The API imports packages by relative
-# path, so its typecheck runs too; `bin/tests` also selects private/bin/tests.
+# merge of public main must keep green. The API imports and reads shared
+# packages, so the whole API gate runs (typecheck, hermetic tier, and
+# `bin/tests`, which also selects private/bin/tests); so does every
+# private-only package that depends on a shared one through a `file:`
+# dependency (private/bin/private-gate-packages.ts). It needs the api and
+# packages dependencies prepared.
 private_gate() {
-  api_typecheck
-  run "operator, protocol, and split tooling tests" bun test bin/tests
+  api_gate
+  local package packages
+  packages="$(bun private/bin/private-gate-packages.ts)" || die "cannot list the private-only packages that depend on shared ones"
+  while IFS= read -r package; do
+    [ -n "$package" ] || continue
+    # The package name is a positional argument of the child shell.
+    # shellcheck disable=SC2016
+    run "private-only package $package (depends on a shared package)" bash -c 'cd "packages/$1" && bun run ci' bash "$package"
+  done <<<"$packages"
 }
 
 packages_gate() {

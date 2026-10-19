@@ -223,6 +223,41 @@ describe("an upstream export into an existing public clone", () => {
     expect(() => exportUpstream({ branch: "u4" })).toThrow("needs --paths");
     write(into, "stray.txt", "x\n");
     expect(() => exportUpstream({ branch: "u5", paths: ["packages/alpha"] })).toThrow("uncommitted or untracked");
+    git(into, "clean", "-qfd");
+  });
+
+  test("the branch name and the message it writes are scanned too; a private address in a trailer refuses", () => {
+    const failing = (extra: Partial<ExportOptions>): ExportRefused => {
+      try {
+        exportUpstream({ paths: ["packages/alpha"], commit: true, ...extra });
+      } catch (error) {
+        if (error instanceof ExportRefused) return error;
+        throw error;
+      }
+      throw new Error("not refused");
+    };
+    expect(ruleSet(failing({ branch: `upstream/${TERM.replace(" ", "-")}`, message: "Fix" }))).toEqual(["relational/r01"]);
+    expect(ruleSet(failing({ branch: "upstream/m1", message: `Fix the ${TERM}` }))).toEqual(["relational/r01"]);
+    expect(ruleSet(failing({ branch: "upstream/m2", message: `Fix\n\nCo-authored-by: Owner <${OWNER_ADDRESS}>` }))).toContain("relational/l01");
+    expect(ruleSet(failing({ branch: "upstream/m3", message: `Fix\n\nCo-authored-by: Ally <${["ally", "privatemail.net"].join("@")}>` }))).toEqual(["personal/email", "personal/message-address"]);
+    expect(git(into, "branch", "--list", "upstream/m*")).toBe("");
+  });
+});
+
+describe("exported workflows and root files", () => {
+  test("an exported workflow must pass the shared workflow lint for the public name", () => {
+    const fixture = fresh({ ".github/workflows/ci.yml": "name: ci\non: push\npermissions:\n  contents: read\njobs:\n  x:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: echo ${{ secrets.NPM_TOKEN }}\n" });
+    const error = refused(fixture);
+    expect(ruleSet(error)).toEqual(["path/workflow-lint"]);
+    expect(error.findings.map((finding) => finding.detail).join("\n")).toContain("reads secret NPM_TOKEN");
+  });
+
+  test("a root file must be a top-level file, a tools/ file, or a workflow", () => {
+    const allowlist = JSON.parse(JSON.stringify(ALLOWLIST)) as { export: { root_files: string[] } };
+    allowlist.export.root_files = [...allowlist.export.root_files, "bin/private-tool.ts"].sort();
+    expect(() => fresh({}, { allowlist })).not.toThrow();
+    const fixture = fresh({}, { allowlist });
+    expect(() => exportInit(fixture)).toThrow("is not a top-level file, a tools/ file, or a workflow");
   });
 });
 

@@ -26,8 +26,12 @@
  * tools/public-guard.ts (path, binary, secret, personal, and gitleaks 8.30.1
  * with the tree's own allow file and .gitleaksignore) and the private layers
  * of private/bin/relational-scan.ts (relational terms, literal digests,
- * withheld files, the denylist's own bytes, and the canary). Any finding
- * refuses the export and nothing is written.
+ * withheld files, the denylist's and the literal list's own bytes, and the
+ * canary), read from the source commit's private/guard unless --guard-dir
+ * names a directory; it lints every exported workflow with
+ * tools/workflow-lint.ts for the public name; and it scans the branch name
+ * and the --message it will write. Any finding refuses the export and
+ * nothing is written.
  *
  * After writing and `git add`, the identity proof requires the clone's index
  * to hold exactly the source's (mode, blob, path) entries for the exported
@@ -39,12 +43,15 @@
  * never pushes, never adds a remote, and prints only paths, rule ids, and
  * line hashes.
  */
+// First: refuse before the shared guard module runs unless it is the reviewed copy.
+import "./reviewed-shared.ts";
 import { closeSync, existsSync, fchmodSync, lstatSync, mkdirSync, openSync, readdirSync, realpathSync, unlinkSync, writeSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   applyAllowEntries,
   applyGitleaksIgnore,
   binaryFindings,
+  decodeText,
   contentFindings,
   type Finding,
   formatFinding,
@@ -66,9 +73,10 @@ import {
   sortFindings,
   type TreeFile,
 } from "../../tools/public-guard.ts";
-import { loadPrivateGuard, DEFAULT_GUARD_DIR, scanFiles } from "./relational-scan.ts";
+import { loadPrivateGuard, loadPrivateGuardFromRev, messageAddressFindings, nameFindings, type PrivateGuard, privateTextFindings, scanFiles } from "./relational-scan.ts";
 import { exportMatcher, readExportConfig, type ExportConfig } from "./shared-scope.ts";
-import { PRIVATE_REPOSITORY } from "../public-repository.ts";
+import { lintWorkflow } from "../../tools/workflow-lint.ts";
+import { PRIVATE_REPOSITORY, PUBLIC_REPOSITORY } from "../public-repository.ts";
 
 export const PUBLIC_AUTHOR_NAME = "AgentTool";
 export const PUBLIC_AUTHOR_EMAIL = PROJECTION_AUTHOR_EMAIL;
@@ -150,7 +158,7 @@ export interface GuardResult {
 export function guardExport(
   files: readonly TreeFile[],
   allowSource: { allow?: Uint8Array; gitleaksIgnore?: Uint8Array },
-  options: { gitleaks?: string; guardDir: string; wholeScope: boolean },
+  options: { gitleaks?: string; guard: PrivateGuard; wholeScope: boolean },
 ): GuardResult {
   const findings: Finding[] = [];
   const paths = new Set(files.map((file) => file.path));
@@ -169,9 +177,16 @@ export function guardExport(
     findings.push(...applyGitleaksIgnore(gitleaksFindings(options.gitleaks, files), scoped(fingerprints)));
     gitleaks = GITLEAKS_VERSION;
   }
-  const guard = loadPrivateGuard(options.guardDir);
-  const relational = scanFiles(files, guard, { wholeTree: options.wholeScope });
+  const relational = scanFiles(files, options.guard, { wholeTree: options.wholeScope });
   findings.push(...relational.findings, ...relational.allowMisses);
+  // An exported workflow must pass the shared CI's workflow lint for the public name.
+  for (const file of files) {
+    const workflow = /^\.github\/workflows\/([^/]+)$/u.exec(file.path);
+    if (workflow === null) continue;
+    for (const problem of lintWorkflow(workflow[1] as string, decodeText(file.bytes), PUBLIC_REPOSITORY)) {
+      findings.push({ layer: "path", rule: "path/workflow-lint", path: file.path, detail: problem.slice(problem.indexOf(": ") + 2) });
+    }
+  }
   return { findings: sortFindings(findings), gitleaks };
 }
 
@@ -306,6 +321,10 @@ export interface ExportReceipt {
 export function runExport(options: ExportOptions): ExportReceipt {
   const repo = resolve(options.repo ?? REPO_ROOT);
   const into = resolve(options.into);
+  const hooks = run(repo, ["config", "--get", "core.hooksPath"], { allowFailure: true }).stdout.toString("utf8").trim();
+  if (hooks !== "" && !existsSync(resolve(repo, hooks))) {
+    throw new ExportRefused(`core.hooksPath names ${hooks}, which is missing, so git runs no hook in this checkout; reinstall the guards first (install-guards.sh --verify)`);
+  }
   if (options.gitleaks === undefined && !options.noGitleaks) throw new ExportRefused("pass --gitleaks <gitleaks 8.30.1>, or --no-gitleaks for a dry export that cannot commit");
   if (options.gitleaks !== undefined && options.noGitleaks) throw new ExportRefused("--gitleaks and --no-gitleaks exclude each other");
   if (options.commit && options.gitleaks === undefined) throw new ExportRefused("--commit needs the gitleaks layer");
@@ -366,12 +385,20 @@ export function runExport(options: ExportOptions): ExportReceipt {
     const result = run(repo, ["cat-file", "blob", `${source}:${path}`], { allowFailure: true });
     return result.status === 0 ? result.stdout : undefined;
   };
+  // The private terms come from the source commit's objects unless a directory is named (tests).
+  const guard = options.guardDir === undefined ? loadPrivateGuardFromRev(repo, source) : loadPrivateGuard(options.guardDir);
   const guardResult = guardExport(files, { allow: rootBlob(GUARD_ALLOW_FILE), gitleaksIgnore: rootBlob(GITLEAKS_IGNORE_FILE) }, {
     gitleaks: options.gitleaks,
-    guardDir: options.guardDir ?? DEFAULT_GUARD_DIR,
+    guard,
     wholeScope: requested === undefined,
   });
-  const findings = sortFindings([...listingFindings, ...guardResult.findings]);
+  // What the export itself writes into the public clone: the branch name and the message.
+  const textFindings: Finding[] = [];
+  if (options.branch !== undefined) textFindings.push(...nameFindings("ref", options.branch, guard));
+  if (options.message !== undefined) {
+    textFindings.push(...privateTextFindings("(commit message)", options.message, guard, "all"), ...messageAddressFindings("(commit message)", options.message));
+  }
+  const findings = sortFindings([...listingFindings, ...guardResult.findings, ...textFindings]);
   if (findings.length > 0) throw new ExportRefused(`the guard found ${findings.length} problem(s); nothing was written`, findings);
 
   // Write, then let the clone hash the files itself. In upstream mode a
@@ -420,7 +447,7 @@ export function runExport(options: ExportOptions): ExportReceipt {
       options.mode === "init"
         ? `AgentTool public root\n\nExported-From: ${source}\n`
         : `${(options.message as string).trim()}\n\nExported-From: ${source}\n`;
-    run(into, ["-c", "commit.gpgSign=false", "commit", "--quiet", "--no-verify", "--allow-empty-message", "--file", "-"], {
+    run(into, ["-c", "commit.gpgSign=false", "-c", "core.hooksPath=/dev/null", "commit", "--quiet", "--no-verify", "--allow-empty-message", "--file", "-"], {
       input: message,
       env: exportGitEnv({
         GIT_AUTHOR_NAME: PUBLIC_AUTHOR_NAME,
