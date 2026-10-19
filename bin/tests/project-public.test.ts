@@ -844,6 +844,8 @@ describe("the shared guard's tree mode", () => {
     write(repo, "README.md", "# Shared tree\n");
     write(repo, "packages/alpha/index.ts", "export const alpha = 1;\n");
     write(repo, ".github/workflows/ci.yml", "name: ci\n");
+    // A shared tree lists its private canaries' blob ids; this one is a fixture.
+    write(repo, "tools/leak-canaries.txt", `${"c".repeat(40)}\n`);
     mkdirSync(join(repo, "tools"), { recursive: true });
     copyFileSync(GUARD, join(repo, "tools/public-guard.ts"));
     for (const [path, content] of Object.entries(files)) write(repo, path, content);
@@ -865,9 +867,10 @@ describe("the shared guard's tree mode", () => {
   });
 
   test("refuses the private namespace, private-only workflows, and a projection record", () => {
-    expect(treeRules(sharedTree({ "private/README.md": "# Private\n" }))).toEqual(["path/private-namespace"]);
-    expect(treeRules(sharedTree({ ".github/workflows/private-ci.yml": "name: private\n" }))).toEqual(["path/private-workflow"]);
-    expect(treeRules(sharedTree({ "PROJECTION.json": "{}\n" }))).toEqual(["path/projection-record"]);
+    // Each is found in the tree and, by the history check, in the commit that added it.
+    expect(treeRules(sharedTree({ "private/README.md": "# Private\n" }))).toEqual(["path/history-private-namespace", "path/private-namespace"]);
+    expect(treeRules(sharedTree({ ".github/workflows/private-ci.yml": "name: private\n" }))).toEqual(["path/history-private-workflow", "path/private-workflow"]);
+    expect(treeRules(sharedTree({ "PROJECTION.json": "{}\n" }))).toEqual(["path/history-projection-record", "path/projection-record"]);
     // Only the exact namespace and the private- workflow prefix are refused.
     expect(treeRules(sharedTree({ "privately/notes.md": "x\n", ".github/workflows/ci-private.yml": "name: x\n" }))).toEqual([]);
   });

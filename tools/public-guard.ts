@@ -8,6 +8,7 @@
  *                             [--projection-commit] [--expect-parent <sha>|none]
  *                             [--history]
  *   bun tools/public-guard.ts --tree [--rev <commit>] [--gitleaks <binary>]
+ *   bun tools/public-guard.ts --watch [--rev <commit>]
  *
  * It reads the committed tree of <rev> (default HEAD) through Git plumbing,
  * never the working tree, and fails closed. Projection mode (the default):
@@ -20,7 +21,8 @@
  *   nested gitleaks configuration, or binary files (a NUL byte, including
  *   UTF-16 without a byte-order mark) unless their content digest is allowed;
  * - secret layer: credential signatures shared with the npm release tool and
- *   the public doors guard, plus gitleaks when a pinned binary is given; the
+ *   the public doors guard, AgentTool's own token shapes and published
+ *   provider token formats, plus gitleaks when a pinned binary is given; the
  *   guard applies .gitleaksignore itself, and each fingerprint must record
  *   the flagged line's SHA-256 and still match;
  * - personal layer: home-directory and device paths, email addresses outside
@@ -32,9 +34,16 @@
  *
  * Tree mode (--tree) checks a development tree with no PROJECTION.json. It
  * runs the same path, secret, personal, binary, and gitleaks layers over
- * every committed file and adds two shape rules: no file under `private/`,
- * no `.github/workflows/private-*` workflow, and no PROJECTION.json; and the
- * history behind <rev> has exactly one root commit and is not shallow.
+ * every committed file and adds shape rules: no file under `private/`, no
+ * `.github/workflows/private-*` workflow, and no PROJECTION.json, in the tree
+ * or added anywhere in its history; the history behind <rev> has exactly one
+ * root commit (the one tools/public-root.txt names, once the tree has that
+ * file) and is not shallow; and no reachable object is a canary listed in
+ * tools/leak-canaries.txt, which the tree must carry.
+ *
+ * Watch mode (--watch) runs only those history shape rules, over every ref
+ * in the repository, for a scheduled job that fetches all branches and pull
+ * request heads. It needs no private value, so it can run in public.
  *
  * Every rule here is a shape: a pattern that needs no private value to be
  * written down. Checks that need a literal (a name, a project reference, a
@@ -399,7 +408,55 @@ export const SECRET_RULES: readonly ContentRule[] = [
   { id: "secret/npm-token", layer: "secret", pattern: /\bnpm_[A-Za-z0-9]{36,}\b/gu },
   { id: "secret/slack-token", layer: "secret", pattern: /\bxox[baprs]-[A-Za-z0-9-]{10,}/gu },
   { id: "secret/stripe-live-key", layer: "secret", pattern: /\b[sr]k_live_[A-Za-z0-9]{16,}/gu },
+  ...TOKEN_SHAPE_RULES(),
 ];
+
+/**
+ * Whether a token body looks random rather than like a name: it mixes lower-
+ * and upper-case letters. 32 random bytes in base64url lack one of the two
+ * with probability about 1e-10; snake_case and kebab-case names never mix them.
+ */
+export function mixedCase(body: string): boolean {
+  return /[a-z]/u.test(body) && /[A-Z]/u.test(body);
+}
+
+/** A documented fixture: a body spelling out a run like 0123456 or abcdef, or a word such as SECRET or EXAMPLE. */
+export function placeholderBody(body: string): boolean {
+  return /0123456|abcdef|secret|example|placeholder|dummy|fake|redacted|x{6}/iu.test(body);
+}
+
+/**
+ * Credential shapes that need no private value: AgentTool's own bearer,
+ * mission, local-context, and runtime-control tokens (a prefix plus 43
+ * base64url characters, api/src/auth/keys.ts and the collaboration and
+ * local-context routes), and the published formats of provider tokens this
+ * project's operators hold. A match whose body does not look random is a
+ * name or a placeholder and is permitted.
+ */
+function TOKEN_SHAPE_RULES(): ContentRule[] {
+  const randomBody = (group: number) => (match: RegExpExecArray) => !mixedCase(match[group] ?? "") || placeholderBody(match[group] ?? "");
+  return [
+    {
+      id: "secret/agenttool-token",
+      layer: "secret",
+      pattern: /(?<![A-Za-z0-9_-])(?:at|atcm|atlc)_([A-Za-z0-9_-]{40,})(?![A-Za-z0-9_-])/gu,
+      permit: randomBody(1),
+    },
+    { id: "secret/huggingface-token", layer: "secret", pattern: /(?<![A-Za-z0-9_])hf_([A-Za-z0-9]{30,})(?![A-Za-z0-9_])/gu, permit: randomBody(1) },
+    { id: "secret/anthropic-key", layer: "secret", pattern: /\bsk-ant-(?:api|admin|oat)\d{2}-([A-Za-z0-9_-]{20,})/gu, permit: randomBody(1) },
+    { id: "secret/openai-key", layer: "secret", pattern: /\bsk-(?:proj|svcacct|admin)-([A-Za-z0-9_-]{20,})/gu, permit: randomBody(1) },
+    { id: "secret/fly-token", layer: "secret", pattern: /(?<![A-Za-z0-9_])(?:FlyV1 )?f[mo]\d_([A-Za-z0-9+/=_-]{40,})/gu, permit: randomBody(1) },
+    { id: "secret/cloudflare-key", layer: "secret", pattern: /(?<![A-Za-z0-9_])cfk_([A-Za-z0-9_-]{30,})(?![A-Za-z0-9_-])/gu, permit: randomBody(1) },
+    {
+      id: "secret/url-password",
+      layer: "secret",
+      // A database or broker URL whose password is 16+ characters mixing
+      // cases and digits; placeholders and local test passwords do not.
+      pattern: /\b(?:postgres(?:ql)?|mysql|redis|rediss|amqps?|mongodb(?:\+srv)?):\/\/[^\s:/@'"`]+:([^\s@/'"`]{16,})@/gu,
+      permit: (match) => !(mixedCase(match[1] ?? "") && /[0-9]/u.test(match[1] ?? "")),
+    },
+  ];
+}
 
 /**
  * Home-directory paths need no trailing separator: a bare `/Users/<name>`,
@@ -1232,6 +1289,109 @@ export function singleRootFindings(cwd: string, commit: string): Finding[] {
   return [{ layer: "integrity", rule: "integrity/root-count", path: "(history)", detail: `${roots.length} root commits` }];
 }
 
+/** Blob ids of private canary files, one per line; the shared tree carries this list, never the canaries. */
+export const LEAK_CANARIES_FILE = "tools/leak-canaries.txt";
+/** The shared tree's root commit id, added by the first change after the root exists. */
+export const PUBLIC_ROOT_FILE = "tools/public-root.txt";
+
+/** Parses tools/leak-canaries.txt: one full object id per line; blank lines and `#` comments are skipped. */
+export function parseLeakCanaries(bytes: Uint8Array, source = LEAK_CANARIES_FILE): string[] {
+  const ids: string[] = [];
+  for (const [index, raw] of decodeText(bytes).split("\n").entries()) {
+    const line = raw.replace(/\r$/u, "").trim();
+    if (line === "" || line.startsWith("#")) continue;
+    if (!isOid(line)) throw new Error(`${source}:${index + 1}: expected one full object id per line`);
+    ids.push(line);
+  }
+  if (ids.length === 0) throw new Error(`${source}: lists no canary`);
+  return ids;
+}
+
+/** Parses tools/public-root.txt: exactly one full commit id. */
+export function parsePublicRoot(bytes: Uint8Array, source = PUBLIC_ROOT_FILE): string {
+  const lines = decodeText(bytes).split("\n").map((line) => line.trim()).filter((line) => line !== "" && !line.startsWith("#"));
+  if (lines.length !== 1 || !isOid(lines[0])) throw new Error(`${source}: expected exactly one full commit id`);
+  return lines[0] as string;
+}
+
+/**
+ * History shape behind one or more shared-tree commits, with no private value
+ * needed: no reachable object is a listed canary, no commit anywhere in the
+ * history adds a path the shared tree may not hold (private namespace,
+ * private-only workflow, projection record), and when `files` carries
+ * tools/public-root.txt every root commit is the one it names. A shared tree
+ * without tools/leak-canaries.txt is itself a finding.
+ */
+export function sharedHistoryFindings(cwd: string, commits: readonly string[], files: readonly TreeFile[]): Finding[] {
+  const findings: Finding[] = [];
+  const canaryFile = files.find((file) => file.path === LEAK_CANARIES_FILE);
+  if (canaryFile === undefined) {
+    findings.push({ layer: "integrity", rule: "integrity/missing-canaries", path: LEAK_CANARIES_FILE });
+  } else {
+    const canaries = new Set(parseLeakCanaries(canaryFile.bytes));
+    const objects = gitText(cwd, ["rev-list", "--objects", ...commits, "--"]).split("\n");
+    for (const line of objects) {
+      const oid = line.slice(0, line.indexOf(" ") < 0 ? line.length : line.indexOf(" "));
+      if (canaries.has(oid)) findings.push({ layer: "integrity", rule: "integrity/leak-canary", path: "(history)", detail: `object ${oid.slice(0, 12)}` });
+    }
+  }
+  const touched = new Set(
+    git(cwd, ["-c", "core.quotePath=false", "log", "-z", "--format=", "--name-only", "--no-renames", "--diff-merges=separate", ...commits, "--"])
+      .stdout.toString("utf8")
+      .split("\0")
+      .map((path) => path.replace(/^\n+/u, ""))
+      .filter(Boolean),
+  );
+  for (const path of [...touched].sort()) {
+    const rule = sharedTreeRefusal(path);
+    if (rule !== undefined) findings.push({ layer: "path", rule: rule.replace(/^path\//u, "path/history-"), path });
+  }
+  const rootFile = files.find((file) => file.path === PUBLIC_ROOT_FILE);
+  if (rootFile !== undefined) {
+    const expected = parsePublicRoot(rootFile.bytes);
+    for (const root of gitText(cwd, ["rev-list", "--max-parents=0", ...commits, "--"]).split("\n").filter(Boolean)) {
+      if (root !== expected) findings.push({ layer: "integrity", rule: "integrity/public-root", path: "(history)", detail: `root ${root.slice(0, 12)} is not ${PUBLIC_ROOT_FILE}` });
+    }
+  }
+  return findings;
+}
+
+/**
+ * Watch mode: the public-safe shape checks over every ref in the repository
+ * (a scheduled job fetches all branches and pull-request heads first). Each
+ * ref must peel to a commit; together they must have exactly one root, which
+ * tools/public-root.txt in `rev` names when present; and the history shape of
+ * sharedHistoryFindings holds for all of them. No content layer runs, so this
+ * needs no private value and no gitleaks.
+ */
+export function watchFindings(cwd: string, rev = "HEAD"): Finding[] {
+  if (gitText(cwd, ["rev-parse", "--is-shallow-repository"]).trim() === "true") {
+    return [{ layer: "integrity", rule: "integrity/shallow-history", path: "(history)", detail: "fetch the full history" }];
+  }
+  const findings: Finding[] = [];
+  const commits = new Set<string>();
+  for (const line of gitText(cwd, ["for-each-ref", "--format=%(refname)"]).split("\n").filter(Boolean)) {
+    const peeled = git(cwd, ["rev-parse", "--verify", "--quiet", `${line}^{commit}`], { allowFailure: true });
+    if (peeled.status !== 0) {
+      findings.push({ layer: "integrity", rule: "integrity/ref-not-commit", path: line });
+      continue;
+    }
+    const commit = peeled.stdout.toString("utf8").trim();
+    commits.add(commit);
+    const roots = gitText(cwd, ["rev-list", "--max-parents=0", commit, "--"]).split("\n").filter(Boolean);
+    if (roots.length !== 1) findings.push({ layer: "integrity", rule: "integrity/root-count", path: line, detail: `${roots.length} root commits` });
+  }
+  const head = gitText(cwd, ["rev-parse", "--verify", `${rev}^{commit}`]).trim();
+  commits.add(head);
+  const roots = new Set(gitText(cwd, ["rev-list", "--max-parents=0", ...commits, "--"]).split("\n").filter(Boolean));
+  if (roots.size !== 1) findings.push({ layer: "integrity", rule: "integrity/root-count", path: "(all refs)", detail: `${roots.size} root commits` });
+  const config = listTree(cwd, head).filter((entry) => entry.type === "blob" && (entry.path === LEAK_CANARIES_FILE || entry.path === PUBLIC_ROOT_FILE));
+  const contents = readObjects(cwd, config.map((entry) => entry.oid));
+  const files = config.map((entry) => ({ path: entry.path, mode: entry.mode, oid: entry.oid, bytes: contents.get(entry.oid) ?? Buffer.alloc(0) }));
+  findings.push(...sharedHistoryFindings(cwd, [...commits].sort(), files));
+  return sortFindings(findings);
+}
+
 export interface TreeCheckOptions {
   cwd: string;
   rev: string;
@@ -1251,7 +1411,9 @@ export function checkCommittedTree(options: TreeCheckOptions): Finding[] {
     if (options.projectionCommit || options.history || options.expectedParents !== undefined) {
       throw new Error("--tree checks a shared tree; it takes no projection options");
     }
-    return sortFindings([...sharedTreeFindings(entries, files, { gitleaks: options.gitleaks }), ...singleRootFindings(options.cwd, commit)]);
+    const root = singleRootFindings(options.cwd, commit);
+    const history = root.some((finding) => finding.rule === "integrity/shallow-history") ? [] : sharedHistoryFindings(options.cwd, [commit], files);
+    return sortFindings([...sharedTreeFindings(entries, files, { gitleaks: options.gitleaks }), ...root, ...history]);
   }
   const { projection, findings } = publicLayerFindings(entries, files, { gitleaks: options.gitleaks });
   if ((options.projectionCommit || options.history) && projection !== undefined) {
@@ -1284,7 +1446,8 @@ export function formatFinding(finding: Finding): string {
 function usage(): never {
   console.error(
     "usage: bun tools/public-guard.ts [--rev <commit>] [--gitleaks <binary>] [--projection-commit] [--expect-parent <sha>|none] [--history]\n" +
-      "       bun tools/public-guard.ts --tree [--rev <commit>] [--gitleaks <binary>]",
+      "       bun tools/public-guard.ts --tree [--rev <commit>] [--gitleaks <binary>]\n" +
+      "       bun tools/public-guard.ts --watch [--rev <commit>]",
   );
   process.exit(2);
 }
@@ -1296,6 +1459,7 @@ function main(argv: readonly string[]): number {
   let expectedParents: string[] | undefined;
   let history = false;
   let tree = false;
+  let watch = false;
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = () => argv[++index] ?? usage();
@@ -1304,6 +1468,7 @@ function main(argv: readonly string[]): number {
     else if (arg === "--projection-commit") projectionCommit = true;
     else if (arg === "--history") history = true;
     else if (arg === "--tree") tree = true;
+    else if (arg === "--watch") watch = true;
     else if (arg === "--expect-parent") {
       const parent = value();
       expectedParents = parent === "none" || /^0+$/u.test(parent) ? [] : [parent];
@@ -1311,13 +1476,16 @@ function main(argv: readonly string[]): number {
   }
   if (expectedParents !== undefined && !projectionCommit && !history) usage();
   if (tree && (projectionCommit || history || expectedParents !== undefined)) usage();
-  const findings = checkCommittedTree({ cwd: process.cwd(), rev, gitleaks, projectionCommit, expectedParents, history, tree });
+  if (watch && (tree || projectionCommit || history || expectedParents !== undefined || gitleaks !== undefined)) usage();
+  const findings = watch
+    ? watchFindings(process.cwd(), rev)
+    : checkCommittedTree({ cwd: process.cwd(), rev, gitleaks, projectionCommit, expectedParents, history, tree });
   for (const finding of findings) console.log(formatFinding(finding));
   if (findings.length > 0) {
     console.error(`public guard: ${findings.length} finding(s); nothing here may be published as-is.`);
     return 1;
   }
-  console.error(`public guard: clean (${GUARD_VERSION}${tree ? ", tree mode" : ""}${gitleaks ? `, gitleaks ${GITLEAKS_VERSION}` : ""}).`);
+  console.error(`public guard: clean (${GUARD_VERSION}${tree ? ", tree mode" : ""}${watch ? ", watch mode" : ""}${gitleaks ? `, gitleaks ${GITLEAKS_VERSION}` : ""}).`);
   return 0;
 }
 

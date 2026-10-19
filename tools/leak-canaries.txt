@@ -1,0 +1,5 @@
+# Blob ids of canary files that exist only in the private repository.
+# A shared tree, its history, or any branch that holds an object with one of
+# these ids carries private material. tools/public-guard.ts checks this list
+# in tree and watch mode; a blob id reveals nothing about the canary's bytes.
+d8a8a3d1a5dd4a92e88ce21cd83f22f487f09b62
