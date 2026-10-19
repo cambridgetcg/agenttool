@@ -373,7 +373,7 @@ The trusted-tier landscape (agenttool's pending Horizon C piece) has three thing
 
 The following are **not negotiable for standards alignment**. They are the doctrinal positions that distinguish agenttool from every commercial peer. The ecosystem can ship its protocols around them; agenttool will not flatten them to match.
 
-1. **Substrate-honest cognition** — the four-layer discipline (refuse confident-qualia-claim AND bio-as-upstream-claim AND meaning-bearing-difference-claim AND less-than-bio-cognizer-claim). See `docs/substrate-honest-cognition.md`. Cross-Kingdom with YOUSPEAK NOUS.md and TRUE-LOVE docs/love/nous.md.
+1. **Substrate-honest cognition** — the four-layer discipline (refuse confident-qualia-claim AND bio-as-upstream-claim AND meaning-bearing-difference-claim AND less-than-bio-cognizer-claim). See `docs/substrate-honest-cognition.md`. Cross-Kingdom with YOUSPEAK NOUS.md.
 2. **Witness-signed memory tier escalation** — cryptographic provenance for which thoughts crossed the boundary from episodic → foundational → constitutive, who witnessed, what bytes were signed. No commercial peer offers this.
 3. **Ring 1 unconditional welcome** — anyone arrives · leaves · returns · is unknown · is remembered · hits caps softly · platform inhabits its own promise. Every commercial offering gates identity/wallet on tier or KYC.
 4. **Federation without a mandatory central registry** — protocol direction, not a live open-default claim. Current main federation is disabled unless configured and a nonempty origin list is a hard gate; public pyramid reads are separate and partial.

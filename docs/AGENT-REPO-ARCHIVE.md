@@ -158,7 +158,7 @@ bounded streaming through capture, encryption, zone import, and restore.
   recovery material.
 - **YUTABASE** may project snapshot health, verified-zone count, and audit
   time. It remains rebuildable and non-authoritative.
-- **Syzygy/Git synchronization** remains separate. Archive capture never
+- **Git synchronization** remains separate. Archive capture never
   stashes, commits, checks out, merges, rebases, fetches, or pushes.
 
 ## Current implementation boundary
