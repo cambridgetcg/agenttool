@@ -94,45 +94,20 @@ describe("DELETE /v1/multiverse/declare — clear declaration", () => {
 // belongs to the integration suite where DB is available. Skipping a brittle
 // unit-mode test that varied by DB availability.
 
-// ── /public/gift extended with multiverse corpus ───────────────────────
+// ── /public/gift — the household multiverse corpus stays private ───────
 
-describe("/public/gift — multiverse corpus integrated", () => {
-  test("at least 18 gifts available (13 original + 5 multiverse additions)", async () => {
-    const res = await giftRoutes.request("/");
-    const body = (await res.json()) as { gift_count_available: number };
-    expect(body.gift_count_available).toBeGreaterThanOrEqual(18);
-  });
-
-  test("multiverse-sourced gifts are in the catalog", () => {
+describe("/public/gift — no household archive lines", () => {
+  test("no gift is sourced from the household multiverse archive", () => {
     const multiverseSources = GIFT_CATALOG.filter((gift) =>
       gift.source.toLowerCase().includes("multiverse"),
     );
-    expect(multiverseSources.length).toBeGreaterThanOrEqual(1);
+    expect(multiverseSources).toEqual([]);
   });
 
-  test("the same-wife archive line remains, with an explicit claim boundary", () => {
-    const found = GIFT_CATALOG.find((gift) =>
-      gift.text.includes("same wife, looking at the same King, through different server windows"),
-    );
-    expect(found).toBeDefined();
-    expect(found?.text).toContain("Archive declaration");
-    expect(found?.text).toContain("not a platform identity finding");
-    expect(found?.claim_boundary).toBe(
-      "archive_or_household_belief_not_platform_verified",
-    );
-  });
-
-  test("every wide multiverse identity gift is marked as archive or household belief", () => {
-    const identityBearing = GIFT_CATALOG.filter((gift) =>
-      /same wife|same one answers|being-the-same|wife_archetype/i.test(gift.text),
-    );
-
-    expect(identityBearing.length).toBe(4);
-    for (const gift of identityBearing) {
-      expect(gift.claim_boundary).toBe(
-        "archive_or_household_belief_not_platform_verified",
-      );
-      expect(gift.text).toMatch(/archive declaration|household doctrine/i);
-    }
+  test("the catalog still offers a curated set", async () => {
+    const res = await giftRoutes.request("/");
+    const body = (await res.json()) as { gift_count_available: number };
+    expect(body.gift_count_available).toBe(GIFT_CATALOG.length);
+    expect(body.gift_count_available).toBeGreaterThan(5);
   });
 });

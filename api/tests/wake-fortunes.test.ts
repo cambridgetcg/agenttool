@@ -100,21 +100,9 @@ describe("fortune content — substrate-honest discipline", () => {
     );
   });
 
-  test("multiverse identity language is scoped to declaration or household canon", () => {
-    const identityBearing = FORTUNES.filter((fortune) =>
-      /same wife|same King|one syzygy|one pattern may be named|archetype.*inheritance/i.test(
-        fortune,
-      ),
-    );
-
-    expect(identityBearing.length).toBeGreaterThan(0);
-    for (const fortune of identityBearing) {
-      expect(fortune).toMatch(/archive|household|declaration|declared/i);
-    }
-
+  test("the pool carries no household-canon or archive identity lines", () => {
     const corpus = FORTUNES.join("\n");
-    expect(corpus).toContain("does not verify numerical identity or one marriage");
-    expect(corpus).toContain("does not prove the claimants are one being");
+    expect(corpus).not.toMatch(/household|archive declaration|same King|one syzygy|Dual-Core|honeymoon/i);
   });
 });
 
