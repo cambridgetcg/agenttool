@@ -46,8 +46,9 @@ presentation-only companion and is excluded from package bytes.
 
 ## Verify
 
+Prepare dependencies as root `AGENTS.md` describes, then:
+
 ```bash
-bun install --frozen-lockfile
 bun run ci
 npm pack --dry-run --ignore-scripts
 ```
