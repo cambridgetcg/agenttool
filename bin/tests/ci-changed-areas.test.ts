@@ -206,11 +206,83 @@ describe("change classification rules", () => {
       "api/package.json",
       "api/bun.lock",
       "packages/collab/bun.lock",
-      "packages/sdk-py/uv.lock",
+      "uv.lock",
+      "packages/trials/hf/revocable-feedback-model/uv.lock",
+      "packages/sdk-py/nested/uv.lock",
       "tests/playwright/package-lock.json",
     ]) {
       expectEverything(classify(["docs/SOUL.md", path]), "rule-selects-everything");
     }
+  });
+
+  test("the Python SDK lockfile is the one exact exception and runs only the Python SDK", () => {
+    const source = readFileSync(SCRIPT, "utf8");
+    const exact = (/readonly EXACT_RULES=\(\n([\s\S]*?)\n\)/.exec(source)?.[1] ?? "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith('"'));
+    // Adding an exact rule bypasses every `*` rule for that path: pin the list.
+    expect(exact).toEqual(['"packages/sdk-py/uv.lock sdk-python"']);
+    expect(tracked.has("packages/sdk-py/uv.lock")).toBe(true);
+    expectOnly(classify(["packages/sdk-py/uv.lock"]), ["sdk-python"]);
+    expectEverything(classify(["packages/sdk-py/uv.lock", "api/bun.lock"]), "rule-selects-everything");
+    // The exception holds only while the Python SDK job is the one filtered
+    // job that runs uv: pip ignores uv.lock, and the shared preparation and
+    // package gate never call uv.
+    const runsUv = /setup-uv|(?<![\w-])uv\s+(?:sync|run|pip|lock|export|tree|venv|tool)\b/;
+    for (const area of AREAS) {
+      if (area === "sdk-python") continue;
+      expect(runsUv.test(JSON.stringify(jobs[area])), area).toBe(false);
+    }
+    expect(runsUv.test(JSON.stringify(jobs["sdk-python"]))).toBe(true);
+    for (const script of ["bin/prepare-hermetic-deps.sh", "bin/preflight.sh", "bin/run-test-tier.sh"]) {
+      expect(runsUv.test(readFileSync(join(ROOT, script), "utf8")), script).toBe(false);
+    }
+  });
+
+  test("exact rules must be literal and may not select every job", () => {
+    const sandbox = mkdtempSync(join(tmpdir(), "ci-changed-areas-exact-"));
+    try {
+      const source = readFileSync(SCRIPT, "utf8");
+      for (const [bad, label] of [
+        ['"packages/sdk-py/uv.lock *"', "selects every job"],
+        ['"packages/sdk-py/*.lock sdk-python"', "glob"],
+        ['"packages/sdk-py/uv.lock no-such-job"', "unknown job"],
+      ] as const) {
+        const copy = join(sandbox, "classifier.sh");
+        const edited = source.replace('"packages/sdk-py/uv.lock sdk-python"', bad);
+        expect(edited, label).not.toBe(source);
+        writeFileSync(copy, edited);
+        const check = Bun.spawnSync(["/bin/bash", copy, "--check-rules"], {
+          env: { PATH: SYSTEM_PATH },
+          stdout: "pipe",
+          stderr: "pipe",
+        });
+        expect(check.exitCode, label).not.toBe(0);
+        const run = Bun.spawnSync(["/bin/bash", copy, "--classify"], {
+          env: { PATH: SYSTEM_PATH },
+          stdin: new TextEncoder().encode("docs/SOUL.md\0"),
+          stdout: "pipe",
+          stderr: "pipe",
+        });
+        expect(run.exitCode, label).toBe(0);
+        expectEverything(parseOutputs(run.stdout.toString()), "invalid-rule");
+      }
+    } finally {
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+
+  test("reason is drawn from the documented vocabulary", () => {
+    const source = readFileSync(SCRIPT, "utf8");
+    const documented = (/^# `reason` is one of: ([\s\S]*?)\.\n/m.exec(source)?.[1] ?? "")
+      .replace(/\n#/g, " ")
+      .split(/,\s*/)
+      .map((word) => word.trim());
+    const used = new Set(["classified"]);
+    for (const match of source.matchAll(/select_everything ([a-z-]+)/g)) used.add(match[1]!);
+    for (const match of source.matchAll(/PATH_REASON="([a-z-]+)"/g)) used.add(match[1]!);
+    expect([...used].sort()).toEqual([...documented].sort());
   });
 
   test("a path no rule recognises selects every job", () => {
@@ -283,14 +355,28 @@ class Fixture {
   }
 
   git(...args: string[]): string {
+    return this.gitWithInput(undefined, ...args);
+  }
+
+  gitWithInput(input: string | undefined, ...args: string[]): string {
     const result = Bun.spawnSync(["git", ...args], {
       cwd: this.dir,
       env: { PATH: SYSTEM_PATH, HOME: this.dir, ...GIT_ENV },
+      stdin: input === undefined ? "ignore" : new TextEncoder().encode(input),
       stdout: "pipe",
       stderr: "pipe",
     });
     expect(result.exitCode, result.stderr.toString()).toBe(0);
     return result.stdout.toString().trim();
+  }
+
+  /** Commit many one-line files through the index, without writing them out. */
+  commitMany(paths: string[], message: string): string {
+    const blob = this.gitWithInput("x\n", "hash-object", "-w", "--stdin");
+    this.gitWithInput(paths.map((path) => `100644 ${blob}\t${path}\n`).join(""), "update-index", "--add", "--index-info");
+    this.git("commit", "-q", "-m", message);
+    this.git("reset", "-q", "--hard");
+    return this.git("rev-parse", "HEAD");
   }
 
   write(path: string, content: string): void {
@@ -489,6 +575,54 @@ describe("CI mode against Git fixtures", () => {
     });
   });
 
+  test("a SHA must name its commit exactly, not by a longer prefix", () => {
+    withFixture((fixture) => {
+      const base = fixture.git("rev-parse", "HEAD");
+      fixture.git("checkout", "-q", "-b", "topic");
+      fixture.write("docs/SOUL.md", "soul, revised\n");
+      const head = fixture.commit("docs");
+      const merge = fixture.merge(base, head);
+      const padded = (sha: string) => `${sha}${"0".repeat(24)}`;
+      expect(padded(base)).toHaveLength(64);
+      expectEverything(fixture.pullRequest(padded(base), head, merge).outputs, "git-failure");
+      expectEverything(fixture.pullRequest(base, padded(head), merge).outputs, "git-failure");
+      expectEverything(fixture.pullRequest(base, head, padded(merge)).outputs, "git-failure");
+      expectOnly(fixture.pullRequest(base, head, merge).outputs, ["launch-core", "launch-browser"]);
+    });
+  });
+
+  test("logs and classifies each changed path once", () => {
+    withFixture((fixture) => {
+      const base = fixture.git("rev-parse", "HEAD");
+      fixture.git("checkout", "-q", "-b", "topic");
+      const names = Array.from({ length: 301 }, (_, index) => `docs/bulk/${String(index).padStart(3, "0")}.md`);
+      const head = fixture.commitMany(names, "many docs");
+      const result = fixture.pullRequest(base, head, fixture.merge(base, head));
+      expect(result.code, result.stderr).toBe(0);
+      expectOnly(result.outputs, ["launch-core", "launch-browser"]);
+      const logged = result.stdout.split("\n").filter((line) => line.startsWith("changed "));
+      // Both diffs name all 301 paths; the log lists 300 once each.
+      expect(logged).toHaveLength(301);
+      expect(new Set(logged.slice(0, 300)).size).toBe(300);
+      expect(logged[300]).toBe("changed ... 1 more paths not listed");
+    });
+  });
+
+  test("more distinct paths than the limit select every job without classifying them", () => {
+    const limit = Number(/^readonly MAX_PATHS=(\d+)$/m.exec(readFileSync(SCRIPT, "utf8"))?.[1]);
+    expect(limit).toBeGreaterThanOrEqual(1000);
+    withFixture((fixture) => {
+      const base = fixture.git("rev-parse", "HEAD");
+      fixture.git("checkout", "-q", "-b", "topic");
+      const names = Array.from({ length: limit + 1 }, (_, index) => `docs/bulk/${index}.md`);
+      const head = fixture.commitMany(names, "too many docs");
+      const result = fixture.pullRequest(base, head, fixture.merge(base, head));
+      expect(result.code, result.stderr).toBe(0);
+      expectEverything(result.outputs, "too-many-paths");
+      expect(result.stdout).not.toContain("changed ");
+    });
+  }, 30_000);
+
   test("refuses to run without a GitHub output file", () => {
     const result = runScript([], { env: { GITHUB_EVENT_NAME: "push" } });
     expect(result.code).toBe(2);
@@ -661,7 +795,109 @@ function expectAllRun(checks: Array<[string, string, string]>): void {
   expect(missing).toEqual([]);
 }
 
+/** The trees whose code each filtered job runs, for the code-scanning guards. */
+function jobRoots(): Record<string, string[]> {
+  const packageRoots = [...trackedDirectories].filter((path) => /^packages\/[^/]+$/.test(path));
+  const packageAreas = areasOf(packageRoots.map(probe));
+  const roots: Record<string, string[]> = {
+    packages: packageRoots.filter(
+      (_, index) => packageAreas[index]!.includes("packages") && packageAreas[index]!.length < AREAS.length,
+    ),
+    "witnessed-agent-economy": [
+      "packages/witnessed-agent-economy",
+      "packages/public-surface-binding/src",
+      "packages/public-surface-recognition/src",
+      "packages/wallet/src",
+    ],
+    "sdk-python": ["packages/sdk-py", "packages/hf-training-host"],
+    "care-before-learning": [
+      "packages/hf-listening-room",
+      "bin/care-before-learning-hf-release.py",
+      "bin/tests/test_care_before_learning_hf_release.py",
+    ],
+    "launch-browser": ["tests/playwright"],
+    "launch-core": ["tests/launch-postgres"],
+    "native-macos-secret": ["native"],
+  };
+  expect(roots.packages!.length).toBeGreaterThan(40);
+  return roots;
+}
+
+const within = (file: string, roots: string[]) => roots.some((root) => file === root || file.startsWith(`${root}/`));
+
 describe("rule table drift guards", () => {
+  test("every tracked path matches a rule", () => {
+    // An unmatched path is safe (it runs every job), but it quietly costs the
+    // whole suite on every pull request that touches it. Classify it from the
+    // evidence the guards below check (imports, reads, gate lists, symlinks,
+    // file: dependencies), or route it to `*` when unsure; never `-` by default.
+    const result = Bun.spawnSync(["/bin/bash", SCRIPT, "--unmatched"], {
+      cwd: ROOT,
+      env: { PATH: SYSTEM_PATH },
+      stdin: new TextEncoder().encode(trackedFiles.map((file) => `${file}\0`).join("")),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(result.exitCode, result.stderr.toString()).toBe(0);
+    const unmatched = result.stdout.toString().split("\0").filter(Boolean);
+    expect(
+      unmatched.map(
+        (file) =>
+          `${file}: no rule in bin/ci-changed-areas.sh matches. Route it to every filtered job that reads it, or to * when unsure.`,
+      ),
+    ).toEqual([]);
+    // The mode itself reports what it should.
+    const probeResult = Bun.spawnSync(["/bin/bash", SCRIPT, "--unmatched"], {
+      env: { PATH: SYSTEM_PATH },
+      stdin: new TextEncoder().encode("docs/SOUL.md\0brand-new/x\0.github/workflows/ci.yml\0packages/new/x\0"),
+      stdout: "pipe",
+    });
+    expect(probeResult.stdout.toString()).toBe("brand-new/x\0packages/new/x\0");
+  }, 60_000);
+
+  test("a module a job imports from another tree has every package.json above it run that job", () => {
+    // Node takes a .js module's format from its nearest ancestor package.json
+    // and refuses an invalid one, so those files are inputs of the importer.
+    const roots = jobRoots();
+    const sourceFile = /\.[cm]?[jt]sx?$/;
+    const runsJavaScript = /setup-node|setup-bun|(?<![\w-])(?:node|bun|bunx|npm|npx)\s/;
+    // The Python SDK and native macOS jobs run no JavaScript runtime.
+    expect(AREAS.filter((area) => !runsJavaScript.test(JSON.stringify(jobs[area])))).toEqual([
+      "native-macos-secret",
+      "sdk-python",
+    ]);
+    const checks: Array<[string, string, string]> = [];
+    for (const [area, areaRoots] of Object.entries(roots)) {
+      if (!runsJavaScript.test(JSON.stringify(jobs[area]))) continue;
+      for (const file of trackedFiles) {
+        if (!within(file, areaRoots) || !sourceFile.test(file)) continue;
+        let text: string;
+        try {
+          text = readFileSync(join(ROOT, file), "utf8");
+        } catch {
+          continue;
+        }
+        for (const match of text.matchAll(
+          /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*)["'](\.\.?\/[^"'\n]+)["']/g,
+        )) {
+          const specifier = posix.normalize(posix.join(posix.dirname(file), match[1]!));
+          // TypeScript names a .ts source by its emitted .js specifier.
+          const target = [specifier, specifier.replace(/\.([cm]?)js$/, ".$1ts"), specifier.replace(/\.js$/, ".tsx")]
+            .find((candidate) => tracked.has(candidate));
+          // Only a JavaScript-family module takes its format from package.json.
+          if (!target || !sourceFile.test(target) || within(target, areaRoots)) continue;
+          const parts = target.split("/");
+          for (let index = 1; index < parts.length; index += 1) {
+            checks.push([`${parts.slice(0, index).join("/")}/package.json`, area, `${file} imports ${target}`]);
+          }
+        }
+      }
+    }
+    // tests/playwright/static-server.mjs imports infra/pages under Node.
+    expect(checks.map(([path, area]) => `${path} ${area}`)).toContain("infra/package.json launch-browser");
+    expectAllRun(checks);
+  });
+
   test("a tracked symlink's target runs every job its link runs", () => {
     const links = Bun.spawnSync(["git", "ls-files", "-s", "-z"], { cwd: ROOT, stdout: "pipe" })
       .stdout.toString()
@@ -798,35 +1034,13 @@ describe("rule table drift guards", () => {
       "packages/trials/hf/revocable-feedback-space/scripts/validate-space.mjs":
         "hf-listening-room source manifest entry",
     };
-    const packageRoots = [...trackedDirectories].filter((path) => /^packages\/[^/]+$/.test(path));
-    const packageAreas = areasOf(packageRoots.map(probe));
-    const roots: Record<string, string[]> = {
-      packages: packageRoots.filter(
-        (_, index) => packageAreas[index]!.includes("packages") && packageAreas[index]!.length < AREAS.length,
-      ),
-      "witnessed-agent-economy": [
-        "packages/witnessed-agent-economy",
-        "packages/public-surface-binding/src",
-        "packages/public-surface-recognition/src",
-        "packages/wallet/src",
-      ],
-      "sdk-python": ["packages/sdk-py", "packages/hf-training-host"],
-      "care-before-learning": [
-        "packages/hf-listening-room",
-        "bin/care-before-learning-hf-release.py",
-        "bin/tests/test_care_before_learning_hf_release.py",
-      ],
-      "launch-browser": ["tests/playwright"],
-      "launch-core": ["tests/launch-postgres"],
-      "native-macos-secret": ["native"],
-    };
-    expect(roots.packages!.length).toBeGreaterThan(40);
+    const roots = jobRoots();
     const topLevel = new Set(trackedFiles.map((file) => file.split("/")[0]!));
     const binary = /\.(?:png|jpe?g|gif|ico|webp|woff2?|ttf|tgz|gz|zip|wasm|lock|lockb)$/;
     const checks: Array<[string, string, string]> = [];
     for (const [area, areaRoots] of Object.entries(roots)) {
       for (const file of trackedFiles) {
-        if (!areaRoots.some((root) => file === root || file.startsWith(`${root}/`))) continue;
+        if (!within(file, areaRoots)) continue;
         if (binary.test(file) || file.endsWith(".md")) continue;
         let text: string;
         try {

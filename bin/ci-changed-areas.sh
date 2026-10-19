@@ -6,14 +6,19 @@
 # .github/workflows/ci.yml to $GITHUB_OUTPUT. Only a pull_request whose every
 # changed path matches a rule below can turn a job off. Any other event, a
 # missing or malformed SHA, any git failure, an unexpected merge shape, an empty
-# diff, a path that no rule matches, or a path whose rule selects `*` turns
-# every job on. Jobs that always run (the Linux API gate, which reads nearly
-# the whole tree, and the PR notice) are not listed here.
+# diff, more than MAX_PATHS distinct paths, a path that no rule matches, or a
+# path whose rule selects `*` turns every job on. Jobs that always run (the
+# Linux API gate, which reads nearly the whole tree, and the PR notice) are not
+# listed here.
+#
+# `reason` is one of: classified, not-a-pull-request, missing-or-malformed-sha,
+# git-failure, unexpected-merge-shape, path-list-failure, empty-diff,
+# too-many-paths, invalid-rule, unmatched-path, rule-selects-everything.
 #
 # Changed paths are chosen by whoever opens the pull request. They are read
-# NUL-delimited, used only as the left operand of [[ == ]], never evaluated or
-# passed as arguments, never written to $GITHUB_OUTPUT, and logged only
-# %q-escaped inside a stop-commands block.
+# NUL-delimited, used only as the left operand of [[ == ]] (or compared as a
+# quoted literal), never evaluated or passed as arguments, never written to
+# $GITHUB_OUTPUT, and logged only %q-escaped inside a stop-commands block.
 #
 # Test and audit modes (no git, no $GITHUB_OUTPUT):
 #   --list-areas      print the filterable job ids, one per line
@@ -23,6 +28,8 @@
 #   --classify-each   read NUL-terminated paths on stdin and print one line per
 #                     path: `*` (every job), `-` (only always-run jobs), or a
 #                     comma-separated job list
+#   --unmatched       read NUL-terminated paths on stdin and print, each
+#                     NUL-terminated, those that no rule matches
 #
 # The dependency evidence behind each rule is summarised beside it; the
 # drift guards live in bin/tests/ci-changed-areas.test.ts.
@@ -32,6 +39,22 @@ set -f
 export LC_ALL=C
 
 readonly AREAS="api-protocol-postgres launch-stateful launch-core launch-browser native-macos-secret care-before-learning witnessed-agent-economy packages sdk-python"
+
+# A pull request with more distinct changed paths than this runs every job
+# rather than spend its classifier time limit matching them one by one.
+readonly MAX_PATHS=10000
+
+# Exact rules: "<repository path> <areas>". The path is compared literally, no
+# glob. An exact rule is final: the path it names takes exactly its areas and
+# RULES are not consulted, so it can carve a precisely evidenced exception out
+# of a `*` rule. Areas are a comma-separated job list or `-`, never `*`.
+# bin/tests/ci-changed-areas.test.ts pins this list; add to it only with
+# evidence of every reader.
+readonly EXACT_RULES=(
+  # Read only by the Python SDK job's `uv sync --locked ... --dry-run` and by
+  # bin/tests/sdk-release.test.ts in the always-run Linux gate. pip ignores it.
+  "packages/sdk-py/uv.lock sdk-python"
+)
 
 # Rules: "<pattern> <areas>". The pattern is a [[ == ]] glob in which `*` also
 # matches `/`. Areas are comma-separated job ids, `*` (every job), or `-` (the
@@ -190,6 +213,16 @@ readonly RULES=(
   "packages/sdk-ts/src/openai-responses-adapter.ts sdk-python"
   "api/src/services/economy/x402-client.ts sdk-python"
 
+  # Module scope: Node takes a .js file's module format from its nearest
+  # ancestor package.json, and an invalid one fails the import. A package.json
+  # above a module that a job imports from another tree runs that job:
+  # tests/playwright/static-server.mjs imports infra/pages under Node, and
+  # package tests import apps/docs/xenia-helly.js and bin/whitehack-advisory.mjs.
+  "infra/package.json launch-browser"
+  "apps/package.json packages"
+  "apps/docs/package.json packages"
+  "bin/package.json packages"
+
   # Read only by jobs that always run (the Linux API gate's whole-tree
   # scanners, catalog, operator tests, and the PR notice).
   "bin/* -"
@@ -231,6 +264,16 @@ NEEDED=" "
 PATH_AREAS=""
 PATH_REASON=""
 
+# Each rule split once, so matching a path does not re-parse the table.
+RULE_PATTERNS=()
+RULE_AREAS=()
+for rule in "${RULES[@]}"; do
+  RULE_PATTERNS+=("${rule%% *}")
+  RULE_AREAS+=("${rule#* }")
+done
+readonly RULE_COUNT=${#RULE_PATTERNS[@]}
+unset rule
+
 is_area() {
   case " $AREAS " in
     *" $1 "*) return 0 ;;
@@ -260,6 +303,17 @@ rule_is_valid() {
   done
 }
 
+# An exact rule names a literal path (no glob characters) and a job list or
+# `-`; it may not select `*`.
+exact_rule_is_valid() {
+  local rule=$1
+  rule_is_valid "$rule" || return 1
+  [[ ${rule#* } != '*' ]] || return 1
+  case ${rule%% *} in
+    *'*'* | *'?'* | *'['* | *']'* | *\\*) return 1 ;;
+  esac
+}
+
 check_rules() {
   local rule status=0
   for rule in "${RULES[@]}"; do
@@ -268,25 +322,34 @@ check_rules() {
       status=1
     fi
   done
+  for rule in ${EXACT_RULES[@]+"${EXACT_RULES[@]}"}; do
+    if ! exact_rule_is_valid "$rule"; then
+      printf 'invalid exact rule: %q\n' "$rule" >&2
+      status=1
+    fi
+  done
   return "$status"
 }
 
 # Sets PATH_AREAS to `*`, `-`, or a comma-separated job list for one path, and
-# PATH_REASON when the answer is `*`.
+# PATH_REASON when the answer is `*`. Every entry point runs check_rules first
+# and classifies nothing when it fails, so the table is known to be well formed.
 classify_one() {
-  local file=$1 rule pattern areas rest token result="" matched=false
-  for rule in "${RULES[@]}"; do
-    pattern=${rule%% *}
-    areas=${rule#* }
-    # The changed path is only ever the subject of the match, never a pattern.
-    # shellcheck disable=SC2053
-    [[ $file == $pattern ]] || continue
-    matched=true
-    if ! rule_is_valid "$rule"; then
-      PATH_AREAS='*'
-      PATH_REASON="invalid-rule"
+  local file=$1 exact index areas rest token result="" matched=false
+  for exact in ${EXACT_RULES[@]+"${EXACT_RULES[@]}"}; do
+    # Quoted: a literal comparison, not a pattern.
+    if [[ $file == "${exact%% *}" ]]; then
+      PATH_AREAS=${exact#* }
+      PATH_REASON=""
       return 0
     fi
+  done
+  for ((index = 0; index < RULE_COUNT; index++)); do
+    # The changed path is only ever the subject of the match, never a pattern.
+    # shellcheck disable=SC2053
+    [[ $file == ${RULE_PATTERNS[index]} ]] || continue
+    matched=true
+    areas=${RULE_AREAS[index]}
     if [[ $areas == '*' ]]; then
       PATH_AREAS='*'
       PATH_REASON="rule-selects-everything"
@@ -350,9 +413,11 @@ emit_outputs() {
 }
 
 # Read NUL-terminated paths from stdin. A final unterminated path still counts.
+# Once every job is selected no later path can change the result, so the rest
+# of the input is left unread.
 classify_stdin() {
   local file
-  while IFS= read -r -d '' file || [[ -n $file ]]; do
+  while [[ $EVERYTHING == false ]] && { IFS= read -r -d '' file || [[ -n $file ]]; }; do
     record_path "$file"
   done
 }
@@ -365,14 +430,31 @@ classify_each_stdin() {
   done
 }
 
+# Prints each path that no rule (exact or pattern) matches. A path is matched
+# as soon as one rule matches it, so this need not take the union.
+unmatched_stdin() {
+  local file exact index
+  while IFS= read -r -d '' file || [[ -n $file ]]; do
+    for exact in ${EXACT_RULES[@]+"${EXACT_RULES[@]}"}; do
+      [[ $file == "${exact%% *}" ]] && continue 2
+    done
+    for ((index = 0; index < RULE_COUNT; index++)); do
+      # shellcheck disable=SC2053
+      [[ $file == ${RULE_PATTERNS[index]} ]] && continue 2
+    done
+    printf '%s\0' "$file"
+  done
+}
+
 valid_sha() {
   [[ $1 =~ ^[0-9a-f]{40}$ || $1 =~ ^[0-9a-f]{64}$ ]]
 }
 
-# Writes the NUL-delimited changed paths to $1. On any doubt it selects every
-# job and returns non-zero.
+# Writes the distinct NUL-delimited changed paths to $2, using $1 for the raw
+# diff output. On any doubt it selects every job and returns non-zero.
 collect_pull_request_paths() {
-  local list=$1 base=${CI_PR_BASE_SHA:-} head=${CI_PR_HEAD_SHA:-} tested=${GITHUB_SHA:-} sha parents
+  local raw=$1 list=$2 base=${CI_PR_BASE_SHA:-} head=${CI_PR_HEAD_SHA:-} tested=${GITHUB_SHA:-}
+  local sha resolved parents count
   if [[ ${GITHUB_EVENT_NAME:-} != pull_request ]]; then
     select_everything not-a-pull-request
     return 1
@@ -382,14 +464,17 @@ collect_pull_request_paths() {
       select_everything missing-or-malformed-sha
       return 1
     fi
-    if ! git cat-file -e "$sha^{commit}" 2>/dev/null; then
+    # The name must resolve to exactly itself. Git would otherwise accept, for
+    # example, 64 digits whose first 40 name a commit in a SHA-1 repository.
+    if ! resolved=$(git rev-parse --verify --quiet "$sha^{commit}" 2>/dev/null) ||
+      [[ $resolved != "$sha" ]]; then
       select_everything git-failure
       return 1
     fi
   done
   # Both sides of a rename count; deletions and mode changes count.
   if ! git diff --no-ext-diff --no-textconv --no-renames --name-only -z \
-    "$base...$head" -- >"$list"; then
+    "$base...$head" -- >"$raw"; then
     select_everything git-failure
     return 1
   fi
@@ -408,7 +493,7 @@ collect_pull_request_paths() {
         return 1
       fi
       if ! git diff --no-ext-diff --no-textconv --no-renames --name-only -z \
-        "$2" "$tested" -- >>"$list"; then
+        "$2" "$tested" -- >>"$raw"; then
         select_everything git-failure
         return 1
       fi
@@ -424,8 +509,22 @@ collect_pull_request_paths() {
       return 1
       ;;
   esac
+  # The two diffs usually name the same paths; classify and log each once.
+  if ! sort -z -u "$raw" >"$list"; then
+    select_everything path-list-failure
+    return 1
+  fi
   if [[ ! -s $list ]]; then
     select_everything empty-diff
+    return 1
+  fi
+  if ! count=$(tr -dc '\000' <"$list" | wc -c); then
+    select_everything path-list-failure
+    return 1
+  fi
+  count=${count//[!0-9]/}
+  if [[ -z $count ]] || ((count > MAX_PATHS)); then
+    select_everything too-many-paths
     return 1
   fi
 }
@@ -459,7 +558,7 @@ write_summary() {
 }
 
 run_ci() {
-  local list
+  local work
   if [[ -z ${GITHUB_OUTPUT:-} ]]; then
     echo "ci-changed-areas: GITHUB_OUTPUT is not set" >&2
     exit 2
@@ -468,12 +567,12 @@ run_ci() {
     select_everything invalid-rule
   fi
   if [[ $EVERYTHING == false ]]; then
-    list=$(mktemp)
+    work=$(mktemp -d)
     # shellcheck disable=SC2064
-    trap "rm -f '$list'" EXIT
-    if collect_pull_request_paths "$list"; then
-      log_paths "$list"
-      classify_stdin <"$list"
+    trap "rm -rf '$work'" EXIT
+    if collect_pull_request_paths "$work/diff" "$work/paths"; then
+      log_paths "$work/paths"
+      classify_stdin <"$work/paths"
     fi
   fi
   emit_outputs >>"$GITHUB_OUTPUT"
@@ -502,8 +601,12 @@ case "${1:-}" in
     check_rules
     classify_each_stdin
     ;;
+  --unmatched)
+    check_rules
+    unmatched_stdin
+    ;;
   *)
-    echo "usage: bin/ci-changed-areas.sh [--list-areas|--check-rules|--classify|--classify-each]" >&2
+    echo "usage: bin/ci-changed-areas.sh [--list-areas|--check-rules|--classify|--classify-each|--unmatched]" >&2
     exit 2
     ;;
 esac
