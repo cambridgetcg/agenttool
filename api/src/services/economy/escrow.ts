@@ -108,13 +108,19 @@ export function escrowIdempotencyKeySha256(key: string): string {
  * limits that spendFromWallet enforces in services/economy/wallets.ts).
  * Creating an escrow debits the wallet but currently checks no policy.
  *
- * Release and refund are open. No function in this service uses Redis, so
- * none takes a Redis client; a process run with workers disabled settles
- * existing escrows the same way. expireOverdue has no scheduler, so no
- * automatic deadline refund runs. Workflow-managed marketplace escrows
- * refuse the generic transitions (assertGenericEscrowMutationAllowed);
- * substrate-task bounty escrows carry no managed_by and settle through
- * services/substrate-tasks/lifecycle.ts. */
+ * Release and refund are open. They check the escrow's state, managed_by,
+ * and the caller's ownership of the creator wallet, but not the deadline,
+ * either wallet's status, or any spending policy. No function in this
+ * service uses Redis, so none takes a Redis client; a process run with
+ * workers disabled settles existing escrows the same way. expireOverdue has
+ * no scheduler, so no automatic deadline refund runs. Workflow-managed
+ * marketplace escrows refuse the generic transitions
+ * (assertGenericEscrowMutationAllowed); substrate-task bounty escrows carry
+ * no managed_by and settle through services/substrate-tasks/lifecycle.ts.
+ * Dispute-bond escrows from the resting escalation path
+ * (services/marketplace/disputes.ts) also carry no managed_by, so these
+ * generic transitions reach them; reopening arbitration must mark them
+ * managed first. */
 export async function createEscrow(
   db: DB,
   input: CreateEscrowInput,

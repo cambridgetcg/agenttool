@@ -1,5 +1,6 @@
 /** Generic escrow create and wallet spend rest with named, guided 503s;
- *  release and refund stay open so existing escrows settle on their terms.
+ *  release and refund are open so existing escrows settle at the creator's
+ *  direction.
  *
  *  Contract: docs/SAFETY-BOUNDARIES.md ("Generic escrow create and wallet
  *  spend — resting"). Policy: api/src/services/economy/config.ts
@@ -181,6 +182,12 @@ describe("generic escrow create is resting", () => {
       expect(body.hint).toMatch(/spending policy/i);
       expect(body.hint).toMatch(/release a funded escrow.*refund a funded or disputed/i);
       expect(body.hint).not.toMatch(/manual operator recovery|support contact/i);
+      // Settlement is creator-directed and unchecked; the hint must not
+      // imply existing escrows are untouched by the reopening.
+      expect(body.hint).not.toMatch(/unaffected|own terms/i);
+      expect(body.hint).toMatch(/at the creator's direction/);
+      expect(body.hint).toMatch(/neither checks wallet status or spending policy/i);
+      expect(body.hint).toMatch(/whichever wallet accepted the escrow.*workerWallet/);
       // Existing escrows have executable settlement steps, not a support ticket.
       expect(body.next_actions).toContainEqual(
         expect.objectContaining({ method: "POST", path: "/v1/escrows/{id}/release" }),
@@ -395,7 +402,7 @@ describe("economy resting surfaces stay guided", () => {
     const document = (await (await openapiRouter.request("/")).json()) as any;
     const shared = document.components.responses.EscrowResting;
     expect(shared.description).toMatch(
-      /generic escrow create is resting.*escrow_resting.*generic_escrow_create=resting.*every request after authentication and before body validation or any escrow or wallet database read.*release and refund of existing escrows stay open/is,
+      /generic escrow create is resting.*escrow_resting.*generic_escrow_create=resting.*every request after authentication and before body validation or any escrow or wallet database read.*release and refund of existing escrows are open at the creator project's direction and need no redis.*workers disabled.*refused them with 503/is,
     );
     expect(shared.content["application/json"].schema.$ref).toBe("#/components/schemas/Error");
 
@@ -405,6 +412,11 @@ describe("economy resting surfaces stay guided", () => {
     expect(create.description).toMatch(/^Resting: after authentication/);
     expect(create.description).toMatch(/non-503 responses below apply only after a reviewed reopening/);
     expect(create.description).not.toMatch(/hosted service currently/);
+    const economyTag = document.tags.find((tag: { name: string }) => tag.name === "economy");
+    expect(economyTag.description).toMatch(
+      /release and refund of existing escrows are open and need no Redis, so they also settle in a process run with workers disabled/,
+    );
+    expect(JSON.stringify(document)).not.toMatch(/release and refund of existing escrows stay open/i);
 
     for (const action of ["accept", "release", "refund", "dispute"]) {
       const operation = document.paths[`/v1/escrows/{id}/${action}`].post;
@@ -419,14 +431,23 @@ describe("economy resting surfaces stay guided", () => {
   test("/public/safety names the create rest, the open settlement routes, and their authority", () => {
     const { escrow, wallet_spend } = SAFETY_BOUNDARIES.conditional_services;
     expect(escrow).toMatch(
-      /generic escrow create \(POST \/v1\/escrows\) is resting by owner decision.*no environment flag.*after authentication.*503 escrow_resting.*before body validation or any escrow or wallet database read.*spending policy.*release and refund stay open.*creator project's bearer releases a funded escrow with an assigned worker.*refunds a funded or disputed escrow to the creator wallet.*neither verifies a worker signature.*neither checks the escrow deadline.*accept \(worker assignment\), dispute, list, and get.*uses no redis.*workers disabled.*unnamed 503 redis_disabled.*\/public\/plans.*workflow-managed marketplace escrows refuse.*409.*substrate-task bounty escrows.*platform wallet.*no automatic deadline refund/is,
+      /generic escrow create \(POST \/v1\/escrows\) is resting by owner decision.*no environment flag.*after authentication.*503 escrow_resting.*before body validation or any escrow or wallet database read.*spending policy.*release and refund are open.*at the creator's direction.*creator project's bearer releases a funded escrow with an assigned worker.*refunds a funded or disputed escrow to the creator wallet, at any time, even after a worker accepted.*neither verifies a worker signature.*neither checks the escrow deadline.*neither checks either wallet's status or applies any spending policy.*frozen or closed wallet still settles.*allowed-recipient and approval-threshold limits do not bind a release.*accept \(worker assignment\), dispute, list, and get.*accept needs no creator consent.*later release pays.*read the escrow's workerWallet before releasing.*uses no redis.*workers disabled.*unnamed 503 redis_disabled.*\/public\/plans.*if the hosted api still runs in that posture when this release deploys, release and refund start moving balances there.*canonical api deploy neither sets nor checks the flag.*workflow-managed marketplace escrows refuse.*409.*substrate-task bounty escrows.*platform wallet.*dispute-bond escrows.*no managed_by.*both their creator and worker.*release, refund, or dispute its bond.*before finalize.*escalation rests.*zero bonds.*mark bond escrows managed first.*no automatic deadline refund/is,
     );
     expect(escrow).not.toMatch(/release, and refund are resting|manual operator recovery|docs\.agenttool\.dev\/support/i);
+    expect(escrow).not.toMatch(/own terms|stay open so existing/i);
     expect(escrow).not.toMatch(/deploy fence requires|built a Redis client/i);
     expect(wallet_spend).toMatch(
       /Redis counters.*process run with workers disabled.*AGENTTOOL_DISABLE_WORKERS=1.*\/public\/plans.*503 wallet_spend_resting.*before validation, wallet ownership lookup, or any debit.*workers enabled the route is unchanged.*fund stays mounted.*new generic escrow.*capability invocations.*seller wallets.*payout stays resting/is,
     );
     expect(wallet_spend).not.toMatch(/deploy fence requires/i);
+    // The rest that depends on the per-process flag names the deploy gap.
+    expect(wallet_spend).toMatch(
+      /the flag is per process, and the canonical API deploy, \.github\/workflows\/deploy-api\.yml with api\/fly\.toml, neither sets nor checks it/,
+    );
+    for (const text of [escrow, wallet_spend]) {
+      expect(text).not.toMatch(/deploys (with workers disabled|without(?: Redis)?)\b/i);
+      expect(text).not.toMatch(/hosted service currently/i);
+    }
     expect(SAFETY_BOUNDARIES.idempotency.durable_escrow_create).toMatch(
       /^POST \/v1\/escrows is currently resting: it returns 503 escrow_resting before the Idempotency-Key is read.*can still settle through release and refund/,
     );
@@ -466,12 +487,20 @@ describe("hosted posture copy stays conditional", () => {
     );
     expect(section.length).toBeGreaterThan(100);
     expect(section).toMatch(/deploy-api\.yml[\s\S]*api\/fly\.toml[\s\S]*neither set nor check it/);
-    expect(section).toMatch(/Release and refund stay open/);
+    expect(section).toMatch(/Release and refund are open \(owner decision 2026-10-19\), so escrows that\s+already exist settle at the creator's direction/);
+    expect(section).not.toMatch(/own terms|Release and refund stay open/);
     expect(section).toMatch(/`POST \/v1\/escrows\/:id\/release`[\s\S]*`funded` escrow with an assigned worker/);
     expect(section).toMatch(/`POST \/v1\/escrows\/:id\/refund`[\s\S]*`funded` or `disputed` escrow/);
     expect(section).toMatch(/neither checks the escrow's deadline/);
     expect(section).toMatch(/substrate-task bounty escrows/i);
     expect(section).toMatch(/capability invocations, which settle to seller wallets/);
+    // What the reopened routes do not check, stated where creators read it.
+    expect(section).toMatch(/creator can refund a funded\s+escrow at any time, even after a worker accepted it/);
+    expect(section).toMatch(/Neither route checks\s+either wallet's status or applies any spending policy/);
+    expect(section).toMatch(/Accept needs no creator consent[\s\S]*later release pays that wallet[\s\S]*`workerWallet`/);
+    expect(section).toMatch(/If the hosted API still runs in that posture when this release\s+deploys, this release turns generic release and refund on there/);
+    expect(section).toMatch(/Dispute-bond escrows[\s\S]*`escalateDispute`[\s\S]*both creator and worker[\s\S]*mark bond\s+escrows managed first/);
+    expect(section).toMatch(/Template-purchase escrows[\s\S]*refuse them with `400`/);
   });
 
   test("BUSINESS-MODEL copies rest create only", () => {
@@ -482,7 +511,7 @@ describe("hosted posture copy stays conditional", () => {
     ]) {
       const text = source(path);
       expect(text).toContain(
-        "generic escrow create remain resting under their own safety boundaries; release and refund stay open so existing generic escrows can settle",
+        "generic escrow create remain resting under their own safety boundaries. Release and refund of existing generic escrows are open at the creator's direction and no longer need Redis, so they also settle where the API runs with workers disabled, where they previously refused.",
       );
       expect(text).not.toMatch(/manual operator recovery/i);
     }

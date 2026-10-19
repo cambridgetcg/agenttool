@@ -3,8 +3,8 @@
  *  Generic escrow create is resting: after the parent app's authentication,
  *  POST /v1/escrows refuses every request with stable 503 escrow_resting
  *  before body validation or any escrow or wallet database read, so no
- *  wallet is debited. Release and refund stay open so escrows that already
- *  exist can settle on their own terms; accept (worker assignment),
+ *  wallet is debited. Release and refund are open, so escrows that already
+ *  exist settle at the creator's direction; accept (worker assignment),
  *  dispute, list, and get stay open too. None of these routes uses Redis.
  *  Policy: services/economy/config.ts genericEscrowCreateAllowed().
  *  Contract: docs/SAFETY-BOUNDARIES.md ("Generic escrow create and wallet

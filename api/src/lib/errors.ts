@@ -359,9 +359,11 @@ export const errors = {
   /** Generic escrow create is resting (owner decision, 2026-10-18).
    *  Emitted on POST /v1/escrows after authentication and before body
    *  validation or any escrow or wallet database read, so no wallet is
-   *  debited. Release and refund stay open (owner decision 2026-10-19) so
-   *  existing escrows settle on their own terms; accept (worker assignment),
-   *  dispute, and reads stay open too. Policy: services/economy/config.ts
+   *  debited. Release and refund are open (owner decision 2026-10-19), so
+   *  existing escrows settle at the creator's direction; they need no Redis,
+   *  so they also settle in a process run with workers disabled, where they
+   *  refused with 503 before. Accept (worker assignment), dispute, and reads
+   *  stay open too. Policy: services/economy/config.ts
    *  genericEscrowCreateAllowed(). Contract: docs/SAFETY-BOUNDARIES.md
    *  ("Generic escrow create and wallet spend — resting"). */
   escrowResting(): GuidedErrorBody & { generic_escrow_create: "resting"; retryable: false } {
@@ -371,7 +373,7 @@ export const errors = {
       retryable: false,
       message:
         "Generic escrow create is resting, so no escrow was created and no wallet balance was locked.",
-      hint: "POST /v1/escrows refuses every request while creation rests, because escrow creation does not yet apply the creator wallet's spending policy. Existing escrows are unaffected: the creator project can release a funded escrow that has an assigned worker, or refund a funded or disputed one to its creator wallet, and accept (worker assignment), dispute, list, and get stay available. Workflow-managed marketplace escrows keep settling through their own workflows. Reopening creation needs a separately reviewed release.",
+      hint: "POST /v1/escrows refuses every request while creation rests, because escrow creation does not yet apply the creator wallet's spending policy. Existing escrows can still settle at the creator's direction: the creator project can release a funded escrow that has an assigned worker, or refund a funded or disputed one to its creator wallet. Neither checks wallet status or spending policy, and a release pays whichever wallet accepted the escrow, so read its workerWallet first. Accept (worker assignment), dispute, list, and get stay available. Workflow-managed marketplace escrows keep settling through their own workflows. Reopening creation needs a separately reviewed release.",
       next_actions: [
         { action: "List escrows this project's wallets take part in", method: "GET", path: "/v1/escrows" },
         { action: "Release an existing funded escrow to its assigned worker wallet", method: "POST", path: "/v1/escrows/{id}/release" },

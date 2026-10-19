@@ -440,7 +440,9 @@ or settlement is sound. AgentTool does not currently claim qualified arbiters
 or route money by an arbiter ruling. Reopening requires end-to-end
 authorization, immutable settlement terms, concurrency and replay analysis,
 bond ownership, compensating transactions, adversarial tests, and a bounded
-production trial.
+production trial. Bond ownership includes marking bond escrows managed: the
+escalation path writes them without `managed_by`, so the generic escrow
+release, refund, and dispute routes reach them.
 
 ## Payout boundary — resting
 
@@ -474,8 +476,8 @@ spending policy that `POST /v1/wallets/:id/spend` enforces (per-transaction,
 hourly, daily, allowed-recipient, and approval-threshold limits). Reopening
 needs a reviewed release that adds those checks first.
 
-Release and refund stay open (owner decision 2026-10-19), so escrows that
-already exist settle on their own terms:
+Release and refund are open (owner decision 2026-10-19), so escrows that
+already exist settle at the creator's direction:
 
 - `POST /v1/escrows/:id/release` — the bearer of the project that owns the
   creator wallet releases a `funded` escrow with an assigned worker. One
@@ -485,10 +487,21 @@ already exist settle on their own terms:
   `funded` or `disputed` escrow. One transaction restores the creator wallet,
   marks the escrow `refunded`, and records the refund.
 
-Neither route verifies a worker signature, completion proof, or bilateral
-approval, and neither checks the escrow's deadline. A project that owns only
-the worker wallet cannot release, refund, or dispute. Accept (worker
-assignment), dispute, list, and get stay open and move no balance.
+Generic escrow carries no enforced terms. Neither route verifies a worker
+signature, completion proof, or bilateral approval, and
+neither checks the escrow's deadline, so the creator can refund a funded
+escrow at any time, even after a worker accepted it. Neither route checks
+either wallet's status or applies any spending policy: a frozen or closed
+creator or worker wallet still settles, and the creator wallet's
+allowed-recipient and approval-threshold limits do not bind the release that
+pays the worker. A project that owns only the worker wallet cannot release,
+refund, or dispute.
+
+Accept (worker assignment), dispute, list, and get stay open and move no
+balance. Accept needs no creator consent: any authenticated project that knows
+the id of a funded, unassigned escrow can assign its own active wallet, and a
+later release pays that wallet. A creator should read the escrow's
+`workerWallet` (`GET /v1/escrows/:id`) before releasing.
 
 The escrow service uses no Redis, and none of these routes builds a Redis
 client, so they behave the same in a process run with
@@ -497,17 +510,32 @@ refund passed an unused `getRedis()` argument, which throws in that posture,
 so all three answered an unnamed `503` whose body read `redis_disabled`. On
 2026-10-19 the hosted API's serving process reported that posture at
 `/public/plans` (`no_exploit_loophole.ip_rate_limit.worker_startup_disabled:
-true`). Nothing in the canonical API deploy guarantees the flag:
+true`). If the hosted API still runs in that posture when this release
+deploys, this release turns generic release and refund on there: they move
+balances where they refused before. Nothing in the canonical API deploy
+guarantees the flag:
 `.github/workflows/deploy-api.yml` and `api/fly.toml` neither set nor check it,
 and the `bin/deploy.sh` fence that did is superseded for the API
 ([DEPLOY-CI.md](DEPLOY-CI.md)).
 
 Workflow-managed marketplace escrows refuse the generic transitions with `409`
-and settle through their workflows. Substrate-task bounty escrows carry no
-`managed_by`; their creator wallet is the platform wallet, so only that
-wallet's project could release or refund them through these routes, and the
-substrate-task lifecycle settles them on its own path. No automatic deadline
-refund runs, because the expiry sweep has no scheduler.
+and settle through their workflows. Two other kinds of escrow carry no
+`managed_by`, so the generic routes reach them:
+
+- Substrate-task bounty escrows. Their creator wallet is the platform wallet,
+  so only that wallet's project could release or refund them through these
+  routes; the substrate-task lifecycle settles them on its own path.
+- Dispute-bond escrows written by the resting arbitration path
+  (`escalateDispute`). The escalator's own wallet is both creator and worker,
+  so the escalator's project could release, refund, or dispute its bond
+  through these routes before finalize, which then skips the forfeiture.
+  Escalation rests (`503 dispute_arbitration_resting`) and the 2026-07-13
+  production audit found no bonds; reopening arbitration must mark bond
+  escrows managed first.
+
+Template-purchase escrows also carry no `managed_by`, but the purchase
+transaction releases them, so the generic routes refuse them with `400`. No
+automatic deadline refund runs, because the expiry sweep has no scheduler.
 
 `POST /v1/wallets/:id/spend` does need Redis: its hourly and daily limits are
 Redis counters. In a process run with workers disabled it returns stable

@@ -371,7 +371,9 @@ class EconomyClient:
     workers disabled (``GET /public/plans`` reports that setting for the
     serving process; the hosted API reported it on 2026-10-19). Both refusals
     carry ``next_actions`` and raise ``AgentToolError``. Release and refund of
-    existing escrows stay open and, from that release, need no Redis. The
+    existing escrows are open at the creator's direction and, from that
+    release, need no Redis, so on a deployment run with workers disabled they
+    settle escrows where earlier releases refused them with 503. The
     usage below shows the retained wire shape for a deployment where create
     and spend are open. See https://api.agenttool.dev/public/safety.
 
@@ -505,7 +507,11 @@ class EconomyClient:
         return resp.json()
 
     def freeze_wallet(self, wallet_id: str) -> Wallet:
-        """Freeze a wallet — halts all spending immediately."""
+        """Freeze a wallet: spend and other new debits from it refuse.
+
+        Escrow release and refund check no wallet status, so an escrow this
+        wallet funded, or would be paid by, still settles while it is frozen.
+        """
         resp = self._http.post(self._url(f"/v1/wallets/{_path_segment(wallet_id)}/freeze"))
         self._check(resp, "post")
         return Wallet.from_dict(resp.json())

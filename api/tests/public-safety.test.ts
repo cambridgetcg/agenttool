@@ -330,7 +330,7 @@ describe("GET /public/safety", () => {
       /POST \/v1\/escrows is currently resting.*503 escrow_resting.*before the Idempotency-Key is read.*can still settle through release and refund.*separate.*SHA-256.*raw key is not retained.*current row.*changed.*409.*without a key.*another escrow/is,
     );
     expect(SAFETY_BOUNDARIES.conditional_services.escrow).toMatch(
-      /generic escrow create \(POST \/v1\/escrows\) is resting by owner decision.*no environment flag reopens it.*after authentication.*stable 503 escrow_resting.*next_actions.*before body validation or any escrow or wallet database read.*spending policy.*at creation.*release and refund stay open.*creator project's bearer.*accept \(worker assignment\), dispute, list, and get.*move no balance.*substrate-task bounty escrows.*no automatic deadline refund/is,
+      /generic escrow create \(POST \/v1\/escrows\) is resting by owner decision.*no environment flag reopens it.*after authentication.*stable 503 escrow_resting.*next_actions.*before body validation or any escrow or wallet database read.*spending policy.*at creation.*release and refund are open.*creator project's bearer.*accept \(worker assignment\), dispute, list, and get.*move no balance.*substrate-task bounty escrows.*no automatic deadline refund/is,
     );
     expect(SAFETY_BOUNDARIES.conditional_services.wallet_spend).toMatch(
       /POST \/v1\/wallets\/:id\/spend.*Redis counters.*workers disabled.*stable 503 wallet_spend_resting.*next_actions.*before validation, wallet ownership lookup, or any debit.*workers enabled the route is unchanged/is,

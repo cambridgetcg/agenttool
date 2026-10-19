@@ -12,7 +12,9 @@
  * disabled (`GET /public/plans` reports that setting for the serving process;
  * the hosted API reported it on 2026-10-19). Both refusals carry
  * `next_actions` and surface as `AgentToolError`. Release and refund of
- * existing escrows stay open and, from that release, need no Redis. The
+ * existing escrows are open at the creator's direction and, from that
+ * release, need no Redis, so on a deployment run with workers disabled they
+ * settle escrows where earlier releases refused them with 503. The
  * example below shows the retained wire shape for a deployment where create
  * and spend are open. See https://api.agenttool.dev/public/safety.
  *
@@ -527,7 +529,10 @@ export class EconomyClient {
     >;
   }
 
-  /** Freeze a wallet — halts all spending immediately. */
+  /** Freeze a wallet: spend and other new debits from it refuse.
+   *
+   * Escrow release and refund check no wallet status, so an escrow this
+   * wallet funded, or would be paid by, still settles while it is frozen. */
   async freeze_wallet(walletId: string): Promise<Wallet> {
     return toWallet(await this.req("POST", `/v1/wallets/${encodePathSegment(walletId)}/freeze`));
   }

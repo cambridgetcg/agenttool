@@ -125,8 +125,10 @@ export function depositAddressDisclosureAllowed(): boolean {
  * first.
  *
  * Release and refund are not gated (owner decision 2026-10-19, PR #494
- * option B), so escrows that already exist can settle on their own terms
- * through POST /v1/escrows/:id/release and /:id/refund. The escrow service
+ * option B), so escrows that already exist settle at the creator's direction
+ * through POST /v1/escrows/:id/release and /:id/refund. Neither checks the
+ * deadline, either wallet's status, or any spending policy, and a release
+ * pays whichever wallet accepted the escrow. The escrow service
  * uses no Redis, so they also run in a process started with
  * AGENTTOOL_DISABLE_WORKERS=1. Before this release the routes passed an
  * unused getRedis() argument, which throws in that posture, so create,
@@ -136,13 +138,20 @@ export function depositAddressDisclosureAllowed(): boolean {
  * 2026-10-19); nothing in the canonical API deploy guarantees it, because
  * .github/workflows/deploy-api.yml and api/fly.toml neither set nor check the
  * flag (docs/DEPLOY-CI.md). On a deployment run with workers enabled, the
- * create rest closes a route that was open.
+ * create rest closes a route that was open. On a deployment run with workers
+ * disabled, the posture the hosted API reported, the opposite holds for
+ * release and refund: this release turns them on there, and they move
+ * balances where they refused before.
  *
  * Accept (worker assignment), dispute, and reads move no balance and are not
  * gated. Workflow-managed marketplace escrows (managed_by set) refuse the
  * generic transitions with 409 and settle through their workflows.
  * Substrate-task bounty escrows carry managed_by NULL and settle through
- * services/substrate-tasks/lifecycle.ts. Contract: docs/SAFETY-BOUNDARIES.md
+ * services/substrate-tasks/lifecycle.ts. Dispute-bond escrows written by the
+ * resting escalation path (services/marketplace/disputes.ts) also carry
+ * managed_by NULL, with the escalator's wallet as creator and worker, so the
+ * generic routes reach them; reopening arbitration must mark them managed
+ * first. Contract: docs/SAFETY-BOUNDARIES.md
  * ("Generic escrow create and wallet spend — resting"); policy:
  * docs/BUSINESS-MODEL.md.
  */
