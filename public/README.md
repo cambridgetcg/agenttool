@@ -10,7 +10,7 @@ publishes anything by itself.
 |---|---|---|
 | [`allowlist.json`](allowlist.json) | No | The only paths that may be copied, the globs removed inside them, and any packages held back (none since 2026-10-11). Its SHA-256 is recorded in each projection. |
 | [`overlay/`](overlay) | Yes, at the public root | Files that exist only in the public tree: README, LICENSE, NOTICE, licensing and security notes, `.gitignore`, `.gitleaksignore`, the public CI, the npm publish workflow, and the public guard with its allow entries. |
-| [`private-guard/`](private-guard) | **Never** | The relational denylist: terms, blob digests, and their allow entries. Publishing the terms would publish what they protect, so guard output names only rule ids and line hashes. |
+| [`private-guard/`](private-guard) | **Never** | The relational denylist: terms, blob digests, and their allow entries. Publishing the terms would publish what they protect, so guard output names only rule ids and line hashes. Beside it, `served-surface.json` records what the three Pages sites may serve that a rule matches; `bin/served-surface-guard.ts` applies the denylist to every Pages upload (`bin/frontend-deploy.sh`) and refuses anything else. |
 
 Top-level areas such as `bin/`, `api/`, `apps/`, and `.github/` never leave
 this repository, whatever the allowlist says. The one exception is
