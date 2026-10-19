@@ -662,7 +662,7 @@ describe("ci.yml consumes the classifier fail-closed", () => {
     expect(changes["runs-on"]).toBe("ubuntu-24.04");
     expect(changes.needs).toBeUndefined();
     expect(changes.if).toBeUndefined();
-    expect(changes.steps).toHaveLength(2);
+    expect(changes.steps).toHaveLength(3);
     expect(changes.steps?.[0]?.uses).toBe("actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1");
     expect(changes.steps?.[0]?.with).toEqual({ "fetch-depth": 0, "persist-credentials": false });
     const classifyStep = changes.steps?.[1];
@@ -677,6 +677,13 @@ describe("ci.yml consumes the classifier fail-closed", () => {
       ["everything", "reason", ...AREAS].map((name) => [name, `\${{ steps.classify.outputs.${name} }}`]),
     );
     expect(changes.outputs).toEqual(expectedOutputs);
+    // The YUTABASE coverage notice rides along on pull requests; it reads no
+    // event field and changes no output (bin/tests/yutabase-ci-access.test.ts).
+    const notice = changes.steps?.[2];
+    expect(notice?.name).toBe("Explain the private YUTABASE fixture coverage boundary");
+    expect(notice?.uses).toBeUndefined();
+    expect(notice?.id).toBeUndefined();
+    expect(notice?.env).toBeUndefined();
   });
 
   test("each filterable job keeps its name and runs unless its area is reported false", () => {

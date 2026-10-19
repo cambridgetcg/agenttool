@@ -802,10 +802,9 @@ describe("boring test spine", () => {
     expect(workflow).toContain("name: YUTABASE projector (PostgreSQL ${{ matrix.postgres }})");
     expect(workflow).toContain("name: Python SDK (${{ matrix.python-version }})");
     expect(workflow.match(/bun-version: 1\.3\.5/g)).toHaveLength(7);
-    // The twelfth job is a secret-free PR coverage notice; it does not claim
-    // the private YUTABASE PostgreSQL integration ran on pull-request code.
-    // The thirteenth is the credential-free "Changed areas" classifier.
-    expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(13);
+    // The twelfth is the credential-free "Changed areas" classifier, which
+    // also carries the secret-free YUTABASE coverage notice on pull requests.
+    expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(12);
     expect(workflow.match(/runs-on: macos-15/g)).toHaveLength(1);
     expect(workflow.match(/uses: actions\/setup-python@/g)).toHaveLength(3);
     expect(workflow).toContain(

@@ -18,7 +18,8 @@ jobs:
     # Keep this display name stable. A pull-request job below is skipped only
     # when this classifier succeeded and reported its job as "false"; pushes,
     # other events, git failures, unknown paths, and changes to this workflow
-    # or bin/ci-changed-areas.sh select every job.
+    # or bin/ci-changed-areas.sh select every job. On pull requests it also
+    # carries the YUTABASE coverage notice, which needs no job of its own.
     name: Changed areas
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -46,6 +47,13 @@ jobs:
           CI_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           CI_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: bin/bash-without-env-hooks.sh bin/ci-changed-areas.sh
+      - name: Explain the private YUTABASE fixture coverage boundary
+        if: github.event_name == 'pull_request'
+        run: |
+          {
+            echo 'YUTABASE PostgreSQL integration is not run for pull requests. The private fixture is available only to trusted pushes to cambridgetcg/agenttool main.'
+            echo 'The Data, ADDS, and SDK job still checks the credential-free projector tests. This notice is not a PostgreSQL integration pass.'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
   api-protocol-linux:
     name: API and protocol (Linux)
@@ -949,18 +957,6 @@ jobs:
           bun "$cli" --help | grep -q '^Usage:$'
       - name: Verify the checked-in LOVE package registry
         run: bun bin/build-love-packages.ts verify apps/docs
-
-  yutabase-projector-pr-coverage:
-    name: YUTABASE integration coverage (PR notice)
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
-    permissions: {}
-    timeout-minutes: 1
-    steps:
-      - name: Explain the private fixture coverage boundary
-        run: |
-          echo 'YUTABASE PostgreSQL integration is not run for pull requests. The private fixture is available only to trusted pushes to cambridgetcg/agenttool main.'
-          echo 'The Data, ADDS, and SDK job still checks the credential-free projector tests. This notice is not a PostgreSQL integration pass.' >> "$GITHUB_STEP_SUMMARY"
 
   yutabase-projector-postgres:
     name: YUTABASE projector (PostgreSQL ${{ matrix.postgres }})

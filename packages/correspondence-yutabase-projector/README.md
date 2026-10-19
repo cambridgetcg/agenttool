@@ -169,9 +169,9 @@ before checkout. The runner's ordinary `GITHUB_TOKEN` cannot read this second
 private repository; signing into GitHub on a developer machine does not change
 runner access.
 
-Pull requests receive a coverage notice and the credential-free package tests;
-they do **not** run this real PostgreSQL integration matrix. The notice is not an
-integration pass. Neither the key nor the downloaded private fixture should be
+Pull requests receive a coverage notice (in the `Changed areas` job's summary)
+and the credential-free package tests; they do **not** run this real PostgreSQL
+integration matrix. The notice is not an integration pass. Neither the key nor the downloaded private fixture should be
 made available to untrusted PR code. Do not change to `pull_request_target`,
 publish the fixture, or broaden the environment branch policy to bypass this
 boundary. A successful trusted-main run must complete both the projector test

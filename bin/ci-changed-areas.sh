@@ -7,8 +7,8 @@
 # changed path matches a rule below can turn a job off. Any other event, a
 # missing or malformed SHA, any git failure, an unexpected merge shape, an empty
 # diff, more than MAX_PATHS distinct paths, a path that no rule matches, or a
-# path whose rule selects `*` turns every job on. Jobs that always run (the
-# Linux API gate, which reads nearly the whole tree, and the PR notice) are not
+# path whose rule selects `*` turns every job on. The job this classifier never
+# turns off (the Linux API gate, which reads nearly the whole tree) is not
 # listed here.
 #
 # `reason` is one of: classified, not-a-pull-request, missing-or-malformed-sha,
@@ -223,8 +223,8 @@ readonly RULES=(
   "apps/docs/package.json packages"
   "bin/package.json packages"
 
-  # Read only by jobs that always run (the Linux API gate's whole-tree
-  # scanners, catalog, operator tests, and the PR notice).
+  # Read only by the job this classifier never turns off (the Linux API gate's
+  # whole-tree scanners, catalog, and operator tests).
   "bin/* -"
   ".github/workflows/* -"
   ".forgejo/* -"
