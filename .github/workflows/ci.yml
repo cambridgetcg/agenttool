@@ -38,7 +38,9 @@ jobs:
     # for a green pull-request run of ci.yml that tested the identical tree on
     # the commit main pointed to before the push, and for a green push run of
     # ci.yml on that commit. When it finds both ("proven"), every job but the
-    # YUTABASE projector is skipped and that pull-request run is the evidence.
+    # YUTABASE projector is skipped and that pull-request run is the evidence,
+    # except that the Python SDK job tests the versions a pull request skips
+    # when that run tested the Python SDK ("sdk-python-rest").
     # A re-run of a push run, of all of it or of this job, is never proven.
     # Scheduled and manual runs select every job. Every job but the push-only
     # YUTABASE projector skips a draft pull request; GitHub runs CI again when
@@ -64,6 +66,7 @@ jobs:
       packages: ${{ steps.classify.outputs.packages }}
       sdk-python: ${{ steps.classify.outputs.sdk-python }}
       proven: ${{ steps.proof.outputs.proven }}
+      sdk-python-rest: ${{ steps.proof.outputs.sdk-python-rest }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1189,7 +1192,9 @@ jobs:
     name: Python SDK (${{ matrix.python-version }})
     needs:
       - changes
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.sdk-python == 'false')) }}
+    # A proven push to main runs this job only when its pull-request run
+    # tested the Python SDK, and then only on the versions that run skipped.
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && ((needs.changes.outputs.proven == 'true' && needs.changes.outputs.sdk-python-rest != 'true') || needs.changes.outputs.sdk-python == 'false')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
@@ -1197,8 +1202,10 @@ jobs:
       matrix:
         # Pull requests test the SDK floor (3.9), the HF training host floor
         # (3.10), and the newest version (3.14, which also smokes the uv lock).
+        # A proven push tests the rest on the same tree, so every tree that
+        # reaches main with a Python SDK change has passed on every version.
         # Every other run tests each supported version.
-        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.9", "3.10", "3.14"]' || '["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]') }}
+        python-version: ${{ fromJSON(github.event_name == 'pull_request' && '["3.9", "3.10", "3.14"]' || needs.changes.result == 'success' && needs.changes.outputs.proven == 'true' && '["3.11", "3.12", "3.13"]' || '["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]') }}
     defaults:
       run:
         working-directory: packages/sdk-py

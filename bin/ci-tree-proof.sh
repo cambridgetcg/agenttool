@@ -3,8 +3,9 @@
 # already passed on the exact tree being pushed, on top of the exact commit
 # main pointed to before the push, while main's own run there had passed.
 #
-# Appends `proven=true|false` and `proof-run=<run id or empty>` to
-# $GITHUB_OUTPUT. `proven=true` requires all of:
+# Appends `proven=true|false`, `proof-run=<run id or empty>`, and
+# `sdk-python-rest=true|false` to $GITHUB_OUTPUT. `proven=true` requires all
+# of:
 #   - a push to refs/heads/main with a valid pushed commit and a valid
 #     `before` commit (CI_PUSH_BEFORE_SHA, from github.event.before);
 #   - the run's first attempt. Re-running a push run, whether all of it or
@@ -24,7 +25,11 @@
 #     conclusion success. Jobs a pull request skips keep main's state, so main
 #     must have been green there. A proven push concludes success, so one
 #     green full run carries forward; a red, cancelled, missing or unfinished
-#     one makes the next push run everything.
+#     one makes the next push run everything;
+#   - a readable job list for the proving run's latest attempt. A pull
+#     request tests the Python SDK on only some versions, so when a "Python
+#     SDK (...)" job succeeded there, `sdk-python-rest=true` and the push
+#     tests the Python SDK on the other versions.
 # Any other answer, any API or git failure, or a missing token reports
 # `proven=false`, and the workflow then runs every job.
 #
@@ -32,12 +37,13 @@
 # one of: unchecked, not-a-main-push, rerun, bad-repository, bad-sha,
 # bad-before, no-token, git-failure, artifact-lookup-failed, no-recorded-run,
 # before-lookup-failed, before-run-not-green, run-lookup-failed,
-# recorded-run-red, recorded-run-not-green, green-pull-request-run.
+# recorded-run-red, recorded-run-not-green, jobs-lookup-failed,
+# green-pull-request-run.
 #
 # Needs GH_TOKEN (actions: read), CI_PUSH_BEFORE_SHA, GITHUB_EVENT_NAME,
 # GITHUB_REF, GITHUB_REPOSITORY, GITHUB_RUN_ATTEMPT, GITHUB_SHA, and
 # GITHUB_OUTPUT. Makes at most
-# 2 + MAX_CANDIDATES read-only REST calls, all GET.
+# 3 + MAX_CANDIDATES read-only REST calls, all GET.
 
 set -euo pipefail
 set -f
@@ -48,15 +54,16 @@ readonly MAX_CANDIDATES=20
 
 proven=false
 proof_run=""
+sdk_python_rest=false
 reason=unchecked
 
 finish() {
-  printf 'proven=%s\nproof-run=%s\n' "$proven" "$proof_run" >>"$GITHUB_OUTPUT"
+  printf 'proven=%s\nproof-run=%s\nsdk-python-rest=%s\n' "$proven" "$proof_run" "$sdk_python_rest" >>"$GITHUB_OUTPUT"
   if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then
-    printf '### Tree proof\n\n| proven | run | reason |\n| --- | --- | --- |\n| %s | %s | %s |\n' \
-      "$proven" "${proof_run:--}" "$reason" >>"$GITHUB_STEP_SUMMARY"
+    printf '### Tree proof\n\n| proven | run | Python SDK rest | reason |\n| --- | --- | --- | --- |\n| %s | %s | %s | %s |\n' \
+      "$proven" "${proof_run:--}" "$sdk_python_rest" "$reason" >>"$GITHUB_STEP_SUMMARY"
   fi
-  printf 'proven=%s proof-run=%s reason=%s\n' "$proven" "${proof_run:--}" "$reason"
+  printf 'proven=%s proof-run=%s sdk-python-rest=%s reason=%s\n' "$proven" "${proof_run:--}" "$sdk_python_rest" "$reason"
 }
 
 if [[ -z ${GITHUB_OUTPUT:-} ]]; then
@@ -156,8 +163,19 @@ for run_id in $candidates; do
       ;;
   esac
 done
-if [[ -n $green_run ]]; then
-  proven=true
-  proof_run=$green_run
-  reason=green-pull-request-run
+[[ -n $green_run ]] || exit 0
+
+# Did the proving run test the Python SDK? Its job list fits one page.
+if ! python_legs=$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/runs/$green_run/jobs" \
+  -f filter=latest -f per_page=100 \
+  --jq 'if .total_count > (.jobs | length) then error("more than one page of jobs") else [.jobs[] | select((.name | startswith("Python SDK (")) and .conclusion == "success")] | length end' \
+  2>/dev/null) || [[ ! $python_legs =~ ^[0-9]+$ ]]; then
+  reason=jobs-lookup-failed
+  exit 0
 fi
+if ((python_legs > 0)); then
+  sdk_python_rest=true
+fi
+proven=true
+proof_run=$green_run
+reason=green-pull-request-run

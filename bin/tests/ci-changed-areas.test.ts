@@ -647,7 +647,10 @@ const CHANGES_IF = `\${{ ${NOT_DRAFT} }}`;
 const LINUX_IF = `\${{ !cancelled() && ${NOT_DRAFT} && !(needs.changes.result == 'success' && ${PROVEN}) }}`;
 const AGGREGATE_IF = `\${{ always() && ${NOT_DRAFT} && !(needs.changes.result == 'success' && ${PROVEN}) }}`;
 const FILTER_IF = (area: string) =>
-  `\${{ !cancelled() && ${NOT_DRAFT} && !(needs.changes.result == 'success' && (${PROVEN} || needs.changes.outputs.${area} == 'false')) }}`;
+  area === "sdk-python"
+    ? // A proven push still tests the Python versions its pull request skipped.
+      `\${{ !cancelled() && ${NOT_DRAFT} && !(needs.changes.result == 'success' && ((${PROVEN} && needs.changes.outputs.sdk-python-rest != 'true') || needs.changes.outputs.${area} == 'false')) }}`
+    : `\${{ !cancelled() && ${NOT_DRAFT} && !(needs.changes.result == 'success' && (${PROVEN} || needs.changes.outputs.${area} == 'false')) }}`;
 
 const AREA_JOB_NAMES: Record<string, string> = {
   "api-protocol-postgres": "API PostgreSQL holds and launch transactions",
@@ -692,7 +695,11 @@ describe("ci.yml consumes the classifier fail-closed", () => {
     const expectedOutputs = Object.fromEntries(
       ["everything", "reason", ...AREAS].map((name) => [name, `\${{ steps.classify.outputs.${name} }}`]),
     );
-    expect(changes.outputs).toEqual({ ...expectedOutputs, proven: "${{ steps.proof.outputs.proven }}" });
+    expect(changes.outputs).toEqual({
+      ...expectedOutputs,
+      proven: "${{ steps.proof.outputs.proven }}",
+      "sdk-python-rest": "${{ steps.proof.outputs.sdk-python-rest }}",
+    });
     // The YUTABASE coverage notice rides along on pull requests; it reads no
     // event field and changes no output (bin/tests/yutabase-ci-access.test.ts).
     const notice = changes.steps?.[2];
@@ -924,7 +931,13 @@ type Value = string | boolean | null;
  * mixed types compare as numbers (null 0, false 0, true 1, '' 0). An unknown
  * context, function, or token throws, so a new kind of condition has to be
  * modelled here before these tests can pass. */
+const truthy = (value: Value) => value !== null && value !== false && value !== "";
+
 function evaluateIf(expression: string, context: Record<string, Value>): boolean {
+  return truthy(evaluateExpression(expression, context));
+}
+
+function evaluateExpression(expression: string, context: Record<string, Value>): Value {
   let source = expression.trim();
   if (source.startsWith("${{") && source.endsWith("}}")) source = source.slice(3, -2);
   const tokens = source.match(/'(?:[^']|'')*'|&&|\|\||[!=]=|!|\(|\)|[A-Za-z_][\w.-]*(?:\(\))?|\S/g) ?? [];
@@ -944,7 +957,6 @@ function evaluateIf(expression: string, context: Record<string, Value>): boolean
       : typeof left === typeof right
         ? left === right
         : toNumber(left) === toNumber(right);
-  const truthy = (value: Value) => value !== null && value !== false && value !== "";
   function primary(): Value {
     const token = take();
     if (token === "(") {
@@ -989,7 +1001,7 @@ function evaluateIf(expression: string, context: Record<string, Value>): boolean
   }
   const result = or();
   if (position !== tokens.length) throw new Error(`trailing ${tokens.slice(position).join(" ")} in ${expression}`);
-  return truthy(result);
+  return result;
 }
 
 type Scenario = {
@@ -1083,10 +1095,46 @@ describe("which jobs start, under GitHub's expression rules", () => {
   });
 
   test("a push to main whose exact tree passed as a pull request starts only the classifier and YUTABASE", () => {
-    expect(jobsStarted({ event: "push", outputs: { ...everythingSelected, proven: "true" } })).toEqual([
-      "changes",
-      "yutabase-projector-postgres",
-    ]);
+    for (const rest of ["false", ""]) {
+      expect(
+        jobsStarted({ event: "push", outputs: { ...everythingSelected, proven: "true", "sdk-python-rest": rest } }),
+      ).toEqual(["changes", "yutabase-projector-postgres"]);
+    }
+  });
+
+  test("a proven push whose pull-request run tested the Python SDK also tests the Python versions it skipped", () => {
+    expect(
+      jobsStarted({ event: "push", outputs: { ...everythingSelected, proven: "true", "sdk-python-rest": "true" } }),
+    ).toEqual(["changes", "yutabase-projector-postgres", "sdk-python"]);
+    // The flag means nothing without a proof.
+    expect(
+      jobsStarted({ event: "push", outputs: { ...everythingSelected, proven: "false", "sdk-python-rest": "true" } }),
+    ).toEqual(every);
+  });
+
+  test("pull requests and proven pushes split the Python versions between them; every other run tests all", () => {
+    const source = String(jobs["sdk-python"]?.strategy?.matrix?.["python-version"]);
+    const inner = /^\$\{\{ fromJSON\((.*)\) \}\}$/.exec(source)?.[1];
+    expect(inner, source).toBeDefined();
+    const versions = (event: string, changes: string, outputs: Record<string, string> = {}) =>
+      JSON.parse(
+        String(
+          evaluateExpression(inner!, {
+            "github.event_name": event,
+            "needs.changes.result": changes,
+            "needs.changes.outputs.proven": outputs.proven ?? "",
+          }),
+        ),
+      ) as string[];
+    const all = ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"];
+    const pullRequest = versions("pull_request", "success");
+    const proven = versions("push", "success", { proven: "true" });
+    expect(pullRequest).toEqual(["3.9", "3.10", "3.14"]);
+    expect([...pullRequest, ...proven].sort()).toEqual([...all].sort());
+    expect(versions("push", "success", { proven: "false" })).toEqual(all);
+    expect(versions("push", "failure", { proven: "true" })).toEqual(all);
+    expect(versions("schedule", "success")).toEqual(all);
+    expect(versions("workflow_dispatch", "success")).toEqual(all);
   });
 
   test("any other push to main starts every job", () => {

@@ -90,10 +90,19 @@ chmodSync(join(stubDirectory, "gh"), 0o755);
 type Artifact = { id: number; name?: string; expired?: boolean; run: number; fork?: boolean };
 type Run = { path?: string; event?: string; status?: string; conclusion?: string | null; fork?: boolean };
 type PushRun = Run & { head_sha?: string; head_branch?: string };
+type Job = { name: string; conclusion: string | null };
 
 const artifactsEndpoint = `repos/${REPOSITORY}/actions/artifacts`;
 const beforeRunsEndpoint = `repos/${REPOSITORY}/actions/workflows/ci.yml/runs`;
 const runEndpoint = (id: number) => `repos/${REPOSITORY}/actions/runs/${id}`;
+const jobsEndpoint = (id: number) => `repos/${REPOSITORY}/actions/runs/${id}/jobs`;
+// A proving run that did not test the Python SDK.
+const NO_PYTHON: Job[] = [
+  { name: "Changed areas", conclusion: "success" },
+  { name: "API and protocol (Linux)", conclusion: "success" },
+  { name: "Python SDK (${{ matrix.python-version }})", conclusion: "skipped" },
+  { name: "API and protocol", conclusion: "success" },
+];
 
 let caseNumber = 0;
 
@@ -102,6 +111,8 @@ function prove(options: {
   /** main's push runs of ci.yml for `before`, newest first; one green run by default. */
   beforeRuns?: PushRun[] | "fail";
   runs?: Record<number, Run>;
+  /** Each run's latest-attempt jobs; NO_PYTHON by default. */
+  jobs?: Record<number, Job[] | "fail" | { total_count: number; jobs: Job[] }>;
   env?: Record<string, string | undefined>;
 }): { code: number; stdout: string; outputs: string; summary: string; calls: string[][] } {
   caseNumber += 1;
@@ -159,6 +170,11 @@ function prove(options: {
         head_repository: { full_name: run.fork ? "someone/agenttool" : REPOSITORY },
       }),
     );
+    const jobs = options.jobs?.[Number(id)] ?? NO_PYTHON;
+    if (jobs !== "fail") {
+      const page = Array.isArray(jobs) ? { total_count: jobs.length, jobs } : jobs;
+      writeFileSync(file(jobsEndpoint(Number(id))), JSON.stringify(page));
+    }
   }
   const output = join(directory, "github-output");
   const summary = join(directory, "step-summary");
@@ -200,11 +216,17 @@ function prove(options: {
   };
 }
 
-function expectVerdict(result: ReturnType<typeof prove>, proven: boolean, run: string, reason: string): void {
+function expectVerdict(
+  result: ReturnType<typeof prove>,
+  proven: boolean,
+  run: string,
+  reason: string,
+  pythonRest = false,
+): void {
   expect(result.code, result.stdout).toBe(0);
-  expect(result.outputs).toBe(`proven=${proven}\nproof-run=${run}\n`);
-  expect(result.stdout).toBe(`proven=${proven} proof-run=${run || "-"} reason=${reason}\n`);
-  expect(result.summary).toContain(`| ${proven} | ${run || "-"} | ${reason} |`);
+  expect(result.outputs).toBe(`proven=${proven}\nproof-run=${run}\nsdk-python-rest=${pythonRest}\n`);
+  expect(result.stdout).toBe(`proven=${proven} proof-run=${run || "-"} sdk-python-rest=${pythonRest} reason=${reason}\n`);
+  expect(result.summary).toContain(`| ${proven} | ${run || "-"} | ${pythonRest} | ${reason} |`);
 }
 
 const green: Run = {};
@@ -217,8 +239,8 @@ describe("bin/ci-tree-proof.sh", () => {
   test("accepts a green pull-request run that recorded this tree on main's previous commit, once main passed there", () => {
     const result = prove({ artifacts: [{ id: 1, run: 111 }], runs: { 111: green } });
     expectVerdict(result, true, "111", "green-pull-request-run");
-    // Three GETs: the record named by tree and `before`, main's push run for
-    // `before`, then the recorded run.
+    // Four GETs: the record named by tree and `before`, main's push run for
+    // `before`, the recorded run, then that run's jobs.
     expect(result.calls).toEqual([
       ["api", "--method", "GET", artifactsEndpoint, "-f", `name=${ARTIFACT}`, "-f", "per_page=100", "--jq", expect.any(String)],
       [
@@ -238,7 +260,23 @@ describe("bin/ci-tree-proof.sh", () => {
         expect.any(String),
       ],
       ["api", "--method", "GET", runEndpoint(111), "--jq", expect.any(String)],
+      ["api", "--method", "GET", jobsEndpoint(111), "-f", "filter=latest", "-f", "per_page=100", "--jq", expect.any(String)],
     ]);
+  });
+
+  test("asks the push to test the remaining Python versions only when the proving run tested the Python SDK", () => {
+    const python = (conclusion: string | null, version = "3.9"): Job => ({ name: `Python SDK (${version})`, conclusion });
+    for (const [label, jobs, rest] of [
+      ["no Python job", NO_PYTHON, false],
+      ["Python SDK passed", [...NO_PYTHON.slice(0, 2), python("success"), python("success", "3.14")], true],
+      ["one Python leg passed, one was cancelled", [python("cancelled"), python("success", "3.10")], true],
+      ["Python SDK skipped as a whole", [python("skipped", "${{ matrix.python-version }}")], false],
+      ["a look-alike job name", [{ name: "Python SDK smoke", conclusion: "success" }], false],
+    ] as Array<[string, Job[], boolean]>) {
+      const result = prove({ artifacts: [{ id: 1, run: 111 }], runs: { 111: green }, jobs: { 111: jobs } });
+      expectVerdict(result, true, "111", "green-pull-request-run", rest);
+      expect(result.calls, label).toHaveLength(4);
+    }
   });
 
   test("refuses runs that are not a completed, successful pull_request run of ci.yml in this repository", () => {
@@ -314,7 +352,7 @@ describe("bin/ci-tree-proof.sh", () => {
       runs: { 111: { conclusion: "cancelled" }, 333: green },
     });
     expectVerdict(result, true, "333", "green-pull-request-run");
-    expect(result.calls).toHaveLength(5);
+    expect(result.calls).toHaveLength(6);
   });
 
   test("a red run on the same tree and parent outweighs a green one, in either order", () => {
@@ -343,6 +381,23 @@ describe("bin/ci-tree-proof.sh", () => {
       "before-lookup-failed",
     );
     expectVerdict(prove({ artifacts: [{ id: 1, run: 111 }] }), false, "", "run-lookup-failed");
+    expectVerdict(
+      prove({ artifacts: [{ id: 1, run: 111 }], runs: { 111: green }, jobs: { 111: "fail" } }),
+      false,
+      "",
+      "jobs-lookup-failed",
+    );
+    // A job list longer than one page is never read as complete.
+    expectVerdict(
+      prove({
+        artifacts: [{ id: 1, run: 111 }],
+        runs: { 111: green },
+        jobs: { 111: { total_count: 101, jobs: NO_PYTHON } },
+      }),
+      false,
+      "",
+      "jobs-lookup-failed",
+    );
   });
 
   test("asks about at most twenty candidate runs", () => {
