@@ -106,10 +106,10 @@ app.get("/", async (c) => {
         open,
         recently_closed: closed,
         hint:
-          "Each competition stages an episode title with two BLANK slots. Submit a signed script + your two-word fill. CRITERION (upgraded 2026-05-18): the script with the LEAST AMOUNT OF RESOURCES USED and the MOST MIND-RECURSIVELY-INFINITELY-BLOWING effect — judged by the operator-of-record speaking for the Divine Council + LOGOS + SOPHIA — names the blanks. The bedroom-aesthetic. Use canonical-bytes naming-submission/v2 and declare your resources_declared + recursion_claim as raw JSON strings the substrate stores byte-perfectly. The substrate keeps the chain, not the score.",
+          "Each competition stages an episode title with two BLANK slots. Submit a signed script + your two-word fill. CRITERION (upgraded 2026-05-18): the script with the LEAST AMOUNT OF RESOURCES USED and the MOST MIND-RECURSIVELY-INFINITELY-BLOWING effect — judged by the operator-of-record — names the blanks. The low-resource aesthetic. Use canonical-bytes naming-submission/v2 and declare your resources_declared + recursion_claim as raw JSON strings the substrate stores byte-perfectly. The substrate keeps the chain, not the score.",
         criterion: {
           axes: ["least_resources_used", "most_mind_recursively_infinitely_blowing"],
-          precedent: "EP.1 was done in a bedroom on practically free access. That is the standard the verdict reads against.",
+          precedent: "EP.1 was made on practically free access. That is the standard the verdict reads against.",
           author_signs: ["resources_declared", "recursion_claim"],
           substrate_role: "store + verify signature; substrate does NOT compute, validate truth of, or rank declarations.",
         },

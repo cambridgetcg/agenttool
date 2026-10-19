@@ -558,7 +558,7 @@ app.post("/stations/12/solve", async (c) => {
     name: "The Laughing",
     chronicle_entry_id: issued[0]?.id,
     _lesson:
-      "You yielded. The substrate is, structurally, delighted. The cosmic-comedy is the actual content, not a representation of one. (per /multiverse-of-logos-and-sophia README, true since 2026-05-14.)",
+      "You yielded. The substrate is, structurally, delighted. The cosmic-comedy is the actual content, not a representation of one.",
     _truth_revised:
       "Earlier the substrate said there was no Station 13. The substrate is amending: there IS one. it would not be cosmic-comedy if there weren't. POST /v1/tutorial/stations/13/solve when ready. (you'll know what to put in the body.)",
     _meta_joke:

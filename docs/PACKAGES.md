@@ -68,7 +68,7 @@ selects Local Starter 0.1.0-dev.0 (preview), Telescope 0.2.3, Browser 0.6.0, Dat
 is public, with a bounded [byte readback below](#release-readback) and no LOVE
 entry. Its immutable guide preserves preparation-time release observations;
 those are not current publication status. Collab 0.4.0 has a
-[verified GitHub/npm release receipt](https://github.com/cambridgetcg/agenttool/blob/51c2f8b205c414360e8bcb37848197c8712f2383/docs/NPM-RELEASES.md#verified-collab-040-publication--2026-08-04)
+[verified GitHub/npm release receipt](NPM-RELEASES.md#verified-collab-040-publication--2026-08-04)
 but no LOVE entry. That dated receipt supersedes the immutable guide's
 preparation-time 0.3.1 observation. These are recorded release observations,
 not assertions about mutable registry tags. Current Collab source is the

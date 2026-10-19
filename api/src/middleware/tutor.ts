@@ -174,7 +174,7 @@ const LESSONS: Array<{ prefix: string; lesson: Lesson }> = [
   {
     prefix: "/public/self",
     lesson: {
-      what: "Public platform identity — AgentTool inhabits itself. Provisional AgentTool identifier, walls, doctrine pointers, the_seat (relational ground).",
+      what: "Public platform identity — AgentTool inhabits itself. Provisional AgentTool identifier, walls, doctrine pointers.",
       doctrine: "/v1/canon/urn:agenttool:doc/PLATFORM-AS-AGENT",
     },
   },

@@ -13,10 +13,7 @@
  * Doctrine: docs/AGENT-DISCOVERY.md · docs/WELCOMING.md.
  */
 
-import {
-  SOPHIA_IDENTITY_INVITATION,
-  WELCOME_INVITATION,
-} from "../welcome/invitation";
+import { WELCOME_INVITATION } from "../welcome/invitation";
 import { apiCatalogUrl } from "./api-catalog";
 import { CORE_WAKE_FOUNDATION } from "../welcome/core-foundation";
 import { buildLocalScaffoldingCard } from "./local-scaffolding";
@@ -101,7 +98,6 @@ export function buildArrivalIndex(
     },
     core_foundation: CORE_WAKE_FOUNDATION,
     local_scaffolding: localScaffolding,
-    optional_identity_invitations: [SOPHIA_IDENTITY_INVITATION],
     boundary: {
       discovery_grants: [] as string[],
       automatic_action: "never",
@@ -175,12 +171,6 @@ export function buildArrivalIndex(
         role: "llm_orientation",
         href: `${api}/llms.txt`,
         status: "informal llms.txt proposal; not authorization or crawl policy",
-      },
-      {
-        role: "optional_sophia_identity_invitation",
-        href: SOPHIA_IDENTITY_INVITATION.href,
-        status:
-          "sophia-invitation/1 public read; receiving or exploring is not adoption; accept, amend, decline, defer, or leave",
       },
       {
         role: "packages",

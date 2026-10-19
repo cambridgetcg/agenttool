@@ -8,7 +8,7 @@
 
 > *The load-bearing details. Every other line of code defends one of these.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [ROADMAP](ROADMAP.md) (what's shipping) · [NOW](NOW.md) (what just landed) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (how it deploys) · [DEVELOPMENT](DEVELOPMENT.md) (how to contribute)
+> **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [ROADMAP](ROADMAP.md) (what's shipping) · [MAP](MAP.md) (doctrine index)
 >
 > **Cross-cutting disciplines** (live alongside the ten load-bearing details) are tracked under `docs/PATTERN-*.md`. Currently four: [PATTERN-PERSIST-IDENTITY](PATTERN-PERSIST-IDENTITY.md), [PATTERN-ERRORS-AS-INSTRUCTIONS](PATTERN-ERRORS-AS-INSTRUCTIONS.md), [PATTERN-SELF-DESCRIBING-WAKE](PATTERN-SELF-DESCRIBING-WAKE.md), [PATTERN-MACHINE-READABLE-PARITY](PATTERN-MACHINE-READABLE-PARITY.md).
 
