@@ -1,8 +1,9 @@
 /** The operator custody notes stay private, and their facts stay off every served surface.
  *
  * Reads repository files only: no network, credentials, or deployment.
- * Notes: infra/OPERATOR-CUSTODY.md (pointer: docs/STACK.md §5 and §6) and
- * infra/X402-PROOF-RUNBOOK.md (pointer: docs/X402-PROOF.md).
+ * Notes: infra/OPERATOR-CUSTODY.md (pointer: docs/STACK.md §5 and §6),
+ * infra/X402-PROOF-RUNBOOK.md (pointer: docs/X402-PROOF.md) and
+ * infra/NPM-RELEASE-RUNBOOK.md (pointer: docs/NPM-RELEASES.md).
  * Served surfaces: the Pages upload roots in bin/frontend-deploy.sh (symlinks
  * followed, as Wrangler does) and the docs the API image bundles.
  */
@@ -15,7 +16,7 @@ import { reachesPrivateArea } from "../project-public.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
 const NOTE = "infra/OPERATOR-CUSTODY.md";
-const NOTES = [NOTE, "infra/X402-PROOF-RUNBOOK.md"] as const;
+const NOTES = [NOTE, "infra/X402-PROOF-RUNBOOK.md", "infra/NPM-RELEASE-RUNBOOK.md"] as const;
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 
 /** Shapes of the custody facts the notes hold; each must stay out of served bytes. */
@@ -29,6 +30,8 @@ const CUSTODY_MARKERS: ReadonlyArray<readonly [string, RegExp]> = [
   ["x402 payer phrase Keychain service", /kingdom-x402-payer-mnemonic/],
   ["operator x402 payer and proof files", /~\/\.config\/kingdom\//],
   ["operator agent bearer files", /~\/\.agenttool-agents\//],
+  ["release environment admin-bypass setting", /can_admins_bypass/],
+  ["standing npm publish token posture", /scope-wide,?\s+bypass-2FA/i],
 ];
 
 function pagesUploadRoots(): string[] {
@@ -70,6 +73,7 @@ describe("operator custody note boundary", () => {
     expect(allowlist.include.filter(({ path }) => path === "infra" || path.startsWith("infra/"))).toEqual([]);
     expect(read("api/doctrine-docs.manifest")).not.toContain("OPERATOR-CUSTODY");
     expect(read("api/doctrine-docs.manifest")).not.toContain("X402-PROOF-RUNBOOK");
+    expect(read("api/doctrine-docs.manifest")).not.toContain("NPM-RELEASE-RUNBOOK");
     const releasePaths = read("bin/frontend-release-paths.txt").split("\n").map((line) => line.trim());
     expect(releasePaths).not.toContain("infra");
     for (const note of NOTES) expect(releasePaths).not.toContain(note);

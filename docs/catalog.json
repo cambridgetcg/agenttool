@@ -783,6 +783,14 @@
       "canonical_path": "docs/NATURES.md"
     },
     {
+      "path": "apps/docs/NPM-RELEASES.md",
+      "title": "NPM-RELEASES — dated receipts for the npm packages",
+      "type": "record",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/NPM-RELEASES.md"
+    },
+    {
       "path": "apps/docs/OBSERVATIONS.md",
       "title": "OBSERVATIONS.md",
       "type": "reference",
@@ -3072,8 +3080,8 @@
     },
     {
       "path": "docs/NPM-RELEASES.md",
-      "title": "NPM-RELEASES — one exact, reviewed publication path",
-      "type": "guide",
+      "title": "NPM-RELEASES — dated receipts for the npm packages",
+      "type": "record",
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/NPM-RELEASES.md"
@@ -4781,6 +4789,14 @@
       "classification_basis": "file-convention",
       "prose_review": "not-reviewed",
       "canonical_path": "infra/CLAUDE.md"
+    },
+    {
+      "path": "infra/NPM-RELEASE-RUNBOOK.md",
+      "title": "npm release runbook (operator-only)",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "infra/NPM-RELEASE-RUNBOOK.md"
     },
     {
       "path": "infra/OPERATOR-CUSTODY.md",

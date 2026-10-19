@@ -15,7 +15,8 @@ manifest, or quote it in issues, pull requests, commit messages or logs.
 
 Until the docs release that follows 2026-10-19, `docs.agenttool.dev/STACK.md`
 served the facts below. From that release the docs site no longer serves
-`STACK.md`, `DEVELOPMENT.md`, `NOW.md` or `NPM-RELEASES.md` at all. Earlier
+`STACK.md`, `DEVELOPMENT.md` or `NOW.md` at all, and `NPM-RELEASES.md` carries
+only the release receipts (its runbook is `infra/NPM-RELEASE-RUNBOOK.md`). Earlier
 Pages deployments keep their bytes at their own deployment URLs; whether to
 delete them is Yu's decision.
 

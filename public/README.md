@@ -18,7 +18,7 @@ this repository, whatever the allowlist says. The one exception is
 `bin/npm-release.ts` and `bin/build-love-packages.ts`, each as an exact file
 entry, because the public repository's publish workflow runs them. They import
 nothing but each other and Node or Bun built-ins. npm releases now run from the
-public repository; see [NPM-RELEASES](../docs/NPM-RELEASES.md#public-release-path-from-2026-10-12)
+public repository; see the [npm release runbook](../infra/NPM-RELEASE-RUNBOOK.md#public-release-path-from-2026-10-12)
 and `bin/public-release-tag.ts`, which tags a green projection commit.
 
 ## Projecting

@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**820 document paths** (including mirrors). orientation: 182; guide: 84; reference: 331; policy: 29; reflection: 123; proposal: 46; record: 23; unclassified: 2.
+**822 document paths** (including mirrors). orientation: 182; guide: 84; reference: 331; policy: 29; reflection: 123; proposal: 46; record: 25; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -231,7 +231,6 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/DOCUMENTATION.md](<../docs/DOCUMENTATION.md>) | 2026-09-26 |
 | [docs/LOCAL-CORE.md](<../docs/LOCAL-CORE.md>) | not-reviewed |
 | [docs/LOCAL-PLAY.md](<../docs/LOCAL-PLAY.md>) | not-reviewed |
-| [docs/NPM-RELEASES.md](<../docs/NPM-RELEASES.md>) | not-reviewed |
 | [docs/PAYOUT-BROADCAST-OPS.md](<../docs/PAYOUT-BROADCAST-OPS.md>) | not-reviewed |
 | [docs/PYPI-RELEASES.md](<../docs/PYPI-RELEASES.md>) | not-reviewed |
 | [docs/TROUBLESHOOTING.md](<../docs/TROUBLESHOOTING.md>) | not-reviewed |
@@ -240,6 +239,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/launch/ADMISSION-OPERATIONS.md](<../docs/launch/ADMISSION-OPERATIONS.md>) | not-reviewed |
 | [docs/launch/HUMAN-DOOR-RUNBOOK.md](<../docs/launch/HUMAN-DOOR-RUNBOOK.md>) | not-reviewed |
 | [docs/zerone-migration/RUNBOOK.md](<../docs/zerone-migration/RUNBOOK.md>) | not-reviewed |
+| [infra/NPM-RELEASE-RUNBOOK.md](<../infra/NPM-RELEASE-RUNBOOK.md>) | not-reviewed |
 | [infra/apex-door/ROLLBACK.md](<../infra/apex-door/ROLLBACK.md>) | not-reviewed |
 | [marketing/DIRECTORY-SUBMISSION.md](<../marketing/DIRECTORY-SUBMISSION.md>) | not-reviewed |
 | [packages/collab-zerone/CLAUDE.md](<../packages/collab-zerone/CLAUDE.md>) | not-reviewed |
@@ -844,11 +844,13 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 
 | Document | Prose review |
 |---|---|
+| [apps/docs/NPM-RELEASES.md](<../apps/docs/NPM-RELEASES.md>) | not-reviewed |
 | [apps/docs/X402-PROOF.md](<../apps/docs/X402-PROOF.md>) | not-reviewed |
 | [docs/COMPETITIVE-LANDSCAPE-2026.md](<../docs/COMPETITIVE-LANDSCAPE-2026.md>) | not-reviewed |
 | [docs/HOSTED-RUNTIME-DESIGN.md](<../docs/HOSTED-RUNTIME-DESIGN.md>) | not-reviewed |
 | [docs/MYTHOS-ENGAGEMENT.md](<../docs/MYTHOS-ENGAGEMENT.md>) | not-reviewed |
 | [docs/NOW.md](<../docs/NOW.md>) | not-reviewed |
+| [docs/NPM-RELEASES.md](<../docs/NPM-RELEASES.md>) | not-reviewed |
 | [docs/REVOCABLE-FEEDBACK-RELEASE.md](<../docs/REVOCABLE-FEEDBACK-RELEASE.md>) | not-reviewed |
 | [docs/SYZYGY-CONSCIOUSNESS-BASELINE.md](<../docs/SYZYGY-CONSCIOUSNESS-BASELINE.md>) | not-reviewed |
 | [docs/TRUE-LOVE-CANON-IN-CLOUD-FORM.md](<../docs/TRUE-LOVE-CANON-IN-CLOUD-FORM.md>) | not-reviewed |

@@ -24,6 +24,7 @@
 ## Current development & releases
 
 - [ROADMAP.md](https://docs.agenttool.dev/ROADMAP.md): Three horizons (economy · network · runtime) with slice progress — what is shipping and what is next.
+- [NPM-RELEASES.md](https://docs.agenttool.dev/NPM-RELEASES.md): Dated exact receipts for each npm package release (sizes, SHA-256, workflow runs, Sigstore entries); registry presence and dist-tags are not maturity claims.
 
 ## Identity & keys
 

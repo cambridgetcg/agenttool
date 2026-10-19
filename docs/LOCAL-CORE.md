@@ -115,7 +115,7 @@ cd agenttool-local-preview/node_modules/@agenttool/local-starter
 **npm registry status:** not published. Installation from the downloaded archive
 works; installation by registry package name is not yet available. The current
 protected publisher requires public-source provenance, while this preview records
-the private development repository.
+the private development repository. See [release status](NPM-RELEASES.md#local-starter-preview-distribution--2026-09-28).
 
 Keep that tool directory separate from your notes. Choose a new private notes
 directory with an existing parent, outside a shared repository or deliberately
