@@ -143,8 +143,9 @@ State the actual runtime/OS used. Local tests passed 70/70 on macOS arm64 with
 Node 22.18.0 and 24.18.1. CI run 36327872045 passed all six combinations of
 Ubuntu 24.04/macOS 15/Windows 2025 and Node 22.18.0/24.18.0: 70 passes on each
 Linux/macOS job; 63 passes and seven POSIX-specific skips on each Windows job.
-Since 2026-10-19 a pull-request run of that workflow covers Ubuntu only; macOS
-and Windows evidence comes from its main-push run or a manual dispatch
+That was a pull-request run from before the trim: pull-request runs of that
+workflow now cover Ubuntu only, so macOS and Windows evidence comes from its
+main-push run or a manual dispatch
 (`gh workflow run local-starter.yml --ref <branch>`).
 WSL/container and Windows ACL privacy need their own receipts. The README
 records separate native Codex MCP/skill and Claude startup-hook observations;
