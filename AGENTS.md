@@ -150,7 +150,7 @@ journal read-only, refuses pending/checksum-drifted migrations, gates the source
 and verifies the exact deployed commit. It never applies SQL. Do not bypass its
 checks or use a rejected local API deployment path. A push to `main` that changes
 anything the image bakes in (`api/`, `docs/agenttool.jsonld`, `docs/kingdom-bundle.json`,
-or a doc listed in `api/doctrine-docs.manifest`) deploys production through this
+`bin/stage-doctrine-docs.sh`, or a doc listed in `api/doctrine-docs.manifest`) deploys production through this
 workflow with no further approval step unless its gates refuse, so merging such a
 change is deploying it.
 
