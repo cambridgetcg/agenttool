@@ -64,10 +64,12 @@ readonly EXACT_RULES=(
 # everything until someone classifies it here.
 readonly API_PREP="api-protocol-postgres,launch-core"
 readonly RULES=(
-  # The workflow, this classifier, shared preparation, and anything that can
-  # change dependency resolution or checked-out bytes select every job.
+  # The workflow, this classifier, the push-to-main tree proof, shared
+  # preparation, and anything that can change dependency resolution or
+  # checked-out bytes select every job.
   ".github/workflows/ci.yml *"
   "bin/ci-changed-areas.sh *"
+  "bin/ci-tree-proof.sh *"
   "bin/bash-without-env-hooks.sh *"
   "bin/hermetic-env.sh *"
   "bin/prepare-hermetic-deps.sh *"

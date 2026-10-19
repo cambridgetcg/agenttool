@@ -709,11 +709,12 @@ describe("boring test spine", () => {
     // pinned Node version in turn.
     expect(careBeforeLearning?.strategy).toBeUndefined();
     // A draft skips it; a ready pull request may skip it only when the change
-    // classifier succeeded and reported its inputs untouched.
-    // bin/tests/ci-changed-areas.test.ts pins the classifier and every
-    // filtered job.
+    // classifier succeeded and reported its inputs untouched, and a push to
+    // main only when bin/ci-tree-proof.sh found a green pull-request run of
+    // the identical tree. bin/tests/ci-changed-areas.test.ts pins the
+    // classifier, the proof wiring, and every filtered job.
     expect(careBeforeLearning?.if).toBe(
-      "${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.care-before-learning == 'false') }}",
+      "${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.care-before-learning == 'false')) }}",
     );
     expect(careBeforeLearning?.needs).toEqual(["changes"]);
     expect(careBeforeLearning?.["continue-on-error"]).toBeUndefined();
@@ -770,7 +771,9 @@ describe("boring test spine", () => {
     expect(careJob).not.toContain("care-before-learning-hf-release.py publish");
 
     expect(requiredApi?.name).toBe("API and protocol");
-    expect(requiredApi?.if).toBe("${{ always() && github.event.pull_request.draft != true }}");
+    expect(requiredApi?.if).toBe(
+      "${{ always() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.proven == 'true') }}",
+    );
     expect(requiredApi?.needs).toEqual([
       "changes",
       "api-protocol-linux",
@@ -1401,7 +1404,7 @@ describe("boring test spine", () => {
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.startsWith("uses:"));
-    expect(uses).toHaveLength(29);
+    expect(uses).toHaveLength(30);
     expect(
       uses.every(
         (line) =>

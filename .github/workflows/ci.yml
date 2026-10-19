@@ -7,27 +7,47 @@ on:
   push:
     branches:
       - main
+  schedule:
+    # Weekly full run on main: the backstop for drift outside the tree and
+    # for path-filter mapping gaps behind skipped or proven runs.
+    - cron: "23 4 * * 1"
+  # A manual run selects every job (the YUTABASE projector stays push-only).
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Pull requests: a newer commit cancels the older run. Pushes to main: one
+  # group per commit, never cancelled, because a later proven push must not
+  # cancel an earlier unproven push's full run (the later pull-request run may
+  # have skipped the earlier push's areas). Scheduled and manual runs share
+  # refs/heads/main with pushes, so they get groups of their own.
+  group: ${{ github.event_name == 'push' && format('ci-{0}-push-{1}', github.workflow, github.sha) || format('ci-{0}-{1}-{2}', github.workflow, github.event_name, github.ref) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   changes:
-    # Keep this display name stable. A pull-request job below is skipped only
-    # when this classifier succeeded and reported its job as "false"; pushes,
-    # other events, git failures, unknown paths, and changes to this workflow
-    # or bin/ci-changed-areas.sh select every job. On pull requests it also
-    # carries the YUTABASE coverage notice, which needs no job of its own.
-    # Every job but the push-only YUTABASE projector skips a draft pull
+    # Keep this display name stable. On a pull request the classifier maps
+    # changed paths to jobs, and a job below is skipped only when it succeeded
+    # and reported that job "false"; git failures, unknown paths, and changes
+    # to this workflow, bin/ci-changed-areas.sh, or bin/ci-tree-proof.sh select
+    # every job. A pull request also records the tree it tested and carries
+    # the YUTABASE coverage notice. On a push to main, bin/ci-tree-proof.sh
+    # looks for a green pull-request run of ci.yml on the identical tree; when
+    # it finds one ("proven"), every job but the YUTABASE projector is skipped
+    # and that run is the evidence. Scheduled and manual runs select every
+    # job. Every job but the push-only YUTABASE projector skips a draft pull
     # request; GitHub runs CI again when it is marked ready for review.
     name: Changed areas
     if: ${{ github.event.pull_request.draft != true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    # actions: read lets a push to main look up the pull-request run that
+    # recorded its tree. Nothing in this job writes through the token.
+    permissions:
+      contents: read
+      actions: read
     outputs:
       everything: ${{ steps.classify.outputs.everything }}
       reason: ${{ steps.classify.outputs.reason }}
@@ -39,6 +59,7 @@ jobs:
       witnessed-agent-economy: ${{ steps.classify.outputs.witnessed-agent-economy }}
       packages: ${{ steps.classify.outputs.packages }}
       sdk-python: ${{ steps.classify.outputs.sdk-python }}
+      proven: ${{ steps.proof.outputs.proven }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -58,10 +79,41 @@ jobs:
             echo 'YUTABASE PostgreSQL integration is not run for pull requests. The private fixture is available only to trusted pushes to cambridgetcg/agenttool main.'
             echo 'The Data, ADDS, and SDK job still checks the credential-free projector tests. This notice is not a PostgreSQL integration pass.'
           } | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Name the tree this pull request tests
+        id: tree
+        if: ${{ github.event_name == 'pull_request' }}
+        # A failure here only means the push to main runs every job.
+        continue-on-error: true
+        run: |
+          tree="$(git rev-parse --verify "$GITHUB_SHA^{tree}")"
+          printf '%s\n' "$GITHUB_SHA" >"$RUNNER_TEMP/ci-tested-tree.txt"
+          printf 'tree=%s\n' "$tree" >>"$GITHUB_OUTPUT"
+      - name: Record the tested tree for the push to main
+        # The push trusts this record only after this whole run has passed. A
+        # missing record only means that push runs every job.
+        if: ${{ github.event_name == 'pull_request' && steps.tree.outputs.tree != '' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: ci-tested-tree-${{ steps.tree.outputs.tree }}
+          path: ${{ runner.temp }}/ci-tested-tree.txt
+          retention-days: 14
+          if-no-files-found: error
+          overwrite: true
+      - name: Look for a green pull-request run of this exact tree
+        id: proof
+        if: ${{ github.event_name == 'push' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bin/bash-without-env-hooks.sh bin/ci-tree-proof.sh
 
   api-protocol-linux:
     name: API and protocol (Linux)
-    if: ${{ github.event.pull_request.draft != true }}
+    needs:
+      - changes
+    # Never filtered by path. Skipped only for a draft, or for a push whose
+    # exact tree a green pull-request run already tested.
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.proven == 'true') }}
     runs-on: ubuntu-24.04
     # The complete gate can exceed 20m on shared runners; match deploy-api's
     # bounded allowance while keeping every test and the required aggregate.
@@ -90,7 +142,7 @@ jobs:
     name: API PostgreSQL holds and launch transactions
     needs:
       - changes
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.api-protocol-postgres == 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.api-protocol-postgres == 'false')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     services:
@@ -243,7 +295,7 @@ jobs:
     name: Launch core outsider journey
     needs:
       - changes
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.launch-core == 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.launch-core == 'false')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -320,7 +372,7 @@ jobs:
     name: Launch browser journeys
     needs:
       - changes
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.launch-browser == 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.launch-browser == 'false')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
@@ -354,7 +406,7 @@ jobs:
     name: Native macOS secret helper
     needs:
       - changes
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.native-macos-secret == 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.native-macos-secret == 'false')) }}
     runs-on: macos-15
     timeout-minutes: 8
     env:
@@ -450,7 +502,7 @@ jobs:
     name: Care before learning (Node 22.18.0 and 25.2.1)
     needs:
       - changes
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.care-before-learning == 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.care-before-learning == 'false')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -529,9 +581,10 @@ jobs:
     # The required result fails unless the change classifier and the Linux
     # gate pass and every other prerequisite passes. A prerequisite may be
     # skipped only when the classifier succeeded and reported it "false".
-    # A draft pull request skips this result along with everything else.
+    # A draft pull request skips this result along with everything else, as
+    # does a push whose exact tree a green pull-request run already tested.
     name: API and protocol
-    if: ${{ always() && github.event.pull_request.draft != true }}
+    if: ${{ always() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.proven == 'true') }}
     needs:
       - changes
       - api-protocol-linux
@@ -582,7 +635,7 @@ jobs:
     name: Witnessed agent economy
     needs:
       - changes
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.witnessed-agent-economy == 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.witnessed-agent-economy == 'false')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -680,7 +733,7 @@ jobs:
     name: Data, ADDS, and SDK
     needs:
       - changes
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.packages == 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.packages == 'false')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -1116,7 +1169,7 @@ jobs:
     name: Python SDK (${{ matrix.python-version }})
     needs:
       - changes
-    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && needs.changes.outputs.sdk-python == 'false') }}
+    if: ${{ !cancelled() && github.event.pull_request.draft != true && !(needs.changes.result == 'success' && (needs.changes.outputs.proven == 'true' || needs.changes.outputs.sdk-python == 'false')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:

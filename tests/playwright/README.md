@@ -76,8 +76,9 @@ and retains failed traces/screenshots for seven days. The protected
 `API PostgreSQL holds and launch transactions` job, whose last steps are the
 isolated PostgreSQL transaction and Redis admission proofs. On a pull request
 that changes none of their inputs, the change classifier may report them
-unneeded and the result then accepts their skip; pushes to `main` always run
-them. Retries are disabled so failures remain visible.
+unneeded and the result then accepts their skip. A push to `main` runs them
+unless a green pull-request run already tested that exact tree, and the weekly
+scheduled run always does. Retries are disabled so failures remain visible.
 
 ## Helpers
 
