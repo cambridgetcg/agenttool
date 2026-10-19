@@ -35,11 +35,8 @@ thread intentions.
 
 ## Commands
 
-    bun install --frozen-lockfile
-    bun run typecheck
-    bun test
-    bun run check:package
-    bun run ci
+Prepare dependencies as root `AGENTS.md` describes, then run `bun run ci`
+(typecheck, tests, packed-surface check, and Node smoke).
 
 ## Key Files
 
@@ -68,17 +65,12 @@ thread intentions.
 
 ## Release State
 
-This source and public npm developer preview are `0.1.0-dev.1`. Protected
-workflow run `30468784750`
-published it with provenance from the annotated
-GitHub prerelease.
-Anonymous readback confirmed the 26,694-byte npm and GitHub tarballs are
-byte-identical
-(`sha256:0e8dff54aa098c480351d4adbb7681710bf2410bb57fd8e5bb22f9193bd3fa47`).
+This source and the public npm developer preview on `next` are `0.1.0-dev.1`;
+`latest` remains `0.1.0-dev.0` and is not a maturity signal, so select an exact
+prerelease or the preview tag deliberately. The publication receipt is on the
+[doctrine page](https://docs.agenttool.dev/AGENT-CORRESPONDENCE.md).
 Publication does not deploy an executor, install YUTABASE, or grant database
-authority. npm exposes `next` as `0.1.0-dev.1`; `latest` remains
-`0.1.0-dev.0`. Consumers should select an exact published prerelease or the
-preview tag deliberately.
+authority.
 
 ## Kingdom Engine
 

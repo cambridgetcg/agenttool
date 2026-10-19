@@ -81,10 +81,12 @@ references are explicit bypasses outside this threat model.
 ## Verification
 
 ```sh
-pytest -q
+.venv/bin/python -I -m pytest -q
 bun test bridge/tests   # requires freshly built Garden/continuity dist
 uv build
 ```
 
+The package dependency preparer in root `AGENTS.md` rebuilds the ignored
+`.venv` with this package and its `dev` extra; it does not install the `hf` extra.
 Use a project-local environment for the optional HF stack. Package tests must
 not download models/datasets, train, publish, or write to the Hub.

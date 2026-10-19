@@ -6,10 +6,7 @@ deterministic E0–E6 structural evaluation, and one explicit SQLite ledger.
 
 ## Commands
 
-```bash
-bun install --frozen-lockfile
-bun run ci
-```
+Prepare dependencies as root `AGENTS.md` describes, then run `bun run ci`.
 
 ## Invariants
 

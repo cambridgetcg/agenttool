@@ -56,8 +56,9 @@ adapter and must remain isolated from model and provider runtimes.
 
 ## Verification
 
+Prepare dependencies as root `AGENTS.md` describes, then:
+
 ```sh
-bun install --frozen-lockfile
 bun run ci
 npm pack --dry-run --ignore-scripts --json
 ```

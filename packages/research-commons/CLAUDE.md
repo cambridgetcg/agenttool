@@ -6,8 +6,9 @@ records. Read `README.md` before changing semantics.
 
 ## Commands
 
+Prepare dependencies with the root `AGENTS.md` preparer, then run here:
+
 ```bash
-bun install --frozen-lockfile
 bun run ci
 ```
 
@@ -47,8 +48,12 @@ bun run ci
   future AgentTool merge revision; those belong to a later Zerone Phase C pin.
 - Keep safety/access postures caller-declared and unverified. Referenced bytes
   are not inspected; digests do not make sensitive content safe.
-- Regenerate schemas and examples from source only through an `apply_patch`
-  change, then keep artifact parity tests green.
+- Schemas and examples have no writer script. `tests/artifacts.test.ts`
+  regenerates the schemas from `scripts/schema-artifacts.ts`, replays the
+  examples from `tests/fixtures.ts` through the simulator, compares both with
+  the committed files, and pins each
+  checked artifact by raw SHA-256, so a deliberate artifact change edits the
+  committed bytes and their pins together.
 - Keep the package private and out of npm publication and hosted-deployment
   allowlists. External activation requires a separate reviewed protocol.
 

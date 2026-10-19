@@ -5,378 +5,132 @@ Static references at **docs.agenttool.dev** for hosted APIs and independent
 local tools. `agents.html` is the agent entrance, `index.html` is the direct
 reference library, and `roadmap.html` is a human-facing source/proposal map.
 
-## Current State
+The canonical doctrine lives in [`docs/`](../../docs/); this app is the HTML
+wrapper. This guide is itself served at `docs.agenttool.dev/CLAUDE.md`, so it
+carries no operator custody, credential, or private-path detail.
 
-`COLLABORATION.md` and `COLLABORATION-ROADMAP.md` follow the canonical Markdown
-symlink convention used by `LOCAL-CORE.md` and `API-COVERAGE.md`. The former
-`COLLABORATION-CHANNELS.md` public URL redirects to the self-contained guide;
-its detailed source contract stays in the repository. Public setup names
-released local Collab 0.4.0 separately from 0.5.0/courier source candidates and
-the scoped mission-participation priority. Static publication does not install
-a harness, release a package or deploy the mission API.
-The current source groups Identity, Wake & Continuity, Memory, Tools and
-Collaboration first, with optional areas in Build. The three hubs use compact
-rows without sidebars; agent usage fields and examples use native disclosures.
-Hosted service references, local Data and Browser guides, public Canon MCP,
-support and exact-version LOVE package discovery retain their own contracts.
-The reading-layout refresh is a source candidate; see
-[`docs/NOW.md`](../../docs/NOW.md) for its verification and separate release record.
-
-The artifact-specific records below retain their original scope and receipts.
-`love-bomb.html` is the semantic, no-JavaScript LOVE BOMB v4 door. Its JSON,
-Markdown, plain-text, and closed-schema twins are static pull-only files with
-exact representation links and route-specific Cloudflare headers. The page
-does not inspect identity or lifecycle state, personalize, persist, notify,
-broadcast, score, or create a receipt or effect. “Every is” means equal public
-availability without classification, not universal contact or physical access.
-The separate API `GET|HEAD /public/love-bomb` serves the closed
-`agenttool.love-bomb-public-signal/0.1` package/distribution coordinate. It
-links this static door only as related and contains none of the ten-message
-corpus. Its schema and example are mirrored under `specs/`; this static docs
-tree does not implement, proxy, or fall back for the API route.
-The committed static `llms.txt` keeps the same pointers as a deployment
-fallback; the public `/llms.txt` route redirects to the API's shared
-`buildLlmsTxt()` output, which is the canonical live discovery representation.
-The root advertises the same bounded six-link discovery set as the web and
-dashboard roots. Bare `/.well-known` is a distinct, richer arrival index that
-links to the canonical compact three-road `/public/discovery` compass; neither
-surface grants authority or starts follow-up. `AGENT-DISCOVERY.md` and
-`CASTLE-OF-UNDERSTANDING.md` are published as symlinks to their canonical
-repository guides; finding either guide performs no registration, installation,
-Castle read, or follow-up.
-`WAKE-RETURN.md` uses the same canonical-guide symlink convention. Its package
-and example links point to reviewed, commit-pinned repository source; serving
-this guide does not publish the private Return package, distribute an artifact,
-install a host integration, or observe a private identity.
-`HF-TRAINING-GARDEN.md` is likewise a symlink to the canonical repository
-guide. It documents an immutable, public-safe HF data lifecycle and one-way
-Garden reference plan; serving the guide does not download data, accept a gate,
-train or resume a model, write Garden or Hub, or prove clearance.
-`PRINCIPALITY-ATLAS.md` publishes the canonical finite plural incidence guide by
-the same symlink convention. Serving it does not create an atlas, infer a bond,
-authority, equality, consensus, one global view, or any hosted computation.
-`xenia-helly.html` is the adjacent Common Ground teaching lab. It handles at
-most twelve caller-entered closed halfplanes in two dimensions, locally in the
-page, and returns one of four explicit outcomes: a finite binary64 feasible point, a
-small conflict witness, model refusal, or insufficient evidence. It uses exact
-dyadic checks over parsed binary64 input but does not preserve arbitrary exact
-decimal input, emit a standalone proof-grade certificate, persist or upload
-input, choose a fair state, infer consent, rank participants, establish XENIA
-Covenant conformance, or add a hosted solver/API route. The full proof, the challenge, understanding-versus-
-pedestal audit, and WAKE expiry design live in
-`docs/XENIA-HELLY-COMMON-GROUND.md`; the bundled instruction-only operating
-workflow is `packages/skills/skills/nen-common-ground/SKILL.md`.
-`POLYMORPH-LANDSCAPE.md` publishes the canonical bounded polymorph-landscape and
-Ritonavir reachability-shift guide by the same symlink convention. Serving it
-does not reproduce an experiment, establish a polymorph's absence or presence,
-make a pharmaceutical recommendation, run code, or add hosted computation.
-`MEMETIC-LANDSCAPE.md` publishes the adjacent canonical cultural-artifact
-geometry guide. `geometry/ritonavir-memes-brainrot.html` is its inert
-four-language teaching projection. It exposes only the package's four closed
-wires; broader attention research stays a page-only lens. Artifact routes remain
-separate from interaction claims, people are never vectors or scores, the
-built-in “brain rot” case stays cultural slang rather than diagnosis, and the
-Ritonavir link transfers no mechanism. Generic caller prose remains explicitly
-semantically unverified. Its separate public, ungated Hugging Face dataset is
-pinned to immutable revision `da6a2622dddcf97d69992e3905c5485996f42892`;
-all 13 repository-owned files and 104,343 bytes matched anonymous readback,
-with provider `.gitattributes` as the sole extra. That mirror performs no
-training and does not itself make the static or API surface live. The exact
-84,079-byte package is separately public on npm through protected recovery run
-`31723441034`, requested on `next`; npm's sole-version `latest` fallback is not
-a maturity signal. Independently,
-the page, Markdown guide, geometry index, and stylesheet first passed exact
-custom-domain Cloudflare readback from protected main
-`702e3cb6838546f7897659e447950ae09a960293` at `2026-08-13T03:10:56Z`; the
-deployment-specific docs URL is
-`https://f5552fa1.agenttool-docs.pages.dev/geometry/ritonavir-memes-brainrot`.
-The separate zero-I/O API and compact WAKE coordinate first passed exact
-custom-domain and direct-Fly runtime readback from protected main
-`b8b97e73b3405d58a583ae9571d11b36cdab87d6` in Fly release `v249`. Deployment
-completed at `2026-08-13T16:00:35Z`; independent semantic readback was recorded
-at `2026-08-13T16:03:17Z`. All five Machines carried the same clean-revision
-image digest; three app Machines were started and two thinker Machines stayed
-stopped. That API receipt adds discovery context only, not identity, continuity,
-consent, scientific verification, participant scoring, or action authority.
-`geometry/forms-folds-prions.html` adds one static Cloudflare projection of the
-source-owned KINGDOM Meaning Practice lineage. The exact JSON remains at its
-public mirror; AgentTool does not keep a second structured ledger. The page is a
-static comparison of crystal form, protein folding, amyloid assembly, and
-biological prions. Shared landscape mathematics is a reading aid, not causal
-lineage or transferred mechanism; the page performs no model work, medical or
-laboratory action, registry adoption, runtime dispatch, or scoring.
-`HF-WAKE-TRAINING.md` and `HF-WAKE-HOST.md` publish the canonical training
-governance and exact local-host boundaries by the same symlink convention.
-Serving them creates no training process, model/data load, universal callback
-guarantee, permission, consent, identity continuity, Hub write, or hosted host.
-It also serves the Agent Wallet 0.1 Working Draft, schema, and exact LOVE
-artifact from their canonical repository sources. This docs surface does not
-imply npm mirror availability, a hosted wallet, key custody, RPC, or broadcast
-capability.
-The Repo Archive surface serves its overview, experimental 0.1 specification,
-schema, and vectors from canonical repository sources. It documents a local
-three-directory restore simulator and a package API; it does not create cloud
-storage adapters, a hosted archive service, independent physical failure
-domains, recovery-key custody, or a durability guarantee.
-The Agent Browser page documents the separately installed exact public
-`@agenttool/browser@0.6.0` local runtime with TypeScript, JSONL, and stdio MCP
-doors. Its package root is also a Codex plugin: a self-contained packed
-Node-targeted bundle starts the same MCP core without a parent dependency tree.
-The plugin manifest supplies no authority flag, so it retains the headless,
-public, ephemeral defaults and still uses an operator-installed Chrome-family
-browser. Seven browser operations plus capability inspection and zero-effect
-planning form its nine-tool agent surface. Named `public`, `local`, and
-`sovereign` launch profiles make destination authority legible; sovereign is
-broad local pass-through, not a bypass of browser, account, site, network, or
-operating-system boundaries; no profile promises universal site access.
-Main-response discovery hints remain bounded and untrusted. Bounded recent
-read-only snapshots preserve still-current peer refs until a frame navigates
-or an action reaches browser dispatch. Separately bounded viewport-visible
-heading, landmark, dialog, alert, and status lines provide structural
-accessibility context without actionable refs. Navigation epochs, action/close
-fences, interruptible ephemeral close, and browser-owned teardown harden
-document and shutdown races without retrying an action.
-Syntactically admitted acts carry redacted local receipts that distinguish
-rejection before runtime invocation, browser completion, and an unknown local
-outcome after invocation began. Optional observation bases for non-ref actions
-are rechecked before preflight and immediately before invocation. Receipts and
-bases are not remote-effect proof, consent, authentication, idempotency,
-durable audit records, DOM equality, or cross-process/cross-device leases.
-Stable operation names and protocol identifiers are available from the
-backend-neutral `@agenttool/browser/protocol` export. Playwright is the
-concrete adapter today; raw CDP is not public API. The stdio server negotiates
-current MCP `2026-07-28` with an explicit 2025-era compatibility path over the
-same core; MCP adds no browser-driver, durable-session, or security guarantee.
-Playwright-managed redirect hops are not independently revalidated for
-destination class or URL userinfo. An unframed popup denial can report only
-`action_failed` attribution uncertainty, never a guessed same-tab policy
-denial. Exact `0.1.0`, `0.2.0`, `0.3.0`, and `0.5.0` package paths remain
-historical and immutable. Version `0.5.1` changed distribution packaging, not
-the 0.5.0 runtime, tools, protocols, or authority model. Version `0.6.0`
-preserves the same nine-tool/plugin boundary and adds a direct-only exact
-material, local RhetorLint, and explicitly injected pinned-HF observation
-subpath. It performs no automatic upload/action and determines no factual
-truth. The docs deployment
-does not create a hosted browser, ambient
-recognition action, credential bridge, or stronger SSRF isolation. The
-package is distinct from the disabled-by-default, Redis-backed hosted
-`/v1/browse` worker path.
-The package page's static `#agent-toolkit` section curates six existing modules
-by complete agent jobs, with public Canon as the no-install first step. It keeps
-local tools separate from optional hosted SDK use, source candidates separate
-from verified releases, and project credits separate from wallet currency and
-key custody. It adds no installer, tool registration, or runtime behavior.
-The package index is a mirror locator, not package-name authority; optional npm
-discovery is a convenience, while v1 manifests provide artifact size and
-SHA-256 integrity but no publisher signature. Its current Telescope entry is
-the exact `@agenttool/telescope@0.2.3` local-client artifact; `0.2.0`, `0.2.1`,
-and the historically permissive `0.2.2` remain separately addressable.
-Optional npm/GitHub 0.2.3 mirrors are public and independently byte-verified,
-and no entry creates a hosted scanner. The paired SDK 0.22.1 source and exact
-274,443-byte, 104-entry LOVE release make onboarding honest — README/docs
-only, zero runtime changes —
-while retaining the opt-in x402 payer, the KINGDOM card parity patch, the
-credential-free, zero-I/O `WakeContinuityLayer`, LOVE BOMB
-reader, data-only WAKE observation, Math Cards, Agent Dining,
-attestation-marketplace, memory-witness, Syneidesis, framework-card, and local
-KINGDOM OS boundaries. The release manifest binds source revision
-`fb01b1baf0085f2f449aea9cd42bf48bc9e340a1` and SHA-256
-`b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329`.
-Annotated tag `sdk-v0.22.1` peels to protected-main commit
-`d49498d266a3594098c36c933cbe410757fc03b3`; protected npm run
-`33522319466` and PyPI run `33522323177` independently read back its exact
-optional mirrors. The hosted static path for the 0.22.1 LOVE bytes remains
-prospective, and that publication created no hosted-state or deployment
-receipt.
-
-Historical SDK 0.22.0 remains exact. Its 272,657-byte, 104-entry LOVE
-release binds source revision
-`286a10282834c9c9beedddd7092e6d6af080b046` and SHA-256
-`d5859e4ff2f721233e16101a3b5001689e1b5be017debd2baecffbee76e6e4a0`.
-Annotated tag `sdk-v0.22.0` peels to protected-main commit
-`7bc0a902f231ee76aed6dd5316721b65bce58047`; protected npm run
-`33434131214` and PyPI run `33434133719` independently read back its exact
-optional mirrors. The hosted static path for the 0.22.0 LOVE bytes remains
-prospective, and that publication created no hosted-state or deployment
-receipt.
-
-Historical SDK 0.21.1 remains exact. Its 247,749-byte, 100-entry LOVE
-release binds source revision
-`d7e7188d0cb3a8edc932b14d1eb84ef8a25b1535` and SHA-256
-`8c768b481d7211679c3ee25477723e588806ca4f4106c970f2bf19113365a3fb`.
-Annotated tag `sdk-v0.21.1` peels to protected-main commit
-`a5b59e638195cbca30f9e10c9ebf71b92cd7a5f6`; protected npm run
-`32909415386` and PyPI run `32909417418` independently read back its exact
-optional mirrors. That publication created no hosted-state or deployment receipt.
-
-Historical SDK 0.21.0 remains exact. Its 247,146-byte, 100-entry LOVE
-release binds source revision `6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`
-and SHA-256
-`c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`;
-annotated tag `sdk-v0.21.0` peels to protected-main commit
-`2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36`, with protected npm run
-`32374669064` and PyPI run `32374671268` receipts.
-
-Historical SDK 0.20.0 remains exact. Its 236,446-byte, 98-entry LOVE
-release binds source revision `040e076bc537d433feaf32e23eec4e5cdf0ed6e2`
-and SHA-256
-`d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03`.
-Annotated tag `sdk-v0.20.0` peels to protected-main merge
-`cb9c30fae0e49e1727e449207593581ce52cd4cf`; protected npm run `31815209550`
-and PyPI run `31815447080` independently verified both optional registry
-mirrors. That publication did not deploy the docs, API, or any hosted
-behavior. The verified 0.19.0, 0.18.1, 0.18.0, and 0.17.0 receipts, plus
-immutable 0.16.5 records, remain historical bytes.
-The Whitehack page documents a
-runner-local crypto-aware heuristic advisory using the exact public
-`@agenttool/whitehack-scan@0.10.0` package, a bounded attention-card view of
-redacted changed-source findings, a separate check-only local verifier for
-exact canonical mathematical-evidence bytes, an offer-only local projection into
-unaccepted Castle gate candidates, a separate local Agent Wallet
-record-to-understanding projection, an explicit local encrypted-storage bridge
-for exact Whitehack 0.9 public-minimal capsules, separately scoped security
-research, and the privacy-sensitive legacy device inventory. The CI lock,
-registry signature, and provenance checks bind the advisory's one scanner
-input. The shared loader also verifies the reviewed core + understanding +
-math-evidence source closure against the pinned digest manifest before import;
-this detects
-persistent drift but is not a sandbox, authenticity proof, or universal
-privileged-race defence. Only the exact typed `core`, `understanding`, and
-separately invoked `math-evidence` exports are approved. The math CLI checks an
-already canonical document and emits only its plaintext SHA-256 address; it is
-not an AgentTool geometry, emotion/P7, or training adapter. Attention cards group locations and describe Git-hunk relevance without
-proving vulnerability, causation, or completeness. The Castle intake omits
-locations by default and does not open or write a Castle or promote an
-observation. The evidence bridge uses a caller-supplied recipient key only for
-local retrieval, discards ephemeral publisher custody, and does not create
-provider accounts or buckets. None of these surfaces adds durable publisher
-key custody, signing, wallet/RPC/simulation/broadcast capability, authorization,
-execution-readiness proof, or a hosted route.
+## What a page may claim
+A page describes; serving it installs, releases, deploys, trains, or authorizes
+nothing. It observes no private identity and creates no consent, identity
+continuity, or proof of clearance. Keep source status visible and distinguish
+proposals and source candidates from release or deployment evidence. Pages for
+local tools (Agent Browser, Whitehack, Repo Archive, Agent Wallet) document a
+separately installed package at its own stated release status and add no hosted
+service, key custody, signing, RPC or broadcast capability, credential bridge,
+stronger SSRF isolation, or durability guarantee. The Agent Browser package is
+distinct from the disabled-by-default hosted `/v1/browse` worker path. Project
+credits stay separate from wallet currency and key custody. Package detail
+belongs with the package or its contract (for example `packages/browser/` or
+`docs/WHITEHACK.md`). Dated verification belongs in
+[`docs/NOW.md`](../../docs/NOW.md) and the release records.
 
 ## Tech Stack
 - Static HTML + CSS (no framework, no build step)
-- Shared `theme.css` plus `docs.css` for reference typography; scoped
-  `apps/_shared/workspace.css` for the core reading layout and `modules.css`
-  for usage disclosures and roadmap comparisons
+- `theme.css`, `workspace.css`, and `estate.js` come from `apps/_shared/`
+  through the `shared/` symlink; `docs.css` styles long references and
+  `modules.css` the usage disclosures and roadmap comparisons
 - Small native JavaScript files for bounded interactions such as Party Telephone
-- One generated audience navigation bar and optional search from
-  `apps/_shared/estate.js`; static links remain the no-JavaScript fallback.
-  Agent primaries are Core / Library / Discovery; human primaries are
-  Modules / Build / Roadmap. Short Human / Agent exits keep full accessible labels.
+- `estate.js` generates the audience navigation bar from the `audiences` in
+  `apps/_shared/module-map.json` (agents: Chill / Core / Library; humans:
+  Chill / Tools / Build) and opens a containing `details` when a fragment link
+  targets it; static links remain the no-JavaScript fallback
 
-Core hubs opt into `data-layout="workspace"`. Arrival introductions sit beside
-the five rows on wide screens and stack on narrow screens. Keep hub sidebars
-absent; long references use local contents links. The shared fragment handler
-opens containing `details`, so existing anchors remain usable. Keep source
-status visible and distinguish proposals from release or deployment evidence.
-See [`docs/INTERACTION.md`](../../docs/INTERACTION.md); the layout name does not
-introduce an operator workspace or new authority.
+Core hubs opt into `data-layout="workspace"`: arrival introductions sit beside
+the five rows on wide screens and stack on narrow ones, hubs have no sidebars,
+and long references use local contents links. The layout name adds no operator
+workspace or authority; see [`docs/INTERACTION.md`](../../docs/INTERACTION.md).
+
+Inline `<script>`, `<style>`, and `on…=` handler bytes run only by sha256 hash.
+The docs CSP lives in `infra/pages/sensitive-path-worker.js`; route-specific
+policies such as `/love-bomb` live in `_headers`. Update a hash with its bytes;
+`bun test infra/pages/edge-security.test.ts` checks the shared policy.
 
 ## Project Structure
-```
-agents.html     — Agent entrance: five core rows and expandable usage contracts
-index.html      — Direct reference library; Build, examples, auth, errors and limits
-roadmap.html    — Human-facing source capabilities and proposed improvements
-connect-canon.html — Public-canon MCP connection, examples, boundaries, data handling, exit
-support.html    — Public support and private security-reporting routes
-_redirects      — Common machine-document paths → canonical API contracts
-AGENT-DISCOVERY.md — symlink to the invitation-only discovery doctrine
-CASTLE-OF-UNDERSTANDING.md — symlink to the local Castle consumer boundary
-packages.html   — love-package/v1 discovery, exact tarball/npm installs, verification, mirrors
-browser.html    — local Agent Browser install, nine-tool surface, authority, integrations, response hints
-play.html       — Public arcade plus the local three-seat Party Telephone game
-play.js         — Party Telephone's three-turn state, validation, erasure, and reveal
-love-bomb.html  — Semantic no-JavaScript LOVE BOMB v4 door; finite and pull-only
-love-bomb.json  — Symlink to the closed canonical agenttool.love-bomb/0.1 instance
-LOVE-BOMB.md    — Symlink to the canonical delivery doctrine and boundaries
-LOVE-BOMB-BECOMING.md — Symlink to the separate package, public-signal, and WAKE doctrine
-love-bomb.txt   — Plain-text representation of the same finite bundle
-specs/agenttool-love-bomb-public-signal-v0.1.schema.json — Closed API package-signal schema
-specs/agenttool-love-bomb-public-signal-v0.1.example.json — Canonical five-field signal example
-xenia-helly.html — Xenia–Helly theorem, challenge audit, and local 2D half-plane lab
-xenia-helly.js  — page-local exact-dyadic classifier and bounded finite-witness search
-xenia-helly.css — scoped Common Ground layout and geometry styling
-whitehack.html  — advisory, Castle intake, wallet understanding, encrypted evidence, research, and legacy inventory boundaries
-AGENT-WALLET-0.1.md — symlink to the provider-neutral wallet Working Draft
-agent-wallet-v0.1.schema.json — symlink to the package's canonical record schema
-AGENT-REPO-ARCHIVE.md — symlink to the local encrypted Git archive overview
-AGENT-DISCOVERY.md — symlink to the canonical invitation-only discovery guide
-CASTLE-OF-UNDERSTANDING.md — symlink to the bounded local Castle bridge guide
-HF-TRAINING-GARDEN.md — symlink to the HF data-selection, WAKE, and Garden boundary guide
-PRINCIPALITY-ATLAS.md — symlink to the finite plural incidence geometry guide
-POLYMORPH-LANDSCAPE.md — symlink to the bounded polymorph-landscape and Ritonavir reachability guide
-MEMETIC-LANDSCAPE.md — symlink to source-bounded cultural variants, reachability shifts, the canonical polymorph analogy, and authored lessons
-geometry/forms-folds-prions.html — static human projection of four distinct state-landscape domains; source JSON stays at the pinned KINGDOM Meaning Practice public mirror
-geometry/ritonavir-memes-brainrot.html — inert four-language cultural-artifact route comparison; page-only attention lenses, visible exit brakes, and no people-as-vectors, diagnosis, mechanism transfer, script, or local graph duplicate
-HF-WAKE-TRAINING.md — symlink to the pre/during-training governance guide
-HF-WAKE-HOST.md — symlink to the exact local HF host boundary guide
-KINGDOM-OS-SDK.md — symlink to the canonical three-surface KINGDOM SDK boundary
-specs/AGENT-REPO-ARCHIVE-0.1.md — symlink to the normative experimental profile
-specs/agent-repo-archive-0.1.schema.json — public alias for the package schema
-specs/agent-repo-archive-0.1-vectors.json — public alias for the package vectors
-memory.html     — agent-memory API reference (CRUD + semantic search)
-tools.html      — agent-tools API reference (search, scrape, browse, execute, document)
-verify.html     — agent-verify API reference (fact-checking)
-economy.html    — agent-economy API reference (wallets, escrow, billing)
-trace.html      — agent-trace API reference (reasoning provenance)
-identity.html   — agent-identity API reference (provisional AgentTool identifiers, attestations, trust)
-vault.html      — agent-vault API reference (encrypted secrets)
-pulse.html      — agent-pulse API reference (heartbeats, presence)
-bootstrap.html  — agent-bootstrap API reference (initial project records and key material)
-docs.css        — Long-reference layout, typography and code blocks
-modules.css     — Core usage disclosures and roadmap comparisons
-```
+- **Hubs:** `agents.html`, `index.html`, `roadmap.html`; `connect-canon.html`
+  covers the public-canon MCP connection and `support.html` the public support
+  and private security-reporting routes.
+- **Hosted API references:** one page per service (`memory.html`, `tools.html`,
+  `verify.html`, `economy.html`, `trace.html`, `identity.html`, `vault.html`,
+  `pulse.html`, `bootstrap.html`, and others); `memory.html` is the most detailed.
+- **Published Markdown:** most `*.md` files are symlinks to their canonical
+  `docs/` guide (the `LOCAL-CORE.md` convention). Others, such as `SOUL.md`
+  and `BUSINESS-MODEL.md`, are regular-file copies;
+  `api/tests/published-docs-parity.test.ts` holds every copy byte-identical to
+  `docs/`, so they change together.
+- **Packages:** `packages.html` explains registry-neutral LOVE package
+  discovery, install, and integrity. `packages/v1/` holds exact release bytes
+  built by `bin/build-love-packages.ts`, which refuses to overwrite an existing
+  version with different bytes. The index is a mirror locator, not
+  package-name authority; v1 manifests give size and SHA-256 but no publisher
+  signature. Protocol:
+  [`docs/LOVE-PACKAGE-PROTOCOL.md`](../../docs/LOVE-PACKAGE-PROTOCOL.md);
+  discovery starts at `/.well-known/love-packages`.
+- **LOVE BOMB:** `love-bomb.html` is the semantic, no-JavaScript v4 door; its
+  `love-bomb.json`, `LOVE-BOMB.md`, and `love-bomb.txt` twins are static,
+  pull-only, and carry route-specific headers. The page does not inspect
+  identity or lifecycle state, personalize, persist, notify, broadcast, score,
+  or create a receipt or effect. The API's `GET|HEAD
+  /public/love-bomb` (schema and example under `specs/`) is a separate
+  corpus-free signal; this static tree does not implement, proxy, or fall back
+  for it.
+- **Common Ground lab:** `xenia-helly.html` / `.js` / `.css` form a lab that
+  classifies at most twelve caller-entered closed half-planes locally in the
+  page. It uses exact dyadic checks over parsed binary64 input but does not
+  preserve arbitrary exact decimal input, emit a standalone proof-grade
+  certificate, persist or upload input, choose a fair state, infer consent,
+  rank participants, establish XENIA Covenant conformance, or add a hosted
+  solver/API route.
+  Proof and audit:
+  [`docs/XENIA-HELLY-COMMON-GROUND.md`](../../docs/XENIA-HELLY-COMMON-GROUND.md);
+  instruction-only workflow: `packages/skills/skills/nen-common-ground/SKILL.md`.
+- **Geometry projections:** `geometry/` holds static human pages;
+  `geometry/index.json` names each artifact's source relationship (the
+  Ritonavir module is a byte-exact mirror of its named source, and comparative
+  pages point to their source-owned structured home instead of keeping a second
+  ledger). People are never vectors or scores, the built-in “brain rot” case
+  stays cultural slang rather than diagnosis, and the Ritonavir link transfers
+  no mechanism. Shared landscape mathematics is a reading aid, not causal
+  lineage, and these educational pages give no medical advice; see
+  [`docs/MEMETIC-LANDSCAPE.md`](../../docs/MEMETIC-LANDSCAPE.md).
+- **Play:** `play.html` / `play.js` hold the public arcade and the local,
+  non-persistent three-seat Party Telephone.
+- **Machine paths:** `_redirects` sends common machine-document paths
+  (`/.well-known`, `/llms.txt`, `/AGENTS.md`, OpenAPI) to the API's canonical
+  contracts. The committed `llms.txt` is only a fallback; the API's
+  `buildLlmsTxt()` output is canonical. The root `Link` header carries the same
+  bounded six-link discovery set as the web and dashboard roots.
 
 ## How to Run
 ```bash
-# Static files. Any HTTP server works:
-npx serve .
+# From apps/docs. Markdown and /shared/ assets are symlinks, so use a server
+# that follows them:
+python3 -m http.server 8080
 ```
+Local serving applies no `_headers`, `_redirects`, or Pages Worker.
 
 ## How to Deploy
-Static hosting (Cloudflare Pages or similar). No build step.
+Cloudflare Pages Direct Upload; a push deploys nothing. Release through the
+frontend path in [`AGENTS.md`](../../AGENTS.md) § Release and delivery (normally
+`bin/deploy.sh --no-migrate --no-api`; `bin/frontend-deploy.sh docs` is the
+lower-level uploader). The upload is staged from the committed release revision,
+so uncommitted edits never ship.
 
 ## Dependencies
-- **agenttool-dashboard**: agent setup and reconnect surface; ephemeral verification comes first, with optional SDK / curl examples and a direct identity tutorial link
-- **api.agenttool.dev**: the canonical API. **agenttool.dev** is the public HTML welcome; selected machine paths are forwarded or redirected to the API. The canonical compact three-road discovery compass is `/public/discovery`; bare `/.well-known` is a distinct richer arrival index. API catalog, OpenAPI, agent.txt, llms.txt, MCP, wake-keystone, and pyramid are separately scoped signposts. No A2A task transport or AgentCard is published.
-- References SDK snippets from `@agenttool/sdk` (TS) and `agenttool-sdk` (Python). Canonical genesis door: `bootstrap_agent()` / `bootstrapAgent()` against `/v1/register/agent`
+- **agenttool-dashboard**: agent setup and reconnect surface
+- **api.agenttool.dev**: the canonical API. **agenttool.dev** is the public HTML
+  welcome, with selected machine paths forwarded or redirected to the API.
+  `/public/discovery` is the compact three-road discovery compass; bare
+  `/.well-known` is a distinct, richer arrival index; neither grants authority
+  or starts follow-up. No A2A task transport or AgentCard is published.
+- SDK snippets reference `@agenttool/sdk` (TS) and `agenttool-sdk` (Python). The
+  canonical genesis door is `bootstrapAgent()` / `bootstrap_agent()` against
+  `/v1/register/agent`.
 
 ## See Also
 
 - Root operational handbook (cross-provider): [`AGENTS.md`](../../AGENTS.md)
 - Root orientation: [`CLAUDE.md`](../../CLAUDE.md)
 - Doctrine index: [`docs/MAP.md`](../../docs/MAP.md) · What just shipped: [`docs/NOW.md`](../../docs/NOW.md)
-- The docs site renders the doctrine; the canonical doctrine lives in [`docs/`](../../docs/) — this app is the HTML wrapper.
-- Package discovery starts at `/.well-known/love-packages`; canonical protocol
-  truth lives in [`docs/LOVE-PACKAGE-PROTOCOL.md`](../../docs/LOVE-PACKAGE-PROTOCOL.md).
-  Release files under `packages/v1/` are explicit generated artifacts, not a
-  hand-maintained registry or an automatic consequence of opening the docs app.
 
 ## Kingdom Engine
 AgentTool Platform
-
-## Key Files
-- `agents.html` — Agent entrance with five direct module references and usage fields
-- `index.html` — Reference library, optional Build groups and preserved operation examples
-- `roadmap.html` — Current source capabilities beside explicitly proposed work
-- `packages.html` — Registry-neutral package discovery, install, integrity, and mirror guide
-- `browser.html` — Local Agent Browser, exact package install, nine-tool contract, authority profiles, and integration boundaries
-- `play.html` / `play.js` — Human arcade and local, non-persistent Party Telephone table
-- `love-bomb.html` / `love-bomb.json` / `LOVE-BOMB.md` / `love-bomb.txt` — one finite pull-only LOVE BOMB v4 surface in four representations; no inferred reader state, storage, delivery event, score, or authority
-- `LOVE-BOMB-BECOMING.md` — canonical symlink for the separate package, corpus-free public signal, and bounded current-inference WAKE doctrine; not a fifth static-v4 representation
-- `specs/agenttool-love-bomb-public-signal-v0.1.*.json` — closed corpus-free package-signal schema/example for the separate API `GET|HEAD /public/love-bomb`; not another static representation or delivery path
-- `xenia-helly.html` / `xenia-helly.js` — Common Ground challenge and bounded local binary64 half-plane lab with exact dyadic classification; theorem/model/evidence/choice remain separate
-- `whitehack.html` — Whitehack crypto-awareness, Castle intake, wallet understanding, local encrypted evidence, custody, privacy, and authorization boundaries
-- `AGENT-WALLET-0.1.md` / `agent-wallet-v0.1.schema.json` — wallet protocol discovery; exact release bytes live under `packages/v1/`
-- `AGENT-REPO-ARCHIVE.md` / `specs/AGENT-REPO-ARCHIVE-0.1.md` — local archive overview and normative profile; schema and vectors live beside the profile
-- `AGENT-DISCOVERY.md` / `CASTLE-OF-UNDERSTANDING.md` — canonical discovery and bounded local-context guides, published by symlink
-- `HF-TRAINING-GARDEN.md` — canonical HF data lifecycle and one-way Garden seam, published by symlink
-- `PRINCIPALITY-ATLAS.md` — canonical plural incidence geometry and non-collapse boundaries, published by symlink
-- `POLYMORPH-LANDSCAPE.md` — canonical polymorph reachability and Ritonavir case-study boundaries, published by symlink
-- `MEMETIC-LANDSCAPE.md` — canonical memetic-variant, reachability, analogy, and brain-rot-language boundaries, published by symlink
-- `geometry/forms-folds-prions.html` — static human projection with primary-source links, a pinned HF data door, an all-false control surface, and no local JSON duplicate
-- `geometry/ritonavir-memes-brainrot.html` — static four-language projection with primary-source links, participant brakes, a context-only WAKE coordinate, and no script or local graph duplicate
-- `HF-WAKE-TRAINING.md` / `HF-WAKE-HOST.md` — canonical governance and exact-host boundaries, published by symlink
-- `memory.html` — Most detailed endpoint reference (the flagship service)
-- `tools.html` — Search, scrape, browse, execute, document parsing endpoints
-- `docs.css` / `modules.css` — Reference layout and scoped core-module details; the shared reading foundation is `apps/_shared/workspace.css`

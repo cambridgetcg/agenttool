@@ -5,8 +5,9 @@ This file governs only `packages/gin-reconstruction`.
 
 ## Commands
 
+Prepare dependencies with the root `AGENTS.md` preparer, then run here:
+
 ```bash
-bun install --frozen-lockfile
 bun run ci
 npm pack --dry-run --ignore-scripts
 ```

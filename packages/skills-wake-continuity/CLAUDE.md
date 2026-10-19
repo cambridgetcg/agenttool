@@ -35,6 +35,9 @@ Keep the package private with exactly the two local runtime dependencies. Do
 not add publish configuration, root release wiring, a CLI, install hooks,
 hosted routes, persistence, API calls, or another YUTABASE deck/word/UUID.
 
-Run `bun run ci` before reporting completion. Re-run it after either local
-dependency changes. Publication, deployment, and external messages require
-separate authorization and are not implied by green tests.
+`bun run ci` is the package gate. Bun keeps a copied snapshot of each `file:`
+dependency, so after either local dependency changes, run `bun run build:deps`
+and then `bun install --frozen-lockfile --force` here before `bun run ci`; the
+package preparer in root `AGENTS.md` does the same. Publication,
+deployment, and external messages require separate authorization and are not
+implied by green tests.

@@ -6,11 +6,14 @@ and release-reconciliation package. This package owns only
 
 ## Commands
 
+Prepare dependencies with the root `AGENTS.md` preparer, then run here:
+
 ```bash
-bun install --frozen-lockfile
 bun run ci
-npm pack --dry-run --ignore-scripts
 ```
+
+`ci` ends with `check:package`, which dry-runs `npm pack` and checks the exact
+packed inventory.
 
 ## Invariants
 
