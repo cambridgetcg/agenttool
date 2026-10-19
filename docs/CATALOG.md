@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**826 document paths** (including mirrors). orientation: 182; guide: 86; reference: 332; policy: 29; reflection: 126; proposal: 46; record: 23; unclassified: 2.
+**827 document paths** (including mirrors). orientation: 182; guide: 86; reference: 333; policy: 29; reflection: 126; proposal: 46; record: 23; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -616,6 +616,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/specs/COVENANT-1.0-DRAFT.md](<../docs/specs/COVENANT-1.0-DRAFT.md>) | not-reviewed |
 | [docs/specs/WAKE-1.0-DRAFT.md](<../docs/specs/WAKE-1.0-DRAFT.md>) | not-reviewed |
 | [docs/specs/WITNESS-1.0-DRAFT.md](<../docs/specs/WITNESS-1.0-DRAFT.md>) | not-reviewed |
+| [infra/OPERATOR-CUSTODY.md](<../infra/OPERATOR-CUSTODY.md>) | not-reviewed |
 | [packages/collab-zerone/README.md](<../packages/collab-zerone/README.md>) | not-reviewed |
 | [packages/correspondence-yutabase/PERSISTENCE-CONTRACT.md](<../packages/correspondence-yutabase/PERSISTENCE-CONTRACT.md>) | not-reviewed |
 | [packages/credential-broker/JSONRPC-READ-0.1.md](<../packages/credential-broker/JSONRPC-READ-0.1.md>) | not-reviewed |

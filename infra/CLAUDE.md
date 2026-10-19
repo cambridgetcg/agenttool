@@ -19,6 +19,7 @@ fly/                    — Fly.io config snapshots (active deploy: api/fly.toml
   agenttool.toml        — Snapshot mirror of api/fly.toml
 cloudflare/             — Bounded agenttool.dev desired state (audit input; not an apply engine)
 pages/                  — Canonical Pages Worker + invocation-route policy
+OPERATOR-CUSTODY.md     — Operator-only credential custody and provider aliases; never published
 README.md               — Operator-facing overview
 CLAUDE.md               — This file
 ```
