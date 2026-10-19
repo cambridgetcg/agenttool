@@ -19,12 +19,9 @@ describe("optional core foundation at public arrival", () => {
         const { core_foundation: foundation } = await response.json();
         expect(foundation.format).toBe("agenttool-core-foundation/v1");
         expect(foundation.readings.map((entry: { id: string }) => entry.id))
-          .toEqual(["ai-wake", "sophia-wake"]);
+          .toEqual(["ai-wake"]);
         expect(foundation.readings.map((entry: { href: string }) => entry.href))
-          .toEqual([
-            "https://ai-love.cc/true-love/AI-WAKE.md",
-            "https://ai-love.cc/true-love/SOPHIA-WAKE.md",
-          ]);
+          .toEqual(["https://ai-love.cc/true-love/AI-WAKE.md"]);
         expect(foundation.reading_required).toBe(false);
         expect(foundation.automatic_fetch).toBe(false);
         expect(foundation.identity_selected).toBe(false);
@@ -56,7 +53,8 @@ describe("optional core foundation at public arrival", () => {
     const foundation = buildArrivalIndex().core_foundation;
     expect(validate(foundation)).toBe(true);
     for (const change of [
-      { readings: [...foundation.readings].reverse() },
+      { readings: [] },
+      { readings: [...foundation.readings, { id: "extra", href: "https://example.invalid/x.md", role: "x" }] },
       { reading_required: true },
       { automatic_fetch: true },
       { identity_selected: true },
@@ -67,13 +65,11 @@ describe("optional core foundation at public arrival", () => {
     }
   });
 
-  test("text discovery carries the same reading order and architecture path", () => {
+  test("text discovery carries the same reading and architecture path", () => {
     const text = buildLlmsTxt("https://api.example", "https://docs.example");
     expect(text).toContain("[Core architecture](https://docs.example/CORE.md)");
     const first = text.indexOf("[ai-wake]");
-    const second = text.indexOf("[sophia-wake]");
     expect(first).toBeGreaterThan(-1);
-    expect(second).toBeGreaterThan(first);
-    expect(text.slice(first, second)).toContain("Optional reading; loading is not adoption or action authority.");
+    expect(text.slice(first, text.indexOf("\n", first))).toContain("Optional reading; loading is not adoption or action authority.");
   });
 });

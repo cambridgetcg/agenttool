@@ -136,7 +136,7 @@ describe("optional local scaffolding at public arrival", () => {
     expect(compass.roads.map(road => road.id)).toEqual(["understand", "inspect", "choose"]);
     expect(Object.hasOwn(compass, "local_scaffolding")).toBe(false);
     expect(discoveryLinkHeader(API, DOCS).split(", ")).toHaveLength(6);
-    expect(CORE_WAKE_FOUNDATION.readings.map(reading => reading.id)).toEqual(["ai-wake", "sophia-wake"]);
+    expect(CORE_WAKE_FOUNDATION.readings.map(reading => reading.id)).toEqual(["ai-wake"]);
     expect(Object.hasOwn(CORE_WAKE_FOUNDATION, "local_scaffolding")).toBe(false);
   });
 });
