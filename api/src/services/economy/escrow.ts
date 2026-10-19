@@ -4,7 +4,6 @@ import { createHash } from "node:crypto";
 
 import { and, eq, exists, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
-import type { Redis } from "ioredis";
 
 import { db as sharedDb } from "../../db/client";
 import {
@@ -100,25 +99,24 @@ export function escrowIdempotencyKeySha256(key: string): string {
   return createHash("sha256").update(key).digest("hex");
 }
 
-/** Generic create/release/refund are resting at the HTTP boundary
- * (services/economy/config.ts genericEscrowMoneyMovementAllowed(); contract:
- * docs/SAFETY-BOUNDARIES.md, "Generic escrow and wallet spend — resting").
- * This service is kept intact for a reviewed reopening, which must first:
- *   - apply the creator wallet's spending policy here (per-transaction,
- *     hourly/daily, allowed-recipient, and approval-threshold limits that
- *     spendFromWallet enforces in services/economy/wallets.ts). Creating an
- *     escrow debits the wallet but currently checks no policy;
- *   - drop the `redis` argument from create/release/refund/expireOverdue.
- *     None of them calls Redis; the routes' getRedis() argument only made
- *     any process run with workers disabled 503 with an unnamed
- *     redis_disabled body.
- * expireOverdue has no scheduler, so no automatic deadline refund runs.
- * Escrow rows other services create and settle on their own paths
- * (workflow-managed marketplace escrows; substrate-task bounty escrows,
- * which carry no managed_by) are outside this rest. */
+/** Generic create is resting at the HTTP boundary
+ * (services/economy/config.ts genericEscrowCreateAllowed(); contract:
+ * docs/SAFETY-BOUNDARIES.md, "Generic escrow create and wallet spend —
+ * resting"). This function is kept intact for a reviewed reopening, which
+ * must first apply the creator wallet's spending policy here
+ * (per-transaction, hourly/daily, allowed-recipient, and approval-threshold
+ * limits that spendFromWallet enforces in services/economy/wallets.ts).
+ * Creating an escrow debits the wallet but currently checks no policy.
+ *
+ * Release and refund are open. No function in this service uses Redis, so
+ * none takes a Redis client; a process run with workers disabled settles
+ * existing escrows the same way. expireOverdue has no scheduler, so no
+ * automatic deadline refund runs. Workflow-managed marketplace escrows
+ * refuse the generic transitions (assertGenericEscrowMutationAllowed);
+ * substrate-task bounty escrows carry no managed_by and settle through
+ * services/substrate-tasks/lifecycle.ts. */
 export async function createEscrow(
   db: DB,
-  redis: Redis,
   input: CreateEscrowInput,
 ): Promise<CreateEscrowOutcome> {
   if (!Number.isSafeInteger(input.amount) || input.amount <= 0)
@@ -418,7 +416,6 @@ export async function acceptEscrow(
 
 export async function releaseEscrow(
   db: DB,
-  redis: Redis,
   escrowId: string,
   projectId: string,
 ) {
@@ -487,7 +484,6 @@ export async function releaseEscrow(
 
 export async function refundEscrow(
   db: DB,
-  redis: Redis,
   escrowId: string,
   projectId: string,
 ) {
@@ -592,7 +588,7 @@ export async function disputeEscrow(
 
 // ─── Expire overdue (intended for cron) ─────────────────────────────────────
 
-export async function expireOverdue(db: DB, redis: Redis): Promise<number> {
+export async function expireOverdue(db: DB): Promise<number> {
   const overdue = await db
     .select()
     .from(escrows)
@@ -613,7 +609,7 @@ export async function expireOverdue(db: DB, redis: Redis): Promise<number> {
         .where(eq(wallets.id, escrow.creatorWallet));
 
       if (wallet) {
-        await refundEscrow(db, redis, escrow.id, wallet.projectId);
+        await refundEscrow(db, escrow.id, wallet.projectId);
         count++;
       }
     } catch {

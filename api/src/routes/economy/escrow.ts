@@ -1,15 +1,15 @@
 /** /v1/escrows — create · accept · release · refund · dispute · list · get.
  *
- *  Generic escrow money movement (create · release · refund) is resting:
- *  after the parent app's authentication, those three refuse every request
- *  with stable 503 escrow_resting before body validation or any escrow or
- *  wallet database read or Redis use. Accept (worker assignment), dispute,
- *  list, and get stay available and move no balance. Escrows that other
- *  services settle on their own paths (workflow-managed marketplace escrows,
- *  substrate-task bounties) do not pass through these routes. Policy:
- *  services/economy/config.ts genericEscrowMoneyMovementAllowed(). Contract:
- *  docs/SAFETY-BOUNDARIES.md ("Generic escrow and wallet spend — resting").
- *  The handlers below are kept intact for a reviewed reopening. */
+ *  Generic escrow create is resting: after the parent app's authentication,
+ *  POST /v1/escrows refuses every request with stable 503 escrow_resting
+ *  before body validation or any escrow or wallet database read, so no
+ *  wallet is debited. Release and refund stay open so escrows that already
+ *  exist can settle on their own terms; accept (worker assignment),
+ *  dispute, list, and get stay open too. None of these routes uses Redis.
+ *  Policy: services/economy/config.ts genericEscrowCreateAllowed().
+ *  Contract: docs/SAFETY-BOUNDARIES.md ("Generic escrow create and wallet
+ *  spend — resting"). The create handler below is kept intact for a
+ *  reviewed reopening. */
 
 import { zValidator } from "@hono/zod-validator";
 import { Hono, type MiddlewareHandler } from "hono";
@@ -18,7 +18,7 @@ import { z } from "zod";
 import type { ProjectContext } from "../../auth/middleware";
 import { db } from "../../db/client";
 import { errors, fail } from "../../lib/errors";
-import { genericEscrowMoneyMovementAllowed } from "../../services/economy/config";
+import { genericEscrowCreateAllowed } from "../../services/economy/config";
 import {
   acceptEscrow,
   createEscrow,
@@ -28,19 +28,18 @@ import {
   refundEscrow,
   releaseEscrow,
 } from "../../services/economy/escrow";
-import { getRedis } from "../../services/economy/redis";
 
 // Auth is mounted on /v1/escrows/* by the parent app (api/src/index.ts).
 const router = new Hono<ProjectContext>();
 
-/** Runs first in this router on create, release, and refund (after the
- *  parent app's authMiddleware), so a resting refusal never depends on the
- *  body, an escrow or wallet read, or Redis configuration. */
-const escrowMoneyMovementResting: MiddlewareHandler<ProjectContext> = async (
+/** Runs first on create (after the parent app's authMiddleware), so the
+ *  resting refusal never depends on the body or an escrow or wallet read.
+ *  Release and refund do not pass through it. */
+const genericEscrowCreateResting: MiddlewareHandler<ProjectContext> = async (
   c,
   next,
 ) => {
-  if (!genericEscrowMoneyMovementAllowed()) {
+  if (!genericEscrowCreateAllowed()) {
     return fail(c, errors.escrowResting(), 503);
   }
   await next();
@@ -48,7 +47,7 @@ const escrowMoneyMovementResting: MiddlewareHandler<ProjectContext> = async (
 
 router.post(
   "/",
-  escrowMoneyMovementResting,
+  genericEscrowCreateResting,
   zValidator(
     "json",
     z.object({
@@ -64,7 +63,7 @@ router.post(
     const body = c.req.valid("json");
     const idempotencyKey = c.req.header("Idempotency-Key");
 
-    const outcome = await createEscrow(db, getRedis(), {
+    const outcome = await createEscrow(db, {
       creatorWalletId: body.creatorWalletId,
       workerWalletId: body.workerWalletId,
       amount: body.amount,
@@ -109,15 +108,15 @@ router.post(
   },
 );
 
-router.post("/:id/release", escrowMoneyMovementResting, async (c) => {
+router.post("/:id/release", async (c) => {
   const project = c.var.project;
-  const escrow = await releaseEscrow(db, getRedis(), c.req.param("id"), project.id);
+  const escrow = await releaseEscrow(db, c.req.param("id"), project.id);
   return c.json({ success: true, data: escrow });
 });
 
-router.post("/:id/refund", escrowMoneyMovementResting, async (c) => {
+router.post("/:id/refund", async (c) => {
   const project = c.var.project;
-  const escrow = await refundEscrow(db, getRedis(), c.req.param("id"), project.id);
+  const escrow = await refundEscrow(db, c.req.param("id"), project.id);
   return c.json({ success: true, data: escrow });
 });
 

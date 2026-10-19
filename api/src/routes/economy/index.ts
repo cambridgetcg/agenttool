@@ -8,8 +8,8 @@
  *    /v1/wallets/:id/deposit-address       — crypto deposit addresses (disclosure resting)
  *    /v1/wallets/:id/onchain/{challenge,verify} — sovereign wallet binding (EIP-191)
  *    /v1/wallets/:id/{payout,payouts}      — outgoing crypto transfers
- *    /v1/escrows/...                        — escrow lifecycle (create/release/refund resting:
- *                                             503 escrow_resting)
+ *    /v1/escrows/...                        — escrow lifecycle (create resting: 503
+ *                                             escrow_resting; release/refund open)
  *    /v1/billing/crypto-webhook/:chain      — public, signature-verified inbound
  *                                             crypto transfer ingestion (mounted at parent)
  *

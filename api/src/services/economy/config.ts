@@ -114,34 +114,39 @@ export function depositAddressDisclosureAllowed(): boolean {
   return false;
 }
 
-/** Generic escrow money movement — POST /v1/escrows, /:id/release and
- * /:id/refund — is resting (owner decision, 2026-10-18), the way payout
- * admission and deposit-address disclosure rest. After authentication the
- * routes refuse every request with stable 503 escrow_resting, before body
- * validation or any escrow or wallet database read or Redis use.
+/** Generic escrow create — POST /v1/escrows — is resting (owner decision,
+ * 2026-10-18), the way payout admission and deposit-address disclosure rest.
+ * After authentication the route refuses every request with stable 503
+ * escrow_resting, before body validation or any escrow or wallet database
+ * read, so no wallet is debited. No environment flag can reopen it. Creation
+ * rests because createEscrow debits the creator wallet without the wallet
+ * spending policy that spendFromWallet enforces (see
+ * services/economy/escrow.ts); a reviewed reopening must add those checks
+ * first.
  *
- * Before this was named, all three already returned an unnamed 503 in any
- * process run with AGENTTOOL_DISABLE_WORKERS=1, because the routes called
- * getRedis(), which throws in that posture. The hosted API's serving process
- * reported that posture at /public/plans
+ * Release and refund are not gated (owner decision 2026-10-19, PR #494
+ * option B), so escrows that already exist can settle on their own terms
+ * through POST /v1/escrows/:id/release and /:id/refund. The escrow service
+ * uses no Redis, so they also run in a process started with
+ * AGENTTOOL_DISABLE_WORKERS=1. Before this release the routes passed an
+ * unused getRedis() argument, which throws in that posture, so create,
+ * release, and refund all answered an unnamed 503 redis_disabled there. The
+ * hosted API's serving process reported that posture at /public/plans
  * (no_exploit_loophole.ip_rate_limit.worker_startup_disabled=true, observed
- * 2026-10-19), so there this names the status quo. Nothing in the canonical
- * API deploy guarantees it: .github/workflows/deploy-api.yml and api/fly.toml
- * neither set nor check the flag, and the bin/deploy.sh fence that did is
- * superseded for the API (docs/DEPLOY-CI.md). On a deployment run with
- * workers enabled this rest is a new closure, not the status quo.
+ * 2026-10-19); nothing in the canonical API deploy guarantees it, because
+ * .github/workflows/deploy-api.yml and api/fly.toml neither set nor check the
+ * flag (docs/DEPLOY-CI.md). On a deployment run with workers enabled, the
+ * create rest closes a route that was open.
  *
- * No environment flag can reopen it. A reviewed reopening must first make
- * createEscrow apply the wallet spending policy that spendFromWallet enforces
- * (see services/economy/escrow.ts) and drop the unused Redis argument.
  * Accept (worker assignment), dispute, and reads move no balance and are not
- * gated here. Escrow rows that other services settle on their own paths are
- * not gated either: workflow-managed marketplace escrows (managed_by set) and
- * substrate-task bounty escrows (managed_by NULL, settled by
- * services/substrate-tasks/lifecycle.ts). Contract: docs/SAFETY-BOUNDARIES.md
- * ("Generic escrow and wallet spend — resting"); policy: docs/BUSINESS-MODEL.md.
+ * gated. Workflow-managed marketplace escrows (managed_by set) refuse the
+ * generic transitions with 409 and settle through their workflows.
+ * Substrate-task bounty escrows carry managed_by NULL and settle through
+ * services/substrate-tasks/lifecycle.ts. Contract: docs/SAFETY-BOUNDARIES.md
+ * ("Generic escrow create and wallet spend — resting"); policy:
+ * docs/BUSINESS-MODEL.md.
  */
-export function genericEscrowMoneyMovementAllowed(): boolean {
+export function genericEscrowCreateAllowed(): boolean {
   return false;
 }
 

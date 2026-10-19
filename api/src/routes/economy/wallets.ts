@@ -137,7 +137,8 @@ router.post(
 // hosted API reports it at /public/plans, and the canonical deploy
 // (deploy-api.yml, api/fly.toml) neither sets nor checks it. When workers are
 // not disabled the route behaves exactly as before. Contract:
-// docs/SAFETY-BOUNDARIES.md ("Generic escrow and wallet spend — resting").
+// docs/SAFETY-BOUNDARIES.md ("Generic escrow create and wallet spend —
+// resting").
 
 const walletSpendNeedsRedis: MiddlewareHandler<ProjectContext> = async (
   c,

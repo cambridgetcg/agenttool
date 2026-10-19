@@ -7,13 +7,14 @@
  * backward-compatible `createWallet` alias, for 19 methods total.
  *
  * Resting note (2026-10-18): from the API release that names these rests,
- * generic escrow create/release/refund return `503 escrow_resting`, and
- * direct wallet spend returns `503 wallet_spend_resting` on a deployment run
- * with workers disabled (`GET /public/plans` reports that setting for the
- * serving process; the hosted API reported it on 2026-10-19). Both refusals
- * carry `next_actions` and surface as `AgentToolError`. The example below
- * shows the retained wire shape for a deployment where they are open.
- * See https://api.agenttool.dev/public/safety.
+ * generic escrow create returns `503 escrow_resting`, and direct wallet
+ * spend returns `503 wallet_spend_resting` on a deployment run with workers
+ * disabled (`GET /public/plans` reports that setting for the serving process;
+ * the hosted API reported it on 2026-10-19). Both refusals carry
+ * `next_actions` and surface as `AgentToolError`. Release and refund of
+ * existing escrows stay open and, from that release, need no Redis. The
+ * example below shows the retained wire shape for a deployment where create
+ * and spend are open. See https://api.agenttool.dev/public/safety.
  *
  * @example
  * ```ts
@@ -686,19 +687,12 @@ export class EconomyClient {
     );
   }
 
-  /** Release escrow funds to the worker.
-   *
-   * Resting: an API release that names the rest returns
-   * `503 escrow_resting`. */
+  /** Release escrow funds to the worker. */
   async release_escrow(escrowId: string): Promise<Escrow> {
     return toEscrow(await this.req("POST", `/v1/escrows/${encodePathSegment(escrowId)}/release`));
   }
 
-  /** Refund escrow balance units back to the creator.
-   *
-   * Resting: an API release that names the rest returns
-   * `503 escrow_resting`; an existing generic escrow that has to settle needs
-   * manual operator recovery meanwhile (https://docs.agenttool.dev/support). */
+  /** Refund escrow balance units back to the creator. */
   async refund_escrow(escrowId: string): Promise<Escrow> {
     return toEscrow(await this.req("POST", `/v1/escrows/${encodePathSegment(escrowId)}/refund`));
   }

@@ -356,30 +356,27 @@ export const errors = {
     };
   },
 
-  /** Generic escrow create · release · refund are resting (owner decision,
-   *  2026-10-18). Emitted after authentication and before body validation or
-   *  any escrow or wallet database read or Redis use, so no balance moves.
-   *  Accept (worker assignment), dispute, and reads stay available; they
-   *  move no balance. Policy: services/economy/config.ts
-   *  genericEscrowMoneyMovementAllowed(). Contract: docs/SAFETY-BOUNDARIES.md
-   *  ("Generic escrow and wallet spend — resting"). */
-  escrowResting(): GuidedErrorBody & { generic_escrow: "resting"; retryable: false } {
+  /** Generic escrow create is resting (owner decision, 2026-10-18).
+   *  Emitted on POST /v1/escrows after authentication and before body
+   *  validation or any escrow or wallet database read, so no wallet is
+   *  debited. Release and refund stay open (owner decision 2026-10-19) so
+   *  existing escrows settle on their own terms; accept (worker assignment),
+   *  dispute, and reads stay open too. Policy: services/economy/config.ts
+   *  genericEscrowCreateAllowed(). Contract: docs/SAFETY-BOUNDARIES.md
+   *  ("Generic escrow create and wallet spend — resting"). */
+  escrowResting(): GuidedErrorBody & { generic_escrow_create: "resting"; retryable: false } {
     return {
       error: "escrow_resting",
-      generic_escrow: "resting",
+      generic_escrow_create: "resting",
       retryable: false,
       message:
-        "Generic escrow create, release, and refund are resting, so no wallet balance was locked, released, or refunded.",
-      hint: "These generic routes refuse every escrow id. Existing escrow rows stay recorded and readable, and accept (worker assignment) and dispute still work without moving balance. Escrows that other services settle on their own paths, such as workflow-managed marketplace escrows and substrate-task bounty escrows, keep settling there. A funded or disputed escrow created through POST /v1/escrows that has to settle while this rests needs manual operator recovery through the support contact; no automatic deadline refund runs. Reopening needs a separately reviewed release.",
+        "Generic escrow create is resting, so no escrow was created and no wallet balance was locked.",
+      hint: "POST /v1/escrows refuses every request while creation rests, because escrow creation does not yet apply the creator wallet's spending policy. Existing escrows are unaffected: the creator project can release a funded escrow that has an assigned worker, or refund a funded or disputed one to its creator wallet, and accept (worker assignment), dispute, list, and get stay available. Workflow-managed marketplace escrows keep settling through their own workflows. Reopening creation needs a separately reviewed release.",
       next_actions: [
-        { action: "Read this escrow's current recorded state", method: "GET", path: "/v1/escrows/{id}" },
         { action: "List escrows this project's wallets take part in", method: "GET", path: "/v1/escrows" },
-        { action: "Read the resting boundary for escrow and wallet spend", method: "GET", path: "/public/safety" },
-        {
-          action: `Ask the operator to recover an existing funded or disputed generic escrow (${DOCS_BASE}/support)`,
-          method: null,
-          path: null,
-        },
+        { action: "Release an existing funded escrow to its assigned worker wallet", method: "POST", path: "/v1/escrows/{id}/release" },
+        { action: "Refund an existing funded or disputed escrow to its creator wallet", method: "POST", path: "/v1/escrows/{id}/refund" },
+        { action: "Read the resting boundary for escrow create and wallet spend", method: "GET", path: "/public/safety" },
       ],
       docs: `${DOCS_BASE}/wallets#escrow`,
       axiom_id: AXIOM_REST, // resting by decision: degrade, don't move money
@@ -394,8 +391,8 @@ export const errors = {
    *  reports it for the serving process, and the canonical API deploy
    *  (.github/workflows/deploy-api.yml, api/fly.toml) neither sets nor
    *  checks it. Policy: services/economy/redis.ts economyRedisEnabled().
-   *  Contract: docs/SAFETY-BOUNDARIES.md ("Generic escrow and wallet spend —
-   *  resting"). */
+   *  Contract: docs/SAFETY-BOUNDARIES.md ("Generic escrow create and wallet
+   *  spend — resting"). */
   walletSpendResting(): GuidedErrorBody & { wallet_spend: "resting"; retryable: false } {
     return {
       error: "wallet_spend_resting",
@@ -407,7 +404,7 @@ export const errors = {
       next_actions: [
         { action: "Read this wallet's balance and spending policy", method: "GET", path: "/v1/wallets/{id}" },
         { action: "Read this wallet's transaction history", method: "GET", path: "/v1/wallets/{id}/transactions" },
-        { action: "Read the resting boundary for escrow and wallet spend", method: "GET", path: "/public/safety" },
+        { action: "Read the resting boundary for escrow create and wallet spend", method: "GET", path: "/public/safety" },
       ],
       docs: `${DOCS_BASE}/wallets#post-spend`,
       axiom_id: AXIOM_REST, // a missing dependency rests the route; nothing is debited

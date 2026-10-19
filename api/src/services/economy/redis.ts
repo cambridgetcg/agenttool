@@ -11,12 +11,12 @@
  *  (wake, identity reads) by 10–30s+ depending on retry overlap.
  *
  *  Routes check economyRedisEnabled() first and refuse with a named,
- *  guided 503 (wallet spend: errors.walletSpendResting()). Generic escrow
- *  money movement rests independently of Redis
- *  (config.ts genericEscrowMoneyMovementAllowed()). getRedis() keeps its
- *  own eager throw as a backstop so no caller can build a client that
- *  will hang. Contract: docs/SAFETY-BOUNDARIES.md ("Generic escrow and
- *  wallet spend — resting"). */
+ *  guided 503 (wallet spend: errors.walletSpendResting()). Escrow does not
+ *  use Redis: its service takes no client, and generic escrow create rests
+ *  independently (config.ts genericEscrowCreateAllowed()). getRedis() keeps
+ *  its own eager throw as a backstop so no caller can build a client that
+ *  will hang. Contract: docs/SAFETY-BOUNDARIES.md ("Generic escrow create
+ *  and wallet spend — resting"). */
 
 import Redis from "ioredis";
 import { HTTPException } from "hono/http-exception";

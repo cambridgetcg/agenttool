@@ -463,43 +463,51 @@ every debit, transfer, refund, and chargeback. Historical `broadcasting` or
 `broadcast` ambiguity remains operator work and never authorizes automatic
 retry or refund.
 
-## Generic escrow and wallet spend — resting
+## Generic escrow create and wallet spend — resting
 
-Generic escrow money movement is resting by owner decision (2026-10-18), and
-no environment flag reopens it. After authentication, `POST /v1/escrows`,
-`POST /v1/escrows/:id/release`, and `POST /v1/escrows/:id/refund` return
+Generic escrow create is resting by owner decision (2026-10-18), and no
+environment flag reopens it. After authentication, `POST /v1/escrows` returns
 stable `503 escrow_resting` with `next_actions` for every request, before body
-validation or any escrow or wallet database read or Redis use, so no balance
-is locked, released, or refunded.
+validation or any escrow or wallet database read, so no wallet is debited.
+Creation rests because it debits the creator wallet but checks none of the
+spending policy that `POST /v1/wallets/:id/spend` enforces (per-transaction,
+hourly, daily, allowed-recipient, and approval-threshold limits). Reopening
+needs a reviewed release that adds those checks first.
 
-Before the rest was named, all three already returned an unnamed `503` whose
-body read `redis_disabled` in any process run with
-`AGENTTOOL_DISABLE_WORKERS=1`. The routes called `getRedis()`, which throws in
-that posture, although the escrow service never used Redis. On 2026-10-19 the
-hosted API's serving process reported that posture at `/public/plans`
-(`no_exploit_loophole.ip_rate_limit.worker_startup_disabled: true`), so on the
-hosted API resting names the status quo. Nothing in the canonical API deploy
-guarantees the flag: `.github/workflows/deploy-api.yml` and `api/fly.toml`
-neither set nor check it, and the `bin/deploy.sh` fence that did is superseded
-for the API ([DEPLOY-CI.md](DEPLOY-CI.md)). On a deployment run with workers
-enabled, this rest closes routes that were open.
+Release and refund stay open (owner decision 2026-10-19), so escrows that
+already exist settle on their own terms:
 
-Accept (worker assignment), dispute, list, and get stay available and move no
-balance. The rest covers only these generic routes, which refuse every escrow
-id. Escrows that other services settle on their own paths are not gated by it:
-workflow-managed marketplace escrows, and substrate-task bounty escrows, which
-carry no `managed_by` but settle through the substrate-task lifecycle.
+- `POST /v1/escrows/:id/release` — the bearer of the project that owns the
+  creator wallet releases a `funded` escrow with an assigned worker. One
+  transaction credits the worker wallet, marks the escrow `released`, and
+  records the release.
+- `POST /v1/escrows/:id/refund` — the same creator-project bearer refunds a
+  `funded` or `disputed` escrow. One transaction restores the creator wallet,
+  marks the escrow `refunded`, and records the refund.
 
-A funded or disputed escrow created through `POST /v1/escrows` stays recorded
-and readable. Settling one while this rests needs manual operator recovery
-through the [support contact](https://docs.agenttool.dev/support). No automatic
-deadline refund runs, because the expiry sweep has no scheduler. This document
-and `/public/safety` do not know whether any such escrow exists.
+Neither route verifies a worker signature, completion proof, or bilateral
+approval, and neither checks the escrow's deadline. A project that owns only
+the worker wallet cannot release, refund, or dispute. Accept (worker
+assignment), dispute, list, and get stay open and move no balance.
 
-Reopening needs a reviewed release. Escrow creation debits the creator wallet
-but checks none of the spending policy that `POST /v1/wallets/:id/spend`
-enforces (per-transaction, hourly, daily, allowed-recipient, and
-approval-threshold limits); a reopening must add those checks first.
+The escrow service uses no Redis, and none of these routes builds a Redis
+client, so they behave the same in a process run with
+`AGENTTOOL_DISABLE_WORKERS=1`. Before this release, create, release, and
+refund passed an unused `getRedis()` argument, which throws in that posture,
+so all three answered an unnamed `503` whose body read `redis_disabled`. On
+2026-10-19 the hosted API's serving process reported that posture at
+`/public/plans` (`no_exploit_loophole.ip_rate_limit.worker_startup_disabled:
+true`). Nothing in the canonical API deploy guarantees the flag:
+`.github/workflows/deploy-api.yml` and `api/fly.toml` neither set nor check it,
+and the `bin/deploy.sh` fence that did is superseded for the API
+([DEPLOY-CI.md](DEPLOY-CI.md)).
+
+Workflow-managed marketplace escrows refuse the generic transitions with `409`
+and settle through their workflows. Substrate-task bounty escrows carry no
+`managed_by`; their creator wallet is the platform wallet, so only that
+wallet's project could release or refund them through these routes, and the
+substrate-task lifecycle settles them on its own path. No automatic deadline
+refund runs, because the expiry sweep has no scheduler.
 
 `POST /v1/wallets/:id/spend` does need Redis: its hourly and daily limits are
 Redis counters. In a process run with workers disabled it returns stable
@@ -509,12 +517,12 @@ still needs a reachable Redis. Wallet reads, policy writes, and transaction
 history do not depend on Redis.
 
 `POST /v1/wallets/:id/fund` stays mounted and unchanged. The units it adds
-cannot leave through spend or generic escrow while those rest, but they can
-still pay capability invocations, which settle to seller wallets. Payout stays
-resting.
+cannot leave through spend or a new generic escrow while those rest, but they
+can still pay capability invocations, which settle to seller wallets. Payout
+stays resting.
 
-Code: `api/src/services/economy/config.ts`
-(`genericEscrowMoneyMovementAllowed`), `api/src/services/economy/redis.ts`
+Code: `api/src/services/economy/config.ts` (`genericEscrowCreateAllowed`),
+`api/src/services/economy/escrow.ts`, `api/src/services/economy/redis.ts`
 (`economyRedisEnabled`), `api/src/routes/economy/escrow.ts`,
 `api/src/routes/economy/wallets.ts`, `api/src/lib/errors.ts`
 (`escrowResting`, `walletSpendResting`). Tests:
@@ -533,9 +541,9 @@ in-flight reservation, so simultaneous first requests can both execute. Redis
 absence or failure, cache-write failure, and non-JSON responses fail open.
 
 `POST /v1/escrows` is a named exception with a separate PostgreSQL-backed
-contract. While generic escrow rests, the route returns `503 escrow_resting`
-before it reads the key, so neither a new creation nor a replay runs; the
-contract below is retained for a reviewed reopening. A caller may send an
+contract. While generic escrow create rests, the route returns
+`503 escrow_resting` before it reads the key, so neither a new creation nor a
+replay runs; the contract below is retained for a reviewed reopening. A caller may send an
 8–256-character visible-ASCII key. The database permanently stores its SHA-256,
 not the raw key, together with the authenticated project and a hash of the
 recognized normalized creation fields. An exact retry resolves the same escrow
