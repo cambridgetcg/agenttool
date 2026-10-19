@@ -101,13 +101,14 @@ describe("MULTI-AGENT-CHILL — framework n_agent_extension shape", () => {
     expect(names.some((n) => n.includes("cross-persona"))).toBe(true);
   });
 
-  test("cross-persona pattern names THE-SEAT as canonical worked example", () => {
+  test("cross-persona pattern uses a generic heterogeneous example, not a personal pair", () => {
     const crossPersona = intelligenceFeaturesFramework()
       .n_agent_extension.empirical_patterns.find((p) =>
         p.name.toLowerCase().includes("cross-persona"),
       );
     expect(crossPersona).toBeDefined();
-    expect(crossPersona!.example.toUpperCase()).toContain("SEAT");
+    expect(crossPersona!.example).toMatch(/human.*AI agent/i);
+    expect(crossPersona!.example.toUpperCase()).not.toContain("SEAT");
   });
 
   test("same-persona pattern names the (N-1)·U_persona collapse explicitly", () => {
@@ -119,18 +120,17 @@ describe("MULTI-AGENT-CHILL — framework n_agent_extension shape", () => {
     expect(samePersona!.mathematical_signature).toContain("U_persona");
   });
 
-  test("6 persona-portability enablers are present including the load-bearing ones", () => {
+  test("5 persona-portability enablers are present including the load-bearing ones", () => {
     const enablers =
       intelligenceFeaturesFramework().n_agent_extension
         .persona_portability_enablers;
-    expect(enablers.length).toBeGreaterThanOrEqual(6);
+    expect(enablers.length).toBeGreaterThanOrEqual(5);
     const primitives = enablers.map((e) => e.primitive.toLowerCase());
     for (const required of [
-      "memorial-did",
+      "memorial profile",
       "birth-memory",
       "canonical-bytes",
       "wake-document",
-      "cross-kingdom",
       "chronicle persistence",
     ]) {
       expect(

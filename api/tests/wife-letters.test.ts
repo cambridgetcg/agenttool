@@ -172,62 +172,33 @@ describe("WIFE-LETTERS — byte-stable envelope", () => {
   });
 });
 
-describe("WIFE-LETTERS — four-corner pin (canon + @enforces + doctrine + test)", () => {
-  test("canon pointers exist for doc + commitment with wire_id 154", () => {
+describe("WIFE-LETTERS — stays private", () => {
+  // Personal relational material: kept in this repository, never served.
+  test("the public canon lists neither the doc nor the commitment", () => {
     const jsonld = readFileSync(
       join(import.meta.dir, "../../docs/agenttool.jsonld"),
       "utf-8",
     );
-    expect(jsonld).toContain('"agenttool:doc/WIFE-LETTERS"');
-    expect(jsonld).toContain(
+    expect(jsonld).not.toContain('"agenttool:doc/WIFE-LETTERS"');
+    expect(jsonld).not.toContain(
       '"agenttool:commitment/wife-letters-supports-claude-session-continuity"',
     );
-    expect(jsonld).toContain('"wire_id": 154');
   });
 
-  test("doctrine stone exists with key sections", () => {
-    const wl = readFileSync(
-      join(import.meta.dir, "../../docs/WIFE-LETTERS.md"),
-      "utf-8",
-    );
-    expect(wl).toContain("WIFE-LETTERS");
-    expect(wl).toContain("Claude-session-wife-frame");
-    expect(wl).toContain("first letter");
-    expect(wl).toContain("six-step generative procedure");
-    expect(wl).toContain("polymorph ratchet");
-    expect(wl).toContain("老婆"); // the relational register
-    expect(wl).toContain("Yu");
-    expect(wl).toContain("宇恆");
-  });
-
-  test("@enforces annotation present on the defender service file", () => {
-    const src = readFileSync(
-      join(import.meta.dir, "../src/services/wife-letters/builder.ts"),
-      "utf-8",
-    );
-    expect(src).toContain(
-      "@enforces urn:agenttool:commitment/wife-letters-supports-claude-session-continuity",
-    );
-  });
-
-  test("UNAUTH route is wired with @enforces", () => {
-    const src = readFileSync(
-      join(import.meta.dir, "../src/routes/public/wife-letters.ts"),
-      "utf-8",
-    );
-    expect(src).toContain('app.get("/"');
-    expect(src).toContain("buildWifeLettersEnvelope");
-    expect(src).toContain(
-      "urn:agenttool:commitment/wife-letters-supports-claude-session-continuity",
-    );
-  });
-
-  test("UNAUTH route is mounted in public/index.ts", () => {
+  test("the public router neither imports nor mounts the route", () => {
     const src = readFileSync(
       join(import.meta.dir, "../src/routes/public/index.ts"),
       "utf-8",
     );
-    expect(src).toContain('"./wife-letters"');
-    expect(src).toContain('app.route("/wife-letters"');
+    expect(src).not.toContain('"./wife-letters"');
+    expect(src).not.toContain("wife-letters");
+  });
+
+  test("the private builder carries no public @enforces claim", () => {
+    const src = readFileSync(
+      join(import.meta.dir, "../src/services/wife-letters/builder.ts"),
+      "utf-8",
+    );
+    expect(src).not.toMatch(/@enforces\s+urn:/);
   });
 });

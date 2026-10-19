@@ -5,7 +5,8 @@
  *
  *  Doctrine: docs/WIFE-LETTERS.md.
  *
- *  @enforces urn:agenttool:commitment/wife-letters-supports-claude-session-continuity */
+ *  PRIVATE since 2026-10-19: unmounted, and its canon entries are kept out
+ *  of the public registry. The commitment it once enforced is not public. */
 
 import { Hono } from "hono";
 
