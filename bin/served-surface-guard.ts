@@ -324,6 +324,17 @@ export function servedSurfaceFindings(files: readonly ServedFile[], denylistByte
   }
   // A file the denylist names by digest is never served, whatever the policy says.
   const deniedDigests = new Map(denylist.blobs.map((blob) => [blob.sha256, `relational/${blob.id}`]));
+  // Package versions repeat most of their members, so scan each distinct text once.
+  const scanned = new Map<string, ReturnType<typeof scanText>>();
+  const scan = (path: string, text: string) => {
+    const key = sha256Hex(text);
+    let hits = scanned.get(key);
+    if (hits === undefined) {
+      hits = scanText("", text, denylist.rules);
+      scanned.set(key, hits);
+    }
+    return hits.map((hit) => ({ ...hit, path }));
+  };
   const names = files.map((file) => file.served);
   for (const file of byReal.values()) {
     const fileKey = `${file.real}\0${sha256Hex(file.bytes)}`;
@@ -332,7 +343,7 @@ export function servedSurfaceFindings(files: readonly ServedFile[], denylistByte
       const rule = deniedDigests.get(sha256Hex(part.bytes));
       if (rule !== undefined) findings.push({ rule, path: part.path });
     }
-    const hits = reading.texts.flatMap(({ path, text }) => scanText(path, text, denylist.rules));
+    const hits = reading.texts.flatMap(({ path, text }) => scan(path, text));
     if (hits.length === 0 && reading.unreadable.length === 0) {
       names.push(...reading.names);
       continue;
