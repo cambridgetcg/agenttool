@@ -87,10 +87,11 @@ This sequence is a proposal, not a ranking Yu has made. Yu's 2026-10-18
 decisions settle what several items should be: release SDK 0.24.0 with the
 trace-consent gate instead of 0.23.0, label Collab main 0.5.1-dev.0, write an
 honest redaction notice, keep `POST /v1/wallets/:id/fund` while escrow rests,
-and restore the evidential work. Items 3 and 4 come from the field notes in
-[issue #486](https://github.com/cambridgetcg/agenttool/issues/486) and the
-execution-seat drafts, not from a decision. The sequence puts releases first,
-because their source is already merged, and new design work after them.
+and restore the evidential work. On 2026-10-19 Yu narrowed the escrow rest to
+creation, so escrows already funded can still settle. Items 3 and 4 come from
+the field notes in [issue #486](https://github.com/cambridgetcg/agenttool/issues/486)
+and the execution-seat drafts, not from a decision. The sequence puts releases
+first, because their source is already merged, and new design work after them.
 
 1. **Releases through the public staged lane.** First SDK 0.24.0 with the
    trace-consent gate from [#459](https://github.com/cambridgetcg/agenttool/pull/459)
@@ -102,12 +103,18 @@ because their source is already merged, and new design work after them.
    [npm trust re-point](NPM-RELEASES.md#one-time-npm-trust-re-point-yu-trusted-device),
    which is not done yet. The field notes call releasing the doorbell
    "probably the biggest single win for Collab adoption".
-2. **Economy surfaces tell the truth.** Rest generic escrow for now: escrow
-   create, release and refund would answer a named `escrow_resting` 503, and
-   wallet spend would name its own 503 where it cannot run, instead of an
-   unnamed error. `POST /v1/wallets/:id/fund` stays
-   ([#494](https://github.com/cambridgetcg/agenttool/pull/494)). On main today
-   escrow is fully mounted with no resting gate.
+2. **Economy surfaces tell the truth.** Rest generic escrow creation only:
+   `POST /v1/escrows` would answer a named `escrow_resting` 503, while release
+   and refund would reopen so escrows that are already funded can settle. Yu
+   chose this on 2026-10-19; resting release and refund as well would leave
+   funded escrows with no API path to settle. Wallet spend would name its own 503
+   where it cannot run, instead of an unnamed error, and
+   `POST /v1/wallets/:id/fund` stays
+   ([#494](https://github.com/cambridgetcg/agenttool/pull/494), open).
+   On main today escrow is fully mounted with no resting gate, but in a
+   process run with workers disabled, create, release and refund all fail with
+   a 503 whose code is the generic `error` and whose message is an operator
+   hint, `redis_disabled`.
 3. **Cross-device human loops** from issue #486. First a server-side,
    project-scoped enrollment request queue, so a device posts its own signed
    packet instead of a person carrying it within the five-minute window. Then
