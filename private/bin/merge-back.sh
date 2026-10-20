@@ -44,7 +44,8 @@
 # without credentials in its environment and, on macOS, inside sandbox-exec:
 # no network but localhost, no writes under the home directory but this
 # clone's working tree (never its git directory), no reads of credential
-# stores. Where no sandbox is available it refuses unless --unsandboxed-gate
+# stores; npm gets a scratch cache outside the home directory, removed after
+# the gate. Where no sandbox is available it refuses unless --unsandboxed-gate
 # is passed deliberately; that mode trusts the public code with this account.
 # After the gate, HEAD, the merge branch, and this clone's git config must be
 # unchanged, and a working tree the gate changed is restored before stopping,
@@ -237,23 +238,36 @@ run_gate() {
   if [ -n "${AGENTTOOL_MERGE_BACK_GATE:-}" ]; then
     printf 'merge-back: WARNING: AGENTTOOL_MERGE_BACK_GATE replaces the private gate with: %s\n' "$gate" >&2
   fi
+  # Package checks run `npm pack`, which writes npm's cache. The account's
+  # cache is under the home directory, which the sandbox keeps unwritable, so
+  # the gate gets a scratch cache of its own, removed afterwards; without a
+  # sandbox the public code still never writes the account's cache.
+  local npm_cache status=0
+  npm_cache="$(mktemp -d "${TMPDIR:-/tmp}/merge-back-npm.XXXXXX")" ||
+    { printf 'merge-back: cannot create a scratch npm cache for the gate\n' >&2; return 1; }
   local env_args=(env -u GH_TOKEN -u GITHUB_TOKEN -u GH_ENTERPRISE_TOKEN -u GITHUB_ENTERPRISE_TOKEN -u NPM_TOKEN -u NODE_AUTH_TOKEN
     -u SSH_AUTH_SOCK -u GIT_ASKPASS -u SSH_ASKPASS -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN
     -u FLY_API_TOKEN -u HF_TOKEN -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u OLLAMA_API_KEY
-    GH_CONFIG_DIR=/nonexistent GIT_TERMINAL_PROMPT=0)
+    GH_CONFIG_DIR=/nonexistent GIT_TERMINAL_PROMPT=0 npm_config_cache="$npm_cache")
   if [ "$unsandboxed" = 1 ]; then
     printf 'merge-back: WARNING: --unsandboxed-gate: the private gate runs public code with this account'"'"'s network and files\n' >&2
-    "${env_args[@]}" bash -c "$gate"
-    return $?
+    "${env_args[@]}" bash -c "$gate" || status=$?
+    rm -rf "$npm_cache"
+    return "$status"
   fi
-  command -v sandbox-exec >/dev/null 2>&1 ||
-    { printf 'merge-back: no sandbox-exec here; pass --unsandboxed-gate deliberately to run the gate without one\n' >&2; return 1; }
+  if ! command -v sandbox-exec >/dev/null 2>&1; then
+    rm -rf "$npm_cache"
+    printf 'merge-back: no sandbox-exec here; pass --unsandboxed-gate deliberately to run the gate without one\n' >&2
+    return 1
+  fi
   local home profile git_dir common_dir
   home="$(cd "$HOME" && pwd -P)"
   git_dir="$(git rev-parse --path-format=absolute --absolute-git-dir)"
   common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
   profile="$(gate_profile "$root" "$home" "$git_dir" "$common_dir")"
-  "${env_args[@]}" sandbox-exec -p "$profile" bash -c "$gate"
+  "${env_args[@]}" sandbox-exec -p "$profile" bash -c "$gate" || status=$?
+  rm -rf "$npm_cache"
+  return "$status"
 }
 
 # sandbox-exec profile (later rules win): loopback only; no writes under the

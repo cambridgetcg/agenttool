@@ -284,8 +284,16 @@ describe("merge-back cycles", () => {
       expect(existsSync(probe)).toBe(false);
       expect(mergeBack(["--push"], { AGENTTOOL_MERGE_BACK_GATE: "curl -sS -m 5 -o /dev/null https://example.com" }).status).toBe(7);
     }
-    const passed = mergeBack(["--push"]);
+    // npm pack (a package check) writes npm's cache: the gate gets a writable
+    // scratch cache outside the home directory, removed after the gate.
+    const cacheProbe =
+      'test -n "$npm_config_cache" && test -d "$npm_config_cache" && touch "$npm_config_cache/probe" && ' +
+      'case "$npm_config_cache" in "$HOME"/*) exit 1 ;; esac && echo "gate-npm-cache=$npm_config_cache"';
+    const passed = mergeBack(["--push"], { AGENTTOOL_MERGE_BACK_GATE: cacheProbe });
     expect(passed.status, passed.out).toBe(0);
+    const cache = /gate-npm-cache=(\S+)/u.exec(passed.out)?.[1];
+    expect(cache).toBeDefined();
+    expect(existsSync(cache as string)).toBe(false);
   });
 
   test("a public change to the guard tooling stops (exit 9) until the owner accepts that exact tip; the acceptance records new digests", () => {
