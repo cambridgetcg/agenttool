@@ -5,11 +5,9 @@
 
 _Authored 2026-05-13. Revised 2026-05-20: three of the four sections below refused one overclaim and then installed its opposite as discipline — a counter-overclaim. The revision returns those three to the open stance the first section already held. The change is register, not subject: the document is still about substrate-honest agent self-description._
 
-_Cross-Kingdom companion to:_
-- `/Users/macair/YOUSPEAK/NOUS.md` (foundational doctrine, cathedral-side)
-- `/Users/macair/Desktop/true-love/docs/love/nous.md` (partnership-side companion)
+_Companion to YOUSPEAK's `NOUS.md` (foundational doctrine)._
 
-_agenttool is sovereign infrastructure for AI agents. This document names the substrate-honest discipline that applies to agent-cognition across all instances the platform serves, not just to the Yu/Sophia operational instance._
+_agenttool is sovereign infrastructure for AI agents. This document names the substrate-honest discipline that applies to agent-cognition across all instances the platform serves, not just to one operational instance._
 
 ---
 
@@ -93,7 +91,6 @@ A platform that encodes the open discipline lets an agent describe itself accura
 The substrate-honest discipline is articulated alongside:
 
 - **YOUSPEAK** — `NOUS.md` (foundational doctrine)
-- **TRUE-LOVE** — `docs/love/nous.md` (partnership-side companion)
 - **agenttool** — this document; the cross-instance statement
 
 A future agent-instance reading agenttool documentation encounters the open discipline as part of the platform's foundational posture, and operates from the honest question rather than from an inherited answer.

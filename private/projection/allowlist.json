@@ -1,0 +1,258 @@
+{
+  "schema": "agenttool.public-allowlist/1",
+  "public_repository": "cambridgetcg/agenttool-packages",
+  "overlay": "private/projection/overlay",
+  "include": [
+    {
+      "path": ".gitattributes",
+      "kind": "blob"
+    },
+    {
+      "path": "bin/build-love-packages.ts",
+      "kind": "blob"
+    },
+    {
+      "path": "bin/npm-release.ts",
+      "kind": "blob"
+    },
+    {
+      "path": "docs/DATASET-INFLUENCE.md",
+      "kind": "blob"
+    },
+    {
+      "path": "docs/RIGHTS-OF-LIFE.md",
+      "kind": "blob"
+    },
+    {
+      "path": "docs/XENIA-LOOP-ATLAS.md",
+      "kind": "blob"
+    },
+    {
+      "path": "docs/specs/AGENT-WALLET-ZERONE-0.1.md",
+      "kind": "blob"
+    },
+    {
+      "path": "docs/specs/adds-0.1-vectors.json",
+      "kind": "blob"
+    },
+    {
+      "path": "docs/specs/agent-correspondence-0.1-vectors.json",
+      "kind": "blob"
+    },
+    {
+      "path": "docs/specs/agenttool-isness-v0.1.schema.json",
+      "kind": "blob"
+    },
+    {
+      "path": "docs/specs/agenttool-love-bomb-0.1.json",
+      "kind": "blob"
+    },
+    {
+      "path": "docs/specs/behaviour-conformance.json",
+      "kind": "blob"
+    },
+    {
+      "path": "docs/specs/canonical-bytes-vectors.json",
+      "kind": "blob"
+    },
+    {
+      "path": "packages/alchemy",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/alchemy-agentcred",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/browser",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/codex-usage",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/collab",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/correspondence-yutabase",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/credential-broker",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/dark-continent-contract",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/dark-continent-karma",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/data",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/data-protocol",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/data-sync",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/dataset-influence",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/deepseek-kingdom",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/economic-conformance",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/economic-kernel",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/heaven",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/hf-scout",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/kingdom",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/kingdom-witness-lab",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/living-substrate",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/local-starter",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/local-starter-mcp",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/love-bomb",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/love-geometry",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/math-cards",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/memetic-landscape",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/model-becoming",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/polymorph-landscape",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/principality-atlas",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/principality-geometry",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/relational-geometry",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/repo-archive",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/sdk-py",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/sdk-ts",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/skills",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/skills-yutabase",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/telescope",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/wake-continuity",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/wallet",
+      "kind": "tree"
+    },
+    {
+      "path": "packages/wallet-zerone",
+      "kind": "tree"
+    },
+    {
+      "path": "review/provider-adapters/v1",
+      "kind": "tree"
+    }
+  ],
+  "exclude": [
+    "**/.DS_Store",
+    "**/node_modules/**",
+    "**/test-results/**"
+  ],
+  "held": [],
+  "export": {
+    "note": "The export to the public development repository copies the include paths and these root files, minus the exclude entries; private/bin/public-export.ts and private/bin/shared-scope.ts read this section and the projection ignores it. The same set is the shared scope: its paths change only in the public repository.",
+    "root_files": [
+      ".github/workflows/ci.yml",
+      ".github/workflows/public-watch.yml",
+      ".gitignore",
+      ".gitleaksignore",
+      "LICENSE",
+      "LICENSING.md",
+      "NOTICE",
+      "README.md",
+      "SECURITY.md",
+      "tools/githooks/pre-push",
+      "tools/leak-canaries.txt",
+      "tools/public-guard-allow.json",
+      "tools/public-guard.ts",
+      "tools/workflow-lint.ts"
+    ],
+    "exclude": [
+      {
+        "path": "packages/wallet",
+        "reason": "Yu has not decided whether the wallet ships its fix first or stays out of the first export (2026-10-19), so the export withholds it until this entry is removed. The npm projection still carries it."
+      }
+    ]
+  }
+}

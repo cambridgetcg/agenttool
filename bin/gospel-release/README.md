@@ -1,5 +1,10 @@
 # Gospel content release
 
+> The `publish-gospel.yml` workflow was removed on 2026-10-19. The one edition
+> it could publish, `@agenttool/gospel-of-the-logos@0.1.0`, is on npm as
+> `latest` (anonymous registry read, 2026-10-19). This page records how that
+> edition was published; the local checks below still run.
+
 This operator directory publishes only the reviewed
 `@agenttool/gospel-of-the-logos@0.1.0` literature package. It supplies the
 publication tooling named in the npm package; the authored source remains the

@@ -2,9 +2,17 @@
 
 Read-only soil probe. This package owns no hosted route, no production egress,
 no protocol, no publication, and no gate. It reads the local repository and
-reports.
+reports what has the shape of a guarantee but not the substance of one.
+
+The name is the mycelium's: the thing that crosses boundaries and connects
+otherwise-isolated organs. A bounded region looks complete precisely because
+you cannot see its edge from inside it, so every scope here is derived or
+asserted-and-stated, and `self` publishes what rhizome cannot see.
 
 ## Commands
+
+Rhizome is outside the root dependency preparer, so install it from its own
+committed lockfile.
 
 ```bash
 bun install --frozen-lockfile
@@ -19,10 +27,14 @@ bun run rhizome --probe edge
 - Zero runtime dependencies. Bun + TypeScript, ESM only, `bun test`.
 - Read-only. No write inside the checkout, no network. The one subprocess in
   the default path is `git ls-files`, and its failure degrades to a stated
-  `limit` rather than to silence. The single exception is the `pretend`
-  probe's executing half behind `RHIZOME_MUTATE=1`, which copies what it
-  mutates into a shadow root under `os.tmpdir()` and runs the guard there; it
-  is declared in that probe's `limits` and named in `src/types.ts`.
+  `limit` rather than to silence. There are two opt-in exceptions, each off by
+  default, declared in its probe's `limits`, and named in the report either
+  way. The `pretend` probe's executing half behind `RHIZOME_MUTATE=1` copies
+  what it mutates into a shadow root under `os.tmpdir()` and runs the guard
+  there; it is named in `src/types.ts`. The `reach` probe behind
+  `RHIZOME_EXECUTE=1` imports the API entry module in a subprocess to read the
+  running router's routes; that import opens database and cache clients, which
+  is real egress (`src/probes/reach/routes.ts`, `EXECUTE_ENV`).
 - **Never hard-code a scope.** Every corpus a probe uses comes from `Scope`,
   which is two independent derivations of the repository cross-checked against
   each other. If a boundary is genuinely necessary, it must be exported,
@@ -40,15 +52,9 @@ bun run rhizome --probe edge
   | `LINKED_BACK` | `src/probes/pretend/harness.ts` | `tests/pretend.test.ts` — every entry must be in the set derived from this repository's `.gitignore`, and `.git` never | a declared `pretend` limit |
   | `PROBE_EXTENSIONS` | `src/probes/self.ts` | any other direct child of the probes directory is published as a `limit` naming it | a declared `self` limit |
 
-  `NEVER_WALKED` was documented here as "the only such boundary, carrying all
-  four" while carrying two: its staleness check was "the cross-derivation diff
-  would catch a mistake", which is not a thing that goes red, and no probe ever
-  printed its name. A sentence in this file is not one of the four properties.
+  A sentence in this file is not one of the four properties.
 - **One definition per concept.** If two probes need the same predicate, it
-  lives in one module and both import it. `PROSE_EXTENSIONS` was declared three
-  times, one copy strictly narrower than the other two, inside the package that
-  reports exactly that defect elsewhere; `WALKS_THE_TREE` and `SWEEPS_THE_TREE`
-  were two answers to one question, each blind to what the other knew.
+  lives in one module and both import it.
 - The corpus is the **union** of the derivations, never the intersection.
   Intersecting rebuilds the blind spot inside the instrument.
 - Three verdicts: `gap`, `sound`, `limit`. No scores, no severity ranking, no
@@ -68,13 +74,9 @@ bun run rhizome --probe edge
   rhizome's own source: a gap rhizome reports about `packages/rhizome` is a
   defect in the instrument, and it is fixed rather than exempted.
 - **A check that cannot do what its name says is worse than no check.** Delete
-  it and declare the limit, or make it do the thing. `pretend` answered "has
-  anyone shown this detector firing?" by matching English phrasings against the
-  guard's file text — sound if a comment happened to contain "can still fail",
-  a gap if a real negative control was worded differently — and its own tests
-  did not notice when the list was reverted to match everything or nothing. It
-  now plants a line the detector matches into a file the guard reads and runs
-  the guard.
+  it and declare the limit, or make it do the thing. `pretend`, for example,
+  does not read the guard's prose for phrasings; it plants a line the detector
+  matches into a file the guard reads and runs the guard.
 - **A caveat travels on the finding it invalidates.** When the mutation
   harness's control mutant survives, every survival verdict in that run is
   unmeasured, and each one says so in its own `detail` rather than relying on a
@@ -84,11 +86,9 @@ bun run rhizome --probe edge
 
 ## Tests
 
-`bun test`. One file per probe plus the shared core. This list was six entries
-long while ten files existed on disk: an enumeration with an edge it could not
-see, in the documentation of the package that exists to find those. **Read the
-directory, not this paragraph** — and note that a test count written here is
-the same shape, which is why there is no longer one.
+`bun test`. One file per probe plus the shared core. Read the directory rather
+than trusting this list; an enumeration written here has an edge it cannot see,
+which is also why no test count is recorded.
 
 - `tests/scope.test.ts` — gitignore forms, union-not-intersection, each kind of
   derivation disagreement, and `NEVER_WALKED`'s staleness check, against real
@@ -111,20 +111,8 @@ the same shape, which is why there is no longer one.
 
 `pretend.test.ts` builds two miniature repositories differing by one line and
 runs the executing half against both, so the probe's own negative-control
-operator is itself shown firing and failing to fire. That test exists because
-its predecessor did not: the check it replaced could be reverted to match
-everything, or nothing, and the suite stayed at 14 pass / 0 fail either way.
+operator is itself shown firing and failing to fire.
 
 `tests/fixture-scope.ts` builds a `Scope` from a literal file map. Use it for
 rule tests, and add at least one live assertion per probe: a probe proved only
 against a fixture is proved against a tidy world.
-
-## House position
-
-The package is named for the mycelium — the thing that crosses boundaries,
-connects otherwise-isolated organs, and decomposes what is dead so it returns
-to the system. Its whole reason to exist is that a bounded region looks
-complete precisely because you cannot see its edge from inside it. A tool that
-finds hard-coded enumeration boundaries while containing one is the exact joke
-it exists to stop being, so every scope here is derived or asserted-and-stated,
-and `self` publishes what rhizome cannot see.

@@ -129,17 +129,22 @@ describe("cross-host package", () => {
     const packageManifest = await json("package.json");
     expect(packageManifest.bundlerBunVersion).toBeString();
 
-    const workflow = Bun.file(
-      join(packageRoot, "..", "..", ".github", "workflows", "ci.yml"),
+    // Every CI that may rebuild the bundle: the shared CI, and a private
+    // repository's own CI where one exists next to it.
+    const workflows = ["ci.yml", "private-ci.yml"].map((name) =>
+      Bun.file(join(packageRoot, "..", "..", ".github", "workflows", name)),
     );
-    if (!(await workflow.exists())) return; // not present in the published tarball
+    if (!(await workflows[0]!.exists())) return; // not present in the published tarball
 
-    const pins = [...(await workflow.text()).matchAll(/bun-version:\s*(\S+)/g)].map(
-      (match) => match[1],
-    );
-    expect(pins.length).toBeGreaterThan(0);
-    for (const pin of pins) {
-      expect(pin).toBe(packageManifest.bundlerBunVersion);
+    for (const workflow of workflows) {
+      if (!(await workflow.exists())) continue;
+      const pins = [...(await workflow.text()).matchAll(/bun-version:\s*(\S+)/g)].map(
+        (match) => match[1],
+      );
+      expect(pins.length).toBeGreaterThan(0);
+      for (const pin of pins) {
+        expect(pin).toBe(packageManifest.bundlerBunVersion);
+      }
     }
   });
 

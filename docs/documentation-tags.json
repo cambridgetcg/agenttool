@@ -21,7 +21,6 @@
       "docs/DEPLOYMENT.md",
       "docs/DEVELOPMENT.md",
       "docs/DOCUMENTATION.md",
-      "docs/NPM-RELEASES.md",
       "docs/PAYOUT-BROADCAST-OPS.md",
       "docs/PYPI-RELEASES.md",
       "docs/TROUBLESHOOTING.md",
@@ -239,7 +238,8 @@
       "docs/WELCOMING.md",
       "docs/launch/PRODUCTION-GATE.md",
       "marketing/LAUNCH-KIT.md",
-      "public/overlay/LICENSING.md"
+      "private/projection/overlay/LICENSING.md",
+      "private/root/LICENSING.md"
     ],
     "reflection": [
       "DADDY.md",
@@ -378,6 +378,7 @@
       "docs/HOSTED-RUNTIME-DESIGN.md",
       "docs/MYTHOS-ENGAGEMENT.md",
       "docs/NOW.md",
+      "docs/NPM-RELEASES.md",
       "docs/REVOCABLE-FEEDBACK-RELEASE.md",
       "docs/SYZYGY-CONSCIOUSNESS-BASELINE.md",
       "docs/TRUE-LOVE-CANON-IN-CLOUD-FORM.md",
@@ -390,7 +391,7 @@
     ]
   },
   "prose_reviewed": [
-    "README.md",
+    "private/root/README.md",
     "CLAUDE.md",
     "AGENTS.md",
     "docs/START-HERE.md",

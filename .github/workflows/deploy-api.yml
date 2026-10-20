@@ -63,6 +63,7 @@ env:
 jobs:
   gate:
     name: gate · survey + hermetic tests
+    if: github.repository == 'cambridgetcg/agenttool'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     outputs:
@@ -147,7 +148,7 @@ jobs:
   deploy:
     name: deploy · ${{ github.event.inputs.strategy || 'rolling' }}
     needs: gate
-    if: needs.gate.outputs.deploy == 'true'
+    if: github.repository == 'cambridgetcg/agenttool' && needs.gate.outputs.deploy == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:

@@ -1,0 +1,10 @@
+{
+  "schema": "agenttool.reviewed-shared/1",
+  "note": "SHA-256 of the shared guard files as last reviewed for this private repository. Update with `bun private/bin/reviewed-shared.ts write` only after reading the change.",
+  "files": {
+    "tools/githooks/pre-push": "5be3d17fc31e51260ce0b07f5daeee4f210d772cc7f3180f18b687f0ead6322c",
+    "tools/leak-canaries.txt": "d6b2b4b4875f612ce79cf639a69331af8f923296e9654769512b183ae95e38dd",
+    "tools/public-guard.ts": "4412a4118d9b818282721d0632bb8ab2b1cebf5b3dcef743af3fb1702db36131",
+    "tools/workflow-lint.ts": "96c478d51c2581310b58b1bfa08897addf42ccde8c301e7ca09c8e6c757bad0e"
+  }
+}

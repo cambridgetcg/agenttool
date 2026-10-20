@@ -178,7 +178,8 @@ describe("outward claim boundaries", () => {
     ] as const;
     const pyProject = read("packages/sdk-py/pyproject.toml");
     const readmes = `${read("packages/sdk-ts/README.md")}\n${read("packages/sdk-py/README.md")}`;
-    const licensing = read("LICENSING.md");
+    // The private repository's own licensing record; the root LICENSING.md covers the shared tree.
+    const licensing = read("private/root/LICENSING.md");
 
     for (const packagePath of packagePaths) {
       const packageJson = JSON.parse(read(`${packagePath}/package.json`)) as {

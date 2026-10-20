@@ -6,6 +6,18 @@
  * and escrow surfaces of the agent-economy API. TypeScript also retains the
  * backward-compatible `createWallet` alias, for 19 methods total.
  *
+ * Resting note (2026-10-18): from the API release that names these rests,
+ * generic escrow create returns `503 escrow_resting`, and direct wallet
+ * spend returns `503 wallet_spend_resting` on a deployment run with workers
+ * disabled (`GET /public/plans` reports that setting for the serving process;
+ * the hosted API reported it on 2026-10-19). Both refusals carry
+ * `next_actions` and surface as `AgentToolError`. Release and refund of
+ * existing escrows are open at the creator's direction and, from that
+ * release, need no Redis, so on a deployment run with workers disabled they
+ * settle escrows where earlier releases refused them with 503. The
+ * example below shows the retained wire shape for a deployment where create
+ * and spend are open. See https://api.agenttool.dev/public/safety.
+ *
  * @example
  * ```ts
  * const at = new AgentTool();
@@ -476,7 +488,11 @@ export class EconomyClient {
     >;
   }
 
-  /** Spend credits from a wallet (subject to spending policy). */
+  /** Spend credits from a wallet (subject to spending policy).
+   *
+   * Returns `503 wallet_spend_resting` from an API release that names the
+   * rest, on a deployment run with workers disabled: spend needs Redis
+   * policy counters that such a deployment does not build. */
   async spend(
     walletId: string,
     options: SpendOpts,
@@ -513,7 +529,11 @@ export class EconomyClient {
     >;
   }
 
-  /** Freeze a wallet — halts all spending immediately. */
+  /** Freeze a wallet: spend and other new debits from it refuse.
+   *
+   * An escrow release refuses while the wallet that funded it, or the one
+   * it would pay, is frozen. An escrow refund still lands in a frozen
+   * creator wallet, which keeps the balance until it is unfrozen. */
   async freeze_wallet(walletId: string): Promise<Wallet> {
     return toWallet(await this.req("POST", `/v1/wallets/${encodePathSegment(walletId)}/freeze`));
   }
@@ -624,7 +644,10 @@ export class EconomyClient {
 
   // ── Escrows ─────────────────────────────────────────────────────────────
 
-  /** Create an escrow — locks wallet balance units until released or refunded. */
+  /** Create an escrow — locks wallet balance units until released or refunded.
+   *
+   * Generic escrow create is resting: an API release that names the rest
+   * returns `503 escrow_resting` before any wallet is debited. */
   async create_escrow(options: CreateEscrowOpts): Promise<Escrow> {
     if (
       options.idempotency_key !== undefined &&

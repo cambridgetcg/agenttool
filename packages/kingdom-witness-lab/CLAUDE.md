@@ -28,8 +28,9 @@ changing a contract.
 
 ## Verify
 
+Prepare dependencies as root `AGENTS.md` describes, then:
+
 ```bash
-bun install --frozen-lockfile
 bun run ci
 npm pack --dry-run --ignore-scripts
 ```

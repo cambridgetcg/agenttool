@@ -1,0 +1,139 @@
+#!/usr/bin/env bash
+# Pre-push hook for a clone of the shared AgentTool tree. It fails closed.
+#
+# Install it from a pinned copy, not from this tree: a merged change could
+# otherwise weaken the hook that guards it. The pinned copy keeps this file at
+# tools/githooks/pre-push next to tools/public-guard.ts,
+# tools/leak-canaries.txt, and the maintainers' private scanner; the clone's
+# core.hooksPath points at that copy's tools/githooks.
+#
+# For every ref pushed (deletions excepted) it checks:
+#   1. the history has exactly one root commit, the one git config
+#      publicguard.root names;
+#   2. every new commit's author and committer address, and a pushed
+#      annotated tag's tagger address, is a public one: the project contact,
+#      GitHub's noreply address, or an account's users.noreply address;
+#   3. no new object is a canary listed in tools/leak-canaries.txt;
+#   4. tools/public-guard.ts --tree passes on the pushed commit, with gitleaks
+#      when git config publicguard.gitleaks names a binary (or "none");
+#   5. the maintainers' private scan passes over the new commits' added lines,
+#      messages (no address but a public one), added path names, and objects,
+#      the pushed ref names, and an annotated tag's message. It reads its terms from the directory git
+#      config publicguard.privateGuard names. When that directory or the
+#      scanner is missing the hook refuses. Someone without the private scan
+#      sets AGENTTOOL_NO_PRIVATE_GUARD=1 to run checks 1-4 only.
+# "New" means not reachable from the remote being pushed to (its
+# remote-tracking refs, or the remote's old value of the ref): a commit that
+# another remote already has is still checked here.
+# It prints commit ids, rule ids, and line hashes; never matched text or an
+# address.
+#
+# Every Bun it starts runs from the pinned copy, never from this clone, and
+# names the clone with --repo: Bun applies the tsconfig.json or jsconfig.json
+# of its working directory and that directory's parents to what it runs, so
+# a file in this clone could otherwise change how the pinned checks load.
+set -euo pipefail
+
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+pin="$(cd "$hook_dir/../.." && pwd -P)"
+zero="0000000000000000000000000000000000000000"
+remote="${1:-}"
+repo="$(git rev-parse --show-toplevel 2>/dev/null || git rev-parse --absolute-git-dir)"
+# The checks' Bun reads no bunfig.toml or .env (a committed preload would
+# otherwise run before, or instead of, every check), and it runs from the
+# pinned copy (see above).
+guard_bun() {
+  (cd "$pin" && exec bun --config=/dev/null --no-env-file "$@")
+}
+
+die() {
+  printf 'shared-tree pre-push: %s\n' "$*" >&2
+  exit 1
+}
+
+command -v bun >/dev/null 2>&1 || die "bun is required"
+root="$(git config --get publicguard.root || true)"
+[ -n "$root" ] || die "git config publicguard.root is not set (the shared tree's root commit)"
+gitleaks="$(git config --get publicguard.gitleaks || true)"
+[ -n "$gitleaks" ] || die "git config publicguard.gitleaks is not set (a gitleaks 8.30.1 binary, or none)"
+case "$gitleaks" in
+  none | /*) ;;
+  */*) gitleaks="$(cd "$(dirname "$gitleaks")" && pwd -P)/$(basename "$gitleaks")" ;;
+esac
+[ -f "$pin/tools/public-guard.ts" ] && [ -f "$pin/tools/leak-canaries.txt" ] || die "the pinned copy lacks tools/public-guard.ts or tools/leak-canaries.txt"
+private_scan=1
+if [ "${AGENTTOOL_NO_PRIVATE_GUARD:-}" = 1 ]; then
+  private_scan=0
+  printf 'shared-tree pre-push: AGENTTOOL_NO_PRIVATE_GUARD=1, so the private scan is skipped\n' >&2
+else
+  guard_dir="$(git config --get publicguard.privateGuard || true)"
+  [ -n "$guard_dir" ] && [ -f "$guard_dir/relational-denylist.json" ] || die "the private denylist is missing (git config publicguard.privateGuard); refusing"
+  guard_dir="$(cd "$guard_dir" && pwd -P)"
+  [ -f "$pin/private/bin/relational-scan.ts" ] || die "the private scanner is not in this hook's pinned copy; refusing"
+fi
+
+public_address() {
+  local address local_part domain
+  address="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  local_part="${address%@*}"
+  domain="${address##*@}"
+  [ -n "$local_part" ] && [ "$local_part" != "$address" ] || return 1
+  case "$local_part" in *@*) return 1 ;; esac
+  case "$domain" in
+    users.noreply.github.com) [ -n "$local_part" ] && return 0 ;;
+    github.com) [ "$local_part" = noreply ] && return 0 ;;
+    cambridgetcg.com) [ "$local_part" = contact ] && return 0 ;;
+  esac
+  return 1
+}
+
+canaries="$(mktemp)"
+trap 'rm -f "$canaries"' EXIT
+grep -E '^[0-9a-f]{40}([0-9a-f]{24})?$' "$pin/tools/leak-canaries.txt" >"$canaries" || die "tools/leak-canaries.txt lists no canary"
+
+updates=()
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -n "${local_ref:-}" ] || continue
+  updates+=("$local_ref $local_sha $remote_ref $remote_sha")
+done
+
+for update in "${updates[@]+"${updates[@]}"}"; do
+  read -r local_ref local_sha remote_ref remote_sha <<<"$update"
+  [ "$local_sha" != "$zero" ] || continue
+  commit="$(git rev-parse --verify --quiet "$local_sha^{commit}" </dev/null)" || die "${local_sha:0:12} is not a commit here"
+  roots="$(git rev-list --max-parents=0 "$commit" </dev/null)"
+  [ "$roots" = "$root" ] || die "${commit:0:12}: the history's root is not the shared tree's root"
+
+  range=("$commit" --not --remotes="$remote")
+  if [ "$remote_sha" != "$zero" ] && git cat-file -e "$remote_sha^{commit}" 2>/dev/null </dev/null; then
+    range+=("$remote_sha")
+  fi
+
+  while IFS=$'\t' read -r sha author_email committer_email; do
+    [ -n "$sha" ] || continue
+    public_address "$author_email" || die "${sha:0:12}: the author address is not a public one"
+    public_address "$committer_email" || die "${sha:0:12}: the committer address is not a public one"
+  done < <(git log --format='%H%x09%ae%x09%ce' "${range[@]}" -- </dev/null)
+
+  # An annotated tag, and every tag it points at in turn (a nested tag).
+  object="$local_sha"
+  while [ "$(git cat-file -t "$object" </dev/null)" = tag ]; do
+    tagger="$(git cat-file tag "$object" </dev/null | sed -n '/^$/q; s/^tagger .*<\([^>]*\)>.*$/\1/p')"
+    public_address "$tagger" || die "${object:0:12}: the tagger address is not a public one"
+    object="$(git cat-file tag "$object" </dev/null | sed -n '/^$/q; s/^object //p')"
+  done
+
+  if git rev-list --objects "${range[@]}" -- </dev/null | cut -d' ' -f1 | grep -qxFf "$canaries"; then
+    die "${commit:0:12}: a new object is a listed canary"
+  fi
+
+  guard_args=(--tree --repo "$repo" --rev "$commit")
+  [ "$gitleaks" = none ] || guard_args+=(--gitleaks "$gitleaks")
+  guard_bun "$pin/tools/public-guard.ts" "${guard_args[@]}" </dev/null || die "${commit:0:12}: the public guard refused"
+
+  if [ "$private_scan" = 1 ]; then
+    scan_args=(--repo "$repo" --guard-dir "$guard_dir" --diff --messages --names --objects --shapes --addresses --ref-name "$remote_ref" --ref-name "$local_ref")
+    if [ "$(git cat-file -t "$local_sha" </dev/null)" = tag ]; then scan_args+=(--tag "$local_sha"); fi
+    guard_bun "$pin/private/bin/relational-scan.ts" "${scan_args[@]}" -- "${range[@]}" </dev/null || die "${commit:0:12}: the private scan refused"
+  fi
+done

@@ -1,0 +1,14 @@
+# Blob ids of canary files that exist only in the private repository.
+# A shared tree, its history, or any branch that holds an object with one of
+# these ids carries private material. tools/public-guard.ts checks this list
+# in tree and watch mode; a blob id reveals nothing about the canary's bytes.
+d8a8a3d1a5dd4a92e88ce21cd83f22f487f09b62
+# Blob ids of every past and present version of the private term and
+# digest lists, so an exact copy is caught by the scheduled public watch
+# too, not only by the private daily scan.
+478d1791c408e15aff06e72397fb0dea99f51cd9
+4df71ab461abc5548810da7975cd386b9c642af0
+9cbf13b35fb4a03dbfd4aa402c1a67695835ea96
+bbba3175219d7952681a5b065c3ac2cbced390f3
+d662b903da0c92ef26126af95cb9ea444e767e8f
+e796fb87420414f522d4c1645cf9fb355c066566

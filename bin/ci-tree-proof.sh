@@ -16,12 +16,12 @@
 #     repository rather than a fork. A pull-request run that targets main
 #     uploads it from its Changed areas job, naming the tree of GitHub's test
 #     merge and that merge's first parent. So the run classified and tested
-#     exactly the change from `before` to these bytes, this ci.yml included;
+#     exactly the change from `before` to these bytes, this private-ci.yml included;
 #   - no run behind such an artifact that completed red, and at least one
-#     whose workflow file is .github/workflows/ci.yml, whose event is
+#     whose workflow file is .github/workflows/private-ci.yml, whose event is
 #     pull_request, whose head repository is this one, and whose latest
 #     attempt completed with conclusion success;
-#   - the newest push run of ci.yml for `before` on main completed with
+#   - the newest push run of private-ci.yml for `before` on main completed with
 #     conclusion success. Jobs a pull request skips keep main's state, so main
 #     must have been green there. A proven push concludes success, so one
 #     green full run carries forward; a red, cancelled, missing or unfinished
@@ -49,7 +49,7 @@ set -euo pipefail
 set -f
 export LC_ALL=C
 
-readonly WORKFLOW_PATH=.github/workflows/ci.yml
+readonly WORKFLOW_PATH=.github/workflows/private-ci.yml
 readonly MAX_CANDIDATES=20
 
 proven=false
@@ -120,8 +120,8 @@ if [[ -z $candidates ]]; then
   exit 0
 fi
 
-# main's newest push run of ci.yml for `before` must have passed.
-if ! before_run=$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" \
+# main's newest push run of private-ci.yml for `before` must have passed.
+if ! before_run=$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/private-ci.yml/runs" \
   -f "head_sha=$before_sha" -f event=push -f branch=main -f per_page=10 \
   --jq "[.workflow_runs[] | select(.head_sha == \"$before_sha\" and .event == \"push\" and .head_branch == \"main\")][0] | [.path, .status, .conclusion] | map(tostring) | join(\" \")" \
   2>/dev/null); then

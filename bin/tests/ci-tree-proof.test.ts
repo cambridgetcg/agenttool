@@ -1,7 +1,7 @@
-/** Push-to-main tree proof for .github/workflows/ci.yml.
+/** Push-to-main tree proof for .github/workflows/private-ci.yml.
  *
  * bin/ci-tree-proof.sh may let a push to main skip the full suite only when a
- * green pull-request run of ci.yml already tested the identical tree on the
+ * green pull-request run of private-ci.yml already tested the identical tree on the
  * commit main pointed to before the push, and main's push run on that commit
  * passed. These tests drive the script against a disposable Git fixture and a
  * stub `gh`
@@ -93,7 +93,7 @@ type PushRun = Run & { head_sha?: string; head_branch?: string };
 type Job = { name: string; conclusion: string | null };
 
 const artifactsEndpoint = `repos/${REPOSITORY}/actions/artifacts`;
-const beforeRunsEndpoint = `repos/${REPOSITORY}/actions/workflows/ci.yml/runs`;
+const beforeRunsEndpoint = `repos/${REPOSITORY}/actions/workflows/private-ci.yml/runs`;
 const runEndpoint = (id: number) => `repos/${REPOSITORY}/actions/runs/${id}`;
 const jobsEndpoint = (id: number) => `repos/${REPOSITORY}/actions/runs/${id}/jobs`;
 // A proving run that did not test the Python SDK.
@@ -108,7 +108,7 @@ let caseNumber = 0;
 
 function prove(options: {
   artifacts?: Artifact[] | "fail";
-  /** main's push runs of ci.yml for `before`, newest first; one green run by default. */
+  /** main's push runs of private-ci.yml for `before`, newest first; one green run by default. */
   beforeRuns?: PushRun[] | "fail";
   runs?: Record<number, Run>;
   /** Each run's latest-attempt jobs; NO_PYTHON by default. */
@@ -147,7 +147,7 @@ function prove(options: {
         total_count: beforeRuns.length,
         workflow_runs: beforeRuns.map((run, index) => ({
           id: 900 + index,
-          path: run.path ?? ".github/workflows/ci.yml",
+          path: run.path ?? ".github/workflows/private-ci.yml",
           event: run.event ?? "push",
           head_branch: run.head_branch ?? "main",
           head_sha: run.head_sha ?? BEFORE,
@@ -162,7 +162,7 @@ function prove(options: {
       file(runEndpoint(Number(id))),
       JSON.stringify({
         id: Number(id),
-        path: run.path ?? ".github/workflows/ci.yml",
+        path: run.path ?? ".github/workflows/private-ci.yml",
         event: run.event ?? "pull_request",
         status: run.status ?? "completed",
         conclusion: run.conclusion === undefined ? "success" : run.conclusion,
@@ -279,7 +279,7 @@ describe("bin/ci-tree-proof.sh", () => {
     }
   });
 
-  test("refuses runs that are not a completed, successful pull_request run of ci.yml in this repository", () => {
+  test("refuses runs that are not a completed, successful pull_request run of private-ci.yml in this repository", () => {
     for (const [label, run, reason] of [
       ["failed", { conclusion: "failure" }, "recorded-run-red"],
       ["timed out", { conclusion: "timed_out" }, "recorded-run-red"],
@@ -287,7 +287,9 @@ describe("bin/ci-tree-proof.sh", () => {
       ["cancelled", { conclusion: "cancelled" }, "recorded-run-not-green"],
       ["in progress", { status: "in_progress", conclusion: null }, "recorded-run-not-green"],
       ["another workflow", { path: ".github/workflows/local-starter.yml" }, "recorded-run-not-green"],
-      ["a workflow path with a ref suffix", { path: ".github/workflows/ci.yml@refs/heads/x" }, "recorded-run-not-green"],
+      // The shared tree's CI keeps the old file name; its runs prove nothing here.
+      ["the shared tree's workflow", { path: ".github/workflows/ci.yml" }, "recorded-run-not-green"],
+      ["a workflow path with a ref suffix", { path: ".github/workflows/private-ci.yml@refs/heads/x" }, "recorded-run-not-green"],
       ["a push run", { event: "push" }, "recorded-run-not-green"],
       ["a pull_request_target run", { event: "pull_request_target" }, "recorded-run-not-green"],
       ["a fork head", { fork: true }, "recorded-run-not-green"],
@@ -316,7 +318,7 @@ describe("bin/ci-tree-proof.sh", () => {
     expect(result.calls).toHaveLength(1);
   });
 
-  test("requires main's newest push run of ci.yml for the previous commit to have passed", () => {
+  test("requires main's newest push run of private-ci.yml for the previous commit to have passed", () => {
     for (const [label, beforeRuns] of [
       ["red", [{ conclusion: "failure" }]],
       ["cancelled", [{ conclusion: "cancelled" }]],
@@ -324,6 +326,7 @@ describe("bin/ci-tree-proof.sh", () => {
       ["missing", []],
       ["newest red, older green", [{ conclusion: "failure" }, {}]],
       ["another workflow", [{ path: ".github/workflows/deploy-api.yml" }]],
+      ["the shared tree's workflow", [{ path: ".github/workflows/ci.yml" }]],
       // The script filters again in case the API ever ignored a parameter.
       ["another commit", [{ head_sha: SHA }]],
       ["another event", [{ event: "workflow_dispatch" }]],

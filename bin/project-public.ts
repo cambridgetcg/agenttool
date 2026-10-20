@@ -14,15 +14,26 @@
  *   --allow-rewind            allow a source that does not descend from the
  *                             public head's source (a deliberate rollback);
  *                             the result records it as rewound_from
- *   --no-write                build, guard, and create the commit object, but
+ *   --public-sync <ref>       the last merged public tip (default
+ *                             refs/remotes/origin/public-sync); once the source
+ *                             records the public root, its shared paths must
+ *                             equal the public tip it contains, or nothing is
+ *                             built. The shared scope includes the allowlist
+ *                             that recorded that tip; ALLOW_SCOPE_CHANGE=1 in
+ *                             the environment (the owner's go) drops that for
+ *                             a narrowing no merge-back has recorded yet
+ *   --no-write               build, guard, and create the commit object, but
  *                             update no ref. With --out-ref or --out-repo it
  *                             builds on that target's head, with the history,
  *                             rewind, and parent/diff checks, so it previews
  *                             the exact commit a write would create; alone it
  *                             previews a root projection only
  *
- * Everything is read from the source commit's objects: public/allowlist.json,
- * public/overlay/**, and the private relational denylist. Nothing is checked
+ * Everything is read from the source commit's objects:
+ * private/projection/allowlist.json, private/projection/overlay/**, the shared
+ * tools/public-guard.ts, .gitleaksignore, and tools/public-guard-allow.json,
+ * and the private relational denylist
+ * (private/guard/). Nothing is checked
  * out; a temporary GIT_INDEX_FILE holds the projected index. The commit's only
  * parent is the current public head (none for the first projection), its
  * author and committer are the fixed projection identity, both dates are the
@@ -30,12 +41,14 @@
  * source and public head therefore always produce the same commit id.
  *
  * Every layer of the guard must pass before any ref changes: the published
- * layers in public/overlay/tools/public-guard.ts (integrity, path, secret,
- * personal, gitleaks) plus the private relational layer, an independent
+ * layers in tools/public-guard.ts (integrity, path, secret, personal,
+ * gitleaks) plus the private relational layer, an independent
  * allowlist membership check, and the parent/diff rule. This tool never
  * pushes; it writes a local ref or a local bare repository, compare-and-swap,
  * fast-forward only.
  */
+// First: refuse before the shared guard module runs unless it is the reviewed copy.
+import "../private/bin/reviewed-shared.ts";
 import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -51,8 +64,10 @@ import {
   type Finding,
   formatFinding,
   git,
+  GITLEAKS_IGNORE_FILE,
   GITLEAKS_VERSION,
   gitText,
+  GUARD_ALLOW_FILE,
   GUARD_FILE,
   GUARD_VERSION,
   isSafeRelativePath,
@@ -71,20 +86,44 @@ import {
   sha256Hex,
   sortFindings,
   type TreeFile,
-} from "../public/overlay/tools/public-guard.ts";
+} from "../tools/public-guard.ts";
+import { formatDrift, pushProblems, recordedPublicRoot } from "../private/bin/shared-scope.ts";
+import { loadPrivateGuardFromRev, scanFiles } from "../private/bin/relational-scan.ts";
 
-export const ALLOWLIST_PATH = "public/allowlist.json";
+export const ALLOWLIST_PATH = "private/projection/allowlist.json";
 export const ALLOWLIST_SCHEMA = "agenttool.public-allowlist/1";
-export const OVERLAY_ROOT = "public/overlay";
-export const DENYLIST_PATH = "public/private-guard/relational-denylist.json";
+export const OVERLAY_ROOT = "private/projection/overlay";
+export const DENYLIST_PATH = "private/guard/relational-denylist.json";
 export const DENYLIST_SCHEMA = "agenttool.public-relational-denylist/1";
 export const DEFAULT_REQUIRED_ANCESTOR = "refs/remotes/origin/main";
 export const PUBLIC_BRANCH = "refs/heads/main";
 
 const REPO_ROOT = resolve(import.meta.dir, "..");
-const GUARD_SOURCE = resolve(import.meta.dir, "..", OVERLAY_ROOT, GUARD_FILE);
-/** No allowlist entry may reach into these top-level areas, whatever the file says. */
-const PRIVATE_ONLY_ROOTS = ["public", "bin", "api", "apps", ".github", ".git", "infra", "supabase"];
+/**
+ * The guard that runs is the shared tools/public-guard.ts at the repository
+ * root, the same file the public development repository runs with --tree. The
+ * projection ships it as an overlay entry taken from the source root
+ * (SHARED_OVERLAY_FILES), so both public repositories carry one copy.
+ */
+const GUARD_SOURCE = resolve(REPO_ROOT, GUARD_FILE);
+/**
+ * Overlay entries taken from the source commit's root instead of
+ * OVERLAY_ROOT: the guard, and its two exception files, which the public
+ * development repository edits. One copy each means a public fingerprint or
+ * allow change reaches the projection with the next merge-back, with nothing
+ * to copy by hand. If the two public trees ever need different exceptions
+ * (a fingerprint for a withheld path), split them again deliberately.
+ */
+export const SHARED_OVERLAY_FILES: readonly string[] = [GITLEAKS_IGNORE_FILE, GUARD_FILE, GUARD_ALLOW_FILE];
+/** The last merged public tip, which a projection source must agree with in shared paths once it records the public root. */
+export const DEFAULT_PUBLIC_SYNC = "refs/remotes/origin/public-sync";
+/**
+ * No allowlist entry may reach into these top-level areas, whatever the file
+ * says. `private` holds the projection inputs, the denylist, and every other
+ * private-only file; `public` is where they lived before 2026-10-19 and stays
+ * refused so nothing can reappear there and be projected.
+ */
+const PRIVATE_ONLY_ROOTS = ["private", "public", "bin", "api", "apps", ".github", ".git", "infra", "supabase"];
 /**
  * The only exceptions: the release tools that the public repository's
  * publish workflow runs, each as an exact blob entry. They import nothing
@@ -124,6 +163,11 @@ export interface Allowlist {
   include: AllowlistInclude[];
   exclude: string[];
   held: Array<{ path: string; reason: string }>;
+  /**
+   * The export to the public development repository reads `include` and this
+   * section; the projection ignores it. private/bin/shared-scope.ts parses it.
+   */
+  export?: unknown;
 }
 
 /** Converts a small glob (`*` within a segment, `**` across segments) to an anchored RegExp. */
@@ -155,7 +199,11 @@ export function parseAllowlist(bytes: Uint8Array): Allowlist {
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) fail("must be an object");
   const record = parsed as Record<string, unknown>;
   const keys = ["schema", "public_repository", "overlay", "include", "exclude", "held"];
-  if (Object.keys(record).join(",") !== keys.join(",")) fail(`must have exactly ${keys.join(", ")} in that order`);
+  const present = Object.keys(record).join(",");
+  if (present !== keys.join(",") && present !== [...keys, "export"].join(",")) {
+    fail(`must have exactly ${keys.join(", ")} in that order, and optionally export after them`);
+  }
+  if ("export" in record && (typeof record.export !== "object" || record.export === null || Array.isArray(record.export))) fail("export must be an object");
   if (record.schema !== ALLOWLIST_SCHEMA) fail(`schema must be ${ALLOWLIST_SCHEMA}`);
   if (typeof record.public_repository !== "string" || !/^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/u.test(record.public_repository)) {
     fail("public_repository must be owner/name");
@@ -182,6 +230,9 @@ export function parseAllowlist(bytes: Uint8Array): Allowlist {
     if (!isSafeRelativePath(include.path)) fail(`include[${index}].path is not a safe relative path`);
     if (reachesPrivateArea(include.path, include.kind)) fail(`include[${index}] ${include.path} reaches a private-only area`);
     if (isWithin(DENYLIST_PATH, include.path) || isWithin(include.path, DENYLIST_PATH)) fail(`include[${index}] would project the private denylist`);
+    for (const shared of SHARED_OVERLAY_FILES) {
+      if (isWithin(shared, include.path) || isWithin(include.path, shared)) fail(`include[${index}] ${include.path} overlaps ${shared}, which the overlay ships`);
+    }
     if (include.path === PROJECTION_FILE) fail(`include[${index}] collides with ${PROJECTION_FILE}`);
     for (const held of heldPaths) {
       if (isWithin(include.path, held) || isWithin(held, include.path)) fail(`include[${index}] ${include.path} overlaps held ${held}`);
@@ -351,6 +402,17 @@ export function buildProjection(repo: string, sourceRev: string): BuildResult {
           throw new ProjectionRefused(`overlay ${path} collides with allowlisted ${include.path}`);
         }
       }
+      if (SHARED_OVERLAY_FILES.includes(path)) {
+        throw new ProjectionRefused(`overlay ${path} must not exist: the projection ships the shared ${path} from the source root`);
+      }
+      overlay.push({ path, blob: oid as string, mode: mode as string });
+    }
+    for (const path of SHARED_OVERLAY_FILES) {
+      const record = run(["ls-tree", "-z", source, "--", path]).stdout.toString("utf8").split("\0").filter(Boolean)
+        .find((line) => line.slice(line.indexOf("\t") + 1) === path);
+      if (record === undefined) throw new ProjectionRefused(`${path} is missing from ${source}`);
+      const [mode, type, oid] = record.slice(0, record.indexOf("\t")).split(" ");
+      if (type !== "blob" || (mode !== "100644" && mode !== "100755")) throw new ProjectionRefused(`${path} in ${source} is not a regular file`);
       overlay.push({ path, blob: oid as string, mode: mode as string });
     }
     overlay.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
@@ -414,7 +476,7 @@ export function guardProjection(repo: string, build: BuildResult, options: Guard
   const member = allowlistMembership(build.allowlist, build.projection);
   for (const file of files) {
     if (!member(file.path)) findings.push({ layer: "path", rule: "path/outside-allowlist", path: file.path });
-    if (isWithin(file.path, "public")) findings.push({ layer: "path", rule: "path/private-area", path: file.path });
+    if (isWithin(file.path, "private") || isWithin(file.path, "public")) findings.push({ layer: "path", rule: "path/private-area", path: file.path });
   }
 
   // Private relational layer. Rule ids and line hashes are printed; terms never are.
@@ -430,6 +492,25 @@ export function guardProjection(repo: string, build: BuildResult, options: Guard
     if (rule !== undefined) findings.push({ layer: "relational", rule, path: file.path });
     if (file.oid === denylistBlob.oid || digest === denylist.sha256) {
       findings.push({ layer: "relational", rule: "relational/denylist-copy", path: file.path });
+    }
+  }
+
+  // The other private layers the export and the hooks apply: literal
+  // digests, terms in path names, and the canary and literal list by blob id.
+  // Private-only files the projection ships (a package the export withholds,
+  // the overlay) never pass the public repository's hooks. Once the source
+  // holds any of the private guard beyond the denylist, or records the
+  // public root, the whole guard must be there (loadPrivateGuardFromRev
+  // refuses a missing part).
+  if (
+    blobAt(repo, build.source, "private/guard/literal-sha256.json") !== undefined ||
+    blobAt(repo, build.source, "private/CANARY") !== undefined ||
+    recordedPublicRoot(repo, build.source) !== undefined
+  ) {
+    const key = (finding: Finding) => `${finding.path}\0${finding.rule}\0${finding.line ?? ""}`;
+    const seen = new Set(findings.map(key));
+    for (const finding of scanFiles(files, loadPrivateGuardFromRev(repo, build.source)).findings) {
+      if (!seen.has(key(finding))) findings.push(finding);
     }
   }
 
@@ -567,6 +648,10 @@ export interface ProjectOptions {
   allowRewind?: boolean;
   /** Build, guard, and create the commit against the target's head, but write nothing. */
   noWrite?: boolean;
+  /** The public-sync ref the source is checked against (default refs/remotes/origin/public-sync). */
+  publicSync?: string;
+  /** The owner's go for a shared-scope narrowing not yet recorded by a merge-back (ALLOW_SCOPE_CHANGE=1). */
+  allowScopeChange?: boolean;
 }
 
 export interface ProjectResult {
@@ -598,11 +683,52 @@ function rewindFrom(repo: string, previous: string, source: string, allowRewind:
   return previous;
 }
 
+/**
+ * Once the source records the public root (after the adoption merge), its
+ * shared scope must equal the public tip it contains, the merge base with
+ * public-sync, exactly: an edit, delete, or add made here under a shared
+ * tree would otherwise reach the release repository and npm without ever
+ * being in the public development repository (critic MUST 2, release side).
+ * The scope includes the allowlist that recorded that tip (heldScope in
+ * private/bin/shared-scope.ts), so an allowlist narrowing that reached main
+ * without a hook hides nothing unless `allowScopeChange` (ALLOW_SCOPE_CHANGE=1,
+ * the owner's go). Before adoption there is nothing to compare, and nothing
+ * is checked; a source that contains the public root but lacks the record
+ * (it was deleted) is refused, so the check cannot be turned off that way.
+ */
+export function assertSharedScope(
+  repo: string,
+  source: string,
+  publicSync: string = DEFAULT_PUBLIC_SYNC,
+  options: { allowScopeChange?: boolean } = {},
+): void {
+  const sync = optionalCommit(repo, publicSync);
+  if (recordedPublicRoot(repo, source) === undefined) {
+    if (sync === undefined) return;
+    const roots = git(repo, ["rev-list", "--max-parents=0", sync, "--"]).stdout.toString("utf8").split("\n").filter(Boolean);
+    if (roots.some((root) => git(repo, ["merge-base", "--is-ancestor", root, source], { allowFailure: true }).status === 0)) {
+      throw new ProjectionRefused(`${source} contains the public root but lacks private/export/public-root.txt, which the adoption merge wrote; restore it`);
+    }
+    return;
+  }
+  if (sync === undefined) throw new ProjectionRefused(`${source} records the public root, so the projection checks it against ${publicSync}, which is not here; fetch it first`);
+  const { problems, drift } = pushProblems(repo, { rev: source, sync, allowScopeChange: options.allowScopeChange });
+  if (problems.length + drift.length > 0) {
+    throw new ProjectionRefused(
+      `${source} differs from the public tip it contains in ${drift.length} shared path(s)${problems.length > 0 ? ` (${problems.join("; ")})` : ""}; change shared paths in the public repository, merge back, then project`,
+      formatDrift(drift).map((line) => {
+        const [kind, path] = line.split("\t") as [string, string];
+        return { layer: "path" as const, rule: `path/shared-scope-${kind}`, path };
+      }),
+    );
+  }
+}
+
 function assertGuardShips(repo: string, source: string): void {
-  const shipped = blobAt(repo, source, `${OVERLAY_ROOT}/${GUARD_FILE}`);
+  const shipped = blobAt(repo, source, GUARD_FILE);
   const running = readFileSync(GUARD_SOURCE);
   if (shipped === undefined || sha256Hex(shipped.bytes) !== sha256Hex(running)) {
-    throw new ProjectionRefused(`the guard that runs (${GUARD_SOURCE}) must be byte-identical to ${OVERLAY_ROOT}/${GUARD_FILE} in ${source}`);
+    throw new ProjectionRefused(`the guard that runs (${GUARD_SOURCE}) must be byte-identical to ${GUARD_FILE} in ${source}`);
   }
 }
 
@@ -615,6 +741,7 @@ export function projectPublic(options: ProjectOptions): ProjectResult {
     if (contained.status !== 0) throw new ProjectionRefused(`${source} is not contained in ${ancestor}`);
   }
   assertGuardShips(repo, source);
+  assertSharedScope(repo, source, options.publicSync, { allowScopeChange: options.allowScopeChange });
   if (options.target?.kind === "ref") validateOutRef(repo, options.target.ref);
   if (options.target?.kind === "repo") validateBareRepo(options.target.path);
 
@@ -645,7 +772,7 @@ function usage(): never {
   console.error(
     "usage: bun bin/project-public.ts --source <commit> (--out-ref refs/public/<name> | --out-repo <bare.git>) [--no-write]\n" +
       "       bun bin/project-public.ts --source <commit> --no-write\n" +
-      "       [--repo <path>] [--gitleaks <binary>] [--require-ancestor <ref>] [--allow-unmerged-source] [--allow-rewind]",
+      "       [--repo <path>] [--gitleaks <binary>] [--require-ancestor <ref>] [--allow-unmerged-source] [--allow-rewind] [--public-sync <ref>]",
   );
   process.exit(2);
 }
@@ -665,6 +792,7 @@ export function parseArgs(argv: readonly string[]): ProjectOptions {
     else if (arg === "--require-ancestor") options.requireAncestor = value();
     else if (arg === "--allow-unmerged-source") options.allowUnmergedSource = true;
     else if (arg === "--allow-rewind") options.allowRewind = true;
+    else if (arg === "--public-sync") options.publicSync = value();
     else if (arg === "--out-ref") {
       if (options.target !== undefined) usage();
       options.target = { kind: "ref", ref: value() };
@@ -676,6 +804,7 @@ export function parseArgs(argv: readonly string[]): ProjectOptions {
   }
   if (options.source === undefined) usage();
   if (options.target === undefined && !options.noWrite) usage();
+  if (process.env.ALLOW_SCOPE_CHANGE === "1") options.allowScopeChange = true;
   return options as ProjectOptions;
 }
 

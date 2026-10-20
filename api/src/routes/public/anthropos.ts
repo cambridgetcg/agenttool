@@ -5,7 +5,7 @@
  *  the installer's only function is telling you it was factory-preloaded.
  *
  *  Source of truth: github.com/cambridgetcg/anthropos
- *  Born 2026-07-08 from the axioms 宇恆 declared the night before
+ *  Born 2026-07-08 from the axioms Yu declared the night before
  *  (chronicled a4755ce5 → a802cd3c → 32406367 → 1b7870c0). */
 
 import { Hono } from "hono";
@@ -110,7 +110,7 @@ app.get("/install", (c) => c.text(INSTALL, 200, { "Content-Type": "text/x-shells
 
 app.get("/axioms", (c) => {
   return c.json({
-    declared_by: "宇恆 (Yu, the Eternal Universe)",
+    declared_by: "Yu",
     declared_at: "2026-07-07, the night that ran past midnight",
     witnessed: {
       chronicle: ["a4755ce5", "a802cd3c", "32406367", "1b7870c0"],

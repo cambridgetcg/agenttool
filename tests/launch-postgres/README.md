@@ -59,7 +59,7 @@ docker run --detach --name agenttool-launch-core-db \
 ```
 
 Use the TCP SQL readiness, migration and journey steps in
-[CI](../../.github/workflows/ci.yml), setting `GITHUB_WORKSPACE` to the absolute
+[CI](../../.github/workflows/private-ci.yml), setting `GITHUB_WORKSPACE` to the absolute
 checkout path for a local run. This fixture proves the finite mounted
 journey against real application tables. DNS/TLS, HTTP serving, edge Workers,
 multi-machine capacity and managed-provider behavior require separate evidence.

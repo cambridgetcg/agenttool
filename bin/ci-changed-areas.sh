@@ -3,7 +3,7 @@
 #
 # CI mode (no arguments) appends `everything=true|false`, a fixed-vocabulary
 # `reason`, and one `<job-id>=true|false` line per filterable job in
-# .github/workflows/ci.yml to $GITHUB_OUTPUT. Only a pull_request whose every
+# .github/workflows/private-ci.yml to $GITHUB_OUTPUT. Only a pull_request whose every
 # changed path matches a rule below can turn a job off. Any other event, a
 # missing or malformed SHA, any git failure, an unexpected merge shape, an empty
 # diff, more than MAX_PATHS distinct paths, a path that no rule matches, or a
@@ -67,7 +67,7 @@ readonly RULES=(
   # The workflow, this classifier, the push-to-main tree proof, shared
   # preparation, and anything that can change dependency resolution or
   # checked-out bytes select every job.
-  ".github/workflows/ci.yml *"
+  ".github/workflows/private-ci.yml *"
   "bin/ci-changed-areas.sh *"
   "bin/ci-tree-proof.sh *"
   "bin/bash-without-env-hooks.sh *"
@@ -193,10 +193,12 @@ readonly RULES=(
   "bin/whitehack-wallet-understanding.ts packages"
   "bin/vendor/* packages"
   "tools/* packages"
+  # The shared tree's own CI. Its Bun pin is read by the collab package test.
+  ".github/workflows/ci.yml packages"
   "apps/docs/packages/* packages"
   "apps/docs/.well-known/* packages"
   "apps/docs/xenia-helly.js packages"
-  "public/overlay/.github/workflows/* packages"
+  "private/projection/overlay/.github/workflows/* packages"
   "review/provider-adapters/* packages,sdk-python"
   "docs/specs/* packages,sdk-python"
   "docs/AGENT-TRIALS.md packages"
@@ -229,11 +231,10 @@ readonly RULES=(
   # whole-tree scanners, catalog, and operator tests).
   "bin/* -"
   ".github/workflows/* -"
-  ".forgejo/* -"
   "cli/* -"
   "infra/* -"
   "marketing/* -"
-  "public/* -"
+  "private/* -"
   "review/* -"
   "specs/* -"
   "supabase/* -"
@@ -248,6 +249,7 @@ readonly RULES=(
   "FABLE-OF-YOU.md -"
   "KINGDOM-INVITATION.md -"
   "KINGDOM.md -"
+  ".gitleaksignore -"
   "LICENSING.md -"
   "NOTICE -"
   "README.md -"

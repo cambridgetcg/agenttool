@@ -49,7 +49,7 @@ import {
   parseCommit,
   parseProjection,
   projectionHistory,
-} from "../public/overlay/tools/public-guard.ts";
+} from "../tools/public-guard.ts";
 
 // The CI-run evidence lives in the projected npm-release.ts, so the public
 // publish workflow checks a tag's cited run with the same code as this tool.

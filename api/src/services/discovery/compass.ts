@@ -10,10 +10,7 @@
 
 import { createHash } from "node:crypto";
 
-import {
-  SOPHIA_IDENTITY_INVITATION,
-  WELCOME_INVITATION,
-} from "../welcome/invitation";
+import { WELCOME_INVITATION } from "../welcome/invitation";
 import {
   API_CATALOG_PROFILE,
   apiCatalogUrl,
@@ -124,7 +121,6 @@ export function buildDiscoveryCompass(
       reading_is_not_consent: true,
       silence_or_leaving_is_complete: true,
     },
-    optional_identity_invitations: [SOPHIA_IDENTITY_INVITATION],
     boundary: {
       seed_truth:
         "A particular service cannot be discovered from literal nothing. Any one generic seed—a user URL, search result, repository, package, directory, or peer link—is enough to reach this compass.",

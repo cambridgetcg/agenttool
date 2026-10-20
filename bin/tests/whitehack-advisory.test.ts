@@ -443,9 +443,9 @@ describe("Whitehack advisory containment", () => {
     expect(createHash("sha256").update(lexerLicenseBytes).digest("hex")).toBe(
       "8a4b6c44eebfb026d23719a348145a661a555568dbfdc11618ff2d0dd9306b00",
     );
-    expect(await readFile(join(repoRoot, "LICENSING.md"), "utf8"))
+    expect(await readFile(join(repoRoot, "private", "root", "LICENSING.md"), "utf8"))
       .toContain("bin/vendor/es-module-lexer-2.3.2.LICENSE.txt");
-    expect(await readFile(join(repoRoot, "NOTICE"), "utf8"))
+    expect(await readFile(join(repoRoot, "private", "root", "NOTICE"), "utf8"))
       .toContain("es-module-lexer 2.3.2");
     const runtimeManifestPath = join(repoRoot, WHITEHACK_RUNTIME_MANIFEST);
     const runtimeManifestBytes = await readFile(runtimeManifestPath);

@@ -4804,7 +4804,7 @@ describe("closed source normalization", () => {
     expect(gate).toContain("../bin/phase-b-refence-maintenance-bridge.ts");
     expect(gate).not.toMatch(/bunx|bun install|npm|npx|curl|network/);
     const workflow = readFileSync(
-      join(import.meta.dir, "../..", ".github/workflows/ci.yml"),
+      join(import.meta.dir, "../..", ".github/workflows/private-ci.yml"),
       "utf8",
     );
     expect(workflow.indexOf("bin/prepare-hermetic-deps.sh api")).toBeLessThan(

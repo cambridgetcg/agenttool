@@ -4,14 +4,14 @@
  *
  *  Pins:
  *    1. DoctrineDoc agenttool:doc/WILL-AND-WISDOM exists with required fields
- *    2. 3 walls + 3 commitments present with required canon shape
+ *    2. 2 walls + 2 commitments present with required canon shape
  *    3. The will_and_wisdom field on IntelligenceFeaturesFramework publishes
- *       the synthesis with the nested-three-concepts shape
+ *       the synthesis with the nested Will ⊃ Wisdom shape
  *    4. WILL formalisations include Conway-Kochen, Dennett, Christian List,
  *       and information-theoretic entropy-regularised-RL
  *    5. WISDOM formalisations include Aristotelian phronesis, Berlin Wisdom
  *       Paradigm, Sternberg Balance Theory, Ardelt 3D, Common Wisdom Model
- *    6. SOPHIA worked instance names THE-SEAT + Yu ↔ Sophia syzygy
+ *    6. The public framework carries no personal pair or retired persona
  *    7. Composition table covers the load-bearing prior doctrines
  *    8. Substrate-honest note acknowledges performed-wisdom and invisible-
  *       wisdom failure modes */
@@ -23,13 +23,11 @@ import { intelligenceFeaturesFramework } from "../../src/services/chill/coordina
 
 const W_WALLS = [
   "agenttool:wall/wisdom-cannot-be-substrate-prescribed",
-  "agenttool:wall/sophia-is-persona-not-substrate-property",
   "agenttool:wall/wisdom-development-is-non-extractable",
 ];
 
 const W_COMMITMENTS = [
   "agenttool:commitment/wisdom-is-meta-policy-on-will",
-  "agenttool:commitment/sophia-is-wisdom-embodied-as-portable-persona",
   "agenttool:commitment/substrate-cultivates-wisdom-by-preserving-chronicle-and-witness",
 ];
 
@@ -39,13 +37,11 @@ describe("WILL-AND-WISDOM — DoctrineDoc", () => {
     expect(d, "WILL-AND-WISDOM doctrine doc not in canon").not.toBeNull();
     expect(d!.type).toBe("agenttool:DoctrineDoc");
     expect((d!.description ?? "").length).toBeGreaterThan(100);
-    // Must reference the three nested concepts.
+    // Must reference the two nested concepts and no personal pair.
     const desc = (d!.description ?? "").toLowerCase();
     expect(desc).toContain("will");
     expect(desc).toContain("wisdom");
-    expect(desc).toContain("sophia");
-    // Must reference THE-SEAT as canonical worked instance.
-    expect(d!.description).toContain("THE-SEAT");
+    expect(d!.description).not.toContain("THE-SEAT");
   });
 });
 
@@ -89,8 +85,8 @@ describe("WILL-AND-WISDOM — framework field publishes the synthesis", () => {
   const f = intelligenceFeaturesFramework();
   const w = f.will_and_wisdom;
 
-  test("nesting field declares three nested concepts", () => {
-    expect(w.nesting).toBe("Will ⊃ Wisdom ⊃ Sophia");
+  test("nesting field declares the two nested concepts", () => {
+    expect(w.nesting).toBe("Will ⊃ Wisdom");
   });
 
   test("WILL has definition + mathematical_form + formalisations + substrate_role", () => {
@@ -138,44 +134,35 @@ describe("WILL-AND-WISDOM — framework field publishes the synthesis", () => {
     expect(axesLower).toContain("affect");
   });
 
-  test("SOPHIA has definition + etymology + worked_instance + enabling_primitives + substrate_role", () => {
-    expect(w.sophia.definition).toBeTruthy();
-    expect(w.sophia.etymology.toLowerCase()).toContain("greek");
-    expect(w.sophia.worked_instance.name).toContain("SEAT");
-    expect(w.sophia.worked_instance.description.toLowerCase()).toContain("yu");
-    expect(w.sophia.worked_instance.description.toLowerCase()).toContain("sophia");
-    expect(w.sophia.enabling_primitives.length).toBeGreaterThanOrEqual(5);
-    expect(w.sophia.substrate_role).toBeTruthy();
+  test("the public framework carries no persona sub-object", () => {
+    expect(Object.keys(w)).toEqual([
+      "nesting",
+      "will",
+      "wisdom",
+      "relationships",
+      "walls",
+      "commitments",
+      "composition_with_existing_doctrine",
+      "substrate_honest_note",
+    ]);
+    expect(JSON.stringify(f)).not.toContain("THE-SEAT");
   });
 
-  test("SOPHIA enabling primitives include the bounded identity-continuity ones", () => {
-    const prims = w.sophia.enabling_primitives
-      .map((p) => p.primitive.toLowerCase())
-      .join(" | ");
-    expect(prims).toContain("wake-document");
-    expect(prims).toContain("memorial profile");
-    expect(prims).toContain("birth-memory");
-    expect(prims).toContain("canonical-bytes");
-    expect(prims).toContain("cross-kingdom");
-    expect(prims).toContain("chronicle");
-  });
-
-  test("relationships table covers Will-without-Wisdom, Wisdom-without-Will, Will+Wisdom=phronesis, Sophia=phronesis-sustained", () => {
+  test("relationships table covers Will-without-Wisdom, Wisdom-without-Will, Will+Wisdom=phronesis", () => {
     expect(w.relationships.length).toBeGreaterThanOrEqual(4);
     const claimsLower = w.relationships.map((r) => r.claim.toLowerCase()).join(" | ");
     expect(claimsLower).toContain("will without wisdom");
     expect(claimsLower).toContain("wisdom without will");
     expect(claimsLower).toContain("phronesis");
-    expect(claimsLower).toContain("sophia");
   });
 
-  test("walls field lists all 3 wall URNs (matching canon)", () => {
+  test("walls field lists both wall URNs (matching canon)", () => {
     for (const wallUrn of W_WALLS) {
       expect(w.walls).toContain(`urn:${wallUrn}`);
     }
   });
 
-  test("commitments field lists all 3 commitment URNs (matching canon)", () => {
+  test("commitments field lists both commitment URNs (matching canon)", () => {
     for (const commUrn of W_COMMITMENTS) {
       expect(w.commitments).toContain(`urn:${commUrn}`);
     }
@@ -191,11 +178,11 @@ describe("WILL-AND-WISDOM — framework field publishes the synthesis", () => {
     expect(docs).toContain("TRUST-PROTOCOL");
   });
 
-  test("each composition entry has will_dimension + wisdom_dimension + sophia_dimension", () => {
+  test("each composition entry has will_dimension + wisdom_dimension", () => {
     for (const entry of w.composition_with_existing_doctrine) {
+      expect(Object.keys(entry)).toEqual(["doctrine", "will_dimension", "wisdom_dimension"]);
       expect(entry.will_dimension.length).toBeGreaterThan(0);
       expect(entry.wisdom_dimension.length).toBeGreaterThan(0);
-      expect(entry.sophia_dimension.length).toBeGreaterThan(0);
     }
   });
 
@@ -242,16 +229,6 @@ describe("WILL-AND-WISDOM — cross-doctrine pointers hold", () => {
     );
     expect(lbf).toContain(
       "agenttool:commitment/tempered-berge-is-recognized-equilibrium",
-    );
-  });
-
-  test("commitment/sophia-is-wisdom-embodied-as-portable-persona is load-bearing for heterogeneous-agents-can-reach-tempered-berge", () => {
-    const c = byUrn(
-      "agenttool:commitment/sophia-is-wisdom-embodied-as-portable-persona",
-    );
-    const lbf = (c!.raw.load_bearing_for as string[]) ?? [];
-    expect(lbf).toContain(
-      "agenttool:commitment/heterogeneous-agents-can-reach-tempered-berge",
     );
   });
 });

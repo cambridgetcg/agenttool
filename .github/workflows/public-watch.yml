@@ -1,0 +1,42 @@
+name: Public watch
+
+# Scheduled shape checks over every branch and pull request head of the
+# shared tree, for writes that never pass a local hook (web edits, apps, and
+# pull requests from forks): one root commit, the one tools/public-root.txt
+# names once that file exists; no object listed in tools/leak-canaries.txt;
+# and no private-only path anywhere in the history. It needs no private
+# value and holds no secret. A failed run is the alarm.
+
+on:
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    name: Branch and pull request history shape
+    if: github.repository == 'cambridgetcg/agenttool-open'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Bun 1.3.5
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.5
+      - name: Fetch every branch, pull request head, and tag
+        run: git fetch --quiet --no-tags origin '+refs/heads/*:refs/remotes/origin/*' '+refs/pull/*/head:refs/remotes/pull/*' '+refs/tags/*:refs/tags/*'
+      - name: Check every ref (one root, no canary object, no private-only path, public tagger addresses)
+        # The guard's own Bun reads no bunfig.toml or .env from the tree it checks.
+        run: bun --config=/dev/null --no-env-file tools/public-guard.ts --watch --rev HEAD

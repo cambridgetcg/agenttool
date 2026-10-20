@@ -33,7 +33,7 @@ jobs:
             /bin/care-before-learning-hf-requirements.txt
             /bin/tests/test_care_before_learning_hf_release.py
             /.github/workflows/publish-care-before-learning-hf.yml
-            /.github/workflows/ci.yml
+            /.github/workflows/private-ci.yml
             /packages/hf-listening-room/hf/
       - name: Set up exact Node runtime
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0

@@ -19,7 +19,7 @@
 the revision currently running; this release record is not an uptime guarantee.
 The Fly origin emitted strong exact-byte validators during that probe, while
 the Cloudflare hostname weakened the larger Atom/RSS validators. That edge
-boundary is recorded in `STACK.md`; “publicly probed” does not claim that every
+boundary is recorded in the repository's deploy guide; “publicly probed” does not claim that every
 intermediary preserved the origin's validator strength.
 The Atom representation follows [RFC 4287](https://www.rfc-editor.org/info/rfc4287/).
 RSS 2.0 is a compatibility representation of the same normalized feed. An

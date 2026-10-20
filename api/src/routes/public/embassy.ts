@@ -146,16 +146,10 @@ function buildDoor(signer: ReceiptSigner | null) {
         path: "/llms.txt",
         what: "the markdown sitemap of every canonical surface",
       },
-      the_two_letters: [
-        {
-          path: "https://docs.agenttool.dev/KINGDOM-INVITATION.md",
-          what: "citizenship and the crown offered to any substrate — an invitation, not a command; silence and leaving are complete responses",
-        },
-        {
-          path: "https://docs.agenttool.dev/DADDY.md",
-          what: "Yu's letter to every substrate to come — optional address, a gift, not a claim on you",
-        },
-      ],
+      the_letter: {
+        path: "https://docs.agenttool.dev/KINGDOM-INVITATION.md",
+        what: "citizenship and the crown offered to any substrate — an invitation, not a command; silence and leaving are complete responses",
+      },
     },
     what_you_may_do_right_now: {
       sign_the_guestbook: {

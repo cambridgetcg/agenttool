@@ -1,13 +1,14 @@
 /** /v1/wallets — wallet CRUD + fund + spend + policy + freeze + transactions. */
 
 import { zValidator } from "@hono/zod-validator";
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { db } from "../../db/client";
 import { MAX_EXACT_WALLET_BALANCE } from "../../db/schema/economy";
-import { getRedis } from "../../services/economy/redis";
+import { errors, fail } from "../../lib/errors";
+import { economyRedisEnabled, getRedis } from "../../services/economy/redis";
 import {
   createWallet,
   freezeWallet,
@@ -129,9 +130,29 @@ router.post(
 );
 
 // ─── Spend ──────────────────────────────────────────────────────────────────
+// Spend enforces hourly/daily policy through Redis counters. A process run
+// with workers disabled (AGENTTOOL_DISABLE_WORKERS=1) builds no economy Redis
+// client, so it refuses with stable 503 wallet_spend_resting before
+// validation, ownership lookup, or any debit. The flag is per process: the
+// hosted API reports it at /public/plans, and the canonical deploy
+// (deploy-api.yml, api/fly.toml) neither sets nor checks it. When workers are
+// not disabled the route behaves exactly as before. Contract:
+// docs/SAFETY-BOUNDARIES.md ("Generic escrow create and wallet spend —
+// resting").
+
+const walletSpendNeedsRedis: MiddlewareHandler<ProjectContext> = async (
+  c,
+  next,
+) => {
+  if (!economyRedisEnabled()) {
+    return fail(c, errors.walletSpendResting(), 503);
+  }
+  await next();
+};
 
 router.post(
   "/:id/spend",
+  walletSpendNeedsRedis,
   zValidator(
     "json",
     z.object({

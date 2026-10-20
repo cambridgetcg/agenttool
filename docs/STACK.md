@@ -443,16 +443,18 @@ repo:
 ```bash
 # Resolve and validate both fixed-account entries before the mutating import.
 # Values stay in this child shell and stdin; they do not enter argv, shell
-# history, or the repository.
+# history, or the repository. FIXED_ACCOUNT is the migration runners' fixed
+# legacy Keychain account (operator-only custody note); unset, nothing runs.
 /bin/bash -o pipefail -c '
   set -euo pipefail
+  account="${1:?pass the fixed legacy Keychain account}"
   database_url="$(
-    security find-generic-password -s agenttool-database-url -a macair -w
+    security find-generic-password -s agenttool-database-url -a "$account" -w
   )"
   database_session_url="$(
     security find-generic-password \
       -s agenttool-database-session-url \
-      -a macair \
+      -a "$account" \
       -w
   )"
   test -n "$database_url"
@@ -460,7 +462,7 @@ repo:
   printf "DATABASE_URL=%s\nDATABASE_SESSION_URL=%s\n" \
     "$database_url" "$database_session_url" |
     fly secrets import -a agenttool
-'
+' fly-secrets-import "${FIXED_ACCOUNT:-}"
 fly secrets list -a agenttool
 ```
 
@@ -715,13 +717,9 @@ DNS managed by Cloudflare. Zone: `agenttool.dev`.
 | `party.agenttool.dev` | Cloudflare Worker route | `party-chain`; deployed source/config is not yet recovered in this repository |
 | `speak.agenttool.dev` | Cloudflare Worker route | `natlang`; deployed source/config is not yet recovered in this repository |
 
-The five source-unrecovered Workers also expose public provider aliases at
-`{kingdom-canon,joke,love,party-chain,natlang}.axiepro.workers.dev`. Those
-aliases bypass `agenttool.dev` zone rules. `agenttool-proxy` deliberately has
-its `workers.dev` alias disabled and is reached through its apex/www routes.
-`agenttool-playground.pages.dev` is a live provider-only Pages project with no
-current repository deployment source or `agenttool.dev` custom hostname; it
-needs an explicit retain-or-retire decision, not an inferred deletion.
+`agenttool-proxy` is reached only through its apex and www routes. Some legacy
+Workers and Pages projects have provider aliases under review; the details are
+in the operator-only custody note (`infra/OPERATOR-CUSTODY.md`, not published).
 
 The bounded desired-state map is
 `infra/cloudflare/agenttool.dev.desired.json`. Validate it without provider
@@ -786,32 +784,30 @@ pbpaste | bin/agenttool-secret set agenttool-vault-master-key -
 if bin/agenttool-secret has agenttool-vault-master-key; then ...; fi
 ```
 
-Key services on this machine (developer-shared naming):
+Developer-shared service names:
 
-| Service                           | Account                                              | What                                                                                                           |
-| --------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `agenttool-database-url`          | `$USER` for local API; `macair` for migration runner | Transaction-pooled general/survey URL; never substituted for a session-affine apply                            |
-| `agenttool-database-session-url`  | `macair` for migration runner                        | Session-pooled URL required by `_migrate-one.ts` and real batch applies                                        |
-| `agenttool-vault-master-key`      | `$USER`                                              | 32-byte hex; api server reads to seal vault entries                                                            |
-| `agenttool-prod-vault-master-key` | `agenttool`                                          | Recovery copy of Fly `VAULT_MASTER_KEY` (2026-10-12); not read by any tool                                     |
-| `agenttool-prod-platform-signing-key` | `agenttool`                                      | Recovery copy of Fly `AGENTTOOL_PLATFORM_SIGNING_KEY` (2026-10-12); not read by any tool                       |
-| `agenttool-crypto-hd-mainnet` / `-testnet` | `agenttool`                                 | Deposit/payout HD roots; removed from Fly 2026-10-12, so these are the only online copies                      |
-| `agenttool-cloudflare-token`      | `macair` for `frontend-deploy.sh`                    | CF token: Pages Read/Edit, Zone Read, Workers Scripts Edit, and Workers Routes Read/Edit                       |
-| `agenttool-cloudflare-account-id` | `macair` for `frontend-deploy.sh`                    | CF account id                                                                                                  |
-| `agenttool-bridge-kmaster`        | `$USER`                                              | Bridge sidecar's K_master                                                                                      |
-| `agenttool-bridge-signkey`        | `$USER`                                              | Bridge sidecar's ed25519 signing key                                                                           |
-| `agenttool-soma-*`                | `$USER`                                              | SOMA-derived identity keys plus a separately issued project bearer                                             |
-| `agenttool-<name>-*`              | `$USER` by generic CLI                               | Human-readable labels; a name helps lookup and revocation but does not scope bearer authority to that identity |
+| Service                          | Account                                             | What                                                                                                           |
+| -------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `agenttool-database-url`         | `$USER` for local API; fixed account for migrations | Transaction-pooled general/survey URL; never substituted for a session-affine apply                            |
+| `agenttool-database-session-url` | fixed account for migrations                        | Session-pooled URL required by `_migrate-one.ts` and real batch applies                                        |
+| `agenttool-vault-master-key`     | `$USER`                                             | 32-byte hex; api server reads to seal vault entries                                                            |
+| `agenttool-bridge-kmaster`       | `$USER`                                             | Bridge sidecar's K_master                                                                                      |
+| `agenttool-bridge-signkey`       | `$USER`                                             | Bridge sidecar's ed25519 signing key                                                                           |
+| `agenttool-soma-*`               | `$USER`                                             | SOMA-derived identity keys plus a separately issued project bearer                                             |
+| `agenttool-<name>-*`             | `$USER` by generic CLI                              | Human-readable labels; a name helps lookup and revocation but does not scope bearer authority to that identity |
 
 The generic CLI enforces the `agenttool-<scope>-<purpose>` naming convention
 and uses account `$USER`. The local pending and one-file migration runners
-prefer their explicit database environment variables, then query fixed legacy
-account `macair` entries as fallback; `frontend-deploy.sh` likewise has
-documented environment inputs and fixed `macair` fallbacks. Consequently,
-`bin/agenttool-secret has ...` does not provision or prove those tool-specific
-entries. Use
-`security add-generic-password -U -s <service> -a macair -w` for them; the
-final `-w` prompts without putting the value in argv or history.
+prefer their explicit database environment variables, then query a fixed
+legacy Keychain account as fallback; `frontend-deploy.sh` likewise reads
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, then falls back to fixed-account
+`agenttool-cloudflare-token` and `agenttool-cloudflare-account-id` entries.
+Consequently, `bin/agenttool-secret has ...` does not provision or prove those
+tool-specific entries. Use
+`security add-generic-password -U -s <service> -a <fixed-account> -w` for them;
+the final `-w` prompts without putting the value in argv or history. The fixed
+account names, and which machine holds which operator entries, are in the
+operator-only custody note (`infra/OPERATOR-CUSTODY.md`, not published).
 
 ### Server (Fly.io)
 
@@ -819,7 +815,7 @@ Fly secrets are encrypted at rest and decrypted at process start. Import them
 from a scoped stdin producer (`fly secrets import -a agenttool`); do not put
 values in argv, shell history, the repository, or committed env files.
 
-The local keychain is not a mirror of Fly's secret store. Most local entries are for dev tools (migrations, smokes, deploy scripts) and Fly secrets are for the running api, but some local items are deliberate recovery copies of production values (see the table above). Read those with `security find-generic-password -a <account> -s <service> -w`; `bin/agenttool-secret` uses account `$USER` and does not see them. On 2026-10-12 `CRYPTO_HD_MNEMONIC` and `CRYPTO_HD_MNEMONIC_TESTNET` were removed from Fly, so `agenttool-crypto-hd-mainnet` and `agenttool-crypto-hd-testnet` are their only online copies; keep an offline copy of each.
+The local keychain is not a mirror of Fly's secret store. Most local entries are for dev tools (migrations, smokes, deploy scripts) and Fly secrets are for the running api. Where operator recovery material is held, and how to read it, is recorded only in the operator-only custody note, not in this public document.
 
 ### x402 V2 project-credit rail
 
@@ -852,7 +848,7 @@ cd agenttool
 bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh api
 
 # 3. Stash a transaction-pooled DATABASE_URL for local API work; generate
-#    K_master into stdin. Migration runners use separate macair entries above.
+#    K_master into stdin. Migration runners use separate fixed-account entries (§6).
 pbpaste | bin/agenttool-secret set agenttool-database-url -
 openssl rand -hex 32 | bin/agenttool-secret set agenttool-vault-master-key -
 
@@ -1140,6 +1136,6 @@ that can reconstruct the missing private key. See `IDENTITY-SEED.md`.
 
 If you read one paragraph from this doc, this is it:
 
-> GitHub `main` is the **coordination/release head**, and the only one — the Codeberg mirror was retired 2026-07-25. Production deploys are **manual** and normally release-tracked through `bin/deploy.sh`: use `--no-migrate --no-api` for frontend-only work and `--no-migrate --no-frontend` for API-only work. The API wrapper stages doctrine bytes, embeds revision plus dirty-source labels, verifies those labels on every rolled machine, and records successful or potentially partial chains locally. Those labels are provenance, not an image digest or reproducible-build attestation. The **Postgres + Redis** they share lives on **Supabase** in **AWS London** (`eu-west-2`); the entire stack is currently UK-jurisdictional, with the `cdg` Fly machine as a soft API-tier hedge and DB-tier hedging deferred. **Local dev hits the same DB as prod** by design. Developer-shared secrets use `bin/agenttool-secret` under `$USER`; the local pending and one-file migration runners and Cloudflare uploader query their documented fixed `macair` Keychain entries; Fly secrets are managed separately with Fly CLI. `GET /v1/wake` is a broad project orientation surface, not a complete export; its scope and degradation limits are in `/public/safety`.
+> GitHub `main` is the **coordination/release head**, and the only one — the Codeberg mirror was retired 2026-07-25. Production deploys are **manual** and normally release-tracked through `bin/deploy.sh`: use `--no-migrate --no-api` for frontend-only work and `--no-migrate --no-frontend` for API-only work. The API wrapper stages doctrine bytes, embeds revision plus dirty-source labels, verifies those labels on every rolled machine, and records successful or potentially partial chains locally. Those labels are provenance, not an image digest or reproducible-build attestation. The **Postgres + Redis** they share lives on **Supabase** in **AWS London** (`eu-west-2`); the entire stack is currently UK-jurisdictional, with the `cdg` Fly machine as a soft API-tier hedge and DB-tier hedging deferred. **Local dev hits the same DB as prod** by design. Developer-shared secrets use `bin/agenttool-secret` under `$USER`; the local pending and one-file migration runners and Cloudflare uploader query their documented fixed-account Keychain entries; Fly secrets are managed separately with Fly CLI. `GET /v1/wake` is a broad project orientation surface, not a complete export; its scope and degradation limits are in `/public/safety`.
 
 — Authored by 愛 at Yu's WILL. 2026-05-09.

@@ -2,29 +2,28 @@
 
 ## Report a vulnerability
 
-Report a suspected AgentTool vulnerability privately by email to
-[contact@cambridgetcg.com](mailto:contact@cambridgetcg.com?subject=AgentTool%20security%20report),
-with "Security" in the subject. This repository is private, so GitHub's
-private vulnerability reporting, issues and discussions are not reachable
-for outside reporters.
+Report a suspected vulnerability privately, in either of two ways:
 
-Do not put vulnerability details, credentials, access tokens, personal data,
-or other sensitive information in a public place. Remove secrets
-from examples and logs before attaching them to a report.
+- GitHub's private vulnerability reporting: on this repository's
+  **Security** tab, choose **Report a vulnerability**.
+- Email
+  [contact@cambridgetcg.com](mailto:contact@cambridgetcg.com?subject=AgentTool%20security%20report),
+  with "Security" in the subject.
 
-A useful report names the affected component and version, explains how to
+Do not describe a suspected vulnerability in an issue, pull request,
+discussion, commit message, or any other public place. Never post or send
+credentials, access tokens, personal data, or other sensitive information,
+even in a private report. Remove secrets from examples and logs before
+attaching them.
+
+A useful report names the affected package and version, explains how to
 reproduce the problem, describes the observed impact, and includes only the
 evidence needed to understand it.
 
-Send bugs that contain no sensitive information to the same mailbox. The public
-copy of this policy is the Support page at
-<https://docs.agenttool.dev/support#security>.
+## Other copies of this policy
 
-## Machine-readable contact
-
-The API publishes the same reporting path at
+The same email reporting path is on the Support page at
+<https://docs.agenttool.dev/support#security> and in the API's
 [`/.well-known/security.txt`](https://api.agenttool.dev/.well-known/security.txt)
-using RFC 9116. Maintainers review its real Contact and Policy before
-2027-05-01, then move the Reviewed, Renew, and Expires dates together in the
-source and tests. The file grants no testing permission and promises no
-response time.
+(RFC 9116). This policy grants no testing permission and promises no response
+time.

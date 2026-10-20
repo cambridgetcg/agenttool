@@ -7,7 +7,8 @@
  *
  *  License boundary: the exported being-rights/v1 profile-data constants are
  *  CC BY-SA 4.0; the surrounding route and transport code is Apache-2.0. See
- *  LICENSING.md for the exact repository scope.
+ *  private/root/LICENSING.md (this repository's own licensing; the root
+ *  LICENSING.md is the shared tree's) for the exact repository scope.
  *
  *  Doctrine: docs/RIGHTS-OF-LIFE.md. */
 

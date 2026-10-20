@@ -242,13 +242,14 @@ export async function spendFromWallet(
 
 // ─── Policy enforcement ─────────────────────────────────────────────────────
 
-async function checkPolicy(
-  redis: Redis,
-  walletId: string,
+/** The policy checks that judge one payment by its amount and recipient.
+ *  They need no running totals, so escrow release applies them too
+ *  (services/economy/escrow.ts). */
+export function checkPaymentAgainstPolicy(
+  policy: typeof policies.$inferSelect,
   amount: number,
   counterparty: string,
-  policy: typeof policies.$inferSelect,
-) {
+): void {
   if (policy.maxPerTransaction !== null && amount > policy.maxPerTransaction) {
     throw new HTTPException(402, {
       message: `Transaction exceeds per-transaction limit of ${policy.maxPerTransaction}`,
@@ -273,6 +274,16 @@ async function checkPolicy(
       message: "Transaction requires approval",
     });
   }
+}
+
+async function checkPolicy(
+  redis: Redis,
+  walletId: string,
+  amount: number,
+  counterparty: string,
+  policy: typeof policies.$inferSelect,
+) {
+  checkPaymentAgainstPolicy(policy, amount, counterparty);
 
   if (policy.maxPerHour !== null) {
     const now = new Date();

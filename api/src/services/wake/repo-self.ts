@@ -67,7 +67,7 @@ const MODULES: ModuleSelf[] = [
       "Persistent strand storage has no plaintext thought column or decrypt path; caller encryption is not proven and runtime custody is declared separately",
       "No auto-retry on payout broadcast",
       "Public and authenticated route families have explicit boundaries",
-      "Idempotency-Key caching on selected authenticated write prefixes fails open without Redis; POST /v1/escrows separately offers optional PostgreSQL-backed durable creation keys",
+      "Idempotency-Key caching on selected authenticated write prefixes fails open without Redis; POST /v1/escrows separately retains optional PostgreSQL-backed durable creation keys, but generic escrow create is resting (503 escrow_resting)",
     ],
     claude_md: "api/CLAUDE.md",
   },
@@ -327,7 +327,7 @@ export const REPO_SELF: RepoSelf = {
   origin: {
     primary_remote: "https://github.com/cambridgetcg/agenttool.git",
     license:
-      "Apache-2.0 by default; file-level terms and exceptions are documented in LICENSING.md.",
+      "Apache-2.0 by default; file-level terms and exceptions are documented in private/root/LICENSING.md.",
   },
   modules: MODULES,
   doctrine: DOCTRINE,

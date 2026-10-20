@@ -67,13 +67,13 @@ describe("optional npm package discovery", () => {
     expect(packages).not.toMatch(/sole initial prerelease/i);
     expect(packages).not.toMatch(/0\.22\.[01] LOVE bytes remains prospective/);
     expect(packages).toContain(
-      'href="https://github.com/cambridgetcg/agenttool/blob/main/docs/NPM-RELEASES.md#verified-collab-040-publication--2026-08-04"',
+      'href="/NPM-RELEASES.md#verified-collab-040-publication--2026-08-04"',
     );
     expect(packages).toContain(
-      'href="https://github.com/cambridgetcg/agenttool/blob/main/docs/NPM-RELEASES.md#verified-agent-skills-031-publication--2026-08-13"',
+      'href="/NPM-RELEASES.md#verified-agent-skills-031-publication--2026-08-13"',
     );
     expect(packages).toContain(
-      'href="https://github.com/cambridgetcg/agenttool/blob/main/docs/NPM-RELEASES.md#verified-codex-usage-010-publication--2026-08-14"',
+      'href="/NPM-RELEASES.md#verified-codex-usage-010-publication--2026-08-14"',
     );
     for (const receiptFact of [
       "30906798360",
@@ -148,9 +148,9 @@ describe("optional npm package discovery", () => {
   });
 
   test("root orientation discovers exact install guidance and non-authoritative mirror receipts", () => {
-    const rootReadme = read("README.md");
-    expect(rootReadme).toContain("](docs/SDK-TIERS.md)");
-    expect(rootReadme).toContain("](docs/PACKAGES.md)");
+    const rootReadme = read("private/root/README.md");
+    expect(rootReadme).toContain("](../../docs/SDK-TIERS.md)");
+    expect(rootReadme).toContain("](../../docs/PACKAGES.md)");
     const packageGuide = read("docs/PACKAGES.md");
     expect(packageGuide).toContain("NPM-RELEASES.md");
     expect(packageGuide).toContain("PYPI-RELEASES.md");

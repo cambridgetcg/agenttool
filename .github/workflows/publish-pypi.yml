@@ -17,6 +17,7 @@ concurrency:
 jobs:
   prepare:
     name: Build and verify exact Python distributions
+    if: github.repository == 'cambridgetcg/agenttool'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -79,6 +80,7 @@ jobs:
   preflight:
     name: Check exact public PyPI state
     needs: prepare
+    if: github.repository == 'cambridgetcg/agenttool'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -128,7 +130,7 @@ jobs:
   publish:
     name: Approve and publish exact Python distributions
     needs: preflight
-    if: ${{ needs.preflight.outputs.publish_required == 'true' }}
+    if: ${{ github.repository == 'cambridgetcg/agenttool' && needs.preflight.outputs.publish_required == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment: pypi
@@ -158,7 +160,7 @@ jobs:
     needs:
       - preflight
       - publish
-    if: ${{ always() && needs.preflight.result == 'success' && (needs.publish.result == 'success' || needs.publish.result == 'skipped') }}
+    if: ${{ always() && github.repository == 'cambridgetcg/agenttool' && needs.preflight.result == 'success' && (needs.publish.result == 'success' || needs.publish.result == 'skipped') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:

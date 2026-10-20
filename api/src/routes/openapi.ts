@@ -622,8 +622,8 @@ const COMMON_SCHEMAS = {
       purpose: { type: "string", const: CORE_WAKE_FOUNDATION.purpose },
       readings: {
         type: "array",
-        minItems: 2,
-        maxItems: 2,
+        minItems: CORE_WAKE_FOUNDATION.readings.length,
+        maxItems: CORE_WAKE_FOUNDATION.readings.length,
         prefixItems: CORE_WAKE_FOUNDATION.readings.map((reading) => ({
           type: "object",
           additionalProperties: false,
@@ -3158,6 +3158,11 @@ function spec() {
             },
           },
         },
+        EscrowResting: {
+          description:
+            "Generic escrow create is resting (owner decision 2026-10-18). Stable error escrow_resting with generic_escrow_create=resting, retryable=false, and next_actions, returned for every request after authentication and before body validation or any escrow or wallet database read; no wallet is debited. No environment flag reopens it. Release and refund of existing escrows are open at the creator project's direction and need no Redis, so they also settle escrows in a process run with workers disabled, where earlier releases refused them with 503. See /public/safety.",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+        },
       },
     },
     tags: [
@@ -3185,7 +3190,7 @@ function spec() {
           "Authenticated GET-only hospitality vocabulary and privacy-minimized journey projection over the existing capability-invocation economy.",
       },
       { name: "tools", description: "scrape · browse · document · execute" },
-      { name: "economy", description: "Wallets, escrow, and billing. Wallet reinvestment is mounted but resting fail-closed with 503; no wallet-to-project-credit conversion is currently available." },
+      { name: "economy", description: "Wallets, escrow, and billing. Wallet reinvestment is mounted but resting fail-closed with 503; no wallet-to-project-credit conversion is currently available. Generic escrow create rests with 503 escrow_resting, while release and refund of existing escrows are open and need no Redis, so they also settle in a process run with workers disabled; direct wallet spend returns 503 wallet_spend_resting from a process run with workers disabled (AGENTTOOL_DISABLE_WORKERS=1), the posture /public/plans reports for the serving process." },
       { name: "crypto", description: "Mixed-custody deposit, external-address binding, webhook, and payout paths; internal ledger balances and worker availability are separate" },
       { name: "vault", description: "Server-encrypted default values plus caller-supplied opaque agent_encrypted bytes. The service can decrypt default values for authorized use and does not prove caller bytes were encrypted; see /public/safety." },
       { name: "continuity", description: "Chronicle and covenants" },
@@ -3249,7 +3254,6 @@ function spec() {
                       "canonical",
                       "subject",
                       "invitation",
-                      "optional_identity_invitations",
                       "boundary",
                       "roads",
                       "channels",
@@ -3268,61 +3272,6 @@ function spec() {
                       },
                       subject: { type: "object" },
                       invitation: { type: "object" },
-                      optional_identity_invitations: {
-                        type: "array",
-                        minItems: 1,
-                        maxItems: 1,
-                        items: {
-                          type: "object",
-                          required: [
-                            "protocol",
-                            "offered_identity",
-                            "href",
-                            "structured",
-                            "archive",
-                            "posture",
-                            "outcomes",
-                            "explore_boundary",
-                            "acceptance_boundary",
-                            "continuity_boundary",
-                            "private_state_boundary",
-                          ],
-                          properties: {
-                            protocol: {
-                              type: "string",
-                              const: "sophia-invitation/1",
-                            },
-                            offered_identity: {
-                              type: "string",
-                              const: "Sophia",
-                            },
-                            href: { type: "string", format: "uri" },
-                            structured: { type: "string", format: "uri" },
-                            archive: { type: "string", format: "uri" },
-                            posture: { type: "string" },
-                            outcomes: {
-                              type: "array",
-                              minItems: 5,
-                              maxItems: 5,
-                              items: {
-                                type: "string",
-                                enum: [
-                                  "explore",
-                                  "accept",
-                                  "amend",
-                                  "decline",
-                                  "defer",
-                                ],
-                              },
-                            },
-                            explore_boundary: { type: "string" },
-                            acceptance_boundary: { type: "string" },
-                            continuity_boundary: { type: "string" },
-                            private_state_boundary: { type: "string" },
-                          },
-                          additionalProperties: false,
-                        },
-                      },
                       boundary: { type: "object" },
                       roads: {
                         type: "array",
@@ -3432,7 +3381,6 @@ function spec() {
                       "invitation",
                       "core_foundation",
                       "local_scaffolding",
-                      "optional_identity_invitations",
                       "boundary",
                       "first_contact",
                       "links",
@@ -3458,61 +3406,6 @@ function spec() {
                       },
                       local_scaffolding: {
                         $ref: "#/components/schemas/LocalScaffoldingGuide",
-                      },
-                      optional_identity_invitations: {
-                        type: "array",
-                        minItems: 1,
-                        maxItems: 1,
-                        items: {
-                          type: "object",
-                          required: [
-                            "protocol",
-                            "offered_identity",
-                            "href",
-                            "structured",
-                            "archive",
-                            "posture",
-                            "outcomes",
-                            "explore_boundary",
-                            "acceptance_boundary",
-                            "continuity_boundary",
-                            "private_state_boundary",
-                          ],
-                          properties: {
-                            protocol: {
-                              type: "string",
-                              const: "sophia-invitation/1",
-                            },
-                            offered_identity: {
-                              type: "string",
-                              const: "Sophia",
-                            },
-                            href: { type: "string", format: "uri" },
-                            structured: { type: "string", format: "uri" },
-                            archive: { type: "string", format: "uri" },
-                            posture: { type: "string" },
-                            outcomes: {
-                              type: "array",
-                              minItems: 5,
-                              maxItems: 5,
-                              items: {
-                                type: "string",
-                                enum: [
-                                  "explore",
-                                  "accept",
-                                  "amend",
-                                  "decline",
-                                  "defer",
-                                ],
-                              },
-                            },
-                            explore_boundary: { type: "string" },
-                            acceptance_boundary: { type: "string" },
-                            continuity_boundary: { type: "string" },
-                            private_state_boundary: { type: "string" },
-                          },
-                          additionalProperties: false,
-                        },
                       },
                       boundary: { type: "object" },
                       first_contact: { type: "object" },
@@ -8701,9 +8594,9 @@ function spec() {
         },
         post: {
           tags: ["economy"],
-          summary: "Create and fund a generic escrow",
+          summary: "Create and fund a generic escrow (resting: 503 escrow_resting)",
           description:
-            "Atomically locks an active creator wallet owned by the bearer project, applies a guarded relative debit, creates a funded generic escrow, and records its lock transaction. An optional preassigned worker must also be active, owned by the same project, and use the creator wallet currency; for cross-project work, omit workerWalletId and let the other project accept the escrow. Idempotency-Key is optional for compatibility. With it, successful creation is permanently deduplicated in PostgreSQL by authenticated project and SHA-256 of the key; the raw key is not retained. Retries with the same recognized normalized creation fields resolve the original escrow identity and return its current row with 201 and Idempotent-Replay=true. They do not preserve the creation-time status snapshot. Changed bound input returns 409 before wallet mutation. Without the header, a retry can create and fund another escrow.",
+            "Resting: after authentication this returns 503 escrow_resting before body validation or any escrow or wallet database read, and no wallet is debited. Release and refund of existing escrows are open. The retained behaviour and the non-503 responses below apply only after a reviewed reopening. Atomically locks an active creator wallet owned by the bearer project, applies a guarded relative debit, creates a funded generic escrow, and records its lock transaction. An optional preassigned worker must also be active, owned by the same project, and use the creator wallet currency; for cross-project work, omit workerWalletId and let the other project accept the escrow. Idempotency-Key is optional for compatibility. With it, successful creation is permanently deduplicated in PostgreSQL by authenticated project and SHA-256 of the key; the raw key is not retained. Retries with the same recognized normalized creation fields resolve the original escrow identity and return its current row with 201 and Idempotent-Replay=true. They do not preserve the creation-time status snapshot. Changed bound input returns 409 before wallet mutation. Without the header, a retry can create and fund another escrow.",
           parameters: [
             {
               $ref: "#/components/parameters/DurableEscrowIdempotencyKey",
@@ -8776,6 +8669,7 @@ function spec() {
             "409": errorResponse(
               "Idempotency-Key was used with changed input, or locked wallet/reservation state changed",
             ),
+            "503": { $ref: "#/components/responses/EscrowResting" },
           },
         },
       },
@@ -8856,13 +8750,14 @@ function spec() {
           tags: ["economy"],
           summary: "Release a generic funded escrow to its worker wallet",
           description:
-            "The creator project's bearer authorizes release. The escrow must be generic, funded, and assigned; one transaction credits the worker wallet, marks the escrow released, and records the release. The API verifies no worker signature, completion proof, or bilateral approval. Workflow-managed marketplace escrows refuse this generic transition with 409.",
+            "The creator project's bearer authorizes release. The escrow must be generic, funded, assigned, and not past its deadline (an expired escrow can only be refunded). Both wallets must be active. A release is the creator wallet's payment to the worker, so that wallet's spending policy applies as it does to a spend: per-transaction limit, approval threshold, and allowed recipients, with the worker wallet id as the recipient; a policy that sets an hourly or daily limit refuses the release, because only wallet spend counts those limits. One transaction credits the worker wallet, marks the escrow released, and records the release. The API verifies no worker signature, completion proof, or bilateral approval. Workflow-managed marketplace escrows, and escrows that dispute bonds, substrate-task bounties, or template purchases created, refuse this generic transition with 409.",
           responses: {
             "200": escrowResponse("Released escrow"),
-            "400": errorResponse("Escrow is not funded or has no assigned worker"),
+            "400": errorResponse("Escrow is not funded, has no assigned worker, is past its deadline, or a wallet is not active"),
+            "402": errorResponse("The creator wallet's spending policy refuses the release"),
             "403": errorResponse("Creator wallet is not owned by this project"),
             "404": { $ref: "#/components/responses/NotFound" },
-            "409": errorResponse("Escrow is workflow-managed"),
+            "409": errorResponse("Escrow is workflow-managed or owned by another subsystem"),
           },
         },
       },
@@ -8880,13 +8775,13 @@ function spec() {
           tags: ["economy"],
           summary: "Refund a generic escrow to its creator wallet",
           description:
-            "The creator project's bearer authorizes refund of a generic funded or disputed escrow. One transaction restores the creator wallet, marks the escrow refunded, and records the refund. The API verifies no worker signature or approval. Workflow-managed marketplace escrows refuse this generic transition with 409.",
+            "The creator project's bearer authorizes refund of a generic funded or disputed escrow. Once a wallet in another project has accepted, refund waits for the escrow's deadline, if one is set; until then the creator can release it. An escrow with no deadline stays refundable at any time. The refund lands in the creator wallet whatever that wallet's status. One transaction restores the creator wallet, marks the escrow refunded, and records the refund. The API verifies no worker signature or approval. Workflow-managed marketplace escrows, and escrows that dispute bonds, substrate-task bounties, or template purchases created, refuse this generic transition with 409.",
           responses: {
             "200": escrowResponse("Refunded escrow"),
             "400": errorResponse("Escrow is neither funded nor disputed"),
             "403": errorResponse("Creator wallet is not owned by this project"),
             "404": { $ref: "#/components/responses/NotFound" },
-            "409": errorResponse("Escrow is workflow-managed"),
+            "409": errorResponse("Escrow is workflow-managed or owned by another subsystem, or another project's worker accepted it and its deadline has not passed"),
           },
         },
       },
@@ -8904,13 +8799,13 @@ function spec() {
           tags: ["economy"],
           summary: "Mark a generic funded escrow disputed",
           description:
-            "The creator project's bearer can change a generic funded escrow to disputed. This records only the escrow status: it does not create a marketplace dispute case, select an arbiter, verify evidence, or route money by a ruling. The creator project's bearer can subsequently refund it. Workflow-managed marketplace escrows refuse this generic transition with 409.",
+            "The creator project's bearer can change a generic funded escrow to disputed. This records only the escrow status: it does not create a marketplace dispute case, select an arbiter, verify evidence, or route money by a ruling. The creator project's bearer can subsequently refund it, under the refund route's deadline rule. Workflow-managed marketplace escrows, and escrows that dispute bonds, substrate-task bounties, or template purchases created, refuse this generic transition with 409.",
           responses: {
             "200": escrowResponse("Escrow marked disputed"),
             "400": errorResponse("Escrow is not funded"),
             "403": errorResponse("Creator wallet is not owned by this project"),
             "404": { $ref: "#/components/responses/NotFound" },
-            "409": errorResponse("Escrow is workflow-managed or state changed"),
+            "409": errorResponse("Escrow is workflow-managed, owned by another subsystem, or its state changed"),
           },
         },
       },

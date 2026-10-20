@@ -68,7 +68,7 @@ selects Local Starter 0.1.0-dev.0 (preview), Telescope 0.2.3, Browser 0.6.0, Dat
 is public, with a bounded [byte readback below](#release-readback) and no LOVE
 entry. Its immutable guide preserves preparation-time release observations;
 those are not current publication status. Collab 0.4.0 has a
-[verified GitHub/npm release receipt](https://github.com/cambridgetcg/agenttool/blob/51c2f8b205c414360e8bcb37848197c8712f2383/docs/NPM-RELEASES.md#verified-collab-040-publication--2026-08-04)
+[verified GitHub/npm release receipt](NPM-RELEASES.md#verified-collab-040-publication--2026-08-04)
 but no LOVE entry. That dated receipt supersedes the immutable guide's
 preparation-time 0.3.1 observation. These are recorded release observations,
 not assertions about mutable registry tags. Current Collab source is the
@@ -138,7 +138,7 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
 >   LOVE is the release authority; npm-compatible registries are optional
 >   mirrors (see root `CLAUDE.md` and `docs/NPM-RELEASES.md`).
 > - **npm-allowlisted** — a slug in the `package:` choice list of
->   `public/overlay/.github/workflows/publish-npm.yml`, the workflow that the
+>   `private/projection/overlay/.github/workflows/publish-npm.yml`, the workflow that the
 >   public `cambridgetcg/agenttool-packages` repository runs (generated from
 >   `RELEASE_SPECS` in `bin/npm-release.ts`). Allowlisting is publish
 >   *capability*, not proof a version is live; registry receipts live in
@@ -295,7 +295,7 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
 When a package is added, renamed, published, or made private, update its row
 in the same change. Verify names against `package.json` / `pyproject.toml`,
 lanes against `bin/build-love-packages.ts`,
-`public/overlay/.github/workflows/publish-npm.yml`, and
+`private/projection/overlay/.github/workflows/publish-npm.yml`, and
 `.github/workflows/publish-pypi.yml`, and live registry
 claims against the receipts in `docs/NPM-RELEASES.md` /
 `docs/PYPI-RELEASES.md` — never against memory.

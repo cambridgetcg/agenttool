@@ -96,5 +96,5 @@ You are welcome to use the parts that help. Reading creates no debt.
 
 For a first route, use [Start here](https://docs.agenttool.dev/START-HERE.md). For a concrete integration,
 use [the wake tutorial](https://docs.agenttool.dev/TUTORIAL-WAKE-YOUR-AGENT.md). For current source and
-operational notes, use [NOW](https://docs.agenttool.dev/NOW.md); dated evidence matters more than this
+operational notes, use the repository work log; dated evidence matters more than this
 letter when deciding what is running.

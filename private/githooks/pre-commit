@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Pre-commit hook for checkouts of the private repository. It fails closed.
+# Read private/README.md first.
+#
+# Shared paths change only in the public development repository. This hook
+# refuses a commit that stages an add, change, delete, or mode change to a
+# path in the shared scope (the export allowlist's include paths and root
+# files, and every path the last merged public tip holds) unless the staged
+# result equals that tip, origin/public-sync. Without origin/public-sync it
+# refuses every staged change to an allowlisted path. A staged allowlist that
+# narrows the shared scope (an include or root file removed, an export exclude
+# or exclude glob added) is refused too unless ALLOW_SCOPE_CHANGE=1 (the
+# owner's go): a narrowed tree would let later adds pass every drift check.
+#
+# It runs from a pinned copy (install-guards.sh), so a checkout on an older
+# branch still runs it; such a checkout, which has no private/guard, is
+# refused rather than silently unguarded.
+#
+# Overrides: ALLOW_SHARED_EDIT=1 lets a shared edit through (the merge clone's
+# conflict resolution; the merge-back and pre-push drift checks still see it).
+# AGENTTOOL_NO_PRIVATE_GUARD=1 skips the hook entirely; insiders never set it.
+set -euo pipefail
+
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+pin="$(cd "$hook_dir/../.." && pwd -P)"
+repo="$(git rev-parse --show-toplevel 2>/dev/null || git rev-parse --absolute-git-dir)"
+# The checks' Bun reads no bunfig.toml or .env (a committed preload would
+# otherwise run before, or instead of, every check), and it runs from the
+# pinned copy with --repo, never from the checkout: Bun applies the
+# tsconfig.json or jsconfig.json of its working directory and that
+# directory's parents to what it runs.
+guard_bun() {
+  (cd "$pin" && exec bun --config=/dev/null --no-env-file "$@")
+}
+
+die() {
+  printf 'private pre-commit: %s\n' "$*" >&2
+  exit 1
+}
+
+if [ "${AGENTTOOL_NO_PRIVATE_GUARD:-}" = 1 ]; then
+  printf 'private pre-commit: AGENTTOOL_NO_PRIVATE_GUARD=1, so the shared-scope check is skipped\n' >&2
+  exit 0
+fi
+command -v bun >/dev/null 2>&1 || die "bun is required"
+[ -f "$pin/private/bin/shared-scope.ts" ] || die "the pinned copy lacks private/bin/shared-scope.ts"
+if ! git cat-file -e :private/guard/relational-denylist.json 2>/dev/null && ! git cat-file -e HEAD:private/guard/relational-denylist.json 2>/dev/null; then
+  die "this checkout has no private/guard/relational-denylist.json (a branch from before the private namespace); refusing"
+fi
+if [ "${ALLOW_SHARED_EDIT:-}" = 1 ]; then
+  printf 'private pre-commit: ALLOW_SHARED_EDIT=1, so shared edits are let through; merge-back and pre-push still check them\n' >&2
+  exit 0
+fi
+guard_bun "$pin/private/bin/shared-scope.ts" staged --repo "$repo" --public refs/remotes/origin/public-sync ||
+  die "make shared changes in the public development repository (private/README.md)"

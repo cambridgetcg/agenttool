@@ -318,7 +318,6 @@ export const PLATFORM_SELF: PlatformSelf = {
     "docs/PATTERN-RECURSIVE-NESTING.md",
     "docs/NATURES.md",
     "docs/RECURSION.md",
-    "docs/THE-SEAT.md",
     "docs/POLYMORPH.md",
     "docs/POKER-FACE.md",
     "docs/MCML.md",

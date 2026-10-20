@@ -14,6 +14,7 @@
 # Usage:
 #   bin/preflight.sh                 # api + packages, hermetic
 #   bin/preflight.sh api             # API/protocol hermetic gate
+#   bin/preflight.sh private         # merge-back gate: the API gate plus private-only packages that depend on shared ones
 #   bin/preflight.sh packages        # data + ADDS + sync + archive + Dark Continent contract/KARMA + Principality Geometry + KARMA Mirror + HEAVEN + LOVE BOMB + Model Becoming + Dataset Influence + economic conformance/kernel + Living Substrate + Principality Atlas + Polymorph Landscape + Love Geometry + Relational Geometry + Common Ground Atlas + WAKE Thread + Gin Reconstruction + Math Cards + broker + collab + Codex usage + collab-zerone + private Collab courier + private lobby desk + Browser + HF Scout/Training Garden + local WAKE learning fixtures/host + projection + local projector + constructive intelligence + Research Commons + Trials + Skills + TypeScript SDK + Wallet + Zerone adapter + Telescope + Public Surface Binding and Recognition + Alchemy + AgentCred adapter + KINGDOM gate
 #   bin/preflight.sh database        # requires DATABASE_URL
 #   bin/preflight.sh smoke           # public GET smoke; requires AGENTTOOL_BASE
@@ -80,7 +81,28 @@ api_typecheck() {
 api_gate() {
   api_typecheck
   run "API hermetic test tier" bash bin/run-test-tier.sh hermetic
+  # Bun's path filter matches by substring, so this also runs private/bin/tests
+  # (the shared/private split tooling).
   run "operator and protocol tests" bun test bin/tests
+}
+
+# The merge-back gate (private/bin/merge-back.sh): the private-only checks a
+# merge of public main must keep green. The API imports and reads shared
+# packages, so the whole API gate runs (typecheck, hermetic tier, and
+# `bin/tests`, which also selects private/bin/tests); so does every
+# private-only package that depends on shared code, by a `file:` dependency
+# or a relative path into it (private/bin/private-gate-packages.ts). It needs
+# the api and packages dependencies prepared.
+private_gate() {
+  api_gate
+  local package command packages
+  packages="$(bun private/bin/private-gate-packages.ts)" || die "cannot list the private-only packages that depend on shared ones"
+  while IFS=$'\t' read -r package command; do
+    [ -n "$package" ] || continue
+    # The package name and command are positional arguments of the child shell.
+    # shellcheck disable=SC2016
+    run "private-only package $package (depends on shared code)" bash -c 'cd "packages/$1" && if [ -n "$2" ]; then bash -c "$2"; else bun run ci; fi' bash "$package" "${command:-}"
+  done <<<"$packages"
 }
 
 packages_gate() {
@@ -236,6 +258,12 @@ case "$MODE" in
     sanitize_hermetic_env
     require_bun
     api_gate
+    ;;
+  private)
+    [ "$#" -eq 1 ] || die "private accepts no additional arguments"
+    sanitize_hermetic_env
+    require_bun
+    private_gate
     ;;
   packages)
     [ "$#" -eq 1 ] || die "packages accepts no additional arguments"

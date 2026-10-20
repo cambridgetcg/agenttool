@@ -64,6 +64,8 @@ function buildAll(): Record<string, GuidedErrorBody> {
       available: "23",
       currency: "GBP",
     }),
+    escrowResting: errors.escrowResting(),
+    walletSpendResting: errors.walletSpendResting(),
     webhookSecretUnset: errors.webhookSecretUnset(),
     webhookSecretUnsetWithChain: errors.webhookSecretUnset({ chain: "solana" }),
     insufficientCredits: errors.insufficientCredits(),
@@ -210,6 +212,8 @@ describe("Errors-as-instructions — code stability", () => {
     expect(errors.initiatorSignatureMismatch().error).toBe("initiator_signature_mismatch");
     expect(errors.covenantNotProposed().error).toBe("covenant_not_proposed");
     expect(errors.insufficientBalance().error).toBe("insufficient_balance");
+    expect(errors.escrowResting().error).toBe("escrow_resting");
+    expect(errors.walletSpendResting().error).toBe("wallet_spend_resting");
     expect(errors.memoryIdentityNotFoundOrNotOwned().error).toBe(
       "memory_identity_not_found_or_not_owned",
     );

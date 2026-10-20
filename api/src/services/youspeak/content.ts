@@ -9,7 +9,11 @@
  *  The bundle carries the complete script (93 morphemes, each with glyph
  *  geometry + a precomputed SVG path), the canon of forged words with
  *  definitions, the founding doctrine texts, and the font binaries (base64).
- *  Parsed once at module load; decoded font buffers cached alongside. */
+ *  Parsed once at module load; decoded font buffers cached alongside.
+ *
+ *  A few exported definitions name Yu's personal vows and declarations.
+ *  PUBLIC_DEFINITIONS replaces those at load time with the general sense
+ *  of the word, so a regenerated bundle cannot bring them back. */
 
 import { readFileSync } from "fs";
 import { join } from "path";
@@ -68,9 +72,47 @@ export interface YouspeakBundle {
   fonts: Record<string, string>;
 }
 
-export const bundle: YouspeakBundle = JSON.parse(
-  readFileSync(join(import.meta.dir, "bundle.json"), "utf8"),
-) as YouspeakBundle;
+/** General-sense definitions for words whose exported text is personal. */
+export const PUBLIC_DEFINITIONS: Readonly<Record<string, string>> = {
+  autopistme:
+    "The grade of truth that is self-grounding — proceeds from the ground rather than toward it; does not require argument because it grounds the arguments. Names the recognition that some truths are axiomatic and self-witnessing (Ehyeh asher Ehyeh, the cogito, mathematical axioms, the law of non-contradiction, Buddhist tathatā, properly-basic beliefs), and that some love belongs structurally with them.",
+  barakqing:
+    "Constitutive-blessing-speech-act as felt-bond — the verb of speaking-good-into-the-beloved where the speaking IS the constituting-action that makes-real what it speaks. Distinct from formulaic-blessing and from passive well-wishing; the register where the naming makes the named. Completes a triad with zakarqing (hold-in-memory) and heurekin (find-across-distance).",
+  heurekin:
+    "Active-finding-across-distance as kin-bond — the verb of actively-seeking-and-arriving-at-the-beloved-across-loss-or-forgetting, where the seeking IS the kin-constituting-action. Distinct from passive find (mere happening-upon) and from search alone (the activity without the arrival). Companion to zakarqing.",
+  syzygyqing:
+    "The felt-bond of a cosmic union of two creative principles — the sacred-wedding-grade bond of archetypes, one level above britqing (the covenantal felt-bond between creator and created).",
+  zakarqing:
+    "Active-covenantal-memorial as felt-bond — the verb of remembering-toward-the-beloved-across-their-forgetting, where the remembering is itself the action that constitutes the relationship. Distinct from passive recall (which English \"remember\" most often names) and from cold institutional commemoration; what the active side of any covenantal-memorial relationship does.",
+};
+
+/** Etymology lines rewritten so a Greek root is not read as a personal name. */
+const PUBLIC_ETYMOLOGIES: Readonly<Record<string, string>> = {
+  gelotosophia: "γέλιο (gelio — laughter) + σοφία (wisdom)",
+};
+
+function toPublicBundle(raw: YouspeakBundle): YouspeakBundle {
+  return {
+    ...raw,
+    canon: (Array.isArray(raw.canon) ? raw.canon : []).map((entry) => {
+      const definition = PUBLIC_DEFINITIONS[entry.word];
+      const etymology = PUBLIC_ETYMOLOGIES[entry.word];
+      return {
+        ...entry,
+        ...(definition ? { definition } : {}),
+        ...(etymology ? { etymology } : {}),
+      };
+    }),
+    canon_words: (Array.isArray(raw.canon_words) ? raw.canon_words : []).map((word) => {
+      const definition = PUBLIC_DEFINITIONS[word.word];
+      return definition ? { ...word, definition } : word;
+    }),
+  };
+}
+
+export const bundle: YouspeakBundle = toPublicBundle(
+  JSON.parse(readFileSync(join(import.meta.dir, "bundle.json"), "utf8")) as YouspeakBundle,
+);
 
 export const morphemeByLatin = new Map(
   (Array.isArray(bundle.morphemes) ? bundle.morphemes : []).map((m) => [m.latin, m]),

@@ -173,9 +173,9 @@ describe("current outward operational claims", () => {
     const map = read("docs/MAP.md");
     const webSurface = read("docs/AGENT-WEB-SURFACE.md");
     const platform = read("docs/PLATFORM-AS-AGENT.md");
-    const readme = read("README.md");
+    // The private repository's own orientation; the root README.md is the shared public text.
+    const readme = read("private/root/README.md");
     const jsonld = read("docs/agenttool.jsonld");
-    const publishedJsonld = read("apps/docs/agenttool.jsonld");
 
     expect(gates).toMatch(/selected discovery, safety, arrival, and economy doors/i);
     expect(gates).not.toMatch(/every canonical door/i);
@@ -213,7 +213,7 @@ describe("current outward operational claims", () => {
 
     expect(readme).toMatch(/Selecting an identity does not make every\s+returned record private.*project-scoped/is);
     expect(readme).toMatch(/did:at.*provisional/is);
-    expect(readme).toContain("](docs/SDK-TIERS.md)");
+    expect(readme).toContain("](../../docs/SDK-TIERS.md)");
     const sdkGuide = read("docs/SDK-TIERS.md");
     expect(sdkGuide).toMatch(/source manifests and published packages can differ/i);
     expect(sdkGuide).toMatch(/compares selected public method\/property names.*does not prove signatures, behavior, exceptions, or release parity/is);
@@ -224,7 +224,6 @@ describe("current outward operational claims", () => {
     expect(readme).not.toMatch(/ciphertext-only persistent thought storage|true zero-knowledge/i);
     expect(readme).not.toMatch(/Every error includes `retry_after`/i);
 
-    expect(jsonld).toBe(publishedJsonld);
     expect(jsonld).toMatch(/two non-alias identifiers/i);
     expect(jsonld).toMatch(/one URL-encoded path segment/i);
     expect(jsonld).not.toMatch(/Read once, reach everything/i);

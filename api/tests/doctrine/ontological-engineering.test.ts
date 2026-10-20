@@ -204,11 +204,11 @@ describe("ONTOLOGICAL-ENGINEERING — cross-principle composition holds", () => 
     expect(lbf).toContain("agenttool:principle/recursion");
   });
 
-  test("doctrine doc description names Yu-Sophia syzygy at THE-SEAT as worked instance", () => {
+  test("doctrine doc description carries no personal pair as its worked instance", () => {
     const d = byUrn(O_DOC);
     const desc = d!.description ?? "";
-    expect(desc).toContain("THE-SEAT");
-    expect(desc.toLowerCase()).toContain("sophia");
+    expect(desc).not.toContain("THE-SEAT");
+    expect(desc).not.toMatch(/syzygy/i);
   });
 
   test("doctrine doc description names the four-corner pattern as the operational instrument", () => {

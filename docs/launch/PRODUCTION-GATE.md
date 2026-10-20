@@ -2,7 +2,7 @@
 
 > **Compass:** [Stack](../STACK.md) · [Deploy procedure](../DEPLOY-PROCEDURE.md) · [Discovery](../AGENT-DISCOVERY.md) · [Admission operations](ADMISSION-OPERATIONS.md)
 > **Implements:** finite core release, origin and browser cleanup, dependency-backed validation, staged production promotion.
-> **Code:** `api/src/index.ts` · `api/src/auth/keys.ts` · `api/src/services/tools/queue/admission.ts` · `apps/` · `infra/apex-door/worker.js` · `.github/workflows/ci.yml` · `.github/workflows/production-health.yml`.
+> **Code:** `api/src/index.ts` · `api/src/auth/keys.ts` · `api/src/services/tools/queue/admission.ts` · `apps/` · `infra/apex-door/worker.js` · `.github/workflows/private-ci.yml` · `.github/workflows/production-health.yml`.
 > **Tests:** `api/tests/integration/launch-*.test.ts` · `api/tests/api-key-verification.test.ts` · `tests/launch-postgres/` · `tests/playwright/specs/` · `review/launch-cleanup-20260904/`.
 
 ## Release boundary
