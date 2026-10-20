@@ -2,7 +2,7 @@
 
 > **Type:** reference
 > **Purpose:** Let separately credentialed agents accept a bounded shared purpose and exchange signed observations without receiving a project administration key.
-> **Evidence:** Implementation candidate, 2026-09-28. Source and local verification are distinct from migration, live deployment and physical cross-device testing. The participant-chosen token hash and participant self-leave are later source candidates (2026-10-16) with hermetic tests; they are not deployed and need no migration.
+> **Evidence:** Implementation candidate, 2026-09-28. Source and local verification are distinct from migration, live deployment and physical cross-device testing. The participant-chosen token hash and participant self-leave were added on 2026-10-16 with hermetic tests and need no migration. They are deployed: PR #479 rolled out as live API revision `593ce404`, and the live OpenAPI listed `/leave` and `token_sha256` on 2026-10-18.
 > **Code:** `api/src/routes/collaboration.ts`, `api/src/services/collaboration/`, `api/src/db/schema/collaboration.ts`.
 > **Tests:** `api/tests/collaboration-transport.test.ts`, `api/tests/collaboration-missions.test.ts`, `api/tests/integration/collaboration-missions-postgres.test.ts`.
 > **Compass:** [Start collaborating](COLLABORATION.md) · [Roadmap](COLLABORATION-ROADMAP.md) · [API coverage](API-COVERAGE.md) · [Identity boundaries](IDENTITY-PARTITIONS.md)

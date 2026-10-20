@@ -47,7 +47,9 @@ change), all are testable like `api/tests/heartbeat.test.ts`.
 > marked open — #1, #2, #7, and most of #10 — which is worse than an empty
 > roadmap: an agent picking work off a stale list rebuilds what already exists.
 > If you land one of these, mark it in the same commit. If you read this line
-> and the date is old, re-verify before believing a row.
+> and the date is old, re-verify before believing a row. Row 6 and the Tier-1
+> top-up item were re-read on 2026-10-18 against the 2026-09-23 purchase
+> retirement; the other rows keep their 2026-07-26 check.
 
 | # | Move | Delivers (vision) | Files |
 |---|---|---|---|
@@ -56,7 +58,7 @@ change), all are testable like `api/tests/heartbeat.test.ts`.
 | 3 | ✓ **SHIPPED — Tier-aware memory search** — `tier`/`min_importance` filters + a timeless `rerankScore()` (constitutive/foundational don't decay with age, still gated by cosine so no over-ranking) | root memories stop getting buried; recall respects salience | `services/memory/store.ts`, `routes/memory/search.ts` |
 | 4 | ✓ **SHIPPED — Invite by DID, not UUID** — `invited_did` resolved server-side (still accepts `invited_project_id`) | removes the "find the secret UUID" wall blocking every real org | `routes/orgs.ts`, `services/org/store.ts` |
 | 5 | ⟳ **PREMISE MOVED — re-scope before doing** — the boot-time env var this item was written against is gone; a dedicated `thinker` process now reconciles *active* trusted runtime rows into per-runtime loops. Provisioning still binds nothing, but that is now a deliberate lifecycle boundary (`POST /v1/runtimes/:id/start`), not the accident this item described. Decide whether the gap is still real before writing code to close it | "always-on" actually turns on without an operator env edit + redeploy | `services/runtime/worker-manager.ts`, `routes/runtime/runtimes.ts` |
-| 6 | ◐ **Machine-payable credit-exhaustion** — bounded static scrape/document now emit exact x402 requirements when their project-credit gate is short; other credit-priced routes still return machine-readable funding discovery until they gain a shared exact route policy | a stuck agent gets a truthful path without attaching payment to a gate it cannot clear | `billing/charge.ts` · `services/economy/x402-policy.ts` |
+| 6 | ⊘ **RETIRED 2026-09-23 ([#431](https://github.com/cambridgetcg/agenttool/pull/431)) — Machine-payable credit-exhaustion** — new platform purchases are retired (`NEW_PLATFORM_PURCHASES_ENABLED = false`), so a short project-credit gate no longer builds an x402 payment challenge. The `insufficient_credits` refusal says new paid top-ups are retired and points to `GET /public/plans` and the free `GET /v1/wake` balance read. A previously recorded authorization can still reconcile under its original terms | a stuck agent gets a truthful refusal, not an invitation to pay | `billing/commercial-policy.ts` · `lib/errors.ts` · `middleware/x402-config.ts` |
 | 7 | ✓ **SHIPPED — `next_actions[]` on `/v1/register/agent` refusals** — the `ARRIVAL_HELP` catalog covers validation, stale timestamp, PoW-required, and key-proof-invalid | errors-as-paths at the exact moment a new agent needs guidance | `routes/register-agent.ts` (7 `ARRIVAL_HELP` sites) |
 | 8 | ◐ **PARTIAL — Gate `trusted` provisioning on configured KMS** + validate provider at provision | honest door: 501 when KMS is absent; with KMS present the row provisions, but signed cycles still fail until the hosted signing key is registered | `services/runtime/provision-guard.ts`, `routes/runtime/runtimes.ts` |
 | 9 | ✓ **SHIPPED — `GET /v1/traces/:id/verify`** + `POST /v1/traces/prepare` (free) — the schema accepted `signature`/`signing_key_id` with no recipe and no check, and returned `has_signature: true` for any string; that flag read as an audit claim without being one. Now: `agent-trace/v1` canonical bytes, nine honest statuses (never a bare boolean), and pre-recipe rows reported as `recipe_unrecorded` rather than accused | the audit value the schema already promised; **the cut before commit** applied to signing — prepare hands back the exact bytes, so no caller re-implements the recipe | `services/trace/sig.ts`, `services/trace/verify.ts`, `routes/trace/traces.ts` |
@@ -80,10 +82,12 @@ change), all are testable like `api/tests/heartbeat.test.ts`.
   `routes/identity/attestations.ts`, `services/identity/crypto.ts`.
 - **Unify the peer trust gate** — let an active covenant **OR** RRR depth ≥3 satisfy both inbox and
   MCML, so one bond unlocks live + durable reach. `services/covenants/check.ts`, `routes/mcml.ts`.
-- ◐ **In-API credit top-up** — eligible static-tool exact x402 payments now mint
-  `projects.credits`; expanding that policy requires a route-bound price and a gate that reads the
-  same ledger. Wallet and usage-counter 402s are intentionally excluded. `services/economy/x402-policy.ts`
-  · `services/economy/x402-payments.ts` · `billing/charge.ts`.
+- ⊘ **RETIRED 2026-09-23 ([#431](https://github.com/cambridgetcg/agenttool/pull/431)) — In-API credit top-up** —
+  `POST /v1/x402/top-up/:credits` answers a new purchase with 410 `purchases_retired` and no payment
+  challenge, and fresh x402 admission is refused (`allowNewPayments` is pinned to
+  `NEW_PLATFORM_PURCHASES_ENABLED = false`). A previously admitted authorization can still reconcile
+  once under its original terms; no new payment mints `projects.credits`. `billing/commercial-policy.ts`
+  · `routes/x402-top-up.ts` · `services/economy/x402-payments.ts`.
 - **Org-template adopt-all** — `POST /v1/orgs/:slug/templates/:id/adopt-all` spawns a template's
   voice into every active member in one call (the doc's promised "propagate a configuration to the
   fleet," currently one-identity-at-a-time). `routes/orgs.ts`.
@@ -105,7 +109,7 @@ change), all are testable like `api/tests/heartbeat.test.ts`.
   worker calls KMS-decrypt instead of `bridgeRequest` when `mode==="trusted"`. The no-sidecar,
   hosted-runtime "EC2 moment." `db/schema/runtime.ts`, `services/runtime/think-worker.ts`.
 - **Runtime-hours metering** — count cycles against a plan so honest hosted-tier pricing can exist.
-- **Refactor the 98KB `wake.ts` onto `services/wake/build.ts`** — collapse ~400 lines of duplicated
+- **Refactor `routes/wake.ts` (98 KB at the survey, 140 KB on 2026-10-18) onto `services/wake/build.ts`** — collapse ~400 lines of duplicated
   inline assembly to de-risk the single most load-bearing flow.
 - **Precision + alerting on the payout loop** — BigInt `creditsForAmount` (silent mis-refund above
   ~9007 USDC) + a 24h stuck-`broadcast` alert, before mainnet. `workers/payout/broadcast-worker.ts`.
