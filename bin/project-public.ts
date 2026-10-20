@@ -88,6 +88,7 @@ import {
   type TreeFile,
 } from "../tools/public-guard.ts";
 import { formatDrift, pushProblems, recordedPublicRoot } from "../private/bin/shared-scope.ts";
+import { loadPrivateGuardFromRev, scanFiles } from "../private/bin/relational-scan.ts";
 
 export const ALLOWLIST_PATH = "private/projection/allowlist.json";
 export const ALLOWLIST_SCHEMA = "agenttool.public-allowlist/1";
@@ -491,6 +492,25 @@ export function guardProjection(repo: string, build: BuildResult, options: Guard
     if (rule !== undefined) findings.push({ layer: "relational", rule, path: file.path });
     if (file.oid === denylistBlob.oid || digest === denylist.sha256) {
       findings.push({ layer: "relational", rule: "relational/denylist-copy", path: file.path });
+    }
+  }
+
+  // The other private layers the export and the hooks apply: literal
+  // digests, terms in path names, and the canary and literal list by blob id.
+  // Private-only files the projection ships (a package the export withholds,
+  // the overlay) never pass the public repository's hooks. Once the source
+  // holds any of the private guard beyond the denylist, or records the
+  // public root, the whole guard must be there (loadPrivateGuardFromRev
+  // refuses a missing part).
+  if (
+    blobAt(repo, build.source, "private/guard/literal-sha256.json") !== undefined ||
+    blobAt(repo, build.source, "private/CANARY") !== undefined ||
+    recordedPublicRoot(repo, build.source) !== undefined
+  ) {
+    const key = (finding: Finding) => `${finding.path}\0${finding.rule}\0${finding.line ?? ""}`;
+    const seen = new Set(findings.map(key));
+    for (const finding of scanFiles(files, loadPrivateGuardFromRev(repo, build.source)).findings) {
+      if (!seen.has(key(finding))) findings.push(finding);
     }
   }
 

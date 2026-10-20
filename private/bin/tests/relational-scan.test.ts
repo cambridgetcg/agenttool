@@ -6,6 +6,7 @@ import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { userInfo } from "node:os";
 import { join } from "node:path";
+import { buildProjection, guardProjection } from "../../../bin/project-public.ts";
 import { lineSha256 } from "../../../tools/public-guard.ts";
 import {
   addGithubAccountLiterals,
@@ -23,6 +24,7 @@ import {
   scanCommits,
   scanFiles,
   scanTree,
+  tagFindings,
 } from "../relational-scan.ts";
 import { ACCOUNT_WORD, commitAll, DENYLIST, git, makePrivateRepo, OWNER_ADDRESS, publicCommit, ROOT, run, scratchDir, TERM, WITHHELD, write } from "./fixtures.ts";
 
@@ -242,6 +244,44 @@ describe("commits, refs, tags, and the CLI", () => {
     git(repo, "reset", "-q", "--hard", clean);
   });
 
+  test("a merged tag's mergetag header, an address in an identity's name half, and every level of a nested tag are scanned", () => {
+    const address = ["ally", "privatemail.net"].join("@");
+    const id = (path: string) => path.replace(/[0-9a-f]{12}/gu, "<id>");
+    // What `git merge <annotated tag>` records: the whole tag in a mergetag header.
+    const embedded = [`object ${base}`, "type commit", "tag side", `tagger Ally <${address}> 1760000000 +0000`, "", `side release ${TERM}`];
+    const merge = [
+      `tree ${git(repo, "rev-parse", `${clean}^{tree}`)}`,
+      `parent ${clean}`,
+      `parent ${base}`,
+      "author AgentTool <contact@cambridgetcg.com> 1760000000 +0000",
+      "committer AgentTool <contact@cambridgetcg.com> 1760000000 +0000",
+      `mergetag ${embedded.join("\n ")}`,
+      "",
+      "Merge tag 'side'",
+      "",
+    ].join("\n");
+    const merged = run(repo, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], { input: merge }).stdout.trim();
+    const found = scanCommits(repo, [`${clean}..${merged}`], guard, { messages: true, addresses: true });
+    expect([...new Set(found.map((finding) => `${id(finding.path)} ${finding.rule}`))].sort()).toEqual(["commit:<id>:mergetag personal/message-address", "commit:<id>:mergetag relational/r01"]);
+    expect(rules(scanCommits(repo, [`${clean}..${merged}`], guard, { messages: true }))).toEqual(["relational/r01"]);
+    // An address written as the author's or committer's name.
+    write(repo, "named.md", "named\n");
+    commitAll(repo, "an address for a name", { name: address, email: "contact@cambridgetcg.com" });
+    expect(scanCommits(repo, [`${clean}..HEAD`], guard, { messages: true })).toEqual([]);
+    expect([...new Set(scanCommits(repo, [`${clean}..HEAD`], guard, { messages: true, addresses: true }).map((finding) => `${id(finding.path)} ${finding.rule}`))].sort()).toEqual([
+      "commit:<id>:author-name personal/message-address",
+      "commit:<id>:committer-name personal/message-address",
+    ]);
+    git(repo, "reset", "-q", "--hard", clean);
+    // A tag of a tag: the inner one's tagger and message count as much as the outer one's.
+    const inner = run(repo, "git", ["mktag"], { input: [`object ${clean}`, "type commit", "tag inner", `tagger Ally <${address}> 1760000000 +0000`, "", `inner ${TERM}`, ""].join("\n") }).stdout.trim();
+    const outer = run(repo, "git", ["mktag"], { input: [`object ${inner}`, "type tag", "tag outer", "tagger AgentTool <contact@cambridgetcg.com> 1760000000 +0000", "", "outer release", ""].join("\n") }).stdout.trim();
+    git(repo, "update-ref", "refs/tags/outer", outer);
+    const tagged = tagFindings(repo, "refs/tags/outer", guard, { addresses: true }).map((finding) => `${finding.path.startsWith(`tag:${inner.slice(0, 12)}`) ? "inner" : "outer"} ${finding.rule}`);
+    expect([...new Set(tagged)].sort()).toEqual(["inner personal/tagger-address", "inner relational/r01"]);
+    git(repo, "update-ref", "-d", "refs/tags/outer");
+  });
+
   test("an annotated tag's message is scanned; a lightweight tag has none", () => {
     git(repo, "-c", "user.name=AgentTool", "-c", "user.email=contact@cambridgetcg.com", "tag", "-a", "v1", "-m", `release ${TERM}`);
     git(repo, "tag", "v2");
@@ -330,6 +370,21 @@ describe("add-literal", () => {
     expect(() => addLiteral(dir, { kind: "word", id: "l05", reason: "x", value: "two words" })).toThrow("one non-empty token");
     rmSync(dir, { recursive: true, force: true });
     expect(existsSync(dir)).toBe(false);
+  });
+});
+
+describe("the projection's private layers", () => {
+  test("literal digests and terms in path names reach what the projection ships though the export withholds it", () => {
+    const dir = join(scratch.dir, "projection");
+    mkdirSync(dir, { recursive: true });
+    const named = `packages/wallet/${TERM.replace(" ", "-")}.md`;
+    const projected = makePrivateRepo(dir, { files: { "packages/wallet/owner.md": `write to ${OWNER_ADDRESS}\n`, [named]: "named\n" } });
+    const found = guardProjection(projected.repo, buildProjection(projected.repo, "HEAD")).map(
+      (finding) => `${finding.rule} ${finding.path.startsWith("path-sha256:") ? "<name>" : finding.path}`,
+    );
+    expect(found).toContain("relational/l01 packages/wallet/owner.md");
+    expect(found).toContain("relational/r01 <name>");
+    expect(found.join("\n").toLowerCase()).not.toContain(TERM);
   });
 });
 

@@ -115,10 +115,13 @@ for update in "${updates[@]+"${updates[@]}"}"; do
     public_address "$committer_email" || die "${sha:0:12}: the committer address is not a public one"
   done < <(git log --format='%H%x09%ae%x09%ce' "${range[@]}" -- </dev/null)
 
-  if [ "$(git cat-file -t "$local_sha" </dev/null)" = tag ]; then
-    tagger="$(git cat-file tag "$local_sha" </dev/null | sed -n '/^$/q; s/^tagger .*<\([^>]*\)>.*$/\1/p')"
-    public_address "$tagger" || die "${local_sha:0:12}: the tagger address is not a public one"
-  fi
+  # An annotated tag, and every tag it points at in turn (a nested tag).
+  object="$local_sha"
+  while [ "$(git cat-file -t "$object" </dev/null)" = tag ]; do
+    tagger="$(git cat-file tag "$object" </dev/null | sed -n '/^$/q; s/^tagger .*<\([^>]*\)>.*$/\1/p')"
+    public_address "$tagger" || die "${object:0:12}: the tagger address is not a public one"
+    object="$(git cat-file tag "$object" </dev/null | sed -n '/^$/q; s/^object //p')"
+  done
 
   if git rev-list --objects "${range[@]}" -- </dev/null | cut -d' ' -f1 | grep -qxFf "$canaries"; then
     die "${commit:0:12}: a new object is a listed canary"

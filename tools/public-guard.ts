@@ -1456,6 +1456,22 @@ export function parseWatchAck(bytes: Uint8Array, source = WATCH_ACK_FILE): Map<s
  * the public list never silences it). No content layer runs, so this needs no
  * private value and no gitleaks.
  */
+/** The tagger address of an annotated tag and of every tag it points at in turn (a nested tag); "" where a tag has none. */
+export function taggerAddresses(cwd: string, ref: string): string[] {
+  const addresses: string[] = [];
+  let object = ref;
+  for (let depth = 0; depth < 64 && gitText(cwd, ["cat-file", "-t", object]).trim() === "tag"; depth += 1) {
+    const raw = gitText(cwd, ["cat-file", "tag", object]);
+    const split = raw.indexOf("\n\n");
+    const headers = split < 0 ? raw : raw.slice(0, split);
+    addresses.push(/^tagger [^\n]*<([^>]*)>/mu.exec(headers)?.[1] ?? "");
+    const next = /^object ([0-9a-f]{40,64})$/mu.exec(headers)?.[1];
+    if (next === undefined) break;
+    object = next;
+  }
+  return addresses;
+}
+
 export function watchFindings(cwd: string, rev = "HEAD", options: { ack?: Map<string, string> } = {}): Finding[] {
   if (gitText(cwd, ["rev-parse", "--is-shallow-repository"]).trim() === "true") {
     return [{ layer: "integrity", rule: "integrity/shallow-history", path: "(history)", detail: "fetch the full history" }];
@@ -1470,9 +1486,9 @@ export function watchFindings(cwd: string, rev = "HEAD", options: { ack?: Map<st
   const ackFile = files.find((file) => file.path === WATCH_ACK_FILE);
   const ack = options.ack ?? (ackFile === undefined ? new Map<string, string>() : parseWatchAck(ackFile.bytes));
   const commits = new Set<string>();
-  const refs = gitText(cwd, ["for-each-ref", "--format=%(refname)%00%(objecttype)%00%(taggeremail)"]).split("\n").filter(Boolean);
+  const refs = gitText(cwd, ["for-each-ref", "--format=%(refname)%00%(objecttype)"]).split("\n").filter(Boolean);
   for (const record of refs) {
-    const [line, type, tagger] = record.split("\0") as [string, string, string];
+    const [line, type] = record.split("\0") as [string, string];
     const peeled = git(cwd, ["rev-parse", "--verify", "--quiet", `${line}^{commit}`], { allowFailure: true });
     if (peeled.status !== 0) {
       findings.push({ layer: "integrity", rule: "integrity/ref-not-commit", path: line });
@@ -1481,7 +1497,7 @@ export function watchFindings(cwd: string, rev = "HEAD", options: { ack?: Map<st
     const commit = peeled.stdout.toString("utf8").trim();
     if (ack.get(watchRefKey(line)) === commit) continue;
     commits.add(commit);
-    if (type === "tag" && !isPublicAddress(tagger.replace(/^<|>$/gu, ""))) {
+    if (type === "tag" && taggerAddresses(cwd, line).some((address) => !isPublicAddress(address))) {
       findings.push({ layer: "personal", rule: "personal/tagger-address", path: line });
     }
     const roots = gitText(cwd, ["rev-list", "--max-parents=0", commit, "--"]).split("\n").filter(Boolean);

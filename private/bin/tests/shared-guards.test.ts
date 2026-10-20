@@ -158,6 +158,13 @@ describe("tree-mode history checks and watch mode", () => {
     expect(watchFindings(repo)).toEqual([]);
     run(repo, "git", ["tag", "-a", "v2", "-m", "release"], { env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_COMMITTER_NAME: "Ally", GIT_COMMITTER_EMAIL: ["ally", "privatemail.net"].join("@") } });
     expect(watchFindings(repo).map((finding) => `${finding.path} ${finding.rule}`)).toEqual(["refs/tags/v2 personal/tagger-address"]);
+    git(repo, "tag", "-d", "v2");
+    // A tag of a tag: the inner tagger counts too.
+    const head = git(repo, "rev-parse", "HEAD");
+    const inner = run(repo, "git", ["mktag"], { input: [`object ${head}`, "type commit", "tag inner", `tagger Ally <${["ally", "privatemail.net"].join("@")}> 1760000000 +0000`, "", "inner", ""].join("\n") }).stdout.trim();
+    const outer = run(repo, "git", ["mktag"], { input: [`object ${inner}`, "type tag", "tag v3", "tagger AgentTool <contact@cambridgetcg.com> 1760000000 +0000", "", "outer", ""].join("\n") }).stdout.trim();
+    git(repo, "update-ref", "refs/tags/v3", outer);
+    expect(watchFindings(repo).map((finding) => `${finding.path} ${finding.rule}`)).toEqual(["refs/tags/v3 personal/tagger-address"]);
     expect(isPublicAddress("1+someone@users.noreply.github.com") && isPublicAddress("noreply@github.com") && isPublicAddress("contact@cambridgetcg.com")).toBe(true);
     expect(isPublicAddress("someone@github.com") || isPublicAddress("a@b@users.noreply.github.com")).toBe(false);
   });

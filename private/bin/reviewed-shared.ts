@@ -20,8 +20,8 @@
  *   next to it differs from the record, so unreviewed shared code never runs
  *   inside a private tool;
  * - `sensitive` lists the guard-sensitive paths (the reviewed files, the
- *   hooks directory, .gitattributes, .github/, and any bunfig.toml,
- *   tsconfig.json, or jsconfig.json) that a range of public
+ *   hooks directory, .gitattributes, .github/, the two shared exception
+ *   lists, and any bunfig.toml, tsconfig.json, or jsconfig.json) that a range of public
  *   commits touches; merge-back refuses such a range unless the owner
  *   accepts that exact public tip, and then records the new digests;
  * - `write` records the current files after a review; `check` verifies.
@@ -61,6 +61,10 @@ function fold(path: string): string {
 export function guardSensitive(path: string): boolean {
   const folded = fold(path);
   if (REVIEWED_FILES.some((file) => fold(file) === folded)) return true;
+  // The shared exception lists: the projection applies them to private-only
+  // paths it ships too (the withheld wallet), so a public entry there could
+  // pre-allow a line no public check ever sees.
+  if (folded === "tools/public-guard-allow.json" || folded === ".gitleaksignore") return true;
   const base = folded.slice(folded.lastIndexOf("/") + 1);
   if (["bunfig.toml", ".bunfig.toml", "tsconfig.json", "jsconfig.json"].includes(base)) return true;
   return folded === ".gitattributes" || folded.startsWith("tools/githooks/") || folded === ".github" || folded.startsWith(".github/");

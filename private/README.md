@@ -95,7 +95,9 @@ public repository. [`bin/reviewed-shared.ts`](bin/reviewed-shared.ts) keeps
 them honest: every private tool refuses to run when a shared guard file
 differs from `guard/reviewed-shared.json`, install-guards.sh never pins such a
 commit, and merge-back stops (exit 9) on any public change to the guard
-files, the hooks, `.gitattributes`, `.github/`, or a Bun or TypeScript
+files, the hooks, `.gitattributes`, `.github/`, the two shared exception
+lists (`tools/public-guard-allow.json`, `.gitleaksignore`: the projection
+applies them to the private-only paths it ships too), or a Bun or TypeScript
 config (`bunfig.toml`, `tsconfig.json`, `jsconfig.json` at any depth) until
 the owner accepts that exact public tip with `--accept-guard-change <sha>`,
 which records the new digests. After editing a shared guard file here before
@@ -169,4 +171,8 @@ Change `PUBLIC_REPOSITORY` in [`public-repository.ts`](public-repository.ts),
 then run `bun private/public-repository.ts --rename-from <old owner/name>`,
 which rewrites the files that cannot import it (`NAME_COPIES`: the two shared
 workflows and this guide). Tools read the constant; the root-split test pins
-every copy.
+every copy. Each pinned hook holds both names as they were at its commit, so
+renaming either repository means re-pinning every recorded checkout
+(`install-guards.sh --verify` lists them) before the new name is used;
+otherwise an old pin would still let this repository be pushed to whatever
+then carries the private name.

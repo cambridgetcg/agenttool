@@ -539,6 +539,32 @@ export interface CommitScanOptions {
   addresses?: boolean;
 }
 
+/**
+ * A commit's headers other than tree, parent, author, committer, encoding,
+ * and the signatures, with continuation lines joined. A `mergetag` header
+ * (what `git merge` of an annotated tag writes) holds that whole tag: its
+ * tagger and message.
+ */
+export function extraCommitHeaders(raw: string): Array<{ name: string; value: string }> {
+  const split = raw.indexOf("\n\n");
+  const headers: Array<{ name: string; value: string }> = [];
+  for (const line of (split < 0 ? raw : raw.slice(0, split)).split("\n")) {
+    const last = headers[headers.length - 1];
+    if (line.startsWith(" ") && last !== undefined) {
+      last.value += `\n${line.slice(1)}`;
+      continue;
+    }
+    const space = line.indexOf(" ");
+    headers.push({ name: space < 0 ? line : line.slice(0, space), value: space < 0 ? "" : line.slice(space + 1) });
+  }
+  return headers.filter((header) => !["tree", "parent", "author", "committer", "encoding", "gpgsig", "gpgsig-sha256"].includes(header.name));
+}
+
+/** The name part of an identity header (`Name <address> time zone`), where an address does not belong. */
+function identityName(identity: string): string {
+  return identity.replace(/\s*<[^>]*>.*$/u, "");
+}
+
 /** Private layers (and, with `shapes`, the public shapes) over the commits a rev-list selects. */
 export function scanCommits(repo: string, revArgs: readonly string[], guard: PrivateGuard, options: CommitScanOptions): Finding[] {
   const findings: Finding[] = [];
@@ -552,7 +578,8 @@ export function scanCommits(repo: string, revArgs: readonly string[], guard: Pri
   if (options.messages) {
     const objects = readObjects(repo, commits);
     for (const commit of commits) {
-      const shape = parseCommit(decodeText(objects.get(commit) ?? Buffer.alloc(0)), { strict: false });
+      const raw = decodeText(objects.get(commit) ?? Buffer.alloc(0));
+      const shape = parseCommit(raw, { strict: false });
       const where = `commit:${commit.slice(0, 12)}`;
       findings.push(...privateTextFindings(`${where}:message`, shape.message, guard, options.shapes ? "secret" : "none"));
       if (options.addresses) findings.push(...messageAddressFindings(`${where}:message`, shape.message));
@@ -560,6 +587,13 @@ export function scanCommits(repo: string, revArgs: readonly string[], guard: Pri
         const identity = header.replace(/ \d+ [+-]\d{4}$/u, "");
         findings.push(...literalFindings(`${where}:${label}`, identity, guard.literals));
         findings.push(...scanText(`${where}:${label}`, identity, guard.denylist.rules));
+        // The address field is the hook's to check; an address in the name field is refused here.
+        if (options.addresses) findings.push(...messageAddressFindings(`${where}:${label}-name`, identityName(identity)));
+      }
+      // Every other header: a mergetag carries a whole tag (tagger and message).
+      for (const header of extraCommitHeaders(raw)) {
+        findings.push(...privateTextFindings(`${where}:${header.name}`, header.value, guard, options.shapes ? "secret" : "none"));
+        if (options.addresses) findings.push(...messageAddressFindings(`${where}:${header.name}`, header.value));
       }
     }
   }
@@ -612,27 +646,37 @@ export function scanCommits(repo: string, revArgs: readonly string[], guard: Pri
   return sortFindings(dedupe(findings));
 }
 
-/** An annotated tag's message and tagger (a lightweight tag has neither); with `addresses`, both must hold public addresses only. */
+/**
+ * An annotated tag's message and tagger (a lightweight tag has neither), and
+ * those of every tag it points at in turn (a nested tag); with `addresses`,
+ * each must hold public addresses only.
+ */
 export function tagFindings(repo: string, ref: string, guard: PrivateGuard, options: { addresses?: boolean } = {}): Finding[] {
   const type = git(repo, ["cat-file", "-t", ref], { allowFailure: true });
   if (type.status !== 0) throw new Error(`cannot read ${nameLabel("ref", ref)}`);
-  if (type.stdout.toString("utf8").trim() !== "tag") return [];
-  const raw = decodeText(git(repo, ["cat-file", "tag", ref]).stdout);
-  const split = raw.indexOf("\n\n");
-  const oid = git(repo, ["rev-parse", ref]).stdout.toString("utf8").trim();
-  const where = `tag:${oid.slice(0, 12)}`;
-  const headers = split < 0 ? raw : raw.slice(0, split);
-  const tagger = /^tagger (.*) \d+ [+-]\d{4}$/mu.exec(headers)?.[1] ?? "";
-  const message = split < 0 ? "" : raw.slice(split + 2);
-  const findings = [
-    ...privateTextFindings(`${where}:message`, message, guard, "secret"),
-    ...literalFindings(`${where}:tagger`, tagger, guard.literals),
-    ...scanText(`${where}:tagger`, tagger, guard.denylist.rules),
-  ];
-  if (options.addresses) {
-    const address = /<([^>]*)>\s*$/u.exec(tagger)?.[1] ?? "";
-    if (!isPublicAddress(address)) findings.push({ layer: "personal", rule: "personal/tagger-address", path: `${where}:tagger` });
-    findings.push(...messageAddressFindings(`${where}:message`, message));
+  const findings: Finding[] = [];
+  let oid = git(repo, ["rev-parse", ref]).stdout.toString("utf8").trim();
+  for (let depth = 0; depth < 64 && git(repo, ["cat-file", "-t", oid]).stdout.toString("utf8").trim() === "tag"; depth += 1) {
+    const raw = decodeText(git(repo, ["cat-file", "tag", oid]).stdout);
+    const split = raw.indexOf("\n\n");
+    const where = `tag:${oid.slice(0, 12)}`;
+    const headers = split < 0 ? raw : raw.slice(0, split);
+    const tagger = /^tagger (.*) \d+ [+-]\d{4}$/mu.exec(headers)?.[1] ?? "";
+    const message = split < 0 ? "" : raw.slice(split + 2);
+    findings.push(
+      ...privateTextFindings(`${where}:message`, message, guard, "secret"),
+      ...literalFindings(`${where}:tagger`, tagger, guard.literals),
+      ...scanText(`${where}:tagger`, tagger, guard.denylist.rules),
+    );
+    if (options.addresses) {
+      const address = /<([^>]*)>\s*$/u.exec(tagger)?.[1] ?? "";
+      if (!isPublicAddress(address)) findings.push({ layer: "personal", rule: "personal/tagger-address", path: `${where}:tagger` });
+      findings.push(...messageAddressFindings(`${where}:tagger-name`, identityName(tagger)));
+      findings.push(...messageAddressFindings(`${where}:message`, message));
+    }
+    const next = /^object ([0-9a-f]{40,64})$/mu.exec(headers)?.[1];
+    if (next === undefined) break;
+    oid = next;
   }
   return findings;
 }

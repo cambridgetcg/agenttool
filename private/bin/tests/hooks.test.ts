@@ -487,6 +487,40 @@ describe("the public clone's pre-push", () => {
     git(clone, "tag", "-d", "v-tagger");
   });
 
+  test("a nested tag's inner tagger, a merged tag's mergetag header, and an address as an identity's name are refused", () => {
+    const address = ["ally", "privatemail.net"].join("@");
+    const head = git(clone, "rev-parse", "HEAD");
+    const inner = run(clone, "git", ["mktag"], { input: [`object ${head}`, "type commit", "tag inner", `tagger Ally <${address}> 1760000000 +0000`, "", "inner", ""].join("\n") }).stdout.trim();
+    const outer = run(clone, "git", ["mktag"], { input: [`object ${inner}`, "type tag", "tag outer", "tagger AgentTool <contact@cambridgetcg.com> 1760000000 +0000", "", "outer", ""].join("\n") }).stdout.trim();
+    git(clone, "update-ref", "refs/tags/nested", outer);
+    const nested = push("refs/tags/nested");
+    expect(nested.status).not.toBe(0);
+    expect(nested.out).toContain("the tagger address is not a public one");
+    expect(nested.out).not.toContain(address);
+    git(clone, "update-ref", "-d", "refs/tags/nested");
+    // A merge of a tag whose message holds a term, recorded in the mergetag header only.
+    const tree = git(clone, "rev-parse", "HEAD^{tree}");
+    const env = cleanEnv({ GIT_AUTHOR_NAME: "AgentTool", GIT_AUTHOR_EMAIL: "contact@cambridgetcg.com", GIT_COMMITTER_NAME: "AgentTool", GIT_COMMITTER_EMAIL: "contact@cambridgetcg.com" });
+    const side = run(clone, "git", ["commit-tree", tree, "-p", head, "-m", "side"], { env }).stdout.trim();
+    const embedded = [`object ${side}`, "type commit", "tag side", "tagger AgentTool <contact@cambridgetcg.com> 1760000000 +0000", "", `side ${TERM}`];
+    const merge = run(clone, "git", ["hash-object", "-t", "commit", "-w", "--stdin"], {
+      input: [`tree ${tree}`, `parent ${head}`, `parent ${side}`, "author AgentTool <contact@cambridgetcg.com> 1760000000 +0000", "committer AgentTool <contact@cambridgetcg.com> 1760000000 +0000", `mergetag ${embedded.join("\n ")}`, "", "Merge tag 'side'", ""].join("\n"),
+    }).stdout.trim();
+    const merged = push(`${merge}:refs/heads/merged-tag`);
+    expect(merged.status).not.toBe(0);
+    expect(merged.out).toContain("the private scan refused");
+    expect(merged.out.toLowerCase()).not.toContain(TERM);
+    // An address written in the author's name, with a public author address.
+    write(clone, "packages/alpha/named.ts", "export const named = 1;\n");
+    git(clone, "add", "-A");
+    run(clone, "git", ["-c", "commit.gpgSign=false", "commit", "-q", "-m", "named"], { env: cleanEnv({ GIT_AUTHOR_NAME: address }) });
+    const named = push();
+    expect(named.status).not.toBe(0);
+    expect(named.out).toContain("the private scan refused");
+    expect(named.out).not.toContain(address);
+    reset();
+  });
+
   test("a commit another remote already has is still scanned when pushed here (T5)", () => {
     const side = join(scratch.dir, "public-side");
     git(scratch.dir, "clone", "-q", publicBare, side);
