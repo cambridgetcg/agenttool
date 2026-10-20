@@ -90,18 +90,18 @@ api_gate() {
 # merge of public main must keep green. The API imports and reads shared
 # packages, so the whole API gate runs (typecheck, hermetic tier, and
 # `bin/tests`, which also selects private/bin/tests); so does every
-# private-only package that depends on a shared one through a `file:`
-# dependency (private/bin/private-gate-packages.ts). It needs the api and
-# packages dependencies prepared.
+# private-only package that depends on shared code, by a `file:` dependency
+# or a relative path into it (private/bin/private-gate-packages.ts). It needs
+# the api and packages dependencies prepared.
 private_gate() {
   api_gate
-  local package packages
+  local package command packages
   packages="$(bun private/bin/private-gate-packages.ts)" || die "cannot list the private-only packages that depend on shared ones"
-  while IFS= read -r package; do
+  while IFS=$'\t' read -r package command; do
     [ -n "$package" ] || continue
-    # The package name is a positional argument of the child shell.
+    # The package name and command are positional arguments of the child shell.
     # shellcheck disable=SC2016
-    run "private-only package $package (depends on a shared package)" bash -c 'cd "packages/$1" && bun run ci' bash "$package"
+    run "private-only package $package (depends on shared code)" bash -c 'cd "packages/$1" && if [ -n "$2" ]; then bash -c "$2"; else bun run ci; fi' bash "$package" "${command:-}"
   done <<<"$packages"
 }
 
