@@ -84,9 +84,15 @@ fly secrets list -a agenttool
 
 Moved from STACK.md §5 (first recorded 2026-08-21, `e96e203d`):
 
-The five source-unrecovered Workers also expose public provider aliases at
-`{kingdom-canon,joke,love,party-chain,natlang}.axiepro.workers.dev`. Those
-aliases bypass `agenttool.dev` zone rules. `agenttool-proxy` deliberately has
+The five source-unrecovered Workers had public provider aliases at
+`{kingdom-canon,joke,love,party-chain,natlang}.axiepro.workers.dev`, which
+bypass `agenttool.dev` zone rules. On 2026-10-20 the aliases and preview URLs of
+`kingdom-canon`, `joke`, `love` and `party-chain` were disabled (the Workers are
+kept and still serve at `canon`, `joke`, `love` and `party.agenttool.dev`).
+`natlang` keeps its alias until the link to it in yutabase's LINKS.md points at
+`speak.agenttool.dev`. Undo one with the Workers API:
+`POST /accounts/<account>/workers/scripts/<name>/subdomain`
+`{"enabled": true, "previews_enabled": true}`. `agenttool-proxy` deliberately has
 its `workers.dev` alias disabled and is reached through its apex/www routes.
 `agenttool-playground.pages.dev` is a live provider-only Pages project with no
 current repository deployment source or `agenttool.dev` custom hostname; it

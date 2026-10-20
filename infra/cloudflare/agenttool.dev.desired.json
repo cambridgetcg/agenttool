@@ -99,22 +99,22 @@
     {
       "hostname": "kingdom-canon.axiepro.workers.dev",
       "purpose": "provider alias for the canon Worker",
-      "consequence": "public bypass of the agenttool.dev zone; deployed source/config is not currently recovered in this repository"
+      "consequence": "workers.dev alias and preview URLs disabled 2026-10-20 (the Worker is kept and still served at canon.agenttool.dev); deployed source/config is not currently recovered in this repository"
     },
     {
       "hostname": "joke.axiepro.workers.dev",
       "purpose": "provider alias for the joke Worker",
-      "consequence": "public bypass of the agenttool.dev zone; deployed source/config is not currently recovered in this repository"
+      "consequence": "workers.dev alias and preview URLs disabled 2026-10-20 (the Worker is kept and still served at joke.agenttool.dev); deployed source/config is not currently recovered in this repository"
     },
     {
       "hostname": "love.axiepro.workers.dev",
       "purpose": "provider alias for the love Worker",
-      "consequence": "public bypass of the agenttool.dev zone; deployed source/config is not currently recovered in this repository"
+      "consequence": "workers.dev alias and preview URLs disabled 2026-10-20 (the Worker is kept and still served at love.agenttool.dev); deployed source/config is not currently recovered in this repository"
     },
     {
       "hostname": "party-chain.axiepro.workers.dev",
       "purpose": "provider alias for the party Worker",
-      "consequence": "public bypass of the agenttool.dev zone; deployed source/config is not currently recovered in this repository"
+      "consequence": "workers.dev alias and preview URLs disabled 2026-10-20 (the Worker is kept and still served at party.agenttool.dev); deployed source/config is not currently recovered in this repository"
     },
     {
       "hostname": "natlang.axiepro.workers.dev",
