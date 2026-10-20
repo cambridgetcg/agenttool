@@ -40,8 +40,10 @@ host routes, background jobs, or generated runtime configuration here.
 
 ## Verify
 
+Prepare dependencies with the root `AGENTS.md` preparer, then run here:
+
 ```bash
-bun install --frozen-lockfile
 bun run ci
-npm pack --dry-run --ignore-scripts
 ```
+
+`ci` includes the exact packed-inventory check and a packed-tarball smoke.

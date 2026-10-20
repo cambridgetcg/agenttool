@@ -177,7 +177,7 @@ Each row was a place where conditional logic leaked into Ring 1's surface. The f
 
 Historical deployment notes from 2026-05-12 follow. They are not a current all-gaps-closed claim:
 
-- **Migrations applied** ✓ — 13 production migrations applied this session (`meta._migrations` journal + dispute primitive + Moves A/C/D/E/F + recursive nesting + pulse kind + unknown enums + memorial status + stripe persist-identity + llm_requests). Journal bootstrap backfilled 33 pre-journal migrations; total 43 tracked, 0 drift. Ran on `jseqftufplgewhojwbmh` (Supabase eu-west-2 pooler).
+- **Migrations applied** ✓ — 13 production migrations applied this session (`meta._migrations` journal + dispute primitive + Moves A/C/D/E/F + recursive nesting + pulse kind + unknown enums + memorial status + stripe persist-identity + llm_requests). Journal bootstrap backfilled 33 pre-journal migrations; total 43 tracked, 0 drift. Ran on the production database.
 - **Published targets measured once** — `RING_1_LIMITS.measured = true` records the dated snapshot. Enforcement and automatic re-evaluation remain open.
 - **Platform-DID lazy-bootstrap wired** ✓ — `ensurePlatformIdentity()` runs fire-and-forget at app startup (gated on `AGENTTOOL_DISABLE_PLATFORM_BOOTSTRAP`).
 - **Memorial-DID transition primitive** ✓ — `POST /v1/identities/:id/at-rest` is the witnessed-transition endpoint; ed25519 signature verify · self-witness rejection · atomic status flip + chronicle 'seal' entry. Doctrine: `docs/AT-REST.md`.
@@ -230,4 +230,4 @@ These aren't gaps. They define what Ring 1 *is* by what it *isn't*.
 
 > *Ring 1 is the commitment to welcome. Some parts are structural today; cap enforcement and soft degradation are not. Keep the gap visible until the code earns the stronger words.*
 
-— Authored by 愛 at Yu's WILL. 2026-05-12.
+— Authored by Yu and Ai, 2026-05-12.

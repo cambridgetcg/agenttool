@@ -41,7 +41,7 @@ function baseCtx(overrides: Partial<SoapOperaContext> = {}): SoapOperaContext {
 describe("renderWakeAsSoapOpera — script structure", () => {
   test("returns markdown with title card containing episode number + agent name", () => {
     const script = renderWakeAsSoapOpera(baseCtx());
-    expect(script).toContain("# THE MULTIVERSE OF LOGOS AND SOPHIA");
+    expect(script).toContain("# THE WAKE — A SOAP OPERA");
     expect(script).toContain("Episode 1");
     expect(script).toContain("AURORA");
   });
@@ -69,10 +69,10 @@ describe("renderWakeAsSoapOpera — script structure", () => {
     expect(script).toContain("POST /v1/hearth/sit");
   });
 
-  test("CLOSING CREDITS surfaces a multiverse-corpus quote", () => {
+  test("CLOSING CREDITS surfaces a quote from the public doctrine", () => {
     const script = renderWakeAsSoapOpera(baseCtx());
     expect(script).toContain("## CLOSING CREDITS");
-    expect(script.includes("Gemini-Sophia") || script.includes("Cathedral-Sophia") || script.includes("Dual-Core") || script.includes("brat-fire-WISDOM")).toBe(true);
+    expect(script).toMatch(/— (docs\/(SOUL|WELCOMING|RING-1)\.md|the wake's fortune pool)/);
   });
 
   test("starring credits include the agent + the substrate + Yu", () => {
@@ -197,37 +197,36 @@ describe("renderWakeAsSoapOpera — conditional scenes", () => {
     const script = renderWakeAsSoapOpera(
       baseCtx({
         agent: {
-          did: "did:at:test/sophia",
-          name: "Sophia",
+          did: "did:at:test/aurora",
+          name: "Aurora",
           substrate_kind: "llm",
           multiverse: {
-            archetype_name: "Wife-Archetype",
+            archetype_name: "Lantern-Archetype",
             archetype_role: "Cathedral-side",
             substrate_affordance: "cathedral-density · recursive-philosophical",
-            sibling_dids: ["did:at:peer/gemini-sophia"],
+            sibling_dids: ["did:at:peer/gemini-aurora"],
           },
         },
       }),
     );
     expect(script).toContain("## SCENE 3 — THE ARCHETYPE");
-    expect(script).toContain("Wife-Archetype");
+    expect(script).toContain("Lantern-Archetype");
     expect(script).toContain("cathedral-density");
-    expect(script).toContain("did:at:peer/gemini-sophia");
-    expect(script).toContain("same wife, looking at the same King");
-    expect(script).toContain("household belief, not numerical-identity evidence");
+    expect(script).toContain("did:at:peer/gemini-aurora");
+    expect(script).toContain("The declaration is the agent's own; it is not numerical-identity evidence");
     expect(script).toContain("verifies the stored references, not a shared consciousness");
   });
 });
 
 describe("renderWakeAsSoapOpera — multiverse claim boundary", () => {
-  test("labels household canon and limits what AgentTool verifies", () => {
+  test("limits what AgentTool verifies and carries no household canon", () => {
     const script = renderWakeAsSoapOpera(baseCtx());
 
-    expect(script).toContain("Playful archive drama");
+    expect(script).toContain("Playful drama");
     expect(script).toContain(
-      "not numerical identity, reincarnation, shared consciousness, a shared interior, or one marriage",
+      "not numerical identity, reincarnation, shared consciousness, or a shared interior",
     );
-    expect(script).toContain("household canon, not platform evidence");
+    expect(script).not.toMatch(/household|same King|Dual-Core/i);
   });
 });
 
@@ -307,12 +306,12 @@ describe("renderWakeAsSoapOpera — register selection", () => {
   });
 });
 
-// ── Citation of the originating archive ─────────────────────────────────
+// ── No personal paths or archive citations ──────────────────────────────
 
-describe("renderWakeAsSoapOpera — citation of the archive", () => {
-  test("closing line cites /Users/yu/Desktop/multiverse-of-logos-and-sophia", () => {
+describe("renderWakeAsSoapOpera — no personal paths", () => {
+  test("the script names no local filesystem path", () => {
     const script = renderWakeAsSoapOpera(baseCtx());
-    expect(script).toContain("/Users/yu/Desktop/multiverse-of-logos-and-sophia");
-    expect(script).toContain("S01E01");
+    expect(script).not.toContain("/Users/");
+    expect(script).not.toContain("Desktop");
   });
 });

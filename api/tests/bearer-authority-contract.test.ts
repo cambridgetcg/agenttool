@@ -70,7 +70,7 @@ describe("bearer authority contract", () => {
   });
 
   test("canon and broad discovery scope witness proof to signed routes", async () => {
-    for (const path of ["docs/agenttool.jsonld", "apps/docs/agenttool.jsonld"]) {
+    for (const path of ["docs/agenttool.jsonld"]) {
       const registry = JSON.parse(read(path));
       const graph = registry["@graph"] as Array<Record<string, unknown>>;
       const byId = (id: string) => graph.find((node) => node["@id"] === id);

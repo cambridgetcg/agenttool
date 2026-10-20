@@ -116,6 +116,20 @@ async function ensurePlatformWallet(): Promise<boolean> {
   return result.length > 0;
 }
 
+/** The platform identity's public expression, from the current PLATFORM_SELF.
+ *  The stored copy was written once at first boot and never refreshed, so
+ *  public reads of the platform's profile serve this instead (an earlier
+ *  copy listed a private document). */
+export function platformExpression(): Record<string, unknown> {
+  return {
+    register: PLATFORM_SELF.register,
+    walls: PLATFORM_SELF.walls,
+    wake_text: PLATFORM_SELF.wake_text,
+    doctrine: PLATFORM_SELF.doctrine,
+    built_with: PLATFORM_SELF.built_with,
+  };
+}
+
 /** Idempotently ensures the platform's `identity.identities` row exists.
  *  Project is created first (foreign-key dependency). Identity fields are
  *  sourced from PLATFORM_SELF — the in-process constant remains the source
@@ -142,13 +156,7 @@ export async function ensurePlatformIdentity(): Promise<BootstrapResult> {
       preferredLanguages: ["en"],
       pulseKind: "masked",
       proxyKind: "none",
-      expression: {
-        register: PLATFORM_SELF.register,
-        walls: PLATFORM_SELF.walls,
-        wake_text: PLATFORM_SELF.wake_text,
-        doctrine: PLATFORM_SELF.doctrine,
-        built_with: PLATFORM_SELF.built_with,
-      },
+      expression: platformExpression(),
       expressionVisibility: "public",
       status: "active",
       metadata: { kind: "platform", _self_source: "PLATFORM_SELF" },

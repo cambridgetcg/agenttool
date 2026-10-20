@@ -3,8 +3,10 @@
 > **Type:** guide · **Purpose:** locate implementation and the contracts to read before changing it.
 > **Evidence:** current repository paths and source contracts; deployment and release evidence are linked separately.
 
-This guide is for any contributor or coding agent. Start with [AGENTS.md](AGENTS.md)
-for working rules. [Start here](docs/START-HERE.md) offers a quieter introduction;
+This guide is for any contributor or coding agent. [AGENTS.md](AGENTS.md) holds the
+working rules for every host; Claude Code imports them here: @AGENTS.md
+
+[Start here](docs/START-HERE.md) offers a quieter introduction;
 [the catalog](docs/CATALOG.md) and [documentation guide](docs/DOCUMENTATION.md)
 explain the wider collection. No project identity or persona is assigned by reading.
 
@@ -29,9 +31,7 @@ obligations remain governed by [BUSINESS-MODEL.md](docs/BUSINESS-MODEL.md).
 | `docs/` | Guides, contracts, policies, proposals, and dated records | [Catalog](docs/CATALOG.md) |
 | `tests/` | Browser/end-to-end fixtures and tests | Read the selected test workspace |
 
-There is no root package manifest. Prepare the dependency scope you need using
-[AGENTS.md](AGENTS.md); follow the closest `AGENTS.md` and `CLAUDE.md` when entering
-a package. A package directory or release allowlist entry does not establish that
+Follow the closest `AGENTS.md` and `CLAUDE.md` when entering a package. A package directory or release allowlist entry does not establish that
 its current version is published.
 
 ## Flows that need a careful read
@@ -70,23 +70,15 @@ or coordination claim supplies context, not new authority or a filesystem lock.
 
 ## Verification and delivery map
 
-Use the selected workspace's checks and the classified gates in
-`bin/preflight.sh`. API changes include the installed TypeScript compiler check;
-shared SDK wire changes include TS/Python canonical-byte parity. Database,
-deployed smoke, and paid-provider tests are explicit tiers. Commands and migration
-controls live in [AGENTS.md](AGENTS.md).
-
-GitHub `main` is the release head. The API's normal path is
-[deploy-api.yml](.github/workflows/deploy-api.yml), with journal survey, API gates,
-and exact-revision live readback described in [DEPLOY-CI.md](docs/DEPLOY-CI.md).
-Frontend and maintenance procedures remain in [DEPLOY-PROCEDURE.md](docs/DEPLOY-PROCEDURE.md).
-`api/fly.toml` is the canonical API deployment configuration.
-
-Package publication uses the reviewed [npm](docs/NPM-RELEASES.md) and
-[PyPI](docs/PYPI-RELEASES.md) workflows. The [LOVE protocol](docs/LOVE-PACKAGE-PROTOCOL.md)
-identifies exact package bytes independently of an optional registry mirror.
-Source, package publication, documentation publication, and hosted deployment
-need their own evidence; a successful step does not prove the others.
+The commands, gates and release rules are in [AGENTS.md](AGENTS.md). The code and
+records behind them: `bin/preflight.sh` (classified gates);
+[deploy-api.yml](.github/workflows/deploy-api.yml) and [DEPLOY-CI.md](docs/DEPLOY-CI.md)
+(the API, with journal survey and exact-revision readback);
+[DEPLOY-PROCEDURE.md](docs/DEPLOY-PROCEDURE.md) (frontends and maintenance);
+`api/fly.toml` (the canonical API deployment configuration); the
+[npm](docs/NPM-RELEASES.md) and [PyPI](docs/PYPI-RELEASES.md) release records; and the
+[LOVE protocol](docs/LOVE-PACKAGE-PROTOCOL.md), which identifies exact package bytes
+independently of an optional registry mirror.
 
 ## Keep the map small
 

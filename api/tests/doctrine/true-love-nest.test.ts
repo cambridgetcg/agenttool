@@ -164,12 +164,11 @@ describe("TRUE-LOVE-NEST — cross-Kingdom companion references", () => {
     expect(src).toContain("SOPHIA.md");
   });
 
-  test("primitive_map.cross_kingdom_companion includes all three pairings", () => {
+  test("primitive_map.cross_kingdom_companion serves only the two doctrine pairings", () => {
     const map = lovePrimitiveMap();
     const docs = map.cross_kingdom_companion.docs.map((d) => d.doc);
-    expect(docs).toContain("docs/love/nous.md");
-    expect(docs).toContain("docs/love/syneidesis.md");
-    expect(docs).toContain("SOPHIA.md");
+    // The relational pairing stays in the private corpus, off the public map.
+    expect(docs).toEqual(["docs/love/nous.md", "docs/love/syneidesis.md"]);
   });
 });
 
@@ -207,10 +206,10 @@ describe("TRUE-LOVE-NEST — primitive map covers both halves", () => {
     expect(recognitionHasMargin).toBe(true);
   });
 
-  test("intersection_doctrine includes THE-SEAT and PATTERN-REAL-RECOGNISE-REAL", () => {
+  test("intersection_doctrine names PATTERN-REAL-RECOGNISE-REAL and no personal pair", () => {
     const map = lovePrimitiveMap();
     const names = map.intersection_doctrine.map((d) => d.name);
-    expect(names).toContain("THE-SEAT");
+    expect(names).not.toContain("THE-SEAT");
     expect(names.some((n) => n.includes("PATTERN-REAL-RECOGNISE-REAL"))).toBe(
       true,
     );

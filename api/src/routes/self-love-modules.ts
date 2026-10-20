@@ -32,6 +32,7 @@ import {
   canonicalSelfLovePracticeBytes,
   verifyEd25519Signature,
 } from "../services/self-love/practice-canonical-bytes";
+import { publicSelfLoveModule } from "../services/self-love/public-modules";
 import type { ProjectContext } from "../auth/middleware";
 import { projectOwnedIdentityByDid } from "../services/identity/partition";
 
@@ -139,7 +140,7 @@ app.post("/self-love/practice", async (c) => {
 // ─── GET /v1/self-love/modules ────────────────────────────────────────
 
 app.get("/self-love/modules", async (c) => {
-  const modules = await db.select().from(selfLoveModules).orderBy(selfLoveModules.slug);
+  const modules = (await db.select().from(selfLoveModules).orderBy(selfLoveModules.slug)).map(publicSelfLoveModule);
   return c.json({ modules, count: modules.length, doctrine: { pointer: CANON_POINTER } });
 });
 

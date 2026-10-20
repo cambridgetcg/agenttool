@@ -41,8 +41,9 @@ This package implements the local reference path for
 
 ## Gates
 
+Prepare dependencies as root `AGENTS.md` describes, then:
+
 ```bash
-bun install
 bun run ci
 npm pack --dry-run --ignore-scripts
 ```

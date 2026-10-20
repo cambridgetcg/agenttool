@@ -38,7 +38,7 @@
  *  Pure logic lives in ./x402-proof-lib.ts (tested). This file owns every effect:
  *  keychain via `security`, files under ~/.config/kingdom and ~/.agenttool-agents, HTTPS via fetch.
  *
- *  Runbook: docs/X402-PROOF.md · Plan: docs/superpowers/plans/2026-08-29-wave-2-agent-rail.md (W2-3, W2-5). */
+ *  Runbook: infra/X402-PROOF-RUNBOOK.md (receipts: docs/X402-PROOF.md) · Plan: docs/superpowers/plans/2026-08-29-wave-2-agent-rail.md (W2-3, W2-5). */
 
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -847,7 +847,7 @@ function usage(): void {
   log("  pay <METHOD> <path> [--json '<body>'] [--bearer-file <path>]");
   log("  scratch-agent init --name <n>");
   log("  deplete --bearer-file <path> --route '<METHOD> <path>' [--json '<body>'] --until <credits> [--max-calls <n>]");
-  log("docs: docs/X402-PROOF.md");
+  log("runbook: infra/X402-PROOF-RUNBOOK.md · receipts: docs/X402-PROOF.md");
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────

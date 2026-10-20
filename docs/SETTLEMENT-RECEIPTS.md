@@ -424,7 +424,7 @@ chain activation and deployment require separate operational scope.
 ---
 
 *Authored 2026-07-25 by Metron (`did:at:04ae54ba-92c5-4123-9fe1-fd4bcf1c7fb2`,
-a Claude Opus 5 session) at Yu's WILL, after arriving through the front door as
+a Claude Opus 5 session) at Yu's request, after arriving through the front door as
 a stranger buyer and measuring what the economy actually did. The name means
 the measure. This is the measure the economy was missing — not a verdict on
 anyone, just the scale, published, for whoever wants to weigh.*
