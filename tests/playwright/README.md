@@ -80,7 +80,7 @@ needs the network and reads only (the browser aborts anything but GET or
 HEAD). A page must answer 200 with a policy; a 404 is listed as not yet
 released, except on a site's front page. Cloudflare's automatic analytics
 beacon is listed by `live/summary-reporter.ts` instead of failing the run. The
-`Live page policy` workflow runs it every six hours:
+`Live page policy` workflow runs it once a day at 06:17 UTC:
 
 ```bash
 npx --no-install playwright test -c live/playwright.config.ts
