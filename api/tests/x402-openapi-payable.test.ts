@@ -122,6 +122,11 @@ describe("OpenAPI carries every payable row", () => {
       expect(description).toContain(
         "no PAYMENT-REQUIRED",
       );
+      if (row.credits === 0) {
+        // Free-floor rows (billing/free-floor.ts) carry no amount to pay.
+        expect(row.amountAtomic).toBeNull();
+        continue;
+      }
       expect(BigInt(row.amountAtomic!)).toBe(
         BigInt(row.credits!) * BigInt(ATOMIC_PER_CREDIT),
       );

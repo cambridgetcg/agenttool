@@ -154,7 +154,7 @@ describe("finite core launch profile", () => {
     ]) expect(validate(body), JSON.stringify(body).slice(0, 100)).toBe(searchSchema.safeParse(body).success);
     expect(profile.operations.find((op) => op.id === "memory_search")!.cost.project_credits).toBe(ROUTE_CREDITS["memory.search"]);
     const writeSource = readFileSync(join(ROOT, "api/src/routes/memory/memories.ts"), "utf8");
-    expect(writeSource).toMatch(/dependencies\.reserve\(c, 1, "memory\.write"\)/);
-    expect(profile.operations.find((op) => op.id === "memory_store")!.cost.project_credits).toBe(1);
+    expect(writeSource).toMatch(/dependencies\.reserve\(c, 0, "memory\.write"\)/);
+    expect(profile.operations.find((op) => op.id === "memory_store")!.cost.project_credits).toBe(0);
   });
 });

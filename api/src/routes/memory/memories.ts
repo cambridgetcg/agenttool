@@ -13,6 +13,11 @@ import {
   finalizeChargeSuccess,
   reserveCharge,
 } from "../../billing/charge";
+import {
+  consumeFreeFloorIn,
+  type FreeFloorExecutor,
+  type FreeFloorRequest,
+} from "../../billing/free-floor";
 import { db } from "../../db/client";
 import { memories } from "../../db/schema/memory";
 import { errors, fail } from "../../lib/errors";
@@ -84,13 +89,27 @@ export interface MemoryWriteRouteDependencies {
   reserve: typeof reserveCharge;
   finalize: typeof finalizeChargeSuccess;
   database: Pick<typeof db, "transaction">;
+  /** Free-floor quota and storage guard, run inside the write transaction. */
+  freeFloor?: (tx: FreeFloorExecutor, request: FreeFloorRequest) => Promise<void>;
 }
 
 const defaultMemoryWriteDependencies: MemoryWriteRouteDependencies = {
   reserve: reserveCharge,
   finalize: finalizeChargeSuccess,
   database: db,
+  freeFloor: consumeFreeFloorIn,
 };
+
+/** Bytes a memory write may add: its text fields plus a float4 embedding. */
+export function memoryWriteBytes(data: z.infer<typeof createSchema>): number {
+  return (
+    Buffer.byteLength(data.content, "utf8") +
+    Buffer.byteLength(data.key ?? "", "utf8") +
+    Buffer.byteLength(data.agent_id ?? "", "utf8") +
+    Buffer.byteLength(JSON.stringify(data.metadata ?? {}), "utf8") +
+    (data.embedding ? data.embedding.length * 4 : 0)
+  );
+}
 
 // ── POST /v1/memories — store ───────────────────────────────────────────
 export function createMemoryWriteHandler(
@@ -126,7 +145,11 @@ export function createMemoryWriteHandler(
       throw error;
     }
 
-    const reservation = await dependencies.reserve(c, 1, "memory.write");
+    // Memory writes are on the free floor: no credit debit, but the usage
+    // receipt is still reserved and finalized. The quota guard runs below,
+    // inside the write transaction (billing/free-floor.ts).
+    const reservation = await dependencies.reserve(c, 0, "memory.write");
+    const freeFloor = dependencies.freeFloor ?? consumeFreeFloorIn;
     const startedAt = Date.now();
 
     // Stamp the origin signal AFTER spreading caller metadata so the
@@ -154,6 +177,14 @@ export function createMemoryWriteHandler(
           parsed.data,
           { database: tx, lockActiveIdentity: true },
         );
+        // A refusal here rolls back with the insert, so a refused or failed
+        // write never consumes quota.
+        await freeFloor(tx, {
+          projectId: c.var.project.id,
+          action: "memory.write",
+          identityId: lockedBinding.identityId,
+          bytes: memoryWriteBytes(parsed.data),
+        });
         const created = await write(c.var.project.id, memoryData, {
           binding: lockedBinding,
           database: tx,

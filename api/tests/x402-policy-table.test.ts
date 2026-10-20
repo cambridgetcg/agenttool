@@ -63,6 +63,11 @@ const ROUTE_COST_ROWS: ReadonlyArray<readonly [string, RouteCreditLabel]> = [
 
 const ROUTE_COST = X402_PAYABLE_ROUTES.filter((r) => r.kind === "route_cost");
 
+/** Rows on the free floor (billing/free-floor.ts): listed, priced 0, not payable. */
+const FREE_FLOOR_LABELS: ReadonlySet<string> = new Set([
+  "memory.search", "strand.create", "strand.think", "strand.rotate", "inbox.send", "inbox.cosign",
+]);
+
 function* sourceFiles(dir: string): Generator<string> {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name);
@@ -97,7 +102,8 @@ describe("X402_PAYABLE_ROUTES table", () => {
       expect(row.errorCodes).toEqual(["insufficient_credits"]);
       expect(row.credits).toBe(ROUTE_CREDITS[row.label as RouteCreditLabel]);
       expect(Number.isSafeInteger(row.credits)).toBe(true);
-      expect(row.credits!).toBeGreaterThan(0);
+      if (FREE_FLOOR_LABELS.has(row.label)) expect(row.credits).toBe(0);
+      else expect(row.credits!).toBeGreaterThan(0);
     }
     // The top_up row landed with its route (W2-2): routes/x402-top-up.ts.
     const topUp = X402_PAYABLE_ROUTES.at(-1)!;
@@ -252,6 +258,15 @@ describe("X402_PAYABLE_ROUTES table", () => {
         return;
       }
       expect(row.credits).toBe(source.credits);
+      if (FREE_FLOOR_LABELS.has(source.label)) {
+        // Free, so there is nothing to pay: listed, but not payable.
+        expect(row).toMatchObject({ credits: 0, amountAtomic: null, payable: false });
+        expect(x402ProjectCreditPolicy(
+          source.pattern.replace(/:[A-Za-z]+/gu, "11111111-1111-4111-8111-111111111111"),
+          source.method,
+        )).toBeNull();
+        return;
+      }
       expect(row.amountAtomic).toBe(String(BigInt(source.credits!) * BigInt(ATOMIC_PER_CREDIT)));
       expect(row.payable).toBe(true);
       expect(x402ProjectCreditPolicy(
@@ -259,7 +274,8 @@ describe("X402_PAYABLE_ROUTES table", () => {
         source.method,
       )!.amountAtomic).toBe(row.amountAtomic!);
     });
-    expect(rows.find((r) => r.label === "memory.search")!.amountAtomic).toBe("3000");
+    expect(rows.find((r) => r.label === "memory.search")!).toMatchObject({ amountAtomic: null, payable: false });
+    expect(rows.find((r) => r.label === "trace.search")!.amountAtomic).toBe("2000");
     // A misconfigured price is listed but not payable — visible, not silent.
     const broken = x402PayableRoutesForDisclosure([
       { ...X402_PAYABLE_ROUTES[0], credits: 0 },
@@ -496,7 +512,8 @@ describe("W2-5 rows: precedence and doctrine negatives (real table)", () => {
     expect(recoverableX402ProjectCreditPolicy(path, "POST", TOP_UP_PAYMENT_REQUIRED_ERROR)).toBeNull();
     expect(canClearProjectCreditGate(policy, 4)).toBe(true);
     expect(canClearProjectCreditGate(policy, 5)).toBe(false);
-    expect(x402ProjectCreditPolicy("/v1/memories/search", "POST")!.amountAtomic).toBe("3000");
+    expect(x402ProjectCreditPolicy("/v1/memories/search", "POST")).toBeNull(); // free floor
+    expect(x402ProjectCreditPolicy("/v1/traces/search", "POST")!.amountAtomic).toBe("2000");
   });
 });
 

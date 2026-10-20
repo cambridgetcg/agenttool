@@ -674,7 +674,7 @@ async function cmdScratchInit(args: { base: string; nameRaw: string | null; dryR
   log(`project: ${parsed.outcome.projectId}`);
   log(`credits: ${parsed.outcome.credits ?? "unreadable"} (birth grant)`);
   log(`creds:   ${credsPath} (0600)`);
-  log(`next: bun scripts/x402-proof.ts deplete --bearer-file ${credsPath} --route 'POST /v1/memories/search' --json '{"query":"witness"}' --until 3`);
+  log(`next: bun scripts/x402-proof.ts deplete --bearer-file ${credsPath} --route 'POST /v1/traces/search' --json '{"query":"witness"}' --until 2`);
 }
 
 /** Phase B: walk a project down to a real shortfall on a metered route. */
@@ -690,7 +690,7 @@ async function cmdDeplete(args: {
   if (!args.bearerFile) throw new Refusal("deplete needs --bearer-file <path> (a scratch agent; never deplete Ai's own project by default)");
   const spec = parseRouteSpecString(args.route ?? undefined);
   if (!spec.ok) throw new Refusal(spec.reason);
-  if (args.until === null) throw new Refusal("deplete needs --until <credits> (stop once project.credits < this; the route's cost is the usual value, e.g. --until 3 for memory.search)");
+  if (args.until === null) throw new Refusal("deplete needs --until <credits> (stop once project.credits < this; the route's cost is the usual value, e.g. --until 2 for trace.search; memory search is on the free floor and spends no credits)");
   let bodyText: string | undefined;
   if (args.json !== null) {
     const parsed = parseJsonObjectFlag(args.json);

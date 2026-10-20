@@ -315,7 +315,11 @@ function routeCost(
  * flag off), time/random (0 credits, keyless), listing.invoke and every
  * invocation.* step (0 by the fair-pricing rule), listing.archive and
  * listing.pause (0: leaving is free), /v1/mcp (never metered), and
- * everything WAKE-free (wake/welcome/register/public). */
+ * everything WAKE-free (wake/welcome/register/public).
+ *
+ * Free-floor rows (memory.search, strand.*, inbox.*) price 0 since
+ * 2026-10-20 (billing/free-floor.ts). They stay listed, and disclosure marks
+ * them `payable: false`, so a reader sees they are free rather than missing. */
 export const X402_PAYABLE_ROUTES: readonly X402PayableRoute[] = Object.freeze([
   // Static tools — routes/tools/{scrape,document}.ts (reserveCharge).
   routeCost("POST", "/v1/scrape", "scrape"),
