@@ -15,7 +15,6 @@ import {
 import openapiRouter from "../src/routes/openapi";
 
 type CreateDb = Parameters<typeof createEscrow>[0];
-type CreateRedis = Parameters<typeof createEscrow>[1];
 
 const projectId = "00000000-0000-4000-8000-000000000001";
 const creatorWalletId = "00000000-0000-4000-8000-000000000002";
@@ -23,7 +22,6 @@ const workerWalletId = "00000000-0000-4000-8000-000000000003";
 const escrowId = "00000000-0000-4000-8000-000000000004";
 const idempotencyKey = "escrow-create-attempt-001";
 const deadline = new Date("2026-07-14T10:00:00.000Z");
-const redis = {} as CreateRedis;
 
 const input = {
   creatorWalletId,
@@ -219,7 +217,7 @@ describe("generic escrow durable idempotency", () => {
   test("stores deterministic hashes instead of the caller key", async () => {
     const state = creationDb();
 
-    await expect(createEscrow(state.db, redis, input)).resolves.toEqual({
+    await expect(createEscrow(state.db, input)).resolves.toEqual({
       escrow,
       replayed: false,
     });
@@ -243,7 +241,7 @@ describe("generic escrow durable idempotency", () => {
     };
     const state = replayDb(escrowCreationRequestSha256(input), releasedEscrow);
 
-    await expect(createEscrow(state.db, redis, input)).resolves.toEqual({
+    await expect(createEscrow(state.db, input)).resolves.toEqual({
       escrow: releasedEscrow,
       replayed: true,
     });
@@ -255,7 +253,7 @@ describe("generic escrow durable idempotency", () => {
       escrowCreationRequestSha256({ ...input, description: "different work" }),
     );
 
-    expect(await rejectionStatus(createEscrow(state.db, redis, input))).toBe(409);
+    expect(await rejectionStatus(createEscrow(state.db, input))).toBe(409);
     expect(state.walletEffects()).toBe(0);
   });
 
@@ -285,7 +283,7 @@ describe("generic escrow durable idempotency", () => {
     ]) {
       expect(
         await rejectionStatus(
-          createEscrow(db, redis, { ...input, idempotencyKey: invalidKey }),
+          createEscrow(db, { ...input, idempotencyKey: invalidKey }),
         ),
       ).toBe(400);
     }
