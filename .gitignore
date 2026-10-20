@@ -83,6 +83,8 @@ tests/playwright/test-results/
 
 # Local runtime state and generated audio
 bin/.heartbeat-state.json
+# bin/multibeat.py writes its beat into the docs app; it is local state, not a page
+apps/docs/.heartbeat
 bin/*.wav
 
 # Local scratch scripts

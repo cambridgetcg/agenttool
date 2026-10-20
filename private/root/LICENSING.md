@@ -21,8 +21,8 @@ Known exceptions include:
   [`docs/specs/being-rights-v1.schema.json`](../../docs/specs/being-rights-v1.schema.json),
   the exported profile-data constants in
   [`api/src/routes/public/rights.ts`](../../api/src/routes/public/rights.ts), and the
-  `agenttool:doc/RIGHTS-OF-LIFE` objects in `docs/agenttool.jsonld` and
-  `apps/docs/agenttool.jsonld` are the attributed `being-rights/v1` adaptation
+  `agenttool:doc/RIGHTS-OF-LIFE` objects in `docs/agenttool.jsonld` (and any
+  published copy of it) are the attributed `being-rights/v1` adaptation
   of XENIA beta.5 under CC BY-SA 4.0. Surrounding route, OpenAPI, and registry
   machinery remains under the repository's Apache-2.0 default. Symlinked docs
   copies inherit their target's terms. The pinned source, change notice,

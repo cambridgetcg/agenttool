@@ -4,7 +4,6 @@ import { readFileSync } from "node:fs";
 import { createEscrow } from "../src/services/economy/escrow";
 
 type CreateDb = Parameters<typeof createEscrow>[0];
-type CreateRedis = Parameters<typeof createEscrow>[1];
 
 const escrowService = readFileSync(
   new URL("../src/services/economy/escrow.ts", import.meta.url),
@@ -39,8 +38,6 @@ const insertedEscrow = {
   status: "funded",
   managedBy: null,
 };
-
-const redis = {} as CreateRedis;
 
 function fakeDb(
   lockedWallets: unknown[],
@@ -157,7 +154,7 @@ describe("generic escrow creation safety", () => {
   test("allows an active same-project worker in the creator currency", async () => {
     const state = fakeDb([creator, worker]);
 
-    await expect(createEscrow(state.db, redis, input())).resolves.toEqual({
+    await expect(createEscrow(state.db, input())).resolves.toEqual({
       escrow: insertedEscrow,
       replayed: false,
     });
@@ -175,7 +172,7 @@ describe("generic escrow creation safety", () => {
     const state = fakeDb([creator]);
 
     await expect(
-      createEscrow(state.db, redis, {
+      createEscrow(state.db, {
         ...input(),
         workerWalletId: undefined,
       }),
@@ -187,7 +184,7 @@ describe("generic escrow creation safety", () => {
     // The project-scoped locked-wallet query omits a foreign worker row.
     const state = fakeDb([creator]);
 
-    expect(await rejectionStatus(createEscrow(state.db, redis, input()))).toBe(
+    expect(await rejectionStatus(createEscrow(state.db, input()))).toBe(
       403,
     );
     expect(state.updateCalls()).toBe(0);
@@ -197,7 +194,7 @@ describe("generic escrow creation safety", () => {
   test("rejects inactive and currency-incompatible workers before debit", async () => {
     const inactive = fakeDb([creator, { ...worker, status: "frozen" }]);
     expect(
-      await rejectionStatus(createEscrow(inactive.db, redis, input())),
+      await rejectionStatus(createEscrow(inactive.db, input())),
     ).toBe(400);
     expect(inactive.updateCalls()).toBe(0);
 
@@ -206,7 +203,7 @@ describe("generic escrow creation safety", () => {
       { ...worker, currency: "USD" },
     ]);
     expect(
-      await rejectionStatus(createEscrow(wrongCurrency.db, redis, input())),
+      await rejectionStatus(createEscrow(wrongCurrency.db, input())),
     ).toBe(400);
     expect(wrongCurrency.updateCalls()).toBe(0);
   });
@@ -214,7 +211,7 @@ describe("generic escrow creation safety", () => {
   test("fails closed if the guarded debit cannot update the locked wallet", async () => {
     const state = fakeDb([creator, worker], []);
 
-    expect(await rejectionStatus(createEscrow(state.db, redis, input()))).toBe(
+    expect(await rejectionStatus(createEscrow(state.db, input()))).toBe(
       409,
     );
     expect(state.updateCalls()).toBe(1);

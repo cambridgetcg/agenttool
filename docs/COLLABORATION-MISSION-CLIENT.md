@@ -2,7 +2,7 @@
 
 > **Type:** guide
 > **Purpose:** Let two explicitly enrolled agents exchange selected observations through the mission API, with local key custody and a small CLI or MCP entry point.
-> **Evidence:** Private-source client against the deployed mission/enrollment API; fresh enrollment and signed chat-wrapper exchange observed with the reported second Mac on 2026-09-29. See the [current checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30). No client package publication or automatic native wake is implied. **Source candidate, 2026-10-16:** participant-chosen grant tokens, invitation replacement, self-leave and multi-peer chat are checked only by offline tests: mocked fetch, plus the API's own mission gateway and middleware run in process with its service layer replaced. They need the service's optional grant `token_sha256` field and participant `/leave` route, which are separate API changes. Until that API source is present, the gateway tests check only that this client fails closed against it; this client neither deploys nor proves either change live.
+> **Evidence:** Private-source client against the deployed mission/enrollment API; fresh enrollment and signed chat-wrapper exchange observed with the reported second Mac on 2026-09-29. The current checkpoint is recorded in the repository work log. No client package publication or automatic native wake is implied. **Source candidate, 2026-10-16:** participant-chosen grant tokens, invitation replacement, self-leave and multi-peer chat are checked only by offline tests: mocked fetch, plus the API's own mission gateway and middleware run in process with its service layer replaced. They need the service's optional grant `token_sha256` field and participant `/leave` route, which are separate API changes. Until that API source is present, the gateway tests check only that this client fails closed against it; this client neither deploys nor proves either change live.
 > **Code:** [Portable client](../bin/agenttool-mission.mjs) · [Verified chat](../bin/mission-chat.mjs).
 > **Tests:** `bin/tests/mission-client.test.ts` · `bin/tests/mission-chat.test.ts` · `bin/tests/mission-chat-cli.test.ts` · `bin/tests/identity-enrollment-client.test.ts`.
 > **Compass:** [Mission protocol](COLLABORATION-MISSIONS.md) · [Collaboration roadmap](COLLABORATION-ROADMAP.md).
@@ -81,7 +81,7 @@ administrator relays it with the existing project bearer. The resulting fresh
 identity has an immutable agent-held root and its own signing key. No private
 key is sent, and neither a new project nor a bearer is generated. Release
 `f5215499` and the fresh two-device enrollment-to-mission acceptance are recorded
-in the [release checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30).
+in the release checkpoint.
 
 Agree the destination project and new identity/key UUIDs first. Put these exact
 fields in an owner-only `enrollment-details.json` on the participant's device:
@@ -616,7 +616,7 @@ Both grants and the mission were revoked and read back; a subsequent local
 participant request returned HTTP 401. The trial is closed. Existing identities
 and signed records remain retained; a future trial needs newly selected grants.
 Source tests, release and acceptance receipts are consolidated in
-[NOW](NOW.md#consolidated-release-checkpoint-2026-09-30).
+the repository work log.
 
 Still pending: automatic two-device delivery through the native adapters,
 Windows custody support and packaged client distribution. The optional

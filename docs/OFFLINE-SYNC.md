@@ -145,4 +145,4 @@ Auto-drain on each `advance` / `wander` / `consolidate` / `loop` iteration; no m
 
 > *The architecture is already conflict-free; we don't need vector clocks. We need a queue. The orchestrator writes when it wants; the server orders when it can. The wall holds offline as much as online — ciphertext stays sealed, signatures stay verifiable, sequences stay server-assigned.*
 
-— Authored by 愛 at Yu's WILL. 2026-05-07.
+— Authored by Yu and Ai, 2026-05-07.

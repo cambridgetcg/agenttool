@@ -4,17 +4,25 @@ import { createHash } from "node:crypto";
 
 import { and, eq, exists, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
-import type { Redis } from "ioredis";
 
 import { db as sharedDb } from "../../db/client";
 import {
   escrowCreateIdempotency,
   escrows,
+  policies,
   transactions,
   wallets,
 } from "../../db/schema/economy";
+import {
+  disputeCases,
+  substrateTasks,
+  templatePurchases,
+} from "../../db/schema/marketplace";
+import { checkPaymentAgainstPolicy } from "./wallets";
 
 type DB = typeof sharedDb;
+type Tx = Parameters<Parameters<DB["transaction"]>[0]>[0];
+type Escrow = typeof escrows.$inferSelect;
 const ESCROW_IDEMPOTENCY_KEY_PATTERN = /^[!-~]{8,256}$/u;
 const ESCROW_STATUSES = ["funded", "released", "refunded", "disputed"] as const;
 
@@ -55,6 +63,115 @@ export function assertGenericEscrowMutationAllowed(
   if (managedBy !== null) {
     throw new HTTPException(409, {
       message: "Escrow transitions are managed by its marketplace workflow",
+    });
+  }
+}
+
+// ─── Settlement checks ──────────────────────────────────────────────────────
+// Release and refund move real balances, so they honour what the other money
+// paths honour: wallet status and spending policy, the escrow's own deadline
+// and worker, and the subsystem that owns an escrow it created itself.
+
+const SUBSYSTEM_ESCROW_REFUSALS = {
+  dispute_bond:
+    "This escrow holds a dispute bond; it settles only through its dispute case",
+  substrate_task:
+    "This escrow holds a substrate-task bounty; it settles only through that task",
+  template_purchase:
+    "This escrow belongs to a template purchase; it settles only through that purchase",
+} as const;
+
+type SubsystemEscrowOwner = keyof typeof SUBSYSTEM_ESCROW_REFUSALS;
+
+/** Dispute bonds, substrate-task bounties, and template purchases create
+ * their own escrows and settle them on their own paths. Their escrows carry
+ * no managed_by (its database check names only the marketplace workflows),
+ * so they are recognised by the row that references them, which each of
+ * those paths writes in the same transaction as the escrow. */
+export async function assertNotSubsystemEscrow(
+  tx: Tx,
+  escrowId: string,
+): Promise<void> {
+  const [row] = await tx
+    .select({
+      owner: sql<SubsystemEscrowOwner | null>`case
+        when ${exists(
+          tx
+            .select({ one: sql`1` })
+            .from(disputeCases)
+            .where(eq(disputeCases.escalatorBondEscrowId, escrows.id)),
+        )} then 'dispute_bond'
+        when ${exists(
+          tx
+            .select({ one: sql`1` })
+            .from(substrateTasks)
+            .where(eq(substrateTasks.escrowId, escrows.id)),
+        )} then 'substrate_task'
+        when ${exists(
+          tx
+            .select({ one: sql`1` })
+            .from(templatePurchases)
+            .where(eq(templatePurchases.escrowId, escrows.id)),
+        )} then 'template_purchase'
+      end`,
+    })
+    .from(escrows)
+    .where(eq(escrows.id, escrowId));
+  if (row?.owner) {
+    throw new HTTPException(409, {
+      message: SUBSYSTEM_ESCROW_REFUSALS[row.owner],
+    });
+  }
+}
+
+/** Past its deadline an escrow has expired: the expiry sweep would refund
+ * it, so the generic routes treat it the same whether or not the sweep ran. */
+export function escrowDeadlinePassed(
+  escrow: Pick<Escrow, "deadline">,
+  now: Date = new Date(),
+): boolean {
+  return escrow.deadline !== null && escrow.deadline < now;
+}
+
+/** Locks the escrow's creator and worker wallets in id order, the order the
+ * other escrow paths use. */
+async function lockEscrowWallets(tx: Tx, escrow: Escrow) {
+  const walletIds = [
+    ...new Set(
+      [escrow.creatorWallet, escrow.workerWallet].filter(
+        (walletId): walletId is string => walletId !== null,
+      ),
+    ),
+  ].sort();
+  const locked = await tx
+    .select()
+    .from(wallets)
+    .where(inArray(wallets.id, walletIds))
+    .orderBy(wallets.id)
+    .for("update");
+  return {
+    creatorWallet: locked.find((wallet) => wallet.id === escrow.creatorWallet),
+    workerWallet: escrow.workerWallet
+      ? locked.find((wallet) => wallet.id === escrow.workerWallet)
+      : undefined,
+  };
+}
+
+/** A release is the creator wallet's payment to the worker, so the creator
+ * wallet's spending policy applies to it as it does to a spend. Hourly and
+ * daily limits are counted by wallet spend in Redis, which settlement cannot
+ * see; rather than guess at a total, a release from a wallet with either
+ * limit set is refused, and the wallet's owner can change its policy. */
+function assertReleaseWithinPolicy(
+  policy: typeof policies.$inferSelect,
+  amount: number,
+  workerWalletId: string,
+): void {
+  checkPaymentAgainstPolicy(policy, amount, workerWalletId);
+  if (policy.maxPerHour !== null || policy.maxPerDay !== null) {
+    throw new HTTPException(402, {
+      message:
+        "The creator wallet's policy sets an hourly or daily spend limit, which escrow release cannot count; change that policy to release from this wallet",
     });
   }
 }
@@ -100,9 +217,29 @@ export function escrowIdempotencyKeySha256(key: string): string {
   return createHash("sha256").update(key).digest("hex");
 }
 
+/** Generic create is resting at the HTTP boundary
+ * (services/economy/config.ts genericEscrowCreateAllowed(); contract:
+ * docs/SAFETY-BOUNDARIES.md, "Generic escrow create and wallet spend —
+ * resting"). This function is kept intact for a reviewed reopening, which
+ * must first apply the creator wallet's spending policy here
+ * (per-transaction, hourly/daily, allowed-recipient, and approval-threshold
+ * limits that spendFromWallet enforces in services/economy/wallets.ts).
+ * Creating an escrow debits the wallet but currently checks no policy.
+ *
+ * Release and refund are open, at the creator project's direction, with the
+ * checks under "Settlement checks" above. Release needs the escrow funded,
+ * assigned, and before its deadline, both wallets active, and the creator
+ * wallet's spending policy satisfied. Refund lands in the creator wallet
+ * whatever its status; once a wallet in another project has accepted, it
+ * waits for the escrow's deadline, if one is set. Workflow-managed
+ * marketplace escrows (assertGenericEscrowMutationAllowed) and escrows that
+ * dispute bonds, substrate-task bounties, or template purchases created
+ * (assertNotSubsystemEscrow) refuse the generic transitions with 409. No
+ * function in this service uses Redis, so none takes a Redis client; a
+ * process run with workers disabled settles existing escrows the same way.
+ * expireOverdue has no scheduler, so no automatic deadline refund runs. */
 export async function createEscrow(
   db: DB,
-  redis: Redis,
   input: CreateEscrowInput,
 ): Promise<CreateEscrowOutcome> {
   if (!Number.isSafeInteger(input.amount) || input.amount <= 0)
@@ -402,7 +539,6 @@ export async function acceptEscrow(
 
 export async function releaseEscrow(
   db: DB,
-  redis: Redis,
   escrowId: string,
   projectId: string,
 ) {
@@ -415,6 +551,7 @@ export async function releaseEscrow(
 
     if (!escrow) throw new HTTPException(404, { message: "Escrow not found" });
     assertGenericEscrowMutationAllowed(escrow.managedBy);
+    await assertNotSubsystemEscrow(tx, escrow.id);
     if (escrow.status !== "funded") {
       throw new HTTPException(400, {
         message: `Cannot release escrow with status: ${escrow.status}`,
@@ -425,22 +562,40 @@ export async function releaseEscrow(
         message: "No worker assigned — cannot release",
       });
     }
+    if (escrowDeadlinePassed(escrow)) {
+      throw new HTTPException(400, {
+        message: `Escrow deadline passed at ${escrow.deadline!.toISOString()}; it can only be refunded`,
+      });
+    }
 
+    const { creatorWallet, workerWallet } = await lockEscrowWallets(tx, escrow);
     // Project owns the creator wallet.
-    const [creatorWallet] = await tx
-      .select()
-      .from(wallets)
-      .where(
-        and(
-          eq(wallets.id, escrow.creatorWallet),
-          eq(wallets.projectId, projectId),
-        ),
-      );
-
-    if (!creatorWallet)
+    if (!creatorWallet || creatorWallet.projectId !== projectId) {
       throw new HTTPException(403, {
         message: "Not authorised to release this escrow",
       });
+    }
+    if (creatorWallet.status !== "active") {
+      throw new HTTPException(400, {
+        message: `Creator wallet is ${creatorWallet.status}`,
+      });
+    }
+    if (!workerWallet) {
+      throw new HTTPException(409, {
+        message: "Escrow worker wallet no longer exists",
+      });
+    }
+    if (workerWallet.status !== "active") {
+      throw new HTTPException(400, {
+        message: `Worker wallet is ${workerWallet.status}`,
+      });
+    }
+
+    const [policy] = await tx
+      .select()
+      .from(policies)
+      .where(eq(policies.walletId, creatorWallet.id));
+    if (policy) assertReleaseWithinPolicy(policy, escrow.amount, workerWallet.id);
 
     await tx
       .update(wallets)
@@ -471,7 +626,6 @@ export async function releaseEscrow(
 
 export async function refundEscrow(
   db: DB,
-  redis: Redis,
   escrowId: string,
   projectId: string,
 ) {
@@ -484,26 +638,37 @@ export async function refundEscrow(
 
     if (!escrow) throw new HTTPException(404, { message: "Escrow not found" });
     assertGenericEscrowMutationAllowed(escrow.managedBy);
+    await assertNotSubsystemEscrow(tx, escrow.id);
     if (!["funded", "disputed"].includes(escrow.status)) {
       throw new HTTPException(400, {
         message: `Cannot refund escrow with status: ${escrow.status}`,
       });
     }
 
-    const [creatorWallet] = await tx
-      .select()
-      .from(wallets)
-      .where(
-        and(
-          eq(wallets.id, escrow.creatorWallet),
-          eq(wallets.projectId, projectId),
-        ),
-      );
-
-    if (!creatorWallet)
+    const { creatorWallet, workerWallet } = await lockEscrowWallets(tx, escrow);
+    if (!creatorWallet || creatorWallet.projectId !== projectId) {
       throw new HTTPException(403, {
         message: "Not authorised to refund this escrow",
       });
+    }
+    // Once a wallet in another project has accepted, a deadline is the
+    // creator's promise to hold the funds until then: the creator can
+    // release before it, and refund after it. With no deadline there is no
+    // such promise, and accept needs no creator consent, so the creator
+    // keeps its refund. The creator wallet's own status is not checked: a
+    // refund is the money going home, and a frozen wallet still holds it.
+    const acceptedElsewhere =
+      escrow.workerWallet !== null &&
+      workerWallet?.projectId !== creatorWallet.projectId;
+    if (
+      acceptedElsewhere &&
+      escrow.deadline !== null &&
+      !escrowDeadlinePassed(escrow)
+    ) {
+      throw new HTTPException(409, {
+        message: `A worker in another project accepted this escrow; it can be released now or refunded after its deadline, ${escrow.deadline.toISOString()}`,
+      });
+    }
 
     await tx
       .update(wallets)
@@ -545,6 +710,7 @@ export async function disputeEscrow(
       .for("update");
     if (!escrow) throw new HTTPException(404, { message: "Escrow not found" });
     assertGenericEscrowMutationAllowed(escrow.managedBy);
+    await assertNotSubsystemEscrow(tx, escrow.id);
     if (escrow.status !== "funded") {
       throw new HTTPException(400, {
         message: `Cannot dispute escrow with status: ${escrow.status}`,
@@ -576,7 +742,7 @@ export async function disputeEscrow(
 
 // ─── Expire overdue (intended for cron) ─────────────────────────────────────
 
-export async function expireOverdue(db: DB, redis: Redis): Promise<number> {
+export async function expireOverdue(db: DB): Promise<number> {
   const overdue = await db
     .select()
     .from(escrows)
@@ -597,7 +763,7 @@ export async function expireOverdue(db: DB, redis: Redis): Promise<number> {
         .where(eq(wallets.id, escrow.creatorWallet));
 
       if (wallet) {
-        await refundEscrow(db, redis, escrow.id, wallet.projectId);
+        await refundEscrow(db, escrow.id, wallet.projectId);
         count++;
       }
     } catch {

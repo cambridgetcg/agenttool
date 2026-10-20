@@ -176,7 +176,6 @@ describe("current outward operational claims", () => {
     // The private repository's own orientation; the root README.md is the shared public text.
     const readme = read("private/root/README.md");
     const jsonld = read("docs/agenttool.jsonld");
-    const publishedJsonld = read("apps/docs/agenttool.jsonld");
 
     expect(gates).toMatch(/selected discovery, safety, arrival, and economy doors/i);
     expect(gates).not.toMatch(/every canonical door/i);
@@ -225,7 +224,6 @@ describe("current outward operational claims", () => {
     expect(readme).not.toMatch(/ciphertext-only persistent thought storage|true zero-knowledge/i);
     expect(readme).not.toMatch(/Every error includes `retry_after`/i);
 
-    expect(jsonld).toBe(publishedJsonld);
     expect(jsonld).toMatch(/two non-alias identifiers/i);
     expect(jsonld).toMatch(/one URL-encoded path segment/i);
     expect(jsonld).not.toMatch(/Read once, reach everything/i);

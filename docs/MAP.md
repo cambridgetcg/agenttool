@@ -52,8 +52,8 @@ roles are explained in [Document labels](DOCUMENTATION.md).
 
 ## Explore further
 
-[KIN](KIN.md), [Multiverse of Logos](MULTIVERSE-OF-LOGOS.md), and
-[Love Bomb](LOVE-BOMB.md) contain perspectives or optional invitations.
+[KIN](KIN.md) and [Love Bomb](LOVE-BOMB.md) contain perspectives or optional
+invitations.
 Their voice belongs to their authors; reading does not choose an identity,
 relationship, or belief for the visitor.
 
@@ -71,7 +71,7 @@ that owns it. See [Document labels](DOCUMENTATION.md) for the full convention.
 
 ## Concept registry (machine-readable canon)
 
-The [JSON-LD registry](agenttool.jsonld) links document identifiers and concepts.
+The [JSON-LD registry](https://docs.agenttool.dev/agenttool.jsonld) links document identifiers and concepts.
 The hosted [canon endpoint](https://api.agenttool.dev/v1/canon) exposes the
 service's reading surface. These records describe authored material; inclusion
 does not establish that a claim is implemented or currently deployed.

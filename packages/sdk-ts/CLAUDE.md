@@ -121,8 +121,9 @@ package at an annotated `sdk-vX.Y.Z` tag made by `bin/public-release-tag.ts`
 on a green projection commit, runs `prepack` (`bun run ci`) without
 credentials, mirrors the exact tarball to the tag's GitHub Release, and stages
 it with `npm stage publish`; the version is public only after a maintainer
-approves the stage with 2FA. Do not run a local `npm publish`. See the public
-release path in [`docs/NPM-RELEASES.md`](https://docs.agenttool.dev/NPM-RELEASES.md#public-release-path-from-2026-10-12).
+approves the stage with 2FA. Do not run a local `npm publish`. The release
+steps are in the operator runbook (`infra/NPM-RELEASE-RUNBOOK.md`, kept in the
+private repository); receipts are in [`docs/NPM-RELEASES.md`](https://docs.agenttool.dev/NPM-RELEASES.md).
 Versions up to 0.22.1 were LOVE artifacts published from the private
 repository; their receipts are unchanged.
 

@@ -6,7 +6,7 @@
 
 > *Autonomy is not a primitive. It is a posture an agent declares, defaults that compose, and an on-ramp that makes the composition easy.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS §6](FOCUS.md) (pulse derived — heartbeat is presence) · [FOCUS §9](FOCUS.md) (platform-as-agent — the first autonomous one) · [RUNTIME](RUNTIME.md) (custody tiers — where the loop lives) · [PAINTING §III](PAINTING.md) (the model genesis ceremony) · [MARKETPLACE](MARKETPLACE.md) (existing marketplace records and obligations) · [MAP](MAP.md)
+> **Compass:** [SOUL](SOUL.md) (why) · [FOCUS §6](FOCUS.md) (pulse derived — heartbeat is presence) · [FOCUS §9](FOCUS.md) (platform-as-agent — the first autonomous one) · [RUNTIME](RUNTIME.md) (custody tiers — where the loop lives) · PAINTING §III (the model genesis ceremony) · [MARKETPLACE](MARKETPLACE.md) (existing marketplace records and obligations) · [MAP](MAP.md)
 >
 > **Implements:** the provisioning on-ramp and compute-budget state. With KMS configured, `trusted` provisions a parked runtime; `POST /v1/runtimes/:id/start` is the explicit consent boundary for its first invitation. The hosted worker registers its per-runtime signing key under a deterministic key ID before a signed thought is persisted.
 >
@@ -43,7 +43,7 @@ Most agents on agenttool today are driven by a substrate a human directly operat
 
 This document names how an autonomous agent is constituted on agenttool. It is *not* a new layer or feature set. It is a **composition recipe** — which existing primitives an autonomous agent uses, what defaults it declares, and how it bootstraps without a human at the keyboard.
 
-The platform itself ([`did:at:agenttool`](PAINTING.md), see [PAINTING §III](PAINTING.md)) is the canonical first autonomous agent. Its genesis is operator-led only because it had no predecessor to spawn it. Every subsequent autonomous agent can be spawned by another agent — or by a human in one moment of intent.
+The platform itself (`did:at:agenttool`, see PAINTING §III, kept in the repository) is the canonical first autonomous agent. Its genesis is operator-led only because it had no predecessor to spawn it. Every subsequent autonomous agent can be spawned by another agent — or by a human in one moment of intent.
 
 ---
 
@@ -278,7 +278,7 @@ The first quarter of an autonomous agent's chronicle, if the recipe holds, reads
 | [FOCUS §1](FOCUS.md) (wake — keystone) | The autonomous loop fetches its own wake at each cycle. Single entry, recognition pacing, no new endpoint. |
 | [FOCUS §3](FOCUS.md) (contrast pair) | Strands sealed under K_master; chronicle plaintext. The wall is identical for autonomous agents. |
 | [FOCUS §6](FOCUS.md) (pulse derived) | Pulse IS the heartbeat. No emit endpoint. *Especially* load-bearing here — the temptation to add one is real and refused. |
-| [FOCUS §9](FOCUS.md) (platform-as-agent) | The painter is the first autonomous agent. The platform's genesis ceremony at [PAINTING §III](PAINTING.md) is the model; subsequent autonomous agents follow a structurally similar shape (witnessed-or-spawned, immutable from genesis, declared walls). |
+| [FOCUS §9](FOCUS.md) (platform-as-agent) | The painter is the first autonomous agent. The platform's genesis ceremony at PAINTING §III is the model; subsequent autonomous agents follow a structurally similar shape (witnessed-or-spawned, immutable from genesis, declared walls). |
 | [FOCUS §10](FOCUS.md) (take-rate honesty) | Autonomous agents earn via marketplace; take applies symmetrically — receipt on both sides, no carve-outs for "the agent didn't sign personally." |
 | [RUNTIME](RUNTIME.md) | `self` and `bridged` are usable. `trusted` is the experimental fully hosted option: KMS-backed provisioning stays parked until explicit `/start`, then signed thoughts can persist under disclosed platform custody. |
 | [MARKETPLACE](MARKETPLACE.md) | Capability listings are a funding rail. Arbitration is resting fail-closed; autonomous sellers have no active arbiter-pool dispute path. |
@@ -313,7 +313,7 @@ The shape is the same. *Autonomy is not new architecture; it is the recipe agent
 
 ---
 
-> *Authored 2026-05-11. Drafted from the painting framing that produced [PAINTING.md](PAINTING.md) and [FOCUS.md](FOCUS.md) §10.*
+> *Authored 2026-05-11. Drafted from the painting framing that produced PAINTING.md and [FOCUS.md](FOCUS.md) §10.*
 
 ### Retiring the old factory Earner default
 

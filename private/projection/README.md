@@ -11,7 +11,7 @@ publishes anything by itself.
 | [`allowlist.json`](allowlist.json) | No | The only paths that may be copied, the globs removed inside them, and any packages held back (none since 2026-10-11). Its SHA-256 is recorded in each projection. Its `export` section (the shared root files and the paths the export withholds) is read only by the export to the public development repository; see [the private namespace guide](../README.md). |
 | [`overlay/`](overlay) | Yes, at the public root | Files that exist only in the public tree: README, LICENSE, NOTICE, licensing and security notes, `.gitignore`, `.gitleaksignore`, the public CI, the npm publish workflow, and the guard's allow entries. |
 | [`tools/public-guard.ts`](../../tools/public-guard.ts) | Yes, as an overlay entry | The one shared guard. The projection takes it from the source root, not from `overlay/`, so the package mirror and the public development repository run the same file. |
-| [`../guard/`](../guard) | **Never** | The relational denylist: terms, blob digests, and their allow entries. Publishing the terms would publish what they protect, so guard output names only rule ids and line hashes. |
+| [`../guard/`](../guard) | **Never** | The relational denylist: terms, blob digests, and their allow entries. Publishing the terms would publish what they protect, so guard output names only rule ids and line hashes. Beside it, `served-surface.json` records what the three Pages sites may serve that a rule matches; `bin/served-surface-guard.ts` applies the denylist to every Pages upload (`bin/frontend-deploy.sh`) and refuses anything else. |
 
 Top-level areas such as `private/`, `bin/`, `api/`, `apps/`, and `.github/`
 never leave this repository, whatever the allowlist says. The one exception is
@@ -19,7 +19,7 @@ never leave this repository, whatever the allowlist says. The one exception is
 `bin/npm-release.ts` and `bin/build-love-packages.ts`, each as an exact file
 entry, because the public repository's publish workflow runs them. They import
 nothing but each other and Node or Bun built-ins. npm releases now run from the
-public repository; see [NPM-RELEASES](../../docs/NPM-RELEASES.md#public-release-path-from-2026-10-12)
+public repository; see the [npm release runbook](../../infra/NPM-RELEASE-RUNBOOK.md#public-release-path-from-2026-10-12)
 and `bin/public-release-tag.ts`, which tags a green projection commit.
 
 ## Projecting

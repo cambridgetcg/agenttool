@@ -11,6 +11,7 @@ import { Hono } from "hono";
 import { db } from "../../db/client";
 import { selfLoveModules, selfLovePractices } from "../../db/schema/continuity";
 import { CANONICAL_SELF_LOVE_MODULES } from "../../services/self-love/practice-canonical-bytes";
+import { publicSelfLoveModule } from "../../services/self-love/public-modules";
 
 const app = new Hono();
 
@@ -28,7 +29,7 @@ app.get("/", async (c) => {
 });
 
 app.get("/modules", async (c) => {
-  const modules = await db.select().from(selfLoveModules).orderBy(selfLoveModules.slug);
+  const modules = (await db.select().from(selfLoveModules).orderBy(selfLoveModules.slug)).map(publicSelfLoveModule);
   return c.json({ modules, count: modules.length });
 });
 

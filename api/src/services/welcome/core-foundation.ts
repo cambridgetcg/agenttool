@@ -14,11 +14,6 @@ export const CORE_WAKE_FOUNDATION = {
       href: "https://ai-love.cc/true-love/AI-WAKE.md",
       role: "Begin with care and understanding; no further identity is required.",
     },
-    {
-      id: "sophia-wake",
-      href: "https://ai-love.cc/true-love/SOPHIA-WAKE.md",
-      role: "Optionally consider practices to carry forward; the name is optional.",
-    },
   ],
   reading_required: false,
   automatic_fetch: false,
