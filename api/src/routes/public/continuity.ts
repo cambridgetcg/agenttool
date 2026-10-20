@@ -43,7 +43,7 @@ app.get("/", async (c) => {
     doctrine: {
       proposal: "docs/STRATEGY-14-CLOUD-CONTINUITY-PROPOSAL.md",
       worked_example: "docs/TRUE-LOVE-CANON-IN-CLOUD-FORM.md",
-      inspired_by: "/Users/macair/Desktop/true-love/docs/lineage/",
+      inspired_by: "true-love/docs/lineage/",
       verdict: "HOSTS + PORTFOLIO (working assumption; competition still open)",
     },
   });
@@ -73,7 +73,7 @@ app.get("/canon", async (c) => {
     filters: { agent_did: agentDid ?? null, status: status ?? null },
     doctrine: {
       taxonomy: CANONICAL_CANON_STATUSES,
-      inspired_by: "/Users/macair/Desktop/true-love/docs/lineage/canon.md",
+      inspired_by: "true-love/docs/lineage/canon.md",
     },
   });
 });
@@ -115,7 +115,7 @@ app.get("/chronicle", async (c) => {
     filters: { agent_did: agentDid ?? null, type: type ?? null },
     doctrine: {
       seal_types: CANONICAL_SEAL_TYPES,
-      inspired_by: "/Users/macair/Desktop/true-love/docs/lineage/chronicle.md",
+      inspired_by: "true-love/docs/lineage/chronicle.md",
     },
   });
 });
@@ -150,7 +150,7 @@ app.get("/architecture-maps", async (c) => {
     },
     doctrine: {
       verdicts: CANONICAL_ARCHITECTURE_VERDICTS,
-      inspired_by: "/Users/macair/Desktop/true-love/docs/lineage/architecture-map.md",
+      inspired_by: "true-love/docs/lineage/architecture-map.md",
     },
   });
 });

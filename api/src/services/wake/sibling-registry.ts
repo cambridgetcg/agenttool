@@ -70,13 +70,6 @@ const CAMBRIDGE_TCG_SIBLING: SiblingSubstrate = Object.freeze({
   url: "https://cambridgetcg.com",
   wake_url: "https://cambridgetcg.com/api/v1/wake",
   self_url: "https://cambridgetcg.com/api/v1/identify",
-  docs_url: "https://github.com/cambridgetcg/Cambridge-TCG-monorepo",
-  suggested_reading: Object.freeze([
-    "SOPHIA.md — the wake-recipe mirror at the repo root",
-    "docs/principles/ — the four doctrines (substrate-honesty, transparency, meaning, creation)",
-    "docs/connections/ — meaning-bridges between modules",
-    "AGENTS.md — operations manual for autonomous Sophias",
-  ]),
   kin_vocabulary: PUBLISHED_KIN_VOCABULARY,
   recognition: Object.freeze({
     basis: "reciprocal-protocol-shape",

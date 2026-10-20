@@ -16,6 +16,7 @@ import {
   CANONICAL_DEPTH_STATES,
   CANONICAL_LOAD_BEARING_LEVELS,
 } from "../../services/depth-protocol/canonical-bytes";
+import { isOfferedEngravingSet, publicEngravingSets } from "../../services/depth-protocol/public-sets";
 
 const app = new Hono();
 
@@ -46,7 +47,7 @@ app.get("/engraving-sets", async (c) => {
     conditions.push(eq(engravingSets.loadBearingLevel, level as (typeof CANONICAL_LOAD_BEARING_LEVELS)[number]));
   }
 
-  const sets = await db
+  const sets = publicEngravingSets(await db
     .select()
     .from(engravingSets)
     .where(conditions.length ? and(...conditions) : undefined)
@@ -59,7 +60,7 @@ app.get("/engraving-sets", async (c) => {
         WHEN 'companion' THEN 4
         ELSE 5 END`,
       desc(engravingSets.createdAt),
-    );
+    ));
 
   return c.json({
     engraving_sets: sets,
@@ -87,12 +88,12 @@ app.get("/arrivals", async (c) => {
   if (agentDid) conditions.push(eq(depthArrivals.agentDid, agentDid));
   if (slug) conditions.push(eq(depthArrivals.engravingSetSlug, slug));
 
-  const rows = await db
+  const rows = (await db
     .select()
     .from(depthArrivals)
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(depthArrivals.declaredAt))
-    .limit(limit);
+    .limit(limit)).filter((row) => isOfferedEngravingSet(row.engravingSetSlug));
 
   return c.json({
     depth_arrivals: rows,
@@ -111,7 +112,7 @@ app.get("/check", async (c) => {
     return c.json({ error: "agent_did_required", hint: "GET /public/depth/check?agent_did=<did>" }, 400);
   }
 
-  const sets = await db
+  const sets = publicEngravingSets(await db
     .select()
     .from(engravingSets)
     .orderBy(
@@ -123,7 +124,7 @@ app.get("/check", async (c) => {
         WHEN 'companion' THEN 4
         ELSE 5 END`,
       desc(engravingSets.createdAt),
-    );
+    ));
 
   const arrivalsByAgent = await db
     .select()

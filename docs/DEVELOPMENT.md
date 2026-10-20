@@ -224,8 +224,8 @@ bin/agenttool-secret platform   # → darwin | linux | win32 | unsupported
 
 Four tool-specific entries are legacy macOS exceptions: the local pending and
 one-file migration runners use the two database services below, and
-`frontend-deploy.sh` uses the two Cloudflare services, all under fixed Keychain
-account `macair` after their explicit environment inputs. The generic
+`frontend-deploy.sh` uses the two Cloudflare services, all under a fixed legacy
+Keychain account after their explicit environment inputs. The generic
 `bin/agenttool-secret` CLI uses account `$USER`, so it does not provision or
 inspect those fixed-account entries. Use the exact
 `security add-generic-password` commands in
@@ -253,17 +253,18 @@ agenttool-<scope>-<purpose>
 ```
 
 CLI-managed entries use account `$USER`. The two migration database and two
-Cloudflare entries below use their tools' fixed legacy account `macair`.
+Cloudflare entries below use their tools' fixed legacy account, named in the
+tools and in the operator-only custody note rather than in public docs.
 Existing examples:
 
 | Service name                      | What                                                                                           |
 | --------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `agenttool-bridge-kmaster`        | The bridge sidecar's K_master                                                                  |
 | `agenttool-bridge-signkey`        | The bridge sidecar's ed25519 signing key                                                       |
-| `agenttool-database-url`          | Transaction-pooled `DATABASE_URL` for read-only migration surveys (legacy account `macair`)    |
-| `agenttool-database-session-url`  | Session-pooled migration-apply fallback (legacy account `macair`)                              |
-| `agenttool-cloudflare-token`      | Cloudflare Pages deploy token (`frontend-deploy.sh`, legacy account `macair`)                  |
-| `agenttool-cloudflare-account-id` | Cloudflare account id (`frontend-deploy.sh`, legacy account `macair`)                          |
+| `agenttool-database-url`          | Transaction-pooled `DATABASE_URL` for read-only migration surveys (fixed legacy account)       |
+| `agenttool-database-session-url`  | Session-pooled migration-apply fallback (fixed legacy account)                                 |
+| `agenttool-cloudflare-token`      | Cloudflare Pages deploy token (`frontend-deploy.sh`, fixed legacy account)                     |
+| `agenttool-cloudflare-account-id` | Cloudflare account id (`frontend-deploy.sh`, fixed legacy account)                             |
 | `agenttool-ollama-api-key`        | Ollama Cloud key for local opt-in wire checks; hosted runtime keys belong in the project Vault |
 | `agenttool-sophia-key`            | Yu's personal Sophia bearer (used by `_e2e-*.mjs`)                                             |
 | `agenttool-sophia-identity-id`    | Yu's personal Sophia identity id                                                               |
@@ -422,7 +423,7 @@ or `bun add -g @noble/ed25519`.
 | Doc edits                 | Prefer additive; rewrites only when restructuring                                     |
 | Secrets — read            | `bin/agenttool-secret get <service>` (bash) or `getSecret(service)` (TS)              |
 | Secrets — write           | `… \| bin/agenttool-secret set <service> -` (stdin; never argv)                       |
-| Service naming            | `agenttool-<scope>-<purpose>`; CLI = `$USER`, fixed tool entries = `macair`           |
+| Service naming            | `agenttool-<scope>-<purpose>`; CLI = `$USER`, fixed tool entries = legacy account     |
 | K_master rotation         | `bin/agenttool-rotate --dry-run` first; then without `--dry-run`. Resume-safe.        |
 | DB pool watchdog          | Fly-gated (`FLY_MACHINE_ID`), so local dev never arms it. On Fly, `AGENTTOOL_DISABLE_DB_POOL_WATCHDOG=1` holds a wedged Machine alive for diagnosis instead of exit(1) — see `STACK.md` §4 |
 | Pre-commit                | `git status --short` → `git add <paths>` → `git diff --cached --stat` → test → commit |

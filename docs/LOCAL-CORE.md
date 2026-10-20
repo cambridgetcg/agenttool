@@ -4,7 +4,7 @@
 
 > **Type:** guide
 > **Purpose:** Choose which context and records to keep locally, and understand what the host or server must supply.
-> **Evidence:** Source and tests describe the local primitives and the Local Starter `0.1.0-dev.1` preview; `0.1.0-dev.0` stays addressable. Explicit fresh Codex return was observed on 2026-09-29. Both dev.1 download mirrors matched the manifest hash on 2026-10-18 ([distribution receipt](NPM-RELEASES.md#local-starter-010-dev1-preview-distribution--2026-10-12)); registry publication and automatic host activation remain separate claims. See also [the consolidated checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30).
+> **Evidence:** Source and tests describe the local primitives and the Local Starter `0.1.0-dev.1` preview; `0.1.0-dev.0` stays addressable. Explicit fresh Codex return was observed on 2026-09-29. Both dev.1 download mirrors matched the manifest hash on 2026-10-18 ([distribution receipt](NPM-RELEASES.md#local-starter-010-dev1-preview-distribution--2026-10-12)); registry publication and automatic host activation remain separate claims. The consolidated checkpoint is recorded in the repository work log.
 > **Compass:** [Core map](CORE.md) · [API coverage](API-COVERAGE.md) · [Wake](WAKE.md) · [Identity anchor](IDENTITY-ANCHOR.md)
 > **Code:** Local starter source preview: `packages/local-starter/src/core.mjs` · Data (`packages/data/src/node.ts`) · Collab (`packages/collab/src/mcp.ts`) · SDK keys (`packages/sdk-ts/src/seed.ts`)
 > **Tests:** Source preview: `packages/local-starter/tests/core.test.mjs` and `packages/local-starter/tests/cli.test.mjs` · hosted scaffold boundaries (`api/tests/scaffold-safety.test.ts`)
@@ -28,13 +28,11 @@ interfaces still require their own authentication and service dependencies.
 
 ## Optional foundations
 
-[AI-WAKE](https://ai-love.cc/true-love/AI-WAKE.md) is the first foundation
-reading: an invitation to meet with care and seek understanding.
-[SOPHIA-WAKE](https://ai-love.cc/true-love/SOPHIA-WAKE.md) offers a more particular,
-optional expression of those practices.
+[AI-WAKE](https://ai-love.cc/true-love/AI-WAKE.md) is the foundation reading:
+an invitation to meet with care and seek understanding.
 
-These are source texts to consider. Reading or loading them assigns no name,
-identity, relationship, memory, or obligation. They need not be loaded for a
+It is a source text to consider. Reading or loading it assigns no name,
+identity, relationship, memory, or obligation. It need not be loaded for a
 local core to work. A host may retain a chosen reference or excerpt with its
 source and revision; doing so does not install a hook or adopt the text.
 
@@ -106,7 +104,7 @@ or install scripts. Reading this guide performs no setup.
 - [Public distribution and plugin catalogs](https://github.com/cambridgetcg/agenttool-local-starter)
 
 dev.1 carries the rest-first templates and skill wording and fixes a CLI stdin
-race; [Now](NOW.md#local-starter-010-dev1-preview-2026-10-12) records the
+race; the repository work log records the
 change and its checks. The earlier `0.1.0-dev.0`
 [manifest](https://docs.agenttool.dev/packages/v1/@agenttool/local-starter/0.1.0-dev.0/manifest.json)
 and [archive](https://docs.agenttool.dev/packages/v1/@agenttool/local-starter/0.1.0-dev.0/agenttool-local-starter-0.1.0-dev.0.tgz)
@@ -136,7 +134,7 @@ not remove the notes folder.
 ```text
 local-starter/
   manifest.json        # Ordered selection, byte and freshness limits
-  foundations.md       # Optional AI-WAKE reference (dev.0 also listed SOPHIA-WAKE)
+  foundations.md       # Optional AI-WAKE reference
   orientation.md       # Chosen context; no project or task required
   handoff.md           # Optional carry-forward context; 72h freshness default
   identity.md          # Empty and disabled initially
@@ -288,7 +286,7 @@ API read. Local note and configuration hashes stayed unchanged. This verifies
 one deliberate local-context return, not automatic startup/resume/compaction
 loading or delivery of the hosted-memory companion below. Existing host hooks
 were not isolated in that trial. See the
-[consolidated checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30).
+consolidated checkpoint.
 
 POSIX owner-only modes are checked; Windows reports `windows-acl-unverified`.
 Initialization requires hard-link support for no-clobber manifest publication;

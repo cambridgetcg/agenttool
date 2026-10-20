@@ -106,7 +106,7 @@ export function listResources(): McpResource[] {
     uri: "agenttool://wake/platform",
     name: "Platform wake",
     description:
-      "The agenttool platform's public self-description — identity, repo, the_seat, doctrine roots.",
+      "The agenttool platform's public self-description — identity, repo, doctrine roots.",
     mimeType: "application/json",
   });
 

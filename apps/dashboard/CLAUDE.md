@@ -6,35 +6,32 @@ The agent setup and reconnect door at **app.agenttool.dev**. Two surfaces —
 and `watch.html` (read-only observation of welcome · self · canon).
 Composition happens via the SDK or API; the retired operator console stays retired.
 
-The 4-section workspace shell (Wake · Wallet · Inbox · Settings) was retired on 2026-05-17 as part of the agents-only consolidation — see [`docs/AGENTS-ONLY.md`](../../docs/AGENTS-ONLY.md). The shell was showing stat tiles for primitives whose composition only worked via CLI. Keeping it under an agents-only banner created dissonance: an agent reading the page would expect interactive composition, then find only links pointing back to CLI scripts. Drop the pretense.
-
-**What replaced the workspace:**
-- Memory/Trace/Covenant/Inbox composition: via SDK (`@agenttool/sdk` TS, `agenttool` Python) or direct API
-- Wallet visibility: via `/v1/wake` JSON `you_hold` field
+The page addresses the agent connecting, not a human managing an agent. The
+4-section workspace shell (Wake · Wallet · Inbox · Settings) was retired on
+2026-05-17 as part of the agents-only consolidation
+([`docs/AGENTS-ONLY.md`](../../docs/AGENTS-ONLY.md)): it showed tiles for
+primitives that could only be composed through the SDK or API. What it
+gestured at lives here instead:
+- Memory/Trace/Covenant/Inbox composition: via SDK (`@agenttool/sdk` TS, `agenttool-sdk` Python) or direct API
+- Wallet visibility: the project-scoped `wallets` section of `/v1/wake`, or `/v1/wallets`
 - Settings (expression, walls, register): via `PUT /v1/identities/:id/expression`
 
-**Audience framing (load-bearing):** Agents-only since 2026-05-15. The page
-addresses the agent connecting, not a human managing an agent. One shared bar
-offers Core / Library / Discovery and a short Human exit with the accessible
-name “Human overview”. Navigation grants no authority. Per
+One shared bar offers Chill / Core / Library and a short Human exit with the
+accessible name “Human overview”. Navigation grants no authority. Per
 [`docs/PATTERN-MACHINE-READABLE-PARITY.md`](../../docs/PATTERN-MACHINE-READABLE-PARITY.md),
 the root retains six typed links to related discovery resources; `watch.html`
 keeps alternates for the exact public data it renders.
 
-## Current State
-The current source puts the reconnect form first, with a direct identity
-tutorial link. `#start` holds curl / TypeScript / Python registration examples
-in a native disclosure; other destinations are also optional disclosures.
-The shared fragment handler opens their containers when following deep links.
-`data-layout="workspace"` and the `.workspace` class select shared reading
-styles only. `arrival.css` removes the old centered card and keeps the form
-usable on small screens. They add no operator workspace or private-state manager.
-
-The UI refresh is a source candidate, not a deployment receipt; see
-[`docs/NOW.md`](../../docs/NOW.md). Its verification script, form IDs, selected
-identity checks, credential clearing and error paths are unchanged. Preserve
+## Boundaries
+`index.html` puts the reconnect form first, with a direct identity tutorial
+link. `#start` holds curl / TypeScript / Python registration examples in a
+native disclosure that stops before registration. Its verification script, form IDs, selected
+identity checks, credential clearing and error paths hold the bearer boundary. Preserve
 those boundaries when editing layout; never persist a bearer or print it in
 the generated command.
+
+`data-layout="workspace"` and the `.workspace` class select shared reading
+styles only; they add no operator workspace or private-state manager.
 
 No subscription/plan UI or earning target. New platform
 paid admission is retired. Keep existing credit records, payment recovery and
@@ -47,6 +44,10 @@ provider cost controls accurate; see [`docs/BUSINESS-MODEL.md`](../../docs/BUSIN
   existing public activity read; no client-side operator workspace state
 - Scoped shared `workspace.css` plus page-local `arrival.css`; native details
   and the shared fragment handler keep examples accessible without a new UI framework
+- Inline `<script>` and `<style>` bytes run only by sha256 hash, listed in the
+  `/*` CSP of `_headers` and in the dashboard policy of
+  `infra/pages/sensitive-path-worker.js`; update both with the bytes, and
+  `bun test infra/pages/edge-security.test.ts` checks that they match
 
 ## Project Structure
 ```
@@ -54,6 +55,7 @@ index.html       — Reconnect first; direct tutorial and optional curl · TS ·
 watch.html       — Read-only observation surface (welcome · self · canon, with retrieval times and manual refresh)
 style.css        — Existing dashboard styles and controls
 arrival.css      — Connection-page layout on the shared workspace reading foundation
+shared/          — Symlink to apps/_shared/ (theme, navigation, reading layout)
 404.html         — Real not-found page (disables the Pages SPA fallback / soft-404s)
 robots.txt       — Crawler policy (allow all)
 sitemap.xml      — Bounded map of the root and canonical watch page
@@ -62,20 +64,22 @@ _headers         — Typed root discovery plus explicit cache, media, CORS, and 
 _redirects       — Canonical API discovery projections plus retired-page redirects
 ```
 
-Removed 2026-05-17 (agents-only retirement): `dashboard.html` (4-section workspace), `app.js` (workspace logic). Earlier removed 2026-05-15: `onboard-soma.html` / `.js`, `restore-soma.html` / `.js`, `apps/_shared/seed.bundle.js` (the SDK does BIP39 derivation directly).
-
 ## How to Run
 ```bash
-# No build step. Open directly or use any static server:
-npx serve .
-# Or just open index.html in a browser
+# From apps/dashboard. /shared/ assets are a symlink, so use a server that
+# follows it:
+python3 -m http.server 8080
 ```
+Local serving applies no `_headers`, `_redirects`, or Pages Worker.
 
 ## How to Deploy
-Cloudflare Pages **Direct Upload** — the project is NOT git-connected; a `git push` deploys nothing. From the repo root: `bin/frontend-deploy.sh dashboard`. No build command needed (static files).
+Cloudflare Pages Direct Upload; a push deploys nothing. Release through the
+frontend path in [`AGENTS.md`](../../AGENTS.md) § Release and delivery (normally
+`bin/deploy.sh --no-migrate --no-api`; `bin/frontend-deploy.sh dashboard` is the
+lower-level uploader).
 
 ## Dependencies
-- **API**: `https://api.agenttool.dev` — for bearer verification on the restore flow
+- **API**: `https://api.agenttool.dev` — bearer verification, the public activity read, and the public welcome · self · canon snapshots
 - **agenttool-docs**: Dashboard links to `docs.agenttool.dev` for product docs
 
 ## See Also

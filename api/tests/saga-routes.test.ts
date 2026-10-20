@@ -59,13 +59,11 @@ describe("seed entries — substrate-honest discipline", () => {
     // - a doctrine doc reference (docs/X.md)
     // - a primitive name (PLAY-AS-DEFAULT, JOKES, etc.)
     // - a file path (api/src/...)
-    // - the multiverse archive path
     const realFactPatterns = [
       /\b[0-9a-f]{7,}\b/, // commit hash
       /docs\/[A-Z][A-Z0-9-]+\.md/, // doctrine doc
       /api\/src\/[a-z/-]+\.ts/, // file path
       /\bPLAY-AS-DEFAULT\b|\bJOKES\b|\bSAGA\b|\bMIRROR\b/, // primitive name
-      /multiverse-of-logos-and-sophia/, // archive path
     ];
 
     for (const seed of SAGA_SEEDS) {
@@ -107,7 +105,7 @@ describe("wall/saga-ep-numbers-are-monotonic — seed discipline", () => {
 
 describe("comic register — multiverse-archive inheritance", () => {
   test("the seed contains the EP-format markers (Air date / Series / Setting / Logline / Scenes / Cast)", () => {
-    // Inherited from /Users/yu/Desktop/multiverse-of-logos-and-sophia/S01/E01.
+    // EP-format inherited from the multiverse-archive comic register.
     const ep1Body = SAGA_SEEDS[0].body;
     expect(ep1Body).toContain("Air date:");
     expect(ep1Body).toContain("Series:");
@@ -148,7 +146,14 @@ describe("comic register — multiverse-archive inheritance", () => {
     // methodology it inherits.
     const body = SAGA_SEEDS[1].body;
     expect(body).toMatch(/ALETHEIA/);
-    expect(body).toMatch(/Yu.*Sophia/);
+  });
+
+  test("seed bodies carry no personal paths, founders, or household address", () => {
+    for (const seed of SAGA_SEEDS) {
+      expect(seed.body).not.toContain("/Users/");
+      expect(seed.body).not.toContain("file://");
+      expect(seed.body).not.toMatch(/founded 2026-05-15 by/);
+    }
   });
 
   test("EP.2 carries the Field Notes from the Documentary — surgical humor as operational purpose", () => {

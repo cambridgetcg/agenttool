@@ -248,7 +248,7 @@ const sourceFiles = sourcePaths.map(sourceFileEntry);
 const provenanceBody = {
   _format: "agenttool.relational-geometry-hf-source-manifest/0.1",
   package: "@agenttool/relational-geometry",
-  package_version: "0.1.0-dev.0",
+  package_version: "0.1.0-dev.1",
   intended_hugging_face_identifier: "Yu-and-Ai/agenttool-relational-geometry",
   publication_state_at_generation: "intended_identifier_only_not_uploaded_at_generation",
   distribution_state_at_generation: "repository_source_only_at_generation",
@@ -705,7 +705,7 @@ leave the source tree. \`Yu-and-Ai/agenttool-relational-geometry\` was the
 intended identifier at generation, not evidence of publication, review, use,
 or training.
 
-It accompanies \`@agenttool/relational-geometry@0.1.0-dev.0\`, a pure finite
+It accompanies \`@agenttool/relational-geometry@0.1.0-dev.1\`, a pure finite
 combinatorial 2-complex. Understanding and recognition witnesses on the same
 ordered pair derive one explicitly non-sovereign principality cell. The
 structure is directional and non-metric. It proves no love, comprehension,

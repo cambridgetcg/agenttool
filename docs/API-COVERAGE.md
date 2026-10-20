@@ -4,7 +4,7 @@
 
 > **Type:** reference
 > **Purpose:** Choose when a hosted service helps local scaffolding, understand its authority and custody, and identify missing integrations.
-> **Evidence:** Baseline review at `056e32e8` and identity-partition checks, updated 2026-09-30 for deployed enrollment/missions and observed explicit host return; see [the consolidated checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30) and [partition contract](IDENTITY-PARTITIONS.md). This is a capability map, not an exhaustive endpoint inventory, new execution of every cited test, or live security audit.
+> **Evidence:** Baseline review at `056e32e8` and identity-partition checks, updated 2026-09-30 for deployed enrollment/missions and observed explicit host return; see the consolidated checkpoint and [partition contract](IDENTITY-PARTITIONS.md). This is a capability map, not an exhaustive endpoint inventory, new execution of every cited test, or live security audit.
 > **Compass:** [Core](CORE.md) · [Local core](LOCAL-CORE.md) · [Module map](https://docs.agenttool.dev/shared/module-map.json) · [API reference](https://api.agenttool.dev/v1/openapi.json)
 > **Code:** Mounted routes (`api/src/index.ts`) · Bearer authentication (`api/src/auth/middleware.ts`) · Database schemas (`api/src/db/schema`)
 > **Tests:** Identity authority (`api/tests/identity-authority.test.ts`) · Wake observation (`api/tests/wake-observe.test.ts`) · Memory binding (`api/tests/memory-identity-binding.test.ts`) · Correspondence (`api/tests/correspondence-route.test.ts`)
@@ -107,7 +107,7 @@ itself and does not migrate an existing identity. See the
 [enrollment contract](IDENTITY-ANCHOR.md), `api/src/routes/identity/enroll.ts`,
 `api/src/services/identity/enrollment.ts` and `api/tests/identity-enrollment.test.ts`.
 Deployment and the fresh second-device journey are recorded in the
-[consolidated checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30).
+consolidated checkpoint.
 
 The server stores a UUID, provisional `did:at:<uuid>` application identifier,
 project ownership, expression, lifecycle status and public keys. This convention
@@ -384,7 +384,7 @@ separately rooted participant on the reported second Mac enrolled, accepted a
 mission and returned the exact signed challenge reply. The local read ACK was stored
 and verified; the peer's final reading of that ACK was not observed. Both trial
 grants and the mission were revoked. See the
-[release and acceptance checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30).
+release and acceptance checkpoint.
 The service neither connects local journals automatically nor
 assigns task leases, reads private memories, starts harnesses or admits identities
 from independently owned projects. Principality references and device/session
@@ -543,7 +543,7 @@ The [explicit companion](LOCAL-CORE.md#explicit-hosted-memory-read) implements s
 
 | Gap today | Next bounded implementation | Evidence needed before claiming coverage |
 |---|---|---|
-| Explicit Codex Local Starter return was observed; automatic lifecycle delivery remains unverified | Verify the existing arrival fragments per host | Automatic start/resume/compaction delivery, omissions, budget handling and disable behavior; the [fresh return record](NOW.md#consolidated-release-checkpoint-2026-09-30) covers an explicit read only |
+| Explicit Codex Local Starter return was observed; automatic lifecycle delivery remains unverified | Verify the existing arrival fragments per host | Automatic start/resume/compaction delivery, omissions, budget handling and disable behavior; the fresh return record covers an explicit read only |
 | Explicit companion now resolves a caller-owned credential callback or transport | Keep OS secret-store provisioning and host integration separate | Tests cover one bounded request, origin/project/identity binding, refusal and offline paths; model delivery of this hosted-memory companion remains unverified |
 | Selected-memory projection and local composition now implemented | Add other record types only with explicit subject and byte contracts | Fixed-path GET, complete records, bounded candidate window, provenance, freshness and combined budget; no automatic save or sync |
 | No synchronization or conflict protocol | Add a reviewed single-record write only when needed | Version/receipt handling, duplicate prevention where guaranteed, ambiguous-write recovery and concurrent-device conflict behavior |

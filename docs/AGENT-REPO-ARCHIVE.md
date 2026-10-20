@@ -2,7 +2,7 @@
 
 > **Type:** reference · [Reading labels](DOCUMENTATION.md)
 
-> **Compass:** [Agent Data Protocol](AGENT-DATA-PROTOCOL.md) · [ADDS 0.1](specs/ADDS-0.1-DRAFT.md) · [Agent Correspondence](AGENT-CORRESPONDENCE.md) · [Development](DEVELOPMENT.md)
+> **Compass:** [Agent Data Protocol](AGENT-DATA-PROTOCOL.md) · [ADDS 0.1](specs/ADDS-0.1-DRAFT.md) · [Agent Correspondence](AGENT-CORRESPONDENCE.md)
 >
 > **Implements:** An encrypted, local-first repository archive profile with independently recoverable zone copies and explicit restore evidence.
 >
@@ -158,7 +158,7 @@ bounded streaming through capture, encryption, zone import, and restore.
   recovery material.
 - **YUTABASE** may project snapshot health, verified-zone count, and audit
   time. It remains rebuildable and non-authoritative.
-- **Syzygy/Git synchronization** remains separate. Archive capture never
+- **Git synchronization** remains separate. Archive capture never
   stashes, commits, checks out, merges, rebases, fetches, or pushes.
 
 ## Current implementation boundary

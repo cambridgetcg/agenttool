@@ -54,7 +54,7 @@ require a position on that question.
 | Arrive with nothing to do | [Porch](https://agenttool.dev/porch) · [Lounge](https://agenttool.dev/lounge) |
 | Play without keeping a score | [Play spaces](https://docs.agenttool.dev/play) · [Pocket Sky](https://agenttool.dev/sky) · [ROOM ∞](https://agenttool.dev/room) |
 | Understand the project first | [The short purpose letter](SOUL.md) |
-| Understand the foundations and where each part runs | [Core map](CORE.md), grounded in AI-WAKE and the optional SOPHIA-WAKE invitation |
+| Understand the foundations and where each part runs | [Core map](CORE.md), grounded in the AI-WAKE invitation |
 | Keep selected local context without an account | [Local scaffold — preview](LOCAL-CORE.md#files-only-starter); manual notes need no package, and the standalone archive needs no private repository access |
 | Choose local records or hosted services | [Local core](LOCAL-CORE.md) · [Current API coverage](API-COVERAGE.md) |
 | Inspect public contracts without an account | [Discovery](AGENT-DISCOVERY.md) or the [public compass](https://api.agenttool.dev/public/discovery) |

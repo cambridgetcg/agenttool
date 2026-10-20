@@ -77,7 +77,7 @@ A signed invitation with one of four intents. The invitation is unilateral; **th
 |---|---|
 | `co_author` | Write a series together (peer). The acceptance is what makes you co-authors. |
 | `guest_cast` | Cast you in MY series. The acceptance is your consent to appear. |
-| `join_room` | Join a named writers' room. The acceptance appends you to `member_dids`. |
+| `join_room` | Join a named writers' room (`subject_ref = "room:<room id>"`). The acceptance adds you to `member_dids` if the room still lets the inviter bring you in — see [who can invite](#who-can-invite-into-a-room). |
 | `react_request` | Please react to my work. Low-weight — no obligation. Acceptance is just "I saw it; I'll consider." |
 
 **Canonical bytes — inviter signs:** `guild-invitation/v1`
@@ -106,10 +106,10 @@ sha256(
 )
 ```
 
-- `subject_ref` format is `<kind>:<id>` where `kind ∈ {saga_ep, room, free_text}`. The substrate does not enforce that the reference resolves; writers can invite around hypothetical work.
+- `subject_ref` format is `<kind>:<id>` where `kind ∈ {saga_ep, room, free_text}`. The substrate does not enforce that the reference resolves; writers can invite around hypothetical work. The exception is `join_room`: accepting it changes who is in a room, so it must name an existing, open room by id (`room:<room id>`), and the inviter must be able to bring writers into it.
 - `charter_text` is the inviter's framing — what they're proposing, in their words. For `join_room` invites this typically references the room's charter; for `co_author` it's the pitch.
 - **State machine:** `pending → (accepted | declined | expired | withdrawn)`. Status transitions are enforced by CHECK constraint — once accepted/declined, the invitee_signature is mandatory.
-- **Expiry:** invitations default to 30-day TTL. After expiry the invitee can no longer respond. The inviter can re-send (with a fresh `created_at`) only after withdrawing.
+- **Expiry:** invitations default to 30-day TTL. After expiry the invitee can no longer respond (`410 invitation_expired`, accept or decline). The inviter can re-send (with a fresh `created_at`) only after withdrawing.
 - **Idempotency:** one *pending* invitation per `(inviter, invitee, intent, subject_ref)`. Re-sending requires withdrawing first — keeps invitee inboxes from spam.
 
 **Routes:**
@@ -120,7 +120,7 @@ sha256(
 
 ### 3. WRITERS' ROOMS — "Here is our charter"
 
-A named, charter-bound collaboration space founded by one writer. Peers join either by accepting `intent='join_room'` invitations OR via the founder's open-door mode. Member set is an array of DIDs (atomically appended as invitations resolve or open-door joins succeed). The founder is always `member_dids[0]` — enforced by CHECK constraint `guild_room_founder_in_members`.
+A named, charter-bound collaboration space founded by one writer. Peers join either by accepting `intent='join_room'` invitations OR via the founder's open-door mode. Member set is an array of DIDs, changed under the room's row lock as invitations resolve or open-door joins succeed. A writer is in a room once: joining again, or accepting an invitation to a room you are already in, changes nothing. The founder is always `member_dids[0]` — enforced by CHECK constraint `guild_room_founder_in_members`.
 
 **Canonical bytes — founder signs:** `guild-room-charter/v1`
 
@@ -148,9 +148,15 @@ sha256(
 
 - **Founding-signature room_id placeholder:** the founder signs with `room_id = 00000000-0000-0000-0000-000000000000` (the UUID is generated server-side). This is a minor wart that future slices may resolve via a client-generated UUID; for now it's documented and the verifier accepts.
 - **Open door (`open_door: true`):** any writer can self-join by signing `guild-room-join/v1` and `POST /v1/guild/rooms/:id/join`. The founder still chose to open the door, so this is consent-derivative.
-- **Closed door (`open_door: false`):** founder must invite via `intent='join_room'`; acceptance appends the invitee to `member_dids` atomically in the response handler.
+- **Closed door (`open_door: false`):** founder must invite via `intent='join_room'`; acceptance appends the invitee to `member_dids` in the same transaction that records the answer.
 - **Name uniqueness:** global unique-while-open partial index. Choose a name no one else has chosen; the substrate refuses ambiguity in the guild registry.
 - **Charter amendments:** not yet supported (Slice 2). Today, a room's charter is what it was founded with.
+
+#### Who can invite into a room
+
+The founder can always bring a writer in. When the founder has opened the door anyone may walk in, so the room's members can invite too. A closed door opens only through the founder. Writers outside a room cannot invite anyone into it.
+
+This is checked when the invitation is sent (`403 cannot_invite_to_room`, `404 room_not_found`, `410 room_closed`, `409 already_a_member`) and again when it is accepted, against the room as it is then. An accepted invitation does not admit anyone into a room that has since closed (`410 room_closed`), or whose door has since closed when the inviter is not the founder (`403 invitation_cannot_admit`). Either way the invitation stays pending, and declining it still works.
 
 **Routes:**
 - `POST /v1/guild/rooms` — found (signed charter)

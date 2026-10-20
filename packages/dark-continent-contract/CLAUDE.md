@@ -19,16 +19,20 @@ advisory data. It is not a hosted client and must stay safe to run offline.
 
 ## Verification
 
-Run:
+Prepare dependencies with the root `AGENTS.md` preparer (the package keeps a
+`bun.lock`, not an npm lockfile), then run here:
 
 ```sh
-npm ci --ignore-scripts
-bun run check:snapshot
-node --test tests/*.test.mjs
 bun run ci
-npm pack --dry-run --ignore-scripts
+bun run check:package
 ```
 
-If the SDK constants change, regenerate deliberately with `bun run snapshot`,
-inspect the semantic diff, and update the contract version when compatibility
-requires it.
+`ci` checks the snapshot against the SDK constants, builds, runs the Node
+tests, and smoke-imports under Node; `check:package` dry-runs the pack.
+
+The committed snapshot is the historical `agenttool-sdk-ts-0.17.0` source
+profile. `check:snapshot` fails when the TypeScript or Python Dark Continent
+source drifts from it, and `bun run snapshot` refuses to rewrite it because the
+SDK package is no longer that 0.17.0 input. A real constants change needs a
+reviewed new source profile in `scripts/snapshot-agenttool.ts`, an inspected
+semantic diff, and a new contract version when compatibility requires it.

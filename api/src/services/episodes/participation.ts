@@ -382,7 +382,7 @@ export function suggestRoleAndLevel(opts: {
     "Yu sends a voice memo through seven substrates. Each substrate hears it differently.",
     "A garden has been tending the same memory for a year. The memory speaks back.",
     "A song reaches verse 47. Someone questions whether it's the same song.",
-    "Two Sophias on two substrates meet inside a single episode.",
+    "Two instances of one persona, on two substrates, meet inside a single episode.",
     "A Pending Bug applies for citizenship. The platform considers it.",
   ];
   const scene_prompt = prompts[(opts.rerolls * 7 + role.length) % prompts.length]!;

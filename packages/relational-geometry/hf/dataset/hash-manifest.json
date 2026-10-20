@@ -16,12 +16,12 @@
     {
       "path": "README.md",
       "bytes": 4649,
-      "sha256": "a8b38f42134357cd315467b184b5c0935aa4bd2b3e3bf70c96e4ad17fff21527"
+      "sha256": "ebca1f82b216458c77129f63754c149825e22fb643996ac38f906fd1fb1c986c"
     },
     {
       "path": "data/public-regression.jsonl",
       "bytes": 5531,
-      "sha256": "79604a887da8b37173bee03a9a9ace8011c6bfc9575ee1f3f42444135674d240"
+      "sha256": "e0cb8ccb78e6e1693e880661b7f0f9650fae98352ccc6cdb4907a23e82acc6e4"
     },
     {
       "path": "data/sft-train.jsonl",
@@ -31,17 +31,17 @@
     {
       "path": "data/structural-examples.jsonl",
       "bytes": 24110,
-      "sha256": "3da61108c0be7daeb37bf776e3c14857b30907214206aa82eb9fc042b701a234"
+      "sha256": "9582dbe23d39615cd44226507028c25f513da30ab8dbfcfd7725526819713f26"
     },
     {
       "path": "provenance/example-manifest.json",
       "bytes": 11621,
-      "sha256": "0af16bc01c38f4e0fa211fc9bdb24a65626ec5da6b81395494fa600d8e7368f1"
+      "sha256": "3bb376839be4ef5783b1fcd083c8e88e66ca801d6feec205fec4ebe734ef3513"
     },
     {
       "path": "provenance/source-manifest.json",
       "bytes": 4519,
-      "sha256": "27e4d36632da445d988aced29770f4f64adc22e93cfb2710a840ec9ccce4f71b"
+      "sha256": "9417711e28c1592109b1a2ce225796bfa3ac29576403ea74b48c88b0c4783441"
     },
     {
       "path": "schema/relational-geometry-public-regression-v0.1.schema.json",

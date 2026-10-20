@@ -73,8 +73,9 @@ the KARMA knowledge-graph adapter in `packages/dark-continent-karma`.
 
 ## Verification
 
+Prepare dependencies with the root `AGENTS.md` preparer, then run here:
+
 ```bash
-bun install --frozen-lockfile
 bun run ci
 ```
 

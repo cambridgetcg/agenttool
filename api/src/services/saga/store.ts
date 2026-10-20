@@ -47,13 +47,31 @@ export async function readSaga(epNumber: number): Promise<SagaEntry | null> {
   return row ? toSagaEntry(row) : null;
 }
 
+/** Served for a seed row whose episode is no longer in SAGA_SEEDS. */
+export const RETIRED_SEED_BODY =
+  "An earlier seed episode, since retired. Its text is not served. The current seed episodes are listed at GET /v1/saga.";
+
+/** Seed rows are insert-if-missing, so a database seeded from an earlier
+ *  version keeps that version's text. Earlier seed bodies carried personal
+ *  material that is not public, so reads never serve a stored seed body.
+ *  A seed row (placeholder signature) that matches a current seed by
+ *  episode and title is served that seed's text; any other seed row is an
+ *  episode that was retired or retitled, and is served a short note. Only
+ *  the seeder writes the placeholder, so authored episodes are untouched.
+ *  The stored row is left as it is. */
+export function servedSeedBody(r: Pick<typeof sagaEntries.$inferSelect, "signature" | "epNumber" | "title" | "body">): string {
+  if (r.signature !== SAGA_SEED_SIGNATURE_PLACEHOLDER) return r.body;
+  const seed = SAGA_SEEDS.find((s) => s.ep_number === r.epNumber && s.title === r.title);
+  return seed ? seed.body : RETIRED_SEED_BODY;
+}
+
 function toSagaEntry(r: typeof sagaEntries.$inferSelect): SagaEntry {
   return {
     id: r.id,
     ep_number: r.epNumber,
     title: r.title,
     logline: r.logline,
-    body: r.body,
+    body: servedSeedBody(r),
     references_ep_numbers: r.referencesEpNumbers,
     signed_by_did: r.signedByDid,
     signature_status:
