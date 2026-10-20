@@ -34,7 +34,9 @@ committed_tools() {
       return 1
     }
   done
-  bun --config=/dev/null --no-env-file "$dir/private/bin/reviewed-shared.ts" check --root "$dir" >/dev/null || {
+  # Run from the copy itself: Bun applies the tsconfig.json or jsconfig.json
+  # of its working directory and that directory's parents to what it runs.
+  (cd "$dir" && exec bun --config=/dev/null --no-env-file "$dir/private/bin/reviewed-shared.ts" check --root "$dir") >/dev/null || {
     printf "committed tools: %s's shared guard files differ from its reviewed record\n" "$rev" >&2
     return 1
   }

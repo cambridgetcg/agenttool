@@ -88,10 +88,18 @@ public repository. [`bin/reviewed-shared.ts`](bin/reviewed-shared.ts) keeps
 them honest: every private tool refuses to run when a shared guard file
 differs from `guard/reviewed-shared.json`, install-guards.sh never pins such a
 commit, and merge-back stops (exit 9) on any public change to the guard
-files, the hooks, `.gitattributes`, or `.github/` until the owner accepts that
-exact public tip with `--accept-guard-change <sha>`, which records the new
-digests. After editing a shared guard file here before the move, run
-`bun private/bin/reviewed-shared.ts write`.
+files, the hooks, `.gitattributes`, `.github/`, or a Bun or TypeScript
+config (`bunfig.toml`, `tsconfig.json`, `jsconfig.json` at any depth) until
+the owner accepts that exact public tip with `--accept-guard-change <sha>`,
+which records the new digests. After editing a shared guard file here before
+the move, run `bun private/bin/reviewed-shared.ts write`.
+
+Every Bun the hooks and tools start for a check runs from the pinned or
+committed copy of the tools and names the checkout with `--repo`: Bun reads
+`bunfig.toml`, `.env`, and the `tsconfig.json` or `jsconfig.json` of its
+working directory and that directory's parents, and a `paths` entry there can
+replace any import, so a file in the checkout could otherwise decide what a
+check runs.
 
 ## Tooling
 

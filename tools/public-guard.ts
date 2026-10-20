@@ -10,6 +10,13 @@
  *   bun tools/public-guard.ts --tree [--rev <commit>] [--gitleaks <binary>]
  *   bun tools/public-guard.ts --watch [--rev <commit>]
  *
+ * Every mode takes --repo <dir> (default: the working directory). A hook or
+ * tool that checks a clone it does not trust runs this file from its own
+ * pinned directory with --repo: Bun applies the TypeScript configuration
+ * (tsconfig.json or jsconfig.json) of its working directory and that
+ * directory's parents to whatever it runs, so a checkout's own file could
+ * otherwise change how this guard loads.
+ *
  * It reads the committed tree of <rev> (default HEAD) through Git plumbing,
  * never the working tree, and fails closed. Projection mode (the default):
  *
@@ -75,7 +82,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 export const GUARD_VERSION = "agenttool.public-guard/1";
 export const PROJECTION_SCHEMA = "agenttool.public-projection/1";
@@ -1540,9 +1547,9 @@ export function formatFinding(finding: Finding): string {
 
 function usage(): never {
   console.error(
-    "usage: bun tools/public-guard.ts [--rev <commit>] [--gitleaks <binary>] [--projection-commit] [--expect-parent <sha>|none] [--history]\n" +
-      "       bun tools/public-guard.ts --tree [--rev <commit>] [--gitleaks <binary>]\n" +
-      "       bun tools/public-guard.ts --watch [--rev <commit>] [--ack <file>]",
+    "usage: bun tools/public-guard.ts [--repo <dir>] [--rev <commit>] [--gitleaks <binary>] [--projection-commit] [--expect-parent <sha>|none] [--history]\n" +
+      "       bun tools/public-guard.ts --tree [--repo <dir>] [--rev <commit>] [--gitleaks <binary>]\n" +
+      "       bun tools/public-guard.ts --watch [--repo <dir>] [--rev <commit>] [--ack <file>]",
   );
   process.exit(2);
 }
@@ -1556,10 +1563,12 @@ function main(argv: readonly string[]): number {
   let tree = false;
   let watch = false;
   let ackFile: string | undefined;
+  let repo = process.cwd();
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = () => argv[++index] ?? usage();
     if (arg === "--rev") rev = value();
+    else if (arg === "--repo") repo = resolve(value());
     else if (arg === "--gitleaks") gitleaks = value();
     else if (arg === "--projection-commit") projectionCommit = true;
     else if (arg === "--history") history = true;
@@ -1576,8 +1585,8 @@ function main(argv: readonly string[]): number {
   if (watch && (tree || projectionCommit || history || expectedParents !== undefined || gitleaks !== undefined)) usage();
   if (ackFile !== undefined && !watch) usage();
   const findings = watch
-    ? watchFindings(process.cwd(), rev, { ack: ackFile === undefined ? undefined : parseWatchAck(readFileSync(ackFile), ackFile) })
-    : checkCommittedTree({ cwd: process.cwd(), rev, gitleaks, projectionCommit, expectedParents, history, tree });
+    ? watchFindings(repo, rev, { ack: ackFile === undefined ? undefined : parseWatchAck(readFileSync(ackFile), ackFile) })
+    : checkCommittedTree({ cwd: repo, rev, gitleaks, projectionCommit, expectedParents, history, tree });
   for (const finding of findings) console.log(formatFinding(finding));
   if (findings.length > 0) {
     console.error(`public guard: ${findings.length} finding(s); nothing here may be published as-is.`);

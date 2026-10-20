@@ -32,10 +32,15 @@ pin="$(cd "$hook_dir/../.." && pwd -P)"
 remote="${1:-}"
 url="${2:-}"
 zero="0000000000000000000000000000000000000000"
-# This tool's own Bun reads no bunfig.toml or .env from the checkout it
-# runs in: a committed preload would otherwise run before, or instead of,
-# every check.
-bun_guard=(bun --config=/dev/null --no-env-file)
+repo="$(git rev-parse --show-toplevel 2>/dev/null || git rev-parse --absolute-git-dir)"
+# The checks' Bun reads no bunfig.toml or .env (a committed preload would
+# otherwise run before, or instead of, every check), and it runs from the
+# pinned copy with --repo, never from the checkout: Bun applies the
+# tsconfig.json or jsconfig.json of its working directory and that
+# directory's parents to what it runs.
+guard_bun() {
+  (cd "$pin" && exec bun --config=/dev/null --no-env-file "$@")
+}
 
 die() {
   printf 'private pre-push: %s\n' "$*" >&2
@@ -44,8 +49,8 @@ die() {
 
 command -v bun >/dev/null 2>&1 || die "bun is required"
 [ -f "$pin/private/public-repository.ts" ] && [ -f "$pin/private/bin/shared-scope.ts" ] || die "the pinned copy is incomplete"
-public_repository="$("${bun_guard[@]}" "$pin/private/public-repository.ts" </dev/null)"
-private_repository="$("${bun_guard[@]}" "$pin/private/public-repository.ts" --private </dev/null)"
+public_repository="$(guard_bun "$pin/private/public-repository.ts" </dev/null)"
+private_repository="$(guard_bun "$pin/private/public-repository.ts" --private </dev/null)"
 [ -n "$public_repository" ] && [ -n "$private_repository" ] || die "cannot read the repository names"
 
 lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
@@ -129,9 +134,9 @@ if [ -n "$sync_new" ]; then
     die "only the dedicated merge clone updates public-sync (merge-back.sh); refusing"
   root_from="${main_new:-$remote_main}"
   [ -n "$root_from" ] || die "no main to read the public root from; refusing the public-sync update"
-  sync_args=(check-sync --repo . --sync "$sync_new" --root-from "$root_from" --main "$root_from")
+  sync_args=(check-sync --repo "$repo" --sync "$sync_new" --root-from "$root_from" --main "$root_from")
   [ "$sync_old" = "$zero" ] || sync_args+=(--previous "$sync_old")
-  "${bun_guard[@]}" "$pin/private/bin/shared-scope.ts" "${sync_args[@]}" </dev/null || die "the proposed public-sync is not a valid public tip; refusing"
+  guard_bun "$pin/private/bin/shared-scope.ts" "${sync_args[@]}" </dev/null || die "the proposed public-sync is not a valid public tip; refusing"
   sync="$sync_new"
 else
   sync="$(git rev-parse --verify --quiet "refs/remotes/$remote/public-sync^{commit}" </dev/null || true)"
@@ -148,8 +153,8 @@ for update in "${updates[@]+"${updates[@]}"}"; do
   git cat-file -e "$commit:private/guard/relational-denylist.json" 2>/dev/null </dev/null ||
     die "${commit:0:12} has no private/guard/relational-denylist.json (a branch from before the private namespace); refusing"
   [ -n "$sync" ] || die "no public-sync to compare ${remote_ref#refs/heads/} with (fetch it first); refusing"
-  check_args=(check-push --repo . --rev "$commit" --sync "$sync")
+  check_args=(check-push --repo "$repo" --rev "$commit" --sync "$sync")
   [ -z "$remote_main" ] || check_args+=(--base-config "$remote_main")
-  "${bun_guard[@]}" "$pin/private/bin/shared-scope.ts" "${check_args[@]}" </dev/null ||
+  guard_bun "$pin/private/bin/shared-scope.ts" "${check_args[@]}" </dev/null ||
     die "${remote_ref} would differ from the public tip in shared paths, or narrow the shared scope; change shared paths in the public repository"
 done

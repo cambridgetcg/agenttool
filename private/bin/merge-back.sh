@@ -67,10 +67,6 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/committed-tools.sh"
 
 main() {
   set -euo pipefail
-  # This tool's own Bun reads no bunfig.toml or .env from the checkout it
-  # runs in: a committed preload would otherwise run before, or instead of,
-  # every check.
-  local bun_guard=(bun --config=/dev/null --no-env-file)
   local push=0 gitleaks="" resume=0 accept="" unsandboxed=0
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -103,6 +99,12 @@ main() {
   tools="$(mktemp -d "${TMPDIR:-/tmp}/merge-back-tools.XXXXXX")"
   trap 'rm -rf "${tools:-}"' EXIT
   committed_tools . origin/main "$tools" || fail 2 "cannot use origin/main's committed tools (see above); nothing runs until that is resolved"
+  # Every check's Bun reads no bunfig.toml or .env (a committed preload would
+  # otherwise run before, or instead of, every check), and runs from that copy
+  # with --repo, never from this clone: Bun applies the tsconfig.json or
+  # jsconfig.json of its working directory and that directory's parents to
+  # what it runs, and this clone's working tree holds public files.
+  guard_bun() { (cd "$tools" && exec bun --config=/dev/null --no-env-file "$@"); }
   local scope="$tools/private/bin/shared-scope.ts" scanner="$tools/private/bin/relational-scan.ts" reviewed="$tools/private/bin/reviewed-shared.ts"
 
   local p0 pub base sync
@@ -124,15 +126,15 @@ main() {
   # Incoming: the private scan over everything public main added, and the
   # public guard over its tree.
   local scan_status=0
-  "${bun_guard[@]}" "$scanner" --repo . --guard-dir "$tools/private/guard" --diff --messages --names --objects -- "$base..$pub" || scan_status=$?
+  guard_bun "$scanner" --repo "$root" --guard-dir "$tools/private/guard" --diff --messages --names --objects -- "$base..$pub" || scan_status=$?
   [ "$scan_status" = 0 ] || fail 3 "the incoming scan refused ${base:0:12}..${pub:0:12} (status $scan_status); do not merge; open an incident"
-  local guard_args=(--tree --rev "$pub")
+  local guard_args=(--tree --repo "$root" --rev "$pub")
   [ -z "$gitleaks" ] || guard_args+=(--gitleaks "$gitleaks")
-  "${bun_guard[@]}" "$tools/tools/public-guard.ts" "${guard_args[@]}" || fail 3 "the public guard refused public main ${pub:0:12}"
+  guard_bun "$tools/tools/public-guard.ts" "${guard_args[@]}" || fail 3 "the public guard refused public main ${pub:0:12}"
 
   # Guard-sensitive shared paths need the owner's acceptance of this exact tip.
   local sensitive
-  sensitive="$("${bun_guard[@]}" "$reviewed" sensitive --repo . --range "$base..$pub" || true)"
+  sensitive="$(guard_bun "$reviewed" sensitive --repo "$root" --range "$base..$pub" || true)"
   if [ -n "$sensitive" ]; then
     printf '%s\n' "$sensitive"
     case "$accept" in
@@ -144,10 +146,10 @@ main() {
 
   # Drift: since the base, this repository changed (added, deleted, or edited)
   # no shared path except to exactly the public bytes.
-  "${bun_guard[@]}" "$scope" drift --repo . --base "$base" --public "$pub" --private origin/main ||
+  guard_bun "$scope" drift --repo "$root" --base "$base" --public "$pub" --private origin/main ||
     fail 4 "drift: revert each added/changed/deleted shared path here and make the change in the public repository; for a collision, move the private file under private/; then run again"
   # A case-insensitive file system writes Private/x over private/x.
-  "${bun_guard[@]}" "$scope" casefold --repo . --public "$pub" --private origin/main ||
+  guard_bun "$scope" casefold --repo "$root" --public "$pub" --private origin/main ||
     fail 5 "a public path differs only in case from a path here; nothing was merged (rename it in the public repository, or move the private file)"
 
   local before branch merge_commit=""
@@ -185,12 +187,12 @@ main() {
   fi
   # The merge itself: it holds the public tip and changed nothing private.
   [ -z "$(git diff --no-renames --name-only --diff-filter=DMT "$pub" "$merge_commit")" ] || fail 6 "a public path is missing or differs after the merge"
-  "${bun_guard[@]}" "$scope" merged --repo . --base "$base" --public "$pub" --private "$before" --rev "$merge_commit" || fail 6 "the merge broke an invariant"
+  guard_bun "$scope" merged --repo "$root" --base "$base" --public "$pub" --private "$before" --rev "$merge_commit" || fail 6 "the merge broke an invariant"
   git merge-base --is-ancestor "$pub" "$merge_commit" || fail 6 "the merge does not contain public main"
   git merge-base --is-ancestor "$before" "$merge_commit" || fail 6 "the merge does not contain origin/main"
 
   if [ -n "$sensitive" ]; then
-    "${bun_guard[@]}" "$reviewed" write --root "$root" 2>/dev/null
+    guard_bun "$reviewed" write --root "$root" 2>/dev/null
     if [ -n "$(git status --porcelain -- private/guard/reviewed-shared.json)" ]; then
       git add private/guard/reviewed-shared.json
       git commit --quiet -m "Accept reviewed shared guard files from public ${pub:0:12}" -- private/guard/reviewed-shared.json
@@ -200,9 +202,9 @@ main() {
   # The tip (the merge, or the merge plus fixes and the acceptance record):
   # shared paths still equal the public tip exactly.
   [ -z "$(git diff --no-renames --name-only --diff-filter=DMT "$pub" HEAD)" ] || fail 6 "a public path differs at the tip of $branch"
-  "${bun_guard[@]}" "$scope" drift --repo . --public "$pub" --private HEAD || fail 6 "the tip of $branch changes a shared path; fix shared code in the public repository"
-  "${bun_guard[@]}" "$scope" casefold --repo . --public "$pub" --private HEAD || fail 6 "the tip of $branch holds a path that differs only in case from a public one"
-  "${bun_guard[@]}" "$reviewed" check --root "$root" >/dev/null || fail 6 "the merged shared guard files differ from the reviewed record"
+  guard_bun "$scope" drift --repo "$root" --public "$pub" --private HEAD || fail 6 "the tip of $branch changes a shared path; fix shared code in the public repository"
+  guard_bun "$scope" casefold --repo "$root" --public "$pub" --private HEAD || fail 6 "the tip of $branch holds a path that differs only in case from a public one"
+  guard_bun "$reviewed" check --root "$root" >/dev/null || fail 6 "the merged shared guard files differ from the reviewed record"
 
   local merged config_before
   merged="$(git rev-parse HEAD)"

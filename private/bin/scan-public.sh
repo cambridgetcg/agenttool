@@ -40,13 +40,18 @@
 
 main() {
   set -euo pipefail
-  # This tool's own Bun reads no bunfig.toml or .env from the checkout it
-  # runs in: a committed preload would otherwise run before, or instead of,
-  # every check.
-  local bun_guard=(bun --config=/dev/null --no-env-file)
+  # Every check's Bun reads no bunfig.toml or .env (a committed preload would
+  # otherwise run before, or instead of, every check), and runs from the
+  # committed copy of the tools (or, before that exists, this script's own
+  # directory), never from a checkout of public files: Bun applies the
+  # tsconfig.json or jsconfig.json of its working directory and that
+  # directory's parents to what it runs.
+  local bun_dir
+  guard_bun() { (cd "$bun_dir" && exec bun --config=/dev/null --no-env-file "$@"); }
   local here root url="" state="${HOME}/.local/state/agenttool/public-scan" github=0 notify=0 plist=0
   here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
   root="$(cd "$here/../.." && pwd -P)"
+  bun_dir="$here"
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --url) shift; url="${1:?--url needs a URL}" ;;
@@ -60,7 +65,7 @@ main() {
   done
   command -v bun >/dev/null 2>&1 || fail 2 "bun is required"
   local slug
-  slug="$("${bun_guard[@]}" "$root/private/public-repository.ts")"
+  slug="$(guard_bun "$root/private/public-repository.ts")"
   [ -n "$url" ] || url="https://github.com/$slug.git"
 
   if [ "$plist" = 1 ]; then
@@ -76,6 +81,7 @@ main() {
   tools="$(mktemp -d "${TMPDIR:-/tmp}/scan-public-tools.XXXXXX")"
   trap 'rm -rf "${tools:-}" "${report:-}"' EXIT
   committed_tools "$root" refs/remotes/origin/main "$tools" || fail 2 "cannot use origin/main's committed tools (see above)"
+  bun_dir="$tools"
   local guard_dir="$tools/private/guard"
   local p0
   p0="$(git -C "$root" show refs/remotes/origin/main:private/export/public-root.txt 2>/dev/null | tr -d '[:space:]' || true)"
@@ -110,7 +116,7 @@ main() {
   local ack="$state/acknowledged.txt"
   [ -f "$ack" ] || : >"$ack"
   local acked
-  acked="$("${bun_guard[@]}" -e 'const { parseWatchAck } = await import(process.argv[1]); for (const [key, oid] of parseWatchAck(await Bun.file(process.argv[2]).bytes(), process.argv[2])) console.log(`${key} ${oid}`);' "$tools/tools/public-guard.ts" "$ack")" ||
+  acked="$(guard_bun -e 'const { parseWatchAck } = await import(process.argv[1]); for (const [key, oid] of parseWatchAck(await Bun.file(process.argv[2]).bytes(), process.argv[2])) console.log(`${key} ${oid}`);' "$tools/tools/public-guard.ts" "$ack")" ||
     fail 2 "$ack is not a valid acknowledgement list"
   local key oid
   while read -r key oid; do
@@ -139,7 +145,7 @@ main() {
     roots="$(git -C "$mirror" rev-list --max-parents=0 "$commit")"
     [ "$roots" = "$p0" ] || echo "$ref: integrity/foreign-root (${commit:0:12})" >>"$report"
   done < <(git -C "$mirror" for-each-ref --format='%(refname)' refs/public-scan/heads refs/public-scan/pull refs/public-scan/tags)
-  check watch bash -c 'cd "$1" && exec bun --config=/dev/null --no-env-file "$2" --watch --rev refs/public-scan/heads/main --ack "$3"' _ "$mirror" "$tools/tools/public-guard.ts" "$ack"
+  check watch guard_bun "$tools/tools/public-guard.ts" --watch --repo "$mirror" --rev refs/public-scan/heads/main --ack "$ack"
 
   # 3. New commits, ref names, and tag messages.
   local scan_args=(--repo "$mirror" --guard-dir "$guard_dir")
@@ -153,16 +159,16 @@ main() {
   if [ -n "$(git -C "$mirror" rev-list --glob='refs/public-scan/*' --not --glob='refs/public-scanned/*' -- | head -n 1)" ]; then
     scan_args+=(--diff --messages --names --objects --shapes -- --glob='refs/public-scan/*' --not --glob='refs/public-scanned/*')
   fi
-  check commits "${bun_guard[@]}" "$tools/private/bin/relational-scan.ts" "${scan_args[@]}"
+  check commits guard_bun "$tools/private/bin/relational-scan.ts" "${scan_args[@]}"
 
   # 4. Public main's whole tree.
-  check tree "${bun_guard[@]}" "$tools/private/bin/relational-scan.ts" --repo "$mirror" --guard-dir "$guard_dir" --tree refs/public-scan/heads/main
+  check tree guard_bun "$tools/private/bin/relational-scan.ts" --repo "$mirror" --guard-dir "$guard_dir" --tree refs/public-scan/heads/main
 
   # 5. Pull request and issue text.
   if [ "$github" = 1 ]; then
     local since_args=()
     [ -f "$state/github-since" ] && since_args=(--since "$(cat "$state/github-since")")
-    check github "${bun_guard[@]}" "$tools/private/bin/relational-scan.ts" --guard-dir "$guard_dir" --github "$slug" "${since_args[@]+"${since_args[@]}"}"
+    check github guard_bun "$tools/private/bin/relational-scan.ts" --guard-dir "$guard_dir" --github "$slug" "${since_args[@]+"${since_args[@]}"}"
   fi
 
   findings="$(grep -c . "$report" || true)"

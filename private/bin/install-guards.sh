@@ -125,7 +125,9 @@ main() {
       git -C "$root" cat-file blob "$commit:$path" >"$staging/$path"
       case "$path" in */githooks/*) chmod 0555 "$staging/$path" ;; *) chmod 0444 "$staging/$path" ;; esac
     done
-    if ! bun --config=/dev/null --no-env-file "$staging/private/bin/reviewed-shared.ts" check --root "$staging" >/dev/null; then
+    # Bun runs from the copy itself: it applies the tsconfig.json or
+    # jsconfig.json of its working directory and that directory's parents.
+    if ! (cd "$staging" && exec bun --config=/dev/null --no-env-file "$staging/private/bin/reviewed-shared.ts" check --root "$staging") >/dev/null; then
       chmod -R u+w "$staging" && rm -rf "$staging"
       fail "${commit:0:12}'s shared guard files differ from its reviewed record (private/guard/reviewed-shared.json); refusing to pin unreviewed hooks"
     fi
@@ -135,7 +137,7 @@ main() {
 
   local backup slug
   backup="$pin_root/backups/$(date -u +%Y%m%dT%H%M%SZ).tsv"
-  slug="$(bun --config=/dev/null --no-env-file "$pin/private/public-repository.ts")"
+  slug="$(cd "$pin" && exec bun --config=/dev/null --no-env-file "$pin/private/public-repository.ts")"
   local previous
   for checkout in "${privates[@]+"${privates[@]}"}"; do
     git -C "$checkout" rev-parse --is-inside-work-tree >/dev/null 2>&1 || fail "$checkout is not a git checkout"
@@ -186,7 +188,7 @@ verify_installs() {
       problems=$((problems + 1))
       continue
     fi
-    slug="$(bun --config=/dev/null --no-env-file "$current/../../private/public-repository.ts" 2>/dev/null || true)"
+    slug="$( (cd "$current/../.." && exec bun --config=/dev/null --no-env-file "$current/../../private/public-repository.ts") 2>/dev/null || true)"
     if [ "$kind" = private ]; then
       if [ -z "$slug" ] || (cd "$checkout" && "$current/pre-push" public "https://github.com/$slug.git" </dev/null >/dev/null 2>&1); then
         echo "install-guards: $checkout: the pre-push did not refuse a push to the public repository"

@@ -53,7 +53,7 @@ main() {
   fi
   [ -f "$root/private/guard/relational-denylist.json" ] || fail "this checkout has no private/guard; the clone's hook would refuse every push"
   local slug
-  slug="$(bun --config=/dev/null --no-env-file "$root/private/public-repository.ts")"
+  slug="$(cd "$root/private" && exec bun --config=/dev/null --no-env-file "$root/private/public-repository.ts")"
   [ -n "$dir" ] || dir="$HOME/${slug#*/}"
   [ -n "$url" ] || url="https://github.com/$slug.git"
   if [ -z "$p0" ]; then

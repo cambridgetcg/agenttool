@@ -313,11 +313,11 @@ describe("merge-back cycles", () => {
     expect(check.status, check.out).toBe(0);
   });
 
-  test("guard-sensitive paths: the reviewed files, hooks, attributes, workflows, and any Bun config, in any letter case", () => {
-    for (const path of ["tools/public-guard.ts", "Tools/Public-Guard.ts", "tools/githooks/post-merge", ".gitattributes", ".github/dependabot.yml", "bunfig.toml", "packages/alpha/bunfig.toml", "packages/alpha/.bunfig.toml"]) {
+  test("guard-sensitive paths: the reviewed files, hooks, attributes, workflows, and any Bun or TypeScript config, in any letter case", () => {
+    for (const path of ["tools/public-guard.ts", "Tools/Public-Guard.ts", "tools/githooks/post-merge", ".gitattributes", ".github/dependabot.yml", "bunfig.toml", "packages/alpha/bunfig.toml", "packages/alpha/.bunfig.toml", "tsconfig.json", "bin/TSConfig.json", "packages/alpha/jsconfig.json"]) {
       expect(guardSensitive(path), path).toBe(true);
     }
-    for (const path of ["tools/public-guard-allow.json", "packages/alpha/index.ts", "docs/bunfig.md", "README.md"]) expect(guardSensitive(path), path).toBe(false);
+    for (const path of ["tools/public-guard-allow.json", "packages/alpha/index.ts", "docs/bunfig.md", "README.md", "packages/alpha/tsconfig.base.json"]) expect(guardSensitive(path), path).toBe(false);
   });
 
   test("a public path that differs only in case from a private one stops before merging (APFS would overwrite it)", () => {

@@ -23,10 +23,15 @@ set -euo pipefail
 
 hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 pin="$(cd "$hook_dir/../.." && pwd -P)"
-# This tool's own Bun reads no bunfig.toml or .env from the checkout it
-# runs in: a committed preload would otherwise run before, or instead of,
-# every check.
-bun_guard=(bun --config=/dev/null --no-env-file)
+repo="$(git rev-parse --show-toplevel 2>/dev/null || git rev-parse --absolute-git-dir)"
+# The checks' Bun reads no bunfig.toml or .env (a committed preload would
+# otherwise run before, or instead of, every check), and it runs from the
+# pinned copy with --repo, never from the checkout: Bun applies the
+# tsconfig.json or jsconfig.json of its working directory and that
+# directory's parents to what it runs.
+guard_bun() {
+  (cd "$pin" && exec bun --config=/dev/null --no-env-file "$@")
+}
 
 die() {
   printf 'private pre-commit: %s\n' "$*" >&2
@@ -46,5 +51,5 @@ if [ "${ALLOW_SHARED_EDIT:-}" = 1 ]; then
   printf 'private pre-commit: ALLOW_SHARED_EDIT=1, so shared edits are let through; merge-back and pre-push still check them\n' >&2
   exit 0
 fi
-"${bun_guard[@]}" "$pin/private/bin/shared-scope.ts" staged --repo . --public refs/remotes/origin/public-sync ||
+guard_bun "$pin/private/bin/shared-scope.ts" staged --repo "$repo" --public refs/remotes/origin/public-sync ||
   die "make shared changes in the public development repository (private/README.md)"

@@ -20,7 +20,8 @@
  *   next to it differs from the record, so unreviewed shared code never runs
  *   inside a private tool;
  * - `sensitive` lists the guard-sensitive paths (the reviewed files, the
- *   hooks directory, .gitattributes, .github/, and any bunfig.toml) that a range of public
+ *   hooks directory, .gitattributes, .github/, and any bunfig.toml,
+ *   tsconfig.json, or jsconfig.json) that a range of public
  *   commits touches; merge-back refuses such a range unless the owner
  *   accepts that exact public tip, and then records the new digests;
  * - `write` records the current files after a review; `check` verifies.
@@ -49,13 +50,19 @@ function fold(path: string): string {
  * .gitattributes, and .github/, that is any Bun config (bunfig.toml at any
  * depth): Bun reads it from the working directory and can preload code into
  * whatever runs there. The guards' own Bun ignores it (--config=/dev/null),
- * but a person or agent running Bun in a checkout of this repository would not.
+ * but a person or agent running Bun in a checkout of this repository would
+ * not. The same holds for tsconfig.json and jsconfig.json at any depth: Bun
+ * applies the one in its working directory or a parent to the module
+ * resolution of whatever it runs (a `paths` entry can replace an import), so
+ * one at the root, or wherever someone runs Bun, would reach the private
+ * tools run from a checkout. The guards' own Bun runs from a pinned or
+ * committed copy for that reason.
  */
 export function guardSensitive(path: string): boolean {
   const folded = fold(path);
   if (REVIEWED_FILES.some((file) => fold(file) === folded)) return true;
   const base = folded.slice(folded.lastIndexOf("/") + 1);
-  if (base === "bunfig.toml" || base === ".bunfig.toml") return true;
+  if (["bunfig.toml", ".bunfig.toml", "tsconfig.json", "jsconfig.json"].includes(base)) return true;
   return folded === ".gitattributes" || folded.startsWith("tools/githooks/") || folded === ".github" || folded.startsWith(".github/");
 }
 

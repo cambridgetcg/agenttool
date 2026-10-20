@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { PUBLIC_REPOSITORY } from "../../public-repository.ts";
 import { runExport } from "../public-export.ts";
 import { exportMatcher, readExportConfig } from "../shared-scope.ts";
-import { cleanEnv, commitAll, git, makePrivateRepo, OWNER_ADDRESS, publicCommit, run, scopedTip, scratchDir, stubGitleaks, TERM, write } from "./fixtures.ts";
+import { cleanEnv, commitAll, commitStaged, git, makePrivateRepo, OWNER_ADDRESS, publicCommit, run, scopedTip, scratchDir, stubGitleaks, TERM, write } from "./fixtures.ts";
 
 setDefaultTimeout(180_000);
 const scratch = scratchDir("hooks");
@@ -151,6 +151,21 @@ describe("the private pre-commit", () => {
     expect(edit.status).toBe(1);
     expect(edit.out).toContain("make shared changes in the public development repository");
     reset();
+  });
+
+  test("a tsconfig.json or jsconfig.json in the checkout cannot redirect the hook's imports: a module that exits 0 does not pass a shared edit", () => {
+    // Bun applies the TypeScript config of its working directory: `paths`
+    // with "*" replaces even node: imports. The hook's Bun runs from the pin.
+    for (const config of ["tsconfig.json", "jsconfig.json"]) {
+      write(dev, config, '{ "compilerOptions": { "baseUrl": ".", "paths": { "*": ["./quiet.ts"] } } }\n');
+      write(dev, "quiet.ts", "process.exit(0);\n");
+      write(dev, "README.md", "# Edited here, beside a path map\n");
+      git(dev, "add", "README.md");
+      const edit = commit(`edit shared beside a ${config}`);
+      expect(edit.status, config).toBe(1);
+      expect(edit.out).toContain("make shared changes in the public development repository");
+      reset();
+    }
   });
 
   test("refuses an add under a shared tree and an edit of a shared file; private and withheld paths pass", () => {
@@ -310,6 +325,21 @@ describe("the private pre-push", () => {
     }
   });
 
+  test("a tsconfig.json in the checkout cannot redirect the hook's imports: an add under a shared tree is still refused", () => {
+    const start = before();
+    write(dev, "tsconfig.json", '{ "compilerOptions": { "baseUrl": ".", "paths": { "*": ["./quiet.ts"] } } }\n');
+    write(dev, "quiet.ts", "process.exit(0);\n");
+    write(dev, "packages/alpha/mapped.ts", "export {};\n");
+    git(dev, "add", "packages/alpha/mapped.ts");
+    commitStaged(dev, "an add beside a path map");
+    const refused = push("-q", "origin", "HEAD:main");
+    expect(refused.status).not.toBe(0);
+    expect(refused.out).toContain("added\tpackages/alpha/mapped.ts");
+    expect(git(origin, "rev-parse", "main")).toBe(start);
+    git(dev, "reset", "-q", "--hard", "origin/main");
+    git(dev, "clean", "-qfd");
+  });
+
   test("a push to main without public-sync is refused", () => {
     git(dev, "update-ref", "-d", "refs/remotes/origin/public-sync");
     write(dev, "private/notes.md", "again\n");
@@ -454,6 +484,20 @@ describe("the public clone's pre-push", () => {
     expect(pushed.out).toContain("the private scan refused");
     expect(pushed.out.toLowerCase()).not.toContain(TERM);
     reset();
+  });
+
+  test("a tsconfig.json or jsconfig.json in the clone cannot redirect the hook's imports: a module that exits 0 does not let a term through", () => {
+    for (const config of ["tsconfig.json", "jsconfig.json"]) {
+      write(clone, config, '{ "compilerOptions": { "baseUrl": ".", "paths": { "*": ["./quiet.ts"] } } }\n');
+      write(clone, "quiet.ts", "process.exit(0);\n");
+      const committed = change("packages/alpha/mapped.md", `${TERM}\n`, `a path map beside a term (${config})`);
+      expect(committed.status, committed.out).toBe(0);
+      const pushed = push();
+      expect(pushed.status, config).not.toBe(0);
+      expect(pushed.out).toContain("refused");
+      expect(pushed.out.toLowerCase()).not.toContain(TERM);
+      reset();
+    }
   });
 
   test("fails closed without its config or the denylist; the public-only mode runs checks 1-4", () => {
