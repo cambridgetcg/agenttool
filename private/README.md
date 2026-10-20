@@ -42,9 +42,16 @@ pre-push hook (on every pushed branch and tag, since a pull request merged on
 GitHub runs no hook), the merge-back drift check, and the projection all
 refuse it. An allowlist change that narrows the scope (an include or root file
 removed, an export exclude or exclude glob added) is refused by both hooks
-unless `ALLOW_SCOPE_CHANGE=1` carries the owner's go. Only the merge clone
-moves `public-sync`, and only to a public commit that the main it pushes
-contains.
+unless `ALLOW_SCOPE_CHANGE=1` carries the owner's go. Hooks run only where
+they are installed, so the projection, merge-back, and the pre-push also
+hold each commit to the allowlist of the commit that recorded its public tip
+(the adoption merge, then each merge-back merge): a narrowing that reached
+main without a hook hides nothing, and a deliberate one takes effect when a
+merge-back run with `ALLOW_SCOPE_CHANGE=1` records it. The pre-push checks
+main whenever it is pushed, even when its commits already sit on the remote
+under another branch. Only the merge clone moves `public-sync`, and only to a
+public commit that the main it pushes contains and that its fetched public
+main contains.
 
 - `.gitignore` is the union of this repository's patterns and the
   projection's, except that the projection's `*.tgz` is narrowed to

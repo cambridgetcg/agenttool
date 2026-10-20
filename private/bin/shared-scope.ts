@@ -5,11 +5,11 @@
  * public one. Read private/README.md first.
  *
  *   bun private/bin/shared-scope.ts list   [--repo <dir>] [--rev <commit>]
- *   bun private/bin/shared-scope.ts drift  --public <commit> --private <commit> [--base <commit>] [--repo <dir>]
+ *   bun private/bin/shared-scope.ts drift  --public <commit> --private <commit> [--base <commit>] [--baseline-tip <commit>] [--repo <dir>]
  *   bun private/bin/shared-scope.ts staged --public <ref> [--repo <dir>]
  *   bun private/bin/shared-scope.ts merged --base <commit> --public <commit> --private <before> --rev <after>
  *   bun private/bin/shared-scope.ts check-push --rev <commit> --sync <commit> [--base-config <commit>]
- *   bun private/bin/shared-scope.ts check-sync --sync <commit> --root-from <commit> [--previous <commit>] [--main <commit>]
+ *   bun private/bin/shared-scope.ts check-sync --sync <commit> --root-from <commit> [--previous <commit>] [--main <commit>] [--public-main <commit>]
  *   bun private/bin/shared-scope.ts casefold --public <commit> --private <commit>
  *
  * One allowlist file, private/projection/allowlist.json, drives the npm
@@ -38,6 +38,16 @@
  * `casefold` lists public paths that differ only in case from a private one.
  * A change that narrows the scope (scopeNarrowing) is refused by `staged` and
  * `check-push` unless ALLOW_SCOPE_CHANGE=1 is set with the owner's go.
+ *
+ * Those refusals run only where the hooks run. So every check that compares
+ * a private commit with the public tip it contains (drift with a base or a
+ * baseline tip, merged, check-push, and the projection) also holds the commit
+ * to its baseline: the allowlist of each commit that recorded that public tip
+ * (the adoption merge, then each merge-back merge; heldScope). A narrowing
+ * that reached main without a hook, through a web edit, a pull request merged
+ * on GitHub, or a checkout without hooks, then hides nothing: an add under
+ * the narrowed tree is still drift. A deliberate narrowing takes effect when
+ * a merge-back run with ALLOW_SCOPE_CHANGE=1 records it.
  * Paths are printed; contents never are. Exit 1 means drift or a problem.
  */
 // First: refuse before the shared guard module runs unless it is the reviewed copy.
@@ -211,10 +221,51 @@ function resolveCommit(repo: string, rev: string): string | undefined {
   return result.status === 0 ? result.stdout.toString("utf8").trim() : undefined;
 }
 
-/** Drift of a private commit against a public commit (optionally since a base), scoped by the private commit's allowlist. */
-export function commitDrift(repo: string, options: { privateRev: string; publicRev: string; baseRev?: string }): Drift[] {
-  const config = readExportConfig(repo, options.privateRev);
-  return scopeDrift(exportMatcher(config), {
+/**
+ * The commits that recorded `tip` as the merged public tip in `rev`'s
+ * history: each commit between the two (`git rev-list --ancestry-path`) that
+ * has `tip` as a later parent and holds the private namespace. That is the
+ * adoption merge for the public root, and a merge-back merge after it.
+ */
+export function recordingCommits(repo: string, rev: string, tip: string): string[] {
+  const raw = git(repo, ["rev-list", "--parents", "--ancestry-path", `${tip}..${rev}`, "--"]).stdout.toString("utf8");
+  const found: string[] = [];
+  for (const line of raw.split("\n")) {
+    const [commit, first, ...later] = line.split(" ").filter(Boolean);
+    if (commit === undefined || first === undefined || !later.includes(tip)) continue;
+    if (git(repo, ["cat-file", "-e", `${commit}:${DENYLIST_PATH}`], { allowFailure: true }).status === 0) found.push(commit);
+  }
+  return found;
+}
+
+/**
+ * The scope a private commit is held to: its own allowlist's, joined with
+ * the allowlist of each commit that recorded `tip`, the public tip it
+ * contains (recordingCommits). Without a tip, or with the owner's go
+ * (`allowScopeChange`), only its own. No recording commit at all fails
+ * closed.
+ */
+export function heldScope(repo: string, rev: string, tip?: string, options: { allowScopeChange?: boolean } = {}): (path: string) => boolean {
+  const own = exportMatcher(readExportConfig(repo, rev));
+  if (tip === undefined || options.allowScopeChange) return own;
+  const baseline = recordingCommits(repo, rev, tip);
+  if (baseline.length === 0) {
+    throw new ScopeError(`no commit in ${rev.slice(0, 12)}'s history records the public tip ${tip.slice(0, 12)} (the adoption merge or a merge-back merge), so its baseline scope is unknown; refusing`);
+  }
+  const matchers = [own, ...baseline.map((commit) => exportMatcher(readExportConfig(repo, commit)))];
+  return (path) => matchers.some((matches) => matches(path));
+}
+
+/**
+ * Drift of a private commit against a public commit (optionally since a
+ * base), scoped by the private commit's allowlist and, with `baselineTip`,
+ * by the allowlists that recorded that public tip (heldScope).
+ */
+export function commitDrift(
+  repo: string,
+  options: { privateRev: string; publicRev: string; baseRev?: string; baselineTip?: string; allowScopeChange?: boolean },
+): Drift[] {
+  return scopeDrift(heldScope(repo, options.privateRev, options.baselineTip, { allowScopeChange: options.allowScopeChange }), {
     privateEntries: treeEntries(repo, options.privateRev),
     publicEntries: treeEntries(repo, options.publicRev),
     baseEntries: options.baseRev === undefined ? undefined : treeEntries(repo, options.baseRev),
@@ -280,20 +331,24 @@ export function stagedViolations(repo: string, publicRef: string, options: { all
  * merge changed nothing outside the shared scope, the public tip, and the
  * base (a public deletion of a path the base held).
  */
-export function mergeProblems(repo: string, revs: { base: string; publicRev: string; before: string; after: string }): string[] {
+export function mergeProblems(
+  repo: string,
+  revs: { base: string; publicRev: string; before: string; after: string },
+  options: { allowScopeChange?: boolean } = {},
+): string[] {
   const problems: string[] = [];
   const publicEntries = treeEntries(repo, revs.publicRev);
   const after = treeEntries(repo, revs.after);
   for (const [path, entry] of publicEntries) {
     if (after.get(path) !== entry) problems.push(`public path differs or is missing after the merge\t${path}`);
   }
-  for (const entry of commitDrift(repo, { privateRev: revs.after, publicRev: revs.publicRev })) {
+  for (const entry of commitDrift(repo, { privateRev: revs.after, publicRev: revs.publicRev, baselineTip: revs.base, allowScopeChange: options.allowScopeChange })) {
     problems.push(`shared path ${entry.kind} after the merge\t${entry.path}`);
   }
   for (const path of caseCollisions(publicEntries.keys(), after.keys())) problems.push(`a path differs only in case from another\t${path}`);
   const before = treeEntries(repo, revs.before);
   const base = treeEntries(repo, revs.base);
-  const inScope = exportMatcher(readExportConfig(repo, revs.after));
+  const inScope = heldScope(repo, revs.after, revs.base, options);
   for (const path of new Set([...before.keys(), ...after.keys()])) {
     if (before.get(path) === after.get(path)) continue;
     if (publicEntries.has(path) || base.has(path) || inScope(path)) continue;
@@ -381,7 +436,7 @@ export function recordedPublicRoot(repo: string, rev: string): string | undefine
  * fast-forwards the previous value; and it is contained in `main` (the main
  * pushed with it, or the remote's) when given.
  */
-export function syncProblems(repo: string, options: { sync: string; root: string; previous?: string; main?: string }): string[] {
+export function syncProblems(repo: string, options: { sync: string; root: string; previous?: string; main?: string; publicMain?: string }): string[] {
   const problems: string[] = [];
   const sync = resolveCommit(repo, options.sync);
   if (sync === undefined) return [`public-sync ${options.sync} is not a commit here`];
@@ -402,6 +457,11 @@ export function syncProblems(repo: string, options: { sync: string; root: string
     else if (!isAncestor(repo, previous, sync)) problems.push(`public-sync ${sync.slice(0, 12)} does not fast-forward ${previous.slice(0, 12)}`);
   }
   if (options.main !== undefined && !isAncestor(repo, sync, options.main)) problems.push(`public-sync ${sync.slice(0, 12)} is not contained in main ${options.main.slice(0, 12)}`);
+  if (options.publicMain !== undefined) {
+    const publicMain = resolveCommit(repo, options.publicMain);
+    if (publicMain === undefined) problems.push(`public main ${options.publicMain} is not known here; fetch it first`);
+    else if (!isAncestor(repo, sync, publicMain)) problems.push(`public-sync ${sync.slice(0, 12)} is not contained in public main ${publicMain.slice(0, 12)} (a public tip made here is not one)`);
+  }
   return problems.sort(compare);
 }
 
@@ -410,9 +470,11 @@ export function syncProblems(repo: string, options: { sync: string; root: string
  * main): the public tip it contains is S = merge-base(commit, public-sync),
  * which must be a public commit (its only root the recorded public root);
  * inside the shared scope the commit must equal S exactly, so an edit, delete,
- * or add under a shared tree is drift whichever branch carries it; and its
- * allowlist must not narrow the scope relative to `baseConfigRev` (the
- * remote's main) unless `allowScopeChange`.
+ * or add under a shared tree is drift whichever branch carries it. The scope
+ * is the commit's own joined with the baseline's (heldScope), so a narrowing
+ * since S was recorded hides nothing; and its allowlist must not narrow the
+ * scope relative to `baseConfigRev` (the remote's main) either. Both hold
+ * unless `allowScopeChange` (the owner's go).
  */
 export function pushProblems(
   repo: string,
@@ -429,7 +491,13 @@ export function pushProblems(
   const tip = base.stdout.toString("utf8").trim().split("\n")[0] as string;
   const problems: string[] = [];
   if (rootsOf(repo, tip).join(",") !== root) problems.push(`the public tip ${tip.slice(0, 12)} in ${rev.slice(0, 12)} is not a public commit (its root is not the recorded public root)`);
-  const drift = commitDrift(repo, { privateRev: rev, publicRev: tip });
+  let drift: Drift[];
+  try {
+    drift = commitDrift(repo, { privateRev: rev, publicRev: tip, baselineTip: tip, allowScopeChange: options.allowScopeChange });
+  } catch (error) {
+    if (!(error instanceof ScopeError)) throw error;
+    return { problems: [...problems, error.message], drift: [] };
+  }
   if (options.baseConfigRev !== undefined && !options.allowScopeChange) {
     let before: ExportConfig | undefined;
     try {
@@ -454,11 +522,11 @@ export function formatDrift(drift: readonly Drift[]): string[] {
 function usage(): never {
   console.error(
     "usage: bun private/bin/shared-scope.ts list [--repo <dir>] [--rev <commit>]\n" +
-      "       bun private/bin/shared-scope.ts drift --public <commit> --private <commit> [--base <commit>] [--repo <dir>]\n" +
+      "       bun private/bin/shared-scope.ts drift --public <commit> --private <commit> [--base <commit>] [--baseline-tip <commit>] [--repo <dir>]\n" +
       "       bun private/bin/shared-scope.ts staged --public <ref> [--repo <dir>]\n" +
       "       bun private/bin/shared-scope.ts merged --base <commit> --public <commit> --private <before> --rev <after> [--repo <dir>]\n" +
       "       bun private/bin/shared-scope.ts check-push --rev <commit> --sync <commit> [--base-config <commit>] [--repo <dir>]\n" +
-      "       bun private/bin/shared-scope.ts check-sync --sync <commit> --root-from <commit> [--previous <commit>] [--main <commit>] [--repo <dir>]\n" +
+      "       bun private/bin/shared-scope.ts check-sync --sync <commit> --root-from <commit> [--previous <commit>] [--main <commit>] [--public-main <commit>] [--repo <dir>]\n" +
       "       bun private/bin/shared-scope.ts casefold --public <commit> --private <commit> [--repo <dir>]",
   );
   process.exit(2);
@@ -470,11 +538,12 @@ function main(argv: readonly string[]): number {
   for (let index = 0; index < rest.length; index += 1) {
     const arg = rest[index] as string;
     const value = rest[index + 1];
-    if (!["--repo", "--rev", "--public", "--private", "--base", "--sync", "--base-config", "--root-from", "--previous", "--main"].includes(arg) || value === undefined) usage();
+    if (!["--repo", "--rev", "--public", "--private", "--base", "--baseline-tip", "--sync", "--base-config", "--root-from", "--previous", "--main", "--public-main"].includes(arg) || value === undefined) usage();
     options[arg.slice(2).replace(/-([a-z])/gu, (_, letter: string) => letter.toUpperCase())] = value;
     index += 1;
   }
   const repo = resolve(options.repo ?? ".");
+  const allowScopeChange = process.env.ALLOW_SCOPE_CHANGE === "1";
   if (command === "list") {
     const rev = options.rev ?? "HEAD";
     const matches = exportMatcher(readExportConfig(repo, rev));
@@ -483,10 +552,17 @@ function main(argv: readonly string[]): number {
   }
   if (command === "drift") {
     if (options.public === undefined || options.private === undefined) usage();
-    for (const rev of [options.public, options.private, ...(options.base === undefined ? [] : [options.base])]) {
+    const baselineTip = options.baselineTip ?? options.base;
+    for (const rev of [options.public, options.private, ...(options.base === undefined ? [] : [options.base]), ...(baselineTip === undefined ? [] : [baselineTip])]) {
       if (resolveCommit(repo, rev) === undefined) throw new ScopeError(`cannot resolve ${rev} to a commit`);
     }
-    const drift = commitDrift(repo, { privateRev: options.private, publicRev: options.public, baseRev: options.base });
+    const drift = commitDrift(repo, {
+      privateRev: options.private,
+      publicRev: options.public,
+      baseRev: options.base,
+      baselineTip: baselineTip === undefined ? undefined : resolveCommit(repo, baselineTip),
+      allowScopeChange,
+    });
     for (const line of formatDrift(drift)) console.log(line);
     if (drift.length > 0) {
       console.error(`shared scope: ${drift.length} shared path(s) differ from the public side; change them in the public repository`);
@@ -497,7 +573,7 @@ function main(argv: readonly string[]): number {
   }
   if (command === "merged") {
     if (options.public === undefined || options.base === undefined || options.private === undefined || options.rev === undefined) usage();
-    const problems = mergeProblems(repo, { base: options.base, publicRev: options.public, before: options.private, after: options.rev });
+    const problems = mergeProblems(repo, { base: resolveCommit(repo, options.base) ?? options.base, publicRev: options.public, before: options.private, after: options.rev }, { allowScopeChange });
     for (const line of problems) console.log(line);
     if (problems.length > 0) {
       console.error(`shared scope: ${problems.length} problem(s) after the merge; nothing may be pushed`);
@@ -506,7 +582,6 @@ function main(argv: readonly string[]): number {
     console.error("shared scope: the merge holds the public tip exactly and changed only shared paths");
     return 0;
   }
-  const allowScopeChange = process.env.ALLOW_SCOPE_CHANGE === "1";
   if (command === "check-push") {
     if (options.rev === undefined || options.sync === undefined) usage();
     const { problems, drift } = pushProblems(repo, { rev: options.rev, sync: options.sync, baseConfigRev: options.baseConfig, allowScopeChange });
@@ -521,7 +596,7 @@ function main(argv: readonly string[]): number {
     if (options.sync === undefined || options.rootFrom === undefined) usage();
     const root = recordedPublicRoot(repo, options.rootFrom);
     if (root === undefined) throw new ScopeError(`${options.rootFrom} has no ${PUBLIC_ROOT_RECORD}`);
-    const problems = syncProblems(repo, { sync: options.sync, root, previous: options.previous, main: options.main });
+    const problems = syncProblems(repo, { sync: options.sync, root, previous: options.previous, main: options.main, publicMain: options.publicMain });
     for (const line of problems) console.log(line);
     if (problems.length > 0) {
       console.error(`shared scope: ${problems.length} problem(s) with the proposed public-sync`);

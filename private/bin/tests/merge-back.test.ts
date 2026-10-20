@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { assertSharedScope, projectPublic, ProjectionRefused } from "../../../bin/project-public.ts";
 import { runExport } from "../public-export.ts";
 import { guardSensitive } from "../reviewed-shared.ts";
-import { cleanEnv, commitAll, git, makePrivateRepo, publicCommit, run, scratchDir, stubGitleaks, TERM, write } from "./fixtures.ts";
+import { cleanEnv, commitAll, commitStaged, git, makePrivateRepo, publicCommit, run, scratchDir, stubGitleaks, TERM, write } from "./fixtures.ts";
 
 setDefaultTimeout(240_000);
 const scratch = scratchDir("merge");
@@ -351,6 +351,42 @@ describe("merge-back cycles", () => {
     expect(() => assertSharedScope(merge, git(merge, "rev-parse", "origin/main"))).not.toThrow();
     // Without public-sync the check fails closed.
     expect(() => assertSharedScope(merge, git(merge, "rev-parse", "origin/main"), "refs/remotes/origin/missing")).toThrow("fetch it first");
+  });
+
+  test("an allowlist narrowing that reached main without a hook hides nothing: the projection and merge-back still see an add under it (G3)", () => {
+    // Pushed from a checkout without hooks, as a web edit or a pull request merged on GitHub would land.
+    git(dev, "pull", "-q", "--ff-only");
+    const allowlist = JSON.parse(readFileSync(join(dev, "private/projection/allowlist.json"), "utf8")) as { export: { exclude: Array<{ path: string; reason: string }> } };
+    allowlist.export.exclude.unshift({ path: "packages/alpha/extra", reason: "a narrowing no one approved" });
+    privateChange({ "private/projection/allowlist.json": `${JSON.stringify(allowlist, null, 2)}\n`, "packages/alpha/extra/r-only.ts": "export {};\n" }, "narrow the scope and add under it");
+    git(merge, "fetch", "-q", "origin");
+    const source = git(merge, "rev-parse", "origin/main");
+    let refused: unknown;
+    try {
+      projectPublic({ repo: merge, source, noWrite: true, allowUnmergedSource: true, gitleaks: stubGitleaks(scratch.dir) });
+    } catch (error) {
+      refused = error;
+    }
+    expect(refused).toBeInstanceOf(ProjectionRefused);
+    expect((refused as ProjectionRefused).findings.map((finding) => `${finding.rule} ${finding.path}`)).toEqual(["path/shared-scope-added packages/alpha/extra/r-only.ts"]);
+    expect(() => assertSharedScope(merge, source, undefined, { allowScopeChange: true })).not.toThrow();
+    // merge-back sees the add as drift until a run with the owner's go records the narrowing.
+    publicChange({ "packages/alpha/later.ts": "export const later = 1;\n" });
+    const before = git(origin, "rev-parse", "main");
+    const stopped = mergeBack(["--push"]);
+    expect(stopped.status, stopped.out).toBe(4);
+    expect(stopped.stdout).toContain("added\tpackages/alpha/extra/r-only.ts");
+    expect(git(origin, "rev-parse", "main")).toBe(before);
+    const recorded = mergeBack(["--push"], { ALLOW_SCOPE_CHANGE: "1" });
+    expect(recorded.status, recorded.out).toBe(0);
+    git(merge, "fetch", "-q", "origin");
+    expect(() => assertSharedScope(merge, git(merge, "rev-parse", "origin/main"))).not.toThrow();
+    // A source that contains the public root but dropped its record is refused, not skipped.
+    git(merge, "switch", "-q", "--detach", "origin/main");
+    git(merge, "rm", "-q", "private/export/public-root.txt");
+    const dropped = commitStaged(merge, "drop the public root record");
+    expect(() => assertSharedScope(merge, dropped)).toThrow("lacks private/export/public-root.txt");
+    git(merge, "switch", "-q", "--detach", "origin/main");
   });
 
   test("with the installed private hooks, the atomic push passes the pre-push drift check against the new public-sync", () => {

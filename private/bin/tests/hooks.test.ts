@@ -273,6 +273,15 @@ describe("the private pre-push", () => {
     expect(self.status).not.toBe(0);
     expect(self.out).toContain("only the dedicated merge clone updates public-sync");
     git(dev, "config", "agenttool.mergeClone", "true");
+    // The merge clone moves public-sync only to a tip its fetched public main contains.
+    const unfetched = push("-q", "--atomic", "origin", "HEAD:refs/heads/main", `${sync}:refs/heads/public-sync`);
+    expect(unfetched.status).not.toBe(0);
+    expect(unfetched.out).toContain("no fetched public main");
+    git(dev, "update-ref", "refs/remotes/public/main", git(dev, "rev-parse", "origin/public-sync"));
+    const madeHere = push("-q", "--atomic", "origin", "HEAD:refs/heads/main", `${sync}:refs/heads/public-sync`);
+    expect(madeHere.status).not.toBe(0);
+    expect(madeHere.out).toContain("is not contained in public main");
+    git(dev, "update-ref", "refs/remotes/public/main", sync);
     const forged = push("-q", "--atomic", "origin", "HEAD:refs/heads/main", "HEAD:refs/heads/public-sync");
     expect(forged.status).not.toBe(0);
     expect(forged.out).toContain("does not have the public root as its only root");
@@ -283,8 +292,25 @@ describe("the private pre-push", () => {
     const atomic = push("-q", "--atomic", "origin", "HEAD:refs/heads/main", `${sync}:refs/heads/public-sync`);
     expect(atomic.status, atomic.out).toBe(0);
     git(dev, "config", "--unset", "agenttool.mergeClone");
+    git(dev, "update-ref", "-d", "refs/remotes/public/main");
     git(dev, "fetch", "-q", "origin");
     expect(git(origin, "rev-parse", "public-sync")).toBe(sync);
+  });
+
+  test("main is checked whenever it is pushed: a commit already on another branch of the remote does not reach main unchecked (G2)", () => {
+    const start = before();
+    write(dev, "packages/alpha/via-topic.ts", "export {};\n");
+    git(dev, "add", "-A");
+    commitAll(dev, "an add pushed to a topic branch without the hook", undefined, { ALLOW_SHARED_EDIT: "1" });
+    expect(run(dev, "git", ["push", "-q", "origin", "HEAD:refs/heads/topic-unhooked"], { env: cleanEnv({ AGENTTOOL_NO_PRIVATE_GUARD: "1" }) }).status).toBe(0);
+    git(dev, "fetch", "-q", "origin");
+    git(dev, "reset", "-q", "--hard", "origin/main");
+    const refused = push("-q", "origin", "refs/remotes/origin/topic-unhooked:refs/heads/main");
+    expect(refused.status).not.toBe(0);
+    expect(refused.out).toContain("added\tpackages/alpha/via-topic.ts");
+    expect(git(origin, "rev-parse", "main")).toBe(start);
+    git(dev, "push", "-q", "origin", "--delete", "topic-unhooked");
+    git(dev, "fetch", "-q", "--prune", "origin");
   });
 
   test("refuses any push to the public repository, by URL or by a local clone's name", () => {

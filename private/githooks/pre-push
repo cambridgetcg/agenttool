@@ -12,15 +12,20 @@
 #    agenttool.mergeClone true) may update refs/heads/public-sync, and only to
 #    a public commit (its only root the recorded public root, no path a
 #    shared tree may not hold anywhere in its history) that fast-forwards the
-#    remote's public-sync and is contained in the main pushed with it.
+#    remote's public-sync, is contained in the main pushed with it, and is
+#    contained in the clone's fetched public main (refs/remotes/public/main),
+#    so a "public tip" made in the clone itself is refused.
 # 3. Every other pushed ref that brings new commits (every branch and tag,
-#    not only main): the pushed commit must hold private/guard, contain the
-#    adoption merge, and equal the public tip it contains inside the shared
-#    scope, so an edit, delete, or add under a shared tree is refused on a
-#    topic branch as well as on main; and its allowlist must not narrow the
-#    shared scope relative to the remote's main unless ALLOW_SCOPE_CHANGE=1
-#    (the owner's go). The public tip is the merge base with public-sync: the
-#    one this push sets (check 2), else <remote>/public-sync, which must have
+#    not only main), and main whenever it is pushed, new commits or not: the
+#    pushed commit must hold private/guard, contain the adoption merge, and
+#    equal the public tip it contains inside the shared scope (its own
+#    allowlist's joined with the one that recorded that tip), so an edit,
+#    delete, or add under a shared tree is refused on a topic branch as well
+#    as on main, and a commit another checkout already pushed elsewhere does
+#    not reach main unchecked; and its allowlist must not narrow the shared
+#    scope relative to the remote's main unless ALLOW_SCOPE_CHANGE=1 (the
+#    owner's go). The public tip is the merge base with public-sync: the one
+#    this push sets (check 2), else <remote>/public-sync, which must have
 #    been fetched.
 #
 # It runs from a pinned copy (install-guards.sh). AGENTTOOL_NO_PRIVATE_GUARD=1
@@ -134,7 +139,9 @@ if [ -n "$sync_new" ]; then
     die "only the dedicated merge clone updates public-sync (merge-back.sh); refusing"
   root_from="${main_new:-$remote_main}"
   [ -n "$root_from" ] || die "no main to read the public root from; refusing the public-sync update"
-  sync_args=(check-sync --repo "$repo" --sync "$sync_new" --root-from "$root_from" --main "$root_from")
+  public_main="$(git rev-parse --verify --quiet "refs/remotes/public/main^{commit}" </dev/null || true)"
+  [ -n "$public_main" ] || die "the merge clone has no fetched public main (refs/remotes/public/main); refusing the public-sync update"
+  sync_args=(check-sync --repo "$repo" --sync "$sync_new" --root-from "$root_from" --main "$root_from" --public-main "$public_main")
   [ "$sync_old" = "$zero" ] || sync_args+=(--previous "$sync_old")
   guard_bun "$pin/private/bin/shared-scope.ts" "${sync_args[@]}" </dev/null || die "the proposed public-sync is not a valid public tip; refusing"
   sync="$sync_new"
@@ -149,7 +156,7 @@ for update in "${updates[@]+"${updates[@]}"}"; do
   [ "$remote_ref" != refs/heads/public-sync ] || continue
   commit="$(git rev-parse --verify --quiet "$local_sha^{commit}" </dev/null)" || die "${local_sha:0:12} does not point at a commit; refusing"
   new="$(git rev-list -n 1 "$commit" --not --remotes="$remote" -- </dev/null 2>/dev/null || git rev-list -n 1 "$commit" -- </dev/null)"
-  [ -n "$new" ] || continue
+  [ -n "$new" ] || [ "$remote_ref" = refs/heads/main ] || continue
   git cat-file -e "$commit:private/guard/relational-denylist.json" 2>/dev/null </dev/null ||
     die "${commit:0:12} has no private/guard/relational-denylist.json (a branch from before the private namespace); refusing"
   [ -n "$sync" ] || die "no public-sync to compare ${remote_ref#refs/heads/} with (fetch it first); refusing"

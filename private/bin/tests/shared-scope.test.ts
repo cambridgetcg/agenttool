@@ -3,7 +3,7 @@ import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ALLOWLIST_PATH, parseAllowlist, type Allowlist } from "../../../bin/project-public.ts";
-import { exportMatcher, mergeProblems, parseExportConfig, ScopeError, scopeDrift, stagedViolations, commitDrift } from "../shared-scope.ts";
+import { exportMatcher, heldScope, mergeProblems, parseExportConfig, recordingCommits, ScopeError, scopeDrift, stagedViolations, commitDrift } from "../shared-scope.ts";
 import { ALLOWLIST, commitAll, git, makePrivateRepo, ROOT, run, scopedTip, scratchDir, write } from "./fixtures.ts";
 
 setDefaultTimeout(60_000);
@@ -174,6 +174,9 @@ describe("staged changes and merge results in a real repository", () => {
   });
 
   test("commit drift and the merge check read the allowlist from the private commit", () => {
+    // The adoption merge records publicTip, so the merge check has a baseline.
+    git(repo, "-c", "user.name=Dev", "-c", "user.email=dev@private.invalid", "merge", "-q", "--allow-unrelated-histories", "-s", "ours", "-m", "Adopt the public root", publicTip);
+    const adopted = git(repo, "rev-parse", "HEAD");
     write(repo, "packages/alpha/added.ts", "export {};\n");
     const drifted = commitAll(repo, "add under shared tree");
     expect(commitDrift(repo, { privateRev: drifted, publicRev: publicTip })).toEqual([{ path: "packages/alpha/added.ts", kind: "added" }]);
@@ -181,7 +184,7 @@ describe("staged changes and merge results in a real repository", () => {
     const cli = run(repo, process.execPath, [join(repo, "private/bin/shared-scope.ts"), "drift", "--repo", repo, "--public", publicTip, "--private", drifted]);
     expect(cli.status).toBe(1);
     expect(cli.stdout).toBe("added\tpackages/alpha/added.ts\n");
-    expect(mergeProblems(repo, { base: publicTip, publicRev: publicTip, before: fixture.head, after: drifted })).toEqual([
+    expect(mergeProblems(repo, { base: publicTip, publicRev: publicTip, before: adopted, after: drifted })).toEqual([
       "shared path added after the merge\tpackages/alpha/added.ts",
     ]);
     // A merge that touched a private-only path is refused too.
@@ -191,6 +194,28 @@ describe("staged changes and merge results in a real repository", () => {
       "shared path added after the merge\tpackages/alpha/added.ts",
       "the merge changed a private-only path\tprivate/notes.md",
     ]);
+    git(repo, "reset", "-q", "--hard", fixture.head);
+  });
+
+  test("a narrowing since the commit that recorded the public tip hides nothing unless the owner says go (G3)", () => {
+    git(repo, "-c", "user.name=Dev", "-c", "user.email=dev@private.invalid", "merge", "-q", "--allow-unrelated-histories", "-s", "ours", "-m", "Adopt the public root", publicTip);
+    const adopted = git(repo, "rev-parse", "HEAD");
+    expect(recordingCommits(repo, adopted, publicTip)).toEqual([adopted]);
+    const allowlist = fixtureAllowlist();
+    (allowlist.export.exclude as Array<{ path: string; reason: string }>).unshift({ path: "packages/alpha/extra", reason: "unreviewed" });
+    write(repo, "private/projection/allowlist.json", `${JSON.stringify(allowlist, null, 2)}\n`);
+    write(repo, "packages/alpha/extra/r-only.ts", "export {};\n");
+    const narrowed = commitAll(repo, "narrow and add under it, without a hook");
+    // Its own allowlist alone would hide the add; the baseline's does not.
+    expect(commitDrift(repo, { privateRev: narrowed, publicRev: publicTip })).toEqual([]);
+    expect(commitDrift(repo, { privateRev: narrowed, publicRev: publicTip, baselineTip: publicTip })).toEqual([{ path: "packages/alpha/extra/r-only.ts", kind: "added" }]);
+    expect(heldScope(repo, narrowed, publicTip)("packages/alpha/extra/r-only.ts")).toBe(true);
+    expect(heldScope(repo, narrowed, publicTip, { allowScopeChange: true })("packages/alpha/extra/r-only.ts")).toBe(false);
+    const cli = run(repo, process.execPath, [join(repo, "private/bin/shared-scope.ts"), "drift", "--repo", repo, "--public", publicTip, "--private", narrowed, "--base", publicTip]);
+    expect(cli.status).toBe(1);
+    expect(cli.stdout).toBe("added\tpackages/alpha/extra/r-only.ts\n");
+    // Without any commit that recorded the tip, the baseline is unknown: refused.
+    expect(() => heldScope(repo, fixture.head, publicTip)).toThrow(ScopeError);
     git(repo, "reset", "-q", "--hard", fixture.head);
   });
 

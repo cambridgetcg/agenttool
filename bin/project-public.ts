@@ -18,8 +18,11 @@
  *                             refs/remotes/origin/public-sync); once the source
  *                             records the public root, its shared paths must
  *                             equal the public tip it contains, or nothing is
- *                             built
- *   --no-write                build, guard, and create the commit object, but
+ *                             built. The shared scope includes the allowlist
+ *                             that recorded that tip; ALLOW_SCOPE_CHANGE=1 in
+ *                             the environment (the owner's go) drops that for
+ *                             a narrowing no merge-back has recorded yet
+ *   --no-write               build, guard, and create the commit object, but
  *                             update no ref. With --out-ref or --out-repo it
  *                             builds on that target's head, with the history,
  *                             rewind, and parent/diff checks, so it previews
@@ -627,6 +630,8 @@ export interface ProjectOptions {
   noWrite?: boolean;
   /** The public-sync ref the source is checked against (default refs/remotes/origin/public-sync). */
   publicSync?: string;
+  /** The owner's go for a shared-scope narrowing not yet recorded by a merge-back (ALLOW_SCOPE_CHANGE=1). */
+  allowScopeChange?: boolean;
 }
 
 export interface ProjectResult {
@@ -664,13 +669,30 @@ function rewindFrom(repo: string, previous: string, source: string, allowRewind:
  * public-sync, exactly: an edit, delete, or add made here under a shared
  * tree would otherwise reach the release repository and npm without ever
  * being in the public development repository (critic MUST 2, release side).
- * Before adoption there is nothing to compare, and nothing is checked.
+ * The scope includes the allowlist that recorded that tip (heldScope in
+ * private/bin/shared-scope.ts), so an allowlist narrowing that reached main
+ * without a hook hides nothing unless `allowScopeChange` (ALLOW_SCOPE_CHANGE=1,
+ * the owner's go). Before adoption there is nothing to compare, and nothing
+ * is checked; a source that contains the public root but lacks the record
+ * (it was deleted) is refused, so the check cannot be turned off that way.
  */
-export function assertSharedScope(repo: string, source: string, publicSync: string = DEFAULT_PUBLIC_SYNC): void {
-  if (recordedPublicRoot(repo, source) === undefined) return;
+export function assertSharedScope(
+  repo: string,
+  source: string,
+  publicSync: string = DEFAULT_PUBLIC_SYNC,
+  options: { allowScopeChange?: boolean } = {},
+): void {
   const sync = optionalCommit(repo, publicSync);
+  if (recordedPublicRoot(repo, source) === undefined) {
+    if (sync === undefined) return;
+    const roots = git(repo, ["rev-list", "--max-parents=0", sync, "--"]).stdout.toString("utf8").split("\n").filter(Boolean);
+    if (roots.some((root) => git(repo, ["merge-base", "--is-ancestor", root, source], { allowFailure: true }).status === 0)) {
+      throw new ProjectionRefused(`${source} contains the public root but lacks private/export/public-root.txt, which the adoption merge wrote; restore it`);
+    }
+    return;
+  }
   if (sync === undefined) throw new ProjectionRefused(`${source} records the public root, so the projection checks it against ${publicSync}, which is not here; fetch it first`);
-  const { problems, drift } = pushProblems(repo, { rev: source, sync });
+  const { problems, drift } = pushProblems(repo, { rev: source, sync, allowScopeChange: options.allowScopeChange });
   if (problems.length + drift.length > 0) {
     throw new ProjectionRefused(
       `${source} differs from the public tip it contains in ${drift.length} shared path(s)${problems.length > 0 ? ` (${problems.join("; ")})` : ""}; change shared paths in the public repository, merge back, then project`,
@@ -699,7 +721,7 @@ export function projectPublic(options: ProjectOptions): ProjectResult {
     if (contained.status !== 0) throw new ProjectionRefused(`${source} is not contained in ${ancestor}`);
   }
   assertGuardShips(repo, source);
-  assertSharedScope(repo, source, options.publicSync);
+  assertSharedScope(repo, source, options.publicSync, { allowScopeChange: options.allowScopeChange });
   if (options.target?.kind === "ref") validateOutRef(repo, options.target.ref);
   if (options.target?.kind === "repo") validateBareRepo(options.target.path);
 
@@ -762,6 +784,7 @@ export function parseArgs(argv: readonly string[]): ProjectOptions {
   }
   if (options.source === undefined) usage();
   if (options.target === undefined && !options.noWrite) usage();
+  if (process.env.ALLOW_SCOPE_CHANGE === "1") options.allowScopeChange = true;
   return options as ProjectOptions;
 }
 

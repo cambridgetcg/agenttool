@@ -145,7 +145,11 @@ main() {
   fi
 
   # Drift: since the base, this repository changed (added, deleted, or edited)
-  # no shared path except to exactly the public bytes.
+  # no shared path except to exactly the public bytes. The scope includes the
+  # allowlist that recorded the base (shared-scope.ts heldScope), so a
+  # narrowing that reached main without a hook hides nothing; a deliberate one
+  # takes effect when a run with ALLOW_SCOPE_CHANGE=1 (the owner's go)
+  # records it.
   guard_bun "$scope" drift --repo "$root" --base "$base" --public "$pub" --private origin/main ||
     fail 4 "drift: revert each added/changed/deleted shared path here and make the change in the public repository; for a collision, move the private file under private/; then run again"
   # A case-insensitive file system writes Private/x over private/x.
@@ -202,7 +206,7 @@ main() {
   # The tip (the merge, or the merge plus fixes and the acceptance record):
   # shared paths still equal the public tip exactly.
   [ -z "$(git diff --no-renames --name-only --diff-filter=DMT "$pub" HEAD)" ] || fail 6 "a public path differs at the tip of $branch"
-  guard_bun "$scope" drift --repo "$root" --public "$pub" --private HEAD || fail 6 "the tip of $branch changes a shared path; fix shared code in the public repository"
+  guard_bun "$scope" drift --repo "$root" --public "$pub" --private HEAD --baseline-tip "$base" || fail 6 "the tip of $branch changes a shared path; fix shared code in the public repository"
   guard_bun "$scope" casefold --repo "$root" --public "$pub" --private HEAD || fail 6 "the tip of $branch holds a path that differs only in case from a public one"
   guard_bun "$reviewed" check --root "$root" >/dev/null || fail 6 "the merged shared guard files differ from the reviewed record"
 
