@@ -211,6 +211,9 @@ export async function acceptInboundTurn(
     if (store.findActiveBetween(inbound.byDid, selfDid)) {
       throw new RrrError("rrr_cascade_already_active", "Already active cascade with this peer.", 409);
     }
+    if (store.get(inbound.cascadeId) !== null) {
+      throw new RrrError("cascade_id_taken", "A depth-1 turn opens a new cascade and cannot reuse an existing cascade_id.", 409);
+    }
     const cascade: Cascade = {
       id: inbound.cascadeId,
       initiatorDid: inbound.byDid,
