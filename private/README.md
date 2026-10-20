@@ -130,11 +130,20 @@ None of these has run against a real public repository; the tests in
 
 The merge-back gate runs public code. Its sandbox (`gate_profile` in
 `bin/merge-back.sh`) gives it a short environment and a scratch HOME and
-TMPDIR, and blocks name resolution, every address but loopback, the loopback
-ports that were already listening, writes outside the clone and the scratch,
-and reads under the home directory except the clone and Bun. Other system
-services stay reachable, so it contains ordinary test code, not code written
-to escape it; running the gate as a separate user or in a VM would.
+TMPDIR, and blocks:
+- name resolution and every address but loopback;
+- on loopback, the ports that were already listening, except the database
+  and Redis defaults (5432, 6379) that the API's hermetic tier connects to
+  (merge-back warns when they are open);
+- writes outside the clone, the scratch, and the entries of `/tmp` and the
+  per-user temporary directory named as this repository's scripts and tests
+  name them (`agenttool-*`, `tmp.*`, `collab-*`, and a few more);
+- reads under the home directory except the clone and Bun.
+
+Other system services stay reachable, and so does anything listening on
+those two ports, so it contains ordinary test code, not code written to
+escape it; running the gate as a separate user or in a VM would. A local
+PostgreSQL that trusts loopback logins is reachable from the gate.
 
 The private pre-push lets a checkout push only to this repository on GitHub
 or to a local path; a push to any other URL (the release repository, Codeberg,

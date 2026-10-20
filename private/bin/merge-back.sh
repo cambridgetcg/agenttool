@@ -315,10 +315,12 @@ listening_ports() {
 
 # sandbox-exec profile (later rules win).
 # - Writes: nowhere but this clone's working tree, the gate's scratch
-#   directory, /dev, and new entries named agenttool-*, .agenttool-*, tmp.*,
-#   or zerone-* in the temporary directories of GATE_TEMP_DIRS (/tmp and the
-#   per-user one), which scripts the tests start with a cleared environment
-#   fall back to. So nothing outside the clone (a tool on PATH, a system git
+#   directory, /dev, and new entries named agenttool-*, tmp.*, zerone-*,
+#   courier-*, collab-* or cdw-* (a leading dot allowed for agenttool and
+#   courier) in the temporary directories of GATE_TEMP_DIRS (/tmp and the
+#   per-user one): the names this repository's scripts and tests use there,
+#   since some write /tmp directly and scripts the tests start with a
+#   cleared environment fall back to these directories. So nothing outside the clone (a tool on PATH, a system git
 #   config, a launch agent, another session's scratch files, a Bun or
 #   TypeScript config above a later run's working directory) can carry a
 #   change past the gate. Never this clone's git directories (config, refs,
@@ -356,7 +358,7 @@ gate_profile() {
   done
   while IFS= read -r temp; do
     [ -n "$temp" ] || continue
-    temps+=" (regex #\"^$(printf '%s' "$temp" | sed 's/[][\\.^$*+?(){}|]/\\&/g')/(agenttool-|\\.agenttool-|tmp\\.|zerone-)\")"
+    temps+=" (regex #\"^$(printf '%s' "$temp" | sed 's/[][\\.^$*+?(){}|]/\\&/g')/(\\.?agenttool-|tmp\\.|zerone-|\\.?courier-|collab-|cdw-)\")"
   done <<<"${GATE_TEMP_DIRS:-}"
   cat <<PROFILE
 (version 1)

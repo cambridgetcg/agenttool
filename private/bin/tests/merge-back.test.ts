@@ -331,10 +331,10 @@ describe("merge-back cycles", () => {
     );
     expect(profile).toContain('(deny file-read* (subpath "/h/me"))');
     expect(profile).toContain('(deny network-outbound (remote ip "localhost:5432") (remote ip "localhost:80"))');
-    // Temporary directories: only new agenttool-*, .agenttool-*, tmp.* and zerone-* entries, the paths regex-escaped.
+    // Temporary directories: only entries with this repository's temporary names, the paths regex-escaped.
     const temps = run(scratch.dir, "bash", ["-c", script], { env: cleanEnv({ GATE_TEMP_DIRS: "/private/tmp\n/v.x/T" }) }).stdout;
-    expect(temps).toContain('(regex #"^/private/tmp/(agenttool-|\\.agenttool-|tmp\\.|zerone-)")');
-    expect(temps).toContain('(regex #"^/v\\.x/T/(agenttool-|\\.agenttool-|tmp\\.|zerone-)")');
+    expect(temps).toContain('(regex #"^/private/tmp/(\\.?agenttool-|tmp\\.|zerone-|\\.?courier-|collab-|cdw-)")');
+    expect(temps).toContain('(regex #"^/v\\.x/T/(\\.?agenttool-|tmp\\.|zerone-|\\.?courier-|collab-|cdw-)")');
   });
 
   test("a public change to the guard tooling stops (exit 9) until the owner accepts that exact tip; the acceptance records new digests", () => {
