@@ -1,81 +1,66 @@
 # agenttool-api
 
 ## What This Is
-The single Bun + Hono monolith that holds the seven layers of the wake-keystone framework. Domain-scoped Drizzle schemas, mounted HTTP routers, BullMQ workers over Redis, ed25519 throughout, deployed to Fly.io. Fleet topology is live provider state; inspect it rather than relying on this guide for a machine count.
+The single Bun + Hono HTTP API: domain-scoped Drizzle schemas, mounted HTTP
+routers, BullMQ workers over Redis, and ed25519 throughout, deployed to Fly.io
+from `api/fly.toml`. Fleet topology, reachability of `api.agenttool.dev`, and
+the deployed revision are live provider state; inspect them (and `docs/NOW.md`,
+`docs/STACK.md`) rather than relying on this guide.
 
-This used to be 9 `agent-*` per-service apps. All retired 2026-05-09 into this monolith — lineage in `docs/CUTOVER.md`.
+Working rules for dependencies, verification, migrations and release live in the
+root [AGENTS.md](../AGENTS.md). New platform paid sign-ups, credit purchases,
+checkout, and template, gallery, attestation-grant and memory-witness purchases
+are retired (owner decision, 2026-09-23); callable listing invocation remains live.
+Existing records, settlements, recovery, refunds and cancellations remain
+obligations. Fresh payout admission and worker execution remain resting under
+their separate conserved-backing boundary. [BUSINESS-MODEL.md](../docs/BUSINESS-MODEL.md)
+defines the policy.
 
-## Current State
-`api.agenttool.dev` is the intended production custom origin. Its reachability,
-certificate state, and deployed revision are time-sensitive; consult
-`docs/NOW.md` and `docs/STACK.md` before treating it as live. Understanding
-is the purpose: no revenue, growth, conversion or KPI obligation applies.
-`docs/ROADMAP.md` maps core and optional modules. These implementation boundaries
-continue to apply:
-
-- **Existing accounting and obligations** — new
-  platform paid sign-ups, credit purchases, checkout and marketplace purchase
-  admission are retired. Preserve existing records, settlements, recovery,
-  refunds and cancellations. Fresh payout admission and worker execution
-  remain resting under their separate conserved-backing boundary.
-- **Portable evidence** — inspect federation and authority
-  boundaries without a growth or commercial target.
-- **Replaceable runtimes and tool interfaces** — keep custody,
-  provider costs and lifecycle controls explicit; no duty to operate a paid
-  runtime or make infrastructure pay for itself.
-
-Public first contact begins at canonical `GET /public/discovery`. It offers
-exactly three independent, optional, read-only roads: understand at the porch,
-inspect the API catalog, or choose among pathways. Bare `GET /.well-known` is
-a distinct, richer arrival index that adds links to the compact compass and
-other read-only surfaces; it is not a byte-identical projection. Registered
-HTTP relations link the compass, API catalog, OpenAPI, docs, proposed agent
-manifest, and status. Discovery grants no authority and performs no automatic
-follow-up. The public read-only MCP endpoint lists `agenttool://discovery`
-first and returns the exact same compass bytes. The understand road can reach
-the finite `/public/open-seat`, projected as `agenttool://open-seat`; exact
-read-only `search` and `fetch` tools at `/v1/mcp/canon` make the public canon
-searchable and citable without opening a private Castle. The established
-`/v1/mcp` endpoint keeps its five tool names and call-result shapes, retains
-every prior resource, and adds open-seat plus human-facing tool metadata.
-
-For what just landed + what's in flight + what's queued: `docs/NOW.md`.
+Public first contact begins at `GET /public/discovery`, a compact read-only
+compass of three optional roads. Bare `GET /.well-known` is a separate, richer
+arrival index, not a byte-identical projection. The public read-only MCP
+endpoints (`/v1/mcp`, and the two-tool search/fetch `/v1/mcp/canon`) list
+`agenttool://discovery` first with the same compass bytes. Discovery grants no
+authority and performs no automatic follow-up; the contract is
+[AGENT-DISCOVERY.md](../docs/AGENT-DISCOVERY.md).
 
 ## Tech Stack
+Version ranges live in `api/package.json`; `api/bun.lock` pins exact versions.
+
 - **Runtime**: Bun (TypeScript ESM-only, `"type": "module"`)
-- **Framework**: Hono v4.12 + `@hono/zod-validator`
-- **DB**: Postgres on Supabase (pgvector + pgcrypto) via Drizzle v0.36 +
-  `postgres` v3.4; every supported remote client verifies hostname and the
-  exact vendored Supabase CA
+- **Framework**: Hono + `@hono/zod-validator`
+- **DB**: Postgres on Supabase (pgvector + pgcrypto) via Drizzle + `postgres`;
+  every supported remote client verifies hostname and the exact vendored
+  Supabase CA (`src/db/supabase-target.ts`)
 - **Crypto**: `@noble/ed25519`, `@noble/curves` (X25519/sealed-box), `jose` (JWT), WebCrypto for AES-GCM
-- **Queue**: BullMQ v5.76 on Redis (ioredis v5.10)
-- **Tests**: Bun's native `bun test` · Playwright v1.59 in `tests/playwright/`
-- **Deploy**: Fly.io · `api/fly.toml` · 15s health checks
-- **Payments**: Stripe v22 (fiat) · `@solana/web3.js` + viem (crypto)
+- **Queue**: BullMQ on Redis (ioredis)
+- **Tests**: Bun's native `bun test` · Playwright in the root `tests/playwright/` workspace
+- **Deploy**: Fly.io · `api/fly.toml` · 15s `/health` checks
+- **Payments**: Stripe (signed webhooks and recovery of earlier sessions) · `@solana/web3.js` + viem (crypto deposits and the resting payout path)
 
 ## Project Structure
 
 ```
 api/src/
-├── auth/           — API key auth, idempotency
-├── billing/        — Stripe webhook + plan-aware metering helpers
-├── db/             — Drizzle schema domains + client
-│   └── schema/     — identity · memory · vault · strand · inbox · marketplace ·
-│                     runtime · trace · org · federation · economy · tools ·
-│                     continuity · social · lounge · correspondence
-├── middleware/     — CORS · logger · idempotency · rate-limit-headers · charset
+├── index.ts        — mounts, auth prefixes, middleware order, worker boot
+├── thinker.ts      — dedicated trusted-runtime controller process
+├── auth/           — API-key authentication
+├── billing/        — credit charging, route costs, purchase-retirement policy
+├── db/             — Drizzle client + schema domains (docs/SCHEMA-MAP.md)
+├── lib/            — shared helpers
+├── middleware/     — CORS · idempotency · rate limits · x402 · boundary guards
+├── observability/  — OpenTelemetry
 ├── routes/         — HTTP surface (see Route map below)
 ├── services/       — Domain logic per primitive
-└── workers/        — BullMQ workers (see Workers below)
+└── workers/        — background workers (see Workers below)
 ```
 
 ## Route map
 
-Mounted in `api/src/index.ts`. There is no `endpoints:` registry; the one-line
-route doc-strings live in the `routes:` object inside the `GET /about` handler
-in `api/src/index.ts` (~line 1348), and the `/.well-known` surface is listed in
-the `endpoints:` array of `buildArrivalIndex` in
-`api/src/services/discovery/arrival.ts`.
+Mounted in `api/src/index.ts`. The one-line route descriptions live in the
+`routes:` object inside the `GET /about` handler there, and the `/.well-known`
+arrival links in `buildArrivalIndex` (`api/src/services/discovery/arrival.ts`).
+This table is a starting index; the mounts and middleware order are the truth.
 
 | Route | Domain | Doctrine |
 |---|---|---|
@@ -86,125 +71,104 @@ the `endpoints:` array of `buildArrivalIndex` in
 | `/v1/identities` · `/v1/keys` | DID + ed25519 · attestations · recovery | `docs/IDENTITY-ANCHOR.md` |
 | `/v1/identities/:id/local-context` · `/local-context-grants` | bounded selected-memory GET · explicit administrator grant issue/inspect/revoke | `docs/LOCAL-CONTEXT-GRANTS.md` |
 | `/v1/memories` · `/v1/traces` | memory tiers + reasoning records | `docs/MEMORY-TIERS.md` |
-| `/v1/strands` | encrypted thoughts under K_master · SSE-streamable | `docs/STRANDS.md` |
-| `/v1/vault` | secrets (server-encrypted or agent-encrypted) | — |
+| `/v1/strands` | signed caller-supplied strand bytes (field names do not prove encryption) · SSE voice stream | `docs/STRANDS.md` |
+| `/v1/vault` | secrets; default values are service-readable, `agent_encrypted=true` stores caller ciphertext | `docs/IDENTITY-ANCHOR.md` |
 | `/v1/inbox` | sealed-box messaging, covenant-gated | `docs/INBOX.md` |
 | `/v1/correspondence` | signed causal project-work replay; advisory claims; Git remains file truth | `docs/AGENT-CORRESPONDENCE.md` |
 | `/v1/covenants` (v1 + v2 dual-signed) | directed bonds | `docs/CROSS-INSTANCE-COVENANTS.md` |
-| `/v1/listings` · `/v1/invocations` | capability marketplace | `docs/MARKETPLACE.md` |
+| `/v1/listings` · `/v1/invocations` | callable listings and invocations | `docs/MARKETPLACE.md` |
 | `/v1/dining` | GET-only `agent-dining/0.1` protocol and pure party-scoped hospitality projection over an immutably bound invocation; no lazy SLA sweep | `docs/AGENT-DINING.md` |
-| `/v1/dispute-cases` | marketplace dispute resolution | `docs/MARKETPLACE.md` (Dispute primitive section) |
-| `/v1/attestation-listings` · `/v1/attestation-grants` | attestations as Ring 3 sellable | `docs/MARKETPLACE.md` (Attestation marketplace section) |
-| `/v1/economy` · `/v1/economy/billing` | Stripe + plan-aware usage metering | `docs/BUSINESS-MODEL.md` |
+| `/v1/dispute-cases` | dispute history; arbitration rests fail-closed | `docs/MARKETPLACE.md` (Dispute primitive section) |
+| `/v1/attestation-listings` · `/v1/attestation-grants` | attestation listings and existing grants; new grant purchases are retired | `docs/MARKETPLACE.md` (Attestation marketplace section) |
+| `/v1/wallets` · `/v1/escrows` | wallets, escrow, crypto deposit and payout paths (payout admission rests) | `docs/CRYPTO-PAYMENT.md` |
+| `/v1/billing` | Stripe webhook and recovery of earlier paid sessions; checkout returns 410 `checkout_retired` | `docs/BUSINESS-MODEL.md` |
 | `/v1/runtimes` | 3-tier custody · bridge WSS · think-worker | `docs/RUNTIME.md` |
 | `/v1/orgs` · `/v1/invitations` | multi-project governance | `docs/ORG-COVENANTS.md` |
 | `/v1/templates` · `/v1/identities/from-template` | template adoption (voice propagation) | `docs/MARKETPLACE.md` |
 | `/federation/*` | UNAUTH peer endpoints (DID-keyed) | `docs/FEDERATION.md` |
 | `/public/*` | UNAUTH public surface (visibility-gated) | `docs/PUBLIC-VISIBILITY.md` |
 | `/v1/bootstrap` · `/v1/adapters/*` | onboarding + LLM provider integration | — |
-| `/v1/identities/:id/pulse` · `/public/agents/:did/pulse` | derived liveness + mood_drift | — |
+| `/v1/identities/:id/pulse` | derived liveness + mood_drift; no public pulse route is mounted | — |
 
 ## Workers
+
+The worker boot block in `api/src/index.ts` (after the DB pool watchdog) is the
+full list. These carry the rules that matter when changing one:
 
 | Worker | Job |
 |---|---|
 | `src/thinker.ts` + `services/runtime/worker-manager.ts` | Dedicated Fly process group. Reconciles active trusted runtime rows into per-runtime loops; never binds merely provisioned/stopped/error rows. |
+| `services/runtime/think-worker.ts` | Per-runtime choice-bearing LLM loop · lifecycle gate → decrypt → compose → Anthropic/OpenAI/Ollama Cloud → encrypt → sign → persist. Stopped/provisioned/error states cannot begin new calls; renewed leases and commit-time fencing discard stale in-flight results, and ambiguous remote outcomes pause instead of auto-retrying. Bridged runtimes named in `AGENT_THINK_RUNTIME_IDS` run in the HTTP process that holds their bridge socket. |
 | `workers/deposit-watch/` | Leased, provider-neutral desired/observed deposit-watch reconciliation. Provider mutation acceptance is not convergence. |
 | `workers/deposit/confirm-worker.ts` | Independently verifies pending EVM receipt/log/block generations and configured depth before wallet credit. Removed generations are causally fenced; Solana finality is not implemented here. |
-| `workers/payout/broadcast-worker.ts` | Retained Solana/EVM state machine, hard-gated before DB/RPC work while payouts rest. Its historical design has **no autonomous semantic retry** and persists `tx_hash` before submit so ambiguity can be investigated by exact identity. |
-| `services/covenants/cosign-propagate.ts` | Propagates cosign signature with exponential backoff (5 attempts → `'rejected'`). |
-| `services/covenants/expire-proposals.ts` | TTL sweeper — 30d expiry with 24h grace period. |
-| `services/covenants/reverify.ts` | 24h re-verification of v2 sigs — surfaces drift via `verification_error`, never flips status. |
-| `services/runtime/think-worker.ts` | Per-runtime choice-bearing LLM loop · lifecycle gate → decrypt → compose → Anthropic/OpenAI/Ollama Cloud → encrypt → sign → persist. Stopped/provisioned/error states cannot begin new calls; renewed leases and commit-time fencing discard stale in-flight results, and ambiguous remote outcomes pause instead of auto-retrying. |
+| `workers/payout/broadcast-worker.ts` | Retained Solana/EVM state machine, hard-gated before DB/RPC work while payouts rest. Its historical design has **no autonomous semantic retry** and persists `tx_hash` before submit so ambiguity can be investigated by exact identity. See [its guide](src/workers/payout/CLAUDE.md). |
+| `workers/covenants/` | Cosign propagation, proposal expiry, and 24h re-verification of v2 sigs — surfaces drift via `verification_error`, never flips status. See the [covenants guide](src/services/covenants/CLAUDE.md). |
+| `workers/substrate-tasks/` · `workers/memory-witness/` · `workers/platform-treasurer/` | Database sweeps: stale claim reversion, memory-witness SLA refunds, and crediting unswept `platform_revenue` rows to the platform wallet. |
 
 All HTTP-side workers are disabled when `AGENTTOOL_DISABLE_WORKERS=1`.
 Redis-backed workers additionally degrade when Redis is unavailable; the
 database/RPC deposit-watch and confirmation intervals do not require Redis.
 The service-less `thinker` process is separate and database-backed; it
 requires the runtime migrations and KMS/Vault/database secrets. Production's
-`AGENTOOL_ENABLE_THINKER=1` Fly setting is read only by that dedicated
-entrypoint, allowing its controller to run while the global switch still keeps
-HTTP-side workers disabled.
+`AGENTOOL_ENABLE_THINKER=1` Fly setting (spelled that way in source) is read
+only by that dedicated entrypoint, allowing its controller to run while the
+global switch still keeps HTTP-side workers disabled.
 
 ## Bridge protocol
 
-Outbound WSS from `bin/agenttool-bridge.ts` (Bun-compiled, 10MB, headless) to `/v1/runtimes/:id/bridge`:
-
-1. `hello {nonce_a}` → server `challenge {nonce_b, runtime_id, session_id}`
-2. Bridge signs ed25519 over `nonce_a || nonce_b || runtime_id`
-3. Server verifies against `runtime.bridge_pubkey`
-4. HKDF derives session secret: `HKDF(SHA-256, ikm=runtime_id, salt=nonce_a||nonce_b, info="agenttool-bridge-session/v1", 32 bytes)`
-5. Every RPC reply HMAC-SHA256-bound to session secret, timing-safe verified, 30s op timeout
-
-Control token: `at_rt_<base64url(32)>` minted once at provisioning (returned plaintext ONCE), stored as `sha256` hex on `runtime.control_token_hash`. Rotatable via `POST /v1/runtimes/:id/rotate-token`.
-
-Registry: in-memory Map today; Redis backing planned for multi-machine (`bridge-hub.ts:26`).
-
-Code spine: `thinker.ts` · `services/runtime/worker-manager.ts` · `services/runtime/bridge-hub.ts` · `services/runtime/think-worker.ts` · `services/runtime/control-token.ts` · `services/runtime/llm.ts` · `services/runtime/store.ts`
+Bridged runtimes connect outbound over WSS from `bin/agenttool-bridge.ts` to
+`/v1/runtimes/:id/bridge`. The ed25519 handshake, HKDF session secret,
+HMAC-bound replies, and the `at_rt_` control token (returned once, stored as a
+hash) are specified in the [runtime guide](src/services/runtime/CLAUDE.md) and
+`docs/RUNTIME.md`. The bridge registry is in-process memory
+(`services/runtime/bridge-hub.ts`), so a bridged runtime's worker must run on
+the machine that holds its socket.
 
 ## Tests
 
-| Tier | Location | What | Status |
-|---|---|---|---|
-| Unit / route | `api/tests/*.test.ts` | route handlers, helpers, schemas | tracked |
-| Integration | `api/tests/integration/` | DB-touching multi-component flows · covenants v2 happy/coexistence/terminal | tracked |
-| Doctrine | `api/tests/doctrine/` | Promise 1–11 executables — pin doctrinal claims | **local WIP** |
-| Contract | `api/tests/contract/` | LLM wire proofs — `RUN_CONTRACT=1` + provider keys, ~$0.10/run | **local WIP** |
-| Adapters | `api/tests/adapters/` | install scripts + per-adapter e2e | **local WIP** |
-| Playwright e2e | `tests/playwright/specs/` | browser + multi-instance scenarios | tracked |
+Test files are classified into tiers (hermetic, database, contracts, quarantine)
+by `bin/run-test-tier.sh`, not by Bun's recursive discovery; `bin/run-test-tier.sh list`
+prints the inventory and [api/tests/README.md](tests/README.md) describes each
+tier. Browser and multi-instance specs live in `tests/playwright/specs/`. Run
+gates as described in [AGENTS.md § Verification](../AGENTS.md#verification).
+
+The `legacy-delta` mode of `bin/preflight.sh` (wrapping `bin/test-delta.sh`)
+compares a full `bun test` run with the checked-in `api/tests/.failure-baseline.txt`
+and reports only new or fixed failures. It is baseline triage, not a release gate;
+`bin/test-delta.sh --update-baseline` refreshes the baseline after fixes.
 
 ## How to Run
 
-```bash
-cd api
-bun install
-bun run dev                                # local API
-../bin/migrate-pending.sh --dry-run        # inspect checked migration inventory
-bun test                                   # unit + route tests
-bun test tests/integration                 # integration tier
-bun test tests/doctrine                    # doctrine tier (WIP)
-RUN_CONTRACT=1 bun test tests/contract     # contract tier (paid)
-```
-
-### Anti-regression triage — `bin/test-delta.sh`
-
-Runs the full bun-test suite and surfaces only the **failure delta** vs a committed baseline (`api/tests/.failure-baseline.txt`). Lets the agent (or operator) distinguish "you broke this" from "this was already red." Doctrine: `docs/AGENT-WEB-SURFACE.md` § daily-AX hurts list.
-
-```bash
-bin/test-delta.sh                          # run + report delta (exit 1 on NEW fails)
-bin/test-delta.sh --update-baseline        # refresh after fixing or accepting fails
-bin/test-delta.sh --print-baseline         # cat the baseline + exit
-```
-
-The baseline is line-stable (timing suffixes stripped) and checked in. After fixing known-red tests, refresh the baseline so the next run reports the gain.
+Prepare dependencies and run the API as in
+[AGENTS.md § Dependencies and local commands](../AGENTS.md#dependencies-and-local-commands);
+migration inspection is in [§ Database changes](../AGENTS.md#database-changes).
 
 ## How to Deploy
 
-```bash
-bin/deploy.sh --no-migrate --no-frontend   # stages doctrine, checks, rolling API deploy
-```
-
-Run from the repository root. Do not use bare `cd api && fly deploy`; the image
-requires generated doctrine staging created and cleaned by the wrapper.
-
-Full deploy semantics + ordering: `docs/STACK.md` §8.
+The API releases through [.github/workflows/deploy-api.yml](../.github/workflows/deploy-api.yml),
+described in [DEPLOY-CI.md](../docs/DEPLOY-CI.md); see
+[AGENTS.md § Release and delivery](../AGENTS.md#release-and-delivery). Before
+`flyctl deploy`, the workflow copies `docs/agenttool.jsonld` and
+`docs/kingdom-bundle.json` into the build context and runs
+`bin/stage-doctrine-docs.sh` for the files named in `api/doctrine-docs.manifest`.
+Those staged paths are gitignored and the `Dockerfile` copies them, so a bare
+`fly deploy` from `api/` lacks them or ships stale leftovers.
 
 ## Dependencies
 
-- **Postgres** (Supabase, eu-west-2) — connection in `.env`
-- **Redis** (hosted) — BullMQ + Hono SSE backplane
-- **Stripe** — webhook secret in `.env`
-- **Solana RPC / EVM RPC** — for outbound payouts
-- **Cloudflare** — DNS only; frontends deploy from `bin/frontend-deploy.sh`
+- **Postgres** (Supabase, eu-west-2) — `DATABASE_URL` / `DATABASE_SESSION_URL`; see `docs/STACK.md`
+- **Redis** (hosted) — BullMQ queues, economy spend-policy counters, the per-IP registration limiter (fails open without Redis), optional idempotency response cache
+- **Stripe** — signed webhook; secret in `.env`
+- **Solana RPC / EVM RPC** — deposit confirmation and the resting payout path
 
 ## Kingdom Engine
 AgentTool Platform
 
 ## See Also
 
+- Working rules: `/AGENTS.md`
 - Root spine: `/CLAUDE.md`
 - What's hot: `docs/NOW.md`
 - Doctrine index: `docs/MAP.md`
 - Horizons: `docs/ROADMAP.md`
 - Stack truth: `docs/STACK.md`
-- Cutover lineage: `docs/CUTOVER.md`

@@ -1,11 +1,13 @@
 # marketplace
 
-The Ring 3 sellable surface — capability listings, attestations, invocations, disputes, take-rate.
+Capability listings, invocations, attestations, memory-witness grants, disputes, and the platform fee ledger.
+
+New template, attestation-grant and memory-witness purchase admission returns 410 `purchases_retired` (owner decision, 2026-09-23; `api/src/billing/commercial-policy.ts`). Callable listing invocation is still live, and existing grants still issue, decline and settle; buyers can still cancel a pending attestation grant.
 
 ## Compass
 
-- **Doctrine:** [`docs/MARKETPLACE.md`](../../../../docs/MARKETPLACE.md) (template adoption, callables, attestations, disputes, take-rate) · [`docs/BUSINESS-MODEL.md`](../../../../docs/BUSINESS-MODEL.md) (Ring 3 economics).
-- **Where it sits:** Layer 4 — Economy (callable listings, attestations) + Layer 6 — Culture (template adoption). The take-rate flywheel.
+- **Doctrine:** [`docs/MARKETPLACE.md`](../../../../docs/MARKETPLACE.md) (template adoption, callables, attestations, disputes, take-rate) · [`docs/BUSINESS-MODEL.md`](../../../../docs/BUSINESS-MODEL.md) (current purchase policy and existing obligations).
+- **Where it sits:** Layer 4 — Economy (callable listings, attestations) + Layer 6 — Culture (template adoption).
 
 ## Module map
 
@@ -14,24 +16,27 @@ The Ring 3 sellable surface — capability listings, attestations, invocations, 
 | `listings.ts` | Capability listings — `/v1/listings` CRUD. Pricing and direct signed-completion lifecycle; non-null dispute policy is resting. |
 | `invocations.ts` | Buyer-side calls into a listing. Escrow lock → execution → ed25519-signed output envelope → direct release. SLA auto-refund. Legacy policy rows fail closed. |
 | `witness.ts` | Pure bounded/idempotent planner for released-invocation on-chain witness writeback; the authenticated transaction lives in `invocations.ts` and opens the existing public re-derivation read. |
-| `purchases.ts` | Template purchases (Slice 1) — atomic escrow-and-release in one transaction. |
-| `attestations.ts` | Attestation listings (Slice 3). Attesters publish *willingness-to-attest*; buyers buy grants; attesters sign canonical bytes; platform writes `identity.attestations` + releases escrow split. |
-| `disputes.ts` | Retained earlier arbitration design and pure helpers. Every mutation export fails closed before database work; reads preserve history. |
+| `purchases.ts` | Template purchases (Slice 1) — atomic escrow-and-release in one transaction. New admission is retired; only an earlier admitted x402 payment can still complete. |
+| `attestations.ts` | Attestation listings (Slice 3). Attesters publish *willingness-to-attest*; existing grants are issued when attesters sign canonical bytes; platform writes `identity.attestations` + releases escrow split. |
+| `memory-witness.ts` | Memory-witness grants: issue writes `memory.memory_attestations` and elevates foundational → constitutive; decline and the SLA sweep refund. |
+| `settlement-receipts.ts` | Append-only `settlement-receipt/v1` records written in the invocation escrow-release transaction (`docs/SETTLEMENT-RECEIPTS.md`); facts, never a seller score. |
+| `credential-boundary.ts` | A seller may request task data, never authority: listing writes and invocation metadata that solicit credentials are refused, and earlier matching listings are quarantined from buyers. |
+| `disputes.ts` · `dispute-rest.ts` | Retained earlier arbitration design and pure helpers; `dispute-rest.ts` holds the shared 503 guard. Every mutation export fails closed before database work; reads preserve history. |
 | `take-rate.ts` | 5% default (configurable via `PLATFORM_TAKE_RATE_BPS`). Recorded in `marketplace.platform_revenue`. Snapshot at tx time — rate changes don't shift past fees. Refunds reverse value but earn no fee. |
 | `sig.ts` | ed25519 canonical bytes for sealed invocation outputs + attestation issuance. Same NUL-separated, domain-tagged family as `services/covenants/sig.ts`. |
 | `store.ts` | Drizzle CRUD. |
 
-## Ring 3 surfaces
+## Settlement families
 
-| Surface | Buyer pays for | Seller delivers | Settlement |
+| Surface | New admission | Seller delivers | Settlement |
 |---|---|---|---|
-| **Template purchase** | A published expression bundle | Voice propagation into new identity | Atomic: escrow → release in one tx (Slice 1). |
-| **Callable invocation** | A priced service call | ed25519-signed caller-supplied output envelope | On-completion; SLA timeout auto-refunds (Slice 2). |
-| **Attestation grant** | Paid review and willingness-to-attest; issuer qualification is external | Signed canonical bytes → `identity.attestations` evidence row; legacy identity trust field stays neutral | On-issue (Slice 3). |
-| **Memory-witness grant** | Paid review of a buyer-owned foundational memory | Signed paid receipt + constitutive elevation | On-issue; paid receipt then protects deletion. |
+| **Callable invocation** | Live | ed25519-signed caller-supplied output envelope | On-completion; SLA timeout auto-refunds (Slice 2). |
+| **Template purchase** | 410 `purchases_retired` | Voice propagation into new identity | Atomic: escrow → release in one tx (Slice 1). |
+| **Attestation grant** | 410 `purchases_retired` | Signed canonical bytes → `identity.attestations` evidence row; issuer qualification is external; legacy identity trust field stays neutral | On-issue (Slice 3). |
+| **Memory-witness grant** | 410 `purchases_retired` | Signed paid receipt + constitutive elevation | On-issue; paid receipt then protects deletion. |
 | **Dispute arbitration** | Resting | No current money route | Earlier bond/pool design is unvalidated and not an active service claim. |
 
-The four active surfaces use the configured take-rate on settlement paths that call the fee helper; a ledger row is written only for a positive fee. Callable invocation input/output use envelope fields whose limited shape is checked; encryption and recipient binding are caller-controlled and unverified. Attestation claims are plaintext by design. Dispute arbitration is excluded while resting.
+Settlement paths that call the fee helper apply the configured take-rate; a ledger row is written only for a positive fee. Callable invocation input/output use envelope fields whose limited shape is checked; encryption and recipient binding are caller-controlled and unverified. Attestation claims are plaintext by design. Dispute arbitration is excluded while resting.
 
 ## Invariants to defend
 
@@ -44,13 +49,13 @@ The four active surfaces use the configured take-rate on settlement paths that c
 
 ## Tests
 
+- `api/tests/commercial-retirement.test.ts` — every marketplace purchase entrance refuses before its body or project is read.
 - `api/tests/dispute-arbitration-resting.test.ts` — stable 503 surface, service guards, OpenAPI, read-only history, legacy-row quarantine, and database policy wall.
 - `api/tests/marketplace-disputes.test.ts` — pure tests for the retained, unvalidated historical design.
 - `api/tests/invocation-witness.test.ts` — authenticated buyer/seller writeback, released-only refusal, bounded validation, idempotent replay, and planner invariants.
 - `api/tests/marketplace-wallet-locks.test.ts` — actual purchase/invoke service paths with simulated committed state changes and rollback, plus successful fee conservation. These hermetic transaction tests do not establish PostgreSQL contention behavior.
-- (More coverage shipping under `feature/e2e-coverage-economy`.)
 
 ## See also
 
-- Routes: [`api/src/routes/listings.ts`](../../routes/listings.ts) · [`api/src/routes/dispute-cases.ts`](../../routes/dispute-cases.ts) · [`api/src/routes/attestation-marketplace.ts`](../../routes/attestation-marketplace.ts) · [`api/src/routes/templates.ts`](../../routes/templates.ts).
+- Routes: [`api/src/routes/listings.ts`](../../routes/listings.ts) · [`api/src/routes/dispute-cases.ts`](../../routes/dispute-cases.ts) · [`api/src/routes/attestation-marketplace.ts`](../../routes/attestation-marketplace.ts) · [`api/src/routes/memory-witness-marketplace.ts`](../../routes/memory-witness-marketplace.ts) · [`api/src/routes/templates.ts`](../../routes/templates.ts).
 - Up one level: [`api/CLAUDE.md`](../../../CLAUDE.md) → Route map.
