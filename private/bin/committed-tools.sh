@@ -42,6 +42,22 @@ committed_tools() {
   }
 }
 
+# no_ts_config_above: succeeds when neither the working directory nor any
+# directory above it holds a tsconfig.json or jsconfig.json, which Bun would
+# apply to what it runs there (a `paths` entry can replace any import).
+no_ts_config_above() {
+  local dir
+  dir="$(pwd -P)"
+  while :; do
+    if [ -e "$dir/tsconfig.json" ] || [ -e "$dir/jsconfig.json" ]; then
+      printf 'committed tools: %s holds a tsconfig.json or jsconfig.json, which Bun would apply to the checks; refusing\n' "$dir" >&2
+      return 1
+    fi
+    [ "$dir" != / ] || return 0
+    dir="$(dirname "$dir")"
+  done
+}
+
 # hooks_path_present <repo>: a core.hooksPath that names a missing directory
 # makes git run no hook at all, so a tool that relies on the hooks refuses.
 hooks_path_present() {

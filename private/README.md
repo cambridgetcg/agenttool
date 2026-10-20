@@ -126,6 +126,14 @@ check runs.
 None of these has run against a real public repository; the tests in
 [`bin/tests/`](bin/tests) run them on scratch repositories only.
 
+The merge-back gate runs public code. Its sandbox (`gate_profile` in
+`bin/merge-back.sh`) gives it a short environment and a scratch HOME and
+TMPDIR, and blocks name resolution, every address but loopback, the loopback
+ports that were already listening, writes outside the clone and the scratch,
+and reads under the home directory except the clone and Bun. Other system
+services stay reachable, so it contains ordinary test code, not code written
+to escape it; running the gate as a separate user or in a VM would.
+
 The private pre-push lets a checkout push only to this repository on GitHub
 or to a local path; a push to any other URL (the release repository, Codeberg,
 another host) is refused. The adoption merge (plan 2.3) is a manual step:

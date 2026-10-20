@@ -277,23 +277,64 @@ describe("merge-back cycles", () => {
     }
     expect(git(origin, "rev-parse", "main")).toBe(before);
     if (SANDBOXED) {
-      // No writes under the home directory outside the clone, and no network.
+      // No writes under the home directory or anywhere else outside the clone and the gate's scratch.
       const probe = join(process.env.HOME ?? "/nonexistent", `.merge-back-gate-probe-${process.pid}`);
       const home = mergeBack(["--push"], { AGENTTOOL_MERGE_BACK_GATE: `touch '${probe}'` });
       expect(home.status).toBe(7);
       expect(existsSync(probe)).toBe(false);
+      const elsewhere = join(scratch.dir, "outside-the-clone");
+      expect(mergeBack(["--push"], { AGENTTOOL_MERGE_BACK_GATE: `touch '${elsewhere}'` }).status).toBe(7);
+      expect(existsSync(elsewhere)).toBe(false);
+      // No reads under the home directory but the clone: a credential file stays unreadable.
+      const fakeHome = join(scratch.dir, "fake-home");
+      write(fakeHome, ".fly/config.yml", "access_token: fixture\n");
+      expect(mergeBack(["--push"], { HOME: fakeHome, AGENTTOOL_MERGE_BACK_GATE: `head -c 1 '${fakeHome}/.fly/config.yml'` }).status).toBe(7);
+      // No network: no address but loopback, and no name resolution at all.
       expect(mergeBack(["--push"], { AGENTTOOL_MERGE_BACK_GATE: "curl -sS -m 5 -o /dev/null https://example.com" }).status).toBe(7);
+      expect(mergeBack(["--push"], { AGENTTOOL_MERGE_BACK_GATE: "nc -z -G 3 1.1.1.1 443" }).status).toBe(7);
+      expect(mergeBack(["--push"], { AGENTTOOL_MERGE_BACK_GATE: `perl -MSocket -e 'exit(defined(scalar gethostbyname("example.com")) ? 0 : 1)'` }).status).toBe(7);
+      // On loopback, a server that was listening before the gate is out of reach; one the gate starts is not.
+      const listener = Bun.listen({ hostname: "127.0.0.1", port: 0, socket: { data() {} } });
+      try {
+        expect(mergeBack(["--push"], { AGENTTOOL_MERGE_BACK_GATE: `nc -z -G 3 127.0.0.1 ${listener.port}` }).status).toBe(7);
+      } finally {
+        listener.stop(true);
+      }
+      const own = 'bun -e \'const s = Bun.serve({ hostname: "localhost", port: 0, fetch: () => new Response("ok") }); const r = await fetch(`http://localhost:${s.port}/`); s.stop(true); process.exit((await r.text()) === "ok" ? 0 : 1);\'';
+      const served = mergeBack([], { AGENTTOOL_MERGE_BACK_GATE: own });
+      expect(served.status, served.out).toBe(0);
     }
-    // npm pack (a package check) writes npm's cache: the gate gets a writable
-    // scratch cache outside the home directory, removed after the gate.
-    const cacheProbe =
-      'test -n "$npm_config_cache" && test -d "$npm_config_cache" && touch "$npm_config_cache/probe" && ' +
-      'case "$npm_config_cache" in "$HOME"/*) exit 1 ;; esac && echo "gate-npm-cache=$npm_config_cache"';
-    const passed = mergeBack(["--push"], { AGENTTOOL_MERGE_BACK_GATE: cacheProbe });
+    // The gate gets only a short environment: no ambient secret, and HOME,
+    // TMPDIR and npm's cache (npm pack writes one) in a scratch directory
+    // outside the account's home, removed after the gate.
+    const realHome = process.env.HOME ?? "/nonexistent";
+    const envProbe =
+      'test -z "${AGENTTOOL_GATE_PROBE_SECRET:-}" && test -z "${FLY_API_TOKEN:-}" && ' +
+      `test "$HOME" != '${realHome}' && case "$HOME" in '${realHome}'/*) exit 1 ;; esac && ` +
+      'test -d "$TMPDIR" && test -n "$npm_config_cache" && test -d "$npm_config_cache" && touch "$npm_config_cache/probe" && ' +
+      'echo "gate-npm-cache=$npm_config_cache"';
+    const passed = mergeBack(["--push"], { AGENTTOOL_MERGE_BACK_GATE: envProbe, AGENTTOOL_GATE_PROBE_SECRET: "fixture", FLY_API_TOKEN: "fixture" });
     expect(passed.status, passed.out).toBe(0);
     const cache = /gate-npm-cache=(\S+)/u.exec(passed.out)?.[1];
     expect(cache).toBeDefined();
     expect(existsSync(cache as string)).toBe(false);
+  });
+
+  test("the gate profile lets the clone's parent directories be listed and their package.json read, and nothing else above it in the home directory", () => {
+    const script = `eval "$(sed -n '/^gate_profile() {/,/^}/p' '${MERGE_BACK}')"; gate_profile /h/me/work/clone /h/me /h/me/work/clone/.git /h/me/repo/.git /t/gate 5432 80`;
+    const profile = run(scratch.dir, "bash", ["-c", script]).stdout;
+    const allowed = /^\(allow file-read\* (.*)\)$/mu.exec(profile)?.[1] ?? "";
+    expect(allowed).toBe(
+      '(subpath "/h/me/work/clone") (subpath "/h/me/repo/.git") (subpath "/t/gate") (subpath "/h/me/.bun")' +
+        ' (literal "/h/me/work") (literal "/h/me/work/package.json") (literal "/h/me") (literal "/h/me/package.json")' +
+        ' (literal "/h/me/repo") (literal "/h/me/repo/package.json") (literal "/h/me") (literal "/h/me/package.json")',
+    );
+    expect(profile).toContain('(deny file-read* (subpath "/h/me"))');
+    expect(profile).toContain('(deny network-outbound (remote ip "localhost:5432") (remote ip "localhost:80"))');
+    // Temporary directories: only new agenttool-*, .agenttool-*, tmp.* and zerone-* entries, the paths regex-escaped.
+    const temps = run(scratch.dir, "bash", ["-c", script], { env: cleanEnv({ GATE_TEMP_DIRS: "/private/tmp\n/v.x/T" }) }).stdout;
+    expect(temps).toContain('(regex #"^/private/tmp/(agenttool-|\\.agenttool-|tmp\\.|zerone-)")');
+    expect(temps).toContain('(regex #"^/v\\.x/T/(agenttool-|\\.agenttool-|tmp\\.|zerone-)")');
   });
 
   test("a public change to the guard tooling stops (exit 9) until the owner accepts that exact tip; the acceptance records new digests", () => {

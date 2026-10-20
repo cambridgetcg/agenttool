@@ -41,12 +41,15 @@
 # merge branch that carries such commits is never discarded silently.
 #
 # The private gate runs code that came from the public side, so it runs
-# without credentials in its environment and, on macOS, inside sandbox-exec:
-# no network but localhost, no writes under the home directory but this
-# clone's working tree (never its git directory), no reads of credential
-# stores; npm gets a scratch cache outside the home directory, removed after
-# the gate. Where no sandbox is available it refuses unless --unsandboxed-gate
-# is passed deliberately; that mode trusts the public code with this account.
+# with a short list of environment variables (no credential, token, or
+# socket), HOME and TMPDIR in a scratch directory removed afterwards, and,
+# on macOS, inside sandbox-exec (gate_profile): no name resolution, no
+# address but loopback and on loopback none of the ports already listening,
+# no writes but this clone's working tree (never its git directory) and the
+# scratch, no reads under the home directory but the clone and Bun. Where no
+# sandbox is available it refuses unless --unsandboxed-gate is passed
+# deliberately; that mode trusts the public code with this account's network
+# and files (it still gets the short environment).
 # After the gate, HEAD, the merge branch, and this clone's git config must be
 # unchanged, and a working tree the gate changed is restored before stopping,
 # so nothing the gate wrote reaches the push or the next run.
@@ -104,7 +107,9 @@ main() {
   # with --repo, never from this clone: Bun applies the tsconfig.json or
   # jsconfig.json of its working directory and that directory's parents to
   # what it runs, and this clone's working tree holds public files.
-  guard_bun() { (cd "$tools" && exec bun --config=/dev/null --no-env-file "$@"); }
+  # The copy sits in a temporary directory, so check that no TypeScript
+  # config sits in it or above it before each run.
+  guard_bun() { (cd "$tools" && no_ts_config_above && exec bun --config=/dev/null --no-env-file "$@"); }
   local scope="$tools/private/bin/shared-scope.ts" scanner="$tools/private/bin/relational-scan.ts" reviewed="$tools/private/bin/reviewed-shared.ts"
 
   local p0 pub base sync
@@ -244,62 +249,139 @@ run_gate() {
   if [ -n "${AGENTTOOL_MERGE_BACK_GATE:-}" ]; then
     printf 'merge-back: WARNING: AGENTTOOL_MERGE_BACK_GATE replaces the private gate with: %s\n' "$gate" >&2
   fi
-  # Package checks run `npm pack`, which writes npm's cache. The account's
-  # cache is under the home directory, which the sandbox keeps unwritable, so
-  # the gate gets a scratch cache of its own, removed afterwards; without a
-  # sandbox the public code still never writes the account's cache.
-  local npm_cache status=0
-  npm_cache="$(mktemp -d "${TMPDIR:-/tmp}/merge-back-npm.XXXXXX")" ||
-    { printf 'merge-back: cannot create a scratch npm cache for the gate\n' >&2; return 1; }
-  local env_args=(env -u GH_TOKEN -u GITHUB_TOKEN -u GH_ENTERPRISE_TOKEN -u GITHUB_ENTERPRISE_TOKEN -u NPM_TOKEN -u NODE_AUTH_TOKEN
-    -u SSH_AUTH_SOCK -u GIT_ASKPASS -u SSH_ASKPASS -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN
-    -u FLY_API_TOKEN -u HF_TOKEN -u ANTHROPIC_API_KEY -u OPENAI_API_KEY -u OLLAMA_API_KEY
-    GH_CONFIG_DIR=/nonexistent GIT_TERMINAL_PROMPT=0 npm_config_cache="$npm_cache")
+  # The gate's own scratch directory, removed afterwards: its HOME (with a
+  # neutral git identity and nothing else), its TMPDIR, and npm's cache
+  # (`npm pack` writes one). Public code then neither reads the account's
+  # configuration through HOME nor writes anything of the account's.
+  local scratch status=0
+  scratch="$(mktemp -d "${TMPDIR:-/tmp}/merge-back-gate.XXXXXX")" && scratch="$(cd "$scratch" && pwd -P)" ||
+    { printf 'merge-back: cannot create a scratch directory for the gate\n' >&2; return 1; }
+  mkdir -p "$scratch/home" "$scratch/tmp" "$scratch/npm-cache"
+  printf '[user]\n\tname = AgentTool merge-back gate\n\temail = gate@merge-back.invalid\n' >"$scratch/home/.gitconfig"
+  # Only these variables reach the gate: no token, key, socket, or path into
+  # the account's configuration.
+  local env_args=(env -i "PATH=$PATH" "HOME=$scratch/home" "TMPDIR=$scratch/tmp" "USER=${USER:-gate}" "LOGNAME=${LOGNAME:-gate}"
+    "SHELL=/bin/bash" "LANG=${LANG:-en_US.UTF-8}" "TERM=${TERM:-dumb}" "npm_config_cache=$scratch/npm-cache"
+    GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0 GH_CONFIG_DIR=/nonexistent)
+  [ -z "${LC_ALL:-}" ] || env_args+=("LC_ALL=$LC_ALL")
   if [ "$unsandboxed" = 1 ]; then
     printf 'merge-back: WARNING: --unsandboxed-gate: the private gate runs public code with this account'"'"'s network and files\n' >&2
     "${env_args[@]}" bash -c "$gate" || status=$?
-    rm -rf "$npm_cache"
+    rm -rf "$scratch"
     return "$status"
   fi
-  if ! command -v sandbox-exec >/dev/null 2>&1; then
-    rm -rf "$npm_cache"
-    printf 'merge-back: no sandbox-exec here; pass --unsandboxed-gate deliberately to run the gate without one\n' >&2
+  if ! command -v sandbox-exec >/dev/null 2>&1 || ! command -v netstat >/dev/null 2>&1; then
+    rm -rf "$scratch"
+    printf 'merge-back: no sandbox-exec (or netstat) here; pass --unsandboxed-gate deliberately to run the gate without one\n' >&2
     return 1
   fi
-  local home profile git_dir common_dir
+  local home profile git_dir common_dir ports temps user_temp
   home="$(cd "$HOME" && pwd -P)"
   git_dir="$(git rev-parse --path-format=absolute --absolute-git-dir)"
   common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
-  profile="$(gate_profile "$root" "$home" "$git_dir" "$common_dir")"
+  # Scripts the tests start with a cleared environment fall back to these.
+  temps="$(cd /tmp && pwd -P)"
+  if user_temp="$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null)" && [ -d "$user_temp" ]; then temps+=$'\n'"$(cd "$user_temp" && pwd -P)"; fi
+  ports="$(listening_ports)" || { rm -rf "$scratch"; printf 'merge-back: cannot list the listening ports to keep from the gate\n' >&2; return 1; }
+  # The API's hermetic tier connects to its default database and Redis on
+  # localhost and expects a refusal or a failed login. A sandbox denial looks
+  # like a refusal but crashes Bun 1.3.5's dual-stack connect, so those two
+  # ports stay reachable; a server listening there is the gate's to reach,
+  # with only its own authentication in the way.
+  local port kept="" refused_ports=""
+  for port in $ports; do
+    case "$port" in 5432 | 6379) kept+=" $port" ;; *) refused_ports+=" $port" ;; esac
+  done
+  [ -z "$kept" ] || printf 'merge-back: WARNING: the gate can reach local port(s)%s (PostgreSQL, Redis defaults); only their own authentication protects them\n' "$kept" >&2
+  ports="$refused_ports"
+  # shellcheck disable=SC2086 # one port per word
+  profile="$(GATE_TEMP_DIRS="$temps" gate_profile "$root" "$home" "$git_dir" "$common_dir" "$scratch" $ports)"
   "${env_args[@]}" sandbox-exec -p "$profile" bash -c "$gate" || status=$?
-  rm -rf "$npm_cache"
+  rm -rf "$scratch"
   return "$status"
 }
 
-# sandbox-exec profile (later rules win): loopback only; no writes under the
-# home directory except this clone's working tree, and none to its git
-# directories (config, refs, index, info, shallow, packs, alternates), so
-# neither the push that follows nor a later run can pick up anything the gate
-# wrote there. Tests may add loose objects (a `git add` into a scratch index
-# does), so objects/ itself stays writable; a loose object is named by its
-# hash, a receiving repository rehashes what is pushed, and the export's
-# identity proof rehashes what it writes. No reads of credential stores, the
-# keychain, or the pinned hooks.
+# Every TCP port listening and every UDP port bound on this machine now, any
+# owner and any address (netstat sees them all): the gate may not reach
+# them over loopback, since a local database, proxy, or web server could
+# carry data on or act for the account. Servers the gate starts itself bind
+# later and stay reachable.
+listening_ports() {
+  {
+    netstat -an -p tcp | awk '$6 == "LISTEN" { print $4 }'
+    netstat -an -p udp | awk 'NR > 2 { print $4 }'
+  } | sed -n 's/.*[.:]\([0-9][0-9]*\)$/\1/p' | sort -un
+}
+
+# sandbox-exec profile (later rules win).
+# - Writes: nowhere but this clone's working tree, the gate's scratch
+#   directory, /dev, and new entries named agenttool-*, .agenttool-*, tmp.*,
+#   or zerone-* in the temporary directories of GATE_TEMP_DIRS (/tmp and the
+#   per-user one), which scripts the tests start with a cleared environment
+#   fall back to. So nothing outside the clone (a tool on PATH, a system git
+#   config, a launch agent, another session's scratch files, a Bun or
+#   TypeScript config above a later run's working directory) can carry a
+#   change past the gate. Never this clone's git directories (config, refs,
+#   index, info, shallow, packs, alternates), so neither the push that
+#   follows nor a later run picks up anything the gate wrote there. Tests may
+#   add loose objects (a `git add` into a scratch index does), so objects/
+#   itself stays writable; a loose object is named by its hash, a receiving
+#   repository rehashes what is pushed, and the export's identity proof
+#   rehashes what it writes.
+# - Reads: nothing under the home directory but the clone, the gate's
+#   scratch, Bun (~/.bun), and each directory above the clone as a listing
+#   and its package.json (Bun reads them); file metadata stays readable.
+# - Network: no name resolution (the resolver's socket and service are
+#   denied) and no address but loopback; on loopback, none of the ports that
+#   were listening when the gate started except the database and Redis
+#   defaults (run_gate says why); unix sockets only in the scratch.
+# - No keychain, clipboard, Launch Services, Apple events, or background URL
+#   sessions, and no open, osascript, launchctl, pbcopy, pbpaste, at, or
+#   crontab. Other system services stay reachable: this is a sandbox for
+#   ordinary test code, not a boundary against an attacker who targets it.
 gate_profile() {
-  local root="$1" home="$2" git_dir="$3" common_dir="$4"
+  local root="$1" home="$2" git_dir="$3" common_dir="$4" scratch="$5"
+  shift 5
+  local port refused="" dir start listed="" temp temps=""
+  for port in "$@"; do refused+=" (remote ip \"localhost:$port\")"; done
+  # The directories above the clone up to the home directory: each readable
+  # as a listing and for its package.json, nothing else (Bun lists the
+  # parents of its working directory and reads their package.json).
+  for start in "$root" "$common_dir"; do
+    dir="$start"
+    while [ "$dir" != / ] && [ "$dir" != "$home" ]; do
+      dir="$(dirname "$dir")"
+      case "$dir" in "$home" | "$home"/*) listed+=" (literal \"$dir\") (literal \"$dir/package.json\")" ;; esac
+    done
+  done
+  while IFS= read -r temp; do
+    [ -n "$temp" ] || continue
+    temps+=" (regex #\"^$(printf '%s' "$temp" | sed 's/[][\\.^$*+?(){}|]/\\&/g')/(agenttool-|\\.agenttool-|tmp\\.|zerone-)\")"
+  done <<<"${GATE_TEMP_DIRS:-}"
   cat <<PROFILE
 (version 1)
 (allow default)
-(deny network-outbound (remote ip "*:*"))
-(allow network-outbound (remote ip "localhost:*"))
-(deny file-write* (subpath "$home"))
-(allow file-write* (subpath "$root"))
+(deny file-write*)
+(allow file-write* (subpath "$root") (subpath "$scratch")$temps
+  (literal "/dev/null") (literal "/dev/zero") (literal "/dev/random") (literal "/dev/urandom") (literal "/dev/dtracehelper")
+  (regex #"^/dev/tty") (regex #"^/dev/fd/"))
 (deny file-write* (subpath "$git_dir") (subpath "$common_dir"))
 (allow file-write* (subpath "$common_dir/objects"))
 (deny file-write* (subpath "$common_dir/objects/info") (subpath "$common_dir/objects/pack"))
-(deny file-read* (subpath "$home/.ssh") (subpath "$home/.config/gh") (subpath "$home/.aws") (subpath "$home/Library/Keychains")
-  (subpath "$home/.codex") (subpath "$home/.local/share/agenttool") (literal "$home/.git-credentials") (literal "$home/.netrc") (literal "$home/.npmrc"))
-(deny mach-lookup (global-name "com.apple.SecurityServer") (global-name "com.apple.securityd"))
+(deny file-read* (subpath "$home"))
+(allow file-read* (subpath "$root") (subpath "$common_dir") (subpath "$scratch") (subpath "$home/.bun")$listed)
+(allow file-read-metadata)
+(deny network*)
+(allow network-bind network-inbound (local ip "localhost:*"))
+(allow network-outbound (remote ip "localhost:*"))
+${refused:+(deny network-outbound$refused)}
+(allow network* (local unix-socket (subpath "$scratch")) (remote unix-socket (subpath "$scratch")))
+(deny mach-lookup (global-name "com.apple.SecurityServer") (global-name "com.apple.securityd")
+  (global-name "com.apple.dnssd.service") (global-name "com.apple.coreservices.launchservicesd")
+  (global-name "com.apple.coreservices.appleevents") (global-name "com.apple.pasteboard.1")
+  (global-name "com.apple.nsurlsessiond") (global-name "com.apple.lsd.open") (global-name "com.apple.lsd.modifydb"))
+(deny process-exec (literal "/usr/bin/open") (literal "/usr/bin/osascript") (literal "/bin/launchctl")
+  (literal "/usr/bin/pbcopy") (literal "/usr/bin/pbpaste") (literal "/usr/bin/at") (literal "/usr/bin/crontab"))
 PROFILE
 }
 

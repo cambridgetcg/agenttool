@@ -47,7 +47,7 @@ main() {
   # tsconfig.json or jsconfig.json of its working directory and that
   # directory's parents to what it runs.
   local bun_dir
-  guard_bun() { (cd "$bun_dir" && exec bun --config=/dev/null --no-env-file "$@"); }
+  guard_bun() { (cd "$bun_dir" && { [ "$bun_dir" = "$here" ] || no_ts_config_above; } && exec bun --config=/dev/null --no-env-file "$@"); }
   local here root url="" state="${HOME}/.local/state/agenttool/public-scan" github=0 notify=0 plist=0
   here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
   root="$(cd "$here/../.." && pwd -P)"
