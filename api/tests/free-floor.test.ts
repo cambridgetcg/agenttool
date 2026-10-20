@@ -141,7 +141,7 @@ describe("writes", () => {
     await consumeFreeFloorIn(database, { projectId: PROJECT, action: "strand.think", bytes: 1 }, ENV);
     const [first] = queries.filter((query) => query.sql.includes("free_floor_usage"));
     expect(first.sql).toContain("ON CONFLICT (scope, subject_id, action, day)");
-    expect(first.sql).toContain("WHERE usage.units + EXCLUDED.units <=");
+    expect(first.sql).toContain("WHERE ffu.units + EXCLUDED.units <=");
     expect(first.sql).toContain("RETURNING");
   });
 

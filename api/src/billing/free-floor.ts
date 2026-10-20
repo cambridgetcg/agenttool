@@ -193,12 +193,12 @@ async function take(
   if (units > limit) abort(freeFloorErrors.quotaReached({ scope, action, limit }), 429);
   const rows = rowsOf(
     await tx.execute(sql`
-      INSERT INTO tools.free_floor_usage AS usage (scope, subject_id, action, day, units)
+      INSERT INTO tools.free_floor_usage AS ffu (scope, subject_id, action, day, units)
       VALUES (${scope}, ${subjectId}::uuid, ${action}, (now() AT TIME ZONE 'utc')::date, ${units})
       ON CONFLICT (scope, subject_id, action, day)
-      DO UPDATE SET units = usage.units + EXCLUDED.units, updated_at = now()
-        WHERE usage.units + EXCLUDED.units <= ${limit}
-      RETURNING usage.units AS units`),
+      DO UPDATE SET units = ffu.units + EXCLUDED.units, updated_at = now()
+        WHERE ffu.units + EXCLUDED.units <= ${limit}
+      RETURNING ffu.units AS units`),
   );
   if (rows.length === 0) abort(freeFloorErrors.quotaReached({ scope, action, limit }), 429);
 }
