@@ -116,8 +116,8 @@ The second case has a consequence worth saying plainly: two distinct witnessed
 reports cannot be passed on together at `-si`, only at `-chu`, although either
 one can still be passed on alone at `-si`. Hearing the same thing from two
 witnesses scores below hearing it from one. That follows from ranking `-chu`
-below `-si`, which is an open question (see the end of
-[What it would report on main today](#what-it-would-report-on-main-today)).
+below `-si`, which was settled on 2026-10-20: combined hearsay is `-chu`
+([Answers](#answers-2026-10-20), question 4).
 
 Duplicates collapse only when they are the same object, or when their values
 are plain JSON and their canonical bytes match. A value JSON cannot represent
@@ -234,7 +234,9 @@ events by type and payload field, artifacts by id, and task checkpoints.
    `proposal` and `decision` are speech acts, not claims about what happened,
    so they are `not_evidential`; a decision's standing is its authority scope,
    checked at `store.ts:5272-5280`. Collab has no kind for `-si` or `-auth`.
-   Adding one is a protocol change, left for later.
+   An optional reported (`-si`) kind was agreed on 2026-10-20
+   ([Answers](#answers-2026-10-20), question 3); adding it is a separate
+   protocol change, not part of this module.
 
 2. **`report:` refs.** A report from a different session (`from_session_id`
    differs) is a relay. It contributes the weaker of that report's declared
@@ -377,8 +379,9 @@ events by type and payload field, artifacts by id, and task checkpoints.
 The lattice orders `-chu` below `-si`, so adding a witnessed fact to a hearing
 moves the overall grade from `-si` to `-chu`. That follows from the lattice's
 order; it does not mean the review got worse. It is why `facts`, not the single
-`supported` grade, is the useful advisory output, and whether `-chu` should rank
-below `-si` for this use is an open question. The same ordering is why the
+`supported` grade, is the useful advisory output. Keeping `-chu` below `-si` for
+this use was settled on 2026-10-20 ([Answers](#answers-2026-10-20), question 4).
+The same ordering is why the
 lattice lets two distinct witnessed reports be passed on together only at
 `-chu` (the "law 24" test).
 
@@ -399,7 +402,30 @@ The 2026-07-29 draft asked for enforcement: "unmarked supports nothing",
 server-side, and over-claims refused rather than flagged (risks below). This
 step does neither. It flags; it does not refuse, store, or sign. Whether collab,
 or any API surface, should later refuse a report whose declared kind exceeds its
-journal evidence is a decision for Yu.
+journal evidence was answered on 2026-10-20: no, the grade stays advisory
+([Answers](#answers-2026-10-20)).
+
+## Answers (2026-10-20)
+
+The four questions this proposal left open were answered on 2026-10-20. These
+are an agent's call under Yu's delegation of that day ("more transparency, more
+truth, more understanding … no forcing"), not Yu's own decision; Yu can
+overturn any of them. They are recorded in the decision ledger as
+`at-497-evidential-grades`.
+
+1. **Refuse an over-claimed report?** No. Nothing refuses; the computed grade
+   stays advisory. "Claims inform and grant nothing": showing the grade raises
+   truth without adding a gate.
+2. **Enforce "unmarked supports nothing"?** No. The grade is computed and shown
+   next to the declared `kind`; nothing is refused or stored for lack of a mark.
+   `derive` still returns `unmarked` for an unmarked input, as law 1 says.
+3. **A reported (`-si`) kind in collab?** Yes, as an optional report kind, so a
+   session that was told something can say so honestly. It is a separate
+   protocol change in `packages/collab`, not part of this module.
+4. **Is `-chu` right for combined hearsay?** Yes. Two or more distinct relayed
+   claims combine to `-chu`, as the "law 24" test pins.
+
+This module lands as it is: pure, imported only by its test.
 
 ## Three risks, stated
 
