@@ -71,13 +71,16 @@ those are not current publication status. Collab 0.4.0 has a
 [verified GitHub/npm release receipt](NPM-RELEASES.md#verified-collab-040-publication--2026-08-04)
 but no LOVE entry. That dated receipt supersedes the immutable guide's
 preparation-time 0.3.1 observation. These are recorded release observations,
-not assertions about mutable registry tags. Current Collab source is the
-**0.5.0 RELEASE CANDIDATE** with 33 tools, including bounded event waiting.
-These release-candidate bytes do not establish npm publication; verify the
-protected receipt and registry separately. Public 0.4.0 remains the unchanged 32-tool release.
+not assertions about mutable registry tags. Public 0.4.0 remains the unchanged
+32-tool npm release.
 **Correction, 2026-10-11.** 0.5.0 has been distributed since 2026-10-10 as a
 public [GitHub Release](https://github.com/cambridgetcg/agenttool-collab/releases/tag/collab-v0.5.0)
 on `cambridgetcg/agenttool-collab`. It is not on npm, where `latest` remains 0.4.0.
+**Update, 2026-10-18.** Current Collab source on `main` is the unreleased
+**0.5.1-dev.0** development build: the 33 tools of 0.5.0, including bounded
+event waiting, plus the host doorbell wait. A development version is not a
+release; the next npm candidate is 0.5.1 through the
+[public release path](NPM-RELEASES.md#public-release-path-from-2026-10-12).
 Serving this shelf neither publishes a package nor installs it in a host.
 
 ### Release readback
@@ -254,7 +257,8 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
   implemented finite CLI, disabled profile example, and offline tests. It carries
   explicitly selected own-fleet summaries over project-readable signed
   Correspondence and single-receiver, non-E2EE Telegram human feedback. Its exact
-  local Collab pins are 0.4.0 and the 0.5.0 release candidate; the private package
+  local Collab pins are 0.4.0 (npm), 0.5.0 (GitHub release, not npm) and the
+  unreleased `main` development build 0.5.1-dev.0; the private package
   version stays unchanged. Implementation-checkpoint tests are recorded separately
   from release-candidate review and live checks; no courier release or live support is claimed.
   [Collaboration channels](COLLABORATION-CHANNELS.md) separates transport from

@@ -8,10 +8,12 @@ description: Coordinate independent coding or research agents across host sessio
 Use the journal as a compact coordination record. Keep the host responsible for
 spawning, steering, waking, reconnecting, waiting for, and stopping agents.
 
-**RELEASE CANDIDATE 0.5.0:** 33 local MCP tools, including `collab_events_wait`.
-These release-candidate bytes do not establish npm publication; verify the
-protected receipt and registry separately.
-Published 0.4.0 has 32 tools and does not gain this wait from these source edits.
+**DEVELOPMENT BUILD 0.5.1-dev.0 (unreleased):** 33 local MCP tools, including
+`collab_events_wait`, plus the unreleased host doorbell wait between turns.
+Collab 0.5.0 is released on GitHub only, not on npm; the next npm candidate is
+0.5.1. This source does not establish publication; verify the protected
+receipt and registry separately.
+Published npm 0.4.0 has 32 tools and does not gain this wait from these source edits.
 One MCP process has one bound session; independent child attribution needs
 independent MCP processes. Preserve native dispatcher, persona, memory,
 permissions and lifecycle in Claude, Codex, Hermes and OpenClaw. Connection or
@@ -350,6 +352,8 @@ has no channel send or cross-device journal replication.
 
 ## Wait between turns (host doorbell, unreleased)
 
+This is new after 0.5.0 and exists only in the 0.5.1-dev.0 development build.
+
 A host that can run a command in the background and wake the model when it
 exits (for example a background shell task) can arm a doorbell instead of
 spending a model turn on every 30-second wait:
@@ -452,7 +456,7 @@ If the host has separately authorized the `@agenttool/collab-zerone` bridge,
 selected workspace heads may be witnessed on Zerone. A head transitively
 commits preceding event bytes; it does not prove their claims true. The local
 read-only sidecar tool first shipped as Collab's 32nd MCP tool in public 0.4.0;
-this 0.5.0 release candidate has 33 tools.
+the 0.5.0 GitHub release and this 0.5.1-dev.0 build have 33 tools.
 
 - Call `collab_anchor_status` with the workspace ID to learn where the journal
   stands: `unanchored`, `anchor_pending`, `anchored`, `anchor_stale`, or

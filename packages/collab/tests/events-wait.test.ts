@@ -8,6 +8,7 @@ import { canonicalJson } from "../src/canonical.js";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import { MAX_WAIT_ANCHOR_BYTES, MAX_WAIT_PAGE_BYTES, MAX_WAIT_RESPONSE_BYTES, type EventCursor, type JournalPage } from "../src/protocol.js";
 import { CollabStore } from "../src/store.js";
+import { COLLAB_PACKAGE_VERSION } from "../src/version.js";
 
 const cleanup: Array<() => void | Promise<void>> = [];
 afterEach(async () => { while (cleanup.length) await cleanup.pop()!(); });
@@ -337,7 +338,9 @@ describe("bounded anchored local observation", () => {
       return receive(id);
     };
     await send({ id: 1, method: "initialize", params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "fixture", version: "1" } } });
-    expect((await receive(1)).result.serverInfo.version).toBe("0.5.0");
+    const initialized = (await receive(1)).result;
+    expect(initialized.serverInfo.version).toBe(COLLAB_PACKAGE_VERSION);
+    expect(initialized.instructions).toStartWith(`Collab ${COLLAB_PACKAGE_VERSION}: `);
     await send({ method: "notifications/initialized", params: {} });
     const start = await call(2, "collab_session_start", { root_path: f.root, actor: "stdio-observer" });
     expect(start.result.isError).toBeUndefined();
