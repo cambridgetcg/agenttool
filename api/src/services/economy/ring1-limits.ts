@@ -17,7 +17,7 @@
  *  ## Status — measured 2026-05-12
  *
  *  Caps were validated against the production Postgres footprint
- *  (jseqftufplgewhojwbmh) on 2026-05-12. Current population sits at <1%
+ *  on 2026-05-12. Current population sits at <1%
  *  of every cap:
  *
  *    Memory   — 3 agents · max 4.79 KB · max 11 records  → cap 100 MB / 10k records (~21,000× headroom)
@@ -173,7 +173,7 @@ export const RING_1_LIMITS = {
     population_size_max: 18,
     headroom_observed: ">99% across every cap",
     method:
-      "Validated against production (jseqftufplgewhojwbmh). Caps remain abundance-driven (docs/RING-1.md §'abundance, not stinginess'); not derived from p99 since current population is too small to justify tighter limits without contradicting the doctrine.",
+      "Validated against the production database footprint on 2026-05-12. Caps remain abundance-driven (docs/RING-1.md §'abundance, not stinginess'); not derived from p99 since current population is too small to justify tighter limits without contradicting the doctrine.",
     re_evaluation_trigger:
       "When any single agent reaches 50% of any cap, re-run api/scripts/_ring1-measure-caps.ts and reconsider.",
   },

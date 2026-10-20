@@ -22,17 +22,17 @@ The manifest has no runtime dependencies or installation lifecycle scripts.
 - This is optional plaintext context, not secret custody or identity authority.
   Do not add keys, seeds, bearers, identity registration, provider calls, database
   access, MCP, daemons, timers, or remote synchronization to the notes/core/hooks.
-  The separate sibling `packages/local-starter-mcp` imports this core for
+- The separate sibling `packages/local-starter-mcp` imports this core for
   explicit local tools; the core/CLI/hooks must never import that transport.
   Delivery plans can point to its entry point without starting it.
-  Release delivery paths point to the bundled `dist` entry within this package;
+- Release delivery paths point to the bundled `dist` entry within this package;
   never rely on a repository sibling or installed dependency at runtime. Keep
   the pinned builder and exact third-party licenses in sync. Plugin manifests
   expose the skill only; no default MCP/hook, root binding or startup effect.
   Retained notes and machine-specific bindings belong outside the distributable
   package and plugin cache. Build output is generated and disposable, never a
   notes root. Do not publish source paths, source maps or private absolute paths.
-  The explicitly invoked `connect.mjs` companion is the sole hosted-read boundary:
+- The explicitly invoked `connect.mjs` companion is the sole hosted-read boundary:
   one fixed GET path selected by exact origin/project/identity, explicit callback
   or injected transport credentials, no ambient lookup except a CLI-selected env
   name, no redirects/retries, and no persistence. Core, CLI, adapters and hooks
@@ -40,7 +40,7 @@ The manifest has no runtime dependencies or installation lifecycle scripts.
   Do not widen the companion into general HTTP, discovery, registration, a secret
   resolver/store, full Wake retrieval, arbitrary projections, or automatic saves.
   Its request timeout is a bound, not a polling or scheduling mechanism.
-  Keep project-bearer selection, hosted read grants, broker grants, and identity
+- Keep project-bearer selection, hosted read grants, broker grants, and identity
   proofs distinct. Authentication defaults to `project_bearer` and requires the
   unchanged v1 envelope. Explicit `local_context_grant` requires v2 with closed
   authorization metadata and rejects a v1 downgrade. Validate exact origin,
@@ -52,7 +52,7 @@ The manifest has no runtime dependencies or installation lifecycle scripts.
   explicit administrator operations elsewhere; a receipt is not ongoing authority
   and revocation cannot retract earlier output. A broker injecting a project
   bearer still produces a project-bearer server receipt.
-  Validate protocol, subject, expiry, UTF-8/digests and content/encoded limits before
+- Validate protocol, subject, expiry, UTF-8/digests and content/encoded limits before
   output; use a distinct metadata receipt and selected records for local-budget
   composition rather than modifying a verified server envelope. No excluded body
   may enter stdout merely as part of a retained source envelope.
@@ -130,17 +130,15 @@ Connector fixtures use injected transports and disposable literal-loopback HTTP
 with sentinel credentials only. Cover exact origin/project/identity, scope and
 schema refusal, byte/expiry/digest checks, no redirects/retries, bounded abort,
 secret-free diagnostics, aggregate selection, unchanged files, and offline paths.
-The companion has 24 cases; the current local suite passes 103 on macOS arm64 /
-Node 22.18.0 and 24.18.1. Set `LOCAL_STARTER_STRESS_ROUNDS` to repeat the
-contending-writer stress test (default 12 rounds of four real CLI writers).
-Its API wire tests are in `api/tests/local-context.test.ts`.
+The companion's API wire tests are in `api/tests/local-context.test.ts`.
+Set `LOCAL_STARTER_STRESS_ROUNDS` to repeat the contending-writer stress test
+(default 12 rounds of four real CLI writers).
 Keep direct and injected grant tests explicit: no parent credential transmission,
 closed v2 metadata, rejected downgrades, in-transit expiry, unchanged record/byte
 bounds, secret-free receipts, and offline/CLI behavior. Test credentials are
-sentinels; current counts do not establish production grant issuance or revocation.
+sentinels; passing tests do not establish production grant issuance or revocation.
 
-State the actual runtime/OS used. Local tests passed 70/70 on macOS arm64 with
-Node 22.18.0 and 24.18.1. CI run 36327872045 passed all six combinations of
+State the actual runtime/OS used. CI run 36327872045 passed all six combinations of
 Ubuntu 24.04/macOS 15/Windows 2025 and Node 22.18.0/24.18.0: 70 passes on each
 Linux/macOS job; 63 passes and seven POSIX-specific skips on each Windows job.
 That was a pull-request run from before the trim: pull-request runs of that

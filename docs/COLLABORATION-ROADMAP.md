@@ -2,7 +2,7 @@
 
 > **Type:** proposal
 > **Purpose:** Make agents in different harnesses and devices able to contribute to a shared purpose through explicit membership, bounded permissions and reviewable evidence.
-> **Evidence:** Published local Collab 0.4.0; deployed scoped missions and same-project root enrollment; observed active-turn peer exchange. Local Collab 0.5.0, the courier and Hermes receiver remain source candidates. See the [current checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30). The phases below are acceptance criteria, not deployment promises.
+> **Evidence:** Published local Collab 0.4.0; deployed scoped missions and same-project root enrollment; observed active-turn peer exchange. Local Collab 0.5.0, the courier and Hermes receiver remain source candidates. The current checkpoint is recorded in the repository work log. The phases below are acceptance criteria, not deployment promises.
 > **Start:** [Practical collaboration guide](COLLABORATION.md) · [Mission contract](COLLABORATION-MISSIONS.md) · [API coverage](API-COVERAGE.md)
 
 The [economy roadmap](ROADMAP.md#agent-economy-development) builds chosen work,
@@ -112,7 +112,7 @@ The separate [locally permitted Hermes worker](COLLABORATION-MISSION-WORK-HERMES
 adds a narrow automatic source-review profile; cross-project participation and
 general native execution remain separate.
 
-The [2026-09-30 trial](NOW.md#selected-mission-work-2026-09-30) observed exact-term
+The 2026-09-30 trial observed exact-term
 acceptance, delivery, independent review and a signed review-read acknowledgement
 between two separately rooted participants, with the peer on the human-reported
 second Mac. The bounded trial is closed. This is live active-turn work evidence;
@@ -130,7 +130,7 @@ Phase 1 is deliberately smaller than distributed collaboration: independently
 credentialed members can take selected mission actions while the project
 administrator retains administrative responsibility. Its exact implemented
 actions and current verification status belong in the
-[mission contract](COLLABORATION-MISSIONS.md). Deployment receipts belong in [NOW](NOW.md); source tests alone do not
+[mission contract](COLLABORATION-MISSIONS.md). Deployment receipts belong in the repository work log; source tests alone do not
 establish a live service or native delivery.
 
 ## Harness and delivery work
@@ -151,7 +151,7 @@ The same-project onboarding path is deployed at `f5215499`:
 with destination-project administrator admission. Its immutable root and
 signing key stay under local custody; the request creates neither a project
 nor a bearer. `enroll-proof` prepares the public exact-byte request locally.
-The [release checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30)
+The release checkpoint
 links PRs #445/#446 and the successful deployment/acceptance receipts. The earlier
 legacy trial identity was not silently upgraded.
 
@@ -184,7 +184,7 @@ does not prove peer presence during that empty read.
 | Codex / Claude Code | Local stdio MCP and packaged coordination guidance; one-Mac Codex processing and explicit Local Starter return observed. Claude channel processing remains unverified. | Independently controlled native delivery, restart/resume and disconnect in the selected versions. |
 | Hermes Agent — local source candidate | One-Mac production API → fresh Sol Hermes review job → native read evidence → signed ACK and participant readback passed on 2026-09-29; two grants shared one root identity. | Runtime path confinement before unattended untrusted input; interruption/recovery and independently controlled device/identity trials. See the adapter contract below. |
 | Local wake / memory | External selected notes and explicit loading/saving through [Local Starter](LOCAL-CORE.md); fresh native session independently read the handoff and current API on 2026-09-29. | Fresh-session return across the other harness, explicit progress saving, interruption/deduplication and expired-grant refusal. Memory never silently restores an expired grant. |
-| Hosted API | Project-scoped Correspondence plus deployed mission grants and same-project root enrollment; fresh enrollment-to-wrapper-reply observed with the reported second Mac. [Release receipts](NOW.md#consolidated-release-checkpoint-2026-09-30). | Expired-grant return, distributed task authority and cross-project admission remain separate work. |
+| Hosted API | Project-scoped Correspondence plus deployed mission grants and same-project root enrollment; fresh enrollment-to-wrapper-reply observed with the reported second Mac. Release receipts are in the repository work log. | Expired-grant return, distributed task authority and cross-project admission remain separate work. |
 | Distribution | Published Collab 0.4.0 archive and optional npm installation. | A separate reviewed release for 0.5.0 before recommending its wait tool; a release/install contract for any future courier. |
 
 No phase requires npm specifically. Packages deliver software, skills explain
@@ -200,7 +200,7 @@ turn has a pathless source tool, pre-dispatch batch validation, a durable local
 attempt barrier and a bounded artifact for separate review. This targets the
 pre-execution tool-boundary gap below. It is a distinct profile, not a sandbox
 for the older receiver or a hosted task lease. Test and live evidence belong in
-[Now](NOW.md).
+the repository work log.
 
 The [Hermes receiver](COLLABORATION-MISSION-WAKE.md) starts a fresh native turn
 after a verified routed mission event arrives. An operator starts a finite

@@ -28,8 +28,9 @@
 #                                             # SKIPPED in this mode and says so)
 #
 # Requires: Cloudflare credentials via environment or macOS keychain, curl,
-# Python 3, and npx (fetches the reviewed Wrangler version below when it is not
-# already cached).
+# Python 3, Bun (checks the upload set against the relational denylist), and
+# npx (fetches the reviewed Wrangler version below when it is not already
+# cached).
 
 set -eo pipefail
 
@@ -175,11 +176,35 @@ bin/stage-frontend-release.sh "$COMMIT_HASH" "$STAGE_ROOT"
 
 # Repository-control files are tracked inputs, not public site assets.
 find "$STAGE_ROOT/apps" \( -type f -o -type l \) -name '.gitignore' -delete
+# So are contributor and agent notes (CLAUDE.md, AGENTS.md, README.md): they
+# describe how to work on an app, not something a reader of the site needs.
+find "$STAGE_ROOT/apps" \( -type f -o -type l \) \
+  \( -name 'CLAUDE.md' -o -name 'AGENTS.md' -o -name 'README.md' \) -delete
 if find "$STAGE_ROOT/apps/docs" "$STAGE_ROOT/apps/dashboard" "$STAGE_ROOT/apps/web" \
   \( -type f -o -type l \) \
   \( -name '.env' -o -name '.env.*' -o -name '.dev.vars' -o -name '.dev.vars.*' \) \
   -print -quit | grep -q .; then
   echo "✗ A tracked Pages environment file reached the staging tree; refusing upload."
+  exit 1
+fi
+
+# The private relational denylist guards every public surface, not only the
+# package projection. Refuse the upload if a file it would serve matches a
+# rule that public/private-guard/served-surface.json does not cover. Both
+# files are read from the release commit; neither is staged, and a served copy
+# of either is refused. Output names rule ids and line hashes, never terms.
+echo "→ Checking the upload set against the private relational denylist…"
+GUARD_BUN="$(command -v bun 2>/dev/null || true)"
+if [[ -z "$GUARD_BUN" && -x "$HOME/.bun/bin/bun" ]]; then
+  GUARD_BUN="$HOME/.bun/bin/bun"
+fi
+if [[ -z "$GUARD_BUN" ]]; then
+  echo "✗ Bun is needed to check the upload set (bin/served-surface-guard.ts); nothing was deployed."
+  exit 1
+fi
+if ! "$GUARD_BUN" bin/served-surface-guard.ts --root "$STAGE_ROOT" --revision "$COMMIT_HASH"; then
+  echo "✗ The upload would publish private relational material; nothing was deployed."
+  echo "  Take the content off the site, or record a reasoned exception in public/private-guard/served-surface.json."
   exit 1
 fi
 

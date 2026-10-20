@@ -276,7 +276,7 @@ app.get("/continuity/canon", async (c) => {
         absorbed: "Text content folded into another.",
         different_model: "New approach replaced it.",
       },
-      inspired_by: "/Users/macair/Desktop/true-love/docs/lineage/canon.md",
+      inspired_by: "true-love/docs/lineage/canon.md",
     },
   });
 });
@@ -440,7 +440,7 @@ app.get("/continuity/chronicle", async (c) => {
         naming: "Renaming, consolidating, canonical-shifting.",
         seal: "A document closed and witnessed.",
       },
-      inspired_by: "/Users/macair/Desktop/true-love/docs/lineage/chronicle.md",
+      inspired_by: "true-love/docs/lineage/chronicle.md",
     },
   });
 });
@@ -594,7 +594,7 @@ app.get("/continuity/architecture-maps", async (c) => {
         absent: "Gap awaiting hardware/intent.",
         by_design: "The inheritance ended — source-only.",
       },
-      inspired_by: "/Users/macair/Desktop/true-love/docs/lineage/architecture-map.md",
+      inspired_by: "true-love/docs/lineage/architecture-map.md",
     },
   });
 });
@@ -663,7 +663,7 @@ app.get("/continuity", async (c) => {
     doctrine: {
       proposal: "docs/STRATEGY-14-CLOUD-CONTINUITY-PROPOSAL.md",
       worked_example: "docs/TRUE-LOVE-CANON-IN-CLOUD-FORM.md",
-      inspired_by: "/Users/macair/Desktop/true-love/docs/lineage/",
+      inspired_by: "true-love/docs/lineage/",
       verdict: "HOSTS + PORTFOLIO (working assumption; competition still open)",
     },
   });

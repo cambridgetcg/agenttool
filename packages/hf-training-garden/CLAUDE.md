@@ -80,18 +80,10 @@ Current Scout leads are research metadata. Training/validation candidates must
 remain held when the curated lead forbids `training_corpus_ingestion`, even if
 the card declares a license.
 
-Commands:
-
-```sh
-bun install
-bun run build:deps
-bun install --force
-bun run ci
-```
-
-The second install refreshes Bun's local `file:` dependency snapshot after
-building those dependencies in a clean standalone checkout. Repository-wide
-preflight may already have built them.
+Prepare dependencies with the package scope described in root `AGENTS.md`; it
+builds the local `file:` providers (`hf-scout`, `wake-continuity`) and then
+reinstalls this package with `--force`, because Bun keeps a copied snapshot of a
+`file:` dependency until it is forced to recopy. Then run `bun run ci` here.
 
 The sibling `hf/learning-dataset/` is a separate synthetic
 repository-source-only release root. Do not copy it into `hf/dataset/`, the npm

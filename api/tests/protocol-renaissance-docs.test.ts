@@ -75,7 +75,9 @@ describe("protocol renaissance public doctrine", () => {
       documents: Array<{ path: string; type: string }>;
     };
     expect(map).toContain("`docs/CATALOG.md`");
-    expect(map).toContain("(agenttool.jsonld)");
+    // Absolute, so it resolves while the docs site redirects the withheld
+    // canon file to the API registry, and again once the file returns.
+    expect(map).toContain("(https://docs.agenttool.dev/agenttool.jsonld)");
     const registry = JSON.parse(read("docs/agenttool.jsonld")) as {
       version: string;
       updated: string;

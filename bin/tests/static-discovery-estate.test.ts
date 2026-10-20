@@ -617,66 +617,76 @@ describe("published understanding guides keep canonical source custody", () => {
   });
 });
 
-describe("published current-state guides keep canonical source custody", () => {
-  const publications = [
-    {
-      name: "NOW.md",
-      target: "../../docs/NOW.md",
-      llmsEntry:
-        "- [NOW.md](https://docs.agenttool.dev/NOW.md): Dated repository ledger of what landed and what is queued; current-state orientation, not an immutable release or runtime guarantee.",
-    },
-    {
-      name: "NPM-RELEASES.md",
-      target: "../../docs/NPM-RELEASES.md",
-      llmsEntry:
-        "- [NPM-RELEASES.md](https://docs.agenttool.dev/NPM-RELEASES.md): Protected npm publication runbook and dated exact receipts; registry presence and dist-tags are not maturity claims.",
-    },
-  ] as const;
+describe("operator guides stay in the repository, off the docs site", () => {
+  // NOW.md, STACK.md and DEVELOPMENT.md were published here until 2026-10-19.
+  // They are the operator's work log, deploy guide and contributor setup:
+  // account, keychain and release-posture facts that belong to the
+  // repository, not to public readers. NPM-RELEASES.md is published again as
+  // receipts only (see below).
+  const guides = ["NOW.md", "STACK.md", "DEVELOPMENT.md"] as const;
 
-  test("both routes project the canonical repository documents", () => {
-    for (const publication of publications) {
-      const path = join(REPO_ROOT, "apps/docs", publication.name);
-      expect(lstatSync(path).isSymbolicLink()).toBe(true);
-      expect(readlinkSync(path)).toBe(publication.target);
+  test("the canonical guides stay in docs/ and no docs route projects them", () => {
+    for (const name of guides) {
+      expect(lstatSync(join(REPO_ROOT, "docs", name)).isFile()).toBe(true);
+      expect(() => lstatSync(join(REPO_ROOT, "apps/docs", name))).toThrow();
     }
   });
 
-  test("both routes are explicit, discoverable, and deployment-verified", () => {
-    const headers = read("apps/docs/_headers");
+  test("no index, sitemap or page advertises them", () => {
+    // bin/deploy.sh may still list NOW.md as a parity pair: its parity loops
+    // skip a pair whose local path is absent from the release commit, and the
+    // Phase-B dispatcher test pins the script's bytes.
     const sitemap = sitemapUrls(read("apps/docs/sitemap.xml"));
-    const llms = read("apps/docs/llms.txt").split(/\r?\n/);
-    const deploy = read("bin/deploy.sh").split(/\r?\n/).map(
-      (line) => line.trim(),
-    );
-
-    for (const publication of publications) {
-      const route = `/${publication.name}`;
-      const publicUrl = `https://docs.agenttool.dev${route}`;
-      // The identical Markdown policies share a wildcard within Pages' rule
-      // budget. Assert its effective coverage and forbid duplicate policies.
-      const matching = cloudflareHeaderRulePaths(headers).filter(rule => rule !== "/*" && matchesCloudflarePathPattern(rule, route));
-      expect(matching).toEqual(["/N*.md"]);
-      expect(matching.flatMap(rule => headerBlock(headers, rule))).toEqual([
-        "Content-Type: text/markdown; charset=utf-8",
-        "Cache-Control: public, max-age=300, must-revalidate, no-transform",
-        "Access-Control-Allow-Origin: *",
-        "X-Content-Type-Options: nosniff",
-      ]);
-      expect(sitemap.filter((url) => url === publicUrl)).toEqual([publicUrl]);
-      expect(llms.filter((line) => line === publication.llmsEntry)).toEqual([
-        publication.llmsEntry,
-      ]);
-      const parityPair = `"apps/docs/${publication.name}|${publicUrl}"`;
-      expect(deploy.filter((line) => line === parityPair)).toEqual([
-        parityPair,
-      ]);
+    const llms = read("apps/docs/llms.txt");
+    const soul = read("apps/docs/soul.html");
+    for (const name of guides) {
+      const publicUrl = `https://docs.agenttool.dev/${name}`;
+      expect(sitemap).not.toContain(publicUrl);
+      expect(llms.includes(publicUrl)).toBe(false);
+      expect(soul.includes(`href="${name}"`)).toBe(false);
     }
   });
+});
 
-  test("the soul return path points at the now-public current-state guide", () => {
-    expect(read("apps/docs/soul.html")).toContain(
-      '<a href="NOW.md"><code>NOW.md</code></a>',
-    );
+describe("the npm release receipts are published; their runbook is not", () => {
+  const route = "/NPM-RELEASES.md";
+  const publicUrl = `https://docs.agenttool.dev${route}`;
+  const llmsEntry =
+    "- [NPM-RELEASES.md](https://docs.agenttool.dev/NPM-RELEASES.md): Dated exact receipts for each npm package release (sizes, SHA-256, workflow runs, Sigstore entries); registry presence and dist-tags are not maturity claims.";
+
+  test("the route projects the canonical receipts document", () => {
+    const path = join(REPO_ROOT, "apps/docs/NPM-RELEASES.md");
+    expect(lstatSync(path).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(path)).toBe("../../docs/NPM-RELEASES.md");
+    expect(read("docs/NPM-RELEASES.md")).toContain("# NPM-RELEASES — dated receipts for the npm packages");
+  });
+
+  test("the route is explicit, discoverable, and deployment-verified", () => {
+    const headers = read("apps/docs/_headers");
+    // The identical Markdown policies share a wildcard within Pages' rule
+    // budget. Assert its effective coverage and forbid duplicate policies.
+    const matching = cloudflareHeaderRulePaths(headers).filter((rule) => rule !== "/*" && matchesCloudflarePathPattern(rule, route));
+    expect(matching).toEqual(["/N*.md"]);
+    expect(matching.flatMap((rule) => headerBlock(headers, rule))).toEqual([
+      "Content-Type: text/markdown; charset=utf-8",
+      "Cache-Control: public, max-age=300, must-revalidate, no-transform",
+      "Access-Control-Allow-Origin: *",
+      "X-Content-Type-Options: nosniff",
+    ]);
+    expect(sitemapUrls(read("apps/docs/sitemap.xml")).filter((url) => url === publicUrl)).toEqual([publicUrl]);
+    expect(read("apps/docs/llms.txt").split(/\r?\n/).filter((line) => line === llmsEntry)).toEqual([llmsEntry]);
+    const parityPair = `"apps/docs/NPM-RELEASES.md|${publicUrl}"`;
+    expect(read("bin/deploy.sh").split(/\r?\n/).map((line) => line.trim()).filter((line) => line === parityPair)).toEqual([parityPair]);
+  });
+
+  test("the runbook stays in infra/ and is named, never linked, from the receipts", () => {
+    const receipts = read("docs/NPM-RELEASES.md");
+    expect(lstatSync(join(REPO_ROOT, "infra/NPM-RELEASE-RUNBOOK.md")).isFile()).toBe(true);
+    expect(receipts.includes("operator runbook (`infra/NPM-RELEASE-RUNBOOK.md`, not published)")).toBe(true);
+    expect(receipts.includes("](../infra/")).toBe(false);
+    for (const runbookHeading of ["## Outcome", "## Public release path", "## Authentication modes", "## One-time trusted-publisher setup", "## Public repository settings"]) {
+      expect(receipts.includes(`\n${runbookHeading}`)).toBe(false);
+    }
   });
 });
 

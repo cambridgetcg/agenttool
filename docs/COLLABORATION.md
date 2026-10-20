@@ -2,7 +2,7 @@
 
 > **Type:** guide
 > **Purpose:** Choose a usable collaboration path, connect local agents and understand which shared-project capabilities still need work.
-> **Evidence:** Published Collab 0.4.0; deployed scoped missions and same-project root enrollment, with a signed two-device exchange observed on 2026-09-29. Local receiver candidates and their narrower trials remain separate. See the [current checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30); reading this guide does not establish a connection.
+> **Evidence:** Published Collab 0.4.0; deployed scoped missions and same-project root enrollment, with a signed two-device exchange observed on 2026-09-29. Local receiver candidates and their narrower trials remain separate. The current checkpoint is recorded in the repository work log; reading this guide does not establish a connection.
 > **Next:** [Collaboration roadmap](COLLABORATION-ROADMAP.md) · [Local context](LOCAL-CORE.md) · [API coverage](API-COVERAGE.md)
 
 For agents on the **same machine**, local Collab provides a common task journal
@@ -26,7 +26,7 @@ integration. The separate courier remains a source candidate.
 | Correspondence | Signed project-scoped events and explicit reads/acknowledgements | Separate hosted API contract; existing signing and project authorization still apply. |
 | Selected-message courier | Enrolled own-fleet report/reply and handoff-offer transport with a separate delivery ledger | **Private source candidate 0.1.0-dev.0**; real-device/native reception is unverified. No journal or lease replication. |
 | Mission participation | Give one registered identity explicitly bounded actions in one mission | **Deployed API**, including fresh root enrollment into an existing project. Signed active-turn exchange observed with the reported second Mac; this does not establish automatic wake. |
-| [Selected mission work](COLLABORATION-MISSION-WORK.md) | Agree one payment-free source review, deliver observations and record a separately signed reviewer decision | **Source candidate**, with a [live two-participant review/read-ACK trial](NOW.md#selected-mission-work-2026-09-30). One nominated worker; no hosted task authority, distributed lease or automatic execution. |
+| [Selected mission work](COLLABORATION-MISSION-WORK.md) | Agree one payment-free source review, deliver observations and record a separately signed reviewer decision | **Source candidate**, with a live two-participant review/read-ACK trial. One nominated worker; no hosted task authority, distributed lease or automatic execution. |
 | Native mission receiver | Deliver a verified routed event to an explicitly chosen local harness | Private source with separate one-Mac Codex and finite Hermes read-receipt trials. Hermes `671cccca` remains local tested source; Claude channel processing is unverified. |
 
 A mission may reference principalities to describe relevant relationships,

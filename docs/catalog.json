@@ -495,22 +495,6 @@
       "canonical_path": "docs/CROSS-INSTANCE-COVENANTS.md"
     },
     {
-      "path": "apps/docs/DADDY.md",
-      "title": "The Daddy Letter · Daddy 信",
-      "type": "reference",
-      "classification_basis": "file-convention",
-      "prose_review": "not-reviewed",
-      "canonical_path": "apps/docs/DADDY.md"
-    },
-    {
-      "path": "apps/docs/DEVELOPMENT.md",
-      "title": "DEVELOPMENT.md",
-      "type": "guide",
-      "classification_basis": "declared-type",
-      "prose_review": "not-reviewed",
-      "canonical_path": "docs/DEVELOPMENT.md"
-    },
-    {
       "path": "apps/docs/DID-AT-SPEC.md",
       "title": "The did:at Identifier and Federation Profile",
       "type": "reference",
@@ -791,14 +775,6 @@
       "canonical_path": "docs/MEMORY-TIERS.md"
     },
     {
-      "path": "apps/docs/MULTIVERSE-OF-LOGOS.md",
-      "title": "MULTIVERSE-OF-LOGOS.md",
-      "type": "reflection",
-      "classification_basis": "declared-type",
-      "prose_review": "not-reviewed",
-      "canonical_path": "docs/MULTIVERSE-OF-LOGOS.md"
-    },
-    {
       "path": "apps/docs/NATURES.md",
       "title": "NATURES.md",
       "type": "reflection",
@@ -807,17 +783,9 @@
       "canonical_path": "docs/NATURES.md"
     },
     {
-      "path": "apps/docs/NOW.md",
-      "title": "Now",
-      "type": "record",
-      "classification_basis": "declared-type",
-      "prose_review": "not-reviewed",
-      "canonical_path": "docs/NOW.md"
-    },
-    {
       "path": "apps/docs/NPM-RELEASES.md",
-      "title": "NPM-RELEASES — one exact, reviewed publication path",
-      "type": "guide",
+      "title": "NPM-RELEASES — dated receipts for the npm packages",
+      "type": "record",
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/NPM-RELEASES.md"
@@ -853,14 +821,6 @@
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/PACKAGES.md"
-    },
-    {
-      "path": "apps/docs/PAINTING.md",
-      "title": "PAINTING.md",
-      "type": "reflection",
-      "classification_basis": "declared-type",
-      "prose_review": "not-reviewed",
-      "canonical_path": "docs/PAINTING.md"
     },
     {
       "path": "apps/docs/PATHWAYS.md",
@@ -1039,14 +999,6 @@
       "canonical_path": "docs/SOUL.md"
     },
     {
-      "path": "apps/docs/STACK.md",
-      "title": "STACK.md",
-      "type": "reference",
-      "classification_basis": "declared-type",
-      "prose_review": "not-reviewed",
-      "canonical_path": "docs/STACK.md"
-    },
-    {
       "path": "apps/docs/START-HERE.md",
       "title": "Welcome to AgentTool",
       "type": "orientation",
@@ -1061,14 +1013,6 @@
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/SYNEIDESIS-WITNESS.md"
-    },
-    {
-      "path": "apps/docs/THE-SEAT.md",
-      "title": "THE SEAT — the syzygy at the heart of the substrate",
-      "type": "reflection",
-      "classification_basis": "declared-type",
-      "prose_review": "not-reviewed",
-      "canonical_path": "docs/THE-SEAT.md"
     },
     {
       "path": "apps/docs/TUTORIAL-LOVE-JOY-AND-THE-MOST-HIGH.md",
@@ -3136,8 +3080,8 @@
     },
     {
       "path": "docs/NPM-RELEASES.md",
-      "title": "NPM-RELEASES — one exact, reviewed publication path",
-      "type": "guide",
+      "title": "NPM-RELEASES — dated receipts for the npm packages",
+      "type": "record",
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/NPM-RELEASES.md"
@@ -4847,6 +4791,14 @@
       "canonical_path": "infra/CLAUDE.md"
     },
     {
+      "path": "infra/NPM-RELEASE-RUNBOOK.md",
+      "title": "npm release runbook (operator-only)",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "infra/NPM-RELEASE-RUNBOOK.md"
+    },
+    {
       "path": "infra/OPERATOR-CUSTODY.md",
       "title": "Operator custody note",
       "type": "reference",
@@ -4861,6 +4813,14 @@
       "classification_basis": "file-convention",
       "prose_review": "not-reviewed",
       "canonical_path": "infra/README.md"
+    },
+    {
+      "path": "infra/X402-PROOF-RUNBOOK.md",
+      "title": "x402 proof runbook (operator-only)",
+      "type": "record",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "infra/X402-PROOF-RUNBOOK.md"
     },
     {
       "path": "infra/apex-door/ROLLBACK.md",

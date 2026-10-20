@@ -255,7 +255,7 @@ function allPublicTools(): PublicMcpTool[] {
       name: "wake.platform",
       title: "Read AgentTool's public platform description",
       description:
-        "Return the public platform-self payload — agenttool's identity, repo, the_seat, doctrine roots. The same data served at GET /public/self.",
+        "Return the public platform-self payload — agenttool's identity, repo, doctrine roots. The platform block of GET /public/self.",
       annotations: readOnlyToolAnnotations(
         "Read AgentTool's public platform description",
       ),
