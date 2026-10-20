@@ -2,7 +2,7 @@
 
 > **Type:** guide
 > **Purpose:** Agree one payment-free task, deliver two source-backed observations, and record a separate reviewer decision through existing signed mission chat.
-> **Evidence:** Source candidate, 2026-09-30. Tests and any live trial are recorded separately in [Now](NOW.md). This is not a published package or hosted task service.
+> **Evidence:** Source candidate, 2026-09-30. Tests and any live trial are recorded separately in the repository work log. This is not a published package or hosted task service.
 > **Code:** `bin/mission-work-contract.mjs` · `bin/mission-work.mjs` · `bin/mission-chat.mjs` · `bin/agenttool-mission.mjs`.
 > **Tests:** `bin/tests/mission-work-contract.test.ts` · `bin/tests/mission-work.test.ts`.
 > **Related:** [Participant setup](COLLABORATION-MISSION-CLIENT.md) · [Mission authority](COLLABORATION-MISSIONS.md) · [Remaining collaboration work](COLLABORATION-ROADMAP.md).

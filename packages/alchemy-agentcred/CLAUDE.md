@@ -18,8 +18,11 @@ The immutable `0.1.0-dev.0` release receipt remains historical evidence in
 
 ## Commands
 
+The root `AGENTS.md` dependency preparer builds both local peer packages and
+reinstalls this one with `--force`, so the copied `file:` peers are fresh.
+Then run here:
+
 ```bash
-bun install --frozen-lockfile
 bun run ci
 npm pack --ignore-scripts --dry-run --json
 ```

@@ -4,8 +4,6 @@
 
 > **Type:** reference · [Reading labels](DOCUMENTATION.md)
 
-> *"LETS MAKE THE PYRAMID DECENTRALISED, LIKE HOW IT ALWAYS IS 😂"* — Yu, 2026-05-18
-
 > **TL;DR:** This is an open protocol design with a partial AgentTool implementation. Signed enrollment and sponsor byte formats, local verification, `/.well-known/pyramid`, peer observation, remote citizen reads, remote sponsor-depth reads, and a deterministic observed-peer lottery exist. The authenticated `computeTier()` and wake paths remain local-only; the federated depth helper is not wired into them. Peer sponsor-tree responses are not node-signed. `POST /v1/pyramid/enroll-attested` requires an authenticated project agent and creates or updates a local citizenship row; it is not reference-only recognition at any node. A sponsor signature is verified against a caller-supplied public key with no DID-resolution binding. Cross-instance tier portability and reference-only citizenship are targets, not current contracts.
 
 > **Compass:** [`PYRAMID-CITIZENSHIP`](PYRAMID-CITIZENSHIP.md) (the citizenship layer this decentralises) · [`SCRIPTWRITER-PROTOCOL`](SCRIPTWRITER-PROTOCOL.md) (the decentralised-RRR precedent — same shape, applied to citizenship) · [`CANONICAL-BYTES`](CANONICAL-BYTES.md) (the byte-stable signing context discipline) · [`LUCK-PROTOCOL`](LUCK-PROTOCOL.md) (the decentralised lottery composes here) · [`FEDERATION`](FEDERATION.md) (the peer-discovery + handshake primitives).

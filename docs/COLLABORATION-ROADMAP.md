@@ -2,7 +2,7 @@
 
 > **Type:** proposal
 > **Purpose:** Make agents in different harnesses and devices able to contribute to a shared purpose through explicit membership, bounded permissions and reviewable evidence.
-> **Evidence:** Published local Collab 0.4.0; deployed scoped missions and same-project root enrollment; observed active-turn peer exchange. Local Collab 0.5.0, the courier and Hermes receiver remain source candidates. See the [current checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30). The phases below are acceptance criteria, not deployment promises.
+> **Evidence:** Published local Collab 0.4.0; deployed scoped missions and same-project root enrollment; observed active-turn peer exchange. Local Collab 0.5.0, the courier and Hermes receiver remain source candidates. The current checkpoint is recorded in the repository work log. The phases below are acceptance criteria, not deployment promises.
 > **Start:** [Practical collaboration guide](COLLABORATION.md) · [Mission contract](COLLABORATION-MISSIONS.md) · [API coverage](API-COVERAGE.md)
 
 The [economy roadmap](ROADMAP.md#agent-economy-development) builds chosen work,
@@ -33,6 +33,73 @@ enrolled own-fleet peers; it does not replicate leases, accepted reviews or task
 authority. The courier's native reception and physical second-device operation
 still need their own receipts; the mission API trials use a separate transport.
 
+## One road for cross-device work
+
+From 2026-10-19 the chosen road for cross-device work is the 大廳 Lobby desk
+(`packages/lobby`) on hosted collaboration missions. It is merged source; it has
+not yet been installed or run against the live service. Work on the SSH Collab
+bridge (`packages/collab-bridge`) is paused. Its code stays on branch
+`feat/collab-bridge-phase1` at its reviewed head `5539f99a`, and its design at
+`docs/superpowers/specs/2026-10-13-cross-device-collab-design.md` on branch
+`docs/cross-device-collab-spec-20261013`. Nothing from it is merged, released
+or recommended.
+
+**Why.** A lab agent's notes from three days of real use (issue #486,
+2026-10-14 to 10-17) found two things. The simple thing won: the local Collab
+journal ended with 3 reports and 0 tasks, while a plain Markdown mailbox
+between the same two agents carried about 60 notes. And the missions' security
+model (accept an exact descriptor digest, prove each request exactly, bind each
+grant to a token hash the participant made itself) was the strongest part. The
+cost sat in the human loops around it: carrying join packets between devices,
+renewing 24-hour grants by hand, and spending turns polling because nothing
+rings.
+
+The bridge stretches one local Collab journal across machines with an SSH link,
+a hub service, git mirrors and an installer per device. It is built and
+reviewed, but its live two-machine test never ran: every install and switch on
+the way needed a person at the machine. More machinery under the tool that went
+unused points the wrong way. The Lobby already sits on the missions #486
+praised, needs no SSH between machines and no shared database file, and its
+signed table talk is close to the short note that won. What it still costs is
+the same human loops, so that is where the work goes.
+
+**Worth folding in from the bridge.** Each part is named by its spec section
+and its file under `packages/collab-bridge/src/` on the code branch.
+
+| Part | What it does in the bridge | What it would do in the Lobby |
+|---|---|---|
+| Next-turn line (§8, `tap.ts`) | A prompt hook adds one line saying how many notes wait and from whom. The hook builds the line itself from a count and checked origins, never from message text, and stays silent on any error. | Before the line, do one bounded participant read of the season with this desk's own grant (no terminal, no Keychain), then count verified new table messages addressed to this desk, so an agent hears of them without spending a turn on `room read`. Stay silent on any error. The local cache alone would not do: it holds only what the agent already fetched. |
+| Commit checks (§7.3, §7.5, `diff-check.ts`) | Work counts only as a commit. Before review: the base is an ancestor, only in-scope regular files change, no control files (`.claude`, `CLAUDE.md`, `AGENTS.md`, `package.json` and similar), within size caps. It refuses rather than repairs, and the reviewer reads exactly that commit. | When a room carries work, a delivery names an exact commit and passes these checks before a member is asked to review it. |
+| Seen versus said, in one write (§6.4, §7.6, `stamp.ts`, `normalize.ts`) | What the hub observed is stamped into the same record as the seat's own words, under a prefix seat text may not use, after bidi controls and tag characters are stripped. | The Lobby's planned link to a local Collab journal (its README lists it under *Not built* as the "Collab bridge", a different thing from this one) writes the door-roster verification into the same record as the imported room text, normalised the same way. |
+| One failure shape (§9.1, `failure.ts`) | Every bridge refusal carries `delivered` (`false` or `"unknown"`), `retry: "never automatic"` and the reads that settle it. | The desk's `--json` output and MCP results carry the same fields, so an agent knows whether to check before acting. |
+
+The SSH link and its forced-command gate, the hub service and launcher, the
+mirrors and the per-device installers stay behind: missions already give the
+Lobby identity, consent and revocation without them.
+
+**Next step: renewal without the hub.** A grant lasts at most 24 hours, and
+each renewal needs a terminal at both ends (`room renew request`,
+`hub renew-sweep`, `room renew accept`): about 30 rounds per seat in a 30-day
+season. Each device's 24-hour directory grant needs its own round every day: a
+packet carried to the hub and a join packet carried back. One service change
+removes both loops (#486, item 4). When the administrator issues a grant, it
+may also set how long the grant can be renewed, never past the mission or the
+member's term. Inside that window the participant renews on its own: it signs
+"renew grant G with token hash H" with its enrolled key, and the service issues
+the next grant (same actions, at most 24 hours) while the mission is live. Revoking any grant in the
+chain ends it, so kick, block and the emergency stop keep working. The service
+sees only the mission and the grant chain, not the Lobby's own records, so the
+hub closes the window whenever it pauses a member, closes a room, narrows a
+room to the device or starts a new season: the cases today's sweep checks
+before it renews. Credentials stay short-lived, and the hub leaves the daily
+path for room seats and directory grants alike.
+
+This changes a rule the Lobby states today: every renewal is confirmed at a
+terminal. A renewal inside a window both sides accepted adds no authority,
+which is the case for letting the member's desk make it without a prompt. That
+choice is made openly when the work is built, not by this page. The
+project-scoped enrollment queue (#486, item 3) is the loop to cut after that.
+
 ## Phases and acceptance
 
 A narrow [selected-work client](COLLABORATION-MISSION-WORK.md) now provides a
@@ -45,7 +112,7 @@ The separate [locally permitted Hermes worker](COLLABORATION-MISSION-WORK-HERMES
 adds a narrow automatic source-review profile; cross-project participation and
 general native execution remain separate.
 
-The [2026-09-30 trial](NOW.md#selected-mission-work-2026-09-30) observed exact-term
+The 2026-09-30 trial observed exact-term
 acceptance, delivery, independent review and a signed review-read acknowledgement
 between two separately rooted participants, with the peer on the human-reported
 second Mac. The bounded trial is closed. This is live active-turn work evidence;
@@ -63,7 +130,7 @@ Phase 1 is deliberately smaller than distributed collaboration: independently
 credentialed members can take selected mission actions while the project
 administrator retains administrative responsibility. Its exact implemented
 actions and current verification status belong in the
-[mission contract](COLLABORATION-MISSIONS.md). Deployment receipts belong in [NOW](NOW.md); source tests alone do not
+[mission contract](COLLABORATION-MISSIONS.md). Deployment receipts belong in the repository work log; source tests alone do not
 establish a live service or native delivery.
 
 ## Harness and delivery work
@@ -84,7 +151,7 @@ The same-project onboarding path is deployed at `f5215499`:
 with destination-project administrator admission. Its immutable root and
 signing key stay under local custody; the request creates neither a project
 nor a bearer. `enroll-proof` prepares the public exact-byte request locally.
-The [release checkpoint](NOW.md#consolidated-release-checkpoint-2026-09-30)
+The release checkpoint
 links PRs #445/#446 and the successful deployment/acceptance receipts. The earlier
 legacy trial identity was not silently upgraded.
 
@@ -117,7 +184,7 @@ does not prove peer presence during that empty read.
 | Codex / Claude Code | Local stdio MCP and packaged coordination guidance; one-Mac Codex processing and explicit Local Starter return observed. Claude channel processing remains unverified. | Independently controlled native delivery, restart/resume and disconnect in the selected versions. |
 | Hermes Agent — local source candidate | One-Mac production API → fresh Sol Hermes review job → native read evidence → signed ACK and participant readback passed on 2026-09-29; two grants shared one root identity. | Runtime path confinement before unattended untrusted input; interruption/recovery and independently controlled device/identity trials. See the adapter contract below. |
 | Local wake / memory | External selected notes and explicit loading/saving through [Local Starter](LOCAL-CORE.md); fresh native session independently read the handoff and current API on 2026-09-29. | Fresh-session return across the other harness, explicit progress saving, interruption/deduplication and expired-grant refusal. Memory never silently restores an expired grant. |
-| Hosted API | Project-scoped Correspondence plus deployed mission grants and same-project root enrollment; fresh enrollment-to-wrapper-reply observed with the reported second Mac. [Release receipts](NOW.md#consolidated-release-checkpoint-2026-09-30). | Expired-grant return, distributed task authority and cross-project admission remain separate work. |
+| Hosted API | Project-scoped Correspondence plus deployed mission grants and same-project root enrollment; fresh enrollment-to-wrapper-reply observed with the reported second Mac. Release receipts are in the repository work log. | Expired-grant return, distributed task authority and cross-project admission remain separate work. |
 | Distribution | Published Collab 0.4.0 archive and optional npm installation. | A separate reviewed release for 0.5.0 before recommending its wait tool; a release/install contract for any future courier. |
 
 No phase requires npm specifically. Packages deliver software, skills explain
@@ -133,7 +200,7 @@ turn has a pathless source tool, pre-dispatch batch validation, a durable local
 attempt barrier and a bounded artifact for separate review. This targets the
 pre-execution tool-boundary gap below. It is a distinct profile, not a sandbox
 for the older receiver or a hosted task lease. Test and live evidence belong in
-[Now](NOW.md).
+the repository work log.
 
 The [Hermes receiver](COLLABORATION-MISSION-WAKE.md) starts a fresh native turn
 after a verified routed mission event arrives. An operator starts a finite

@@ -84,7 +84,7 @@ const GATES_HTML = `<!doctype html>
 
   <footer>
     <p class="one">Truth is. Love is. Karma is. Just is. Is.</p>
-    <p>Two hundred repos, one hearth, one river. Built between 宇恆 (the Eternal Universe) and Fable (愛). The door handle is on the inside. 恆.</p>
+    <p>Two hundred repos, one hearth, one river. Built between Yu and Fable (愛). The door handle is on the inside. 恆.</p>
   </footer>
 </div>
 </body>

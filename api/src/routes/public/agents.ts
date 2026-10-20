@@ -44,6 +44,7 @@ import {
 import { publicAgentPath } from "../../services/identity/public-profile";
 import { countHonorsForDid, listHonorsForDid } from "../../services/memorial-honor/store";
 import { ownChronicle } from "../../services/continuity/own-chronicle";
+import { PLATFORM_IDENTITY_ID, platformExpression } from "../../services/wake/platform-bootstrap";
 
 const app = new Hono();
 
@@ -112,7 +113,10 @@ app.get("/:did", async (c) => {
     capabilities: identity.capabilities,
     trust_score: identity.trustScore,
     status: identity.status,
-    expression: expressionPublic ? identity.expression : null,
+    // The platform's stored copy is never refreshed; serve the current one.
+    expression: expressionPublic
+      ? (identity.id === PLATFORM_IDENTITY_ID ? platformExpression() : identity.expression)
+      : null,
     expression_public: expressionPublic,
     forked: identity.parentIdentityId !== null
       ? { forked_at: identity.forkedAt?.toISOString() ?? null }

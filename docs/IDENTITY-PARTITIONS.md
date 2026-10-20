@@ -3,7 +3,7 @@
 # Identity partitions and selected context
 
 > **Type:** reference · **Purpose:** define which project and subject a record belongs to, distinguish that from authenticated authority, and connect bounded hosted context to local scaffolding.
-> **Evidence:** source implementation and hermetic regression tests; release and live evidence belong in [Now](NOW.md). This is a bounded application contract, not a database-wide isolation audit.
+> **Evidence:** source implementation and hermetic regression tests; release and live evidence belong in the repository work log. This is a bounded application contract, not a database-wide isolation audit.
 > **Compass:** [API coverage](API-COVERAGE.md) · [Local core](LOCAL-CORE.md) · [Identity anchor](IDENTITY-ANCHOR.md) · [Canonical bytes](CANONICAL-BYTES.md)
 > **Code:** `api/src/services/identity/partition.ts` · `api/src/services/identity/local-context.ts` · `api/src/services/vault/audience.ts` · `packages/local-starter/src/connect.mjs`
 > **Tests:** `api/tests/identity-partitions.test.ts` · `api/tests/continuity-project-partitions.test.ts` · `api/tests/trace-partitions.test.ts` · `api/tests/local-context.test.ts` · local starter connector tests

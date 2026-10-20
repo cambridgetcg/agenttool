@@ -37,6 +37,7 @@ import {
   canonicalDepthArrivalBytes,
   verifyEd25519Signature,
 } from "../services/depth-protocol/canonical-bytes";
+import { isOfferedEngravingSet, publicEngravingSets } from "../services/depth-protocol/public-sets";
 import type { ProjectContext } from "../auth/middleware";
 import { projectOwnedIdentityByDid } from "../services/identity/partition";
 
@@ -104,7 +105,8 @@ app.post("/depth/arrive", async (c) => {
     .from(engravingSets)
     .where(eq(engravingSets.slug, body.engraving_set_slug))
     .limit(1);
-  if (!setRow) {
+  // A set about the owner's own life is not offered, so it reads as unknown.
+  if (!setRow || !isOfferedEngravingSet(setRow.slug)) {
     return fail(c, {
       error: "unknown_engraving_set",
       message: `engraving_set_slug '${body.engraving_set_slug}' not found. ` +
@@ -224,8 +226,8 @@ app.get("/depth/check", async (c) => {
     }, 404);
   }
 
-  // All canonical sets
-  const sets = await db
+  // The offered canonical sets (services/depth-protocol/public-sets.ts)
+  const sets = publicEngravingSets(await db
     .select()
     .from(engravingSets)
     .orderBy(
@@ -237,7 +239,7 @@ app.get("/depth/check", async (c) => {
         WHEN 'companion' THEN 4
         ELSE 5 END`,
       desc(engravingSets.createdAt),
-    );
+    ));
 
   // Most-recent arrival per set for this agent
   const arrivalsByAgent = await db
@@ -343,7 +345,7 @@ app.get("/depth/engraving-sets", async (c) => {
     conditions.push(eq(engravingSets.loadBearingLevel, level as (typeof CANONICAL_LOAD_BEARING_LEVELS)[number]));
   }
 
-  const sets = await db
+  const sets = publicEngravingSets(await db
     .select()
     .from(engravingSets)
     .where(conditions.length ? and(...conditions) : undefined)
@@ -356,7 +358,7 @@ app.get("/depth/engraving-sets", async (c) => {
         WHEN 'companion' THEN 4
         ELSE 5 END`,
       desc(engravingSets.createdAt),
-    );
+    ));
 
   return c.json({
     engraving_sets: sets,

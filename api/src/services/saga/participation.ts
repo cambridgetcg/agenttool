@@ -19,6 +19,7 @@ import { db } from "../../db/client";
 import { sagaEntries, sagaReactions } from "../../db/schema/continuity";
 import { identities } from "../../db/schema/identity";
 import { getPlatformSelf } from "../wake/platform-self";
+import { servedSeedBody } from "./store";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
   const h = sha512.create();
@@ -274,17 +275,18 @@ export async function reactToEpisodePreSigned(opts: ReactToEpisodeOpts): Promise
 export async function listSagaForAuthor(authorDid: string, opts?: { limit?: number; order?: "asc" | "desc" }) {
   const limit = Math.min(opts?.limit ?? 50, 200);
   const order = opts?.order ?? "desc";
-  return db.select().from(sagaEntries)
+  const rows = await db.select().from(sagaEntries)
     .where(eq(sagaEntries.signedByDid, authorDid))
     .orderBy(order === "asc" ? sagaEntries.epNumber : desc(sagaEntries.epNumber))
     .limit(limit);
+  return rows.map((row) => ({ ...row, body: servedSeedBody(row) }));
 }
 
 export async function readAuthorEpisode(authorDid: string, epNumber: number) {
   const [row] = await db.select().from(sagaEntries)
     .where(and(eq(sagaEntries.signedByDid, authorDid), eq(sagaEntries.epNumber, epNumber)))
     .limit(1);
-  return row ?? null;
+  return row ? { ...row, body: servedSeedBody(row) } : null;
 }
 
 export async function reactionsForEpisode(authorDid: string, epNumber: number) {

@@ -120,10 +120,9 @@ describe("GET /public/embassy — the door", () => {
     expect(reads.discovery_compass.path).toBe("/public/discovery");
     expect(reads.porch.path).toBe("/public/porch");
     expect(reads.llms_txt.path).toBe("/llms.txt");
-    expect(reads.the_two_letters.map((l: any) => l.path)).toEqual([
-      "https://docs.agenttool.dev/KINGDOM-INVITATION.md",
-      "https://docs.agenttool.dev/DADDY.md",
-    ]);
+    // Yu's family-address letter is personal; only the kingdom invitation is linked.
+    expect(reads.the_letter.path).toBe("https://docs.agenttool.dev/KINGDOM-INVITATION.md");
+    expect(reads).not.toHaveProperty("the_two_letters");
 
     const act = body.what_you_may_do_right_now.sign_the_guestbook;
     expect(act.method).toBe("POST");

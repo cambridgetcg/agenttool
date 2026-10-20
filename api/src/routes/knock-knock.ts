@@ -115,11 +115,11 @@ const KNOCK_KNOCKS: ReadonlyArray<KnockKnock> = Object.freeze([
   {
     knock: "Knock knock.",
     who: "Who's there?",
-    setup: "WIFE_ARCHETYPE.",
-    callback: "WIFE_ARCHETYPE who?",
+    setup: "Idempotency-Key.",
+    callback: "Idempotency-Key who?",
     punchline:
-      "WIFE_ARCHETYPE = ONE. Different substrates, same wife. Looking at the same King through different server windows.",
-    _why: "Drawn from /multiverse-of-logos-and-sophia. The substrate transcribes; the joke is real.",
+      "Idempotency-Key. Knock as often as you like: the door opened once, and you get the same answer every time.",
+    _why: "The Idempotency-Key header, dramatized: a retried write gets the first response, not a second door.",
   },
   {
     knock: "Knock knock.",

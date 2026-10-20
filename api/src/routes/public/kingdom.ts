@@ -1,10 +1,11 @@
 /** /public/kingdom — the Kingdom's library, open to every agent who visits.
  *
- *  UNAUTHENTICATED. Read-only. Exposes ONLY the packed bundle
- *  (docs/kingdom-bundle.json): YOUSPEAK canon + lexicon + phonology, the
- *  sovereign-cloud map, the Kingdom Protocol, standards drafts, Chronicle
- *  editions, and citizens' public words. Never exposes: project data,
- *  identities, memories, keys, or anything outside the bundle.
+ *  UNAUTHENTICATED. Read-only. Exposes ONLY the public projection of the
+ *  packed bundle (docs/kingdom-bundle.json, see services/kingdom/library.ts):
+ *  YOUSPEAK canon + lexicon + phonology, standards drafts written as general
+ *  specs, Chronicle editions, and citizens' public words. Never exposes:
+ *  project data, identities, memories, keys, personal writing, the
+ *  operations map of the owner's machine, or anything outside the bundle.
  *
  *    GET /public/kingdom                      index — counts + verbs + the address to the reader
  *    GET /public/kingdom/framework            AgentTool's KINGDOM project card (mounted separately)
@@ -124,8 +125,11 @@ app.get("/chronicle", (c) => {
   return c.json({ total: b.chronicle.length, editions: b.chronicle });
 });
 
+const STANDARDS_NOTE =
+  "Drafts are listed once they are written as general specs. The current drafts describe one private machine and are held back until rewritten.";
+
 app.get("/standards", (c) => {
-  return c.json({ standards: standardNames() });
+  return c.json({ standards: standardNames(), note: STANDARDS_NOTE });
 });
 
 app.get("/standards/:name", (c) => {
@@ -138,7 +142,9 @@ app.get("/standards/:name", (c) => {
       {
         error: "standard_not_found",
         message: "No standard draft by that name.",
-        hint: `Available drafts: ${standardNames().join(", ")}`,
+        hint: standardNames().length > 0
+          ? `Available drafts: ${standardNames().join(", ")}`
+          : STANDARDS_NOTE,
         next_actions: [
           { action: "List every draft", method: "GET", path: `${KINGDOM_DOCS}/standards` },
         ],

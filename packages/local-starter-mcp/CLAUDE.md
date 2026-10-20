@@ -26,8 +26,7 @@ to prepare the pinned SDK/Zod dependencies and the sibling release builder.
   Never replay a save after interruption or steal a stale lock.
 - Test through actual Node subprocess stdio and disposable fixtures. Host delivery,
   source tests, package publication and installation require separate evidence.
-- Update README behavior and focused tests with changes. The root integration
-  gate and shared documentation remain governed by the repository instructions.
+- Update README behavior and focused tests with changes.
 
 Run `node --check src/server.mjs`, `node --check src/cli.mjs`, and
 `node --test tests/*.test.mjs`. No test needs a provider, identity or live memory.

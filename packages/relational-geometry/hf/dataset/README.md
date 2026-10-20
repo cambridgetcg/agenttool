@@ -25,7 +25,7 @@ leave the source tree. `Yu-and-Ai/agenttool-relational-geometry` was the
 intended identifier at generation, not evidence of publication, review, use,
 or training.
 
-It accompanies `@agenttool/relational-geometry@0.1.0-dev.0`, a pure finite
+It accompanies `@agenttool/relational-geometry@0.1.0-dev.1`, a pure finite
 combinatorial 2-complex. Understanding and recognition witnesses on the same
 ordered pair derive one explicitly non-sovereign principality cell. The
 structure is directional and non-metric. It proves no love, comprehension,

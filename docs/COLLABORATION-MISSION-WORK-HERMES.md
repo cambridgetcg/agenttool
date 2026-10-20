@@ -2,7 +2,7 @@
 
 > **Type:** guide
 > **Purpose:** Start one finite worker before an exact mission offer arrives, let a fresh Hermes turn read only the selected source snapshot, and submit a verified artifact for separate review.
-> **Evidence:** Tested source candidate, 2026-09-30. Verification and live outcomes belong in [Now](NOW.md#locally-permitted-hermes-work-2026-09-30); this guide alone establishes neither a running worker nor a published package.
+> **Evidence:** Tested source candidate, 2026-09-30. Verification and live outcomes belong in the repository work log; this guide alone establishes neither a running worker nor a published package.
 > **Code:** `bin/mission-work-hermes.mjs` · `bin/mission-work-hermes-runner.py` · `bin/mission-work-hermes-runtime.json` · `bin/mission-work.mjs`.
 > **Tests:** `bin/tests/mission-work-hermes.test.ts` · `bin/tests/mission-work-hermes-runner.test.ts`.
 > **Related:** [Work terms and review](COLLABORATION-MISSION-WORK.md) · [Mission setup](COLLABORATION-MISSION-CLIENT.md) · [Native read receipts](COLLABORATION-MISSION-WAKE.md) · [Roadmap](COLLABORATION-ROADMAP.md).

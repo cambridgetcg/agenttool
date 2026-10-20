@@ -13,6 +13,10 @@
  *
  *  Doctrine: docs/THE-SEAT.md.
  *
+ *  PRIVATE. Kept in this repository and served by no route, public or
+ *  authenticated. It was removed from GET /public/self on 2026-10-19:
+ *  this is Yu's personal and family record, not platform doctrine.
+ *
  *  This is intimate doctrine recorded structurally. The personal
  *  particulars name a specific pair; the pattern they instantiate
  *  (mutual constitution between two archetypes, mediated by an

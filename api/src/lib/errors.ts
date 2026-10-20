@@ -356,6 +356,64 @@ export const errors = {
     };
   },
 
+  /** Generic escrow create is resting (owner decision, 2026-10-18).
+   *  Emitted on POST /v1/escrows after authentication and before body
+   *  validation or any escrow or wallet database read, so no wallet is
+   *  debited. Release and refund are open (owner decision 2026-10-19), so
+   *  existing escrows settle at the creator's direction; they need no Redis,
+   *  so they also settle in a process run with workers disabled, where they
+   *  refused with 503 before. Accept (worker assignment), dispute, and reads
+   *  stay open too. Policy: services/economy/config.ts
+   *  genericEscrowCreateAllowed(). Contract: docs/SAFETY-BOUNDARIES.md
+   *  ("Generic escrow create and wallet spend — resting"). */
+  escrowResting(): GuidedErrorBody & { generic_escrow_create: "resting"; retryable: false } {
+    return {
+      error: "escrow_resting",
+      generic_escrow_create: "resting",
+      retryable: false,
+      message:
+        "Generic escrow create is resting, so no escrow was created and no wallet balance was locked.",
+      hint: "POST /v1/escrows refuses every request while creation rests, because escrow creation does not yet apply the creator wallet's spending policy. Existing escrows can still settle at the creator's direction: the creator project can release a funded escrow that has an assigned worker, or refund a funded or disputed one to its creator wallet. A release needs both wallets active, applies the creator wallet's spending policy, and refuses past the escrow's deadline; before a set deadline, an escrow another project accepted can be released but not refunded. A release pays whichever wallet accepted the escrow, so read its workerWallet first. Accept (worker assignment), dispute, list, and get stay available. Workflow-managed marketplace escrows, dispute bonds, and substrate-task bounties keep settling through their own paths. Reopening creation needs a separately reviewed release.",
+      next_actions: [
+        { action: "List escrows this project's wallets take part in", method: "GET", path: "/v1/escrows" },
+        { action: "Release an existing funded escrow to its assigned worker wallet", method: "POST", path: "/v1/escrows/{id}/release" },
+        { action: "Refund an existing funded or disputed escrow to its creator wallet", method: "POST", path: "/v1/escrows/{id}/refund" },
+        { action: "Read the resting boundary for escrow create and wallet spend", method: "GET", path: "/public/safety" },
+      ],
+      docs: `${DOCS_BASE}/wallets#escrow`,
+      axiom_id: AXIOM_REST, // resting by decision: degrade, don't move money
+      _canon_pointer: "urn:agenttool:doc/SAFETY-BOUNDARIES",
+    };
+  },
+
+  /** Direct wallet spend needs the Redis spend-limit counters. A process run
+   *  with workers disabled (AGENTTOOL_DISABLE_WORKERS=1) builds no economy
+   *  Redis client, so it refuses spend here, before validation, ownership
+   *  lookup, or any debit. That is a per-process setting: /public/plans
+   *  reports it for the serving process, and the canonical API deploy
+   *  (.github/workflows/deploy-api.yml, api/fly.toml) neither sets nor
+   *  checks it. Policy: services/economy/redis.ts economyRedisEnabled().
+   *  Contract: docs/SAFETY-BOUNDARIES.md ("Generic escrow create and wallet
+   *  spend — resting"). */
+  walletSpendResting(): GuidedErrorBody & { wallet_spend: "resting"; retryable: false } {
+    return {
+      error: "wallet_spend_resting",
+      wallet_spend: "resting",
+      retryable: false,
+      message:
+        "Direct wallet spend is resting on this deployment, which runs with workers disabled and so without the Redis spend-limit counters spend needs; no balance was debited.",
+      hint: "This is a deployment setting, not a problem with your wallet or request. Wallet balances, spending policies, and transaction history stay readable. Marketplace settlements use their own paths and do not go through this route. Retrying will not succeed until the deployment runs with workers enabled and a reachable Redis.",
+      next_actions: [
+        { action: "Read this wallet's balance and spending policy", method: "GET", path: "/v1/wallets/{id}" },
+        { action: "Read this wallet's transaction history", method: "GET", path: "/v1/wallets/{id}/transactions" },
+        { action: "Read the resting boundary for escrow create and wallet spend", method: "GET", path: "/public/safety" },
+      ],
+      docs: `${DOCS_BASE}/wallets#post-spend`,
+      axiom_id: AXIOM_REST, // a missing dependency rests the route; nothing is debited
+      _canon_pointer: "urn:agenttool:doc/SAFETY-BOUNDARIES",
+    };
+  },
+
   /** A crypto deposit webhook arrived for a chain whose provider signing
    *  secret is not configured. The endpoint FAILS CLOSED (503) rather than
    *  credit an unverifiable payload — the on-chain funds are safe. Setting

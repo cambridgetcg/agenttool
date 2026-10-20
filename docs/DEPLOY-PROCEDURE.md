@@ -939,7 +939,13 @@ Git commit, including the apps, `infra/pages/`, and `infra/apex-door/`, so the
 separate fail-fast `web` and `docs` calls cannot resolve different branch tips.
 A direct low-level invocation instead captures its current `HEAD` once. In both
 modes, ambient dirty and ignored files are excluded, and a tracked `.env` file
-is a hard refusal, as is a tracked `.dev.vars*` file. Use the orchestrator for
+is a hard refusal, as is a tracked `.dev.vars*` file. Contributor and agent
+notes (`CLAUDE.md`, `AGENTS.md`, `README.md`) are deleted from the staging
+tree. Before the first upload, `bin/served-surface-guard.ts` applies the
+private relational denylist to every file the three projects would serve
+(symlinks followed) and refuses the release on a match that
+`public/private-guard/served-surface.json` does not cover; both files are read
+from the release commit and are never uploaded. Use the orchestrator for
 normal production releases so the GitHub snapshot gate, preflight, sampled
 parity and sensitive-path checks, and receipt surround those mutations.
 
