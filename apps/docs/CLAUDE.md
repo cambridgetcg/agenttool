@@ -6,8 +6,10 @@ local tools. `agents.html` is the agent entrance, `index.html` is the direct
 reference library, and `roadmap.html` is a human-facing source/proposal map.
 
 The canonical doctrine lives in [`docs/`](../../docs/); this app is the HTML
-wrapper. This guide is itself served at `docs.agenttool.dev/CLAUDE.md`, so it
-carries no operator custody, credential, or private-path detail.
+wrapper. This guide is not served: the frontend release strips `CLAUDE.md`,
+`AGENTS.md` and `README.md` from every app, and the Pages Worker answers
+`CLAUDE.md` with a 404 at any depth. Keep it free of operator custody,
+credential, and private-path detail all the same.
 
 ## What a page may claim
 A page describes; serving it installs, releases, deploys, trains, or authorizes

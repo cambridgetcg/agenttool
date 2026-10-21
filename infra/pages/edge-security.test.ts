@@ -248,6 +248,60 @@ describe("Worker-generated response boundaries", () => {
     expectGeneratedSecurity(head);
   });
 
+  test("refuses withdrawn and repository-only documents before the asset binding", async () => {
+    // Pages would otherwise answer these from its asset-preservation cache.
+    for (const url of [
+      "https://docs.agenttool.dev/NOW.md",
+      "https://docs.agenttool.dev/NOW.md?fresh=1",
+      "https://docs.agenttool.dev/stack.md",
+      "https://docs.agenttool.dev/DEVELOPMENT%2Emd",
+      "https://docs.agenttool.dev/%252e/THE-SEAT.md",
+      "https://docs.agenttool.dev/.heartbeat",
+      "https://agenttool-docs.pages.dev/DADDY.md",
+      "https://docs.agenttool.dev/PAINTING.md",
+      "https://docs.agenttool.dev/Painting.md?v=2",
+      "https://docs.agenttool.dev/MULTIVERSE-OF-LOGOS.md",
+      "https://docs.agenttool.dev/CLAUDE.md",
+      "https://docs.agenttool.dev/geometry/README.md",
+      "https://app.agenttool.dev/README.md",
+    ]) {
+      let assetCalls = 0;
+      const response = await handlePagesRequest(new Request(url), {
+        ASSETS: {
+          fetch: async () => {
+            assetCalls += 1;
+            return new Response("preserved copy");
+          },
+        },
+      });
+
+      expect(assetCalls, url).toBe(0);
+      expect(response.status, url).toBe(404);
+      expect(response.headers.get("cache-control"), url).toBe("no-store, max-age=0");
+      expectGeneratedSecurity(response);
+    }
+
+    for (const url of [
+      "https://docs.agenttool.dev/ROADMAP.md",
+      "https://docs.agenttool.dev/NPM-RELEASES.md",
+      "https://docs.agenttool.dev/AGENTS.md",
+      "https://docs.agenttool.dev/geometry/NOW.md",
+    ]) {
+      let assetCalls = 0;
+      const response = await handlePagesRequest(new Request(url), {
+        ASSETS: {
+          fetch: async () => {
+            assetCalls += 1;
+            return new Response("asset");
+          },
+        },
+      });
+
+      expect(assetCalls, url).toBe(1);
+      expect(response.status, url).toBe(200);
+    }
+  });
+
   test("preserves Pages asset metadata while filling absent security headers", async () => {
     const assetResponse = new Response("asset", {
       headers: { "x-pages-fixture": "untouched" },
