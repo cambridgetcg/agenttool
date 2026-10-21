@@ -1,4 +1,22 @@
 const SENSITIVE_ROOT_PREFIXES = ["/.git", "/.env", "/.dev.vars"];
+// Documents that belong to the repository, not the public sites. The frontend
+// release strips CLAUDE.md and README.md at every depth, and #509 withdrew the
+// root documents below from docs.agenttool.dev. When the current deployment has
+// no asset at a path, Cloudflare Pages answers from its asset-preservation
+// cache instead: the last published copy, kept per data center for up to a
+// week (`s-maxage=604800`), keyed by the full URL and not reached by a zone URL
+// purge. Refusing these paths before ASSETS makes a withdrawal take effect
+// with the release that makes it, rather than a week later.
+const REPOSITORY_ONLY_FILENAMES = new Set(["claude.md", "readme.md"]);
+const WITHDRAWN_ROOT_PATHS = new Set([
+  "/.heartbeat",
+  "/daddy.md",
+  "/development.md",
+  "/multiverse-of-logos.md",
+  "/now.md",
+  "/stack.md",
+  "/the-seat.md",
+]);
 const MAX_PATH_DECODE_PASSES = 8;
 const SURFACE_MANIFEST_PATH = "/.well-known/agent.json";
 const SURFACE_ORIENTATION_PATH = "/public/orientation";
@@ -303,6 +321,48 @@ export function isSensitiveRootPath(pathname) {
   return true;
 }
 
+function namesWithdrawnDocument(pathname) {
+  const segments = [];
+
+  for (const segment of pathname.replaceAll("\\", "/").split("/")) {
+    if (segment === "" || segment === ".") continue;
+    if (segment === "..") {
+      segments.pop();
+      continue;
+    }
+    segments.push(segment.toLowerCase());
+  }
+
+  const filename = segments.at(-1);
+  if (filename === undefined) return false;
+  return (
+    REPOSITORY_ONLY_FILENAMES.has(filename) ||
+    WITHDRAWN_ROOT_PATHS.has(`/${segments.join("/")}`)
+  );
+}
+
+/** True for a repository-only or withdrawn document under any encoding the
+ * sensitive fence accepts. Malformed or deeply nested encodings never reach
+ * this check: isSensitiveRootPath refuses them first. */
+export function isWithdrawnDocumentPath(pathname) {
+  let decoded = pathname;
+
+  for (let pass = 0; pass < MAX_PATH_DECODE_PASSES; pass += 1) {
+    if (namesWithdrawnDocument(decoded)) return true;
+
+    let next;
+    try {
+      next = decodeURIComponent(decoded);
+    } catch {
+      return false;
+    }
+    if (next === decoded) return false;
+    decoded = next;
+  }
+
+  return false;
+}
+
 export function sensitivePathNotFound(request) {
   return new Response(request.method === "HEAD" ? null : "Not Found\n", {
     status: 404,
@@ -563,6 +623,9 @@ export async function handlePagesRequest(request, env) {
 
   // This remains the first routing gate on every Pages origin.
   if (isSensitiveRootPath(url.pathname)) {
+    return sensitivePathNotFound(request);
+  }
+  if (isWithdrawnDocumentPath(url.pathname)) {
     return sensitivePathNotFound(request);
   }
 
