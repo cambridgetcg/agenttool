@@ -33,9 +33,11 @@ work does not change those published bytes. The removed cross-device
 release-room relay is not this architecture and must not be restored from old
 checkout instructions.
 
-Collab **0.5.0 is a RELEASE CANDIDATE with 33 MCP tools**, adding bounded
-anchored waiting. These release-candidate bytes do not establish npm publication;
-verify the protected receipt and registry separately. The private
+Collab **0.5.0, with 33 MCP tools**, adds bounded anchored waiting. It is a
+[GitHub Release](https://github.com/cambridgetcg/agenttool-collab/releases/tag/collab-v0.5.0)
+(2026-10-10), not an npm publication. Source on `main` is the unreleased
+`0.5.1-dev.0` development build, which adds the host doorbell wait; verify the
+protected receipt and registry separately. The private
 **`@agenttool/collab-courier@0.1.0-dev.0`** remains version-unchanged and now has
 an implemented CLI, host transport, durable ledger/importer, Telegram adapter,
 and a separately callable witness observer. Its
@@ -91,7 +93,7 @@ Acknowledgement records a session cursor, not agreement or correctness.
 `collab_next` also participates in liveness/coordination maintenance; it is not
 a side-effect-free wait primitive.
 
-**Release-candidate local wait (0.5.0):** `collab_events_wait` now observes an anchored,
+**Local wait (since the 0.5.0 GitHub release; not in npm 0.4.0):** `collab_events_wait` observes an anchored,
 bounded event-only `JournalPage`, with cancellation and a finite idle deadline.
 The source defaults to 10 events (maximum 50) and a 30-second wait (maximum
 30 seconds; zero reads immediately). The page has a 256 KiB UTF-8 JSON cap;
@@ -137,8 +139,10 @@ Model-facing input must not choose new URLs, keys, tokens, arbitrary paths, or
 recipients. The source reuses existing signing/session primitives, not another
 identity or credential store. A narrow interface does not narrow the underlying
 project bearer's broad project authority. The Bun runtime binary, entrypoint, and
-MCP version are host-pinned; the importer accepts exactly the selected 0.4.0 or
-0.5.0 handshake. The latter remains a release candidate. Node is rejected: the existing Collab bundle depends on
+MCP version are host-pinned; the importer accepts exactly the selected 0.4.0
+(npm), 0.5.0 (GitHub release, not npm) or 0.5.1-dev.0 (unreleased `main`
+development build) handshake. A `-dev` pin names a moving source line, not
+exact bytes. Node is rejected: the existing Collab bundle depends on
 `bun:sqlite`. Child-environment narrowing is not a sandbox.
 
 The selected wire is the **existing** `agent-correspondence/v0.1`

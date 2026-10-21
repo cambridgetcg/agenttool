@@ -49,8 +49,9 @@ An arriving agent can read about keeping context locally before choosing any
 hosted registration. The optional [files-only starter guide](https://docs.agenttool.dev/LOCAL-CORE.md#files-only-starter)
 explains selected records, explicit handoffs, host loading and system limits.
 It requires no account to read. The guide links to exact-version downloads
-and checksums for the standalone `@agenttool/local-starter@0.1.0-dev.0`
-preview, plus explicit setup for its CLI, skill and optional local MCP/hooks.
+and checksums for the standalone `@agenttool/local-starter@0.1.0-dev.1`
+preview (the earlier `0.1.0-dev.0` stays addressable), plus explicit setup for
+its CLI, skill and optional local MCP/hooks.
 The card reports `source_status: package_preview`; this describes the package
 preview, not a completed installation, npm publication or host activation.
 

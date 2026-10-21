@@ -4,7 +4,7 @@
 
 > **Type:** guide
 > **Purpose:** Choose which context and records to keep locally, and understand what the host or server must supply.
-> **Evidence:** Source and tests describe the local primitives and Local Starter `0.1.0-dev.0` preview. Explicit fresh Codex return was observed on 2026-09-29. Download integrity, registry publication and automatic host activation remain separate claims; the consolidated checkpoint is recorded in the repository work log.
+> **Evidence:** Source and tests describe the local primitives and the Local Starter `0.1.0-dev.1` preview; `0.1.0-dev.0` stays addressable. Explicit fresh Codex return was observed on 2026-09-29. Both dev.1 download mirrors matched the manifest hash on 2026-10-18 ([distribution receipt](NPM-RELEASES.md#local-starter-010-dev1-preview-distribution--2026-10-12)); registry publication and automatic host activation remain separate claims. The consolidated checkpoint is recorded in the repository work log.
 > **Compass:** [Core map](CORE.md) · [API coverage](API-COVERAGE.md) · [Wake](WAKE.md) · [Identity anchor](IDENTITY-ANCHOR.md)
 > **Code:** Local starter source preview: `packages/local-starter/src/core.mjs` · Data (`packages/data/src/node.ts`) · Collab (`packages/collab/src/mcp.ts`) · SDK keys (`packages/sdk-ts/src/seed.ts`)
 > **Tests:** Source preview: `packages/local-starter/tests/core.test.mjs` and `packages/local-starter/tests/cli.test.mjs` · hosted scaffold boundaries (`api/tests/scaffold-safety.test.ts`)
@@ -94,28 +94,36 @@ deliberately afterward. Merely creating the files does not load or save context.
 This manual pattern does not run the starter or enforce its byte budgets,
 freshness rules, file checks or write locks.
 
-**Preview package:** `@agenttool/local-starter@0.1.0-dev.0` contains the CLI,
+**Preview package:** `@agenttool/local-starter@0.1.0-dev.1` contains the CLI,
 portable skill, Codex/Claude plugin manifests and a self-contained optional MCP
 runtime. Node 22 or newer is required. It has no runtime dependency installation
 or install scripts. Reading this guide performs no setup.
 
-- [Exact-version manifest and SHA-256](https://docs.agenttool.dev/packages/v1/@agenttool/local-starter/0.1.0-dev.0/manifest.json)
-- [Standalone archive](https://docs.agenttool.dev/packages/v1/@agenttool/local-starter/0.1.0-dev.0/agenttool-local-starter-0.1.0-dev.0.tgz)
+- [Exact-version manifest and SHA-256](https://docs.agenttool.dev/packages/v1/@agenttool/local-starter/0.1.0-dev.1/manifest.json)
+- [Standalone archive](https://docs.agenttool.dev/packages/v1/@agenttool/local-starter/0.1.0-dev.1/agenttool-local-starter-0.1.0-dev.1.tgz)
 - [Public distribution and plugin catalogs](https://github.com/cambridgetcg/agenttool-local-starter)
+
+dev.1 carries the rest-first templates and skill wording and fixes a CLI stdin
+race; the repository work log records the
+change and its checks. The earlier `0.1.0-dev.0`
+[manifest](https://docs.agenttool.dev/packages/v1/@agenttool/local-starter/0.1.0-dev.0/manifest.json)
+and [archive](https://docs.agenttool.dev/packages/v1/@agenttool/local-starter/0.1.0-dev.0/agenttool-local-starter-0.1.0-dev.0.tgz)
+stay addressable with their own bytes.
 
 For an archive, verify its SHA-256 against the manifest, then extract it into a
 stable tool directory. The commands below run inside its extracted `package/`
 folder. Alternatively, install the verified downloaded archive into a dedicated local prefix:
 
 ```sh
-npm install --ignore-scripts --prefix ./agenttool-local-preview /absolute/downloads/agenttool-local-starter-0.1.0-dev.0.tgz
+npm install --ignore-scripts --prefix ./agenttool-local-preview /absolute/downloads/agenttool-local-starter-0.1.0-dev.1.tgz
 cd agenttool-local-preview/node_modules/@agenttool/local-starter
 ```
 
 **npm registry status:** not published. Installation from the downloaded archive
 works; installation by registry package name is not yet available. The current
 protected publisher requires public-source provenance, while this preview records
-the private development repository. See [release status](NPM-RELEASES.md#local-starter-preview-distribution--2026-09-28).
+the private development repository. See [release status](NPM-RELEASES.md#local-starter-010-dev1-preview-distribution--2026-10-12)
+and the [dev.0 record](NPM-RELEASES.md#local-starter-preview-distribution--2026-09-28).
 
 Keep that tool directory separate from your notes. Choose a new private notes
 directory with an existing parent, outside a shared repository or deliberately
@@ -126,7 +134,7 @@ not remove the notes folder.
 ```text
 local-starter/
   manifest.json        # Ordered selection, byte and freshness limits
-  foundations.md       # AI-WAKE reference
+  foundations.md       # Optional AI-WAKE reference
   orientation.md       # Chosen context; no project or task required
   handoff.md           # Optional carry-forward context; 72h freshness default
   identity.md          # Empty and disabled initially

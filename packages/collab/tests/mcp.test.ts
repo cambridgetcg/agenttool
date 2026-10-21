@@ -14,6 +14,7 @@ import { spawnSync } from "node:child_process";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import { EVIDENCE_REF_PREFIXES, EVIDENCE_REFS_DESCRIPTION } from "../src/protocol.js";
 import { CollabStore } from "../src/store.js";
+import { COLLAB_PACKAGE_VERSION } from "../src/version.js";
 
 const packageRoot = resolve(import.meta.dir, "..");
 const cleanup: Array<() => void | Promise<void>> = [];
@@ -1118,8 +1119,8 @@ describe("MCP surface", () => {
     const reviewer = new StdioMcpHarness(bundlePath, databasePath);
     cleanup.push(() => reviewer.close());
     const reviewerInit = await reviewer.initialize();
-    expect(implementerInit.serverInfo.version).toBe("0.5.0");
-    expect(reviewerInit.serverInfo.version).toBe("0.5.0");
+    expect(implementerInit.serverInfo.version).toBe(COLLAB_PACKAGE_VERSION);
+    expect(reviewerInit.serverInfo.version).toBe(COLLAB_PACKAGE_VERSION);
 
     const implementerJoin = await implementer.callTool("collab_session_start", {
       root_path: root,
