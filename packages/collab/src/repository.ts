@@ -11,7 +11,7 @@ import {
   statSync,
 } from "node:fs";
 import { resolve } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawnSync, type SpawnSyncOptions, type SpawnSyncReturns } from "node:child_process";
 import { CollabError } from "./errors.js";
 import type { RepoCheckpoint } from "./protocol.js";
 
@@ -26,10 +26,23 @@ const MAX_SUCCESSOR_INSPECT_MS = 5_000;
 const GIT_OBJECT_ID = /^[0-9a-f]{40,64}$/;
 const RAW_DIFF_HEADER = /^:([0-7]{6}) ([0-7]{6}) ([0-9a-f]{40,64}) ([0-9a-f]{40,64}) ([A-Z])$/;
 
+/** Local discovery bounds; injected clock/process runner keep deadline tests deterministic. */
+export interface RepositoryProbeOptions {
+  deadline?: number;
+  now?: () => number;
+  spawn?: (args: string[], options: SpawnSyncOptions) => SpawnSyncReturns<string | Buffer>;
+}
+
+export class RepositoryProbeTimeout extends Error {
+  constructor() { super("Repository discovery exhausted its Git time budget"); }
+}
+
 export interface RepositoryIdentity {
   requested_root_path: string;
   root_path: string;
   repository_key: string;
+  /** Portable routing alias; physical keys stay stable for older clients. */
+  portable_repository_key?: string | null;
   git_common_dir_hash: string | null;
   worktree_fingerprint: string;
   checkpoint: RepoCheckpoint;
@@ -49,6 +62,8 @@ export type SuccessorCommitInspection =
 export function inspectRepository(
   rootInput: string,
   explicitRepositoryKey?: string,
+  metadataOnly = false,
+  options: RepositoryProbeOptions & { portable?: boolean } = {},
 ): RepositoryIdentity {
   const requested = resolve(rootInput);
   if (!existsSync(requested) || !statSync(requested).isDirectory()) {
@@ -60,7 +75,7 @@ export function inspectRepository(
   }
 
   const requestedRoot = realpathSync(requested);
-  const topLevel = gitOutput(requestedRoot, ["rev-parse", "--show-toplevel"]);
+  const topLevel = gitOutput(requestedRoot, ["rev-parse", "--show-toplevel"], options);
   const rootPath = topLevel && existsSync(topLevel) ? realpathSync(topLevel) : requestedRoot;
   const explicitKey = explicitRepositoryKey?.trim();
 
@@ -85,11 +100,11 @@ export function inspectRepository(
   }
 
   const commonDirOutput =
-    gitOutput(rootPath, ["rev-parse", "--path-format=absolute", "--git-common-dir"])
-    ?? gitOutput(rootPath, ["rev-parse", "--git-common-dir"]);
+    gitOutput(rootPath, ["rev-parse", "--path-format=absolute", "--git-common-dir"], options)
+    ?? gitOutput(rootPath, ["rev-parse", "--git-common-dir"], options);
   const gitDirOutput =
-    gitOutput(rootPath, ["rev-parse", "--path-format=absolute", "--git-dir"])
-    ?? gitOutput(rootPath, ["rev-parse", "--git-dir"]);
+    gitOutput(rootPath, ["rev-parse", "--path-format=absolute", "--git-dir"], options)
+    ?? gitOutput(rootPath, ["rev-parse", "--git-dir"], options);
   if (!commonDirOutput || !gitDirOutput) {
     throw new CollabError(
       "git_identity_unavailable",
@@ -111,10 +126,63 @@ export function inspectRepository(
     requested_root_path: requestedRoot,
     root_path: rootPath,
     repository_key: repositoryKey,
+    portable_repository_key: explicitKey || options.portable === false ? null : portableRepositoryKey(rootPath, options),
     git_common_dir_hash: commonDirHash,
     worktree_fingerprint: fingerprint,
-    checkpoint: captureRepoCheckpoint(rootPath, id),
+    checkpoint: metadataOnly
+      ? { worktree_id: id, head_sha: null, branch: null, dirty: null, captured_at: new Date().toISOString() }
+      : captureRepoCheckpoint(rootPath, id),
   };
+}
+
+/** Local Git config/object inspection only; no transport or credential helper.
+ * Ambiguous, incomplete or unrelated histories retain their physical identity.
+ * A bounded probe throws RepositoryProbeTimeout instead of a negative result.
+ */
+export function portableRepositoryKey(rootPath: string, optionsOrDeadline: RepositoryProbeOptions | number = {}): string | null {
+  // Keep the original numeric-deadline call shape available to library callers.
+  const options = typeof optionsOrDeadline === "number" ? { deadline: optionsOrDeadline } : optionsOrDeadline;
+  // Avoid walking history at all for roots without a usable remote.
+  const origin = gitOutput(rootPath, ["config", "--get-all", "remote.origin.url"], options);
+  const remote = origin ?? gitOutput(rootPath, ["config", "--get-all", "remote.github.url"], options);
+  const canonical = remote ? canonicalRepositoryRemote(remote) : null;
+  if (!canonical || gitOutput(rootPath, ["rev-parse", "--is-shallow-repository"], options) !== "false") return null;
+  const roots = successorGit(rootPath, ["rev-list", "--max-parents=0", "HEAD"], MAX_GIT_OUTPUT, options);
+  if (roots.timed_out && options.deadline !== undefined) throw new RepositoryProbeTimeout();
+  if (!roots.ok) return null;
+  const root = roots.stdout.toString("utf8").trim();
+  if (!GIT_OBJECT_ID.test(root)) return null;
+  return `git-root-remote:v1:${sha256(`${root}\0${canonical}`)}`;
+}
+
+export function canonicalRepositoryRemote(value: string): string | null {
+  if (/[\s\x00-\x1f\x7f]/.test(value) || value.includes("::")
+    || (value.includes("://") && !/^(https?|ssh|git):\/\//i.test(value))) return null;
+  let host: string;
+  let path: string;
+  let port = "";
+  try {
+    if (/^(https?|ssh|git):\/\//i.test(value)) {
+      const url = new URL(value);
+      if (url.search || url.hash) return null;
+      host = url.hostname.toLowerCase();
+      path = url.pathname;
+      port = url.port && !((url.protocol === "ssh:" && url.port === "22")
+        || (url.protocol === "git:" && url.port === "9418")) ? `:${url.port}` : "";
+    } else {
+      const scp = /^(?:[^/@:]+@)?([^/:]+):(.+)$/.exec(value);
+      if (!scp) return null;
+      host = scp[1]!.toLowerCase();
+      path = scp[2]!;
+    }
+    path = path.replace(/^\/+|\/+$/g, "").replace(/\.git$/i, "");
+    if (!host || !path || path.split("/").some(part => !part || part === "." || part === "..")
+      || /[%\\?#]/.test(path)) return null;
+    // Credentials/usernames never participate or leave this function.
+    return `${host}${port}/${path.toLowerCase()}`;
+  } catch {
+    return null;
+  }
 }
 
 export function captureRepoCheckpoint(rootPath: string, id: string): RepoCheckpoint {
@@ -292,22 +360,27 @@ function realpathIfPresent(path: string): string {
   return existsSync(path) ? realpathSync(path) : resolve(path);
 }
 
-function gitOutput(rootPath: string, args: string[]): string | null {
-  const result = runGit(rootPath, args);
+function gitOutput(rootPath: string, args: string[], options: RepositoryProbeOptions = {}): string | null {
+  const result = runGit(rootPath, args, options);
+  if (result.timed_out && options.deadline !== undefined) throw new RepositoryProbeTimeout();
   if (!result.ok) return null;
   const value = result.stdout.trim();
   return value.length > 0 ? value : null;
 }
 
-function runGit(rootPath: string, args: string[]): { ok: boolean; stdout: string } {
-  const result = spawnSync("git", ["-C", rootPath, ...args], {
+function runGit(rootPath: string, args: string[], options: RepositoryProbeOptions): { ok: boolean; timed_out: boolean; stdout: string } {
+  const timeout = gitTimeout(options);
+  if (timeout <= 0) return { ok: false, timed_out: true, stdout: "" };
+  const result = spawnRepositoryGit(["-C", rootPath, ...args], {
     encoding: "utf8",
-    timeout: GIT_TIMEOUT_MS,
+    timeout,
     maxBuffer: MAX_GIT_OUTPUT,
     stdio: ["ignore", "pipe", "ignore"],
-  });
+    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+  }, options);
   return {
     ok: result.status === 0 && !result.error,
+    timed_out: (result.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT",
     stdout: typeof result.stdout === "string" ? result.stdout : "",
   };
 }
@@ -348,17 +421,30 @@ function successorGit(
   rootPath: string,
   args: string[],
   maxBuffer = MAX_GIT_OUTPUT,
-): { ok: boolean; stdout: Buffer } {
-  const result = spawnSync("git", ["-C", rootPath, ...SUCCESSOR_GIT_ARGS, ...args], {
-    timeout: GIT_TIMEOUT_MS,
+  options: RepositoryProbeOptions = {},
+): { ok: boolean; timed_out: boolean; stdout: Buffer } {
+  const timeout = gitTimeout(options);
+  if (timeout <= 0) return { ok: false, timed_out: true, stdout: Buffer.alloc(0) };
+  const result = spawnRepositoryGit(["-C", rootPath, ...SUCCESSOR_GIT_ARGS, ...args], {
+    timeout,
     maxBuffer,
     stdio: ["ignore", "pipe", "ignore"],
     env: successorGitEnv(),
-  });
+  }, options);
   return {
     ok: result.status === 0 && !result.error,
+    timed_out: (result.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT",
     stdout: Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.alloc(0),
   };
+}
+
+function spawnRepositoryGit(args: string[], options: SpawnSyncOptions, probe: RepositoryProbeOptions) {
+  return probe.spawn ? probe.spawn(args, options) : spawnSync("git", args, options);
+}
+
+function gitTimeout(options: RepositoryProbeOptions): number {
+  return options.deadline === undefined ? GIT_TIMEOUT_MS
+    : Math.min(GIT_TIMEOUT_MS, Math.ceil(options.deadline - (options.now ?? (() => performance.now()))()));
 }
 
 function successorGitExitCode(rootPath: string, args: string[]): number | null {

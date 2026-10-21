@@ -449,7 +449,7 @@ describe("agenttool.collab/0.2 session coordination", () => {
       expected_version: claim.version,
       message: "A partial implementation exists; verify it before continuing.",
     });
-    currentTime = new Date(currentTime.getTime() + 31_000);
+    currentTime = new Date(currentTime.getTime() + 6 * 60 * 60 * 1000 + 1);
 
     const blockedTakeover = errorFrom(() =>
       store.claimTaskForSession({
@@ -529,7 +529,7 @@ describe("agenttool.collab/0.2 session coordination", () => {
       expected_version: blockTask.version,
       ttl_seconds: 30,
     });
-    currentTime = new Date(currentTime.getTime() + 31_000);
+    currentTime = new Date(currentTime.getTime() + 6 * 60 * 60 * 1000 + 1);
 
     const released = store.recoverTaskForSession({
       ...recovery.credential,
@@ -1281,6 +1281,10 @@ describe("agenttool.collab/0.2 session coordination", () => {
       expected_version: liveTask.version,
       ttl_seconds: 3600,
     });
+    // A preserved journal can have independent TTL and session freshness.
+    // Pin the stale-holder/one-future-TTL case without changing either lease.
+    store.db.query("UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?")
+      .run(new Date(currentTime.getTime() - 6 * 60 * 60 * 1000 - 1).toISOString(), worker.session.id);
     expect(store.getTask(worker.workspace.id, expiredTask.id).effective_status).toBe(
       "recovery_required",
     );
@@ -1378,6 +1382,8 @@ describe("agenttool.collab/0.2 session coordination", () => {
       expected_version: liveTask.version,
       ttl_seconds: 3600,
     });
+    store.db.query("UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?")
+      .run(new Date(currentTime.getTime() - 6 * 60 * 60 * 1000 - 1).toISOString(), worker.session.id);
     const headBefore = store.getWorkspace(worker.workspace.id)!.event_head_sequence;
     // Fail on the very last write, after both leases went through their
     // release and recovery paths, so the rollback has to undo all of it.
@@ -1506,7 +1512,7 @@ describe("agenttool.collab/0.2 session coordination", () => {
       expected_version: blankTask.version,
       ttl_seconds: 30,
     });
-    currentTime = new Date(currentTime.getTime() + 31_000);
+    currentTime = new Date(currentTime.getTime() + 6 * 60 * 60 * 1000 + 1);
     expect(
       store.endSessionWithReleases({
         ...blank.credential,
@@ -1541,7 +1547,7 @@ describe("agenttool.collab/0.2 session coordination", () => {
       expected_version: task.version,
       ttl_seconds: 30,
     });
-    currentTime = new Date(currentTime.getTime() + 31_000);
+    currentTime = new Date(currentTime.getTime() + 6 * 60 * 60 * 1000 + 1);
 
     const released = store.recoverTaskForSession({
       ...holder.credential,

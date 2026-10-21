@@ -1,5 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/server";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { z } from "zod";
+import { defaultActor } from "./actor-default.js";
 import { anchorStatusForWorkspace } from "./anchor-status.js";
 import { CollabError } from "./errors.js";
 import {
@@ -79,6 +81,8 @@ export interface CollabMcpServerOptions {
     handle: SessionHandle;
     credential_file: string;
   };
+  /** Host-held credentials only, never a model-facing resume argument. */
+  resumed_sessions?: Record<string, BoundSession>;
 }
 
 interface BoundSession {
@@ -90,7 +94,19 @@ export function buildCollabMcpServer(
   store: CollabStore,
   options: CollabMcpServerOptions = {},
 ): McpServer {
-  let binding: BoundSession | null = options.resumed_session ?? null;
+  type Slot = { key: string; binding: BoundSession | null };
+  const slots = new Map<string, Slot>([["", { key: "", binding: options.resumed_session ?? null }]]);
+  for (const [key, binding] of Object.entries(options.resumed_sessions ?? {})) {
+    if (!key || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(key)) {
+      throw new CollabError("invalid_binding_key", "A named binding requires a valid non-empty key");
+    }
+    slots.set(key, { key, binding });
+  }
+  const requestSlot = new AsyncLocalStorage<Slot>();
+  const state = {
+    get binding() { return requestSlot.getStore()!.binding; },
+    set binding(value: BoundSession | null) { requestSlot.getStore()!.binding = value; },
+  };
   const server = new McpServer(
     { name: "agenttool-collab", version: COLLAB_PACKAGE_VERSION },
     {
@@ -99,11 +115,14 @@ export function buildCollabMcpServer(
         `Collab ${COLLAB_PACKAGE_VERSION}: collab_events_wait offers bounded read-only anchored observation for an already running host, ` +
         "without acknowledging, refreshing presence, or renewing leases; continue from next_anchor, never head. " +
         "Local-first coordination journal for honest exchange among independent coding-agent sessions. " +
-        "Use collab_session_start once per credential-bound MCP process, then collab_next; a host restart resumes from the " +
+        "Use collab_session_start once per default or named binding_key, then collab_next. Named children require an explicit actor and parent_session_id; " +
+        "send their binding_key on every call. Selectors are cooperative routing, not authenticated subagent isolation. " +
+        "Default-slot actor can use Claude metadata only with matching selected PID, messaging socket and process start time. A host restart resumes from the " +
         "mode-0600 credential file without exposing its bearer token to the model. Exchange observations, " +
         "inferences, proposals, or authorised decisions as structured reports with evidence, confidence, " +
-        "limits, and explicit authority scope. Claim before editing overlapping path scopes and renew long " +
-        "work. An advisory coordination lease is not ownership, a filesystem lock, or authority. Edit-task " +
+        "limits, and explicit authority scope. Claim before editing overlapping path scopes. Session leases remain live while their " +
+        "session is live (6 hours since activity); optional renew is lease-fenced, not version-gated. " +
+        "An advisory coordination lease is not ownership, a filesystem lock, or authority. Edit-task " +
         "completion is actor-reported and remains pending until a distinct session accepts it. Challenges " +
         "remain append-only disagreement; acknowledgement means processed, not agreed. Expired session " +
         "leases require explicit recovery. Git checkpoints are local evidence, not attribution or atomic " +
@@ -116,6 +135,35 @@ export function buildCollabMcpServer(
         "it never contacts a chain, broadcasts, spends funds, or turns an anchor into truth or authority.",
     },
   );
+
+  // Select once per request. Async-local slots keep waits/cursor writes from
+  // switching credentials when another child calls the same MCP endpoint.
+  // This is cooperative routing, not isolation from other endpoint callers.
+  const register = server.registerTool.bind(server);
+  server.registerTool = ((...[name, config, callback]: Parameters<McpServer["registerTool"]>) => register(name, {
+    ...config,
+    inputSchema: {
+      ...config.inputSchema,
+      binding_key: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/).optional()
+        .describe("Cooperative subagent binding selector; omit for the original default binding. Not authentication."),
+    },
+  }, async (input: Record<string, unknown>, ctx: Parameters<typeof callback>[1]) => {
+    const { binding_key, ...args } = input as Record<string, unknown>;
+    if (binding_key !== undefined && (typeof binding_key !== "string"
+      || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(binding_key))) {
+      return failure(new CollabError("invalid_binding_key", "Invalid binding selector"));
+    }
+    const key = binding_key ?? "";
+    let slot = slots.get(key);
+    if (key && (!slot || !slot.binding) && name !== "collab_session_start") {
+      return failure(new CollabError("session_not_bound", "The selected child binding is not bound"));
+    }
+    if (!slot) {
+      slot = { key, binding: null };
+      slots.set(key, slot);
+    }
+    return requestSlot.run(slot, () => callback(args, ctx));
+  })) as McpServer["registerTool"];
 
   const waitShutdown = new AbortController();
   let activeWaits = 0;
@@ -131,6 +179,7 @@ export function buildCollabMcpServer(
   };
 
   const boundCredential = (allowCursorRecovery = false) => {
+    const binding = state.binding;
     if (!binding) {
       throw new CollabError(
         "session_not_bound",
@@ -147,6 +196,7 @@ export function buildCollabMcpServer(
     return binding.handle.credential;
   };
   const requireWorkspace = (id: string) => {
+    const binding = state.binding;
     if (binding && binding.handle.workspace.id !== id) {
       throw new CollabError(
         "session_workspace_mismatch",
@@ -249,26 +299,32 @@ export function buildCollabMcpServer(
       annotations: localMutation,
       inputSchema: {
         root_path: z.string().min(1),
-        actor: actorLabel,
+        actor: actorLabel.optional().describe("Defaults to verified owning Claude process metadata; named children require an explicit actor."),
         role: z.string().max(200).optional(),
         parent_session_id: z.string().min(1).optional(),
         repository_key: z.string().min(1).max(1000).optional(),
       },
     },
     async (input) => call(() => {
-      if (binding) {
+      if (state.binding) {
         throw new CollabError(
           "session_already_bound",
           "This MCP process already has a bound session",
-          { session_id: binding.handle.session.id },
+          { session_id: state.binding.handle.session.id },
         );
       }
-      const handle = store.startSession(input);
+      if (requestSlot.getStore()!.key && !input.parent_session_id) {
+        throw new CollabError("parent_session_required", "A named child binding requires parent_session_id");
+      }
+      if (requestSlot.getStore()!.key && input.actor === undefined) {
+        throw new CollabError("actor_required", "A named child binding requires its own explicit actor");
+      }
+      const handle = store.startSession({ ...input, actor: input.actor ?? defaultActor() });
       const credentialFile = store.defaultSessionCredentialPath(handle.session.id);
       try {
         const path = writeSessionCredentialFile(credentialFile, handle.credential);
-        binding = { handle, credential_file: path };
-        return publicSessionBinding(binding);
+        state.binding = { handle, credential_file: path };
+        return publicSessionBinding(state.binding);
       } catch (error) {
         try {
           store.endSession({ ...handle.credential, reason: "credential_file_write_failed" });
@@ -305,7 +361,7 @@ export function buildCollabMcpServer(
       },
     },
     async ({ reason, release_leases, release_summary }) => call(() => {
-      const current = binding;
+      const current = state.binding;
       if (!current) throw new CollabError("session_not_bound", "No session is bound");
       const ended = store.endSessionWithReleases({
         ...current.handle.credential,
@@ -313,7 +369,7 @@ export function buildCollabMcpServer(
         release_leases,
         release_summary,
       });
-      binding = null;
+      state.binding = null;
       removeSessionCredentialFile(current.credential_file);
       return {
         session: ended.session,
@@ -339,11 +395,11 @@ export function buildCollabMcpServer(
       },
     },
     async (input) => call(() => {
-      if (binding) {
+      if (state.binding) {
         throw new CollabError(
           "session_already_bound",
           "A bound MCP process cannot open or register another workspace",
-          { session_id: binding.handle.session.id },
+          { session_id: state.binding.handle.session.id },
         );
       }
       return { workspace: store.openWorkspace(input) };
@@ -385,7 +441,7 @@ export function buildCollabMcpServer(
     },
     async ({ workspace_id, actor, after_sequence, known_cursor, event_limit }) => call(() => {
       requireWorkspace(workspace_id);
-      return binding
+      return state.binding
         ? store.nextForSession({
           ...boundCredential(),
           known_cursor,
@@ -421,6 +477,7 @@ export function buildCollabMcpServer(
         anchor,
         expected_cursor_version,
       });
+      const binding = state.binding;
       if (binding) {
         binding.handle = {
           ...binding.handle,
@@ -458,6 +515,7 @@ export function buildCollabMcpServer(
     async ({ workspace_id, ...input }) => call(() => {
       requireWorkspace(workspace_id);
       const session = store.resetSessionCursor({ ...boundCredential(true), ...input });
+      const binding = state.binding;
       if (binding) {
         binding.handle = {
           ...binding.handle,
@@ -502,7 +560,7 @@ export function buildCollabMcpServer(
     async ({ workspace_id, actor, task_id, ...input }) => call(() => {
       requireWorkspace(workspace_id);
       if (
-        !binding
+        !state.binding
         && (
           input.work_mode !== undefined
           || input.completion_policy !== undefined
@@ -514,7 +572,7 @@ export function buildCollabMcpServer(
           "work_mode, completion_policy, and expected_base_sha require a bound v0.2 session",
         );
       }
-      const task = binding
+      const task = state.binding
         ? store.createTaskForSession({ ...boundCredential(), ...input, id: task_id })
         : store.createTask({
             workspace_id,
@@ -572,7 +630,7 @@ export function buildCollabMcpServer(
     },
     async ({ workspace_id, actor, ...input }) => call(() => {
       requireWorkspace(workspace_id);
-      const task = binding
+      const task = state.binding
         ? store.claimTaskForSession({ ...boundCredential(), ...input })
         : store.claimTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
       return { task };
@@ -609,13 +667,13 @@ export function buildCollabMcpServer(
     "collab_task_renew",
     {
       title: "Renew a live task lease",
-      description: "Extend the current lease; renewal never shortens it.",
+      description: "Extend the current lease without version-gating or task-version churn; renewal never shortens it. Credential and lease fencing still apply.",
       annotations: localRetrySafeMutation,
-      inputSchema: leaseMutationSchema({ ttl_seconds: ttlSeconds }),
+      inputSchema: leaseMutationSchema({ ttl_seconds: ttlSeconds, expected_version: expectedVersion.optional() }),
     },
     async ({ workspace_id, actor, ...input }) => call(() => {
       requireWorkspace(workspace_id);
-      const task = binding
+      const task = state.binding
         ? store.renewLeaseForSession({ ...boundCredential(), ...input })
         : store.renewLease({ workspace_id, actor: requireLegacyActor(actor), ...input });
       return { task };
@@ -633,7 +691,7 @@ export function buildCollabMcpServer(
     },
     async ({ workspace_id, actor, ...input }) => call(() => {
       requireWorkspace(workspace_id);
-      const task = binding
+      const task = state.binding
         ? store.progressTaskForSession({ ...boundCredential(), ...input })
         : store.progressTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
       return { task };
@@ -651,7 +709,7 @@ export function buildCollabMcpServer(
     },
     async ({ workspace_id, actor, ...input }) => call(() => {
       requireWorkspace(workspace_id);
-      const task = binding
+      const task = state.binding
         ? store.releaseTaskForSession({ ...boundCredential(), ...input })
         : store.releaseTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
       return { task };
@@ -668,7 +726,7 @@ export function buildCollabMcpServer(
     },
     async ({ workspace_id, actor, ...input }) => call(() => {
       requireWorkspace(workspace_id);
-      const task = binding
+      const task = state.binding
         ? store.blockTaskForSession({ ...boundCredential(), ...input })
         : store.blockTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
       return { task };
@@ -692,7 +750,7 @@ export function buildCollabMcpServer(
     },
     async ({ workspace_id, actor, ...input }) => call(() => {
       requireWorkspace(workspace_id);
-      const task = binding
+      const task = state.binding
         ? store.unblockTaskForSession({ ...boundCredential(), ...input })
         : store.unblockTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
       return { task };
@@ -716,7 +774,7 @@ export function buildCollabMcpServer(
     },
     async ({ workspace_id, actor, ...input }) => call(() => {
       requireWorkspace(workspace_id);
-      return binding
+      return state.binding
         ? store.attachArtifactForSession({ ...boundCredential(), ...input })
         : store.attachArtifact({ workspace_id, actor: requireLegacyActor(actor), ...input });
     }),
@@ -743,13 +801,13 @@ export function buildCollabMcpServer(
     },
     async ({ workspace_id, actor, ...input }) => call(() => {
       requireWorkspace(workspace_id);
-      if (!binding && input.review_requested_session_id !== undefined) {
+      if (!state.binding && input.review_requested_session_id !== undefined) {
         throw new CollabError(
           "session_required_for_review_request",
           "review_requested_session_id requires a bound v0.2 session",
         );
       }
-      const task = binding
+      const task = state.binding
         ? store.completeTaskForSession({ ...boundCredential(), ...input })
         : store.completeTask({
             workspace_id,
@@ -876,7 +934,7 @@ export function buildCollabMcpServer(
     },
     async ({ workspace_id, actor, authority_scope, authority_basis, ...input }) => call(() => {
       requireWorkspace(workspace_id);
-      if (binding) {
+      if (state.binding) {
         return {
           report: store.appendReportForSession({
             ...boundCredential(),
@@ -915,7 +973,7 @@ export function buildCollabMcpServer(
     },
     async ({ workspace_id, actor, to_actor, to_session_id, ...input }) => call(() => {
       requireWorkspace(workspace_id);
-      return binding
+      return state.binding
         ? store.offerHandoffForSession({
             ...boundCredential(),
             ...input,
@@ -949,7 +1007,7 @@ export function buildCollabMcpServer(
     },
     async ({ workspace_id, actor, ...input }) => call(() => {
       requireWorkspace(workspace_id);
-      return binding
+      return state.binding
         ? store.respondHandoffForSession({ ...boundCredential(), ...input })
         : store.respondHandoff({
             workspace_id,
@@ -1103,6 +1161,9 @@ export function buildCollabMcpServer(
       anchorStatusForWorkspace(store, workspace_id)),
   );
 
+  // Only Collab's own registrations are multiplexed; preserve the SDK method
+  // for callers adding their own tools after building this server.
+  server.registerTool = register;
   return server;
 }
 

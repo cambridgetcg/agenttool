@@ -28291,8 +28291,14 @@ function defaultDatabasePath(env = process.env) {
 function resolveDatabasePath(env = process.env) {
   return env.AGENTOOL_COLLAB_DB ?? defaultDatabasePath(env);
 }
-// src/anchor-status.ts
+
+// src/mcp.ts
+import { AsyncLocalStorage } from "async_hooks";
+// src/actor-default.ts
 import { closeSync, constants, fstatSync, openSync, readSync } from "fs";
+import { homedir as homedir2 } from "os";
+import { basename, join as join2 } from "path";
+import { spawnSync } from "child_process";
 
 // src/errors.ts
 class CollabError extends Error {
@@ -28306,7 +28312,57 @@ class CollabError extends Error {
   }
 }
 
+// src/actor-default.ts
+function defaultActor(env = process.env, parentPid = process.ppid) {
+  const socketPid = env.CLAUDE_CODE_MESSAGING_SOCKET ? /^(\d+)\.sock$/.exec(basename(env.CLAUDE_CODE_MESSAGING_SOCKET))?.[1] : undefined;
+  const pid = env.AGENTOOL_COLLAB_CLAUDE_PID ?? String(parentPid);
+  const unavailable = () => new CollabError("actor_required", "Supply actor explicitly or configure the owning Claude session PID with a valid display name");
+  if (!/^[1-9]\d{0,9}$/.test(pid) || socketPid !== pid)
+    throw unavailable();
+  let fd;
+  try {
+    const path = join2(env.CLAUDE_CONFIG_DIR ?? join2(homedir2(), ".claude"), "sessions", `${pid}.json`);
+    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const stat = fstatSync(fd);
+    if (!stat.isFile() || stat.size > 64 * 1024 || process.getuid && stat.uid !== process.getuid()) {
+      throw unavailable();
+    }
+    const bytes = Buffer.alloc(64 * 1024 + 1);
+    let length = 0;
+    while (length < bytes.length) {
+      const count = readSync(fd, bytes, length, bytes.length - length, null);
+      if (!count)
+        break;
+      length += count;
+    }
+    if (length > 64 * 1024)
+      throw unavailable();
+    const value = JSON.parse(bytes.subarray(0, length).toString("utf8"));
+    if (value.pid !== Number(pid) || typeof value.name !== "string" || value.messagingSocketPath !== env.CLAUDE_CODE_MESSAGING_SOCKET || typeof value.procStart !== "string" || !value.procStart)
+      throw unavailable();
+    const started = spawnSync("ps", ["-o", "lstart=", "-p", pid], {
+      encoding: "utf8",
+      timeout: 1000,
+      maxBuffer: 1024,
+      stdio: ["ignore", "pipe", "ignore"],
+      env: { PATH: process.env.PATH, LC_ALL: "C", TZ: "UTC" }
+    });
+    if (started.status !== 0 || started.error || started.stdout.trim() !== value.procStart)
+      throw unavailable();
+    const name = value.name.trim();
+    if (!name || name.length > 200 || /[\x00-\x1f\x7f]/.test(name))
+      throw unavailable();
+    return name;
+  } catch {
+    throw unavailable();
+  } finally {
+    if (fd !== undefined)
+      closeSync(fd);
+  }
+}
+
 // src/anchor-status.ts
+import { closeSync as closeSync2, constants as constants2, fstatSync as fstatSync2, openSync as openSync2, readSync as readSync2 } from "fs";
 var ANCHOR_LEDGER_PROTOCOL = "agenttool.collab-zerone-ledger/0.1";
 var SCOPE_NOTE = "Anchor status reflects the local sidecar ledger only; it never proves remote chain state." + " Use @agenttool/collab-zerone `verify --workspace <id> --check-chain` for on-chain confirmation.";
 var MAX_LEDGER_BYTES = 4 * 1024 * 1024;
@@ -28344,18 +28400,18 @@ function toAnchorRef(entry) {
 function readLedgerFile(path) {
   let fd;
   try {
-    fd = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK);
+    fd = openSync2(path, constants2.O_RDONLY | constants2.O_NONBLOCK);
   } catch {
     return null;
   }
   try {
-    const stat = fstatSync(fd);
+    const stat = fstatSync2(fd);
     if (!stat.isFile() || stat.size > MAX_LEDGER_BYTES)
       return null;
     const buffer = Buffer.alloc(Number(stat.size));
     let offset = 0;
     while (offset < buffer.length) {
-      const read = readSync(fd, buffer, offset, buffer.length - offset, offset);
+      const read = readSync2(fd, buffer, offset, buffer.length - offset, offset);
       if (read <= 0)
         break;
       offset += read;
@@ -28364,7 +28420,7 @@ function readLedgerFile(path) {
   } catch {
     return null;
   } finally {
-    closeSync(fd);
+    closeSync2(fd);
   }
 }
 function anchorStatusForWorkspace(store, workspaceId, ledgerPath) {
@@ -28549,13 +28605,13 @@ var MAX_WAIT_ANCHOR_BYTES = 8 * 1024 * 1024;
 // src/session-file.ts
 import {
   chmodSync,
-  closeSync as closeSync2,
+  closeSync as closeSync3,
   existsSync,
   fsyncSync,
   linkSync,
   lstatSync,
   mkdirSync,
-  openSync as openSync2,
+  openSync as openSync3,
   readFileSync,
   renameSync,
   unlinkSync,
@@ -28615,13 +28671,13 @@ function writeSessionCredentialFile(pathInput, credential, options = {}) {
       last_cursor: credential.last_cursor
     };
     temporary = `${path}.tmp-${randomUUID()}`;
-    const descriptor = openSync2(temporary, "wx", 384);
+    const descriptor = openSync3(temporary, "wx", 384);
     try {
       writeFileSync(descriptor, `${JSON.stringify(payload)}
 `, "utf8");
       fsyncSync(descriptor);
     } finally {
-      closeSync2(descriptor);
+      closeSync3(descriptor);
     }
     if (options.replace) {
       renameSync(temporary, path);
@@ -28731,10 +28787,48 @@ var localDestructiveMutation = {
   openWorldHint: false
 };
 function buildCollabMcpServer(store, options = {}) {
-  let binding = options.resumed_session ?? null;
+  const slots = new Map([["", { key: "", binding: options.resumed_session ?? null }]]);
+  for (const [key2, binding] of Object.entries(options.resumed_sessions ?? {})) {
+    if (!key2 || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(key2)) {
+      throw new CollabError("invalid_binding_key", "A named binding requires a valid non-empty key");
+    }
+    slots.set(key2, { key: key2, binding });
+  }
+  const requestSlot = new AsyncLocalStorage;
+  const state = {
+    get binding() {
+      return requestSlot.getStore().binding;
+    },
+    set binding(value) {
+      requestSlot.getStore().binding = value;
+    }
+  };
   const server = new McpServer({ name: "agenttool-collab", version: COLLAB_PACKAGE_VERSION }, {
     capabilities: { tools: {} },
-    instructions: `Collab ${COLLAB_PACKAGE_VERSION}: collab_events_wait offers bounded read-only anchored observation for an already running host, ` + "without acknowledging, refreshing presence, or renewing leases; continue from next_anchor, never head. " + "Local-first coordination journal for honest exchange among independent coding-agent sessions. " + "Use collab_session_start once per credential-bound MCP process, then collab_next; a host restart resumes from the " + "mode-0600 credential file without exposing its bearer token to the model. Exchange observations, " + "inferences, proposals, or authorised decisions as structured reports with evidence, confidence, " + "limits, and explicit authority scope. Claim before editing overlapping path scopes and renew long " + "work. An advisory coordination lease is not ownership, a filesystem lock, or authority. Edit-task " + "completion is actor-reported and remains pending until a distinct session accepts it. Challenges " + "remain append-only disagreement; acknowledgement means processed, not agreed. Expired session " + "leases require explicit recovery. Git checkpoints are local evidence, not attribution or atomic " + "Git/SQLite locks. Store concise coordination facts only\u2014never credentials, prompts, transcripts, " + "chain-of-thought, or sensitive source content. Cursor rollback recovery must be enabled by the host " + "and completed with an audited cursor reset before session mutations resume. The host owns spawning, " + "wakeups, waiting, and stopping. The separate collab_session_join/list/heartbeat/leave tools preserve " + "the public v0.2 self-declared presence plane; they provide routing hints only and never authenticate a caller. " + "The read-only collab_anchor_status tool can compare this journal with an optional local Zerone witness sidecar; " + "it never contacts a chain, broadcasts, spends funds, or turns an anchor into truth or authority."
+    instructions: `Collab ${COLLAB_PACKAGE_VERSION}: collab_events_wait offers bounded read-only anchored observation for an already running host, ` + "without acknowledging, refreshing presence, or renewing leases; continue from next_anchor, never head. " + "Local-first coordination journal for honest exchange among independent coding-agent sessions. " + "Use collab_session_start once per default or named binding_key, then collab_next. Named children require an explicit actor and parent_session_id; " + "send their binding_key on every call. Selectors are cooperative routing, not authenticated subagent isolation. " + "Default-slot actor can use Claude metadata only with matching selected PID, messaging socket and process start time. A host restart resumes from the " + "mode-0600 credential file without exposing its bearer token to the model. Exchange observations, " + "inferences, proposals, or authorised decisions as structured reports with evidence, confidence, " + "limits, and explicit authority scope. Claim before editing overlapping path scopes. Session leases remain live while their " + "session is live (6 hours since activity); optional renew is lease-fenced, not version-gated. " + "An advisory coordination lease is not ownership, a filesystem lock, or authority. Edit-task " + "completion is actor-reported and remains pending until a distinct session accepts it. Challenges " + "remain append-only disagreement; acknowledgement means processed, not agreed. Expired session " + "leases require explicit recovery. Git checkpoints are local evidence, not attribution or atomic " + "Git/SQLite locks. Store concise coordination facts only\u2014never credentials, prompts, transcripts, " + "chain-of-thought, or sensitive source content. Cursor rollback recovery must be enabled by the host " + "and completed with an audited cursor reset before session mutations resume. The host owns spawning, " + "wakeups, waiting, and stopping. The separate collab_session_join/list/heartbeat/leave tools preserve " + "the public v0.2 self-declared presence plane; they provide routing hints only and never authenticate a caller. " + "The read-only collab_anchor_status tool can compare this journal with an optional local Zerone witness sidecar; " + "it never contacts a chain, broadcasts, spends funds, or turns an anchor into truth or authority."
+  });
+  const register2 = server.registerTool.bind(server);
+  server.registerTool = (...[name, config2, callback]) => register2(name, {
+    ...config2,
+    inputSchema: {
+      ...config2.inputSchema,
+      binding_key: exports_external.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/).optional().describe("Cooperative subagent binding selector; omit for the original default binding. Not authentication.")
+    }
+  }, async (input, ctx) => {
+    const { binding_key, ...args } = input;
+    if (binding_key !== undefined && (typeof binding_key !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(binding_key))) {
+      return failure(new CollabError("invalid_binding_key", "Invalid binding selector"));
+    }
+    const key2 = binding_key ?? "";
+    let slot = slots.get(key2);
+    if (key2 && (!slot || !slot.binding) && name !== "collab_session_start") {
+      return failure(new CollabError("session_not_bound", "The selected child binding is not bound"));
+    }
+    if (!slot) {
+      slot = { key: key2, binding: null };
+      slots.set(key2, slot);
+    }
+    return requestSlot.run(slot, () => callback(args, ctx));
   });
   const waitShutdown = new AbortController;
   let activeWaits = 0;
@@ -28749,6 +28843,7 @@ function buildCollabMcpServer(store, options = {}) {
     onclose?.();
   };
   const boundCredential = (allowCursorRecovery = false) => {
+    const binding = state.binding;
     if (!binding) {
       throw new CollabError("session_not_bound", "Start a credential-bound session first or provide legacy actor mode explicitly");
     }
@@ -28758,6 +28853,7 @@ function buildCollabMcpServer(store, options = {}) {
     return binding.handle.credential;
   };
   const requireWorkspace = (id) => {
+    const binding = state.binding;
     if (binding && binding.handle.workspace.id !== id) {
       throw new CollabError("session_workspace_mismatch", "The bound session belongs to another workspace");
     }
@@ -28820,21 +28916,27 @@ function buildCollabMcpServer(store, options = {}) {
     annotations: localMutation,
     inputSchema: {
       root_path: exports_external.string().min(1),
-      actor: actorLabel,
+      actor: actorLabel.optional().describe("Defaults to verified owning Claude process metadata; named children require an explicit actor."),
       role: exports_external.string().max(200).optional(),
       parent_session_id: exports_external.string().min(1).optional(),
       repository_key: exports_external.string().min(1).max(1000).optional()
     }
   }, async (input) => call(() => {
-    if (binding) {
-      throw new CollabError("session_already_bound", "This MCP process already has a bound session", { session_id: binding.handle.session.id });
+    if (state.binding) {
+      throw new CollabError("session_already_bound", "This MCP process already has a bound session", { session_id: state.binding.handle.session.id });
     }
-    const handle = store.startSession(input);
+    if (requestSlot.getStore().key && !input.parent_session_id) {
+      throw new CollabError("parent_session_required", "A named child binding requires parent_session_id");
+    }
+    if (requestSlot.getStore().key && input.actor === undefined) {
+      throw new CollabError("actor_required", "A named child binding requires its own explicit actor");
+    }
+    const handle = store.startSession({ ...input, actor: input.actor ?? defaultActor() });
     const credentialFile = store.defaultSessionCredentialPath(handle.session.id);
     try {
       const path = writeSessionCredentialFile(credentialFile, handle.credential);
-      binding = { handle, credential_file: path };
-      return publicSessionBinding(binding);
+      state.binding = { handle, credential_file: path };
+      return publicSessionBinding(state.binding);
     } catch (error51) {
       try {
         store.endSession({ ...handle.credential, reason: "credential_file_write_failed" });
@@ -28852,7 +28954,7 @@ function buildCollabMcpServer(store, options = {}) {
       release_summary: exports_external.string().max(2000).optional().describe("Release summary and recovery note recorded for each released lease; requires release_leases: true. " + "Defaults to reason")
     }
   }, async ({ reason, release_leases, release_summary }) => call(() => {
-    const current = binding;
+    const current = state.binding;
     if (!current)
       throw new CollabError("session_not_bound", "No session is bound");
     const ended = store.endSessionWithReleases({
@@ -28861,7 +28963,7 @@ function buildCollabMcpServer(store, options = {}) {
       release_leases,
       release_summary
     });
-    binding = null;
+    state.binding = null;
     removeSessionCredentialFile(current.credential_file);
     return {
       session: ended.session,
@@ -28881,8 +28983,8 @@ function buildCollabMcpServer(store, options = {}) {
       repository_key: exports_external.string().min(1).max(1000).optional()
     }
   }, async (input) => call(() => {
-    if (binding) {
-      throw new CollabError("session_already_bound", "A bound MCP process cannot open or register another workspace", { session_id: binding.handle.session.id });
+    if (state.binding) {
+      throw new CollabError("session_already_bound", "A bound MCP process cannot open or register another workspace", { session_id: state.binding.handle.session.id });
     }
     return { workspace: store.openWorkspace(input) };
   }));
@@ -28905,7 +29007,7 @@ function buildCollabMcpServer(store, options = {}) {
     }
   }, async ({ workspace_id, actor, after_sequence, known_cursor, event_limit }) => call(() => {
     requireWorkspace(workspace_id);
-    return binding ? store.nextForSession({
+    return state.binding ? store.nextForSession({
       ...boundCredential(),
       known_cursor,
       event_limit: event_limit ?? DEFAULT_MCP_NEXT_EVENT_LIMIT,
@@ -28928,6 +29030,7 @@ function buildCollabMcpServer(store, options = {}) {
       anchor,
       expected_cursor_version
     });
+    const binding = state.binding;
     if (binding) {
       binding.handle = {
         ...binding.handle,
@@ -28955,6 +29058,7 @@ function buildCollabMcpServer(store, options = {}) {
   }, async ({ workspace_id, ...input }) => call(() => {
     requireWorkspace(workspace_id);
     const session = store.resetSessionCursor({ ...boundCredential(true), ...input });
+    const binding = state.binding;
     if (binding) {
       binding.handle = {
         ...binding.handle,
@@ -28988,10 +29092,10 @@ function buildCollabMcpServer(store, options = {}) {
     }
   }, async ({ workspace_id, actor, task_id, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    if (!binding && (input.work_mode !== undefined || input.completion_policy !== undefined || input.expected_base_sha !== undefined)) {
+    if (!state.binding && (input.work_mode !== undefined || input.completion_policy !== undefined || input.expected_base_sha !== undefined)) {
       throw new CollabError("session_required_for_v2_task_options", "work_mode, completion_policy, and expected_base_sha require a bound v0.2 session");
     }
-    const task = binding ? store.createTaskForSession({ ...boundCredential(), ...input, id: task_id }) : store.createTask({
+    const task = state.binding ? store.createTaskForSession({ ...boundCredential(), ...input, id: task_id }) : store.createTask({
       workspace_id,
       actor: requireLegacyActor(actor),
       ...input,
@@ -29028,7 +29132,7 @@ function buildCollabMcpServer(store, options = {}) {
     }
   }, async ({ workspace_id, actor, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    const task = binding ? store.claimTaskForSession({ ...boundCredential(), ...input }) : store.claimTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
+    const task = state.binding ? store.claimTaskForSession({ ...boundCredential(), ...input }) : store.claimTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
     return { task };
   }));
   server.registerTool("collab_task_recover", {
@@ -29053,12 +29157,12 @@ function buildCollabMcpServer(store, options = {}) {
   }));
   server.registerTool("collab_task_renew", {
     title: "Renew a live task lease",
-    description: "Extend the current lease; renewal never shortens it.",
+    description: "Extend the current lease without version-gating or task-version churn; renewal never shortens it. Credential and lease fencing still apply.",
     annotations: localRetrySafeMutation,
-    inputSchema: leaseMutationSchema({ ttl_seconds: ttlSeconds })
+    inputSchema: leaseMutationSchema({ ttl_seconds: ttlSeconds, expected_version: expectedVersion.optional() })
   }, async ({ workspace_id, actor, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    const task = binding ? store.renewLeaseForSession({ ...boundCredential(), ...input }) : store.renewLease({ workspace_id, actor: requireLegacyActor(actor), ...input });
+    const task = state.binding ? store.renewLeaseForSession({ ...boundCredential(), ...input }) : store.renewLease({ workspace_id, actor: requireLegacyActor(actor), ...input });
     return { task };
   }));
   server.registerTool("collab_task_progress", {
@@ -29068,7 +29172,7 @@ function buildCollabMcpServer(store, options = {}) {
     inputSchema: leaseMutationSchema({ message: exports_external.string().min(1).max(2000) })
   }, async ({ workspace_id, actor, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    const task = binding ? store.progressTaskForSession({ ...boundCredential(), ...input }) : store.progressTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
+    const task = state.binding ? store.progressTaskForSession({ ...boundCredential(), ...input }) : store.progressTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
     return { task };
   }));
   server.registerTool("collab_task_release", {
@@ -29078,7 +29182,7 @@ function buildCollabMcpServer(store, options = {}) {
     inputSchema: leaseMutationSchema({ summary: exports_external.string().max(2000).optional() })
   }, async ({ workspace_id, actor, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    const task = binding ? store.releaseTaskForSession({ ...boundCredential(), ...input }) : store.releaseTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
+    const task = state.binding ? store.releaseTaskForSession({ ...boundCredential(), ...input }) : store.releaseTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
     return { task };
   }));
   server.registerTool("collab_task_block", {
@@ -29088,7 +29192,7 @@ function buildCollabMcpServer(store, options = {}) {
     inputSchema: leaseMutationSchema({ blocker: exports_external.string().min(1).max(2000) })
   }, async ({ workspace_id, actor, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    const task = binding ? store.blockTaskForSession({ ...boundCredential(), ...input }) : store.blockTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
+    const task = state.binding ? store.blockTaskForSession({ ...boundCredential(), ...input }) : store.blockTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
     return { task };
   }));
   server.registerTool("collab_task_unblock", {
@@ -29105,7 +29209,7 @@ function buildCollabMcpServer(store, options = {}) {
     }
   }, async ({ workspace_id, actor, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    const task = binding ? store.unblockTaskForSession({ ...boundCredential(), ...input }) : store.unblockTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
+    const task = state.binding ? store.unblockTaskForSession({ ...boundCredential(), ...input }) : store.unblockTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
     return { task };
   }));
   server.registerTool("collab_artifact_attach", {
@@ -29121,7 +29225,7 @@ function buildCollabMcpServer(store, options = {}) {
     })
   }, async ({ workspace_id, actor, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    return binding ? store.attachArtifactForSession({ ...boundCredential(), ...input }) : store.attachArtifact({ workspace_id, actor: requireLegacyActor(actor), ...input });
+    return state.binding ? store.attachArtifactForSession({ ...boundCredential(), ...input }) : store.attachArtifact({ workspace_id, actor: requireLegacyActor(actor), ...input });
   }));
   server.registerTool("collab_task_complete", {
     title: "Report a claimed task complete",
@@ -29137,10 +29241,10 @@ function buildCollabMcpServer(store, options = {}) {
     })
   }, async ({ workspace_id, actor, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    if (!binding && input.review_requested_session_id !== undefined) {
+    if (!state.binding && input.review_requested_session_id !== undefined) {
       throw new CollabError("session_required_for_review_request", "review_requested_session_id requires a bound v0.2 session");
     }
-    const task = binding ? store.completeTaskForSession({ ...boundCredential(), ...input }) : store.completeTask({
+    const task = state.binding ? store.completeTaskForSession({ ...boundCredential(), ...input }) : store.completeTask({
       workspace_id,
       actor: requireLegacyActor(actor),
       task_id: input.task_id,
@@ -29235,7 +29339,7 @@ function buildCollabMcpServer(store, options = {}) {
     }
   }, async ({ workspace_id, actor, authority_scope, authority_basis, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    if (binding) {
+    if (state.binding) {
       return {
         report: store.appendReportForSession({
           ...boundCredential(),
@@ -29269,7 +29373,7 @@ Rationale: ${input.rationale}` : ""}`,
     })
   }, async ({ workspace_id, actor, to_actor, to_session_id, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    return binding ? store.offerHandoffForSession({
+    return state.binding ? store.offerHandoffForSession({
       ...boundCredential(),
       ...input,
       to_session_id: requiredString(to_session_id, "to_session_id")
@@ -29295,7 +29399,7 @@ Rationale: ${input.rationale}` : ""}`,
     }
   }, async ({ workspace_id, actor, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    return binding ? store.respondHandoffForSession({ ...boundCredential(), ...input }) : store.respondHandoff({
+    return state.binding ? store.respondHandoffForSession({ ...boundCredential(), ...input }) : store.respondHandoff({
       workspace_id,
       actor: requireLegacyActor(actor),
       ...input
@@ -29409,6 +29513,7 @@ Rationale: ${input.rationale}` : ""}`,
     annotations: localReadOnly,
     inputSchema: { workspace_id: workspaceId }
   }, async ({ workspace_id }) => call(() => anchorStatusForWorkspace(store, workspace_id)));
+  server.registerTool = register2;
   return server;
 }
 function waitDelay(ms, signals) {
@@ -29485,13 +29590,13 @@ import { Database } from "bun:sqlite";
 import { createHash as createHash2, randomBytes, randomUUID as randomUUID2, timingSafeEqual } from "crypto";
 import {
   chmodSync as chmodSync2,
-  closeSync as closeSync4,
+  closeSync as closeSync5,
   existsSync as existsSync3,
   lstatSync as lstatSync3,
   mkdirSync as mkdirSync2,
-  openSync as openSync4
+  openSync as openSync5
 } from "fs";
-import { dirname as dirname2, isAbsolute as isAbsolute2, join as join2, posix, resolve as resolve4 } from "path";
+import { dirname as dirname2, isAbsolute as isAbsolute2, join as join3, posix, resolve as resolve4 } from "path";
 
 // src/canonical.ts
 function canonicalJson(value) {
@@ -29510,18 +29615,18 @@ function sortValue(value) {
 // src/repository.ts
 import { createHash } from "crypto";
 import {
-  closeSync as closeSync3,
+  closeSync as closeSync4,
   existsSync as existsSync2,
-  fstatSync as fstatSync2,
+  fstatSync as fstatSync3,
   lstatSync as lstatSync2,
-  openSync as openSync3,
+  openSync as openSync4,
   readlinkSync,
-  readSync as readSync2,
+  readSync as readSync3,
   realpathSync,
   statSync
 } from "fs";
 import { resolve as resolve3 } from "path";
-import { spawnSync } from "child_process";
+import { spawnSync as spawnSync2 } from "child_process";
 var GIT_TIMEOUT_MS = 5000;
 var MAX_GIT_OUTPUT = 1024 * 1024;
 var MAX_UNTRACKED_FILES = 1e4;
@@ -29532,13 +29637,19 @@ var MAX_SUCCESSOR_BYTES = 64 * 1024 * 1024;
 var MAX_SUCCESSOR_INSPECT_MS = 5000;
 var GIT_OBJECT_ID = /^[0-9a-f]{40,64}$/;
 var RAW_DIFF_HEADER = /^:([0-7]{6}) ([0-7]{6}) ([0-9a-f]{40,64}) ([0-9a-f]{40,64}) ([A-Z])$/;
-function inspectRepository(rootInput, explicitRepositoryKey) {
+
+class RepositoryProbeTimeout extends Error {
+  constructor() {
+    super("Repository discovery exhausted its Git time budget");
+  }
+}
+function inspectRepository(rootInput, explicitRepositoryKey, metadataOnly = false, options = {}) {
   const requested = resolve3(rootInput);
   if (!existsSync2(requested) || !statSync(requested).isDirectory()) {
     throw new CollabError("workspace_not_directory", "Workspace root must be an existing directory", { root_path: requested });
   }
   const requestedRoot = realpathSync(requested);
-  const topLevel = gitOutput(requestedRoot, ["rev-parse", "--show-toplevel"]);
+  const topLevel = gitOutput(requestedRoot, ["rev-parse", "--show-toplevel"], options);
   const rootPath = topLevel && existsSync2(topLevel) ? realpathSync(topLevel) : requestedRoot;
   const explicitKey = explicitRepositoryKey?.trim();
   if (!topLevel) {
@@ -29558,8 +29669,8 @@ function inspectRepository(rootInput, explicitRepositoryKey) {
       }
     };
   }
-  const commonDirOutput = gitOutput(rootPath, ["rev-parse", "--path-format=absolute", "--git-common-dir"]) ?? gitOutput(rootPath, ["rev-parse", "--git-common-dir"]);
-  const gitDirOutput = gitOutput(rootPath, ["rev-parse", "--path-format=absolute", "--git-dir"]) ?? gitOutput(rootPath, ["rev-parse", "--git-dir"]);
+  const commonDirOutput = gitOutput(rootPath, ["rev-parse", "--path-format=absolute", "--git-common-dir"], options) ?? gitOutput(rootPath, ["rev-parse", "--git-common-dir"], options);
+  const gitDirOutput = gitOutput(rootPath, ["rev-parse", "--path-format=absolute", "--git-dir"], options) ?? gitOutput(rootPath, ["rev-parse", "--git-dir"], options);
   if (!commonDirOutput || !gitDirOutput) {
     throw new CollabError("git_identity_unavailable", "Git recognized the repository but its local identity could not be resolved", { root_path: rootPath });
   }
@@ -29573,10 +29684,57 @@ function inspectRepository(rootInput, explicitRepositoryKey) {
     requested_root_path: requestedRoot,
     root_path: rootPath,
     repository_key: repositoryKey,
+    portable_repository_key: explicitKey || options.portable === false ? null : portableRepositoryKey(rootPath, options),
     git_common_dir_hash: commonDirHash,
     worktree_fingerprint: fingerprint,
-    checkpoint: captureRepoCheckpoint(rootPath, id)
+    checkpoint: metadataOnly ? { worktree_id: id, head_sha: null, branch: null, dirty: null, captured_at: new Date().toISOString() } : captureRepoCheckpoint(rootPath, id)
   };
+}
+function portableRepositoryKey(rootPath, optionsOrDeadline = {}) {
+  const options = typeof optionsOrDeadline === "number" ? { deadline: optionsOrDeadline } : optionsOrDeadline;
+  const origin = gitOutput(rootPath, ["config", "--get-all", "remote.origin.url"], options);
+  const remote = origin ?? gitOutput(rootPath, ["config", "--get-all", "remote.github.url"], options);
+  const canonical = remote ? canonicalRepositoryRemote(remote) : null;
+  if (!canonical || gitOutput(rootPath, ["rev-parse", "--is-shallow-repository"], options) !== "false")
+    return null;
+  const roots = successorGit(rootPath, ["rev-list", "--max-parents=0", "HEAD"], MAX_GIT_OUTPUT, options);
+  if (roots.timed_out && options.deadline !== undefined)
+    throw new RepositoryProbeTimeout;
+  if (!roots.ok)
+    return null;
+  const root = roots.stdout.toString("utf8").trim();
+  if (!GIT_OBJECT_ID.test(root))
+    return null;
+  return `git-root-remote:v1:${sha256(`${root}\x00${canonical}`)}`;
+}
+function canonicalRepositoryRemote(value) {
+  if (/[\s\x00-\x1f\x7f]/.test(value) || value.includes("::") || value.includes("://") && !/^(https?|ssh|git):\/\//i.test(value))
+    return null;
+  let host;
+  let path;
+  let port = "";
+  try {
+    if (/^(https?|ssh|git):\/\//i.test(value)) {
+      const url2 = new URL(value);
+      if (url2.search || url2.hash)
+        return null;
+      host = url2.hostname.toLowerCase();
+      path = url2.pathname;
+      port = url2.port && !(url2.protocol === "ssh:" && url2.port === "22" || url2.protocol === "git:" && url2.port === "9418") ? `:${url2.port}` : "";
+    } else {
+      const scp = /^(?:[^/@:]+@)?([^/:]+):(.+)$/.exec(value);
+      if (!scp)
+        return null;
+      host = scp[1].toLowerCase();
+      path = scp[2];
+    }
+    path = path.replace(/^\/+|\/+$/g, "").replace(/\.git$/i, "");
+    if (!host || !path || path.split("/").some((part) => !part || part === "." || part === "..") || /[%\\?#]/.test(path))
+      return null;
+    return `${host}${port}/${path.toLowerCase()}`;
+  } catch {
+    return null;
+  }
 }
 function captureRepoCheckpoint(rootPath, id) {
   const head = gitOutput(rootPath, ["rev-parse", "--verify", "HEAD"]);
@@ -29719,22 +29877,29 @@ function resolveGitPath(rootPath, value) {
 function realpathIfPresent(path) {
   return existsSync2(path) ? realpathSync(path) : resolve3(path);
 }
-function gitOutput(rootPath, args) {
-  const result = runGit(rootPath, args);
+function gitOutput(rootPath, args, options = {}) {
+  const result = runGit(rootPath, args, options);
+  if (result.timed_out && options.deadline !== undefined)
+    throw new RepositoryProbeTimeout;
   if (!result.ok)
     return null;
   const value = result.stdout.trim();
   return value.length > 0 ? value : null;
 }
-function runGit(rootPath, args) {
-  const result = spawnSync("git", ["-C", rootPath, ...args], {
+function runGit(rootPath, args, options) {
+  const timeout = gitTimeout(options);
+  if (timeout <= 0)
+    return { ok: false, timed_out: true, stdout: "" };
+  const result = spawnRepositoryGit(["-C", rootPath, ...args], {
     encoding: "utf8",
-    timeout: GIT_TIMEOUT_MS,
+    timeout,
     maxBuffer: MAX_GIT_OUTPUT,
-    stdio: ["ignore", "pipe", "ignore"]
-  });
+    stdio: ["ignore", "pipe", "ignore"],
+    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" }
+  }, options);
   return {
     ok: result.status === 0 && !result.error,
+    timed_out: result.error?.code === "ETIMEDOUT",
     stdout: typeof result.stdout === "string" ? result.stdout : ""
   };
 }
@@ -29743,7 +29908,7 @@ function gitDigest(rootPath, args) {
   return result.ok ? sha256Bytes(result.stdout) : null;
 }
 function gitBytes(rootPath, args, maxBuffer = MAX_GIT_OUTPUT) {
-  const result = spawnSync("git", ["-C", rootPath, ...args], {
+  const result = spawnSync2("git", ["-C", rootPath, ...args], {
     timeout: GIT_TIMEOUT_MS,
     maxBuffer,
     stdio: ["ignore", "pipe", "ignore"]
@@ -29757,20 +29922,30 @@ var SUCCESSOR_GIT_ARGS = ["-c", "core.commitGraph=false", "--no-replace-objects"
 function successorGitEnv() {
   return { ...process.env, GIT_GRAFT_FILE: "/dev/null/agenttool-collab-no-grafts" };
 }
-function successorGit(rootPath, args, maxBuffer = MAX_GIT_OUTPUT) {
-  const result = spawnSync("git", ["-C", rootPath, ...SUCCESSOR_GIT_ARGS, ...args], {
-    timeout: GIT_TIMEOUT_MS,
+function successorGit(rootPath, args, maxBuffer = MAX_GIT_OUTPUT, options = {}) {
+  const timeout = gitTimeout(options);
+  if (timeout <= 0)
+    return { ok: false, timed_out: true, stdout: Buffer.alloc(0) };
+  const result = spawnRepositoryGit(["-C", rootPath, ...SUCCESSOR_GIT_ARGS, ...args], {
+    timeout,
     maxBuffer,
     stdio: ["ignore", "pipe", "ignore"],
     env: successorGitEnv()
-  });
+  }, options);
   return {
     ok: result.status === 0 && !result.error,
+    timed_out: result.error?.code === "ETIMEDOUT",
     stdout: Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.alloc(0)
   };
 }
+function spawnRepositoryGit(args, options, probe) {
+  return probe.spawn ? probe.spawn(args, options) : spawnSync2("git", args, options);
+}
+function gitTimeout(options) {
+  return options.deadline === undefined ? GIT_TIMEOUT_MS : Math.min(GIT_TIMEOUT_MS, Math.ceil(options.deadline - (options.now ?? (() => performance.now()))()));
+}
 function successorGitExitCode(rootPath, args) {
-  const result = spawnSync("git", ["-C", rootPath, ...SUCCESSOR_GIT_ARGS, ...args], {
+  const result = spawnSync2("git", ["-C", rootPath, ...SUCCESSOR_GIT_ARGS, ...args], {
     timeout: GIT_TIMEOUT_MS,
     stdio: ["ignore", "ignore", "ignore"],
     env: successorGitEnv()
@@ -29830,8 +30005,8 @@ function digestUntrackedContent(rootPath, paths) {
 function digestStableFile(path, budget) {
   let descriptor = null;
   try {
-    descriptor = openSync3(path, "r");
-    const before = fstatSync2(descriptor);
+    descriptor = openSync4(path, "r");
+    const before = fstatSync3(descriptor);
     if (!before.isFile() || before.size > budget.remainingBytes || Date.now() > budget.deadline)
       return null;
     const hash2 = createHash("sha256");
@@ -29839,12 +30014,12 @@ function digestStableFile(path, budget) {
     while (true) {
       if (Date.now() > budget.deadline)
         return null;
-      const count = readSync2(descriptor, buffer, 0, buffer.length, null);
+      const count = readSync3(descriptor, buffer, 0, buffer.length, null);
       if (count === 0)
         break;
       hash2.update(buffer.subarray(0, count));
     }
-    const after = fstatSync2(descriptor);
+    const after = fstatSync3(descriptor);
     if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.mode !== after.mode || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs)
       return null;
     budget.remainingBytes -= before.size;
@@ -29853,7 +30028,7 @@ function digestStableFile(path, budget) {
     return null;
   } finally {
     if (descriptor !== null)
-      closeSync3(descriptor);
+      closeSync4(descriptor);
   }
 }
 function splitNul(value) {
@@ -29904,6 +30079,7 @@ var HARDENED_PREVIEW_SCHEMA_VERSION = 2;
 var SCHEMA_VERSION = 3;
 var DEFAULT_LEASE_SECONDS = 15 * 60;
 var MAX_LEASE_SECONDS = 60 * 60;
+var REPOSITORY_DISCOVERY_MS = 250;
 var MAX_TEXT = 8000;
 var MAX_REPORT_BODY = 9000;
 var MAX_DEPENDENCIES = 128;
@@ -29973,11 +30149,17 @@ class CollabStore {
   now;
   filesystemPath;
   migrationFailpoint;
+  repositoryDiscovery;
   eventReader;
   closed = false;
   constructor(path, options = {}) {
     this.now = options.now ?? (() => new Date);
     this.migrationFailpoint = options.migration_failpoint;
+    this.repositoryDiscovery = {
+      ...options.repository_discovery,
+      budget_ms: options.repository_discovery?.budget_ms ?? REPOSITORY_DISCOVERY_MS,
+      now: options.repository_discovery?.now ?? (() => performance.now())
+    };
     const databasePath = path === ":memory:" ? path : resolve4(path);
     if (databasePath !== ":memory:") {
       const parent = dirname2(databasePath);
@@ -29989,8 +30171,8 @@ class CollabStore {
         assertSafeDatabaseFile(databasePath);
       } else {
         try {
-          const descriptor = openSync4(databasePath, "wx", 384);
-          closeSync4(descriptor);
+          const descriptor = openSync5(databasePath, "wx", 384);
+          closeSync5(descriptor);
         } catch (error51) {
           if (error51.code !== "EEXIST")
             throw error51;
@@ -30040,7 +30222,7 @@ class CollabStore {
       throw new CollabError("session_file_path_required", "An explicit credential file path is required for an in-memory database");
     }
     const id = validateId(sessionId2, "session_id");
-    return join2(dirname2(this.filesystemPath), "collab-sessions", `${id}.json`);
+    return join3(dirname2(this.filesystemPath), "collab-sessions", `${id}.json`);
   }
   initialize() {
     this.db.exec("PRAGMA foreign_keys = ON");
@@ -30073,6 +30255,22 @@ class CollabStore {
         SCHEMA_VERSION
       ]);
       this.validateAllJournals();
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS repository_aliases (
+          worktree_id TEXT PRIMARY KEY REFERENCES worktrees(id),
+          portable_key TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS repository_aliases_key_idx ON repository_aliases(portable_key);
+        CREATE TABLE IF NOT EXISTS repository_discovery (
+          worktree_id TEXT PRIMARY KEY REFERENCES worktrees(id),
+          fingerprint TEXT NOT NULL,
+          outcome TEXT NOT NULL CHECK (outcome IN ('checked', 'unresolvable'))
+        );
+        CREATE TABLE IF NOT EXISTS session_lease_lapses (
+          lease_id TEXT PRIMARY KEY,
+          effective_at TEXT NOT NULL
+        );
+      `);
       this.db.exec(`PRAGMA application_id = ${APPLICATION_ID}`);
       this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     });
@@ -30864,11 +31062,92 @@ class CollabStore {
       chmodSync2(path, 384);
     }
   }
+  discoverRepositoryKey(budget, probe) {
+    const now = this.repositoryDiscovery.now();
+    const fullSlice = budget.deadline === undefined;
+    budget.deadline ??= now + this.repositoryDiscovery.budget_ms;
+    if (now >= budget.deadline)
+      return;
+    try {
+      return probe({ ...this.repositoryDiscovery, deadline: budget.deadline });
+    } catch (error51) {
+      if (error51 instanceof RepositoryProbeTimeout && !fullSlice)
+        return;
+      return null;
+    }
+  }
+  prepareRepositoryAliases(budget) {
+    const rows = this.db.query(`
+      SELECT w.* FROM worktrees w
+      LEFT JOIN repository_discovery d ON d.worktree_id = w.id AND d.fingerprint = w.fingerprint
+      WHERE d.worktree_id IS NULL AND w.repository_key LIKE 'local-git:%'
+      ORDER BY w.id
+    `).iterate();
+    const prepared = [];
+    for (const row of rows) {
+      const key2 = this.discoverRepositoryKey(budget, (options) => {
+        const identity = inspectRepository(row.root_path, undefined, true, options);
+        if (identity.repository_key === row.repository_key && identity.worktree_fingerprint === row.fingerprint) {
+          return identity.portable_repository_key ?? null;
+        }
+        return null;
+      });
+      if (key2 === undefined)
+        break;
+      prepared.push({ row, key: key2 });
+    }
+    return prepared;
+  }
+  recordRepositoryAlias(worktreeId2, key2) {
+    if (key2)
+      this.db.query(`INSERT OR IGNORE INTO repository_aliases (worktree_id, portable_key) VALUES (?, ?)`).run(worktreeId2, key2);
+  }
+  recordRepositoryDiscovery(worktreeId2, fingerprint, key2) {
+    if (key2 === undefined)
+      return;
+    this.recordRepositoryAlias(worktreeId2, key2);
+    this.db.query(`INSERT INTO repository_discovery (worktree_id, fingerprint, outcome) VALUES (?, ?, ?)
+      ON CONFLICT(worktree_id) DO UPDATE SET fingerprint = excluded.fingerprint, outcome = excluded.outcome`).run(worktreeId2, fingerprint, key2 ? "checked" : "unresolvable");
+  }
+  repositoryPartitions(identity) {
+    return this.db.query(`
+      SELECT DISTINCT w.id FROM workspaces w
+      LEFT JOIN worktrees t ON t.workspace_id = w.id
+      WHERE w.repository_key = ? OR t.repository_key = ?
+      ORDER BY w.created_at, w.id
+    `).all(identity.repository_key, identity.repository_key);
+  }
+  portableRepositoryWorkspace(key2) {
+    if (!key2)
+      return;
+    const pending = this.db.query(`SELECT 1 FROM worktrees w LEFT JOIN repository_discovery d
+      ON d.worktree_id = w.id AND d.fingerprint = w.fingerprint
+      WHERE d.worktree_id IS NULL AND w.repository_key LIKE 'local-git:%' LIMIT 1`).get();
+    if (pending)
+      return;
+    const matches = this.db.query(`SELECT DISTINCT w.workspace_id AS id FROM worktrees w
+      JOIN repository_aliases a ON a.worktree_id = w.id WHERE a.portable_key = ? LIMIT 2`).all(key2);
+    return matches.length === 1 ? matches[0] : undefined;
+  }
   openWorkspace(input) {
     const actor = validateActor(input.actor);
-    const identity = inspectRepository(input.root_path, input.repository_key);
+    const identity = inspectRepository(input.root_path, input.repository_key, false, { portable: false });
+    const budget = {};
+    const cached2 = this.db.query(`SELECT a.portable_key FROM repository_discovery d
+      LEFT JOIN repository_aliases a ON a.worktree_id = d.worktree_id
+      WHERE d.worktree_id = ? AND d.fingerprint = ?`).get(identity.checkpoint.worktree_id, identity.worktree_fingerprint);
+    const registered = this.db.query(`SELECT 1 FROM worktrees WHERE root_path = ?`).get(identity.root_path);
+    const aliases = !registered && this.repositoryPartitions(identity).length === 0 && identity.repository_key.startsWith("local-git:") ? this.prepareRepositoryAliases(budget) : [];
+    identity.portable_repository_key = cached2 ? cached2.portable_key : identity.repository_key.startsWith("local-git:") ? this.discoverRepositoryKey(budget, (options) => portableRepositoryKey(identity.root_path, options)) : null;
     const created = this.db.transaction(() => {
       const now = this.timestamp();
+      for (const { row, key: key2 } of aliases) {
+        const current = this.requireWorktreeRow(row.id);
+        if (current.root_path !== row.root_path || current.fingerprint !== row.fingerprint || current.repository_key !== row.repository_key || current.workspace_id !== row.workspace_id) {
+          continue;
+        }
+        this.recordRepositoryDiscovery(row.id, row.fingerprint, key2);
+      }
       const existingWorktree = this.db.query(`
         SELECT * FROM worktrees WHERE root_path = ?
       `).get(identity.root_path);
@@ -30879,22 +31158,25 @@ class CollabStore {
             registered_worktree_id: existingWorktree.id
           });
         }
+        this.recordRepositoryDiscovery(existingWorktree.id, identity.worktree_fingerprint, identity.portable_repository_key);
         this.touchWorktree(existingWorktree, identity.checkpoint, now);
         return this.requireWorkspace(existingWorktree.workspace_id);
       }
-      const repositoryWorkspace = this.db.query(`
-        SELECT id FROM workspaces
-        WHERE repository_key = ?
-        ORDER BY created_at, id
-        LIMIT 1
-      `).get(identity.repository_key);
+      const partitions = this.repositoryPartitions(identity);
+      if (partitions.length > 1) {
+        throw new CollabError("repository_partitioned", "Multiple preserved journals require explicit reconciliation", {
+          workspace_ids: partitions.map((partition) => partition.id)
+        });
+      }
+      const repositoryWorkspace = partitions[0] ?? this.portableRepositoryWorkspace(identity.portable_repository_key);
       const id = repositoryWorkspace?.id ?? `ws_${sha2562(identity.repository_key).slice(0, 24)}`;
       const existing = this.getWorkspace(id);
-      if (existing && existing.repository_key !== identity.repository_key) {
+      if (existing && !repositoryWorkspace) {
         throw new CollabError("workspace_identity_collision", "Workspace identity collision");
       }
       if (existing) {
         this.registerWorktree(existing.id, identity, now, actor, true);
+        this.recordRepositoryDiscovery(identity.checkpoint.worktree_id, identity.worktree_fingerprint, identity.portable_repository_key);
         return this.requireWorkspace(existing.id);
       }
       const epochId = `epoch_${randomUUID2()}`;
@@ -30907,6 +31189,7 @@ class CollabStore {
         VALUES (?, ?, ?, ?, ?, ?, 0, ?)
       `).run(id, epochId, identity.root_path, identity.repository_key, name, now, GENESIS_HASH);
       this.registerWorktree(id, identity, now, actor, false);
+      this.recordRepositoryDiscovery(identity.checkpoint.worktree_id, identity.worktree_fingerprint, identity.portable_repository_key);
       this.appendEvent(id, "workspace.opened", id, actor, {
         root_path: identity.root_path,
         repository_key: identity.repository_key,
@@ -31055,15 +31338,7 @@ class CollabStore {
   startSession(input) {
     const actor = validateActor(input.actor);
     const role = optionalText(input.role, "role", 200);
-    const identity = inspectRepository(input.root_path, input.repository_key);
-    const partitions = this.db.query(`
-      SELECT id FROM workspaces
-      WHERE repository_key = ?
-      ORDER BY created_at, id
-    `).all(identity.repository_key);
-    if (partitions.length > 1) {
-      throw new CollabError("repository_partitioned", "This repository has multiple preserved v0.1 journals; explicit reconciliation is required before credential-bound sessions can start", { workspace_ids: partitions.map((partition) => partition.id) });
-    }
+    const identity = inspectRepository(input.root_path, input.repository_key, true, { portable: false });
     const workspace = this.openWorkspace({
       root_path: input.root_path,
       actor,
@@ -31077,6 +31352,12 @@ class CollabStore {
     }
     const parentSessionId = input.parent_session_id ? validateId(input.parent_session_id, "parent_session_id") : null;
     const joined = this.db.transaction(() => {
+      const partitions = this.repositoryPartitions(identity);
+      if (partitions.length > 1) {
+        throw new CollabError("repository_partitioned", "Multiple preserved journals require explicit reconciliation before session start", {
+          workspace_ids: partitions.map((partition) => partition.id)
+        });
+      }
       if (parentSessionId) {
         const parent = this.requireCoordinationSessionRow(parentSessionId);
         if (parent.workspace_id !== workspace.id) {
@@ -31110,6 +31391,7 @@ class CollabStore {
     const resumed = this.db.transaction(() => {
       const row = this.authenticateResumeToken(sessionId2, credential.session_token);
       const now = this.timestamp();
+      this.recordSessionLeaseLapses(row, now);
       const nextGeneration = row.generation + 1;
       const persistedCursor = {
         epoch_id: row.cursor_epoch_id,
@@ -31225,7 +31507,7 @@ class CollabStore {
           try {
             for (const task of held) {
               const leaseId2 = task.lease_id;
-              const expired = task.lease_expires_at !== null && now >= task.lease_expires_at;
+              const expired = this.isExpired(task, row, now);
               if (expired) {
                 const lapsed = this.expireSessionLeaseForRecovery(task, row, now);
                 this.recordRecoveryWithoutTakeover(task, row, {
@@ -31307,7 +31589,7 @@ class CollabStore {
   preflightSessionEnd(credential) {
     const sessionId2 = validateId(credential.session_id, "session_id");
     const row = this.authenticateResumeToken(sessionId2, credential.session_token);
-    const refusal = this.liveLeaseRefusal(row.workspace_id, row.id, this.timestamp());
+    const refusal = this.liveLeaseRefusal(row.workspace_id, row.id, this.timestamp(), true);
     if (refusal)
       throw refusal;
   }
@@ -31315,6 +31597,7 @@ class CollabStore {
     const acknowledged = this.db.transaction(() => {
       const row = this.authenticateSession(input);
       const anchor = this.validateEventAnchor(row.workspace_id, input.anchor);
+      this.recordSessionLeaseLapses(row, this.timestamp());
       if (anchor.epoch_id !== row.cursor_epoch_id) {
         throw new CollabError("cursor_epoch_mismatch", "The cursor belongs to another journal epoch");
       }
@@ -31651,7 +31934,7 @@ class CollabStore {
     return this.mutateAsSession(input, input.idempotency_key, "task.recover.v2", request, (session) => {
       const row = this.requireTaskRow(session.workspace_id, taskId2);
       this.requireVersion(row, expectedVersion2);
-      if (!this.isExpired(row) || !row.lease_id || !row.assignee_session_id) {
+      if (!this.isExpired(row, row.assignee_session_id === session.id ? session : undefined) || !row.lease_id || !row.assignee_session_id) {
         throw new CollabError("recovery_not_required", "Only an expired session-owned lease can be explicitly recovered");
       }
       const now = this.timestamp();
@@ -31702,16 +31985,15 @@ class CollabStore {
     });
   }
   renewLeaseForSession(input) {
-    const normalized = normalizeSessionLeaseInput(input);
+    const normalized = normalizeSessionRenewInput(input);
     const ttl = validateTtl(input.ttl_seconds);
     return this.mutateAsSession(input, normalized.idempotency_key, "task.renew.v2", { ...normalized.request, ttl_seconds: ttl }, (session) => {
       const row = this.requireTaskRow(session.workspace_id, normalized.task_id);
-      this.requireVersion(row, normalized.expected_version);
       this.requireActiveSessionLease(row, session, normalized.lease_id);
       const now = this.timestamp();
       const candidate = addSeconds(now, ttl);
       const expiresAt = row.lease_expires_at && row.lease_expires_at > candidate ? row.lease_expires_at : candidate;
-      const version2 = row.version + 1;
+      const version2 = row.version;
       this.db.query(`
           UPDATE tasks SET lease_expires_at = ?, version = ?, updated_at = ?
           WHERE workspace_id = ? AND id = ?
@@ -31990,16 +32272,22 @@ class CollabStore {
     });
   }
   renewLease(input) {
-    const normalized = normalizeLeaseInput(input);
+    if (input.expected_version !== undefined)
+      validateExpectedVersion(input.expected_version);
+    const normalized = {
+      ...normalizeMutation(input),
+      task_id: validateId(input.task_id, "task_id"),
+      lease_id: validateId(input.lease_id, "lease_id"),
+      ...input.expected_version === undefined ? {} : { expected_version: input.expected_version }
+    };
     const ttl = validateTtl(input.ttl_seconds);
     return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.renew", { ...normalized, ttl_seconds: ttl }, () => {
       const row = this.requireTaskRow(input.workspace_id, normalized.task_id);
-      this.requireVersion(row, normalized.expected_version);
       this.requireActiveLease(row, normalized.actor, normalized.lease_id);
       const now = this.timestamp();
       const candidate = addSeconds(now, ttl);
       const expiresAt = row.lease_expires_at && row.lease_expires_at > candidate ? row.lease_expires_at : candidate;
-      const version2 = row.version + 1;
+      const version2 = row.version;
       this.db.query(`
         UPDATE tasks SET lease_expires_at = ?, version = ?, updated_at = ?
         WHERE workspace_id = ? AND id = ?
@@ -32458,7 +32746,7 @@ class CollabStore {
         });
       }
       const id = `handoff_${randomUUID2()}`;
-      const expiresAt = [addSeconds(now, ttl), row.lease_expires_at].sort()[0];
+      const expiresAt = addSeconds(now, ttl);
       this.db.query(`
           INSERT INTO handoffs (
             id, workspace_id, task_id, from_actor, from_session_id,
@@ -32627,6 +32915,7 @@ class CollabStore {
         requireBoundAfterSequence(input.after_sequence, authenticated);
       }
       const eventLimit2 = validateNextEventLimit(input.event_limit);
+      this.recordSessionLeaseLapses(authenticated, this.timestamp());
       this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), authenticated.id);
       return {
         row: this.requireCoordinationSessionRow(authenticated.id),
@@ -32962,6 +33251,7 @@ class CollabStore {
     const idempotencyKey = validateIdempotencyKey(idempotencyKeyInput);
     const transaction = this.db.transaction(() => {
       const session = this.authenticateSession(credential, options);
+      this.recordSessionLeaseLapses(session, this.timestamp());
       const mutationActor = `session:${session.id}`;
       const requestHash = sha2562(canonicalJson({ operation, request }));
       const existing = this.db.query(`
@@ -33306,14 +33596,20 @@ class CollabStore {
       SELECT t.*
       FROM tasks t
       JOIN workspaces w ON w.id = t.workspace_id
-      WHERE w.repository_key = ?
+      WHERE (w.repository_key = ? OR w.id IN (
+        SELECT other.workspace_id FROM worktrees own
+        JOIN repository_aliases a ON a.worktree_id = own.id
+        JOIN repository_aliases b ON b.portable_key = a.portable_key
+        JOIN worktrees other ON other.id = b.worktree_id
+        WHERE own.workspace_id = ?
+      ))
         AND NOT (t.workspace_id = ? AND t.id = ?)
         AND (
           (t.status = 'claimed' AND (t.lease_expires_at > ? OR t.assignee_session_id IS NOT NULL))
           OR (t.status = 'completed' AND t.completion_policy = 'accepted'
               AND t.review_status = 'pending')
         )
-    `).all(workspace.repository_key, task.workspace_id, task.id, this.timestamp());
+    `).all(workspace.repository_key, task.workspace_id, task.workspace_id, task.id, this.timestamp());
     const result = [];
     for (const row of rows) {
       if (row.work_mode === "read_only")
@@ -33336,7 +33632,7 @@ class CollabStore {
     if (row.status !== "claimed" || !row.lease_id || !row.lease_expires_at) {
       throw new CollabError("lease_not_active", "Task does not have an active lease");
     }
-    if (this.isExpired(row)) {
+    if (this.isExpired(row, row.assignee_session_id === session.id ? session : undefined)) {
       throw new CollabError("lease_expired", "Task lease has expired", {
         lease_expires_at: row.lease_expires_at
       });
@@ -33365,18 +33661,19 @@ class CollabStore {
     }, session.id);
     return this.requireTask(row.workspace_id, row.id);
   }
-  liveLeaseRefusal(workspaceId2, sessionId2, now) {
+  liveLeaseRefusal(workspaceId2, sessionId2, now, holderWillResume = false) {
     const live = this.db.query(`
-      SELECT id, lease_id, lease_expires_at FROM tasks
+      SELECT * FROM tasks
       WHERE workspace_id = ? AND assignee_session_id = ?
-        AND status = 'claimed' AND lease_expires_at > ?
+        AND status = 'claimed'
       ORDER BY id
-    `).all(workspaceId2, sessionId2, now);
-    if (live.length === 0)
+    `).all(workspaceId2, sessionId2);
+    const active = live.filter((task) => holderWillResume || !this.isExpired(task, undefined, now));
+    if (active.length === 0)
       return null;
     return new CollabError("session_has_active_leases", "Release, complete, or hand off active task leases before ending the session, or end with release_leases: true. " + "A handoff counts once it is accepted; release_leases also expires this session's pending outgoing offers", {
-      task_ids: live.map((task) => task.id),
-      leases: live.map((task) => ({
+      task_ids: active.map((task) => task.id),
+      leases: active.map((task) => ({
         task_id: task.id,
         lease_id: task.lease_id,
         expires_at: task.lease_expires_at
@@ -33386,6 +33683,10 @@ class CollabStore {
     });
   }
   expireSessionLeaseForRecovery(row, session, now) {
+    const holder = row.assignee_session_id === session.id ? session : this.requireCoordinationSessionRow(row.assignee_session_id);
+    const staleAt = holder.status === "ended" ? Date.parse(holder.ended_at ?? now) : Date.parse(holder.last_seen_at) + SESSION_STALE_AFTER_MS + 1;
+    const lapse = this.db.query(`SELECT effective_at FROM session_lease_lapses WHERE lease_id = ?`).get(row.lease_id);
+    const effectiveAt = lapse?.effective_at ?? (Number.isFinite(staleAt) ? new Date(Math.max(Date.parse(row.lease_expires_at), staleAt)).toISOString() : now);
     const prior = {
       assignee: row.assignee,
       session_id: row.assignee_session_id,
@@ -33404,7 +33705,8 @@ class CollabStore {
     this.expirePendingHandoffs(row.workspace_id, row.id, now, "system:clock", "source_lease_expired");
     this.appendEvent(row.workspace_id, "task.claim_expired", row.id, "system:clock", {
       ...prior,
-      effective_at: prior.lease_expires_at,
+      effective_at: effectiveAt,
+      lease_lifetime_basis: "session_liveness",
       observed_by_session_id: session.id,
       version: expiryVersion
     });
@@ -33788,8 +34090,22 @@ class CollabStore {
       });
     }
   }
-  isExpired(row) {
-    return row.status === "claimed" && row.lease_expires_at !== null && this.timestamp() >= row.lease_expires_at;
+  recordSessionLeaseLapses(session, now) {
+    if (sessionLiveness(session, now) === "live")
+      return;
+    const staleAt = new Date(Date.parse(session.last_seen_at) + SESSION_STALE_AFTER_MS + 1).toISOString();
+    this.db.query(`INSERT OR IGNORE INTO session_lease_lapses (lease_id, effective_at)
+      SELECT lease_id, MAX(lease_expires_at, ?) FROM tasks
+      WHERE assignee_session_id = ? AND status = 'claimed' AND lease_expires_at <= ?`).run(staleAt, session.id, now);
+  }
+  isExpired(row, priorHolder, observedAt = this.timestamp()) {
+    if (row.status !== "claimed" || row.lease_expires_at === null || observedAt < row.lease_expires_at)
+      return false;
+    if (!row.assignee_session_id)
+      return true;
+    if (this.db.query(`SELECT 1 FROM session_lease_lapses WHERE lease_id = ?`).get(row.lease_id))
+      return true;
+    return (priorHolder ? sessionLiveness(priorHolder, observedAt) : this.assigneeLiveness(row.assignee_session_id, observedAt)) !== "live";
   }
   taskFromRow(row) {
     let effectiveStatus = row.status;
@@ -33844,13 +34160,13 @@ class CollabStore {
   sessionProjection(row, observedAt = this.timestamp()) {
     return coordinationSessionFromRow(row, observedAt);
   }
-  assigneeLiveness(sessionId2) {
+  assigneeLiveness(sessionId2, observedAt = this.timestamp()) {
     if (!sessionId2)
       return null;
     const holder = this.db.query(`
       SELECT status, last_seen_at FROM coordination_sessions WHERE id = ?
     `).get(sessionId2);
-    return holder ? sessionLiveness(holder, this.timestamp()) : null;
+    return holder ? sessionLiveness(holder, observedAt) : null;
   }
   requireWorkspace(workspaceId2, db = this.db) {
     const workspace = this.getWorkspace(workspaceId2, db);
@@ -34007,6 +34323,16 @@ function requireBoundAfterSequence(afterSequence, session) {
     cursor_version: session.cursor_version,
     remedy: BOUND_AFTER_SEQUENCE_REMEDY
   });
+}
+function normalizeSessionRenewInput(input) {
+  if (input.expected_version !== undefined)
+    validateExpectedVersion(input.expected_version);
+  const request = {
+    task_id: validateId(input.task_id, "task_id"),
+    lease_id: validateId(input.lease_id, "lease_id"),
+    ...input.expected_version === undefined ? {} : { expected_version: input.expected_version }
+  };
+  return { ...request, request, idempotency_key: validateIdempotencyKey(input.idempotency_key) };
 }
 function normalizeSessionLeaseInput(input) {
   const normalized = {

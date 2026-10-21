@@ -42,9 +42,12 @@ channel credential or remote URL is needed for local Collab. Keep credentials
 and host-only paths out of model-visible text.
 
 Use the same local database as the cooperating Claude/Codex/Hermes MCP
-processes. Each independently attributed child needs its own MCP process and
-`collab_session_start`; a shared endpoint exposes one coordination binding,
-not an independently identified fleet. Verify the intended workspace and the
+processes. Each child needs its own `collab_session_start`, either in a separate
+MCP process or with an explicit `binding_key` and `parent_session_id` on the
+shared endpoint. Carry the key on every child call. This is cooperative routing,
+not authenticated subagent isolation or automatic OpenClaw integration; see
+[the session-fit migration note](../../README.md#session-fit-migration-unreleased).
+Verify the intended workspace and the
 33-tool inventory after connecting. Native tool-name prefixes depend on the
 selected adapter; the names below are the underlying MCP names.
 

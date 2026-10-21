@@ -130,7 +130,7 @@ describe("staleness as a derived view", () => {
     });
   });
 
-  test("projects assignee liveness and lists recovery-required leases with the caller's own first", () => {
+  test("keeps live session leases and preserves recovery after a stale holder returns", () => {
     const holder = session("own-holder");
     const other = session("other-holder");
     const observer = session("observer");
@@ -147,25 +147,25 @@ describe("staleness as a derived view", () => {
 
     advance(31_000);
     const ownNext = store.nextForSession(holder.credential);
-    expect(ownNext.recovery_required.map((task) => task.id)).toEqual([ownTask.id, otherTask.id]);
-    expect(ownNext.recovery_required.map((task) => task.effective_status)).toEqual([
-      "recovery_required",
-      "recovery_required",
-    ]);
-    expect(ownNext.own_claims).toEqual([]);
+    expect(ownNext.recovery_required).toEqual([]);
+    expect(ownNext.own_claims.map((task) => task.id)).toEqual([ownTask.id]);
     expect(store.nextForSession(other.credential).recovery_required.map((task) => task.id))
-      .toEqual([otherTask.id, ownTask.id]);
+      .toEqual([]);
     expect(store.nextForSession(observer.credential).recovery_required.map((task) => task.id))
-      .toEqual([otherTask.id, ownTask.id]);
+      .toEqual([]);
     expect(
       store.nextForActor(observer.workspace.id, "legacy-observer").recovery_required
         .map((task) => task.id),
-    ).toEqual([otherTask.id, ownTask.id]);
+    ).toEqual([]);
     expect(store.getTask(ownTask.workspace_id, ownTask.id).assignee_liveness).toBe("live");
 
     advance(STALE_AFTER_MS + 1);
     expect(store.getTask(ownTask.workspace_id, ownTask.id).assignee_liveness).toBe("stale");
     expect(store.getTask(otherTask.workspace_id, otherTask.id).assignee_liveness).toBe("stale");
+    expect(store.nextForSession(observer.credential).recovery_required.map(task => task.id))
+      .toEqual([otherTask.id, ownTask.id]);
+    // Returning activity is live again, but a previously expired lease still
+    // needs explicit recovery, even before anyone else takes it over.
     const refreshed = store.nextForSession(holder.credential).recovery_required;
     expect(refreshed.map((task) => [task.id, task.assignee_liveness])).toEqual([
       [ownTask.id, "live"],
@@ -173,8 +173,8 @@ describe("staleness as a derived view", () => {
     ]);
     expect(otherClaim.lease_expires_at! < ownClaim.lease_expires_at!).toBe(true);
 
-    // An expired lease does not block session_end, so a holder can leave it
-    // behind; an ended holder reads stale even though it was just seen.
+    // A stale holder can still leave an expired lease for explicit recovery.
+    advance(STALE_AFTER_MS + 1);
     store.endSession({ ...holder.credential, reason: "leaves an expired lease behind" });
     expect(store.getTask(ownTask.workspace_id, ownTask.id)).toMatchObject({
       effective_status: "recovery_required",
