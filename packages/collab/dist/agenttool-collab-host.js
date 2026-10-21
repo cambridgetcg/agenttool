@@ -165,13 +165,19 @@ var MAX_SUCCESSOR_BYTES = 64 * 1024 * 1024;
 var MAX_SUCCESSOR_INSPECT_MS = 5000;
 var GIT_OBJECT_ID = /^[0-9a-f]{40,64}$/;
 var RAW_DIFF_HEADER = /^:([0-7]{6}) ([0-7]{6}) ([0-9a-f]{40,64}) ([0-9a-f]{40,64}) ([A-Z])$/;
+
+class RepositoryProbeTimeout extends Error {
+  constructor() {
+    super("Repository discovery exhausted its Git time budget");
+  }
+}
 function inspectRepository(rootInput, explicitRepositoryKey, metadataOnly = false, options = {}) {
   const requested = resolve3(rootInput);
   if (!existsSync2(requested) || !statSync(requested).isDirectory()) {
     throw new CollabError("workspace_not_directory", "Workspace root must be an existing directory", { root_path: requested });
   }
   const requestedRoot = realpathSync(requested);
-  const topLevel = gitOutput(requestedRoot, ["rev-parse", "--show-toplevel"], options.deadline);
+  const topLevel = gitOutput(requestedRoot, ["rev-parse", "--show-toplevel"], options);
   const rootPath = topLevel && existsSync2(topLevel) ? realpathSync(topLevel) : requestedRoot;
   const explicitKey = explicitRepositoryKey?.trim();
   if (!topLevel) {
@@ -191,8 +197,8 @@ function inspectRepository(rootInput, explicitRepositoryKey, metadataOnly = fals
       }
     };
   }
-  const commonDirOutput = gitOutput(rootPath, ["rev-parse", "--path-format=absolute", "--git-common-dir"], options.deadline) ?? gitOutput(rootPath, ["rev-parse", "--git-common-dir"], options.deadline);
-  const gitDirOutput = gitOutput(rootPath, ["rev-parse", "--path-format=absolute", "--git-dir"], options.deadline) ?? gitOutput(rootPath, ["rev-parse", "--git-dir"], options.deadline);
+  const commonDirOutput = gitOutput(rootPath, ["rev-parse", "--path-format=absolute", "--git-common-dir"], options) ?? gitOutput(rootPath, ["rev-parse", "--git-common-dir"], options);
+  const gitDirOutput = gitOutput(rootPath, ["rev-parse", "--path-format=absolute", "--git-dir"], options) ?? gitOutput(rootPath, ["rev-parse", "--git-dir"], options);
   if (!commonDirOutput || !gitDirOutput) {
     throw new CollabError("git_identity_unavailable", "Git recognized the repository but its local identity could not be resolved", { root_path: rootPath });
   }
@@ -206,19 +212,22 @@ function inspectRepository(rootInput, explicitRepositoryKey, metadataOnly = fals
     requested_root_path: requestedRoot,
     root_path: rootPath,
     repository_key: repositoryKey,
-    portable_repository_key: explicitKey || options.portable === false ? null : portableRepositoryKey(rootPath, options.deadline),
+    portable_repository_key: explicitKey || options.portable === false ? null : portableRepositoryKey(rootPath, options),
     git_common_dir_hash: commonDirHash,
     worktree_fingerprint: fingerprint,
     checkpoint: metadataOnly ? { worktree_id: id, head_sha: null, branch: null, dirty: null, captured_at: new Date().toISOString() } : captureRepoCheckpoint(rootPath, id)
   };
 }
-function portableRepositoryKey(rootPath, deadline) {
-  const origin = gitOutput(rootPath, ["config", "--get-all", "remote.origin.url"], deadline);
-  const remote = origin ?? gitOutput(rootPath, ["config", "--get-all", "remote.github.url"], deadline);
+function portableRepositoryKey(rootPath, optionsOrDeadline = {}) {
+  const options = typeof optionsOrDeadline === "number" ? { deadline: optionsOrDeadline } : optionsOrDeadline;
+  const origin = gitOutput(rootPath, ["config", "--get-all", "remote.origin.url"], options);
+  const remote = origin ?? gitOutput(rootPath, ["config", "--get-all", "remote.github.url"], options);
   const canonical = remote ? canonicalRepositoryRemote(remote) : null;
-  if (!canonical || gitOutput(rootPath, ["rev-parse", "--is-shallow-repository"], deadline) !== "false")
+  if (!canonical || gitOutput(rootPath, ["rev-parse", "--is-shallow-repository"], options) !== "false")
     return null;
-  const roots = successorGit(rootPath, ["rev-list", "--max-parents=0", "HEAD"], MAX_GIT_OUTPUT, deadline);
+  const roots = successorGit(rootPath, ["rev-list", "--max-parents=0", "HEAD"], MAX_GIT_OUTPUT, options);
+  if (roots.timed_out && options.deadline !== undefined)
+    throw new RepositoryProbeTimeout;
   if (!roots.ok)
     return null;
   const root = roots.stdout.toString("utf8").trim();
@@ -396,26 +405,29 @@ function resolveGitPath(rootPath, value) {
 function realpathIfPresent(path) {
   return existsSync2(path) ? realpathSync(path) : resolve3(path);
 }
-function gitOutput(rootPath, args, deadline) {
-  const result = runGit(rootPath, args, deadline);
+function gitOutput(rootPath, args, options = {}) {
+  const result = runGit(rootPath, args, options);
+  if (result.timed_out && options.deadline !== undefined)
+    throw new RepositoryProbeTimeout;
   if (!result.ok)
     return null;
   const value = result.stdout.trim();
   return value.length > 0 ? value : null;
 }
-function runGit(rootPath, args, deadline) {
-  const timeout = gitTimeout(deadline);
+function runGit(rootPath, args, options) {
+  const timeout = gitTimeout(options);
   if (timeout <= 0)
-    return { ok: false, stdout: "" };
-  const result = spawnSync("git", ["-C", rootPath, ...args], {
+    return { ok: false, timed_out: true, stdout: "" };
+  const result = spawnRepositoryGit(["-C", rootPath, ...args], {
     encoding: "utf8",
     timeout,
     maxBuffer: MAX_GIT_OUTPUT,
     stdio: ["ignore", "pipe", "ignore"],
     env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" }
-  });
+  }, options);
   return {
     ok: result.status === 0 && !result.error,
+    timed_out: result.error?.code === "ETIMEDOUT",
     stdout: typeof result.stdout === "string" ? result.stdout : ""
   };
 }
@@ -438,23 +450,27 @@ var SUCCESSOR_GIT_ARGS = ["-c", "core.commitGraph=false", "--no-replace-objects"
 function successorGitEnv() {
   return { ...process.env, GIT_GRAFT_FILE: "/dev/null/agenttool-collab-no-grafts" };
 }
-function successorGit(rootPath, args, maxBuffer = MAX_GIT_OUTPUT, deadline) {
-  const timeout = gitTimeout(deadline);
+function successorGit(rootPath, args, maxBuffer = MAX_GIT_OUTPUT, options = {}) {
+  const timeout = gitTimeout(options);
   if (timeout <= 0)
-    return { ok: false, stdout: Buffer.alloc(0) };
-  const result = spawnSync("git", ["-C", rootPath, ...SUCCESSOR_GIT_ARGS, ...args], {
+    return { ok: false, timed_out: true, stdout: Buffer.alloc(0) };
+  const result = spawnRepositoryGit(["-C", rootPath, ...SUCCESSOR_GIT_ARGS, ...args], {
     timeout,
     maxBuffer,
     stdio: ["ignore", "pipe", "ignore"],
     env: successorGitEnv()
-  });
+  }, options);
   return {
     ok: result.status === 0 && !result.error,
+    timed_out: result.error?.code === "ETIMEDOUT",
     stdout: Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.alloc(0)
   };
 }
-function gitTimeout(deadline) {
-  return deadline === undefined ? GIT_TIMEOUT_MS : Math.min(GIT_TIMEOUT_MS, Math.ceil(deadline - performance.now()));
+function spawnRepositoryGit(args, options, probe) {
+  return probe.spawn ? probe.spawn(args, options) : spawnSync("git", args, options);
+}
+function gitTimeout(options) {
+  return options.deadline === undefined ? GIT_TIMEOUT_MS : Math.min(GIT_TIMEOUT_MS, Math.ceil(options.deadline - (options.now ?? (() => performance.now()))()));
 }
 function successorGitExitCode(rootPath, args) {
   const result = spawnSync("git", ["-C", rootPath, ...SUCCESSOR_GIT_ARGS, ...args], {
@@ -661,11 +677,17 @@ class CollabStore {
   now;
   filesystemPath;
   migrationFailpoint;
+  repositoryDiscovery;
   eventReader;
   closed = false;
   constructor(path, options = {}) {
     this.now = options.now ?? (() => new Date);
     this.migrationFailpoint = options.migration_failpoint;
+    this.repositoryDiscovery = {
+      ...options.repository_discovery,
+      budget_ms: options.repository_discovery?.budget_ms ?? REPOSITORY_DISCOVERY_MS,
+      now: options.repository_discovery?.now ?? (() => performance.now())
+    };
     const databasePath = path === ":memory:" ? path : resolve4(path);
     if (databasePath !== ":memory:") {
       const parent = dirname2(databasePath);
@@ -1568,7 +1590,21 @@ class CollabStore {
       chmodSync2(path, 384);
     }
   }
-  prepareRepositoryAliases(deadline) {
+  discoverRepositoryKey(budget, probe) {
+    const now = this.repositoryDiscovery.now();
+    const fullSlice = budget.deadline === undefined;
+    budget.deadline ??= now + this.repositoryDiscovery.budget_ms;
+    if (now >= budget.deadline)
+      return;
+    try {
+      return probe({ ...this.repositoryDiscovery, deadline: budget.deadline });
+    } catch (error) {
+      if (error instanceof RepositoryProbeTimeout && !fullSlice)
+        return;
+      return null;
+    }
+  }
+  prepareRepositoryAliases(budget) {
     const rows = this.db.query(`
       SELECT w.* FROM worktrees w
       LEFT JOIN repository_discovery d ON d.worktree_id = w.id AND d.fingerprint = w.fingerprint
@@ -1577,15 +1613,15 @@ class CollabStore {
     `).iterate();
     const prepared = [];
     for (const row of rows) {
-      if (performance.now() >= deadline)
-        break;
-      let key = null;
-      try {
-        const identity = inspectRepository(row.root_path, undefined, true, { deadline });
+      const key = this.discoverRepositoryKey(budget, (options) => {
+        const identity = inspectRepository(row.root_path, undefined, true, options);
         if (identity.repository_key === row.repository_key && identity.worktree_fingerprint === row.fingerprint) {
-          key = identity.portable_repository_key ?? null;
+          return identity.portable_repository_key ?? null;
         }
-      } catch {}
+        return null;
+      });
+      if (key === undefined)
+        break;
       prepared.push({ row, key });
     }
     return prepared;
@@ -1595,6 +1631,8 @@ class CollabStore {
       this.db.query(`INSERT OR IGNORE INTO repository_aliases (worktree_id, portable_key) VALUES (?, ?)`).run(worktreeId2, key);
   }
   recordRepositoryDiscovery(worktreeId2, fingerprint, key) {
+    if (key === undefined)
+      return;
     this.recordRepositoryAlias(worktreeId2, key);
     this.db.query(`INSERT INTO repository_discovery (worktree_id, fingerprint, outcome) VALUES (?, ?, ?)
       ON CONFLICT(worktree_id) DO UPDATE SET fingerprint = excluded.fingerprint, outcome = excluded.outcome`).run(worktreeId2, fingerprint, key ? "checked" : "unresolvable");
@@ -1622,13 +1660,13 @@ class CollabStore {
   openWorkspace(input) {
     const actor = validateActor(input.actor);
     const identity = inspectRepository(input.root_path, input.repository_key, false, { portable: false });
-    const deadline = performance.now() + REPOSITORY_DISCOVERY_MS;
+    const budget = {};
     const cached = this.db.query(`SELECT a.portable_key FROM repository_discovery d
       LEFT JOIN repository_aliases a ON a.worktree_id = d.worktree_id
       WHERE d.worktree_id = ? AND d.fingerprint = ?`).get(identity.checkpoint.worktree_id, identity.worktree_fingerprint);
-    identity.portable_repository_key = cached ? cached.portable_key : identity.repository_key.startsWith("local-git:") ? portableRepositoryKey(identity.root_path, deadline) : null;
     const registered = this.db.query(`SELECT 1 FROM worktrees WHERE root_path = ?`).get(identity.root_path);
-    const aliases = !registered && this.repositoryPartitions(identity).length === 0 && identity.portable_repository_key ? this.prepareRepositoryAliases(deadline) : [];
+    const aliases = !registered && this.repositoryPartitions(identity).length === 0 && identity.repository_key.startsWith("local-git:") ? this.prepareRepositoryAliases(budget) : [];
+    identity.portable_repository_key = cached ? cached.portable_key : identity.repository_key.startsWith("local-git:") ? this.discoverRepositoryKey(budget, (options) => portableRepositoryKey(identity.root_path, options)) : null;
     const created = this.db.transaction(() => {
       const now = this.timestamp();
       for (const { row, key } of aliases) {

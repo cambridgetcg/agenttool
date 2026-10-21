@@ -65,7 +65,9 @@ import {
   inspectRepository,
   inspectSuccessorCommit,
   portableRepositoryKey,
+  RepositoryProbeTimeout,
   type RepositoryIdentity,
+  type RepositoryProbeOptions,
   type SuccessorCommitInspection,
 } from "./repository.js";
 
@@ -381,6 +383,7 @@ interface ReviewRow {
 export interface CollabStoreOptions {
   now?: Clock;
   migration_failpoint?: (step: string) => void;
+  repository_discovery?: Omit<RepositoryProbeOptions, "deadline"> & { budget_ms?: number };
 }
 
 export class CollabStore {
@@ -388,12 +391,21 @@ export class CollabStore {
   private readonly now: Clock;
   private readonly filesystemPath?: string;
   private readonly migrationFailpoint?: (step: string) => void;
+  private readonly repositoryDiscovery: Omit<RepositoryProbeOptions, "deadline" | "now"> & {
+    budget_ms: number;
+    now: () => number;
+  };
   private eventReader?: Database;
   private closed = false;
 
   constructor(path: string, options: CollabStoreOptions = {}) {
     this.now = options.now ?? (() => new Date());
     this.migrationFailpoint = options.migration_failpoint;
+    this.repositoryDiscovery = {
+      ...options.repository_discovery,
+      budget_ms: options.repository_discovery?.budget_ms ?? REPOSITORY_DISCOVERY_MS,
+      now: options.repository_discovery?.now ?? (() => performance.now()),
+    };
     const databasePath = path === ":memory:" ? path : resolve(path);
     if (databasePath !== ":memory:") {
       const parent = dirname(databasePath);
@@ -1375,7 +1387,27 @@ export class CollabStore {
     }
   }
 
-  private prepareRepositoryAliases(deadline: number): Array<{ row: WorktreeRow; key: string | null }> {
+  // See README "Session-fit migration": a shared-budget cutoff is not a
+  // negative discovery result. Only the first probe receives a full slice.
+  private discoverRepositoryKey(
+    budget: { deadline?: number },
+    probe: (options: RepositoryProbeOptions) => string | null,
+  ): string | null | undefined {
+    const now = this.repositoryDiscovery.now();
+    const fullSlice = budget.deadline === undefined;
+    budget.deadline ??= now + this.repositoryDiscovery.budget_ms;
+    if (now >= budget.deadline) return undefined;
+    try {
+      return probe({ ...this.repositoryDiscovery, deadline: budget.deadline });
+    } catch (error) {
+      if (error instanceof RepositoryProbeTimeout && !fullSlice) return undefined;
+      // Missing/unreadable roots and full-slice timeouts remain bounded and
+      // cached, but a partial slice must get another chance on a later open.
+      return null;
+    }
+  }
+
+  private prepareRepositoryAliases(budget: { deadline?: number }): Array<{ row: WorktreeRow; key: string | null }> {
     const rows = this.db.query(`
       SELECT w.* FROM worktrees w
       LEFT JOIN repository_discovery d ON d.worktree_id = w.id AND d.fingerprint = w.fingerprint
@@ -1384,18 +1416,15 @@ export class CollabStore {
     `).iterate() as IterableIterator<WorktreeRow>;
     const prepared: Array<{ row: WorktreeRow; key: string | null }> = [];
     for (const row of rows) {
-      if (performance.now() >= deadline) break;
-      let key: string | null = null;
-      try {
-        const identity = inspectRepository(row.root_path, undefined, true, { deadline });
+      const key = this.discoverRepositoryKey(budget, options => {
+        const identity = inspectRepository(row.root_path, undefined, true, options);
         if (identity.repository_key === row.repository_key
           && identity.worktree_fingerprint === row.fingerprint) {
-          key = identity.portable_repository_key ?? null;
+          return identity.portable_repository_key ?? null;
         }
-      } catch {
-        // Missing, unreadable or timed-out roots stay local. Cache failures too:
-        // a historical root must never block or repeatedly slow session start.
-      }
+        return null;
+      });
+      if (key === undefined) break;
       prepared.push({ row, key });
     }
     return prepared;
@@ -1409,6 +1438,7 @@ export class CollabStore {
   }
 
   private recordRepositoryDiscovery(worktreeId: string, fingerprint: string, key: string | null | undefined): void {
+    if (key === undefined) return; // Shared deadline: leave this fingerprint pending.
     this.recordRepositoryAlias(worktreeId, key);
     this.db.query(`INSERT INTO repository_discovery (worktree_id, fingerprint, outcome) VALUES (?, ?, ?)
       ON CONFLICT(worktree_id) DO UPDATE SET fingerprint = excluded.fingerprint, outcome = excluded.outcome`)
@@ -1446,18 +1476,23 @@ export class CollabStore {
   }): Workspace {
     const actor = validateActor(input.actor);
     const identity = inspectRepository(input.root_path, input.repository_key, false, { portable: false });
-    const deadline = performance.now() + REPOSITORY_DISCOVERY_MS;
+    const budget: { deadline?: number } = {};
     const cached = this.db.query(`SELECT a.portable_key FROM repository_discovery d
       LEFT JOIN repository_aliases a ON a.worktree_id = d.worktree_id
       WHERE d.worktree_id = ? AND d.fingerprint = ?`)
       .get(identity.checkpoint.worktree_id, identity.worktree_fingerprint) as { portable_key: string | null } | null;
-    identity.portable_repository_key = cached ? cached.portable_key
-      : identity.repository_key.startsWith("local-git:") ? portableRepositoryKey(identity.root_path, deadline) : null;
+
     // Git inspection remains outside the write transaction. Recheck prepared
     // registration rows under the lock before recording their aliases.
     const registered = this.db.query(`SELECT 1 FROM worktrees WHERE root_path = ?`).get(identity.root_path);
-    const aliases = !registered && this.repositoryPartitions(identity).length === 0 && identity.portable_repository_key
-      ? this.prepareRepositoryAliases(deadline) : [];
+    // Give the first pending row a full slice before inspecting the new clone.
+    // Otherwise every new clone can starve the backlog with a partial budget.
+    const aliases = !registered && this.repositoryPartitions(identity).length === 0
+      && identity.repository_key.startsWith("local-git:")
+      ? this.prepareRepositoryAliases(budget) : [];
+    identity.portable_repository_key = cached ? cached.portable_key
+      : identity.repository_key.startsWith("local-git:")
+        ? this.discoverRepositoryKey(budget, options => portableRepositoryKey(identity.root_path, options)) : null;
     const created = this.db.transaction(() => {
       const now = this.timestamp();
       for (const { row, key } of aliases) {

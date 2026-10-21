@@ -600,11 +600,16 @@ journal, host configuration or installed package is changed by this source PR.
 
 `repository_aliases` and `repository_discovery` are additive routing metadata.
 Discovery records `checked` or `unresolvable` once per worktree/fingerprint,
-including missing roots, unusable remotes, ambiguous history and timed-out Git
-inspection. There is no worktree-count refusal. A new portable clone surveys
-unexamined registrations within a 250 ms shared Git time budget, outside the
-write transaction; later new clones continue the survey. Existing roots do not
-survey the backlog, and cached roots do not walk their history again.
+including missing roots, unusable remotes and ambiguous history. There is no
+worktree-count refusal. A new local-Git clone surveys unexamined registrations
+before inspecting its own portable key, within a 250 ms shared Git time budget
+outside the write transaction. A timeout is cached as `unresolvable` only when
+that root received the full budget slice. Rows or new clones cut short by a
+partly consumed or exhausted shared deadline get no discovery/alias record and
+stay pending. Later new clones continue the survey; an existing pending root
+can retry its own discovery. Existing roots do not survey the backlog, and
+cached roots do not walk their history again. The budget, monotonic clock and
+Git runner are injectable for deterministic deadline regressions.
 
 Original workspace IDs, physical keys, epochs, events, hashes and migration
 receipts are unchanged. Only a new clone with no physical match can join a
@@ -615,7 +620,11 @@ journals. The old physical-key partition refusal is retained. The first stored
 alias is kept when remotes change/disappear or history becomes ambiguous; a
 negative result stays local for that fingerprint. This is intentionally
 conservative: it does not promise automatic regrouping after remote edits,
-retries of timed-out discovery, or journal/database replication.
+retries of full-slice timed-out discovery, or journal/database replication.
+Already split repositories keep splitting on ambiguous portable matches until
+an explicit reconciliation tool exists. Lower-casing remote paths also remains
+a risk on case-sensitive hosts: distinct repositories sharing a root commit
+could receive the same alias. Neither limitation is resolved by timeout handling.
 
 Actor omission reads only `<CLAUDE_CONFIG_DIR or ~/.claude>/sessions/<PID>.json`.
 PID selection is host-only: `AGENTOOL_COLLAB_CLAUDE_PID`, otherwise the direct
