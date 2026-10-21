@@ -1088,8 +1088,9 @@ passing by having nothing to block. A 404 is listed as not yet released and
 skipped, except on a site's front page. Cloudflare's automatic Web Analytics
 beacon is listed on each run instead of failing it, because its fix is a zone
 setting (turn off automatic injection, or allow the origin in
-`script-src-elem`). The `Live page policy` workflow repeats the sweep every six
-hours and can be started by hand with `gh workflow run live-page-policy.yml`.
+`script-src-elem`). The `Live page policy` workflow repeats the sweep once a day
+at 06:17 UTC and can be started by hand with
+`gh workflow run live-page-policy.yml`.
 Before merge, `specs/page-policy.spec.ts` runs the same sweep under committed
 headers in the default browser gate, and `bin/preflight.sh api` checks the hash
 of every inline script, event handler and style against each site's site-wide
