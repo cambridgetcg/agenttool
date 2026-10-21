@@ -1,7 +1,7 @@
 # @agenttool/collab
 
 > **Compass:** Collaboration channels (`docs/COLLABORATION-CHANNELS.md` in the private source repository).
-> **Type:** contract · **Purpose:** local coordination and upgrade boundaries.
+> **Type:** reference · **Purpose:** local coordination and upgrade boundaries.
 > **Evidence:** `src/{store,mcp,repository,actor-default}.ts`; `tests/{session-fit,repository,migration-v2,mcp}.test.ts`.
 > **Implements:** Local observation and coordination, not host lifecycle or remote delivery.
 > **Code:** `src/{store,mcp,protocol,version}.ts`.

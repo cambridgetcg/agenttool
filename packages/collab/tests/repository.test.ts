@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -68,7 +68,8 @@ function discoveryClock(cost: (args: string[]) => number, budget_ms = 250) {
   return { budget_ms, now: () => elapsed, spawn, calls };
 }
 beforeEach(() => {
-  directory = mkdtempSync(join(tmpdir(), "collab-repository-"));
+  // Worktrees are stored by real path; root_path lookups must match under a symlinked TMPDIR (macOS /var, /tmp).
+  directory = realpathSync(mkdtempSync(join(tmpdir(), "collab-repository-")));
   root = join(directory, "repo");
   mkdirSync(root);
   git(root, "init", "--initial-branch=main");
@@ -90,7 +91,7 @@ describe("portable repository routing", () => {
     }
     expect(canonicalRepositoryRemote("ssh://example.invalid:2222/owner/repo")).toBe("example.invalid:2222/owner/repo");
     expect(canonicalRepositoryRemote("HTTPS://GitHub.COM/Owner/Repo.GIT")).toBe("github.com/owner/repo");
-    expect(canonicalRepositoryRemote("git@GitHub.COM:OWNER/REPO.git")).toBe("github.com/owner/repo");
+    expect(canonicalRepositoryRemote("git@Example.INVALID:OWNER/REPO.git")).toBe("example.invalid/owner/repo");
     for (const value of ["/local/path", "file:///local/path", "ext::command", "https://x/repo?token=private", "git@host:a/../b", "https://x/a%2fb", "one\ntwo"]) {
       expect(canonicalRepositoryRemote(value)).toBeNull();
     }
