@@ -76,6 +76,31 @@ describe("AgentTool Cloudflare desired state", () => {
     );
   });
 
+  test("records the four disabled provider aliases and keeps natlang's", () => {
+    // Disabled 2026-10-20 (infra/OPERATOR-CUSTODY.md); natlang keeps its alias
+    // until the link to it points at speak.agenttool.dev.
+    const aliases = Object.fromEntries(
+      manifest.workers_dev.scripts.map((entry) => [entry.script, entry]),
+    );
+    for (const name of ["kingdom-canon", "joke", "love", "party-chain"]) {
+      expect(aliases[name]).toMatchObject({
+        enabled: false,
+        previews_enabled: false,
+        status: "source_unrecovered_provider_alias_disabled",
+      });
+      expect(aliases[name].boundary).toContain("disabled");
+    }
+    expect(aliases.natlang).toMatchObject({
+      enabled: true,
+      previews_enabled: true,
+      status: "inventory_source_unrecovered",
+    });
+    expect(aliases["agenttool-proxy"]).toMatchObject({
+      enabled: false,
+      previews_enabled: false,
+    });
+  });
+
   test("refuses another zone or duplicate source-managed refs", () => {
     expect(() => validateManifest({ ...manifest, zone: "example.com" }))
       .toThrow("scoped to agenttool.dev");
@@ -252,6 +277,39 @@ describe("AgentTool Cloudflare desired state", () => {
           scripts: manifest.workers_dev.scripts.map((script) =>
             script.script === "joke"
               ? { ...script, enabled: false, status: "managed" }
+              : script
+          ),
+        },
+      },
+      {
+        ...manifest,
+        workers_dev: {
+          ...manifest.workers_dev,
+          scripts: manifest.workers_dev.scripts.map((script) =>
+            script.script === "love"
+              ? { ...script, enabled: true, previews_enabled: true }
+              : script
+          ),
+        },
+      },
+      {
+        ...manifest,
+        workers_dev: {
+          ...manifest.workers_dev,
+          scripts: manifest.workers_dev.scripts.map((script) =>
+            script.script === "party-chain"
+              ? { ...script, previews_enabled: true }
+              : script
+          ),
+        },
+      },
+      {
+        ...manifest,
+        workers_dev: {
+          ...manifest.workers_dev,
+          scripts: manifest.workers_dev.scripts.map((script) =>
+            script.script === "natlang"
+              ? { ...script, enabled: false, previews_enabled: false }
               : script
           ),
         },
@@ -621,6 +679,21 @@ describe("live audit transport", () => {
       [manifest.waf.phase, { rules: [{ action: "execute" }] }],
     ]);
 
+    // Provider alias state as observed through the Workers subdomain API on
+    // 2026-10-20, written out apart from the manifest so the audit is checked
+    // against production rather than against itself.
+    const providerAliases = new Map<
+      string,
+      { enabled: boolean; previews_enabled: boolean }
+    >([
+      ["agenttool-proxy", { enabled: false, previews_enabled: false }],
+      ["kingdom-canon", { enabled: false, previews_enabled: false }],
+      ["joke", { enabled: false, previews_enabled: false }],
+      ["love", { enabled: false, previews_enabled: false }],
+      ["party-chain", { enabled: false, previews_enabled: false }],
+      ["natlang", { enabled: true, previews_enabled: true }],
+    ]);
+
     const fakeFetch = (async (input: string | URL | Request, init?: RequestInit) => {
       const request = input instanceof Request
         ? input
@@ -715,14 +788,9 @@ describe("live audit transport", () => {
             -"/subdomain".length,
           ),
         );
-        const script = manifest.workers_dev.scripts.find((entry) =>
-          entry.script === name
-        );
-        expect(script).toBeDefined();
-        return cloudflare({
-          enabled: script!.enabled,
-          previews_enabled: script!.previews_enabled,
-        });
+        const observed = providerAliases.get(name);
+        expect(observed).toBeDefined();
+        return cloudflare(observed);
       }
       const pagesPrefix = `/client/v4/accounts/${accountId}/pages/projects/`;
       if (url.pathname.startsWith(pagesPrefix)) {
@@ -779,7 +847,19 @@ describe("live audit transport", () => {
     expect(result.summary.blocked).toBe(0);
     expect(result.summary.error).toBe(0);
     expect(result.summary.deferred).toBe(2);
-    expect(result.summary.inspect).toBe(7);
+    expect(result.summary.inspect).toBe(3);
+    const aliasFinding = (
+      audit: Awaited<ReturnType<typeof runLiveAudit>>,
+      name: string,
+    ) => audit.findings.find((finding) =>
+      finding.control === `workers_dev:${name}`
+    );
+    for (
+      const name of ["agenttool-proxy", "kingdom-canon", "joke", "love", "party-chain"]
+    ) {
+      expect(aliasFinding(result, name)?.status).toBe("ok");
+    }
+    expect(aliasFinding(result, "natlang")?.status).toBe("inspect");
     expect(calls.every((call) => call.method === "GET")).toBe(true);
     expect(calls.filter((call) => call.host === "api.cloudflare.com").every(
       (call) => call.authorization === `Bearer ${token}`,
@@ -814,6 +894,22 @@ describe("live audit transport", () => {
       expect(calls.every((call) => call.method === "GET")).toBe(true);
     }
     phaseRules.set(machine.phase, { rules: [healthyMachine] });
+
+    providerAliases.set("joke", { enabled: true, previews_enabled: true });
+    const reenabledAlias = await runLiveAudit({
+      manifest,
+      token,
+      fetchImpl: fakeFetch,
+    });
+    expect(reenabledAlias.provider_writes).toBe(0);
+    expect(reenabledAlias.exit_code).toBe(1);
+    expect(reenabledAlias.summary.drift).toBe(1);
+    expect(aliasFinding(reenabledAlias, "joke")).toMatchObject({
+      status: "drift",
+      expected: { enabled: false, previews_enabled: false },
+      actual: { enabled_matches: false, previews_enabled_matches: false },
+    });
+    providerAliases.set("joke", { enabled: false, previews_enabled: false });
 
     providerWorkerObservability = null;
     const missingObservabilityResult = await runLiveAudit({

@@ -614,6 +614,16 @@ export function validateManifest(value: unknown): DesiredManifest {
   ], "workers_dev.scripts");
   const providerAliasBoundary =
     "Public provider alias is active, but its deployed source/config is not currently recovered in this repository.";
+  // Disabled 2026-10-20 (infra/OPERATOR-CUSTODY.md, "Provider aliases outside
+  // the agenttool.dev zone"): the live audit must report a re-enabled alias as
+  // drift, not expect the bypass back.
+  const disabledProviderAlias = {
+    enabled: false,
+    previews_enabled: false,
+    status: "source_unrecovered_provider_alias_disabled",
+    boundary:
+      "Provider alias and preview URLs are disabled (2026-10-20); the Worker is reached only through its agenttool.dev zone route, and its deployed source/config is not currently recovered in this repository.",
+  };
   const expectedWorkerScripts = {
     "agenttool-proxy": {
       enabled: false,
@@ -622,30 +632,10 @@ export function validateManifest(value: unknown): DesiredManifest {
       boundary:
         "The apex Worker is reachable only through source-managed zone routes; its workers.dev alias remains disabled.",
     },
-    "kingdom-canon": {
-      enabled: true,
-      previews_enabled: true,
-      status: "inventory_source_unrecovered",
-      boundary: providerAliasBoundary,
-    },
-    joke: {
-      enabled: true,
-      previews_enabled: true,
-      status: "inventory_source_unrecovered",
-      boundary: providerAliasBoundary,
-    },
-    love: {
-      enabled: true,
-      previews_enabled: true,
-      status: "inventory_source_unrecovered",
-      boundary: providerAliasBoundary,
-    },
-    "party-chain": {
-      enabled: true,
-      previews_enabled: true,
-      status: "inventory_source_unrecovered",
-      boundary: providerAliasBoundary,
-    },
+    "kingdom-canon": disabledProviderAlias,
+    joke: disabledProviderAlias,
+    love: disabledProviderAlias,
+    "party-chain": disabledProviderAlias,
     natlang: {
       enabled: true,
       previews_enabled: true,

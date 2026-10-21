@@ -114,16 +114,16 @@ cat > "$CADDYFILE" << 'CADDY'
     # Love page
     @love path /love/*
     handle @love {
-        reverse_proxy https://love.axiepro.workers.dev {
-            header_up Host love.axiepro.workers.dev
+        reverse_proxy https://love.agenttool.dev {
+            header_up Host love.agenttool.dev
         }
     }
 
     # Joke API
     @joke path /joke/*
     handle @joke {
-        reverse_proxy https://joke.axiepro.workers.dev {
-            header_up Host joke.axiepro.workers.dev
+        reverse_proxy https://joke.agenttool.dev {
+            header_up Host joke.agenttool.dev
         }
     }
 

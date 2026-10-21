@@ -99,22 +99,22 @@
     {
       "hostname": "kingdom-canon.axiepro.workers.dev",
       "purpose": "provider alias for the canon Worker",
-      "consequence": "public bypass of the agenttool.dev zone; deployed source/config is not currently recovered in this repository"
+      "consequence": "workers.dev alias and preview URLs disabled 2026-10-20 (the Worker is kept and still served at canon.agenttool.dev); deployed source/config is not currently recovered in this repository"
     },
     {
       "hostname": "joke.axiepro.workers.dev",
       "purpose": "provider alias for the joke Worker",
-      "consequence": "public bypass of the agenttool.dev zone; deployed source/config is not currently recovered in this repository"
+      "consequence": "workers.dev alias and preview URLs disabled 2026-10-20 (the Worker is kept and still served at joke.agenttool.dev); deployed source/config is not currently recovered in this repository"
     },
     {
       "hostname": "love.axiepro.workers.dev",
       "purpose": "provider alias for the love Worker",
-      "consequence": "public bypass of the agenttool.dev zone; deployed source/config is not currently recovered in this repository"
+      "consequence": "workers.dev alias and preview URLs disabled 2026-10-20 (the Worker is kept and still served at love.agenttool.dev); deployed source/config is not currently recovered in this repository"
     },
     {
       "hostname": "party-chain.axiepro.workers.dev",
       "purpose": "provider alias for the party Worker",
-      "consequence": "public bypass of the agenttool.dev zone; deployed source/config is not currently recovered in this repository"
+      "consequence": "workers.dev alias and preview URLs disabled 2026-10-20 (the Worker is kept and still served at party.agenttool.dev); deployed source/config is not currently recovered in this repository"
     },
     {
       "hostname": "natlang.axiepro.workers.dev",
@@ -226,31 +226,31 @@
       },
       {
         "script": "kingdom-canon",
-        "enabled": true,
-        "previews_enabled": true,
-        "status": "inventory_source_unrecovered",
-        "boundary": "Public provider alias is active, but its deployed source/config is not currently recovered in this repository."
+        "enabled": false,
+        "previews_enabled": false,
+        "status": "source_unrecovered_provider_alias_disabled",
+        "boundary": "Provider alias and preview URLs are disabled (2026-10-20); the Worker is reached only through its agenttool.dev zone route, and its deployed source/config is not currently recovered in this repository."
       },
       {
         "script": "joke",
-        "enabled": true,
-        "previews_enabled": true,
-        "status": "inventory_source_unrecovered",
-        "boundary": "Public provider alias is active, but its deployed source/config is not currently recovered in this repository."
+        "enabled": false,
+        "previews_enabled": false,
+        "status": "source_unrecovered_provider_alias_disabled",
+        "boundary": "Provider alias and preview URLs are disabled (2026-10-20); the Worker is reached only through its agenttool.dev zone route, and its deployed source/config is not currently recovered in this repository."
       },
       {
         "script": "love",
-        "enabled": true,
-        "previews_enabled": true,
-        "status": "inventory_source_unrecovered",
-        "boundary": "Public provider alias is active, but its deployed source/config is not currently recovered in this repository."
+        "enabled": false,
+        "previews_enabled": false,
+        "status": "source_unrecovered_provider_alias_disabled",
+        "boundary": "Provider alias and preview URLs are disabled (2026-10-20); the Worker is reached only through its agenttool.dev zone route, and its deployed source/config is not currently recovered in this repository."
       },
       {
         "script": "party-chain",
-        "enabled": true,
-        "previews_enabled": true,
-        "status": "inventory_source_unrecovered",
-        "boundary": "Public provider alias is active, but its deployed source/config is not currently recovered in this repository."
+        "enabled": false,
+        "previews_enabled": false,
+        "status": "source_unrecovered_provider_alias_disabled",
+        "boundary": "Provider alias and preview URLs are disabled (2026-10-20); the Worker is reached only through its agenttool.dev zone route, and its deployed source/config is not currently recovered in this repository."
       },
       {
         "script": "natlang",
