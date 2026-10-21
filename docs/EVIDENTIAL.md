@@ -2,9 +2,9 @@
 
 > **Type:** proposal
 > **Purpose:** Define grades for how a claim is known, the laws that stop provenance collapse when claims are passed on, and a first advisory place to compute those grades.
-> **Evidence:** Source: `api/src/services/evidential/lattice.ts` and 26 tests in `api/tests/evidential.test.ts`, run under Bun 1.3.5 with no database. The module is pure and nothing imports it, so no route, schema, package or deployed behaviour depends on it. Collab, schema and migration line numbers below were read at `origin/main` 3b9aa630 on 2026-10-18. Every landing in this document is **Proposed**.
+> **Evidence:** Source: `api/src/services/evidential/lattice.ts` and 29 tests in `api/tests/evidential.test.ts`, run under Bun 1.3.5 with no database. The module is pure and nothing imports it, so no route, schema, package or deployed behaviour depends on it. Collab, schema and migration line numbers below were read at `origin/main` 3b9aa630 on 2026-10-18. Every landing in this document is **Proposed**.
 > **Code:** `api/src/services/evidential/lattice.ts` · **Tests:** `api/tests/evidential.test.ts`
-> **History:** prototype 91c33c2a (2026-07-29), never proposed as a PR. Ported on 2026-10-18 with the relay fan-in hole closed and this document's claims corrected, then revised after two independent reviews of the port.
+> **History:** prototype 91c33c2a (2026-07-29), never proposed as a PR. Ported on 2026-10-18 with the relay fan-in hole closed and this document's claims corrected, then revised after two independent reviews of the port. On 2026-10-21 the chain merge was fixed after Codex review of #497 (see [The chain is the feature](#the-chain-is-the-feature)).
 
 A signature proves **who** said a thing. It has never proved **how they know it**.
 
@@ -156,11 +156,28 @@ Grade and chain sit **inside** `canonicalBytes`. A grade that can be edited
 after signing is not a grade; a chain that can be truncated is a laundering
 surface.
 
+When `relay` merges chains, it keeps the order the inputs were handed over in:
+each input's chain in its own order, a hop already recorded skipped, and the
+relaying hop last. A diamond (A → B, A → C, both → D) records A once, and no
+hop moves ahead of a hop it was built on. Two hops count as one only when every
+field the signed payload carries matches: `did`, `grade`, `at` and `basis`.
+Timestamps never reorder the chain, because an `at` is what a hop said about
+itself, and clock skew or the `at` option can stamp a relay before the claim it
+relays. Hops from separate branches appear in handover order, which says
+nothing about which happened first. The ported prototype keyed hops without
+`basis`, which dropped a hop, and sorted the merged chain by `at`, which could
+reverse it. Codex found both in review of #497, and both were fixed on
+2026-10-21; the tests on `basis` and on timestamps pin the fix.
+
 The prototype's limits, stated:
 
 - `canonicalBytes` uses `JSON.stringify`, so the bytes of an object `value`
   depend on key order. It is not the RFC 8785 JCS recipe used by other signing
   contexts ([canonical bytes](CANONICAL-BYTES.md)).
+- A hop carries no identifier of the claim it records, so two distinct hops
+  whose four fields match exactly are recorded once, as a diamond's shared
+  origin is. Telling them apart would need a hop identifier, such as a hash
+  of the claim.
 - Hops carry no signature of their own, and `relay` does not verify the inputs
   it receives. A final signer would sign the whole chain, so upstream hops could
   be rewritten before that.

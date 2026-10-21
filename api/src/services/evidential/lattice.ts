@@ -121,8 +121,19 @@ export interface Graded<T> {
   value: T;
   /** The grade this claim now carries — the last hop's grade. */
   grade: Grade;
-  /** Oldest hop first. An empty chain means the value was never relayed. */
+  /** Causal order: every hop follows the hops it was built on, and the last
+   *  hop is the current holder. Hops from separate branches keep the order
+   *  their inputs were handed over in. An `at` is what a hop said about
+   *  itself and never reorders the chain. An empty chain means the value was
+   *  never relayed. */
   chain: readonly Hop[];
+}
+
+/** A hop's identity when chains merge: every field the signed payload
+ *  carries, so two hops collapse only when `canonicalBytes` could not tell
+ *  them apart. */
+function hopKey(hop: Hop): string {
+  return JSON.stringify([hop.did, hop.grade, hop.at, hop.basis ?? null]);
 }
 
 /** The weaker of two grades. */
@@ -298,19 +309,21 @@ export function relay<T>(
   const verdict = guard(claimed, supported);
   if (!verdict.ok) return verdict;
 
-  // Chains merge oldest-first and de-duplicate identical hops, so a diamond
-  // (A → B, A → C, both → D) records A once rather than twice.
+  // Chains merge in the order the inputs were handed over, each keeping its
+  // own order, and a hop already recorded is skipped. A diamond (A → B,
+  // A → C, both → D) therefore records A once, and no hop moves ahead of a
+  // hop it was built on. Nothing is sorted by `at`: clock skew, or the `at`
+  // option, can stamp a relay before the claim it relays.
   const seen = new Set<string>();
   const merged: Hop[] = [];
   for (const input of inputs) {
     for (const hop of input.chain) {
-      const key = `${hop.did}|${hop.grade}|${hop.at}`;
+      const key = hopKey(hop);
       if (seen.has(key)) continue;
       seen.add(key);
       merged.push(hop);
     }
   }
-  merged.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
   merged.push({ did: by, grade: claimed, at: opts.at ?? new Date().toISOString(), basis: opts.basis });
 
   return { ok: true, claim: { value, grade: claimed, chain: merged } };

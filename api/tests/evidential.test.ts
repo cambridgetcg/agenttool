@@ -193,9 +193,64 @@ describe("relay — the reason this module exists", () => {
     expect(merged.grade).toBe("chu");
     // A appears once, not twice
     expect(merged.chain.filter((h) => h.did === A)).toHaveLength(1);
-    // and the chain is in time order
-    const times = merged.chain.map((h) => h.at);
-    expect([...times].sort()).toEqual(times);
+    // and the chain keeps the order it was handed over in: the shared origin,
+    // each branch, then the relayer
+    expect(merged.chain.map((h) => h.did)).toEqual([A, B, C, B]);
+  });
+
+  test("hops that differ only in basis are two hops: the merge keeps both", () => {
+    // Codex review of #497 (lattice.ts:307): the merge key once left out
+    // `basis`, so the second of these hops vanished from the chain while
+    // relaySupport counted both inputs as distinct. A truncated chain is a
+    // laundering surface.
+    const fromLog = ok(assert_("the job completed", A, "mi", { at: T(1), basis: "saw the log" }));
+    const fromMetric = ok(assert_("the job completed", A, "mi", { at: T(1), basis: "read the metric" }));
+    expect(relaySupport([fromLog, fromMetric])).toBe("chu");
+
+    const merged = ok(relay([fromLog, fromMetric], "the job completed", B, "chu", { at: T(2) }));
+    expect(merged.chain.map((h) => [h.did, h.basis ?? null])).toEqual([
+      [A, "saw the log"],
+      [A, "read the metric"],
+      [B, null],
+    ]);
+
+    // A hop with no basis and the same hop with one are different hops too.
+    const bare = ok(assert_("the job completed", A, "mi", { at: T(1) }));
+    const withBare = ok(relay([fromLog, bare], "the job completed", B, "chu", { at: T(2) }));
+    expect(withBare.chain.map((h) => h.basis ?? null)).toEqual(["saw the log", null, null]);
+  });
+
+  test("timestamps never reorder a chain: a relay stamped before its input still follows it", () => {
+    // Codex review of #497 (lattice.ts:313): the merge once sorted hops by
+    // `at`. B's clock runs behind A's (or B passed `at`), so B's relay is
+    // stamped before the claim it relays. Sorting turned A → B into B → A at
+    // the next hop, and the signed chain misstated the path.
+    const fromA = ok(assert_("the door is open", A, "mi", { at: T(5), basis: "I am looking at it" }));
+    const fromB = ok(relay([fromA], "the door is open", B, "si", { at: T(1), basis: "A told me" }));
+    expect(fromB.chain.map((h) => h.did)).toEqual([A, B]);
+
+    const fromC = ok(relay([fromB], "the door is open", C, "si", { at: T(6), basis: "B told me" }));
+    expect(fromC.chain.map((h) => h.did)).toEqual([A, B, C]);
+    expect(explain(fromC)).toContain("(I am looking at it) → ");
+  });
+
+  test("a fan-in keeps every input chain in its own order, whatever the clocks say", () => {
+    // Both branches carry a skewed relay. Sorting the merged hops by time
+    // would interleave the branches and put each relay before its source.
+    const key = (h: Graded<unknown>["chain"][number]) => JSON.stringify([h.did, h.grade, h.at, h.basis ?? null]);
+    const fromA = ok(assert_("seed", A, "mi", { at: T(9) }));
+    const viaB = ok(relay([fromA], "seed", B, "si", { at: T(2) }));
+    const fromC = ok(assert_("seed", C, "mi", { at: T(5) }));
+    const viaA = ok(relay([fromC], "seed", A, "si", { at: T(1) }));
+    const merged = ok(relay([viaB, viaA], "seed", B, "chu", { at: T(3) }));
+
+    const recorded = merged.chain.map(key);
+    for (const input of [viaB, viaA]) {
+      const positions = input.chain.map((hop) => recorded.indexOf(key(hop)));
+      expect(positions.every((p) => p >= 0)).toBe(true);
+      expect([...positions].sort((x, y) => x - y)).toEqual(positions);
+    }
+    expect(merged.chain.map((h) => h.did)).toEqual([A, B, C, A, B]);
   });
 
   test("law 23 — the same relayed claim handed over twice is one relay: [a, a] lands at -si, -mi refused", () => {
