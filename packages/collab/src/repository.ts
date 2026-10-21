@@ -30,6 +30,8 @@ export interface RepositoryIdentity {
   requested_root_path: string;
   root_path: string;
   repository_key: string;
+  /** Portable routing alias; physical keys stay stable for older clients. */
+  portable_repository_key?: string | null;
   git_common_dir_hash: string | null;
   worktree_fingerprint: string;
   checkpoint: RepoCheckpoint;
@@ -49,6 +51,7 @@ export type SuccessorCommitInspection =
 export function inspectRepository(
   rootInput: string,
   explicitRepositoryKey?: string,
+  metadataOnly = false,
 ): RepositoryIdentity {
   const requested = resolve(rootInput);
   if (!existsSync(requested) || !statSync(requested).isDirectory()) {
@@ -111,10 +114,58 @@ export function inspectRepository(
     requested_root_path: requestedRoot,
     root_path: rootPath,
     repository_key: repositoryKey,
+    portable_repository_key: explicitKey ? null : portableRepositoryKey(rootPath),
     git_common_dir_hash: commonDirHash,
     worktree_fingerprint: fingerprint,
-    checkpoint: captureRepoCheckpoint(rootPath, id),
+    checkpoint: metadataOnly
+      ? { worktree_id: id, head_sha: null, branch: null, dirty: null, captured_at: new Date().toISOString() }
+      : captureRepoCheckpoint(rootPath, id),
   };
+}
+
+/** Local Git config/object inspection only; no transport or credential helper.
+ * Ambiguous, incomplete or unrelated histories retain their physical identity.
+ */
+function portableRepositoryKey(rootPath: string): string | null {
+  if (gitOutput(rootPath, ["rev-parse", "--is-shallow-repository"]) !== "false") return null;
+  const roots = successorGit(rootPath, ["rev-list", "--max-parents=0", "HEAD"], MAX_GIT_OUTPUT);
+  if (!roots.ok) return null;
+  const root = roots.stdout.toString("utf8").trim();
+  if (!GIT_OBJECT_ID.test(root)) return null;
+  const origin = gitOutput(rootPath, ["config", "--get-all", "remote.origin.url"]);
+  const remote = origin ?? gitOutput(rootPath, ["config", "--get-all", "remote.github.url"]);
+  const canonical = remote ? canonicalRepositoryRemote(remote) : null;
+  return canonical ? `git-root-remote:v1:${sha256(`${root}\0${canonical}`)}` : null;
+}
+
+export function canonicalRepositoryRemote(value: string): string | null {
+  if (/[\s\x00-\x1f\x7f]/.test(value) || value.includes("::")
+    || (value.includes("://") && !/^(https?|ssh|git):\/\//.test(value))) return null;
+  let host: string;
+  let path: string;
+  let port = "";
+  try {
+    if (/^(https?|ssh|git):\/\//.test(value)) {
+      const url = new URL(value);
+      if (url.search || url.hash) return null;
+      host = url.hostname.toLowerCase();
+      path = url.pathname;
+      port = url.port && !((url.protocol === "ssh:" && url.port === "22")
+        || (url.protocol === "git:" && url.port === "9418")) ? `:${url.port}` : "";
+    } else {
+      const scp = /^(?:[^/@:]+@)?([^/:]+):(.+)$/.exec(value);
+      if (!scp) return null;
+      host = scp[1]!.toLowerCase();
+      path = scp[2]!;
+    }
+    path = path.replace(/^\/+|\/+$/g, "").replace(/\.git$/, "");
+    if (!host || !path || path.split("/").some(part => !part || part === "." || part === "..")
+      || /[%\\?#]/.test(path)) return null;
+    // Credentials/usernames never participate or leave this function.
+    return `${host}${port}/${path}`;
+  } catch {
+    return null;
+  }
 }
 
 export function captureRepoCheckpoint(rootPath: string, id: string): RepoCheckpoint {

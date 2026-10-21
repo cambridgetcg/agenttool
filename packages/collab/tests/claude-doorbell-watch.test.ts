@@ -29,7 +29,7 @@ beforeEach(async () => {
   databasePath = join(directory, "state", "collab.sqlite");
   store = new CollabStore(databasePath);
   // Unix socket paths are short-limited; name it after this live pid like Claude Code does.
-  socketDirectory = mkdtempSync("/tmp/cdw-");
+  socketDirectory = mkdtempSync(join(tmpdir(), "cdw-"));
   socketPath = join(socketDirectory, `${process.pid}.sock`);
   connections = [];
   server = createServer((socket) => {

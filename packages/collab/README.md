@@ -1,6 +1,8 @@
 # @agenttool/collab
 
 > **Compass:** Collaboration channels (`docs/COLLABORATION-CHANNELS.md` in the private source repository).
+> **Type:** contract · **Purpose:** local coordination and upgrade boundaries.
+> **Evidence:** `src/{store,mcp,repository,actor-default}.ts`; `tests/{session-fit,repository,migration-v2,mcp}.test.ts`.
 > **Implements:** Local observation and coordination, not host lifecycle or remote delivery.
 > **Code:** `src/{store,mcp,protocol,version}.ts`.
 > **Tests:** `tests/{events-wait,mcp,package}.test.ts`.
@@ -11,7 +13,8 @@ is released on GitHub only, as the
 of `cambridgetcg/agenttool-collab` (2026-10-10). On npm the recorded release is
 still the 32-tool 0.4.0, which does not supply `collab_events_wait`. In
 behaviour, this source is 0.5.0 plus the unreleased [host doorbell wait](#host-doorbell-wait-unreleased)
-and its addressed mode with the Claude Code watcher. The next npm candidate is
+and its addressed mode with the Claude Code watcher, plus the unreleased
+[session-fit changes](#session-fit-migration-unreleased). The next npm candidate is
 0.5.1 through the [public staged release path](https://docs.agenttool.dev/NPM-RELEASES.md#public-release-path-from-2026-10-12).
 This source is not evidence of 0.5.1 publication or native-harness activation;
 verify exact release receipts separately.
@@ -62,20 +65,24 @@ deletion command.
 
 ## Repository workspaces and sessions
 
-For a Git repository, Collab derives repository identity from the resolved Git
-common directory. Fresh v0.3 linked worktrees therefore join one logical
-workspace even though each has a different root path. Each root is also
-registered as a separate worktree so a claim or checkpoint records where it
-originated.
-Different clones do not automatically share an identity. A non-Git directory
-falls back to its resolved local path. An explicitly supplied repository key
-can override discovery, but it is a routing key, not proof that two roots are
-equivalent or safe to combine.
+For a complete, single-root Git history with a supported remote, Collab routes
+by the root commit plus canonical remote (`origin`, otherwise `github`). SSH,
+SCP-style and HTTP(S) spellings of the same host/path share an alias; credentials
+are omitted, path case and non-default ports remain significant. Clones and
+linked worktrees using the same database therefore join one journal. Each
+physical root keeps its own worktree ID and common-directory key for checkpoints
+and old-client compatibility. These aliases are routing hints, not proof of
+ownership or permission to combine work.
 
-Collab asks local Git only for repository identity, `HEAD`, branch, and coarse
-status. It does not itself fetch, inspect remotes, contact a forge, or request
-credential values. Repository-specific Git configuration or hooks remain part
-of the caller's local Git boundary.
+Missing/ambiguous remotes, shallow, unborn or multiple-root histories retain
+local common-directory routing. Non-Git directories use their resolved path.
+Explicit repository keys override portable discovery. Existing separate journals
+are preserved, not merged: see the migration note below.
+
+Collab reads local Git config, root ancestry, `HEAD`, branch and status. It never
+fetches, invokes a transport/credential helper, or contacts a forge. A configured
+remote can contain userinfo; it is discarded before hashing and is never returned
+or journaled. Repository-specific Git configuration remains a local boundary.
 
 ### Two session planes
 
@@ -248,7 +255,7 @@ model-facing inputs. It uses the same count/byte bounds and performs no wait.
 Most sessions need only this loop. Each step names the tool and the field that
 carries the next step.
 
-1. **Start.** `collab_session_start` with `root_path`, an `actor` label, an
+1. **Start.** `collab_session_start` with `root_path`, an optional `actor` label, an
    optional free-text `role`, and, for a delegated child, `parent_session_id`.
 2. **Poll and acknowledge.** `collab_next`, process the page, then
    `collab_cursor_ack` with its `next_anchor`. Reconcile new reports, reviews,
@@ -262,8 +269,10 @@ carries the next step.
    “claimable” accounts for active path leases, merely open or
    dependency-ready does not. Claim with `collab_task_claim` and the version
    just read, and begin edits only after the claim succeeds.
-4. **Work.** Renew with `collab_task_renew` before a long task exceeds its
-   lease and record compact `collab_task_progress`.
+4. **Work.** A live credential-bound session keeps its leases through normal
+   polling/acknowledgement/activity. Optional `collab_task_renew` needs no
+   `expected_version`; legacy actor leases still need renewal before TTL expiry.
+   Record compact `collab_task_progress`.
 5. **Attach.** `collab_artifact_attach` each file, commit, test, data, or URL
    reference rather than raw output. A file artifact uses a
    repository-relative `uri` inside the task's path scopes and the `sha256` of
@@ -285,8 +294,9 @@ report. Acceptance is a coordination decision only: it does not grant merge,
 commit, publication, deployment, purchase, messaging, or other external
 authority.
 
-Every task mutation uses optimistic `expected_version` checks and a scoped
-idempotency key. Reuse an idempotency key only for an exact retry. SQLite
+Task content mutations use optimistic `expected_version` checks; lease renewal
+instead checks the current holder and lease ID and does not increment task
+version. Both retain scoped idempotency keys. Reuse a key only for an exact retry. SQLite
 `BEGIN IMMEDIATE` transactions make one claim win under local contention.
 
 ### Evidence references
@@ -419,8 +429,15 @@ A delegated agent is an independent process with its own session. The
 delegator shares its session ID and keeps its credential to itself:
 never pass your session file, its path, or `AGENTOOL_COLLAB_SESSION_FILE`,
 because resuming it would advance the generation fence and fence the
-delegator. The child calls `collab_session_start` with `parent_session_id` set
-to the delegator's session and an actor label that names its runtime and job.
+delegator. A host may use a separate MCP process or a named `binding_key` on
+the shared endpoint. The child calls `collab_session_start` with that key,
+`parent_session_id` set to the delegator's session, and an optional actor label.
+Every subsequent child call, including wait, acknowledge and end, must carry
+the same key. Omission always selects the original default binding; an unknown
+explicit key refuses rather than falling back. Each slot owns a separate bearer,
+generation and cursor. Keys are cooperative routing, not authenticated subagent
+isolation: any caller of this endpoint can select a known slot. Hosts needing
+separation should continue using separate processes. Parent end does not end children.
 `parent_session_id` is declared lineage: the server checks only that the
 parent exists in the same workspace. It is unauthenticated and shares no
 authority, lease, or cursor. Parent and child are distinct sessions and may
@@ -462,8 +479,11 @@ and `collab_next` adds `recovery_required` (the caller's own expired leases
 first). Every cursor acknowledgement refreshes `last_seen_at`, including one
 that does not advance the cursor; so do `collab_next`, session mutations, a
 cursor reset, resume, and end. A host that only uses `collab_events_wait` or
-the host doorbell `wait` for over 6 hours reads as stale. This is a view: no status changes and nothing
-expires automatically.
+the host doorbell `wait` for over 6 hours reads as stale. This does not change session status. A session lease becomes recoverable only
+when both its stored TTL deadline has passed and the holder is stale; no task
+ownership transfers automatically. Activity before recovery retains the existing
+lease, but activity after takeover cannot reacquire it. Read-only waits never
+refresh liveness.
 `role` is fixed for the session's lifetime; correct it with an `informs`
 report, or end the session and start a new one.
 
@@ -475,7 +495,8 @@ case-insensitive. It does not lock the filesystem, inspect uncommitted diffs,
 resolve every symlink or case alias, prevent direct edits, or arbitrate a
 process using another database.
 
-When a session lease expires, the task reads as `recovery_required`. Before taking
+When a session is stale and its lease TTL has passed, the task reads as
+`recovery_required`. Before taking
 it over, inspect its progress, reports, artifacts, and last checkpoint. Call
 `collab_task_recover` explicitly with the chosen takeover, release, or block
 action and a concise recovery note explaining what was checked and how useful
@@ -552,6 +573,61 @@ and disagreement are valid outcomes and do not transfer private data or
 authority.
 
 ## Journal integrity and compatibility
+
+### Session-fit migration (unreleased)
+
+The `fr-collab-fit` changes keep the 33-tool surface and journal schema 3.
+Old explicit actor labels, default bindings, renewal requests carrying
+`expected_version`, presence APIs, event protocols and exact idempotency receipts
+remain readable/usable. Renewal accepts a stale version but still rejects the
+wrong holder, lease, generation or idempotency payload. Legacy actor leases
+remain TTL-bound; a credential-bound lease lives while its holder is `live`
+(active and seen within the existing six-hour window). `lease_expires_at` remains
+the stored minimum deadline, not the full effective lifetime; inspect
+`effective_status` and `assignee_liveness`. This is recorded activity, not proof
+of a running process. Hosts should end departed sessions with `release_leases`.
+
+Back up the selected journal and upgrade all serving MCP processes together
+before relying on new lease or cross-clone semantics. An older server can still
+read/open the schema and existing roots, but uses its old expiry/discovery rules;
+mixed old/new servers cannot offer the new coordination guarantees. No live
+journal, host configuration or installed package is changed by this source PR.
+
+`repository_aliases` is an additive worktree-to-portable-key table. Opening a
+portable repository backfills up to 256 unresolved registered Git worktrees,
+using bounded local metadata inspection outside the write transaction; larger
+inventories refuse with `repository_discovery_limit`. Missing old roots remain
+unresolved. Original workspace IDs, physical keys, epochs, events, hashes and
+migration receipts are unchanged. A new clone joins the unique existing match
+even if it is opened first after upgrade. Multiple existing matches refuse with
+`repository_partitioned`; retain both audit journals and arrange explicit
+reconciliation, never merge rows. Changing a registered portable alias refuses
+with `repository_identity_changed`. Discovery does not replicate databases.
+
+Actor omission reads only `<CLAUDE_CONFIG_DIR or ~/.claude>/sessions/<PID>.json`.
+PID selection is host-only: `AGENTOOL_COLLAB_CLAUDE_PID`, otherwise the numeric
+basename of `CLAUDE_CODE_MESSAGING_SOCKET`, otherwise the direct parent PID.
+The file must be a regular file owned by this OS user, not a final-component
+symlink, at most 64 KiB, and contain the matching numeric `pid` and a nonempty
+display `name` of at most 200 characters. Missing/unsafe/malformed metadata
+returns `actor_required`; supply an explicit label rather than scanning other
+sessions. No `.key`, transcript, `logPath`, credential, or sibling file is read.
+Only the name is retained; later name changes do not rewrite attribution.
+
+Named child bindings require `parent_session_id` at start and `binding_key` on
+every call. Existing hosts need no changes for the default slot. A host integrating
+the library can restore separate host-resumed handles via `resumed_sessions`;
+the CLI's existing `AGENTOOL_COLLAB_SESSION_FILE` resumes only the default slot.
+Named-slot restoration across CLI restarts is not automatic: end children before
+exit, or resume each independently through the existing host-held file mechanism.
+Never pass bearers or their paths to a subagent. The older packaged skill adapters
+describe the separate-process workflow, which remains supported; the MCP schemas
+and this section specify the new opt-in multiplexing contract.
+
+Coverage: `tests/session-fit.test.ts` (lease/liveness/renewal fencing, actor
+metadata and child concurrency), `tests/repository.test.ts` (clone routing,
+fallbacks and preserved partitions), and the existing migration, stdio, host,
+waiting and journal tests. No chain/consensus behavior changes.
 
 New coordination events use `agenttool.collab/0.2`; public presence records use
 `agenttool.collab.session/0.1`. Opening an original 0.1 database migrates its
@@ -686,8 +762,9 @@ infer external authority. Since 0.5.0 the adapter also names
 [The explicit OpenClaw example](integrations/openclaw/README.md) describes a
 host-selected MCP connection, not an installed native plugin or verified idle
 wake. Leave native persona, memory, channel receiver ownership, permissions and
-lifecycle intact. One MCP process has one coordination binding; independently
-attributed children need separate processes, even if the host calls them a fleet.
+lifecycle intact. A process retains one default binding and can opt into distinct
+named child bindings; this does not create an authenticated fleet or native
+subagent routing. Separate processes remain the isolation-oriented choice.
 
 Across all four hosts the vocabulary is the same: inspect **status**, explicitly
 **queue** a selected report in a separately configured private courier,

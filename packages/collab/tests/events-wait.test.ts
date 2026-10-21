@@ -60,7 +60,7 @@ function secondConnection(f: ReturnType<typeof fixture>) {
 }
 async function worker(f: ReturnType<typeof fixture>, mode: string) {
   const child = Bun.spawn([process.execPath, join(import.meta.dir, "events-wait-worker.ts"), mode, f.path, f.root], {
-    env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", TMPDIR: "/tmp" },
+    env: { PATH: process.env.PATH ?? "", HOME: f.directory, TMPDIR: tmpdir(), GIT_CEILING_DIRECTORIES: tmpdir() },
     stdin: "pipe", stdout: "pipe", stderr: "pipe",
   });
   cleanup.push(async () => { child.kill(); await child.exited; });
@@ -307,7 +307,7 @@ describe("bounded anchored local observation", () => {
   test(`the bundled stdio protocol validates bounds and stops real waits on ${stop}`, async () => {
     const f = fixture();
     const child = Bun.spawn([process.execPath, join(import.meta.dir, "../dist/agenttool-collab-mcp.js")], {
-      env: { PATH: process.env.PATH ?? "", HOME: f.directory, TMPDIR: "/tmp", AGENTOOL_COLLAB_DB: f.path },
+      env: { PATH: process.env.PATH ?? "", HOME: f.directory, TMPDIR: tmpdir(), GIT_CEILING_DIRECTORIES: tmpdir(), AGENTOOL_COLLAB_DB: f.path },
       stdin: "pipe", stdout: "pipe", stderr: "pipe",
     });
     cleanup.push(async () => { child.kill(); await child.exited; });

@@ -507,6 +507,15 @@ export class CollabStore {
         SCHEMA_VERSION,
       ]);
       this.validateAllJournals();
+      // Additive routing metadata: schema-3 clients ignore this table. No old
+      // workspace IDs, event bytes, heads or migration receipts are rewritten.
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS repository_aliases (
+          worktree_id TEXT PRIMARY KEY REFERENCES worktrees(id),
+          portable_key TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS repository_aliases_key_idx ON repository_aliases(portable_key);
+      `);
       this.db.exec(`PRAGMA application_id = ${APPLICATION_ID}`);
       this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     });
@@ -1355,6 +1364,53 @@ export class CollabStore {
     }
   }
 
+  private prepareRepositoryAliases(): Array<{ row: WorktreeRow; key: string }> {
+    const rows = this.db.query(`
+      SELECT w.* FROM worktrees w
+      LEFT JOIN repository_aliases a ON a.worktree_id = w.id
+      WHERE a.worktree_id IS NULL AND w.repository_key LIKE 'local-git:%'
+      ORDER BY w.id LIMIT 257
+    `).all() as WorktreeRow[];
+    if (rows.length > 256) {
+      throw new CollabError("repository_discovery_limit", "Portable discovery requires at most 256 unresolved worktrees");
+    }
+    const prepared: Array<{ row: WorktreeRow; key: string }> = [];
+    for (const row of rows) {
+      try {
+        const identity = inspectRepository(row.root_path, undefined, true);
+        if (identity.repository_key === row.repository_key
+          && identity.worktree_fingerprint === row.fingerprint
+          && identity.portable_repository_key) {
+          prepared.push({ row, key: identity.portable_repository_key });
+        }
+      } catch (error) {
+        if (!(error instanceof CollabError) || error.code !== "workspace_not_directory") throw error;
+        // An unavailable legacy root stays local; do not guess its identity.
+      }
+    }
+    return prepared;
+  }
+
+  private recordRepositoryAlias(worktreeId: string, key: string | null | undefined): void {
+    const prior = this.db.query(`SELECT portable_key FROM repository_aliases WHERE worktree_id = ?`)
+      .get(worktreeId) as { portable_key: string } | null;
+    if (prior && prior.portable_key !== key) {
+      throw new CollabError("repository_identity_changed", "The registered repository root/remote identity changed");
+    }
+    if (key) this.db.query(`INSERT OR IGNORE INTO repository_aliases (worktree_id, portable_key) VALUES (?, ?)`)
+      .run(worktreeId, key);
+  }
+
+  private repositoryPartitions(identity: RepositoryIdentity): Array<{ id: string }> {
+    return this.db.query(`
+      SELECT DISTINCT w.id FROM workspaces w
+      LEFT JOIN worktrees t ON t.workspace_id = w.id
+      LEFT JOIN repository_aliases a ON a.worktree_id = t.id
+      WHERE w.repository_key = ? OR t.repository_key = ? OR a.portable_key = ?
+      ORDER BY w.created_at, w.id
+    `).all(identity.repository_key, identity.repository_key, identity.portable_repository_key ?? null) as Array<{ id: string }>;
+  }
+
   openWorkspace(input: {
     root_path: string;
     name?: string;
@@ -1363,8 +1419,19 @@ export class CollabStore {
   }): Workspace {
     const actor = validateActor(input.actor);
     const identity = inspectRepository(input.root_path, input.repository_key);
+    // Git inspection remains outside the write transaction. Recheck prepared
+    // registration rows under the lock before recording their aliases.
+    const aliases = identity.portable_repository_key ? this.prepareRepositoryAliases() : [];
     const created = this.db.transaction(() => {
       const now = this.timestamp();
+      for (const { row, key } of aliases) {
+        const current = this.requireWorktreeRow(row.id);
+        if (current.root_path !== row.root_path || current.fingerprint !== row.fingerprint
+          || current.repository_key !== row.repository_key || current.workspace_id !== row.workspace_id) {
+          throw new CollabError("worktree_observation_stale", "Repository registration changed during discovery");
+        }
+        this.recordRepositoryAlias(row.id, key);
+      }
       const existingWorktree = this.db.query(`
         SELECT * FROM worktrees WHERE root_path = ?
       `).get(identity.root_path) as WorktreeRow | null;
@@ -1382,24 +1449,27 @@ export class CollabStore {
             },
           );
         }
+        this.recordRepositoryAlias(existingWorktree.id, identity.portable_repository_key);
         this.touchWorktree(existingWorktree, identity.checkpoint, now);
         return this.requireWorkspace(existingWorktree.workspace_id);
       }
 
-      const repositoryWorkspace = this.db.query(`
-        SELECT id FROM workspaces
-        WHERE repository_key = ?
-        ORDER BY created_at, id
-        LIMIT 1
-      `).get(identity.repository_key) as { id: string } | null;
+      const partitions = this.repositoryPartitions(identity);
+      if (partitions.length > 1) {
+        throw new CollabError("repository_partitioned", "Multiple preserved journals require explicit reconciliation", {
+          workspace_ids: partitions.map(partition => partition.id),
+        });
+      }
+      const repositoryWorkspace = partitions[0];
       const id = repositoryWorkspace?.id
-        ?? `ws_${sha256(identity.repository_key).slice(0, 24)}`;
+        ?? `ws_${sha256(identity.portable_repository_key ?? identity.repository_key).slice(0, 24)}`;
       const existing = this.getWorkspace(id);
-      if (existing && existing.repository_key !== identity.repository_key) {
+      if (existing && !repositoryWorkspace) {
         throw new CollabError("workspace_identity_collision", "Workspace identity collision");
       }
       if (existing) {
         this.registerWorktree(existing.id, identity, now, actor, true);
+        this.recordRepositoryAlias(identity.checkpoint.worktree_id, identity.portable_repository_key);
         return this.requireWorkspace(existing.id);
       }
 
@@ -1426,6 +1496,7 @@ export class CollabStore {
         GENESIS_HASH,
       );
       this.registerWorktree(id, identity, now, actor, false);
+      this.recordRepositoryAlias(identity.checkpoint.worktree_id, identity.portable_repository_key);
       this.appendEvent(id, "workspace.opened", id, actor, {
         root_path: identity.root_path,
         repository_key: identity.repository_key,
@@ -1663,18 +1734,7 @@ export class CollabStore {
     const actor = validateActor(input.actor);
     const role = optionalText(input.role, "role", 200);
     const identity = inspectRepository(input.root_path, input.repository_key);
-    const partitions = this.db.query(`
-      SELECT id FROM workspaces
-      WHERE repository_key = ?
-      ORDER BY created_at, id
-    `).all(identity.repository_key) as Array<{ id: string }>;
-    if (partitions.length > 1) {
-      throw new CollabError(
-        "repository_partitioned",
-        "This repository has multiple preserved v0.1 journals; explicit reconciliation is required before credential-bound sessions can start",
-        { workspace_ids: partitions.map((partition) => partition.id) },
-      );
-    }
+
     const workspace = this.openWorkspace({
       root_path: input.root_path,
       actor,
@@ -1691,6 +1751,12 @@ export class CollabStore {
       : null;
 
     const joined = this.db.transaction(() => {
+      const partitions = this.repositoryPartitions(identity);
+      if (partitions.length > 1) {
+        throw new CollabError("repository_partitioned", "Multiple preserved journals require explicit reconciliation before session start", {
+          workspace_ids: partitions.map(partition => partition.id),
+        });
+      }
       if (parentSessionId) {
         const parent = this.requireCoordinationSessionRow(parentSessionId);
         if (parent.workspace_id !== workspace.id) {
@@ -1909,7 +1975,7 @@ export class CollabStore {
             for (const task of held) {
               const leaseId = task.lease_id!;
               // One clock reading decides live versus expired for every lease.
-              const expired = task.lease_expires_at !== null && now >= task.lease_expires_at;
+              const expired = this.isExpired(task, row, now);
               if (expired) {
                 const lapsed = this.expireSessionLeaseForRecovery(task, row, now);
                 this.recordRecoveryWithoutTakeover(task, row, {
@@ -2010,7 +2076,9 @@ export class CollabStore {
   preflightSessionEnd(credential: { session_id: string; session_token: string }): void {
     const sessionId = validateId(credential.session_id, "session_id");
     const row = this.authenticateResumeToken(sessionId, credential.session_token);
-    const refusal = this.liveLeaseRefusal(row.workspace_id, row.id, this.timestamp());
+    // Host end resumes first, making even stale held leases live again. Refuse
+    // before generation/last_seen changes unless the caller requested release.
+    const refusal = this.liveLeaseRefusal(row.workspace_id, row.id, this.timestamp(), true);
     if (refusal) throw refusal;
   }
 
@@ -2515,7 +2583,8 @@ export class CollabStore {
     return this.mutateAsSession(input, input.idempotency_key, "task.recover.v2", request, (session) => {
       const row = this.requireTaskRow(session.workspace_id, taskId);
       this.requireVersion(row, expectedVersion);
-      if (!this.isExpired(row) || !row.lease_id || !row.assignee_session_id) {
+      if (!this.isExpired(row, row.assignee_session_id === session.id ? session : undefined)
+        || !row.lease_id || !row.assignee_session_id) {
         throw new CollabError(
           "recovery_not_required",
           "Only an expired session-owned lease can be explicitly recovered",
@@ -2601,10 +2670,10 @@ export class CollabStore {
     idempotency_key: string;
     task_id: string;
     lease_id: string;
-    expected_version: number;
+    expected_version?: number;
     ttl_seconds?: number;
   }): Task {
-    const normalized = normalizeSessionLeaseInput(input);
+    const normalized = normalizeSessionRenewInput(input);
     const ttl = validateTtl(input.ttl_seconds);
     return this.mutateAsSession(
       input,
@@ -2613,14 +2682,14 @@ export class CollabStore {
       { ...normalized.request, ttl_seconds: ttl },
       (session) => {
         const row = this.requireTaskRow(session.workspace_id, normalized.task_id);
-        this.requireVersion(row, normalized.expected_version);
         this.requireActiveSessionLease(row, session, normalized.lease_id);
         const now = this.timestamp();
         const candidate = addSeconds(now, ttl);
         const expiresAt = row.lease_expires_at && row.lease_expires_at > candidate
           ? row.lease_expires_at
           : candidate;
-        const version = row.version + 1;
+        // A heartbeat is fenced by the credential and lease, not task content.
+        const version = row.version;
         this.db.query(`
           UPDATE tasks SET lease_expires_at = ?, version = ?, updated_at = ?
           WHERE workspace_id = ? AND id = ?
@@ -3070,19 +3139,23 @@ export class CollabStore {
     });
   }
 
-  renewLease(input: LeaseTaskInput & { ttl_seconds?: number }): Task {
-    const normalized = normalizeLeaseInput(input);
+  renewLease(input: Omit<LeaseTaskInput, "expected_version"> & { expected_version?: number; ttl_seconds?: number }): Task {
+    if (input.expected_version !== undefined) validateExpectedVersion(input.expected_version);
+    const normalized = {
+      ...normalizeMutation(input),
+      task_id: validateId(input.task_id, "task_id"),
+      lease_id: validateId(input.lease_id, "lease_id"),
+    };
     const ttl = validateTtl(input.ttl_seconds);
     return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.renew", { ...normalized, ttl_seconds: ttl }, () => {
       const row = this.requireTaskRow(input.workspace_id, normalized.task_id);
-      this.requireVersion(row, normalized.expected_version);
       this.requireActiveLease(row, normalized.actor, normalized.lease_id);
       const now = this.timestamp();
       const candidate = addSeconds(now, ttl);
       const expiresAt = row.lease_expires_at && row.lease_expires_at > candidate
         ? row.lease_expires_at
         : candidate;
-      const version = row.version + 1;
+      const version = row.version;
       this.db.query(`
         UPDATE tasks SET lease_expires_at = ?, version = ?, updated_at = ?
         WHERE workspace_id = ? AND id = ?
@@ -3719,7 +3792,7 @@ export class CollabStore {
           });
         }
         const id = `handoff_${randomUUID()}`;
-        const expiresAt = [addSeconds(now, ttl), row.lease_expires_at!].sort()[0]!;
+        const expiresAt = addSeconds(now, ttl);
         this.db.query(`
           INSERT INTO handoffs (
             id, workspace_id, task_id, from_actor, from_session_id,
@@ -4979,7 +5052,13 @@ export class CollabStore {
       SELECT t.*
       FROM tasks t
       JOIN workspaces w ON w.id = t.workspace_id
-      WHERE w.repository_key = ?
+      WHERE (w.repository_key = ? OR w.id IN (
+        SELECT other.workspace_id FROM worktrees own
+        JOIN repository_aliases a ON a.worktree_id = own.id
+        JOIN repository_aliases b ON b.portable_key = a.portable_key
+        JOIN worktrees other ON other.id = b.worktree_id
+        WHERE own.workspace_id = ?
+      ))
         AND NOT (t.workspace_id = ? AND t.id = ?)
         AND (
           (t.status = 'claimed' AND (t.lease_expires_at > ? OR t.assignee_session_id IS NOT NULL))
@@ -4988,6 +5067,7 @@ export class CollabStore {
         )
     `).all(
       workspace.repository_key,
+      task.workspace_id,
       task.workspace_id,
       task.id,
       this.timestamp(),
@@ -5064,25 +5144,23 @@ export class CollabStore {
     workspaceId: string,
     sessionId: string,
     now: string,
+    holderWillResume = false,
   ): CollabError | null {
     const live = this.db.query(`
-      SELECT id, lease_id, lease_expires_at FROM tasks
+      SELECT * FROM tasks
       WHERE workspace_id = ? AND assignee_session_id = ?
-        AND status = 'claimed' AND lease_expires_at > ?
+        AND status = 'claimed'
       ORDER BY id
-    `).all(workspaceId, sessionId, now) as Array<{
-      id: string;
-      lease_id: string;
-      lease_expires_at: string;
-    }>;
-    if (live.length === 0) return null;
+    `).all(workspaceId, sessionId) as TaskRow[];
+    const active = live.filter((task) => holderWillResume || !this.isExpired(task, undefined, now));
+    if (active.length === 0) return null;
     return new CollabError(
       "session_has_active_leases",
       "Release, complete, or hand off active task leases before ending the session, or end with release_leases: true. "
         + "A handoff counts once it is accepted; release_leases also expires this session's pending outgoing offers",
       {
-        task_ids: live.map((task) => task.id),
-        leases: live.map((task) => ({
+        task_ids: active.map((task) => task.id),
+        leases: active.map((task) => ({
           task_id: task.id,
           lease_id: task.lease_id,
           expires_at: task.lease_expires_at,
@@ -5099,6 +5177,15 @@ export class CollabStore {
     session: CoordinationSessionRow,
     now: string,
   ): { prior: ExpiredSessionLease; expiryVersion: number } {
+    const holder = row.assignee_session_id === session.id
+      ? session
+      : this.requireCoordinationSessionRow(row.assignee_session_id!);
+    const staleAt = holder.status === "ended"
+      ? Date.parse(holder.ended_at ?? now)
+      : Date.parse(holder.last_seen_at) + SESSION_STALE_AFTER_MS + 1;
+    const effectiveAt = Number.isFinite(staleAt)
+      ? new Date(Math.max(Date.parse(row.lease_expires_at!), staleAt)).toISOString()
+      : now;
     const prior: ExpiredSessionLease = {
       assignee: row.assignee,
       session_id: row.assignee_session_id,
@@ -5123,7 +5210,8 @@ export class CollabStore {
     );
     this.appendEvent(row.workspace_id, "task.claim_expired", row.id, "system:clock", {
       ...prior,
-      effective_at: prior.lease_expires_at,
+      effective_at: effectiveAt,
+      lease_lifetime_basis: "session_liveness",
       observed_by_session_id: session.id,
       version: expiryVersion,
     });
@@ -5754,10 +5842,15 @@ export class CollabStore {
     }
   }
 
-  private isExpired(row: TaskRow): boolean {
+  private isExpired(row: TaskRow, priorHolder?: CoordinationSessionRow, observedAt = this.timestamp()): boolean {
+    // See README "Session-fit migration": TTL is a floor, not a second clock
+    // a live session must keep renewing. Legacy actor leases retain TTL.
     return row.status === "claimed"
       && row.lease_expires_at !== null
-      && this.timestamp() >= row.lease_expires_at;
+      && observedAt >= row.lease_expires_at
+      && (!row.assignee_session_id || (priorHolder
+        ? sessionLiveness(priorHolder, observedAt)
+        : this.assigneeLiveness(row.assignee_session_id, observedAt)) !== "live");
   }
 
   private taskFromRow(row: TaskRow): Task {
@@ -5818,12 +5911,12 @@ export class CollabStore {
     return coordinationSessionFromRow(row, observedAt);
   }
 
-  private assigneeLiveness(sessionId: string | null): SessionLiveness | null {
+  private assigneeLiveness(sessionId: string | null, observedAt = this.timestamp()): SessionLiveness | null {
     if (!sessionId) return null;
     const holder = this.db.query(`
       SELECT status, last_seen_at FROM coordination_sessions WHERE id = ?
     `).get(sessionId) as Pick<CoordinationSessionRow, "status" | "last_seen_at"> | null;
-    return holder ? sessionLiveness(holder, this.timestamp()) : null;
+    return holder ? sessionLiveness(holder, observedAt) : null;
   }
 
   private requireWorkspace(workspaceId: string, db = this.db): Workspace {
@@ -6042,6 +6135,21 @@ function requireBoundAfterSequence(
       remedy: BOUND_AFTER_SEQUENCE_REMEDY,
     },
   );
+}
+
+function normalizeSessionRenewInput(input: {
+  idempotency_key: string;
+  task_id: string;
+  lease_id: string;
+  expected_version?: number;
+}) {
+  if (input.expected_version !== undefined) validateExpectedVersion(input.expected_version);
+  const request = {
+    task_id: validateId(input.task_id, "task_id"),
+    lease_id: validateId(input.lease_id, "lease_id"),
+    ...(input.expected_version === undefined ? {} : { expected_version: input.expected_version }),
+  };
+  return { ...request, request, idempotency_key: validateIdempotencyKey(input.idempotency_key) };
 }
 
 function normalizeSessionLeaseInput(input: {

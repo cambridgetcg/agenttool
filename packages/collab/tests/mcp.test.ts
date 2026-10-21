@@ -66,13 +66,15 @@ class StdioMcpHarness {
   private buffered = "";
   private nextId = 1;
 
-  constructor(bundlePath: string, databasePath: string) {
+  constructor(bundlePath: string, databasePath: string, hostEnv: Record<string, string> = {}) {
     this.child = Bun.spawn([process.execPath, bundlePath], {
       cwd: packageRoot,
       env: {
         AGENTOOL_COLLAB_DB: databasePath,
         PATH: process.env.PATH ?? "",
         TMPDIR: tmpdir(),
+        GIT_CEILING_DIRECTORIES: tmpdir(),
+        ...hostEnv,
       },
       stdin: "pipe",
       stdout: "pipe",
@@ -182,10 +184,51 @@ describe("MCP surface", () => {
     ]);
   });
 
+  test("carries actor defaults and child binding selectors over real bundled stdio", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "collab-fit-stdio-"));
+    const root = join(directory, "repo");
+    const config = join(directory, "claude");
+    mkdirSync(root);
+    mkdirSync(join(config, "sessions"), { recursive: true });
+    writeFileSync(join(config, "sessions/123.json"), JSON.stringify({ pid: 123, name: "host-name", extra: "metadata-not-for-output" }));
+    const client = new StdioMcpHarness(join(packageRoot, "dist/agenttool-collab-mcp.js"), join(directory, "collab.sqlite"), {
+      HOME: directory, CLAUDE_CONFIG_DIR: config, AGENTOOL_COLLAB_CLAUDE_PID: "123",
+    });
+    cleanup.push(async () => { await client.close(); rmSync(directory, { recursive: true, force: true }); });
+    await client.initialize();
+    const tools = (await client.listTools()).tools;
+    expect(tools.find((item: any) => item.name === "collab_session_start").inputSchema.required).not.toContain("actor");
+    expect(tools.find((item: any) => item.name === "collab_task_renew").inputSchema.required).not.toContain("expected_version");
+    const parent = (await client.callTool("collab_session_start", { root_path: root })).structuredContent;
+    expect(parent.session.actor).toBe("host-name");
+    const child = (await client.callTool("collab_session_start", {
+      root_path: root, actor: "explicit-child", binding_key: "child", parent_session_id: parent.session.id,
+    })).structuredContent;
+    expect(child.session.actor).toBe("explicit-child");
+    expect(child.session.id).not.toBe(parent.session.id);
+    const workspace_id = parent.workspace.id;
+    const task = (await client.callTool("collab_task_create", {
+      workspace_id, binding_key: "child", idempotency_key: "create", title: "child", work_mode: "coordination",
+    })).structuredContent.task;
+    const claim = (await client.callTool("collab_task_claim", {
+      workspace_id, binding_key: "child", idempotency_key: "claim", task_id: task.id, expected_version: task.version,
+    })).structuredContent.task;
+    const renewed = await client.callTool("collab_task_renew", {
+      workspace_id, binding_key: "child", idempotency_key: "renew", task_id: task.id, lease_id: claim.lease_id,
+    });
+    expect(renewed.isError).toBeUndefined();
+    expect(renewed.structuredContent.task.version).toBe(claim.version);
+    expect((await client.callTool("collab_next", { workspace_id })).structuredContent.session.id).toBe(parent.session.id);
+    expect((await client.callTool("collab_session_end", { binding_key: "child", release_leases: true })).isError).toBeUndefined();
+    expect((await client.callTool("collab_session_end", { release_leases: true })).isError).toBeUndefined();
+    expect(JSON.stringify([parent, child])).not.toContain("session_token");
+    expect(JSON.stringify([parent, child])).not.toContain("metadata-not-for-output");
+  });
+
   test("keeps anchor ledger path selection host-only", () => {
     const { server } = node();
     const tool = (server as any)._registeredTools.collab_anchor_status;
-    expect(Object.keys(tool.inputSchema.shape)).toEqual(["workspace_id"]);
+    expect(Object.keys(tool.inputSchema.shape)).toEqual(["workspace_id", "binding_key"]);
     expect(tool.description).toContain("Local file read only");
     expect(tool.description).toContain("cannot choose or discover it");
   });
@@ -709,6 +752,7 @@ describe("MCP surface", () => {
     const { root, store, server } = node();
     const endTool = (server as any)._registeredTools.collab_session_end;
     expect(Object.keys(endTool.inputSchema.shape).sort()).toEqual([
+      "binding_key",
       "reason",
       "release_leases",
       "release_summary",
