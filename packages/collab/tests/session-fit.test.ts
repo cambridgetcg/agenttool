@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 import { defaultActor } from "../src/actor-default.js";
 import { CollabError } from "../src/errors.js";
 import { buildCollabMcpServer } from "../src/mcp.js";
@@ -80,6 +81,46 @@ describe("session-fit leases", () => {
     expect(store.getWorkspace(owner.workspace.id)!.event_head_sequence).toBe(head);
   });
 
+  test("a stale holder cannot renew or progress an expired lease before recovery", () => {
+    const { owner, claim } = claimed();
+    advance(SESSION_STALE_AFTER_MS + 1);
+    const before = store.getCoordinationSession(owner.session.id);
+    const request = { ...owner.credential, task_id: claim.id, lease_id: claim.lease_id!, expected_version: claim.version };
+    expect(code(() => store.renewLeaseForSession({ ...request, idempotency_key: "late" }))).toBe("lease_expired");
+    expect(code(() => store.progressTaskForSession({ ...request, idempotency_key: "late-progress", message: "late" }))).toBe("lease_expired");
+    expect(store.getCoordinationSession(owner.session.id)).toEqual(before);
+    expect(store.getTask(owner.workspace.id, claim.id).effective_status).toBe("recovery_required");
+    const recovered = store.recoverTaskForSession({ ...owner.credential, task_id: claim.id, expected_version: claim.version, idempotency_key: "recover-own", recovery_note: "Checked expired work" });
+    expect(recovered.lease_id).not.toBe(claim.lease_id);
+  });
+
+  for (const activity of ["poll", "ack", "resume", "report", "retry"] as const) {
+    test(`stale ${activity} refreshes activity without reviving an expired lease`, () => {
+      const { owner, claim } = claimed();
+      let credential = owner.credential;
+      const renewal = { ...credential, task_id: claim.id, lease_id: claim.lease_id!, idempotency_key: "original-renew" };
+      const receipt = store.renewLeaseForSession(renewal);
+      advance(SESSION_STALE_AFTER_MS + 1);
+      const expiredAt = now.toISOString();
+      if (activity === "poll") store.nextForSession(credential);
+      if (activity === "ack") store.acknowledgeSessionCursor({ ...credential, anchor: owner.session.cursor, expected_cursor_version: 0 });
+      if (activity === "resume") credential = store.resumeSession(credential).credential;
+      if (activity === "report") store.appendReportForSession({ ...credential, idempotency_key: "report", kind: "observation", body: "Back from rest" });
+      if (activity === "retry") expect(store.renewLeaseForSession(renewal)).toEqual(receipt);
+      expect(store.getCoordinationSession(owner.session.id)!.liveness).toBe("live");
+      expect(store.getTask(owner.workspace.id, claim.id).effective_status).toBe("recovery_required");
+      expect(code(() => store.renewLeaseForSession({ ...renewal, ...credential, idempotency_key: "revive" }))).toBe("lease_expired");
+      store.close();
+      store = new CollabStore(join(directory, "collab.sqlite"), { now: () => new Date(now) });
+      expect(store.getTask(owner.workspace.id, claim.id).effective_status).toBe("recovery_required");
+      const recovered = store.recoverTaskForSession({ ...credential, task_id: claim.id, expected_version: claim.version, idempotency_key: "recover", recovery_note: "Inspected expired lease" });
+      expect(recovered.lease_id).not.toBe(claim.lease_id);
+      const expiration = store.eventsSince(owner.workspace.id, 0, 500).events.find(event => event.type === "task.claim_expired");
+      expect(expiration?.payload.effective_at).toBe(expiredAt);
+      expect(store.verifyJournal(owner.workspace.id)).toBe(true);
+    });
+  }
+
   test("renew ignores stale versions, preserves progress/version and exact retry receipts", () => {
     const { owner, claim } = claimed();
     const progress = store.progressTaskForSession({ ...owner.credential, task_id: claim.id, lease_id: claim.lease_id!, expected_version: claim.version, idempotency_key: "progress", message: "In progress" });
@@ -103,6 +144,8 @@ describe("session-fit leases", () => {
     const claim = store.claimTask({ workspace_id: ws.id, actor: "legacy", idempotency_key: "claim", task_id: task.id, expected_version: task.version, ttl_seconds: 30 });
     const input = { workspace_id: ws.id, actor: "legacy", task_id: task.id, lease_id: claim.lease_id!, idempotency_key: "renew", ttl_seconds: 30 };
     expect(store.renewLease({ ...input, expected_version: 1 }).version).toBe(claim.version);
+    expect(code(() => store.renewLease({ ...input, expected_version: 2 }))).toBe("idempotency_conflict");
+    expect(code(() => store.renewLease(input))).toBe("idempotency_conflict");
     expect(store.renewLease({ ...input, idempotency_key: "without" }).version).toBe(claim.version);
     expect(code(() => store.renewLease({ ...input, actor: "other", idempotency_key: "other" }))).toBe("lease_not_holder");
     advance(31_000);
@@ -120,22 +163,33 @@ describe("session-fit leases", () => {
 });
 
 describe("display-name defaults", () => {
-  test("reads only the selected PID JSON name, with host PID and socket selection", () => {
+  test("requires the selected live PID, matching socket and exact process start", () => {
     const config = join(directory, "claude");
     mkdirSync(join(config, "sessions"), { recursive: true });
-    writeFileSync(join(config, "sessions/123.json"), JSON.stringify({ pid: 123, name: "chosen name", logPath: "/never/read", extra: "not returned" }));
-    writeFileSync(join(config, "sessions/456.json"), JSON.stringify({ pid: 456, name: "other" }));
-    const env = { CLAUDE_CONFIG_DIR: config, AGENTOOL_COLLAB_CLAUDE_PID: "123" };
+    const pid = process.pid;
+    const socket = `/fixture/${pid}.sock`;
+    const procStart = spawnSync("ps", ["-o", "lstart=", "-p", String(pid)], { encoding: "utf8", env: { ...process.env, LC_ALL: "C", TZ: "UTC" } }).stdout.trim();
+    expect(procStart.length).toBeGreaterThan(0);
+    const file = join(config, `sessions/${pid}.json`);
+    const metadata = { pid, name: "chosen name", messagingSocketPath: socket, procStart, logPath: "/never/read", extra: "not returned" };
+    writeFileSync(file, JSON.stringify(metadata));
+    const env = { CLAUDE_CONFIG_DIR: config, AGENTOOL_COLLAB_CLAUDE_PID: String(pid), CLAUDE_CODE_MESSAGING_SOCKET: socket };
     expect(defaultActor(env)).toBe("chosen name");
-    expect(defaultActor({ CLAUDE_CONFIG_DIR: config, CLAUDE_CODE_MESSAGING_SOCKET: "/fixture/123.sock" })).toBe("chosen name");
-    expect(defaultActor({ CLAUDE_CONFIG_DIR: config }, 123)).toBe("chosen name");
+    expect(defaultActor({ CLAUDE_CONFIG_DIR: config, CLAUDE_CODE_MESSAGING_SOCKET: socket }, pid)).toBe("chosen name");
+    expect(code(() => defaultActor({ CLAUDE_CONFIG_DIR: config, CLAUDE_CODE_MESSAGING_SOCKET: socket }, pid + 1))).toBe("actor_required");
+    expect(code(() => defaultActor({ ...env, CLAUDE_CODE_MESSAGING_SOCKET: undefined }))).toBe("actor_required");
+    expect(code(() => defaultActor({ ...env, CLAUDE_CODE_MESSAGING_SOCKET: `/other/${pid}.sock` }))).toBe("actor_required");
+    for (const update of [{ procStart: "reused-pid" }, { procStart: undefined }, { messagingSocketPath: undefined }]) {
+      writeFileSync(file, JSON.stringify({ ...metadata, ...update }));
+      expect(code(() => defaultActor(env))).toBe("actor_required");
+    }
   });
 
   test("missing, malformed, oversized, wrong-PID and symlink metadata fail without paths or bytes", () => {
     const config = join(directory, "claude");
     mkdirSync(join(config, "sessions"), { recursive: true });
     const file = join(config, "sessions/123.json");
-    const env = { CLAUDE_CONFIG_DIR: config, AGENTOOL_COLLAB_CLAUDE_PID: "123" };
+    const env = { CLAUDE_CONFIG_DIR: config, AGENTOOL_COLLAB_CLAUDE_PID: "123", CLAUDE_CODE_MESSAGING_SOCKET: "/fixture/123.sock" };
     for (const content of ["not-json-private", JSON.stringify({ pid: 456, name: "wrong" }), JSON.stringify({ pid: 123, name: "x".repeat(201) }), "x".repeat(65537)]) {
       writeFileSync(file, content);
       expect(code(() => defaultActor(env))).toBe("actor_required");
@@ -155,6 +209,8 @@ describe("cooperative child bindings", () => {
     const server = buildCollabMcpServer(store);
     const parent = (await tool(server, "collab_session_start", { root_path: root, actor: "same" })).structuredContent;
     const workspace_id = parent.workspace.id;
+    const unnamed = await tool(server, "collab_session_start", { root_path: root, binding_key: "child", parent_session_id: parent.session.id });
+    expect(unnamed.structuredContent.error).toBe("actor_required");
     const child = (await tool(server, "collab_session_start", { root_path: root, actor: "same", binding_key: "child", parent_session_id: parent.session.id })).structuredContent;
     expect(child.session.id).not.toBe(parent.session.id);
     expect(child.session.parent_session_id).toBe(parent.session.id);

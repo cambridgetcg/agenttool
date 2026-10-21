@@ -67,9 +67,10 @@ deletion command.
 
 For a complete, single-root Git history with a supported remote, Collab routes
 by the root commit plus canonical remote (`origin`, otherwise `github`). SSH,
-SCP-style and HTTP(S) spellings of the same host/path share an alias; credentials
-are omitted, path case and non-default ports remain significant. Clones and
-linked worktrees using the same database therefore join one journal. Each
+SCP-style and HTTP(S) spellings of the same host/path share a case-insensitive
+alias; credentials are omitted and non-default ports remain significant. New
+clones join an existing journal only when discovery finds exactly one match.
+Existing registrations and physical common-directory matches take precedence. Each
 physical root keeps its own worktree ID and common-directory key for checkpoints
 and old-client compatibility. These aliases are routing hints, not proof of
 ownership or permission to combine work.
@@ -431,7 +432,7 @@ never pass your session file, its path, or `AGENTOOL_COLLAB_SESSION_FILE`,
 because resuming it would advance the generation fence and fence the
 delegator. A host may use a separate MCP process or a named `binding_key` on
 the shared endpoint. The child calls `collab_session_start` with that key,
-`parent_session_id` set to the delegator's session, and an optional actor label.
+`parent_session_id` set to the delegator's session, and an explicit actor label.
 Every subsequent child call, including wait, acknowledge and end, must carry
 the same key. Omission always selects the original default binding; an unknown
 explicit key refuses rather than falling back. Each slot owns a separate bearer,
@@ -481,9 +482,9 @@ that does not advance the cursor; so do `collab_next`, session mutations, a
 cursor reset, resume, and end. A host that only uses `collab_events_wait` or
 the host doorbell `wait` for over 6 hours reads as stale. This does not change session status. A session lease becomes recoverable only
 when both its stored TTL deadline has passed and the holder is stale; no task
-ownership transfers automatically. Activity before recovery retains the existing
-lease, but activity after takeover cannot reacquire it. Read-only waits never
-refresh liveness.
+ownership transfers automatically. Activity while live retains the lease, but
+once expired it requires explicit recovery even if its holder becomes live again.
+Read-only waits never refresh liveness.
 `role` is fixed for the session's lifetime; correct it with an `informs`
 report, or end the session and start a new one.
 
@@ -586,6 +587,10 @@ remain TTL-bound; a credential-bound lease lives while its holder is `live`
 the stored minimum deadline, not the full effective lifetime; inspect
 `effective_status` and `assignee_liveness`. This is recorded activity, not proof
 of a running process. Hosts should end departed sessions with `release_leases`.
+Expiry is checked against the pre-refresh session row. An additive
+`session_lease_lapses` table retains expired lease IDs across later polling,
+acknowledgement, resume and unrelated activity; returning activity cannot revive
+them. No claim is released or transferred until explicit recovery/end.
 
 Back up the selected journal and upgrade all serving MCP processes together
 before relying on new lease or cross-clone semantics. An older server can still
@@ -593,29 +598,41 @@ read/open the schema and existing roots, but uses its old expiry/discovery rules
 mixed old/new servers cannot offer the new coordination guarantees. No live
 journal, host configuration or installed package is changed by this source PR.
 
-`repository_aliases` is an additive worktree-to-portable-key table. Opening a
-portable repository backfills up to 256 unresolved registered Git worktrees,
-using bounded local metadata inspection outside the write transaction; larger
-inventories refuse with `repository_discovery_limit`. Missing old roots remain
-unresolved. Original workspace IDs, physical keys, epochs, events, hashes and
-migration receipts are unchanged. A new clone joins the unique existing match
-even if it is opened first after upgrade. Multiple existing matches refuse with
-`repository_partitioned`; retain both audit journals and arrange explicit
-reconciliation, never merge rows. Changing a registered portable alias refuses
-with `repository_identity_changed`. Discovery does not replicate databases.
+`repository_aliases` and `repository_discovery` are additive routing metadata.
+Discovery records `checked` or `unresolvable` once per worktree/fingerprint,
+including missing roots, unusable remotes, ambiguous history and timed-out Git
+inspection. There is no worktree-count refusal. A new portable clone surveys
+unexamined registrations within a 250 ms shared Git time budget, outside the
+write transaction; later new clones continue the survey. Existing roots do not
+survey the backlog, and cached roots do not walk their history again.
+
+Original workspace IDs, physical keys, epochs, events, hashes and migration
+receipts are unchanged. Only a new clone with no physical match can join a
+unique portable match, including on first open after upgrade if discovery
+finishes within budget. Multiple portable matches or incomplete discovery fall
+back to local physical routing, never refuse an existing registration or merge
+journals. The old physical-key partition refusal is retained. The first stored
+alias is kept when remotes change/disappear or history becomes ambiguous; a
+negative result stays local for that fingerprint. This is intentionally
+conservative: it does not promise automatic regrouping after remote edits,
+retries of timed-out discovery, or journal/database replication.
 
 Actor omission reads only `<CLAUDE_CONFIG_DIR or ~/.claude>/sessions/<PID>.json`.
-PID selection is host-only: `AGENTOOL_COLLAB_CLAUDE_PID`, otherwise the numeric
-basename of `CLAUDE_CODE_MESSAGING_SOCKET`, otherwise the direct parent PID.
+PID selection is host-only: `AGENTOOL_COLLAB_CLAUDE_PID`, otherwise the direct
+parent PID. The inherited messaging socket alone never selects an ancestor.
+Its numeric basename must match the selected PID, and metadata's
+`messagingSocketPath` must exactly equal `CLAUDE_CODE_MESSAGING_SOCKET`.
 The file must be a regular file owned by this OS user, not a final-component
 symlink, at most 64 KiB, and contain the matching numeric `pid` and a nonempty
-display `name` of at most 200 characters. Missing/unsafe/malformed metadata
+display `name` of at most 200 characters. `procStart` must match the live process's
+`ps -o lstart=` value in the C locale and UTC (bounded to one second), preventing
+PID-reuse attribution. Missing/unsafe/malformed metadata or an unavailable process
 returns `actor_required`; supply an explicit label rather than scanning other
 sessions. No `.key`, transcript, `logPath`, credential, or sibling file is read.
 Only the name is retained; later name changes do not rewrite attribution.
 
-Named child bindings require `parent_session_id` at start and `binding_key` on
-every call. Existing hosts need no changes for the default slot. A host integrating
+Named child bindings require an explicit `actor` and `parent_session_id` at start
+and `binding_key` on every call. Existing hosts need no changes for the default slot. A host integrating
 the library can restore separate host-resumed handles via `resumed_sessions`;
 the CLI's existing `AGENTOOL_COLLAB_SESSION_FILE` resumes only the default slot.
 Named-slot restoration across CLI restarts is not automatic: end children before

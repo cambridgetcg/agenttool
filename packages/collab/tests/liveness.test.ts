@@ -130,7 +130,7 @@ describe("staleness as a derived view", () => {
     });
   });
 
-  test("keeps live session leases and projects recovery only for stale holders", () => {
+  test("keeps live session leases and preserves recovery after a stale holder returns", () => {
     const holder = session("own-holder");
     const other = session("other-holder");
     const observer = session("observer");
@@ -164,10 +164,11 @@ describe("staleness as a derived view", () => {
     expect(store.getTask(otherTask.workspace_id, otherTask.id).assignee_liveness).toBe("stale");
     expect(store.nextForSession(observer.credential).recovery_required.map(task => task.id))
       .toEqual([otherTask.id, ownTask.id]);
-    // Activity before takeover keeps the same lease; it cannot retake a lease
-    // already transferred by audited recovery (session-fit.test.ts).
+    // Returning activity is live again, but a previously expired lease still
+    // needs explicit recovery, even before anyone else takes it over.
     const refreshed = store.nextForSession(holder.credential).recovery_required;
     expect(refreshed.map((task) => [task.id, task.assignee_liveness])).toEqual([
+      [ownTask.id, "live"],
       [otherTask.id, "stale"],
     ]);
     expect(otherClaim.lease_expires_at! < ownClaim.lease_expires_at!).toBe(true);

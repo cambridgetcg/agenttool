@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import type { SessionHandle } from "../src/protocol.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
 import { CollabStore } from "../src/store.js";
@@ -29,7 +29,11 @@ beforeEach(async () => {
   databasePath = join(directory, "state", "collab.sqlite");
   store = new CollabStore(databasePath);
   // Unix socket paths are short-limited; name it after this live pid like Claude Code does.
-  socketDirectory = mkdtempSync(join(tmpdir(), "cdw-"));
+  // A long TMPDIR can exceed macOS's 104-byte sockaddr_un limit. Use a
+  // short relative path inside the test package, not another user's temp home.
+  const prefix = join(tmpdir(), "cdw-");
+  socketDirectory = mkdtempSync(Buffer.byteLength(`${prefix}XXXXXX/${process.pid}.sock`) < 104
+    ? prefix : join(relative(process.cwd(), packageRoot), ".cdw-"));
   socketPath = join(socketDirectory, `${process.pid}.sock`);
   connections = [];
   server = createServer((socket) => {
@@ -71,7 +75,7 @@ function startWatcher(sessionId: string, extra: string[] = [], socket = socketPa
       PATH: process.env.PATH ?? "",
       TMPDIR: tmpdir(),
       HOME: join(directory, "home"),
-      CLAUDE_CODE_MESSAGING_SOCKET: socket,
+      CLAUDE_CODE_MESSAGING_SOCKET: socket.startsWith("/") ? socket : relative(packageRoot, resolve(socket)),
       CLAUDE_CODE_MESSAGING_TOKEN: TOKEN,
     },
     stdout: "pipe",

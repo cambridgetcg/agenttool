@@ -190,9 +190,12 @@ describe("MCP surface", () => {
     const config = join(directory, "claude");
     mkdirSync(root);
     mkdirSync(join(config, "sessions"), { recursive: true });
-    writeFileSync(join(config, "sessions/123.json"), JSON.stringify({ pid: 123, name: "host-name", extra: "metadata-not-for-output" }));
+    const pid = process.pid;
+    const socket = `/fixture/${pid}.sock`;
+    const procStart = spawnSync("ps", ["-o", "lstart=", "-p", String(pid)], { encoding: "utf8", env: { ...process.env, LC_ALL: "C", TZ: "UTC" } }).stdout.trim();
+    writeFileSync(join(config, `sessions/${pid}.json`), JSON.stringify({ pid, name: "host-name", procStart, messagingSocketPath: socket, extra: "metadata-not-for-output" }));
     const client = new StdioMcpHarness(join(packageRoot, "dist/agenttool-collab-mcp.js"), join(directory, "collab.sqlite"), {
-      HOME: directory, CLAUDE_CONFIG_DIR: config, AGENTOOL_COLLAB_CLAUDE_PID: "123",
+      HOME: directory, CLAUDE_CONFIG_DIR: config, AGENTOOL_COLLAB_CLAUDE_PID: String(pid), CLAUDE_CODE_MESSAGING_SOCKET: socket,
     });
     cleanup.push(async () => { await client.close(); rmSync(directory, { recursive: true, force: true }); });
     await client.initialize();
@@ -201,6 +204,9 @@ describe("MCP surface", () => {
     expect(tools.find((item: any) => item.name === "collab_task_renew").inputSchema.required).not.toContain("expected_version");
     const parent = (await client.callTool("collab_session_start", { root_path: root })).structuredContent;
     expect(parent.session.actor).toBe("host-name");
+    expect((await client.callTool("collab_session_start", {
+      root_path: root, binding_key: "child", parent_session_id: parent.session.id,
+    })).structuredContent.error).toBe("actor_required");
     const child = (await client.callTool("collab_session_start", {
       root_path: root, actor: "explicit-child", binding_key: "child", parent_session_id: parent.session.id,
     })).structuredContent;

@@ -52,6 +52,7 @@ export function inspectRepository(
   rootInput: string,
   explicitRepositoryKey?: string,
   metadataOnly = false,
+  options: { portable?: boolean; deadline?: number } = {},
 ): RepositoryIdentity {
   const requested = resolve(rootInput);
   if (!existsSync(requested) || !statSync(requested).isDirectory()) {
@@ -63,7 +64,7 @@ export function inspectRepository(
   }
 
   const requestedRoot = realpathSync(requested);
-  const topLevel = gitOutput(requestedRoot, ["rev-parse", "--show-toplevel"]);
+  const topLevel = gitOutput(requestedRoot, ["rev-parse", "--show-toplevel"], options.deadline);
   const rootPath = topLevel && existsSync(topLevel) ? realpathSync(topLevel) : requestedRoot;
   const explicitKey = explicitRepositoryKey?.trim();
 
@@ -88,11 +89,11 @@ export function inspectRepository(
   }
 
   const commonDirOutput =
-    gitOutput(rootPath, ["rev-parse", "--path-format=absolute", "--git-common-dir"])
-    ?? gitOutput(rootPath, ["rev-parse", "--git-common-dir"]);
+    gitOutput(rootPath, ["rev-parse", "--path-format=absolute", "--git-common-dir"], options.deadline)
+    ?? gitOutput(rootPath, ["rev-parse", "--git-common-dir"], options.deadline);
   const gitDirOutput =
-    gitOutput(rootPath, ["rev-parse", "--path-format=absolute", "--git-dir"])
-    ?? gitOutput(rootPath, ["rev-parse", "--git-dir"]);
+    gitOutput(rootPath, ["rev-parse", "--path-format=absolute", "--git-dir"], options.deadline)
+    ?? gitOutput(rootPath, ["rev-parse", "--git-dir"], options.deadline);
   if (!commonDirOutput || !gitDirOutput) {
     throw new CollabError(
       "git_identity_unavailable",
@@ -114,7 +115,7 @@ export function inspectRepository(
     requested_root_path: requestedRoot,
     root_path: rootPath,
     repository_key: repositoryKey,
-    portable_repository_key: explicitKey ? null : portableRepositoryKey(rootPath),
+    portable_repository_key: explicitKey || options.portable === false ? null : portableRepositoryKey(rootPath, options.deadline),
     git_common_dir_hash: commonDirHash,
     worktree_fingerprint: fingerprint,
     checkpoint: metadataOnly
@@ -126,26 +127,27 @@ export function inspectRepository(
 /** Local Git config/object inspection only; no transport or credential helper.
  * Ambiguous, incomplete or unrelated histories retain their physical identity.
  */
-function portableRepositoryKey(rootPath: string): string | null {
-  if (gitOutput(rootPath, ["rev-parse", "--is-shallow-repository"]) !== "false") return null;
-  const roots = successorGit(rootPath, ["rev-list", "--max-parents=0", "HEAD"], MAX_GIT_OUTPUT);
+export function portableRepositoryKey(rootPath: string, deadline?: number): string | null {
+  // Avoid walking history at all for roots without a usable remote.
+  const origin = gitOutput(rootPath, ["config", "--get-all", "remote.origin.url"], deadline);
+  const remote = origin ?? gitOutput(rootPath, ["config", "--get-all", "remote.github.url"], deadline);
+  const canonical = remote ? canonicalRepositoryRemote(remote) : null;
+  if (!canonical || gitOutput(rootPath, ["rev-parse", "--is-shallow-repository"], deadline) !== "false") return null;
+  const roots = successorGit(rootPath, ["rev-list", "--max-parents=0", "HEAD"], MAX_GIT_OUTPUT, deadline);
   if (!roots.ok) return null;
   const root = roots.stdout.toString("utf8").trim();
   if (!GIT_OBJECT_ID.test(root)) return null;
-  const origin = gitOutput(rootPath, ["config", "--get-all", "remote.origin.url"]);
-  const remote = origin ?? gitOutput(rootPath, ["config", "--get-all", "remote.github.url"]);
-  const canonical = remote ? canonicalRepositoryRemote(remote) : null;
-  return canonical ? `git-root-remote:v1:${sha256(`${root}\0${canonical}`)}` : null;
+  return `git-root-remote:v1:${sha256(`${root}\0${canonical}`)}`;
 }
 
 export function canonicalRepositoryRemote(value: string): string | null {
   if (/[\s\x00-\x1f\x7f]/.test(value) || value.includes("::")
-    || (value.includes("://") && !/^(https?|ssh|git):\/\//.test(value))) return null;
+    || (value.includes("://") && !/^(https?|ssh|git):\/\//i.test(value))) return null;
   let host: string;
   let path: string;
   let port = "";
   try {
-    if (/^(https?|ssh|git):\/\//.test(value)) {
+    if (/^(https?|ssh|git):\/\//i.test(value)) {
       const url = new URL(value);
       if (url.search || url.hash) return null;
       host = url.hostname.toLowerCase();
@@ -158,11 +160,11 @@ export function canonicalRepositoryRemote(value: string): string | null {
       host = scp[1]!.toLowerCase();
       path = scp[2]!;
     }
-    path = path.replace(/^\/+|\/+$/g, "").replace(/\.git$/, "");
+    path = path.replace(/^\/+|\/+$/g, "").replace(/\.git$/i, "");
     if (!host || !path || path.split("/").some(part => !part || part === "." || part === "..")
       || /[%\\?#]/.test(path)) return null;
     // Credentials/usernames never participate or leave this function.
-    return `${host}${port}/${path}`;
+    return `${host}${port}/${path.toLowerCase()}`;
   } catch {
     return null;
   }
@@ -343,19 +345,22 @@ function realpathIfPresent(path: string): string {
   return existsSync(path) ? realpathSync(path) : resolve(path);
 }
 
-function gitOutput(rootPath: string, args: string[]): string | null {
-  const result = runGit(rootPath, args);
+function gitOutput(rootPath: string, args: string[], deadline?: number): string | null {
+  const result = runGit(rootPath, args, deadline);
   if (!result.ok) return null;
   const value = result.stdout.trim();
   return value.length > 0 ? value : null;
 }
 
-function runGit(rootPath: string, args: string[]): { ok: boolean; stdout: string } {
+function runGit(rootPath: string, args: string[], deadline?: number): { ok: boolean; stdout: string } {
+  const timeout = gitTimeout(deadline);
+  if (timeout <= 0) return { ok: false, stdout: "" };
   const result = spawnSync("git", ["-C", rootPath, ...args], {
     encoding: "utf8",
-    timeout: GIT_TIMEOUT_MS,
+    timeout,
     maxBuffer: MAX_GIT_OUTPUT,
     stdio: ["ignore", "pipe", "ignore"],
+    env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
   });
   return {
     ok: result.status === 0 && !result.error,
@@ -399,9 +404,12 @@ function successorGit(
   rootPath: string,
   args: string[],
   maxBuffer = MAX_GIT_OUTPUT,
+  deadline?: number,
 ): { ok: boolean; stdout: Buffer } {
+  const timeout = gitTimeout(deadline);
+  if (timeout <= 0) return { ok: false, stdout: Buffer.alloc(0) };
   const result = spawnSync("git", ["-C", rootPath, ...SUCCESSOR_GIT_ARGS, ...args], {
-    timeout: GIT_TIMEOUT_MS,
+    timeout,
     maxBuffer,
     stdio: ["ignore", "pipe", "ignore"],
     env: successorGitEnv(),
@@ -410,6 +418,10 @@ function successorGit(
     ok: result.status === 0 && !result.error,
     stdout: Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.alloc(0),
   };
+}
+
+function gitTimeout(deadline?: number): number {
+  return deadline === undefined ? GIT_TIMEOUT_MS : Math.min(GIT_TIMEOUT_MS, Math.ceil(deadline - performance.now()));
 }
 
 function successorGitExitCode(rootPath: string, args: string[]): number | null {

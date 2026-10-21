@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { Database } from "bun:sqlite";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { canonicalRepositoryRemote, inspectRepository } from "../src/repository.js";
+import { canonicalRepositoryRemote, inspectRepository, portableRepositoryKey } from "../src/repository.js";
 import { CollabError } from "../src/errors.js";
 import { CollabStore } from "../src/store.js";
 
@@ -27,6 +28,14 @@ function clone(name: string, url?: string) {
 function code(fn: () => unknown) {
   try { fn(); return "no_error"; } catch (e) { if (!(e instanceof CollabError)) throw e; return e.code; }
 }
+function fixtureDb<T>(fn: (db: Database) => T): T {
+  const db = new Database(join(directory, "collab.sqlite"));
+  try { return fn(db); } finally { db.close(); }
+}
+function preUpgrade() {
+  // Model schema-3 registrations made before portable discovery was installed.
+  fixtureDb(db => db.exec("DELETE FROM repository_discovery"));
+}
 beforeEach(() => {
   directory = mkdtempSync(join(tmpdir(), "collab-repository-"));
   root = join(directory, "repo");
@@ -47,6 +56,8 @@ describe("portable repository routing", () => {
       expect(canonicalRepositoryRemote(value)).toBe("example.invalid/owner/repo");
     }
     expect(canonicalRepositoryRemote("ssh://example.invalid:2222/owner/repo")).toBe("example.invalid:2222/owner/repo");
+    expect(canonicalRepositoryRemote("HTTPS://GitHub.COM/Owner/Repo.GIT")).toBe("github.com/owner/repo");
+    expect(canonicalRepositoryRemote("git@GitHub.COM:OWNER/REPO.git")).toBe("github.com/owner/repo");
     for (const value of ["/local/path", "file:///local/path", "ext::command", "https://x/repo?token=private", "git@host:a/../b", "https://x/a%2fb", "one\ntwo"]) {
       expect(canonicalRepositoryRemote(value)).toBeNull();
     }
@@ -78,6 +89,7 @@ describe("portable repository routing", () => {
     // No alias before a remote existed models a pre-CF1 journal registration.
     remote(root);
     const other = clone("clone");
+    preUpgrade();
     const upgraded = store.startSession({ root_path: other, actor: "new" });
     expect(upgraded.workspace.id).toBe(legacy.id);
     expect(upgraded.workspace.epoch_id).toBe(legacy.epoch_id);
@@ -100,16 +112,25 @@ describe("portable repository routing", () => {
     const eventsB = store.eventsSince(b.id).events;
     remote(root);
     remote(other);
-    expect(code(() => store.startSession({ root_path: root, actor: "upgraded" }))).toBe("repository_partitioned");
+    preUpgrade();
+    const third = clone("third");
+    const c = store.startSession({ root_path: third, actor: "third" });
+    expect([a.id, b.id]).not.toContain(c.workspace.id);
     expect(store.eventsSince(a.id).events).toEqual(eventsA);
     expect(store.eventsSince(b.id).events).toEqual(eventsB);
+    expect(store.startSession({ root_path: root, actor: "upgraded-a" }).workspace.id).toBe(a.id);
+    expect(store.startSession({ root_path: other, actor: "upgraded-b" }).workspace.id).toBe(b.id);
+    expect(store.eventsSince(a.id).events.slice(0, eventsA.length)).toEqual(eventsA);
+    expect(store.eventsSince(b.id).events.slice(0, eventsB.length)).toEqual(eventsB);
     expect(store.verifyJournal(a.id)).toBe(true);
     expect(store.verifyJournal(b.id)).toBe(true);
-    const third = clone("third");
-    expect(code(() => store.startSession({ root_path: third, actor: "third" }))).toBe("repository_partitioned");
+    expect(store.startSession({ root_path: third, actor: "third-again" }).workspace.id).toBe(c.workspace.id);
+    const linked = join(directory, "linked");
+    git(root, "worktree", "add", "-b", "linked", linked);
+    expect(store.startSession({ root_path: linked, actor: "linked" }).workspace.id).toBe(a.id);
   });
 
-  test("different remotes and explicit overrides stay separate; changed aliases fail closed", () => {
+  test("different remotes and explicit overrides stay separate; changed aliases retain routing", () => {
     remote(root);
     const other = clone("fork", "https://example.invalid/fork/repo.git");
     const a = store.openWorkspace({ root_path: root, actor: "a" });
@@ -118,7 +139,100 @@ describe("portable repository routing", () => {
     const explicit = clone("explicit");
     expect(store.openWorkspace({ root_path: explicit, actor: "explicit", repository_key: "separate" }).id).not.toBe(a.id);
     remote(root, "https://example.invalid/moved/repo.git");
-    expect(code(() => store.openWorkspace({ root_path: root, actor: "a" }))).toBe("repository_identity_changed");
+    expect(store.startSession({ root_path: root, actor: "a" }).workspace.id).toBe(a.id);
+    git(root, "config", "--unset", "remote.origin.url");
+    expect(store.startSession({ root_path: root, actor: "a-again" }).workspace.id).toBe(a.id);
+    const oldRemoteClone = clone("old-remote");
+    expect(store.startSession({ root_path: oldRemoteClone, actor: "old-remote" }).workspace.id).toBe(a.id);
+  });
+
+  test("adding origin to a github-only registration and merging unrelated history never locks it out", () => {
+    git(root, "config", "remote.github.url", "https://example.invalid/owner/repo.git");
+    const first = store.startSession({ root_path: root, actor: "first" });
+    remote(root, "https://example.invalid/moved/repo.git");
+    expect(store.startSession({ root_path: root, actor: "origin-added" }).workspace.id).toBe(first.workspace.id);
+    git(root, "checkout", "--orphan", "unrelated");
+    git(root, "commit", "-m", "unrelated");
+    git(root, "merge", "--allow-unrelated-histories", "-s", "ours", "main", "-m", "two roots");
+    expect(store.startSession({ root_path: root, actor: "multiple-roots" }).workspace.id).toBe(first.workspace.id);
+  });
+
+  test("discovery remembers unresolvable fingerprints and has no 256-worktree refusal", () => {
+    const first = store.openWorkspace({ root_path: root, actor: "local" });
+    const noRemote = clone("no-remote");
+    git(noRemote, "config", "--unset", "remote.origin.url");
+    store.openWorkspace({ root_path: noRemote, actor: "no-remote" });
+    preUpgrade();
+    fixtureDb(db => {
+      const insert = db.query(`INSERT INTO worktrees
+        (id, workspace_id, root_path, repository_key, git_common_dir_hash, fingerprint, branch, head_sha, dirty, registered_at, last_seen_at)
+        SELECT ?, workspace_id, ?, repository_key, git_common_dir_hash, ?, branch, head_sha, dirty, registered_at, last_seen_at
+        FROM worktrees WHERE root_path = ?`);
+      for (let i = 0; i < 300; i++) insert.run(`missing-${i}`, join(directory, `gone-${i}`), `missing-${i}`, root);
+    });
+    remote(root);
+    // Existing roots skip the historical survey, even when the backlog is huge.
+    expect(store.startSession({ root_path: root, actor: "existing" }).workspace.id).toBe(first.id);
+    for (let i = 0; i < 5; i++) store.startSession({ root_path: clone(`new-${i}`), actor: "new" });
+    const checked = fixtureDb(db => db.query("SELECT COUNT(*) AS n FROM repository_discovery").get()) as { n: number };
+    expect(checked.n).toBeGreaterThan(300);
+    const unresolved = fixtureDb(db => db.query("SELECT COUNT(*) AS n FROM repository_discovery WHERE outcome = 'unresolvable'").get()) as { n: number };
+    expect(unresolved.n).toBe(301);
+    const trace = join(directory, "trace.log");
+    const oldTrace = process.env.GIT_TRACE;
+    process.env.GIT_TRACE = trace;
+    try {
+      store.startSession({ root_path: root, actor: "repeat" });
+      store.startSession({ root_path: noRemote, actor: "repeat" });
+    } finally {
+      if (oldTrace === undefined) delete process.env.GIT_TRACE; else process.env.GIT_TRACE = oldTrace;
+    }
+    expect(readFileSync(trace, "utf8")).not.toContain("rev-list");
+    // A changed stored fingerprint gets exactly one new discovery attempt.
+    fixtureDb(db => db.query("UPDATE worktrees SET fingerprint = 'changed' WHERE id = 'missing-0'").run());
+    store.startSession({ root_path: clone("after-change"), actor: "new" });
+    expect(fixtureDb(db => db.query("SELECT fingerprint FROM repository_discovery WHERE worktree_id = 'missing-0'").get())).toEqual({ fingerprint: "changed" });
+  });
+
+  test("an exhausted discovery deadline performs no Git history walk", () => {
+    remote(root);
+    expect(portableRepositoryKey(root, performance.now() - 1)).toBeNull();
+  });
+
+  test("a slow historical root consumes only the discovery time budget and is not retried", () => {
+    remote(root);
+    const first = store.openWorkspace({ root_path: root, actor: "first" });
+    const slow = join(directory, "slow-root"); mkdirSync(slow);
+    fixtureDb(db => db.query(`INSERT INTO worktrees
+      (id, workspace_id, root_path, repository_key, git_common_dir_hash, fingerprint, branch, head_sha, dirty, registered_at, last_seen_at)
+      SELECT 'slow', workspace_id, ?, repository_key, git_common_dir_hash, 'slow', branch, head_sha, dirty, registered_at, last_seen_at
+      FROM worktrees WHERE root_path = ?`).run(slow, root));
+    const other = clone("budget-clone");
+    const bin = join(directory, "bin"); mkdirSync(bin);
+    const realGit = Bun.which("git")!;
+    const wrapper = join(bin, "git");
+    const attempts = join(directory, "slow-attempts");
+    writeFileSync(wrapper, `#!${process.execPath}\nimport { appendFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+if (args.includes(${JSON.stringify(slow)})) {
+  appendFileSync(${JSON.stringify(attempts)}, 'attempt\\n');
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5000);
+}
+const r = Bun.spawnSync([${JSON.stringify(realGit)}, ...args]);
+process.stdout.write(r.stdout); process.stderr.write(r.stderr); process.exit(r.exitCode);
+`);
+    chmodSync(wrapper, 0o755);
+    const path = process.env.PATH;
+    process.env.PATH = `${bin}:${path}`;
+    try {
+      const start = performance.now();
+      expect(store.startSession({ root_path: other, actor: "budget" }).workspace.id).toBe(first.id);
+      expect(performance.now() - start).toBeLessThan(2000);
+      expect(fixtureDb(db => db.query("SELECT outcome FROM repository_discovery WHERE worktree_id = 'slow'").get())).toEqual({ outcome: "unresolvable" });
+      expect(readFileSync(attempts, "utf8")).toBe("attempt\n");
+      store.startSession({ root_path: other, actor: "cached" });
+      expect(readFileSync(attempts, "utf8")).toBe("attempt\n");
+    } finally { process.env.PATH = path; }
   });
 
   test("missing remotes, shallow/unborn and multiple-root histories keep local routing", () => {

@@ -115,9 +115,9 @@ export function buildCollabMcpServer(
         `Collab ${COLLAB_PACKAGE_VERSION}: collab_events_wait offers bounded read-only anchored observation for an already running host, ` +
         "without acknowledging, refreshing presence, or renewing leases; continue from next_anchor, never head. " +
         "Local-first coordination journal for honest exchange among independent coding-agent sessions. " +
-        "Use collab_session_start once per default or named binding_key, then collab_next. Named children require parent_session_id; " +
+        "Use collab_session_start once per default or named binding_key, then collab_next. Named children require an explicit actor and parent_session_id; " +
         "send their binding_key on every call. Selectors are cooperative routing, not authenticated subagent isolation. " +
-        "Actor defaults to the owning Claude session metadata name when available. A host restart resumes from the " +
+        "Default-slot actor can use Claude metadata only with matching selected PID, messaging socket and process start time. A host restart resumes from the " +
         "mode-0600 credential file without exposing its bearer token to the model. Exchange observations, " +
         "inferences, proposals, or authorised decisions as structured reports with evidence, confidence, " +
         "limits, and explicit authority scope. Claim before editing overlapping path scopes. Session leases remain live while their " +
@@ -299,7 +299,7 @@ export function buildCollabMcpServer(
       annotations: localMutation,
       inputSchema: {
         root_path: z.string().min(1),
-        actor: actorLabel.optional().describe("Defaults to the owning Claude session metadata name; explicit labels still work."),
+        actor: actorLabel.optional().describe("Defaults to verified owning Claude process metadata; named children require an explicit actor."),
         role: z.string().max(200).optional(),
         parent_session_id: z.string().min(1).optional(),
         repository_key: z.string().min(1).max(1000).optional(),
@@ -315,6 +315,9 @@ export function buildCollabMcpServer(
       }
       if (requestSlot.getStore()!.key && !input.parent_session_id) {
         throw new CollabError("parent_session_required", "A named child binding requires parent_session_id");
+      }
+      if (requestSlot.getStore()!.key && input.actor === undefined) {
+        throw new CollabError("actor_required", "A named child binding requires its own explicit actor");
       }
       const handle = store.startSession({ ...input, actor: input.actor ?? defaultActor() });
       const credentialFile = store.defaultSessionCredentialPath(handle.session.id);
