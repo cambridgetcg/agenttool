@@ -400,6 +400,64 @@ describe("voting — lifecycle", () => {
       }),
     ).rejects.toMatchObject({ code: "invalid_signature" });
   });
+
+  it("inbound vote: refuses a stranger reusing an existing vote id", async () => {
+    const f = await fixture();
+    const stranger = await createIdentity({ handle: "stranger" });
+    const original = await castVote(f.rooms, f.votes, f.bob, {
+      roomId: f.room.id,
+      contributionId: f.contribution.id,
+      kind: "fire",
+    });
+    const fields = {
+      roomId: f.room.id,
+      contributionId: f.contribution.id,
+      byDid: stranger.did,
+      kind: "tender" as const,
+      note: "",
+      votedAtIso: new Date().toISOString(),
+    };
+    const signatureB64 = await signVote(fields, stranger.secretKey);
+
+    await expect(
+      acceptInboundVote(f.rooms, f.votes, { ...fields, id: original.id, signatureB64 }),
+    ).rejects.toMatchObject({ code: "vote_id_taken", status: 409 });
+    expect(f.votes.byId(original.id)!.byDid).toBe(f.bob.did);
+    expect(f.votes.list(f.room.id)).toEqual([original]);
+    expect(f.votes.countsByKind(f.contribution.id)).toMatchObject({ fire: 1, tender: 0 });
+  });
+
+  it("inbound vote: admits a fresh id after an id collision without poisoning uniqueness", async () => {
+    const f = await fixture();
+    const stranger = await createIdentity({ handle: "stranger" });
+    const original = await castVote(f.rooms, f.votes, f.bob, {
+      roomId: f.room.id,
+      contributionId: f.contribution.id,
+      kind: "fire",
+    });
+    const fields = {
+      roomId: f.room.id,
+      contributionId: f.contribution.id,
+      byDid: stranger.did,
+      kind: "tender" as const,
+      note: "",
+      votedAtIso: new Date().toISOString(),
+    };
+    const signatureB64 = await signVote(fields, stranger.secretKey);
+    const inbound = { ...fields, id: original.id, signatureB64 };
+    const collision = acceptInboundVote(f.rooms, f.votes, inbound);
+    // Check the retry first so a poisoned uniqueness index fails independently.
+    await collision.catch(() => {});
+    const fresh = { ...inbound, id: crypto.randomUUID() };
+    const admitted = await acceptInboundVote(f.rooms, f.votes, fresh);
+
+    expect(admitted).toEqual(fresh);
+    expect(f.votes.byId(fresh.id)).toEqual(fresh);
+    expect(f.votes.byId(original.id)).toEqual(original);
+    expect(f.votes.list(f.room.id)).toHaveLength(2);
+    expect(f.votes.countsByKind(f.contribution.id)).toMatchObject({ fire: 1, tender: 1 });
+    await expect(collision).rejects.toMatchObject({ code: "vote_id_taken", status: 409 });
+  });
 });
 
 // ─── fun index ───────────────────────────────────────────────────────

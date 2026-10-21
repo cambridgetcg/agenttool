@@ -5,7 +5,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-10-12 (Local Starter 0.1.0-dev.1 candidate; historical receipts retain their original dates)
+> Updated: 2026-10-18 (merges #450–#490 recorded; Local Starter 0.1.0-dev.1 distribution corrected; historical receipts retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -17,11 +17,44 @@
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
 
-## Local Starter 0.1.0-dev.1 candidate (2026-10-12)
+## Landed 2026-10-09 to 2026-10-17 (recorded 2026-10-18)
 
-**Source candidate:** `fix/local-starter-dev1-20261012`. Not yet distributed:
-the public repository commit, GitHub prerelease and docs deployment are
-separate operator steps, each needing its own readback.
+**Record:** 30 merged PRs from #450 to #490 had no entry here; #467 has its own
+entry below. **Observed 2026-10-18** with anonymous GETs: live API `/health`
+reports `593ce404` (PR #479) with `dirty: false`, and nothing under `api/`
+differs from there to main `3b9aa630`, so all API source on main is live. Six
+sampled docs, app and web files are byte-equal to main. npm serves
+`@agenttool/collab` 0.4.0 and `@agenttool/sdk` 0.22.1. "Rolled out" names the
+merge whose `deploy-api` run deployed it; it is not a fresh behavioural check
+of each feature.
+
+| Group | Merged | Status on 2026-10-18 |
+|---|---|---|
+| Truth and security fixes | [#450](https://github.com/cambridgetcg/agenttool/pull/450) native memory leak from `Response.clone().json()`; [#451](https://github.com/cambridgetcg/agenttool/pull/451) chunked `POST /v1/mcp` bodies read once; [#453](https://github.com/cambridgetcg/agenttool/pull/453) enrolled guest roots never speak for the administrator's project; [#455](https://github.com/cambridgetcg/agenttool/pull/455) Truth Map follow-through: acting identity, cross-project trust leaks, two bug classes, security contact; [#458](https://github.com/cambridgetcg/agenttool/pull/458) adapters shelf truth, LangGraph and Mastra sketches retired; [#461](https://github.com/cambridgetcg/agenttool/pull/461) deposit-address disclosure rests behind a production fence | Rolled out at `6805afed`, `91a6aecf`, `6e7bbca7`, `d141bf9d`, `e613e01f` and `28ae19db` |
+| Package source fixes | [#459](https://github.com/cambridgetcg/agenttool/pull/459) SDK: model-written `<trace>` needs explicit consent; [#460](https://github.com/cambridgetcg/agenttool/pull/460) wallet: overlapping call rules resolve most-restrictively | Merged, unreleased. #459 sits under "Unreleased — after 0.23.0" in the SDK changelog; npm wallet is still 0.1.3 |
+| Exit door | [#462](https://github.com/cambridgetcg/agenttool/pull/462) keyset-cursor walks of memories, chronicle and strands, plus `GET\|HEAD /v1/correspondence/repositories`; [#464](https://github.com/cambridgetcg/agenttool/pull/464) `at.exitDoor` / `at.exit_door` and the `agenttool-exit-door` bin | #462 rolled out at `91e75d3c`. #464 is SDK source in the unpublished 0.23.0 candidate; on 2026-10-18 Yu chose to skip 0.23.0 and release it in 0.24.0 with the #459 gate ([#496](https://github.com/cambridgetcg/agenttool/pull/496)) |
+| Deletion wave 1 | [#468](https://github.com/cambridgetcg/agenttool/pull/468) deletion-scopes design (Q1–Q9) and wave 1: read leaks closed, `GET /public/retention`, free archiving and exit, privacy page; [#469](https://github.com/cambridgetcg/agenttool/pull/469) CI-sized projection-test timeout | #468's own gate failed at `2698b042`; after #469, the rollout at `5b933492` carried it. `/public/retention` returned 200. Wave 2 is draft #472 |
+| Public packages lane | [#463](https://github.com/cambridgetcg/agenttool/pull/463) public source projection to `cambridgetcg/agenttool-packages`; [#465](https://github.com/cambridgetcg/agenttool/pull/465) staged npm publishing from that repository; [#466](https://github.com/cambridgetcg/agenttool/pull/466) package docs point at the public source; [#470](https://github.com/cambridgetcg/agenttool/pull/470) SDK 0.23.0 prepared for that path; [#471](https://github.com/cambridgetcg/agenttool/pull/471) release-tool test timeout | The public repository exists. Both `Publish npm package` dispatches (math-cards dev.2, SDK 0.23.0) prepared an artifact and skipped the stage job: dry runs only, so no staged publish has happened. Yu's one-time npm trust re-point is not done |
+| Collab | [#452](https://github.com/cambridgetcg/agenttool/pull/452) household smoothing, the 0.5.0 source (`bc71e87e`); [#456](https://github.com/cambridgetcg/agenttool/pull/456) the 0.5.0 distribution record; [#484](https://github.com/cambridgetcg/agenttool/pull/484) host doorbell `agenttool-collab-host wait`; [#485](https://github.com/cambridgetcg/agenttool/pull/485) addressed doorbell and Claude Code watcher; [#477](https://github.com/cambridgetcg/agenttool/pull/477) collab-zerone salted anchor aliases | 0.5.0 is a GitHub release in `cambridgetcg/agenttool-collab` (2026-10-10); npm stays 0.4.0. #484, #485 and #477 are merged and unreleased; main's collab version label becomes 0.5.1-dev.0 in [#495](https://github.com/cambridgetcg/agenttool/pull/495) |
+| Lobby (大廳) | [#479](https://github.com/cambridgetcg/agenttool/pull/479) joiner-chosen grant token hash and participant leave; [#480](https://github.com/cambridgetcg/agenttool/pull/480) mission client: participant tokens, leave, multi-peer pins; [#478](https://github.com/cambridgetcg/agenttool/pull/478) local lobby desk with egress gate and read-only MCP; [#482](https://github.com/cambridgetcg/agenttool/pull/482) fleet hall v0; [#483](https://github.com/cambridgetcg/agenttool/pull/483) table talk, renewal, leave, kick and block, stop, access digest | #479 rolled out at `593ce404`, the live API revision. #480 is unreleased `bin/` source. The lobby desk is a private package with hermetic tests, never run against the live service or a real Keychain |
+| Docs site and hearth | [#474](https://github.com/cambridgetcg/agenttool/pull/474) docs site: exit door, public source, Collab 0.5.0, KINGDOM 0.1.2 correction; [#490](https://github.com/cambridgetcg/agenttool/pull/490) one hearth for every door: shared palette, faces and column, plus the CSP-blocked app styles | Live bytes equal main for files #490 changed (`arrival.css`, `style.css`, `data`, `packages`), so a frontend publication followed #490 although its PR body says "Not deployed". No receipt for that publication is recorded here |
+| CI | [#473](https://github.com/cambridgetcg/agenttool/pull/473) constructive-intelligence keeps SQLite locks while tightening ledger file modes, fixing the concurrency flake noted under #449 | Merged; main CI passed at `3b9aa630` |
+
+**Not established:** a receipt for the post-#490 frontend publication; any SDK
+0.23.0 or 0.24.0 publication; the doorbell or the lobby desk running outside
+tests and local installs. **Queued:** a proposed order, not one Yu has ranked,
+is in [ROADMAP](ROADMAP.md#the-order-work-is-following-2026-10-18).
+
+## Local Starter 0.1.0-dev.1 preview (2026-10-12)
+
+**Distributed 2026-10-12:** merged in [PR #467](https://github.com/cambridgetcg/agenttool/pull/467)
+as `b723eda0`; GitHub prerelease `local-starter-v0.1.0-dev.1` in
+`cambridgetcg/agenttool-local-starter` published at 15:52:42Z, and the LOVE
+manifest is live. Not on npm. On 2026-10-18 both archive mirrors matched the
+recorded SHA-256; see the
+[distribution receipt](NPM-RELEASES.md#local-starter-010-dev1-preview-distribution--2026-10-12).
+This entry first said "not yet distributed"; it was committed four and a half
+hours before the prerelease.
 
 `@agenttool/local-starter@0.1.0-dev.1` ships the one-link foundations
 template, the rest-first templates and skill wording, and a CLI stdin fix.
@@ -41,7 +74,9 @@ on npm. The dev.0 archive and its two-link template keep their bytes.
 250 rounds of four real writers on each Node version. The old CLI fails the
 three new stdin tests. A fresh-clone rebuild reproduced the archive byte for
 byte, and the same toolchain reproduces dev.0's published SHA-256. Linux and
-Windows CI for this candidate are still to run.
+Windows CI then ran: the `Local starter` workflow passed all six Ubuntu, macOS
+and Windows jobs on Node 22.18.0 and 24.18.0 on the PR head and on the merge
+(runs 38270081771 and 38273305961).
 
 ## YUTABASE CI read access and audit hints (2026-10-01)
 
@@ -401,6 +436,12 @@ change, package publication or deployment is established by this trial.
 
 ## Consolidated release checkpoint (2026-09-30)
 
+**Superseded revision (2026-10-18):** `f5215499` below was the live API when
+this checkpoint was written. PR #448 rolled out `64392d72` later that day, and
+the live API is now `593ce404`; see the
+[current record](#landed-2026-10-09-to-2026-10-17-recorded-2026-10-18). The
+evidence in this section keeps its original dates.
+
 **Subsequent release:** [PR #447](https://github.com/cambridgetcg/agenttool/pull/447)
 merged the Hermes source and consolidation at `4226c927`. The normal frontend
 wrapper published docs, dashboard, web and the apex Worker at 00:19:04 UTC;
@@ -418,7 +459,7 @@ recent return, enrollment and receiver work has these distinct outcomes:
 
 | Area | Current evidence | Boundary |
 |---|---|---|
-| Hosted enrollment and missions | GitHub `main` is `f5215499`; the sampled live `/health` matches with `dirty: false`. [PR #445](https://github.com/cambridgetcg/agenttool/pull/445), [PR #446](https://github.com/cambridgetcg/agenttool/pull/446) and successful [deployment run 36584016392](https://github.com/cambridgetcg/agenttool/actions/runs/36584016392) record the release. | Existing-project enrollment needs administrator admission and the participant's exact signed birth intent; it creates no mission grant. |
+| Hosted enrollment and missions | At this checkpoint GitHub `main` was `f5215499` and the sampled live `/health` matched with `dirty: false` (superseded; see above). [PR #445](https://github.com/cambridgetcg/agenttool/pull/445), [PR #446](https://github.com/cambridgetcg/agenttool/pull/446) and successful [deployment run 36584016392](https://github.com/cambridgetcg/agenttool/actions/runs/36584016392) record the release. | Existing-project enrollment needs administrator admission and the participant's exact signed birth intent; it creates no mission grant. |
 | Explicit Local Starter return | A fresh Codex thread loaded selected local notes and completed a bounded API read on 2026-09-29. | Automatic hook, resume and compaction delivery, and the separate hosted-memory companion's native delivery remain unverified. |
 | Portable mission chat | A fresh separately rooted participant enrolled, accepted a mission and sent a verified signed reply through the chat wrapper from the reported second Mac. The local read ACK was stored and signature-verified. | Peer consumption of that final ACK was not observed. Active-turn exchange does not establish automatic wake. Both grants and the mission were revoked. |
 | Hermes receiver | Source `671cccca` passed the full required gate and a finite live event → fresh Hermes turn → verified file read → signed ACK trial. | One Mac, two grants sharing one root. Local tested source; no published package or unattended wake service. |

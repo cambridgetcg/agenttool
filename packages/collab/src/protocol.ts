@@ -423,7 +423,7 @@ export interface TaskConflict {
   }>;
 }
 
-/** Bounded local observation in Collab 0.5.0; limits are UTF-8 JSON bytes. */
+/** Bounded local observation since Collab 0.5.0; limits are UTF-8 JSON bytes. */
 export const DEFAULT_WAIT_EVENT_LIMIT = 10;
 export const MAX_WAIT_EVENT_LIMIT = 50;
 export const MAX_WAIT_MS = 30_000;

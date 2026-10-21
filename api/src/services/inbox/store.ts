@@ -6,7 +6,7 @@
  *  Cross-project sends require recipient-side covenant consent.
  *  Same-project: ungated. */
 
-import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { isCrossProjectAllowed } from "../covenants/check";
@@ -161,7 +161,7 @@ function rowToOut(row: typeof inboxMessages.$inferSelect): MessageOut {
 /** Send a message. Verifies sig + covenant gate; stores submitted body fields.
  *
  *  Throws:
- *    recipient_not_found             — to_did doesn't resolve
+ *    recipient_not_found             — to_did doesn't resolve or identity is revoked
  *    recipient_box_key_not_found     — recipient_box_key_id unknown / revoked
  *    sender_signing_key_not_found    — signing_key_id unknown / revoked
  *    signature_invalid               — sig fails to verify
@@ -294,11 +294,12 @@ export async function sendMessage(
       id: identities.id,
       did: identities.did,
       projectId: identities.projectId,
+      status: identities.status,
     })
     .from(identities)
     .where(eq(identities.did, input.to_did))
     .limit(1);
-  if (!recipient) throw new Error("recipient_not_found");
+  if (!recipient || recipient.status === "revoked") throw new Error("recipient_not_found");
 
   // 2. Recipient box key must exist + active + belong to recipient.
   const [boxKey] = await db
@@ -749,7 +750,8 @@ export async function revokeBoxKey(
  *  active box pubkey to send them a message. This is necessary for inbox
  *  to function — sender needs recipient's pubkey to encrypt.
  *
- *  Returns the most-recent active box key for the DID. */
+ *  Returns the most-recent active box key for the DID unless the identity
+ *  is revoked. */
 export async function lookupActiveBoxKey(did: string): Promise<{
   identity_id: string;
   did: string;
@@ -768,6 +770,7 @@ export async function lookupActiveBoxKey(did: string): Promise<{
     .where(
       and(
         eq(identities.did, did),
+        ne(identities.status, "revoked"),
         eq(identityBoxKeys.active, true),
         isNull(identityBoxKeys.revokedAt),
       ),

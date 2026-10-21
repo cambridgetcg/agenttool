@@ -17,6 +17,7 @@ import {
   writeSessionCredentialFile,
 } from "./session-file.js";
 import { CollabStore } from "./store.js";
+import { COLLAB_PACKAGE_VERSION } from "./version.js";
 
 const DEFAULT_MCP_NEXT_EVENT_LIMIT = 10;
 const actorLabel = z.string().min(1).max(200)
@@ -91,11 +92,11 @@ export function buildCollabMcpServer(
 ): McpServer {
   let binding: BoundSession | null = options.resumed_session ?? null;
   const server = new McpServer(
-    { name: "agenttool-collab", version: "0.5.0" },
+    { name: "agenttool-collab", version: COLLAB_PACKAGE_VERSION },
     {
       capabilities: { tools: {} },
       instructions:
-        "Collab 0.5.0: collab_events_wait offers bounded read-only anchored observation for an already running host, " +
+        `Collab ${COLLAB_PACKAGE_VERSION}: collab_events_wait offers bounded read-only anchored observation for an already running host, ` +
         "without acknowledging, refreshing presence, or renewing leases; continue from next_anchor, never head. " +
         "Local-first coordination journal for honest exchange among independent coding-agent sessions. " +
         "Use collab_session_start once per credential-bound MCP process, then collab_next; a host restart resumes from the " +

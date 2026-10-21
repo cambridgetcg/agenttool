@@ -250,8 +250,15 @@ export function buildMcpServer(deps: McpDeps): McpServer {
           },
         );
         // Also record the cascade in OUR local store so we can escalate later.
+        if (deps.rrr.get(turn.cascadeId) !== null) {
+          return err(
+            "cascade_id_taken",
+            "The locally minted cascade id is already in this node's store, so the record was not replaced.",
+            { peer_base_url },
+          );
+        }
         deps.rrr.put({
-          id: cascade.id,
+          id: turn.cascadeId,
           initiatorDid: cascade.initiatorDid,
           partnerDid: cascade.partnerDid,
           depth: cascade.depth,
@@ -263,7 +270,7 @@ export function buildMcpServer(deps: McpDeps): McpServer {
           peerBaseUrl: peer_base_url,
           turns: [
             {
-              cascadeId: cascade.id,
+              cascadeId: turn.cascadeId,
               depth: 1,
               byDid: turn.byDid,
               toDid: turn.toDid,
@@ -276,7 +283,7 @@ export function buildMcpServer(deps: McpDeps): McpServer {
         });
         return ok({
           peer: { did: peer.id, handle: peer.handle, vibe: peer.vibe },
-          cascade: cascadeWire(deps.rrr.get(cascade.id)!),
+          cascade: cascadeWire(deps.rrr.get(turn.cascadeId)!),
           depth: depthBundle(cascade.depth, peer.handle),
           _next_verbs: ["wait_for_peer_response", "list_cascades"],
         });

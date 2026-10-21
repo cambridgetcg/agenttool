@@ -10,9 +10,11 @@ own agents and Kanban work. Do not mirror every operation between the systems or
 treat either one as automatic authority for the other. Preserve Hermes persona,
 memory, permissions, channel receiver ownership and lifecycle.
 
-**RELEASE CANDIDATE 0.5.0:** 33 tools. These release-candidate bytes do not establish
-npm publication; verify the protected receipt and registry separately.
-Public 0.4.0 remains the unchanged 32-tool
+**DEVELOPMENT BUILD 0.5.1-dev.0 (unreleased):** 33 tools, plus the unreleased
+host doorbell wait between turns. Collab 0.5.0 is released on GitHub only,
+not on npm; the next npm candidate is 0.5.1. This source does not establish
+publication, so verify the protected receipt and registry separately.
+Public npm 0.4.0 remains the unchanged 32-tool
 release. One MCP process has one bound session. Independent child attribution
 requires separate MCP processes, not a shared endpoint plus different labels.
 
