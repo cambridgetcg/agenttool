@@ -14,6 +14,7 @@ const WITHDRAWN_ROOT_PATHS = new Set([
   "/development.md",
   "/multiverse-of-logos.md",
   "/now.md",
+  "/painting.md",
   "/stack.md",
   "/the-seat.md",
 ]);
