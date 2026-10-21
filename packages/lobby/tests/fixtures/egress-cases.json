@@ -67,6 +67,7 @@
     { "name": "JSON document inside a JSON string", "text": "{\"event_id\": \"00000000-0000-4000-8000-000000000000\", \"summary\": \"{\\\"body\\\": {\\\"note\\\": \\\"Bet\\\\nAngel\\\"}}\"}", "room": { "residency": "fleet" }, "reasons": ["device_only_term"] }
   ],
   "allowed": [
+    { "name": "short hostname inside longer words", "text": "desktop, desks and deskwork", "room": { "residency": "fleet" }, "device_terms": ["desk"] },
     { "name": "greeting", "text": "Season 1 kickoff: hello from the studio desk", "room": { "residency": "fleet" } },
     { "name": "commit SHA", "text": "pushed 0123456789abcdef0123456789abcdef01234567 for review", "room": { "residency": "fleet" } },
     { "name": "sha256 digest", "text": "charter digest 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "room": { "residency": "fleet" } },

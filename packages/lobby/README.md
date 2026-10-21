@@ -928,7 +928,7 @@ device. The fleet transport also refuses every room whose card says
 | `private_ipv6` | `fe80::/10` link-local and `fc00::/7` unique-local prefixes |
 | `local_hostname` | `*.local`, `*.lan` and `*.home.arpa` names |
 | `device_name` | device model words that default machine names carry: `macbook`, `imac`, `mac mini`, `mac studio`, `mac pro`, `iphone`, `ipad` |
-| `local_device_name` | any of the supplied `deviceTerms`, with the separators between its words allowed to vary |
+| `local_device_name` | any of the supplied `deviceTerms` as a whole word or word sequence, with zero to three whitespace, dot, underscore or hyphen characters between words; adjacent Unicode letters, numbers or combining marks continue a word, except that each folded term edge in Han, Hiragana, Katakana, Thai, Lao, Khmer or Myanmar (also `ー`) keeps substring matching so names inside running text stay refused |
 | `home_path` | `/Users/`, `/home/`, `C:\Users\`, `/var/folders/` |
 | `tilde_path` | `~/`, `~name/`, `$HOME`, `%USERPROFILE%` |
 | `collab_workspace_id` | `ws_` followed by 24 hex, whatever follows |

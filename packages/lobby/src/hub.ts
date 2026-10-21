@@ -187,7 +187,8 @@ export function requireLiveHub(ctx: FleetContext): HubRow {
   const hub = requireHub(ctx);
   if (hub.stopped_at != null) {
     throw new LobbyError("hub_stopped",
-      `an emergency stop was recorded at ${hub.stopped_at}; this hub issues no more access. Rotate the lobby-issuer API key by hand, then start a new hub`);
+      `an emergency stop was recorded at ${hub.stopped_at}; this hub issues no more access. ` +
+      "Rotate the API key that issued the lobby grants (its bearer is in this hub's Keychain) by hand, then start a new hub");
   }
   return hub;
 }
