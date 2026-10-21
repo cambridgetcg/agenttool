@@ -1,0 +1,50 @@
+name: Live page policy
+
+# Loads every committed page from production in a browser and fails on any
+# enforced Content-Security-Policy violation raised while it loads, or on a page
+# that does not answer 200 with a policy. Byte parity at release time does not
+# show this: a blocked inline style still lets the page render. Read-only; the
+# browser aborts every request other than GET or HEAD.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-page-policy
+  cancel-in-progress: true
+
+jobs:
+  sweep:
+    name: Production pages under their served policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node 20.19.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20.19.0
+          package-manager-cache: false
+      - name: Install the locked browser test dependencies
+        working-directory: tests/playwright
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install the matching Chromium browser
+        working-directory: tests/playwright
+        run: npx --no-install playwright install --with-deps chromium
+      - name: Load every committed page from production
+        working-directory: tests/playwright
+        run: npx --no-install playwright test -c live/playwright.config.ts
+      - name: Retain failed browser evidence
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: live-page-policy-failures
+          path: tests/playwright/test-results-live
+          retention-days: 7

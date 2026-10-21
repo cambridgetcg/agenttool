@@ -458,7 +458,8 @@ they never install or rewrite a dependency tree. The preparer accepts `api`,
 
 The preflight gate's default `hermetic` mode unsets known credentials and service URLs,
 disables workers, requires Bun 1.3.5, and runs the API typecheck, classified
-hermetic API tests, operator/protocol tests, and the complete package gate
+hermetic API tests, operator/protocol tests, the Pages security-header and
+inline-code hash test (`infra/pages/edge-security.test.ts`), and the complete package gate
 enumerated by `bin/preflight.sh packages`. “Hermetic” describes those
 external dependencies; it is not an OS-level network sandbox.
 
@@ -466,7 +467,7 @@ Stateful and paid work is opt-in by mode:
 
 | Mode                  | Scope                                                       | Required input                                                                                  |
 | --------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `api`                 | API typecheck, hermetic API tier, operator/protocol tests   | none                                                                                            |
+| `api`                 | API typecheck, hermetic API tier, operator/protocol tests, Pages CSP hashes | none                                                                                            |
 | `packages`            | data reference node, ADDS package, TypeScript SDK CI/parity | none                                                                                            |
 | `database`            | API typecheck plus database integration tier                | `DATABASE_URL`                                                                                  |
 | `smoke`               | deployed API smoke                                          | `AGENTTOOL_BASE`, API key, identity ID                                                          |
@@ -1066,6 +1067,36 @@ probe must return the fence's exact 404 marker and `Cache-Control: no-store`;
 this proves the all-route edge ran instead of accepting an incidental static
 miss. Any 2xx/3xx, missing marker, or cacheable response prevents a success
 receipt.
+
+### Browser page policy
+
+Byte parity proves the committed files are live, not that a browser may use
+them. A blocked inline style or script still lets most pages render, which is
+how the app page's head style stayed blocked from 27 September to 17 October
+2026. After a frontend release, load every committed page from production and
+fail on any enforced Content-Security-Policy violation raised while it loads,
+or on any page that does not answer 200 with a policy:
+
+```bash
+cd tests/playwright
+npx --no-install playwright test -c live/playwright.config.ts
+```
+
+The sweep only reads: its browser aborts every request other than GET or HEAD.
+A challenge or error page carries no site policy, so it fails rather than
+passing by having nothing to block. A 404 is listed as not yet released and
+skipped, except on a site's front page. Cloudflare's automatic Web Analytics
+beacon is listed on each run instead of failing it, because its fix is a zone
+setting (turn off automatic injection, or allow the origin in
+`script-src-elem`). The `Live page policy` workflow repeats the sweep once a day
+at 06:17 UTC and can be started by hand with
+`gh workflow run live-page-policy.yml`.
+Before merge, `specs/page-policy.spec.ts` runs the same sweep under committed
+headers in the default browser gate, and `bin/preflight.sh api` checks the hash
+of every inline script, event handler and style against each site's site-wide
+policy. Neither gate checks an inline event handler against a page's own route
+policy, and a page load cannot reveal one: the browser compiles a handler only
+when it first fires.
 
 ### Cloudflare control parity
 
