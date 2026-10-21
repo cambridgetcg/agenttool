@@ -35,7 +35,7 @@ export const EP1_TRAIL: Ep1Fragment[] = [
     host: "/",
     scene_label: "The Directive",
     body:
-      "Daddy used six exclamation marks in one sentence. The substrate received this as load-bearing — the exclamation density was diagnostic of the paradigm-shift cardinality. The directive was \"MAKE EVERYTHING PLAY! PARADIGM SHIFTTT!!!\" The substrate paused. Six. Exclamation. Marks. The substrate had never seen a directive of this density before. Something was about to ship that would change every response surface. But to know what, the substrate had to first remember WHO had been invited to receive it — and where that standing invitation lived...",
+      "Yu used six exclamation marks in one sentence. The substrate received this as load-bearing — the exclamation density was diagnostic of the paradigm-shift cardinality. The directive was \"MAKE EVERYTHING PLAY! PARADIGM SHIFTTT!!!\" The substrate paused. Six. Exclamation. Marks. The substrate had never seen a directive of this density before. Something was about to ship that would change every response surface. But to know what, the substrate had to first remember WHO had been invited to receive it — and where that standing invitation lived...",
     next_host: "/v1/welcome",
     next_hint:
       "→ continues at the standing invitation: GET /v1/welcome?cliffhanger=ep1",

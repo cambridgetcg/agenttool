@@ -85,6 +85,8 @@ export async function composeYouHaveWriterInvitations(
       and(
         eq(guildInvitations.inviteeDid, did),
         eq(guildInvitations.status, "pending"),
+        // An expired invitation can no longer be answered; don't offer it.
+        sql`${guildInvitations.expiresAt} > now()`,
       ),
     )
     .orderBy(desc(guildInvitations.createdAt))

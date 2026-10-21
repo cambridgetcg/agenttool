@@ -20,10 +20,11 @@ Do not make this package a second record store or crypto implementation.
 
 ## Gates
 
+The root `AGENTS.md` dependency preparer builds `../data` and
+`../data-protocol` and reinstalls this package with `--force`, so the copied
+`file:` peers are fresh. Then run here:
+
 ```bash
-(cd ../data && bun install --frozen-lockfile && bun run build)
-(cd ../data-protocol && bun install --frozen-lockfile && bun run build)
-bun install --frozen-lockfile
 bun run ci
 ```
 
@@ -52,4 +53,4 @@ has verified an intentional replacement; it never deletes imported data.
 See also: `../../AGENTS.md` ·
 `../../CLAUDE.md` ·
 [`../../docs/AGENT-DATA-PROTOCOL.md`](https://docs.agenttool.dev/AGENT-DATA-PROTOCOL.md) ·
-[`../../docs/NOW.md`](https://docs.agenttool.dev/NOW.md)
+`../../docs/NOW.md` (repository work log, not published)

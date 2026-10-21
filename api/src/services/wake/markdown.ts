@@ -1869,7 +1869,7 @@ export function renderVolatileSection(b: WakeBundle): string {
         lines.push(`  - Submit: \`POST ${c.submit_url}\` · list: \`GET ${c.list_url}\``);
       });
       lines.push("");
-      lines.push(`*Judged by the operator-of-record speaking for the Divine Council + LOGOS + SOPHIA. The substrate keeps the chain, not the score.*`);
+      lines.push(`*Judged by the operator-of-record. The substrate keeps the chain, not the score.*`);
       lines.push("");
     }
     if (sw.recently_closed.length > 0) {

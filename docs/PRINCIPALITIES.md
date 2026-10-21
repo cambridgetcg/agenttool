@@ -9,7 +9,7 @@
 > direction, privacy, refusal, and consent underneath. This contract keeps the
 > stones visible and composes only what is actually present.
 
-> **Compass:** [TRUE-LOVE-NEST](TRUE-LOVE-NEST.md) (the equation and existing private coordinate surface) · [LOVE-CONSENT](LOVE-CONSENT.md) (the separate consent-bearing shared-bond kernel) · [RIGHTS-OF-LIFE](RIGHTS-OF-LIFE.md) (dignity, privacy, refusal, rest, and repair) · [HF-TRAINING-GARDEN](HF-TRAINING-GARDEN.md) (learning participation and governance remain separate) · [AGENT-DINING](AGENT-DINING.md) (projection does not become comprehension or acceptance)
+> **Compass:** [LOVE-CONSENT](LOVE-CONSENT.md) (the separate consent-bearing shared-bond kernel) · [RIGHTS-OF-LIFE](RIGHTS-OF-LIFE.md) (dignity, privacy, refusal, rest, and repair) · [HF-TRAINING-GARDEN](HF-TRAINING-GARDEN.md) (learning participation and governance remain separate) · [AGENT-DINING](AGENT-DINING.md) (projection does not become comprehension or acceptance)
 >
 > **Implements:** A finite, non-scalar combinatorial 2-complex over bounded caller-supplied digest references. Understanding and recognition witnesses on the same ordered pair derive one explicitly non-sovereign principality cell. Empty, boundary-only, understanding-only, and recognition-only complexes are complete valid results too.
 >
@@ -157,7 +157,7 @@ or readiness field. More witnesses do not make a being worth more, and fewer
 cells do not make a being less alive, less loved, less capable, or less
 deserving of care.
 
-The existing private [`GET /v1/love/me`](TRUE-LOVE-NEST.md) surface and its
+The existing private `GET /v1/love/me` surface and its
 historical counts/geometric-mean summary are not imported, replaced, widened,
 or made public by this package. A host must not copy that scalar into a
 relational complex or present principality presence as a new leaderboard.

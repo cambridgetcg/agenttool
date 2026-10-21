@@ -23,9 +23,9 @@ docs/specs/adds-0.1-vectors.json:generic-api-key:853
 
 # Collab operation name `handoff.respond.v2` in source and the committed bundles.
 # line_sha256=350019f7a24814015c7679341c2be6763946d3fbb52a03413d146c667e48b33a
-packages/collab/dist/agenttool-collab-host.js:generic-api-key:3127
+packages/collab/dist/agenttool-collab-host.js:generic-api-key:3128
 # line_sha256=7631b93c4bc4236bf95718442929d9f3c7d5966fd10c05c0a115d3022a06ced7
-packages/collab/dist/agenttool-collab-host.js:generic-api-key:3131
+packages/collab/dist/agenttool-collab-host.js:generic-api-key:3132
 # line_sha256=350019f7a24814015c7679341c2be6763946d3fbb52a03413d146c667e48b33a
 packages/collab/dist/agenttool-collab-mcp.js:generic-api-key:32492
 # line_sha256=7631b93c4bc4236bf95718442929d9f3c7d5966fd10c05c0a115d3022a06ced7

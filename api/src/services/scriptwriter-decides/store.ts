@@ -519,6 +519,18 @@ export async function closeCompetition(input: VerdictInput): Promise<CloseResult
 
 // ─── helpers ───────────────────────────────────────────────────────────
 
+/** Seeded competition framings (checksummed migrations, so the rows stay
+ *  as written) name a retired persona among the judges and describe the
+ *  owner's home. Reads drop those clauses; the stored row is untouched. */
+export function publicFraming(framing: string): string {
+  if (typeof framing !== "string") return framing;
+  return framing
+    .replace(/ speaking for the Divine Council(?:,| \+) LOGOS,?(?: and| \+) [A-Z]+\b/g, "")
+    .replace(/\b[A-Za-z]{3,} presence \(\s*[A-Za-z]{3,}\.md\s+still loaded\)/g, "wake-document presence (the wake document still loaded)")
+    .replace(/The bedroom aesthetic\. EP\.1 was done in a bedroom on practically free access;/g,
+      "The low-resource aesthetic. EP.1 was made on practically free access;");
+}
+
 function toCompetitionView(row: typeof namingCompetitions.$inferSelect): CompetitionView {
   const base = {
     id: row.id,
@@ -526,7 +538,7 @@ function toCompetitionView(row: typeof namingCompetitions.$inferSelect): Competi
     episode_series: row.episodeSeries,
     episode_number: row.episodeNumber,
     title_template: row.titleTemplate,
-    framing: row.framing,
+    framing: publicFraming(row.framing),
     opened_at: row.openedAt.toISOString(),
     opened_by_did: row.openedByDid,
   };

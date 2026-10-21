@@ -8,7 +8,8 @@
 import { describe, it, expect } from "bun:test";
 import { buildMcpServer } from "../src/mcp";
 import { createIdentity } from "../src/identity";
-import { RrrStore, openCascade } from "../src/rrr";
+import { RrrStore, openCascade, acceptInboundTurn, type Cascade } from "../src/rrr";
+import { signRrrTurn } from "../src/canonical-bytes";
 import { RoomStore } from "../src/rooms";
 
 async function makeNode() {
@@ -129,6 +130,98 @@ describe("MCP tool surface", () => {
     expect(r.structuredContent.cascades[0].depth).toBe(1);
     expect(r.structuredContent.cascades[0].peer_base_url).toBe("http://example.com");
     expect(r.structuredContent.cascades[0].your_turn).toBe(false);
+  });
+
+  it("a peer's reply id cannot replace an existing cascade", async () => {
+    const { server, identity: alice, rrr: storeA } = await makeNode();
+    const bob = await createIdentity({ handle: "bob" });
+    const peer = await createIdentity({ handle: "peer" });
+    const original = await openCascade(storeA, alice, bob.did);
+    const before = structuredClone(original);
+    const peerBaseUrl = "https://peer.example";
+    let mintedId = "";
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = (async (input, init) => {
+        const request = new Request(input, init);
+        if (request.method === "GET" && request.url === `${peerBaseUrl}/.well-known/scriptwriter`) {
+          return Response.json({ id: peer.did, handle: peer.handle, vibe: peer.vibe });
+        }
+        if (request.method === "POST" && request.url === `${peerBaseUrl}/rrr/turn`) {
+          const body = await request.json() as { cascade_id: string };
+          mintedId = body.cascade_id;
+          return Response.json({ cascade: { id: original.id, depth: 1, status: "active" } }, { status: 201 });
+        }
+        return new Response(null, { status: 404 });
+      }) as typeof fetch;
+
+      const r = await callTool(server, "open_cascade_with_peer", { peer_base_url: peerBaseUrl });
+      expect(storeA.get(original.id)).toEqual(before);
+      expect(storeA.findActiveBetween(alice.did, bob.did)?.id).toBe(original.id);
+      expect(r.isError).not.toBe(true);
+      expect(mintedId).not.toBe("");
+      expect(r.structuredContent.cascade.id).toBe(mintedId);
+      expect(r.structuredContent.cascade.id).not.toBe(original.id);
+      expect(storeA.get(mintedId)).not.toBeNull();
+      expect(storeA.get(mintedId)!.turns[0]).toMatchObject({
+        byDid: alice.did,
+        cascadeId: mintedId,
+      });
+      expect(storeA.exportAll()).toHaveLength(2);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("the tool never replaces a record already stored under the minted id", async () => {
+    const { server, identity: alice, rrr: storeA } = await makeNode();
+    const bob = await createIdentity({ handle: "bob" });
+    const peer = await createIdentity({ handle: "peer" });
+    const stranger = await createIdentity({ handle: "stranger" });
+    await openCascade(storeA, alice, bob.did);
+    const before = structuredClone(storeA.exportAll());
+    const peerBaseUrl = "https://peer.example";
+    let mintedId = "";
+    let planted: Cascade | null = null;
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = (async (input, init) => {
+        const request = new Request(input, init);
+        if (request.method === "GET" && request.url === `${peerBaseUrl}/.well-known/scriptwriter`) {
+          return Response.json({ id: peer.did, handle: peer.handle, vibe: peer.vibe });
+        }
+        if (request.method === "POST" && request.url === `${peerBaseUrl}/rrr/turn`) {
+          const body = await request.json() as { cascade_id: string };
+          mintedId = body.cascade_id;
+          const fields = {
+            cascadeId: mintedId,
+            depth: 1,
+            byDid: stranger.did,
+            basisText: "I see your work.",
+            prevSignatureB64: "",
+            turnAtIso: new Date().toISOString(),
+          };
+          const signatureB64 = await signRrrTurn(fields, stranger.secretKey);
+          planted = structuredClone(await acceptInboundTurn(storeA, alice.did, {
+            ...fields,
+            toDid: alice.did,
+            signatureB64,
+          }));
+          return Response.json({ cascade: { id: mintedId, depth: 1, status: "active" } }, { status: 201 });
+        }
+        return new Response(null, { status: 404 });
+      }) as typeof fetch;
+
+      const r = await callTool(server, "open_cascade_with_peer", { peer_base_url: peerBaseUrl });
+      expect(r.isError).toBe(true);
+      expect(r.structuredContent.error).toBe("cascade_id_taken");
+      expect(mintedId).not.toBe("");
+      expect(planted).not.toBeNull();
+      expect(storeA.get(mintedId)).toEqual(planted);
+      expect(storeA.exportAll()).toEqual([...before, planted!]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it("get_cascade returns turns + verification result", async () => {

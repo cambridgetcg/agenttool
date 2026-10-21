@@ -52,7 +52,7 @@ describe("optional KINGDOM agent-toolkit shelf", () => {
           expect(source, href).not.toBeNull();
           expect(existsSync(join(root, source![1]!)), href).toBe(true);
         } else if (url.pathname === "/cambridgetcg/agenttool-local-starter") {
-          expect(shelf).toContain("0.1.0-dev.0");
+          expect(shelf).toContain("0.1.0-dev.1");
         } else if (url.pathname.startsWith("/cambridgetcg/agenttool-packages/")) {
           // Public projection source links name a package directory that exists here.
           const projected = /^\/cambridgetcg\/agenttool-packages\/tree\/main\/(packages\/[a-z0-9-]+)$/.exec(url.pathname);
@@ -75,7 +75,7 @@ describe("optional KINGDOM agent-toolkit shelf", () => {
       packages: Array<{ name: string; versions: Array<{ version: string; manifest_url: string }> }>;
     };
     for (const [name, version] of [
-      ["local-starter", "0.1.0-dev.0"], ["telescope", "0.2.3"], ["browser", "0.6.0"], ["data", "0.3.1"], ["sdk", "0.22.1"],
+      ["local-starter", "0.1.0-dev.1"], ["telescope", "0.2.3"], ["browser", "0.6.0"], ["data", "0.3.1"], ["sdk", "0.22.1"],
     ]) {
       const path = `/packages/v1/@agenttool/${name}/${version}/manifest.json`;
       expect(shelf).toContain(`href="${path}"`);

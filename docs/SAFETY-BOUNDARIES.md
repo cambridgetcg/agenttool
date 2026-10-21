@@ -440,7 +440,9 @@ or settlement is sound. AgentTool does not currently claim qualified arbiters
 or route money by an arbiter ruling. Reopening requires end-to-end
 authorization, immutable settlement terms, concurrency and replay analysis,
 bond ownership, compensating transactions, adversarial tests, and a bounded
-production trial.
+production trial. The escalation path writes bond escrows without
+`managed_by`; the generic escrow release, refund, and dispute routes recognise
+them by their dispute case and refuse them.
 
 ## Payout boundary — resting
 
@@ -463,6 +465,113 @@ every debit, transfer, refund, and chargeback. Historical `broadcasting` or
 `broadcast` ambiguity remains operator work and never authorizes automatic
 retry or refund.
 
+## Generic escrow create and wallet spend — resting
+
+Generic escrow create is resting by owner decision (2026-10-18), and no
+environment flag reopens it. After authentication, `POST /v1/escrows` returns
+stable `503 escrow_resting` with `next_actions` for every request, before body
+validation or any escrow or wallet database read, so no wallet is debited.
+Creation rests because it debits the creator wallet but checks none of the
+spending policy that `POST /v1/wallets/:id/spend` enforces (per-transaction,
+hourly, daily, allowed-recipient, and approval-threshold limits). Reopening
+needs a reviewed release that adds those checks first.
+
+Release and refund are open (owner decision 2026-10-19), so escrows that
+already exist settle at the creator's direction. They move real balances, so
+they honour what the other money paths honour:
+
+- `POST /v1/escrows/:id/release` — the bearer of the project that owns the
+  creator wallet releases a `funded` escrow with an assigned worker, before
+  the escrow's deadline if it has one. Both wallets must be `active`, as for a
+  spend or an accept, so a frozen or closed wallet cannot pay or be paid by a
+  release.
+  A release is the creator wallet's payment to the worker, so that wallet's
+  spending policy applies as it does to a spend: the per-transaction limit,
+  the approval threshold, and the allowed recipients, where the recipient is
+  the worker wallet's id. Hourly and daily limits are counted only by wallet
+  spend, in Redis, which settlement cannot see, so a release from a wallet
+  whose policy sets either one is refused rather than guessed at; the
+  wallet's owner can change that policy. One transaction credits the worker
+  wallet, marks the escrow `released`, and records the release.
+- `POST /v1/escrows/:id/refund` — the same creator-project bearer refunds a
+  `funded` or `disputed` escrow. The refund lands in the creator wallet
+  whatever that wallet's status: it is the money going home, and a frozen
+  wallet still holds it. One transaction restores the creator wallet, marks
+  the escrow `refunded`, and records the refund.
+
+An escrow's deadline, when it has one, is the creator's promise to hold the
+money for the worker until then. Past the deadline the escrow has expired:
+release refuses and only refund remains, whether or not the expiry sweep has
+run. Before it, once a wallet in another project has accepted, the creator
+cannot take the money back; it can release now or refund after the deadline.
+An escrow with no deadline made no such promise, and accept needs no creator
+consent, so its creator can still refund it at any time, even after a worker
+accepted it; refusing would leave paying whoever accepted as the only way
+out. Every escrow keeps a way out.
+
+Neither route verifies a worker signature, completion proof, or bilateral
+approval. A project that owns only the worker wallet cannot release, refund,
+or dispute.
+
+Accept (worker assignment), dispute, list, and get stay open and move no
+balance. Accept needs no creator consent: any authenticated project that knows
+the id of a funded, unassigned escrow can assign its own active wallet, and a
+later release pays that wallet. A creator should read the escrow's
+`workerWallet` (`GET /v1/escrows/:id`) before releasing.
+
+The escrow service uses no Redis, and none of these routes builds a Redis
+client, so they behave the same in a process run with
+`AGENTTOOL_DISABLE_WORKERS=1`. Before this release, create, release, and
+refund passed an unused `getRedis()` argument, which throws in that posture,
+so all three answered an unnamed `503` whose body read `redis_disabled`. On
+2026-10-19 the hosted API's serving process reported that posture at
+`/public/plans` (`no_exploit_loophole.ip_rate_limit.worker_startup_disabled:
+true`). If the hosted API still runs in that posture when this release
+deploys, this release turns generic release and refund on there: they move
+balances where they refused before. Nothing in the canonical API deploy
+guarantees the flag:
+`.github/workflows/deploy-api.yml` and `api/fly.toml` neither set nor check it,
+and the `bin/deploy.sh` fence that did is superseded for the API
+([DEPLOY-CI.md](DEPLOY-CI.md)).
+
+An escrow that another part of AgentTool created settles only through that
+part, so the generic release, refund, and dispute routes refuse it with `409`:
+
+- Workflow-managed marketplace escrows, marked by `managed_by`.
+- Dispute-bond escrows (`escalateDispute`), substrate-task bounty escrows, and
+  template-purchase escrows. These carry no `managed_by`, whose database check
+  names only the marketplace workflows, so the routes recognise them by the
+  dispute case, task, or purchase that references them. Each of those paths
+  writes that reference in the same transaction as the escrow, so an
+  escalator can no longer release, refund, or dispute its own bond before
+  finalize.
+
+No automatic deadline refund runs, because the expiry sweep has no scheduler.
+A read-only production count on 2026-10-19 found 12 funded generic escrows and
+none disputed. None has a deadline or a creator-wallet policy; three were
+accepted by a wallet in another project. There were no dispute bonds, no
+substrate-task escrows, and no unsettled template-purchase escrows.
+
+`POST /v1/wallets/:id/spend` does need Redis: its hourly and daily limits are
+Redis counters. In a process run with workers disabled it returns stable
+`503 wallet_spend_resting` with `next_actions` before validation, wallet
+ownership lookup, or any debit. With workers enabled the route is unchanged and
+still needs a reachable Redis. Wallet reads, policy writes, and transaction
+history do not depend on Redis.
+
+`POST /v1/wallets/:id/fund` stays mounted and unchanged. The units it adds
+cannot leave through spend or a new generic escrow while those rest, but they
+can still pay capability invocations, which settle to seller wallets. Payout
+stays resting.
+
+Code: `api/src/services/economy/config.ts` (`genericEscrowCreateAllowed`),
+`api/src/services/economy/escrow.ts`, `api/src/services/economy/redis.ts`
+(`economyRedisEnabled`), `api/src/routes/economy/escrow.ts`,
+`api/src/routes/economy/wallets.ts`, `api/src/lib/errors.ts`
+(`escrowResting`, `walletSpendResting`). Tests:
+`api/tests/economy-resting.test.ts`, `api/tests/escrow-settlement-checks.test.ts`,
+`api/tests/public-safety.test.ts`.
+
 ## Idempotency
 
 `Idempotency-Key` is opt-in on selected authenticated write prefixes, not all
@@ -476,13 +585,16 @@ in-flight reservation, so simultaneous first requests can both execute. Redis
 absence or failure, cache-write failure, and non-JSON responses fail open.
 
 `POST /v1/escrows` is a named exception with a separate PostgreSQL-backed
-contract. A caller may send an 8–256-character visible-ASCII key. The database
-permanently stores its SHA-256, not the raw key, together with the authenticated
-project and a hash of the recognized normalized creation fields. An exact retry
-resolves the same escrow identity and returns its current row with `201` and
-`Idempotent-Replay: true`; it does not preserve the original response bytes or
-creation-time status. Changed bound input returns `409` before wallet mutation.
-Without a key, retrying may fund another escrow.
+contract. While generic escrow create rests, the route returns
+`503 escrow_resting` before it reads the key, so neither a new creation nor a
+replay runs; the contract below is retained for a reviewed reopening. A caller may send an
+8–256-character visible-ASCII key. The database permanently stores its SHA-256,
+not the raw key, together with the authenticated project and a hash of the
+recognized normalized creation fields. An exact retry resolves the same escrow
+identity and returns its current row with `201` and `Idempotent-Replay: true`;
+it does not preserve the original response bytes or creation-time status.
+Changed bound input returns `409` before wallet mutation. Without a key,
+retrying may fund another escrow.
 
 ## Vault
 

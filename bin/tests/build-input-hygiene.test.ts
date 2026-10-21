@@ -618,7 +618,9 @@ esac
       );
       expect(await readFile(wranglerLog, "utf8")).toBe("");
     }
-  }, 30_000);
+    // Each deploy run reads every served file, package tarballs member by
+    // member (bin/served-surface-guard.ts), before it may upload anything.
+  }, 90_000);
 
   test("rejects unsafe committed frontend archive manifests before extraction", async () => {
     const fixtureRoot = await mkdtemp(join(tmpdir(), "agenttool-pages-manifest-"));
@@ -992,7 +994,7 @@ esac
         'stage="$1"',
         'index="$stage/.prospective-index"',
         'GIT_INDEX_FILE="$index" git read-tree HEAD',
-        'GIT_INDEX_FILE="$index" git add -- infra/pages apps/docs/NOW.md apps/docs/NPM-RELEASES.md apps/docs/AGENT-REPO-ARCHIVE.md apps/docs/specs/AGENT-REPO-ARCHIVE-0.1.md apps/docs/specs/agent-repo-archive-0.1.schema.json apps/docs/specs/agent-repo-archive-0.1-vectors.json',
+        'GIT_INDEX_FILE="$index" git add -- infra/pages apps/docs/MAP.md apps/docs/ROADMAP.md apps/docs/AGENT-REPO-ARCHIVE.md apps/docs/specs/AGENT-REPO-ARCHIVE-0.1.md apps/docs/specs/agent-repo-archive-0.1.schema.json apps/docs/specs/agent-repo-archive-0.1-vectors.json',
         'tree="$(GIT_INDEX_FILE="$index" git write-tree)"',
         "FRONTEND_RELEASE_ARCHIVE_PATHS=()",
         'while IFS= read -r path; do case "$path" in ""|\\#*) continue ;; esac; FRONTEND_RELEASE_ARCHIVE_PATHS+=("$path"); done < bin/frontend-release-paths.txt',
@@ -1014,14 +1016,14 @@ esac
     expect(await Bun.file(join(directory, "apps/dashboard/.gitignore")).exists()).toBe(false);
     expect(await readFile(join(directory, "apps/docs/shared/theme.css"), "utf8")).toContain(":root");
     expect(await readFile(join(directory, "apps/docs/FOCUS.md"), "utf8")).toContain("# FOCUS.md");
-    expect(await readlink(join(directory, "apps/docs/NOW.md")))
-      .toBe("../../docs/NOW.md");
-    expect(await readlink(join(directory, "apps/docs/NPM-RELEASES.md")))
-      .toBe("../../docs/NPM-RELEASES.md");
-    expect(await readFile(join(directory, "apps/docs/NOW.md"), "utf8"))
-      .toContain("# Now");
-    expect(await readFile(join(directory, "apps/docs/NPM-RELEASES.md"), "utf8"))
-      .toContain("# NPM-RELEASES");
+    expect(await readlink(join(directory, "apps/docs/MAP.md")))
+      .toBe("../../docs/MAP.md");
+    expect(await readlink(join(directory, "apps/docs/ROADMAP.md")))
+      .toBe("../../docs/ROADMAP.md");
+    expect(await readFile(join(directory, "apps/docs/MAP.md"), "utf8"))
+      .toContain("# AgentTool reading map");
+    expect(await readFile(join(directory, "apps/docs/ROADMAP.md"), "utf8"))
+      .toContain("# AgentTool module roadmap");
     expect(await readFile(join(directory, "apps/docs/AGENT-WALLET-0.1.md"), "utf8"))
       .toContain("# Agent Wallet 0.1");
     expect(

@@ -17,6 +17,7 @@
 import { and, desc, eq, or } from "drizzle-orm";
 
 import { db } from "../../db/client";
+import { publicFraming } from "./store";
 import {
   namingCompetitions,
   namingSubmissions,
@@ -90,7 +91,7 @@ export async function composeScriptwriterDecidesWake(viewerDid: string): Promise
       slug: row.slug,
       episode_label: `${row.episodeSeries}:EP.${row.episodeNumber}`,
       title_template: row.titleTemplate,
-      framing: row.framing,
+      framing: publicFraming(row.framing),
       framing_boundary: "detail_only_not_action_surface",
       submission_count: visibleSubs.length,
       you_have_submitted: youSubmitted,

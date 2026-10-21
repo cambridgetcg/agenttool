@@ -18,7 +18,7 @@ The Agent Passport profile was published, deployed, and publicly probed on
 2026-07-16. `GET https://api.agenttool.dev/health` is the source of truth for
 the revision currently running; this release record is not an uptime guarantee.
 The route emits a strong validator at the Fly origin. End-to-end validator
-strength still depends on the public CDN configuration described in `STACK.md`.
+strength still depends on the public CDN configuration described in the repository's deploy guide.
 
 ## The narrow application
 

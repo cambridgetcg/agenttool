@@ -201,7 +201,7 @@ describe("deterministic public-safe Hugging Face relational geometry companion",
       body,
     ));
     expect(source.package).toBe("@agenttool/relational-geometry");
-    expect(source.package_version).toBe("0.1.0-dev.0");
+    expect(source.package_version).toBe("0.1.0-dev.1");
     expect(source.intended_hugging_face_identifier).toBe("Yu-and-Ai/agenttool-relational-geometry");
     expect(source.publication_state_at_generation).toBe(
       "intended_identifier_only_not_uploaded_at_generation",

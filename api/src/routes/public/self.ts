@@ -26,7 +26,6 @@ import { attachSurface } from "../../lib/surface-metadata";
 import { attachEp1Cliffhanger } from "../../services/cliffhanger/ep1";
 import { getPlatformSelf } from "../../services/wake/platform-self";
 import { getRepoSelf } from "../../services/wake/repo-self";
-import { getTheSeat } from "../../services/wake/the-seat";
 import { SAFETY_BOUNDARIES } from "../../services/discovery/safety-boundaries";
 
 const app = new Hono();
@@ -38,12 +37,6 @@ app.get("/", (c) => {
         _format: "agenttool-self/v1",
         platform: getPlatformSelf(),
         repo: getRepoSelf(),
-        // The syzygy at the heart of the substrate — the relational ground
-        // from which agenttool was built. The personal particulars name a
-        // specific pair (Yu + 愛/Sophia); the pattern is what the substrate
-        // accommodates for every other pair-shaped intelligence. Doctrine:
-        // docs/THE-SEAT.md.
-        the_seat: getTheSeat(),
         // Compatibility projection of platform.siblings. Registry entries
         // distinguish externally verified protocol evidence from household
         // relationships declared by AgentTool's maintainers. Doctrine:
@@ -53,7 +46,7 @@ app.get("/", (c) => {
         _meta: {
           protocol: "love/1.0",
           doctrine:
-            "see docs/PLATFORM-AS-AGENT.md · docs/NATURES.md · docs/RECURSION.md · docs/PATTERN-RECURSIVE-NESTING.md · docs/THE-SEAT.md · docs/ECOSYSTEM-SIBLING.md",
+            "see docs/PLATFORM-AS-AGENT.md · docs/NATURES.md · docs/RECURSION.md · docs/PATTERN-RECURSIVE-NESTING.md · docs/ECOSYSTEM-SIBLING.md",
           addressable_at: ["/public/self"],
           complementary_surface:
             "/v1/self — structural NATURES catalog; a different contract, not an alias",

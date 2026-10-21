@@ -32,6 +32,80 @@ describe("RRR walls", () => {
     expect(c.status).toBe("active");
   });
 
+  it("refuses a stranger's genesis turn reusing an active cascade id", async () => {
+    const node = await createIdentity({ handle: "node" });
+    const bob = await createIdentity({ handle: "bob" });
+    const stranger = await createIdentity({ handle: "stranger" });
+    const store = new RrrStore();
+    const original = await openCascade(store, node, bob.did);
+    const before = structuredClone(store.exportAll());
+    const fields = {
+      cascadeId: original.id,
+      depth: 1,
+      byDid: stranger.did,
+      basisText: "I see your work.",
+      prevSignatureB64: "",
+      turnAtIso: new Date().toISOString(),
+    };
+    const signatureB64 = await signRrrTurn(fields, stranger.secretKey);
+
+    await expect(
+      acceptInboundTurn(store, node.did, { ...fields, toDid: node.did, signatureB64 }),
+    ).rejects.toMatchObject({ code: "cascade_id_taken", status: 409 });
+    expect(store.get(original.id)).toMatchObject({
+      initiatorDid: node.did,
+      partnerDid: bob.did,
+      lastSignatureB64: original.lastSignatureB64,
+    });
+    expect(store.get(original.id)!.turns).toHaveLength(1);
+    expect(store.findActiveBetween(node.did, bob.did)).toEqual(original);
+    expect(store.exportAll()).toEqual(before);
+  });
+
+  it("refuses replaying the original genesis turn after a cascade is capped", async () => {
+    const node = await createIdentity({ handle: "node" });
+    const bob = await createIdentity({ handle: "bob" });
+    const store = new RrrStore();
+    const opened = await openCascade(new RrrStore(), bob, node.did);
+    const genesis = opened.turns[0]!;
+    let c = await acceptInboundTurn(store, node.did, genesis);
+    while (c.depth < 49) {
+      const actor = c.nextToActDid === node.did ? node : bob;
+      c = (await escalate(store, actor, c.id)).cascade;
+    }
+    expect(c.status).toBe("capped");
+    expect(c.turns).toHaveLength(49);
+    const before = structuredClone(store.exportAll());
+
+    await expect(acceptInboundTurn(store, node.did, genesis)).rejects.toMatchObject({
+      code: "cascade_id_taken",
+      status: 409,
+    });
+    expect(store.get(c.id)).toMatchObject({ depth: 49, status: "capped" });
+    expect(store.get(c.id)!.turns).toHaveLength(49);
+    expect(store.exportAll()).toEqual(before);
+  });
+
+  it("admits an inbound genesis turn with a fresh id from a new peer", async () => {
+    const node = await createIdentity({ handle: "node" });
+    const bob = await createIdentity({ handle: "bob" });
+    const peer = await createIdentity({ handle: "peer" });
+    const store = new RrrStore();
+    await openCascade(store, node, bob.did);
+    const opened = await openCascade(new RrrStore(), peer, node.did);
+
+    const admitted = await acceptInboundTurn(store, node.did, opened.turns[0]!);
+    expect(admitted).toMatchObject({
+      id: opened.id,
+      depth: 1,
+      initiatorDid: peer.did,
+      partnerDid: node.did,
+      nextToActDid: node.did,
+    });
+    expect(store.get(opened.id)).toEqual(admitted);
+    expect(store.list()).toHaveLength(2);
+  });
+
   it("wall/rrr-must-alternate — refuses when wrong party tries to escalate", async () => {
     const alice = await createIdentity({ handle: "alice" });
     const bob = await createIdentity({ handle: "bob" });

@@ -15,7 +15,7 @@ function filesBelow(path: string): string[] {
 describe("package boundary", () => {
   test("is zero-runtime-dependency, public-preview, side-effect-free, and has no CLI or install hooks", () => {
     expect(packageJson.name).toBe("@agenttool/relational-geometry");
-    expect(packageJson.version).toBe("0.1.0-dev.0");
+    expect(packageJson.version).toBe("0.1.0-dev.1");
     expect(packageJson.license).toBe("Apache-2.0");
     expect(packageJson.sideEffects).toBe(false);
     expect(packageJson.dependencies).toBeUndefined();

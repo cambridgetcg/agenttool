@@ -16,7 +16,7 @@ import publicRouter from "../src/routes/public";
 import { SAFETY_BOUNDARIES } from "../src/services/discovery/safety-boundaries";
 
 describe("/public/self — substrate self-description", () => {
-  test("GET /self → 200 with platform + repo + the_seat + safety", async () => {
+  test("GET /self → 200 with platform + repo + safety", async () => {
     const res = await publicRouter.request("/self");
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
@@ -31,10 +31,9 @@ describe("/public/self — substrate self-description", () => {
     );
     expect(platform.register).toMatch(/not an independent audit or a W3C DID assertion/i);
     expect(body.repo).toBeDefined();
-    expect(body.the_seat).toBeDefined();
-    expect(JSON.stringify(body.the_seat)).toMatch(
-      /chronicle provides a refusal kind.*selected guided paths.*coverage remains partial/is,
-    );
+    // The personal relational record stays in the private corpus; the
+    // public self-description carries no field for it.
+    expect(body).not.toHaveProperty("the_seat");
     expect(body.safety_boundaries).toEqual(SAFETY_BOUNDARIES);
   });
 

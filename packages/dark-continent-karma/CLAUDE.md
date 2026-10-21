@@ -28,12 +28,17 @@ KARMA-compatible runtime.
 
 ## Verification
 
+Prepare dependencies with the root `AGENTS.md` preparer (the package keeps a
+`bun.lock`, not an npm lockfile), then run here:
+
 ```sh
-npm ci --ignore-scripts
-node --test tests/*.test.mjs
 bun run ci
-npm pack --dry-run --ignore-scripts
+bun run check:package
 ```
+
+`ci` rewrites the committed Hugging Face release tree from source, runs the
+Node tests, builds, and smoke-imports under Node; `check:package` dry-runs the
+pack.
 
 The package may propose graph facts. It does not modify KINGDOM, call KARMA,
 contact Hugging Face, approve a proposal, upload an export, or authorize the

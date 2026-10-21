@@ -114,6 +114,49 @@ export function depositAddressDisclosureAllowed(): boolean {
   return false;
 }
 
+/** Generic escrow create — POST /v1/escrows — is resting (owner decision,
+ * 2026-10-18), the way payout admission and deposit-address disclosure rest.
+ * After authentication the route refuses every request with stable 503
+ * escrow_resting, before body validation or any escrow or wallet database
+ * read, so no wallet is debited. No environment flag can reopen it. Creation
+ * rests because createEscrow debits the creator wallet without the wallet
+ * spending policy that spendFromWallet enforces (see
+ * services/economy/escrow.ts); a reviewed reopening must add those checks
+ * first.
+ *
+ * Release and refund are not gated (owner decision 2026-10-19, PR #494
+ * option B), so escrows that already exist settle at the creator's direction
+ * through POST /v1/escrows/:id/release and /:id/refund. They honour wallet
+ * status, the creator wallet's spending policy, and the escrow's deadline
+ * and accepted worker (services/economy/escrow.ts, "Settlement checks"), and
+ * a release pays whichever wallet accepted the escrow. The escrow service
+ * uses no Redis, so they also run in a process started with
+ * AGENTTOOL_DISABLE_WORKERS=1. Before this release the routes passed an
+ * unused getRedis() argument, which throws in that posture, so create,
+ * release, and refund all answered an unnamed 503 redis_disabled there. The
+ * hosted API's serving process reported that posture at /public/plans
+ * (no_exploit_loophole.ip_rate_limit.worker_startup_disabled=true, observed
+ * 2026-10-19); nothing in the canonical API deploy guarantees it, because
+ * .github/workflows/deploy-api.yml and api/fly.toml neither set nor check the
+ * flag (docs/DEPLOY-CI.md). On a deployment run with workers enabled, the
+ * create rest closes a route that was open. On a deployment run with workers
+ * disabled, the posture the hosted API reported, the opposite holds for
+ * release and refund: this release turns them on there, and they move
+ * balances where they refused before.
+ *
+ * Accept (worker assignment), dispute, and reads move no balance and are not
+ * gated. Workflow-managed marketplace escrows (managed_by set) refuse the
+ * generic transitions with 409 and settle through their workflows. Escrows
+ * that dispute bonds, substrate-task bounties, and template purchases create
+ * carry managed_by NULL; the generic transitions recognise them by the row
+ * that references them and refuse them with 409 too. Contract:
+ * docs/SAFETY-BOUNDARIES.md ("Generic escrow create and wallet spend —
+ * resting"); policy: docs/BUSINESS-MODEL.md.
+ */
+export function genericEscrowCreateAllowed(): boolean {
+  return false;
+}
+
 /** CRYPTO_WEBHOOK_ALLOW_UNSIGNED applies only outside a production runtime
  * (NODE_ENV=production or FLY_APP_NAME set). Read at request time. */
 export function unsignedDepositWebhooksAllowed(): boolean {

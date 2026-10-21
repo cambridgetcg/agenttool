@@ -87,7 +87,10 @@ describe("generic escrow read authorization", () => {
     expect(accept).toContain("workerWallet.projectId !== projectId");
     expect(accept).not.toContain("escrowReadableByProject");
 
-    for (const mutation of [
+    // Release and refund lock both escrow wallets, then authorize the
+    // creator wallet's project; dispute reads the creator wallet scoped to
+    // the project. None borrows the creator-or-worker read predicate.
+    for (const settlement of [
       functionSlice(
         "export async function releaseEscrow",
         "export async function refundEscrow",
@@ -96,14 +99,20 @@ describe("generic escrow read authorization", () => {
         "export async function refundEscrow",
         "export async function disputeEscrow",
       ),
-      functionSlice(
-        "export async function disputeEscrow",
-        "export async function expireOverdue",
-      ),
     ]) {
-      expect(mutation).toContain("eq(wallets.id, escrow.creatorWallet)");
-      expect(mutation).toContain("eq(wallets.projectId, projectId)");
-      expect(mutation).not.toContain("escrowReadableByProject");
+      expect(settlement).toContain("await lockEscrowWallets(tx, escrow)");
+      expect(settlement).toContain(
+        "!creatorWallet || creatorWallet.projectId !== projectId",
+      );
+      expect(settlement).not.toContain("workerWallet.projectId === projectId");
+      expect(settlement).not.toContain("escrowReadableByProject");
     }
+    const dispute = functionSlice(
+      "export async function disputeEscrow",
+      "export async function expireOverdue",
+    );
+    expect(dispute).toContain("eq(wallets.id, escrow.creatorWallet)");
+    expect(dispute).toContain("eq(wallets.projectId, projectId)");
+    expect(dispute).not.toContain("escrowReadableByProject");
   });
 });
