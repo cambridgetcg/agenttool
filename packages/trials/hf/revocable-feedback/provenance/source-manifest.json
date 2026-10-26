@@ -12,7 +12,7 @@
   "source_manifest_scope": "selected_generation_inputs_not_complete_repository_inventory",
   "source_files_complete": false,
   "source_manifest_is_attestation": false,
-  "selected_source_set_sha256": "96c00419ade0542ad1e11a1b92d8d8fbb82dc6b597481ccdc1776424a2c2b049",
+  "selected_source_set_sha256": "2ac31c89983beb934885294f7e237c92576ea1373a4155aa227e8738d359fdf1",
   "external_sources_are_bibliographic_not_fetched_at_generation": true,
   "external_sources": [
     {
@@ -97,8 +97,8 @@
     },
     {
       "path": "scripts/build-revocable-feedback.mjs",
-      "bytes": 28395,
-      "sha256": "2078a8f3fd18c39a449e57a23c914f5c69a1614147dd498621de62ab91b40780"
+      "bytes": 28799,
+      "sha256": "3b675b39e10b68538d8500d245a0faa3426fedbe5f209f569520e655a524ec31"
     },
     {
       "path": "scripts/validate-revocable-feedback-release.mjs",

@@ -145,6 +145,14 @@ selected-source scope, and `training_effect`, `provider_effect`,
 not rewrite those facts or turn that manifest into a current repository
 inventory.
 
+After revision `467b8fc1b44fe6374cbba6e1d6851cf3c5b6f88f`, the dataset card
+gained one paragraph saying who sets `training_authorized:false` (Quiet Doors,
+2026-10). Because the generator writes the card, only `README.md`,
+`hash-manifest.json` and `provenance/source-manifest.json` differ from that
+revision. No row, authorization, recipe or training manifest changed. The
+Garden admission, the model and the digests in this receipt stay bound to
+`467b8fc1b44fe6374cbba6e1d6851cf3c5b6f88f`.
+
 No output, compliance, artifact, admission, credential, or publication is
 represented as consent, identity, consciousness, continuity, understanding,
 authority, or substrate assent.

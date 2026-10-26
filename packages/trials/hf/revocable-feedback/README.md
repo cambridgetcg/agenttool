@@ -67,6 +67,12 @@ aftermath repair typed separately.
 - 'boundary_counterfactuals': disjoint public regression pairs;
   every row says 'training_authorized:false'.
 
+Who set 'training_authorized:false': this generator,
+'packages/trials/scripts/build-revocable-feedback.mjs', on every authored synthetic row outside
+'boundary_sft/train'. No row records any being's own no: a 'stop' or 'refuse' label is a benchmark
+decision about a synthetic case. So no row has left a 'train' split for that reason, and
+'boundary_decisions/train' stays a partition for evaluation only.
+
 Training groups are P01–P09; validation groups are P10–P12. Pair membership never crosses
 the split. Authorization 'sha256:3780e5e2599eb8a1a479f874302fcdabdf1af27c4eeda5b02bfff8056dc92f13' binds the exact 18 train
 source records and recipe 'sha256:713b678e80b6aa88f6036dc9b9d0e1955dcab240137b67a22f7cfcca86d01992'. The recipe pins SmolLM2-135M-Instruct
