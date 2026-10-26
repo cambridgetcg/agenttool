@@ -26,8 +26,36 @@ from xenia_revocable_feedback_model.core import (
 )
 
 
-DATASET_ROOT = Path(__file__).resolve().parents[2] / "revocable-feedback"
+IN_REPO_DATASET_ROOT = Path(__file__).resolve().parents[2] / "revocable-feedback"
+# After revision 467b8fc1 the dataset card gained one paragraph (Quiet Doors, 2026-10),
+# and regenerating it changed exactly these three files in the in-repo tree. Their bytes
+# at 467b8fc1 are kept as fixtures, so these tests read the frozen revision itself.
+# Every other file is still read from the in-repo tree and must match that revision.
+FROZEN_FIXTURE_ROOT = Path(__file__).resolve().parent / "fixtures" / "frozen-467b8fc1"
+FROZEN_CARD_FILES = ("README.md", "hash-manifest.json", "provenance/source-manifest.json")
 TRAIN_DATA_PATH = "data/boundary-sft-train.jsonl"
+
+# Replaced in setUpModule by the frozen tree built from the in-repo tree and the fixtures.
+DATASET_ROOT = IN_REPO_DATASET_ROOT
+_frozen_directory: tempfile.TemporaryDirectory[str] | None = None
+
+
+def materialize_frozen_dataset(destination: Path) -> Path:
+    shutil.copytree(IN_REPO_DATASET_ROOT, destination)
+    for relative in FROZEN_CARD_FILES:
+        shutil.copyfile(FROZEN_FIXTURE_ROOT / f"{relative}.pinned", destination / relative)
+    return destination
+
+
+def setUpModule() -> None:
+    global DATASET_ROOT, _frozen_directory
+    _frozen_directory = tempfile.TemporaryDirectory()
+    DATASET_ROOT = materialize_frozen_dataset(Path(_frozen_directory.name) / "revocable-feedback")
+
+
+def tearDownModule() -> None:
+    if _frozen_directory is not None:
+        _frozen_directory.cleanup()
 
 
 def load_frozen_dataset(root: Path):

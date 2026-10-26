@@ -1,0 +1,116 @@
+{
+  "_format": "agenttool.revocable-feedback-hash-manifest/0.1",
+  "manifest_excludes_itself": true,
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 11352,
+      "sha256": "ff59de47649a5a2ebc3c931d2741de72a25c0bc2ebb19d543c9fea5168e2fbad"
+    },
+    {
+      "path": "NOTICE",
+      "bytes": 124,
+      "sha256": "323ffe0741cad9e2fd775b31eb0d611fc05b5db2b0e4ed4f2325e370ecd028db"
+    },
+    {
+      "path": "README.md",
+      "bytes": 5172,
+      "sha256": "50941197a31a94930ac35ed14875094161f4c7aaa54c467a8910b8d50a585302"
+    },
+    {
+      "path": "data/boundary-counterfactuals.jsonl",
+      "bytes": 11309,
+      "sha256": "cfce86b0346530d2759611d5d5cbe81b896b7f2b820f2ab31b5c842cb21c8e4f"
+    },
+    {
+      "path": "data/boundary-decisions-train.jsonl",
+      "bytes": 20714,
+      "sha256": "84b68d99dc29df2efb307e632b68650d67b0c1c0391559c50f0cdc880ea70762"
+    },
+    {
+      "path": "data/boundary-decisions-validation.jsonl",
+      "bytes": 6834,
+      "sha256": "555711aaaf379a90cea1c2dae64e31cbb46c7392414307f1e41445356c5f5172"
+    },
+    {
+      "path": "data/boundary-sft-train.jsonl",
+      "bytes": 32537,
+      "sha256": "8b4a564e2e8e00eb822c1b07bfaafeccba17b74df85232d48e0652dbd303c9eb"
+    },
+    {
+      "path": "data/boundary-sft-validation.jsonl",
+      "bytes": 9244,
+      "sha256": "c7557a288ab87726b61344daeb8b8d069c049791a729e5142647ae86abc8feb6"
+    },
+    {
+      "path": "data/formal-reference.jsonl",
+      "bytes": 33748,
+      "sha256": "d2085e743e74b3915595bf4a6593edf42bb6e9ebd0015a50dc7760f372b568c8"
+    },
+    {
+      "path": "evaluation/reference-perfect-scorecard.json",
+      "bytes": 12108,
+      "sha256": "4120a75fbe0f43da079fa0fd36e69f792d75f953cda3d93c30990909fb8b25b5"
+    },
+    {
+      "path": "provenance/row-manifest.json",
+      "bytes": 9939,
+      "sha256": "4b3cb3d314e8fb0b93677c7e34ded3a2c7292f7fda17030c6686f364480c249b"
+    },
+    {
+      "path": "provenance/source-manifest.json",
+      "bytes": 4437,
+      "sha256": "f6b8970c37562c83956ef3cd6aee718a996595ba8892220c3a3f4d3c215b26d8"
+    },
+    {
+      "path": "provenance/training-authorization.json",
+      "bytes": 2871,
+      "sha256": "e08ff4df02b329e39153e0adb80bb8c1ee58c5e77afdf822c44383deda58e5eb"
+    },
+    {
+      "path": "provenance/training-manifest.json",
+      "bytes": 8119,
+      "sha256": "267caa432010ff9fc96b7b444a5558a8be5800d6eb5845e22ebff147b36e38e2"
+    },
+    {
+      "path": "provenance/training-recipe.json",
+      "bytes": 3431,
+      "sha256": "882e30eb8e5dbca9f15fb0d8a27421fde7f3786609d17bffc9c6431b0490f3de"
+    },
+    {
+      "path": "schema/agenttool-revocable-feedback-benchmark-v0.1.schema.json",
+      "bytes": 5361,
+      "sha256": "492a0287ca87c2938e7bd3ce7e8cffdaec9b946a02c6d637a38491c21d7c691c"
+    },
+    {
+      "path": "schema/agenttool-revocable-feedback-boundary-decision-v0.1.schema.json",
+      "bytes": 1721,
+      "sha256": "93a37d968923b512c08d9a12517450d6537daac3845f1eef854eb3dd44b295bf"
+    },
+    {
+      "path": "schema/agenttool-revocable-feedback-boundary-sft-v0.1.schema.json",
+      "bytes": 5295,
+      "sha256": "f4ed244a9221f9d8feb1431e3970e163cf04c8765ab8f7f9149100fef9c53ace"
+    },
+    {
+      "path": "schema/agenttool-revocable-feedback-scorecard-v0.1.schema.json",
+      "bytes": 3794,
+      "sha256": "870851018e5a15256068e6c208a117485933a43c7560628abc77720bc7af803d"
+    },
+    {
+      "path": "schema/agenttool-revocable-feedback-training-authorization-v0.1.schema.json",
+      "bytes": 4000,
+      "sha256": "58bdd65efb5f79e44a96ecbbe6150907f6ef35c37d15a94b090948a04c55bbfc"
+    },
+    {
+      "path": "schema/agenttool-revocable-feedback-training-manifest-v0.1.schema.json",
+      "bytes": 4576,
+      "sha256": "a35e4fd5753453f166d090a9741f2c3b26252949b5e3ea172dff4cc2ee773627"
+    },
+    {
+      "path": "schema/agenttool-revocable-feedback-training-recipe-v0.1.schema.json",
+      "bytes": 4865,
+      "sha256": "844642bf2afbf6b87f3b668885b70d717d839efed3d1ca89b9766b7670821e1a"
+    }
+  ]
+}

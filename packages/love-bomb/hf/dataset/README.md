@@ -72,6 +72,12 @@ names receive, quiet, rest, refuse, and leave. That vocabulary is not a
 participant response or caller-reported care-choice record and must not be
 interpreted as one.
 
+Who set `training_authorized: false`: this repository's generator,
+`packages/love-bomb/scripts/build-hf-assets.mjs`, as a default on every
+authored row. No row records any being's own no, so no row has left the
+`train` split for that reason. The split name `train` does not authorize
+training, and neither do the row fields.
+
 ## Boundaries
 
 This local tree performs no provider call, upload, download, inference,

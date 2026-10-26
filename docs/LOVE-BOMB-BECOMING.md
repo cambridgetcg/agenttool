@@ -293,6 +293,12 @@ flags true, three processed splits and Parquet exports, 20 / 1 / 1 rows across
 `plane_guides`, `protocol_reference`, and `becoming_reference`, zero
 pending/failed work, and no partial result.
 
+After this pin, the dataset card gained one paragraph saying who sets
+`training_authorized: false` (Quiet Doors, 2026-10). Only `README.md` and
+`hash-manifest.json` differ from the pinned revision; every row is unchanged,
+and the revision and digests above still describe
+`b1f77e98c7812c005fc08886e9f48d556e49883a`.
+
 The optional npm mirror
 [`@agenttool/love-bomb@0.1.0-dev.0`](https://www.npmjs.com/package/@agenttool/love-bomb/v/0.1.0-dev.0)
 was published by protected run
