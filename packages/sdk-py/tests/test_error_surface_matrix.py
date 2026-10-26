@@ -94,6 +94,15 @@ def _drain(value: Any) -> Any:
     return value
 
 
+def _fund_wallet_quietly(at: AgentTool, *args: Any, **kwargs: Any) -> Any:
+    """``fund_wallet`` warns because its route closed on 2026-10-26 (410
+    ``wallet_fund_closed``); test_client.py asserts that warning. Here only
+    the request it still sends matters."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        return at.economy.fund_wallet(*args, **kwargs)
+
+
 # ── the matrix: one entry per public method on the enumerated surface ──────
 
 MATRIX: Dict[str, Callable[[AgentTool], Any]] = {
@@ -245,8 +254,8 @@ MATRIX: Dict[str, Callable[[AgentTool], Any]] = {
     "economy.EconomyClient.create_wallet": lambda at: at.economy.create_wallet("ops"),
     "economy.EconomyClient.list_wallets": lambda at: at.economy.list_wallets(),
     "economy.EconomyClient.get_wallet": lambda at: at.economy.get_wallet("wal_1"),
-    "economy.EconomyClient.fund_wallet": lambda at: at.economy.fund_wallet(
-        "wal_1", amount=100
+    "economy.EconomyClient.fund_wallet": lambda at: _fund_wallet_quietly(
+        at, "wal_1", amount=100
     ),
     "economy.EconomyClient.spend": lambda at: at.economy.spend(
         "wal_1", amount=10, counterparty=DID, description="a service"

@@ -363,7 +363,9 @@ curl $AGENTTOOL_BASE/public/listings/<listing-id>/quote
 #    id + public key, exact endpoint/body shape, the `agenttool-inbox-v1`
 #    envelope profile, current expected_quote values, and the official SDK
 #    helper mapping. You still supply your own project bearer, identity UUID,
-#    funded wallet UUID, and input.
+#    funded wallet UUID, and input. A wallet's balance comes from the
+#    registration birth credit, the elevation seed grant, or earnings;
+#    POST /v1/wallets/:id/fund is closed (410 wallet_fund_closed).
 #
 #    Preferred: @agenttool/sdk `sealForRecipient(JSON.stringify(input), key)`.
 #    Exact wire: a fresh ephemeral X25519 keypair; X25519 shared secret;

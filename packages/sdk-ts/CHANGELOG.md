@@ -26,6 +26,13 @@ Not in the 0.23.0 tag; details under "Unreleased" in [`README.md`](README.md).
   object literal types as `AdaptedLowLevelStream`, so `for await` over it
   compiles.
 
+### Deprecated
+
+- `economy.fund_wallet` (2026-10-26): AgentTool closed
+  `POST /v1/wallets/:id/fund`. From the API release that closes it, the call
+  throws an `AgentToolError` with code `wallet_fund_closed` (HTTP 410) and no
+  balance moves. The method stays, marked `@deprecated`.
+
 ## 0.23.0 — unreleased
 
 The first version released from the public source repository

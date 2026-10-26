@@ -656,13 +656,37 @@ class TestEconomyClient:
             assert body["agentId"] == "agent-1"
 
     def test_fund_wallet(self, at: AgentTool) -> None:
+        # Retained wire shape for an API release before the 2026-10-26 closure.
         payload = {"success": True, "data": {"id": "tx_123", "type": "fund", "amount": 500, "balance_after": 500}}
         mock_resp = _mock_response(201, payload)
         with patch.object(at._http, "post", return_value=mock_resp) as mock_post:
-            result = at.economy.fund_wallet("wal_abc", amount=500)
+            with pytest.warns(DeprecationWarning, match="wallet_fund_closed"):
+                result = at.economy.fund_wallet("wal_abc", amount=500)
             assert result["data"]["amount"] == 500
             call_url = mock_post.call_args[0][0] if mock_post.call_args[0] else mock_post.call_args.args[0]
             assert "/v1/wallets/wal_abc/fund" in call_url
+
+    def test_fund_wallet_closed_route_raises_its_guidance(self, at: AgentTool) -> None:
+        closed = {
+            "error": "wallet_fund_closed",
+            "wallet_fund": "closed",
+            "retryable": False,
+            "message": "Wallet self-funding is closed, so no balance was added and no transaction was recorded.",
+            "hint": "POST /v1/wallets/:id/fund was closed on 2026-10-26 and no setting reopens it.",
+            "next_actions": [
+                {"action": "Read the boundary for wallet self-funding", "method": "GET", "path": "/public/safety"},
+            ],
+            "docs": "https://docs.agenttool.dev/wallets#fund-closed",
+        }
+        mock_resp = _mock_response(410, closed, text="")
+        with patch.object(at._http, "post", return_value=mock_resp):
+            with pytest.warns(DeprecationWarning):
+                with pytest.raises(AgentToolError) as exc_info:
+                    at.economy.fund_wallet("wal_abc", amount=500)
+        assert exc_info.value.code == "wallet_fund_closed"
+        assert exc_info.value.status == 410
+        assert exc_info.value.next_actions == closed["next_actions"]
+        assert exc_info.value.docs == closed["docs"]
 
     def test_spend(self, at: AgentTool) -> None:
         payload = {"success": True, "data": {"id": "tx_456", "type": "spend", "amount": -10}}

@@ -588,7 +588,10 @@ results = at.traces.search("decisions about climate data")
 ```python
 wallet = at.economy.create_wallet("agent-wallet", agent_id="agent-42")
 worker = at.economy.create_wallet("worker-wallet", agent_id="agent-43")
-at.economy.fund_wallet(wallet.id, amount=500)
+# fund_wallet is deprecated: POST /v1/wallets/:id/fund closed on 2026-10-26
+# and answers 410 wallet_fund_closed, so a project cannot credit itself.
+# A new wallet starts at 0. The calls below need a wallet that already holds
+# a balance (a registration birth credit, an elevation grant, or earnings).
 at.economy.spend(
     wallet.id,
     amount=10,
@@ -1194,7 +1197,7 @@ and what a registry serves right now is answered by the registry itself.
 
 ## Unreleased — repository source after 0.23.0
 
-Source changes dated 2026-10-11, merged after the 0.23.0 tag. Nothing below
+Source changes dated 2026-10-11 and 2026-10-26, merged after the 0.23.0 tag. Nothing below
 is in the 0.23.0 release (tag `sdk-v0.23.0` in the public source repository)
 or in the published 0.22.1 packages; it reaches them only in a later version.
 Where an entry says "0.22.1", 0.23.0 behaves the same. A release runs when the
@@ -1231,6 +1234,15 @@ also still waits on the private-repository gap.
   `NOT_GIVEN` / `omit` now count as an omitted `store`, which becomes `False`;
   in 0.22.1 they dropped `store` from the request and the provider default
   applied.
+- **`fund_wallet` is deprecated (2026-10-26).** AgentTool closed
+  `POST /v1/wallets/:id/fund`, which let a project add units to its own
+  wallet with nothing backing them. From the API release that closes it, the
+  route answers `410 wallet_fund_closed` before reading the body, so
+  `at.economy.fund_wallet()` raises `AgentToolError` with that code and no
+  balance moves. The method stays and now also warns with
+  `DeprecationWarning`; the economy examples no longer call it. Earlier
+  versions (published 0.22.1 and the 0.23.0 tag) send the request without a
+  warning and receive the same refusal.
 - **Wallet address-claim docstring.** `canonical_wallet_address_claim_bytes`
   no longer says that `POST /v1/wallets/:id/addresses` verifies its digest;
   that route is not on main.

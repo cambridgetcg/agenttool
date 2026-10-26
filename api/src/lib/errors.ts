@@ -414,6 +414,33 @@ export const errors = {
     };
   },
 
+  /** POST /v1/wallets/:id/fund is closed (owner decision, 2026-10-26),
+   *  retired rather than rested: no environment flag reopens it. It let the
+   *  project bearer add any amount to its own wallet with nothing backing the
+   *  units. Emitted after authentication and before body validation, wallet
+   *  ownership lookup, or any database read or write, so no balance moves.
+   *  The internal fundWallet() service stays for server-side grants (the
+   *  register-agent birth credit). Contract: docs/SAFETY-BOUNDARIES.md
+   *  ("Wallet self-funding — closed"). */
+  walletFundClosed(): GuidedErrorBody & { wallet_fund: "closed"; retryable: false } {
+    return {
+      error: "wallet_fund_closed",
+      wallet_fund: "closed",
+      retryable: false,
+      message:
+        "Wallet self-funding is closed, so no balance was added and no transaction was recorded.",
+      hint: "POST /v1/wallets/:id/fund let a project add units to its own wallet with nothing backing them. It was closed on 2026-10-26 and no setting reopens it. Balances it credited earlier stay as they are, and their fund rows stay in the wallet's transaction history. The other wallet routes are unchanged.",
+      next_actions: [
+        { action: "Read this wallet's balance and spending policy", method: "GET", path: "/v1/wallets/{id}" },
+        { action: "Read this wallet's transaction history, earlier fund rows included", method: "GET", path: "/v1/wallets/{id}/transactions" },
+        { action: "Read the boundary for wallet self-funding", method: "GET", path: "/public/safety" },
+      ],
+      docs: `${DOCS_BASE}/wallets#fund-closed`,
+      axiom_id: AXIOM_GUIDE, // closed by decision: say what remains, move nothing
+      _canon_pointer: "urn:agenttool:doc/SAFETY-BOUNDARIES",
+    };
+  },
+
   /** A crypto deposit webhook arrived for a chain whose provider signing
    *  secret is not configured. The endpoint FAILS CLOSED (503) rather than
    *  credit an unverifiable payload — the on-chain funds are safe. Setting

@@ -7,6 +7,7 @@ import hashlib
 from dataclasses import dataclass
 import re
 from typing import Any, Dict, List, Literal, Optional
+import warnings
 
 import httpx
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -377,15 +378,20 @@ class EconomyClient:
     usage below shows the retained wire shape for a deployment where create
     and spend are open. See https://api.agenttool.dev/public/safety.
 
+    Closed note (2026-10-26): ``POST /v1/wallets/:id/fund`` is closed, so
+    ``fund_wallet`` is deprecated. From the API release that closes it, the
+    route answers ``410 wallet_fund_closed`` and adds nothing; no setting
+    reopens it. A wallet's balance comes from server-side paths instead.
+
     Usage::
 
         # Create a wallet for an agent
         wallet = at.economy.create_wallet("agent-42-wallet", agent_id="agent-42")
         worker = at.economy.create_wallet("worker-wallet", agent_id="agent-43")
 
-        # Fund it
-        at.economy.fund_wallet(wallet.id, amount=500, description="Weekly budget")
-
+        # A new wallet starts at 0 and /fund is closed, so spend and escrow
+        # need a wallet that already holds a balance (birth credit, an
+        # elevation grant, or earnings).
         # Spend from it
         at.economy.spend(wallet.id, amount=10, counterparty="wal_...", description="Task fee")
 
@@ -446,7 +452,29 @@ class EconomyClient:
         description: str = "Manual fund",
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Add credits to a wallet."""
+        """Add credits to a wallet. Deprecated: the route is closed.
+
+        Deprecated (2026-10-26): ``POST /v1/wallets/:id/fund`` let a project
+        add units to its own wallet with nothing backing them, and it is
+        closed. From the API release that closes it, the route answers
+        ``410 wallet_fund_closed`` before reading the body, so this method
+        raises ``AgentToolError`` with that code and no balance moves. No
+        setting reopens it. The method stays, and warns with
+        ``DeprecationWarning``, so existing callers receive the server's
+        guidance instead of a missing attribute. See
+        https://api.agenttool.dev/public/safety.
+
+        Raises:
+            AgentToolError: ``wallet_fund_closed`` from an API release that
+                closes the route.
+        """
+        warnings.warn(
+            "EconomyClient.fund_wallet() is deprecated: POST /v1/wallets/:id/fund "
+            "closed on 2026-10-26 and answers 410 wallet_fund_closed; no balance "
+            "moves. See https://api.agenttool.dev/public/safety.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         body: Dict[str, Any] = {"amount": amount, "description": description}
         if metadata is not None:
             body["metadata"] = metadata

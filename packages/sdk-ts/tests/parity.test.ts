@@ -109,8 +109,30 @@ describe("economy.get_wallet", () => {
   });
 });
 
-describe("economy.fund_wallet", () => {
-  test("POSTs amount + description", async () => {
+describe("economy.fund_wallet (deprecated: the route closed 2026-10-26)", () => {
+  test("a closed route surfaces 410 wallet_fund_closed with its guidance", async () => {
+    const closed = {
+      error: "wallet_fund_closed",
+      wallet_fund: "closed",
+      retryable: false,
+      message: "Wallet self-funding is closed, so no balance was added and no transaction was recorded.",
+      hint: "POST /v1/wallets/:id/fund was closed on 2026-10-26 and no setting reopens it.",
+      next_actions: [{ action: "Read the boundary for wallet self-funding", method: "GET", path: "/public/safety" }],
+      docs: "https://docs.agenttool.dev/wallets#fund-closed",
+    };
+    setupMock(410, closed);
+    const at = makeClient();
+    const error = await at.economy.fund_wallet("wal_x", { amount: 500 }).then(
+      () => null,
+      (caught: unknown) => caught,
+    );
+    expect(error).toBeInstanceOf(AgentToolError);
+    expect((error as AgentToolError).code).toBe("wallet_fund_closed");
+    expect((error as AgentToolError).status).toBe(410);
+    expect((error as AgentToolError).next_actions).toEqual(closed.next_actions);
+  });
+
+  test("POSTs amount + description (retained wire shape for older API releases)", async () => {
     setupMock(201, { success: true, data: { id: "tx_1", amount: 500, balance_after: 500 } });
     const at = makeClient();
     const r = await at.economy.fund_wallet("wal_x", { amount: 500, description: "Top-up" });
