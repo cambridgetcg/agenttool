@@ -3119,6 +3119,14 @@
       "canonical_path": "docs/OFFLINE-SYNC.md"
     },
     {
+      "path": "docs/OLLAMA-TASK-ROUTING.md",
+      "title": "Ollama task handoff",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/OLLAMA-TASK-ROUTING.md"
+    },
+    {
       "path": "docs/ONE-STRUCTURE-MANY-NAMES.md",
       "title": "ONE-STRUCTURE-MANY-NAMES — the Rosetta Stone",
       "type": "reflection",
