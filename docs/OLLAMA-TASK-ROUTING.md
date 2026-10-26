@@ -117,6 +117,15 @@ pilot, with continued attention to certainty and attribution. Kimi also passed
 these cases. The sample is too small to establish a general quality or latency
 ranking, long-session reliability, or citizen continuity.
 
+A later integration smoke check against committed source returned a clean
+`READY` from DeepSeek in 1.41 seconds. Kimi answered in 1.31 seconds but included
+stray response-delimiter text after `READY`, despite `done_reason:stop`.
+Earlier connectivity checks returned clean text. This is a formatting failure
+in one observed Kimi response; its cause and frequency are unknown. The command
+preserves the returned text. Treat Kimi as a provisional backup and validate
+the answer against the downstream task's format before using it. A completed
+provider response does not prove that the task was completed correctly.
+
 The citizen reflection runner in the separate `love-unlimited` repository
 explicitly refuses cloud models and handles private soul/inbox text. This
 change does not alter that boundary or activate a citizen. Cloud-backed
