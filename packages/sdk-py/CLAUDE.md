@@ -108,8 +108,9 @@ annotated SDK tag contained in GitHub `main`, enters the protected `pypi`
 environment only for the pinned PyPA trusted-publisher action, and verifies the
 public files independently. Do not run a second local token/Twine upload path.
 See `docs/PYPI-RELEASES.md`. That workflow still
-runs in this private repository, and its tag check fetches `main` without
-credentials, so it cannot complete while the repository is private; the
+runs in the private development repository, not in the public projection,
+and its tag check fetches `main` without credentials, so it cannot complete
+while that development repository is private; the
 runbook records the open fix.
 
 **Release gate — 2026-10-12.** On 2026-10-11 the `pypi` environment carried
