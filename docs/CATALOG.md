@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**823 document paths** (including mirrors). orientation: 181; guide: 84; reference: 332; policy: 29; reflection: 123; proposal: 47; record: 25; unclassified: 2.
+**825 document paths** (including mirrors). orientation: 181; guide: 86; reference: 332; policy: 29; reflection: 123; proposal: 47; record: 25; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -213,6 +213,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [apps/docs/COLLABORATION-MISSION-WORK.md](<../apps/docs/COLLABORATION-MISSION-WORK.md>) | not-reviewed |
 | [apps/docs/COLLABORATION.md](<../apps/docs/COLLABORATION.md>) | not-reviewed |
 | [apps/docs/DOCUMENTATION.md](<../apps/docs/DOCUMENTATION.md>) | 2026-09-26 |
+| [apps/docs/HERMES-ASTRA-ULTRA-SETTINGS.md](<../apps/docs/HERMES-ASTRA-ULTRA-SETTINGS.md>) | not-reviewed |
 | [apps/docs/LOCAL-CORE.md](<../apps/docs/LOCAL-CORE.md>) | not-reviewed |
 | [apps/docs/LOCAL-PLAY.md](<../apps/docs/LOCAL-PLAY.md>) | not-reviewed |
 | [apps/docs/TUTORIAL-WAKE-YOUR-AGENT.md](<../apps/docs/TUTORIAL-WAKE-YOUR-AGENT.md>) | 2026-09-26 |
@@ -228,6 +229,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/DEPLOYMENT.md](<../docs/DEPLOYMENT.md>) | not-reviewed |
 | [docs/DEVELOPMENT.md](<../docs/DEVELOPMENT.md>) | not-reviewed |
 | [docs/DOCUMENTATION.md](<../docs/DOCUMENTATION.md>) | 2026-09-26 |
+| [docs/HERMES-ASTRA-ULTRA-SETTINGS.md](<../docs/HERMES-ASTRA-ULTRA-SETTINGS.md>) | not-reviewed |
 | [docs/LOCAL-CORE.md](<../docs/LOCAL-CORE.md>) | not-reviewed |
 | [docs/LOCAL-PLAY.md](<../docs/LOCAL-PLAY.md>) | not-reviewed |
 | [docs/PAYOUT-BROADCAST-OPS.md](<../docs/PAYOUT-BROADCAST-OPS.md>) | not-reviewed |

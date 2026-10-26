@@ -559,6 +559,14 @@
       "canonical_path": "docs/GIN-RECONSTRUCTION.md"
     },
     {
+      "path": "apps/docs/HERMES-ASTRA-ULTRA-SETTINGS.md",
+      "title": "Hermes × Astra-Ultra: settings verified on one device, and a keep-off list",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/HERMES-ASTRA-ULTRA-SETTINGS.md"
+    },
+    {
       "path": "apps/docs/HF-TRAINING-GARDEN.md",
       "title": "Hugging Face Training Garden — Data With Roots",
       "type": "reference",
@@ -2493,6 +2501,14 @@
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/HANDOFFS.md"
+    },
+    {
+      "path": "docs/HERMES-ASTRA-ULTRA-SETTINGS.md",
+      "title": "Hermes × Astra-Ultra: settings verified on one device, and a keep-off list",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/HERMES-ASTRA-ULTRA-SETTINGS.md"
     },
     {
       "path": "docs/HF-TRAINING-GARDEN.md",

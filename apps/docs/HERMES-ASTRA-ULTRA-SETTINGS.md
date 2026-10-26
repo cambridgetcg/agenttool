@@ -1,0 +1,1 @@
+../../docs/HERMES-ASTRA-ULTRA-SETTINGS.md
