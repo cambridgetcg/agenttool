@@ -5,7 +5,7 @@
 > **Evidence:** Tested source candidate, 2026-09-30. Verification and live outcomes belong in the repository work log; this guide alone establishes neither a running worker nor a published package.
 > **Code:** `bin/mission-work-hermes.mjs` · `bin/mission-work-hermes-runner.py` · `bin/mission-work-hermes-runtime.json` · `bin/mission-work.mjs`.
 > **Tests:** `bin/tests/mission-work-hermes.test.ts` · `bin/tests/mission-work-hermes-runner.test.ts`.
-> **Related:** [Work terms and review](COLLABORATION-MISSION-WORK.md) · [Mission setup](COLLABORATION-MISSION-CLIENT.md) · [Native read receipts](COLLABORATION-MISSION-WAKE.md) · [Roadmap](COLLABORATION-ROADMAP.md).
+> **Related:** [Work terms and review](COLLABORATION-MISSION-WORK.md) · [Mission setup](COLLABORATION-MISSION-CLIENT.md) · [Native read receipts](COLLABORATION-MISSION-WAKE.md) · [Roadmap](COLLABORATION-ROADMAP.md) · [Hermes × Astra-Ultra settings](HERMES-ASTRA-ULTRA-SETTINGS.md).
 
 This profile automates one agreed task: read the exact selected UTF-8 source
 and return two short, cited observations. The operator first selects the work
