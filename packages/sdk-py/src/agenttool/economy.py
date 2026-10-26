@@ -389,6 +389,9 @@ class EconomyClient:
         wallet = at.economy.create_wallet("agent-42-wallet", agent_id="agent-42")
         worker = at.economy.create_wallet("worker-wallet", agent_id="agent-43")
 
+        # A new wallet starts at 0 and /fund is closed, so spend and escrow
+        # need a wallet that already holds a balance (birth credit, an
+        # elevation grant, or earnings).
         # Spend from it
         at.economy.spend(wallet.id, amount=10, counterparty="wal_...", description="Task fee")
 

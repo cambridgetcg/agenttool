@@ -590,6 +590,8 @@ wallet = at.economy.create_wallet("agent-wallet", agent_id="agent-42")
 worker = at.economy.create_wallet("worker-wallet", agent_id="agent-43")
 # fund_wallet is deprecated: POST /v1/wallets/:id/fund closed on 2026-10-26
 # and answers 410 wallet_fund_closed, so a project cannot credit itself.
+# A new wallet starts at 0. The calls below need a wallet that already holds
+# a balance (a registration birth credit, an elevation grant, or earnings).
 at.economy.spend(
     wallet.id,
     amount=10,

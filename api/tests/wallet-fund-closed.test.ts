@@ -266,6 +266,23 @@ describe("fundWallet stays internal", () => {
     expect(service).toMatch(/Internal only since 2026-10-26[\s\S]*register-agent birth credit/);
   });
 
+  test("no file imports it under another name or re-exports it", () => {
+    const importers = sourceFiles(SRC_ROOT)
+      .filter((path) =>
+        /import\s*\{[^}]*\bfundWallet\b[^}]*\}\s*from/.test(code(readFileSync(path, "utf8"))),
+      )
+      .map((path) => relative(SRC_ROOT, path))
+      .sort();
+    expect(importers).toEqual(["routes/register-agent.ts"]);
+    for (const path of sourceFiles(SRC_ROOT)) {
+      const text = code(readFileSync(path, "utf8"));
+      expect(text).not.toMatch(/\.\s*fundWallet\b|\[\s*["'`]fundWallet["'`]\s*\]/);
+      expect(text).not.toMatch(/\bfundWallet\s+as\b/);
+      expect(text).not.toMatch(/export\s*\{[^}]*\bfundWallet\b/);
+      expect(text).not.toMatch(/export\s*\*\s*from\s*["'][^"']*services\/economy\/wallets["']/);
+    }
+  });
+
   test("the birth credit still calls it with its fixed amount", () => {
     expect(source("src/routes/register-agent.ts")).toMatch(
       /await\s+fundWallet\(\s*db\s*,\s*wallet\.id\s*,\s*RING_2_BIRTH_CREDIT_MINOR/,

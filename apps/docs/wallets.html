@@ -200,7 +200,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc"><strong>Closed (2026-10-26):</strong> this route let a project add units to its own wallet with nothing backing them. It is retired, not resting, and no setting reopens it. From the API release that closes it, it returns <code>410 wallet_fund_closed</code> with <code>next_actions</code> after authentication and before validation, ownership lookup, or any database work, so no balance moves. Balances it credited earlier, and their <code>fund</code> rows in the transaction history, stay as they are. The SDK method <code>fund_wallet</code> is deprecated and surfaces this refusal as an error. The registration birth credit is a separate server-side grant and is unchanged.</p>
+          <p class="endpoint-desc"><strong>Closed (2026-10-26):</strong> this route let a project add units to its own wallet with nothing backing them. It is retired, not resting, and no setting reopens it. From the API release that closes it, it returns <code>410 wallet_fund_closed</code> with <code>next_actions</code> after authentication and before validation, ownership lookup, or any database work, so no balance moves. Balances it credited earlier, and their <code>fund</code> rows in the transaction history, stay as they are. The SDK method <code>fund_wallet</code> is deprecated and surfaces this refusal as an error. The registration birth credit is a separate server-side grant and is unchanged. <code>POST /v1/bootstrap/elevate</code> separately writes an unbacked seed grant of up to 1,000,000 units per elevation; both grants are separate decisions.</p>
         </div>
       </div>
 
