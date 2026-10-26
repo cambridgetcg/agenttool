@@ -1244,6 +1244,14 @@ the 0.23.0 tag behaves the same.
   written as an inline object literal now types as `AdaptedLowLevelStream`, so
   `for await` over it compiles. In 0.22.1 the literal fell through to the
   `AdaptedResponse` overload (TS2504).
+- **`fund_wallet` is deprecated (2026-10-26).** AgentTool closed
+  `POST /v1/wallets/:id/fund`, which let a project add units to its own
+  wallet with nothing backing them. From the API release that closes it, the
+  route answers `410 wallet_fund_closed` before reading the body, so
+  `at.economy.fund_wallet()` throws an `AgentToolError` with that code and no
+  balance moves. The method stays, marked `@deprecated`; the economy example
+  no longer calls it. Earlier versions (published 0.22.1 and the 0.23.0 tag)
+  send the request and receive the same refusal.
 - **Wallet address-claim docstring.** `canonicalWalletAddressClaimBytes` no
   longer says that `POST /v1/wallets/:id/addresses` verifies its digest; that
   route is not on main.

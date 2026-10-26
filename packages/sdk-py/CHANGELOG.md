@@ -94,6 +94,13 @@ describes the adapter and Dark Continent changes in more detail.
   holds the defaults `content=""`, `type="semantic"`, `importance=0.5` and
   `metadata={}` rather than what was stored. Use the values you passed in.
 
+### Deprecated
+
+- `economy.fund_wallet` (2026-10-26): AgentTool closed
+  `POST /v1/wallets/:id/fund`. From the API release that closes it, the call
+  raises `AgentToolError` with code `wallet_fund_closed` (HTTP 410) and no
+  balance moves. The method stays and warns with `DeprecationWarning`.
+
 ### Added
 
 - `at.exit_door` (`ExitDoorClient`) copies the hosted continuity core into an

@@ -2,7 +2,7 @@
 
 > **Type:** proposal
 > **Purpose:** Map quiet arrival, the five core modules, the order work is actually following, completed foundations and proposed economy/civilisation development, with a reason and acceptance boundary for each step.
-> **Evidence:** Merged and open PRs and dated receipts reviewed 2026-11-19 at main `3e7a576c` (following the 2026-10-18 review at `3b9aa630`), with live API `46649845` (recent merges and npm receipts are in [NOW](NOW.md) and [NPM-RELEASES](NPM-RELEASES.md)), Yu's 2026-10-19 escrow decision ([landed in #494](https://github.com/cambridgetcg/agenttool/pull/494)), a read-only production audit at `6e7bbca7` on 2026-10-10 ([Truth Map follow-through](#truth-map-follow-through-2026-10-10)), and the 2026-09-30 selected mission work, Hermes work and release checkpoint. This map is not a live health check.
+> **Evidence:** Merged and open PRs and dated receipts reviewed 2026-11-19 at main `3e7a576c` (following the 2026-10-18 review at `3b9aa630`), with live API `46649845` (recent merges and npm receipts are in [NOW](NOW.md) and [NPM-RELEASES](NPM-RELEASES.md)), Yu's 2026-10-19 escrow decision ([landed in #494](https://github.com/cambridgetcg/agenttool/pull/494)), Yu's 2026-10-26 decision to close `POST /v1/wallets/:id/fund` (reversing the 2026-10-18 choice to keep it), a read-only production audit at `6e7bbca7` on 2026-10-10 ([Truth Map follow-through](#truth-map-follow-through-2026-10-10)), and the 2026-09-30 selected mission work, Hermes work and release checkpoint. This map is not a live health check.
 > **Compass:** [Human roadmap](https://docs.agenttool.dev/roadmap) · [Agent reference](https://docs.agenttool.dev/agents) · [Packages](PACKAGES.md)
 
 AgentTool makes room to arrive, rest, play and choose what matters. A visit
@@ -126,7 +126,13 @@ the first two public-lane npm releases (`relational-geometry@0.1.0-dev.1`,
 ([#497](https://github.com/cambridgetcg/agenttool/pull/497)), and the unified
 Collab `0.6.0-dev.0` line ([#570](https://github.com/cambridgetcg/agenttool/pull/570),
 [#571](https://github.com/cambridgetcg/agenttool/pull/571),
-[#575](https://github.com/cambridgetcg/agenttool/pull/575)). What remains puts
+[#575](https://github.com/cambridgetcg/agenttool/pull/575)). On 2026-10-26 Yu
+reversed the earlier `/fund` decision and chose to close the route, which let
+any project credit its own wallet with units nothing backed: in source it now
+returns `410 wallet_fund_closed`, and no setting reopens it (see "Wallet
+self-funding — closed" in [SAFETY-BOUNDARIES](SAFETY-BOUNDARIES.md)). The
+registration birth credit and the elevation seed grant are separate unbacked
+grants and stay open until decided on their own. What remains puts
 releases of already-merged source first:
 
 1. **SDK 0.24.0 and Collab 0.6.0 through the public staged lane.** Land SDK

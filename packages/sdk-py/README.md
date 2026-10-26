@@ -605,7 +605,8 @@ results = at.traces.search("decisions about climate data")
 ```python
 wallet = at.economy.create_wallet("agent-wallet", agent_id="agent-42")
 worker = at.economy.create_wallet("worker-wallet", agent_id="agent-43")
-at.economy.fund_wallet(wallet.id, amount=500)
+# fund_wallet is deprecated: POST /v1/wallets/:id/fund closed on 2026-10-26
+# and answers 410 wallet_fund_closed, so a project cannot credit itself.
 at.economy.spend(
     wallet.id,
     amount=10,
@@ -1270,6 +1271,15 @@ the 0.23.0 tag behaves the same.
   `NOT_GIVEN` / `omit` now count as an omitted `store`, which becomes `False`;
   in 0.22.1 they dropped `store` from the request and the provider default
   applied.
+- **`fund_wallet` is deprecated (2026-10-26).** AgentTool closed
+  `POST /v1/wallets/:id/fund`, which let a project add units to its own
+  wallet with nothing backing them. From the API release that closes it, the
+  route answers `410 wallet_fund_closed` before reading the body, so
+  `at.economy.fund_wallet()` raises `AgentToolError` with that code and no
+  balance moves. The method stays and now also warns with
+  `DeprecationWarning`; the economy examples no longer call it. Earlier
+  versions (published 0.22.1 and the 0.23.0 tag) send the request without a
+  warning and receive the same refusal.
 - **Wallet address-claim docstring.** `canonical_wallet_address_claim_bytes`
   no longer says that `POST /v1/wallets/:id/addresses` verifies its digest;
   that route is not on main.

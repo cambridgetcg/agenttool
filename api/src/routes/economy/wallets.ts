@@ -1,4 +1,5 @@
-/** /v1/wallets — wallet CRUD + fund + spend + policy + freeze + transactions. */
+/** /v1/wallets — wallet CRUD + spend + policy + freeze + transactions.
+ *  POST /:id/fund is closed (410 wallet_fund_closed, 2026-10-26). */
 
 import { zValidator } from "@hono/zod-validator";
 import { Hono, type MiddlewareHandler } from "hono";
@@ -12,7 +13,6 @@ import { economyRedisEnabled, getRedis } from "../../services/economy/redis";
 import {
   createWallet,
   freezeWallet,
-  fundWallet,
   getPolicy,
   getTransactions,
   getWallet,
@@ -77,33 +77,18 @@ router.get("/:id", async (c) => {
   return c.json({ success: true, data: { ...wallet, policy } });
 });
 
-// ─── Fund ───────────────────────────────────────────────────────────────────
+// ─── Fund — closed ──────────────────────────────────────────────────────────
+// Closed by owner decision, 2026-10-26, and retired rather than rested: no
+// environment flag reopens it. The route let the project bearer add any
+// amount, up to the exact-balance limit, to a wallet its project owns, with
+// nothing backing the units. authMiddleware runs first (api/src/index.ts);
+// the route then answers 410 wallet_fund_closed for every request, before
+// body validation, ownership lookup, or any database read or write, so no
+// balance moves. The fundWallet() service stays for server-side grants
+// (register-agent's birth credit). Contract: docs/SAFETY-BOUNDARIES.md
+// ("Wallet self-funding — closed").
 
-router.post(
-  "/:id/fund",
-  zValidator(
-    "json",
-    z.object({
-      amount: positiveExactInteger,
-      description: z.string().default("Manual fund"),
-      metadata: z.record(z.unknown()).optional(),
-    }),
-  ),
-  async (c) => {
-    const project = c.var.project;
-    await getWallet(db, c.req.param("id"), project.id); // ownership
-    const body = c.req.valid("json");
-
-    const tx = await fundWallet(
-      db,
-      c.req.param("id"),
-      body.amount,
-      body.description,
-      body.metadata,
-    );
-    return c.json({ success: true, data: tx }, 201);
-  },
-);
+router.post("/:id/fund", (c) => fail(c, errors.walletFundClosed(), 410));
 
 // ─── Reinvest — mounted but resting fail-closed ─────────────────────────────
 

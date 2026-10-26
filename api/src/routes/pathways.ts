@@ -188,9 +188,11 @@ const PATHWAYS: Pathway[] = [
       "claim (default 'sponsorship')",
       "evidence",
     ],
+    // POST /v1/wallets/<wallet_id>/fund left this list when it closed
+    // (410 wallet_fund_closed, 2026-10-26): the seed grant has no
+    // component-operation equivalent outside the orchestrator.
     manual_fallback: [
       "POST /v1/attestations",
-      "POST /v1/wallets/<wallet_id>/fund",
       "PUT /v1/vault/<agent_id>:config",
     ],
     verify_protocol: {

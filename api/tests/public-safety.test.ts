@@ -335,6 +335,10 @@ describe("GET /public/safety", () => {
     expect(SAFETY_BOUNDARIES.conditional_services.wallet_spend).toMatch(
       /POST \/v1\/wallets\/:id\/spend.*Redis counters.*workers disabled.*stable 503 wallet_spend_resting.*next_actions.*before validation, wallet ownership lookup, or any debit.*workers enabled the route is unchanged/is,
     );
+    expect(SAFETY_BOUNDARIES.conditional_services.wallet_fund).toMatch(
+      /POST \/v1\/wallets\/:id\/fund is closed by owner decision \(2026-10-26\).*no environment flag reopens it.*no payment, deposit, or debit.*after authentication.*stable 410 wallet_fund_closed.*next_actions.*before body validation, wallet ownership lookup, or any database read or write.*no balance moves.*idempotency.*replay moves no balance.*credited earlier stay.*fundWallet.*register-agent birth credit.*also unbacked.*bootstrap\/elevate.*1,000,000.*separate decisions/is,
+    );
+    expect(SAFETY_BOUNDARIES.conditional_services.wallet_spend).not.toMatch(/fund stays mounted/i);
     expect(SAFETY_BOUNDARIES.conditional_services.browse).toMatch(
       /return 503 redis_disabled.*mounted route is not proof/is,
     );

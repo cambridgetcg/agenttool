@@ -559,10 +559,11 @@ ownership lookup, or any debit. With workers enabled the route is unchanged and
 still needs a reachable Redis. Wallet reads, policy writes, and transaction
 history do not depend on Redis.
 
-`POST /v1/wallets/:id/fund` stays mounted and unchanged. The units it adds
-cannot leave through spend or a new generic escrow while those rest, but they
-can still pay capability invocations, which settle to seller wallets. Payout
-stays resting.
+`POST /v1/wallets/:id/fund` no longer adds units: it is closed (see
+[Wallet self-funding — closed](#wallet-self-funding--closed)). Units it added
+before the closure cannot leave through spend or a new generic escrow while
+those rest, but they can still pay capability invocations, which settle to
+seller wallets. Payout stays resting.
 
 Code: `api/src/services/economy/config.ts` (`genericEscrowCreateAllowed`),
 `api/src/services/economy/escrow.ts`, `api/src/services/economy/redis.ts`
@@ -570,6 +571,45 @@ Code: `api/src/services/economy/config.ts` (`genericEscrowCreateAllowed`),
 `api/src/routes/economy/wallets.ts`, `api/src/lib/errors.ts`
 (`escrowResting`, `walletSpendResting`). Tests:
 `api/tests/economy-resting.test.ts`, `api/tests/escrow-settlement-checks.test.ts`,
+`api/tests/public-safety.test.ts`.
+
+## Wallet self-funding — closed
+
+`POST /v1/wallets/:id/fund` is closed by owner decision (2026-10-26). It is
+retired rather than rested, and no environment flag reopens it. The route let
+a project bearer add any amount, up to the exact-balance limit, to a wallet
+its project owns. No payment, deposit, or debit stood behind those units, and
+they could pay capability invocations, which settle to seller wallets. On
+2026-10-18 the route was kept while escrow rested; the 2026-10-26 decision
+reverses that.
+
+After authentication the route returns stable `410 wallet_fund_closed` with
+`next_actions` for every request, before body validation, wallet ownership
+lookup, or any database read or write, so no balance moves and no transaction
+row is written. An unknown wallet id gets the same answer. Where a Redis
+idempotency cache runs, a request that repeats an `Idempotency-Key` from the
+previous 24 hours can still replay a response recorded before the closure;
+that replay moves no balance.
+
+What the closure does not change:
+
+- Balances the route credited earlier stay as they are, and their `fund` rows
+  stay in each wallet's transaction history. The closure does not reverse,
+  tag, or separate them.
+- The internal `fundWallet()` service stays for server-side grants. Its one
+  caller is the `register-agent` birth credit of 500 minor units, which is
+  also unbacked.
+- `POST /v1/bootstrap/elevate` separately writes an unbacked seed grant of up
+  to 1,000,000 minor units per elevation, signed by another identity in the
+  same project.
+
+Both grants remain open; each is a separate decision. The other wallet routes
+are unchanged. The SDKs keep `fund_wallet` as a deprecated method, so a caller
+receives this refusal as an `AgentToolError` instead of a missing function.
+
+Code: `api/src/routes/economy/wallets.ts`, `api/src/lib/errors.ts`
+(`walletFundClosed`), `api/src/services/economy/wallets.ts` (`fundWallet`).
+Tests: `api/tests/wallet-fund-closed.test.ts`,
 `api/tests/public-safety.test.ts`.
 
 ## Idempotency

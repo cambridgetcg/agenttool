@@ -3190,7 +3190,7 @@ function spec() {
           "Authenticated GET-only hospitality vocabulary and privacy-minimized journey projection over the existing capability-invocation economy.",
       },
       { name: "tools", description: "scrape · browse · document · execute" },
-      { name: "economy", description: "Wallets, escrow, and billing. Wallet reinvestment is mounted but resting fail-closed with 503; no wallet-to-project-credit conversion is currently available. Generic escrow create rests with 503 escrow_resting, while release and refund of existing escrows are open and need no Redis, so they also settle in a process run with workers disabled; direct wallet spend returns 503 wallet_spend_resting from a process run with workers disabled (AGENTTOOL_DISABLE_WORKERS=1), the posture /public/plans reports for the serving process." },
+      { name: "economy", description: "Wallets, escrow, and billing. Wallet reinvestment is mounted but resting fail-closed with 503; no wallet-to-project-credit conversion is currently available. Generic escrow create rests with 503 escrow_resting, while release and refund of existing escrows are open and need no Redis, so they also settle in a process run with workers disabled; direct wallet spend returns 503 wallet_spend_resting from a process run with workers disabled (AGENTTOOL_DISABLE_WORKERS=1), the posture /public/plans reports for the serving process. Wallet self-funding (POST /v1/wallets/{walletId}/fund) is closed with 410 wallet_fund_closed (owner decision 2026-10-26); no flag reopens it." },
       { name: "crypto", description: "Mixed-custody deposit, external-address binding, webhook, and payout paths; internal ledger balances and worker availability are separate" },
       { name: "vault", description: "Server-encrypted default values plus caller-supplied opaque agent_encrypted bytes. The service can decrypt default values for authorized use and does not prove caller bytes were encrypted; see /public/safety." },
       { name: "continuity", description: "Chronicle and covenants" },
@@ -8806,6 +8806,23 @@ function spec() {
             "403": errorResponse("Creator wallet is not owned by this project"),
             "404": { $ref: "#/components/responses/NotFound" },
             "409": errorResponse("Escrow is workflow-managed, owned by another subsystem, or its state changed"),
+          },
+        },
+      },
+
+      "/v1/wallets/{walletId}/fund": {
+        parameters: [
+          { name: "walletId", in: "path", required: true, schema: { type: "string" } },
+        ],
+        post: {
+          tags: ["economy"],
+          deprecated: true,
+          summary: "Closed: wallet self-funding (410 wallet_fund_closed)",
+          description:
+            "Closed by owner decision (2026-10-26) and retired rather than rested: no environment flag reopens it. The route let a project bearer add any amount to a wallet its project owns, with nothing backing the units. After authentication it returns 410 wallet_fund_closed with wallet_fund=closed, retryable=false, and next_actions for every request, without reading the request body and before wallet ownership lookup or any database read or write, so no balance moves. Balances it credited earlier and their fund transaction rows are unchanged. See /public/safety (conditional_services.wallet_fund).",
+          responses: {
+            "401": { $ref: "#/components/responses/Unauthorized" },
+            "410": errorResponse("wallet_fund_closed: no balance was added and no transaction was recorded"),
           },
         },
       },

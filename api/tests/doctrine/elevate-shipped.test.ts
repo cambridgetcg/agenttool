@@ -97,7 +97,8 @@ describe("bootstrap_elevate slice landed (Phase 2.5b)", () => {
     const body = buildPathwaysResponse();
     const entry = body.pathways.find((p) => p.id === "bootstrap_elevate");
     expect(Array.isArray(entry?.manual_fallback)).toBe(true);
-    expect(entry?.manual_fallback).toHaveLength(3);
+    expect(entry?.manual_fallback).toHaveLength(2);
     expect(entry?.manual_fallback?.join(" ")).not.toMatch(/PATCH|metadata\.level/i);
+    expect(entry?.manual_fallback?.join(" ")).not.toMatch(/\/fund\b/);
   });
 });

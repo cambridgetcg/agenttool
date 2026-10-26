@@ -3,8 +3,9 @@
  *  Mounted in api/src/index.ts as: app.route("/v1", economyRouter)
  *
  *  Path layout (crypto-only; Stripe billing layer dropped 2026-05-17):
- *    /v1/wallets/...                       — wallet CRUD + fund + spend + policy + transactions
- *                                             (spend: 503 wallet_spend_resting with workers disabled)
+ *    /v1/wallets/...                       — wallet CRUD + spend + policy + transactions
+ *                                             (spend: 503 wallet_spend_resting with workers disabled;
+ *                                             fund: closed, 410 wallet_fund_closed since 2026-10-26)
  *    /v1/wallets/:id/deposit-address       — crypto deposit addresses (disclosure resting)
  *    /v1/wallets/:id/onchain/{challenge,verify} — sovereign wallet binding (EIP-191)
  *    /v1/wallets/:id/{payout,payouts}      — outgoing crypto transfers

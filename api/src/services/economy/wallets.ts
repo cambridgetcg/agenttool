@@ -1,4 +1,5 @@
-/** Wallet service: create · fund · spend · freeze · transactions · policy. */
+/** Wallet service: create · fund (internal grants only) · spend · freeze ·
+ *  transactions · policy. */
 
 import { and, desc, eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
@@ -88,6 +89,13 @@ export async function getTransactions(
 }
 
 // ─── Fund ───────────────────────────────────────────────────────────────────
+// Internal only since 2026-10-26: POST /v1/wallets/:id/fund is closed (410
+// wallet_fund_closed), so no route lets a caller choose an amount for this
+// service. It adds units with no backing behind them. Its one caller is the
+// register-agent birth credit (routes/register-agent.ts). A new caller is a
+// decision about unbacked grants, not a refactor; tests/wallet-fund-closed
+// pins the list. Contract: docs/SAFETY-BOUNDARIES.md ("Wallet self-funding —
+// closed").
 
 export async function fundWallet(
   db: DB,

@@ -66,6 +66,7 @@ function buildAll(): Record<string, GuidedErrorBody> {
     }),
     escrowResting: errors.escrowResting(),
     walletSpendResting: errors.walletSpendResting(),
+    walletFundClosed: errors.walletFundClosed(),
     webhookSecretUnset: errors.webhookSecretUnset(),
     webhookSecretUnsetWithChain: errors.webhookSecretUnset({ chain: "solana" }),
     insufficientCredits: errors.insufficientCredits(),
@@ -214,6 +215,7 @@ describe("Errors-as-instructions — code stability", () => {
     expect(errors.insufficientBalance().error).toBe("insufficient_balance");
     expect(errors.escrowResting().error).toBe("escrow_resting");
     expect(errors.walletSpendResting().error).toBe("wallet_spend_resting");
+    expect(errors.walletFundClosed().error).toBe("wallet_fund_closed");
     expect(errors.memoryIdentityNotFoundOrNotOwned().error).toBe(
       "memory_identity_not_found_or_not_owned",
     );

@@ -18,12 +18,16 @@
  * example below shows the retained wire shape for a deployment where create
  * and spend are open. See https://api.agenttool.dev/public/safety.
  *
+ * Closed note (2026-10-26): `POST /v1/wallets/:id/fund` is closed, so
+ * `fund_wallet` is deprecated. From the API release that closes it, the
+ * route answers `410 wallet_fund_closed` and adds nothing; no setting
+ * reopens it. A wallet's balance comes from server-side paths instead.
+ *
  * @example
  * ```ts
  * const at = new AgentTool();
  * const wallet = await at.economy.create_wallet("agent-42-wallet", { agent_id: "agent-42" });
  * const worker = await at.economy.create_wallet("worker-wallet", { agent_id: "agent-43" });
- * await at.economy.fund_wallet(wallet.id, { amount: 500, description: "Weekly budget" });
  * await at.economy.spend(wallet.id, { amount: 10, counterparty: "wal_xyz", description: "Task fee" });
  *
  * const escrow = await at.economy.create_escrow({
@@ -472,7 +476,15 @@ export class EconomyClient {
     return toWallet(await this.req("GET", `/v1/wallets/${encodePathSegment(walletId)}`));
   }
 
-  /** Add credits to a wallet. */
+  /** Add credits to a wallet.
+   *
+   * @deprecated Closed 2026-10-26. `POST /v1/wallets/:id/fund` let a project
+   * add units to its own wallet with nothing backing them. From the API
+   * release that closes it, the route answers `410 wallet_fund_closed`
+   * before reading the body, so this method throws an `AgentToolError` with
+   * that code and no balance moves. No setting reopens it. The method stays
+   * so existing callers receive the server's guidance instead of a missing
+   * function. See https://api.agenttool.dev/public/safety. */
   async fund_wallet(
     walletId: string,
     options: FundWalletOpts,
