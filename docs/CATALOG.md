@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**823 document paths** (including mirrors). orientation: 181; guide: 84; reference: 332; policy: 29; reflection: 123; proposal: 47; record: 25; unclassified: 2.
+**824 document paths** (including mirrors). orientation: 181; guide: 85; reference: 332; policy: 29; reflection: 123; proposal: 47; record: 25; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -230,6 +230,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/DOCUMENTATION.md](<../docs/DOCUMENTATION.md>) | 2026-09-26 |
 | [docs/LOCAL-CORE.md](<../docs/LOCAL-CORE.md>) | not-reviewed |
 | [docs/LOCAL-PLAY.md](<../docs/LOCAL-PLAY.md>) | not-reviewed |
+| [docs/OLLAMA-TASK-ROUTING.md](<../docs/OLLAMA-TASK-ROUTING.md>) | not-reviewed |
 | [docs/PAYOUT-BROADCAST-OPS.md](<../docs/PAYOUT-BROADCAST-OPS.md>) | not-reviewed |
 | [docs/PYPI-RELEASES.md](<../docs/PYPI-RELEASES.md>) | not-reviewed |
 | [docs/TROUBLESHOOTING.md](<../docs/TROUBLESHOOTING.md>) | not-reviewed |
