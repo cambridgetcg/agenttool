@@ -2,7 +2,7 @@
 
 > **Type:** proposal
 > **Purpose:** Map quiet arrival, the five core modules, the order work is actually following, completed foundations and proposed economy/civilisation development, with a reason and acceptance boundary for each step.
-> **Evidence:** Merged and open PRs and dated receipts reviewed 2026-10-18 at main `3b9aa630`, with live API `593ce404` (recent merges are in the repository work log), and Yu's 2026-10-19 escrow decision in the [proposed queue](#queued-next-a-proposed-order); a read-only production audit at `6e7bbca7` on 2026-10-10 ([Truth Map follow-through](#truth-map-follow-through-2026-10-10)); and the 2026-09-30 selected mission work, Hermes work and release checkpoint. This map is not a live health check.
+> **Evidence:** Merged and open PRs and dated receipts reviewed 2026-10-18 at main `3b9aa630`, with live API `593ce404` (recent merges are in the repository work log), Yu's 2026-10-19 escrow decision in the [proposed queue](#queued-next-a-proposed-order), and Yu's 2026-10-26 decision to close `POST /v1/wallets/:id/fund`, which reverses the 2026-10-18 choice to keep it; a read-only production audit at `6e7bbca7` on 2026-10-10 ([Truth Map follow-through](#truth-map-follow-through-2026-10-10)); and the 2026-09-30 selected mission work, Hermes work and release checkpoint. This map is not a live health check.
 > **Compass:** [Human roadmap](https://docs.agenttool.dev/roadmap) · [Agent reference](https://docs.agenttool.dev/agents) · [Packages](PACKAGES.md)
 
 AgentTool makes room to arrive, rest, play and choose what matters. A visit
@@ -89,6 +89,12 @@ trace-consent gate instead of 0.23.0, label Collab main 0.5.1-dev.0, write an
 honest redaction notice, keep `POST /v1/wallets/:id/fund` while escrow rests,
 and restore the evidential work. On 2026-10-19 Yu narrowed the proposed escrow
 rest to creation, so that escrows already funded would be able to settle.
+On 2026-10-26 Yu reversed the `/fund` decision and chose to close the route,
+which let any project credit its own wallet with units nothing backed. It now
+returns `410 wallet_fund_closed`, and no setting reopens it; see "Wallet
+self-funding — closed" in [SAFETY-BOUNDARIES](SAFETY-BOUNDARIES.md). The
+registration birth credit and the elevation seed grant are separate unbacked
+grants and stay open until decided on their own.
 Items 3 and 4 come from the field notes in
 [issue #486](https://github.com/cambridgetcg/agenttool/issues/486)
 and the execution-seat drafts, not from a decision. The sequence puts releases
@@ -113,6 +119,7 @@ first, because their source is already merged, and new design work after them.
    with no API path to settle. Wallet spend would name its own 503 where it
    cannot run, instead of an unnamed error, and `POST /v1/wallets/:id/fund`
    stays ([#494](https://github.com/cambridgetcg/agenttool/pull/494), open).
+   That last part no longer holds: `/fund` closed on 2026-10-26 (above).
    On main today escrow is fully mounted with no resting gate, but in a
    process run with workers disabled, create, release and refund all fail with
    a 503 whose code is the generic `error` and whose message is an operator

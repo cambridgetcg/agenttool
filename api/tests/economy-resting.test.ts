@@ -396,11 +396,13 @@ describe("wallet spend rests without Redis", () => {
     expect(response.status).toBe(400);
   });
 
-  test("fund is not gated by the spend rest", () => {
+  test("fund is closed, not resting: the spend gate does not decide it", () => {
+    // tests/wallet-fund-closed.test.ts covers the closure itself.
     const route = source("../src/routes/economy/wallets.ts");
     const fund = route.slice(route.indexOf('"/:id/fund"'), route.indexOf('"/:id/reinvest"'));
     expect(fund).not.toContain("walletSpendNeedsRedis");
     expect(fund).not.toContain("economyRedisEnabled");
+    expect(fund).toContain("errors.walletFundClosed()");
     expect(route).toContain('"/:id/spend",\n  walletSpendNeedsRedis,\n  zValidator(');
   });
 });
@@ -460,7 +462,7 @@ describe("economy resting surfaces stay guided", () => {
     expect(escrow).not.toMatch(/own terms|stay open so existing/i);
     expect(escrow).not.toMatch(/deploy fence requires|built a Redis client/i);
     expect(wallet_spend).toMatch(
-      /Redis counters.*process run with workers disabled.*AGENTTOOL_DISABLE_WORKERS=1.*\/public\/plans.*503 wallet_spend_resting.*before validation, wallet ownership lookup, or any debit.*workers enabled the route is unchanged.*fund stays mounted.*new generic escrow.*capability invocations.*seller wallets.*payout stays resting/is,
+      /Redis counters.*process run with workers disabled.*AGENTTOOL_DISABLE_WORKERS=1.*\/public\/plans.*503 wallet_spend_resting.*before validation, wallet ownership lookup, or any debit.*workers enabled the route is unchanged.*fund no longer adds units: it is closed.*before the closure.*new generic escrow.*capability invocations.*seller wallets.*payout stays resting/is,
     );
     expect(wallet_spend).not.toMatch(/deploy fence requires/i);
     // The rest that depends on the per-process flag names the deploy gap.

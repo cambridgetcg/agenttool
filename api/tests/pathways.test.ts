@@ -321,8 +321,11 @@ describe("GET /v1/pathways", () => {
     // Component operations remain inspectable, but generic metadata PATCH is
     // not an alternate elevation path.
     expect(Array.isArray(elevate?.manual_fallback)).toBe(true);
-    expect(elevate?.manual_fallback).toHaveLength(3);
+    expect(elevate?.manual_fallback).toHaveLength(2);
     expect(elevate?.manual_fallback?.join(" ")).not.toMatch(/PATCH|metadata\.level/i);
+    // Wallet self-funding is closed (410 wallet_fund_closed, 2026-10-26), so
+    // it is no longer offered as a component operation.
+    expect(elevate?.manual_fallback?.join(" ")).not.toMatch(/\/fund\b/);
   });
 
   test("register_agent pathway carries verify_protocol details", () => {

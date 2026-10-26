@@ -26,6 +26,7 @@ import base64
 import pathlib
 import re
 from typing import Any, Callable, Dict, List, NamedTuple, Tuple
+import warnings
 
 import httpx
 import pytest
@@ -33,6 +34,15 @@ from cryptography.hazmat.primitives import serialization
 
 from agenttool import AgentTool, AgentToolError
 from agenttool._url import _path_segment
+
+
+def _fund_wallet_quietly(at: AgentTool, *args: Any, **kwargs: Any) -> Any:
+    """``fund_wallet`` warns because its route closed on 2026-10-26 (410
+    ``wallet_fund_closed``); test_client.py asserts that warning. Here only
+    the request it still sends matters."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        return at.economy.fund_wallet(*args, **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -192,7 +202,7 @@ CASES: List[Case] = [
     Case(
         "economy.fund_wallet",
         "/v1/wallets/",
-        lambda at, i: at.economy.fund_wallet(i, amount=10),
+        lambda at, i: _fund_wallet_quietly(at, i, amount=10),
     ),
     Case(
         "economy.spend",
