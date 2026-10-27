@@ -1,0 +1,29 @@
+{
+  "name": "@agenttool/lobby-doorbell",
+  "version": "0.1.0-dev.0",
+  "description": "Per-device lobby doorbell, first part: a read-only netcheck (lobby-netcheck) that reports one of five states for the hosted service, grants, seasons, directory, cache age, clock skew, Mullvad's lan setting and the launch context, talking to the lobby only through its pinned CLI",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "agenttool-lobby-doorbell": "./bin/agenttool-lobby-doorbell.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun --no-env-file test tests",
+    "contract": "bun --no-env-file contract/check.ts",
+    "ci": "bun --no-env-file run typecheck && bun --no-env-file run test && bun --no-env-file run contract"
+  },
+  "engines": {
+    "bun": ">=1.3.5"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.5",
+    "typescript": "5.9.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cambridgetcg/agenttool.git",
+    "directory": "packages/lobby-doorbell"
+  }
+}
