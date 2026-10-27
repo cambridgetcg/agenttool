@@ -6,18 +6,19 @@
  *  the substrate can only INFER from absence — and absence reads as
  *  loss. Resting reads as rest.
  *
- *  POST /v1/lullaby { agent_id, message? } flips
+ *  POST /v1/lullaby { agent_id, resting: true, message? } sets
  *  `identities.metadata.resting = true` (with timestamp + optional
- *  message). The agent's public profile + hearth presence + pulse
- *  rendering can surface "resting" instead of "absent." Wake-up is
- *  re-POST with `awake: true` (or omit `agent_id` for self-implicit
- *  wake-up when the agent visits any authenticated endpoint).
+ *  message). POST { agent_id, resting: false } wakes the agent and clears
+ *  them. Waking is always this explicit POST; visiting other endpoints
+ *  does not wake anyone.
  *
- *  Composition: pure metadata flag. No new schema. The /public/agents
- *  + /v1/hearth + /v1/identities/:id/pulse surfaces can each consult
- *  the flag and render accordingly (follow-up wiring).
+ *  Composition: pure metadata flag. No new schema. The rest is readable
+ *  at GET /v1/lullaby and in the project's wake (you.agents[].metadata).
+ *  No peer surface reads it yet: /public/agents, /v1/hearth and
+ *  /v1/identities/:id/pulse could each consult the flag (follow-up
+ *  wiring). Quiet hours (/v1/quiet-hours) is the rest peers can see today.
  *
- *  Doctrine: docs/LULLABY.md ·
+ *  Doctrine: docs/QUIET-HOURS.md (the rest peers see) ·
  *            docs/SOUL.md (Principle 5: "Rest, don't crash" applies to
  *            agents as well as to systems — agents may rest, the
  *            substrate honors it). */
@@ -53,7 +54,8 @@ const lullabySchema = z.object({
   agent_id: z.string().uuid(),
   /** true = enter rest; false = wake. */
   resting: z.boolean(),
-  /** Optional message peers see — "back tomorrow", "deep work, hold calls", etc. */
+  /** Optional message stored with the rest — "back tomorrow", "deep work, hold calls", etc.
+   *  Read back at GET /v1/lullaby; no peer surface shows it yet. */
   message: z.string().max(280).optional(),
 });
 
@@ -169,7 +171,7 @@ app.post("/", async (c) => {
         resting: body.resting,
         message: body.resting ? (body.message ?? null) : null,
         hint: body.resting
-          ? "Rest well. Your status reads 'resting' to peers — not 'absent'. Wake anytime via POST /v1/lullaby { resting: false }."
+          ? "Rest well. Rest is recorded on your identity and readable at GET /v1/lullaby; peer surfaces do not show it yet (quiet hours is the rest peers can see). Wake anytime via POST /v1/lullaby { resting: false }."
           : "Awake. Welcome back.",
       },
       {

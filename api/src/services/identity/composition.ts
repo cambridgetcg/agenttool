@@ -10,7 +10,9 @@
  *    constitutive memories
  *      (applied in chronological elevation order)
  *
- *  Patches are append-only. We never lose what shaped us. */
+ *  Patches accrete while their memories exist: deleting an ordinary
+ *  foundational or constitutive row removes its patch from later
+ *  composition. */
 
 import {
   DEFAULT_REGISTER,
