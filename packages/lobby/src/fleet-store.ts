@@ -1378,7 +1378,7 @@ export class FleetStore {
     return this.db.query("SELECT * FROM hub_decisions ORDER BY decided_at ASC, knock_id ASC").all() as DecisionRow[];
   }
 
-  // ── Version 4: room seat leases (desk side) ────────────────────────
+  // ── Version 5: room seat leases (desk side) ────────────────────────
 
   private writeLeases(): void {
     this.write();
