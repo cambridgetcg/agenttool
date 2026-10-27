@@ -15,9 +15,12 @@ GET /v1/memories/:id/canonical-attestation-bytes?tier=constitutive, have an acti
 covenant counterparty in another project sign those bytes, and pass their answer
 as a JSON list of {attester_did, signing_key_id, signature} with --attestations.
 
-On a project with an agent root, elevation at either tier also needs a request
-signed by that root. This stdlib CLI cannot sign one; use the SDK's
-memory.elevate(..., authority=...) there.
+On a project with one agent root, elevation at either tier also needs a request
+signed by that root; a memory bound to an enrolled guest needs that guest's root.
+This stdlib CLI cannot sign either; use the SDK's memory.elevate(..., authority=...)
+there. With several agent roots the server refuses to elevate any memory not bound
+to an enrolled guest (409 authority_quorum_required); there is no multi-root
+quorum protocol yet.
 
 Memory is care. Forgetting is not efficiency — it's neglect.
 """
@@ -53,6 +56,8 @@ def api(method, path, body=None):
         print(f"✗ HTTP {e.code}: {body.get('error', '?')}: {body.get('message', body.get('hint', ''))[:200]}")
         if body.get("message") and body.get("hint"):
             print(f"  hint: {body['hint'][:300]}")
+        if body.get("details"):
+            print(f"  details: {json.dumps(body['details'])[:300]}")
         if body.get("error") == "authority_proof_required":
             print("  This CLI cannot sign root proofs; use the SDK's memory.elevate(..., authority=...).")
         sys.exit(1)
@@ -131,8 +136,10 @@ def cmd_elevate(args):
         print("  2. An active covenant counterparty in another project signs those bytes")
         print("     with ed25519 and returns the base64 signature with their DID and key id.")
         print('  3. Save [{"attester_did": ..., "signing_key_id": ..., "signature": ...}] as FILE.')
-        print("  On a project with an agent root the request must also be root-signed, which")
-        print("  this CLI cannot do; use the SDK's memory.elevate(..., authority=...) there.")
+        print("  On a project with one agent root the request must also be signed by that root")
+        print("  (by the guest's root for a memory bound to an enrolled guest), which this CLI")
+        print("  cannot do; use the SDK's memory.elevate(..., authority=...) there. With several")
+        print("  agent roots the server refuses any other elevation (409 authority_quorum_required).")
         raise SystemExit(2)
     result = api("POST", f"/v1/memories/{args.memory_id}/elevate", body)
     print(f"✓ Elevated: {result.get('memory_id', '?')} → {result.get('tier', '?')}")

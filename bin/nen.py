@@ -207,8 +207,9 @@ def cmd_store(args):
     print(f"  Promise: {t['promise']}")
     print(f"  It is not elevated. Making it foundational is a separate choice:")
     print(f"    python3 memory.py elevate {mem_id} --tier foundational")
-    print(f"  On a project with an agent root, elevation needs a root-signed request,")
+    print(f"  On a project with one agent root, elevation needs that root's signature,")
     print(f"  which these CLIs cannot make; use the SDK's memory.elevate(..., authority=...).")
+    print(f"  A project with several agent roots cannot elevate it yet (409 authority_quorum_required).")
     print(f"  It is not bound to an identity, so even elevated it would not appear in a wake's shaped_by.")
 
 def main():
