@@ -27,12 +27,15 @@ bun run ci
 bun run check:package
 ```
 
-`ci` checks the snapshot against the SDK constants, builds, runs the Node
-tests, and smoke-imports under Node; `check:package` dry-runs the pack.
+`ci` checks the source profiles, builds, runs the Node tests, and smoke-imports
+under Node; `check:package` dry-runs the pack.
 
-The committed snapshot is the historical `agenttool-sdk-ts-0.17.0` source
-profile. `check:snapshot` fails when the TypeScript or Python Dark Continent
-source drifts from it, and `bun run snapshot` refuses to rewrite it because the
-SDK package is no longer that 0.17.0 input. A real constants change needs a
-reviewed new source profile in `scripts/snapshot-agenttool.ts`, an inspected
-semantic diff, and a new contract version when compatibility requires it.
+The packaged snapshot is the historical `agenttool-sdk-ts-0.17.0` source
+profile; consumers pin its bytes, so it is checked by digest and never
+regenerated. The newest reviewed profile lives in `source-profiles/`, outside
+the package, and `check:snapshot` fails when the TypeScript or Python Dark
+Continent source drifts from it. A source change needs a reviewed new profile
+in `scripts/snapshot-agenttool.ts` (pinned digests, a label that implies no
+release, the declared semantic diff), the diff recorded in the README, and a new
+contract version when compatibility requires it. The script refuses structural
+changes, which always need that contract decision.

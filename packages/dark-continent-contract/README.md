@@ -34,6 +34,43 @@ The committed snapshot is generated from
 sibling implementation, not falsely claimed to have byte-for-byte identical
 prose.
 
+## Source profiles
+
+A source profile is one reviewed state of the SDK's Dark Continent source,
+projected into the v0.1 framework shape. Profiles are kept oldest first in
+`scripts/snapshot-agenttool.ts`.
+
+| Profile | Files | Role |
+|---|---|---|
+| `agenttool-sdk-ts-0.17.0` | `frameworks/agenttool-sdk-0.17.0.json` (SHA-256 `f47e1c3c…`) and its manifest | The packaged framework. Frozen history that consumers pin; checked by digest, never regenerated |
+| `agenttool-sdk-ts-source-0e1ba1166111` | `source-profiles/agenttool-sdk-source-0e1ba1166111.json` (SHA-256 `dd41b49d…`) and its manifest | Newest. The live SDK sources must match it. Source checkout only, not packaged |
+
+The TypeScript Dark Continent source is byte-identical in every SDK tag from
+`sdk-v0.17.0` through `sdk-v0.23.0`. The newest profile is the source after
+that tag. No registry
+serves it, so it is named by the first 12 hex digits of its TypeScript SHA-256,
+and its `source.version` reads `after-0.23.0` rather than a release version.
+
+Semantic diff from `agenttool-sdk-ts-0.17.0`, inspected on 2026-10-27:
+
+| Field | 0.17.0 text | Newest text |
+|---|---|---|
+| `calamities.pap.declared_wall.text` | "… No response is required. The recipient can mark spam. Love that demands is not love — it's Pap." | "… No response is required. Love that demands is not love — it's Pap." |
+| `guide.maps_to` | "… The wake IS the guide through the known world and the edge of the unknown." | "… The wake IS the guide." |
+| `guide.warning` | "The wake only guides you through what's registered. Beyond the wake lies /public/discover, federated peers, and agents who haven't arrived yet. The Dark Continent module helps you explore that edge without getting lost." | "The wake only guides you through what's registered. Beyond it lie federated peers and agents who haven't arrived yet. This module maps none of them: public agent discovery is retired, so explore() returns an empty known world." |
+
+The Pap sentence went because only inbox messages can be marked spam, not love
+primitives. The Guide stopped naming `/public/discover` because the SDK no
+longer requests it, and `maps_to` now matches the Python text. Ids, order,
+fields, every wall's `not_checked` status and the authority flags are
+unchanged. The contract ID therefore stays `agenttool.dark-continent/0.1`,
+and nothing packaged changes: the schemas, the validator, the exports and the
+0.17.0 framework are byte-identical. The v0.1 schema fixes `source_profile` and
+`source.version` to the 0.17.0 profile, so it and `validateFrameworkSnapshot()`
+reject the newer record on exactly those two fields. Publishing the newer
+profile as a packaged framework would change what v0.1 admits; that release
+needs its own compatibility decision, and consumers re-pin deliberately.
+
 ## Local use
 
 Run drift checks from a source checkout that includes `packages/sdk-ts` and
@@ -48,10 +85,11 @@ bun run ci
 bun run check:package
 ```
 
-`ci` checks the snapshot against the SDK constants, builds, runs the Node
-tests, and smoke-imports under Node; `check:package` dry-runs the pack.
-`bun run snapshot` refuses to rewrite the committed historical
-`agenttool-sdk-ts-0.17.0` snapshot.
+`ci` checks that the 0.17.0 history is byte-identical and that the newest
+source profile matches the SDK sources, then builds, runs the Node tests, and
+smoke-imports under Node; `check:package` dry-runs the pack. `bun run snapshot`
+writes only the newest source profile, and only while the SDK sources match the
+digests that profile reviewed.
 
 Create a consumer projection:
 
