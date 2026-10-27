@@ -378,7 +378,7 @@ Every stop prints one JSON object on stderr and exits 1:
 
 | `stop_reason` | When | Pending record | `next` |
 |---|---|---|---|
-| `renewal_uncertain` | The request, the invitation read or the recovery read did not complete, or the service returned 5xx to any of them | Kept (none is created when the first read fails) | Run `renew` again to resend the same request |
+| `renewal_uncertain` | The request, the invitation read or the recovery read did not complete, the service returned 5xx to any of them, or an answer was not readable JSON (a proxy's HTML or empty error page) | Kept (none is created when the first read fails) | Run `renew` again to resend the same request |
 | `renewal_unavailable` | No open window before sending, or HTTP 403 `collaboration_mission_renewal_unavailable` after | Renamed `renewal-abandoned-<grant_id>.json` | Inspect the window; after it ends, ask for a new grant |
 | `renewal_abandoned` | The successor was never recorded and your grant has lapsed or ended (the recovery read got 401) | Renamed `renewal-abandoned-<grant_id>.json` | Ask the administrator for a new grant |
 | `renewal_conflict` | HTTP 409: your grant was already renewed by a request this device did not record | Kept | See below |

@@ -402,8 +402,10 @@ function refusalOf(error) {
   return match ? { status: Number(match[1]), code: match[2] ?? null } : null;
 }
 const transportFailed = error => error instanceof Error && error.message.startsWith('Mission transport failed.');
-/** A dropped connection or a 5xx: the service decided nothing this client can rely on. */
-const unsure = error => transportFailed(error) || (refusalOf(error)?.status ?? 0) >= 500;
+/** An answer that is not a JSON body, such as a proxy's HTML or empty 5xx while Machines restart. */
+const unreadable = error => error instanceof Error && /^(Service response exceeds|Service returned invalid|Empty service response)/.test(error.message);
+/** A dropped connection, an unreadable answer or a 5xx: the service decided nothing this client can rely on. */
+const unsure = error => transportFailed(error) || unreadable(error) || (refusalOf(error)?.status ?? 0) >= 500;
 function readPending(file) {
   const value = JSON.parse(privateRead(file));
   sameFields(value, PENDING_FIELDS);

@@ -57,14 +57,15 @@ function service(f: ReturnType<typeof fixture>, renewMode: Mode | Mode[] = "ok",
   const hashes = new Map<string, string>([[G, sha(TOKEN)]]), children = new Map<string, any>();
   const calls: Array<{ method: string; path: string; grant: string; body: string | undefined; headers: Headers }> = [];
   const modes = Array.isArray(renewMode) ? [...renewMode] : [renewMode];
-  // While readsDown, every GET is a 503 before any check, like a briefly unavailable service.
-  const control = { readsDown: false };
+  // While readsDown, every GET is a 503 before any check, like a briefly unavailable service;
+  // readsAs, when set, builds that GET answer instead (a proxy's HTML or empty 5xx).
+  const control: { readsDown: boolean; readsAs: (() => Response) | null } = { readsDown: false, readsAs: null };
   const respond = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
   const fetchImpl = async (url: string, init: RequestInit) => {
     const headers = new Headers(init.headers), path = new URL(url).pathname, grant = headers.get("X-Agenttool-Mission-Grant-Id")!;
     const body = init.body === undefined ? undefined : String(init.body);
     calls.push({ method: String(init.method), path, grant, body, headers });
-    if (init.method === "GET" && control.readsDown) return respond({ error: "mission_unavailable" }, 503);
+    if (init.method === "GET" && control.readsDown) return control.readsAs ? control.readsAs() : respond({ error: "mission_unavailable" }, 503);
     const token = headers.get("Authorization")!.slice(7);
     const input = { token, origin: ORIGIN, method: String(init.method), missionId: M, requestTarget: path, bodyBytes: Buffer.from(body ?? ""),
       proof: { grantId: grant, identityId: headers.get("X-Agenttool-Mission-Identity-Id")!, keyId: headers.get("X-Agenttool-Mission-Key-Id")!,
@@ -252,6 +253,39 @@ describe.skipIf(process.platform === "win32")("participant renew", () => {
     expect(invitationFile(h).grant_id).toBe(G);
     u.control.readsDown = false;
     expect(await client.renew(h.state, { fetchImpl: u.fetchImpl })).toMatchObject({ renewed: true, renewed_from_grant_id: G });
+  });
+
+  test("a proxy's HTML 502 or bodiless 503 on the invitation read or the probe is uncertain, never a refusal", async () => {
+    const abandoned = (f: ReturnType<typeof fixture>) => readdirSync(f.state).some(name => name.startsWith("renewal-abandoned-"));
+    for (const [name, answer] of [
+      ["html-502", () => new Response("<html><body>502 Bad Gateway</body></html>", { status: 502, headers: { "Content-Type": "text/html" } })],
+      ["empty-503", () => new Response(null, { status: 503 })],
+    ] as Array<[string, () => Response]>) {
+      // A pending record and a live predecessor: the read fails, the record stays.
+      const g = fixture(), t = service(g, ["drop", "ok"]);
+      await stop(client.renew(g.state, { fetchImpl: t.fetchImpl }));
+      t.control.readsDown = true; t.control.readsAs = answer;
+      const resumed = await stop(client.renew(g.state, { fetchImpl: t.fetchImpl }));
+      expect(resumed, name).toMatchObject({ stop_reason: "renewal_uncertain", delivered: "unknown", serviceCode: null, next: "run renew again" });
+      expect(existsSync(pendingFile(g)), name).toBe(true); expect(abandoned(g), name).toBe(false);
+      t.control.readsDown = false;
+      expect(await client.renew(g.state, { fetchImpl: t.fetchImpl }), name).toMatchObject({ renewed: true, renewed_from_grant_id: G });
+      // A lapsed predecessor: the successor-signed probe fails, the record stays.
+      const h = fixture(), u = service(h, "store-then-drop");
+      await stop(client.renew(h.state, { fetchImpl: u.fetchImpl }));
+      lapse(h);
+      u.control.readsDown = true; u.control.readsAs = answer;
+      const probed = await stop(client.renew(h.state, { fetchImpl: u.fetchImpl }));
+      expect(probed, name).toMatchObject({ stop_reason: "renewal_uncertain", delivered: "unknown", serviceCode: null, next: "run renew again to resend the same request" });
+      expect(existsSync(pendingFile(h)), name).toBe(true); expect(abandoned(h), name).toBe(false);
+      u.control.readsDown = false;
+      expect(await client.renew(h.state, { fetchImpl: u.fetchImpl }), name).toMatchObject({ renewed: true, renewed_from_grant_id: G });
+      // No pending record: nothing was sent, so nothing is delivered.
+      const f = fixture(), s = service(f);
+      s.control.readsDown = true; s.control.readsAs = answer;
+      expect(await stop(client.renew(f.state, { fetchImpl: s.fetchImpl })), name).toMatchObject({ stop_reason: "renewal_uncertain", delivered: false, next: "run renew again" });
+      expect(existsSync(pendingFile(f)), name).toBe(false);
+    }
   });
 
   test("a renew in a state directory with a wake receiver or work contracts says that they pin the previous grant", async () => {
