@@ -541,6 +541,27 @@ databaseTest("an event retried by a later member of the same chain returns its o
   expect((await admin`SELECT count(*)::int AS n FROM tools.collaboration_events`)[0].n).toBe(1);
 });
 
+databaseTest("an event first sent through an unchained grant or another chain conflicts when a chain member retries it", async () => {
+  const { token } = await renewableRoot();
+  const childToken = freshToken();
+  await executeMissionRequest(renewReq(token, G, H, childToken), at(HALF));
+  const proofFor = (grantId: string) => ({ grantId, identityId: I, keyId: K, timestamp: HALF.toISOString(), signature: "" });
+  // Same identity and key: (a) a plain grant, (b) the root of a different chain.
+  const plainToken = freshToken(), plain = uid(46), otherToken = freshToken(), other = uid(47);
+  await issueMissionGrant({ ...grantInput(), grantId: plain, tokenSha256: sha(plainToken) }, at(HALF));
+  await issueMissionGrant({ ...grantInput(), grantId: other, tokenSha256: sha(otherToken), expiresAt: new Date(HALF.getTime() + 3_600_000).toISOString(), renewableUntil: WINDOW.toISOString() }, at(HALF));
+  for (const [grantId, senderToken, event] of [[plain, plainToken, uid(48)], [other, otherToken, uid(49)]]) {
+    await executeMissionRequest(req(senderToken, "/accept", { mission_digest: DIGEST }, { proof: proofFor(grantId) }), at(HALF));
+    const body = { event_id: event, summary: `sent through ${grantId}` };
+    expect((await executeMissionRequest(req(senderToken, "/events", body, { proof: proofFor(grantId) }), at(HALF))).created).toBe(true);
+    // Both the root and the head of chain G refuse the exact bytes.
+    for (const [retryToken, retryGrant] of [[token, G], [childToken, H]])
+      await expect(executeMissionRequest(req(retryToken, "/events", body, { proof: proofFor(retryGrant) }), at(HALF)))
+        .rejects.toMatchObject({ status: 409, code: "collaboration_mission_conflict" });
+  }
+  expect((await admin`SELECT count(*)::int AS n FROM tools.collaboration_events`)[0].n).toBe(2);
+});
+
 databaseTest("migration constraints keep a chain linear and within its root's whole scope", async () => {
   const { token } = await renewableRoot();
   await executeMissionRequest(renewReq(token, G, H, freshToken()), at(HALF));

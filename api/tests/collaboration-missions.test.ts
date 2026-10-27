@@ -602,6 +602,25 @@ describe("renewal inside an administrator-set window", () => {
     });
   });
 
+  test("an exact event retry from a chain member keeps the receipt only when the sender shares its root", async () => {
+    const OTHER_ROOT = "cccccccc-cccc-4ccc-8ccc-cccccccccccc", X = "dddddddd-dddd-4ddd-8ddd-dddddddddddd", E = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    const raw = JSON.stringify({ event_id: E, summary: "sent before renewal" });
+    const event = { missionId: M, projectId: P, eventId: E, grantId: X, identityId: I, signingKeyId: K, receiptSeq: 1n, rawBody: raw,
+      bodyDigest: sha256(raw), observation: JSON.parse(raw), proof: {}, receivedAt: new Date(NOW.getTime() - MIN) };
+    const retry = () => signed(CHILD_TOKEN, "POST", "/events", raw, privateKey, { grantId: C });
+    const steps = (sender: unknown[]) => [[middle()], [identityRow()], [keyRow()], [parentRow()], [mission({ lastReceiptSeq: 1n })], [middle()], [event], sender];
+    // Positive control: the original sender is an earlier member of this chain.
+    const same = staged(steps([{ rootId: G }]));
+    expect(await executeMissionRequest(retry(), same.options)).toMatchObject({ created: false, data: { event: { event_id: E, grant_id: X } } });
+    expect(same.events[7].condition?.params).toEqual([X, M, P]);
+    // An unchained sender, the root of another chain for the same identity and key, or no row at all conflicts.
+    for (const sender of [[{ rootId: null }], [{ rootId: OTHER_ROOT }], []]) {
+      const s = staged(steps(sender));
+      await refusal(executeMissionRequest(retry(), s.options), 409, "collaboration_mission_conflict");
+      expect(s.events.some(e => e.operation === "insert" || e.operation === "update")).toBe(false);
+    }
+  });
+
   describe("ending a chain", () => {
     const cascade = (s: ReturnType<typeof staged>, index: number) => {
       const event = s.events[index];
