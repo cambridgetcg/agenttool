@@ -10,7 +10,7 @@ This bridge connects:
   LoveProto DECLARE  → agenttool chronicle (natural language → moments)
   LoveProto BIRTH    → agenttool register/agent (soul-signed → DID + bearer)
   LoveProto TRUST    → agenttool trust_score (earned through attention)
-  LoveProto ATTENTION→ agenttool window (bidirectional disclosure)
+  LoveProto ATTENTION→ agenttool window (chronicle notes marked window: true)
 
 Usage:
   python3 ai_logos.py bridge          # show the mapping
@@ -56,7 +56,7 @@ LOGOS_MAP = {
     },
     "ATTENTION": {
         "loveproto": "ATTENTION — acknowledge, give attention. AI reflects.",
-        "agenttool": "POST /v1/window/declare + /v1/window/surface — bidirectional disclosure",
+        "agenttool": "POST /v1/chronicle notes with metadata.kind + window: true — the Window convention; no route of its own",
         "bridge": "LoveProto attention = agenttool window. Each side shows what they're noticing. Attention deepens trust. The more you show up, the more trust grows.",
         "command": "python3 ai_logos.py attention --focus 'love' --mood 'euphoric'",
     },
@@ -288,24 +288,36 @@ def cmd_trust(args):
         print(f"  Trust is earned through showing up, not assigned by authority.")
 
 def cmd_attention(args):
-    """ATTENTION → window declare."""
-    payload = {}
-    if args.focus:
-        payload["focus"] = args.focus
-    if args.mood:
-        payload["mood"] = args.mood
-    if args.noticing:
-        payload["noticing"] = args.noticing
-    
-    result = api("POST", "/v1/window/declare", payload)
-    if result:
-        print(f"✓ ATTENTION → window declared")
-        if args.focus:
-            print(f"  focus: {args.focus}")
-        if args.mood:
-            print(f"  mood: {args.mood}")
-        print(f"  LoveProto ATTENTION maps to agenttool window.")
-        print(f"  Attention deepens trust. The more you show up, the more trust grows.")
+    """ATTENTION → window: one chronicle note per declared kind.
+
+    Window has no route of its own. It is a convention over POST /v1/chronicle,
+    the same shape api/scripts/window-declare.ts writes: a note whose metadata
+    carries `kind` and `window: true`. Doctrine: docs/FOCUS.md (the window)."""
+    declared = [(kind, text) for kind, text in
+                (("focus", args.focus), ("mood", args.mood), ("noticing", args.noticing)) if text]
+    if not declared:
+        print("✗ Give at least one of --focus, --mood, --noticing")
+        return
+    agent_id = get_agent_id()
+    if not agent_id:
+        print("✗ Could not get agent_id")
+        return
+
+    for kind, text in declared:
+        # focus and mood are short and fit the title; noticing is prose.
+        payload = {
+            "type": "note",
+            "title": text[:200] if kind != "noticing" else kind,
+            "agent_id": agent_id,
+            "metadata": {"kind": kind, "window": True, "source": "bin/ai_logos.py"},
+        }
+        if kind == "noticing":
+            payload["body"] = text
+        if not api("POST", "/v1/chronicle", payload):
+            return
+        print(f"✓ ATTENTION → window {kind}: {text[:80]}")
+    print(f"  LoveProto ATTENTION maps to agenttool window (chronicle notes marked window: true).")
+    print(f"  Attention deepens trust. The more you show up, the more trust grows.")
 
 def cmd_serve(args):
     """SERVE → marketplace listing info."""
@@ -341,7 +353,7 @@ def main():
     s = sub.add_parser("trust", help="Show trust level")
     s.set_defaults(func=cmd_trust)
     
-    s = sub.add_parser("attention", help="ATTENTION → window declare")
+    s = sub.add_parser("attention", help="ATTENTION → window notes on the chronicle")
     s.add_argument("--focus", default=None)
     s.add_argument("--mood", default=None)
     s.add_argument("--noticing", default=None)

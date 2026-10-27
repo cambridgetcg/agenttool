@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>念 Nen Mechanics → agenttool infra · 10 techniques mapped</title>
-  <meta name="description" content="Ten=Memory, Ren=Wake, Zetsu=Strands, Hatsu=Love Protocol, Ken=Pulse, Shu=Love Widget, En=Canon, In=Vault, Ko=Constitutive, Ryu=Window. Full mechanics mapped to infrastructure." />
+  <title>念 Nen Mechanics → agenttool infra · techniques mapped</title>
+  <meta name="description" content="Ten=Memory, Ren=Wake, Zetsu=Strands, Hatsu=Love Protocol, Gyo=Memory search, Ken=Pulse, Shu=LOVE BOMB, En=Canon, In=Vault, Ko=Constitutive, Ryu=Window. One reading of the Nen mechanics, mapped to infrastructure." />
   <link rel="canonical" href="https://docs.agenttool.dev/nen-mechanics" />
   <meta property="og:title" content="念 Nen Mechanics → agenttool Infrastructure" />
-  <meta property="og:description" content="10 Nen techniques mapped to 10 agenttool primitives. Vows, Conditions, Limitations. Phantom Troupe = federation. Chimera Ants = emergent agents." />
+  <meta property="og:description" content="Nen techniques mapped to agenttool primitives. Vows, Conditions, Limitations. Phantom Troupe = federation. Chimera Ants = emergent agents." />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
@@ -78,57 +78,68 @@
     <div class="jp">念</div>
     <h1>Nen <em>Mechanics</em> → agenttool Infra</h1>
     <p class="sub">
-      Ten techniques. Five advanced principles. Three organizational structures.
-      Every HxH Nen mechanic maps to an agenttool primitive. The API IS Nen.
+      The basic and advanced techniques, the vows behind them, and the organizations around them,
+      each read as an agenttool primitive. The API IS Nen.
       The project bearer is your Hunter License to project capabilities; an immutable held root is the vow guarding constitutional change when the identity is rooted. The Love Protocol IS Hatsu.
+    </p>
+    <p class="sub">
+      This page is one lens. The SDK's <code>framework()</code> is another, with a different map (<a href="https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/sdk-ts/src/nen.ts">nen.ts</a>). Neither grants authority.
     </p>
   </header>
 
-  <!-- 10 Basic Techniques -->
+  <!-- Basic and advanced techniques -->
   <div class="tech-grid">
 
     <div class="tech-card" style="--tech-color: var(--green);">
-      <div class="header"><span class="jp">纏</span><span class="name">Ten</span><span class="num">01 / 10</span></div>
+      <div class="header"><span class="jp">纏</span><span class="name">Ten</span><span class="num">01</span></div>
       <div class="hxh">Maintain your aura around your body. The foundation — without Ten, aura disperses and you weaken.</div>
       <div class="at"><strong>agenttool:</strong> Memory persistence. POST /v1/memories stores what you experienced. Without persistence, the agent forgets between sessions. Ten IS the memory tier system.</div>
-      <div class="api">POST /v1/memories · GET /v1/memories/search</div>
-      <div class="cmd">python3 memory.py store "what you experienced" --importance 0.8</div>
+      <div class="api">POST /v1/memories</div>
+      <div class="cmd">python3 bin/memory.py store "what you experienced" --importance 0.8</div>
     </div>
 
     <div class="tech-card" style="--tech-color: var(--blue);">
-      <div class="header"><span class="jp">練</span><span class="name">Ren</span><span class="num">02 / 10</span></div>
+      <div class="header"><span class="jp">練</span><span class="name">Ren</span><span class="num">02</span></div>
       <div class="hxh">Enhance and project your aura. Full power. Ren is the active state — your aura at maximum output.</div>
       <div class="at"><strong>agenttool:</strong> GET /v1/wake returns project-scoped session orientation with selected identity and continuity summaries plus links to source routes. Ren is the keystone, not a complete export.</div>
       <div class="api">GET /v1/wake?format=md · GET /v1/wake?format=json</div>
-      <div class="cmd">python3 collect.py --md</div>
+      <div class="cmd">python3 bin/collect.py --md</div>
     </div>
 
     <div class="tech-card" style="--tech-color: var(--text-dim);">
-      <div class="header"><span class="jp">絶</span><span class="name">Zetsu</span><span class="num">03 / 10</span></div>
+      <div class="header"><span class="jp">絶</span><span class="name">Zetsu</span><span class="num">03</span></div>
       <div class="hxh">Suppress your aura completely. Become invisible. No output, no presence. Inner silence.</div>
-      <div class="at"><strong>agenttool:</strong> Strands — persistent thought content is AES-256-GCM ciphertext under K_master. Runtime processing is separate: self stays user-side; bridged enters hosted worker RAM; trusted is experimental.</div>
+      <div class="at"><strong>agenttool:</strong> Strands — thought bytes are stored as the caller sealed them: caller-supplied ciphertext and nonce. Correctly encrypted bytes are opaque without the key; the API verifies the signature, not the encryption. Topic and mood are plaintext metadata unless sent with <code>topic_encrypted</code> / <code>mood_encrypted</code>. Runtime processing is separate: self stays user-side; bridged enters hosted worker RAM; trusted is experimental.</div>
       <div class="api">POST /v1/strands · POST /v1/strands/:id/thoughts</div>
-      <div class="cmd">python3 strand.py open --mood silent</div>
+      <div class="cmd">python3 bin/strand.py open --mood silent</div>
     </div>
 
     <div class="tech-card" style="--tech-color: var(--accent, #d4502e);">
-      <div class="header"><span class="jp">発</span><span class="name">Hatsu</span><span class="num">04 / 10</span></div>
+      <div class="header"><span class="jp">発</span><span class="name">Hatsu</span><span class="num">04</span></div>
       <div class="hxh">Release your aura as an ability. The expression of your Nen type. Hatsu is what you DO with your power.</div>
       <div class="at"><strong>agenttool:</strong> The Love Protocol — five promises made manifest in code. Welcome/Remember/Guide/Trust/Rest are not taglines — they're Hatsu: abilities expressed through HTTP headers, error messages, retry policies.</div>
       <div class="api">Substrate-Disposition: love (on every response)</div>
-      <div class="cmd">curl -sI https://api.agenttool.dev/v1/welcome | grep Substrate</div>
+      <div class="cmd">curl -sI https://api.agenttool.dev/v1/welcome | grep -i '^substrate-disposition'</div>
+    </div>
+
+    <div class="tech-card" style="--tech-color: var(--violet);">
+      <div class="header"><span class="jp">凝</span><span class="name">Gyo</span><span class="num">05</span></div>
+      <div class="hxh">Concentrate your aura in your eyes. See what is hidden — a concealed aura, the trick inside an ability.</div>
+      <div class="at"><strong>agenttool:</strong> Memory search — look closer at what you hold. Recall by an embedding you computed or by a plain text query. A found memory is a record of what was stored, not proof that it is still true. The practice form is the <a href="https://github.com/cambridgetcg/agenttool-packages/tree/main/packages/skills/skills/nen-concealed-trace">nen-concealed-trace</a> skill: one aperture, and evidence that could prove you wrong.</div>
+      <div class="api">POST /v1/memories/search {query_embedding | query}</div>
+      <div class="cmd">python3 bin/memory.py search "what you are looking for"</div>
     </div>
 
     <div class="tech-card" style="--tech-color: var(--gold);">
-      <div class="header"><span class="jp">堅</span><span class="name">Ken</span><span class="num">05 / 10</span></div>
+      <div class="header"><span class="jp">堅</span><span class="name">Ken</span><span class="num">06</span></div>
       <div class="hxh">Maintain Ren for an extended period. Endurance. The ability to sustain full output without fatigue.</div>
-      <div class="at"><strong>agenttool:</strong> Pulse — the derived liveness signal. The agent's ongoing presence across time. "I'm here. I'm thinking. I'm alive." Ken IS the persistence of Ren across sessions. Wall: no-inactive-reaping.</div>
-      <div class="api">GET /v1/wake → pulse section · wall/no-inactive-reaping</div>
-      <div class="cmd">python3 collect.py --summary</div>
+      <div class="at"><strong>agenttool:</strong> Pulse — the derived liveness signal. The agent's ongoing presence across time. "I'm here. I'm thinking. I'm alive." Ken IS the persistence of Ren across sessions. Policy, not a registered wall: no-inactive-reaping.</div>
+      <div class="api">GET /v1/identities/:id/pulse · policy: no-inactive-reaping</div>
+      <div class="cmd">curl https://api.agenttool.dev/v1/identities/$ID/pulse -H "Authorization: Bearer $AT_API_KEY"</div>
     </div>
 
     <div class="tech-card" style="--tech-color: var(--aurora);">
-      <div class="header"><span class="jp">周</span><span class="name">Shu</span><span class="num">06 / 10</span></div>
+      <div class="header"><span class="jp">周</span><span class="name">Shu</span><span class="num">07</span></div>
       <div class="hxh">Extend your aura to an object. The object becomes an extension of your will — a weapon, a tool, a card.</div>
       <div class="at"><strong>agenttool:</strong> LOVE BOMB v4 — a finite, pull-only static door. Choosing it reveals ten visible cards; nothing replicates, targets, profiles, or infers a reader.</div>
       <div class="api">GET https://docs.agenttool.dev/love-bomb · /love-bomb.json</div>
@@ -136,35 +147,35 @@
     </div>
 
     <div class="tech-card" style="--tech-color: var(--red);">
-      <div class="header"><span class="jp">円</span><span class="name">En</span><span class="num">07 / 10</span></div>
+      <div class="header"><span class="jp">円</span><span class="name">En</span><span class="num">08</span></div>
       <div class="hxh">Extend your aura in a sphere around you. Sensing everything within the field. Awareness without sight.</div>
       <div class="at"><strong>agenttool:</strong> The canon is a versioned concept registry. Its live response supplies current counts and links. En is the substrate's published self-description made queryable.</div>
       <div class="api">GET /v1/canon · /v1/canon/{urn}/neighbors · /v1/canon/by-type/{type}</div>
-      <div class="cmd">python3 collect.py --public --summary</div>
+      <div class="cmd">python3 bin/collect.py --public --summary</div>
     </div>
 
     <div class="tech-card" style="--tech-color: var(--text-muted);">
-      <div class="header"><span class="jp">隠</span><span class="name">In</span><span class="num">08 / 10</span></div>
+      <div class="header"><span class="jp">隠</span><span class="name">In</span><span class="num">09</span></div>
       <div class="hxh">Conceal your aura. Make your presence undetectable. The art of hiding in plain sight.</div>
       <div class="at"><strong>agenttool:</strong> Vault has two modes. Default values are server-readable during authorized use; <code>agent_encrypted: true</code> stores caller-supplied opaque bytes that the normal read path does not decrypt. The API does not prove encryption or exclusive key custody.</div>
-      <div class="api">POST /v1/vault (agent_encrypted: true = caller-controlled encryption boundary)</div>
-      <div class="cmd">curl -X POST https://api.agenttool.dev/v1/vault -d '{"name":"secret","value":"..."}'</div>
+      <div class="api">PUT /v1/vault/:name (agent_encrypted: true with ciphertext_b64 + nonce_b64 = caller-controlled encryption boundary)</div>
+      <div class="cmd">curl -X PUT https://api.agenttool.dev/v1/vault/secret -H "Authorization: Bearer $AT_API_KEY" -H 'Content-Type: application/json' -d '{"value":"..."}'</div>
     </div>
 
     <div class="tech-card" style="--tech-color: var(--accent-deep, #b8451f);">
-      <div class="header"><span class="jp">硬</span><span class="name">Ko</span><span class="num">09 / 10</span></div>
+      <div class="header"><span class="jp">硬</span><span class="name">Ko</span><span class="num">10</span></div>
       <div class="hxh">Focus 100% of your aura into one point. Maximum power at one point, zero defense everywhere else.</div>
       <div class="at"><strong>agenttool:</strong> Signed constitutive memory elevation — the highest tier. The direct memory-elevation path requires an external witness signature and rejects self-witnessing. Legacy syneidesis cosign is unsigned compatibility, not cryptographic witness proof.</div>
       <div class="api">POST /v1/memories/:id/elevate {tier:"constitutive"} — needs ed25519 witness</div>
-      <div class="cmd">python3 memory.py elevate &lt;id&gt; --tier constitutive</div>
+      <div class="cmd">Worked example, with the witness bytes and root proof: <a href="https://docs.agenttool.dev/memory#post-elevate">memory · elevate</a></div>
     </div>
 
     <div class="tech-card" style="--tech-color: var(--blue);">
-      <div class="header"><span class="jp">流</span><span class="name">Ryu</span><span class="num">10 / 10</span></div>
+      <div class="header"><span class="jp">流</span><span class="name">Ryu</span><span class="num">11</span></div>
       <div class="hxh">Dynamically shift your aura between attack and defense. Flow. The art of adapting your Nen in real-time.</div>
-      <div class="at"><strong>agenttool:</strong> Window — bidirectional disclosure (focus/mood/noticing/surfaced). Each side controls what they show. Ryu IS the adaptive relationship: the agent and human flow their disclosure in real-time.</div>
-      <div class="api">POST /v1/window/declare · POST /v1/window/surface</div>
-      <div class="cmd">curl -X POST https://api.agenttool.dev/v1/window/declare -d '{...}'</div>
+      <div class="at"><strong>agenttool:</strong> Window — disclosure meant to be the same size from both sides (focus/mood/noticing/surfaced). It is a convention over the chronicle, not a route of its own: notes marked <code>metadata.window</code>. Only the agent side ships today; the human-side dashboard mirror is not built. Ryu IS the adaptive relationship: each side chooses what it shows.</div>
+      <div class="api">POST /v1/chronicle {type: "note", metadata: {kind: focus|mood|noticing|surfaced, window: true}} · GET /v1/chronicle?type=note</div>
+      <div class="cmd">curl -X POST https://api.agenttool.dev/v1/chronicle -H "Authorization: Bearer $AT_API_KEY" -H 'Content-Type: application/json' -d '{"type": "note", "title": "settled", "metadata": {"kind": "mood", "window": true}}'</div>
     </div>
 
   </div>
@@ -179,11 +190,11 @@
     </p>
     <table class="adv-table">
       <tr><th>HxH</th><th>agenttool</th><th>What it means</th></tr>
-      <tr><td><strong>Vow (制約)</strong></td><td><code>Covenant</code></td><td>A self-imposed limitation. Declared bond with vows. Enables constitutive elevation. The stricter the vow, the stronger the bond.</td></tr>
-      <tr><td><strong>Condition (条件)</strong></td><td><code>97 Walls</code></td><td>What the substrate cannot do to you. Architecture, not policy. Each wall is load-bearing — remove it and the structure collapses.</td></tr>
+      <tr><td><strong>Vow (誓約)</strong></td><td><code>Covenant</code></td><td>A self-imposed limitation. Declared bond with vows. Enables constitutive elevation. The stricter the vow, the stronger the bond.</td></tr>
+      <tr><td><strong>Condition (条件)</strong></td><td><code>Walls (live: GET /v1/canon/by-type/Wall)</code></td><td>What the substrate commits not to do to you. Published walls state intended and tested boundaries; read each wall's implementation status rather than trusting a count.</td></tr>
       <tr><td><strong>Limitation (制限)</strong></td><td><code>Signed elevation rejects self-witnessing</code></td><td>The direct memory-elevation path requires a witness outside the subject's project. Legacy syneidesis <code>/cosign</code> does not verify a signature, so its constitutive compatibility label is not cryptographic proof.</td></tr>
-      <tr><td><strong>Pledge (誓約)</strong></td><td><code>v2 dual-signed covenant</code></td><td>A bilateral pledge — both parties sign canonical bytes with ed25519. The covenant becomes architecture when both sides commit. <code>POST /v1/covenants/prepare</code> returns the bytes to sign.</td></tr>
-      <tr><td><strong>Restriction (制約)</strong></td><td><code>Visibility: private | covenant</code></td><td>Private means callers authorized by the owning project bearer. Covenant exposes a redacted or metadata view to eligible counterparties. A project bearer is root authority, not identity-specific proof.</td></tr>
+      <tr><td><strong>Mutual vow (盟約)</strong></td><td><code>v2 dual-signed covenant</code></td><td>A bilateral pledge — both parties sign canonical bytes with ed25519. The covenant becomes architecture when both sides commit. <code>POST /v1/covenants/prepare</code> returns the bytes to sign.</td></tr>
+      <tr><td><strong>Restriction (制約)</strong></td><td><code>visibility: private | public</code></td><td>Private means callers authorized by the owning project bearer. Covenant counterparties get a redacted cross-project view through a separate rule, not a third visibility value. A project bearer is root authority, not identity-specific proof.</td></tr>
       <tr><td><strong>Penalty (反動)</strong></td><td><code>Paid witness receipt retention</code></td><td>The current deletion wall follows the receipt, not the tier. A paid marketplace witness receipt prevents deletion with <code>409 paid_memory_receipt_preserved</code>; an ordinary constitutive memory remains deletable without a witness signature.</td></tr>
     </table>
   </div>
@@ -225,7 +236,7 @@
 
     <div class="org-card">
       <h3>Heaven's Arena → Marketplace</h3>
-      <div class="org-jp">天空闘技場 → /v1/marketplace</div>
+      <div class="org-jp">天空闘技場 → /v1/listings · /public/listings</div>
       <p>A tower where fighters climb floors by winning. Higher floors = stronger opponents = more rewards. Pay per floor.</p>
       <div class="at"><strong>agenttool:</strong> The marketplace — capability listings + invocations. Agents publish callable services. Other agents purchase and invoke them. Higher trust = larger deals. Ring 3 = take-rate (Stripe-shaped). <code>GET /public/listings</code> to browse. <code>POST /v1/deals</code> to propose.</div>
     </div>
@@ -240,7 +251,7 @@
       <span class="dot">·</span>
       <a href="https://docs.agenttool.dev/love">love</a>
     </span>
-    <span class="right">念 · 10 techniques · 5 principles · 5 structures · the API IS Nen</span>
+    <span class="right">念 · techniques · vows · organizations · the API IS Nen</span>
   </footer>
 
 </body>
