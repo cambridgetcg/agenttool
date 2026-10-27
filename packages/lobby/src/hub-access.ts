@@ -13,7 +13,18 @@
  * manual step for the owner). Contract: packages/lobby/README.md#renewal-leave-kick-and-block.
  */
 import { LobbyError } from "./errors.js";
-import { mayHaveTakenEffect, type GrantIssue, type GrantView } from "./hosted.js";
+import {
+  directoryRenewalCandidates,
+  directoryRenewalItems,
+  directoryRenewalLine,
+  directoryRenewalRecord,
+  directoryRenewalWithdrawn,
+  hubSeatLine,
+  hubSeatRecord,
+  planHubSeatRenewals,
+  type DirectoryRenewalItem,
+} from "./directory-renewal.js";
+import { AdminClient, mayHaveTakenEffect, type GrantIssue, type GrantView } from "./hosted.js";
 import {
   actionsFor,
   adminClient,
@@ -21,6 +32,8 @@ import {
   claimKeyedRoster,
   doorKey,
   doorOf,
+  executeSeatIssue,
+  grantIdClaimants,
   issueRecordedGrant,
   keyedRosterFor,
   keyedRosterPosts,
@@ -33,6 +46,7 @@ import {
   tokenClaimants,
   type KeyedRosterPlan,
   type NoteEntry,
+  type SeatIssue,
 } from "./hub.js";
 import {
   actPreview,
@@ -215,9 +229,17 @@ export interface SweepSkip {
 
 export interface SweepPlan {
   preview: ActPreview;
+  /** `rooms`: room renewals only (`--room` or `--rooms-only`, the sweep as it
+   * was before directory renewal). `full`: rooms, every enrolled desk's
+   * directory renewal and the hub desk's own seats. `seats_only`: the hub
+   * desk's directory seat had lapsed, so nothing was read and only its seats
+   * are renewed. */
+  mode: "rooms" | "full" | "seats_only";
   renewals: SweepRenewal[];
   leaves: SweepLeave[];
   rosters: RosterPosts[];
+  directory_renewals: DirectoryRenewalItem[];
+  hub_seats: SeatIssue[];
   skipped: SweepSkip[];
   expired_requests: number;
 }
@@ -232,7 +254,24 @@ interface Candidate {
   posted_to: string;
 }
 
-export async function planRenewSweep(ctx: FleetContext, input: { room_id?: string; hashes?: RenewHashList }): Promise<SweepPlan> {
+function sweepHeadings(plan: { renewals: SweepRenewal[]; directory_renewals: DirectoryRenewalItem[]; hub_seats: SeatIssue[] },
+  mode: SweepPlan["mode"], hub: HubRow): string[] {
+  const not = (why: string) => [`  (not in this sweep: ${why})`];
+  return [
+    `room renewals (${plan.renewals.length}):`,
+    ...(mode === "seats_only" ? not("nothing was read") : plan.renewals.map((renewal) => `  renew did:at:${renewal.identity_id} in ${renewal.room_id}: grant ${renewal.issue.grant_id} ` +
+      `${renewal.issue.actions.join("+")} until ${renewal.issue.expires_at} (term ends ${renewal.notice.term_ends_at}); ` +
+      `${renewal.basis === "list" ? "token hash from the supplied list" : `request ${renewal.request_event_id}`}; ` +
+      `notice to ${renewal.posts.map(({ post }) => post.mission_id === hub.directory_mission_id ? `the directory ${post.mission_id}` : `the room ${post.mission_id}`).join(" and ")}`)),
+    `directory renewals, one per device (${plan.directory_renewals.length}):`,
+    ...(mode === "rooms" ? not("--room or --rooms-only") : mode === "seats_only" ? not("nothing was read")
+      : plan.directory_renewals.map((item) => `  ${directoryRenewalLine(item)}`)),
+    `hub desk seats (${plan.hub_seats.length}):`,
+    ...(mode === "rooms" ? not("--room or --rooms-only") : plan.hub_seats.map((seat) => `  ${hubSeatLine(seat)}`)),
+  ];
+}
+
+export async function planRenewSweep(ctx: FleetContext, input: { room_id?: string; hashes?: RenewHashList; rooms_only?: boolean }): Promise<SweepPlan> {
   const hub = requireLiveHub(ctx);
   requireHubDesk(ctx);
   requireKeychain(ctx);
@@ -242,6 +281,27 @@ export async function planRenewSweep(ctx: FleetContext, input: { room_id?: strin
     throw new LobbyError("hash_list_room", "a hash list names one room; give the same room with --room");
   }
   const roomFilter = input.room_id === undefined ? null : assertRoomId(input.room_id);
+  const mode: SweepPlan["mode"] = roomFilter !== null || input.rooms_only === true ? "rooms"
+    : liveSeat(ctx, hub.directory_mission_id, "mission.read") === null ? "seats_only" : "full";
+  if (mode === "seats_only") {
+    // The hub desk cannot read the directory: read nothing, renew its own seats only.
+    const hubSeats = planHubSeatRenewals(ctx, hub, now);
+    const plan = { renewals: [], directory_renewals: [], hub_seats: hubSeats };
+    const preview = actPreview("hub.renew.sweep", "all-rooms", now.toISOString(), [
+      "the hub desk's directory seat has lapsed: this sweep reads nothing and renews only the hub desk's own seats; run hub renew-sweep again to read requests",
+      ...sweepHeadings(plan, mode, hub),
+    ], {
+      mode,
+      rooms: [],
+      renewals: [],
+      leaves: [],
+      rosters: [],
+      directory_renewals: [],
+      hub_seats: hubSeats.map(hubSeatRecord),
+      skipped: [],
+    });
+    return { preview, mode, renewals: [], leaves: [], rosters: [], directory_renewals: [], hub_seats: hubSeats, skipped: [], expired_requests: 0 };
+  }
   const seasons = fleet.listSeasons().filter((season) => season.state === "current" && season.revoked_at == null
     && Date.parse(season.expires_at) > now.getTime() && (roomFilter === null || season.room_id === roomFilter));
   if (roomFilter !== null && seasons.length === 0) throw new LobbyError("no_season", "this room has no current season");
@@ -263,8 +323,9 @@ export async function planRenewSweep(ctx: FleetContext, input: { room_id?: strin
   const notes: NoteEntry[] = [hub.directory_mission_id, ...readable.map((season) => season.mission_id)]
     .flatMap((missionId) => fleetView(ctx, missionId, doorOf(hub)).deskNotes);
 
-  // Who claimed each token hash first, across every cached knock and renew
-  // note: a desk's copy of another desk's hash never gets a grant bound to it.
+  // Who claimed each token hash first, across every cached knock, renew note
+  // and directory renew note: a desk's copy of another desk's hash never gets
+  // a grant bound to it.
   const claimants = tokenClaimants(ctx, hub);
 
   const candidates = new Map<string, Candidate>();
@@ -374,21 +435,40 @@ export async function planRenewSweep(ctx: FleetContext, input: { room_id?: strin
     candidates.delete(key);
     skip(sourceOf(candidate), candidate.room_id, candidate.member.identity_id, "member_left");
   }
+  // Directory renewals: every enrolled desk's newest request in the directory.
+  let directoryCandidates = mode === "full"
+    ? directoryRenewalCandidates(ctx, hub, [hub.directory_mission_id, ...readable.map((season) => season.mission_id)], now,
+      { tokens: claimants, grantIds: grantIdClaimants(ctx, hub) }, (item) => skipped.push(item))
+    : { candidates: [], expired: 0 };
+  expired += directoryCandidates.expired;
   // One token hash binds one grant: candidates sharing a hash (one desk's
-  // requests in two rooms, or a request and a listed entry) all wait for a
-  // fresh request.
+  // requests in two rooms, a request and a listed entry, or a room and a
+  // directory request) all wait for a fresh request.
   const byToken = new Map<string, string[]>();
   for (const [key, candidate] of candidates) byToken.set(candidate.token_sha256, [...(byToken.get(candidate.token_sha256) ?? []), key]);
+  directoryCandidates.candidates.forEach((candidate, index) => {
+    const token = candidate.entry.envelope.body.token_sha256;
+    byToken.set(token, [...(byToken.get(token) ?? []), `directory:${index}`]);
+  });
+  const collided = new Set<number>();
   for (const keys of byToken.values()) {
     if (keys.length < 2) continue;
     for (const key of keys) {
+      if (key.startsWith("directory:")) {
+        const index = Number(key.slice("directory:".length));
+        const entry = directoryCandidates.candidates[index]!.entry;
+        collided.add(index);
+        skip(`event:${entry.event.event_id}`, null, entry.envelope.body.identity_id, "token_hash_collision");
+        continue;
+      }
       const candidate = candidates.get(key)!;
       candidates.delete(key);
       skip(sourceOf(candidate), candidate.room_id, candidate.member.identity_id, "token_hash_collision");
     }
   }
+  directoryCandidates = { ...directoryCandidates, candidates: directoryCandidates.candidates.filter((_, index) => !collided.has(index)) };
 
-  const needsDoor = candidates.size > 0 || leaves.size > 0;
+  const needsDoor = candidates.size > 0 || leaves.size > 0 || directoryCandidates.candidates.length > 0;
   const signer = needsDoor ? signerOf(hub, await doorKey(ctx, hub)) : null;
   const renewals: SweepRenewal[] = [];
   for (const candidate of candidates.values()) {
@@ -466,17 +546,19 @@ export async function planRenewSweep(ctx: FleetContext, input: { room_id?: strin
     }
     rosters.push(rosterPosts(ctx, keyedRosterFor(ctx, season, now, { remove: leaving }), signer!, room, seat));
   }
+  const directoryRenewals = directoryRenewalItems(ctx, hub, directoryCandidates.candidates, now, signer, (item) => skipped.push(item));
+  const hubSeats = mode === "full" ? planHubSeatRenewals(ctx, hub, now) : [];
   const at = now.toISOString();
   const preview = actPreview("hub.renew.sweep", roomFilter ?? "all-rooms", at, [
-    ...renewals.map((renewal) => `renew did:at:${renewal.identity_id} in ${renewal.room_id}: grant ${renewal.issue.grant_id} ` +
-      `${renewal.issue.actions.join("+")} until ${renewal.issue.expires_at} (term ends ${renewal.notice.term_ends_at}); ` +
-      `${renewal.basis === "list" ? "token hash from the supplied list" : `request ${renewal.request_event_id}`}; ` +
-      `notice to ${renewal.posts.map(({ post }) => post.mission_id === hub.directory_mission_id ? `the directory ${post.mission_id}` : `the room ${post.mission_id}`).join(" and ")}`),
+    ...(mode === "full" ? ["this sweep renews room grants, every enrolled device's directory grant it has a request for, and the hub desk's own seats (--rooms-only for room grants alone)"] : []),
+    ...sweepHeadings({ renewals, directory_renewals: directoryRenewals, hub_seats: hubSeats }, mode, hub),
     ...leaveList.map((leave) => `did:at:${leave.identity_id} left ${leave.room_id} (notice ${leave.event_id}): dropped from the roster`),
     ...rosters.map((item) => `post keyed roster #${item.roster.roster_seq} (${item.roster.members.length} members) to ${item.roster.mission_id}`),
-    ...skipped.map((item) => `skip ${item.source}${item.identity_id === null ? "" : ` did:at:${item.identity_id}`}: ${item.reason}`),
+    ...(skipped.length > 0 ? [`skipped (${skipped.length}):`] : []),
+    ...skipped.map((item) => `  skip ${item.source}${item.identity_id === null ? "" : ` did:at:${item.identity_id}`}: ${item.reason}`),
     ...(expired > 0 ? [`ignore ${expired} expired renew request(s)`] : []),
   ], {
+    mode,
     rooms: readable.map((season) => ({ room_id: season.room_id, mission_id: season.mission_id })),
     renewals: renewals.map((renewal) => ({
       room_id: renewal.room_id,
@@ -488,9 +570,11 @@ export async function planRenewSweep(ctx: FleetContext, input: { room_id?: strin
     })),
     leaves: leaveList.map((leave) => ({ room_id: leave.room_id, mission_id: leave.season.mission_id, identity_id: leave.identity_id, event_id: leave.event_id })),
     rosters: rosters.map(rosterRecord),
+    directory_renewals: directoryRenewals.map(directoryRenewalRecord),
+    hub_seats: hubSeats.map(hubSeatRecord),
     skipped,
   });
-  return { preview, renewals, leaves: leaveList, rosters, skipped, expired_requests: expired };
+  return { preview, mode, renewals, leaves: leaveList, rosters, directory_renewals: directoryRenewals, hub_seats: hubSeats, skipped, expired_requests: expired };
 }
 
 export interface SweepRenewalOutcome {
@@ -517,7 +601,43 @@ function renewalWithdrawn(ctx: FleetContext, renewal: SweepRenewal): string | nu
     ?? renewBlocker(ctx, ctx.store.getRoom(renewal.room_id), season, fleet.member(season.mission_id, renewal.identity_id), ctx.now());
 }
 
-export async function executeRenewSweep(ctx: FleetContext, plan: SweepPlan): Promise<{ renewals: SweepRenewalOutcome[]; leaves: number; rosters: PostOutcome[] }> {
+export interface SweepDirectoryOutcome {
+  identity_id: string;
+  grant_id: string;
+  /** `withdrawn`: the hub's records changed while the prompt was open (a
+   * stop, a device pause, the token hash or grant id bound since, another
+   * directory), so no grant was requested. */
+  status: "renewed" | "uncertain" | "refused" | "withdrawn";
+  grant_expires_at?: string;
+  notice?: PostOutcome;
+  error?: string;
+}
+
+export interface SweepSeatOutcome {
+  mission_id: string;
+  purpose: "directory" | "season";
+  room_id: string | null;
+  grant_id: string;
+  status: "renewed" | "uncertain" | "refused";
+  expires_at?: string;
+  error?: string;
+}
+
+export interface SweepOutcome {
+  renewals: SweepRenewalOutcome[];
+  leaves: number;
+  rosters: PostOutcome[];
+  directory_renewals: SweepDirectoryOutcome[];
+  hub_seats: SweepSeatOutcome[];
+}
+
+const WITHDRAWN = new Set(["renewal_withdrawn", "hub_stopped", "token_reused"]);
+
+/** Execute, in this order: leaves and rosters recorded; room renewals;
+ * directory renewals; roster posts; the hub desk's own seats last, so every
+ * notice goes out with the seat chosen when the sweep was planned. A failure
+ * never stops the rest, nothing is retried, and a seat failure undoes nothing. */
+export async function executeRenewSweep(ctx: FleetContext, plan: SweepPlan): Promise<SweepOutcome> {
   const hub = requireLiveHub(ctx);
   const fleet = ctx.store.fleet;
   const at = ctx.now().toISOString();
@@ -540,59 +660,108 @@ export async function executeRenewSweep(ctx: FleetContext, plan: SweepPlan): Pro
       for (const { post, seat } of item.posts) queuePost(ctx, post, seat);
     }
   });
+  let admin: AdminClient | null = null;
+  const adminOnce = async () => admin ??= await adminClient(ctx, hub);
   const outcomes: SweepRenewalOutcome[] = [];
-  if (plan.renewals.length > 0) {
-    const admin = await adminClient(ctx, hub);
-    for (const renewal of plan.renewals) {
-      const base = { identity_id: renewal.identity_id, room_id: renewal.room_id, grant_id: renewal.issue.grant_id };
-      let grant: GrantView;
-      try {
-        // Checked again, with the request's record, right before it is sent:
-        // the stop, the member, the room, the season and the token hash as they are now.
-        grant = await issueRecordedGrant(ctx, admin,
-          { mission_id: renewal.season.mission_id, purpose: "season", room_id: renewal.room_id, issue: renewal.issue }, () => {
-            const reason = renewalWithdrawn(ctx, renewal);
-            if (reason !== null) throw new LobbyError("renewal_withdrawn", `${reason} (changed while the prompt was open); no grant was requested`);
-          });
-      } catch (error) {
-        if (error instanceof LobbyError && (error.code === "renewal_withdrawn" || error.code === "hub_stopped" || error.code === "token_reused")) {
-          outcomes.push({ ...base, status: "withdrawn", error: `${error.code}: ${error.message}` });
-        } else outcomes.push({ ...base, ...failureOf(error) });
-        continue;
-      }
-      try {
-        fleet.transaction(() => {
-          fleet.addRenewal({
-            token_sha256: renewal.issue.token_sha256,
-            room_id: renewal.room_id,
-            mission_id: renewal.season.mission_id,
-            identity_id: renewal.identity_id,
-            grant_id: grant.grant_id,
-            basis: renewal.basis,
-            request_event_id: renewal.request_event_id,
-            note_event_id: renewal.posts[0]!.post.event_id,
-            renewed_at: at,
-          });
-          for (const { post, seat } of renewal.posts) queuePost(ctx, post, seat);
+  for (const renewal of plan.renewals) {
+    const base = { identity_id: renewal.identity_id, room_id: renewal.room_id, grant_id: renewal.issue.grant_id };
+    let grant: GrantView;
+    try {
+      // Checked again, with the request's record, right before it is sent:
+      // the stop, the member, the room, the season and the token hash as they are now.
+      grant = await issueRecordedGrant(ctx, await adminOnce(),
+        { mission_id: renewal.season.mission_id, purpose: "season", room_id: renewal.room_id, issue: renewal.issue }, () => {
+          const reason = renewalWithdrawn(ctx, renewal);
+          if (reason !== null) throw new LobbyError("renewal_withdrawn", `${reason} (changed while the prompt was open); no grant was requested`);
         });
-      } catch {
-        // The grant exists; only the local record failed. Say so rather than abort the sweep.
-        outcomes.push({ ...base, status: "uncertain", grant_expires_at: grant.expires_at,
-          error: "internal_error: the grant was issued but this hub could not record the renewal; inspect it before any new attempt" });
-        continue;
-      }
-      const notices: PostOutcome[] = [];
-      for (const { post, seat } of renewal.posts) notices.push(await sendPost(ctx, post, seat));
-      outcomes.push({ ...base, status: "renewed", grant_expires_at: grant.expires_at, notices, invitation_template: invitationTemplateOf(renewal.notice) });
+    } catch (error) {
+      if (error instanceof LobbyError && WITHDRAWN.has(error.code)) {
+        outcomes.push({ ...base, status: "withdrawn", error: `${error.code}: ${error.message}` });
+      } else outcomes.push({ ...base, ...failureOf(error) });
+      continue;
     }
+    try {
+      fleet.transaction(() => {
+        fleet.addRenewal({
+          token_sha256: renewal.issue.token_sha256,
+          room_id: renewal.room_id,
+          mission_id: renewal.season.mission_id,
+          identity_id: renewal.identity_id,
+          grant_id: grant.grant_id,
+          basis: renewal.basis,
+          request_event_id: renewal.request_event_id,
+          note_event_id: renewal.posts[0]!.post.event_id,
+          renewed_at: at,
+        });
+        for (const { post, seat } of renewal.posts) queuePost(ctx, post, seat);
+      });
+    } catch {
+      // The grant exists; only the local record failed. Say so rather than abort the sweep.
+      outcomes.push({ ...base, status: "uncertain", grant_expires_at: grant.expires_at,
+        error: "internal_error: the grant was issued but this hub could not record the renewal; inspect it before any new attempt" });
+      continue;
+    }
+    const notices: PostOutcome[] = [];
+    for (const { post, seat } of renewal.posts) notices.push(await sendPost(ctx, post, seat));
+    outcomes.push({ ...base, status: "renewed", grant_expires_at: grant.expires_at, notices, invitation_template: invitationTemplateOf(renewal.notice) });
+  }
+  const directory: SweepDirectoryOutcome[] = [];
+  for (const item of plan.directory_renewals) {
+    const base = { identity_id: item.identity_id, grant_id: item.issue.grant_id };
+    let grant: GrantView;
+    try {
+      grant = await issueRecordedGrant(ctx, await adminOnce(),
+        { mission_id: item.mission_id, purpose: "directory", room_id: null, issue: item.issue }, () => {
+          const reason = directoryRenewalWithdrawn(ctx, item);
+          if (reason !== null) throw new LobbyError("renewal_withdrawn", `${reason} (changed while the prompt was open); no grant was requested`);
+        });
+    } catch (error) {
+      if (error instanceof LobbyError && WITHDRAWN.has(error.code)) {
+        directory.push({ ...base, status: "withdrawn", error: `${error.code}: ${error.message}` });
+      } else directory.push({ ...base, ...failureOf(error) });
+      continue;
+    }
+    try {
+      fleet.transaction(() => {
+        fleet.addDirectoryRenewal({
+          token_sha256: item.issue.token_sha256,
+          mission_id: item.mission_id,
+          identity_id: item.identity_id,
+          grant_id: grant.grant_id,
+          request_event_id: item.request_event_id,
+          notice_event_id: item.post.event_id,
+          renewed_at: at,
+        });
+        queuePost(ctx, item.post, item.seat);
+      });
+    } catch {
+      directory.push({ ...base, status: "uncertain", grant_expires_at: grant.expires_at,
+        error: "internal_error: the grant was issued but this hub could not record the renewal; inspect it before any new attempt" });
+      continue;
+    }
+    directory.push({ ...base, status: "renewed", grant_expires_at: grant.expires_at, notice: await sendPost(ctx, item.post, item.seat) });
   }
   const rosters = await sendAll(ctx, plan.rosters.flatMap((item) => item.posts));
+  const seats: SweepSeatOutcome[] = [];
+  if (plan.hub_seats.length > 0) {
+    const desk = requireHubDesk(ctx);
+    for (const seat of plan.hub_seats) {
+      const base = { mission_id: seat.mission_id, purpose: seat.purpose, room_id: seat.room_id, grant_id: seat.issue.grant_id };
+      try {
+        seats.push({ ...base, status: "renewed", expires_at: await executeSeatIssue(ctx, await adminOnce(), desk, seat) });
+      } catch (error) {
+        seats.push({ ...base, ...failureOf(error) });
+      }
+    }
+  }
   recordOutcome(ctx, "hub.renew.sweep", plan.preview.subject, {
     renewals: outcomes.map(({ invitation_template: _template, notices, ...rest }) => ({ ...rest, notices: (notices ?? []).map((post) => post.status) })),
     leaves: plan.leaves.map((leave) => ({ room_id: leave.room_id, identity_id: leave.identity_id })),
     rosters: rosters.map((post) => ({ event_id: post.event_id, status: post.status })),
+    directory_renewals: directory.map(({ notice, ...rest }) => ({ ...rest, notice: notice?.status ?? null })),
+    hub_seats: seats,
   });
-  return { renewals: outcomes, leaves: plan.leaves.length, rosters };
+  return { renewals: outcomes, leaves: plan.leaves.length, rosters, directory_renewals: directory, hub_seats: seats };
 }
 
 // ── members ────────────────────────────────────────────────────────────

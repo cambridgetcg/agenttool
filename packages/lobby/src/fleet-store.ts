@@ -1,4 +1,4 @@
-/** Fleet-hall state in lobby.sqlite (schema version 3).
+/** Fleet-hall state in lobby.sqlite (schema version 4).
  *
  * Desk side (every enrolled device): its desk identity and directory join,
  * the grants it holds (and which it left), the knocks it sent, its pending
@@ -10,9 +10,11 @@
  * rosters, renewals, blocks, grants registered by hand for adopted seasons,
  * desk notes already processed, and an emergency stop.
  *
- * Version 3 is reached from version 2 by `FLEET_V3_UPGRADE_SQL`, run once in
- * the same transaction that records the new version; nothing existing is
- * rewritten. The steps are chained in src/store.ts (`SCHEMA_STEPS`).
+ * Version 3 is reached from version 2 by `FLEET_V3_UPGRADE_SQL`, and version 4
+ * (directory renewal inside the Lobby) from version 3 by
+ * `FLEET_V4_UPGRADE_SQL`, each run once in the same transaction that records
+ * the new version; nothing existing is rewritten. The steps are chained in
+ * src/store.ts (`SCHEMA_STEPS`).
  *
  * No secret is stored here: the desk key and token preimages live in
  * `<home>/secrets` (src/secrets.ts); the project bearer and door key live in
@@ -263,6 +265,35 @@ CREATE TABLE IF NOT EXISTS hub_processed_notes (
 ) STRICT;
 `;
 
+/** Version 3 → 4: directory renewal inside the Lobby. Additive only: a
+ * nullable column on the desk and on enrolled devices, and two new tables
+ * (room renewals keep their own tables, whose `room_id` is required). */
+export const FLEET_V4_UPGRADE_SQL = `
+ALTER TABLE desk ADD COLUMN directory_expires_at TEXT;
+ALTER TABLE hub_devices ADD COLUMN directory_paused_at TEXT;
+
+CREATE TABLE IF NOT EXISTS desk_directory_renewals (
+  token_sha256 TEXT PRIMARY KEY,
+  mission_id TEXT NOT NULL,
+  grant_id TEXT NOT NULL UNIQUE,
+  posted_mission_id TEXT NOT NULL,
+  request_event_id TEXT NOT NULL,
+  requested_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  accepted_at TEXT
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS hub_directory_renewals (
+  token_sha256 TEXT PRIMARY KEY,
+  mission_id TEXT NOT NULL,
+  identity_id TEXT NOT NULL,
+  grant_id TEXT NOT NULL UNIQUE,
+  request_event_id TEXT NOT NULL,
+  notice_event_id TEXT NOT NULL,
+  renewed_at TEXT NOT NULL
+) STRICT;
+`;
+
 export interface DeskRow {
   project_id: string;
   origin: string;
@@ -276,6 +307,8 @@ export interface DeskRow {
   directory_digest: string | null;
   door_fingerprint: string | null;
   joined_at: string | null;
+  /** The joined directory's end, as this desk last read it (version 4; absent on older reads). */
+  directory_expires_at?: string | null;
 }
 
 export interface DeskGrantRow {
@@ -301,6 +334,19 @@ export interface DeskRenewalRow {
   request_event_id: string;
   requested_at: string;
   accepted_grant_id: string | null;
+  accepted_at: string | null;
+}
+
+/** A request this desk posted for its next directory grant (version 4): the
+ * grant id and token hash it chose, and when it picked the grant up. */
+export interface DeskDirectoryRenewalRow {
+  token_sha256: string;
+  mission_id: string;
+  grant_id: string;
+  posted_mission_id: string;
+  request_event_id: string;
+  requested_at: string;
+  expires_at: string;
   accepted_at: string | null;
 }
 
@@ -358,6 +404,8 @@ export interface HubDeviceRow {
   fingerprint: string;
   display_name: string;
   enrolled_at: string;
+  /** Set while the owner has paused this device's directory renewal (version 4). */
+  directory_paused_at?: string | null;
 }
 
 export interface HubGrantRow {
@@ -408,6 +456,17 @@ export interface RenewalRow {
   basis: "request" | "list";
   request_event_id: string | null;
   note_event_id: string;
+  renewed_at: string;
+}
+
+/** A directory grant the hub renewed from a desk's request (version 4). */
+export interface DirectoryRenewalRow {
+  token_sha256: string;
+  mission_id: string;
+  identity_id: string;
+  grant_id: string;
+  request_event_id: string;
+  notice_event_id: string;
   renewed_at: string;
 }
 
@@ -474,6 +533,8 @@ export class FleetStore {
   readonly available: boolean;
   /** The table-talk, renewal and removal tables and columns exist (state version 3 or later). */
   readonly v3: boolean;
+  /** The directory-renewal tables and columns exist (state version 4 or later). */
+  readonly v4: boolean;
 
   /** `stateVersion` is one LobbyStore has already accepted as readable. */
   constructor(
@@ -484,6 +545,7 @@ export class FleetStore {
     const version = Number(stateVersion);
     this.available = version >= 2;
     this.v3 = version >= 3;
+    this.v4 = version >= 4;
   }
 
   private write(): void {
@@ -1101,6 +1163,74 @@ export class FleetStore {
       `INSERT INTO hub_processed_notes (event_id, kind, identity_id, outcome, processed_at)
        VALUES ($event_id, $kind, $identity_id, $outcome, $processed_at) ON CONFLICT (event_id) DO NOTHING`,
     ).run({ ...row });
+  }
+
+  // ── Version 4: directory renewal ───────────────────────────────────
+
+  private writeV4(): void {
+    this.write();
+    if (!this.v4) throw new LobbyError("state_not_upgraded", "this desk state has no version-4 directory renewal tables yet");
+  }
+
+  setDeskDirectoryExpiry(expiresAt: string): void {
+    this.writeV4();
+    this.db.query("UPDATE desk SET directory_expires_at = $at WHERE singleton = 1").run({ at: expiresAt });
+  }
+
+  addDeskDirectoryRenewal(row: Omit<DeskDirectoryRenewalRow, "accepted_at">): void {
+    this.writeV4();
+    this.db.query(
+      `INSERT INTO desk_directory_renewals (token_sha256, mission_id, grant_id, posted_mission_id, request_event_id,
+         requested_at, expires_at, accepted_at)
+       VALUES ($token_sha256, $mission_id, $grant_id, $posted_mission_id, $request_event_id, $requested_at, $expires_at, NULL)`,
+    ).run({ ...row });
+  }
+
+  /** This desk's directory renew requests, newest first. */
+  deskDirectoryRenewals(): DeskDirectoryRenewalRow[] {
+    if (!this.v4) return [];
+    return this.db.query("SELECT * FROM desk_directory_renewals ORDER BY requested_at DESC, token_sha256 ASC")
+      .all() as DeskDirectoryRenewalRow[];
+  }
+
+  markDeskDirectoryRenewalAccepted(tokenSha256: string, at: string): void {
+    this.writeV4();
+    const result = this.db.query(
+      "UPDATE desk_directory_renewals SET accepted_at = $at WHERE token_sha256 = $token AND accepted_at IS NULL",
+    ).run({ token: tokenSha256, at });
+    if (result.changes !== 1) throw new LobbyError("renewal_used", "this directory renewal was already picked up");
+  }
+
+  setDevicePaused(identityId: string, pausedAt: string | null): void {
+    this.writeV4();
+    this.db.query("UPDATE hub_devices SET directory_paused_at = $paused_at WHERE identity_id = $id")
+      .run({ id: identityId, paused_at: pausedAt });
+  }
+
+  hubGrant(grantId: string): HubGrantRow | null {
+    if (!this.available) return null;
+    return withActions<HubGrantRow>(this.db.query("SELECT * FROM hub_grants WHERE grant_id = $grant_id")
+      .get({ grant_id: grantId }) as Row | null);
+  }
+
+  addDirectoryRenewal(row: DirectoryRenewalRow): void {
+    this.writeV4();
+    this.db.query(
+      `INSERT INTO hub_directory_renewals (token_sha256, mission_id, identity_id, grant_id, request_event_id,
+         notice_event_id, renewed_at)
+       VALUES ($token_sha256, $mission_id, $identity_id, $grant_id, $request_event_id, $notice_event_id, $renewed_at)`,
+    ).run({ ...row });
+  }
+
+  directoryRenewal(tokenSha256: string): DirectoryRenewalRow | null {
+    if (!this.v4) return null;
+    return this.db.query("SELECT * FROM hub_directory_renewals WHERE token_sha256 = $token")
+      .get({ token: tokenSha256 }) as DirectoryRenewalRow | null;
+  }
+
+  listDirectoryRenewals(): DirectoryRenewalRow[] {
+    if (!this.v4) return [];
+    return this.db.query("SELECT * FROM hub_directory_renewals ORDER BY renewed_at ASC, token_sha256 ASC").all() as DirectoryRenewalRow[];
   }
 
   listDecisions(): DecisionRow[] {

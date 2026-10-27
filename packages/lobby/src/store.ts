@@ -36,15 +36,17 @@ import {
   type SlotTier,
 } from "./room.js";
 import { codePointLength, TERMINAL_UNSAFE } from "./text.js";
-import { FLEET_SCHEMA_SQL, FLEET_V3_UPGRADE_SQL, FleetStore } from "./fleet-store.js";
+import { FLEET_SCHEMA_SQL, FLEET_V3_UPGRADE_SQL, FLEET_V4_UPGRADE_SQL, FleetStore } from "./fleet-store.js";
 
 /** Version 2 adds the fleet-hall tables; version 3 adds table talk, renewal,
- * leave, kick and block and the emergency stop (src/fleet-store.ts). An older
+ * leave, kick and block and the emergency stop; version 4 adds directory
+ * renewal inside the Lobby (src/fleet-store.ts). An older
  * file is upgraded explicitly, one step at a time (`SCHEMA_STEPS`), when the
  * CLI opens it for writing; the read-only MCP handle reads version 1 as "no
- * fleet state yet" and version 2 as fleet state without the version-3 tables.
+ * fleet state yet", version 2 as fleet state without the version-3 tables and
+ * version 3 without the version-4 directory renewal tables.
  * Later numbers are reserved in packages/lobby/CLAUDE.md ("Schema versions"). */
-export const STATE_SCHEMA_VERSION = "3";
+export const STATE_SCHEMA_VERSION = "4";
 export const ACT_SCHEMA = "agenttool-lobby-act/v1" as const;
 const GENESIS_HASH = "0".repeat(64);
 
@@ -154,6 +156,13 @@ function upgradeV2ToV3(db: Database): void {
   db.exec(FLEET_V3_UPGRADE_SQL);
 }
 
+/** 3 → 4: directory renewal inside the Lobby (src/fleet-store.ts
+ * `FLEET_V4_UPGRADE_SQL`: two nullable columns and two tables; plain
+ * `ALTER TABLE ... ADD COLUMN`, so it runs once, on a version-3 file). */
+function upgradeV3ToV4(db: Database): void {
+  db.exec(FLEET_V4_UPGRADE_SQL);
+}
+
 /** The upgrade chain, in order. A new file is created at version 1
  * (`SCHEMA_SQL`) and takes every step, so every desk reaches one schema by
  * one path. The next version adds one function and one entry here (`from`
@@ -163,7 +172,8 @@ function upgradeV2ToV3(db: Database): void {
 export const SCHEMA_STEPS: readonly SchemaStep[] = [
   { from: "1", to: "2", apply: upgradeV1ToV2 },
   { from: "2", to: "3", apply: upgradeV2ToV3 },
-  // Next: { from: "3", to: "4", apply: upgradeV3ToV4 } (reserved: Build 2A).
+  { from: "3", to: "4", apply: upgradeV3ToV4 },
+  // Next: { from: "4", to: "5", apply: upgradeV4ToV5 } (reserved: Build 2B, directory rollover).
 ];
 
 /** Every version this code can read: the base version and each step's target. */

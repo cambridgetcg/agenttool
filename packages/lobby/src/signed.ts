@@ -7,12 +7,12 @@
  * gate refuses key-like base64 runs.
  *
  * Kinds and signers:
- * - `card`, `admission`, `denial`, `roster`, `member_roster` and `renewal`
- *   are signed by the hub's **door** key and verified against the door key
- *   pinned on each device out of band.
- * - `knock`, `renew` and `leave` are signed by a member device's **desk** key
- *   and verified by the hub against the public key it recorded when it
- *   relayed (or, for an adopted season, added) that device.
+ * - `card`, `admission`, `denial`, `roster`, `member_roster`, `renewal` and
+ *   `directory_renewal` are signed by the hub's **door** key and verified
+ *   against the door key pinned on each device out of band.
+ * - `knock`, `renew`, `leave` and `directory_renew` are signed by a member
+ *   device's **desk** key and verified by the hub against the public key it
+ *   recorded when it relayed (or, for an adopted season, added) that device.
  *
  * Kinds are additive: a reader that does not know a kind reports it as
  * malformed and never acts on it. A change to an existing kind's body is a
@@ -46,11 +46,12 @@ import {
 } from "./wire.js";
 
 export const SIGNED_FORMAT = "agenttool-lobby-signed/v1" as const;
-export const SIGNED_KINDS = ["card", "knock", "admission", "denial", "roster", "member_roster", "renewal", "renew", "leave"] as const;
+export const SIGNED_KINDS = ["card", "knock", "admission", "denial", "roster", "member_roster", "renewal", "renew", "leave",
+  "directory_renew", "directory_renewal"] as const;
 export type SignedKind = typeof SIGNED_KINDS[number];
 /** Kinds only the door may sign. */
-export const DOOR_KINDS: readonly SignedKind[] = ["card", "admission", "denial", "roster", "member_roster", "renewal"];
-/** Kinds a member desk signs about itself; the hub verifies them against its device registry. */
+export const DOOR_KINDS: readonly SignedKind[] = ["card", "admission", "denial", "roster", "member_roster", "renewal", "directory_renewal"];
+/** Kinds a member desk signs about a room it sits in; the hub verifies them against its device registry. */
 export const DESK_NOTE_KINDS: readonly SignedKind[] = ["renew", "leave"];
 
 export const KNOCK_MAX_MS = 72 * 3_600_000;
@@ -213,8 +214,30 @@ export interface RenewalBody {
   issued_at: string;
 }
 
+/** A desk's signed request for its next directory grant (schema version 4).
+ * The desk chooses both the grant id and the token hash, so it can pick the
+ * grant up with an invitation read alone, even after its old grant lapsed.
+ * `mission_id` is the directory the grant is asked for. No room: a renew note
+ * for a room keeps its own kind, `renew`. */
+export interface DirectoryRenewBody {
+  mission_id: string;
+  grant_id: string;
+  identity_id: string;
+  signing_key_id: string;
+  token_sha256: string;
+  issued_at: string;
+  expires_at: string;
+}
+
+/** The door's signed notice of a renewed directory grant: an audit trail and
+ * a cross-check for the desk, never required for its pickup. */
+export interface DirectoryRenewalBody {
+  invitation: RenewalInvitation;
+  issued_at: string;
+}
+
 export type SignedBody = FleetCard | KnockBody | AdmissionBody | DenialBody | RosterBody | MemberRosterBody | RenewBody
-  | LeaveBody | RenewalBody;
+  | LeaveBody | RenewalBody | DirectoryRenewBody | DirectoryRenewalBody;
 
 export interface SignedEnvelope<B = SignedBody> {
   format: typeof SIGNED_FORMAT;
@@ -470,6 +493,51 @@ export function validateRenewal(value: unknown): RenewalBody {
   return body;
 }
 
+export function validateDirectoryRenew(value: unknown): DirectoryRenewBody {
+  const record = exact(value, ["mission_id", "grant_id", "identity_id", "signing_key_id", "token_sha256", "issued_at", "expires_at"], "directory renew");
+  const body: DirectoryRenewBody = {
+    mission_id: assertUuid(record.mission_id, "mission_id"),
+    grant_id: assertUuid(record.grant_id, "grant_id"),
+    identity_id: assertUuid(record.identity_id, "identity_id"),
+    signing_key_id: assertUuid(record.signing_key_id, "signing_key_id"),
+    token_sha256: tokenHash(record.token_sha256),
+    issued_at: assertCanonicalTime(record.issued_at, "issued_at"),
+    expires_at: assertCanonicalTime(record.expires_at, "expires_at"),
+  };
+  const lifetime = Date.parse(body.expires_at) - Date.parse(body.issued_at);
+  if (lifetime <= 0 || lifetime > RENEW_MAX_MS) {
+    throw new LobbyError("invalid_signed_document", "a directory renew request expires within 24 hours of being issued");
+  }
+  return body;
+}
+
+function renewalInvitation(value: unknown, what: string): RenewalInvitation {
+  const invitation = exact(value, ["mission_id", "grant_id", "identity_id", "signing_key_id", "public_key_hex",
+    "expires_at", "token_sha256"], what);
+  return {
+    mission_id: assertUuid(invitation.mission_id, "mission_id"),
+    grant_id: assertUuid(invitation.grant_id, "grant_id"),
+    identity_id: assertUuid(invitation.identity_id, "identity_id"),
+    signing_key_id: assertUuid(invitation.signing_key_id, "signing_key_id"),
+    public_key_hex: publicKeyHex(invitation.public_key_hex),
+    expires_at: assertCanonicalTime(invitation.expires_at, "expires_at"),
+    token_sha256: tokenHash(invitation.token_sha256),
+  };
+}
+
+export function validateDirectoryRenewal(value: unknown): DirectoryRenewalBody {
+  const record = exact(value, ["invitation", "issued_at"], "directory renewal");
+  const body: DirectoryRenewalBody = {
+    invitation: renewalInvitation(record.invitation, "directory renewal invitation"),
+    issued_at: assertCanonicalTime(record.issued_at, "issued_at"),
+  };
+  const grantLife = Date.parse(body.invitation.expires_at) - Date.parse(body.issued_at);
+  if (grantLife <= 0 || grantLife > MISSION_LIMITS.grantMs) {
+    throw new LobbyError("invalid_signed_document", "a renewed directory grant lasts at most 24 hours");
+  }
+  return body;
+}
+
 /** Members per roster part: what fits one observation with the signature. */
 export const ROSTER_PART_MEMBERS = 4;
 /** Keyed members per member_roster part: each carries two ids and a 64-hex key. */
@@ -485,6 +553,8 @@ const VALIDATORS: Record<SignedKind, (value: unknown) => SignedBody> = {
   renewal: validateRenewal,
   renew: validateRenew,
   leave: validateLeave,
+  directory_renew: validateDirectoryRenew,
+  directory_renewal: validateDirectoryRenewal,
 };
 
 export function signingDigest(kind: SignedKind, body: SignedBody): Buffer {
@@ -562,8 +632,9 @@ export function publicKeyFromHex(hex: string): string {
 }
 
 /** The exact `agenttool-mission-invitation-template/v1` document a renewal
- * notice carries, in the participant client's field order. Holds no secret. */
-export function invitationTemplateOf(renewal: RenewalBody): Record<string, string> {
+ * notice (room or directory) carries, in the participant client's field
+ * order. Holds no secret. */
+export function invitationTemplateOf(renewal: { invitation: RenewalInvitation }): Record<string, string> {
   const invitation = renewal.invitation;
   return {
     format: INVITATION_TEMPLATE_FORMAT,

@@ -8,7 +8,8 @@
 This private package is the 大廳 Lobby desk: the **local hall** (room cards,
 the private ledger, the pin book, the audit log, the egress gate), the
 **fleet hall v0** (hub and door, device enrollment, door-signed cards, knocks,
-admit/deny and Ready on agenttool collaboration missions) and, inside a room,
+admit/deny and Ready on agenttool collaboration missions, and directory
+renewal inside the Lobby) and, inside a room,
 **table talk**, renewal inside the term, leave, kick and block, the emergency
 stop and the weekly access digest, with a read-only stdio MCP view. It is MVP
 steps 1, 2, 7 and 8 of the 2026-10-16 Lobby design; README `Concepts`
@@ -80,7 +81,8 @@ restates the design terms it implements.
 - **Consequential acts belong to the CLI and the terminal.** Promotion, pin
   changes and every fleet act that signs, sends, grants, revokes, posts or
   accepts (table talk, renew request and accept, leave, the renew sweep, member
-  add, pause and resume, roster posts, kick, block, unblock, stop) go through
+  add, pause and resume, `fleet renew`, `hub device pause` and resume, roster
+  posts, kick, block, unblock, stop) go through
   `plan*` → `confirmOnTty` → record → `execute*`. The confirmation shows the
   exact canonical bytes, including every document or request body to be sent,
   reads `/dev/tty` and never stdin, and fails closed without a terminal. Fleet
@@ -127,9 +129,12 @@ restates the design terms it implements.
   hub enforces its own room's door and status (never trusting the requesting
   desk's CLI), and a knock id belongs to the desk whose authentic knock used
   it first. A token hash likewise belongs to the identity whose authentic
-  knock or renew note carried it first (`tokenClaimants`); a copy under
-  another key is never granted, one hash binds one grant per sweep, and the
-  newest renew request per member and room wins across sweeps.
+  knock, renew note or directory renew note carried it first
+  (`tokenClaimants`), and a desk-chosen grant id to the identity whose
+  authentic directory renew note carried it first (`grantIdClaimants`); a
+  copy under another key is never granted and never burns the original, one
+  hash binds one grant per sweep, and the newest renew request per member and
+  room (and per device, for the directory) wins across sweeps.
 - **Signed documents are compact and hex.** `agenttool-lobby-signed/v1`
   documents fit one 1000-character observation, signature included, and use
   hex for signatures, digests and public keys (the gate refuses key-like
@@ -181,11 +186,13 @@ transaction that records the new version. A released step is never edited, and a
 next version adds one step `from` the last `to` and moves
 `STATE_SCHEMA_VERSION`.
 
-The next numbers are reserved, in this order (2026-10-27 lobby builds):
+Version 4 is directory renewal inside the Lobby (Build 2A,
+`lobby/directory-renew`). The next numbers are reserved, in this order
+(2026-10-27 lobby builds):
 
 | Version | Build |
 |---|---|
-| 4 | directory renew (Build 2A) |
+| 4 | directory renew (Build 2A): taken |
 | 5 | directory rollover (Build 2B) |
 | 6 | room seat leases (Build 5) |
 | 7 | renewal by signature, lobby side (Build 3 C0) |

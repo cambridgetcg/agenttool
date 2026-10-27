@@ -99,6 +99,18 @@ describe("fleet hall end to end", () => {
       "room.publish", "hub.relay", "hub.admit"]);
     const deviceActs = JSON.parse((await ok(device.run("audit", "list", "--json"))).stdout).entries.map((entry: any) => entry.act);
     expect(deviceActs).toEqual(["desk.enroll", "fleet.join", "fleet.knock", "fleet.ready"]);
+
+    // The joined desk keeps its directory grant inside the Lobby: fleet renew
+    // posts a request, one hub renew-sweep issues it, fleet renew picks it up.
+    const joined = JSON.parse((await ok(device.run("fleet", "status", "--json"))).stdout).directory;
+    expect(joined).toMatchObject({ mission_id: fleet.directoryId, ends_at: hosted.missions.get(fleet.directoryId)!.expires_at, open_request: null, successor: null });
+    await ok(device.yes("fleet", "renew"));
+    const request = JSON.parse(shownBytes(device)).request;
+    await ok(hub.yes("hub", "renew-sweep"));
+    expect(JSON.parse(shownBytes(hub)).directory_renewals.map((item: any) => item.grant.grant_id)).toEqual([request.grant_id]);
+    fleet.world.advance(3_600_000);
+    expect((await ok(device.yes("fleet", "renew"))).stdout).toContain(`picked up directory grant ${request.grant_id}`);
+    await ok(device.run("fleet", "sync"));
   });
 
   test("hub relay takes the device from the code typed at the hub; the packet and the join packet are unchanged", async () => {
