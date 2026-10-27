@@ -1050,12 +1050,15 @@ export interface StopPlan {
 /** The manual step the stop prints. The desk never calls /v1/keys. */
 export function manualRotationStep(hub: HubRow): string {
   return [
-    "MANUAL STEP FOR THE OWNER (this desk never does it): rotate the API key that issued the lobby grants.",
+    "MANUAL STEP FOR THE OWNER (this desk never does it): revoke the API key that issued the lobby grants.",
     `  This hub's bearer is the Keychain item service ${hub.bearer_service}, account ${hub.keychain_account} (its value is never shown).`,
     "  Every mission grant hangs off the API key that issued it, so revoking that key ends every lobby grant at once,",
-    "  including any this stop could not reach. From a terminal or the dashboard keys page you control, revoke that key",
-    `  (DELETE /v1/keys/<key id> on ${LOBBY_ORIGIN}, or rotate it), never from an agent's tool call. If the lobby is to`,
-    "  continue later, store the new bearer in the Keychain yourself (security prompts for it) and start a new hub.",
+    "  including any this stop could not reach. Do it yourself from a terminal, never from an agent's tool call:",
+    `  on ${LOBBY_ORIGIN}, GET /v1/keys gives the key's id (is_current is true when asked with that bearer), and`,
+    "  DELETE /v1/keys/<key id> revokes it. If it is the project's only active key, DELETE answers 409: first mint",
+    "  a replacement (POST /v1/keys), then DELETE; or POST /v1/keys/rotate with that bearer, which revokes it and",
+    "  returns the replacement only once. If the lobby is to continue later, store the new bearer in the Keychain",
+    "  yourself (security prompts for it) and start a new hub.",
   ].join("\n");
 }
 
@@ -1088,12 +1091,12 @@ export function planStop(ctx: FleetContext, input: { include_adopted: boolean })
     ...missions.map((mission) => `revoke ${mission.kind} mission ${mission.mission_id} (${mission.mode}): POST .../revoke, zero body bytes`),
     ...grants.map((grant) => `revoke grant ${grant.grant_id} in ${grant.mission_id} (${grant.source}): POST .../grants/<id>/revoke, zero body bytes`),
     ...(!input.include_adopted && adoptedLeft > 0 ? [`${adoptedLeft} adopted mission(s) made by hand are left alone (add --include-adopted to revoke them too)`] : []),
-    "then rotate the issuing API key by hand: the exact step is printed after the stop",
+    "then revoke the issuing API key by hand: the exact step is printed after the stop",
   ], {
     include_adopted: input.include_adopted,
     missions: missions.map((mission) => ({ ...mission, request: `POST ${MISSIONS_PATH}/${mission.mission_id}/revoke`, body_bytes: 0 })),
     grants: grants.map(revokeRequest),
-    manual_step: "rotate the issuing API key by hand; this desk never calls /v1/keys",
+    manual_step: "revoke the issuing API key by hand; this desk never calls /v1/keys",
   });
   return { preview, missions, grants, manual_step: manual };
 }
