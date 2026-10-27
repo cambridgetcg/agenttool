@@ -1,0 +1,171 @@
+#!/bin/sh
+# ferry-gate: the 渡 Ferry post office's sshd forced command, run as the
+# ferry account from one root-owned authorized_keys line per lane:
+#   command="/Library/Ferry/libexec/ferry-gate --peer <peer>"
+# SSH_ORIGINAL_COMMAND is data, matched against a closed grammar. The gate
+# never runs a lobby command, never reads a packet's fields, and prints
+# nothing on stdout but one success line or the bytes of a "get". Every put
+# declares its size, so an upload cut short is refused, never published.
+PATH=/usr/bin:/bin:/usr/sbin:/sbin; export PATH
+LC_ALL=C; export LC_ALL
+IFS=$(printf ' \t\n_'); IFS=${IFS%_}
+umask 027
+set -euf
+
+# --- ferry:paths (tests rewrite only this block) ---
+FERRY_ROOT=/Library/Ferry
+# --- end ferry:paths ---
+
+FS_TOOL=gate
+. "$FERRY_ROOT/libexec/ferry-spool.sh"
+fs_begin
+fs_load_site
+fs_role gate
+
+MODE=
+case $# in
+  1)
+    [ "$1" = --self-check ] || fs_die 2 usage "expected --peer PEER or --self-check"
+    MODE=self
+    ;;
+  2)
+    [ "$1" = --peer ] || fs_die 2 usage "expected --peer PEER or --self-check"
+    fs_is_peer "$2" || fs_die 2 usage "the lane name is not a peer name"
+    PEER=$2
+    MODE=lane
+    ;;
+  *) fs_die 2 usage "expected --peer PEER or --self-check" ;;
+esac
+
+if [ "$MODE" = self ]; then
+  CUR_OP=ping
+  fs_check_spool
+  printf 'ok self-check gate=2\n'
+  exit 0
+fi
+
+if [ "$PEER" = "$SITE_LOCAL_PEER" ] || fs_is_reserved "$PEER"; then
+  fs_die 1 refused "this name cannot be a lane"
+fi
+fs_check_spool
+if [ ! -e "$SPOOL/lobby/in/$PEER" ] && [ ! -L "$SPOOL/lobby/in/$PEER" ]; then
+  fs_die 1 refused "this lane is not provisioned"
+fi
+fs_check_dir "$SPOOL/lobby/in/$PEER"
+fs_check_dir "$SPOOL/lobby/out/$PEER"
+fs_check_dir "$SPOOL/files/$PEER"
+fs_prune
+
+# ── the command, as data ───────────────────────────────────────────────
+if [ -z "${SSH_ORIGINAL_COMMAND+set}" ]; then
+  fs_die 2 usage "a lane takes only ferry commands"
+fi
+CMD=$SSH_ORIGINAL_COMMAND
+if [ ${#CMD} -lt 1 ] || [ ${#CMD} -gt "$CMD_MAX" ]; then
+  fs_die 2 usage "not a ferry command"
+fi
+case $CMD in
+  *[!a-zA-Z0-9._\ -]*) fs_die 2 usage "not a ferry command" ;;
+esac
+SAVED_IFS=$IFS
+IFS=' '
+set -- $CMD
+JOINED=$*
+IFS=$SAVED_IFS
+[ "$JOINED" = "$CMD" ] || fs_die 2 usage "not a ferry command"
+
+do_put_lobby() {
+  CUR_OP=put-lobby
+  CUR_TO=hub
+  fs_size_ok "$1" "$LOBBY_MAX"
+  fs_floor_precheck "$LOBBY_MAX"
+  fs_receive "$1"
+  CUR_BYTES=$RCV_SIZE
+  fs_check_packet "$RCV_FILE" enroll || fs_die 4 invalid "not a lobby enrollment packet"
+  fs_sha "$RCV_FILE" || fs_die 6 unsafe "could not hash the upload"
+  fs_write_meta lobby-enroll "$PEER" hub "$RCV_SIZE" "$SHA"
+  fs_publish "$SPOOL/lobby/in/$PEER" lobby-enroll "$PEER" "$RCV_SIZE"
+  printf 'ok put %s %s %s\n' "$PUB_ID" "$RCV_SIZE" "$SHA"
+}
+
+do_put_file() {
+  CUR_OP=put-file
+  fs_is_peer "$1" || fs_die 2 usage "not a ferry command"
+  [ "$1" != "$PEER" ] || fs_die 2 usage "a lane cannot send to itself"
+  if fs_is_reserved "$1"; then
+    fs_die 2 usage "not a ferry command"
+  fi
+  CUR_TO=$1
+  fs_peer_dir files "$1"
+  TO_DIR=$PEER_DIR
+  fs_is_name "$2" || fs_die 4 invalid "the file name is not allowed"
+  fs_size_ok "$3" "$FILE_MAX"
+  fs_floor_precheck "$FILE_MAX"
+  fs_receive "$3"
+  CUR_BYTES=$RCV_SIZE
+  fs_sha "$RCV_FILE" || fs_die 6 unsafe "could not hash the upload"
+  fs_write_meta file "$PEER" "$1" "$RCV_SIZE" "$SHA" "$2"
+  fs_publish "$TO_DIR" file "$PEER" "$RCV_SIZE"
+  printf 'ok put %s %s %s\n' "$PUB_ID" "$RCV_SIZE" "$SHA"
+}
+
+do_list() {
+  CUR_OP=list
+  LIST_N=0
+  printf 'ferry-list/1\n'
+  fs_list_dir "$SPOOL/lobby/out/$PEER" lobby-out "$PEER"
+  fs_list_dir "$SPOOL/files/$PEER" files "$PEER"
+  printf 'end %s\n' "$LIST_N"
+  CUR_ITEMS=$LIST_N
+}
+
+do_get() {
+  CUR_OP=get
+  fs_is_id "$1" || fs_die 2 usage "not a ferry command"
+  CUR_ID=$1
+  fs_find_out "$PEER" "$1"
+  fs_floor_precheck "$FILE_MAX"
+  fs_take "$FOUND_DIR" "$FOUND_ROLE" "$PEER" "$1" || fs_die 6 unsafe "this item failed its checks"
+  CUR_BYTES=$M_SIZE
+  cat -- "$TAKE_FILE"
+  fs_drop_take
+}
+
+do_ack() {
+  CUR_OP=ack
+  fs_is_id "$1" || fs_die 2 usage "not a ferry command"
+  CUR_ID=$1
+  fs_find_out "$PEER" "$1"
+  fs_remove "$FOUND_DIR" "$1"
+  printf 'ok ack %s\n' "$1"
+}
+
+case $# in
+  1)
+    case $1 in
+      ping)
+        CUR_OP=ping
+        printf 'ok ping gate=2 peer=%s\n' "$PEER"
+        ;;
+      list) do_list ;;
+      *) fs_die 2 usage "not a ferry command" ;;
+    esac
+    ;;
+  2)
+    case $1 in
+      get) do_get "$2" ;;
+      ack) do_ack "$2" ;;
+      *) fs_die 2 usage "not a ferry command" ;;
+    esac
+    ;;
+  3)
+    [ "$1" = put ] && [ "$2" = lobby ] || fs_die 2 usage "not a ferry command"
+    do_put_lobby "$3"
+    ;;
+  5)
+    [ "$1" = put ] && [ "$2" = file ] || fs_die 2 usage "not a ferry command"
+    do_put_file "$3" "$4" "$5"
+    ;;
+  *) fs_die 2 usage "not a ferry command" ;;
+esac
+exit 0

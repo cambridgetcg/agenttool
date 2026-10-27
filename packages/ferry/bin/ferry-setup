@@ -1,0 +1,581 @@
+#!/bin/sh
+# ferry-setup: prepares the lab once, run by a person with sudo from the
+# carried package directory:
+#   sudo /bin/sh ./bin/ferry-setup [--apply | --check | --undo] --lan CIDR [--hub-user NAME]
+# The default is a dry run that prints every check and every command and
+# changes nothing. --apply runs the commands; each step queries first and
+# creates only what is missing. --check only reads. --undo only prints.
+# It touches no sshd file and no hub-user file except a group membership.
+# It installs only a root-owned copy of the package, checked against SHA256SUMS.
+PATH=/usr/bin:/bin:/usr/sbin:/sbin; export PATH
+LC_ALL=C; export LC_ALL
+IFS=$(printf ' \t\n_'); IFS=${IFS%_}
+umask 022
+set -euf
+
+# --- ferry:paths (tests rewrite only this block) ---
+FERRY_ROOT=/Library/Ferry
+FERRY_HOME=/Users/ferry
+REQUIRE_ROOT=1
+ROOT_OWNER=root
+ROOT_GROUP=wheel
+FERRY_USER=ferry
+FERRY_GROUP=ferryhand
+STAFF_GROUP=staff
+TMPROOT=/private/tmp
+ID=/usr/bin/id
+SYSADMINCTL=/usr/sbin/sysadminctl
+DSCL=/usr/bin/dscl
+DSEDITGROUP=/usr/sbin/dseditgroup
+CREATEHOMEDIR=/usr/sbin/createhomedir
+INSTALL=/usr/bin/install
+CHOWN=/usr/sbin/chown
+CHMOD=/bin/chmod
+MKDIR=/bin/mkdir
+SUDO=/usr/bin/sudo
+STAT=/usr/bin/stat
+SHASUM=/usr/bin/shasum
+JQ=/usr/bin/jq
+ICONV=/usr/bin/iconv
+XATTR=/usr/bin/xattr
+SSH_KEYGEN=/usr/bin/ssh-keygen
+# --- end ferry:paths ---
+
+LOCAL_PEER=lab
+ACCESS_GROUP=com.apple.access_ssh
+HEADER='# ferry lanes. Written only by /Library/Ferry/bin/ferry-admin; do not edit by hand.'
+PKG_FILES='SHA256SUMS bin/ferry bin/ferry-admin bin/ferry-hub bin/ferry-setup libexec/ferry-gate libexec/ferry-spool.sh'
+TMP_SITE=
+TMP_AK=
+PKG_COPY=
+
+on_exit() {
+  set +e
+  for _oe in "$TMP_SITE" "$TMP_AK"; do
+    if [ -n "$_oe" ]; then
+      rm -f -- "$_oe" 2>/dev/null
+    fi
+  done
+  if [ -n "$PKG_COPY" ]; then
+    rm -rf -- "$PKG_COPY" 2>/dev/null
+  fi
+  exit "$1"
+}
+trap 'on_exit $?' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+die() {
+  printf 'ferry-setup: %s: %s\n' "$2" "$3" >&2
+  exit "$1"
+}
+
+say() {
+  printf '%s\n' "$*"
+}
+
+is_account() {
+  case $1 in
+    [a-z_]*) ;;
+    *) return 1 ;;
+  esac
+  case $1 in
+    *[!a-z0-9_-]*) return 1 ;;
+  esac
+  [ ${#1} -le 32 ] || return 1
+  return 0
+}
+
+is_abspath() {
+  case $1 in
+    /*) ;;
+    *) return 1 ;;
+  esac
+  case $1 in
+    *[!A-Za-z0-9/._-]* | *..*) return 1 ;;
+  esac
+  [ ${#1} -le 200 ] || return 1
+  return 0
+}
+
+is_cidr() {
+  case $1 in
+    */*) ;;
+    *) return 1 ;;
+  esac
+  _ci_ip=${1%/*}
+  _ci_len=${1#*/}
+  case $_ci_ip in
+    *[!0-9.]* | .* | *. | *..*) return 1 ;;
+  esac
+  case $_ci_len in
+    [89] | [12][0-9] | 3[0-2]) ;;
+    *) return 1 ;;
+  esac
+  _ci_ifs=$IFS
+  IFS=.
+  set -- $_ci_ip
+  IFS=$_ci_ifs
+  [ $# -eq 4 ] || return 1
+  for _ci_o in "$@"; do
+    case $_ci_o in
+      [0-9] | [1-9][0-9] | 1[0-9][0-9] | 2[0-4][0-9] | 25[0-5]) ;;
+      *) return 1 ;;
+    esac
+  done
+  return 0
+}
+
+usage() {
+  cat <<'EOF'
+ferry-setup: prepare the lab for Ferry (once, with sudo, from the package directory)
+  sudo /bin/sh ./bin/ferry-setup --lan CIDR [--hub-user NAME]           dry run: prints, changes nothing
+  sudo /bin/sh ./bin/ferry-setup --apply --lan CIDR [--hub-user NAME]   runs the steps
+  sudo /bin/sh ./bin/ferry-setup --check --lan CIDR [--hub-user NAME]   read-only verification
+  sudo /bin/sh ./bin/ferry-setup --undo --lan CIDR [--hub-user NAME]    prints the undo commands
+EOF
+}
+
+MODE=dry
+LAN=
+HUB=${SUDO_USER:-}
+while [ $# -gt 0 ]; do
+  case $1 in
+    --apply) [ "$MODE" = dry ] || die 2 usage "choose one of --apply, --check, --undo"; MODE=apply; shift ;;
+    --check) [ "$MODE" = dry ] || die 2 usage "choose one of --apply, --check, --undo"; MODE=check; shift ;;
+    --undo) [ "$MODE" = dry ] || die 2 usage "choose one of --apply, --check, --undo"; MODE=undo; shift ;;
+    --lan) [ $# -ge 2 ] || die 2 usage "--lan needs a CIDR such as 10.0.0.0/24"; LAN=$2; shift 2 ;;
+    --hub-user) [ $# -ge 2 ] || die 2 usage "--hub-user needs a name"; HUB=$2; shift 2 ;;
+    -h | --help | help) usage; exit 0 ;;
+    *) usage >&2; die 2 usage "unknown argument" ;;
+  esac
+done
+[ -n "$LAN" ] || die 2 usage "--lan is required (the lab's own /24, so no subnet is baked into the package)"
+is_cidr "$LAN" || die 2 usage "--lan takes a dotted quad and a /8-/32 prefix"
+[ -n "$HUB" ] || die 2 usage "--hub-user is required when SUDO_USER is not set"
+[ "$HUB" != root ] || die 2 usage "the hub user cannot be root"
+is_account "$HUB" || die 2 usage "--hub-user is not an account name"
+
+_pkg_rel=${0%/*}
+case $_pkg_rel in
+  "$0") _pkg_rel=. ;;
+esac
+PKG=$(cd -- "$_pkg_rel/.." && pwd -P) || die 1 refused "cannot find the package directory"
+AK=$FERRY_HOME/.ssh/authorized_keys
+SPOOL=$FERRY_HOME/spool
+
+# ── undo: text only ────────────────────────────────────────────────────
+
+if [ "$MODE" = undo ]; then
+  say "To undo Ferry on this lab, read and run these by hand (nothing here runs them):"
+  say "  sudo dseditgroup -o edit -d $FERRY_USER -t user $ACCESS_GROUP"
+  say "  sudo dseditgroup -o edit -d $HUB -t user $FERRY_GROUP"
+  say "  sudo sysadminctl -deleteUser $FERRY_USER          # also deletes $FERRY_HOME: the spool and lanes go with it"
+  say "  id $FERRY_USER                                     # must now fail: sysadminctl can exit 0 when it did nothing"
+  say "  sudo dseditgroup -o delete $FERRY_GROUP"
+  say "  sudo rm -rf $FERRY_ROOT"
+  say "  # the hub user's own files stay: ~/agenttool/state/lobby-mail/{in,out}, ~/Ferry, ~/.local/state/agenttool/ferry-hub"
+  say "  # each Mac: rm -rf ~/.local/state/agenttool/ferry ~/.ssh/ferry ~/.local/bin/ferry  (~/Ferry holds received files)"
+  exit 0
+fi
+
+if [ "$MODE" = apply ]; then
+  RUN_WORD="run:"
+else
+  RUN_WORD="would run:"
+fi
+
+run() {
+  say "$RUN_WORD $*"
+  if [ "$MODE" = apply ]; then
+    "$@" || die 1 failed "a setup step failed; the steps after it did not run"
+  fi
+  return 0
+}
+
+# run_in DIR CMD...: as run, for a command naming ./<entry> inside DIR, which
+# the caller has entered.
+run_in() {
+  _ri_dir=$1
+  shift
+  say "$RUN_WORD (in $_ri_dir) $*"
+  if [ "$MODE" = apply ]; then
+    "$@" || die 1 failed "a setup step failed; the steps after it did not run"
+  fi
+  return 0
+}
+
+quiet() {
+  "$@" > /dev/null 2>&1
+}
+
+dscl_value() {
+  # dscl_value PATH KEY: the single value of KEY, in DV, or return 1.
+  _dv_o=$("$DSCL" . -read "$1" "$2" 2>/dev/null) || return 1
+  case $_dv_o in
+    "$2: "*) DV=${_dv_o#"$2: "} ;;
+    *) return 1 ;;
+  esac
+  case $DV in
+    *'
+'*) return 1 ;;
+  esac
+  return 0
+}
+
+site_text() {
+  printf 'ferry-site/1\n'
+  printf 'ferry_user=%s\n' "$FERRY_USER"
+  printf 'ferry_group=%s\n' "$FERRY_GROUP"
+  printf 'hub_user=%s\n' "$HUB"
+  printf 'hub_home=%s\n' "$HUB_HOME"
+  printf 'local_peer=%s\n' "$LOCAL_PEER"
+  printf 'lan_cidr=%s\n' "$LAN"
+  printf 'lobby_queue=4\n'
+  printf 'file_queue_items=32\n'
+  printf 'file_queue_bytes=134217728\n'
+  printf 'spool_max_bytes=1073741824\n'
+  printf 'floor_kib=20971520\n'
+  printf 'retain_days=7\n'
+}
+
+# ── preconditions (read-only) ──────────────────────────────────────────
+
+# stage_package: copy the carried package into a fresh root-owned directory
+# and check the copy. Why: the carried directory usually sits in the hub
+# user's home, where any shell as that user (an agent included) can change a
+# file between the check and the install, and root installs code that runs
+# under sudo later. The copy cannot change, so what is checked is what is
+# installed. cp -R -P neither follows a link nor reads a FIFO.
+stage_package() {
+  PKG_COPY=$(mktemp -d "$TMPROOT/ferry-pkg.XXXXXXXX") || die 1 refused "cannot make a temp directory"
+  mkdir -- "$PKG_COPY/bin" "$PKG_COPY/libexec" || die 1 refused "cannot make a temp directory"
+  for _sp_f in $PKG_FILES; do
+    cp -R -P -- "$PKG/$_sp_f" "$PKG_COPY/$_sp_f" 2>/dev/null || die 1 refused "the package is incomplete; carry it again"
+    if [ -L "$PKG_COPY/$_sp_f" ] || [ ! -f "$PKG_COPY/$_sp_f" ]; then
+      die 1 refused "the package holds something other than plain files; carry it again"
+    fi
+  done
+  (cd -- "$PKG_COPY" && "$SHASUM" -a 256 -c SHA256SUMS > /dev/null 2>&1) \
+    || die 1 refused "the package does not match its SHA256SUMS; carry it again"
+  _sp_h=$("$SHASUM" -a 256 < "$PKG_COPY/SHA256SUMS") || die 1 refused "cannot hash SHA256SUMS"
+  SUMS_SHA=${_sp_h%% *}
+  PKG=$PKG_COPY
+  return 0
+}
+
+# group_gid: the hand-off group's numeric id in FERRY_GID, or return 1.
+group_gid() {
+  dscl_value "/Groups/$FERRY_GROUP" PrimaryGroupID || return 1
+  case $DV in
+    '' | *[!0-9]*) return 1 ;;
+  esac
+  FERRY_GID=$DV
+  return 0
+}
+
+# account_made: after sysadminctl, ask directory services what exists.
+# sysadminctl exits 0 even when it created nothing, so its status is not
+# evidence; this is.
+account_made() {
+  quiet "$ID" -u "$FERRY_USER" \
+    || die 1 failed "sysadminctl did not create the $FERRY_USER account (it exits 0 even then); stop here: only the $FERRY_GROUP group step ran before it"
+  if ! dscl_value "/Users/$FERRY_USER" NFSHomeDirectory || [ "$DV" != "$FERRY_HOME" ] \
+    || ! dscl_value "/Users/$FERRY_USER" PrimaryGroupID || [ "$DV" != "$FERRY_GID" ]; then
+    die 1 failed "the $FERRY_USER account came out with another home or primary group; remove it (sudo sysadminctl -deleteUser $FERRY_USER, then check that id $FERRY_USER fails) and run setup again"
+  fi
+  return 0
+}
+
+precheck() {
+  if [ "$REQUIRE_ROOT" = 1 ]; then
+    _pc_u=$("$ID" -u) || die 1 refused "cannot tell who is running this"
+    [ "$_pc_u" = 0 ] || die 1 refused "run this with sudo"
+  fi
+  [ "$(/usr/bin/uname -s)" = Darwin ] || die 1 refused "Ferry's lab side is macOS only"
+  for _pc_t in "$JQ" "$ICONV" "$XATTR" "$SHASUM" "$SYSADMINCTL" "$DSCL" "$DSEDITGROUP" "$CREATEHOMEDIR" "$SSH_KEYGEN" "$INSTALL" "$CHOWN" "$CHMOD" "$MKDIR" "$SUDO" "$STAT"; do
+    [ -x "$_pc_t" ] || die 1 refused "a required tool is missing"
+  done
+  say "check: tools present"
+  stage_package
+  say "check: package matches SHA256SUMS (checked on a root-owned copy; only the copy is installed)"
+  say "check: SHA256SUMS sha256 $SUMS_SHA"
+  say "       compare it with shasum -a 256 SHA256SUMS on the reviewed Mac's own screen; stop if they differ"
+  quiet "$ID" -u "$HUB" || die 1 refused "the hub user does not exist"
+  dscl_value "/Users/$HUB" NFSHomeDirectory || die 1 refused "cannot read the hub user's home"
+  HUB_HOME=$DV
+  is_abspath "$HUB_HOME" || die 1 refused "the hub user's home is not a plain absolute path"
+  say "check: hub user $HUB, home $HUB_HOME"
+  if quiet "$ID" -u "$FERRY_USER"; then
+    FERRY_EXISTS=1
+    if quiet "$DSEDITGROUP" -o checkmember -m "$FERRY_USER" admin; then
+      die 1 refused "the $FERRY_USER account is an admin; Ferry needs a standard account"
+    fi
+    dscl_value "/Users/$FERRY_USER" IsHidden && [ "$DV" = 1 ] || die 1 refused "the $FERRY_USER account exists but is not hidden"
+    dscl_value "/Users/$FERRY_USER" NFSHomeDirectory && [ "$DV" = "$FERRY_HOME" ] \
+      || die 1 refused "the $FERRY_USER account exists with another home"
+    dscl_value "/Groups/$FERRY_GROUP" PrimaryGroupID && _pc_gid=$DV \
+      && dscl_value "/Users/$FERRY_USER" PrimaryGroupID && [ "$DV" = "$_pc_gid" ] \
+      || die 1 refused "the $FERRY_USER account exists with a primary group other than $FERRY_GROUP"
+    say "check: account $FERRY_USER exists, standard, hidden, primary group $FERRY_GROUP"
+  else
+    FERRY_EXISTS=0
+    if [ -e "$FERRY_HOME" ] || [ -L "$FERRY_HOME" ]; then
+      die 1 refused "$FERRY_HOME exists but the $FERRY_USER account does not; inspect it by hand"
+    fi
+    say "check: account $FERRY_USER does not exist yet"
+  fi
+  TMP_SITE=$(mktemp "$TMPROOT/ferry-site.XXXXXXXX") || die 1 refused "cannot make a temp file"
+  site_text > "$TMP_SITE"
+  if [ -e "$FERRY_ROOT/site.conf" ] || [ -L "$FERRY_ROOT/site.conf" ]; then
+    if [ -L "$FERRY_ROOT/site.conf" ] || ! cmp -s -- "$TMP_SITE" "$FERRY_ROOT/site.conf"; then
+      die 1 refused "site.conf differs; review and remove it by hand"
+    fi
+    SITE_PRESENT=1
+    say "check: site.conf is already in place and identical"
+  else
+    SITE_PRESENT=0
+  fi
+  return 0
+}
+
+# safe_dir PARENT NAME OWNER GROUP MODE: create or re-assert PARENT/NAME as
+# root without ever following a link. Entries inside the spool can be renamed
+# by the ferry account, so a root-run install -d (which follows links) could
+# be pointed at any directory. Instead: enter PARENT and check that its real
+# path is PARENT (no link anywhere on it), then mkdir refuses an existing
+# name and chown -h / chmod -h act on a link itself if one is swapped in.
+safe_dir() {
+  _sd=$1/$2
+  if [ "$MODE" = dry ] && [ ! -d "$1" ]; then
+    say "$RUN_WORD $MKDIR $_sd"
+    say "$RUN_WORD $CHOWN -h $3:$4 $_sd"
+    say "$RUN_WORD $CHMOD -h $5 $_sd"
+    return 0
+  fi
+  if ! cd -P -- "$1" 2>/dev/null || [ "$(pwd -P)" != "$1" ]; then
+    cd /
+    die 1 refused "a link or a missing directory stands on the path to $_sd; inspect it by hand"
+  fi
+  if [ -L "./$2" ]; then
+    cd /
+    die 1 refused "a link stands where a Ferry directory belongs; inspect $_sd by hand"
+  fi
+  if [ -e "./$2" ] && [ ! -d "./$2" ]; then
+    cd /
+    die 1 refused "something other than a directory stands at $_sd; inspect it by hand"
+  fi
+  if [ ! -e "./$2" ]; then
+    run_in "$1" "$MKDIR" "./$2"
+  fi
+  run_in "$1" "$CHOWN" -h "$3:$4" "./$2"
+  run_in "$1" "$CHMOD" -h "$5" "./$2"
+  cd /
+  return 0
+}
+
+member() {
+  if quiet "$DSEDITGROUP" -o checkmember -m "$1" "$2"; then
+    say "check: $1 is in $2"
+  else
+    run "$DSEDITGROUP" -o edit -a "$1" -t user "$2"
+  fi
+  return 0
+}
+
+# ── check (read-only) ──────────────────────────────────────────────────
+
+FAILS=0
+expect() {
+  # expect PATH TYPE OWNER GROUP MODE
+  _ex_o=$("$STAT" -f '%HT|%Su|%Sg|%Mp%Lp' -- "$1" 2>/dev/null) || _ex_o=missing
+  if [ "$_ex_o" = "$2|$3|$4|$5" ]; then
+    say "ok    $1"
+  else
+    say "FAIL  $1 (want $2 $3:$4 $5)"
+    FAILS=$((FAILS + 1))
+  fi
+  return 0
+}
+
+expect_sum() {
+  # expect_sum RELPATH: the installed file's sha256 equals the SHA256SUMS line.
+  _es_want=
+  while IFS= read -r _es_l; do
+    case $_es_l in
+      *"  $1") _es_want=${_es_l%% *} ;;
+    esac
+  done < "$FERRY_ROOT/SHA256SUMS"
+  _es_have=$("$SHASUM" -a 256 < "$FERRY_ROOT/$1" 2>/dev/null) || _es_have=
+  _es_have=${_es_have%% *}
+  if [ -n "$_es_want" ] && [ "$_es_want" = "$_es_have" ]; then
+    say "ok    $FERRY_ROOT/$1 matches SHA256SUMS"
+  else
+    say "FAIL  $FERRY_ROOT/$1 does not match SHA256SUMS"
+    FAILS=$((FAILS + 1))
+  fi
+  return 0
+}
+
+expect_member() {
+  if quiet "$DSEDITGROUP" -o checkmember -m "$1" "$2"; then
+    say "ok    $1 is in $2"
+  else
+    say "FAIL  $1 is not in $2"
+    FAILS=$((FAILS + 1))
+  fi
+  return 0
+}
+
+do_check() {
+  FAILS=0
+  for _dc_d in "$FERRY_ROOT" "$FERRY_ROOT/libexec" "$FERRY_ROOT/bin"; do
+    expect "$_dc_d" Directory "$ROOT_OWNER" "$ROOT_GROUP" 0755
+  done
+  expect "$FERRY_ROOT/libexec/ferry-gate" "Regular File" "$ROOT_OWNER" "$ROOT_GROUP" 0755
+  expect "$FERRY_ROOT/libexec/ferry-spool.sh" "Regular File" "$ROOT_OWNER" "$ROOT_GROUP" 0644
+  expect "$FERRY_ROOT/bin/ferry-admin" "Regular File" "$ROOT_OWNER" "$ROOT_GROUP" 0755
+  expect "$FERRY_ROOT/bin/ferry-hub" "Regular File" "$ROOT_OWNER" "$ROOT_GROUP" 0755
+  expect "$FERRY_ROOT/site.conf" "Regular File" "$ROOT_OWNER" "$ROOT_GROUP" 0644
+  expect "$FERRY_ROOT/SHA256SUMS" "Regular File" "$ROOT_OWNER" "$ROOT_GROUP" 0644
+  if [ -f "$FERRY_ROOT/SHA256SUMS" ]; then
+    for _dc_f in libexec/ferry-gate libexec/ferry-spool.sh bin/ferry-admin bin/ferry-hub; do
+      expect_sum "$_dc_f"
+    done
+  fi
+  expect "$FERRY_HOME" Directory "$ROOT_OWNER" "$FERRY_GROUP" 0750
+  expect "$FERRY_HOME/.ssh" Directory "$ROOT_OWNER" "$ROOT_GROUP" 0755
+  expect "$AK" "Regular File" "$ROOT_OWNER" "$ROOT_GROUP" 0644
+  expect "$FERRY_HOME/stage" Directory "$FERRY_USER" "$FERRY_GROUP" 0700
+  expect "$FERRY_HOME/log" Directory "$FERRY_USER" "$FERRY_GROUP" 2750
+  for _dc_d in "$SPOOL" "$SPOOL/lobby" "$SPOOL/lobby/in" "$SPOOL/lobby/out" "$SPOOL/files" "$SPOOL/files/$LOCAL_PEER"; do
+    expect "$_dc_d" Directory "$FERRY_USER" "$FERRY_GROUP" 2770
+  done
+  expect_member "$FERRY_USER" "$FERRY_GROUP"
+  expect_member "$HUB" "$FERRY_GROUP"
+  if quiet "$DSCL" . -read "/Groups/$ACCESS_GROUP"; then
+    expect_member "$FERRY_USER" "$ACCESS_GROUP"
+  fi
+  if quiet "$DSEDITGROUP" -o checkmember -m "$FERRY_USER" admin; then
+    say "FAIL  $FERRY_USER is an admin"
+    FAILS=$((FAILS + 1))
+  fi
+  if group_gid && dscl_value "/Users/$FERRY_USER" PrimaryGroupID && [ "$DV" = "$FERRY_GID" ]; then
+    say "ok    $FERRY_USER's primary group is $FERRY_GROUP"
+  else
+    say "FAIL  $FERRY_USER's primary group is not $FERRY_GROUP"
+    FAILS=$((FAILS + 1))
+  fi
+  if quiet "$DSEDITGROUP" -o checkmember -m "$FERRY_USER" "$STAFF_GROUP"; then
+    say "FAIL  $FERRY_USER is in $STAFF_GROUP (it could read group-readable files in the hub user's home)"
+    FAILS=$((FAILS + 1))
+  fi
+  _dc_o=$("$SUDO" -u "$FERRY_USER" -H "$FERRY_ROOT/libexec/ferry-gate" --self-check 2>/dev/null) || _dc_o=
+  if [ "$_dc_o" = "ok self-check gate=2" ]; then
+    say "ok    the gate's self-check as $FERRY_USER"
+  else
+    say "FAIL  the gate's self-check as $FERRY_USER"
+    FAILS=$((FAILS + 1))
+  fi
+  [ "$FAILS" = 0 ] || die 6 unsafe "$FAILS checks failed; nothing was changed by the check"
+  say "check: all paths, memberships and the gate self-check are in order"
+  return 0
+}
+
+if [ "$MODE" = check ]; then
+  precheck
+  do_check
+  exit 0
+fi
+
+# ── dry run or apply ───────────────────────────────────────────────────
+
+precheck
+
+say "step: hand-off group"
+if quiet "$DSCL" . -read "/Groups/$FERRY_GROUP"; then
+  say "check: group $FERRY_GROUP exists"
+else
+  run "$DSEDITGROUP" -o create -r "Ferry hand-off" "$FERRY_GROUP"
+fi
+
+# The account's primary group is the hand-off group, not staff: a macOS home
+# is user:staff 0750, so a staff member could list the hub user's home.
+FERRY_GID="<the PrimaryGroupID of $FERRY_GROUP>"
+if [ "$MODE" = apply ] || quiet "$DSCL" . -read "/Groups/$FERRY_GROUP"; then
+  group_gid || die 1 failed "cannot read the $FERRY_GROUP group's numeric id"
+fi
+
+say "step: the $FERRY_USER account"
+if [ "$FERRY_EXISTS" = 0 ]; then
+  say "sysadminctl asks for the new account's password: type a throwaway of at least 24 characters and keep nothing."
+  run "$SYSADMINCTL" -addUser "$FERRY_USER" -fullName "Ferry post office" -GID "$FERRY_GID" -shell /bin/sh -home "$FERRY_HOME" -password -
+  if [ "$MODE" = apply ]; then
+    account_made
+  fi
+  run "$DSCL" . -create "/Users/$FERRY_USER" IsHidden 1
+  if [ "$MODE" = apply ] && { ! dscl_value "/Users/$FERRY_USER" IsHidden || [ "$DV" != 1 ]; }; then
+    die 1 failed "the $FERRY_USER account is not hidden after dscl; stop and inspect it"
+  fi
+fi
+if [ ! -d "$FERRY_HOME" ]; then
+  run "$CREATEHOMEDIR" -c -u "$FERRY_USER"
+fi
+if [ "$MODE" = apply ] && quiet "$DSEDITGROUP" -o checkmember -m "$FERRY_USER" admin; then
+  die 1 refused "the $FERRY_USER account came out as an admin; stop and inspect it"
+fi
+
+say "step: memberships"
+member "$FERRY_USER" "$FERRY_GROUP"
+member "$HUB" "$FERRY_GROUP"
+if quiet "$DSCL" . -read "/Groups/$ACCESS_GROUP"; then
+  say "Remote Login is limited to $ACCESS_GROUP here, so $FERRY_USER must be a member"
+  member "$FERRY_USER" "$ACCESS_GROUP"
+else
+  say "Remote Login is open to all users here; no membership is needed"
+fi
+
+say "step: code in $FERRY_ROOT"
+run "$INSTALL" -d -o "$ROOT_OWNER" -g "$ROOT_GROUP" -m 0755 "$FERRY_ROOT" "$FERRY_ROOT/libexec" "$FERRY_ROOT/bin"
+run "$INSTALL" -o "$ROOT_OWNER" -g "$ROOT_GROUP" -m 0755 "$PKG/libexec/ferry-gate" "$FERRY_ROOT/libexec/ferry-gate"
+run "$INSTALL" -o "$ROOT_OWNER" -g "$ROOT_GROUP" -m 0644 "$PKG/libexec/ferry-spool.sh" "$FERRY_ROOT/libexec/ferry-spool.sh"
+run "$INSTALL" -o "$ROOT_OWNER" -g "$ROOT_GROUP" -m 0755 "$PKG/bin/ferry-admin" "$FERRY_ROOT/bin/ferry-admin"
+run "$INSTALL" -o "$ROOT_OWNER" -g "$ROOT_GROUP" -m 0755 "$PKG/bin/ferry-hub" "$FERRY_ROOT/bin/ferry-hub"
+run "$INSTALL" -o "$ROOT_OWNER" -g "$ROOT_GROUP" -m 0644 "$PKG/SHA256SUMS" "$FERRY_ROOT/SHA256SUMS"
+if [ "$SITE_PRESENT" = 0 ]; then
+  run "$INSTALL" -o "$ROOT_OWNER" -g "$ROOT_GROUP" -m 0644 "$TMP_SITE" "$FERRY_ROOT/site.conf"
+fi
+
+say "step: home and lanes"
+safe_dir "${FERRY_HOME%/*}" "${FERRY_HOME##*/}" "$ROOT_OWNER" "$FERRY_GROUP" 0750
+safe_dir "$FERRY_HOME" .ssh "$ROOT_OWNER" "$ROOT_GROUP" 0755
+if [ -e "$AK" ] || [ -L "$AK" ]; then
+  say "check: authorized_keys exists; it is left as it is"
+else
+  TMP_AK=$(mktemp "$TMPROOT/ferry-keys.XXXXXXXX") || die 1 refused "cannot make a temp file"
+  printf '%s\n' "$HEADER" > "$TMP_AK"
+  run "$INSTALL" -o "$ROOT_OWNER" -g "$ROOT_GROUP" -m 0644 "$TMP_AK" "$AK"
+fi
+
+say "step: spool and private directories"
+safe_dir "$FERRY_HOME" spool "$FERRY_USER" "$FERRY_GROUP" 2770
+safe_dir "$SPOOL" lobby "$FERRY_USER" "$FERRY_GROUP" 2770
+safe_dir "$SPOOL/lobby" in "$FERRY_USER" "$FERRY_GROUP" 2770
+safe_dir "$SPOOL/lobby" out "$FERRY_USER" "$FERRY_GROUP" 2770
+safe_dir "$SPOOL" files "$FERRY_USER" "$FERRY_GROUP" 2770
+safe_dir "$SPOOL/files" "$LOCAL_PEER" "$FERRY_USER" "$FERRY_GROUP" 2770
+safe_dir "$FERRY_HOME" stage "$FERRY_USER" "$FERRY_GROUP" 0700
+safe_dir "$FERRY_HOME" log "$FERRY_USER" "$FERRY_GROUP" 2750
+
+if [ "$MODE" = dry ]; then
+  say "dry run: nothing was changed. Run again with --apply to do the steps above."
+  exit 0
+fi
+
+say "step: verify"
+do_check
+say "next:"
+say "  1. open a new terminal as $HUB (or log out and in) so the $FERRY_GROUP membership applies"
+say "  2. $FERRY_ROOT/bin/ferry-admin whoami"
+say "  3. sudo $FERRY_ROOT/bin/ferry-admin lane add --peer NAME --pubkey-file FILE --expect-fp <typed off that Mac's own screen>, for each Mac"
+exit 0

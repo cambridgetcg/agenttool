@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**823 document paths** (including mirrors). orientation: 181; guide: 84; reference: 332; policy: 29; reflection: 123; proposal: 47; record: 25; unclassified: 2.
+**826 document paths** (including mirrors). orientation: 181; guide: 86; reference: 333; policy: 29; reflection: 123; proposal: 47; record: 25; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -246,6 +246,8 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/collab/skills/coordinate-agent-work/SKILL.md](<../packages/collab/skills/coordinate-agent-work/SKILL.md>) | not-reviewed |
 | [packages/credential-broker/ROTATION.md](<../packages/credential-broker/ROTATION.md>) | not-reviewed |
 | [packages/dark-continent-karma/docs/INTEGRATION.md](<../packages/dark-continent-karma/docs/INTEGRATION.md>) | not-reviewed |
+| [packages/ferry/CLAUDE.md](<../packages/ferry/CLAUDE.md>) | not-reviewed |
+| [packages/ferry/INSTALL.md](<../packages/ferry/INSTALL.md>) | not-reviewed |
 | [packages/hf-listening-room/hf/dataset/profile/ADOPTING.md](<../packages/hf-listening-room/hf/dataset/profile/ADOPTING.md>) | not-reviewed |
 | [packages/hf-listening-room/hf/dataset/profile/MODEL_CARD_TEMPLATE.md](<../packages/hf-listening-room/hf/dataset/profile/MODEL_CARD_TEMPLATE.md>) | not-reviewed |
 | [packages/hf-listening-room/hf/space/profile/ADOPTING.md](<../packages/hf-listening-room/hf/space/profile/ADOPTING.md>) | not-reviewed |
@@ -621,6 +623,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/dataset-influence/hf/dataset/reference/PROTOCOL.md](<../packages/dataset-influence/hf/dataset/reference/PROTOCOL.md>) | not-reviewed |
 | [packages/economic-conformance/hf/dataset/reference/CONFORMANCE.md](<../packages/economic-conformance/hf/dataset/reference/CONFORMANCE.md>) | not-reviewed |
 | [packages/economic-conformance/hf/dataset/reference/KERNEL.md](<../packages/economic-conformance/hf/dataset/reference/KERNEL.md>) | not-reviewed |
+| [packages/ferry/README.md](<../packages/ferry/README.md>) | not-reviewed |
 | [packages/hf-listening-room/hf/space/BOUNDARIES.md](<../packages/hf-listening-room/hf/space/BOUNDARIES.md>) | not-reviewed |
 | [packages/lobby/README.md](<../packages/lobby/README.md>) | not-reviewed |
 | [packages/love-geometry/hf-space/BOUNDARIES.md](<../packages/love-geometry/hf-space/BOUNDARIES.md>) | not-reviewed |

@@ -1,0 +1,1101 @@
+#!/bin/sh
+# ferry: the 渡 Ferry client, on every Mac, run as the person (never root).
+# It dials one pinned post office over one restricted SSH lane, only from a
+# terminal or an agent shell, never from launchd. It carries bytes: it never
+# runs a lobby command, never answers a prompt, and never prints, logs or
+# pre-fills a packet's fingerprints or keys. Follow-up commands carry a
+# placeholder that the person replaces with what they read off the other
+# machine's own screen.
+PATH=/usr/bin:/bin:/usr/sbin:/sbin; export PATH
+LC_ALL=C; export LC_ALL
+IFS=$(printf ' \t\n_'); IFS=${IFS%_}
+umask 077
+set -euf
+
+# --- ferry:paths (tests rewrite only this block) ---
+SSH=/usr/bin/ssh
+SSH_KEYSCAN=/usr/bin/ssh-keyscan
+SSH_KEYGEN=/usr/bin/ssh-keygen
+PS=/bin/ps
+DSCACHEUTIL=/usr/bin/dscacheutil
+XATTR=/usr/bin/xattr
+JQ=/usr/bin/jq
+ICONV=/usr/bin/iconv
+SHASUM=/usr/bin/shasum
+ID=/usr/bin/id
+STAT=/usr/bin/stat
+# --- end ferry:paths ---
+
+# The same contract constants and the same two jq filters as the post
+# office's library (tests/static.test.ts keeps them equal).
+LOBBY_MAX=65536
+FILE_MAX=16777216
+ENROLL_FORMAT=agenttool-lobby-enrollment-packet/v1
+JOIN_FORMAT=agenttool-lobby-join/v1
+ENROLL_KEYS='["directory_token_sha256","display_name","enrollment_request","fingerprint","format","identity_id","issued_at","kind","origin","packet_sig","project_id","public_key","signing_key_id","valid_until"]'
+JOIN_KEYS='["directory","door","format","invitation_template","origin","project_id"]'
+SHAPE_FILTER='type=="object" and .format==$f and (keys==$k)'
+DISPLAY_FILTER='[.kind, .valid_until] | @tsv'
+ED_PREFIX=AAAAC3NzaC1lZDI1NTE5AAAAI
+DOOR_PLACEHOLDER="<type the 16 hex from the hub's own screen>"
+LAUNCHD_MSG="ferry dials only from a terminal or an agent shell, not from launchd"
+
+TMP_A=
+TMP_B=
+TMP_C=
+TMP_ERR=
+REFRESHED=0
+
+on_exit() {
+  set +e
+  for _oe in "$TMP_A" "$TMP_B" "$TMP_C" "$TMP_ERR"; do
+    if [ -n "$_oe" ]; then
+      rm -rf -- "$_oe" 2>/dev/null
+    fi
+  done
+  exit "$1"
+}
+trap 'on_exit $?' EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+die() {
+  printf 'ferry: %s: %s\n' "$2" "$3" >&2
+  exit "$1"
+}
+
+usage() {
+  cat <<'EOF'
+ferry: a LAN courier to the lab's post office (渡 Ferry)
+  ferry init --self NAME [--lobby-command CMD] [--lobby-mail DIR]
+  ferry whoami                        this Mac's lane key and the lab-side command
+  ferry peer add hub --host HOST --host-key-fp SHA256:... [--replace]
+  ferry ping
+  ferry lobby push FILE               carry an enrollment or renewal packet to the hub
+  ferry lobby fetch                   collect join packets the hub placed for this Mac
+  ferry send TO FILE                  leave a file for another Mac (or "lab")
+  ferry list                          what is waiting for this Mac
+  ferry fetch [ID]                    receive files into ~/Ferry/inbox/<from>/
+  ferry ack ID                        discard a waiting item without fetching it
+Ferry carries bytes only: it never runs a lobby command or types a yes.
+EOF
+}
+
+# ── grammar ────────────────────────────────────────────────────────────
+
+is_peer() {
+  case $1 in
+    [a-z]*) ;;
+    *) return 1 ;;
+  esac
+  case $1 in
+    *[!a-z0-9-]* | *--* | *-) return 1 ;;
+  esac
+  [ ${#1} -ge 2 ] && [ ${#1} -le 16 ] || return 1
+  return 0
+}
+
+is_reserved() {
+  case $1 in
+    hub | ferry | all | none) return 0 ;;
+  esac
+  return 1
+}
+
+is_id() {
+  case $1 in
+    [0-9][0-9][0-9][0-9][0-1][0-9][0-3][0-9]T[0-2][0-9][0-5][0-9][0-6][0-9]Z-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) return 0 ;;
+  esac
+  return 1
+}
+
+is_name() {
+  case $1 in
+    [A-Za-z0-9]*) ;;
+    *) return 1 ;;
+  esac
+  case $1 in
+    *[!A-Za-z0-9._-]* | *..* | *.part | *.meta | *.body) return 1 ;;
+  esac
+  [ ${#1} -le 100 ] || return 1
+  return 0
+}
+
+is_sha() {
+  case $1 in
+    *[!0-9a-f]*) return 1 ;;
+  esac
+  [ ${#1} -eq 64 ] || return 1
+  return 0
+}
+
+is_num() {
+  case $1 in
+    '' | *[!0-9]*) return 1 ;;
+    0) return 0 ;;
+    0*) return 1 ;;
+  esac
+  [ ${#1} -le 12 ] || return 1
+  return 0
+}
+
+is_host() {
+  case $1 in
+    [A-Za-z0-9]*) ;;
+    *) return 1 ;;
+  esac
+  case $1 in
+    *[!A-Za-z0-9.-]*) return 1 ;;
+  esac
+  [ ${#1} -le 253 ] || return 1
+  return 0
+}
+
+is_ipv4() {
+  case $1 in
+    *[!0-9.]* | .* | *. | *..*) return 1 ;;
+  esac
+  _ip_ifs=$IFS
+  IFS=.
+  set -- $1
+  IFS=$_ip_ifs
+  [ $# -eq 4 ] || return 1
+  for _ip_o in "$@"; do
+    case $_ip_o in
+      [0-9] | [1-9][0-9] | 1[0-9][0-9] | 2[0-4][0-9] | 25[0-5]) ;;
+      *) return 1 ;;
+    esac
+  done
+  return 0
+}
+
+is_fp() {
+  case $1 in
+    SHA256:*) ;;
+    *) return 1 ;;
+  esac
+  case ${1#SHA256:} in
+    *[!A-Za-z0-9+/]*) return 1 ;;
+  esac
+  [ ${#1} -eq 50 ] || return 1
+  return 0
+}
+
+is_abspath() {
+  case $1 in
+    /*) ;;
+    *) return 1 ;;
+  esac
+  case $1 in
+    *[!A-Za-z0-9/._-]* | *..*) return 1 ;;
+  esac
+  [ ${#1} -le 200 ] || return 1
+  return 0
+}
+
+is_lobby_command() {
+  case $1 in
+    '' | *[!A-Za-z0-9_./~-]*) return 1 ;;
+  esac
+  [ ${#1} -le 200 ] || return 1
+  return 0
+}
+
+# ── files ──────────────────────────────────────────────────────────────
+
+cl_stat() {
+  _st_o=$("$STAT" -f '%HT|%Su|%Sg|%Mp%Lp|%l|%z|%d|%m' -- "$1" 2>/dev/null) || return 1
+  _st_ifs=$IFS
+  IFS='|'
+  set -- $_st_o
+  IFS=$_st_ifs
+  [ $# -eq 8 ] || return 1
+  ST_TYPE=$1
+  ST_USER=$2
+  ST_GROUP=$3
+  ST_MODE=$4
+  ST_LINKS=$5
+  ST_SIZE=$6
+  ST_DEV=$7
+  ST_MTIME=$8
+  return 0
+}
+
+sha_of() {
+  _sh_o=$("$SHASUM" -a 256 < "$1" 2>/dev/null) || return 1
+  SHA=${_sh_o%% *}
+  is_sha "$SHA" || return 1
+  return 0
+}
+
+quarantine() {
+  "$XATTR" -w com.apple.quarantine "0081;$(printf %08x "$(date +%s)");ferry;" "$1" 2>/dev/null \
+    || die 6 unsafe "could not set the quarantine flag"
+  return 0
+}
+
+# private_dir DIR: create (0700) or accept a directory that is ours, not a link.
+private_dir() {
+  if [ -L "$1" ]; then
+    die 6 unsafe "a private directory is a link"
+  fi
+  if [ ! -d "$1" ]; then
+    mkdir -p -- "$1" || die 6 unsafe "could not create a private directory"
+  fi
+  cl_stat "$1" || die 6 unsafe "a private directory is missing"
+  if [ "$ST_TYPE" != Directory ] || [ "$ST_USER" != "$ME" ]; then
+    die 6 unsafe "a private directory has the wrong type or owner"
+  fi
+  return 0
+}
+
+# stage_copy SRC MAX: a private copy of a person's file in TMP_A, plus
+# COPY_SIZE. The copy is what gets checked and sent.
+stage_copy() {
+  cl_stat "$1" || die 4 invalid "the file is missing"
+  [ "$ST_TYPE" = "Regular File" ] || die 4 invalid "give a plain file (not a link or a folder)"
+  [ "$ST_SIZE" -ge 1 ] || die 4 invalid "the file is empty"
+  [ "$ST_SIZE" -le "$2" ] || die 4 invalid "the file is over the size limit"
+  TMP_A=$(mktemp "$STAGE/.send.XXXXXXXX") || die 6 unsafe "could not stage"
+  rm -f -- "$TMP_A"
+  cp -P -- "$1" "$TMP_A" 2>/dev/null || die 4 invalid "the file could not be read"
+  cl_stat "$TMP_A" || die 6 unsafe "could not stage"
+  if [ "$ST_TYPE" != "Regular File" ] || [ "$ST_SIZE" -lt 1 ] || [ "$ST_SIZE" -gt "$2" ]; then
+    die 4 invalid "the file changed while it was read"
+  fi
+  COPY_SIZE=$ST_SIZE
+  return 0
+}
+
+check_packet() {
+  case $2 in
+    enroll) _cp_fmt=$ENROLL_FORMAT; _cp_keys=$ENROLL_KEYS ;;
+    join) _cp_fmt=$JOIN_FORMAT; _cp_keys=$JOIN_KEYS ;;
+    *) return 1 ;;
+  esac
+  cl_stat "$1" || return 1
+  [ "$ST_TYPE" = "Regular File" ] && [ "$ST_SIZE" -ge 2 ] && [ "$ST_SIZE" -le "$LOBBY_MAX" ] || return 1
+  "$ICONV" -f UTF-8 -t UTF-8 < "$1" > /dev/null 2>&1 || return 1
+  _cp_n=$(tr -d '\n\040-\176\200-\377' < "$1" | wc -c) || return 1
+  _cp_n=${_cp_n##* }
+  [ "$_cp_n" = 0 ] || return 1
+  _cp_1=
+  _cp_2=
+  { IFS= read -r _cp_1 && IFS= read -r _cp_2; } < "$1" || return 1
+  [ "$_cp_1" = "{" ] || return 1
+  [ "$_cp_2" = "  \"format\": \"$_cp_fmt\"," ] || return 1
+  _cp_last=$(tail -n 1 < "$1") || return 1
+  [ "$_cp_last" = "}" ] || return 1
+  "$JQ" -e --arg f "$_cp_fmt" --argjson k "$_cp_keys" "$SHAPE_FILTER" < "$1" > /dev/null 2>&1 || return 1
+  return 0
+}
+
+packet_display() {
+  _pd_o=$("$JQ" -r "$DISPLAY_FILTER" < "$1" 2>/dev/null) || return 1
+  _pd_tab=$(printf '\t')
+  case $_pd_o in
+    *"$_pd_tab"*) ;;
+    *) return 1 ;;
+  esac
+  PK_KIND=${_pd_o%%"$_pd_tab"*}
+  PK_UNTIL=${_pd_o#*"$_pd_tab"}
+  case $PK_KIND in
+    enroll | renew) ;;
+    *) return 1 ;;
+  esac
+  case $PK_UNTIL in
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) ;;
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9]Z) ;;
+    *) return 1 ;;
+  esac
+  _pd_d=$(printf '%s' "$PK_UNTIL" | cut -c1-4,6-7,9-10,12-13,15-16,18-19)
+  _pd_e=$(date -j -u -f %Y%m%d%H%M%S "$_pd_d" +%s 2>/dev/null) || return 1
+  is_num "$_pd_e" || return 1
+  PK_HHMM=$(printf '%s' "$PK_UNTIL" | cut -c12-16)
+  _pd_now=$(date +%s)
+  PK_LEFT=$(( (_pd_e - _pd_now) / 60 ))
+  PK_EXPIRED=0
+  if [ "$_pd_e" -le "$_pd_now" ]; then
+    PK_LEFT=0
+    PK_EXPIRED=1
+  fi
+  return 0
+}
+
+safe_name() {
+  _sn=$(printf '%s' "$1" | tr -c 'A-Za-z0-9._-' '_')
+  while :; do
+    case $_sn in
+      .* | -*) _sn=${_sn#?} ;;
+      *) break ;;
+    esac
+  done
+  _sn=$(printf '%s' "$_sn" | cut -c1-100)
+  is_name "$_sn" || return 1
+  SAFE_NAME=$_sn
+  return 0
+}
+
+age_of() {
+  _ag_ts=${1%%-*}
+  _ag_e=$(date -j -u -f %Y%m%dT%H%M%SZ "$_ag_ts" +%s 2>/dev/null) || _ag_e=$(date +%s)
+  _ag_s=$(($(date +%s) - _ag_e))
+  if [ "$_ag_s" -lt 60 ]; then
+    AGE="just now"
+  elif [ "$_ag_s" -lt 3600 ]; then
+    AGE="$((_ag_s / 60)) min ago"
+  elif [ "$_ag_s" -lt 172800 ]; then
+    AGE="$((_ag_s / 3600)) h ago"
+  else
+    AGE="$((_ag_s / 86400)) d ago"
+  fi
+  return 0
+}
+
+# ── state ──────────────────────────────────────────────────────────────
+
+who_am_i() {
+  _uid=$("$ID" -u 2>/dev/null) || die 8 nodial "cannot tell who is running this"
+  [ "$_uid" != 0 ] || die 8 nodial "ferry runs as a person, never as root"
+  ME=$("$ID" -un 2>/dev/null) || die 8 nodial "cannot tell who is running this"
+  _home=${HOME:-}
+  is_abspath "$_home" || die 8 nodial "HOME must be a plain absolute path (letters, digits, / . _ -)"
+  STATE=$_home/.local/state/agenttool/ferry
+  CONF=$STATE/ferry.conf
+  KH=$STATE/known_hosts
+  STAGE=$STATE/stage
+  KEYDIR=$_home/.ssh/ferry
+  FILE_LANDING=$_home/Ferry/inbox
+  return 0
+}
+
+load_conf() {
+  if [ ! -e "$CONF" ] && [ ! -L "$CONF" ]; then
+    die 8 nodial "this Mac has no Ferry lane yet; run ferry init --self NAME"
+  fi
+  for _lc_d in "$STATE" "$STAGE" "$KEYDIR"; do
+    cl_stat "$_lc_d" || die 8 nodial "the Ferry state is incomplete; run ferry init again after removing it"
+    if [ "$ST_TYPE" != Directory ] || [ "$ST_USER" != "$ME" ] || [ "$ST_MODE" != 0700 ]; then
+      die 6 unsafe "a Ferry state directory has the wrong type, owner or mode"
+    fi
+  done
+  cl_stat "$CONF" || die 8 nodial "ferry.conf is unreadable"
+  if [ "$ST_TYPE" != "Regular File" ] || [ "$ST_USER" != "$ME" ] || [ "$ST_SIZE" -gt 4096 ]; then
+    die 8 nodial "ferry.conf has the wrong type, owner or size"
+  fi
+  _lc_i=0
+  _lc_bad=0
+  _lc_l=
+  while IFS= read -r _lc_l; do
+    _lc_i=$((_lc_i + 1))
+    case $_lc_i in
+      1) [ "$_lc_l" = ferry-conf/1 ] || _lc_bad=1 ;;
+      2)
+        case $_lc_l in
+          self=*) SELF=${_lc_l#self=}; is_peer "$SELF" || _lc_bad=1 ;;
+          *) _lc_bad=1 ;;
+        esac
+        ;;
+      3)
+        case $_lc_l in
+          hub_host=) HUB_HOST= ;;
+          hub_host=*) HUB_HOST=${_lc_l#hub_host=}; is_host "$HUB_HOST" || _lc_bad=1 ;;
+          *) _lc_bad=1 ;;
+        esac
+        ;;
+      4)
+        case $_lc_l in
+          hub_last_ip=) HUB_LAST_IP= ;;
+          hub_last_ip=*) HUB_LAST_IP=${_lc_l#hub_last_ip=}; is_ipv4 "$HUB_LAST_IP" || _lc_bad=1 ;;
+          *) _lc_bad=1 ;;
+        esac
+        ;;
+      5)
+        case $_lc_l in
+          lobby_command=*) LOBBY_COMMAND=${_lc_l#lobby_command=}; is_lobby_command "$LOBBY_COMMAND" || _lc_bad=1 ;;
+          *) _lc_bad=1 ;;
+        esac
+        ;;
+      6)
+        case $_lc_l in
+          lobby_mail=*) LOBBY_MAIL_DIR=${_lc_l#lobby_mail=}; is_abspath "$LOBBY_MAIL_DIR" || _lc_bad=1 ;;
+          *) _lc_bad=1 ;;
+        esac
+        ;;
+      *) _lc_bad=1 ;;
+    esac
+  done < "$CONF"
+  if [ "$_lc_bad" != 0 ] || [ "$_lc_i" != 6 ] || [ -n "$_lc_l" ]; then
+    die 8 nodial "ferry.conf is malformed; it holds only the keys ferry init writes"
+  fi
+  KEY=$KEYDIR/ferry_${SELF}_ed25519
+  cl_stat "$KEY" || die 8 nodial "the lane key is missing; run ferry init again after removing the state"
+  if [ "$ST_TYPE" != "Regular File" ] || [ "$ST_USER" != "$ME" ] || [ "$ST_MODE" != 0600 ]; then
+    die 6 unsafe "the lane key has the wrong type, owner or mode"
+  fi
+  prune_stage
+  return 0
+}
+
+write_conf() {
+  _wc_t=$(mktemp "$STATE/.conf.XXXXXXXX") || die 6 unsafe "could not write ferry.conf"
+  TMP_C=$_wc_t
+  printf 'ferry-conf/1\nself=%s\nhub_host=%s\nhub_last_ip=%s\nlobby_command=%s\nlobby_mail=%s\n' \
+    "$SELF" "$HUB_HOST" "$HUB_LAST_IP" "$LOBBY_COMMAND" "$LOBBY_MAIL_DIR" > "$_wc_t" \
+    || die 6 unsafe "could not write ferry.conf"
+  mv -f -- "$_wc_t" "$CONF" || die 6 unsafe "could not write ferry.conf"
+  TMP_C=
+  return 0
+}
+
+require_pin() {
+  if [ -z "$HUB_HOST" ]; then
+    die 8 nodial "no pinned post office; run ferry peer add hub --host HOST --host-key-fp FP"
+  fi
+  cl_stat "$KH" || die 8 nodial "no pinned post office; run ferry peer add hub --host HOST --host-key-fp FP"
+  if [ "$ST_TYPE" != "Regular File" ] || [ "$ST_USER" != "$ME" ]; then
+    die 6 unsafe "the pinned host key file has the wrong type or owner"
+  fi
+  return 0
+}
+
+prune_stage() {
+  _ps_now=$(date +%s)
+  _ps_names=$(ls -1A -- "$STAGE" 2>/dev/null) || return 0
+  while IFS= read -r _ps_n; do
+    [ -n "$_ps_n" ] || continue
+    if cl_stat "$STAGE/$_ps_n" && [ $((_ps_now - ST_MTIME)) -gt 3600 ]; then
+      rm -rf -- "${STAGE:?}/$_ps_n" 2>/dev/null || :
+    fi
+  done <<EOF
+$_ps_names
+EOF
+  return 0
+}
+
+first_ipv4() {
+  FIRST_IP=
+  if is_ipv4 "$1"; then
+    return 0
+  fi
+  _fi_o=$("$DSCACHEUTIL" -q host -a name "$1" 2>/dev/null) || return 0
+  while IFS= read -r _fi_l; do
+    case $_fi_l in
+      'ip_address: '*)
+        _fi_v=${_fi_l#ip_address: }
+        if is_ipv4 "$_fi_v"; then
+          FIRST_IP=$_fi_v
+          return 0
+        fi
+        ;;
+    esac
+  done <<EOF
+$_fi_o
+EOF
+  return 0
+}
+
+# ── dialling ───────────────────────────────────────────────────────────
+
+# is_app_exe COMM: COMM is the executable of an app bundle that sits directly
+# in an Applications folder (/Applications, /System/Applications, either one's
+# Utilities, or ~/Applications): a terminal, Claude, an editor. A bundle
+# nested inside another (Xcode's Python.app) does not count.
+is_app_exe() {
+  case $1 in
+    /Applications/*) _ae=${1#/Applications/} ;;
+    /System/Applications/*) _ae=${1#/System/Applications/} ;;
+    "$_home/Applications/"*) _ae=${1#"$_home/Applications/"} ;;
+    *) return 1 ;;
+  esac
+  case $_ae in
+    Utilities/*) _ae=${_ae#Utilities/} ;;
+  esac
+  _ae_app=${_ae%%/*}
+  case $_ae_app in
+    ?*.app) ;;
+    *) return 1 ;;
+  esac
+  case ${_ae#"$_ae_app"/} in
+    Contents/MacOS/*) _ae_exe=${_ae#"$_ae_app"/Contents/MacOS/} ;;
+    *) return 1 ;;
+  esac
+  case $_ae_exe in
+    '' | */*) return 1 ;;
+  esac
+  return 0
+}
+
+# launchd_check: dial only when a person or an agent is in front of this
+# process. Walking up to launchd, some process must hold a controlling
+# terminal, or the process launchd started must be an app from an
+# Applications folder. cron, at, LaunchAgents and interpreters orphaned to
+# launchd have neither, whatever runs between them and ferry. A ferry whose
+# own parent is launchd (nohup after the terminal closed) is refused too.
+# Why: Local Network privacy needs a responsible app, and unattended dialling
+# is not what lanes are for. It guards against accidents, not against the
+# person's own code.
+launchd_check() {
+  _lc_pid=$$
+  _lc_hops=0
+  _lc_seen_tty=0
+  while :; do
+    _lc_hops=$((_lc_hops + 1))
+    [ "$_lc_hops" -le 32 ] || die 8 nodial "$LAUNCHD_MSG"
+    _lc_o=$("$PS" -o ppid=,tty=,comm= -p "$_lc_pid" 2>/dev/null) || die 8 nodial "$LAUNCHD_MSG"
+    _lc_ppid=
+    _lc_tty=
+    _lc_comm=
+    read -r _lc_ppid _lc_tty _lc_comm <<EOF
+$_lc_o
+EOF
+    case $_lc_ppid in
+      '' | *[!0-9]*) die 8 nodial "$LAUNCHD_MSG" ;;
+    esac
+    [ -n "$_lc_comm" ] || die 8 nodial "$LAUNCHD_MSG"
+    case $_lc_tty in
+      tty?* | console) _lc_seen_tty=1 ;;
+    esac
+    if [ "$_lc_ppid" -le 1 ]; then
+      # This process was started by launchd (or is launchd).
+      [ "$_lc_pid" != "$$" ] || die 8 nodial "$LAUNCHD_MSG"
+      [ "$_lc_pid" -gt 1 ] || die 8 nodial "$LAUNCHD_MSG"
+      if [ "$_lc_seen_tty" = 1 ] || is_app_exe "$_lc_comm"; then
+        return 0
+      fi
+      die 8 nodial "$LAUNCHD_MSG"
+    fi
+    _lc_pid=$_lc_ppid
+  done
+}
+
+# need_jq: the packet filter needs /usr/bin/jq, which macOS ships from 15
+# (Sequoia) on. Without it every packet would look invalid, so say so.
+need_jq() {
+  if [ ! -x "$JQ" ] || [ ! -x "$ICONV" ]; then
+    die 8 nodial "this Mac has no /usr/bin/jq (macOS 15 or later ships it); lobby packets cannot be checked here"
+  fi
+  return 0
+}
+
+ssh_exec() {
+  _sx_t=$1
+  _sx_c=$2
+  _sx_n=$3
+  set -- -F /dev/null -T -l ferry -p 22 -i "$KEY" \
+    -o BatchMode=yes -o IdentitiesOnly=yes -o IdentityAgent=none -o AddKeysToAgent=no \
+    -o PreferredAuthentications=publickey -o PasswordAuthentication=no \
+    -o KbdInteractiveAuthentication=no -o GSSAPIAuthentication=no -o HostbasedAuthentication=no \
+    -o HostKeyAlias=ferry-hub -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$KH" \
+    -o GlobalKnownHostsFile=/dev/null -o UpdateHostKeys=no -o CheckHostIP=no \
+    -o VerifyHostKeyDNS=no -o KnownHostsCommand=none \
+    -o ClearAllForwardings=yes -o ForwardAgent=no -o ForwardX11=no -o Tunnel=no \
+    -o PermitLocalCommand=no -o ProxyCommand=none -o ProxyJump=none \
+    -o ControlMaster=no -o ControlPath=none -o RequestTTY=no -o EscapeChar=none \
+    -o AddressFamily=inet -o CanonicalizeHostname=no \
+    -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o LogLevel=ERROR
+  if [ "$_sx_n" = n ]; then
+    set -- "$@" -n
+  fi
+  set -- "$@" -- "$_sx_t" "$_sx_c"
+  "$SSH" "$@"
+}
+
+# dial OUT IN CMD: run CMD at the post office, stdout to OUT, stdin from IN
+# (empty means -n). Falls back to the cached IPv4 only when the first target
+# failed before connecting, so nothing can be sent twice. Gate codes 1-6
+# pass through; remote stderr is shown filtered to printable ASCII.
+dial() {
+  _dl_out=$1
+  _dl_in=$2
+  _dl_cmd=$3
+  if [ -z "$TMP_ERR" ]; then
+    TMP_ERR=$(mktemp "$STAGE/.err.XXXXXXXX") || die 6 unsafe "could not stage"
+  fi
+  _dl_targets=$HUB_HOST
+  if [ -n "$HUB_LAST_IP" ] && [ "$HUB_LAST_IP" != "$HUB_HOST" ]; then
+    _dl_targets="$HUB_HOST $HUB_LAST_IP"
+  fi
+  _dl_rc=255
+  _dl_via=
+  for _dl_t in $_dl_targets; do
+    _dl_via=$_dl_t
+    : > "$TMP_ERR"
+    if [ -n "$_dl_in" ]; then
+      ssh_exec "$_dl_t" "$_dl_cmd" put < "$_dl_in" > "$_dl_out" 2> "$TMP_ERR" && _dl_rc=0 || _dl_rc=$?
+    else
+      ssh_exec "$_dl_t" "$_dl_cmd" n > "$_dl_out" 2> "$TMP_ERR" && _dl_rc=0 || _dl_rc=$?
+    fi
+    if [ "$_dl_rc" = 255 ] && grep -q -F -e 'Could not resolve hostname' -e 'connect to host' -e 'Network is unreachable' "$TMP_ERR"; then
+      continue
+    fi
+    break
+  done
+  if [ -s "$TMP_ERR" ]; then
+    tr -cd '\040-\176\n' < "$TMP_ERR" | head -n 10 >&2 || :
+  fi
+  case $_dl_rc in
+    0) ;;
+    255) die 7 unreachable "could not reach the post office (on the home LAN? lane expired? host key changed?)" ;;
+    1 | 2 | 3 | 4 | 5 | 6) exit "$_dl_rc" ;;
+    *) die 6 unsafe "the post office did not answer as expected" ;;
+  esac
+  DIAL_VIA=$_dl_via
+  if [ "$_dl_via" = "$HUB_HOST" ] && [ "$REFRESHED" = 0 ]; then
+    REFRESHED=1
+    first_ipv4 "$HUB_HOST"
+    if [ -n "$FIRST_IP" ] && [ "$FIRST_IP" != "$HUB_LAST_IP" ]; then
+      HUB_LAST_IP=$FIRST_IP
+      write_conf
+    fi
+  fi
+  return 0
+}
+
+# one_line FILE: the single line of a short gate reply, in LINE.
+one_line() {
+  cl_stat "$1" || die 6 unsafe "the post office did not answer as expected"
+  [ "$ST_SIZE" -le 512 ] || die 6 unsafe "the post office did not answer as expected"
+  LINE=
+  _ol_extra=
+  { IFS= read -r LINE || :; IFS= read -r _ol_extra || :; } < "$1"
+  [ -z "$_ol_extra" ] || die 6 unsafe "the post office did not answer as expected"
+  case $LINE in
+    *[!a-zA-Z0-9._=\ -]*) die 6 unsafe "the post office did not answer as expected" ;;
+  esac
+  return 0
+}
+
+# get_list: the gate's "list", validated line by line, into ITEMS (one
+# "id kind from size sha name" line per item; name is - for lobby joins).
+get_list() {
+  _gl_f=$(mktemp "$STAGE/.list.XXXXXXXX") || die 6 unsafe "could not stage"
+  TMP_B=$_gl_f
+  dial "$_gl_f" "" list
+  cl_stat "$_gl_f" || die 6 unsafe "the post office did not answer as expected"
+  [ "$ST_SIZE" -le 1048576 ] || die 6 unsafe "the post office list is too long"
+  ITEMS=
+  _gl_i=0
+  _gl_n=0
+  _gl_end=
+  _gl_l=
+  while IFS= read -r _gl_l; do
+    _gl_i=$((_gl_i + 1))
+    [ -z "$_gl_end" ] || die 6 unsafe "the post office list is malformed"
+    case $_gl_l in
+      *[!a-zA-Z0-9._/\ -]*) die 6 unsafe "the post office list is malformed" ;;
+    esac
+    if [ "$_gl_i" = 1 ]; then
+      [ "$_gl_l" = ferry-list/1 ] || die 6 unsafe "the post office list is malformed"
+      continue
+    fi
+    _gl_ifs=$IFS
+    IFS=' '
+    set -- $_gl_l
+    _gl_j=$*
+    IFS=$_gl_ifs
+    [ "$_gl_j" = "$_gl_l" ] || die 6 unsafe "the post office list is malformed"
+    case $1 in
+      end)
+        [ $# -eq 2 ] && is_num "$2" && [ "$2" = "$_gl_n" ] || die 6 unsafe "the post office list is malformed"
+        _gl_end=1
+        ;;
+      item)
+        is_id "$2" && is_num "$5" && is_sha "$6" || die 6 unsafe "the post office list is malformed"
+        case $3 in
+          lobby-join)
+            [ $# -eq 6 ] && [ "$4" = hub ] || die 6 unsafe "the post office list is malformed"
+            ITEMS="$ITEMS$2 $3 $4 $5 $6 -
+"
+            ;;
+          file)
+            [ $# -eq 7 ] && is_peer "$4" && is_name "$7" || die 6 unsafe "the post office list is malformed"
+            ITEMS="$ITEMS$2 $3 $4 $5 $6 $7
+"
+            ;;
+          *) die 6 unsafe "the post office list is malformed" ;;
+        esac
+        _gl_n=$((_gl_n + 1))
+        ;;
+      *) die 6 unsafe "the post office list is malformed" ;;
+    esac
+  done < "$_gl_f"
+  if [ -z "$_gl_end" ] || [ -n "$_gl_l" ]; then
+    die 6 unsafe "the post office list is malformed"
+  fi
+  rm -f -- "$_gl_f"
+  TMP_B=
+  ITEM_COUNT=$_gl_n
+  return 0
+}
+
+# get_item ID SIZE SHA: the item's bytes in TMP_A, verified, or exit 9.
+get_item() {
+  TMP_A=$(mktemp "$STAGE/.part.XXXXXXXX") || die 6 unsafe "could not stage"
+  dial "$TMP_A" "" "get $1"
+  cl_stat "$TMP_A" || die 9 integrity "the item did not arrive intact; nothing was saved and it stays at the post office"
+  if [ "$ST_TYPE" != "Regular File" ] || [ "$ST_SIZE" != "$2" ] || ! sha_of "$TMP_A" || [ "$SHA" != "$3" ]; then
+    rm -f -- "$TMP_A"
+    TMP_A=
+    die 9 integrity "the item did not arrive intact; nothing was saved and it stays at the post office"
+  fi
+  return 0
+}
+
+ack_item() {
+  _ak_f=$(mktemp "$STAGE/.ack.XXXXXXXX") || die 6 unsafe "could not stage"
+  TMP_B=$_ak_f
+  dial "$_ak_f" "" "ack $1"
+  one_line "$_ak_f"
+  [ "$LINE" = "ok ack $1" ] || die 6 unsafe "the post office did not answer as expected"
+  rm -f -- "$_ak_f"
+  TMP_B=
+  return 0
+}
+
+same_device() {
+  cl_stat "$STAGE" || die 6 unsafe "the stage is missing"
+  _sd_a=$ST_DEV
+  cl_stat "$1" || die 6 unsafe "the landing directory is missing"
+  [ "$ST_DEV" = "$_sd_a" ] || die 6 unsafe "the stage and the landing directory are on different volumes"
+  return 0
+}
+
+# ── commands ───────────────────────────────────────────────────────────
+
+print_whoami() {
+  _pw_o=$("$SSH_KEYGEN" -l -E sha256 -f "$KEY.pub" 2>/dev/null) || die 6 unsafe "could not fingerprint the lane key"
+  set -- $_pw_o
+  [ $# -ge 2 ] && is_fp "$2" || die 6 unsafe "could not fingerprint the lane key"
+  printf 'self %s\n' "$SELF"
+  printf 'key %s\n' "$KEY"
+  printf 'lane fingerprint %s\n' "$2"
+  printf 'public key %s.pub (holds no secret; carry it to the lab)\n' "$KEY"
+  printf "at the lab: sudo /Library/Ferry/bin/ferry-admin lane add --peer %s --pubkey-file <path on the lab> --expect-fp <type the SHA256 fingerprint from this Mac's own screen>\n" "$SELF"
+}
+
+do_init() {
+  _self=
+  LOBBY_COMMAND=agenttool-lobby
+  LOBBY_MAIL_DIR=$_home/.local/state/agenttool/lobby-mail
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --self) [ $# -ge 2 ] || die 2 usage "--self needs a name"; _self=$2; shift 2 ;;
+      --lobby-command) [ $# -ge 2 ] || die 2 usage "--lobby-command needs a value"; LOBBY_COMMAND=$2; shift 2 ;;
+      --lobby-mail) [ $# -ge 2 ] || die 2 usage "--lobby-mail needs a directory"; LOBBY_MAIL_DIR=$2; shift 2 ;;
+      *) die 2 usage "ferry init --self NAME [--lobby-command CMD] [--lobby-mail DIR]" ;;
+    esac
+  done
+  is_peer "$_self" || die 2 usage "the name must be 2-16 of a-z 0-9 - (starting with a letter)"
+  if is_reserved "$_self"; then
+    die 2 usage "this name is reserved"
+  fi
+  is_lobby_command "$LOBBY_COMMAND" || die 2 usage "--lobby-command takes a plain command path"
+  is_abspath "$LOBBY_MAIL_DIR" || die 2 usage "--lobby-mail takes a plain absolute path"
+  SELF=$_self
+  KEY=$KEYDIR/ferry_${SELF}_ed25519
+  for _in_p in "$CONF" "$KEY" "$KEY.pub"; do
+    if [ -e "$_in_p" ] || [ -L "$_in_p" ]; then
+      die 1 refused "this Mac already has Ferry state; ferry whoami shows it"
+    fi
+  done
+  private_dir "$STATE"
+  private_dir "$STAGE"
+  private_dir "$_home/.ssh"
+  private_dir "$KEYDIR"
+  for _in_d in "$STATE" "$STAGE" "$KEYDIR"; do
+    chmod 0700 "$_in_d" || die 6 unsafe "could not set a directory mode"
+  done
+  "$SSH_KEYGEN" -q -t ed25519 -N '' -C "ferry:$SELF" -f "$KEY" < /dev/null > /dev/null 2>&1 \
+    || die 6 unsafe "ssh-keygen could not make the lane key"
+  chmod 0600 "$KEY" && chmod 0644 "$KEY.pub" || die 6 unsafe "could not set the lane key modes"
+  HUB_HOST=
+  HUB_LAST_IP=
+  write_conf
+  print_whoami
+}
+
+do_whoami() {
+  [ $# -eq 0 ] || die 2 usage "ferry whoami"
+  load_conf
+  print_whoami
+}
+
+do_peer() {
+  [ $# -ge 2 ] && [ "$1" = add ] && [ "$2" = hub ] || die 2 usage "ferry peer add hub --host HOST --host-key-fp SHA256:... [--replace]"
+  shift 2
+  _host=
+  _fp=
+  _replace=0
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --host) [ $# -ge 2 ] || die 2 usage "--host needs a value"; _host=$2; shift 2 ;;
+      --host-key-fp) [ $# -ge 2 ] || die 2 usage "--host-key-fp needs a value"; _fp=$2; shift 2 ;;
+      --replace) _replace=1; shift ;;
+      *) die 2 usage "ferry peer add hub --host HOST --host-key-fp SHA256:... [--replace]" ;;
+    esac
+  done
+  is_host "$_host" || die 2 usage "--host takes a host name or an IPv4 address"
+  is_fp "$_fp" || die 2 usage "--host-key-fp takes SHA256: and 43 characters"
+  load_conf
+  if { [ -e "$KH" ] || [ -L "$KH" ]; } && [ "$_replace" != 1 ]; then
+    die 1 refused "the post office is already pinned; add --replace to pin it again"
+  fi
+  launchd_check
+  _scan=$(mktemp "$STAGE/.scan.XXXXXXXX") || die 6 unsafe "could not stage"
+  TMP_A=$_scan
+  "$SSH_KEYSCAN" -4 -T 10 -t ed25519 -p 22 -- "$_host" > "$_scan" 2>/dev/null || :
+  _n=0
+  _b64=
+  while IFS= read -r _l; do
+    case $_l in
+      '' | '#'*) continue ;;
+    esac
+    set -- $_l
+    if [ $# -ne 3 ] || [ "$2" != ssh-ed25519 ]; then
+      die 1 refused "the post office answered with something other than one ed25519 host key; nothing pinned"
+    fi
+    _b64=$3
+    _n=$((_n + 1))
+  done < "$_scan"
+  [ "$_n" -ge 1 ] || die 7 unreachable "could not read the post office's host key (on the home LAN?)"
+  [ "$_n" -eq 1 ] || die 1 refused "the post office offered more than one host key; nothing pinned"
+  case $_b64 in
+    "$ED_PREFIX"*) ;;
+    *) die 1 refused "the post office answered with something other than one ed25519 host key; nothing pinned" ;;
+  esac
+  case $_b64 in
+    *[!A-Za-z0-9+/]*) die 1 refused "the post office answered with something other than one ed25519 host key; nothing pinned" ;;
+  esac
+  [ ${#_b64} -eq 68 ] || die 1 refused "the post office answered with something other than one ed25519 host key; nothing pinned"
+  printf 'ferry-hub ssh-ed25519 %s\n' "$_b64" > "$_scan"
+  _o=$("$SSH_KEYGEN" -l -E sha256 -f "$_scan" 2>/dev/null) || die 6 unsafe "could not fingerprint the host key"
+  set -- $_o
+  [ $# -ge 2 ] && is_fp "$2" || die 6 unsafe "could not fingerprint the host key"
+  if [ "$2" != "$_fp" ]; then
+    die 1 refused "the lab's host key does not match what you typed; read it again from ferry-admin whoami on the lab's own screen"
+  fi
+  chmod 0600 "$_scan" || die 6 unsafe "could not set the known_hosts mode"
+  mv -f -- "$_scan" "$KH" || die 6 unsafe "could not write known_hosts"
+  TMP_A=
+  HUB_HOST=$_host
+  first_ipv4 "$_host"
+  HUB_LAST_IP=$FIRST_IP
+  write_conf
+  printf 'pinned the post office; next: ferry ping\n'
+}
+
+do_ping() {
+  [ $# -eq 0 ] || die 2 usage "ferry ping"
+  load_conf
+  require_pin
+  launchd_check
+  TMP_A=$(mktemp "$STAGE/.ping.XXXXXXXX") || die 6 unsafe "could not stage"
+  dial "$TMP_A" "" ping
+  one_line "$TMP_A"
+  case $LINE in
+    "ok ping gate=2 peer=$SELF") ;;
+    "ok ping gate="*" peer=$SELF") die 6 unsafe "the post office runs another version of Ferry; install this client from the commit the lab was set up from" ;;
+    *) die 6 unsafe "the post office did not answer as expected" ;;
+  esac
+  printf 'ok: reached the post office as %s via %s\n' "$SELF" "$DIAL_VIA"
+}
+
+do_lobby_push() {
+  [ $# -eq 1 ] || die 2 usage "ferry lobby push FILE"
+  load_conf
+  require_pin
+  need_jq
+  launchd_check
+  stage_copy "$1" "$LOBBY_MAX"
+  check_packet "$TMP_A" enroll || die 4 invalid "this is not a lobby enrollment or renewal packet"
+  packet_display "$TMP_A" || die 4 invalid "this is not a lobby enrollment or renewal packet"
+  if [ "$PK_EXPIRED" = 1 ]; then
+    die 4 invalid "this packet has expired; run enroll-device again"
+  fi
+  sha_of "$TMP_A" || die 6 unsafe "could not hash the packet"
+  _sha=$SHA
+  _out=$(mktemp "$STAGE/.put.XXXXXXXX") || die 6 unsafe "could not stage"
+  TMP_B=$_out
+  dial "$_out" "$TMP_A" "put lobby $COPY_SIZE"
+  one_line "$_out"
+  set -- $LINE
+  if [ $# -ne 5 ] || [ "$1" != ok ] || [ "$2" != put ] || ! is_id "$3" || [ "$4" != "$COPY_SIZE" ] || [ "$5" != "$_sha" ]; then
+    die 9 integrity "the post office stored something other than this packet; run ferry list"
+  fi
+  printf 'sent lobby packet %s (%s, %s bytes, valid until %sZ, %s min left)\n' "$3" "$PK_KIND" "$COPY_SIZE" "$PK_HHMM" "$PK_LEFT"
+  printf 'next, at the lab: ferry-hub inbox\n'
+}
+
+do_lobby_fetch() {
+  [ $# -eq 0 ] || die 2 usage "ferry lobby fetch"
+  load_conf
+  require_pin
+  need_jq
+  launchd_check
+  private_dir "$LOBBY_MAIL_DIR"
+  private_dir "$LOBBY_MAIL_DIR/from-hub"
+  same_device "$LOBBY_MAIL_DIR/from-hub"
+  get_list
+  _got=0
+  _items=$ITEMS
+  while IFS=' ' read -r _id _kind _from _size _sha _name; do
+    [ "$_kind" = lobby-join ] || continue
+    get_item "$_id" "$_size" "$_sha"
+    if ! check_packet "$TMP_A" join; then
+      rm -f -- "$TMP_A"
+      TMP_A=
+      die 4 invalid "the post office holds something that is not a join packet; it stays there (ferry ack to discard)"
+    fi
+    _dest=$LOBBY_MAIL_DIR/from-hub/$_id.join.json
+    if [ -e "$_dest" ] || [ -L "$_dest" ]; then
+      die 6 unsafe "a join packet with this id is already saved; ferry ack it to discard the copy at the post office"
+    fi
+    chmod 0600 "$TMP_A" || die 6 unsafe "could not set the file mode"
+    quarantine "$TMP_A"
+    mv -- "$TMP_A" "$_dest" || die 6 unsafe "could not save the join packet"
+    TMP_A=
+    ack_item "$_id"
+    _got=$((_got + 1))
+    printf 'received join packet %s (%s bytes, sha256 ok)\n' "$_id" "$_size"
+    printf 'saved: %s\n' "$_dest"
+    printf "next, at this terminal (type the door fingerprint yourself, reading it off the hub's own screen):\n"
+    printf '  %s fleet join --packet-file %s --door-fingerprint %s\n' "$LOBBY_COMMAND" "$_dest" "$DOOR_PLACEHOLDER"
+  done <<EOF
+$_items
+EOF
+  if [ "$_got" = 0 ]; then
+    printf 'no join packet waiting\n'
+  fi
+}
+
+do_send() {
+  [ $# -eq 2 ] || die 2 usage "ferry send TO FILE"
+  is_peer "$1" || die 2 usage "TO must be a peer name (2-16 of a-z 0-9 -)"
+  if is_reserved "$1"; then
+    die 2 usage "this name is reserved; the lab's own user is lab"
+  fi
+  load_conf
+  [ "$1" != "$SELF" ] || die 2 usage "this Mac cannot send to itself"
+  require_pin
+  launchd_check
+  safe_name "${2##*/}" || die 4 invalid "the file name has nothing usable left; rename it"
+  _name=$SAFE_NAME
+  stage_copy "$2" "$FILE_MAX"
+  sha_of "$TMP_A" || die 6 unsafe "could not hash the file"
+  _sha=$SHA
+  _out=$(mktemp "$STAGE/.put.XXXXXXXX") || die 6 unsafe "could not stage"
+  TMP_B=$_out
+  dial "$_out" "$TMP_A" "put file $1 $_name $COPY_SIZE"
+  one_line "$_out"
+  set -- "$1" $LINE
+  if [ $# -ne 6 ] || [ "$2" != ok ] || [ "$3" != put ] || ! is_id "$4" || [ "$5" != "$COPY_SIZE" ] || [ "$6" != "$_sha" ]; then
+    die 9 integrity "the post office stored something other than this file; run ferry list on the receiver"
+  fi
+  _short=$(printf '%s' "$_sha" | cut -c1-12)
+  printf 'sent %s to %s as %s (%s bytes, sha256 %s)\n' "$4" "$1" "$_name" "$COPY_SIZE" "$_short"
+}
+
+do_list() {
+  [ $# -eq 0 ] || die 2 usage "ferry list"
+  load_conf
+  require_pin
+  launchd_check
+  get_list
+  _items=$ITEMS
+  while IFS=' ' read -r _id _kind _from _size _sha _name; do
+    [ -n "$_id" ] || continue
+    age_of "$_id"
+    if [ "$_kind" = lobby-join ]; then
+      printf 'lobby  %s  join from hub  %s bytes  (%s)\n' "$_id" "$_size" "$AGE"
+    else
+      printf 'file   %s  from %s  %s  %s bytes  (%s)\n' "$_id" "$_from" "$_name" "$_size" "$AGE"
+    fi
+  done <<EOF
+$_items
+EOF
+  printf '%s waiting\n' "$ITEM_COUNT"
+}
+
+do_fetch() {
+  [ $# -le 1 ] || die 2 usage "ferry fetch [ID]"
+  _want=
+  if [ $# -eq 1 ]; then
+    is_id "$1" || die 2 usage "not an item id"
+    _want=$1
+  fi
+  load_conf
+  require_pin
+  launchd_check
+  get_list
+  _items=$ITEMS
+  _got=0
+  while IFS=' ' read -r _id _kind _from _size _sha _name; do
+    [ "$_kind" = file ] || continue
+    if [ -n "$_want" ] && [ "$_id" != "$_want" ]; then
+      continue
+    fi
+    private_dir "$FILE_LANDING/$_from"
+    same_device "$FILE_LANDING/$_from"
+    _dest=$FILE_LANDING/$_from/$_id--$_name
+    if [ -e "$_dest" ] || [ -L "$_dest" ]; then
+      die 6 unsafe "this item is already in the inbox; ferry ack it to discard the copy at the post office"
+    fi
+    get_item "$_id" "$_size" "$_sha"
+    chmod 0600 "$TMP_A" || die 6 unsafe "could not set the file mode"
+    quarantine "$TMP_A"
+    mv -- "$TMP_A" "$_dest" || die 6 unsafe "could not land the file"
+    TMP_A=
+    ack_item "$_id"
+    _got=$((_got + 1))
+    printf 'received %s from %s: %s (%s bytes, sha256 ok)\n' "$_id" "$_from" "$_dest" "$_size"
+  done <<EOF
+$_items
+EOF
+  if [ -n "$_want" ] && [ "$_got" = 0 ]; then
+    die 3 notfound "no such file waiting for this Mac"
+  fi
+  if [ "$_got" = 0 ]; then
+    printf 'no files waiting\n'
+  fi
+}
+
+do_ack() {
+  [ $# -eq 1 ] || die 2 usage "ferry ack ID"
+  is_id "$1" || die 2 usage "not an item id"
+  load_conf
+  require_pin
+  launchd_check
+  ack_item "$1"
+  printf 'ok: discarded %s\n' "$1"
+}
+
+case ${1:-} in
+  '' | help | -h | --help) usage; exit 0 ;;
+esac
+who_am_i
+COMMAND=$1
+shift
+case $COMMAND in
+  init) do_init "$@" ;;
+  whoami) do_whoami "$@" ;;
+  peer) do_peer "$@" ;;
+  ping) do_ping "$@" ;;
+  lobby)
+    [ $# -ge 1 ] || die 2 usage "ferry lobby push FILE | ferry lobby fetch"
+    _sub=$1
+    shift
+    case $_sub in
+      push) do_lobby_push "$@" ;;
+      fetch) do_lobby_fetch "$@" ;;
+      *) die 2 usage "ferry lobby push FILE | ferry lobby fetch" ;;
+    esac
+    ;;
+  send) do_send "$@" ;;
+  list) do_list "$@" ;;
+  fetch) do_fetch "$@" ;;
+  ack) do_ack "$@" ;;
+  *) die 2 usage "unknown command; try ferry help" ;;
+esac
+exit 0

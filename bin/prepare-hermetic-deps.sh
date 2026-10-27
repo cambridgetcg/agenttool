@@ -78,6 +78,7 @@ readonly -a PACKAGE_WORKSPACES=(
   packages/collab-zerone
   packages/collab-courier
   packages/lobby
+  packages/ferry
   packages/browser
   packages/hf-scout
   packages/hf-training-garden
