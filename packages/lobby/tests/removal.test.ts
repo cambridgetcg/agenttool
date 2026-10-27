@@ -205,8 +205,8 @@ describe("the emergency stop", () => {
     expect(stopped.stdout).toContain("MANUAL STEP FOR THE OWNER");
     expect(stopped.stdout).toContain("agenttool-lobby.hub-bearer");
     // It names the revoke path that exists, and the 409 a single-key project meets.
-    expect(stopped.stdout).toContain("DELETE /v1/keys/<key id>");
-    expect(stopped.stdout).toContain("409");
+    expect(stopped.stdout).toContain("DELETE answers 409");
+    expect(stopped.stdout).toContain("POST /v1/keys/rotate");
     expect(stopped.stdout).not.toContain("dashboard");
     expect(hosted.seen.some((request) => request.path.startsWith("/v1/keys"))).toBe(false);
     expectNoSecretIn(stopped.stdout + stopped.stderr);

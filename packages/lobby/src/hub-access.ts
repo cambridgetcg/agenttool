@@ -1091,12 +1091,12 @@ export function planStop(ctx: FleetContext, input: { include_adopted: boolean })
     ...missions.map((mission) => `revoke ${mission.kind} mission ${mission.mission_id} (${mission.mode}): POST .../revoke, zero body bytes`),
     ...grants.map((grant) => `revoke grant ${grant.grant_id} in ${grant.mission_id} (${grant.source}): POST .../grants/<id>/revoke, zero body bytes`),
     ...(!input.include_adopted && adoptedLeft > 0 ? [`${adoptedLeft} adopted mission(s) made by hand are left alone (add --include-adopted to revoke them too)`] : []),
-    "then rotate the issuing API key by hand: the exact step is printed after the stop",
+    "then revoke the issuing API key by hand: the exact step is printed after the stop",
   ], {
     include_adopted: input.include_adopted,
     missions: missions.map((mission) => ({ ...mission, request: `POST ${MISSIONS_PATH}/${mission.mission_id}/revoke`, body_bytes: 0 })),
     grants: grants.map(revokeRequest),
-    manual_step: "rotate the issuing API key by hand; this desk never calls /v1/keys",
+    manual_step: "revoke the issuing API key by hand; this desk never calls /v1/keys",
   });
   return { preview, missions, grants, manual_step: manual };
 }

@@ -37,7 +37,7 @@ module.
 | **Membership / grant** | A term of at most the season; underneath, a mission grant of at most 24 hours bound to the device's own token hash (`mission.read`, plus `mission.observe` for players), **renewed inside the term**: a signed renew note, the hub's sweep, the member's accept of the same digest. The hub can **pause** a member's renewal. | Automatic (unattended) renewal: every renewal is confirmed at a terminal. |
 | **Roster** | A door-signed **keyed roster** (`member_roster`) of the season's members, with each member's key: the pin source for table talk. Posted on every admission, leave, kick, block and member added by hand; the newest complete roster wins. Announced in the charter. | — |
 | **Table talk** | The room's shared, signed message stream: `agenttool-mission-chat/v1` envelopes, byte for byte as the participant client writes them, verified against the keyed roster. Every member and the service read every message. | Fan-out to several members in one message. |
-| **Leave, kick, block, stop** | A member leaves its own grants (`POST .../leave`, zero body bytes). The hub kicks (revokes the member's grants), blocks (and refuses its knocks on that room), and in an emergency revokes every lobby grant and created mission, then tells the owner to rotate the issuing API key. | Steward roles; a fleet-wide block of one device. |
+| **Leave, kick, block, stop** | A member leaves its own grants (`POST .../leave`, zero body bytes). The hub kicks (revokes the member's grants), blocks (and refuses its knocks on that room), and in an emergency revokes every lobby grant and created mission, then tells the owner to revoke the issuing API key. | Steward roles; a fleet-wide block of one device. |
 | **Lobby desk** | The `agenttool-lobby` CLI and the read-only `agenttool-lobby-mcp` server. MCP tools only read (and draft). Consequential acts exist only in the CLI behind a `/dev/tty` confirmation. | — |
 | **Private ledger** | `room_id` ↔ a local Collab workspace id, an absolute path, or `none`. | The Collab bridge that would use it. |
 | **Pin book** | DID, key id, public key, petname, how the pin was obtained, fingerprint. Fingerprints are shown before names. The door key is pinned here at `fleet join`, from a fingerprint the person types. Members' keys are pinned per season by the door-signed roster, not in the pin book. | — |
@@ -323,8 +323,9 @@ agenttool-lobby enroll-device --project <hub project uuid> > /private/dir/packet
 agenttool-lobby fleet join --packet-file /private/dir/join.json --door-fingerprint <read from the hub's terminal>
 ```
 
-`--packet-file` takes an absolute path to a regular file; a relative path or a
-link is refused (`"$PWD/join.json"` works from the directory that holds it).
+`--packet-file` takes an absolute path to a regular file of at most 64 KiB; a
+relative path, or a symbolic link as the last path component, is refused
+(`"$PWD/join.json"` works from the directory that holds it).
 
 1. **`hub init`** (tty) records the hub: project, origin, Keychain item names,
    the door key (generated and stored, or reused when the Keychain already has
@@ -990,14 +991,15 @@ text such as commit SHAs, digests, room ids, public addresses and version number
   plaintext. Every fleet device reads every knock note in the directory, and
   every renew or leave note and renewal notice posted there. Every member reads
   every message at a room's table. Desk display names are self-declared and
-  visible platform-wide: `/v1/discover` lists the active identities of every
-  project, with their display names, to any project's bearer (and searches
-  them with `q`), so they stay neutral.
+  public: `/v1/discover` lists the active identities of every project, with
+  their display names, to any project's bearer (and searches them with `q`),
+  and `/public/agents/<did>` shows them to anyone with the DID, so they stay
+  neutral.
 - **The bearer is a whole-project credential.** It is read into this process's
   memory for one confirmed act and cannot be wiped from a JavaScript string;
   it goes only to the pinned origin and is never printed. A dedicated
   `lobby-issuer` key is a later step; the emergency stop revokes what it can
-  reach and tells the owner to rotate whichever key issued the grants.
+  reach and tells the owner to revoke whichever key issued the grants.
 - **The MCP view is a cache view.** `room_read` and `room_wait` see only what
   the CLI last stored; with no CLI sync running, `room_wait` waits for nothing.
   This is deliberate (see [MCP tools](#mcp-tools)).
