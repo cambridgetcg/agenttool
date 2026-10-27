@@ -12,7 +12,7 @@ import * as missions from "../services/collaboration/store";
 
 const BASE = "/v1/collaboration/missions";
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
-const TARGET = new RegExp(`^${BASE}/(${UUID})(?:/(invitation|accept|context|events|leave|revoke|grants)(?:/(${UUID})(/revoke)?)?)?$`);
+const TARGET = new RegExp(`^${BASE}/(${UUID})(?:/(invitation|accept|context|events|leave|renew|revoke|grants)(?:/(${UUID})(/revoke|/renewal/close)?)?)?$`);
 const DOCS = "https://docs.agenttool.dev/COLLABORATION-MISSIONS.md";
 
 class TransportError extends Error {
@@ -74,7 +74,7 @@ async function bodyBytes(request: Request, maxBytes: number): Promise<Uint8Array
 export interface MissionGatewayDependencies {
   verify: typeof verifyBearer;
   origin: () => string;
-  service: Pick<typeof missions, "createMission" | "getMission" | "issueMissionGrant" | "getMissionGrant" | "revokeMissionGrant" | "revokeMission" | "executeMissionRequest">;
+  service: Pick<typeof missions, "createMission" | "getMission" | "issueMissionGrant" | "getMissionGrant" | "revokeMissionGrant" | "closeMissionGrantRenewal" | "revokeMission" | "executeMissionRequest">;
 }
 
 export function createMissionGateway(dependencies: Partial<MissionGatewayDependencies> = {}) {
@@ -91,14 +91,14 @@ export function createMissionGateway(dependencies: Partial<MissionGatewayDepende
       const match = TARGET.exec(url.pathname);
       const collection = url.pathname === BASE;
       if (!match && !collection) throw new TransportError(404, "mission_route_not_found");
-      const [, missionId = "", action, grantId, revocation] = match ?? [];
+      const [, missionId = "", action, grantId, suffix] = match ?? [];
       if (grantId && action !== "grants") throw new TransportError(404, "mission_route_not_found");
-      const participant = ["invitation", "accept", "context", "events", "leave"].includes(action ?? "");
-      // Participant leave, like administrator revocation, carries zero body bytes.
+      const participant = ["invitation", "accept", "context", "events", "leave", "renew"].includes(action ?? "");
+      // Participant leave, like administrator revocation and window close, carries zero body bytes.
       const leave = action === "leave";
       const allowed = participant
-        ? action === "events" ? ["GET", "POST"] : action === "accept" || leave ? ["POST"] : ["GET"]
-        : collection || action === "revoke" || action === "grants" && (!grantId || revocation) ? ["POST"] : ["GET"];
+        ? action === "events" ? ["GET", "POST"] : action === "accept" || leave || action === "renew" ? ["POST"] : ["GET"]
+        : collection || action === "revoke" || action === "grants" && (!grantId || suffix) ? ["POST"] : ["GET"];
       if (!allowed.includes(method)) { c.header("Allow", allowed.join(", ")); throw new TransportError(405, "mission_method_not_allowed"); }
       if (query && !(participant && action === "events" && method === "GET")) throw new TransportError(400, "invalid_mission_target");
       const authorization = c.req.header("Authorization") ?? "";
@@ -118,7 +118,7 @@ export function createMissionGateway(dependencies: Partial<MissionGatewayDepende
         };
         const bytes = await bodyBytes(c.req.raw, method === "GET" || leave ? 0 : 8192);
         const result = await service.executeMissionRequest({ token, missionId, origin: origin(), method, requestTarget: url.pathname + query, bodyBytes: bytes, proof });
-        return c.json(result.data, result.created && action === "events" ? 201 : 200);
+        return c.json(result.data, result.created && (action === "events" || action === "renew") ? 201 : 200);
       }
 
       const verified = await verify(token, { recordLastUsed: false });
@@ -135,9 +135,13 @@ export function createMissionGateway(dependencies: Partial<MissionGatewayDepende
         const body = issueMissionGrantSchema.safeParse(json);
         if (!body.success) throw new TransportError(400, malformedTokenHash(json) ? "invalid_token_sha256" : "invalid_mission_grant_request");
         const participantHash = body.data.token_sha256 === undefined ? {} : { tokenSha256: body.data.token_sha256 };
-        return c.json(await service.issueMissionGrant({ ...target, issuerApiKeyId: verified.apiKey.id, grantId: body.data.grant_id, identityId: body.data.identity_id, signingKeyId: body.data.signing_key_id, actions: body.data.actions, expiresAt: body.data.expires_at, origin: origin(), ...participantHash }), 201);
+        const window = body.data.renewable_until === undefined ? {} : { renewableUntil: body.data.renewable_until };
+        return c.json(await service.issueMissionGrant({ ...target, issuerApiKeyId: verified.apiKey.id, grantId: body.data.grant_id, identityId: body.data.identity_id, signingKeyId: body.data.signing_key_id, actions: body.data.actions, expiresAt: body.data.expires_at, origin: origin(), ...participantHash, ...window }), 201);
       }
-      if (action === "grants") return c.json({ grant: await (revocation ? service.revokeMissionGrant : service.getMissionGrant)({ ...target, grantId: grantId! }) });
+      if (action === "grants") {
+        const operation = suffix === "/renewal/close" ? service.closeMissionGrantRenewal : suffix === "/revoke" ? service.revokeMissionGrant : service.getMissionGrant;
+        return c.json({ grant: await operation({ ...target, grantId: grantId! }) });
+      }
       if (action === "revoke") return c.json({ mission: await service.revokeMission(target) });
       return c.json({ mission: await service.getMission(target) });
     } catch (error) {

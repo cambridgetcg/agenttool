@@ -8,6 +8,8 @@ export const MISSION_BOUNDS = Object.freeze({
   descriptorBytes: 32_768, requestBytes: 8_192, pageMax: 50, pageDefault: 20,
   responseBytes: 1_048_576,
   missionAgeMs: 30 * 86_400_000, grantAgeMs: 86_400_000, proofWindowMs: 300_000,
+  // A renewable root lives at least an hour, which bounds a chain's length.
+  renewableGrantMinMs: 3_600_000,
 });
 export const MISSION_PROOF_HEADERS = Object.freeze({
   grantId: "X-Agenttool-Mission-Grant-Id", identityId: "X-Agenttool-Mission-Identity-Id",
@@ -45,12 +47,18 @@ export const createMissionSchema = z.object({
 export const issueMissionGrantSchema = z.object({
   grant_id: missionUuidSchema, identity_id: missionUuidSchema, signing_key_id: missionUuidSchema,
   actions: missionActionsSchema, expires_at: missionDateSchema, token_sha256: missionTokenSha256Schema.optional(),
+  renewable_until: missionDateSchema.optional(),
 }).strict();
 export const missionObservationSchema = z.object({
   event_id: missionUuidSchema, summary: boundedText(1000),
   seat: z.object({ device_id: boundedText(128), session_id: boundedText(128), harness: boundedText(128) }).strict().optional(),
 }).strict();
 export const missionAcceptSchema = z.object({ mission_digest: missionDigestSchema }).strict();
+/** Signed as exact bytes: "renew grant G (the proof's grant) into new grant_id with token hash H, for digest D".
+ * The server copies every scope field from G and computes the expiry. */
+export const missionRenewSchema = z.object({
+  grant_id: missionUuidSchema, token_sha256: missionTokenSha256Schema, mission_digest: missionDigestSchema,
+}).strict();
 export type MissionDescriptor = z.infer<typeof missionDescriptorSchema>;
 export type MissionAction = z.infer<typeof missionActionSchema>;
 export type MissionObservation = z.infer<typeof missionObservationSchema>;
@@ -59,7 +67,7 @@ export interface MissionRequest {
   token: string; missionId: string; origin: string; method: string; requestTarget: string;
   bodyBytes: Uint8Array; proof: MissionProof;
 }
-export type MissionOperation = "invitation" | "accept" | "context" | "list" | "observe" | "leave";
+export type MissionOperation = "invitation" | "accept" | "context" | "list" | "observe" | "leave" | "renew";
 /** Signed request fields retained as independently verifiable evidence. */
 export type MissionProofRecord = Record<string, string>;
 /** The grant's stored acceptance proof. A participant self-leave adds one nested
@@ -67,11 +75,11 @@ export type MissionProofRecord = Record<string, string>;
 export type MissionGrantProofs = { [field: string]: string | MissionProofRecord };
 export const MISSION_LEAVE_FIELD = "participant_leave";
 export const MISSION_LEAVE_REASON = "participant_left";
-export type MissionErrorReason = "invalid_request" | "invalid_credential" | "not_found" | "conflict" | "acceptance_required" | "invalid_state" | "token_hash_conflict";
+export type MissionErrorReason = "invalid_request" | "invalid_credential" | "not_found" | "conflict" | "acceptance_required" | "invalid_state" | "token_hash_conflict" | "renewal_unavailable";
 export class MissionError extends HTTPException {
   readonly code: string;
   constructor(reason: MissionErrorReason) {
-    const status = { invalid_request: 400, invalid_credential: 401, not_found: 404, conflict: 409, acceptance_required: 403, invalid_state: 503, token_hash_conflict: 409 } as const;
+    const status = { invalid_request: 400, invalid_credential: 401, not_found: 404, conflict: 409, acceptance_required: 403, invalid_state: 503, token_hash_conflict: 409, renewal_unavailable: 403 } as const;
     const message = {
       invalid_request: "Use the exact bounded mission request contract.",
       invalid_credential: "This credential and proof do not authorize this mission request.",
@@ -80,10 +88,13 @@ export class MissionError extends HTTPException {
       acceptance_required: "Explicit signed acceptance of this invitation is required.",
       invalid_state: "Mission state could not be validated.",
       token_hash_conflict: "This token hash is already bound to a grant.",
+      renewal_unavailable: "This grant cannot be renewed now.",
     }[reason];
     const action = reason === "token_hash_conflict"
       ? "Ask the participant to generate a fresh token and send its SHA-256; if a grant you issued earlier holds this hash, inspect that grant ID instead"
-      : "Inspect the mission invitation and credential scope; an issued token cannot be recovered";
+      : reason === "renewal_unavailable"
+        ? "Inspect the grant's renewal window: renewal opens halfway through a live accepted grant and ends at renewable_until or when the administrator closes it; after that, ask the administrator for a new grant"
+        : "Inspect the mission invitation and credential scope; an issued token cannot be recovered";
     // The shared mission-client contract names this refusal without the domain prefix.
     const code = reason === "token_hash_conflict" ? reason : `collaboration_mission_${reason}`;
     super(status[reason], { message, cause: { error: code, message,
@@ -116,7 +127,7 @@ export function missionOperation(input: Pick<MissionRequest, "missionId" | "meth
   const { method, requestTarget: target, bodyBytes } = input;
   if (method === "GET" && bodyBytes.length !== 0) throw new MissionError("invalid_request");
   const simple = method === "GET" ? { [`${base}/invitation`]: "invitation", [`${base}/context`]: "context" }
-    : method === "POST" ? { [`${base}/accept`]: "accept", [`${base}/events`]: "observe", [`${base}/leave`]: "leave" } : {};
+    : method === "POST" ? { [`${base}/accept`]: "accept", [`${base}/events`]: "observe", [`${base}/leave`]: "leave", [`${base}/renew`]: "renew" } : {};
   const operation = simple[target] as MissionOperation | undefined;
   // Leave, like a read, signs zero body bytes.
   if (operation === "leave" && bodyBytes.length !== 0) throw new MissionError("invalid_request");

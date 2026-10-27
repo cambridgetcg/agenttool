@@ -23,6 +23,7 @@ function fixture(overrides: Partial<MissionGatewayDependencies> = {}) {
     issueMissionGrant: async (input: unknown) => { seen.push(input); return { grant: { grant_id: G }, token: TOKEN }; },
     getMissionGrant: async (input: unknown) => { seen.push(input); return { grant_id: G }; },
     revokeMissionGrant: async (input: unknown) => { seen.push(input); return { grant_id: G }; },
+    closeMissionGrantRenewal: async (input: unknown) => { seen.push({ close: input }); return { grant_id: G }; },
     revokeMission: async (input: unknown) => { seen.push(input); return { mission_id: M }; },
     executeMissionRequest: async (input: Parameters<MissionGatewayDependencies["service"]["executeMissionRequest"]>[0]) => {
       missionOperation(input); seen.push(input); return { created: input.method === "POST", data: { accepted: true } };
@@ -238,12 +239,110 @@ describe("sealed collaboration transport", () => {
     expect(result.properties.status).toEqual({ const: "revoked" });
   });
   test("OpenAPI gives every participant path the narrow scheme and five required proofs", () => {
-    for (const suffix of ["invitation", "accept", "context", "events", "leave"]) {
+    for (const suffix of ["invitation", "accept", "context", "events", "leave", "renew"]) {
       const path = COLLABORATION_OPENAPI_PATHS[`${BASE}/{mission_id}/${suffix}`] as any;
       for (const method of ["get", "post"]) if (path[method]) {
         expect(path[method].security).toEqual([{ missionGrant: [] }]);
         expect(path[method].parameters.filter((p: any) => p.in === "header" && p.required).map((p: any) => p.name)).toEqual(Object.values(MISSION_PROOF_HEADERS));
       }
     }
+  });
+  test("participant renew is a JSON POST with proofs: 201 when created, 200 on exact retry, no project context", async () => {
+    const f = fixture();
+    const body = JSON.stringify({ grant_id: K, mission_digest: `sha256:${"a".repeat(64)}`, token_sha256: "b".repeat(64) });
+    const created = await f.app.request(`http://internal.invalid${BASE}/${M}/renew`, { method: "POST", body,
+      headers: { ...headers(), "Content-Type": "application/json", Host: "spoof.invalid", "Idempotency-Key": "do-not-replay" } });
+    expect(created.status).toBe(201); privateResponse(created);
+    expect(f.counts()).toEqual({ project: 0, downstream: 0 });
+    expect(f.seen[0]).toMatchObject({ method: "POST", requestTarget: `${BASE}/${M}/renew`, origin: ORIGIN, missionId: M, token: TOKEN });
+    expect(new TextDecoder().decode(f.seen[0].bodyBytes)).toBe(body);
+    f.service.executeMissionRequest = (async () => ({ created: false, data: { replay: true } })) as never;
+    const replay = await f.app.request(`${BASE}/${M}/renew`, { method: "POST", body, headers: { ...headers(), "Content-Type": "application/json" } });
+    expect(replay.status).toBe(200); privateResponse(replay);
+    expect(await replay.json()).toEqual({ replay: true });
+    f.service.executeMissionRequest = async () => { throw new MissionError("renewal_unavailable"); };
+    const closed = await f.app.request(`${BASE}/${M}/renew`, { method: "POST", body, headers: { ...headers(), "Content-Type": "application/json" } });
+    expect(closed.status).toBe(403); privateResponse(closed);
+    expect((await closed.json()).error).toBe("collaboration_mission_renewal_unavailable");
+  });
+  test("renew refuses other methods, queries, non-JSON, oversize, encoding and project bearers before the service", async () => {
+    const f = fixture();
+    const json = { ...headers(), "Content-Type": "application/json" };
+    for (const [path, init, status] of [
+      [`${BASE}/${M}/renew`, { method: "GET", headers: headers() }, 405],
+      [`${BASE}/${M}/renew?grant_id=${G}`, { method: "POST", body: "{}", headers: json }, 400],
+      [`${BASE}/${M}/renew`, { method: "POST", body: "{}", headers: headers() }, 415],
+      [`${BASE}/${M}/renew`, { method: "POST", body: "x".repeat(8193), headers: json }, 413],
+      [`${BASE}/${M}/renew`, { method: "POST", body: "{}", headers: { ...json, "Content-Encoding": "gzip" } }, 400],
+      [`${BASE}/${M}/renew`, { method: "POST", body: "{}", headers: { ...json, Authorization: "Bearer at_project" } }, 401],
+      [`${BASE}/${M}/renew/`, { method: "POST", body: "{}", headers: json }, 404],
+      [`${BASE}/${M}/renew/${G}`, { method: "POST", body: "{}", headers: json }, 404],
+    ] as const) {
+      const response = await f.app.request(path, init as RequestInit);
+      expect(response.status).toBe(status); privateResponse(response);
+      if (status === 405) expect(response.headers.get("Allow")).toBe("POST");
+    }
+    expect(f.seen).toEqual([]); expect(f.counts()).toEqual({ project: 0, downstream: 0 });
+  });
+  test("closing a renewal window is a zero-byte administrator POST on one exact path", async () => {
+    const f = fixture();
+    const admin = { Authorization: "Bearer at_project" };
+    const closed = await f.app.request(`${BASE}/${M}/grants/${G}/renewal/close`, { method: "POST", headers: { ...admin, "Idempotency-Key": "same" } });
+    expect(closed.status).toBe(200); privateResponse(closed);
+    expect(await closed.json()).toEqual({ grant: { grant_id: G } });
+    expect(f.seen).toEqual([{ close: { projectId: M, missionId: M, grantId: G } }]);
+    expect(f.counts()).toEqual({ project: 1, downstream: 0 });
+    for (const [path, init, status] of [
+      [`${BASE}/${M}/grants/${G}/renewal/close`, { method: "POST", body: "{}", headers: { ...admin, "Content-Type": "application/json" } }, 413],
+      [`${BASE}/${M}/grants/${G}/renewal/close`, { method: "POST", headers: { ...admin, "Content-Length": "1" } }, 413],
+      [`${BASE}/${M}/grants/${G}/renewal/close`, { method: "POST", headers: headers() }, 401],
+      [`${BASE}/${M}/grants/${G}/renewal/close`, { method: "GET", headers: admin }, 405],
+      [`${BASE}/${M}/grants/${G}/renewal/close?now=1`, { method: "POST", headers: admin }, 400],
+      [`${BASE}/${M}/grants/${G}/renewal`, { method: "POST", headers: admin }, 404],
+      [`${BASE}/${M}/grants/${G}/renewal/open`, { method: "POST", headers: admin }, 404],
+      [`${BASE}/${M}/grants/${G}/renewal/close/`, { method: "POST", headers: admin }, 404],
+    ] as const) {
+      const response = await f.app.request(path, init as RequestInit);
+      expect(response.status).toBe(status); privateResponse(response);
+      if (status === 404) expect((await response.json()).error).toBe("mission_route_not_found");
+      if (status === 405) expect(response.headers.get("Allow")).toBe("POST");
+    }
+    expect(f.seen).toHaveLength(1);
+    // Revoke and inspect keep their routes and services.
+    await f.app.request(`${BASE}/${M}/grants/${G}/revoke`, { method: "POST", headers: admin });
+    await f.app.request(`${BASE}/${M}/grants/${G}`, { headers: admin });
+    expect(f.seen.slice(1)).toEqual([{ projectId: M, missionId: M, grantId: G }, { projectId: M, missionId: M, grantId: G }]);
+  });
+  test("grant issue forwards renewable_until only when present, and refuses a noncanonical one", async () => {
+    const grant = { grant_id: G, identity_id: M, signing_key_id: K, actions: ["mission.read"], expires_at: "2026-09-28T12:00:00.000Z" };
+    const request = (f: ReturnType<typeof fixture>, value: object) => f.app.request(`${BASE}/${M}/grants`, { method: "POST",
+      headers: { Authorization: "Bearer at_project", "Content-Type": "application/json" }, body: JSON.stringify(value) });
+    const windowed = fixture();
+    expect((await request(windowed, { ...grant, renewable_until: "2026-09-29T09:00:00.000Z" })).status).toBe(201);
+    expect(windowed.seen[0].renewableUntil).toBe("2026-09-29T09:00:00.000Z");
+    const plain = fixture();
+    expect((await request(plain, grant)).status).toBe(201);
+    expect("renewableUntil" in plain.seen[0]).toBe(false);
+    const malformed = fixture();
+    const refused = await request(malformed, { ...grant, renewable_until: "2026-09-29T09:00:00Z" });
+    expect(refused.status).toBe(400); expect((await refused.json()).error).toBe("invalid_mission_grant_request");
+    expect(malformed.seen).toEqual([]);
+  });
+  test("OpenAPI documents renew, the window field and the close route", () => {
+    const paths = COLLABORATION_OPENAPI_PATHS as any;
+    const issue = paths[`${BASE}/{mission_id}/grants`].post.requestBody.content["application/json"].schema;
+    expect(issue.properties.renewable_until).toMatchObject({ type: "string", format: "date-time" });
+    expect(issue.required).not.toContain("renewable_until");
+    const renew = paths[`${BASE}/{mission_id}/renew`];
+    expect(Object.keys(renew)).toEqual(["parameters", "post"]);
+    const schema = renew.post.requestBody.content["application/json"].schema;
+    expect(schema).toMatchObject({ additionalProperties: false, required: ["grant_id", "mission_digest", "token_sha256"] });
+    expect(Object.keys(renew.post.responses)).toEqual(expect.arrayContaining(["200", "201", "400", "401", "403", "409"]));
+    expect(renew.post.responses["403"].description).toContain("collaboration_mission_renewal_unavailable");
+    expect(renew.post.security).toEqual([{ missionGrant: [] }]);
+    const close = paths[`${BASE}/{mission_id}/grants/{grant_id}/renewal/close`];
+    expect(Object.keys(close)).toEqual(["parameters", "post"]);
+    expect(close.post.requestBody).toBeUndefined();
+    expect(close.post.security).toEqual([{ bearerAuth: [] }]);
   });
 });

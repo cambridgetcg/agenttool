@@ -2,13 +2,14 @@
  * Doctrine: docs/COLLABORATION-MISSIONS.md. Never falls back to application DATABASE_URL.
  */
 import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import * as ed from "@noble/ed25519";
 import { drizzle } from "drizzle-orm/postgres-js";
 import type { Sql } from "postgres";
 import postgres from "../fixtures/verified-postgres";
-import { createMission, executeMissionRequest, getMission, getMissionGrant, issueMissionGrant, revokeMission, revokeMissionGrant, type ServerIssuedMissionGrant } from "../../src/services/collaboration/store";
+import { closeMissionGrantRenewal, createMission, executeMissionRequest, getMission, getMissionGrant, issueMissionGrant, revokeMission, revokeMissionGrant, type ServerIssuedMissionGrant } from "../../src/services/collaboration/store";
+import { correspondenceCanonicalJson } from "../../src/services/correspondence/canonical";
 import { canonicalMissionRequestBytes, verifyMissionProof } from "../../src/services/collaboration/proof";
 import type { MissionAction, MissionRequest } from "../../src/services/collaboration/contracts";
 
@@ -22,6 +23,20 @@ const PRIVATE = new Uint8Array(32).fill(7), OTHER_PRIVATE = new Uint8Array(32).f
 const PUBLIC = Buffer.from(ed.getPublicKey(PRIVATE)).toString("base64"), OTHER_PUBLIC = Buffer.from(ed.getPublicKey(OTHER_PRIVATE)).toString("base64");
 const descriptor = { format: "agenttool-collaboration-mission/v1", purpose: "Selected collaboration", resources: [], acceptance_criteria: ["Report evidence"], principalities: [] };
 let admin: Sql, service: Sql, locker: Sql, database: ReturnType<typeof drizzle>, owned = false;
+let legacyRows: Array<Record<string, unknown>> = [];
+const sha = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
+const DIGEST = `sha256:${sha(correspondenceCanonicalJson(descriptor))}`;
+const LEGACY_TOKEN = `atcm_${Buffer.alloc(32, 21).toString("base64url")}`;
+// Exactly the column list the a99257ab code inserts: no renewal columns.
+const legacyGrantInsert = `INSERT INTO tools.collaboration_grants (id, project_id, mission_id, identity_id, signing_key_id, issuing_api_key_id,
+  token_hash, origin, actions, issued_at, expires_at, accepted_at, acceptance_proof, revoked_at) VALUES ('${G}', '${P}', '${M}', '${I}', '${K}', '${A}',
+  '${sha(LEGACY_TOKEN)}', '${ORIGIN}', ARRAY['mission.observe','mission.read'], '${NOW.toISOString()}', '${END.toISOString()}', NULL, NULL, NULL);`;
+const LEGACY_MISSION = `INSERT INTO tools.collaboration_missions (id, project_id, creator_api_key_id, descriptor, digest, created_at, expires_at)
+  VALUES ('${M}', '${P}', '${A}', '${JSON.stringify(descriptor)}'::jsonb, '${DIGEST}', '${NOW.toISOString()}', '${new Date(NOW.getTime() + 86_400_000).toISOString()}');`;
+const LEGACY_SEED = `INSERT INTO tools.projects (id) VALUES ('${P}'); INSERT INTO tools.api_keys (id, project_id) VALUES ('${A}', '${P}');
+  INSERT INTO identity.identities (id, project_id, status) VALUES ('${I}', '${P}', 'active');
+  INSERT INTO identity.identity_keys (id, identity_id, public_key, active) VALUES ('${K}', '${I}', '${PUBLIC}', true);
+  ${LEGACY_MISSION} ${legacyGrantInsert}`;
 const options = () => ({ database, now: NOW });
 const target = { projectId: P, missionId: M };
 const grantInput = (actions: MissionAction[] = ["mission.read", "mission.observe"]) => ({ ...target, issuerApiKeyId: A, grantId: G, identityId: I, signingKeyId: K, origin: ORIGIN, actions, expiresAt: END.toISOString() });
@@ -67,6 +82,10 @@ beforeAll(async () => {
     CREATE TABLE identity.identity_keys (id uuid PRIMARY KEY, identity_id uuid NOT NULL REFERENCES identity.identities(id), public_key text NOT NULL, active boolean NOT NULL, revoked_at timestamptz);`);
   owned = true;
   await admin.unsafe(readFileSync(new URL("../../migrations/20260928T094318_collaboration_missions.sql", import.meta.url), "utf8"));
+  // Legacy rows exist before the renewal migration, as in production.
+  await admin.unsafe(LEGACY_SEED);
+  await admin.unsafe(readFileSync(new URL("../../migrations/20261027T134854_collaboration_grant_renewal.sql", import.meta.url), "utf8"));
+  legacyRows = await admin`SELECT * FROM tools.collaboration_grants ORDER BY id`;
   service = postgres(DATABASE, { max: 8, prepare: false, connection: { application_name: "collaboration-mission-service-test" } });
   locker = postgres(DATABASE, { max: 1, prepare: false, connection: { application_name: "collaboration-mission-locker-test" } });
   database = drizzle(service);
@@ -378,4 +397,304 @@ databaseTest("an already admitted append commits before revocation, which then d
   expect((await revoking).revoked_at).toBe(NOW.toISOString());
   await expect(executeMissionRequest(write, options())).rejects.toMatchObject({ status: 401 });
   expect((await admin`SELECT count(*)::int AS n FROM tools.collaboration_events`)[0].n).toBe(1);
+});
+
+// ── Renewal inside an administrator-set window ─────────────────────────────
+const HALF = new Date(NOW.getTime() + 1_800_000), WINDOW = new Date(NOW.getTime() + 6 * 3_600_000);
+const freshToken = () => `atcm_${randomBytes(32).toString("base64url")}`;
+const at = (date: Date) => ({ database, now: date });
+/** A signed renew of `grantId` (holding `token`) into `child` with `childToken`'s hash, at `time`. */
+function renewReq(token: string, grantId: string, child: string, childToken: string, time = HALF, digest = DIGEST) {
+  return req(token, "/renew", { grant_id: child, mission_digest: digest, token_sha256: sha(childToken) },
+    { proof: { grantId, identityId: I, keyId: K, timestamp: time.toISOString(), signature: "" } });
+}
+async function renewableRoot(renewableUntil = WINDOW, missionAgeMs = 86_400_000) {
+  const mission = await createMission({ ...target, issuerApiKeyId: A, descriptor, expiresAt: new Date(NOW.getTime() + missionAgeMs).toISOString() }, options());
+  const issued = await issueMissionGrant({ ...grantInput(), renewableUntil: renewableUntil.toISOString() }, options()) as ServerIssuedMissionGrant;
+  await executeMissionRequest(req(issued.token, "/accept", { mission_digest: mission.mission_digest }), options());
+  return { token: issued.token, grant: issued.grant, mission };
+}
+const unrevokedMembers = async () => (await admin`SELECT count(*)::int AS n FROM tools.collaboration_grants WHERE renewal_root_id = ${G} AND revoked_at IS NULL`)[0].n;
+const membersAt = async (time: Date) => (await admin`SELECT count(*)::int AS n FROM tools.collaboration_grants
+  WHERE renewal_root_id = ${G} AND revoked_at IS NULL AND issued_at <= ${time} AND expires_at > ${time}`)[0].n;
+async function resetMissions() { await admin.unsafe("DELETE FROM tools.collaboration_events; DELETE FROM tools.collaboration_grants; DELETE FROM tools.collaboration_missions;"); }
+/** Holds a callback's transaction open after its work, so a competitor queues behind its locks. */
+function delayed() {
+  const done = barrier(), commit = barrier();
+  const handle = { transaction: (callback: Parameters<typeof database.transaction>[0], config?: Parameters<typeof database.transaction>[1]) =>
+    database.transaction(async tx => { try { return await callback(tx); } finally { done.resolve(); await commit.promise; } }, config) };
+  return { handle: handle as unknown as typeof database, done: done.promise, commit: commit.resolve };
+}
+const outcome = (promise: Promise<unknown>) => promise.then(value => ({ status: 200, value }), error => ({ status: error.status as number, code: error.code as string, error }));
+
+databaseTest("the renewal migration applies over legacy rows, which still admit, accept, leave and revoke", async () => {
+  expect(legacyRows).toHaveLength(1);
+  expect(legacyRows[0]).toMatchObject({ id: G, renewable_until: null, renewal_closed_at: null, renewal_root_id: null, renewed_from_grant_id: null });
+  // Old code on the new schema: its insert names none of the renewal columns.
+  await admin.unsafe(LEGACY_MISSION + legacyGrantInsert);
+  const invite = await executeMissionRequest(req(LEGACY_TOKEN, "/invitation"), options());
+  expect(invite.data.grant).not.toHaveProperty("renewal");
+  expect((await executeMissionRequest(req(LEGACY_TOKEN, "/accept", { mission_digest: DIGEST }), options())).created).toBe(true);
+  await expect(executeMissionRequest(renewReq(LEGACY_TOKEN, G, H, freshToken(), NOW), options())).rejects.toMatchObject({ status: 403, code: "collaboration_mission_renewal_unavailable" });
+  expect((await executeMissionRequest(req(LEGACY_TOKEN, "/leave", undefined, { method: "POST" }), options())).created).toBe(true);
+  expect(await revokeMissionGrant({ ...target, grantId: G }, options())).toMatchObject({ revoked_at: NOW.toISOString(), revocation_reason: "participant_left" });
+  expect(await closeMissionGrantRenewal({ ...target, grantId: G }, options())).not.toHaveProperty("renewal");
+});
+
+databaseTest("a renewable root references itself and renews into a born-accepted child with the same scope", async () => {
+  const { token, grant } = await renewableRoot();
+  expect(grant.renewal).toEqual({ root_grant_id: G, renewed_from_grant_id: null, renewed_to_grant_id: null, renewable_until: WINDOW.toISOString(), closed_at: null });
+  expect((await admin`SELECT renewal_root_id FROM tools.collaboration_grants WHERE id = ${G}`)[0].renewal_root_id).toBe(G);
+  await expect(executeMissionRequest(renewReq(token, G, H, freshToken(), new Date(HALF.getTime() - 1)), at(new Date(HALF.getTime() - 1)))).rejects.toMatchObject({ status: 403 });
+  const childToken = freshToken(), request = renewReq(token, G, H, childToken);
+  const renewed = await executeMissionRequest(request, at(HALF));
+  expect(renewed.created).toBe(true);
+  expect(renewed.data).toMatchObject({ token_sha256: sha(childToken), token_source: "participant",
+    grant: { grant_id: H, accepted_at: HALF.toISOString(), issued_at: HALF.toISOString(), expires_at: new Date(HALF.getTime() + 3_600_000).toISOString(),
+      actions: ["mission.observe", "mission.read"], renewal: { root_grant_id: G, renewed_from_grant_id: G, renewed_to_grant_id: null, renewable_until: WINDOW.toISOString(), closed_at: null } } });
+  expect(JSON.stringify(renewed.data)).not.toContain(childToken);
+  // The stored proof re-verifies on its own through signed_grant_id.
+  const [stored] = await admin`SELECT acceptance_proof FROM tools.collaboration_grants WHERE id = ${H}`;
+  const proof = stored.acceptance_proof;
+  expect(proof.signed_grant_id).toBe(G);
+  expect(verifyMissionProof({ token: "", missionId: M, origin: proof.origin, method: proof.method, requestTarget: proof.request_target,
+    bodyBytes: Buffer.from(proof.raw_body, "utf8"), proof: { grantId: proof.signed_grant_id, identityId: I, keyId: K, timestamp: proof.timestamp, signature: proof.signature } }, proof.public_key, HALF)).toBe(true);
+  // The child works at once, and a later explicit accept is harmless.
+  const childProof = { grantId: H, identityId: I, keyId: K, timestamp: HALF.toISOString(), signature: "" };
+  expect((await executeMissionRequest(req(childToken, "/context", undefined, { proof: childProof }), at(HALF))).data.grant).toMatchObject({ grant_id: H });
+  expect((await executeMissionRequest(req(childToken, "/accept", { mission_digest: DIGEST }, { proof: childProof }), at(HALF))).created).toBe(false);
+  expect((await getMissionGrant({ ...target, grantId: G }, options())).renewal?.renewed_to_grant_id).toBe(H);
+  // An exact retry with a fresh proof returns the same child; anything else conflicts.
+  const later = new Date(HALF.getTime() + 1000);
+  const retry = await executeMissionRequest(renewReq(token, G, H, childToken, later), at(later));
+  expect(retry).toEqual({ created: false, data: { ...renewed.data } });
+  await expect(executeMissionRequest(renewReq(token, G, E, freshToken(), later), at(later))).rejects.toMatchObject({ status: 409, code: "collaboration_mission_conflict" });
+  await expect(executeMissionRequest(renewReq(token, G, H, childToken, later, `sha256:${"0".repeat(64)}`), at(later))).rejects.toMatchObject({ status: 409 });
+  // Close keeps exact retry working while G lives, but stops new renewals of the head.
+  await closeMissionGrantRenewal({ ...target, grantId: H }, at(later));
+  expect((await executeMissionRequest(renewReq(token, G, H, childToken, later), at(later))).created).toBe(false);
+  const head = new Date(HALF.getTime() + 1_800_000);
+  await expect(executeMissionRequest(renewReq(childToken, H, E, freshToken(), head), at(head))).rejects.toMatchObject({ status: 403, code: "collaboration_mission_renewal_unavailable" });
+  expect((await admin`SELECT count(*)::int AS n FROM tools.collaboration_grants WHERE renewal_closed_at = ${later}`)[0].n).toBe(2);
+  // A captured renew replayed after revocation is refused, not answered with the stored child.
+  await revokeMissionGrant({ ...target, grantId: G }, at(later));
+  await expect(executeMissionRequest(renewReq(token, G, H, childToken, later), at(later))).rejects.toMatchObject({ status: 401 });
+  expect(await unrevokedMembers()).toBe(0);
+});
+
+databaseTest("migration constraints keep a chain linear and within its root's whole scope", async () => {
+  const { token } = await renewableRoot();
+  await executeMissionRequest(renewReq(token, G, H, freshToken()), at(HALF));
+  const copy = (id: string, change: string, from = G) => `INSERT INTO tools.collaboration_grants (id, project_id, mission_id, identity_id, signing_key_id, issuing_api_key_id, token_hash, origin, actions,
+    issued_at, expires_at, accepted_at, acceptance_proof, revoked_at, renewable_until, renewal_root_id, renewed_from_grant_id)
+    SELECT '${id}', project_id, mission_id, identity_id, signing_key_id, issuing_api_key_id, '${"f".repeat(64)}', origin, actions,
+    issued_at, expires_at, issued_at, '{}'::jsonb, NULL, renewable_until, renewal_root_id, '${from}' FROM tools.collaboration_grants WHERE id = '${H}'; ${change}`;
+  await admin`INSERT INTO identity.identity_keys (id, identity_id, public_key, active) VALUES (${uid(40)}, ${I}, ${OTHER_PUBLIC}, true)`;
+  for (const change of [
+    `UPDATE tools.collaboration_grants SET actions = ARRAY['mission.read'] WHERE id = '${uid(41)}'`,
+    `UPDATE tools.collaboration_grants SET origin = 'https://other.example' WHERE id = '${uid(41)}'`,
+    `UPDATE tools.collaboration_grants SET issuing_api_key_id = '${B}' WHERE id = '${uid(41)}'`,
+    `UPDATE tools.collaboration_grants SET signing_key_id = '${uid(40)}' WHERE id = '${uid(41)}'`,
+    `UPDATE tools.collaboration_grants SET identity_id = '${J}', signing_key_id = '${L}' WHERE id = '${uid(41)}'`,
+  ]) await expect(Promise.resolve(admin.begin(tx => tx.unsafe(copy(uid(41), change, H))))).rejects.toMatchObject({ code: "23503" });
+  // A second child of one predecessor, a window without a root, and a child accepted later than issued.
+  await expect(Promise.resolve(admin.unsafe(copy(uid(42), "")))).rejects.toMatchObject({ code: "23505" });
+  for (const sql of [
+    `UPDATE tools.collaboration_grants SET renewal_root_id = NULL, renewed_from_grant_id = NULL WHERE id = '${H}'`,
+    `UPDATE tools.collaboration_grants SET accepted_at = issued_at + interval '1 second' WHERE id = '${H}'`,
+    `UPDATE tools.collaboration_grants SET renewable_until = expires_at - interval '1 second' WHERE id = '${H}'`,
+    `UPDATE tools.collaboration_grants SET renewable_until = issued_at + interval '31 days' WHERE id = '${G}'`,
+    `UPDATE tools.collaboration_grants SET renewal_closed_at = issued_at - interval '1 second' WHERE id = '${G}'`,
+    `UPDATE tools.collaboration_grants SET renewal_closed_at = 'infinity' WHERE id = '${G}'`,
+  ]) await expect(Promise.resolve(admin.unsafe(sql))).rejects.toMatchObject({ code: "23514" });
+});
+
+databaseTest("one leave ends the chain; each member's own later leave reads back participant_left", async () => {
+  const { token } = await renewableRoot();
+  const childToken = freshToken();
+  await executeMissionRequest(renewReq(token, G, H, childToken), at(HALF));
+  const proofFor = (grantId: string) => ({ grantId, identityId: I, keyId: K, timestamp: HALF.toISOString(), signature: "" });
+  const left = await executeMissionRequest(req(childToken, "/leave", undefined, { method: "POST", proof: proofFor(H) }), at(HALF));
+  expect(left).toEqual({ created: true, data: { mission_id: M, grant_id: H, status: "revoked", reason: "participant_left", revoked_at: HALF.toISOString() } });
+  // The predecessor carries only an unsigned pointer; its own leave returns its own revoked_at.
+  const sibling = await executeMissionRequest(req(token, "/leave", undefined, { method: "POST", proof: proofFor(G) }), at(HALF));
+  expect(sibling).toEqual({ created: false, data: { mission_id: M, grant_id: G, status: "revoked", reason: "participant_left", revoked_at: HALF.toISOString() } });
+  const [root] = await admin`SELECT acceptance_proof, renewal_closed_at FROM tools.collaboration_grants WHERE id = ${G}`;
+  expect(root.acceptance_proof.participant_leave).toEqual({ reason: "participant_left", via_grant_id: H });
+  expect(root.renewal_closed_at.toISOString()).toBe(HALF.toISOString());
+  for (const grantId of [G, H]) expect((await getMissionGrant({ ...target, grantId }, options())).revocation_reason).toBe("participant_left");
+  expect(await unrevokedMembers()).toBe(0);
+  // An administrator-revoked chain cannot be relabelled as left.
+  await resetMissions();
+  const again = await renewableRoot();
+  await executeMissionRequest(renewReq(again.token, G, H, childToken), at(HALF));
+  await revokeMissionGrant({ ...target, grantId: G }, at(HALF));
+  await expect(executeMissionRequest(req(childToken, "/leave", undefined, { method: "POST", proof: proofFor(H) }), at(HALF))).rejects.toMatchObject({ status: 401 });
+  expect(await getMissionGrant({ ...target, grantId: H }, options())).not.toHaveProperty("revocation_reason");
+});
+
+databaseTest("a successor needs a fresh hash: the presented token's or any bound hash conflicts", async () => {
+  const { token } = await renewableRoot();
+  await expect(executeMissionRequest(renewReq(token, G, H, token), at(HALF))).rejects.toMatchObject({ status: 409, code: "token_hash_conflict" });
+  const peer = freshToken();
+  await issueMissionGrant({ ...grantInput(["mission.read"]), grantId: E, identityId: J, signingKeyId: L, tokenSha256: sha(peer) }, options());
+  await expect(executeMissionRequest(renewReq(token, G, H, peer), at(HALF))).rejects.toMatchObject({ status: 409, code: "token_hash_conflict" });
+  await expect(executeMissionRequest(renewReq(token, G, E, freshToken()), at(HALF))).rejects.toMatchObject({ status: 409, code: "collaboration_mission_conflict" });
+  expect((await admin`SELECT count(*)::int AS n FROM tools.collaboration_grants`)[0].n).toBe(2);
+});
+
+databaseTest("concurrent renewals of one grant have one durable successor", async () => {
+  const { token } = await renewableRoot();
+  const distinct = await Promise.all([renewReq(token, G, H, freshToken()), renewReq(token, G, E, freshToken())].map(r => outcome(executeMissionRequest(r, at(HALF)))));
+  expect(distinct.map(r => r.status).sort()).toEqual([200, 409]);
+  await resetMissions();
+  const again = await renewableRoot(), request = renewReq(again.token, G, H, freshToken());
+  const same = await Promise.all([executeMissionRequest(request, at(HALF)), executeMissionRequest(request, at(HALF))]);
+  expect(same.map(r => r.created).sort()).toEqual([false, true]);
+  expect(same[0].data).toEqual(same[1].data);
+  expect((await admin`SELECT count(*)::int AS n FROM tools.collaboration_grants`)[0].n).toBe(2);
+});
+
+for (const competitor of ["revoke", "close", "leave", "mission"] as const) for (const first of ["renew", competitor] as const) {
+  databaseTest(`renew racing ${competitor}, ${first} committing first, leaves no escaped authority`, async () => {
+    const { token } = await renewableRoot();
+    const childToken = freshToken(), hold = delayed();
+    const run = (who: string, database_: typeof database) => who === "renew" ? executeMissionRequest(renewReq(token, G, H, childToken), { database: database_, now: HALF })
+      : competitor === "revoke" ? revokeMissionGrant({ ...target, grantId: G }, { database: database_, now: HALF })
+      : competitor === "close" ? closeMissionGrantRenewal({ ...target, grantId: G }, { database: database_, now: HALF })
+      : competitor === "leave" ? executeMissionRequest(req(token, "/leave", undefined, { method: "POST", proof: { grantId: G, identityId: I, keyId: K, timestamp: HALF.toISOString(), signature: "" } }), { database: database_, now: HALF })
+      : revokeMission(target, { database: database_, now: HALF });
+    const second = first === "renew" ? competitor : "renew";
+    const firstResult = outcome(run(first, hold.handle));
+    await hold.done;
+    const secondResult = outcome(run(second, database));
+    try { await waitForLock(); } finally { hold.commit(); }
+    const results = { [first]: await firstResult, [second]: await secondResult } as Record<string, { status: number; code?: string }>;
+    expect(results[competitor].status).toBe(200);
+    const childProof = { grantId: H, identityId: I, keyId: K, timestamp: HALF.toISOString(), signature: "" };
+    const childRead = await outcome(executeMissionRequest(req(childToken, "/invitation", undefined, { proof: childProof }), at(HALF)));
+    if (competitor === "close") {
+      // Close revokes nothing: an earlier renewal stands but is closed; a later one is refused.
+      if (first === "renew") { expect(results.renew.status).toBe(200); expect(childRead.status).toBe(200);
+        expect((await admin`SELECT count(*)::int AS n FROM tools.collaboration_grants WHERE renewal_closed_at IS NULL`)[0].n).toBe(0); }
+      else { expect(results.renew).toMatchObject({ status: 403, code: "collaboration_mission_renewal_unavailable" }); expect(childRead.status).toBe(401); }
+      return;
+    }
+    expect(results.renew.status).toBe(first === "renew" ? 200 : 401);
+    expect(childRead.status).toBe(401);
+    if (competitor !== "mission") expect(await unrevokedMembers()).toBe(0);
+  });
+}
+
+databaseTest("renew and revoke of the root race twenty times without a deadlock or a live member", async () => {
+  for (let round = 0; round < 20; round++) {
+    await resetMissions();
+    const { token } = await renewableRoot();
+    const results = await Promise.all([
+      outcome(executeMissionRequest(renewReq(token, G, H, freshToken()), at(HALF))),
+      outcome(revokeMissionGrant({ ...target, grantId: G }, at(HALF))),
+    ]);
+    for (const result of results) expect([200, 401]).toContain(result.status);
+    expect(results[1].status).toBe(200);
+    expect(await unrevokedMembers()).toBe(0);
+  }
+});
+
+databaseTest("a renew proof that ages past five minutes while waiting on the root lock is refused", async () => {
+  const { token } = await renewableRoot();
+  const held = barrier(), release = barrier(); let clock = HALF;
+  const transaction = locker.begin(async tx => { await tx`SELECT id FROM tools.collaboration_grants WHERE id = ${G} FOR UPDATE`; held.resolve(); await release.promise; });
+  await held.promise;
+  const pending = outcome(executeMissionRequest(renewReq(token, G, H, freshToken()), { database, now: () => clock }));
+  try { await waitForLock(); clock = new Date(HALF.getTime() + 300_001); } finally { release.resolve(); }
+  await transaction;
+  expect((await pending).status).toBe(401);
+  expect((await admin`SELECT count(*)::int AS n FROM tools.collaboration_grants`)[0].n).toBe(1);
+});
+
+databaseTest("explicit READ COMMITTED keeps the cascade complete even where sessions default to REPEATABLE READ", async () => {
+  const { token } = await renewableRoot();
+  const repeatable = postgres(DATABASE, { max: 1, prepare: false, connection: { application_name: "collaboration-mission-service-test" } });
+  try {
+    await repeatable.unsafe("SET default_transaction_isolation = 'repeatable read'");
+    expect((await repeatable.begin(tx => tx`SHOW transaction_isolation`) as any)[0].transaction_isolation).toBe("repeatable read");
+    const hold = delayed();
+    const renewing = outcome(executeMissionRequest(renewReq(token, G, H, freshToken()), { database: hold.handle, now: HALF }));
+    await hold.done;
+    // The revoke's first statement takes its snapshot before the child commits, then waits on the root.
+    const revoking = outcome(revokeMissionGrant({ ...target, grantId: G }, { database: drizzle(repeatable), now: HALF }));
+    try { await waitForLock(); } finally { hold.commit(); }
+    expect((await renewing).status).toBe(200);
+    expect((await revoking).status).toBe(200);
+    expect(await unrevokedMembers()).toBe(0);
+  } finally { await repeatable.end({ timeout: 2 }); }
+});
+
+databaseTest("a 24-hour root renewed at every halfway over a 30-day window ends at the window with at most two live", async () => {
+  const window = new Date(NOW.getTime() + 30 * 86_400_000);
+  await createMission({ ...target, issuerApiKeyId: A, descriptor, expiresAt: window.toISOString() }, options());
+  const root = await issueMissionGrant({ ...grantInput(), expiresAt: new Date(NOW.getTime() + 86_400_000).toISOString(), renewableUntil: window.toISOString() }, options()) as ServerIssuedMissionGrant;
+  await executeMissionRequest(req(root.token, "/accept", { mission_digest: DIGEST }), options());
+  let head = { id: G, token: root.token, issued: NOW, expires: new Date(NOW.getTime() + 86_400_000) }, rounds = 0;
+  for (;;) {
+    const time = new Date(head.issued.getTime() + Math.floor((head.expires.getTime() - head.issued.getTime()) / 2));
+    const childToken = freshToken(), child = uid(100 + rounds);
+    const result = await outcome(executeMissionRequest(renewReq(head.token, head.id, child, childToken, time), at(time)));
+    if (result.status !== 200) { expect(result).toMatchObject({ status: 403, code: "collaboration_mission_renewal_unavailable" }); break; }
+    expect(await membersAt(time)).toBeLessThanOrEqual(2);
+    const grant = (result as { value: { data: { grant: { expires_at: string } } } }).value.data.grant;
+    head = { id: child, token: childToken, issued: time, expires: new Date(grant.expires_at) };
+    if (++rounds > 70) throw new Error("chain did not terminate");
+  }
+  expect(head.expires.toISOString()).toBe(window.toISOString());
+  const rows = (await admin`SELECT count(*)::int AS n FROM tools.collaboration_grants`)[0].n;
+  expect(rows).toBeLessThanOrEqual(62);
+  expect(rows).toBeGreaterThan(50);
+});
+
+databaseTest("a revoking host whose clock is behind a member's issue time still ends it within the CHECKs", async () => {
+  const { token } = await renewableRoot();
+  await executeMissionRequest(renewReq(token, G, H, freshToken()), at(HALF));
+  const skewed = new Date(HALF.getTime() - 60_000);
+  await revokeMissionGrant({ ...target, grantId: G }, at(skewed));
+  const rows = await admin`SELECT id, issued_at, revoked_at, renewal_closed_at FROM tools.collaboration_grants ORDER BY issued_at`;
+  expect(rows.map(row => [row.id, row.revoked_at.toISOString(), row.renewal_closed_at.toISOString()]))
+    .toEqual([[G, skewed.toISOString(), skewed.toISOString()], [H, HALF.toISOString(), HALF.toISOString()]]);
+});
+
+databaseTest("kicking an expired root the hub knows ends the live head it never saw", async () => {
+  const { token } = await renewableRoot();
+  const childToken = freshToken();
+  await executeMissionRequest(renewReq(token, G, H, childToken), at(HALF));
+  const later = new Date(END.getTime() + 60_000);
+  const revoked = await revokeMissionGrant({ ...target, grantId: G }, at(later));
+  expect(revoked).toMatchObject({ revoked_at: later.toISOString(), renewal: { renewed_to_grant_id: H } });
+  const childProof = { grantId: H, identityId: I, keyId: K, timestamp: later.toISOString(), signature: "" };
+  await expect(executeMissionRequest(req(childToken, "/context", undefined, { proof: childProof }), at(later))).rejects.toMatchObject({ status: 401 });
+  expect(await unrevokedMembers()).toBe(0);
+  // After a rollback, older code revokes one row only. A repeat revoke of that already
+  // revoked root still reaches the live head it left behind.
+  await resetMissions();
+  const again = await renewableRoot();
+  await executeMissionRequest(renewReq(again.token, G, H, childToken), at(HALF));
+  await admin`UPDATE tools.collaboration_grants SET revoked_at = ${HALF} WHERE id = ${G}`;
+  expect(await unrevokedMembers()).toBe(1);
+  expect((await revokeMissionGrant({ ...target, grantId: G }, at(later))).revoked_at).toBe(HALF.toISOString());
+  expect(await unrevokedMembers()).toBe(0);
+});
+
+databaseTest("a middle member renewing while the root is revoked cannot leave an escaped head", async () => {
+  const { token } = await renewableRoot();
+  const childToken = freshToken();
+  await executeMissionRequest(renewReq(token, G, H, childToken), at(HALF));
+  // H's halfway; H is a middle member, so only the root lock serializes it with the cascade.
+  const time = new Date(HALF.getTime() + 1_800_000), hold = delayed();
+  const renewing = outcome(executeMissionRequest(renewReq(childToken, H, E, freshToken(), time), { database: hold.handle, now: time }));
+  await hold.done;
+  const revoking = outcome(revokeMissionGrant({ ...target, grantId: G }, at(time)));
+  try { await waitForLock(); } finally { hold.commit(); }
+  expect((await renewing).status).toBe(200);
+  expect((await revoking).status).toBe(200);
+  expect((await admin`SELECT count(*)::int AS n FROM tools.collaboration_grants`)[0].n).toBe(3);
+  expect(await unrevokedMembers()).toBe(0);
 });
