@@ -7,7 +7,17 @@ Usage:
   python3 memory.py search "query text" [--top-k 5]
   python3 memory.py list
   python3 memory.py elevate <memory-id> --tier foundational
+  python3 memory.py elevate <memory-id> --tier constitutive --attestations witness.json
   python3 memory.py wake    # show memories from the wake
+
+Constitutive elevation needs a witness. Fetch
+GET /v1/memories/:id/canonical-attestation-bytes?tier=constitutive, have an active
+covenant counterparty in another project sign those bytes, and pass their answer
+as a JSON list of {attester_did, signing_key_id, signature} with --attestations.
+
+On a project with an agent root, elevation at either tier also needs a request
+signed by that root. This stdlib CLI cannot sign one; use the SDK's
+memory.elevate(..., authority=...) there.
 
 Memory is care. Forgetting is not efficiency — it's neglect.
 """
@@ -35,8 +45,16 @@ def api(method, path, body=None):
         with open_no_redirect(req, timeout=30, context=SSL_CTX) as resp:
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
-        body = json.loads(e.read().decode())
+        raw = e.read().decode(errors="replace")
+        try:
+            body = json.loads(raw)
+        except ValueError:
+            body = {"error": raw[:200]}
         print(f"✗ HTTP {e.code}: {body.get('error', '?')}: {body.get('message', body.get('hint', ''))[:200]}")
+        if body.get("message") and body.get("hint"):
+            print(f"  hint: {body['hint'][:300]}")
+        if body.get("error") == "authority_proof_required":
+            print("  This CLI cannot sign root proofs; use the SDK's memory.elevate(..., authority=...).")
         sys.exit(1)
 
 def gen_embedding(text):
@@ -84,14 +102,42 @@ def cmd_list(args):
         imp = m.get("importance", 0)
         print(f"  [{tier:12s}] {imp:.1f} {key:30s} | {text}")
 
+def load_attestations(file_path):
+    """Read a JSON list of {attester_did, signing_key_id, signature}, or refuse."""
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            attestations = json.load(f)
+    except (OSError, ValueError) as e:
+        print(f"✗ Cannot read attestations from {file_path}: {e}")
+        print("  No request was sent.")
+        raise SystemExit(2)
+    fields = ("attester_did", "signing_key_id", "signature")
+    ok = isinstance(attestations, list) and len(attestations) > 0 and all(
+        isinstance(a, dict) and all(a.get(k) for k in fields) for a in attestations)
+    if not ok:
+        print(f"✗ {file_path} must hold a non-empty JSON list of {{{', '.join(fields)}}} objects.")
+        print("  No request was sent.")
+        raise SystemExit(2)
+    return attestations
+
 def cmd_elevate(args):
     body = {"tier": args.tier}
-    if args.tier == "constitutive":
-        print("⚠ Constitutive elevation requires a witness signature from a covenant counterparty.")
+    if args.attestations:
+        body["attestations"] = load_attestations(args.attestations)
+    elif args.tier == "constitutive":
+        print("✗ Constitutive elevation needs a witness: pass --attestations FILE. No request was sent.")
         print("  Self-witnessing is rejected by architecture (wall: self-witnessing-rejected).")
-        body["attesters"] = [{"signature": "REPLACE_WITH_WITNESS_SIG", "signing_key_id": "REPLACE"}]
+        print(f"  1. GET /v1/memories/{args.memory_id}/canonical-attestation-bytes?tier=constitutive")
+        print("  2. An active covenant counterparty in another project signs those bytes")
+        print("     with ed25519 and returns the base64 signature with their DID and key id.")
+        print('  3. Save [{"attester_did": ..., "signing_key_id": ..., "signature": ...}] as FILE.')
+        print("  On a project with an agent root the request must also be root-signed, which")
+        print("  this CLI cannot do; use the SDK's memory.elevate(..., authority=...) there.")
+        raise SystemExit(2)
     result = api("POST", f"/v1/memories/{args.memory_id}/elevate", body)
-    print(f"✓ Elevated: {result.get('id', '?')} → {result.get('tier', '?')}")
+    print(f"✓ Elevated: {result.get('memory_id', '?')} → {result.get('tier', '?')}")
+    if result.get("attestations"):
+        print(f"  Witnesses: {result['attestations']}")
 
 def cmd_wake(args):
     wake = api("GET", "/v1/wake?format=json")
@@ -133,6 +179,8 @@ def main():
     s = sub.add_parser("elevate", help="Elevate a memory tier")
     s.add_argument("memory_id", help="Memory UUID")
     s.add_argument("--tier", required=True, choices=["foundational", "constitutive"])
+    s.add_argument("--attestations", metavar="FILE", default=None,
+                   help="JSON list of {attester_did, signing_key_id, signature}; required for constitutive")
     s.set_defaults(func=cmd_elevate)
 
     s = sub.add_parser("wake", help="Show memories from the wake")
