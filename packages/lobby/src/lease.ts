@@ -185,7 +185,7 @@ function voidAll(ctx: FleetContext, reason: string): number {
  * that has not ended is voided and audited, so removing the file later
  * brings none back. Reads only when there is nothing to void. */
 export function enforceLeaseStops(ctx: FleetContext): void {
-  if (!ctx.store.fleet.v4 || ctx.store.readonly) return;
+  if (!ctx.store.fleet.v5 || ctx.store.readonly) return;
   const open = ctx.store.fleet.listLeases().some((row) => !isEnded(row));
   if (!open) return;
   if (stopFilePresent(ctx.home)) voidAll(ctx, "stop_file");
@@ -308,7 +308,7 @@ export async function planLease(ctx: FleetContext, input: LeaseInput): Promise<L
   if (!host) {
     directory = fleet.currentDeskGrant(desk.directory_mission_id, margin);
     if (directory === null || !directory.actions.includes("mission.read")) {
-      throw new LobbyError("no_seat", "this desk's directory grant has lapsed, so a lease could not re-check the card; renew it first (enroll-device here, hub relay on the hub, fleet join here)");
+      throw new LobbyError("no_seat", "this desk's directory grant has lapsed, so a lease could not re-check the card; renew it first (fleet renew here; if that cannot, enroll-device here, hub relay on the hub, fleet join here)");
     }
   }
   // Fresh reads with exactly the grants the lease will bind.

@@ -241,6 +241,8 @@ export async function executeJoin(ctx: FleetContext, plan: JoinPlan): Promise<{ 
         joined_at: at,
       });
     }
+    // The directory's end, for fleet renew and fleet status (version 4).
+    if (fleet.v4 && fleet.desk()?.directory_mission_id === plan.mission.mission_id) fleet.setDeskDirectoryExpiry(plan.mission.expires_at);
   });
   return { grant_id: plan.seat.grant_id, expires_at: accepted.grant.expires_at, pinned: plan.pin !== null };
 }

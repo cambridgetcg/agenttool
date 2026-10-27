@@ -2,7 +2,8 @@
  *
  * Reads (sync, browse, card, knocks, status) need no confirmation.
  * Consequential acts (hub init, hub relay, hub season, hub seat, room
- * publish, hub admit, hub deny, fleet join, knock, ready, outbox retry) show
+ * publish, hub admit, hub deny, fleet join, fleet renew, knock, ready,
+ * outbox retry) show
  * their exact bytes on /dev/tty, need "yes" typed there, record those bytes
  * in the audit log, and only then touch the network. enroll-device sends
  * nothing and is audited without a prompt. Secrets never reach stdout or
@@ -25,6 +26,7 @@ import {
   planOutboxRetry,
   planReady,
 } from "./desk.js";
+import { directoryStatus, executeFleetRenew, planFleetRenew } from "./directory-renewal.js";
 import { LobbyError } from "./errors.js";
 import {
   executeAdmit,
@@ -227,6 +229,34 @@ export async function fleetCommand(ctx: FleetContext, args: string[], io: FleetI
         `${outcome.value.pinned ? `; door ${plan.packet.door.fingerprint} pinned` : ""}\naudit: recorded fleet.join sha256 ${plan.preview.sha256}\n`);
       return EXIT_OK;
     }
+    case "renew": {
+      positionals(parseArgs({ args: rest, allowPositionals: true, strict: true, options: {} }).positionals, 0, "fleet renew");
+      const headless = withoutTerminal(ctx, io);
+      if (headless !== null) return headless;
+      const planned = await planFleetRenew(ctx);
+      if ("idle" in planned) {
+        const idle = planned.idle;
+        io.stdout(`nothing to do: directory renew request ${idle.request.event_id} (grant id ${idle.request.grant_id}) is open until ` +
+          `${idle.request.expires_at} and the hub has not renewed it yet\n` +
+          `your directory grant ends ${idle.grant_expires_at ?? "(none live)"}; the hub must run hub renew-sweep before then, ` +
+          "then run fleet renew again here\n");
+        return EXIT_OK;
+      }
+      const plan = planned.plan;
+      const outcome = await consequentialAsync(ctx, io, plan.preview, () => executeFleetRenew(ctx, plan));
+      if (!outcome.confirmed) return outcome.code;
+      io.stdout(`audit: recorded fleet.renew sha256 ${plan.preview.sha256}\n`);
+      if (outcome.value.picked_up !== null) {
+        io.stdout(`picked up directory grant ${outcome.value.picked_up.grant_id} until ${outcome.value.picked_up.expires_at}\n`);
+      }
+      if (outcome.value.request === null) {
+        if (plan.no_request !== null) io.stdout(`no next directory renew request: ${plan.no_request}\n`);
+        return EXIT_OK;
+      }
+      io.stdout(`next directory renew request: grant id ${plan.request!.body.grant_id}, token sha256 ${plan.request!.body.token_sha256}, ` +
+        `good until ${plan.request!.body.expires_at}; after the hub's renew-sweep, run fleet renew again\n`);
+      return reportPosts(io, [outcome.value.request]);
+    }
     case "sync": {
       positionals(parseArgs({ args: rest, allowPositionals: true, strict: true, options: {} }).positionals, 0, "fleet sync");
       const result = await fleetSync(ctx);
@@ -293,17 +323,23 @@ export async function fleetCommand(ctx: FleetContext, args: string[], io: FleetI
         grant_id: grant.grant_id, mission_id: grant.mission_id, purpose: grant.purpose, room_id: grant.room_id,
         actions: grant.actions, expires_at: grant.expires_at, accepted_at: grant.accepted_at,
       }));
+      const directory = directoryStatus(ctx);
       const status = desk === null ? { desk: null } : {
         desk: {
           fingerprint: desk.fingerprint, identity_id: desk.identity_id, signing_key_id: desk.signing_key_id,
           display_name: desk.display_name, project_id: desk.project_id, origin: desk.origin,
           directory_mission_id: desk.directory_mission_id, door_fingerprint: desk.door_fingerprint, joined_at: desk.joined_at,
         },
+        directory,
         grants,
       };
+      const request = directory?.open_request ?? null;
       io.stdout(values.json ? `${JSON.stringify(status, null, 2)}\n` : desk === null ? "no desk identity on this device; run enroll-device\n"
         : `desk ${desk.fingerprint} ${JSON.stringify(desk.display_name)} did:at:${desk.identity_id}\n` +
           `directory ${desk.directory_mission_id ?? "(not joined)"}; door ${desk.door_fingerprint ?? "(not pinned)"}\n` +
+          (directory === null ? "" : `directory ends ${directory.ends_at ?? "(unknown here)"}; directory grant until ${directory.grant_expires_at ?? "(none)"}; ` +
+            `${request === null ? "no open renew request" : `renew request ${request.event_id} ${request.posted ? "posted" : "NOT POSTED (outbox retry)"}` +
+              ` until ${request.expires_at}${request.expired ? " (expired)" : ""}`}\n`) +
           `${grants.map((grant) => `grant ${grant.grant_id} ${grant.purpose} ${grant.mission_id} until ${grant.expires_at ?? "?"} ${grant.accepted_at === null ? "(not accepted)" : "(accepted)"}`).join("\n")}\n`);
       return EXIT_OK;
     }
@@ -441,11 +477,13 @@ export async function hubCommand(ctx: FleetContext, args: string[], io: FleetIo)
         directory: { mission_id: hub.directory_mission_id, mission_digest: hub.directory_digest, expires_at: hub.directory_expires_at, mode: hub.directory_mode },
         devices: ctx.store.fleet.listDevices().map((device) => ({
           fingerprint: device.fingerprint, identity_id: device.identity_id, display_name: device.display_name, enrolled_at: device.enrolled_at,
+          directory_paused_at: device.directory_paused_at ?? null,
         })),
       };
       io.stdout(values.json ? `${JSON.stringify(view, null, 2)}\n`
         : `project ${view.project_id}\ndoor ${view.door_fingerprint}\ndirectory ${view.directory.mission_id} until ${view.directory.expires_at}\n` +
-          `${view.devices.map((device) => `device ${device.fingerprint} did:at:${device.identity_id} ${JSON.stringify(device.display_name)}`).join("\n")}\n`);
+          `${view.devices.map((device) => `device ${device.fingerprint} did:at:${device.identity_id} ${JSON.stringify(device.display_name)}` +
+            (device.directory_paused_at === null ? "" : "  DIRECTORY RENEWAL PAUSED")).join("\n")}\n`);
       return EXIT_OK;
     }
     case "relay": {

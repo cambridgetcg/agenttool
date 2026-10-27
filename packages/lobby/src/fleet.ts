@@ -17,6 +17,8 @@ import {
   verifyDocument,
   type AdmissionBody,
   type DenialBody,
+  type DirectoryRenewalBody,
+  type DirectoryRenewBody,
   type FleetCard,
   type KnockBody,
   type LeaveBody,
@@ -80,6 +82,11 @@ export interface FleetView {
   /** Desk-signed renew requests and leave notices, shape-checked only; the
    * hub verifies them against its device registry exactly like knocks. */
   deskNotes: Array<{ envelope: SignedEnvelope<RenewBody | LeaveBody>; summary: string; event: MissionEvent }>;
+  /** Desk-signed requests for a next directory grant, shape-checked only; the
+   * hub verifies them against its device registry like every desk note. */
+  directoryRenewRequests: Array<{ envelope: SignedEnvelope<DirectoryRenewBody>; summary: string; event: MissionEvent }>;
+  /** Door-signed notices of renewed directory grants, in receipt order. */
+  directoryRenewals: VerifiedDocument<DirectoryRenewalBody>[];
   unverified: UnverifiedEvent[];
 }
 
@@ -130,7 +137,8 @@ export function verifyEventProof(event: MissionEvent, publicKey: string): boolea
 
 export function readFleetEvents(events: readonly MissionEvent[], door: DoorPin | null): FleetView {
   const view: FleetView = {
-    cards: new Map(), admissions: [], denials: [], rosters: [], memberRosters: [], renewals: [], knocks: [], deskNotes: [], unverified: [],
+    cards: new Map(), admissions: [], denials: [], rosters: [], memberRosters: [], renewals: [], knocks: [], deskNotes: [],
+    directoryRenewRequests: [], directoryRenewals: [], unverified: [],
   };
   const reject = (event: MissionEvent, kind: string | null, reason: UnverifiedReason) => {
     view.unverified.push({ event_id: event.event_id, received_seq: event.received_seq, kind, reason, authority: "none" });
@@ -152,6 +160,10 @@ export function readFleetEvents(events: readonly MissionEvent[], door: DoorPin |
     if (envelope === null) continue; // ordinary text, not a lobby document
     if (envelope.kind === "knock") {
       view.knocks.push({ envelope: envelope as SignedEnvelope<KnockBody>, summary, event });
+      continue;
+    }
+    if (envelope.kind === "directory_renew") {
+      view.directoryRenewRequests.push({ envelope: envelope as SignedEnvelope<DirectoryRenewBody>, summary, event });
       continue;
     }
     if (DESK_NOTE_KINDS.includes(envelope.kind)) {
@@ -205,6 +217,9 @@ export function readFleetEvents(events: readonly MissionEvent[], door: DoorPin |
         break;
       case "renewal":
         view.renewals.push(verified as VerifiedDocument<RenewalBody>);
+        break;
+      case "directory_renewal":
+        view.directoryRenewals.push(verified as VerifiedDocument<DirectoryRenewalBody>);
         break;
     }
   }

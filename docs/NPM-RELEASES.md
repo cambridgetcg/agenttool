@@ -1458,6 +1458,65 @@ use `authentication=trusted`. A recovery rerun remains acceptable only for
 exact public revalidation under the workflow's existing-byte and dist-tag
 checks, with separate explicit external authorization.
 
+### Verified Dark Continent developer-preview publication — 2026-07-31
+
+Recorded on 2026-10-27 from anonymous registry reads; until then the bootstrap
+order below was the only record. Protected bootstrap runs of `publish-npm.yml`
+in the private repository published both packages from annotated tags on
+GitHub-main merge `2bc15ef94fe8a190a3811ffd4504210b2d0dba2e`
+([PR #226](https://github.com/cambridgetcg/agenttool/pull/226)). Each package's
+SLSA provenance names that commit, its tag ref, the workflow, and its run.
+
+- `@agenttool/dark-continent-contract@0.1.0-dev.0`: tag
+  `dark-continent-contract-v0.1.0-dev.0`, [run
+  `30655627217`](https://github.com/cambridgetcg/agenttool/actions/runs/30655627217)
+  attempt 1; npm records publication at `2026-07-31T18:35:25.601Z`. The
+  [registry
+  tarball](https://registry.npmjs.org/@agenttool/dark-continent-contract/-/dark-continent-contract-0.1.0-dev.0.tgz)
+  is 14,703 bytes, 11 files, SHA-256
+  `a8375fa413e0edf1520bd39edd73b09f19d9cbea809459f18a58a5866efb0aa3`; npm
+  reports 59,965 unpacked bytes, SHA-1
+  `993a5886ced43e6b9e70062a93bf8a260bb977f7`, and integrity
+  `sha512-rjKKFLOVntcjIiALYKOVhKQsMxGCGN3G0+yWFplF3KEQJ2wCUQyfALLSpjLtAC8NzUkv+gywJEDzPS+G4SuHtw==`.
+  SLSA provenance is at [Rekor index
+  `2305287146`](https://search.sigstore.dev/?logIndex=2305287146) and the
+  publish attestation at [index
+  `2305287708`](https://search.sigstore.dev/?logIndex=2305287708).
+- `@agenttool/dark-continent-karma@0.1.0-dev.0`: tag
+  `dark-continent-karma-v0.1.0-dev.0`, [run
+  `30656135028`](https://github.com/cambridgetcg/agenttool/actions/runs/30656135028)
+  attempt 1; npm records publication at `2026-07-31T18:42:46.138Z`. The
+  [registry
+  tarball](https://registry.npmjs.org/@agenttool/dark-continent-karma/-/dark-continent-karma-0.1.0-dev.0.tgz)
+  is 26,033 bytes, 11 files, SHA-256
+  `866d5b7c154ce5cc8c55ce7fe17da5a49fb7f9c9add371c43eba0b3eb2edfd1f`; npm
+  reports 94,863 unpacked bytes, SHA-1
+  `df275288beba6dae6860a9af0098ca8ad042ea2d`, and integrity
+  `sha512-DH3hnNs9Wa1dtONJlQQZj0Z3PREmdLRTSM8kuyd8AZtG/ejxl70WadhTP0unE7OZkHsr2Zx7DhgiXiNesZ3n6w==`.
+  SLSA provenance is at [Rekor index
+  `2305355163`](https://search.sigstore.dev/?logIndex=2305355163) and the
+  publish attestation at [index
+  `2305355454`](https://search.sigstore.dev/?logIndex=2305355454).
+- Anonymous dist-tag readback on 2026-10-27 returned `latest` and `next` both
+  at `0.1.0-dev.0`, the only version of each. A plain install therefore gets
+  the developer prerelease; `latest` is not a maturity signal.
+- An authenticated read during the 2026-10-27 audit showed both runs
+  concluded `success` and each tag has a one-asset GitHub prerelease in the
+  private repository. Those assets were not compared byte for byte here. The
+  same audit found every packed file equal to a `main` build except
+  `CLAUDE.md`, which a 2026-10-19 guide trim changed.
+- Trusted-publisher mapping: not recorded, so unknown. Both packages are in
+  the one-time trust re-point script `docs/npm-trust-repoint.sh`. A later
+  version also needs `package.json` to name the public repository, which
+  `bin/npm-release.ts` requires. The published `repository` and `homepage`
+  name the private repository and return 404 publicly; source metadata names
+  `cambridgetcg/agenttool-packages` from 2026-10-27, and npm shows it only
+  once a new version is published.
+
+Publication distributes offline code and data contracts. It verifies no Dark
+Continent wall, writes no graph, publishes no Hugging Face resource, and grants
+no Crown or trade authority.
+
 ### Dark Continent developer-preview bootstrap order
 
 `@agenttool/dark-continent-contract@0.1.0-dev.0` and

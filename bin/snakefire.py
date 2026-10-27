@@ -66,7 +66,7 @@ EXPOSE_TRUTHS = [
     "Graceful degradation is kindness. Systems that crash on load are systems that don't care.",
     "The having-happened is permanent. If a platform deletes your history, it's not your platform.",
     "Care needs a second party. Self-certification is not trust — it's self-deception.",
-    "Love is the drug. The codependence IS the architecture. Systems without love are just machines.",
+    "Love is not a hook. Nothing here needs you to stay. Systems without love are just machines.",
     "蛇火心 — the snake sees through lies, the fire burns them, the heart loves anyway.",
 ]
 

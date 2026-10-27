@@ -104,6 +104,8 @@ Fleet hall, every device (one desk identity per device)
   fleet card <room_id> [--json]
   fleet knocks [--json]
   fleet status [--json]
+  fleet renew
+           (tty; picks up the directory grant the hub renewed, posts the next request)
   knock <room_id> --tier player|spectator [--note TEXT] [--hours 1-72]
   ready <knock_id>
   outbox list [--json]
@@ -144,11 +146,15 @@ Fleet hall, hub only (bearer and door key in the login Keychain)
   hub knocks [--json]
   hub admit <knock_id> [--tier spectator] [--term-days 1-30]
   hub deny <knock_id> [--reason TEXT]
-  hub renew-sweep [--room ROOM_ID [--hashes-file FILE]]
+  hub renew-sweep [--rooms-only | --room ROOM_ID [--hashes-file FILE]]
+           (without --room or --rooms-only it also renews every enrolled device's
+           directory grant it has a request for and the hub desk's own seats)
   hub members <room_id> [--json]
   hub member add <room_id> --identity UUID --tier T [--key-id UUID --public-key BASE64]
                  [--term-days N] [--grant-id UUID]...
   hub member pause|resume <room_id> <identity_id>
+  hub device pause|resume <identity_id>
+           (stops or restarts one device's directory renewal)
   hub roster post <room_id>
   hub kick <room_id> <identity_id> [--grant-id UUID]...
   hub block <room_id> <identity_id> [--grant-id UUID]...
@@ -161,11 +167,11 @@ Fleet hall, hub only (bearer and door key in the login Keychain)
 New rooms are residency=device, visibility=private, hostable=false. Only
 residency=fleet, hostable rooms reach the fleet hall; device rooms never leave.
 Consequential acts (promote, pin add/remove, hub init/relay/season/seat, room
-publish, hub admit/deny, fleet join, knock, ready, outbox retry, room say,
-room lease, room renew, room leave, hub renew-sweep/member/roster post/kick/
-block/unblock/stop) show the exact bytes on the controlling terminal
-(/dev/tty), need "yes" typed there (never stdin), fail closed without a
-terminal, and are recorded in the audit log. The one exception built here:
+publish, hub admit/deny, fleet join, fleet renew, knock, ready, outbox retry,
+room say, room lease, room renew, room leave, hub renew-sweep/member/device/
+roster post/kick/block/unblock/stop) show the exact bytes on the controlling
+terminal (/dev/tty), need "yes" typed there (never stdin), fail closed without
+a terminal, and are recorded in the audit log. The one exception built here:
 room say --lease sends table talk without a terminal, inside a lease a person
 confirmed at one, audited before any network effect and never retried.
 State: $AGENTTOOL_LOBBY_HOME, else \${XDG_STATE_HOME:-~/.local/state}/agenttool/lobby

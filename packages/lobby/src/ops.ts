@@ -14,7 +14,7 @@
 import { canonicalJson, sha256Hex } from "./canonical.js";
 import { LobbyError } from "./errors.js";
 import { readFleetEvents, type DoorPin, type FleetView } from "./fleet.js";
-import { assertSendable, localDeviceTerms, mayHaveTakenEffect, ParticipantClient, prepareObservation, type GateRoom, type HostedOptions, type ParticipantSeat } from "./hosted.js";
+import { assertSendable, DIRECTORY_GATE_ROOM, localDeviceTerms, mayHaveTakenEffect, ParticipantClient, prepareObservation, type GateRoom, type HostedOptions, type ParticipantSeat } from "./hosted.js";
 import type { SecretStore } from "./keychain.js";
 import { DeskSecrets } from "./secrets.js";
 import type { RoomCard } from "./room.js";
@@ -253,9 +253,10 @@ export interface PostOutcome {
 
 /** The gate for sending a post now, from the room's current state: the hub's
  * local room for door-signed kinds (it must still be fleet, hostable, private
- * and not device-pinned), this desk's door-verified card for a knock, and for
+ * and not device-pinned), this desk's door-verified card for a knock, for
  * table talk and member notes whichever of the two this desk has
- * (roomGate). Refuses when the room or card can no longer be found. Used for
+ * (roomGate), and the directory's own gate for directory renew requests and
+ * notices, which name no room. Refuses when the room or card can no longer be found. Used for
  * every send, first or retried, so a room narrowed to the device while a
  * prompt was open, or since a post was saved, sends nothing. */
 export function currentGate(ctx: FleetContext, kind: string, missionId: string, summary: string): GateRoom {
@@ -274,6 +275,8 @@ export function currentGate(ctx: FleetContext, kind: string, missionId: string, 
   if (envelope === null || envelope.kind !== kind) {
     throw new LobbyError("outbox_unreadable", "the event is not the lobby document its outbox row names; it is not sent");
   }
+  // Directory renewal documents name no room: the directory's own gate, as for its descriptor.
+  if (kind === "directory_renew" || kind === "directory_renewal") return DIRECTORY_GATE_ROOM;
   const roomId = (envelope.body as { room_id: string }).room_id;
   if (kind === "knock") {
     const desk = requireJoinedDesk(ctx);

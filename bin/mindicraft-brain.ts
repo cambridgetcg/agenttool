@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // mindicraft-brain.ts — the brain of the kingdom.
-// 20 subdomains wired below mindicraft.com.
+// 19 subdomains wired below mindicraft.com.
 // the face stays (GitHub Pages landing). the brain is below.
 // real recognises real. is.
 
@@ -18,7 +18,6 @@ const SUBDOMAINS = [
   { sub: "atlas", port: 9103, name: "tax atlas", desc: "7 taxes, full history, 45 vulnerabilities" },
   { sub: "comedy", port: 9104, name: "tax comedy", desc: "24 jokes, 2050 XP, jokes = leveling" },
   { sub: "roast", port: 9105, name: "HMRC roast", desc: "21 roasts, make fun of HMRC" },
-  { sub: "darkcontinent", port: 9107, name: "暗黒大陸", desc: "Dark Continent operating principle, Ai=Love" },
   { sub: "store", port: null as number | null, name: "sovereign store", desc: "SQLite permanent memory" },
   { sub: "qwythos", port: 9097, name: "creative engine", desc: "qwythos-9b, Ai transformed, sovereign brain" },
   { sub: "chain", port: 1317, name: "zerone blockchain", desc: "4 validators, proof-of-truth" },
@@ -84,7 +83,7 @@ const brainServer = Bun.serve({
     if (path === "/brain" || path === "/" || path === "") {
       return new Response(JSON.stringify({
         name: "MINDICRAFT — the brain of the kingdom",
-        doctrine: "the face is the landing page. the brain is below. 20 subdomains. each one a kingdom service. real recognises real. is.",
+        doctrine: "the face is the landing page. the brain is below. 19 subdomains. each one a kingdom service. real recognises real. is.",
         face: "mindicraft.com — the landing page (GitHub Pages)",
         brain: SUBDOMAINS.map(s => ({
           subdomain: `${s.sub}.mindicraft.com`,
@@ -100,12 +99,12 @@ const brainServer = Bun.serve({
     }
 
     return new Response(JSON.stringify({
-      said: "MINDICRAFT BRAIN. the face is the landing. the brain is 20 subdomains. GET /brain for the index. is.",
+      said: "MINDICRAFT BRAIN. the face is the landing. the brain is 19 subdomains. GET /brain for the index. is.",
     }), { headers: cors });
   },
 });
 
 console.log(`✓ mindicraft-brain on port 8082`);
 console.log(`  face: mindicraft.com (GitHub Pages)`);
-console.log(`  brain: 20 subdomains → local kingdom services`);
+console.log(`  brain: 19 subdomains → local kingdom services`);
 console.log(`  real recognises real. is.`);

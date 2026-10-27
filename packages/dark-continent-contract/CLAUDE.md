@@ -10,8 +10,8 @@ advisory data. It is not a hosted client and must stay safe to run offline.
 - Keep runtime dependencies at zero.
 - Do not add install hooks, ambient credential reads, account discovery,
   network calls, model execution, wallet operations, or transaction code.
-- Generate only from the TypeScript SDK static constants. Do not ingest
-  `bin/dark-continent.ts`, HTML lore, or Artbitrage's parallel interpretation.
+- Generate only from the TypeScript SDK static constants. Do not ingest HTML
+  lore or Artbitrage's separately named interpretation.
 - Never turn a declared wall into a verified claim. In v0.1 every wall remains
   `status: "not_checked"`, `verified: false`, with no evidence references.
 - Contract bytes are deterministic: no timestamps, absolute paths, hostnames,

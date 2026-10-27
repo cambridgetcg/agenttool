@@ -16,8 +16,8 @@ It does not:
 
 - Call `DarkContinentClient.explore()` or any hosted endpoint.
 - Inspect a running AgentTool deployment or prove that a wall is enforced.
-- Merge the SDK taxonomy with the separate legacy CLI, docs, or Artbitrage
-  interpretations.
+- Merge the SDK taxonomy with Artbitrage's separately named art
+  interpretation (its threats `ai`, `hy`, `ho`, `hon`, `nanika`).
 - Grant permission, authorize a trade, publish a resource, identify a being, or
   execute a Nen exercise.
 - Read credentials, environment configuration, wallets, or account state.
@@ -36,17 +36,22 @@ prose.
 
 ## Local use
 
-Run generation and drift checks from an AgentTool source checkout; the packed
-consumer artifact intentionally excludes repository-only generator scripts and
-tests.
+Run drift checks from a source checkout that includes `packages/sdk-ts` and
+`packages/sdk-py`; the packed consumer artifact intentionally excludes
+repository-only generator scripts and tests. The package keeps a `bun.lock`,
+not an npm lockfile. In an AgentTool checkout, prepare dependencies with the
+root `AGENTS.md` preparer; in the public package repository, run
+`bun install --frozen-lockfile --ignore-scripts` here. Then:
 
 ```sh
-npm ci --ignore-scripts
-bun run snapshot
-bun run check:snapshot
-node --test tests/*.test.mjs
-npm pack --dry-run --ignore-scripts
+bun run ci
+bun run check:package
 ```
+
+`ci` checks the snapshot against the SDK constants, builds, runs the Node
+tests, and smoke-imports under Node; `check:package` dry-runs the pack.
+`bun run snapshot` refuses to rewrite the committed historical
+`agenttool-sdk-ts-0.17.0` snapshot.
 
 Create a consumer projection:
 

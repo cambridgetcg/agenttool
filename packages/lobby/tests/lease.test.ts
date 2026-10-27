@@ -3,9 +3,10 @@
  * closed refusal and void, idempotent replay, a lost response, a race on the
  * last budget slot, the STOP file, the hub's stop, kick and block, and the
  * egress gate on every lease send (CJK, Kana, Hangul and Thai neighbours of a
- * device term included). Fake service, file-backed Keychain stand-in for the
- * hub's own terminal acts, and a Keychain spy that fails if a lease path ever
- * touches it. Contract: packages/lobby/README.md#room-seat-leases. */
+ * device term included), and leases beside directory renewal (a renewed
+ * directory grant never carries a lease on). Fake service, file-backed
+ * Keychain stand-in for the hub's own terminal acts, and a Keychain spy that
+ * fails if a lease path ever touches it. Contract: packages/lobby/README.md#room-seat-leases. */
 import { Database } from "bun:sqlite";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -775,6 +776,90 @@ describe("what the hub's digest shows", () => {
     expect(text).toMatch(/\| room\.lease \| lease_/);
     expect(text).toContain("1 send(s) under leases (room.say.lease)");
     expect(text).not.toMatch(/\| room\.say\.lease \|/);
+  });
+});
+
+describe("leases beside directory renewal (schema 4, #535)", () => {
+  const HOUR = 3_600_000;
+
+  test("fleet renew and the sweep renew the directory grant; a member's lease keeps its bound grant and still sends", async () => {
+    const fleet = await seatedFleet();
+    const leaseId = await lease(fleet.device, fleet.roomId);
+    const before = await leaseOf(fleet.device, leaseId);
+    const bound = before.directory_grant_id as string;
+    expect(bound).toBeString();
+    fleet.world.advance(HOUR);
+    await ok(fleet.device.yes("fleet", "renew"));
+    await ok(fleet.hub.yes("hub", "renew-sweep"));
+    await ok(fleet.device.yes("fleet", "renew"));
+    const status = await json(fleet.device.run("fleet", "status", "--json"));
+    const directories = status.grants.filter((grant: any) => grant.purpose === "directory").map((grant: any) => grant.grant_id);
+    expect(directories).toHaveLength(2);
+    expect(directories).toContain(bound);
+    expect(Date.parse(status.directory.grant_expires_at)).toBeGreaterThan(Date.parse(before.expires_at));
+    // The renewal neither moves nor extends the lease.
+    const after = await leaseOf(fleet.device, leaseId);
+    expect([after.directory_grant_id, after.expires_at, after.ends_by, after.state]).toEqual([bound, before.expires_at, before.ends_by, "active"]);
+    const sent = await say(fleet, fleet.device, leaseId, "after the directory renewal");
+    expect(sent.code).toBe(0);
+    expect(JSON.parse(sent.stdout).grant_id).toBe(before.grant_id);
+    // The renewal's own acts went through the terminal; the lease made none of them.
+    const acts = (await auditOf(fleet.device)).map((entry) => entry.act);
+    expect(acts.filter((act) => act === "fleet.renew")).toHaveLength(2);
+    expect(acts.filter((act) => act.startsWith("room.say"))).toEqual(["room.say.lease"]);
+  });
+
+  test("a lease made late in a directory grant's day ends with that grant, and a renewal does not carry it on", async () => {
+    const fleet = await seatedFleet();
+    const status = await json(fleet.device.run("fleet", "status", "--json"));
+    const directory = status.grants.find((grant: any) => grant.purpose === "directory");
+    // Two hours before the directory grant ends, so a grant, not the 8 hours, ends the lease.
+    fleet.world.advance(Date.parse(directory.expires_at) - fleet.world.clock.now.getTime() - 2 * HOUR);
+    const leaseId = await lease(fleet.device, fleet.roomId);
+    const made = await leaseOf(fleet.device, leaseId);
+    expect(made.directory_grant_id).toBe(directory.grant_id);
+    expect(["directory_grant", "season_grant"]).toContain(made.ends_by);
+    expect(Date.parse(made.expires_at)).toBeLessThanOrEqual(Date.parse(directory.expires_at) - 60_000);
+    await ok(fleet.device.yes("fleet", "renew"));
+    await ok(fleet.hub.yes("hub", "renew-sweep"));
+    await ok(fleet.device.yes("fleet", "renew"));
+    const renewed = (await json(fleet.device.run("fleet", "status", "--json"))).grants
+      .filter((grant: any) => grant.purpose === "directory" && grant.grant_id !== directory.grant_id);
+    expect(renewed).toHaveLength(1);
+    expect(Date.parse(renewed[0].expires_at)).toBeGreaterThan(Date.parse(directory.expires_at));
+    const after = await leaseOf(fleet.device, leaseId);
+    expect([after.directory_grant_id, after.expires_at, after.ends_by]).toEqual([made.directory_grant_id, made.expires_at, made.ends_by]);
+    expect((await say(fleet, fleet.device, leaseId, "still inside the old grant")).code).toBe(0);
+    fleet.world.advance(Date.parse(made.expires_at) - fleet.world.clock.now.getTime());
+    expect((await say(fleet, fleet.device, leaseId, "past the old grant")).stderr).toContain("lease_expired");
+    expect((await leaseOf(fleet.device, leaseId)).state).toBe("expired");
+  });
+
+  test("a STOP file voids leases only: fleet renew and the sweep still run, and the hub's digest shows both", async () => {
+    const fleet = await seatedFleet();
+    const hubLease = await lease(fleet.hub, fleet.roomId, "--seat-ref", "codex:eeeeeeee-5555-4555-8555-555555555555");
+    const deviceLease = await lease(fleet.device, fleet.roomId);
+    fleet.world.advance(HOUR);
+    writeFileSync(join(fleet.device.home, "STOP"), "");
+    await ok(fleet.device.yes("fleet", "renew"));
+    expect((await leaseOf(fleet.device, deviceLease)).state).toBe("void: stop_file");
+    await ok(fleet.hub.yes("hub", "renew-sweep"));
+    await ok(fleet.device.yes("fleet", "renew"));
+    const directories = (await json(fleet.device.run("fleet", "status", "--json"))).grants.filter((grant: any) => grant.purpose === "directory");
+    expect(directories).toHaveLength(2);
+    // The device's STOP touches neither the hub's lease nor the device's renewal.
+    expect((await leaseOf(fleet.hub, hubLease)).state).toBe("active");
+    expect((await headless(fleet.world, fleet.hub, ["room", "say", fleet.roomId, "--lease", hubLease, "--idempotency-key", "beside-renew-01", "--text", "hi"],
+      { env: { CODEX_THREAD_ID: "eeeeeeee-5555-4555-8555-555555555555" } })).code).toBe(0);
+    const out = join(fleet.hub.parent, "digest-both.md");
+    await ok(fleet.hub.run("hub", "digest", "--out", out));
+    const text = readFileSync(out, "utf8");
+    expect(text).toContain(`renewed the directory grant of`);
+    expect(text).toMatch(/\| hub\.renew\.sweep \|/);
+    expect(text).toContain("## Seat leases on this desk");
+    expect(text).toContain(`| ${hubLease} | ${fleet.roomId} | codex:eeeeeeee-5555-4555-8555-555555555555 |`);
+    expect(text).toContain("1 send(s) under leases (room.say.lease)");
+    expect(text).not.toContain(deviceLease);
   });
 });
 

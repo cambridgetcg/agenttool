@@ -8,8 +8,11 @@ import {
   openDocument,
   ROSTER_PART_MEMBERS,
   sealDocument,
+  SIGNED_KINDS,
   verifyDocument,
   type AdmissionBody,
+  type DirectoryRenewalBody,
+  type DirectoryRenewBody,
   type FleetCard,
   type KnockBody,
   type RosterBody,
@@ -204,6 +207,105 @@ describe("signed lobby documents", () => {
     expect([...view.cards.values()].map((document) => document.envelope.body.title)).toEqual(["Zerone season 1"]);
     expect(view.unverified.map((entry) => entry.reason)).toEqual(["bad_signature", "malformed_document"]);
     expect(readFleetEvents([event(genuine, 1)], null).unverified[0]!.reason).toBe("door_not_pinned");
+  });
+});
+
+describe("directory renewal documents (schema version 4)", () => {
+  const renew: DirectoryRenewBody = {
+    mission_id: UUID_A, grant_id: UUID_B, identity_id: "33333333-3333-4333-8333-333333333333",
+    signing_key_id: "44444444-4444-4444-8444-444444444444", token_sha256: "d".repeat(64), issued_at: T, expires_at: LATER(86_340_000),
+  };
+  const renewal: DirectoryRenewalBody = {
+    invitation: {
+      mission_id: UUID_A, grant_id: UUID_B, identity_id: renew.identity_id, signing_key_id: renew.signing_key_id,
+      public_key_hex: "e".repeat(64), expires_at: LATER(86_340_000), token_sha256: renew.token_sha256,
+    },
+    issued_at: T,
+  };
+
+  test("both kinds round-trip, verify, and refuse a changed body", () => {
+    const desk = signer();
+    const door = signer();
+    for (const [kind, body, key] of [["directory_renew", renew, desk], ["directory_renewal", renewal, door]] as const) {
+      const sealed = sealDocument(kind, body, key);
+      const opened = openDocument(sealed.summary)!;
+      expect(opened.kind).toBe(kind);
+      expect(opened.body).toEqual(body);
+      expect(verifyDocument(opened, key.publicKey)).toBe(true);
+      expect(verifyDocument({ ...opened, body: { ...opened.body, issued_at: LATER(1) } as never }, key.publicKey)).toBe(false);
+    }
+  });
+
+  test("bodies are exact, canonical and at most 24 hours long", () => {
+    const desk = signer();
+    expect(errorCode(() => sealDocument("directory_renew", { ...renew, expires_at: LATER(24 * 3_600_000 + 1) }, desk))).toBe("invalid_signed_document");
+    expect(errorCode(() => sealDocument("directory_renew", { ...renew, expires_at: T }, desk))).toBe("invalid_signed_document");
+    expect(errorCode(() => sealDocument("directory_renew", { ...renew, room_id: ROOM } as never, desk))).toBe("invalid_signed_document");
+    expect(errorCode(() => sealDocument("directory_renew", { ...renew, grant_id: "not-a-uuid" }, desk))).toBe("invalid_grant_id");
+    expect(errorCode(() => sealDocument("directory_renewal", { ...renewal, invitation: { ...renewal.invitation, expires_at: LATER(24 * 3_600_000 + 1) } }, desk)))
+      .toBe("invalid_signed_document");
+    expect(errorCode(() => sealDocument("directory_renewal", { ...renewal, invitation: { ...renewal.invitation, public_key_hex: "E".repeat(64) } }, desk)))
+      .toBe("invalid_signed_document");
+    // A body out of canonical order is refused on open, as for every kind.
+    const sealed = sealDocument("directory_renew", renew, desk);
+    const reordered = sealed.summary.replace(`"expires_at":"${renew.expires_at}","grant_id":"${renew.grant_id}"`,
+      `"grant_id":"${renew.grant_id}","expires_at":"${renew.expires_at}"`);
+    expect(reordered).not.toBe(sealed.summary);
+    expect(() => openDocument(reordered)).toThrow();
+  });
+
+  test("worst-case documents fit one observation, signature included", () => {
+    const desk = signer();
+    for (const [kind, body] of [["directory_renew", renew], ["directory_renewal", renewal]] as const) {
+      expect([...sealDocument(kind, body, desk).summary].length).toBeLessThanOrEqual(1000);
+    }
+  });
+
+  test("the fleet reader keeps desk requests apart and door notices only when the pinned door signed them", () => {
+    const desk = signer();
+    const door = signer();
+    const event = (summary: string, seq: number) => ({
+      event_id: crypto.randomUUID(), mission_id: UUID_A, grant_id: UUID_B, identity_id: renew.identity_id, signing_key_id: renew.signing_key_id,
+      received_seq: String(seq), received_at: T, raw_body: JSON.stringify({ event_id: "", summary }), body_sha256: "", proof: {},
+    });
+    const events = [
+      sealDocument("directory_renew", renew, desk).summary,
+      sealDocument("directory_renewal", renewal, door).summary,
+      sealDocument("directory_renewal", renewal, desk).summary,
+    ].map((summary, index) => {
+      const value = event(summary, index + 1);
+      return { ...value, raw_body: JSON.stringify({ event_id: value.event_id, summary }) };
+    });
+    const view = readFleetEvents(events, { fingerprint: door.fingerprint, public_key: door.publicKey });
+    expect(view.directoryRenewRequests.map((entry) => entry.envelope.body)).toEqual([renew]);
+    expect(view.directoryRenewals.map((entry) => entry.envelope.body)).toEqual([renewal]);
+    expect(view.deskNotes).toEqual([]);
+    expect(view.unverified.map((item) => [item.kind, item.reason])).toEqual([["directory_renewal", "signer_not_door"]]);
+  });
+
+  test("an older reader, which knows neither kind, treats both as malformed and acts on nothing", () => {
+    const desk = signer();
+    const door = signer();
+    const events = [sealDocument("directory_renew", renew, desk).summary, sealDocument("directory_renewal", renewal, door).summary]
+      .map((summary, index) => {
+        const event_id = crypto.randomUUID();
+        return {
+          event_id, mission_id: UUID_A, grant_id: UUID_B, identity_id: renew.identity_id, signing_key_id: renew.signing_key_id,
+          received_seq: String(index + 1), received_at: T, raw_body: JSON.stringify({ event_id, summary }), body_sha256: "", proof: {},
+        };
+      });
+    // The previous release's kind list: the same reader without the two version 4 kinds.
+    const kinds = SIGNED_KINDS as unknown as string[];
+    const saved = [...kinds];
+    kinds.splice(0, kinds.length, ...saved.filter((kind) => kind !== "directory_renew" && kind !== "directory_renewal"));
+    try {
+      const view = readFleetEvents(events, { fingerprint: door.fingerprint, public_key: door.publicKey });
+      expect(view.unverified.map((item) => item.reason)).toEqual(["malformed_document", "malformed_document"]);
+      expect([view.directoryRenewRequests, view.directoryRenewals, view.deskNotes, view.renewals, view.knocks]).toEqual([[], [], [], [], []]);
+    } finally {
+      kinds.splice(0, kinds.length, ...saved);
+    }
+    expect(readFleetEvents(events, { fingerprint: door.fingerprint, public_key: door.publicKey }).unverified).toEqual([]);
   });
 });
 

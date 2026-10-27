@@ -152,11 +152,11 @@ export async function enrollThroughHub(hub: Desk, device: Desk, doorFingerprint:
 /** Hub with the bearer in its Keychain, hub init, its own desk enrolled and
  * joined, one fleet room with an open season and a published card, and one
  * device desk enrolled, joined and synced. */
-export async function bootstrapFleet(options: { roomArgs?: string[] } = {}): Promise<Fleet> {
+export async function bootstrapFleet(options: { roomArgs?: string[]; initArgs?: string[] } = {}): Promise<Fleet> {
   const w = world();
   const hub = w.desk("hub");
   await hub.keychain.add({ service: "agenttool-lobby.hub-bearer", account: "agenttool-lobby" }, FAKE_BEARER);
-  const init = await ok(hub.yes("hub", "init", "--project", FAKE_PROJECT));
+  const init = await ok(hub.yes("hub", "init", "--project", FAKE_PROJECT, ...(options.initArgs ?? [])));
   const doorFingerprint = /door fingerprint ([0-9a-f]{16})/.exec(init.stdout)![1]!;
   const directoryId = /directory ([0-9a-f-]{36})/.exec(init.stdout)![1]!;
   await enrollHub(hub, doorFingerprint);

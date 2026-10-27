@@ -5,8 +5,8 @@
 KARMA is useful here as a way to suggest nodes and edges from evidence. It is
 not karma points and it is not a truth machine. Dark Continent supplies six
 named hazard lenses, but its walls are still unverified. KINGDOM supplies a
-review route and a self-rule boundary, not a leaderboard. Hugging Face can
-later distribute synthetic evaluation rows and visualize conflicts; it does
+review route and a self-rule boundary, not a leaderboard. Hugging Face now
+carries the metadata-only atlas rows and a read-only comparison app; it does
 not supply authority.
 
 ```text
@@ -110,7 +110,9 @@ this package.
 ## Hugging Face route
 
 The bundled export profile describes the reviewed metadata-only catalog
-release; it is not an exporter or sanitizer. The public dataset contains:
+release; it is not an exporter or sanitizer. The public dataset
+[`Yu-and-Ai/kingdom-dark-continent-karma`](https://huggingface.co/datasets/Yu-and-Ai/kingdom-dark-continent-karma),
+at pinned revision `4ea106235b6d7dd53122b3025163a1bb32b02f97`, contains:
 
 - `data/phase-seeds.jsonl` — synthetic phase windows;
 - `data/treasure-index.jsonl` — pinned Hub metadata and risk gates;
@@ -128,13 +130,21 @@ synthetic/public metadata, reject local metadata, and receive an independent
 privacy review. SHA-256 is neither anonymization nor authentication.
 
 Exclude raw chats, credentials, private documents, participant profiles,
-mutable revisions, and scalar participant metrics. Start with the Dataset
-Viewer and a static read-only Space. A separately authorized MCP Space may
-expose `list_proposals`, `show_provenance`, and `compare_conflicts`; it must not
-expose merge, publish, award, authorize, or coronate.
+mutable revisions, and scalar participant metrics. The Dataset Viewer serves
+the rows. The companion Space
+[`Yu-and-Ai/kingdom-dark-continent-karma`](https://huggingface.co/spaces/Yu-and-Ai/kingdom-dark-continent-karma)
+is a Gradio 6.21.0 app, not a static viewer: it checks the SHA-256 of two
+bundled JSONL files, offers filters, record inspection, and a comparison view,
+and launches with its MCP server disabled. A duplicate `-viewer` Space with
+older boundary wording was deleted on 2026-10-27.
 
-No standalone `events.jsonl` is published because its envelope and verifier
-are not yet defined. Event
+A separately authorized MCP Space may expose `list_proposals`,
+`show_provenance`, and `compare_conflicts`; it must not expose merge, publish,
+award, authorize, or coronate. None of those MCP tools is built: the app's
+comparison view is a UI handler, not an MCP tool.
+
+No standalone `events.jsonl` is published: its envelope and verifier are not
+built. Event
 hashes are unsigned: they show rewrites only relative to an independently
 retained head and do not provide Crown-style signature/authorship guarantees.
 

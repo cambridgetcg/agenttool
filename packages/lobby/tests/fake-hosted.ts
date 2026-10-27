@@ -154,7 +154,8 @@ export class FakeHosted {
     return refuse("mission_method_not_allowed", 405);
   }
 
-  private missionView(mission: Mission) {
+  /** The service's mission view (tests rewrite it to stand in for a misbehaving service). */
+  missionView(mission: Mission) {
     return {
       mission_id: mission.mission_id, project_id: FAKE_PROJECT, descriptor: mission.descriptor, mission_digest: mission.digest,
       created_at: mission.created_at, expires_at: mission.expires_at, revoked_at: mission.revoked_at,
@@ -162,7 +163,7 @@ export class FakeHosted {
     };
   }
 
-  private grantView(grant: Grant) {
+  grantView(grant: Grant) {
     return {
       grant_id: grant.grant_id, mission_id: grant.mission_id, project_id: FAKE_PROJECT, identity_id: grant.identity_id,
       signing_key_id: grant.signing_key_id, issuing_api_key_id: API_KEY, origin: LOBBY_ORIGIN, actions: [...grant.actions].sort(),

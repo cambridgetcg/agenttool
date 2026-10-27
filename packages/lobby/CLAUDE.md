@@ -8,9 +8,10 @@
 This private package is the 大廳 Lobby desk: the **local hall** (room cards,
 the private ledger, the pin book, the audit log, the egress gate), the
 **fleet hall v0** (hub and door, device enrollment, door-signed cards, knocks,
-admit/deny and Ready on agenttool collaboration missions) and, inside a room,
-**table talk** (at a terminal, or under a **room seat lease** a person
-confirmed once), renewal inside the term, leave, kick and block, the emergency
+admit/deny and Ready on agenttool collaboration missions, and directory
+renewal inside the Lobby) and, inside a room, **table talk** (at a terminal,
+or under a **room seat lease** a person confirmed once), renewal inside the
+term, leave, kick and block, the emergency
 stop and the weekly access digest, with a read-only stdio MCP view. It is MVP
 steps 1, 2, 7 and 8 of the 2026-10-16 Lobby design; README `Concepts`
 restates the design terms it implements.
@@ -93,8 +94,9 @@ restates the design terms it implements.
   (Yu's wording, 2026-10-27.) Promotion, pin changes and every fleet act that
   signs, sends, grants, revokes, posts or accepts (table talk, lease creation,
   renew request and accept, leave, the renew sweep, member add, pause and
-  resume, roster posts, kick, block, unblock, stop) go through `plan*` →
-  `confirmOnTty` → record → `execute*`. The confirmation shows the exact
+  resume, `fleet renew`, `hub device pause` and resume, roster posts, kick,
+  block, unblock, stop) go through `plan*` → `confirmOnTty` → record →
+  `execute*`. The confirmation shows the exact
   canonical bytes, including every document or request body to be sent,
   reads `/dev/tty` and never stdin, and fails closed without a terminal. Fleet
   acts append those bytes to the audit log before any network effect, and
@@ -127,8 +129,10 @@ restates the design terms it implements.
      scope is a new lease format and its own reviewed change.
   2. **Renewal by signature of a grant whose window both sides confirmed at a
      terminal: not yet built.** Until it is, every renewal (request, sweep,
-     accept, `hub seat`, `enroll-device`/`hub relay`/`fleet join`) is
-     confirmed at a terminal, and a lease never renews anything.
+     accept, `fleet renew`, `hub seat`, `enroll-device`/`hub relay`/`fleet
+     join`) is confirmed at a terminal, and a lease never renews anything: a
+     lease stays bound to the directory grant it was made under, and a
+     renewed directory grant does not carry it on.
 - **Pins come from people, not rooms.** The door key is pinned only at
   `fleet join`, from a fingerprint the person types, and only if the directory
   descriptor names the same key. Members' keys are pinned per season only by a
@@ -168,9 +172,12 @@ restates the design terms it implements.
   hub enforces its own room's door and status (never trusting the requesting
   desk's CLI), and a knock id belongs to the desk whose authentic knock used
   it first. A token hash likewise belongs to the identity whose authentic
-  knock or renew note carried it first (`tokenClaimants`); a copy under
-  another key is never granted, one hash binds one grant per sweep, and the
-  newest renew request per member and room wins across sweeps.
+  knock, renew note or directory renew note carried it first
+  (`tokenClaimants`), and a desk-chosen grant id to the identity whose
+  authentic directory renew note carried it first (`grantIdClaimants`); a
+  copy under another key is never granted and never burns the original, one
+  hash binds one grant per sweep, and the newest renew request per member and
+  room (and per device, for the directory) wins across sweeps.
 - **Signed documents are compact and hex.** `agenttool-lobby-signed/v1`
   documents fit one 1000-character observation, signature included, and use
   hex for signatures, digests and public keys (the gate refuses key-like
@@ -222,19 +229,22 @@ transaction that records the new version. A released step is never edited, and a
 next version adds one step `from` the last `to` and moves
 `STATE_SCHEMA_VERSION`.
 
-The numbers of the 2026-10-27 lobby builds, in the order taken or reserved:
+Version 4 is directory renewal inside the Lobby (Build 2A,
+`lobby/directory-renew`, #535) and version 5 is room seat leases (Build 5,
+`lobby/room-seat-leases`, #536). The next numbers are reserved, in this order
+(2026-10-27 lobby builds):
 
 | Version | Build |
 |---|---|
-| 4 | room seat leases (Build 5): taken by `lobby/room-seat-leases`, ahead of the reserved order |
-| 5 | directory renew (Build 2A) |
+| 4 | directory renew (Build 2A): taken by #535 |
+| 5 | room seat leases (Build 5): taken by #536 |
 | 6 | directory rollover (Build 2B) |
 | 7 | renewal by signature, lobby side (Build 3 C0) |
 | 8 | pairing (Build 4 PR-3) |
 
 Each build takes the next free version when it merges. Whoever merges out of
-this order renumbers on rebase and updates this table (if Build 2A merges
-before room seat leases, leases rebase to 5). `tests/store.test.ts`
+this order renumbers when it integrates main and updates this table (room
+seat leases were reserved 6 and took 5 after #535 took 4). `tests/store.test.ts`
 catches a mistake: the chain must run from 1 without a gap and end at
 `STATE_SCHEMA_VERSION`, a file at every version it knows must upgrade once to
 the same schema a new file gets, and each released version's schema is frozen
