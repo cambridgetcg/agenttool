@@ -485,6 +485,12 @@ describe("renewal inside an administrator-set window", () => {
         await refusal(executeMissionRequest(renew(), s.options), 403, "collaboration_mission_renewal_unavailable");
         noInsert(s);
       }
+      // The halfway gate is the presented member's own, never the root's: a young
+      // successor under a root past its halfway cannot renew yet.
+      const young = middle({ issuedAt: new Date(NOW.getTime() - 10 * MIN), acceptedAt: new Date(NOW.getTime() - 10 * MIN), expiresAt: new Date(NOW.getTime() + 50 * MIN) });
+      const early = staged(renewSteps(young, root(), []));
+      await refusal(executeMissionRequest(renew(CHILD_TOKEN, C), early.options), 403, "collaboration_mission_renewal_unavailable");
+      noInsert(early);
       // A closed root closes every member, even one whose own stamp is missing.
       const s = staged(renewSteps(middle(), root({ renewalClosedAt: new Date(NOW.getTime() - MIN) }), []));
       await refusal(executeMissionRequest(renew(CHILD_TOKEN, C), s.options), 403, "collaboration_mission_renewal_unavailable");

@@ -482,6 +482,18 @@ databaseTest("a renewable root references itself and renews into a born-accepted
   expect(await unrevokedMembers()).toBe(0);
 });
 
+databaseTest("a successor opens at its own halfway, not the root's, so a chain cannot be minted in a burst", async () => {
+  const { token } = await renewableRoot();
+  const childToken = freshToken();
+  await executeMissionRequest(renewReq(token, G, H, childToken), at(HALF));
+  const soon = new Date(HALF.getTime() + 1000);
+  await expect(executeMissionRequest(renewReq(childToken, H, E, freshToken(), soon), at(soon))).rejects.toMatchObject({ status: 403, code: "collaboration_mission_renewal_unavailable" });
+  expect((await admin`SELECT count(*)::int AS n FROM tools.collaboration_grants WHERE renewal_root_id = ${G}`)[0].n).toBe(2);
+  // H was born at HALF for one hour: it opens 30 minutes later.
+  const open = new Date(HALF.getTime() + 1_800_000);
+  expect((await executeMissionRequest(renewReq(childToken, H, E, freshToken(), open), at(open))).created).toBe(true);
+});
+
 databaseTest("migration constraints keep a chain linear and within its root's whole scope", async () => {
   const { token } = await renewableRoot();
   await executeMissionRequest(renewReq(token, G, H, freshToken()), at(HALF));
