@@ -461,8 +461,12 @@ databaseTest("a renewable root references itself and renews into a born-accepted
     bodyBytes: Buffer.from(proof.raw_body, "utf8"), proof: { grantId: proof.signed_grant_id, identityId: I, keyId: K, timestamp: proof.timestamp, signature: proof.signature } }, proof.public_key, HALF)).toBe(true);
   // The child works at once, and a later explicit accept is harmless.
   const childProof = { grantId: H, identityId: I, keyId: K, timestamp: HALF.toISOString(), signature: "" };
-  expect((await executeMissionRequest(req(childToken, "/context", undefined, { proof: childProof }), at(HALF))).data.grant).toMatchObject({ grant_id: H });
-  expect((await executeMissionRequest(req(childToken, "/accept", { mission_digest: DIGEST }, { proof: childProof }), at(HALF))).created).toBe(false);
+  // /context and /accept carry the same lineage object as /invitation.
+  const lineage = { root_grant_id: G, renewed_from_grant_id: G, renewed_to_grant_id: null, renewable_until: WINDOW.toISOString(), closed_at: null };
+  expect((await executeMissionRequest(req(childToken, "/context", undefined, { proof: childProof }), at(HALF))).data.grant).toMatchObject({ grant_id: H, renewal: lineage });
+  const reaccepted = await executeMissionRequest(req(childToken, "/accept", { mission_digest: DIGEST }, { proof: childProof }), at(HALF));
+  expect(reaccepted.created).toBe(false);
+  expect(reaccepted.data.grant).toMatchObject({ grant_id: H, renewal: lineage });
   expect((await getMissionGrant({ ...target, grantId: G }, options())).renewal?.renewed_to_grant_id).toBe(H);
   // An exact retry with a fresh proof returns the same child; anything else conflicts.
   const later = new Date(HALF.getTime() + 1000);

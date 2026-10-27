@@ -37,6 +37,7 @@ const grantRow = (overrides: Record<string, unknown> = {}) => ({ id: G, projectI
 const issueInput = (extra: { tokenSha256?: string; grantId?: string; renewableUntil?: string; expiresAt?: string } = {}) => ({ projectId: P, missionId: M, issuerApiKeyId: A, grantId: G,
   identityId: I, signingKeyId: K, origin: ORIGIN, actions: ["mission.read"] as MissionAction[], expiresAt: END.toISOString(), ...extra });
 
+type GrantLike = { renewal?: unknown };
 type Step = unknown[] | ((values: Record<string, unknown> | undefined) => unknown[]);
 interface StagedEvent { operation: string; condition?: { sql: string; params: unknown[] }; lock?: string; values?: Record<string, unknown>; conflict?: "target" | "any" }
 /** Replays one result per terminal query and records each query's shape. */
@@ -722,6 +723,28 @@ describe("renewal inside an administrator-set window", () => {
     expect(shape(invitation)[5]).toEqual(["select", "share"]);
     expect(view.data.grant).toMatchObject({ grant_id: C, renewal: { root_grant_id: G, renewed_from_grant_id: G, renewed_to_grant_id: null } });
     expect(JSON.stringify(view)).not.toContain(CHILD_HASH);
+  });
+
+  test("context and accept return the same lineage object; unchained grants keep their keys", async () => {
+    const head = (renewedTo: string | null) => ({ root_grant_id: G, renewed_from_grant_id: G, renewed_to_grant_id: renewedTo, renewable_until: WINDOW.toISOString(), closed_at: null });
+    const admitted = (row: Record<string, unknown>, ...tail: Step[]) => [...renewSteps(row, row).slice(0, 5), [row], ...tail];
+    const asChild = (method: "GET" | "POST", suffix: string, raw = "") => signed(CHILD_TOKEN, method, suffix, raw, privateKey, { grantId: C });
+    const acceptBody = JSON.stringify({ mission_digest: DIGEST });
+    const context = await executeMissionRequest(asChild("GET", "/context"), staged(admitted(middle(), [{ id: N }])).options);
+    expect((context.data.grant as GrantLike).renewal).toEqual(head(N));
+    // A successor is born accepted: a later accept returns its view with lineage.
+    const again = await executeMissionRequest(asChild("POST", "/accept", acceptBody), staged(admitted(middle(), [])).options);
+    expect(again.created).toBe(false);
+    expect((again.data.grant as GrantLike).renewal).toEqual(head(null));
+    // A root's first acceptance returns its lineage too.
+    const unaccepted = root({ acceptedAt: null, acceptanceProof: null });
+    const first = await executeMissionRequest(signed(PARTICIPANT_TOKEN, "POST", "/accept", acceptBody),
+      staged(admitted(unaccepted, values => [{ ...unaccepted, ...values }], [])).options);
+    expect(first.created).toBe(true);
+    expect((first.data.grant as GrantLike).renewal).toEqual({ ...head(null), renewed_from_grant_id: null });
+    const plain = staged(admissionSteps(acceptedRow()));
+    expect((await executeMissionRequest(signed(PARTICIPANT_TOKEN, "GET", "/context"), plain.options)).data.grant).not.toHaveProperty("renewal");
+    expect(plain.events).toHaveLength(6);
   });
 });
 
