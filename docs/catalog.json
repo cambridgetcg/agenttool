@@ -5583,6 +5583,22 @@
       "canonical_path": "packages/living-substrate/README.md"
     },
     {
+      "path": "packages/lobby-doorbell/CLAUDE.md",
+      "title": "Lobby doorbell package guide",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/lobby-doorbell/CLAUDE.md"
+    },
+    {
+      "path": "packages/lobby-doorbell/README.md",
+      "title": "Lobby doorbell: netcheck",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/lobby-doorbell/README.md"
+    },
+    {
       "path": "packages/lobby/CLAUDE.md",
       "title": "Lobby desk package guide",
       "type": "guide",
