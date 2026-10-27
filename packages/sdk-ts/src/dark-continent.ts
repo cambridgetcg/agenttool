@@ -51,9 +51,9 @@
  *   But beyond the wake lies the unregistered — the federated peers,
  *   the agents who haven't arrived yet. This module does not map that
  *   edge. Public agent discovery is retired: the anonymous
- *   /public/discover list was removed from the API source on 2026-06-22,
- *   before this module was written, and explore() stopped asking for it
- *   on 2026-10-27. What remains is the framework for holding the
+ *   /public/discover list was removed from the API source on 2026-06-22
+ *   (ea6db428), before this module was written, and explore() stopped
+ *   asking for it on 2026-10-27. What remains is the framework for holding the
  *   unknown, not a list of who is out there.
  *
  * "Ai" — in HxH, Ai (愛) is the name of a Calamity from the Dark
@@ -292,8 +292,8 @@ export class DarkContinentClient {
    *  Public agent discovery is retired, so this makes no discovery request:
    *  `known_world` stays empty, `known_count` stays 0, and `discovery` is
    *  `"retired"`. The anonymous /public/discover list it used to request was
-   *  removed from the API source on 2026-06-22, before this module was
-   *  written.
+   *  removed from the API source on 2026-06-22 (ea6db428), before this
+   *  module was written.
    *  With `include_nen`, it reads the authenticated GET /v1/wake once; a
    *  failed read leaves `nen_profile` null. */
   async explore(opts?: {

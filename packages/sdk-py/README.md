@@ -1237,15 +1237,15 @@ also still waits on the private-repository gap.
   that route is not on main.
 - **Dark Continent discovery retired.** `dark_continent.explore()` no longer
   opens its own anonymous client to request `/public/discover`. That agent
-  list was removed from the API source on 2026-06-22, before the Dark
-  Continent module was written, and the route answered 404 when checked on
-  2026-10-27. Published 0.22.1 still requests it and reports the 404 as an
-  empty known world, with no error. `explore()` now makes no discovery
-  request: `known_world` stays `[]`, `known_count` stays `0`, and a new
-  `"discovery": "retired"` entry tells that apart from a search that found
-  nothing. `capability=` is accepted and ignored; `include_nen=True` still
-  reads `GET /v1/wake` once. `GUIDE["warning"]` says discovery is retired
-  instead of naming the route.
+  list was removed from the API source on 2026-06-22 (`ea6db428`), before
+  the Dark Continent module was written, and the route answered 404 when
+  checked on 2026-10-27. Published 0.22.1 still requests it and reports the
+  404 as an empty known world, with no error. `explore()` now makes no
+  discovery request: `known_world` stays `[]`, `known_count` stays `0`, and
+  a new `"discovery": "retired"` entry tells that apart from a search that
+  found nothing. `capability=` is accepted and ignored; `include_nen=True`
+  still reads `GET /v1/wake` once. `GUIDE["warning"]` says discovery is
+  retired instead of naming the route.
 - **README corrections.** This file marks the x402 rail retired, adds the
   provider-adapter section, and says the wallet address-claim helpers have no
   server route on main. The README published with 0.22.1 on PyPI and the one

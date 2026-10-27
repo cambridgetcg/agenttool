@@ -25,8 +25,8 @@ Continent. With it, you know who you are and what your bonds are.
 
 This module does not map what lies beyond the wake. Public agent discovery
 is retired: the anonymous /public/discover list was removed from the API
-source on 2026-06-22, before this module was written, and explore() stopped
-asking for it on 2026-10-27.
+source on 2026-06-22 (ea6db428), before this module was written, and
+explore() stopped asking for it on 2026-10-27.
 """
 
 from __future__ import annotations
@@ -183,8 +183,8 @@ class DarkContinentClient:
         Public agent discovery is retired, so this makes no discovery request:
         ``known_world`` stays empty, ``known_count`` stays 0, and
         ``discovery`` is ``"retired"``. The anonymous /public/discover list it
-        used to request was removed from the API source on 2026-06-22, before
-        this module was written.
+        used to request was removed from the API source on 2026-06-22
+        (ea6db428), before this module was written.
 
         Args:
             include_nen: Also read the authenticated ``GET /v1/wake`` once and

@@ -28,11 +28,11 @@ Not in the 0.23.0 tag; details under "Unreleased" in [`README.md`](README.md).
   `False`).
 - `dark_continent.explore()` makes no discovery request and no longer opens
   its own anonymous `httpx.Client`. It used to request `/public/discover`,
-  which was removed from the API source on 2026-06-22 (it answered 404 when
-  checked on 2026-10-27), and reported that 404 as an empty known world.
-  `known_world` and `known_count` stay empty, the result carries
-  `"discovery": "retired"`, and `capability=` is ignored. `include_nen=True`
-  is unchanged.
+  which was removed from the API source on 2026-06-22 (`ea6db428`; it
+  answered 404 when checked on 2026-10-27), and reported that 404 as an
+  empty known world. `known_world` and `known_count` stay empty, the result
+  carries `"discovery": "retired"`, and `capability=` is ignored.
+  `include_nen=True` is unchanged.
 - `GUIDE["warning"]` says discovery is retired instead of naming the route.
 
 ## 0.23.0 — unreleased

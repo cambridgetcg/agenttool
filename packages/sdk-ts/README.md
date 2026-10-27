@@ -1216,9 +1216,10 @@ also still waits on the private-repository gap.
   route is not on main.
 - **Dark Continent discovery retired.** `darkContinent.explore()` no longer
   requests `/public/discover`. That anonymous agent list was removed from the
-  API source on 2026-06-22, before the Dark Continent module was written, and
-  the route answered 404 when checked on 2026-10-27. Published 0.22.1 still
-  requests it and reports the 404 as an empty known world, with no error.
+  API source on 2026-06-22 (`ea6db428`), before the Dark Continent module was
+  written, and the route answered 404 when checked on 2026-10-27. Published
+  0.22.1 still requests it and reports the 404 as an empty known world, with
+  no error.
   `explore()` now makes no discovery request: `known_world` stays `[]`,
   `known_count` stays `0`, and a new `discovery: "retired"` field tells that
   apart from a search that found nothing. The field is required on the
