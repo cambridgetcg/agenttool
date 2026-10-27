@@ -41,7 +41,9 @@ import {
 import { HUB_ACCESS_COMMANDS, hubAccessCommand, ROOM_TABLE_COMMANDS, roomTableCommand } from "./cli-table.js";
 import type { FetchLike } from "./hosted.js";
 import type { SecretStore } from "./keychain.js";
+import { enforceLeaseStops } from "./lease.js";
 import type { FleetContext } from "./ops.js";
+import { defaultSeatRef } from "./seat-ref.js";
 
 export const EXIT_OK = 0;
 export const EXIT_REFUSED = 1;
@@ -114,9 +116,21 @@ Inside a room (table talk, renewal, leave)
   room roster <room_id> [--cached] [--json] [--chat-config [--conversation C]]
   room say <room_id> (--text T | --text-file FILE) [--to UUID]
            [--in-reply-to EVENT [--kind message|read_ack]] [--conversation C]
+           [--lease LEASE_ID --idempotency-key K [--json]]
+           (tty; or, under a lease a person made at a terminal, no terminal)
   room renew request <room_id>
   room renew accept <room_id>
   room leave <room_id>
+
+Room seat leases (table talk without a terminal per message)
+  room lease <room_id> (--seat-ref REF | --any-seat) [--to UUID]... [--minutes 1-480]
+           [--messages 1-100] [--chars 1-50000] [--interval-seconds 5-3600] [--conversation C]
+           (tty, players only; confirmed once; defaults 480 minutes, 20 messages,
+            10000 characters, 30 s apart; at most 1000 characters per message)
+  room lease list [--all] [--json]
+  room lease show <lease_id> [--json]
+  room lease revoke (<lease_id> | --all [--room ROOM_ID])   (no terminal, no prompt)
+  A file named STOP in the state directory voids every lease on this desk.
 
 Fleet hall, hub only (bearer and door key in the login Keychain)
   hub init --project UUID [--days 1-30] [--adopt-directory UUID --directory-digest sha256:...]
@@ -148,10 +162,12 @@ New rooms are residency=device, visibility=private, hostable=false. Only
 residency=fleet, hostable rooms reach the fleet hall; device rooms never leave.
 Consequential acts (promote, pin add/remove, hub init/relay/season/seat, room
 publish, hub admit/deny, fleet join, knock, ready, outbox retry, room say,
-room renew, room leave, hub renew-sweep/member/roster post/kick/block/unblock/stop)
-show the exact bytes on the controlling terminal (/dev/tty), need "yes" typed
-there (never stdin), fail closed without a terminal, and are recorded in the
-audit log.
+room lease, room renew, room leave, hub renew-sweep/member/roster post/kick/
+block/unblock/stop) show the exact bytes on the controlling terminal
+(/dev/tty), need "yes" typed there (never stdin), fail closed without a
+terminal, and are recorded in the audit log. The one exception built here:
+room say --lease sends table talk without a terminal, inside a lease a person
+confirmed at one, audited before any network effect and never retried.
 State: $AGENTTOOL_LOBBY_HOME, else \${XDG_STATE_HOME:-~/.local/state}/agenttool/lobby
 (directory 0700, files 0600; wider modes are refused).
 Exit codes: 0 ok, 1 refused, 2 usage, 3 not confirmed.
@@ -508,7 +524,10 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
       keychain: io.keychain ?? null,
       hasTerminal: io.hasTerminal ?? (() => false),
       sleep: io.sleep ?? ((ms) => new Promise<void>((resolve) => setTimeout(resolve, ms))),
+      seatRef: defaultSeatRef(io.env),
     };
+    // A STOP file, or the hub's recorded stop, ends every lease for good.
+    enforceLeaseStops(ctx);
     const fleetIo = { stdout: io.stdout, stderr: io.stderr, confirm: io.confirm };
     if (group === "room" && rest[0] === "publish") return await roomPublishCommand(ctx, rest.slice(1), fleetIo);
     if (group === "room" && (ROOM_TABLE_COMMANDS as readonly string[]).includes(rest[0] ?? "")) return await roomTableCommand(ctx, rest, fleetIo);

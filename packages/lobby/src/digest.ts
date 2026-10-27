@@ -2,7 +2,8 @@
  *
  * Built only from this hub's own records (lobby.sqlite and the audit log):
  * who holds which grant, terms, expiries, pauses, blocks and the recent
- * admits, kicks, blocks, leaves and renewals. It reads no Keychain item,
+ * admits, kicks, blocks, leaves and renewals, and this desk's own room seat
+ * leases (src/lease.ts). It reads no Keychain item,
  * contacts no service and posts nothing. It holds no token, key or bearer
  * (token hashes are left out too: a person does not need them). The report
  * is written to a new owner-only file; the CLI prints only its path.
@@ -13,6 +14,7 @@ import { isAbsolute, join } from "node:path";
 import { LobbyError } from "./errors.js";
 import { assertPrivateDirectory } from "./home.js";
 import { requireHub } from "./hub.js";
+import { leaseView } from "./lease.js";
 import { DAY_MS, HOUR_MS, type FleetContext } from "./ops.js";
 import { writeNewPrivateFile } from "./secrets.js";
 import { TERMINAL_UNSAFE } from "./text.js";
@@ -21,7 +23,7 @@ export const DIGEST_DEFAULT_DAYS = 7;
 const REPORTS_DIR = "reports";
 
 /** Acts the digest lists as recent access changes (and their outcomes). */
-const ACCESS_ACTS = /^(hub\.(init|relay|admit|deny|season\.\w+|seat|renew\.sweep|member\.\w+|roster\.post|kick|block|unblock|stop)|room\.(publish|promote))(\.outcome)?$/;
+const ACCESS_ACTS = /^(hub\.(init|relay|admit|deny|season\.\w+|seat|renew\.sweep|member\.\w+|roster\.post|kick|block|unblock|stop)|room\.(publish|promote)|room\.lease(\.revoke|\.void)?)(\.outcome)?$/;
 
 function cell(text: string): string {
   // Self-declared names never break the table or the terminal: line breaks
@@ -141,6 +143,23 @@ export function buildAccessDigest(ctx: FleetContext, input: { days?: number } = 
     ...renewed.map((renewal) => `- ${renewal.renewed_at} renewed ${who(renewal.identity_id)} in ${renewal.room_id} (grant ${renewal.grant_id}, from ${renewal.basis === "list" ? "a supplied hash list" : "a signed request"})`),
   );
   if (admitted.length + changed.length + renewed.length === 0) lines.push("(no admissions, denials, leaves, kicks, blocks or renewals)");
+  // This desk's own leases: a lease is local, so other desks' leases are not here.
+  const leases = fleet.listLeases().map((row) => leaseView(ctx, row))
+    .filter((lease) => lease.state === "active" || inWindow(lease.issued_at) || inWindow(lease.revoked_at) || inWindow(lease.voided_at));
+  lines.push("", "## Seat leases on this desk", "",
+    "Leases are local to the desk that holds them; a member desk's leases show in its own `room lease list`.", "");
+  if (leases.length === 0) lines.push("(no lease active or issued, revoked or voided in the window)");
+  else {
+    lines.push("| lease | room | seat ref | issued | ends | ends by | recipients | messages | characters | stored / pending | state |",
+      "|---|---|---|---|---|---|---|---|---|---|---|");
+    for (const lease of leases) {
+      lines.push(`| ${lease.lease_id} | ${lease.room_id} | ${cell(lease.seat_ref ?? "any seat")} | ${lease.issued_at} | ${lease.expires_at} | ${lease.ends_by} | ` +
+        `${lease.recipients.length} | ${lease.sent_messages}/${lease.max_messages} | ${lease.sent_chars}/${lease.max_total_chars} | ` +
+        `${lease.sends.stored} / ${lease.sends.pending} | ${cell(lease.state)} |`);
+    }
+  }
+  const leaseSends = ctx.store.listAudit().filter((entry) => entry.act === "room.say.lease" && inWindow(entry.at)).length;
+  lines.push("", `${leaseSends} send(s) under leases (room.say.lease) in the window; each is in the audit log, not listed here.`);
   lines.push("", "### Audited access acts", "", "| at | act | subject |", "|---|---|---|");
   const acts = ctx.store.listAudit().filter((entry) => ACCESS_ACTS.test(entry.act) && inWindow(entry.at));
   lines.push(...(acts.length === 0 ? ["| - | (none) | - |"] : acts.map((entry) => `| ${entry.at} | ${entry.act} | ${cell(entry.subject)} |`)));

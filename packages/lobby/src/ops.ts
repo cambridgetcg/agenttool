@@ -14,7 +14,7 @@
 import { canonicalJson, sha256Hex } from "./canonical.js";
 import { LobbyError } from "./errors.js";
 import { readFleetEvents, type DoorPin, type FleetView } from "./fleet.js";
-import { assertSendable, localDeviceTerms, ParticipantClient, prepareObservation, type GateRoom, type HostedOptions, type ParticipantSeat } from "./hosted.js";
+import { assertSendable, localDeviceTerms, mayHaveTakenEffect, ParticipantClient, prepareObservation, type GateRoom, type HostedOptions, type ParticipantSeat } from "./hosted.js";
 import type { SecretStore } from "./keychain.js";
 import { DeskSecrets } from "./secrets.js";
 import type { RoomCard } from "./room.js";
@@ -37,6 +37,11 @@ export interface FleetContext {
   hasTerminal: () => boolean;
   /** Pause between polls of a bounded wait (a timer in production; tests advance their clock). */
   sleep: (ms: number) => Promise<void>;
+  /** The execution seat the caller declares (src/seat-ref.ts), from the
+   * environment the CLI was started with; null or absent when it declares
+   * none. An unverified label: room seat leases record it and may be bound
+   * to one, and it authorizes nothing. */
+  seatRef?: string | null;
 }
 
 export const NO_TERMINAL_MESSAGE =
@@ -241,6 +246,9 @@ export interface PostOutcome {
   status: "stored" | "pending" | "refused";
   received_seq?: string;
   error?: string;
+  /** On `pending`: true when the request may have reached the service
+   * (`mayHaveTakenEffect`), false when it definitely did not take effect. */
+  uncertain?: boolean;
 }
 
 /** The gate for sending a post now, from the room's current state: the hub's
@@ -316,7 +324,7 @@ export async function sendPost(ctx: FleetContext, post: PreparedPost, seat: Part
     return { event_id: post.event_id, mission_id: post.mission_id, kind: post.kind, status: "stored", received_seq: event.received_seq };
   } catch (error) {
     const reason = error instanceof LobbyError ? `${error.code}: ${error.message}` : "internal_error: the send failed unexpectedly; it may or may not have been stored";
-    return { event_id: post.event_id, mission_id: post.mission_id, kind: post.kind, status: "pending", error: reason };
+    return { event_id: post.event_id, mission_id: post.mission_id, kind: post.kind, status: "pending", error: reason, uncertain: mayHaveTakenEffect(error) };
   }
 }
 

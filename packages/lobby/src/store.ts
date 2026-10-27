@@ -36,15 +36,16 @@ import {
   type SlotTier,
 } from "./room.js";
 import { codePointLength, TERMINAL_UNSAFE } from "./text.js";
-import { FLEET_SCHEMA_SQL, FLEET_V3_UPGRADE_SQL, FleetStore } from "./fleet-store.js";
+import { FLEET_SCHEMA_SQL, FLEET_V3_UPGRADE_SQL, FLEET_V4_UPGRADE_SQL, FleetStore } from "./fleet-store.js";
 
 /** Version 2 adds the fleet-hall tables; version 3 adds table talk, renewal,
- * leave, kick and block and the emergency stop (src/fleet-store.ts). An older
- * file is upgraded explicitly, one step at a time (`SCHEMA_STEPS`), when the
- * CLI opens it for writing; the read-only MCP handle reads version 1 as "no
- * fleet state yet" and version 2 as fleet state without the version-3 tables.
+ * leave, kick and block and the emergency stop; version 4 adds room seat
+ * leases (src/fleet-store.ts). An older file is upgraded explicitly, one step
+ * at a time (`SCHEMA_STEPS`), when the CLI opens it for writing; the
+ * read-only MCP handle reads version 1 as "no fleet state yet", version 2 as
+ * fleet state without the version-3 tables and version 3 as "no leases".
  * Later numbers are reserved in packages/lobby/CLAUDE.md ("Schema versions"). */
-export const STATE_SCHEMA_VERSION = "3";
+export const STATE_SCHEMA_VERSION = "4";
 export const ACT_SCHEMA = "agenttool-lobby-act/v1" as const;
 const GENESIS_HASH = "0".repeat(64);
 
@@ -154,6 +155,12 @@ function upgradeV2ToV3(db: Database): void {
   db.exec(FLEET_V3_UPGRADE_SQL);
 }
 
+/** 3 → 4: room seat leases (src/fleet-store.ts `FLEET_V4_UPGRADE_SQL`: two
+ * new tables and their triggers; nothing existing changes). */
+function upgradeV3ToV4(db: Database): void {
+  db.exec(FLEET_V4_UPGRADE_SQL);
+}
+
 /** The upgrade chain, in order. A new file is created at version 1
  * (`SCHEMA_SQL`) and takes every step, so every desk reaches one schema by
  * one path. The next version adds one function and one entry here (`from`
@@ -163,7 +170,8 @@ function upgradeV2ToV3(db: Database): void {
 export const SCHEMA_STEPS: readonly SchemaStep[] = [
   { from: "1", to: "2", apply: upgradeV1ToV2 },
   { from: "2", to: "3", apply: upgradeV2ToV3 },
-  // Next: { from: "3", to: "4", apply: upgradeV3ToV4 } (reserved: Build 2A).
+  { from: "3", to: "4", apply: upgradeV3ToV4 },
+  // Next: { from: "4", to: "5", apply: upgradeV4ToV5 } (see packages/lobby/CLAUDE.md "Schema versions").
 ];
 
 /** Every version this code can read: the base version and each step's target. */
@@ -733,13 +741,24 @@ export class LobbyStore {
     this.db.transaction(() => this.appendAudit(plan)).immediate();
   }
 
-  private appendAudit(plan: ActPreview): void {
+  /** Append one act's exact bytes and make the local writes it stands for,
+   * in one immediate transaction: `run` gets the new audit sequence number,
+   * and if it throws nothing is written, the audit entry included. Room seat
+   * leases use it so that a lease, a void, a revocation, or a send's budget
+   * reservation and outbox row exist only together with their audit entry,
+   * written before any network effect (src/lease.ts). */
+  recordActWith<T>(plan: ActPreview, run: (auditSeq: number) => T): T {
+    this.requireWritable();
+    return this.db.transaction(() => run(this.appendAudit(plan))).immediate();
+  }
+
+  private appendAudit(plan: ActPreview): number {
     const last = this.db.query("SELECT hash FROM audit ORDER BY seq DESC LIMIT 1").get() as
       | { hash: string }
       | null;
     const previous = last?.hash ?? GENESIS_HASH;
     const bytesSha = sha256Hex(plan.bytes);
-    this.db.query(
+    return Number(this.db.query(
       `INSERT INTO audit (at, act, subject, bytes, bytes_sha256, prev_hash, hash)
        VALUES ($at, $act, $subject, $bytes, $bytes_sha256, $prev_hash, $hash)`,
     ).run({
@@ -750,7 +769,7 @@ export class LobbyStore {
       bytes_sha256: bytesSha,
       prev_hash: previous,
       hash: auditHash(previous, plan.at, plan.act, plan.subject, bytesSha),
-    });
+    }).lastInsertRowid);
   }
 
   /** A plan's shown bytes must still be the canonical encoding of what will

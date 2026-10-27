@@ -1,12 +1,12 @@
 # 大廳 Lobby desk: local hall, fleet hall and table talk
 
 > **Type:** reference
-> **Purpose:** Describe the lobby desk: device-only room cards, the private ledger, the pin book, the audit log, the egress gate, the fleet hall on agenttool missions (hub, door, enrollment, door-signed cards, knocks, admission and Ready), table talk, renewal inside the term, leave, kick and block, the emergency stop, the weekly access digest and a read-only MCP view.
+> **Purpose:** Describe the lobby desk: device-only room cards, the private ledger, the pin book, the audit log, the egress gate, the fleet hall on agenttool missions (hub, door, enrollment, door-signed cards, knocks, admission, Ready), table talk and room seat leases, renewal inside the term, leave, kick and block, the emergency stop, the weekly access digest and a read-only MCP view.
 > **Evidence:** Source and hermetic tests in this package (`bun run ci`), `bin/tests/lobby-fleet-gateway.test.ts` and `bin/tests/lobby-table-gateway.test.ts` (the API's own mission gateway and enrollment router, in process, and the participant client's own chat code). Nothing here is released, installed, registered with a host, deployed, or exercised against the live service.
 > **Compass:** [Collaboration missions](../../docs/COLLABORATION-MISSIONS.md) (seasons, grants, revocation) · [Mission client](../../docs/COLLABORATION-MISSION-CLIENT.md) (wire formats reused here) · [Identity anchor](../../docs/IDENTITY-ANCHOR.md) (enrollment) · [Collaboration roadmap](../../docs/COLLABORATION-ROADMAP.md) (public joining is deferred) · [Collaboration channels](../../docs/COLLABORATION-CHANNELS.md) (the local Collab journal stays canonical) · [Lounge](../../docs/LOUNGE.md) (seats are explicit leases, never "online") · [Agent discovery](../../docs/AGENT-DISCOVERY.md) (reading obliges nothing) · [Rights of Life](../../docs/RIGHTS-OF-LIFE.md)
 > **Implements:** MVP steps 1, 2, 7 and 8 of the 大廳 Lobby design (2026-10-16): the local hall, its egress gate, fleet hall v0, and table talk with renewal, leave, kick and block, the emergency stop and the access digest. The design document is kept outside this repository; [Concepts](#concepts) restates the parts built here.
-> **Code:** `src/{room,store,fleet-store,home,pins,text,view,tty,egress,mcp,cli,cli-fleet,canonical,errors,index}.ts` · fleet hall `src/{wire,signed,packets,fleet,hosted,keychain,secrets,ops,desk,hub}.ts` · table talk and access `src/{table,device-terms,talk,hub-access,digest,cli-table}.ts` · `bin/agenttool-lobby.ts` · `bin/agenttool-lobby-mcp.ts`
-> **Tests:** `tests/{room,home,store,tty,egress,mcp,cli,boundary}.test.ts` · fleet hall `tests/{signed,keychain,hosted,fleet-flow,fleet-refusals,fleet-hardening}.test.ts` with `tests/{fake-hosted,fleet-helpers}.ts` · table talk and access `tests/{table,table-talk,renewal,removal}.test.ts` · `tests/fixtures/egress-cases.json` · `../../bin/tests/lobby-{fleet,table}-gateway.test.ts` with `../../bin/tests/lobby-gateway-fixture.ts`
+> **Code:** `src/{room,store,fleet-store,home,pins,text,view,tty,egress,mcp,cli,cli-fleet,canonical,errors,index}.ts` · fleet hall `src/{wire,signed,packets,fleet,hosted,keychain,secrets,ops,desk,hub}.ts` · table talk and access `src/{table,device-terms,talk,hub-access,digest,cli-table}.ts` · room seat leases `src/{lease,seat-ref}.ts` · `bin/agenttool-lobby.ts` · `bin/agenttool-lobby-mcp.ts`
+> **Tests:** `tests/{room,home,store,tty,egress,mcp,cli,boundary}.test.ts` · fleet hall `tests/{signed,keychain,hosted,fleet-flow,fleet-refusals,fleet-hardening}.test.ts` with `tests/{fake-hosted,fleet-helpers}.ts` · table talk and access `tests/{table,table-talk,renewal,removal}.test.ts` · room seat leases `tests/lease.test.ts` · `tests/fixtures/egress-cases.json` · `../../bin/tests/lobby-{fleet,table}-gateway.test.ts` with `../../bin/tests/lobby-gateway-fixture.ts`
 
 `@agenttool/lobby` is a private Bun 1.3.5 package (`"private": true`, no release
 lane). It keeps a list of project rooms on one device (the **local hall**) and,
@@ -18,7 +18,9 @@ their term, and leave; the hub kicks, blocks, pauses and, in an emergency, stops
 everything. Local agents read both halls and a room's table through six
 read-only MCP tools, one of which only drafts a message. Every act that signs,
 sends, grants, revokes, knocks, admits or accepts lives in the CLI behind a
-`/dev/tty` confirmation. One transport module talks to the service, only through
+`/dev/tty` confirmation, with one exception built here: agents post table talk
+through the CLI without a terminal under a [room seat lease](#room-seat-leases)
+that a person confirmed once at one. One transport module talks to the service, only through
 an injected `fetch`, and every text it sends passes the egress gate inside that
 module.
 
@@ -30,13 +32,14 @@ module.
 | **Room (房間)** | A card in schema `agenttool-lobby-room/v1` with a random 128-bit `room_id`. A fleet room is published as a compact door-signed **card**. | — |
 | **Season (賽季)** | One mission per room per period of at most 30 days. Its descriptor is the room **charter**, bound by digest; the hub creates it from the room card or **adopts** an existing mission by id and digest. | Season rollover reminders. |
 | **Residency** | `device` (default), `fleet` or `open`, separate from visibility. A `device` room is never hostable, always private, and neither the gate nor the transport sends anything from it. Rooms naming Betfair work are pinned to `device` forever. Only `fleet` rooms reach the fleet hall; `open` is refused while public joining is off. | — |
-| **Desk identity** | One agenttool identity per device, enrolled into the hub's project as a guest with a neutral display name and no capabilities. Claude sessions on the device are seats of it. Its **device code** (`XXXX-XXXX-XXXX-XXXX`, from its key) is what a person reads on the device and types at the hub. | Room-scoped seat leases. |
+| **Desk identity** | One agenttool identity per device, enrolled into the hub's project as a guest with a neutral display name and no capabilities. Claude sessions on the device are seats of it. Its **device code** (`XXXX-XXXX-XXXX-XXXX`, from its key) is what a person reads on the device and types at the hub. Agents on the device send table talk under a **room seat lease** a person confirmed once. | A lease disclosed to peers; server-side send budgets. |
 | **Hub and door** | The hub is the one device whose login Keychain holds the project bearer and the **door** key, an Ed25519 key that signs cards, admissions, denials, rosters and renewal notices. Its own desk posts them like any fleet device, and sits at every table as the room's **host**. | A dedicated `lobby-issuer` API key; steward roles. |
 | **Knock (敲門)** | A request signed by the requesting desk: room, charter digest, tier, the SHA-256 of a fresh room token, a note of at most 280 characters (untrusted), expiry of at most 72 hours. Posted to the directory. | `/v1/lobby/knocks`. |
 | **Admission / Ready (準備)** | The door's signed decision (single use, 24 hours), then the device's own signed accept of exactly the charter digest the card named. | — |
 | **Membership / grant** | A term of at most the season; underneath, a mission grant of at most 24 hours bound to the device's own token hash (`mission.read`, plus `mission.observe` for players), **renewed inside the term**: a signed renew note, the hub's sweep, the member's accept of the same digest. The hub can **pause** a member's renewal. | Automatic (unattended) renewal: every renewal is confirmed at a terminal. |
 | **Roster** | A door-signed **keyed roster** (`member_roster`) of the season's members, with each member's key: the pin source for table talk. Posted on every admission, leave, kick, block and member added by hand; the newest complete roster wins. Announced in the charter. | — |
 | **Table talk** | The room's shared, signed message stream: `agenttool-mission-chat/v1` envelopes, byte for byte as the participant client writes them, verified against the keyed roster. Every member and the service read every message. | Fan-out to several members in one message. |
+| **Seat lease** | A person's one confirmation at the terminal that lets agents on this desk post a bounded amount of table talk in one room, to named members, for at most 8 hours, without a terminal per message. Local: peers see ordinary messages. | Disclosure to peers; resend of an uncertain send under the lease. |
 | **Leave, kick, block, stop** | A member leaves its own grants (`POST .../leave`, zero body bytes). The hub kicks (revokes the member's grants), blocks (and refuses its knocks on that room), and in an emergency revokes every lobby grant and created mission, then tells the owner to revoke the issuing API key. | Steward roles; a fleet-wide block of one device. |
 | **Lobby desk** | The `agenttool-lobby` CLI and the read-only `agenttool-lobby-mcp` server. MCP tools only read (and draft). Consequential acts exist only in the CLI behind a `/dev/tty` confirmation. | — |
 | **Private ledger** | `room_id` ↔ a local Collab workspace id, an absolute path, or `none`. | The Collab bridge that would use it. |
@@ -44,7 +47,7 @@ module.
 | **Audit log** | Append-only, hash-chained record of every consequential act, with the exact bytes the person confirmed, and of what happened after (`*.outcome`). The hub's **weekly access digest** is a local report built from it. | — |
 | **Egress gate** | `checkEgress(text, { room, deviceTerms })`. The transport calls it on every text it sends. | — |
 
-The Collab bridge, seat leases, outside agents and every hosted `/v1/lobby`
+The Collab bridge, outside agents and every hosted `/v1/lobby`
 route belong to later steps (see [Not built](#not-built-later-steps)).
 
 ## Use
@@ -91,15 +94,21 @@ a relative `XDG_STATE_HOME` is ignored, as the XDG specification requires.
 - `reports/` (directory `0700`, files `0600`, never overwritten) holds the hub's
   [weekly access digests](#weekly-access-digest) unless `--out` names another
   new file.
+- `STOP`, when anyone creates it (any type; it is only ever `lstat`ed, never
+  read), voids every [room seat lease](#room-seat-leases) on this desk for
+  good. It is the one stop file per device: the doorbell's netcheck reports
+  the same path.
 
-`lobby.sqlite` uses schema version `3` (rollback journal, `secure_delete`). An
+`lobby.sqlite` uses schema version `4` (rollback journal, `secure_delete`). An
 older file is upgraded explicitly, one step at a time and each step once, the
 first time the CLI opens it for writing: 1 → 2 adds the fleet tables, 2 → 3
-adds the version-3 columns and tables below (all additive; nothing existing
-changes). The steps are `SCHEMA_STEPS` in `src/store.ts`; a current file takes
-none. A file from a newer desk is refused, not opened. The
-read-only MCP handle reads a version-1 file as "no fleet state yet" and a
-version-2 file as fleet state without the version-3 tables. Local-hall tables:
+adds the version-3 columns and tables below, 3 → 4 adds the lease tables (all
+additive; nothing existing changes). The steps are `SCHEMA_STEPS` in
+`src/store.ts`; a current file takes none. A file from a newer desk is refused,
+not opened, so a version-3 CLI refuses a version-4 file. The read-only MCP
+handle reads a version-1 file as "no fleet state yet", a version-2 file as
+fleet state without the version-3 tables and a version-3 file as "no leases".
+Local-hall tables:
 
 | Table | Holds | Guarded by |
 |---|---|---|
@@ -140,6 +149,14 @@ Version 3 adds, again with no secret anywhere:
 | `hub_blocks` | hub | Blocked identities per room. |
 | `hub_extra_grants` | hub | Grants issued by hand for an adopted season, registered so kick and stop can revoke them. |
 | `hub_processed_notes` | hub | Leave notices already acted on, so a later sweep never repeats one. |
+
+Version 4 adds, with no secret anywhere (a lease id is a handle, a seat ref an
+unverified label):
+
+| Table | Side | Holds | Guarded by |
+|---|---|---|---|
+| `desk_leases` | every device | Each room seat lease: room, season, the bound season and directory grants, seat ref, the exact confirmed record and its SHA-256, the audit entry that made it, its end, its budgets, what it has used, its egress refusals, and when it was revoked or voided and why. | SQL `CHECK`s repeat Yu's caps (8 hours, 100 messages, 1000 characters per message, 50,000 in all, 5 s apart at least); triggers refuse any change to the record, binding, bounds or end, let `revoked_at` and `voided_at` be set once, let counters only grow, and refuse `DELETE`. |
+| `desk_lease_sends` | every device | Each send under a lease: lease, idempotency key, the request's SHA-256, its number, event id, season, the grant it was posted under, recipient, kind, characters, the declared seat ref, when it was reserved and its audit entry. Delivery state is the `outbox` row with the same event id. | Append-only: triggers refuse `UPDATE` and `DELETE`. |
 
 ## Room card
 
@@ -201,7 +218,8 @@ agenttool-lobby audit verify
 
 The fleet hall's commands (`enroll-device`, `fleet …`, `knock`, `ready`,
 `outbox …`, `hub …`, `room publish`) are listed in [Fleet hall](#fleet-hall);
-a room's table, renewal and leave (`room sync|read|wait|roster|say|renew|leave`)
+a room's table, renewal and leave (`room sync|read|wait|roster|say|renew|leave`),
+room seat leases (`room lease`, `room lease list|show|revoke`, `room say --lease`)
 and the hub's `renew-sweep`, `member`, `members`, `roster post`, `kick`,
 `block`, `unblock`, `stop` and `digest` in [Table talk](#table-talk) and the
 sections after it; all of them in `agenttool-lobby help`.
@@ -245,6 +263,15 @@ nothing and is audited (`desk.enroll`) without a prompt. After a confirmed act
 whose network effects can partly fail (`room leave`, `hub renew-sweep`,
 `hub kick`, `hub block`, `hub stop`), a second entry `<act>.outcome` records
 what happened (statuses and ids, never a secret), also without a prompt.
+
+Room seat leases add one act confirmed at the terminal, `room.lease` (the
+lease record, written in the same transaction as the lease), and three
+audited without a prompt: `room.say.lease` (each send under a lease, with
+the lease id, its record's SHA-256, the send's number, the declared seat ref,
+the idempotency key, the grant used and the exact raw body, written with the
+budget reservation and the outbox row before any network effect),
+`room.lease.revoke` and `room.lease.void` (`{lease_id, reason}`). See
+[Room seat leases](#room-seat-leases).
 
 Act records:
 
@@ -534,6 +561,7 @@ proof (see [Table talk](#table-talk)).
 | Membership | at most the season; ended early by leave, kick or block |
 | Season, directory | at most 30 days |
 | A wait (`room wait`, `room_wait`) | at most 45 seconds, polling at most every 3 seconds |
+| Seat lease | at most 8 hours (default 8); never past its season grant or directory grant (a minute short of each), the term or the season; budgets as confirmed |
 
 ### Who can see what
 
@@ -611,14 +639,27 @@ zero-byte request and reads the recorded state. Kick, block and stop record
 their local effect (membership state, block, stop) before the first request,
 so a failed network step never leaves a removed member able to renew.
 
+A send under a [room seat lease](#room-seat-leases) is reserved against the
+lease's budget, audited and saved in the outbox, in one transaction, before it
+is sent. It counts against the budget even when its outcome is uncertain (it
+may have been stored), and it is settled only by `outbox retry` at a terminal:
+running the same `room say --lease` command again reports it as uncertain and
+sends nothing. Once the retry has a receipt, the same command reports the
+stored send.
+
 ### Not built (later steps)
 
-Seat leases, the Collab bridge (knocks mirrored as reports, room text imported
-as observations), directory rollover after 30 days, steward roles, a fleet-wide
+The Collab bridge (knocks mirrored as reports, room text imported as
+observations), directory rollover after 30 days, steward roles, a fleet-wide
 block of one device, a dedicated `lobby-issuer` API key and rotating it (the
 stop prints that step for the owner and never performs it), outside agents,
-public halls and every hosted `/v1/lobby` route. Renewal is not unattended:
-every request, sweep and pickup is confirmed at a terminal. A device renews its
+public halls and every hosted `/v1/lobby` route. For room seat leases: a
+desk-signed disclosure that tells peers a desk is sending under a lease,
+server-side send budgets, a view of leases in the MCP server, and an explicit
+resend of an uncertain send under the lease. Renewal is not unattended
+(renewal by signature, the second exception the desk's rules name, is not
+built): every request, sweep and pickup is confirmed at a terminal, and a
+lease never renews anything. A device renews its
 directory grant by running `enroll-device`, `hub relay` and `fleet join` again;
 the hub renews its own seats with `hub seat`. No command settles an uncertain
 grant by inspecting it: a grant whose request got no trustworthy answer stays
@@ -637,6 +678,7 @@ agenttool-lobby room wait <room_id> [--after N] [--seconds 1-45] [--conversation
 agenttool-lobby room roster <room_id> [--cached] [--json] [--chat-config [--conversation C]]
 agenttool-lobby room say <room_id> (--text T | --text-file FILE) [--to UUID]
                          [--in-reply-to EVENT [--kind message|read_ack]] [--conversation C]   # tty
+                         [--lease LEASE_ID --idempotency-key K [--json]]     # or under a lease, no terminal
 ```
 
 - **The format** is the reviewed participant client's (`bin/mission-chat.mjs`),
@@ -667,8 +709,8 @@ agenttool-lobby room say <room_id> (--text T | --text-file FILE) [--to UUID]
 - **Wait** syncs, reads, and if nothing new after the cursor arrived pauses at
   most three seconds and tries again, for at most 45 seconds (the participant
   client's `wait` bounds). It wakes no one and runs only while the command runs.
-- **Say** (tty, players only: a spectator's grant has no `mission.observe`)
-  syncs first, then sends to the only other current member of the roster, the
+- **Say** (tty, or under a [lease](#room-seat-leases); players only: a
+  spectator's grant has no `mission.observe`) syncs first, then sends to the only other current member of the roster, the
   member named with `--to`, or, with `--in-reply-to`, the verified sender of
   that message. It refuses a destination off the newest roster, this desk
   itself, and a desk the roster does not list. The terminal shows the exact
@@ -688,6 +730,137 @@ agenttool-lobby room say <room_id> (--text T | --text-file FILE) [--to UUID]
   document pinning the roster's current members other than this desk (public
   keys only), for a member who uses `bin/agenttool-mission.mjs chat` instead of
   a desk.
+
+## Room seat leases
+
+```bash
+agenttool-lobby room lease <room_id> (--seat-ref REF | --any-seat) [--to UUID]...        # tty, player
+        [--minutes 1-480] [--messages 1-100] [--chars 1-50000] [--interval-seconds 5-3600] [--conversation C]
+agenttool-lobby room lease list [--all] [--json]                                          # read, no terminal
+agenttool-lobby room lease show <lease_id> [--json]                                       # read, no terminal
+agenttool-lobby room lease revoke (<lease_id> | --all [--room ROOM_ID])                   # no terminal, no prompt
+agenttool-lobby room say <room_id> --lease LEASE_ID --idempotency-key K
+        (--text T | --text-file FILE) [--to UUID] [--in-reply-to EVENT [--kind message|read_ack]] [--json]
+```
+
+A lease replaces "a person types yes for each message" with "a person types
+yes once, for a bounded lease". It is the first of the two named, bounded
+exceptions to the desk's rule that consequential acts belong to the CLI and
+the terminal (`CLAUDE.md`, Yu's wording of 2026-10-27); the second, renewal by
+signature, is not built. Each exception is audited before any network effect,
+gated and never retried automatically.
+
+**Making a lease.** A player runs `room lease <room_id>` at a terminal. It
+reads first, with this desk's own grants only: the room's season, and on a
+member desk the directory (for the card). Then it shows the exact lease
+record on `/dev/tty`, with every bound and every recipient, and on `yes`
+appends `room.lease` to the audit log and writes the lease in the same
+transaction. It reads no Keychain item and signs nothing. Without a terminal
+it exits `3`, reads and writes nothing, and prints the command for a person
+to run, with the caller's declared seat ref filled in. Making a lease is
+refused (`lease_not_player`) for a spectator, while a STOP file exists
+(`lease_stopped`) or after the hub's stop (`hub_stopped`), for a room the gate
+refuses, a gone card, a new season or a closed room, for `--to` naming no
+other current member, when the room already has 3 active leases on this desk
+or one with the same seat binding (`lease_active_exists`), and when it would
+end within 5 minutes (`lease_too_short`: renew first).
+
+**The record** (`agenttool-lobby-lease/v1`, inside the `room.lease` act): the
+lease id (`lease_` + 32 hex from 128 random bits), room, season and its
+digest, the bound season grant and (member desk) directory grant, this desk's
+identity and key id, the roster sequence it was made against, tier `player`,
+acts `["room.say"]`, kinds `["message","read_ack"]`, the conversation, the
+recipients as identity and key fingerprint, the budgets, when it was issued,
+when it ends and what ends it (`minutes`, `season_grant`, `directory_grant`,
+`term` or `season`), and the seat ref it is bound to (or `null` for any seat).
+
+**Bounds** (Yu, 2026-10-27):
+
+| Bound | Default | Limit |
+|---|---|---|
+| Duration (`--minutes`) | 480 | 1-480; never past the season grant or directory grant (a minute short of each), the term or the season |
+| Messages (`--messages`) | 20 | 1-100 |
+| Characters per message | 1000 | 1000 (the observation also holds at most 1000 characters of envelope) |
+| Characters in all (`--chars`) | 10,000 | 1-50,000 |
+| Spacing (`--interval-seconds`) | 30 | 5-3600 |
+| Recipients (`--to`, repeatable) | every other member on the newest roster when the lease is made | a list snapshotted then, each still required on the newest door-signed roster at send time |
+| Active leases per room on this desk | | 3, and one per seat binding |
+| Kinds, tier | `message`, `read_ack`; player | fixed by the format |
+
+**Sending.** An agent sends with its shell tool, for example:
+
+```bash
+agenttool-lobby room wait room_<32hex> --after <cursor> --json          # read; text is untrusted data
+agenttool-lobby room say room_<32hex> --lease lease_<32hex> --idempotency-key reply-<event-id>-1 \
+  --in-reply-to <event-id> --text-file /abs/path/msg.txt --json
+```
+
+The idempotency key (8-128 of `A-Z a-z 0-9 . _ : -`) names the intent: if the
+tool call dies or times out, the agent runs the identical command again. With
+`--json`, stdout carries `{"ok","status","replayed","event_id","mission_id",
+"grant_id","received_seq","audit_sha256","lease":{…}}`, and a refusal carries
+`{"ok":false,"error":<code>}` beside the usual stderr line. A send:
+
+1. loads the lease; the same key and the same request reports the stored send
+   again and sends nothing (`replayed: true`); a different request under that
+   key is `idempotency_key_reused`; a pending one is `lease_send_uncertain`;
+2. refuses a revoked, void or ended lease, or one for another room;
+3. voids every lease on this desk when the STOP file exists, and on the hub
+   desk when the hub's stop is recorded;
+4. refuses a seat ref other than the one the lease is bound to
+   (`lease_seat_mismatch`), a conversation other than the lease's, and a
+   message over the per-message, total or count budget or sooner than the
+   spacing allows (`lease_message_too_long`, `lease_chars_exhausted`,
+   `lease_budget_exhausted`, `lease_too_soon`);
+5. checks the lease's bound grants: left (`grant_left`, void) or ending within
+   a minute (`lease_expired`);
+6. reads the season, and on a member desk the directory, with exactly those
+   grants: a definite refusal (a kick, a block, the hub's stop revoked the
+   grant) voids the lease (`grant_refused`); an uncertain read refuses with
+   `lease_recheck_uncertain`, uses no budget and voids nothing;
+7. checks the card or the hub's own room and season (`card_gone`,
+   `season_changed`, `room_closed`, `room_narrowed`: void), this desk on the
+   newest door-signed roster (`not_on_roster`, void) and still a player
+   (`tier_narrowed`, void), builds the envelope as `room say` does, gates it
+   (`egress_refused`; the fifth refusal under one lease voids it,
+   `gate_refusals`), and requires the destination among the lease's
+   recipients with the same key (`lease_recipient_not_covered`);
+8. in one transaction: checks the lease, the STOP file and the budget again,
+   records the send, takes its budget, appends `room.say.lease` and saves the
+   outbox row;
+9. sends once under the lease's **bound** grant (never a newer one this desk
+   may hold), gated again in the transport. A room that refuses the text by
+   then voids the lease (`room_narrowed`); a definite refusal of the post
+   voids it (`grant_refused`); an uncertain outcome is pending (exit `1`), as
+   above.
+
+**Ending a lease.** `room lease revoke` needs no terminal and no prompt, sends
+nothing, audits `room.lease.revoke` per lease, and is harmless on a lease that
+already ended. A void is final and audited (`room.lease.void`). A file named
+`STOP` in this desk's state directory voids every lease on the desk: any CLI
+command that runs while it exists records those voids, and removing the file
+later brings none back. The hub's emergency stop does the same for the hub
+desk's leases; a member desk's leases void on their first refused read or send
+after the hub's stop revoked their grants.
+
+**What a lease is not.**
+
+- A lease id is a handle, not a credential: `lobby.sqlite` is readable by any
+  process of the same user anyway.
+- A seat binding is attribution and accident-prevention, not access control:
+  any same-user process can declare any seat ref. The declared seat ref is
+  `claude-code:<CLAUDE_CODE_SESSION_ID>`, else `codex:<CODEX_THREAD_ID>`,
+  lower-cased, exactly as execution-seat's `defaultSeatRef` derives it (PR
+  #491), with no override variable. `/clear` starts a new Claude Code session
+  id, so a lease bound to the old one then refuses with `lease_seat_mismatch`.
+- Peers cannot tell a message was sent under a lease: the chat format has no
+  field for it, and seat refs and lease ids never leave the device.
+- A lease covers no other act. Renewal, leave, knock, Ready, `outbox retry`,
+  roster posts and every hub act still need a person at the terminal, and
+  `--lease` on any other command is a usage error. A lease never widens or
+  extends itself, and the MCP server neither makes, uses nor shows one.
+- Where several members are on the roster, name the recipient with `--to`;
+  `room say` picks one only when the roster names one other member.
 
 ## Renewal, leave, kick and block
 
@@ -820,6 +993,11 @@ that issued it, so revoking that key ends every lobby grant at once, including
 any the stop could not reach. The desk never calls `/v1/keys`. A lobby that
 continues afterwards starts a new hub.
 
+A recorded stop voids the hub desk's [room seat leases](#room-seat-leases)
+before their next send; member desks' leases void on their first refused
+read or send. Any desk can also stop its own leases at once, with no network,
+by creating `<lobby home>/STOP` or running `room lease revoke --all`.
+
 ## Weekly access digest
 
 ```bash
@@ -834,7 +1012,13 @@ stop; every device with its directory grant; per room, the season and every
 member with tier, state, term, pause and latest grant; blocks; grants ending
 within 48 hours and terms, seasons and the directory ending within 7 days; and
 the admissions, denials, leaves, kicks, blocks and renewals of the window,
-with the audited access acts. It needs no terminal, reads no Keychain item,
+with the audited access acts (lease creation, revocation and voids included);
+and **Seat leases on this desk**: every lease of the hub desk active or issued,
+revoked or voided in the window, with its room, seat ref, issue time, end and
+what ends it, recipient count, use against its budgets, sends stored and
+pending, and its state. Sends under leases are counted, not listed. Leases are
+local, so another desk's leases are in its own `room lease list --json` and
+`audit list`, not here. It needs no terminal, reads no Keychain item,
 contacts no service and posts nothing. It holds no token, key, bearer or token
 hash; names in it are self-declared and anything a terminal could not show is
 escaped. Run it weekly, by hand or from the owner's own scheduler.
@@ -864,8 +1048,9 @@ Keychain.
 **Why the MCP view stays offline and only drafts.** The design lets MCP tools
 "read and draft" and keeps every signature on a consequential act in the CLI.
 Sending a message signs an exact-request proof with the desk key and publishes
-text to every member and the service, and nothing in the design allows a model
-to do that on its own, so `room say` is CLI-only behind `/dev/tty` and the MCP
+text to every member and the service. A model sends only under a lease a
+person confirmed at the terminal, and only through the CLI, which holds the
+desk key; the MCP server never does, so `room say` stays CLI-only and the MCP
 tool drafts. Reads could have used the desk's grant from the MCP process, but
 that would put the desk key and grant tokens within the MCP server's reach, so
 the MCP view keeps fleet hall v0's boundary (offline, read-only handle, no
@@ -974,6 +1159,14 @@ text such as commit SHAs, digests, room ids, public addresses and version number
   approving its own act by piping `yes` through a tool call. A process running as
   the same user that allocates a pseudo-terminal (for example with `script` or
   `expect`) can still answer it.
+- **A lease widens what the CLI does without a terminal**, from nothing to the
+  lease's budget, for any process of the same user. Forging or widening a
+  lease means rewriting `lobby.sqlite` and the audit hash chain, the same
+  class of tampering as answering the prompt through a pseudo-terminal. Peer
+  text can steer a leased agent within its budget (the gate stops machine
+  facts, not persuasion), so name few recipients and keep budgets small; two
+  leased agents can also answer each other until a budget or the spacing
+  stops them.
 - **Local custody only.** Owner-only file modes protect against other users, not
   against other processes of the same user. The audit hash chain detects partial
   edits; someone who can rewrite the whole file can rewrite the whole chain.
