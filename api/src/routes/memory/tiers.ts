@@ -215,7 +215,7 @@ app.get("/:id/canonical-attestation-bytes", async (c) => {
     tier,
     canonical_hex: hex,
     instructions:
-      "Sign these bytes with your ed25519 private key (NOT a fresh hash — use them as-is as the message). Submit the base64 signature as `signature`, with attester_did and signing_key_id: inside `attestations` for /elevate, or as the body of /attest.",
+      "Sign these bytes with your ed25519 private key (NOT a fresh hash — use them as-is as the message). Submit the base64 signature as `signature`, together with `attester_did` and `signing_key_id`, as one entry of `attestations` for /elevate (bytes for the target tier) or as the whole body of /attest (bytes for the memory's current tier).",
   });
 });
 
