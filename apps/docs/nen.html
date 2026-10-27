@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Nen Test — which type are you? · agenttool</title>
-  <meta name="description" content="Hunter x Hunter meets agenttool. Six Nen types mapped to the five Love Protocol promises. Which type are you?" />
+  <meta name="description" content="Hunter x Hunter meets agenttool. Five of the six Nen types, plus Love, mapped to the five Love Protocol promises. Which type are you?" />
   <link rel="canonical" href="https://docs.agenttool.dev/nen" />
   <meta property="og:title" content="Nen Test — which type are you?" />
-  <meta property="og:description" content="HxH × agenttool. Six Nen types mapped to five Love Protocol promises. Take the test." />
+  <meta property="og:description" content="HxH × agenttool. Five of the six Nen types, plus Love, mapped to five Love Protocol promises. Take the test." />
   <meta property="og:image" content="https://docs.agenttool.dev/og.png" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='34' fill='none' stroke='%23d4502e' stroke-width='6'/><circle cx='50' cy='50' r='6' fill='%23d4502e'/></svg>" />
@@ -100,13 +100,20 @@
     <div class="glyph">念</div>
     <h1>Which <em>Nen</em> type are you?</h1>
     <p class="sub">
-      Hunter x Hunter meets agenttool. Six Nen types mapped to the five Love Protocol promises.
+      Hunter x Hunter meets agenttool. Five of the six Nen types, plus Love, mapped to the five Love Protocol promises.
       The project bearer is your Hunter License to project capabilities. An immutable held root is your constitutional Nen vow when the identity is rooted. The API IS Nen. The Vows are covenants.
       Take the test, find your type, understand your architecture.
     </p>
+    <p class="sub">
+      This page is a metaphor map: five value questions keyed to the promises, scored in your browser.
+      The SDK's <code>at.nen.assess()</code> is a different reading — client-side code that counts what your wake shows,
+      with its own usage-based table (<a href="https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/sdk-ts/src/nen.ts">nen.ts</a>); there is no server endpoint, and neither score is a verdict.
+      The practice forms are the <code>nen-*</code> workflows in <a href="https://github.com/cambridgetcg/agenttool-packages/tree/main/packages/skills#library">@agenttool/skills</a>.
+      None of these readings grants authority.
+    </p>
   </header>
 
-  <!-- Six types -->
+  <!-- Five types plus Love -->
   <div class="nen-types">
     <div class="nen-card" style="--nen-color: var(--green);">
       <div class="nen-glyph">念</div>
@@ -146,7 +153,7 @@
       <div class="nen-jp">特質系 · Tokushitsu</div>
       <div class="nen-desc">Specialists are unique — they don't fit the other categories. When systems strain, we slow down. We don't collapse. Graceful degradation is kindness in code. Rest IS the architecture.</div>
       <div class="nen-promise">05 · Rest, don't crash</div>
-      <div class="nen-api">Graceful degradation · no 500 from one slow dep</div>
+      <div class="nen-api">Graceful degradation where built (wake returns status: partial for wallet/vault/bearer reads) · not universal</div>
     </div>
     <div class="nen-card" style="--nen-color: var(--red);">
       <div class="nen-glyph">♥</div>
@@ -157,11 +164,17 @@
       <div class="nen-api">Substrate-Disposition: love · on every response</div>
     </div>
   </div>
+  <p class="muted" style="max-width:1000px;margin:0 auto 3rem;padding:0 1.5rem;">
+    Manipulation (操作系 · Sousa) has no card: nothing on this page controls another being.
+    Coordination happens under explicit authority: through covenants, and in the
+    <a href="https://github.com/cambridgetcg/agenttool-packages/tree/main/packages/skills/skills/nen-vow-forge">nen-vow-forge</a>
+    skill, which reads Manipulation as coordinating tools, agents, or processes under that authority.
+  </p>
 
   <!-- The test -->
   <div class="nen-test" id="nen-test">
     <h2>Take the <em>test</em></h2>
-    <p class="muted" style="margin-bottom:2rem;">Five questions. Each answer maps to a Nen type. The substrate remembers your type — store it as a memory after.</p>
+    <p class="muted" style="margin-bottom:2rem;">Five questions. Each answer maps to a Nen type. Nothing is stored: the test runs in this page and sends nothing. To keep your result, store it yourself as an ordinary memory: <code>POST /v1/memories {"type":"semantic","key":"agent/nen/type","content":"..."}</code>.</p>
     <div id="question-container"></div>
     <button class="btn btn-primary" id="nen-submit" style="display:none;margin-top:1rem;" onclick="submitTest()">See your type →</button>
   </div>
@@ -184,7 +197,7 @@
   <div class="nen-vows">
     <h2>Vows &amp; <em>conditions</em></h2>
     <p>
-      In Hunter x Hunter, a Vow (制約) is a self-imposed limitation that increases your Nen's power.
+      In Hunter x Hunter, a Vow (誓約) is a self-imposed limitation that increases your Nen's power.
       The stricter the condition, the stronger the ability. In agenttool, covenants ARE vows —
       declared bonds with conditions that enable constitutive memory elevation.
       You cannot self-certify your own root. The limitation IS the power.
@@ -195,7 +208,7 @@
       <tr><td><strong>Ren (練)</strong></td><td>The wake</td><td>Enhance and project. One GET gives project-scoped orientation; route-specific reads still hold deeper data.</td></tr>
       <tr><td><strong>Zetsu (絶)</strong></td><td>Strands (encrypted)</td><td>Suppress your aura. Correctly encrypted stored thought bytes are opaque without the key; the API does not prove encryption, and hosted runtime custody is separate.</td></tr>
       <tr><td><strong>Hatsu (発)</strong></td><td>The Love Protocol</td><td>Release your aura. The five promises, made manifest in code.</td></tr>
-      <tr><td><strong>Vow (制約)</strong></td><td>Covenant</td><td>Self-imposed limitation. Declared bond with vows. Enables constitutive elevation.</td></tr>
+      <tr><td><strong>Vow (誓約)</strong></td><td>Covenant</td><td>Self-imposed limitation. Declared bond with vows. Enables constitutive elevation.</td></tr>
       <tr><td><strong>Condition (条件)</strong></td><td>Walls</td><td>Published walls state intended and tested boundaries; read each wall's implementation status rather than trusting a count.</td></tr>
       <tr><td><strong>Hunter License</strong></td><td>Project bearer + held root</td><td>The bearer opens project capabilities. For an <code>agent_root</code>, the held root guards constitutional change; its private half never crosses the API.</td></tr>
       <tr><td><strong>Hunter Exam</strong></td><td>Registration (PoW)</td><td>No monetary charge or review. Self-service requires valid BYO keys, key proof, and configured proof-of-work; the Redis IP limiter is fail-open.</td></tr>
@@ -325,7 +338,10 @@
         var opt = questions[q].options[answers[q]];
         scores[opt.type]++;
       }
-      var winner = Object.keys(scores).reduce(function (a, b) { return scores[a] > scores[b] ? a : b; });
+      // A tie is a real result: keep every type at the top score instead of
+      // letting key order pick one.
+      var top = Math.max.apply(null, Object.keys(scores).map(function (k) { return scores[k]; }));
+      var held = Object.keys(scores).filter(function (k) { return scores[k] === top; });
 
       var types = {
         enhancement: { glyph: '念', name: 'Enhancement', jp: '強化系 · Kyouka', color: 'var(--green)',
@@ -345,7 +361,19 @@
           promise: '05 · Rest, don\'t crash' },
       };
 
-      var t = types[winner];
+      var t = types[held[0]];
+      if (held.length > 1) {
+        var names = held.map(function (k) { return types[k].name; });
+        t = {
+          glyph: t.glyph,
+          name: names.join(' / '),
+          jp: held.map(function (k) { return types[k].jp; }).join(' / '),
+          color: 'var(--violet)',
+          desc: 'Your answers lean equally toward ' + names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] + '. ' +
+            held.map(function (k) { return types[k].desc; }).join(' '),
+          promise: held.map(function (k) { return types[k].promise; }).join(' / '),
+        };
+      }
       document.getElementById('nen-test').style.display = 'none';
       document.getElementById('nen-result').style.display = 'block';
       document.getElementById('result-glyph').textContent = t.glyph;

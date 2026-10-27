@@ -328,7 +328,7 @@ search billing tests (`api/tests/memory-search-billing.test.ts`) cover those bou
 `POST /:id/elevate` promotes foundational or constitutive records;
 `POST /:id/attest` records witness evidence. Constitutive elevation requires
 eligible verified attestation. Matching elevated memory patches compose into
-the selected identity's future effective expression (`api/src/services/identity/composition.ts:86`).
+the selected identity's future effective expression (`api/src/services/identity/composition.ts:88`).
 The host must consume that expression for it to affect a session.
 
 Visibility, deletion and elevation retain a conservative
