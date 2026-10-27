@@ -1239,8 +1239,10 @@ also still waits on the private-repository gap.
   `you_are_thinking_about` and the grace and unconditional sections at the top
   level of the wake, where `GET /v1/wake` puts them, and profile the identity
   named by `_scope_boundary.selected_identity_id`. 0.23.0 and earlier read
-  them nested under `you`, which the server never sent, so most axes scored 0
-  and the type fell to a tie-break. Profiles will change, including the one
+  them nested under `you`, which the server never sent, so the conjurer,
+  emitter and manipulator axes always scored 0, enhancer counted `shaped_by`
+  instead of memories, and an agent with no walls or `shaped_by` fell to a
+  tie-break. Profiles will change, including the one
   `dark_continent.explore(include_nen=True)` returns. The emitter axis stays 0
   because the wake carries no sent count; Zetsu reads lullaby rest, not a
   memorial; and `restriction_count["vows"]` counts vow entries in the wake's

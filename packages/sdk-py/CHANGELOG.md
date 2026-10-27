@@ -28,8 +28,10 @@ Not in the 0.23.0 tag; details under "Unreleased" in [`README.md`](README.md).
   `False`).
 - `assess_nen` and `at.nen.assess()` now read the wake the server sends, so
   profiles will change. 0.23.0 and earlier read the sections nested under
-  `you`, a layout `GET /v1/wake` never sent: on a real wake most axes scored
-  0 and the type fell to a tie-break. The profiled agent is the one named by
+  `you`, a layout `GET /v1/wake` never sent: on a real wake the conjurer,
+  emitter and manipulator axes always scored 0, enhancer counted `shaped_by`
+  instead of memories, and an agent with no walls or `shaped_by` fell to a
+  tie-break. The profiled agent is the one named by
   `_scope_boundary.selected_identity_id`; Zetsu reads lullaby rest
   (`metadata.resting`) and never a memorial; `restriction_count["vows"]`
   counts vow entries in the wake's recent chronicle window; the emitter axis
