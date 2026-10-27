@@ -33,9 +33,10 @@ const iso = (ms: number) => new Date(ms).toISOString();
 const descriptor = { format: "agenttool-collaboration-mission/v1", purpose: "Exchange selected fixture observations", resources: [], acceptance_criteria: ["Return one reviewed reply"], principalities: [] };
 const DIGEST = `sha256:${sha(correspondenceCanonicalJson(descriptor))}`;
 const mission = { mission_id: M, project_id: PROJECT, descriptor, mission_digest: DIGEST };
+const missionFor = (d: Record<string, unknown>) => ({ mission_id: M, project_id: PROJECT, descriptor: d, mission_digest: `sha256:${sha(correspondenceCanonicalJson(d))}` });
 
 /** A participant whose imported grant G is accepted, a quarter past its halfway, inside a six-hour window. */
-function fixture(grant: Record<string, unknown> = {}) {
+function fixture(grant: Record<string, unknown> = {}, view = mission) {
   const parent = realpathSync(mkdtempSync(join(tmpdir(), "mission-renew-fixture-")));
   chmodSync(parent, 0o700);
   cleanups.push(() => rmSync(parent, { recursive: true, force: true }));
@@ -48,7 +49,7 @@ function fixture(grant: Record<string, unknown> = {}) {
   writeFileSync(file, JSON.stringify({ format: "agenttool-mission-invitation/v1", origin: ORIGIN, mission_id: M, grant_id: G, identity_id: I,
     signing_key_id: K, public_key: enrollment.public_key, expires_at: predecessor.expires_at, token: TOKEN }), { mode: 0o600 });
   client.importInvitation(state, file);
-  return { parent, state, enrollment, predecessor };
+  return { parent, state, enrollment, predecessor, mission: view };
 }
 type Mode = "ok" | "store-then-drop" | "drop" | "401" | "409" | "403" | "500" | "400" | "token_hash_conflict";
 /** A synthetic service: verifies each request's token and exact-request proof, stores successors, answers probes. */
@@ -66,7 +67,7 @@ function service(f: ReturnType<typeof fixture>, renewMode: Mode | Mode[] = "ok",
       proof: { grantId: grant, identityId: headers.get("X-Agenttool-Mission-Identity-Id")!, keyId: headers.get("X-Agenttool-Mission-Key-Id")!,
         timestamp: headers.get("X-Agenttool-Mission-Timestamp")!, signature: headers.get("X-Agenttool-Mission-Signature")! } };
     if (hashes.get(grant) !== sha(token) || !verifyMissionProof(input, f.enrollment.public_key, new Date())) return respond({ error: "collaboration_mission_invalid_credential" }, 401);
-    if (init.method === "GET") return respond({ mission, grant: grant === G ? f.predecessor : children.get(grant) });
+    if (init.method === "GET") return respond({ mission: f.mission, grant: grant === G ? f.predecessor : children.get(grant) });
     const mode = modes.length > 1 ? modes.shift()! : modes[0];
     const parsed = JSON.parse(body!);
     const existing = [...children.values()][0];
@@ -85,7 +86,7 @@ function service(f: ReturnType<typeof fixture>, renewMode: Mode | Mode[] = "ok",
     if (mode === "token_hash_conflict") return respond({ error: "token_hash_conflict" }, 409);
     store();
     const { body: _, ...view } = child;
-    const result = { mission: structuredClone(mission), grant: structuredClone(view), token_sha256: parsed.token_sha256, token_source: "participant" };
+    const result = { mission: structuredClone(f.mission), grant: structuredClone(view), token_sha256: parsed.token_sha256, token_source: "participant" };
     patch(result);
     return respond(result, existing ? 200 : 201);
   };
@@ -273,6 +274,99 @@ describe.skipIf(process.platform === "win32")("participant renew", () => {
     }
   });
 
+  test("a descriptor string \"token\" is data, not a token key: the successor installs and its recovery read too", async () => {
+    const view = missionFor({ ...descriptor, resources: [{ format: "token" }], acceptance_criteria: ["token"] });
+    const f = fixture({}, view), s = service(f);
+    expect(await client.renew(f.state, { fetchImpl: s.fetchImpl })).toMatchObject({ renewed: true, renewed_from_grant_id: G });
+    expect(existsSync(pendingFile(f))).toBe(false);
+    const g = fixture({}, view), lost = service(g, "store-then-drop");
+    await stop(client.renew(g.state, { fetchImpl: lost.fetchImpl }));
+    lapse(g);
+    expect(await client.renew(g.state, { fetchImpl: lost.fetchImpl })).toMatchObject({ renewed: true, renewed_from_grant_id: G });
+    // A token key anywhere in the view is still refused.
+    for (const patch of [(v: any) => { v.mission.token = TOKEN; }, (v: any) => { v.grant.renewal.token = TOKEN; }]) {
+      const h = fixture({}, view), bad = service(h, "ok", patch);
+      expect((await stop(client.renew(h.state, { fetchImpl: bad.fetchImpl }))).stop_reason).toBe("renewal_response_invalid");
+    }
+  });
+
+  test("a 401 for the still-unexpired predecessor recovers a stored successor, from the read or from the send", async () => {
+    // The invitation read is refused: the server ended or expired G while the local clock still holds it.
+    const f = fixture(), s = service(f, "store-then-drop");
+    await stop(client.renew(f.state, { fetchImpl: s.fetchImpl }));
+    const child = JSON.parse(s.calls[1].body!).grant_id;
+    s.hashes.delete(G);
+    expect(await client.renew(f.state, { fetchImpl: s.fetchImpl })).toMatchObject({ renewed: true, grant_id: child, renewed_from_grant_id: G });
+    expect(s.calls.slice(2).map(c => `${c.method} ${c.path.split("/").at(-1)} as ${c.grant === G ? "G" : c.grant === child ? "child" : "other"}`))
+      .toEqual(["GET invitation as G", "GET invitation as child"]);
+    expect(invitationFile(f).grant_id).toBe(child);
+    expect(existsSync(pendingFile(f))).toBe(false);
+    // The resend is refused with 401.
+    const g = fixture(), t = service(g, ["store-then-drop", "401"]);
+    await stop(client.renew(g.state, { fetchImpl: t.fetchImpl }));
+    const second = JSON.parse(t.calls[1].body!).grant_id;
+    expect(await client.renew(g.state, { fetchImpl: t.fetchImpl })).toMatchObject({ renewed: true, grant_id: second });
+    expect(t.calls.slice(2).map(c => `${c.method} ${c.path.split("/").at(-1)} as ${c.grant === G ? "G" : "child"}`))
+      .toEqual(["GET invitation as G", "POST renew as G", "GET invitation as child"]);
+    expect(invitationFile(g).grant_id).toBe(second);
+  });
+
+  test("a 401 for the predecessor with no stored successor abandons the record, from the read or from the send", async () => {
+    for (const via of ["read", "send"] as const) {
+      const f = fixture(), s = service(f, ["drop", "401"]);
+      await stop(client.renew(f.state, { fetchImpl: s.fetchImpl }));
+      const pending = JSON.parse(readFileSync(pendingFile(f), "utf8"));
+      if (via === "read") s.hashes.delete(G);
+      const abandoned = await stop(client.renew(f.state, { fetchImpl: s.fetchImpl }));
+      expect(abandoned.stop_reason, via).toBe("renewal_abandoned");
+      expect(s.calls.at(-1), via).toMatchObject({ method: "GET", grant: pending.grant_id });
+      expect(existsSync(pendingFile(f)), via).toBe(false);
+      expect(JSON.parse(readFileSync(join(f.state, `renewal-abandoned-${pending.grant_id}.json`), "utf8")), via).toEqual(pending);
+      expect(invitationFile(f).grant_id, via).toBe(G);
+    }
+  });
+
+  test("concurrent resumes are exclusive: one installs, the other stops before sending, and one backup remains", async () => {
+    const f = fixture(), s = service(f, ["store-then-drop", "ok"]);
+    await stop(client.renew(f.state, { fetchImpl: s.fetchImpl }));
+    const child = JSON.parse(s.calls[1].body!).grant_id, sent = s.calls.length;
+    const [first, second] = await Promise.allSettled([client.renew(f.state, { fetchImpl: s.fetchImpl }), client.renew(f.state, { fetchImpl: s.fetchImpl })]);
+    expect(first).toMatchObject({ status: "fulfilled", value: { renewed: true, grant_id: child } });
+    expect(second.status).toBe("rejected");
+    const busy = (second as PromiseRejectedResult).reason;
+    expect(busy).toBeInstanceOf(client.RenewalError);
+    expect(busy).toMatchObject({ stop_reason: "renewal_in_progress", delivered: false });
+    expect(s.calls.length - sent).toBe(2);
+    expect(readdirSync(f.state).filter(name => name.startsWith("invitation.replaced-"))).toHaveLength(1);
+    expect(existsSync(join(f.state, "renewal.lock"))).toBe(false);
+    expect(invitationFile(f).grant_id).toBe(child);
+    // A lock left by a crashed run stops renew without any request until it is inspected and removed.
+    writeFileSync(join(f.state, "renewal.lock"), "{}", { mode: 0o600 });
+    const calls = s.calls.length;
+    expect((await stop(client.renew(f.state, { fetchImpl: s.fetchImpl }))).stop_reason).toBe("renewal_in_progress");
+    expect(s.calls).toHaveLength(calls);
+  });
+
+  test("the renewal is signed as the grant the pending record names, even if invitation.json changes mid-run", async () => {
+    const f = fixture(), s = service(f);
+    const X = "55555555-5555-4555-8555-555555555555", other = { ...invitationFile(f), grant_id: X, token: `atcm_${Buffer.alloc(32, 29).toString("base64url")}` };
+    let swapped = false;
+    const fetchImpl = async (url: string, init: RequestInit) => {
+      const response = await s.fetchImpl(url, init);
+      // Another process imports a different invitation right after the read.
+      if (!swapped) { swapped = true; writeFileSync(join(f.state, "invitation.json"), JSON.stringify(other), { mode: 0o600 }); }
+      return response;
+    };
+    const error = await stop(client.renew(f.state, { fetchImpl }));
+    expect(s.calls.map(c => `${c.method} ${c.grant === G ? "G" : c.grant}`)).toEqual(["GET G", "POST G"]);
+    expect(error.stop_reason).toBe("renewal_pending_mismatch");
+    expect(error.message).toContain("invitation.json changed");
+    // Nothing overwrote the other invitation; the record stays for inspection.
+    expect(invitationFile(f).grant_id).toBe(X);
+    expect(existsSync(pendingFile(f))).toBe(true);
+    expect(readdirSync(f.state).some(name => name.startsWith("invitation.replaced-"))).toBe(false);
+  });
+
   test("a second run while a record is pending resends rather than starting another renewal", async () => {
     const f = fixture(), s = service(f, ["drop", "drop"]);
     await stop(client.renew(f.state, { fetchImpl: s.fetchImpl }));
@@ -377,6 +471,13 @@ describe.skipIf(process.platform === "win32")("administrator window commands", (
     expect(String(uncertain.message)).not.toContain(BEARER);
     await expect(client.closeRenewal({ bearerFile: a.bearerFile, missionId: M, grantId: G, serviceOrigin: ORIGIN }, { fetchImpl: async () => new Response(JSON.stringify({ grant: { grant_id: K, mission_id: M } })) }))
       .rejects.toThrow("does not confirm the window close");
+    for (const body of [{ grant: { grant_id: G, mission_id: M, token: TOKEN } }, { grant: { grant_id: G, mission_id: M }, token: TOKEN }]) {
+      await expect(client.closeRenewal({ bearerFile: a.bearerFile, missionId: M, grantId: G, serviceOrigin: ORIGIN }, { fetchImpl: async () => new Response(JSON.stringify(body)) }))
+        .rejects.toThrow("does not confirm the window close");
+    }
+    // A string value "token" is data, not a token key.
+    expect(await client.closeRenewal({ bearerFile: a.bearerFile, missionId: M, grantId: G, serviceOrigin: ORIGIN }, { fetchImpl: async () =>
+      new Response(JSON.stringify({ grant: { grant_id: G, mission_id: M, revocation_reason: "token" } })) })).toMatchObject({ grant_id: G, renewable: false });
   });
 
   test("the CLI prints one structured stop on stderr, never a token or bearer, and renew succeeds offline", () => {

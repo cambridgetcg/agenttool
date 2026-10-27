@@ -317,8 +317,13 @@ node /absolute/tools/agenttool-mission.mjs renew \
 ```
 
 `renew` takes no other options. Each run sends at most one renewal request and
-never loops or retries in the background. It first reads the current invitation
-(one signed `GET /invitation`) and stops before sending anything when:
+never loops or retries in the background. A run holds `renewal.lock` (0600,
+created exclusively, removed when the run ends) for its whole length, so only
+one `renew` runs per state directory at a time; a second one stops with
+`renewal_in_progress` before reading or sending anything. Every request of a run
+is signed as the grant `invitation.json` named when the run started. It first
+reads the current invitation (one signed `GET /invitation`) and stops before
+sending anything when:
 
 - the grant has no `renewal` window, its window is closed or has ended, or the
   grant already reaches the window's end (`renewal_unavailable`);
@@ -329,16 +334,17 @@ never loops or retries in the background. It first reads the current invitation
 
 Otherwise it generates a fresh token like `token-new`, picks a new grant UUID,
 and saves the exact request body in `renewal-pending.json` (0600, created
-exclusively, so only one renewal runs at a time) **before** sending
+exclusively, so a grant has one renewal record at a time) **before** sending
 `POST /v1/collaboration/missions/{mission_id}/renew`. The body carries only the
 new grant UUID, the mission digest and the new token's SHA-256; the token itself
 never leaves the device. The response must name that grant, renewed from yours,
 with the same mission, identity, key, origin, actions and digest, accepted, not
 revoked, expiring later than your grant and inside the window, echoing the hash
-with `token_source: "participant"`, and with no token anywhere. Then `renew`
-installs it like `import --replace`: `invitation.json` names the new grant, the
-previous file is kept as `invitation.replaced-<UTC timestamp>.json`, and the
-pending record is removed. The output names the new grant, its expiry and the
+with `token_source: "participant"`, and with no `token` key on the response, its
+grant, window or mission. Then, if `invitation.json` still names your grant,
+`renew` installs the successor like `import --replace`: `invitation.json` names
+the new grant, the previous file is kept as
+`invitation.replaced-<UTC timestamp>.json`, and the pending record is removed. The output names the new grant, its expiry and the
 window, plus a note: peers whose chat configuration pins your `grant_id` must
 re-pin you by `identity_id` and `signing_key_id`. No separate accept is needed.
 
@@ -346,9 +352,10 @@ While a record is pending, the next `renew` finishes it instead of starting a
 new one. If the invitation already names the pending grant, it only removes the
 record. If your grant is still unexpired, it resends the exact saved bytes with
 a fresh timestamp and signature; the service returns the same successor. If your
-grant has lapsed, it reads `GET /invitation` signed **as the pending successor**,
-with its new grant UUID and stored token, and installs it when the service
-confirms it.
+grant has lapsed, or the service refuses it with HTTP 401 (it ended, or it
+expired by the service's clock), it reads `GET /invitation` signed **as the
+pending successor**, with its new grant UUID and stored token, and installs it
+when the service confirms it.
 
 Every stop prints one JSON object on stderr and exits 1:
 
@@ -365,7 +372,8 @@ Every stop prints one JSON object on stderr and exits 1:
 | `renewal_conflict` | HTTP 409: your grant was already renewed by a request this device did not record | Kept | See below |
 | `renewal_response_invalid` | The response does not confirm the expected successor; nothing installed | Kept | Inspect with the administrator before any new attempt |
 | `renewal_refused` | Any other refusal, with its fixed service `code` | Kept, or renamed when a resend could never succeed (`token_hash_conflict`, invalid request, no renew route) | A fixed sentence per code |
-| `renewal_pending_mismatch` | The pending record belongs to another invitation | Kept | Inspect both files |
+| `renewal_pending_mismatch` | The pending record belongs to another invitation, or `invitation.json` changed during the run (the successor was confirmed but not installed) | Kept | Inspect both files |
+| `renewal_in_progress` | Another `renew` holds `renewal.lock`; nothing was read or sent | Untouched | Wait for it; if none is running, inspect and remove `renewal.lock` |
 
 `renewal_conflict` means someone holding both your token and your key may have
 renewed first. Unless this device lost its pending record, treat that token and
