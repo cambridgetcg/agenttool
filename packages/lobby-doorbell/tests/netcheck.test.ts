@@ -453,15 +453,20 @@ describe("the doorbell's own files: unreadable is unknown, never healthy", () =>
     const world = makeWorld();
     privateHome(world);
     writeFileSync(join(world.doorbellHome, "bells", `${ROOM_A}.json`), `{not json ${CANARY}`, { mode: 0o600 });
-    writeFileSync(join(world.doorbellHome, "bells", `${ROOM_B}.json`),
-      JSON.stringify({ format: "agenttool-lobby-bell/v1", room_id: ROOM_B, state: "ok" }), { mode: 0o600 });
+    const valid = (room: string) => ({
+      format: "agenttool-lobby-bell/v1", room_id: room, armed_at: at(-HOUR), seq: 1, base_cursor: "3", head_cursor: "3", state: "ok", reason: null,
+      new: 0, addressed: 0, unverified: 0, last_change: null, at: at(0), fetcher_pid: 4242,
+    });
+    writeFileSync(join(world.doorbellHome, "bells", `${ROOM_B}.json`), JSON.stringify(valid(ROOM_B)), { mode: 0o600 });
     const report = await world.run();
     expect(report.checks.doorbell.bells).toEqual([{ room_id: ROOM_A, state: "unreadable" }, { room_id: ROOM_B, state: "ok" }]);
     expect(report.unknown).toEqual(["doorbell:bell_unreadable"]);
     expect(report.state).toBe("unknown");
-    writeFileSync(join(world.doorbellHome, "bells", `${ROOM_A}.json`),
-      JSON.stringify({ format: "agenttool-lobby-bell/v1", room_id: ROOM_B, state: "ok" }), { mode: 0o600 });
-    expect((await world.run()).unknown).toEqual(["doorbell:bell_unreadable"]);
+    // A bell filed under another room, a bare minimal one, or one carrying a text field is unreadable.
+    for (const forged of [valid(ROOM_B), { format: "agenttool-lobby-bell/v1", room_id: ROOM_A, state: "ok" }, { ...valid(ROOM_A), text: CANARY }]) {
+      writeFileSync(join(world.doorbellHome, "bells", `${ROOM_A}.json`), JSON.stringify(forged), { mode: 0o600 });
+      expect((await world.run()).unknown).toEqual(["doorbell:bell_unreadable"]);
+    }
   });
 
   test("a pidfile that is not JSON, or lacks a pid, is unknown", async () => {
@@ -537,7 +542,7 @@ describe("the command line", () => {
     const world = makeWorld();
     expect((await world.cli(["netcheck", "--room", "room_XYZ"])).code).toBe(2);
     expect((await world.cli(["netcheck", "--sync"])).code).toBe(2);
-    expect((await world.cli(["fetch"])).code).toBe(2);
+    expect((await world.cli(["renew"])).code).toBe(2);
     expect((await world.cli(["netcheck", "--home", join(world.lobbyHome, "doorbell")])).code).toBe(2);
     world.env.AGENTOOL_LOBBY_HOME = "/tmp/x";
     const misspelt = await world.cli(["netcheck"]);
