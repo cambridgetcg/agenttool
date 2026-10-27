@@ -59,13 +59,16 @@ function service(f: ReturnType<typeof fixture>, renewMode: Mode | Mode[] = "ok",
   const modes = Array.isArray(renewMode) ? [...renewMode] : [renewMode];
   // While readsDown, every GET is a 503 before any check, like a briefly unavailable service;
   // readsAs, when set, builds that GET answer instead (a proxy's HTML or empty 5xx).
-  const control: { readsDown: boolean; readsAs: (() => Response) | null } = { readsDown: false, readsAs: null };
+  // While refuseAll, every request gets the 401 the service also returns for a proof more than five
+  // minutes off its clock or a briefly inactive identity or key: it says nothing about what is stored.
+  const control: { readsDown: boolean; readsAs: (() => Response) | null; refuseAll: boolean } = { readsDown: false, readsAs: null, refuseAll: false };
   const respond = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
   const fetchImpl = async (url: string, init: RequestInit) => {
     const headers = new Headers(init.headers), path = new URL(url).pathname, grant = headers.get("X-Agenttool-Mission-Grant-Id")!;
     const body = init.body === undefined ? undefined : String(init.body);
     calls.push({ method: String(init.method), path, grant, body, headers });
     if (init.method === "GET" && control.readsDown) return control.readsAs ? control.readsAs() : respond({ error: "mission_unavailable" }, 503);
+    if (control.refuseAll) return respond({ error: "collaboration_mission_invalid_credential" }, 401);
     const token = headers.get("Authorization")!.slice(7);
     const input = { token, origin: ORIGIN, method: String(init.method), missionId: M, requestTarget: path, bodyBytes: Buffer.from(body ?? ""),
       proof: { grantId: grant, identityId: headers.get("X-Agenttool-Mission-Identity-Id")!, keyId: headers.get("X-Agenttool-Mission-Key-Id")!,
@@ -181,8 +184,9 @@ describe.skipIf(process.platform === "win32")("participant renew", () => {
     lapse(g);
     const abandoned = await stop(client.renew(g.state, { fetchImpl: lost.fetchImpl }));
     expect(abandoned).toMatchObject({ stop_reason: "renewal_abandoned", delivered: false });
-    expect(abandoned.next).toContain("ask the administrator for a new grant");
-    expect(abandoned.next).toContain("a successor of the predecessor that this device did not record, treat this token and key as exposed");
+    expect(abandoned.next).toContain("Ask the administrator for a new grant");
+    expect(abandoned.next).toContain(`kept successor ${pending.grant_id} in renewal-abandoned-${pending.grant_id}.json`);
+    expect(abandoned.next).toContain("a successor of your grant that has no renewal-abandoned-<grant_id>.json on this device, treat this token and key as exposed");
     expect(existsSync(pendingFile(g))).toBe(false);
     expect(JSON.parse(readFileSync(join(g.state, `renewal-abandoned-${pending.grant_id}.json`), "utf8"))).toEqual(pending);
     expect(invitationFile(g).grant_id).toBe(G);
@@ -581,12 +585,19 @@ describe.skipIf(process.platform === "win32")("participant renew", () => {
     expect(invitationFile(g).grant_id).toBe(second);
   });
 
-  test("a 401 for the predecessor with no stored successor abandons the record, from the read or from the send", async () => {
+  test("a 401 for the predecessor with no stored successor keeps the record while it is unexpired here, and abandons it once it lapses", async () => {
     for (const via of ["read", "send"] as const) {
       const f = fixture(), s = service(f, ["drop", "401"]);
       await stop(client.renew(f.state, { fetchImpl: s.fetchImpl }));
       const pending = JSON.parse(readFileSync(pendingFile(f), "utf8"));
       if (via === "read") s.hashes.delete(G);
+      const held = await stop(client.renew(f.state, { fetchImpl: s.fetchImpl }));
+      expect(held, via).toMatchObject({ stop_reason: "renewal_uncertain", delivered: "unknown", serviceCode: "collaboration_mission_invalid_credential" });
+      expect(held.next, via).toContain("device clock");
+      expect(s.calls.at(-1), via).toMatchObject({ method: "GET", grant: pending.grant_id });
+      expect(JSON.parse(readFileSync(pendingFile(f), "utf8")), via).toEqual(pending);
+      expect(readdirSync(f.state).some(name => name.startsWith("renewal-abandoned-")), via).toBe(false);
+      lapse(f);
       const abandoned = await stop(client.renew(f.state, { fetchImpl: s.fetchImpl }));
       expect(abandoned.stop_reason, via).toBe("renewal_abandoned");
       expect(s.calls.at(-1), via).toMatchObject({ method: "GET", grant: pending.grant_id });
@@ -594,6 +605,73 @@ describe.skipIf(process.platform === "win32")("participant renew", () => {
       expect(JSON.parse(readFileSync(join(f.state, `renewal-abandoned-${pending.grant_id}.json`), "utf8")), via).toEqual(pending);
       expect(invitationFile(f).grant_id, via).toBe(G);
     }
+  });
+
+  test("a 401 on every request (a clock offset) never abandons a stored successor while the grant is unexpired here", async () => {
+    const f = fixture(), s = service(f, ["store-then-drop", "ok"]);
+    await stop(client.renew(f.state, { fetchImpl: s.fetchImpl }));
+    const child = JSON.parse(s.calls[1].body!).grant_id, pending = readFileSync(pendingFile(f), "utf8");
+    s.control.refuseAll = true;
+    const held = await stop(client.renew(f.state, { fetchImpl: s.fetchImpl }));
+    expect(held).toMatchObject({ stop_reason: "renewal_uncertain", delivered: "unknown", serviceCode: "collaboration_mission_invalid_credential" });
+    expect(held.next).toContain("device clock");
+    expect(s.calls.slice(2).map(c => `${c.method} ${c.grant === G ? "G" : c.grant === child ? "child" : "other"}`)).toEqual(["GET G", "GET child"]);
+    expect(readFileSync(pendingFile(f), "utf8")).toBe(pending);
+    expect(readdirSync(f.state).some(name => name.startsWith("renewal-abandoned-"))).toBe(false);
+    s.control.refuseAll = false;
+    expect(await client.renew(f.state, { fetchImpl: s.fetchImpl })).toMatchObject({ renewed: true, grant_id: child, renewed_from_grant_id: G });
+    expect(invitationFile(f).grant_id).toBe(child);
+  });
+
+  test("a lapsed grant with no pending record recovers through this device's own abandoned record, signing only as the successor", async () => {
+    // A stored successor whose record was abandoned after a 401 on a lapsed grant (a clock offset at the time).
+    const f = fixture(), s = service(f, "store-then-drop");
+    await stop(client.renew(f.state, { fetchImpl: s.fetchImpl }));
+    const child = JSON.parse(s.calls[1].body!).grant_id, file = join(f.state, `renewal-abandoned-${child}.json`);
+    lapse(f);
+    s.control.refuseAll = true;
+    const abandoned = await stop(client.renew(f.state, { fetchImpl: s.fetchImpl }));
+    expect(abandoned.stop_reason).toBe("renewal_abandoned");
+    expect(abandoned.next).toContain("run renew again");
+    expect(existsSync(file)).toBe(true); expect(existsSync(pendingFile(f))).toBe(false);
+    // leave cannot sign as the lapsed grant; it names the successor this device kept instead of only "expired".
+    const sent = s.calls.length;
+    await expect(client.leave(f.state, { fetchImpl: s.fetchImpl })).rejects.toThrow(`successor ${child}`);
+    expect(s.calls).toHaveLength(sent);
+    // Still refused: nothing is installed, and the record stays for the next run.
+    const still = await stop(client.renew(f.state, { fetchImpl: s.fetchImpl }));
+    expect(still.stop_reason).toBe("renewal_abandoned");
+    expect(s.calls.slice(sent).map(c => `${c.method} ${c.grant === G ? "G" : c.grant === child ? "child" : "other"}`)).toEqual(["GET child"]);
+    expect(existsSync(file)).toBe(true); expect(invitationFile(f).grant_id).toBe(G);
+    // The clock is fixed: the successor is installed, and nothing was ever signed as the lapsed grant.
+    s.control.refuseAll = false;
+    expect(await client.renew(f.state, { fetchImpl: s.fetchImpl })).toMatchObject({ renewed: true, grant_id: child, renewed_from_grant_id: G, recovered_abandoned: true });
+    expect(invitationFile(f).grant_id).toBe(child);
+    expect(s.calls.slice(2).filter(c => c.grant === G)).toHaveLength(0);
+    expect(readdirSync(join(f.state, "tokens"))).toHaveLength(1);
+    // A successor-signed read that does not confirm the expected successor installs nothing.
+    const h = fixture(), u = service(h, "store-then-drop");
+    await stop(client.renew(h.state, { fetchImpl: u.fetchImpl }));
+    const revoked = JSON.parse(readFileSync(pendingFile(h), "utf8"));
+    writeFileSync(join(h.state, `renewal-abandoned-${revoked.grant_id}.json`), JSON.stringify(revoked), { mode: 0o600 }); rmSync(pendingFile(h));
+    u.children.get(revoked.grant_id).revoked_at = iso(Date.now());
+    lapse(h);
+    const invalid = await stop(client.renew(h.state, { fetchImpl: u.fetchImpl }));
+    expect(invalid.stop_reason).toBe("renewal_response_invalid");
+    expect(invalid.next).toContain(`renewal-abandoned-${revoked.grant_id}.json`);
+    expect(invitationFile(h).grant_id).toBe(G);
+    // Records of another predecessor, or filed under another grant's name, are ignored: the lapsed grant fails locally with no request.
+    const g = fixture(), t = service(g, "store-then-drop");
+    await stop(client.renew(g.state, { fetchImpl: t.fetchImpl }));
+    const other = JSON.parse(readFileSync(pendingFile(g), "utf8"));
+    rmSync(pendingFile(g));
+    writeFileSync(join(g.state, `renewal-abandoned-${other.grant_id}.json`), JSON.stringify({ ...other, predecessor_grant_id: "55555555-5555-4555-8555-555555555555" }), { mode: 0o600 });
+    writeFileSync(join(g.state, "renewal-abandoned-99999999-9999-4999-8999-999999999999.json"), JSON.stringify(other), { mode: 0o600 });
+    lapse(g);
+    const calls = t.calls.length;
+    await expect(client.renew(g.state, { fetchImpl: t.fetchImpl })).rejects.toThrow("Invitation expiry is invalid or has passed.");
+    await expect(client.leave(g.state, { fetchImpl: t.fetchImpl })).rejects.toThrow("Invitation expiry is invalid or has passed.");
+    expect(t.calls).toHaveLength(calls);
   });
 
   test("concurrent resumes are exclusive: one installs, the other stops before sending, and one backup remains", async () => {

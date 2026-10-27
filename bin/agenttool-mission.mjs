@@ -347,19 +347,21 @@ export async function leave(path, options) {
   return result;
 }
 async function leaveLocked(root, options) {
-  const pendingFile = join(root, 'renewal-pending.json');
-  if (existsSync(pendingFile)) {
-    // A lapsed predecessor cannot sign, but a successor the service may have issued is live.
+  const pendingFile = join(root, 'renewal-pending.json'), local = enrollment(root);
+  // One read: the grant signed is the grant the response is checked against.
+  const saved = validateProfile(JSON.parse(privateRead(join(root, 'invitation.json'))), local, { lapsed: true });
+  if (Date.parse(saved.expires_at) <= Date.now()) {
+    // A lapsed predecessor cannot sign, but a successor this device requested may be live.
     // (While the predecessor lives, its leave ends that successor with the rest of the chain.)
-    const saved = validateProfile(JSON.parse(privateRead(join(root, 'invitation.json'))), enrollment(root), { lapsed: true });
-    if (Date.parse(saved.expires_at) <= Date.now()) {
+    if (existsSync(pendingFile)) {
       let successor = 'its successor';
       try { successor = `successor ${readPending(pendingFile).grant_id}`; } catch { /* A damaged record still blocks. */ }
       fail(`A renewal is pending: ${successor} may be live on the service while invitation.json has lapsed. Run renew to resolve it, then leave. Nothing was sent.`);
     }
+    const kept = abandonedFor(root, saved);
+    if (kept.length) fail(`invitation.json has lapsed, and ${kept.map(({ record }) => `successor ${record.grant_id}`).join(', ')} that this device requested (kept in renewal-abandoned-<grant_id>.json) may be live on the service. Run renew to recover it, then leave. Nothing was sent.`);
   }
-  // One read: the grant signed is the grant the response is checked against.
-  const p = profile(root);
+  const p = validateProfile(saved, local);
   let result;
   try { result = await requestAs(p, readKey(root), 'POST', '/leave', LEAVE_BODY, options); }
   catch (error) {
@@ -422,6 +424,18 @@ function readPending(file) {
 function abandon(root, pending) {
   const from = join(root, 'renewal-pending.json'), to = join(root, `renewal-abandoned-${pending.grant_id}.json`);
   linkSync(from, to); unlinkSync(from); syncDirectory(root);
+}
+/** This device's own abandoned records whose predecessor is `saved`, by name; damaged or foreign
+ * records are skipped. At most 20, so a recovery run stays finite. */
+function abandonedFor(root, saved) {
+  const kept = [];
+  for (const name of readdirSync(root).filter(name => name.startsWith('renewal-abandoned-') && name.endsWith('.json')).sort()) {
+    let record;
+    try { record = readPending(join(root, name)); } catch { continue; }
+    if (name === `renewal-abandoned-${record.grant_id}.json` && record.predecessor_grant_id === saved.grant_id && record.mission_id === saved.mission_id) kept.push({ name, record });
+    if (kept.length === 20) break;
+  }
+  return kept;
 }
 /** Everything this device knows about the predecessor; actions and window only while it is readable. */
 function check(view, before, pending, { echo = false, record = 'the pending record' } = {}) {
@@ -532,7 +546,13 @@ async function renewLocked(root, options) {
   // that refusal says nothing about whether an earlier send was stored.
   const resending = pending !== null;
   if (!pending || Date.parse(saved.expires_at) > Date.now()) {
-    if (Date.parse(saved.expires_at) <= Date.now()) fail('Invitation expiry is invalid or has passed.');
+    if (Date.parse(saved.expires_at) <= Date.now()) {
+      // Never signed as the lapsed grant. A successor this device requested and later abandoned
+      // (say after a 401 from a clock offset) may still be live: read as each one, never mint.
+      const kept = abandonedFor(root, saved);
+      if (!kept.length) fail('Invitation expiry is invalid or has passed.');
+      return recoverAbandoned(root, local, key, before, kept, options);
+    }
     // Read the live predecessor's window and scope; a refusal here sends nothing more.
     // Every request of this run is signed as `saved`, the grant the pending record names.
     let view;
@@ -615,9 +635,27 @@ async function recover(root, local, key, before, pending, options, conflicted) {
     catch (error) { if (!conflicted || !(error instanceof RenewalError)) throw error; }
   }
   if (conflicted) throw new RenewalError('renewal_conflict', theft(before.grant_id), { serviceCode: 'collaboration_mission_conflict', next: theft(before.grant_id) });
+  // The service gives the same 401 for a proof more than five minutes off its clock and for a briefly
+  // inactive identity or key, so while the predecessor is unexpired here it proves nothing: keep the record.
+  if (Date.parse(before.expires_at) > Date.now()) throw new RenewalError('renewal_uncertain',
+    'The service refused both your grant and the pending successor with HTTP 401 while your grant is unexpired on this device; the exact request remains saved.',
+    { serviceCode: 'collaboration_mission_invalid_credential', delivered: 'unknown',
+      next: 'Check the device clock (a proof more than five minutes off is refused) and that the identity and key are active, then run renew again. If your grant was revoked or has ended, renew resolves the record once it lapses here.' });
   abandon(root, pending);
-  throw new RenewalError('renewal_abandoned', 'The renewal was not recorded and the predecessor has lapsed or ended.',
-    { next: 'The renewal was not recorded and the predecessor has lapsed or ended; ask the administrator for a new grant. If the administrator sees a successor of the predecessor that this device did not record, treat this token and key as exposed and ask the administrator to revoke that chain.' });
+  throw new RenewalError('renewal_abandoned', `The successor could not be read and grant ${before.grant_id} has lapsed.`, { next: abandonedNext(before.grant_id, [pending.grant_id]) });
+}
+/** No successor of `grantId` that this device kept is readable. A refusal from a clock offset or an
+ * inactive identity or key looks the same, so the records stay and the next run reads as each again. */
+const abandonedNext = (grantId, successors) => `Ask the administrator for a new grant. This device kept ${successors.map(id => `successor ${id} in renewal-abandoned-${id}.json`).join(', ')}: if a device clock offset or an inactive identity or key caused the refusal, fix it and run renew again to read as that successor. If the administrator sees a successor of your grant that has no renewal-abandoned-<grant_id>.json on this device, treat this token and key as exposed and ask the administrator to revoke grant ${grantId}.`;
+/** The predecessor has lapsed and no record is pending: install a successor only through one of this
+ * device's own abandoned records for it, signed as that successor. */
+async function recoverAbandoned(root, local, key, before, kept, options) {
+  for (const { name, record } of kept) {
+    const found = await probe(root, key, before, record, options);
+    if (found.view) return { ...install(root, local, before, record, check(found.view, before, record, { record: name })), recovered_abandoned: true };
+  }
+  throw new RenewalError('renewal_abandoned', `Grant ${before.grant_id} has lapsed and no successor this device requested for it can be read.`,
+    { next: abandonedNext(before.grant_id, kept.map(({ record }) => record.grant_id)) });
 }
 const GRANT_REQUEST_FIELDS = ['format', 'origin', 'mission_id', 'grant_id', 'identity_id', 'signing_key_id', 'public_key', 'actions', 'expires_at'];
 function grantRequest(value) {
