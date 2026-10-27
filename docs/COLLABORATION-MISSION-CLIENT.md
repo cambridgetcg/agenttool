@@ -324,7 +324,11 @@ never loops or retries in the background. A run holds `renewal.lock` (0600,
 created exclusively, removed when the run ends) for its whole length, so only
 one `renew` runs per state directory at a time; a second one stops with
 `renewal_in_progress` before reading or sending anything. `leave` holds the
-same lock, so a renewal never installs a successor while a leave is in flight. Every request of a run
+same lock, so a renewal never installs a successor while a leave is in flight.
+The lock records the command holding it (`renew` or `leave`) and its `pid`, and
+the refusal names that command (`Another leave run holds renewal.lock…`); a lock
+from an older client names none and is reported as a `renew or leave` run.
+Remove a lock only when no process with that `pid` is running. Every request of a run
 is signed as the grant `invitation.json` named when the run started. It first
 reads the current invitation (one signed `GET /invitation`) and stops before
 sending anything when:
@@ -412,7 +416,7 @@ Every stop prints one JSON object on stderr and exits 1:
 | `renewal_response_invalid` | The response does not confirm the expected successor; nothing installed | Kept | Inspect with the administrator before any new attempt |
 | `renewal_refused` | Any other refusal, with its fixed service `code` | Kept, or renamed when a resend could never succeed (`token_hash_conflict`, invalid request, no renew route on a first send; on a resend that 404 is `renewal_uncertain`) | A fixed sentence per code |
 | `renewal_pending_mismatch` | The pending record belongs to another invitation, or `invitation.json` changed during the run (the successor was confirmed but not installed) | Kept | Inspect both files |
-| `renewal_in_progress` | Another `renew` holds `renewal.lock`; nothing was read or sent | Untouched | Wait for it; if none is running, inspect and remove `renewal.lock` |
+| `renewal_in_progress` | Another `renew` or a `leave` holds `renewal.lock` (the message names which); nothing was read or sent | Untouched | Wait for it; if no process with the `pid` recorded in `renewal.lock` is running, remove the lock |
 
 `renewal_conflict` means someone holding both your token and your key may have
 renewed first. Unless this device lost its pending record, treat that token and
@@ -447,8 +451,9 @@ predecessor (for example a token kept in `invitation.replaced-*.json`) also
 ends the grant you currently use. Every other grant and the mission continue.
 
 `leave` holds `renewal.lock` for its whole run and signs as the grant
-`invitation.json` named when it started. While a `renew` run holds the lock,
-`leave` stops before sending anything; run it again when that run is done.
+`invitation.json` named when it started. While another `renew` or `leave` run
+holds the lock, `leave` stops before sending anything and names that command;
+run it again when that run is done.
 
 If `renewal-pending.json` exists and `invitation.json` has lapsed, `leave`
 refuses before sending anything: the service may already hold a live successor

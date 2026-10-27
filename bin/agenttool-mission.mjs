@@ -333,9 +333,9 @@ export async function leave(path, options) {
   const root = stateRoot(path);
   // Renew replaces invitation.json; holding its lock keeps leave's grant and the installed one the same.
   let release;
-  try { release = renewalLock(root); }
+  try { release = renewalLock(root, 'leave'); }
   catch (error) {
-    if (error instanceof RenewalError) fail('Another renew run holds renewal.lock; nothing was sent. Wait for it to finish, then run leave again. If none is running, inspect renewal.lock, remove it, then run leave again.');
+    if (error instanceof RenewalError) fail(`${error.message} Wait for that ${error.holder} run to finish, then run leave again. If none is running (the pid recorded in renewal.lock is gone), remove renewal.lock, then run leave again.`);
     throw error;
   }
   let result, problem;
@@ -499,7 +499,7 @@ const REFUSAL_NEXT = {
  * Contract: docs/COLLABORATION-MISSION-CLIENT.md.
  */
 export async function renew(path, options = {}) {
-  const root = stateRoot(path), release = renewalLock(root);
+  const root = stateRoot(path), release = renewalLock(root, 'renew');
   let result, problem;
   try { result = await renewLocked(root, options); }
   catch (error) { problem = error; }
@@ -512,16 +512,22 @@ export async function renew(path, options = {}) {
   if (problem) throw problem;
   return result;
 }
-/** One renew run at a time per state directory, held for the whole run, so two resumes
- * of one pending record never both install. A lock left by a crashed run stops renew
- * until it is inspected and removed. */
-function renewalLock(root) {
+/** One renew or leave run at a time per state directory, held for the whole run, so two
+ * resumes of one pending record never both install. The lock names its command, so a
+ * leave's lock is never mistaken for a stale renew's. A lock left by a crashed run stops
+ * renew and leave until it is inspected and removed. */
+function renewalLock(root, command) {
   const path = join(root, 'renewal.lock'), lockId = randomUUID();
-  try { writeNew(path, json({ lock_id: lockId, pid: process.pid, created_at: new Date().toISOString() })); }
+  try { writeNew(path, json({ command, lock_id: lockId, pid: process.pid, created_at: new Date().toISOString() })); }
   catch (error) {
-    if (error?.code === 'EEXIST') throw new RenewalError('renewal_in_progress', 'Another renew run holds renewal.lock; nothing was sent.',
-      { next: 'Wait for the other renew run to finish. If none is running, inspect renewal.lock, remove it, then run renew again.' });
-    throw error;
+    if (error?.code !== 'EEXIST') throw error;
+    // Best effort: a lock from an older client, a damaged one or one just removed names no command.
+    let holder = 'renew or leave';
+    try { const held = JSON.parse(privateRead(path, 1024))?.command; if (held === 'renew' || held === 'leave') holder = held; } catch { /* Unnamed. */ }
+    const stopped = new RenewalError('renewal_in_progress', `Another ${holder} run holds renewal.lock; nothing was sent.`,
+      { next: `Wait for that ${holder} run to finish. If none is running (the pid recorded in renewal.lock is gone), remove renewal.lock, then run renew again.` });
+    stopped.holder = holder;
+    throw stopped;
   }
   return () => {
     if (JSON.parse(privateRead(path)).lock_id !== lockId) fail('Renewal lock ownership changed; inspect it before recovery.');

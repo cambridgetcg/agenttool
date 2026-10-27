@@ -481,7 +481,13 @@ describe.skipIf(process.platform === "win32")("participant renew", () => {
     const leaving = client.leave(g.state, { fetchImpl: async () => { inFlight.resolve(); await release.promise;
       return new Response(JSON.stringify({ mission_id: M, grant_id: G, status: "revoked", reason: "participant_left", revoked_at: iso(Date.now()) })); } });
     await inFlight.promise;
-    expect((await stop(client.renew(g.state, { fetchImpl: t.fetchImpl }))).stop_reason).toBe("renewal_in_progress");
+    // The lock says which command holds it, so nobody removes a leave's lock as a stale renew's.
+    expect(JSON.parse(readFileSync(join(g.state, "renewal.lock"), "utf8"))).toMatchObject({ command: "leave", pid: process.pid });
+    const blocked = await stop(client.renew(g.state, { fetchImpl: t.fetchImpl }));
+    expect(blocked.stop_reason).toBe("renewal_in_progress");
+    expect(blocked.message).toBe("Another leave run holds renewal.lock; nothing was sent.");
+    expect(blocked.next).toContain("Wait for that leave run to finish");
+    expect(blocked.next).toContain("pid");
     expect(t.calls).toHaveLength(0);
     release.resolve();
     expect(await leaving).toMatchObject({ grant_id: G, recorded: true });
@@ -683,7 +689,7 @@ describe.skipIf(process.platform === "win32")("participant renew", () => {
     expect(second.status).toBe("rejected");
     const busy = (second as PromiseRejectedResult).reason;
     expect(busy).toBeInstanceOf(client.RenewalError);
-    expect(busy).toMatchObject({ stop_reason: "renewal_in_progress", delivered: false });
+    expect(busy).toMatchObject({ stop_reason: "renewal_in_progress", delivered: false, message: "Another renew run holds renewal.lock; nothing was sent." });
     expect(s.calls.length - sent).toBe(2);
     expect(readdirSync(f.state).filter(name => name.startsWith("invitation.replaced-"))).toHaveLength(1);
     expect(existsSync(join(f.state, "renewal.lock"))).toBe(false);
@@ -691,7 +697,9 @@ describe.skipIf(process.platform === "win32")("participant renew", () => {
     // A lock left by a crashed run stops renew without any request until it is inspected and removed.
     writeFileSync(join(f.state, "renewal.lock"), "{}", { mode: 0o600 });
     const calls = s.calls.length;
-    expect((await stop(client.renew(f.state, { fetchImpl: s.fetchImpl }))).stop_reason).toBe("renewal_in_progress");
+    const crashed = await stop(client.renew(f.state, { fetchImpl: s.fetchImpl }));
+    expect(crashed).toMatchObject({ stop_reason: "renewal_in_progress", message: "Another renew or leave run holds renewal.lock; nothing was sent." });
+    await expect(client.leave(f.state, { fetchImpl: s.fetchImpl })).rejects.toThrow("Another renew or leave run holds renewal.lock; nothing was sent.");
     expect(s.calls).toHaveLength(calls);
   });
 
