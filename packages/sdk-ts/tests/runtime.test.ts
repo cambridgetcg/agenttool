@@ -6,7 +6,7 @@
  *    trusted  — cloud holds K_master. Maximum uptime.
  *
  *  Nen mapping:
- *    十 Ten (Focus)    → provision a runtime (orient the agent in the cloud)
+ *    纏 Ten (Focus)    → provision a runtime (orient the agent in the cloud)
  *    練 Ren (Enhance)  → think-once triggers a thinking cycle (active aura)
  *    絶 Zetsu (Suppress) → stop the runtime (rest, don't crash)
  *    発 Hatsu (Release) → the runtime runs the agent's expression against an LLM
