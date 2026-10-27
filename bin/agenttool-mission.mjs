@@ -5,7 +5,7 @@
  * command reads one, from an owner-only file, and it never prints or stores it.
  */
 import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, randomBytes, randomUUID, sign } from 'node:crypto';
-import { constants, existsSync, linkSync, lstatSync, mkdirSync, openSync, closeSync, readFileSync, renameSync, unlinkSync, writeFileSync, fstatSync, fsyncSync, realpathSync } from 'node:fs';
+import { constants, existsSync, linkSync, lstatSync, mkdirSync, openSync, closeSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync, fstatSync, fsyncSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -354,7 +354,17 @@ export class RenewalError extends Error {
  * string such as "token" is data, never mistaken for a returned credential. */
 const tokenFree = (...objects) => objects.every(value => !value || typeof value !== 'object' || !Object.hasOwn(value, 'token'));
 const PENDING_FIELDS = ['format', 'mission_id', 'predecessor_grant_id', 'grant_id', 'token_sha256', 'body_utf8', 'created_at'];
-const PIN_NOTE = 'Peers whose chat config pins this grant_id must re-pin by identity_id and signing_key_id.';
+export const PIN_NOTE = 'Peers whose chat config pins this grant_id must re-pin by identity_id and signing_key_id. A work contract or wake receiver binding that names the previous grant_id, on this device or a peer\'s, cannot follow a renewal: bind the receiver again and agree a new work contract.';
+/** Local tools in this state directory that pin the previous grant; existence checks only, nothing is read. */
+function pinnedElsewhere(root) {
+  const warnings = [];
+  if (existsSync(join(root, 'wake', 'binding.json'))) warnings.push('wake/binding.json is bound to the previous grant, so this receiver now stops with "Participant changed since receiver binding". Inspect its status, move wake/ aside, then bind again for the new grant.');
+  let tasks = [];
+  try { tasks = readdirSync(join(root, 'work')).filter(name => UUID.test(name)).sort().slice(0, 20); }
+  catch (error) { if (error?.code !== 'ENOENT') throw error; }
+  for (const task of tasks) warnings.push(`work/${task} pins the previous grant_id in its immutable contract: it cannot continue from the new grant. Agree a new work contract for unfinished work.`);
+  return warnings;
+}
 const theft = grantId => `Grant ${grantId} was already renewed by a request this device did not record. Unless this device lost its pending record, treat this token and key as exposed: run leave (it ends every grant in the chain) and ask the administrator to revoke grant ${grantId}.`;
 /** The fixed refusal code from boundedJson's message, or null for transport failure. */
 function refusalOf(error) {
@@ -362,6 +372,8 @@ function refusalOf(error) {
   return match ? { status: Number(match[1]), code: match[2] ?? null } : null;
 }
 const transportFailed = error => error instanceof Error && error.message.startsWith('Mission transport failed.');
+/** A dropped connection or a 5xx: the service decided nothing this client can rely on. */
+const unsure = error => transportFailed(error) || (refusalOf(error)?.status ?? 0) >= 500;
 function readPending(file) {
   const value = JSON.parse(privateRead(file));
   sameFields(value, PENDING_FIELDS);
@@ -411,8 +423,9 @@ function install(root, local, before, pending, g) {
   try { unlinkSync(join(root, 'renewal-pending.json')); }
   catch (error) { if (error?.code !== 'ENOENT') throw error; /* Already cleaned up. */ }
   syncDirectory(root);
+  const warnings = pinnedElsewhere(root);
   return { mission_id: before.mission_id, renewed_from_grant_id: before.grant_id, grant_id: g.grant_id, expires_at: g.expires_at,
-    renewable_until: g.renewal.renewable_until, renewed: true, replaced: backup !== null, backup, note: PIN_NOTE };
+    renewable_until: g.renewal.renewable_until, renewed: true, replaced: backup !== null, backup, note: PIN_NOTE, ...(warnings.length ? { warnings } : {}) };
 }
 /** Sign GET /invitation as the pending successor with its own token: ordinary admission. */
 async function probe(root, key, before, pending, options) {
@@ -421,8 +434,8 @@ async function probe(root, key, before, pending, options) {
   try { return { view: await requestAs(as, key, 'GET', '/invitation', '', options) }; }
   catch (error) {
     if (refusalOf(error)?.status === 401) return { recorded: false };
-    if (transportFailed(error)) throw new RenewalError('renewal_uncertain', 'Renewal outcome is uncertain: the recovery read did not complete.',
-      { delivered: 'unknown', next: 'run renew again to resend the same request' });
+    if (unsure(error)) throw new RenewalError('renewal_uncertain', 'Renewal outcome is uncertain: the recovery read did not complete.',
+      { serviceCode: refusalOf(error)?.code ?? null, delivered: 'unknown', next: 'run renew again to resend the same request' });
     throw new RenewalError('renewal_refused', 'The recovery read was refused.', { serviceCode: refusalOf(error)?.code ?? null, delivered: 'unknown',
       next: 'Inspect the pending record and the grant with its administrator before any new attempt.' });
   }
@@ -491,8 +504,9 @@ async function renewLocked(root, options) {
     try { view = await invitationAs(saved, key, options); }
     catch (error) {
       if (pending && refusalOf(error)?.status === 401) return recover(root, local, key, before, pending, options, false);
-      if (transportFailed(error)) throw new RenewalError('renewal_uncertain', 'The invitation read did not complete; nothing new was sent.',
-        { delivered: pending ? 'unknown' : false, next: 'run renew again' });
+      // A 5xx, like a dropped connection, says nothing about the renewal: resending the saved bytes stays safe.
+      if (unsure(error)) throw new RenewalError('renewal_uncertain', 'The invitation read did not complete; nothing new was sent.',
+        { serviceCode: refusalOf(error)?.code ?? null, delivered: pending ? 'unknown' : false, next: 'run renew again' });
       throw new RenewalError('renewal_refused', 'The current grant could not be read.', { serviceCode: refusalOf(error)?.code ?? null,
         delivered: pending ? 'unknown' : false, next: REFUSAL_NEXT[refusalOf(error)?.code] ?? 'Inspect the invitation and ask the administrator.' });
     }

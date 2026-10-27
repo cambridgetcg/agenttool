@@ -348,6 +348,17 @@ the new grant, the previous file is kept as
 window, plus a note: peers whose chat configuration pins your `grant_id` must
 re-pin you by `identity_id` and `signing_key_id`. No separate accept is needed.
 
+Chat can follow a renewal; the [work client](COLLABORATION-MISSION-WORK.md) and
+the [wake receiver](COLLABORATION-MISSION-WAKE.md) cannot. A work contract pins
+each role's `grant_id` in its immutable terms, and a receiver binding
+fingerprints your grant and pins its peer's. After you renew, work under that
+contract stops on both sides and your receiver stops with "Participant changed
+since receiver binding"; after a peer renews, your receiver no longer matches
+its messages. When the state directory holds `wake/binding.json` or a
+`work/<task UUID>` directory, the `renew` output adds a `warnings` array naming
+each one. Bind the receiver again (move `wake/` aside first) and agree a new
+work contract for unfinished work. Renew between work tasks when you can.
+
 While a record is pending, the next `renew` finishes it instead of starting a
 new one. If the invitation already names the pending grant, it only removes the
 record. If your grant is still unexpired, it resends the exact saved bytes with
@@ -366,7 +377,7 @@ Every stop prints one JSON object on stderr and exits 1:
 
 | `stop_reason` | When | Pending record | `next` |
 |---|---|---|---|
-| `renewal_uncertain` | The request or the recovery read did not complete, or the service returned 5xx | Kept | Run `renew` again to resend the same request |
+| `renewal_uncertain` | The request, the invitation read or the recovery read did not complete, or the service returned 5xx to any of them | Kept (none is created when the first read fails) | Run `renew` again to resend the same request |
 | `renewal_unavailable` | No open window before sending, or HTTP 403 `collaboration_mission_renewal_unavailable` after | Renamed `renewal-abandoned-<grant_id>.json` | Inspect the window; after it ends, ask for a new grant |
 | `renewal_abandoned` | The successor was never recorded and your grant has lapsed or ended (the recovery read got 401) | Renamed `renewal-abandoned-<grant_id>.json` | Ask the administrator for a new grant |
 | `renewal_conflict` | HTTP 409: your grant was already renewed by a request this device did not record | Kept | See below |

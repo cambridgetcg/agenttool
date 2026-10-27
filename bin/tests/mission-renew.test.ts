@@ -57,11 +57,14 @@ function service(f: ReturnType<typeof fixture>, renewMode: Mode | Mode[] = "ok",
   const hashes = new Map<string, string>([[G, sha(TOKEN)]]), children = new Map<string, any>();
   const calls: Array<{ method: string; path: string; grant: string; body: string | undefined; headers: Headers }> = [];
   const modes = Array.isArray(renewMode) ? [...renewMode] : [renewMode];
+  // While readsDown, every GET is a 503 before any check, like a briefly unavailable service.
+  const control = { readsDown: false };
   const respond = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
   const fetchImpl = async (url: string, init: RequestInit) => {
     const headers = new Headers(init.headers), path = new URL(url).pathname, grant = headers.get("X-Agenttool-Mission-Grant-Id")!;
     const body = init.body === undefined ? undefined : String(init.body);
     calls.push({ method: String(init.method), path, grant, body, headers });
+    if (init.method === "GET" && control.readsDown) return respond({ error: "mission_unavailable" }, 503);
     const token = headers.get("Authorization")!.slice(7);
     const input = { token, origin: ORIGIN, method: String(init.method), missionId: M, requestTarget: path, bodyBytes: Buffer.from(body ?? ""),
       proof: { grantId: grant, identityId: headers.get("X-Agenttool-Mission-Identity-Id")!, keyId: headers.get("X-Agenttool-Mission-Key-Id")!,
@@ -90,7 +93,7 @@ function service(f: ReturnType<typeof fixture>, renewMode: Mode | Mode[] = "ok",
     patch(result);
     return respond(result, existing ? 200 : 201);
   };
-  return { fetchImpl, calls, children, hashes };
+  return { fetchImpl, calls, children, hashes, control };
 }
 const invitationFile = (f: ReturnType<typeof fixture>) => JSON.parse(readFileSync(join(f.state, "invitation.json"), "utf8"));
 const pendingFile = (f: ReturnType<typeof fixture>) => join(f.state, "renewal-pending.json");
@@ -127,7 +130,10 @@ describe.skipIf(process.platform === "win32")("participant renew", () => {
     const child = s.children.get(sent.grant_id);
     expect(result).toEqual({ mission_id: M, renewed_from_grant_id: G, grant_id: sent.grant_id, expires_at: child.expires_at,
       renewable_until: f.predecessor.renewal.renewable_until, renewed: true, replaced: true, backup: expect.stringMatching(/^invitation\.replaced-.*\.json$/),
-      note: "Peers whose chat config pins this grant_id must re-pin by identity_id and signing_key_id." });
+      note: client.PIN_NOTE });
+    expect(client.PIN_NOTE).toContain("chat config");
+    expect(client.PIN_NOTE).toContain("work contract");
+    expect(client.PIN_NOTE).toContain("wake receiver");
     expect(JSON.stringify(result)).not.toContain("atcm_");
     expect(existsSync(pendingFile(f))).toBe(false);
     const installed = invitationFile(f);
@@ -215,6 +221,52 @@ describe.skipIf(process.platform === "win32")("participant renew", () => {
       expect(readdirSync(f.state).some(name => name.startsWith("renewal-abandoned-")), mode).toBe(abandoned);
       expect(invitationFile(f).grant_id).toBe(G);
     }
+  });
+
+  test("a 5xx on the invitation read or the recovery probe is uncertain: the record is kept and nothing is abandoned", async () => {
+    const abandoned = (f: ReturnType<typeof fixture>) => readdirSync(f.state).some(name => name.startsWith("renewal-abandoned-"));
+    // No pending record: nothing was sent, so nothing is delivered.
+    const f = fixture(), s = service(f);
+    s.control.readsDown = true;
+    const fresh = await stop(client.renew(f.state, { fetchImpl: s.fetchImpl }));
+    expect(fresh).toMatchObject({ stop_reason: "renewal_uncertain", delivered: false, serviceCode: "mission_unavailable", next: "run renew again" });
+    expect(existsSync(pendingFile(f))).toBe(false);
+    expect(s.calls.map(c => c.method)).toEqual(["GET"]);
+    // A pending record and a live predecessor: the read fails, the record stays.
+    const g = fixture(), t = service(g, ["drop", "ok"]);
+    await stop(client.renew(g.state, { fetchImpl: t.fetchImpl }));
+    t.control.readsDown = true;
+    const resumed = await stop(client.renew(g.state, { fetchImpl: t.fetchImpl }));
+    expect(resumed).toMatchObject({ stop_reason: "renewal_uncertain", delivered: "unknown", next: "run renew again" });
+    expect(existsSync(pendingFile(g))).toBe(true); expect(abandoned(g)).toBe(false);
+    t.control.readsDown = false;
+    expect(await client.renew(g.state, { fetchImpl: t.fetchImpl })).toMatchObject({ renewed: true, renewed_from_grant_id: G });
+    // A lapsed predecessor: the successor-signed probe fails, the record stays.
+    const h = fixture(), u = service(h, "store-then-drop");
+    await stop(client.renew(h.state, { fetchImpl: u.fetchImpl }));
+    lapse(h);
+    u.control.readsDown = true;
+    const probed = await stop(client.renew(h.state, { fetchImpl: u.fetchImpl }));
+    expect(probed).toMatchObject({ stop_reason: "renewal_uncertain", delivered: "unknown", serviceCode: "mission_unavailable", next: "run renew again to resend the same request" });
+    expect(existsSync(pendingFile(h))).toBe(true); expect(abandoned(h)).toBe(false);
+    expect(invitationFile(h).grant_id).toBe(G);
+    u.control.readsDown = false;
+    expect(await client.renew(h.state, { fetchImpl: u.fetchImpl })).toMatchObject({ renewed: true, renewed_from_grant_id: G });
+  });
+
+  test("a renew in a state directory with a wake receiver or work contracts says that they pin the previous grant", async () => {
+    const f = fixture(), s = service(f), task = "88888888-8888-4888-8888-888888888888";
+    mkdirSync(join(f.state, "wake"), { mode: 0o700 });
+    writeFileSync(join(f.state, "wake", "binding.json"), "{}", { mode: 0o600 });
+    mkdirSync(join(f.state, "work", task), { recursive: true, mode: 0o700 });
+    const result = await client.renew(f.state, { fetchImpl: s.fetchImpl });
+    expect(result.renewed).toBe(true);
+    expect(result.warnings).toHaveLength(2);
+    expect(result.warnings[0]).toContain("wake/binding.json");
+    expect(result.warnings[1]).toContain(`work/${task}`);
+    // Without either, the result keeps its established keys.
+    const g = fixture(), t = service(g);
+    expect(await client.renew(g.state, { fetchImpl: t.fetchImpl })).not.toHaveProperty("warnings");
   });
 
   test("not yet open prints when it opens and sends nothing beyond the read", async () => {
@@ -475,6 +527,12 @@ describe.skipIf(process.platform === "win32")("administrator window commands", (
       await expect(client.closeRenewal({ bearerFile: a.bearerFile, missionId: M, grantId: G, serviceOrigin: ORIGIN }, { fetchImpl: async () => new Response(JSON.stringify(body)) }))
         .rejects.toThrow("does not confirm the window close");
     }
+    // A renewal object that does not carry a canonical closed_at does not confirm the close.
+    for (const closed_at of [null, "2026-10-27T12:00:00Z", undefined]) {
+      const renewal = { root_grant_id: G, renewed_from_grant_id: null, renewed_to_grant_id: null, renewable_until: iso(Date.now() + 3_600_000), ...(closed_at === undefined ? {} : { closed_at }) };
+      await expect(client.closeRenewal({ bearerFile: a.bearerFile, missionId: M, grantId: G, serviceOrigin: ORIGIN }, { fetchImpl: async () =>
+        new Response(JSON.stringify({ grant: { grant_id: G, mission_id: M, renewal } })) })).rejects.toThrow("does not confirm the window close");
+    }
     // A string value "token" is data, not a token key.
     expect(await client.closeRenewal({ bearerFile: a.bearerFile, missionId: M, grantId: G, serviceOrigin: ORIGIN }, { fetchImpl: async () =>
       new Response(JSON.stringify({ grant: { grant_id: G, mission_id: M, revocation_reason: "token" } })) })).toMatchObject({ grant_id: G, renewable: false });
@@ -488,6 +546,8 @@ globalThis.fetch = async (url, init) => {
   const path = new URL(url).pathname;
   appendFileSync(${JSON.stringify(marker)}, JSON.stringify({ origin: new URL(url).origin, path, method: init.method, body: init.body ?? null }) + '\\n');
   if (process.env.MISSION_FIXTURE_MODE === 'drop' && init.method === 'POST') throw new Error('socket closed ' + init.headers.Authorization);
+  if (path.endsWith('/renewal/close') && process.env.MISSION_FIXTURE_MODE === 'still-open') return new Response(JSON.stringify({ grant: { grant_id: ${JSON.stringify(G)}, mission_id: ${JSON.stringify(M)},
+    renewal: { ...predecessor.renewal, closed_at: null } } }));
   if (path.endsWith('/renewal/close')) return new Response(JSON.stringify({ grant: { grant_id: ${JSON.stringify(G)}, mission_id: ${JSON.stringify(M)} } }));
   if (init.method === 'GET') return new Response(JSON.stringify({ mission, grant: predecessor }));
   const body = JSON.parse(init.body), now = Date.now();
@@ -516,6 +576,10 @@ globalThis.fetch = async (url, init) => {
     expect(calls.map(c => c.origin)).toEqual([...Array(5).fill(ORIGIN), client.DEFAULT_ORIGIN]);
     expect(calls[1].body).toBe(calls[3].body);
     expect(calls[4].body).toBeNull();
+    // An answer whose window is still open is never printed as a close.
+    const stillOpen = cli(["renewal-close", "--bearer-file", a.bearerFile, "--mission-id", M, "--grant-id", G, "--origin", ORIGIN], "still-open");
+    expect(stillOpen.status).toBe(1); expect(stillOpen.stdout).toBe("");
+    expect(stillOpen.stderr).toContain("does not confirm the window close"); expect(stillOpen.stderr).not.toContain(BEARER);
     expect(cli(["renew", "--state", f.state, "--grant-id", G]).status).toBe(1);
     expect(cli(["renewal-close", "--state", f.state, "--bearer-file", a.bearerFile, "--mission-id", M, "--grant-id", G]).status).toBe(1);
     const tokens = readdirSync(join(f.state, "tokens")).map(name => JSON.parse(readFileSync(join(f.state, "tokens", name), "utf8")).token);
