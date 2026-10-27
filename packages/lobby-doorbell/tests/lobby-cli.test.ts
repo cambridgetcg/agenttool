@@ -137,6 +137,11 @@ describe("parsers keep only validated fields", () => {
     expect(parseFleetStatus(fleetStatus([{ ...grant("season", SEASON_MISSION, HOUR), room_id: CANARY }]), ORIGIN)).toBeNull();
     expect(parseFleetStatus(fleetStatus([{ ...grant("season", SEASON_MISSION, HOUR), expires_at: "tomorrow" }]), ORIGIN)).toBeNull();
     expect(parseFleetStatus(fleetStatus([], { directory_mission_id: CANARY }), ORIGIN)).toBeNull();
+    // A grant whose mission_id is missing, renamed or not a UUID is unparseable, never a silent non-match.
+    const { mission_id: _dropped, ...renamed } = grant("season", SEASON_MISSION, HOUR, { room: ROOM_A });
+    expect(parseFleetStatus(fleetStatus([{ ...renamed, mission: SEASON_MISSION }]), ORIGIN)).toBeNull();
+    expect(parseFleetStatus(fleetStatus([{ ...grant("directory", DIRECTORY_MISSION, HOUR), mission_id: null }]), ORIGIN)).toBeNull();
+    expect(parseFleetStatus(fleetStatus([{ ...grant("directory", DIRECTORY_MISSION, HOUR), mission_id: CANARY }]), ORIGIN)).toBeNull();
     expect(parseFleetStatus([], ORIGIN)).toBeNull();
   });
 

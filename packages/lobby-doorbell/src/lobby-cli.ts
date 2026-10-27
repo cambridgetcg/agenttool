@@ -146,7 +146,7 @@ export class LobbyCli {
 export interface DeskGrant {
   purpose: "directory" | "season";
   room_id: string | null;
-  mission_id: string | null;
+  mission_id: string;
   expires_at: string | null;
   accepted_at: string | null;
 }
@@ -171,8 +171,10 @@ export function parseFleetStatus(json: unknown, origin: string): FleetStatus | n
     const expires = timeOrNull(grant.expires_at);
     const accepted = timeOrNull(grant.accepted_at);
     if (roomId === undefined || expires === undefined || accepted === undefined) return null;
-    const mission = typeof grant.mission_id === "string" && UUID_PATTERN.test(grant.mission_id) ? grant.mission_id : null;
-    grants.push({ purpose: grant.purpose, room_id: roomId, mission_id: mission, expires_at: expires, accepted_at: accepted });
+    // Every grant decision matches on mission_id, so a missing or renamed key is
+    // unparseable (unknown), never a grant that silently matches nothing (lapsed).
+    if (typeof grant.mission_id !== "string" || !UUID_PATTERN.test(grant.mission_id)) return null;
+    grants.push({ purpose: grant.purpose, room_id: roomId, mission_id: grant.mission_id, expires_at: expires, accepted_at: accepted });
   }
   return { desk: { origin_matches: desk.origin === origin, directory_mission_id: directory }, grants };
 }

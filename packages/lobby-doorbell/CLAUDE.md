@@ -16,7 +16,8 @@ later PRs and inherit every rule below.
   or `docs/`). Read lobby state only through the pinned CLI's JSON output, run as
   a child. Contract checks in `contract/lobby-contract.ts` pin what is parsed, as
   patterns and key names; update them in the same change as a parser.
-- **One process module, no shell.** Only `src/run.ts` starts processes, through
+- **One process module, no shell.** Only `src/run.ts` starts processes (never
+  `Bun.$`), through
   `assertAllowedArgv`'s closed allowlist (`process.execPath` with the pinned
   lobby entry and its read commands, `mullvad lan get` at fixed paths,
   `/bin/ps -o lstart= -p <pid>`). Children get `HOME`, `PATH=/usr/bin:/bin`,
@@ -30,8 +31,13 @@ later PRs and inherit every rule below.
   `createServer`, `dgram`, `node:http(s)` servers, `Bun.udpSocket`, mDNS or
   Bonjour. PR 1 makes no connection besides the injected fetch; PR 2 adds
   exactly one socket connect site, the Claude inbox, in its own module.
-- **Never secrets.** Nothing names the Keychain, `/usr/bin/security`, the
-  lobby's `secrets/` or its database. Inside the lobby home only `STOP` is named.
+- **Never secrets.** Nothing names the Keychain, `/usr/bin/security` or the
+  lobby's `secrets/`, and nothing opens or reads the lobby's database. Inside
+  the lobby home only two names appear, both in `src/home.ts` and only for
+  `lstat`: `STOP`, and the database file, whose existence decides whether the
+  CLI may run. (The spec said not to name `lobby.sqlite` at all; a review of PR
+  1 showed that without this check netcheck made the CLI create the database
+  in a home holding only `.DS_Store`.)
 - **No text survives.** Every field printed, logged or (later) written to a
   bell or ring is a validated id, canonical time, number or closed code. Card,
   message, roster and display-name text is dropped at parse time. Canary tests
@@ -39,9 +45,12 @@ later PRs and inherit every rule below.
 - **Unknown is never healthy.** A new axis that cannot be read reports
   `unknown`, never `ok`. `unknown` never exits 0.
 - **Read-only means read-only.** Netcheck never runs a command that changes
-  state (no `room sync`), never starts the lobby CLI on an empty lobby home,
-  never creates the doorbell home, and writes one log line only into a doorbell
-  home that already exists. Writes live in `src/home.ts`.
+  state (no `room sync`), never starts the lobby CLI unless the lobby's
+  database file already exists, never creates the doorbell home, and writes
+  one log line only into a doorbell home that already exists. Writes live in `src/home.ts`, sync, async or
+  callback style; `node:fs/promises` is not imported anywhere. Only `bin/`
+  reads the environment (`process.env`, never `Bun.env`); library code takes it
+  as a value.
 - **Nothing restarts itself.** No launchd agent, no KeepAlive, no self-restart.
   `STOP` at `<lobby home>/STOP` is the one device brake; lifting it will need a
   person at `/dev/tty`.

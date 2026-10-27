@@ -3,11 +3,13 @@
  * The lobby home is resolved exactly as packages/lobby/src/home.ts does
  * (contract/lobby-contract.ts pins those rules) and is handed to every child
  * CLI as AGENTTOOL_LOBBY_HOME, so the child never re-resolves it from an
- * environment it does not see. Inside the lobby home the doorbell touches one
- * name, STOP, and only with lstat. The doorbell home holds no secrets and no
- * text; netcheck never creates it.
+ * environment it does not see. Inside the lobby home the doorbell touches two
+ * names, STOP and the database file, and only with lstat: it never opens or
+ * reads the database, it only checks that one exists before it lets a lobby
+ * command run. The doorbell home holds no secrets and no text; netcheck never
+ * creates it.
  */
-import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, writeSync, type Stats } from "node:fs";
+import { closeSync, constants, fstatSync, lstatSync, openSync, writeSync, type Stats } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
 import { DoorbellError, UsageError } from "./errors.js";
@@ -18,6 +20,8 @@ export const LOBBY_HOME_ENV = "AGENTTOOL_LOBBY_HOME";
 /** Tests only: overrides the doorbell home, like the `--home` flag. */
 export const DOORBELL_HOME_ENV = "AGENTTOOL_LOBBY_DOORBELL_HOME";
 export const STOP_FILE = "STOP";
+/** The lobby's database file name (pinned by the contract). Only ever lstat'ed, never opened. */
+export const DATABASE_FILE = "lobby.sqlite";
 export const LOG_FILE = "log.jsonl";
 const LOG_LINE_MAX = 4096;
 
@@ -99,7 +103,12 @@ export function stopPresent(lobbyHome: string): boolean {
   }
 }
 
-/** What the lobby home holds, by name only. `empty` also covers a home that holds only STOP. */
+/** Whether the lobby home holds desk state, by lstat of two names only.
+ *
+ * `present` means the database file exists as a regular file, so a lobby
+ * command opens it instead of creating it. `empty` means it does not, whatever
+ * else the home holds (STOP, `.DS_Store`, a directory): any lobby command would
+ * then create the database, so netcheck starts none. */
 export function lobbyHomeState(lobbyHome: string): "absent" | "empty" | "present" | "unsafe" {
   let stat: Stats;
   try {
@@ -108,11 +117,13 @@ export function lobbyHomeState(lobbyHome: string): "absent" | "empty" | "present
     return "absent";
   }
   if (stat.isSymbolicLink() || !stat.isDirectory()) return "unsafe";
+  let database: Stats;
   try {
-    return readdirSync(lobbyHome).some((name) => name !== STOP_FILE) ? "present" : "empty";
-  } catch {
-    return "unsafe";
+    database = lstatSync(join(lobbyHome, DATABASE_FILE));
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "ENOENT" ? "empty" : "unsafe";
   }
+  return database.isFile() ? "present" : "unsafe";
 }
 
 /** Append one line to <dbhome>/log.jsonl, only when the doorbell home already exists and is private. */

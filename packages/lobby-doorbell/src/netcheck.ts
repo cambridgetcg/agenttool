@@ -2,7 +2,7 @@
  *
  * Worst first: hosted-unreachable, grant-lapsed, lan-blocked, unknown,
  * hosted-ok. Unknown is never healthy and never exits 0. It changes nothing:
- * it never starts the lobby CLI when the lobby home holds no desk state (any
+ * it never starts the lobby CLI when the lobby home holds no database (any
  * lobby command would create it), runs only allowlisted read commands, and
  * writes one log line only into a doorbell home that already exists.
  * Spec: ~/.kingdom/lobby/specs/doorbells.md section 7 (agent-written, 2026-10-27).
@@ -258,8 +258,8 @@ export async function runNetcheck(options: NetcheckOptions): Promise<NetcheckRep
     doorbell: await doorbellPromise,
   };
 
-  // Any lobby command opens (and would create) the desk state, so the CLI runs
-  // only when the lobby home already holds something besides STOP.
+  // Any lobby command opens (and would create) the desk database, so the CLI
+  // runs only when that file already exists; other entries (STOP, .DS_Store) do not count.
   if (entryCheck.state !== "ok") checks.desk.code = entryCheck.code;
   else if (lobbyHome === null) checks.desk.code = lobbyHomeCode;
   else if (homeState === "absent" || homeState === "empty") checks.desk.code = "no_desk_state";
@@ -405,7 +405,10 @@ export function formatDuration(seconds: number | null): string {
 
 function grantLine(grant: GrantView): string {
   if (grant.state === "live") return `live, expires ${formatDuration(grant.expires_in_s)}`;
-  return `${grant.state} (${grant.reason})${grant.expires_at === null ? "" : `, expired ${formatDuration(grant.expires_in_s)}`}`;
+  if (grant.expires_at === null) return `${grant.state} (${grant.reason})`;
+  // A grant never accepted can lapse before its expiry.
+  const verb = grant.expires_in_s !== null && grant.expires_in_s > 0 ? "expires" : "expired";
+  return `${grant.state} (${grant.reason}), ${verb} ${formatDuration(grant.expires_in_s)}`;
 }
 
 export function formatReport(report: NetcheckReport): string {

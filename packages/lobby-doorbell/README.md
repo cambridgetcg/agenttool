@@ -85,9 +85,12 @@ The **lobby home** is resolved exactly as `packages/lobby/src/home.ts` does:
 `${XDG_STATE_HOME:-~/.local/state}/agenttool/lobby`. Netcheck passes the result
 to every child as `AGENTTOOL_LOBBY_HOME`, so a child never re-resolves it from an
 environment it does not see. Every lobby command opens, and so would create, the
-desk state. Netcheck therefore starts no lobby command when the lobby home is
-missing or holds only `STOP`. Inside the lobby home it names only `STOP`, and
-only with `lstat`.
+desk database. Netcheck therefore starts no lobby command unless the database
+file (`lobby.sqlite`) already exists as a regular file; a home that holds only
+`STOP`, `.DS_Store` or directories reads `unknown/no_desk_state`, and a database
+entry that is a link or a directory reads `unknown/lobby_home_unsafe`. Inside
+the lobby home it names only `STOP` and the database file, and only with
+`lstat`: it never opens or reads the database.
 
 The **doorbell home** is `${XDG_STATE_HOME:-~/.local/state}/agenttool/lobby-doorbell`;
 `--home` or `AGENTTOOL_LOBBY_DOORBELL_HOME` override it in tests. It is never
@@ -149,11 +152,15 @@ holds no secrets and no text.
 
 ## Limits
 
-- `fleet status --json` does not show whether this desk left a grant, so a grant
-  it left still reads as live until it expires.
-- In a lobby home that holds files but no database, the lobby CLI creates its
-  empty database when netcheck runs, as any lobby command would. A desk at an
-  older schema is upgraded by the lobby's own open, also as any command would.
+- `fleet status --json` does not show whether this desk left a grant (it omits
+  `left_at`), so a grant it left still reads as live until it expires. After
+  that, the room still counts while its season is open, so netcheck reads
+  `grant-lapsed` (exit 4) every run until the season ends, asking for a renewal
+  of a room this desk left. An additive `left_at` in `fleet status` (a lobby
+  change) would let netcheck skip rooms it left.
+- When the database exists, the lobby CLI opens it read-write, as any lobby
+  command does: a desk at an older schema is upgraded by that open, and SQLite
+  may write its rollback journal while it runs.
 - Clock skew is about +-1 s plus half the round trip; it replaces `sntp`.
 - Not verified: `XPC_SERVICE_NAME` inside a launchd agent, and whether
   `mullvad lan get` output changes in later Mullvad releases (an unreadable

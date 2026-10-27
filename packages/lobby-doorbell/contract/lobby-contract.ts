@@ -5,6 +5,7 @@
  * `bun run contract -- --lobby-src <dir>`.
  */
 import { LOBBY_ORIGIN } from "../src/health.js";
+import { DATABASE_FILE } from "../src/home.js";
 
 export interface ContractCheck {
   file: string;
@@ -33,8 +34,16 @@ export const CONTRACT: readonly ContractCheck[] = [
     ],
   },
   {
+    file: "home.ts",
+    why: "preparePrivateHome creates the database file only when it is missing, so netcheck starts the CLI only when that file exists",
+    patterns: [
+      literal(`export const DATABASE_FILE = "${DATABASE_FILE}";`),
+      /const database = join\(home, DATABASE_FILE\);\s*if \(!existsSync\(database\)\) \{/,
+    ],
+  },
+  {
     file: "store.ts",
-    why: "every CLI command opens the store through preparePrivateHome, so netcheck must not start it on an empty home",
+    why: "every CLI command opens the store through preparePrivateHome, so netcheck must not start it on a home without a database",
     patterns: [/static open\(home: string\): LobbyStore \{\s*const path = preparePrivateHome\(home\);/],
   },
   {
@@ -56,6 +65,7 @@ export const CONTRACT: readonly ContractCheck[] = [
     why: "fleet status --json keys",
     patterns: [
       literal('positionals(extra, 0, "fleet status [--json]");'),
+      literal("grant_id: grant.grant_id, mission_id: grant.mission_id,"),
       literal("purpose: grant.purpose, room_id: grant.room_id,"),
       literal("expires_at: grant.expires_at, accepted_at: grant.accepted_at,"),
       literal("const status = desk === null ? { desk: null } : {"),

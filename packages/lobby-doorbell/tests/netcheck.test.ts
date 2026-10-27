@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { checkHealth } from "../src/health.js";
-import { EXIT_CODES, formatDuration, overallState, STATES, THRESHOLDS, WARNING_CODES } from "../src/netcheck.js";
+import { EXIT_CODES, formatDuration, formatReport, overallState, STATES, THRESHOLDS, WARNING_CODES } from "../src/netcheck.js";
+import { childEnvironment } from "../src/run.js";
 import {
   at, cachedRead, CANARY, card, DAY, DIRECTORY_MISSION, fakeFetch, fleetStatus, grant, healthResponse, healthyScenario, HOUR,
   makeWorld, NOW, OLD_SEASON_MISSION, readKey, ROOM_A, ROOM_B, SEASON_MISSION,
@@ -201,6 +202,29 @@ describe("unknown is never healthy and never exits 0", () => {
     expect(readdirSync(world.lobbyHome)).toEqual(["STOP"]);
   });
 
+  test("a lobby home holding entries but no database starts no CLI and gains nothing", async () => {
+    const world = makeWorld({ desk: false });
+    mkdirSync(join(world.lobbyHome, "secrets"), { recursive: true, mode: 0o700 });
+    chmodSync(world.lobbyHome, 0o700);
+    writeFileSync(join(world.lobbyHome, ".DS_Store"), "", { mode: 0o600 });
+    const report = await world.run();
+    expect(report.checks.lobby_home).toEqual({ state: "empty", code: null, stop_present: false });
+    expect(report.unknown).toContain("desk:no_desk_state");
+    expect(world.calls()).toEqual([]);
+    expect(readdirSync(world.lobbyHome).sort()).toEqual([".DS_Store", "secrets"]);
+  });
+
+  test("a database entry that is not a regular file is unsafe, and no CLI starts", async () => {
+    const world = makeWorld({ desk: false });
+    mkdirSync(world.lobbyHome, { recursive: true, mode: 0o700 });
+    writeFileSync(join(world.root, "elsewhere"), "", { mode: 0o600 });
+    symlinkSync(join(world.root, "elsewhere"), join(world.lobbyHome, "lobby.sqlite"));
+    const report = await world.run();
+    expect(report.checks.lobby_home.state).toBe("unsafe");
+    expect(report.unknown).toContain("desk:lobby_home_unsafe");
+    expect(world.calls()).toEqual([]);
+  });
+
   test("a relative AGENTTOOL_LOBBY_HOME is unknown, as the lobby itself refuses it", async () => {
     const world = makeWorld();
     world.env.AGENTTOOL_LOBBY_HOME = "relative/lobby";
@@ -308,6 +332,17 @@ describe("warnings and thresholds", () => {
       "stop_present", "fetcher_absent_with_listener", "launch_context_not_exempt"]);
   });
 
+  test("a lapsed grant reads 'expires' while its expiry is ahead and 'expired' once it has passed", async () => {
+    const world = makeWorld();
+    world.setScenario({
+      ...healthyScenario(),
+      "fleet status --json": { stdout: fleetStatus([grant("directory", DIRECTORY_MISSION, -60), grant("season", SEASON_MISSION, 20 * HOUR, { room: ROOM_A, accepted: false })]) },
+    });
+    const text = formatReport(await world.run());
+    expect(text).toContain("directory  grant lapsed (expired), expired 1m 0s ago;");
+    expect(text).toContain("  grant    lapsed (not_accepted), expires in 20h 0m\n");
+  });
+
   test("durations read as countdowns", () => {
     expect(formatDuration(3 * DAY + 2 * HOUR)).toBe("in 3d 2h");
     expect(formatDuration(-(HOUR + 120))).toBe("1h 2m ago");
@@ -393,6 +428,68 @@ describe("no text survives", () => {
     const world = makeWorld();
     await world.run();
     expect(existsSync(world.doorbellHome)).toBe(false);
+  });
+});
+
+describe("the doorbell's own files: unreadable is unknown, never healthy", () => {
+  const privateHome = (world: ReturnType<typeof makeWorld>) => {
+    mkdirSync(join(world.doorbellHome, "bells"), { recursive: true, mode: 0o700 });
+    chmodSync(world.doorbellHome, 0o700);
+  };
+
+  test("a doorbell home open to group or others is unknown, and gets no log line", async () => {
+    const world = makeWorld();
+    mkdirSync(world.doorbellHome, { recursive: true, mode: 0o700 });
+    chmodSync(world.doorbellHome, 0o755);
+    const report = await world.run();
+    expect(report.checks.doorbell.home).toBe("unsafe");
+    expect(report.unknown).toEqual(["doorbell:home_unsafe"]);
+    expect(report.state).toBe("unknown");
+    expect(report.exit_code).toBe(7);
+    expect(readdirSync(world.doorbellHome)).toEqual([]);
+  });
+
+  test("a garbled or foreign bell is unreadable and unknown; a valid bell is kept", async () => {
+    const world = makeWorld();
+    privateHome(world);
+    writeFileSync(join(world.doorbellHome, "bells", `${ROOM_A}.json`), `{not json ${CANARY}`, { mode: 0o600 });
+    writeFileSync(join(world.doorbellHome, "bells", `${ROOM_B}.json`),
+      JSON.stringify({ format: "agenttool-lobby-bell/v1", room_id: ROOM_B, state: "ok" }), { mode: 0o600 });
+    const report = await world.run();
+    expect(report.checks.doorbell.bells).toEqual([{ room_id: ROOM_A, state: "unreadable" }, { room_id: ROOM_B, state: "ok" }]);
+    expect(report.unknown).toEqual(["doorbell:bell_unreadable"]);
+    expect(report.state).toBe("unknown");
+    writeFileSync(join(world.doorbellHome, "bells", `${ROOM_A}.json`),
+      JSON.stringify({ format: "agenttool-lobby-bell/v1", room_id: ROOM_B, state: "ok" }), { mode: 0o600 });
+    expect((await world.run()).unknown).toEqual(["doorbell:bell_unreadable"]);
+  });
+
+  test("a pidfile that is not JSON, or lacks a pid, is unknown", async () => {
+    const world = makeWorld();
+    privateHome(world);
+    writeFileSync(join(world.doorbellHome, "fetcher.pid"), "12345\n", { mode: 0o600 });
+    const report = await world.run();
+    expect(report.checks.doorbell.fetcher).toBe("unknown");
+    expect(report.unknown).toEqual(["doorbell:pidfile_unreadable"]);
+    expect(report.state).toBe("unknown");
+    writeFileSync(join(world.doorbellHome, "fetcher.pid"), JSON.stringify({ started: "Tue Oct 27 12:00:00 2026" }), { mode: 0o600 });
+    expect((await world.run()).checks.doorbell.fetcher).toBe("unknown");
+  });
+
+  test("a pidfile is running only when /bin/ps gives the same start time; otherwise stale", async () => {
+    const world = makeWorld();
+    privateHome(world);
+    // The real /bin/ps through the allowlisted spawner, with the environment netcheck gives it.
+    const probe = Bun.spawnSync(["/bin/ps", "-o", "lstart=", "-p", String(process.pid)], { env: childEnvironment(world.env, null) });
+    const started = probe.stdout.toString().trim();
+    expect(started).not.toBe("");
+    const pidfile = (value: string) => writeFileSync(join(world.doorbellHome, "fetcher.pid"), JSON.stringify({ pid: process.pid, started: value }), { mode: 0o600 });
+    pidfile(started);
+    const running = await world.run();
+    expect(running.checks.doorbell.fetcher).toBe("running");
+    expect(running.state).toBe("hosted-ok");
+    pidfile("Thu Jan  1 00:00:00 1970");
+    expect((await world.run()).checks.doorbell.fetcher).toBe("stale");
   });
 });
 

@@ -3,9 +3,11 @@
  * - No listening socket of any kind, and no socket connect at all in PR 1.
  * - One HTTP call site: src/health.ts, through an injected fetchImpl; only the
  *   bin names the runtime's fetch; the only URL literal is the origin constant.
- * - One process module: src/run.ts, with no shell.
- * - No Keychain, no lobby secrets, no lobby database; in the lobby home only STOP.
- * - Writes only in src/home.ts (the log line); nothing imported from the lobby, api/ or docs/.
+ * - One process module: src/run.ts, with no shell (neither `sh -c` nor Bun.$).
+ * - No Keychain, no lobby secrets; in the lobby home only STOP and the database
+ *   file's name, both only lstat'ed (src/home.ts).
+ * - Writes only in src/home.ts (the log line), sync or async; only bin/ reads
+ *   the environment; nothing imported from the lobby, api/ or docs/.
  */
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
@@ -32,7 +34,7 @@ function specifiers(source: string): string[] {
   return found;
 }
 
-const FORBIDDEN_MODULE = /^(?:node:)?(?:http|https|http2|net|tls|dgram|dns|inspector|child_process|worker_threads|cluster)(?:\/.*)?$|^(?:undici|ws|node-fetch|axios|got|bun:ffi|bun:sqlite|bonjour|bonjour-service|mdns|multicast-dns|dns-sd)$/;
+const FORBIDDEN_MODULE = /^(?:node:)?(?:http|https|http2|net|tls|dgram|dns|inspector|child_process|worker_threads|cluster|fs\/promises)(?:\/.*)?$|^(?:undici|ws|node-fetch|axios|got|bun:ffi|bun:sqlite|bonjour|bonjour-service|mdns|multicast-dns|dns-sd)$/;
 /** Forbidden in every file. */
 const NEVER: RegExp[] = [
   /(?<![.\w])fetch\s*\(/,
@@ -48,17 +50,30 @@ const NEVER: RegExp[] = [
   /["'`]-c["'`]/,
   /keychain/i,
   /\/usr\/bin\/security\b/,
-  /\.sqlite\b/,
   /["'`/]secrets\b/,
   /\bkill\s*\(\s*[^)]*(?:9|SIGKILL)/,
+  /\bBun\.\$/,
+  /\bBun\.env\b/,
+  /\bimport\.meta\.env\b/,
+  /\bpromises\b/,
 ];
+/** Every way to create, change or remove a file, sync, async or callback style. */
+const WRITE = new RegExp([
+  String.raw`\b(?:writeFileSync|appendFileSync|writeSync|writevSync|mkdirSync|mkdtempSync|renameSync|unlinkSync|rmSync|rmdirSync`,
+  String.raw`|chmodSync|fchmodSync|lchmodSync|chownSync|fchownSync|lchownSync|copyFileSync|cpSync|symlinkSync|linkSync|truncateSync`,
+  String.raw`|ftruncateSync|utimesSync|futimesSync|lutimesSync|openSync|createWriteStream|O_CREAT|O_APPEND|O_WRONLY|O_RDWR|O_TRUNC`,
+  String.raw`|Bun\.write|Bun\.file)\b`,
+  String.raw`|(?<!process\.std(?:out|err)\.)\b(?:writeFile|appendFile|write|writev|mkdir|mkdtemp|rename|unlink|rm|rmdir|chmod|chown`,
+  String.raw`|copyFile|cp|symlink|link|truncate|ftruncate|open|utimes)\s*\(`,
+].join(""));
 /** Allowed in exactly one file each. */
 const ONLY_IN: Array<{ pattern: RegExp; file: string }> = [
   { pattern: /\bglobalThis\.fetch\b/, file: "bin/agenttool-lobby-doorbell.ts" },
   { pattern: /\bfetchImpl\s*\(/, file: "src/health.ts" },
   { pattern: /https?:\/\//, file: "src/health.ts" },
   { pattern: /\bBun\.spawn\b/, file: "src/run.ts" },
-  { pattern: /\b(?:writeFileSync|appendFileSync|writeSync|mkdirSync|renameSync|unlinkSync|rmSync|rmdirSync|chmodSync|O_CREAT|O_APPEND|Bun\.write)\b/, file: "src/home.ts" },
+  { pattern: WRITE, file: "src/home.ts" },
+  { pattern: /\.sqlite\b/, file: "src/home.ts" },
 ];
 
 describe("network, process and write boundary", () => {
@@ -117,13 +132,19 @@ describe("network, process and write boundary", () => {
     }
   });
 
-  test("inside the lobby home only STOP is named", () => {
+  test("inside the lobby home only STOP and the database file are named, the database only for an lstat", () => {
     for (const path of SOURCES.filter((file) => rel(file).startsWith("src/"))) {
       for (const match of text(path).matchAll(/join\(\s*lobbyHome\s*,\s*([^)]*)\)/g)) {
-        expect({ file: rel(path), joined: match[1]!.trim() }).toEqual({ file: rel(path), joined: "STOP_FILE" });
+        expect({ file: rel(path), joined: ["STOP_FILE", "DATABASE_FILE"].includes(match[1]!.trim()) }).toEqual({ file: rel(path), joined: true });
       }
+      if (rel(path) !== "src/home.ts") expect({ file: rel(path), database: /\bDATABASE_FILE\b/.test(text(path)) }).toEqual({ file: rel(path), database: false });
     }
-    expect(text(join(packageRoot, "src", "home.ts"))).toContain('export const STOP_FILE = "STOP";');
+    const home = text(join(packageRoot, "src", "home.ts"));
+    expect(home).toContain('export const STOP_FILE = "STOP";');
+    expect(home.match(/\.sqlite\b/g)).toEqual([".sqlite"]);
+    expect(home).toContain('export const DATABASE_FILE = "lobby.sqlite";');
+    expect(home.match(/\bDATABASE_FILE\b/g)).toHaveLength(2);
+    expect(home).toContain("database = lstatSync(join(lobbyHome, DATABASE_FILE));");
   });
 
   test("the detector recognises the forbidden shapes", () => {
@@ -133,6 +154,23 @@ describe("network, process and write boundary", () => {
     expect(NEVER[2]!.test("Bun.serve({})")).toBe(true);
     expect(NEVER[9]!.test('["/bin/sh", "-c"]')).toBe(true);
     expect(NEVER[11]!.test("MacKeychainStore")).toBe(true);
+    const never = (source: string) => NEVER.some((pattern) => pattern.test(source));
+    expect(never("await Bun.$`echo hi`")).toBe(true);
+    expect(never("const home = Bun.env.HOME;")).toBe(true);
+    expect(never("import.meta.env.HOME")).toBe(true);
+    expect(never('import { promises } from "node:fs"; await promises.writeFile(path, text);')).toBe(true);
+    expect(never("fs.promises.appendFile(path, line)")).toBe(true);
+    expect(FORBIDDEN_MODULE.test("node:fs/promises")).toBe(true);
+    expect(FORBIDDEN_MODULE.test("fs/promises")).toBe(true);
+    for (const write of [
+      'await writeFile("/tmp/x", "")', "appendFile(path, line, done)", "mkdir(dir, { recursive: true })", "rm(path, { force: true })",
+      "rename(from, to)", "unlink(path)", "copyFile(from, to)", "cp(from, to)", "symlink(target, path)", "truncate(path)",
+      "open(path, \"w\")", "createWriteStream(path)", "copyFileSync(from, to)", "symlinkSync(target, path)", "openSync(path, \"w\")",
+      "Bun.write(path, text)", "Bun.file(path).writer()", "fs.writeFileSync(path, text)", "handle.write(text)",
+    ]) expect({ write, found: WRITE.test(write) }).toEqual({ write, found: true });
+    for (const read of ["process.stdout.write(text)", "process.stderr.write(text)", "readFileSync(path)", "lstatSync(path)", "writes one line", "fileOpened(path)"]) {
+      expect({ read, found: WRITE.test(read) }).toEqual({ read, found: false });
+    }
     expect(FORBIDDEN_MODULE.test("node:child_process")).toBe(true);
     expect(FORBIDDEN_MODULE.test("multicast-dns")).toBe(true);
     expect(FORBIDDEN_MODULE.test("node:fs")).toBe(false);

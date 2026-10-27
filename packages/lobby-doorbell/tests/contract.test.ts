@@ -50,6 +50,11 @@ describe("the lobby contract", () => {
   test.skipIf(!present)("a renamed key, a moved origin or a new refusal format fails", () => {
     expect(checkLobbyContract(source({ file: "cli-fleet.ts", from: "accepted_at: grant.accepted_at", to: "accepted: grant.accepted_at" }))
       .map((failure) => failure.file)).toEqual(["cli-fleet.ts"]);
+    // Every grant decision matches on the grant's mission_id (review of PR 530).
+    expect(checkLobbyContract(source({ file: "cli-fleet.ts", from: "mission_id: grant.mission_id", to: "mission: grant.mission_id" }))
+      .map((failure) => failure.file)).toEqual(["cli-fleet.ts"]);
+    expect(checkLobbyContract(source({ file: "home.ts", from: "if (!existsSync(database)) {\n    try {", to: "{\n    try {" }))
+      .map((failure) => failure.file)).toEqual(["home.ts"]);
     expect(checkLobbyContract(source({ file: "wire.ts", from: '"https://api.agenttool.dev"', to: '"https://api2.agenttool.dev"' }))
       .map((failure) => failure.file)).toEqual(["wire.ts"]);
     expect(checkLobbyContract(source({ file: "cli.ts", from: "agenttool-lobby: ${error.code}: ${error.message}", to: "agenttool-lobby [${error.code}] ${error.message}" }))
