@@ -367,7 +367,18 @@ a fresh timestamp and signature; the service returns the same successor. If your
 grant has lapsed, or the service refuses it with HTTP 401 (it ended, or it
 expired by the service's clock), it reads `GET /invitation` signed **as the
 pending successor**, with its new grant UUID and stored token, and installs it
-when the service confirms it.
+when the service confirms it. A resend refused with HTTP 404
+`mission_route_not_found` (it reached a Machine without the renew route, during
+a rolling deploy or after a rollback) says nothing about the earlier send: the
+record is kept and the run stops with `renewal_uncertain`. Only the first send's
+refusal abandons the record.
+
+With no record pending, the invitation read can show that your grant was
+already renewed (`renewal.renewed_to_grant_id`). If this device kept that
+successor's record as `renewal-abandoned-<grant_id>.json`, `renew` reads as that
+successor, installs it and adds `"recovered_abandoned": true` to the output; if
+the successor has ended it stops with `renewal_abandoned`. With no such record it
+stops with `renewal_conflict` before generating a token or sending anything.
 
 Every stop prints one JSON object on stderr and exits 1:
 
@@ -380,10 +391,10 @@ Every stop prints one JSON object on stderr and exits 1:
 |---|---|---|---|
 | `renewal_uncertain` | The request, the invitation read or the recovery read did not complete, the service returned 5xx to any of them, or an answer was not readable JSON (a proxy's HTML or empty error page) | Kept (none is created when the first read fails) | Run `renew` again to resend the same request |
 | `renewal_unavailable` | No open window before sending, or HTTP 403 `collaboration_mission_renewal_unavailable` after | Renamed `renewal-abandoned-<grant_id>.json` | Inspect the window; after it ends, ask for a new grant |
-| `renewal_abandoned` | The successor was never recorded and your grant has lapsed or ended (the recovery read got 401) | Renamed `renewal-abandoned-<grant_id>.json` | Ask the administrator for a new grant |
-| `renewal_conflict` | HTTP 409: your grant was already renewed by a request this device did not record | Kept | See below |
+| `renewal_abandoned` | The successor was never recorded and your grant has lapsed or ended (the recovery read got 401), or a successor this device abandoned earlier has ended | Renamed `renewal-abandoned-<grant_id>.json` (an earlier one stays as it is) | Ask the administrator for a new grant |
+| `renewal_conflict` | HTTP 409, or the invitation names a successor this device has no record of: your grant was already renewed by a request this device did not record | Kept (none is created before sending) | See below |
 | `renewal_response_invalid` | The response does not confirm the expected successor; nothing installed | Kept | Inspect with the administrator before any new attempt |
-| `renewal_refused` | Any other refusal, with its fixed service `code` | Kept, or renamed when a resend could never succeed (`token_hash_conflict`, invalid request, no renew route) | A fixed sentence per code |
+| `renewal_refused` | Any other refusal, with its fixed service `code` | Kept, or renamed when a resend could never succeed (`token_hash_conflict`, invalid request, no renew route on a first send) | A fixed sentence per code |
 | `renewal_pending_mismatch` | The pending record belongs to another invitation, or `invitation.json` changed during the run (the successor was confirmed but not installed) | Kept | Inspect both files |
 | `renewal_in_progress` | Another `renew` holds `renewal.lock`; nothing was read or sent | Untouched | Wait for it; if none is running, inspect and remove `renewal.lock` |
 

@@ -395,7 +395,7 @@ function pinnedElsewhere(root) {
   for (const task of tasks) warnings.push(`work/${task} pins the previous grant_id in its immutable contract: it cannot continue from the new grant. Agree a new work contract for unfinished work.`);
   return warnings;
 }
-const theft = grantId => `Grant ${grantId} was already renewed by a request this device did not record. Unless this device lost its pending record, treat this token and key as exposed: run leave (it ends every grant in the chain) and ask the administrator to revoke grant ${grantId}.`;
+const theft = (grantId, successor = null) => `Grant ${grantId} was already renewed${successor ? ` to grant ${successor}` : ''} by a request this device did not record. Unless this device lost its pending record, treat this token and key as exposed: run leave (it ends every grant in the chain) and ask the administrator to revoke grant ${grantId}.`;
 /** The fixed refusal code from boundedJson's message, or null for transport failure. */
 function refusalOf(error) {
   const match = error instanceof Error ? /^Mission request refused: HTTP (\d{3})(?: ([a-z_]{1,90}))?\.$/.exec(error.message) : null;
@@ -528,6 +528,9 @@ async function renewLocked(root, options) {
       throw new RenewalError('renewal_pending_mismatch', 'The pending renewal belongs to a different invitation than the one imported.',
         { next: 'Inspect renewal-pending.json and invitation.json before any new attempt.' });
   }
+  // A resend may reach code without the renew route (a rolling deploy or a rollback):
+  // that refusal says nothing about whether an earlier send was stored.
+  const resending = pending !== null;
   if (!pending || Date.parse(saved.expires_at) > Date.now()) {
     if (Date.parse(saved.expires_at) <= Date.now()) fail('Invitation expiry is invalid or has passed.');
     // Read the live predecessor's window and scope; a refusal here sends nothing more.
@@ -545,6 +548,9 @@ async function renewLocked(root, options) {
     const g = view.grant, r = g?.renewal;
     before.actions = g.actions; before.renewable_until = r?.renewable_until ?? null; before.expires_at = g.expires_at;
     if (!pending) {
+      // Already renewed: recover through this device's own abandoned record, never mint another.
+      if (r && typeof r === 'object' && r.renewed_to_grant_id !== null && r.renewed_to_grant_id !== undefined)
+        return renewedElsewhere(root, local, key, before, uuid(r.renewed_to_grant_id), options);
       const now = Date.now();
       if (!r || typeof r !== 'object' || r.closed_at !== null || !canonicalTime(r.renewable_until) || now >= Date.parse(r.renewable_until)
         || Date.parse(g.expires_at) >= Date.parse(r.renewable_until))
@@ -575,7 +581,11 @@ async function renewLocked(root, options) {
         throw new RenewalError('renewal_unavailable', 'The renewal window is closed or not open.', { serviceCode: refusal.code,
           next: 'Inspect the grant\'s renewal window; after it ends, ask the administrator for a new grant.' });
       }
-      // Definitive refusals that a resend of the same bytes could never change.
+      if (resending && refusal.code === 'mission_route_not_found') throw new RenewalError('renewal_uncertain',
+        'The resend reached a service without the renew route; the earlier send may be stored, and the exact request remains saved.',
+        { serviceCode: refusal.code, delivered: 'unknown', next: 'run renew again to resend the same request once any deploy or rollback has settled; if the service still has no renew route, inspect the pending record with the administrator' });
+      // Definitive refusals that a resend of the same bytes could never change. Only code with the
+      // renew route answers token_hash_conflict or invalid_request, and it returns a stored successor first.
       if (['token_hash_conflict', 'collaboration_mission_invalid_request', 'mission_route_not_found'].includes(refusal.code)) abandon(root, pending);
       throw new RenewalError('renewal_refused', 'The service refused the renewal.', { serviceCode: refusal.code,
         next: REFUSAL_NEXT[refusal.code] ?? 'Inspect the grant with its administrator before any new attempt.' });
@@ -583,6 +593,20 @@ async function renewLocked(root, options) {
     return install(root, local, before, pending, check(result, before, pending, { echo: true }));
   }
   return recover(root, local, key, before, pending, options, false);
+}
+/** The live predecessor names a successor and no record is pending. Recover it only when this
+ * device kept that successor's abandoned record; otherwise someone else renewed first. */
+async function renewedElsewhere(root, local, key, before, successor, options) {
+  const file = join(root, `renewal-abandoned-${successor}.json`);
+  if (!existsSync(file)) throw new RenewalError('renewal_conflict', theft(before.grant_id, successor), { next: theft(before.grant_id, successor) });
+  const record = readPending(file);
+  if (record.grant_id !== successor || record.predecessor_grant_id !== before.grant_id || record.mission_id !== before.mission_id)
+    throw new RenewalError('renewal_pending_mismatch', `renewal-abandoned-${successor}.json does not belong to this invitation.`,
+      { next: 'Inspect the abandoned record and invitation.json before any new attempt.' });
+  const found = await probe(root, key, before, record, options);
+  if (found.view) return { ...install(root, local, before, record, check(found.view, before, record)), recovered_abandoned: true };
+  throw new RenewalError('renewal_abandoned', `Grant ${before.grant_id} was renewed to ${successor}, which this device recorded but can no longer read; it has ended.`,
+    { next: 'This grant cannot renew again; ask the administrator for a new grant.' });
 }
 async function recover(root, local, key, before, pending, options, conflicted) {
   const found = await probe(root, key, before, pending, options);

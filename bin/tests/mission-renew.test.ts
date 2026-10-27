@@ -51,7 +51,7 @@ function fixture(grant: Record<string, unknown> = {}, view = mission) {
   client.importInvitation(state, file);
   return { parent, state, enrollment, predecessor, mission: view };
 }
-type Mode = "ok" | "store-then-drop" | "drop" | "401" | "409" | "403" | "500" | "400" | "token_hash_conflict";
+type Mode = "ok" | "store-then-drop" | "drop" | "401" | "409" | "403" | "404" | "500" | "400" | "token_hash_conflict";
 /** A synthetic service: verifies each request's token and exact-request proof, stores successors, answers probes. */
 function service(f: ReturnType<typeof fixture>, renewMode: Mode | Mode[] = "ok", patch: (view: any) => void = () => {}) {
   const hashes = new Map<string, string>([[G, sha(TOKEN)]]), children = new Map<string, any>();
@@ -86,6 +86,8 @@ function service(f: ReturnType<typeof fixture>, renewMode: Mode | Mode[] = "ok",
     if (mode === "409") return respond({ error: "collaboration_mission_conflict" }, 409);
     if (mode === "403") return respond({ error: "collaboration_mission_renewal_unavailable" }, 403);
     if (mode === "500") return respond({ error: "mission_unavailable" }, 503);
+    // A Machine still on code without the renew route, as during a rolling deploy or a rollback.
+    if (mode === "404") return respond({ error: "mission_route_not_found" }, 404);
     if (mode === "400") return respond({ error: "collaboration_mission_invalid_request" }, 400);
     if (mode === "token_hash_conflict") return respond({ error: "token_hash_conflict" }, 409);
     store();
@@ -214,7 +216,7 @@ describe.skipIf(process.platform === "win32")("participant renew", () => {
 
   test("a closed window after sending abandons the record; definitive refusals never loop", async () => {
     for (const [mode, reason, abandoned] of [["403", "renewal_unavailable", true], ["token_hash_conflict", "renewal_refused", true],
-      ["400", "renewal_refused", true], ["500", "renewal_uncertain", false]] as const) {
+      ["400", "renewal_refused", true], ["404", "renewal_refused", true], ["500", "renewal_uncertain", false]] as const) {
       const f = fixture(), s = service(f, mode);
       const error = await stop(client.renew(f.state, { fetchImpl: s.fetchImpl }));
       expect(error.stop_reason, mode).toBe(reason);
@@ -222,6 +224,62 @@ describe.skipIf(process.platform === "win32")("participant renew", () => {
       expect(readdirSync(f.state).some(name => name.startsWith("renewal-abandoned-")), mode).toBe(abandoned);
       expect(invitationFile(f).grant_id).toBe(G);
     }
+  });
+
+  test("a resend that reaches code without the renew route keeps the record; the next run installs the stored successor", async () => {
+    const f = fixture(), s = service(f, ["store-then-drop", "404", "ok"]);
+    await stop(client.renew(f.state, { fetchImpl: s.fetchImpl }));
+    const child = JSON.parse(s.calls[1].body!).grant_id;
+    const resent = await stop(client.renew(f.state, { fetchImpl: s.fetchImpl }));
+    expect(resent).toMatchObject({ stop_reason: "renewal_uncertain", delivered: "unknown", serviceCode: "mission_route_not_found" });
+    expect(resent.next).toContain("run renew again to resend the same request");
+    expect(existsSync(pendingFile(f))).toBe(true);
+    expect(readdirSync(f.state).some(name => name.startsWith("renewal-abandoned-"))).toBe(false);
+    const result = await client.renew(f.state, { fetchImpl: s.fetchImpl });
+    expect(result).toMatchObject({ renewed: true, grant_id: child, renewed_from_grant_id: G });
+    expect(s.calls.map(c => c.method)).toEqual(["GET", "POST", "GET", "POST", "GET", "POST"]);
+    expect(new Set(s.calls.filter(c => c.method === "POST").map(c => c.body)).size).toBe(1);
+    expect(readdirSync(join(f.state, "tokens"))).toHaveLength(1);
+  });
+
+  test("a grant already renewed to an abandoned record of this device recovers through it; to an unknown grant it stops as possible theft", async () => {
+    const setup = () => {
+      const f = fixture(), s = service(f, "store-then-drop");
+      return { f, s, done: stop(client.renew(f.state, { fetchImpl: s.fetchImpl })) };
+    };
+    // An older run (or client) abandoned a record whose send was in fact stored.
+    const { f, s, done } = setup();
+    await done;
+    const child = JSON.parse(s.calls[1].body!).grant_id, abandonedFile = join(f.state, `renewal-abandoned-${child}.json`);
+    writeFileSync(abandonedFile, readFileSync(pendingFile(f)), { mode: 0o600 }); rmSync(pendingFile(f));
+    f.predecessor.renewal = { ...f.predecessor.renewal, renewed_to_grant_id: child };
+    const recovered = await client.renew(f.state, { fetchImpl: s.fetchImpl });
+    expect(recovered).toMatchObject({ renewed: true, grant_id: child, renewed_from_grant_id: G });
+    expect(s.calls.slice(2).map(c => `${c.method} ${c.grant === G ? "G" : c.grant === child ? "child" : "other"}`)).toEqual(["GET G", "GET child"]);
+    expect(invitationFile(f).grant_id).toBe(child);
+    expect(readdirSync(join(f.state, "tokens"))).toHaveLength(1);
+    // That successor has since ended: no new renewal is minted.
+    const ended = setup();
+    await ended.done;
+    const gone = JSON.parse(ended.s.calls[1].body!).grant_id;
+    writeFileSync(join(ended.f.state, `renewal-abandoned-${gone}.json`), readFileSync(pendingFile(ended.f)), { mode: 0o600 }); rmSync(pendingFile(ended.f));
+    ended.f.predecessor.renewal = { ...ended.f.predecessor.renewal, renewed_to_grant_id: gone };
+    ended.s.hashes.delete(gone);
+    const lost = await stop(client.renew(ended.f.state, { fetchImpl: ended.s.fetchImpl }));
+    expect(lost.stop_reason).toBe("renewal_abandoned");
+    expect(ended.s.calls.filter(c => c.method === "POST")).toHaveLength(1);
+    expect(readdirSync(join(ended.f.state, "tokens"))).toHaveLength(1);
+    expect(existsSync(pendingFile(ended.f))).toBe(false);
+    // Renewed to a grant this device has no record of: stop before minting anything.
+    const g = fixture(), t = service(g), X = "55555555-5555-4555-8555-555555555555";
+    g.predecessor.renewal = { ...g.predecessor.renewal, renewed_to_grant_id: X };
+    const theft = await stop(client.renew(g.state, { fetchImpl: t.fetchImpl }));
+    expect(theft).toMatchObject({ stop_reason: "renewal_conflict", delivered: false });
+    expect(theft.next).toContain(`Grant ${G} was already renewed`);
+    expect(theft.next).toContain(X);
+    expect(t.calls.map(c => c.method)).toEqual(["GET"]);
+    expect(existsSync(join(g.state, "tokens"))).toBe(false);
+    expect(existsSync(pendingFile(g))).toBe(false);
   });
 
   test("a 5xx on the invitation read or the recovery probe is uncertain: the record is kept and nothing is abandoned", async () => {
