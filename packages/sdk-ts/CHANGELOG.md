@@ -25,6 +25,18 @@ Not in the 0.23.0 tag; details under "Unreleased" in [`README.md`](README.md).
 - `adapter.messages.create({ ..., stream: true })` written as an inline
   object literal types as `AdaptedLowLevelStream`, so `for await` over it
   compiles.
+- `darkContinent.explore()` makes no discovery request. It used to request
+  `/public/discover`, which was removed from the API source on 2026-06-22
+  (`ea6db428`; it answered 404 when checked on 2026-10-27), and reported
+  that 404 as an empty known world. `known_world` and `known_count` stay
+  empty, the new `DarkContinentResult.discovery` field is `"retired"`, and
+  the `capability` option is ignored. `include_nen` is unchanged. The new
+  field is required, so code that constructs a `DarkContinentResult` must add
+  `discovery: "retired"`.
+- `GUIDE.warning` says discovery is retired instead of naming the route.
+  `GUIDE.maps_to` and the Pap Calamity's `walled_by` now match the Python
+  strings; the dropped Pap sentence said recipients can mark love primitives
+  as spam, which only inbox messages support.
 
 ## 0.23.0 — unreleased
 
