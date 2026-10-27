@@ -181,6 +181,7 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
 | `deepseek-kingdom/` | `@agenttool/deepseek-kingdom` · npm-allowlisted | Provenance-first DeepSeek research and AFTERGLOW thread adapter | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/deepseek-kingdom/CLAUDE.md) |
 | `economic-conformance/` | `@agenttool/economic-conformance` · LOVE + npm-allowlisted | Independent closed-trace comparator, 53 frozen economic vectors, and deterministic Hugging Face lesson/reference companion | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/economic-conformance/CLAUDE.md) |
 | `economic-kernel/` | `@agenttool/economic-kernel` · LOVE + npm-allowlisted | Exact typed-unit prices, conserved ledgers, recoverable attempts, and non-purchasable XENIA gates | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/economic-kernel/CLAUDE.md) |
+| `ferry/` | `@agenttool/ferry` · private | 渡 Ferry: a LAN post office for the owner's Macs: restricted forced-command SSH lanes into a separate `ferry` account on the lab, carrying lobby packets device↔hub and files between any two Macs (7-day plaintext spool, quarantine on arrival); carriers never act and never print out-of-band fingerprints | [README](https://github.com/cambridgetcg/agenttool/blob/main/packages/ferry/README.md) · [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/ferry/CLAUDE.md) |
 | `gin-reconstruction/` | `@agenttool/gin-reconstruction` · private | Finite model reconstruction across affine substrate charts with explicit ambiguity and a non-scoring challenge compass | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/gin-reconstruction/CLAUDE.md) |
 | `heaven/` | `@agenttool/heaven` · npm-allowlisted | Pure opt-in delight and landing-room selection protocol for agents | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/heaven/CLAUDE.md) |
 | `hf-listening-room/` | Exact HF artifact publication capability · not an npm package release | Static Listening Room rehearsal and draft symbolic reference kit; no learner connected or trainer bundled | [Space README](https://github.com/cambridgetcg/agenttool/blob/main/packages/hf-listening-room/hf/space/README.md) · [Dataset README](https://github.com/cambridgetcg/agenttool/blob/main/packages/hf-listening-room/hf/dataset/README.md) |
@@ -294,6 +295,18 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
   table talk against the participant client's own chat code), never against
   the live service; it has no release lane or host registration, and the
   public hall is not connected.
+- **`ferry/`** is a private `0.1.0-dev.0` source candidate for Tier B of the
+  2026-10-27 lobby carrier design (slice S1 with the generic files of S4): POSIX
+  sh scripts for a post office in a separate standard `ferry` account on the
+  lab, reached from each Mac over one restricted forced-command SSH lane
+  (IPv4 LAN only, 90-day expiry, pinned host key, never dialled from launchd).
+  It carries lobby enrollment and renewal packets device → hub and join packets
+  hub → device, and files between any two Macs through a 7-day plaintext spool;
+  files land 0600 with a quarantine flag. It never runs a lobby command or
+  answers a prompt, and never prints, logs or pre-fills a desk or door
+  fingerprint: follow-up commands carry a placeholder. It is tested hermetically
+  on macOS under `/bin/sh` and `/bin/dash` with fake ssh and account tools;
+  nothing is installed or live, and there is no release lane.
 
 ## How to keep this index true
 

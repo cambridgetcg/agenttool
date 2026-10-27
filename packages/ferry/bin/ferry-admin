@@ -1,0 +1,477 @@
+#!/bin/sh
+# ferry-admin: the only writer of /Users/ferry/.ssh/authorized_keys. A lane
+# is one restricted line: IPv4 LAN only, 90-day expiry, forced gate command.
+# add, renew and remove need root and a "yes" typed on the terminal; list and
+# whoami need neither. Fingerprints a person must compare are printed on this
+# machine's own screen and never pre-filled into a command for another one.
+PATH=/usr/bin:/bin:/usr/sbin:/sbin; export PATH
+LC_ALL=C; export LC_ALL
+IFS=$(printf ' \t\n_'); IFS=${IFS%_}
+umask 022
+set -euf
+
+# --- ferry:paths (tests rewrite only this block) ---
+FERRY_ROOT=/Library/Ferry
+REQUIRE_ROOT=1
+TTY=/dev/tty
+HOST_KEYS=/etc/ssh/ssh_host_ed25519_key.pub
+DATE=/bin/date
+SSH_KEYGEN=/usr/bin/ssh-keygen
+SCUTIL=/usr/sbin/scutil
+IPCONFIG=/usr/sbin/ipconfig
+# --- end ferry:paths ---
+
+FS_TOOL=admin
+. "$FERRY_ROOT/libexec/ferry-spool.sh"
+
+HEADER='# ferry lanes. Written only by /Library/Ferry/bin/ferry-admin; do not edit by hand.'
+ED_PREFIX=AAAAC3NzaC1lZDI1NTE5AAAAI
+LANE_DAYS=90
+
+usage() {
+  cat <<'EOF'
+ferry-admin: lanes into the Ferry post office
+  ferry-admin whoami                                  this lab's host key, names and subnet
+  ferry-admin lane list                               lanes with their expiry
+  sudo ferry-admin lane add --peer P --pubkey-file F --expect-fp SHA256:...
+  sudo ferry-admin lane renew --peer P                another 90 days
+  sudo ferry-admin lane remove --peer P               the line and the lane's spool
+EOF
+}
+
+case ${1:-} in
+  '' | help | -h | --help) usage; exit 0 ;;
+esac
+
+fs_begin
+fs_load_site
+SSH_DIR=$FERRY_HOME/.ssh
+
+fa_die() {
+  fs_die "$@"
+}
+
+is_b64_ed25519() {
+  case $1 in
+    "$ED_PREFIX"*) ;;
+    *) return 1 ;;
+  esac
+  case $1 in
+    *[!A-Za-z0-9+/]*) return 1 ;;
+  esac
+  [ ${#1} -eq 68 ] || return 1
+  return 0
+}
+
+is_fp() {
+  case $1 in
+    SHA256:*) ;;
+    *) return 1 ;;
+  esac
+  case ${1#SHA256:} in
+    *[!A-Za-z0-9+/]*) return 1 ;;
+  esac
+  [ ${#1} -eq 50 ] || return 1
+  return 0
+}
+
+# fp_of_b64 B64: FP of a bare ed25519 key, fingerprinted from stdin.
+fp_of_b64() {
+  _fk_o=$(printf 'ssh-ed25519 %s\n' "$1" | "$SSH_KEYGEN" -l -E sha256 -f - 2>/dev/null) || return 1
+  set -- $_fk_o
+  [ $# -ge 2 ] && is_fp "$2" || return 1
+  FP=$2
+  return 0
+}
+
+lane_line() {
+  # lane_line PEER CIDR EXPIRY14 B64
+  printf 'restrict,from="%s",expiry-time="%sZ",command="%s/libexec/ferry-gate --peer %s" ssh-ed25519 %s ferry-lane:%s' \
+    "$2" "$3" "$FERRY_ROOT" "$1" "$4" "$1"
+}
+
+# parse_line LINE: L_PEER L_CIDR L_EXP L_B64, or return 1 unless LINE is
+# exactly what lane_line would write for those values.
+parse_line() {
+  set -- $1
+  [ $# -eq 6 ] || return 1
+  _pl_opts=$1
+  [ "$2" = --peer ] || return 1
+  L_PEER=${3%\"}
+  [ "$4" = ssh-ed25519 ] || return 1
+  L_B64=$5
+  case $_pl_opts in
+    'restrict,from="'*) ;;
+    *) return 1 ;;
+  esac
+  _pl_r=${_pl_opts#restrict,from=\"}
+  L_CIDR=${_pl_r%%\"*}
+  _pl_r=${_pl_r#*\",expiry-time=\"}
+  L_EXP=${_pl_r%%Z\"*}
+  fs_is_peer "$L_PEER" || return 1
+  fs_is_cidr "$L_CIDR" || return 1
+  case $L_EXP in
+    [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]) ;;
+    *) return 1 ;;
+  esac
+  is_b64_ed25519 "$L_B64" || return 1
+  [ "$*" = "$(lane_line "$L_PEER" "$L_CIDR" "$L_EXP" "$L_B64")" ] || return 1
+  return 0
+}
+
+# load_keys: check authorized_keys and read its lines. Every non-comment line
+# must be one ferry-admin wrote, or nothing is changed.
+load_keys() {
+  fs_stat "$SSH_DIR" || fa_die 6 unsafe "the lanes directory is missing; run ferry-setup first"
+  if [ "$ST_TYPE" != Directory ] || [ "$ST_USER" != "$ROOT_OWNER" ] || [ "$ST_GROUP" != "$ROOT_GROUP" ] || [ "$ST_MODE" != 0755 ]; then
+    fa_die 6 unsafe "the lanes directory has the wrong type, owner or mode"
+  fi
+  fs_stat "$AUTH_KEYS" || fa_die 6 unsafe "authorized_keys is missing; run ferry-setup first"
+  if [ "$ST_TYPE" != "Regular File" ] || [ "$ST_USER" != "$ROOT_OWNER" ] || [ "$ST_GROUP" != "$ROOT_GROUP" ] \
+    || [ "$ST_MODE" != 0644 ] || [ "$ST_LINKS" != 1 ] || [ "$ST_SIZE" -gt 262144 ]; then
+    fa_die 6 unsafe "authorized_keys has the wrong type, owner or mode"
+  fi
+  KEYS_TEXT=$(cat -- "$AUTH_KEYS")
+  LANES=
+  _lk_l=
+  while IFS= read -r _lk_l; do
+    case $_lk_l in
+      '' | '#'*) continue ;;
+    esac
+    parse_line "$_lk_l" || fa_die 6 unsafe "authorized_keys has a line ferry-admin did not write; inspect it by hand"
+    LANES="$LANES$L_PEER $L_EXP $L_B64 $L_CIDR
+"
+  done <<EOF
+$KEYS_TEXT
+EOF
+  return 0
+}
+
+# find_lane PEER: F_EXP F_B64 F_CIDR, or return 1.
+find_lane() {
+  while IFS=' ' read -r _fl_p _fl_e _fl_b _fl_c; do
+    if [ "$_fl_p" = "$1" ]; then
+      F_EXP=$_fl_e
+      F_B64=$_fl_b
+      F_CIDR=$_fl_c
+      return 0
+    fi
+  done <<EOF
+$LANES
+EOF
+  return 1
+}
+
+# write_keys NEW_TEXT: keep .prev, write beside, set owner and mode, rename.
+write_keys() {
+  _wk_p=$(mktemp "$SSH_DIR/.prev.XXXXXXXX") || fa_die 6 unsafe "could not write beside authorized_keys"
+  printf '%s\n' "$KEYS_TEXT" > "$_wk_p"
+  chown "$ROOT_OWNER:$ROOT_GROUP" "$_wk_p" && chmod 0644 "$_wk_p" && mv -f -- "$_wk_p" "$AUTH_KEYS.prev" \
+    || { rm -f -- "$_wk_p"; fa_die 6 unsafe "could not keep authorized_keys.prev"; }
+  _wk_n=$(mktemp "$SSH_DIR/.authorized_keys.XXXXXXXX") || fa_die 6 unsafe "could not write beside authorized_keys"
+  printf '%s\n' "$1" > "$_wk_n"
+  chown "$ROOT_OWNER:$ROOT_GROUP" "$_wk_n" && chmod 0644 "$_wk_n" && mv -f -- "$_wk_n" "$AUTH_KEYS" \
+    || { rm -f -- "$_wk_n"; fa_die 6 unsafe "could not replace authorized_keys"; }
+  return 0
+}
+
+need_root_and_tty() {
+  if [ "$REQUIRE_ROOT" = 1 ]; then
+    _nr_u=$("$ID" -u) || fa_die 1 refused "cannot tell who is running this"
+    [ "$_nr_u" = 0 ] || fa_die 1 refused "lane changes need sudo"
+  fi
+  (exec 3< "$TTY" 4>> "$TTY") 2>/dev/null || fa_die 3 notconfirmed "no terminal to confirm on; nothing changed"
+  exec 3< "$TTY" 4>> "$TTY"
+  return 0
+}
+
+confirm() {
+  printf 'type yes to continue: ' >&4
+  _cf_a=
+  IFS= read -r _cf_a <&3 || _cf_a=
+  [ "$_cf_a" = yes ] || fa_die 3 notconfirmed "not confirmed; nothing changed"
+  return 0
+}
+
+days_left() {
+  # days_left EXP14: DAYS (negative when past)
+  _dl_e=$("$DATE" -j -u -f %Y%m%d%H%M%S "$1" +%s 2>/dev/null) || _dl_e=0
+  _dl_n=$("$DATE" -u +%s)
+  DAYS=$(( (_dl_e - _dl_n) / 86400 ))
+  if [ "$_dl_e" -le "$_dl_n" ]; then
+    DAYS=EXPIRED
+  fi
+  return 0
+}
+
+ymd() {
+  printf '%s' "$1" | cut -c1-4,5-6,7-8 | sed 's/^\(....\)\(..\)\(..\)$/\1-\2-\3/'
+}
+
+new_expiry() {
+  NEW_EXP=$("$DATE" -u -v+"$LANE_DAYS"d +%Y%m%d%H%M%S) || fa_die 6 unsafe "could not read the clock"
+  case $NEW_EXP in
+    [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]) ;;
+    *) fa_die 6 unsafe "could not read the clock" ;;
+  esac
+  return 0
+}
+
+# make_lane_dir AREA PEER: as root, inside a spool whose entries the ferry
+# account can rename. The area directory is entered first (no link anywhere
+# on its path), then mkdir refuses an existing name and chown -h / chmod -h
+# act on a link itself, so no step can be steered onto another directory
+# (install -d would follow a planted link).
+make_lane_dir() {
+  fs_enter "$1" || fa_die 6 unsafe "the line was added but a spool area is not safe; run lane remove and inspect the spool by hand"
+  if [ ! -e "./$2" ] && [ ! -L "./$2" ]; then
+    mkdir -- "./$2" 2>/dev/null || fa_die 6 unsafe "the line was added but a lane directory was not; run lane remove and inspect the spool by hand"
+  fi
+  chown -h "$SITE_FERRY_USER:$SITE_FERRY_GROUP" "./$2" && chmod -h 2770 "./$2" && fs_dir_ok "./$2" \
+    || fa_die 6 unsafe "the line was added but a lane directory was not; run lane remove and inspect the spool by hand"
+  fs_leave
+  return 0
+}
+
+# remove_lane_dir AREA PEER: rm -rf inside the entered area directory.
+remove_lane_dir() {
+  fs_enter "$1" || fa_die 6 unsafe "the line was removed but a spool area is not safe; inspect the spool by hand"
+  rm -rf -- "./$2" || fa_die 6 unsafe "the line was removed but a lane directory was not; inspect the spool by hand"
+  fs_leave
+  return 0
+}
+
+lane_dirs() {
+  printf '%s\n%s\n%s\n' "$SPOOL/lobby/in/$1" "$SPOOL/lobby/out/$1" "$SPOOL/files/$1"
+}
+
+# ── commands ───────────────────────────────────────────────────────────
+
+do_whoami() {
+  [ -f "$HOST_KEYS" ] && [ ! -L "$HOST_KEYS" ] || fa_die 6 unsafe "the host key is missing"
+  _hk=$("$SSH_KEYGEN" -l -E sha256 -f "$HOST_KEYS" 2>/dev/null) || fa_die 6 unsafe "could not fingerprint the host key"
+  set -- $_hk
+  [ $# -ge 2 ] && is_fp "$2" || fa_die 6 unsafe "could not fingerprint the host key"
+  printf 'host key (ed25519) %s\n' "$2"
+  _mdns=$("$SCUTIL" --get LocalHostName 2>/dev/null) || _mdns=
+  case $_mdns in
+    '' | *[!A-Za-z0-9-]*) _mdns='<this lab has no LocalHostName>' ;;
+    *) _mdns=$_mdns.local ;;
+  esac
+  printf 'mdns %s\n' "$_mdns"
+  _ips=
+  for _if in en0 en1; do
+    _a=$("$IPCONFIG" getifaddr "$_if" 2>/dev/null) || _a=
+    if [ -n "$_a" ] && fs_is_ipv4 "$_a"; then
+      _ips="$_ips $_a"
+    fi
+  done
+  printf 'ipv4%s\n' "${_ips:- none}"
+  printf 'lane subnet %s\n' "$SITE_LAN_CIDR"
+  printf "on each Mac: ferry peer add hub --host %s --host-key-fp <type the SHA256 fingerprint from the lab's own screen>\n" "$_mdns"
+}
+
+do_list() {
+  load_keys
+  _n=0
+  while IFS=' ' read -r _p _e _b _c; do
+    [ -n "$_p" ] || continue
+    fp_of_b64 "$_b" || fa_die 6 unsafe "could not fingerprint a lane key"
+    days_left "$_e"
+    if [ "$DAYS" = EXPIRED ]; then
+      _left=EXPIRED
+    else
+      _left="$DAYS days left"
+    fi
+    printf '%-16s %s  expires %s (%s)  from %s\n' "$_p" "$FP" "$(ymd "$_e")" "$_left" "$_c"
+    _n=$((_n + 1))
+  done <<EOF
+$LANES
+EOF
+  printf '%s lanes\n' "$_n"
+}
+
+do_add() {
+  _peer=
+  _file=
+  _fp=
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --peer) [ $# -ge 2 ] || fa_die 2 usage "--peer needs a value"; _peer=$2; shift 2 ;;
+      --pubkey-file) [ $# -ge 2 ] || fa_die 2 usage "--pubkey-file needs a value"; _file=$2; shift 2 ;;
+      --expect-fp) [ $# -ge 2 ] || fa_die 2 usage "--expect-fp needs a value"; _fp=$2; shift 2 ;;
+      *) fa_die 2 usage "lane add --peer P --pubkey-file F --expect-fp SHA256:..." ;;
+    esac
+  done
+  [ -n "$_peer" ] && [ -n "$_file" ] && [ -n "$_fp" ] || fa_die 2 usage "lane add --peer P --pubkey-file F --expect-fp SHA256:..."
+  fs_is_peer "$_peer" || fa_die 2 usage "the peer name must be 2-16 of a-z 0-9 -"
+  if fs_is_reserved "$_peer" || [ "$_peer" = "$SITE_LOCAL_PEER" ]; then
+    fa_die 1 refused "this name is reserved"
+  fi
+  is_fp "$_fp" || fa_die 2 usage "--expect-fp takes SHA256: and 43 characters"
+  need_root_and_tty
+  load_keys
+  if find_lane "$_peer"; then
+    fa_die 1 refused "this peer already has a lane; use lane renew or lane remove"
+  fi
+  fs_stat "$_file" || fa_die 1 refused "the key file is missing"
+  if [ "$ST_TYPE" != "Regular File" ] || [ "$ST_LINKS" != 1 ] || [ "$ST_SIZE" -gt 1024 ]; then
+    fa_die 1 refused "the key file must be a plain file of at most 1 KiB"
+  fi
+  _sudo_user=${SUDO_USER:-}
+  if [ "$ST_USER" != "$ROOT_OWNER" ] && [ "$ST_USER" != "$_sudo_user" ]; then
+    fa_die 1 refused "the key file must belong to root or to you"
+  fi
+  _kt=$(cat -- "$_file")
+  _bad=$(printf '%s' "$_kt" | tr -d '\040-\176' | wc -c)
+  _bad=${_bad##* }
+  [ "$_bad" = 0 ] || fa_die 1 refused "the key file must be one ssh-ed25519 line"
+  set -- $_kt
+  if [ $# -lt 2 ] || [ $# -gt 3 ] || [ "$1" != ssh-ed25519 ]; then
+    fa_die 1 refused "the key file must be one ssh-ed25519 line"
+  fi
+  _b64=$2
+  is_b64_ed25519 "$_b64" || fa_die 1 refused "the key file must be one ssh-ed25519 line"
+  fp_of_b64 "$_b64" || fa_die 1 refused "the key file must be one ssh-ed25519 line"
+  [ "$FP" = "$_fp" ] || fa_die 1 refused "the key file does not match the fingerprint you typed"
+  while IFS=' ' read -r _p _e _b _c; do
+    if [ -n "$_p" ] && [ "$_b" = "$_b64" ]; then
+      fa_die 1 refused "this key already has a lane"
+    fi
+  done <<EOF
+$LANES
+EOF
+  new_expiry
+  _line=$(lane_line "$_peer" "$SITE_LAN_CIDR" "$NEW_EXP" "$_b64")
+  {
+    printf 'add a Ferry lane\n'
+    printf '  peer         %s\n' "$_peer"
+    printf '  lane key     %s (matches what you typed)\n' "$FP"
+    printf '  expires      %s\n' "$(ymd "$NEW_EXP")"
+    printf '  line to append to %s:\n    %s\n' "$AUTH_KEYS" "$_line"
+    printf '  spool directories to create (%s:%s 2770):\n' "$SITE_FERRY_USER" "$SITE_FERRY_GROUP"
+    lane_dirs "$_peer" | sed 's/^/    /'
+  } >&4
+  for _d in "$SPOOL/lobby/in/$_peer" "$SPOOL/lobby/out/$_peer" "$SPOOL/files/$_peer"; do
+    if [ -e "$_d" ] || [ -L "$_d" ]; then
+      fs_dir_ok "$_d" || fa_die 6 unsafe "something unexpected stands where a lane directory belongs; inspect the spool by hand"
+    fi
+  done
+  confirm
+  write_keys "$KEYS_TEXT
+$_line"
+  for _a in "$SPOOL/lobby/in" "$SPOOL/lobby/out" "$SPOOL/files"; do
+    make_lane_dir "$_a" "$_peer"
+  done
+  days_left "$NEW_EXP"
+  printf "lane %s added; expires %s (%s days). Next on %s: ferry peer add hub --host <this lab's mdns name> --host-key-fp <type the SHA256 fingerprint from ferry-admin whoami on the lab's own screen>, then ferry ping\n" \
+    "$_peer" "$(ymd "$NEW_EXP")" "$DAYS" "$_peer"
+}
+
+do_renew() {
+  [ $# -eq 2 ] && [ "$1" = --peer ] || fa_die 2 usage "lane renew --peer P"
+  fs_is_peer "$2" || fa_die 2 usage "the peer name must be 2-16 of a-z 0-9 -"
+  _peer=$2
+  need_root_and_tty
+  load_keys
+  find_lane "$_peer" || fa_die 3 notfound "this peer has no lane"
+  new_expiry
+  {
+    printf 'renew the Ferry lane for %s\n' "$_peer"
+    printf '  expires now  %s\n' "$(ymd "$F_EXP")"
+    printf '  expires next %s\n' "$(ymd "$NEW_EXP")"
+  } >&4
+  confirm
+  _new=
+  _first=1
+  while IFS= read -r _l; do
+    case $_l in
+      '' | '#'*) ;;
+      *)
+        parse_line "$_l" || fa_die 6 unsafe "authorized_keys changed underneath; nothing changed"
+        if [ "$L_PEER" = "$_peer" ]; then
+          _l=$(lane_line "$L_PEER" "$L_CIDR" "$NEW_EXP" "$L_B64")
+        fi
+        ;;
+    esac
+    if [ "$_first" = 1 ]; then
+      _new=$_l
+      _first=0
+    else
+      _new="$_new
+$_l"
+    fi
+  done <<EOF
+$KEYS_TEXT
+EOF
+  write_keys "$_new"
+  printf 'lane %s renewed; expires %s\n' "$_peer" "$(ymd "$NEW_EXP")"
+}
+
+do_remove() {
+  [ $# -eq 2 ] && [ "$1" = --peer ] || fa_die 2 usage "lane remove --peer P"
+  fs_is_peer "$2" || fa_die 2 usage "the peer name must be 2-16 of a-z 0-9 -"
+  _peer=$2
+  need_root_and_tty
+  load_keys
+  find_lane "$_peer" || fa_die 3 notfound "this peer has no lane"
+  {
+    printf 'remove the Ferry lane for %s\n' "$_peer"
+    printf '  line to remove:\n    %s\n' "$(lane_line "$_peer" "$F_CIDR" "$F_EXP" "$F_B64")"
+    printf '  spool directories to delete with everything in them:\n'
+    for _d in "$SPOOL/lobby/in/$_peer" "$SPOOL/lobby/out/$_peer" "$SPOOL/files/$_peer"; do
+      if [ -d "$_d" ] && [ ! -L "$_d" ]; then
+        fs_count_metas "$_d"
+        printf '    %s (%s items)\n' "$_d" "$CNT"
+      else
+        printf '    %s (absent)\n' "$_d"
+      fi
+    done
+  } >&4
+  confirm
+  _new=
+  _first=1
+  while IFS= read -r _l; do
+    case $_l in
+      '' | '#'*) ;;
+      *)
+        parse_line "$_l" || fa_die 6 unsafe "authorized_keys changed underneath; nothing changed"
+        if [ "$L_PEER" = "$_peer" ]; then
+          continue
+        fi
+        ;;
+    esac
+    if [ "$_first" = 1 ]; then
+      _new=$_l
+      _first=0
+    else
+      _new="$_new
+$_l"
+    fi
+  done <<EOF
+$KEYS_TEXT
+EOF
+  write_keys "$_new"
+  for _a in "$SPOOL/lobby/in" "$SPOOL/lobby/out" "$SPOOL/files"; do
+    remove_lane_dir "$_a" "$_peer"
+  done
+  printf 'lane %s removed with its spool directories\n' "$_peer"
+}
+
+case $1 in
+  whoami) [ $# -eq 1 ] || fa_die 2 usage "ferry-admin whoami"; do_whoami ;;
+  lane)
+    [ $# -ge 2 ] || fa_die 2 usage "ferry-admin lane list|add|renew|remove"
+    _sub=$2
+    shift 2
+    case $_sub in
+      list) [ $# -eq 0 ] || fa_die 2 usage "ferry-admin lane list"; do_list ;;
+      add) do_add "$@" ;;
+      renew) do_renew "$@" ;;
+      remove) do_remove "$@" ;;
+      *) fa_die 2 usage "ferry-admin lane list|add|renew|remove" ;;
+    esac
+    ;;
+  *) fa_die 2 usage "unknown command; try ferry-admin help" ;;
+esac
+exit 0

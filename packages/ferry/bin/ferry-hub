@@ -1,0 +1,406 @@
+#!/bin/sh
+# ferry-hub: the lab's own end of 渡 Ferry, run as the hub user. It takes
+# lobby packets out of the spool into the hub user's private lobby-mail,
+# prints (never runs) the relay command, places join packets for a lane, and
+# sends or fetches files as the local peer. It never runs a lobby command,
+# never answers a prompt and never prints a packet's fingerprints or keys.
+PATH=/usr/bin:/bin:/usr/sbin:/sbin; export PATH
+LC_ALL=C; export LC_ALL
+IFS=$(printf ' \t\n_'); IFS=${IFS%_}
+umask 027
+set -euf
+
+# --- ferry:paths (tests rewrite only this block) ---
+FERRY_ROOT=/Library/Ferry
+# --- end ferry:paths ---
+
+FS_TOOL=hub
+. "$FERRY_ROOT/libexec/ferry-spool.sh"
+
+usage() {
+  cat <<'EOF'
+ferry-hub: the lab side of Ferry, as the hub user
+  ferry-hub status                 counts waiting per lane, spool and disk
+  ferry-hub inbox                  take lobby packets into lobby-mail; print the relay line for each one waiting
+  ferry-hub reply PEER JOIN_FILE   place a join packet (the relay's output) for PEER
+  ferry-hub send TO FILE           send a file to another Mac's lane
+  ferry-hub list                   files waiting for the lab
+  ferry-hub fetch [ID]             receive files into ~/Ferry/inbox/<from>/
+  ferry-hub ack ID                 discard a waiting file without fetching it
+EOF
+}
+
+case ${1:-} in
+  '' | help | -h | --help) usage; exit 0 ;;
+esac
+
+fs_begin
+fs_load_site
+fs_role hub
+fs_check_spool
+fs_prune
+
+ensure_private_dir() {
+  if [ -L "$1" ]; then
+    fs_die 6 unsafe "a private directory is a link"
+  fi
+  if [ ! -d "$1" ]; then
+    (umask 077; mkdir -p -- "$1") || fs_die 6 unsafe "could not create a private directory"
+  fi
+  fs_stat "$1" || fs_die 6 unsafe "a private directory is missing"
+  if [ "$ST_TYPE" != Directory ] || [ "$ST_USER" != "$FS_ME" ]; then
+    fs_die 6 unsafe "a private directory has the wrong type or owner"
+  fi
+  return 0
+}
+
+# ── status ─────────────────────────────────────────────────────────────
+
+do_status() {
+  CUR_OP=list
+  fs_tally "$SITE_LOCAL_PEER"
+  fs_ls "$SPOOL/lobby/in"
+  _peers=$FS_LS
+  fs_ls "$SPOOL/files"
+  _peers=$(printf '%s\n%s\n' "$_peers" "$FS_LS" | sort -u)
+  _lanes=0
+  while IFS= read -r _p; do
+    [ -n "$_p" ] || continue
+    fs_is_peer "$_p" || continue
+    _li=-
+    _lo=-
+    _fn=0
+    _fb=0
+    if fs_dir_ok "$SPOOL/lobby/in/$_p"; then
+      fs_count_metas "$SPOOL/lobby/in/$_p"
+      _li=$CNT
+    fi
+    if fs_dir_ok "$SPOOL/lobby/out/$_p"; then
+      fs_count_metas "$SPOOL/lobby/out/$_p"
+      _lo=$CNT
+    fi
+    if fs_dir_ok "$SPOOL/files/$_p"; then
+      fs_ls "$SPOOL/files/$_p"
+      while IFS= read -r _n; do
+        case $_n in
+          *.meta) ;;
+          *) continue ;;
+        esac
+        fs_is_id "${_n%.meta}" || continue
+        fs_meta_of "$SPOOL/files/$_p/$_n" || continue
+        _fn=$((_fn + 1))
+        _fb=$((_fb + M_SIZE))
+      done <<EOF
+$FS_LS
+EOF
+    fi
+    printf '%-16s lobby in %s, lobby out %s, files %s (%s bytes)\n' "$_p" "$_li" "$_lo" "$_fn" "$_fb"
+    _lanes=$((_lanes + 1))
+  done <<EOF
+$_peers
+EOF
+  fs_avail_kib
+  printf 'spool %s of %s bytes\n' "$TALLY_TOTAL" "$SITE_SPOOL_MAX_BYTES"
+  printf 'free %s KiB (floor %s KiB)\n' "$AVAIL_KIB" "$SITE_FLOOR_KIB"
+  CUR_ITEMS=$_lanes
+}
+
+# ── inbox ──────────────────────────────────────────────────────────────
+
+# relay_block PEER ID FILE SIZE: the relay line for one packet in lobby-mail,
+# after fs_check_packet and fs_packet_display on FILE.
+relay_block() {
+  _rb_out=$LOBBY_MAIL/out/$1/$2.join.json
+  printf '%s  %s  %s  %s bytes  valid until %sZ (%s min left)\n' "$1" "$2" "$PK_KIND" "$4" "$PK_HHMM" "$PK_LEFT"
+  printf 'saved: %s\n' "$3"
+  printf "next, at this terminal (the prompt shows the desk fingerprint: compare it with %s's own screen):\n" "$1"
+  printf '  %s hub relay --packet-file %s > %s && %s/bin/ferry-hub reply %s %s\n' \
+    "$LOBBY_CMD" "$3" "$_rb_out" "$FERRY_ROOT" "$1" "$_rb_out"
+  return 0
+}
+
+# take_new: move every live packet from the spool into lobby-mail/in/<peer>/.
+take_new() {
+  fs_ls "$SPOOL/lobby/in"
+  _tn_peers=$FS_LS
+  while IFS= read -r _p; do
+    [ -n "$_p" ] || continue
+    fs_is_peer "$_p" || continue
+    fs_dir_ok "$SPOOL/lobby/in/$_p" || continue
+    _d=$SPOOL/lobby/in/$_p
+    fs_ls "$_d"
+    while IFS= read -r _n; do
+      case $_n in
+        *.meta) ;;
+        *) continue ;;
+      esac
+      _id=${_n%.meta}
+      fs_is_id "$_id" || continue
+      fs_take "$_d" lobby-in "$_p" "$_id" || continue
+      if ! fs_check_packet "$TAKE_FILE" enroll || ! fs_packet_display "$TAKE_FILE"; then
+        fs_drop_take
+        fs_remove "$_d" "$_id"
+        printf '%s  %s  refused: not a lobby enrollment packet; removed\n' "$_p" "$_id"
+        continue
+      fi
+      if [ "$PK_EXPIRED" = 1 ]; then
+        fs_drop_take
+        fs_remove "$_d" "$_id"
+        printf '%s %s expired at %sZ — ask %s for a fresh packet\n' "$_p" "$_id" "$PK_HHMM" "$_p"
+        continue
+      fi
+      ensure_private_dir "$LOBBY_MAIL/in/$_p"
+      ensure_private_dir "$LOBBY_MAIL/out/$_p"
+      _dest=$LOBBY_MAIL/in/$_p/$_id.json
+      if [ -e "$_dest" ] || [ -L "$_dest" ]; then
+        fs_die 6 unsafe "a lobby-mail file with this id already exists"
+      fi
+      chmod 0600 "$TAKE_FILE" || fs_die 6 unsafe "could not set the file mode"
+      fs_quarantine "$TAKE_FILE"
+      mv -- "$TAKE_FILE" "$_dest" || fs_die 6 unsafe "could not save the packet"
+      FS_TMP_T=
+      fs_remove "$_d" "$_id"
+      _taken=$((_taken + 1))
+      CUR_ID=$_id
+    done <<EOF
+$FS_LS
+EOF
+  done <<EOF
+$_tn_peers
+EOF
+  return 0
+}
+
+# show_waiting: the relay line for every packet in lobby-mail/in/<peer>/ that
+# is still valid and has no join packet beside it yet, whether this inbox
+# took it or an earlier one did (an agent may have run that one, and the
+# person at the lab terminal needs the line). These are the hub user's own
+# files, but each is still checked before it is read.
+show_waiting() {
+  _sw_in=$LOBBY_MAIL/in
+  fs_stat "$_sw_in" || return 0
+  [ "$ST_TYPE" = Directory ] && [ "$ST_USER" = "$FS_ME" ] || return 0
+  fs_ls "$_sw_in"
+  _sw_peers=$FS_LS
+  while IFS= read -r _p; do
+    [ -n "$_p" ] || continue
+    fs_is_peer "$_p" || continue
+    fs_stat "$_sw_in/$_p" || continue
+    [ "$ST_TYPE" = Directory ] && [ "$ST_USER" = "$FS_ME" ] || continue
+    fs_ls "$_sw_in/$_p"
+    while IFS= read -r _n; do
+      case $_n in
+        *.json) ;;
+        *) continue ;;
+      esac
+      _id=${_n%.json}
+      fs_is_id "$_id" || continue
+      _f=$_sw_in/$_p/$_n
+      _o=$LOBBY_MAIL/out/$_p/$_id.join.json
+      if fs_stat "$_o" && [ "$ST_TYPE" = "Regular File" ] && fs_check_packet "$_o" join; then
+        continue
+      fi
+      fs_stat "$_f" || continue
+      [ "$ST_TYPE" = "Regular File" ] && [ "$ST_LINKS" = 1 ] && [ "$ST_USER" = "$FS_ME" ] || continue
+      _sw_size=$ST_SIZE
+      fs_check_packet "$_f" enroll && fs_packet_display "$_f" || continue
+      [ "$PK_EXPIRED" = 0 ] || continue
+      relay_block "$_p" "$_id" "$_f" "$_sw_size"
+      _shown=$((_shown + 1))
+    done <<EOF
+$FS_LS
+EOF
+  done <<EOF
+$_sw_peers
+EOF
+  return 0
+}
+
+do_inbox() {
+  CUR_OP=inbox
+  _taken=0
+  _shown=0
+  take_new
+  show_waiting
+  if [ "$_shown" = 0 ]; then
+    printf 'no lobby packets waiting\n'
+  fi
+  CUR_ITEMS=$_taken
+}
+
+# ── reply ──────────────────────────────────────────────────────────────
+
+do_reply() {
+  CUR_OP=reply
+  [ $# -eq 2 ] || fs_die 2 usage "ferry-hub reply PEER JOIN_FILE"
+  fs_is_peer "$1" || fs_die 2 usage "not a peer name"
+  if [ "$1" = "$SITE_LOCAL_PEER" ] || fs_is_reserved "$1"; then
+    fs_die 2 usage "this name has no lane"
+  fi
+  PEER_TO=$1
+  CUR_TO=$1
+  fs_peer_dir lobby-out "$1"
+  _outdir=$PEER_DIR
+  case $2 in
+    /*) ;;
+    *) fs_die 2 usage "give the join file as an absolute path" ;;
+  esac
+  fs_stat "$2" || fs_die 4 invalid "this file is not a join packet (was the relay declined?)"
+  if [ "$ST_TYPE" != "Regular File" ] || [ "$ST_LINKS" != 1 ]; then
+    fs_die 6 unsafe "the join file is not a plain file"
+  fi
+  [ "$ST_USER" = "$FS_ME" ] || fs_die 6 unsafe "the join file belongs to another account"
+  if [ "$ST_SIZE" -lt 2 ] || [ "$ST_SIZE" -gt "$LOBBY_MAX" ]; then
+    fs_die 4 invalid "this file is not a join packet (was the relay declined?)"
+  fi
+  RCV_FILE=$(mktemp "$STAGE/.part.$PEER.XXXXXXXX") || fs_die 6 unsafe "could not stage"
+  FS_TMP_A=$RCV_FILE
+  rm -f -- "$RCV_FILE"
+  cp -R -P -- "$2" "$RCV_FILE" 2>/dev/null || fs_die 6 unsafe "could not copy the join file"
+  fs_stat "$RCV_FILE" || fs_die 6 unsafe "could not copy the join file"
+  if [ "$ST_TYPE" != "Regular File" ] || [ "$ST_LINKS" != 1 ]; then
+    fs_die 6 unsafe "the join file is not a plain file"
+  fi
+  RCV_SIZE=$ST_SIZE
+  CUR_BYTES=$RCV_SIZE
+  fs_check_packet "$RCV_FILE" join || fs_die 4 invalid "this file is not a join packet (was the relay declined?)"
+  fs_sha "$RCV_FILE" || fs_die 6 unsafe "could not hash the join file"
+  fs_write_meta lobby-join hub "$PEER_TO" "$RCV_SIZE" "$SHA"
+  fs_publish "$_outdir" lobby-join hub "$RCV_SIZE"
+  printf 'placed join packet %s for %s (%s bytes). On %s: ferry lobby fetch\n' "$PUB_ID" "$PEER_TO" "$RCV_SIZE" "$PEER_TO"
+}
+
+# ── files as the local peer ────────────────────────────────────────────
+
+do_send() {
+  CUR_OP=send
+  [ $# -eq 2 ] || fs_die 2 usage "ferry-hub send TO FILE"
+  fs_is_peer "$1" || fs_die 2 usage "not a peer name"
+  [ "$1" != "$SITE_LOCAL_PEER" ] || fs_die 2 usage "the lab cannot send to itself"
+  if fs_is_reserved "$1"; then
+    fs_die 2 usage "not a peer name"
+  fi
+  CUR_TO=$1
+  fs_peer_dir files "$1"
+  _todir=$PEER_DIR
+  fs_stat "$2" || fs_die 4 invalid "the file is missing"
+  [ "$ST_TYPE" = "Regular File" ] || fs_die 4 invalid "send takes a plain file (not a link or a folder)"
+  [ "$ST_SIZE" -ge 1 ] || fs_die 4 invalid "the file is empty"
+  [ "$ST_SIZE" -le "$FILE_MAX" ] || fs_die 4 invalid "the file is over 16 MiB"
+  fs_safe_name "${2##*/}" || fs_die 4 invalid "the file name has nothing usable left; rename it"
+  _name=$SAFE_NAME
+  fs_floor_precheck "$FILE_MAX"
+  RCV_FILE=$(mktemp "$STAGE/.part.$PEER.XXXXXXXX") || fs_die 6 unsafe "could not stage"
+  FS_TMP_A=$RCV_FILE
+  head -c $((FILE_MAX + 1)) < "$2" > "$RCV_FILE" || fs_die 4 invalid "the file could not be read"
+  fs_stat "$RCV_FILE" || fs_die 6 unsafe "could not stage"
+  if [ "$ST_SIZE" -lt 1 ] || [ "$ST_SIZE" -gt "$FILE_MAX" ]; then
+    fs_die 4 invalid "the file changed size while it was read"
+  fi
+  RCV_SIZE=$ST_SIZE
+  CUR_BYTES=$RCV_SIZE
+  fs_sha "$RCV_FILE" || fs_die 6 unsafe "could not hash the file"
+  fs_write_meta file "$SITE_LOCAL_PEER" "$1" "$RCV_SIZE" "$SHA" "$_name"
+  fs_publish "$_todir" file "$SITE_LOCAL_PEER" "$RCV_SIZE"
+  _short=$(printf '%s' "$SHA" | cut -c1-12)
+  printf 'sent %s to %s as %s (%s bytes, sha256 %s)\n' "$PUB_ID" "$1" "$_name" "$RCV_SIZE" "$_short"
+}
+
+do_list() {
+  CUR_OP=list
+  fs_peer_dir files "$SITE_LOCAL_PEER"
+  _d=$PEER_DIR
+  _n=0
+  fs_ls "$_d"
+  while IFS= read -r _f; do
+    case $_f in
+      *.meta) ;;
+      *) continue ;;
+    esac
+    _id=${_f%.meta}
+    fs_is_id "$_id" || continue
+    fs_item_ok "$_d" files "$SITE_LOCAL_PEER" "$_id" || continue
+    fs_age "$_id"
+    printf 'file   %s  from %s  %s  %s bytes  (%s)\n' "$_id" "$M_FROM" "$M_NAME" "$M_SIZE" "$AGE"
+    _n=$((_n + 1))
+  done <<EOF
+$FS_LS
+EOF
+  printf '%s waiting\n' "$_n"
+  CUR_ITEMS=$_n
+}
+
+do_fetch() {
+  CUR_OP=fetch
+  [ $# -le 1 ] || fs_die 2 usage "ferry-hub fetch [ID]"
+  _want=
+  if [ $# -eq 1 ]; then
+    fs_is_id "$1" || fs_die 2 usage "not an item id"
+    _want=$1
+  fi
+  fs_peer_dir files "$SITE_LOCAL_PEER"
+  _d=$PEER_DIR
+  _got=0
+  fs_ls "$_d"
+  while IFS= read -r _f; do
+    case $_f in
+      *.meta) ;;
+      *) continue ;;
+    esac
+    _id=${_f%.meta}
+    fs_is_id "$_id" || continue
+    if [ -n "$_want" ] && [ "$_id" != "$_want" ]; then
+      continue
+    fi
+    fs_take "$_d" files "$SITE_LOCAL_PEER" "$_id" || fs_die 6 unsafe "an item failed its checks; it stays in the spool"
+    ensure_private_dir "$LANDING/$M_FROM"
+    _dest=$LANDING/$M_FROM/$_id--$M_NAME
+    if [ -e "$_dest" ] || [ -L "$_dest" ]; then
+      fs_die 6 unsafe "this item is already in the inbox; discard it with ferry-hub ack"
+    fi
+    chmod 0600 "$TAKE_FILE" || fs_die 6 unsafe "could not set the file mode"
+    fs_quarantine "$TAKE_FILE"
+    mv -- "$TAKE_FILE" "$_dest" || fs_die 6 unsafe "could not land the file"
+    FS_TMP_T=
+    fs_remove "$_d" "$_id"
+    CUR_ID=$_id
+    printf 'received %s from %s: %s (%s bytes, sha256 ok)\n' "$_id" "$M_FROM" "$_dest" "$M_SIZE"
+    _got=$((_got + 1))
+  done <<EOF
+$FS_LS
+EOF
+  if [ -n "$_want" ] && [ "$_got" = 0 ]; then
+    fs_die 3 notfound "no such item for the lab"
+  fi
+  if [ "$_got" = 0 ]; then
+    printf 'no files waiting\n'
+  fi
+  CUR_ITEMS=$_got
+}
+
+do_ack() {
+  CUR_OP=ack
+  [ $# -eq 1 ] || fs_die 2 usage "ferry-hub ack ID"
+  fs_is_id "$1" || fs_die 2 usage "not an item id"
+  fs_peer_dir files "$SITE_LOCAL_PEER"
+  if [ ! -e "$PEER_DIR/$1.meta" ] && [ ! -L "$PEER_DIR/$1.meta" ]; then
+    fs_die 3 notfound "no such item for the lab"
+  fi
+  CUR_ID=$1
+  fs_remove "$PEER_DIR" "$1"
+  printf 'ok: discarded %s\n' "$1"
+}
+
+COMMAND=$1
+shift
+case $COMMAND in
+  status) [ $# -eq 0 ] || fs_die 2 usage "ferry-hub status"; do_status ;;
+  inbox) [ $# -eq 0 ] || fs_die 2 usage "ferry-hub inbox"; do_inbox ;;
+  reply) do_reply "$@" ;;
+  send) do_send "$@" ;;
+  list) [ $# -eq 0 ] || fs_die 2 usage "ferry-hub list"; do_list ;;
+  fetch) do_fetch "$@" ;;
+  ack) do_ack "$@" ;;
+  *) fs_die 2 usage "unknown command; try ferry-hub help" ;;
+esac
+exit 0

@@ -5335,6 +5335,30 @@
       "canonical_path": "packages/economic-kernel/README.md"
     },
     {
+      "path": "packages/ferry/CLAUDE.md",
+      "title": "渡 Ferry package guide",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/ferry/CLAUDE.md"
+    },
+    {
+      "path": "packages/ferry/INSTALL.md",
+      "title": "Installing 渡 Ferry",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/ferry/INSTALL.md"
+    },
+    {
+      "path": "packages/ferry/README.md",
+      "title": "渡 Ferry: a LAN post office for the owner's Macs",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/ferry/README.md"
+    },
+    {
       "path": "packages/gin-reconstruction/CLAUDE.md",
       "title": "@agenttool/gin-reconstruction",
       "type": "orientation",
