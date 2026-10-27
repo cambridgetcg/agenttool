@@ -51,7 +51,7 @@ function fixture(grant: Record<string, unknown> = {}, view = mission) {
   client.importInvitation(state, file);
   return { parent, state, enrollment, predecessor, mission: view };
 }
-type Mode = "ok" | "store-then-drop" | "drop" | "401" | "409" | "403" | "404" | "500" | "400" | "token_hash_conflict";
+type Mode = "ok" | "store-then-drop" | "drop" | "401" | "409" | "403" | "403-closed" | "403-ended" | "403-not-due" | "404" | "500" | "400" | "token_hash_conflict";
 /** A synthetic service: verifies each request's token and exact-request proof, stores successors, answers probes. */
 function service(f: ReturnType<typeof fixture>, renewMode: Mode | Mode[] = "ok", patch: (view: any) => void = () => {}) {
   const hashes = new Map<string, string>([[G, sha(TOKEN)]]), children = new Map<string, any>();
@@ -88,6 +88,9 @@ function service(f: ReturnType<typeof fixture>, renewMode: Mode | Mode[] = "ok",
     if (mode === "401") return respond({ error: "collaboration_mission_invalid_credential" }, 401);
     if (mode === "409") return respond({ error: "collaboration_mission_conflict" }, 409);
     if (mode === "403") return respond({ error: "collaboration_mission_renewal_unavailable" }, 403);
+    if (mode === "403-closed") return respond({ error: "collaboration_mission_renewal_closed" }, 403);
+    if (mode === "403-ended") return respond({ error: "collaboration_mission_renewal_window_ended" }, 403);
+    if (mode === "403-not-due") return respond({ error: "collaboration_mission_renewal_not_due" }, 403);
     if (mode === "500") return respond({ error: "mission_unavailable" }, 503);
     // A Machine still on code without the renew route, as during a rolling deploy or a rollback.
     if (mode === "404") return respond({ error: "mission_route_not_found" }, 404);
@@ -231,7 +234,8 @@ describe.skipIf(process.platform === "win32")("participant renew", () => {
   });
 
   test("a closed window after sending abandons the record; definitive refusals never loop", async () => {
-    for (const [mode, reason, abandoned] of [["403", "renewal_unavailable", true], ["token_hash_conflict", "renewal_refused", true],
+    for (const [mode, reason, abandoned] of [["403", "renewal_unavailable", true], ["403-closed", "renewal_unavailable", true],
+      ["403-ended", "renewal_unavailable", true], ["token_hash_conflict", "renewal_refused", true],
       ["400", "renewal_refused", true], ["404", "renewal_refused", true], ["500", "renewal_uncertain", false]] as const) {
       const f = fixture(), s = service(f, mode);
       const error = await stop(client.renew(f.state, { fetchImpl: s.fetchImpl }));
@@ -240,6 +244,19 @@ describe.skipIf(process.platform === "win32")("participant renew", () => {
       expect(readdirSync(f.state).some(name => name.startsWith("renewal-abandoned-")), mode).toBe(abandoned);
       expect(invitationFile(f).grant_id).toBe(G);
     }
+  });
+
+  test("the service's not_due (its clock ahead of ours) is not_yet_open, never a stop; the next run sends fresh bytes", async () => {
+    const f = fixture(), s = service(f, ["403-not-due", "ok"]);
+    const early = await client.renew(f.state, { fetchImpl: s.fetchImpl });
+    expect(early).toMatchObject({ renewed: false, reason: "not_yet_open", service_code: "collaboration_mission_renewal_not_due" });
+    expect(existsSync(pendingFile(f))).toBe(false);
+    expect(invitationFile(f).grant_id).toBe(G);
+    const result = await client.renew(f.state, { fetchImpl: s.fetchImpl });
+    expect(result).toMatchObject({ renewed: true, renewed_from_grant_id: G });
+    const posts = s.calls.filter(c => c.method === "POST").map(c => JSON.parse(c.body!).grant_id);
+    expect(posts).toHaveLength(2);
+    expect(posts[0]).not.toBe(posts[1]);
   });
 
   test("a resend that reaches code without the renew route keeps the record; the next run installs the stored successor", async () => {

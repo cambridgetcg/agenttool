@@ -95,7 +95,7 @@ export const COLLABORATION_OPENAPI_PATHS = {
   responses: {
     "201": { description: "Successor created: mission, grant (with renewal lineage), the echoed token_sha256 and token_source \"participant\"; never a token" },
     "200": { description: "Exact retry (same grant_id, token_sha256 and body bytes, fresh proof) returns the stored successor while the presented grant is live" },
-    "403": { description: "collaboration_mission_renewal_unavailable outside the window, or collaboration_mission_acceptance_required" },
+    "403": { description: "collaboration_mission_renewal_not_due before halfway (the only refusal a later attempt can change); final: collaboration_mission_renewal_unavailable (no window), collaboration_mission_renewal_closed (closed, or a chain member revoked), collaboration_mission_renewal_window_ended (the window, mission end or issuing key expiry cannot extend the grant); or collaboration_mission_acceptance_required" },
     "409": { description: "collaboration_mission_conflict (already renewed differently, grant_id taken, digest mismatch) or token_hash_conflict" },
   } }) },
   [`${base}/{mission_id}/context`]: { parameters: [mission], get: operation("Read accepted mission context", true, { description: "Requires mission.read and prior acceptance. No private memory or task authority." }) },

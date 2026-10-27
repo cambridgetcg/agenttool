@@ -475,30 +475,44 @@ describe("renewal inside an administrator-set window", () => {
       }
     });
 
-    test("outside the window the refusal is renewal_unavailable and nothing is inserted", async () => {
+    test("outside the window each refusal names its reason, and nothing is inserted", async () => {
       const unchained = staged(admissionSteps(acceptedRow()));
       await refusal(executeMissionRequest(renew(), unchained.options), 403, "collaboration_mission_renewal_unavailable");
       expect(shape(unchained)[5]).toEqual(["select", "share"]);
-      for (const rootRow of [
-        root({ issuedAt: new Date(NOW.getTime() - 20 * MIN), expiresAt: new Date(NOW.getTime() + 40 * MIN) }),
-        root({ renewableUntil: NOW }),
-        root({ renewalClosedAt: new Date(NOW.getTime() - MIN) }),
-        root({ renewableUntil: new Date(NOW.getTime() + 20 * MIN) }),
-      ]) {
-        const s = staged(renewSteps(rootRow, rootRow, []));
-        await refusal(executeMissionRequest(renew(), s.options), 403, "collaboration_mission_renewal_unavailable");
+      for (const [rootRow, code] of [
+        [root({ issuedAt: new Date(NOW.getTime() - 20 * MIN), expiresAt: new Date(NOW.getTime() + 40 * MIN) }), "collaboration_mission_renewal_not_due"],
+        [root({ renewableUntil: NOW }), "collaboration_mission_renewal_window_ended"],
+        [root({ renewalClosedAt: new Date(NOW.getTime() - MIN) }), "collaboration_mission_renewal_closed"],
+        [root({ renewableUntil: new Date(NOW.getTime() + 20 * MIN) }), "collaboration_mission_renewal_window_ended"],
+      ] as Array<[Record<string, unknown>, string]>) {
+        // existing successor, then the revoked-member read (reached only by not_due).
+        const s = staged(renewSteps(rootRow, rootRow, [], []));
+        await refusal(executeMissionRequest(renew(), s.options), 403, code);
         noInsert(s);
       }
       // The halfway gate is the presented member's own, never the root's: a young
       // successor under a root past its halfway cannot renew yet.
       const young = middle({ issuedAt: new Date(NOW.getTime() - 10 * MIN), acceptedAt: new Date(NOW.getTime() - 10 * MIN), expiresAt: new Date(NOW.getTime() + 50 * MIN) });
-      const early = staged(renewSteps(young, root(), []));
-      await refusal(executeMissionRequest(renew(CHILD_TOKEN, C), early.options), 403, "collaboration_mission_renewal_unavailable");
+      const early = staged(renewSteps(young, root(), [], []));
+      await refusal(executeMissionRequest(renew(CHILD_TOKEN, C), early.options), 403, "collaboration_mission_renewal_not_due");
       noInsert(early);
       // A closed root closes every member, even one whose own stamp is missing.
       const s = staged(renewSteps(middle(), root({ renewalClosedAt: new Date(NOW.getTime() - MIN) }), []));
-      await refusal(executeMissionRequest(renew(CHILD_TOKEN, C), s.options), 403, "collaboration_mission_renewal_unavailable");
+      await refusal(executeMissionRequest(renew(CHILD_TOKEN, C), s.options), 403, "collaboration_mission_renewal_closed");
       noInsert(s);
+    });
+
+    test("a final refusal outranks not_due, so a caller retrying only on not_due stops", async () => {
+      const young = { issuedAt: new Date(NOW.getTime() - 10 * MIN), acceptedAt: new Date(NOW.getTime() - 10 * MIN), expiresAt: new Date(NOW.getTime() + 50 * MIN) };
+      for (const [presented, rootRow, ended, code] of [
+        [middle({ ...young, renewalClosedAt: new Date(NOW.getTime() - MIN) }), root(), [], "collaboration_mission_renewal_closed"],
+        [middle({ ...young, renewableUntil: new Date(NOW.getTime() + 50 * MIN) }), root(), [], "collaboration_mission_renewal_window_ended"],
+        [middle(young), root(), [{ id: N }], "collaboration_mission_renewal_closed"],
+      ] as Array<[Record<string, unknown>, Record<string, unknown>, Array<Record<string, unknown>>, string]>) {
+        const s = staged(renewSteps(presented, rootRow, [], ended));
+        await refusal(executeMissionRequest(renew(CHILD_TOKEN, C), s.options), 403, code);
+        noInsert(s);
+      }
     });
 
     test("a member revoked alone (by code at a99257ab) ends renewal of every live member", async () => {
@@ -508,7 +522,7 @@ describe("renewal inside an administrator-set window", () => {
         [root(), root(), PARTICIPANT_TOKEN, G],
       ] as Array<[Record<string, unknown>, Record<string, unknown>, string, string]>) {
         const s = staged(renewSteps(presented, rootRow, [], [{ id: N }]));
-        await refusal(executeMissionRequest(renew(token, grantId), s.options), 403, "collaboration_mission_renewal_unavailable");
+        await refusal(executeMissionRequest(renew(token, grantId), s.options), 403, "collaboration_mission_renewal_closed");
         noInsert(s);
       }
     });

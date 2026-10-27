@@ -478,7 +478,7 @@ databaseTest("a renewable root references itself and renews into a born-accepted
   await closeMissionGrantRenewal({ ...target, grantId: H }, at(later));
   expect((await executeMissionRequest(renewReq(token, G, H, childToken, later), at(later))).created).toBe(false);
   const head = new Date(HALF.getTime() + 1_800_000);
-  await expect(executeMissionRequest(renewReq(childToken, H, E, freshToken(), head), at(head))).rejects.toMatchObject({ status: 403, code: "collaboration_mission_renewal_unavailable" });
+  await expect(executeMissionRequest(renewReq(childToken, H, E, freshToken(), head), at(head))).rejects.toMatchObject({ status: 403, code: "collaboration_mission_renewal_closed" });
   expect((await admin`SELECT count(*)::int AS n FROM tools.collaboration_grants WHERE renewal_closed_at = ${later}`)[0].n).toBe(2);
   // A captured renew replayed after revocation is refused, not answered with the stored child.
   await revokeMissionGrant({ ...target, grantId: G }, at(later));
@@ -491,7 +491,7 @@ databaseTest("a successor opens at its own halfway, not the root's, so a chain c
   const childToken = freshToken();
   await executeMissionRequest(renewReq(token, G, H, childToken), at(HALF));
   const soon = new Date(HALF.getTime() + 1000);
-  await expect(executeMissionRequest(renewReq(childToken, H, E, freshToken(), soon), at(soon))).rejects.toMatchObject({ status: 403, code: "collaboration_mission_renewal_unavailable" });
+  await expect(executeMissionRequest(renewReq(childToken, H, E, freshToken(), soon), at(soon))).rejects.toMatchObject({ status: 403, code: "collaboration_mission_renewal_not_due" });
   expect((await admin`SELECT count(*)::int AS n FROM tools.collaboration_grants WHERE renewal_root_id = ${G}`)[0].n).toBe(2);
   // H was born at HALF for one hour: it opens 30 minutes later.
   const open = new Date(HALF.getTime() + 1_800_000);
@@ -507,7 +507,7 @@ databaseTest("a root revoked by one-row legacy code refuses renewal of its live 
   await executeMissionRequest(renewReq(token, G, H, childToken), at(HALF));
   await legacyRevoke(G, HALF);
   const open = new Date(HALF.getTime() + 1_800_000);
-  await expect(executeMissionRequest(renewReq(childToken, H, E, freshToken(), open), at(open))).rejects.toMatchObject({ status: 403, code: "collaboration_mission_renewal_unavailable" });
+  await expect(executeMissionRequest(renewReq(childToken, H, E, freshToken(), open), at(open))).rejects.toMatchObject({ status: 403, code: "collaboration_mission_renewal_closed" });
   expect((await admin`SELECT count(*)::int AS n FROM tools.collaboration_grants WHERE renewal_root_id = ${G}`)[0].n).toBe(2);
 });
 databaseTest("a middle member revoked by one-row legacy code refuses renewal of the head", async () => {
@@ -517,7 +517,7 @@ databaseTest("a middle member revoked by one-row legacy code refuses renewal of 
   await executeMissionRequest(renewReq(childToken, H, E, headToken, open), at(open));
   await legacyRevoke(H, open);
   const headOpen = new Date(open.getTime() + 1_800_000), next = uid(43);
-  await expect(executeMissionRequest(renewReq(headToken, E, next, freshToken(), headOpen), at(headOpen))).rejects.toMatchObject({ status: 403, code: "collaboration_mission_renewal_unavailable" });
+  await expect(executeMissionRequest(renewReq(headToken, E, next, freshToken(), headOpen), at(headOpen))).rejects.toMatchObject({ status: 403, code: "collaboration_mission_renewal_closed" });
   expect((await admin`SELECT count(*)::int AS n FROM tools.collaboration_grants WHERE id = ${next}`)[0].n).toBe(0);
 });
 
@@ -682,7 +682,7 @@ for (const competitor of ["revoke", "close", "leave", "mission"] as const) for (
       // Close revokes nothing: an earlier renewal stands but is closed; a later one is refused.
       if (first === "renew") { expect(results.renew.status).toBe(200); expect(childRead.status).toBe(200);
         expect((await admin`SELECT count(*)::int AS n FROM tools.collaboration_grants WHERE renewal_closed_at IS NULL`)[0].n).toBe(0); }
-      else { expect(results.renew).toMatchObject({ status: 403, code: "collaboration_mission_renewal_unavailable" }); expect(childRead.status).toBe(401); }
+      else { expect(results.renew).toMatchObject({ status: 403, code: "collaboration_mission_renewal_closed" }); expect(childRead.status).toBe(401); }
       return;
     }
     expect(results.renew.status).toBe(first === "renew" ? 200 : 401);
@@ -745,7 +745,7 @@ databaseTest("a 24-hour root renewed at every halfway over a 30-day window ends 
     const time = new Date(head.issued.getTime() + Math.floor((head.expires.getTime() - head.issued.getTime()) / 2));
     const childToken = freshToken(), child = uid(100 + rounds);
     const result = await outcome(executeMissionRequest(renewReq(head.token, head.id, child, childToken, time), at(time)));
-    if (result.status !== 200) { expect(result).toMatchObject({ status: 403, code: "collaboration_mission_renewal_unavailable" }); break; }
+    if (result.status !== 200) { expect(result).toMatchObject({ status: 403, code: "collaboration_mission_renewal_window_ended" }); break; }
     expect(await membersAt(time)).toBeLessThanOrEqual(2);
     const grant = (result as { value: { data: { grant: { expires_at: string } } } }).value.data.grant;
     head = { id: child, token: childToken, issued: time, expires: new Date(grant.expires_at) };

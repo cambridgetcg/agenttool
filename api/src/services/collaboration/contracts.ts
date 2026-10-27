@@ -75,11 +75,13 @@ export type MissionProofRecord = Record<string, string>;
 export type MissionGrantProofs = { [field: string]: string | MissionProofRecord };
 export const MISSION_LEAVE_FIELD = "participant_leave";
 export const MISSION_LEAVE_REASON = "participant_left";
-export type MissionErrorReason = "invalid_request" | "invalid_credential" | "not_found" | "conflict" | "acceptance_required" | "invalid_state" | "token_hash_conflict" | "renewal_unavailable";
+export type MissionErrorReason = "invalid_request" | "invalid_credential" | "not_found" | "conflict" | "acceptance_required" | "invalid_state" | "token_hash_conflict"
+  | "renewal_unavailable" | "renewal_closed" | "renewal_window_ended" | "renewal_not_due";
 export class MissionError extends HTTPException {
   readonly code: string;
   constructor(reason: MissionErrorReason) {
-    const status = { invalid_request: 400, invalid_credential: 401, not_found: 404, conflict: 409, acceptance_required: 403, invalid_state: 503, token_hash_conflict: 409, renewal_unavailable: 403 } as const;
+    const status = { invalid_request: 400, invalid_credential: 401, not_found: 404, conflict: 409, acceptance_required: 403, invalid_state: 503, token_hash_conflict: 409,
+      renewal_unavailable: 403, renewal_closed: 403, renewal_window_ended: 403, renewal_not_due: 403 } as const;
     const message = {
       invalid_request: "Use the exact bounded mission request contract.",
       invalid_credential: "This credential and proof do not authorize this mission request.",
@@ -88,13 +90,18 @@ export class MissionError extends HTTPException {
       acceptance_required: "Explicit signed acceptance of this invitation is required.",
       invalid_state: "Mission state could not be validated.",
       token_hash_conflict: "This token hash is already bound to a grant.",
-      renewal_unavailable: "This grant cannot be renewed now.",
+      renewal_unavailable: "This grant has no renewal window.",
+      renewal_closed: "This grant's renewal window was closed or a member of its chain was revoked.",
+      renewal_window_ended: "This grant's renewal window cannot extend it any further.",
+      renewal_not_due: "This grant's renewal opens halfway through its life; it is not due yet.",
     }[reason];
     const action = reason === "token_hash_conflict"
       ? "Ask the participant to generate a fresh token and send its SHA-256; if a grant you issued earlier holds this hash, inspect that grant ID instead"
-      : reason === "renewal_unavailable"
-        ? "Inspect the grant's renewal window: renewal opens halfway through a live accepted grant and ends at renewable_until or when the administrator closes it; after that, ask the administrator for a new grant"
-        : "Inspect the mission invitation and credential scope; an issued token cannot be recovered";
+      : reason === "renewal_not_due"
+        ? "Renew again once the grant is halfway through its life; this is the only renewal refusal that a later attempt can change"
+        : reason === "renewal_unavailable" || reason === "renewal_closed" || reason === "renewal_window_ended"
+          ? "This chain cannot renew again: ask the administrator for a new grant before this one expires"
+          : "Inspect the mission invitation and credential scope; an issued token cannot be recovered";
     // The shared mission-client contract names this refusal without the domain prefix.
     const code = reason === "token_hash_conflict" ? reason : `collaboration_mission_${reason}`;
     super(status[reason], { message, cause: { error: code, message,

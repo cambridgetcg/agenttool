@@ -2,7 +2,9 @@
 --
 -- Doctrine: docs/COLLABORATION-MISSIONS.md (Renewal inside a window)
 -- Additive: new columns are nullable; code at a99257ab keeps working after apply.
--- Apply: bin/migrate-pending.sh
+-- Apply: bin/fly-migrate-one.sh api/migrations/20261027T134854_collaboration_grant_renewal.sql
+--   This one file only, by Yu, then merge in the same sitting. Never bin/migrate-pending.sh
+--   from a tree that holds another unapplied migration: it would apply both.
 
 ALTER TABLE tools.collaboration_grants
   ADD COLUMN renewable_until timestamptz,

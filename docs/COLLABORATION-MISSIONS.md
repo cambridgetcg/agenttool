@@ -341,11 +341,23 @@ proof window returns the same successor only while G is live; after any
 revocation it is refused with HTTP 401. There is no nonce store: idempotency is
 the replay defence.
 
-Outside the window the refusal is HTTP 403
-`collaboration_mission_renewal_unavailable`: before halfway, after
-`renewable_until`, after a close, for a grant without a window, when any
-member of the chain is revoked, or when the successor would not extend G. Its next step is to inspect the grant's renewal
-window and, after it ends, ask the administrator for a new grant. An
+Outside the window the refusal is HTTP 403 and names why. Exactly one of
+these refusals is transient:
+
+- `collaboration_mission_renewal_not_due`: G is not yet halfway through its
+  own life. Renewing again later can succeed.
+
+The rest are final for this chain: no later renewal of it can succeed, and the
+next step is to ask the administrator for a new grant before G expires.
+
+- `collaboration_mission_renewal_unavailable`: G has no window.
+- `collaboration_mission_renewal_closed`: the window was closed, or a member of
+  the chain is revoked.
+- `collaboration_mission_renewal_window_ended`: `renewable_until`, the mission's
+  end or the issuing key's expiry has been reached, or no longer reaches past G.
+
+A final reason is reported before `renewal_not_due`, so a caller that retries
+only on `renewal_not_due` never retries a chain that cannot extend. An
 unaccepted grant is HTTP 403 `collaboration_mission_acceptance_required`.
 
 Someone holding both G's token and the enrolled key can renew G before its
@@ -403,7 +415,7 @@ code finishes the chain; when the chain has already ended, it writes nothing
 new. An administrator-revoked chain cannot be relabelled as left. Ending a chain also
 closes its window. Renewal does not rely on that alone: while any member of the
 chain carries `revoked_at`, renewing any other member is HTTP 403
-`collaboration_mission_renewal_unavailable`, so a single-row revocation (older
+`collaboration_mission_renewal_closed`, so a single-row revocation (older
 code, or a direct database revoke) still stops the chain from extending.
 
 ### Closing a window
@@ -505,20 +517,35 @@ Authentication denial does not fall back to a broader credential or public view.
 `20261027T134854_collaboration_grant_renewal.sql` before the code: the code
 reads the new columns on every grant query, so on the old schema every request
 that reads a grant (participant admission, grant issue, inspect, revoke, renew)
-would fail; mission-only administrator routes do not. A default `bin/deploy.sh`
-applies the migration in Phase 1, before the API. With `--no-migrate` the gate
-does **not** refuse it: this is an ordinary, unprotected migration, so the
-survey only warns and the API still rolls out. Before a `--no-migrate` deploy,
-apply it (`bin/migrate-pending.sh` or `bin/fly-migrate-one.sh`) and require a
-clean `bin/migrate-pending.sh --dry-run`. The migration is additive and older
-code keeps working on the new schema. Older code does not cascade: a revoke or
-leave it serves ends only the one grant and leaves the window open. Renewal
-refuses once any member is revoked, so such a chain cannot extend, but its other
-live members stay valid until their own expiry, at most 24 hours. `bin/deploy.sh`
-rolls Machines one at a time, so old and new code serve together during a
-deploy: do not issue `renewable_until` until every Machine runs the new
-revision. Before any rollback, close and revoke live chains (or revoke the
-mission); otherwise successors stay valid for up to 24 hours.
+would fail; mission-only administrator routes do not. The change touches
+`api/`, so merging it to `main` deploys the live API through
+`.github/workflows/deploy-api.yml` (AGENTS.md, "Release and delivery"). There is
+no separate deploy step and no local API release. That workflow never applies
+SQL. Its journal survey refuses to deploy while a repository migration is
+pending, and also while the journal holds a file whose source is not on `main`.
+The apply and the merge therefore happen in one sitting, in this order:
+
+1. From a clean checkout of the change's head, check the file's sha256 against
+   the pinned value, then apply that one file:
+   `bin/fly-migrate-one.sh api/migrations/20261027T134854_collaboration_grant_renewal.sql`.
+   Do not apply it with `bin/migrate-pending.sh`: from a tree that also holds
+   another unapplied migration, that would apply both.
+2. From the same checkout, require a clean `bin/migrate-pending.sh --dry-run`.
+3. Merge in the same sitting. Between the apply and the merge every API deploy
+   refuses, so nothing else that deploys the API merges in between, and the
+   sitting never overlaps another migration's apply-and-merge sitting.
+4. The workflow rolls Machines one at a time, so old and new code serve
+   together during the deploy. Do not issue `renewable_until` until the run's
+   receipt and `/health` show the new revision on every Machine.
+
+The migration is additive and older code keeps working on the new schema.
+Older code does not cascade: a revoke or leave it serves ends only the one grant
+and leaves the window open. Renewal refuses once any member is revoked, so such
+a chain cannot extend, but its other live members stay valid until their own
+expiry, at most 24 hours. Rollback redeploys the previous image with the
+command in the workflow run's receipt; the columns stay, and the migration is
+never edited once journaled. Before any rollback, close and revoke live chains
+(or revoke the mission); otherwise successors stay valid for up to 24 hours.
 
 This slice establishes bounded participation and durable observations. Native
 task lifecycle, secure cross-device delivery setup, cross-project membership

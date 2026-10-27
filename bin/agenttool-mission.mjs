@@ -486,6 +486,8 @@ async function probe(root, key, before, pending, options) {
       next: 'Inspect the pending record and the grant with its administrator before any new attempt.' });
   }
 }
+/** Final renewal refusals: no later attempt on this chain can succeed. renewal_not_due is the only transient one. */
+const FINAL_RENEWAL_REFUSALS = ['collaboration_mission_renewal_unavailable', 'collaboration_mission_renewal_closed', 'collaboration_mission_renewal_window_ended'];
 const REFUSAL_NEXT = {
   collaboration_mission_acceptance_required: 'accept the current invitation first',
   collaboration_mission_invalid_credential: 'This grant can no longer renew; ask the administrator for a new grant.',
@@ -602,10 +604,16 @@ async function renewLocked(root, options) {
       if (refusal.code === 'collaboration_mission_conflict') return recover(root, local, key, before, pending, options, true);
       if (refusal.status >= 500) throw new RenewalError('renewal_uncertain', 'The service could not complete the renewal; the exact request remains saved.',
         { serviceCode: refusal.code, delivered: 'unknown', next: 'run renew again to resend the same request' });
-      if (refusal.code === 'collaboration_mission_renewal_unavailable') {
+      // Each is a definite refusal written before any insert; an exact retry of a stored successor
+      // is answered before them, so the saved bytes can never renew and the record is set aside.
+      if (refusal.code === 'collaboration_mission_renewal_not_due') {
         abandon(root, pending);
-        throw new RenewalError('renewal_unavailable', 'The renewal window is closed or not open.', { serviceCode: refusal.code,
-          next: 'Inspect the grant\'s renewal window; after it ends, ask the administrator for a new grant.' });
+        return { renewed: false, reason: 'not_yet_open', service_code: refusal.code, expires_at: before.expires_at };
+      }
+      if (FINAL_RENEWAL_REFUSALS.includes(refusal.code)) {
+        abandon(root, pending);
+        throw new RenewalError('renewal_unavailable', 'This grant\'s renewal window has no room left: it was closed or ended, or the grant has none.', { serviceCode: refusal.code,
+          next: 'This chain cannot renew again; ask the administrator for a new grant.' });
       }
       if (resending && refusal.code === 'mission_route_not_found') throw new RenewalError('renewal_uncertain',
         'The resend reached a service without the renew route; the earlier send may be stored, and the exact request remains saved.',

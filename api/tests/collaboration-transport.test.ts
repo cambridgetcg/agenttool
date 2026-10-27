@@ -268,6 +268,12 @@ describe("sealed collaboration transport", () => {
     const closed = await f.app.request(`${BASE}/${M}/renew`, { method: "POST", body, headers: { ...headers(), "Content-Type": "application/json" } });
     expect(closed.status).toBe(403); privateResponse(closed);
     expect((await closed.json()).error).toBe("collaboration_mission_renewal_unavailable");
+    for (const reason of ["renewal_closed", "renewal_window_ended", "renewal_not_due"] as const) {
+      f.service.executeMissionRequest = async () => { throw new MissionError(reason); };
+      const refused = await f.app.request(`${BASE}/${M}/renew`, { method: "POST", body, headers: { ...headers(), "Content-Type": "application/json" } });
+      expect(refused.status).toBe(403); privateResponse(refused);
+      expect((await refused.json()).error).toBe(`collaboration_mission_${reason}`);
+    }
   });
   test("renew refuses other methods, queries, non-JSON, oversize, encoding and project bearers before the service", async () => {
     const f = fixture();
@@ -343,6 +349,7 @@ describe("sealed collaboration transport", () => {
     expect(schema).toMatchObject({ additionalProperties: false, required: ["grant_id", "mission_digest", "token_sha256"] });
     expect(Object.keys(renew.post.responses)).toEqual(expect.arrayContaining(["200", "201", "400", "401", "403", "409"]));
     expect(renew.post.responses["403"].description).toContain("collaboration_mission_renewal_unavailable");
+    for (const code of ["renewal_closed", "renewal_window_ended", "renewal_not_due"]) expect(renew.post.responses["403"].description).toContain(`collaboration_mission_${code}`);
     expect(renew.post.security).toEqual([{ missionGrant: [] }]);
     const close = paths[`${BASE}/{mission_id}/grants/{grant_id}/renewal/close`];
     expect(Object.keys(close)).toEqual(["parameters", "post"]);

@@ -403,17 +403,24 @@ export async function executeMissionRequest(input: MissionRequest, options: Miss
           || existing.acceptanceProof?.body_sha256 !== missionSha256(input.bodyBytes)) throw new MissionError("conflict");
         return { created: false, data: issued(existing, await chainView(tx, existing)) };
       }
-      const opensAt = grant.issuedAt.getTime() + Math.floor((grant.expiresAt.getTime() - grant.issuedAt.getTime()) / 2);
-      const ceiling = Math.min(now.getTime() + (root.expiresAt.getTime() - root.issuedAt.getTime()), grant.renewableUntil?.getTime() ?? -Infinity,
-        mission.expiresAt.getTime(), parent?.expiresAt?.getTime() ?? Infinity);
-      if (grant.renewalClosedAt !== null || root.renewalClosedAt !== null || grant.renewableUntil === null || now >= grant.renewableUntil
-        || now.getTime() < opensAt || ceiling <= grant.expiresAt.getTime()) throw new MissionError("renewal_unavailable");
+      // Final refusals come before the one transient refusal (renewal_not_due), so a caller that
+      // retries only on not_due never retries a chain that can no longer extend.
+      if (grant.renewableUntil === null) throw new MissionError("renewal_unavailable");
+      if (grant.renewalClosedAt !== null || root.renewalClosedAt !== null) throw new MissionError("renewal_closed");
+      // The fixed bounds (window, mission end, issuing key expiry) no longer reach past G.
+      const fixedCeiling = Math.min(grant.renewableUntil.getTime(), mission.expiresAt.getTime(), parent?.expiresAt?.getTime() ?? Infinity);
+      if (now >= grant.renewableUntil || fixedCeiling <= grant.expiresAt.getTime()) throw new MissionError("renewal_window_ended");
       // New code ends a chain whole. Code at a99257ab (a rollback, or an old Machine during a
       // rolling deploy) revokes or leaves one row and leaves the window open: any revoked
       // member still ends renewal, so a kick through the only id an administrator knows holds.
       const [ended] = await tx.select({ id: collaborationGrants.id }).from(collaborationGrants)
         .where(and(chainKey(scope, root.id), isNotNull(collaborationGrants.revokedAt))).limit(1);
-      if (ended) throw new MissionError("renewal_unavailable");
+      if (ended) throw new MissionError("renewal_closed");
+      const opensAt = grant.issuedAt.getTime() + Math.floor((grant.expiresAt.getTime() - grant.issuedAt.getTime()) / 2);
+      if (now.getTime() < opensAt) throw new MissionError("renewal_not_due");
+      const ceiling = Math.min(now.getTime() + (root.expiresAt.getTime() - root.issuedAt.getTime()), fixedCeiling);
+      // Unreachable once halfway (now + root lifetime then passes G's expiry); kept as a guard.
+      if (ceiling <= grant.expiresAt.getTime()) throw new MissionError("renewal_window_ended");
       // Born accepted: the signed body names the same immutable digest with the same enrolled key.
       // signed_grant_id lets the stored proof be re-verified on its own.
       const [child] = await tx.insert(collaborationGrants).values({ id: renewal.grant_id, projectId: grant.projectId, missionId: grant.missionId,
