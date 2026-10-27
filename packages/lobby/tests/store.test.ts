@@ -307,7 +307,7 @@ describe("state schema versions and the upgrade chain", () => {
     reader.close();
 
     const upgraded = LobbyStore.open(home);
-    expect(upgraded.stateVersion).toBe("3");
+    expect(upgraded.stateVersion).toBe(STATE_SCHEMA_VERSION);
     expect(upgraded.fleet.available).toBe(true);
     expect(upgraded.fleet.v3).toBe(true);
     expect(upgraded.listRooms()).toEqual([room]);
@@ -339,7 +339,7 @@ describe("state schema versions and the upgrade chain", () => {
     reader.close();
 
     const upgraded = LobbyStore.open(home);
-    expect(upgraded.stateVersion).toBe("3");
+    expect(upgraded.stateVersion).toBe(STATE_SCHEMA_VERSION);
     const [member] = upgraded.fleet.members("11111111-1111-4111-8111-111111111111");
     expect(member).toMatchObject({ identity_id: "22222222-2222-4222-8222-222222222222", state: "active", paused_at: null });
     upgraded.close();
@@ -368,6 +368,23 @@ describe("state schema versions and the upgrade chain", () => {
       .all() as Array<{ type: string; name: string; sql: string }>).map((row) => `${row.type} ${row.name}: ${row.sql}`);
     raw.close();
     return { cookie, version, objects };
+  }
+
+  /** The schema each released version leaves on disk: sha256 of `schemaOf().objects`
+   * joined by newlines. These are frozen from the released code, not from the
+   * code under test: each value is what a new desk at that release wrote
+   * (1: 1fd7d4c1, a395ed11; 2: 20abfae2 to 8434539b; 3: 8ab54047 to 8947c8fd).
+   * Editing `SCHEMA_SQL` or a released step changes a fixture below and fails
+   * here, because real desks at that version would not have the edit. A new
+   * version adds one line, taken from a new desk once its step is final. */
+  const RELEASED_SCHEMAS: Readonly<Record<string, string>> = {
+    "1": "7aac6b19c22d1c6d332df147db6b2eae0474ce566a880a472de5c01ad3f73fa7",
+    "2": "dd929e4e296c22ead6f3d49f297790d10e048bc76608ced611bbef8d5f4b03b2",
+    "3": "578aa41feab26266068638cca521d027004176a36f91dd0a2aebb6d699bfd847",
+  };
+
+  function schemaDigest(objects: string[]): string {
+    return sha256Hex(objects.join("\n"));
   }
 
   /** A file as a desk of `version` left it, with one local-hall room in it:
@@ -408,6 +425,14 @@ describe("state schema versions and the upgrade chain", () => {
     expect(version).toBe(STATE_SCHEMA_VERSION);
   });
 
+  test("every version the chain knows has a frozen released schema, and a new file has the current one", () => {
+    expect(Object.keys(RELEASED_SCHEMAS).sort((a, b) => Number(a) - Number(b)))
+      .toEqual(["1", ...SCHEMA_STEPS.map((step) => step.to)]);
+    const fresh = tempHome().home;
+    LobbyStore.open(fresh).close();
+    expect(schemaDigest(schemaOf(fresh).objects)).toBe(RELEASED_SCHEMAS[STATE_SCHEMA_VERSION]!);
+  });
+
   // Every version the chain knows: 1, 2 and 3 today, and each later one as it lands.
   for (const version of ["1", ...SCHEMA_STEPS.map((step) => step.to)]) {
     test(`a version-${version} file opens, upgrades to version ${STATE_SCHEMA_VERSION} once and keeps its rooms`, () => {
@@ -418,6 +443,9 @@ describe("state schema versions and the upgrade chain", () => {
       const { home, roomId } = legacyFile(version);
       const before = schemaOf(home);
       expect(before.version).toBe(version);
+      // The fixture is the schema real desks at this version have, not just
+      // what today's base and steps rebuild.
+      expect(schemaDigest(before.objects)).toBe(RELEASED_SCHEMAS[version]!);
 
       const opened = LobbyStore.open(home);
       expect(opened.stateVersion).toBe(STATE_SCHEMA_VERSION);
