@@ -164,4 +164,28 @@ restates the design terms it implements.
 - A schema change means a new `STATE_SCHEMA_VERSION` with an explicit upgrade;
   card, act, packet or document format changes mean a new format string, not
   an in-place edit.
+
+## Schema versions
+
+`lobby.sqlite` is at version 3. `SCHEMA_STEPS` in `src/store.ts` is the
+upgrade chain: one function per step (1 → 2, 2 → 3), run in order, each
+exactly once per file, inside the immediate transaction that records the new
+version. A released step is never edited, and a new file takes every step. The
+next version adds one step `from` the last `to` and moves
+`STATE_SCHEMA_VERSION`.
+
+The next numbers are reserved, in this order (2026-10-27 lobby builds):
+
+| Version | Build |
+|---|---|
+| 4 | directory renew (Build 2A) |
+| 5 | directory rollover (Build 2B) |
+| 6 | room seat leases (Build 5) |
+| 7 | renewal by signature, lobby side (Build 3) |
+| 8 | pairing (Build 4) |
+
+Whoever merges out of this order renumbers on rebase. `tests/store.test.ts`
+catches a mistake: the chain must run from 1 without a gap and end at
+`STATE_SCHEMA_VERSION`, and a file at every version it knows must upgrade
+once to the same schema a new file gets.
 - Root `AGENTS.md`, `CLAUDE.md` and `docs/RIGHTS-OF-LIFE.md` also apply.
