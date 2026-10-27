@@ -15,7 +15,7 @@ import { sealDocument, type KnockBody } from "../src/signed.js";
 import { LobbyStore } from "../src/store.js";
 import { missionDigest, type MissionDescriptor } from "../src/wire.js";
 import { FAKE_BEARER, FAKE_PROJECT, FakeHosted, type SeenRequest } from "./fake-hosted.js";
-import { bootstrapFleet, enrollThroughHub, ok, shownBytes, world, type Desk, type Fleet } from "./fleet-helpers.js";
+import { bootstrapFleet, enrollThroughHub, ok, relayArgs, shownBytes, world, type Desk, type Fleet } from "./fleet-helpers.js";
 import { cleanupTempHomes } from "./helpers.js";
 
 afterEach(cleanupTempHomes);
@@ -192,7 +192,7 @@ describe("no consequential act plans without a person at the terminal", () => {
     const knockId = await knock(fleet);
     const second = await addFleetRoom(fleet, "--title", "Second room");
     const third = fleet.world.desk("third");
-    const packet = third.file("packet.json", (await ok(third.run("enroll-device", "--project", FAKE_PROJECT))).stdout);
+    const relay = relayArgs(third, await ok(third.run("enroll-device", "--project", FAKE_PROJECT)));
     const headless = fleet.world.desk("headless-hub", { of: fleet.hub, noTerminal: true });
     const seen = hosted.seen.length;
     const audit = (await ok(fleet.hub.run("audit", "list", "--json"))).stdout;
@@ -203,7 +203,7 @@ describe("no consequential act plans without a person at the terminal", () => {
       ["hub", "season", "open", second],
       ["hub", "season", "adopt", second, "--mission", fleet.seasonId, "--digest", fleet.seasonDigest],
       ["hub", "seat", "directory"],
-      ["hub", "relay", "--packet-file", packet],
+      relay,
       ["outbox", "retry", crypto.randomUUID()],
     ]) {
       const refused = await headless.run(...argv);
@@ -507,7 +507,7 @@ describe("fleet join restores a removed door pin", () => {
     expect((await fleet.device.yes("knock", fleet.roomId, "--tier", "spectator")).stderr).toContain("door_not_pinned");
     fleet.device.answers.length = 0;
     const enrolled = await ok(fleet.device.run("enroll-device"));
-    const relayed = await ok(fleet.hub.yes("hub", "relay", "--packet-file", fleet.device.file("renew.json", enrolled.stdout)));
+    const relayed = await ok(fleet.hub.yes(...relayArgs(fleet.device, enrolled, "renew.json")));
     const joinFile = fleet.device.file("renew-join.json", relayed.stdout);
     // The typed fingerprint must still be the door this desk joined with.
     const wrong = await fleet.device.run("fleet", "join", "--packet-file", joinFile, "--door-fingerprint", "0".repeat(16));
@@ -524,7 +524,7 @@ describe("fleet join restores a removed door pin", () => {
   test("a renewal with the door pin in place keeps it", async () => {
     const fleet = await bootstrapFleet();
     const enrolled = await ok(fleet.device.run("enroll-device"));
-    const relayed = await ok(fleet.hub.yes("hub", "relay", "--packet-file", fleet.device.file("renew.json", enrolled.stdout)));
+    const relayed = await ok(fleet.hub.yes(...relayArgs(fleet.device, enrolled, "renew.json")));
     const joined = await ok(fleet.device.yes("fleet", "join", "--packet-file", fleet.device.file("renew-join.json", relayed.stdout),
       "--door-fingerprint", fleet.doorFingerprint));
     expect(joined.stdout).not.toContain("pinned");

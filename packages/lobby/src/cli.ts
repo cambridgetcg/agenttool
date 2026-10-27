@@ -122,7 +122,7 @@ Fleet hall, hub only (bearer and door key in the login Keychain)
   hub init --project UUID [--days 1-30] [--adopt-directory UUID --directory-digest sha256:...]
            [--keychain-account A] [--bearer-service S] [--door-service S]
   hub show [--json]
-  hub relay --packet-file FILE
+  hub relay --packet-file FILE --device-fingerprint CODE
   hub season open <room_id> [--days 1-30]
   hub season adopt <room_id> --mission UUID --digest sha256:...
   hub seat directory|<room_id>

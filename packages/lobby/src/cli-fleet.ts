@@ -49,6 +49,7 @@ import { confirmAndRecord, NO_TERMINAL_MESSAGE, type Confirm, type FleetContext,
 import { DOORS, ROOM_STATUSES, SLOT_TIERS, type SlotTier } from "./room.js";
 import type { ActPreview } from "./store.js";
 import { wrapFleetCard } from "./view.js";
+import { deviceCode } from "./wire.js";
 
 export const EXIT_OK = 0;
 export const EXIT_REFUSED = 1;
@@ -171,6 +172,7 @@ export function enrollDeviceCommand(ctx: FleetContext, args: string[], io: Fleet
     ...(values.project === undefined ? {} : { project_id: values.project }),
     ...(values["display-name"] === undefined ? {} : { display_name: values["display-name"] }),
   });
+  const code = deviceCode(packet.public_key);
   io.stdout(`${JSON.stringify(packet, null, 2)}\n`);
   io.stderr([
     `agenttool-lobby: ${created ? "created this desk and " : ""}signed one public ${packet.kind} packet (above, on stdout).`,
@@ -178,6 +180,10 @@ export function enrollDeviceCommand(ctx: FleetContext, args: string[], io: Fleet
     `  The token itself stays in this desk's private state and is never printed.`,
     `  VALID ${packet.kind === "enroll" ? "5" : "30"} MINUTES (until ${packet.valid_until}): carry it to the hub now for hub relay.`,
     "  If the window passes, run enroll-device again for a fresh packet.",
+    `  device code ${code}`,
+    "  Read it from this screen and type it at the hub: hub relay --packet-file FILE --device-fingerprint <the code above>",
+    "  Do not send the code with the packet: the hub checks the packet's key against the code typed there,",
+    "  so a code carried beside a swapped packet would vouch for it.",
     "",
   ].join("\n"));
   return EXIT_OK;
@@ -430,11 +436,20 @@ export async function hubCommand(ctx: FleetContext, args: string[], io: FleetIo)
       return EXIT_OK;
     }
     case "relay": {
-      const { values, positionals: extra } = parseArgs({ args: rest, allowPositionals: true, strict: true, options: { "packet-file": { type: "string" } } });
-      positionals(extra, 0, "hub relay --packet-file FILE");
+      const { values, positionals: extra } = parseArgs({
+        args: rest,
+        allowPositionals: true,
+        strict: true,
+        options: { "packet-file": { type: "string" }, "device-fingerprint": { type: "string" } },
+      });
+      positionals(extra, 0, "hub relay --packet-file FILE --device-fingerprint CODE");
+      // An empty or blank value is the same as no flag: a usage error, exit 2.
+      if (values["device-fingerprint"] === undefined || values["device-fingerprint"].trim() === "") {
+        throw new FleetUsageError("hub relay needs --device-fingerprint: type the device code that enroll-device showed on the device's own screen");
+      }
       const headless = withoutTerminal(ctx, io);
       if (headless !== null) return headless;
-      const plan = planRelay(ctx, { packetText: readPacketFile(values["packet-file"]) });
+      const plan = planRelay(ctx, { packetText: readPacketFile(values["packet-file"]), deviceCode: values["device-fingerprint"] });
       const outcome = await consequentialAsync(ctx, io, plan.preview, () => executeRelay(ctx, plan));
       if (!outcome.confirmed) return outcome.code;
       io.stdout(`${JSON.stringify(outcome.value.join, null, 2)}\n`);

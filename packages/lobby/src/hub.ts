@@ -75,12 +75,15 @@ import { checkText } from "./text.js";
 import {
   assertDigest,
   assertUuid,
+  deviceCode,
+  deviceCodeMatches,
   INVITATION_TEMPLATE_FORMAT,
   LOBBY_ORIGIN,
   MISSION_DESCRIPTOR_FORMAT,
   MISSION_LIMITS,
   missionDigest,
   newUuid,
+  normalizeDeviceCode,
   privateKeyFromSeed,
   publicKeyBase64,
   publicKeyFingerprint,
@@ -438,12 +441,30 @@ export interface RelayPlan {
   issue: GrantIssue;
 }
 
-export function planRelay(ctx: FleetContext, input: { packetText: string }): RelayPlan {
+/** `deviceCode` is what the person typed at this terminal, read from the
+ * device's own screen (enroll-device prints it to stderr). The packet's key is
+ * accepted only when it matches: the code is checked right after the packet
+ * parses, before any Keychain read, audit record, prompt or request, and a
+ * mismatch never says which code the packet carries. */
+export function planRelay(ctx: FleetContext, input: { packetText: string; deviceCode: string }): RelayPlan {
+  if (typeof input.deviceCode !== "string" || input.deviceCode.length === 0) {
+    throw new LobbyError("device_fingerprint_required", "hub relay needs the device code shown on the device by enroll-device");
+  }
+  if (normalizeDeviceCode(input.deviceCode) === null) {
+    throw new LobbyError("invalid_device_fingerprint", "a device code is 16 characters such as ABCD-EFGH-JKMN-PQRS, as enroll-device prints it");
+  }
+  // These three only look at local state and the terminal; none reads the Keychain.
   const hub = requireLiveHub(ctx);
   requireKeychain(ctx);
   requireHosted(ctx);
   const now = ctx.now();
   const packet = parseEnrollmentPacket(input.packetText, now);
+  if (!deviceCodeMatches(input.deviceCode, packet.public_key)) {
+    throw new LobbyError("device_fingerprint_mismatch",
+      "the typed device code does not match the packet's key; nothing was read, recorded or sent. " +
+      "Read the code again on the device that made this packet, or carry that device's packet");
+  }
+  const code = deviceCode(packet.public_key);
   if (packet.project_id !== hub.project_id) throw new LobbyError("project_mismatch", "the packet names another project");
   const fleet = ctx.store.fleet;
   const known = fleet.device(packet.identity_id);
@@ -477,6 +498,7 @@ export function planRelay(ctx: FleetContext, input: { packetText: string }): Rel
   const at = now.toISOString();
   const preview = actPreview("hub.relay", packet.identity_id, at, [
     `device ${packet.fingerprint} ${JSON.stringify(packet.display_name)} (name is self-declared)`,
+    `device code ${code} typed at this terminal matches the packet's key`,
     enroll ? `enroll identity ${packet.identity_id} key ${packet.signing_key_id} into project ${hub.project_id} (exact signed body below)` : "already enrolled: no enrollment request is sent",
     `directory grant ${issue.grant_id} mission.observe+mission.read until ${issue.expires_at}`,
     `bound to the device's own token hash ${issue.token_sha256}; no token is created or shown here`,
@@ -487,6 +509,7 @@ export function planRelay(ctx: FleetContext, input: { packetText: string }): Rel
       signing_key_id: packet.signing_key_id,
       did: `did:at:${packet.identity_id}`,
       fingerprint: packet.fingerprint,
+      device_code: code,
       public_key: packet.public_key,
       display_name: packet.display_name,
     },

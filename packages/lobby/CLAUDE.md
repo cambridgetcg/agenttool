@@ -94,7 +94,13 @@ restates the design terms it implements.
   complete door-signed `member_roster` verified against that door key (highest
   `roster_seq` wins). Never pin or trust a key because a card, knock, message,
   note or unverified roster names it. A key added by hand (`hub member add`) is
-  typed at the hub's terminal, never taken from room content.
+  typed at the hub's terminal, never taken from room content. A relayed
+  packet's device is confirmed by a typed device code, never taken from the
+  packet: `hub relay` needs `--device-fingerprint` (the Crockford-80 code
+  `enroll-device` shows on the device's stderr, `deviceCode` in `src/wire.ts`)
+  and compares it with the packet's key before any Keychain read, audit
+  record, prompt or request, refusing with `device_fingerprint_mismatch`
+  without naming the expected code. Do not add a path that relays without it.
 - **Removal and the stop never wait on the network.** Kick, block and stop
   record their local effect (member state, block, stop) before the first
   request; after a stop the hub issues nothing (`requireLiveHub`, at plan and

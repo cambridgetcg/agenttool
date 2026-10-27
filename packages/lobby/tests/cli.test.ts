@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { EXIT_NOT_CONFIRMED, EXIT_OK, EXIT_REFUSED, EXIT_USAGE, runCli } from "../src/cli.js";
 import { LobbyStore } from "../src/store.js";
 import { confirmOnTty, showOnTty } from "../src/tty.js";
+import { deviceCode } from "../src/wire.js";
 import { cleanupTempHomes, fakePublicKey, fakeTerminal, packageRoot, tempHome, type FakeTerminal } from "./helpers.js";
 
 afterEach(cleanupTempHomes);
@@ -110,6 +111,10 @@ describe("ordinary room commands", () => {
     expect((await run("room", "add", "--title", "x", "--status", "online")).code).toBe(EXIT_USAGE);
     expect((await run("room", "add", "--title", "x", "--slot", "nope")).code).toBe(EXIT_USAGE);
     expect((await run("room", "dance")).code).toBe(EXIT_USAGE);
+    // hub relay without the typed device code is a usage error before anything is read.
+    const relay = await run("hub", "relay", "--packet-file", "/nonexistent/packet.json");
+    expect(relay.code).toBe(EXIT_USAGE);
+    expect(relay.stderr).toContain("--device-fingerprint");
     const refused = await run("room", "add", "--title", "x", "--tag", "Not_A_Tag");
     expect(refused.code).toBe(EXIT_REFUSED);
     expect(refused.stderr).toContain("invalid_tags");
@@ -251,6 +256,15 @@ describe("the real CLI without a controlling terminal", () => {
     expect(packet).toMatchObject({ format: "agenttool-lobby-enrollment-packet/v1", kind: "enroll", origin: "https://api.agenttool.dev" });
     expect(packet.enrollment_request.request_target).toBe("/v1/identities/enroll");
     expect(result.stderr).toContain("VALID 5 MINUTES");
+    // The device code goes to stderr for the person to read and type at the hub; stdout stays the packet.
+    const code = deviceCode(packet.public_key);
+    expect(code).toMatch(/^[0-9A-HJKMNP-TV-Z]{4}(?:-[0-9A-HJKMNP-TV-Z]{4}){3}$/);
+    expect(result.stderr).toContain(`device code ${code}\n`);
+    // It is shown once, on its own line; the hint names a placeholder so the code is not pasted beside the packet.
+    expect(result.stderr.split(code)).toHaveLength(2);
+    expect(result.stderr).toContain("--device-fingerprint <the code above>");
+    expect(result.stdout).toBe(`${JSON.stringify(packet, null, 2)}\n`);
+    expect(result.stdout).not.toContain(code);
     expect(result.stderr).toContain(packet.directory_token_sha256);
     expect(result.stdout + result.stderr).not.toMatch(/atcm_|PRIVATE KEY/);
     const tokenFile = join(home, "secrets", "tokens", `${packet.directory_token_sha256}.json`);

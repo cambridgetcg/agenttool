@@ -7,9 +7,12 @@ import { join } from "node:path";
 import { buildLobbyMcpServer } from "../src/mcp.js";
 import { sealDocument, type FleetCard, type KnockBody } from "../src/signed.js";
 import { LobbyStore } from "../src/store.js";
-import { generateKeyPair, missionDigest, publicKeyBase64, publicKeyFingerprint, type MissionDescriptor } from "../src/wire.js";
+import type { KeychainRef } from "../src/keychain.js";
+import {
+  deviceCode, deviceCodeMatches, generateKeyPair, missionDigest, normalizeDeviceCode, publicKeyBase64, publicKeyFingerprint, type MissionDescriptor,
+} from "../src/wire.js";
 import { FAKE_BEARER, FAKE_PROJECT } from "./fake-hosted.js";
-import { bootstrapFleet, enrollThroughHub, ok, world, type Desk, type Fleet } from "./fleet-helpers.js";
+import { bootstrapFleet, deviceCodeShown, enrollThroughHub, ok, relayArgs, world, type Desk, type Fleet } from "./fleet-helpers.js";
 import { cleanupTempHomes } from "./helpers.js";
 
 afterEach(cleanupTempHomes);
@@ -162,7 +165,7 @@ describe("door pin and verification", () => {
     const fleet = await bootstrapFleet();
     const device = w.desk("other");
     const enrolled = await ok(device.run("enroll-device", "--project", FAKE_PROJECT));
-    const relayed = await ok(fleet.hub.yes("hub", "relay", "--packet-file", device.file("p.json", enrolled.stdout)));
+    const relayed = await ok(fleet.hub.yes(...relayArgs(device, enrolled, "p.json")));
     const join = device.file("j.json", relayed.stdout);
     const sent = fleet.world.hosted.seen.length;
     const refused = await device.run("fleet", "join", "--packet-file", join, "--door-fingerprint", "0123456789abcdef");
@@ -177,7 +180,7 @@ describe("door pin and verification", () => {
     const fleet = await bootstrapFleet();
     const device = fleet.world.desk("other");
     const enrolled = await ok(device.run("enroll-device", "--project", FAKE_PROJECT));
-    const relayed = await ok(fleet.hub.yes("hub", "relay", "--packet-file", device.file("p.json", enrolled.stdout)));
+    const relayed = await ok(fleet.hub.yes(...relayArgs(device, enrolled, "p.json")));
     const packet = JSON.parse(relayed.stdout);
     const impostor = publicKeyBase64(generateKeyPair());
     packet.door = { public_key: impostor, fingerprint: publicKeyFingerprint(impostor) };
@@ -220,6 +223,96 @@ describe("door pin and verification", () => {
   });
 });
 
+describe("hub relay confirms the device by a typed device code (C1)", () => {
+  // Fixed vectors from PR #487's enrollmentFingerprint (api/src/services/identity/pairing.ts
+  // at b5884198), run on these exact keys. Swap for a cross-check against that
+  // function once it is on main.
+  const VECTORS: Array<[string, string]> = [
+    ["AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", "CSM7-NBFR-CAYQ-EV4F"],
+    ["//////////////////////////////////////////8=", "NYB1-6XGF-E9HN-ZFDM"],
+    ["AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=", "CC6W-TAB6-RGSP-D48J"],
+    ["O2onvM62pC1io6jQKm8Nc2UyFXcd4kOmOsBIoYtZ2ik=", "2EF3-JG76-9DA9-2WH0"],
+    ["6kpsY+KcUgq+9VB7Ey7F+ZVHdq6+vnuSQh7qaRRG0iw=", "ZT0J-R4QK-ND6E-DB2X"],
+  ];
+
+  test("the device code is #487's Crockford-80 format, pinned by vectors", () => {
+    for (const [key, code] of VECTORS) expect(deviceCode(key)).toBe(code);
+  });
+
+  test("typed codes ignore case, spaces and dashes and read I and L as 1, O as 0", () => {
+    expect(normalizeDeviceCode("nyb1-6xgf-e9hn-zfdm")).toBe("NYB16XGFE9HNZFDM");
+    expect(normalizeDeviceCode(" NYBl 6XGF E9HN ZFDM ")).toBe("NYB16XGFE9HNZFDM");
+    expect(normalizeDeviceCode("NYBI6XGFE9HNZFDM")).toBe("NYB16XGFE9HNZFDM");
+    expect(deviceCodeMatches("2ef3jg769da92whO", VECTORS[3]![0])).toBe(true);
+    expect(deviceCodeMatches("zToj-r4qk-nd6e-db2x", VECTORS[4]![0])).toBe(true);
+    // Too short, too long, U (not Crockford) and other punctuation are not codes.
+    for (const bad of ["", "CSM7-NBFR-CAYQ", "CSM7-NBFR-CAYQ-EV4F-0", "CSM7-NBFR-CAYQ-EV4U", "CSM7_NBFR_CAYQ_EV4F", "CSM7.NBFR.CAYQ.EV4F"]) {
+      expect({ bad, normalized: normalizeDeviceCode(bad) }).toEqual({ bad, normalized: null });
+    }
+    expect(deviceCodeMatches(VECTORS[0]![1], VECTORS[1]![0])).toBe(false);
+  });
+
+  test("a missing, malformed or mismatched code is refused before any Keychain read, audit record, prompt or request", async () => {
+    const fleet = await bootstrapFleet();
+    const hosted = fleet.world.hosted;
+    const touched: string[] = [];
+    const keychain = fleet.hub.keychain;
+    const read = keychain.read.bind(keychain);
+    const has = keychain.has.bind(keychain);
+    keychain.read = async (ref: KeychainRef) => { touched.push(`read ${ref.service}`); return read(ref); };
+    keychain.has = async (ref: KeychainRef) => { touched.push(`has ${ref.service}`); return has(ref); };
+    const device = fleet.world.desk("new-mac");
+    const other = fleet.world.desk("other-mac");
+    const enrolled = await ok(device.run("enroll-device", "--project", FAKE_PROJECT));
+    const otherEnrolled = await ok(other.run("enroll-device", "--project", FAKE_PROJECT));
+    const packetFile = device.file("p.json", enrolled.stdout);
+    const ownCode = deviceCodeShown(enrolled.stderr);
+    const otherCode = deviceCodeShown(otherEnrolled.stderr);
+    expect(otherCode).not.toBe(ownCode);
+    const seen = hosted.seen.length;
+    const opened = fleet.hub.terminal.opened;
+    const audit = (await ok(fleet.hub.run("audit", "list", "--json"))).stdout;
+
+    // No flag, an empty value and a blank value are all the same usage error.
+    for (const flag of [[], ["--device-fingerprint", ""], ["--device-fingerprint=   "]]) {
+      const missing = await fleet.hub.yes("hub", "relay", "--packet-file", packetFile, ...flag);
+      expect({ flag, code: missing.code }).toEqual({ flag, code: 2 });
+      expect(missing.stderr).toContain("--device-fingerprint");
+      fleet.hub.answers.length = 0;
+    }
+    // The whole code is compared: one changed character, at the end or in the middle, is a mismatch.
+    const flip = (c: string) => (c === "0" ? "1" : "0");
+    const lastChanged = ownCode.slice(0, -1) + flip(ownCode.at(-1)!);
+    const middleChanged = ownCode.slice(0, 7) + flip(ownCode[7]!) + ownCode.slice(8);
+    for (const [typed, error] of [["ABCD", "invalid_device_fingerprint"], ["CSM7-NBFR-CAYQ-EV4U", "invalid_device_fingerprint"],
+      [otherCode, "device_fingerprint_mismatch"], [otherCode.toLowerCase().replace(/-/g, " "), "device_fingerprint_mismatch"],
+      [lastChanged, "device_fingerprint_mismatch"], [middleChanged, "device_fingerprint_mismatch"]] as const) {
+      fleet.hub.answers.push("yes");
+      const refused = await fleet.hub.run("hub", "relay", "--packet-file", packetFile, "--device-fingerprint", typed);
+      fleet.hub.answers.length = 0;
+      expect({ typed, code: refused.code }).toEqual({ typed, code: 1 });
+      expect(refused.stderr).toContain(error);
+      // The refusal never tells the person which code the packet carries.
+      expect(refused.stdout + refused.stderr).not.toContain(ownCode);
+      expect(refused.stdout).toBe("");
+    }
+    // Another device's packet with this device's code is refused the same way.
+    const swapped = await fleet.hub.run("hub", "relay", "--packet-file", other.file("o.json", otherEnrolled.stdout), "--device-fingerprint", ownCode);
+    expect(swapped.stderr).toContain("device_fingerprint_mismatch");
+
+    expect(touched).toEqual([]);
+    expect(fleet.hub.terminal.opened).toBe(opened);
+    expect(hosted.seen).toHaveLength(seen);
+    expect((await ok(fleet.hub.run("audit", "list", "--json"))).stdout).toBe(audit);
+    expect(hosted.identities.size).toBe(2);
+
+    // The person's own reading of the code, typed loosely, relays as before.
+    const relayed = await ok(fleet.hub.yes("hub", "relay", "--packet-file", packetFile, "--device-fingerprint", ` ${ownCode.toLowerCase().replace(/-/g, "")} `));
+    expect(JSON.parse(relayed.stdout).invitation_template.public_key).toBe(JSON.parse(enrolled.stdout).public_key);
+    expect(touched).toContain("read agenttool-lobby.hub-bearer");
+  });
+});
+
 describe("hub relay packet checks", () => {
   test("expired, foreign, tampered and wrong-origin packets are refused before any request", async () => {
     const fleet = await bootstrapFleet();
@@ -234,17 +327,18 @@ describe("hub relay packet checks", () => {
       ["extra field", JSON.stringify({ ...packet, bearer: "at_nothing" })],
       ["body changed", JSON.stringify({ ...packet, enrollment_request: { ...packet.enrollment_request, body_utf8: packet.enrollment_request.body_utf8.replace("desk ", "desk  ") } })],
     ];
+    const code = deviceCodeShown(enrolled.stderr);
     for (const [name, text] of variants) {
-      const refused = await fleet.hub.run("hub", "relay", "--packet-file", device.file(`${name}.json`, text));
+      const refused = await fleet.hub.run("hub", "relay", "--packet-file", device.file(`${name}.json`, text), "--device-fingerprint", code);
       expect({ name, code: refused.code }).toEqual({ name, code: 1 });
       expect(refused.stderr).toMatch(/invalid_packet/);
     }
     fleet.world.advance(6 * 60_000);
-    const expired = await fleet.hub.run("hub", "relay", "--packet-file", device.file("late.json", enrolled.stdout));
+    const expired = await fleet.hub.run(...relayArgs(device, enrolled, "late.json"));
     expect(expired.stderr).toContain("packet_expired");
     const foreign = fleet.world.desk("foreign");
     const other = await ok(foreign.run("enroll-device", "--project", "88888888-8888-4888-8888-888888888888"));
-    expect((await fleet.hub.run("hub", "relay", "--packet-file", foreign.file("f.json", other.stdout))).stderr).toContain("project_mismatch");
+    expect((await fleet.hub.run(...relayArgs(foreign, other, "f.json"))).stderr).toContain("project_mismatch");
     expect(hosted.seen.length).toBe(sent);
     expect(fleet.hub.terminal.opened).toBeGreaterThan(0);
   });
