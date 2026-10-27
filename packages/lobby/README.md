@@ -318,10 +318,13 @@ agenttool-lobby fleet join --packet-file /private/dir/join.json --door-fingerpri
 On each other device, carrying files by the existing SSH mailbox or AirDrop:
 
 ```bash
-agenttool-lobby enroll-device --project <hub project uuid> > packet.json   # carry it to the hub within 5 minutes
-#   on the hub: agenttool-lobby hub relay --packet-file packet.json > join.json
-agenttool-lobby fleet join --packet-file join.json --door-fingerprint <read from the hub's terminal>
+agenttool-lobby enroll-device --project <hub project uuid> > /private/dir/packet.json   # carry it to the hub within 5 minutes
+#   on the hub: agenttool-lobby hub relay --packet-file /private/dir/packet.json > /private/dir/join.json
+agenttool-lobby fleet join --packet-file /private/dir/join.json --door-fingerprint <read from the hub's terminal>
 ```
+
+`--packet-file` takes an absolute path to a regular file; a relative path or a
+link is refused (`"$PWD/join.json"` works from the directory that holds it).
 
 1. **`hub init`** (tty) records the hub: project, origin, Keychain item names,
    the door key (generated and stored, or reused when the Keychain already has
@@ -785,12 +788,16 @@ it again to settle anything uncertain. A grant another terminal requested
 while the stop's own prompt was open is not in the confirmed list: the stop
 names it, exits `1`, and the next `hub stop` revokes it.
 
-It never rotates a key. It prints, on stdout and stderr, the manual step for
-the owner: revoke or rotate the API key whose bearer is in the hub's Keychain
-item, from a terminal or the dashboard the owner controls, because every
-mission grant hangs off the API key that issued it, so revoking that key ends
-every lobby grant at once, including any the stop could not reach. The desk
-never calls `/v1/keys`. A lobby that continues afterwards starts a new hub.
+It never revokes or rotates a key. It prints, on stdout and stderr, the manual
+step for the owner: from a terminal the owner controls, revoke the API key
+whose bearer is in the hub's Keychain item. `GET /v1/keys` gives its id and
+`DELETE /v1/keys/<id>` revokes it. `DELETE` refuses a project's only active key
+with `409`, so for a dedicated hub project mint a replacement first
+(`POST /v1/keys`) or use `POST /v1/keys/rotate`, which revokes the calling key
+and returns its replacement once. Every mission grant hangs off the API key
+that issued it, so revoking that key ends every lobby grant at once, including
+any the stop could not reach. The desk never calls `/v1/keys`. A lobby that
+continues afterwards starts a new hub.
 
 ## Weekly access digest
 
@@ -983,8 +990,9 @@ text such as commit SHAs, digests, room ids, public addresses and version number
   plaintext. Every fleet device reads every knock note in the directory, and
   every renew or leave note and renewal notice posted there. Every member reads
   every message at a room's table. Desk display names are self-declared and
-  visible to the project (`/v1/discover` lists active identities to any
-  bearer), so they stay neutral.
+  visible platform-wide: `/v1/discover` lists the active identities of every
+  project, with their display names, to any project's bearer (and searches
+  them with `q`), so they stay neutral.
 - **The bearer is a whole-project credential.** It is read into this process's
   memory for one confirmed act and cannot be wiped from a JavaScript string;
   it goes only to the pinned origin and is never printed. A dedicated
