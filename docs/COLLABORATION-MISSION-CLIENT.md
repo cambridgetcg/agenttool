@@ -261,8 +261,11 @@ node /absolute/tools/agenttool-mission.mjs renewal-close \
 or `--origin`) before it reads the bearer, sends one zero-byte
 `POST …/grants/{grant_id}/renewal/close`, and prints `grant_id`, `renewable`,
 `root_grant_id` and `closed_at`. Closing is idempotent and keeps the first close
-time; the current grant runs out at its own expiry. An uncertain outcome stops
-with `renewal_close_uncertain`; repeat the command. Revoking any grant in the
+time; the current grant runs out at its own expiry. An uncertain outcome (a
+dropped connection, any 5xx, or an answer that is not readable JSON, such as a
+proxy's HTML or empty error page) stops with `renewal_close_uncertain`: the
+close may not have run, so repeat the command. Only a 4xx stops with
+`renewal_close_refused` and its fixed `code`. Revoking any grant in the
 chain with the administrator API ends the whole chain.
 
 The template holds no secret. Return it to the participant by any channel,

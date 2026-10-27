@@ -706,11 +706,13 @@ export async function closeRenewal({ bearerFile, missionId, grantId, serviceOrig
       method: 'POST', redirect: 'error', headers: { Authorization: `Bearer ${bearer}` },
       signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout) }));
   } catch (error) {
+    // Only a 4xx is a refusal. A 5xx, an unreadable answer (a proxy's HTML or empty 5xx) or a
+    // dropped connection decided nothing this client can rely on; the close may not have run.
     const refusal = refusalOf(error);
-    if (refusal) throw new RenewalError('renewal_close_refused', 'The service refused to close the renewal window.', { serviceCode: refusal.code,
+    if (refusal && refusal.status < 500) throw new RenewalError('renewal_close_refused', 'The service refused to close the renewal window.', { serviceCode: refusal.code,
       next: 'Check the mission and grant IDs and the bearer project.' });
-    if (error instanceof Error && /^(Service response exceeds|Service returned invalid|Empty service response)/.test(error.message)) throw error;
-    throw new RenewalError('renewal_close_uncertain', 'Closing the renewal window is uncertain.', { delivered: 'unknown', next: 'repeat renewal-close; it is idempotent' });
+    throw new RenewalError('renewal_close_uncertain', 'Closing the renewal window is uncertain.', { serviceCode: refusal?.code ?? null,
+      delivered: 'unknown', next: 'repeat renewal-close; it is idempotent' });
   }
   const grant = result?.grant, window = grant?.renewal;
   if (!grant || typeof grant !== 'object' || !tokenFree(result, grant, window) || grant.grant_id !== grantId || grant.mission_id !== missionId

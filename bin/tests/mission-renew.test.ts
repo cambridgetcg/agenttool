@@ -691,6 +691,20 @@ describe.skipIf(process.platform === "win32")("administrator window commands", (
     const uncertain = await stop(client.closeRenewal({ bearerFile: a.bearerFile, missionId: M, grantId: G, serviceOrigin: ORIGIN }, { fetchImpl: async () => { throw new Error(`reset ${BEARER}`); } }));
     expect(uncertain).toMatchObject({ stop_reason: "renewal_close_uncertain", delivered: "unknown", next: "repeat renewal-close; it is idempotent" });
     expect(String(uncertain.message)).not.toContain(BEARER);
+    // A 5xx, JSON or not (a proxy's HTML 502 or empty 503 while Machines restart), decided nothing: repeat, never "check the IDs".
+    for (const [name, answer] of [
+      ["json-503", () => new Response(JSON.stringify({ error: "mission_unavailable" }), { status: 503 })],
+      ["html-502", () => new Response("<html><body>502 Bad Gateway</body></html>", { status: 502, headers: { "Content-Type": "text/html" } })],
+      ["empty-503", () => new Response(null, { status: 503 })],
+    ] as Array<[string, () => Response]>) {
+      const unsure = await stop(client.closeRenewal({ bearerFile: a.bearerFile, missionId: M, grantId: G, serviceOrigin: ORIGIN }, { fetchImpl: async () => answer() }));
+      expect(unsure, name).toMatchObject({ stop_reason: "renewal_close_uncertain", delivered: "unknown", next: "repeat renewal-close; it is idempotent" });
+      expect(String(unsure.message), name).not.toContain(BEARER);
+    }
+    // Only a 4xx is a refusal.
+    const refused = await stop(client.closeRenewal({ bearerFile: a.bearerFile, missionId: M, grantId: G, serviceOrigin: ORIGIN }, { fetchImpl: async () =>
+      new Response(JSON.stringify({ error: "collaboration_mission_not_found" }), { status: 404 }) }));
+    expect(refused).toMatchObject({ stop_reason: "renewal_close_refused", serviceCode: "collaboration_mission_not_found", delivered: false });
     await expect(client.closeRenewal({ bearerFile: a.bearerFile, missionId: M, grantId: G, serviceOrigin: ORIGIN }, { fetchImpl: async () => new Response(JSON.stringify({ grant: { grant_id: K, mission_id: M } })) }))
       .rejects.toThrow("does not confirm the window close");
     for (const body of [{ grant: { grant_id: G, mission_id: M, token: TOKEN } }, { grant: { grant_id: G, mission_id: M }, token: TOKEN }]) {
