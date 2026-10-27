@@ -294,6 +294,42 @@ describe.skipIf(process.platform === "win32")("participant renew", () => {
     expect(live).toMatchObject({ grant_id: G, recorded: true });
   });
 
+  test("leave and renew exclude each other through renewal.lock; leave signs with the one invitation it read", async () => {
+    const f = fixture(), s = service(f), posted = Promise.withResolvers<void>(), gate = Promise.withResolvers<void>();
+    // A renew run that has stored its successor but not yet installed it.
+    const running = client.renew(f.state, { fetchImpl: async (url: string, init: RequestInit) => {
+      if (init.method === "POST") { const response = await s.fetchImpl(url, init); posted.resolve(); await gate.promise; return response; }
+      return s.fetchImpl(url, init);
+    } });
+    await posted.promise;
+    const calls = s.calls.length;
+    let leaveCalls = 0;
+    await expect(client.leave(f.state, { fetchImpl: async () => { leaveCalls++; return new Response("{}"); } }))
+      .rejects.toThrow("Another renew run holds renewal.lock; nothing was sent.");
+    expect(leaveCalls).toBe(0);
+    gate.resolve();
+    const renewed = await running;
+    expect(s.calls).toHaveLength(calls);
+    // Once the renew run is done, leave signs as the installed successor and holds the lock itself.
+    let seen: { grant: string; lock: boolean } | null = null;
+    const left = await client.leave(f.state, { fetchImpl: async (_url: string, init: RequestInit) => {
+      seen = { grant: new Headers(init.headers).get("X-Agenttool-Mission-Grant-Id")!, lock: existsSync(join(f.state, "renewal.lock")) };
+      return new Response(JSON.stringify({ mission_id: M, grant_id: renewed.grant_id, status: "revoked", reason: "participant_left", revoked_at: iso(Date.now()) }));
+    } });
+    expect(seen).toEqual({ grant: renewed.grant_id, lock: true });
+    expect(left).toMatchObject({ grant_id: renewed.grant_id, recorded: true });
+    expect(existsSync(join(f.state, "renewal.lock"))).toBe(false);
+    // A renew started while leave is in flight stops before sending.
+    const g = fixture(), t = service(g), inFlight = Promise.withResolvers<void>(), release = Promise.withResolvers<void>();
+    const leaving = client.leave(g.state, { fetchImpl: async () => { inFlight.resolve(); await release.promise;
+      return new Response(JSON.stringify({ mission_id: M, grant_id: G, status: "revoked", reason: "participant_left", revoked_at: iso(Date.now()) })); } });
+    await inFlight.promise;
+    expect((await stop(client.renew(g.state, { fetchImpl: t.fetchImpl }))).stop_reason).toBe("renewal_in_progress");
+    expect(t.calls).toHaveLength(0);
+    release.resolve();
+    expect(await leaving).toMatchObject({ grant_id: G, recorded: true });
+  });
+
   test("not yet open prints when it opens and sends nothing beyond the read", async () => {
     const now = Date.now();
     const f = fixture({ issued_at: iso(now - 10 * MIN), expires_at: iso(now + 20 * MIN) }), s = service(f);

@@ -320,7 +320,8 @@ node /absolute/tools/agenttool-mission.mjs renew \
 never loops or retries in the background. A run holds `renewal.lock` (0600,
 created exclusively, removed when the run ends) for its whole length, so only
 one `renew` runs per state directory at a time; a second one stops with
-`renewal_in_progress` before reading or sending anything. Every request of a run
+`renewal_in_progress` before reading or sending anything. `leave` holds the
+same lock, so a renewal never installs a successor while a leave is in flight. Every request of a run
 is signed as the grant `invitation.json` named when the run started. It first
 reads the current invitation (one signed `GET /invitation`) and stops before
 sending anything when:
@@ -412,6 +413,10 @@ expire. The service revokes this participant's own grant with reason
 chain, including any successor, and closes the window: leaving through an old
 predecessor (for example a token kept in `invitation.replaced-*.json`) also
 ends the grant you currently use. Every other grant and the mission continue.
+
+`leave` holds `renewal.lock` for its whole run and signs as the grant
+`invitation.json` named when it started. While a `renew` run holds the lock,
+`leave` stops before sending anything; run it again when that run is done.
 
 If `renewal-pending.json` exists and `invitation.json` has lapsed, `leave`
 refuses before sending anything: the service may already hold a live successor

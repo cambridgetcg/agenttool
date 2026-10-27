@@ -330,7 +330,24 @@ export async function accept(path, selectedDigest, options) {
  * grant. Idempotent on the service; the first local record is never overwritten.
  */
 export async function leave(path, options) {
-  const root = stateRoot(path), pendingFile = join(root, 'renewal-pending.json');
+  const root = stateRoot(path);
+  // Renew replaces invitation.json; holding its lock keeps leave's grant and the installed one the same.
+  let release;
+  try { release = renewalLock(root); }
+  catch (error) {
+    if (error instanceof RenewalError) fail('Another renew run holds renewal.lock; nothing was sent. Wait for it to finish, then run leave again. If none is running, inspect renewal.lock, remove it, then run leave again.');
+    throw error;
+  }
+  let result, problem;
+  try { result = await leaveLocked(root, options); }
+  catch (error) { problem = error; }
+  try { release(); }
+  catch { if (result) result.lock_remains = true; }
+  if (problem) throw problem;
+  return result;
+}
+async function leaveLocked(root, options) {
+  const pendingFile = join(root, 'renewal-pending.json');
   if (existsSync(pendingFile)) {
     // A lapsed predecessor cannot sign, but a successor the service may have issued is live.
     // (While the predecessor lives, its leave ends that successor with the rest of the chain.)
@@ -341,9 +358,10 @@ export async function leave(path, options) {
       fail(`A renewal is pending: ${successor} may be live on the service while invitation.json has lapsed. Run renew to resolve it, then leave. Nothing was sent.`);
     }
   }
-  const p = profile(path);
+  // One read: the grant signed is the grant the response is checked against.
+  const p = profile(root);
   let result;
-  try { result = await request(path, 'POST', '/leave', LEAVE_BODY, options); }
+  try { result = await requestAs(p, readKey(root), 'POST', '/leave', LEAVE_BODY, options); }
   catch (error) {
     if (error instanceof Error && error.message.startsWith('Mission transport failed.')) fail('Leave outcome is uncertain. No automatic retry; leaving is idempotent, so repeat leave explicitly to read the recorded state.');
     throw error;
@@ -351,7 +369,7 @@ export async function leave(path, options) {
   if (!result || result.mission_id !== p.mission_id || result.grant_id !== p.grant_id || result.status !== 'revoked'
     || result.reason !== 'participant_left' || !canonicalTime(result.revoked_at)) fail('Leave response does not match this participant grant.');
   const record = { mission_id: p.mission_id, grant_id: p.grant_id, status: 'revoked', reason: 'participant_left', revoked_at: result.revoked_at };
-  const target = join(stateRoot(path), `left-${p.grant_id}.json`);
+  const target = join(root, `left-${p.grant_id}.json`);
   if (!existsSync(target)) writeNew(target, json(record));
   return { ...record, recorded: true };
 }
