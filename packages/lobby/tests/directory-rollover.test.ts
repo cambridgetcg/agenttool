@@ -2,9 +2,10 @@
  * resume, finish, the notice and the reposted cards), the move of desks on
  * their next `fleet renew` pickups, the refusals (wrong signer, wrong
  * predecessor, another door, replayed and conflicting notices), the overlap
- * while both directories live, the fallback join into the successor, and the
- * stop revoking every directory. Fake service, file-backed Keychain
- * stand-in, scripted terminals. */
+ * while both directories live, the fallback join into the successor, the
+ * races with another terminal while a prompt is open, and the stop revoking
+ * every directory. Fake service, file-backed Keychain stand-in, scripted
+ * terminals. */
 import { afterEach, describe, expect, test } from "bun:test";
 import { directoryDescriptor } from "../src/hub.js";
 import { readDoorKey } from "../src/keychain.js";
@@ -77,8 +78,8 @@ async function doorSigned(fleet: Fleet, body: DirectorySuccessorBody): Promise<s
 
 /** A mission created with the project bearer straight on the service (as a
  * holder of the bearer could), with the given charter. */
-async function createMission(fleet: Fleet, descriptor: MissionDescriptor, expiresAt: string): Promise<{ mission_id: string; mission_digest: string }> {
-  const missionId = newUuid();
+async function createMission(fleet: Fleet, descriptor: MissionDescriptor, expiresAt: string, missionId = newUuid())
+  : Promise<{ mission_id: string; mission_digest: string }> {
   const response = await fleet.world.hosted.fetch("https://api.agenttool.dev/v1/collaboration/missions", {
     method: "POST",
     redirect: "error",
@@ -108,6 +109,41 @@ async function issueOpenRequest(fleet: Fleet, desk: Desk, missionId: string): Pr
   });
   expect(response.status).toBe(201);
   return row.grant_id;
+}
+
+/** Each card's card_seq posted in a mission, in order. */
+function cardSeqsIn(fleet: Fleet, missionId: string): number[] {
+  return summariesOf(fleet, missionId).filter((summary) => openDocument(summary)?.kind === "card")
+    .map((summary) => (openDocument(summary)!.body as FleetCard).card_seq);
+}
+
+/** A project other than the fake service's: synthetic. */
+const OTHER_PROJECT = "99999999-9999-4999-8999-999999999999";
+
+/** Answer reads of `missionId` (or its create) with its view in another
+ * project, as a service holding another project's bearer would. */
+function inOtherProject(fleet: Fleet, match: (request: { method: string; path: string; body: string }) => string | null): void {
+  const hosted = fleet.world.hosted;
+  hosted.intercept = (request, process) => {
+    const response = process();
+    const missionId = match(request);
+    if (missionId === null || (response.status !== 200 && response.status !== 201)) return response;
+    const mission = hosted.missions.get(missionId)!;
+    const view: any = { mission: { ...hosted.missionView(mission), project_id: OTHER_PROJECT } };
+    if (request.path.endsWith("/invitation")) {
+      const grant = [...hosted.grants.values()].find((entry) => entry.mission_id === missionId)!;
+      view.grant = { ...hosted.grantView(grant), project_id: OTHER_PROJECT };
+    }
+    return new Response(JSON.stringify(view), { status: response.status, headers: { "Content-Type": "application/json" } });
+  };
+}
+
+/** Take a mission's events matching `drop` off the service (as if never posted). */
+function dropEvents(fleet: Fleet, missionId: string, drop: (summary: string) => boolean): void {
+  const events = fleet.world.hosted.missions.get(missionId)!.events;
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    if (drop((events[index]!.observation as { summary: string }).summary)) events.splice(index, 1);
+  }
 }
 
 describe("hub directory successor", () => {
@@ -228,6 +264,171 @@ describe("hub directory successor", () => {
     await ok(hub.yes("outbox", "retry", notice.event_id));
     expect(summariesOf(fleet, fleet.directoryId).filter((summary) => openDocument(summary)?.kind === "directory_successor")).toEqual([notice.summary]);
   });
+
+  test("the same id holding other bytes: successor_conflict, nothing announced, and the pending record is forgotten", async () => {
+    const fleet = await bootstrapFleet();
+    const { hub, world } = fleet;
+    world.advance(HOUR);
+    // The connection drops before the service sees the create: uncertain, nothing exists.
+    world.hosted.failNext = (seen) => seen.method === "POST" && seen.path === "/v1/collaboration/missions";
+    expect((await hub.yes("hub", "directory", "successor")).stderr).toContain("successor_uncertain");
+    const planned = JSON.parse(shownBytes(hub)).successor;
+    expect(world.hosted.missions.has(planned.mission_id)).toBe(false);
+    // A holder of the bearer takes that id with another charter (no predecessor).
+    const store = LobbyStore.open(hub.home);
+    const row = store.fleet.hub()!;
+    store.close();
+    const taken = await createMission(fleet, directoryDescriptor({ public_key: row.door_public_key, fingerprint: row.door_fingerprint }),
+      planned.expires_at, planned.mission_id);
+    expect(taken.mission_digest).not.toBe(planned.mission_digest);
+    const refused = await hub.yes("hub", "directory", "successor");
+    expect(refused.code).toBe(1);
+    expect(refused.stderr).toContain("successor_conflict");
+    expect(kindsIn(fleet, fleet.directoryId)).not.toContain("directory_successor");
+    expect((await json(hub.run("hub", "show", "--json"))).directory.mission_id).toBe(fleet.directoryId);
+    const after = LobbyStore.open(hub.home);
+    expect(after.fleet.hubDirectory(planned.mission_id)).toBeNull();
+    after.close();
+    // Forgotten, so a fresh successor (a new id) may be asked for.
+    await ok(hub.yes("hub", "directory", "successor", "--days", "30"));
+    expect(JSON.parse(shownBytes(hub))).toMatchObject({ mode: "create" });
+    expect(JSON.parse(shownBytes(hub)).successor.mission_id).not.toBe(planned.mission_id);
+  });
+
+  test("a successor the service puts in another project: project_mismatch, nothing announced, and the pending record is forgotten", async () => {
+    const fleet = await bootstrapFleet();
+    const { hub, world } = fleet;
+    world.advance(HOUR);
+    inOtherProject(fleet, (request) => request.method === "POST" && request.path === "/v1/collaboration/missions"
+      ? JSON.parse(request.body).mission_id : null);
+    const refused = await hub.yes("hub", "directory", "successor");
+    world.hosted.intercept = null;
+    expect(refused.code).toBe(1);
+    expect(refused.stderr).toContain("project_mismatch");
+    const planned = JSON.parse(shownBytes(hub)).successor;
+    expect(kindsIn(fleet, fleet.directoryId)).not.toContain("directory_successor");
+    const store = LobbyStore.open(hub.home);
+    expect(store.fleet.hubDirectory(planned.mission_id)).toBeNull();
+    store.close();
+    expect((await json(hub.run("hub", "show", "--json"))).directory.mission_id).toBe(fleet.directoryId);
+    await ok(hub.yes("hub", "directory", "successor", "--days", "30"));
+    expect(JSON.parse(shownBytes(hub))).toMatchObject({ mode: "create" });
+  });
+
+  test("a room whose season ended is not reposted to the successor", async () => {
+    const fleet = await bootstrapFleet();
+    const { hub, world } = fleet;
+    const added = await ok(hub.run("room", "add", "--title", "Short season", "--purpose", "a one-day season", "--door", "knock",
+      "--slot", "reviewer:player:1", "--json"));
+    const shortRoom = JSON.parse(added.stdout).card.room_id as string;
+    await ok(hub.yes("room", "promote", shortRoom, "--residency", "fleet", "--hostable", "true"));
+    await ok(hub.yes("hub", "season", "open", shortRoom, "--days", "1"));
+    await ok(hub.yes("room", "publish", shortRoom));
+    world.advance(DAY + HOUR);
+    // The hub desk's seats lapsed with the day: the sweep renews them first.
+    await ok(hub.yes("hub", "renew-sweep"));
+    await ok(hub.yes("hub", "directory", "successor"));
+    const bytes = JSON.parse(shownBytes(hub));
+    expect(bytes.cards.map((card: any) => card.room_id)).toEqual([fleet.roomId]);
+    expect(bytes.cards_skipped).toEqual([{ room_id: shortRoom, reason: "season_ended" }]);
+    const successorId = bytes.successor.mission_id;
+    expect(summariesOf(fleet, successorId).map((summary) => (openDocument(summary)!.body as FleetCard).room_id)).toEqual([fleet.roomId]);
+  });
+});
+
+describe("another terminal while a prompt is open", () => {
+  test("a room publish while the successor prompt is open: the successor refuses with nothing recorded, and a second run reposts the new card", async () => {
+    const fleet = await bootstrapFleet();
+    const { hub, world } = fleet;
+    world.advance(HOUR);
+    const other = world.desk("hub-other", { of: hub });
+    const missions = world.hosted.missions.size;
+    const result = await runWhilePromptOpen(world, hub, ["hub", "directory", "successor", "--days", "30"], async () => {
+      await ok(other.yes("room", "publish", fleet.roomId));
+    });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("announce_changed");
+    expect(result.stderr).toContain("nothing was recorded or sent");
+    expect(world.hosted.missions.size).toBe(missions);
+    expect(cardSeqsIn(fleet, fleet.directoryId)).toEqual([1, 2]);
+    await ok(hub.yes("hub", "directory", "successor", "--days", "30"));
+    const successorId = JSON.parse(shownBytes(hub)).successor.mission_id;
+    expect(cardSeqsIn(fleet, successorId)).toEqual([2]);
+    // A desk that joins the successor directly sees the newest card.
+    const late = world.desk("late");
+    await enrollThroughHub(hub, late, fleet.doorFingerprint);
+    await ok(late.run("fleet", "sync"));
+    const browsed = await json(late.run("fleet", "browse", "--json"));
+    expect(browsed.rooms.map((room: any) => room.fields.card_seq.value)).toEqual([2]);
+  });
+
+  test("a card recorded after the create and before the announce: nothing announced or re-signed; the next run finishes with that card", async () => {
+    const fleet = await bootstrapFleet();
+    const { hub, world } = fleet;
+    world.advance(HOUR);
+    // Another terminal records a newer card while the create is in flight.
+    world.hosted.intercept = (request, process) => {
+      const response = process();
+      if (request.method === "POST" && request.path === "/v1/collaboration/missions") {
+        world.hosted.intercept = null;
+        const store = LobbyStore.open(hub.home);
+        const latest = store.fleet.latestCard(fleet.roomId)!;
+        store.fleet.addCard({ ...latest, card_seq: latest.card_seq + 1, event_id: newUuid(), issued_at: world.clock.now.toISOString() });
+        store.close();
+      }
+      return response;
+    };
+    const refused = await hub.yes("hub", "directory", "successor");
+    expect(refused.code).toBe(1);
+    expect(refused.stderr).toContain("announce_changed");
+    expect(refused.stderr).toContain("nothing was announced");
+    const first = JSON.parse(shownBytes(hub));
+    expect(first.cards.map((card: any) => card.card_seq)).toEqual([1]);
+    expect(kindsIn(fleet, fleet.directoryId)).not.toContain("directory_successor");
+    expect(summariesOf(fleet, first.successor.mission_id)).toEqual([]);
+    expect((await json(hub.run("hub", "show", "--json"))).directory.mission_id).toBe(fleet.directoryId);
+    await ok(hub.yes("hub", "directory", "successor"));
+    const finished = JSON.parse(shownBytes(hub));
+    expect(finished).toMatchObject({ mode: "finish", successor: { mission_id: first.successor.mission_id } });
+    expect(finished.cards.map((card: any) => card.card_seq)).toEqual([2]);
+    expect(summariesOf(fleet, fleet.directoryId).filter((summary) => openDocument(summary)?.kind === "directory_successor")).toHaveLength(1);
+  });
+
+  test("a successor announced while a room publish prompt is open: the publish refuses with nothing recorded; run again, both directories get it", async () => {
+    const fleet = await bootstrapFleet();
+    const { hub, world } = fleet;
+    world.advance(HOUR);
+    const other = world.desk("hub-other", { of: hub });
+    const result = await runWhilePromptOpen(world, hub, ["room", "publish", fleet.roomId], async () => {
+      await ok(other.yes("hub", "directory", "successor", "--days", "30"));
+    });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("card_changed");
+    const successorId = (await json(hub.run("hub", "show", "--json"))).directory.mission_id;
+    expect(cardSeqsIn(fleet, fleet.directoryId)).toEqual([1]);
+    expect(cardSeqsIn(fleet, successorId)).toEqual([1]);
+    await ok(hub.yes("room", "publish", fleet.roomId));
+    expect(cardSeqsIn(fleet, fleet.directoryId)).toEqual([1, 2]);
+    expect(cardSeqsIn(fleet, successorId)).toEqual([1, 2]);
+  });
+
+  test("a desk moved by another terminal while its fleet renew prompt is open: no second accept, nothing recorded", async () => {
+    const fleet = await rolledOver();
+    const { hub, device, world } = fleet;
+    await ok(device.yes("fleet", "renew"));
+    await ok(hub.yes("hub", "renew-sweep"));
+    const accepts = () => world.hosted.seen.filter((seen) => seen.method === "POST" && seen.path === `/v1/collaboration/missions/${fleet.successorId}/accept`).length;
+    const before = accepts();
+    const other = world.desk("device-other", { of: device });
+    const result = await runWhilePromptOpen(world, device, ["fleet", "renew"], async () => {
+      await ok(other.yes("fleet", "renew"));
+    });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("directory_changed");
+    // The other terminal's accept only.
+    expect(accepts()).toBe(before + 1);
+    expect((await status(device)).mission_id).toBe(fleet.successorId);
+  });
 });
 
 describe("desks move to the successor on their next fleet renew pickups", () => {
@@ -313,16 +514,50 @@ describe("desks move to the successor on their next fleet renew pickups", () => 
     expect((await status(device)).successor).toBeNull();
   });
 
-  for (const [what, descriptorOf, reason] of [
-    ["a successor charter naming another predecessor", (fleet: Fleet, door: { public_key: string; fingerprint: string }) =>
-      directoryDescriptor(door, { mission_id: newUuid(), mission_digest: `sha256:${"b".repeat(64)}` }), "predecessor"],
-    ["a successor charter naming another door", (fleet: Fleet) => {
+  test("a door-signed notice whose `from` digest is not this desk's directory's moves nobody", async () => {
+    const fleet = await bootstrapFleet();
+    const { device, hub, world } = fleet;
+    world.advance(HOUR);
+    const store = LobbyStore.open(hub.home);
+    const row = store.fleet.hub()!;
+    store.close();
+    const d1 = world.hosted.missions.get(fleet.directoryId)!;
+    const expiresAt = new Date(world.clock.now.getTime() + 30 * DAY - MINUTE).toISOString();
+    const target = await createMission(fleet, directoryDescriptor({ public_key: row.door_public_key, fingerprint: row.door_fingerprint },
+      { mission_id: d1.mission_id, mission_digest: d1.digest }), expiresAt);
+    await postAs(world, hub, fleet.directoryId, await doorSigned(fleet, {
+      from_mission_id: fleet.directoryId, from_mission_digest: `sha256:${"d".repeat(64)}`, from_expires_at: d1.expires_at,
+      to_mission_id: target.mission_id, to_mission_digest: target.mission_digest, to_expires_at: expiresAt, issued_at: world.clock.now.toISOString(),
+    }));
+    await ok(device.yes("fleet", "renew"));
+    const request = JSON.parse(shownBytes(device)).request;
+    expect(request.mission_id).toBe(fleet.directoryId);
+    expect(request.target_mission_id).toBeUndefined();
+    expect((await status(device)).successor).toBeNull();
+  });
+
+  type Door = { public_key: string; fingerprint: string };
+  /** The charter an honest successor of the fleet's first directory carries. */
+  const honest = (fleet: Fleet, door: Door) => {
+    const d1 = fleet.world.hosted.missions.get(fleet.directoryId)!;
+    return directoryDescriptor(door, { mission_id: d1.mission_id, mission_digest: d1.digest });
+  };
+  const cases: Array<{ what: string; descriptorOf: (fleet: Fleet, door: Door) => MissionDescriptor; reason: string;
+    notice?: (body: DirectorySuccessorBody) => DirectorySuccessorBody; otherProject?: true }> = [
+    { what: "a successor charter naming another predecessor", reason: "predecessor",
+      descriptorOf: (fleet, door) => directoryDescriptor(door, { mission_id: newUuid(), mission_digest: `sha256:${"b".repeat(64)}` }) },
+    { what: "a successor charter naming another door", reason: "pinned door", descriptorOf: (fleet) => {
       const other = generateKeyPair();
-      const d1 = fleet.world.hosted.missions.get(fleet.directoryId)!;
-      return directoryDescriptor({ public_key: publicKeyBase64(other), fingerprint: publicKeyFingerprint(publicKeyBase64(other)) },
-        { mission_id: d1.mission_id, mission_digest: d1.digest });
-    }, "pinned door"],
-  ] as const) {
+      return honest(fleet, { public_key: publicKeyBase64(other), fingerprint: publicKeyFingerprint(publicKeyBase64(other)) });
+    } },
+    // The door key without the bearer: the notice may name anything, the mission it names must match it exactly.
+    { what: "a notice naming another digest than the mission's", reason: "digest differs", descriptorOf: honest,
+      notice: (body) => ({ ...body, to_mission_digest: `sha256:${"c".repeat(64)}` }) },
+    { what: "a notice naming another end than the mission's", reason: "end differs", descriptorOf: honest,
+      notice: (body) => ({ ...body, to_expires_at: new Date(Date.parse(body.to_expires_at) - MINUTE).toISOString() }) },
+    { what: "a successor in another project", reason: "another project", descriptorOf: honest, otherProject: true },
+  ];
+  for (const { what, descriptorOf, reason, notice, otherProject } of cases) {
     test(`${what}: successor_mismatch at pickup, nothing accepted, the desk stays`, async () => {
       const fleet = await bootstrapFleet();
       const { device, hub, world } = fleet;
@@ -334,17 +569,23 @@ describe("desks move to the successor on their next fleet renew pickups", () => 
       const expiresAt = new Date(world.clock.now.getTime() + 30 * DAY - MINUTE).toISOString();
       // Someone holding the door key and the bearer makes a "successor" the hub never recorded.
       const target = await createMission(fleet, descriptorOf(fleet, { public_key: row.door_public_key, fingerprint: row.door_fingerprint }), expiresAt);
-      await postAs(world, hub, fleet.directoryId, await doorSigned(fleet, {
+      const body: DirectorySuccessorBody = {
         from_mission_id: fleet.directoryId, from_mission_digest: d1.digest, from_expires_at: d1.expires_at,
         to_mission_id: target.mission_id, to_mission_digest: target.mission_digest, to_expires_at: expiresAt, issued_at: world.clock.now.toISOString(),
-      }));
+      };
+      await postAs(world, hub, fleet.directoryId, await doorSigned(fleet, notice === undefined ? body : notice(body)));
       await ok(device.yes("fleet", "renew"));
       expect(JSON.parse(shownBytes(device)).request.target_mission_id).toBe(target.mission_id);
       // The hub's sweep never issues into a directory outside its chain.
       expect((await ok(hub.yes("hub", "renew-sweep"))).stdout).toContain("directory_not_live");
       const grantId = await issueOpenRequest(fleet, device, target.mission_id);
+      if (otherProject) {
+        inOtherProject(fleet, (request) => request.method === "GET" && request.path === `/v1/collaboration/missions/${target.mission_id}/invitation`
+          ? target.mission_id : null);
+      }
       const opened = device.terminal.opened;
       const refused = await device.yes("fleet", "renew");
+      world.hosted.intercept = null;
       expect(refused.code).toBe(1);
       expect(refused.stderr).toContain("successor_mismatch");
       expect(refused.stderr).toContain(reason);
@@ -418,6 +659,34 @@ describe("desks move to the successor on their next fleet renew pickups", () => 
     expect((await status(late)).mission_id).toBe(fleet.successorId);
   });
 
+  for (const [what, change, code] of [
+    ["digest", (body: DirectorySuccessorBody) => ({ ...body, to_mission_digest: `sha256:${"e".repeat(64)}` }), "directory_changed"],
+    ["end", (body: DirectorySuccessorBody) => ({ ...body, to_expires_at: new Date(Date.parse(body.to_expires_at) - MINUTE).toISOString() }),
+      "successor_mismatch"],
+  ] as const) {
+    test(`a join packet for the successor is refused when the door-signed notice names another ${what}`, async () => {
+      const fleet = await bootstrapFleet();
+      const { hub, device, world } = fleet;
+      world.advance(HOUR);
+      await ok(hub.yes("hub", "directory", "successor"));
+      const real = openDocument(JSON.parse(shownBytes(hub)).notice.summary)!.body as DirectorySuccessorBody;
+      // The only notice the device will read names the successor's id with another digest or end.
+      dropEvents(fleet, fleet.directoryId, (summary) => openDocument(summary)?.kind === "directory_successor");
+      await postAs(world, hub, fleet.directoryId, await doorSigned(fleet, change(real)));
+      await ok(device.run("fleet", "sync"));
+      world.advance(DAY);
+      const enrolled = await ok(device.run("enroll-device"));
+      const { relayArgs } = await import("./fleet-helpers.js");
+      const relayed = await ok(hub.yes(...relayArgs(device, enrolled)));
+      expect(JSON.parse(relayed.stdout).directory.mission_id).toBe(real.to_mission_id);
+      const refused = await device.yes("fleet", "join", "--packet-file", device.file(`join-${what}.json`, relayed.stdout),
+        "--door-fingerprint", fleet.doorFingerprint);
+      expect(refused.code).toBe(1);
+      expect(refused.stderr).toContain(code);
+      expect((await json(device.run("fleet", "status", "--json"))).desk.directory_mission_id).toBe(fleet.directoryId);
+    });
+  }
+
   test("a desk that never read the notice cannot be moved by a join packet", async () => {
     const fleet = await bootstrapFleet();
     const { hub, device, world } = fleet;
@@ -456,6 +725,74 @@ describe("while both directories live", () => {
     const ready = await ok(device.yes("ready", knockId));
     expect(ready.stdout).toContain(`accepted season ${fleet.seasonId}`);
     expect((await json(device.run("fleet", "knocks", "--json"))).knocks[0].status).toBe("ready");
+  });
+
+  test("a knock in the old directory is denied there after the announcement", async () => {
+    const fleet = await rolledOver();
+    const { hub, device } = fleet;
+    await ok(device.run("fleet", "sync"));
+    const knockId = /knock ([0-9a-f-]{36})/.exec((await ok(device.yes("knock", fleet.roomId, "--tier", "player"))).stdout)![1]!;
+    expect(JSON.parse(shownBytes(device)).mission_id).toBe(fleet.directoryId);
+    await ok(hub.yes("hub", "deny", knockId));
+    expect(JSON.parse(shownBytes(hub)).post.mission_id).toBe(fleet.directoryId);
+    expect(kindsIn(fleet, fleet.directoryId)).toContain("denial");
+    expect(kindsIn(fleet, fleet.successorId)).not.toContain("denial");
+  });
+
+  test("room renew accept finds a notice posted only in the directory this desk moved from", async () => {
+    const fleet = await rolledOver();
+    const { hub, device, world } = fleet;
+    await ok(device.run("fleet", "sync"));
+    const knockId = /knock ([0-9a-f-]{36})/.exec((await ok(device.yes("knock", fleet.roomId, "--tier", "player"))).stdout)![1]!;
+    await ok(hub.yes("hub", "admit", knockId));
+    await ok(device.yes("ready", knockId));
+    world.advance(HOUR);
+    await ok(device.yes("room", "renew", "request", fleet.roomId));
+    await ok(device.yes("fleet", "renew"));
+    // The room renewal notice reaches only the previous directory: the posts to the successor and the room are refused.
+    world.hosted.intercept = (request, process) => {
+      if (request.method === "POST" && (request.path === `/v1/collaboration/missions/${fleet.successorId}/events`
+        || request.path === `/v1/collaboration/missions/${fleet.seasonId}/events`)
+        && openDocument(JSON.parse(request.body).summary)?.kind === "renewal") {
+        return new Response(JSON.stringify({ error: "collaboration_mission_forbidden", message: "synthetic refusal" }),
+          { status: 403, headers: { "Content-Type": "application/json" } });
+      }
+      return process();
+    };
+    await hub.yes("hub", "renew-sweep");
+    world.hosted.intercept = null;
+    expect(kindsIn(fleet, fleet.directoryId)).toContain("renewal");
+    expect(kindsIn(fleet, fleet.successorId)).not.toContain("renewal");
+    expect(kindsIn(fleet, fleet.seasonId)).not.toContain("renewal");
+    // The desk moves, then accepts its room renewal from the directory it moved from.
+    await ok(device.yes("fleet", "renew"));
+    expect((await status(device)).mission_id).toBe(fleet.successorId);
+    await ok(device.yes("room", "renew", "accept", fleet.roomId));
+  });
+
+  test("a device's open request in the old directory and its newer one for the successor: one grant, for the successor", async () => {
+    const fleet = await bootstrapFleet();
+    const { hub, device, world } = fleet;
+    world.advance(HOUR);
+    await ok(device.yes("fleet", "renew"));
+    const older = JSON.parse(shownBytes(device)).request;
+    expect(older.target_mission_id).toBeUndefined();
+    await ok(hub.yes("hub", "directory", "successor"));
+    const successorId = JSON.parse(shownBytes(hub)).successor.mission_id;
+    world.advance(MINUTE);
+    const identity = deskOf(device);
+    const { DeskSecrets } = await import("../src/secrets.js");
+    const newer = sealDocument("directory_renew", {
+      mission_id: successorId, grant_id: newUuid(), identity_id: identity.identity_id, signing_key_id: identity.signing_key_id,
+      token_sha256: "f".repeat(64), issued_at: world.clock.now.toISOString(), expires_at: new Date(world.clock.now.getTime() + HOUR).toISOString(),
+    }, { privateKey: DeskSecrets.open(device.home).deskKey(), fingerprint: identity.fingerprint }).summary;
+    await postAs(world, device, fleet.directoryId, newer);
+    await ok(hub.yes("hub", "renew-sweep"));
+    const sweep = JSON.parse(shownBytes(hub));
+    const mine = sweep.directory_renewals.filter((item: any) => item.grant.identity_id === identity.identity_id);
+    expect(mine.map((item: any) => item.grant.mission_id)).toEqual([successorId]);
+    expect(sweep.skipped).toEqual(expect.arrayContaining([expect.objectContaining({ identity_id: identity.identity_id, reason: "superseded" })]));
+    expect(world.hosted.grants.has(older.grant_id)).toBe(false);
   });
 
   test("room publish posts one card_seq to both; room renewal notices land in both", async () => {
@@ -557,6 +894,21 @@ describe("the stop", () => {
     const shown = await json(hub.run("hub", "show", "--json"));
     expect(shown.directories.every((row: any) => row.revoked_at !== null)).toBe(true);
     expect((await hub.yes("hub", "directory", "successor")).stderr).toContain("hub_stopped");
+  });
+
+  test("a stop forgets a successor the service definitely does not have", async () => {
+    const fleet = await bootstrapFleet();
+    const { hub, world } = fleet;
+    world.advance(HOUR);
+    world.hosted.failNext = (seen) => seen.method === "POST" && seen.path === "/v1/collaboration/missions";
+    expect((await hub.yes("hub", "directory", "successor")).stderr).toContain("successor_uncertain");
+    const planned = JSON.parse(shownBytes(hub)).successor.mission_id;
+    expect(world.hosted.missions.has(planned)).toBe(false);
+    await hub.yes("hub", "stop");
+    expect(JSON.parse(shownBytes(hub)).missions.map((mission: any) => mission.mission_id)).toContain(planned);
+    const store = LobbyStore.open(hub.home);
+    expect(store.fleet.hubDirectory(planned)).toBeNull();
+    store.close();
   });
 
   test("a stop revokes a successor created but not announced; a stop while the prompt is open announces nothing", async () => {

@@ -471,6 +471,8 @@ export interface FleetRenewPlan {
   /** The current directory's end as read in this plan, recorded on yes
    * (null when this act moves the desk, which records the successor's end). */
   directory_expires_at: string | null;
+  /** This desk's directory as planned; a move by another terminal refuses. */
+  directory_mission_id: string;
 }
 
 /** Nothing to do: the state, and why no prompt was shown. */
@@ -715,7 +717,7 @@ export async function planFleetRenew(ctx: FleetContext): Promise<{ plan: FleetRe
     },
     ...(noRequest === null ? {} : { no_request: noRequest }),
   });
-  return { plan: { preview, pickup, request, no_request: noRequest, directory_expires_at: currentEnds } };
+  return { plan: { preview, pickup, request, no_request: noRequest, directory_expires_at: currentEnds, directory_mission_id: directoryId } };
 }
 
 export interface FleetRenewOutcome {
@@ -731,6 +733,11 @@ export async function executeFleetRenew(ctx: FleetContext, plan: FleetRenewPlan)
   const at = ctx.now().toISOString();
   let pickedUp: FleetRenewOutcome["picked_up"] = null;
   let movedTo: string | null = null;
+  // Checked before the first network effect (and again where a pickup is
+  // recorded): another terminal may have moved this desk while the prompt was open.
+  if (desk.directory_mission_id !== plan.directory_mission_id) {
+    throw new LobbyError("directory_changed", "this desk's directory changed while the prompt was open; nothing was accepted, recorded or sent");
+  }
   if (plan.pickup !== null) {
     // Idempotent on the service: an accepted grant is accepted again. An
     // uncertain accept records nothing; running fleet renew again re-reads it.
@@ -757,12 +764,12 @@ export async function executeFleetRenew(ctx: FleetContext, plan: FleetRenewPlan)
           accepted_at: accepted.grant.accepted_at!,
         });
       }
+      if (fleet.desk()?.directory_mission_id !== plan.directory_mission_id) {
+        throw new LobbyError("directory_changed", "this desk's directory changed while this act ran; nothing was recorded. Run fleet renew again");
+      }
       fleet.markDeskDirectoryRenewalAccepted(pickup.row.token_sha256, at);
       if (pickup.move !== null) {
         // The move: this desk's directory is now the door-signed successor. The door pin is untouched.
-        if (fleet.desk()?.directory_mission_id !== pickup.move.from_mission_id) {
-          throw new LobbyError("directory_changed", "this desk's directory changed while the prompt was open; nothing was recorded");
-        }
         fleet.moveDeskDirectory({
           mission_id: pickup.mission.mission_id,
           mission_digest: pickup.mission.mission_digest,

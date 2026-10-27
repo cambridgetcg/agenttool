@@ -854,6 +854,9 @@ export interface PublishPlan {
   /** The same bytes in the previous directory, while a rollover's overlap
    * lasts and the hub desk may post there. */
   also: Array<{ post: PreparedPost; seat: ReturnType<typeof seatOf> }>;
+  /** Every live directory of the hub's chain as planned (current first),
+   * including a previous one skipped for a lapsed seat. */
+  directories: string[];
 }
 
 export async function planPublish(ctx: FleetContext, input: { room_id: string }): Promise<PublishPlan> {
@@ -898,7 +901,8 @@ export async function planPublish(ctx: FleetContext, input: { room_id: string })
     room_id: room.room_id, card_seq: card.card_seq, mission_id: hub.directory_mission_id, event_id: post.event_id, summary: sealed.summary,
     ...(also.length === 0 ? {} : { also: also.map(({ post: other }) => ({ mission_id: other.mission_id, event_id: other.event_id })) }),
   });
-  return { preview, card, post, seat, also };
+  const directories = hubLiveDirectories(ctx, hub, now).map((directory) => directory.mission_id);
+  return { preview, card, post, seat, also, directories };
 }
 
 export async function executePublish(ctx: FleetContext, plan: PublishPlan): Promise<PostOutcome[]> {
@@ -906,8 +910,13 @@ export async function executePublish(ctx: FleetContext, plan: PublishPlan): Prom
   fleet.transaction(() => {
     // Checked again: the hub, the room and its season may have changed while
     // the prompt was open. The card's bytes were confirmed as shown, so a
-    // changed sequence number or season refuses rather than re-signing.
-    requireLiveHub(ctx);
+    // changed sequence number, season or directory chain refuses rather than
+    // re-signing (a successor announced meanwhile would miss the card).
+    const live = requireLiveHub(ctx);
+    if (live.directory_mission_id !== plan.post.mission_id
+      || hubLiveDirectories(ctx, live).some((directory) => !plan.directories.includes(directory.mission_id))) {
+      throw new LobbyError("card_changed", "the hub's directory changed while the prompt was open; nothing was recorded or sent. Run room publish again");
+    }
     requireFleetRoom(ctx, plan.card.room_id);
     const season = fleet.currentSeason(plan.card.room_id);
     if (season === null || season.mission_id !== plan.card.season.mission_id) {

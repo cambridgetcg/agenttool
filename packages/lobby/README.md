@@ -843,13 +843,18 @@ device joins again and no packet is carried.
    signs, before the prompt, a `directory_successor` notice naming both
    directories (id, digest, end). The prompt shows the successor's id, end,
    digest and charter, the hub desk's seat there, the notice's exact bytes and
-   every reposted card's exact bytes. On `yes`, in order: the successor is
+   every reposted card's exact bytes. On `yes`, in order: checked again (the
+   stop, the directory, and every room's latest `card_seq`: a card published
+   from another terminal while the prompt was open refuses with nothing
+   recorded or sent, `announce_changed`), the successor is
    recorded (`pending`) and created (never retried: an uncertain create says
    `successor_uncertain`, and running the command again with no `--days`
    resumes with the same id and bytes; a definite refusal or a mission in
    another project forgets the record); the hub desk takes its seat there (a
    failure leaves the successor recorded, unannounced, and the next run
-   finishes); then, in one transaction, checked again (the stop, the chain),
+   finishes); then, in one transaction, checked again (the stop, the chain,
+   every room's latest `card_seq`: a card recorded meanwhile refuses with
+   nothing announced or re-signed, and the next run finishes with it),
    the successor becomes `current`, the old directory `previous`, the `hub`
    row and the hub's own desk point at the successor, and the notice (to the
    old directory) and each room's latest card (to the successor, the exact
@@ -871,14 +876,18 @@ device joins again and no packet is carried.
    desk's project, and the grant is live, `mission.observe` + `mission.read`
    and within it; anything else refuses (`successor_mismatch`) before any
    prompt and accepts nothing. The prompt says the desk moves and that the
-   door pin is unchanged; on `yes` the grant is accepted and the desk points
+   door pin is unchanged; on `yes`, checked again (a desk another terminal
+   moved meanwhile refuses with nothing accepted or sent, `directory_changed`),
+   the grant is accepted and the desk points
    at the successor (`desk_directories` records the move). Its next request
    goes out in the successor. A desk thus moves over two daily renewals.
 3. **While both live** (the old directory `previous` until it ends): `hub
    knocks` reads both and lists each knock with its directory; an admission or
    denial goes to the directory the knock was posted in (and the season);
    room renewal notices and `room publish` (one `card_seq`, the same bytes)
-   go to both, while the hub desk may post in the old one; the sweep reads
+   go to both, while the hub desk may post in the old one (a successor
+   announced while a `room publish` prompt is open refuses the publish with
+   nothing recorded or sent, `card_changed`; run it again); the sweep reads
    room and directory requests in both, renews a grant in either while it is
    live, and renews the hub desk's seats in both; first-poster ownership of
    token hashes and grant ids spans both; `hub relay` issues into the

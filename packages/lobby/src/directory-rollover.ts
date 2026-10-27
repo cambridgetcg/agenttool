@@ -82,6 +82,10 @@ export interface SuccessorPlan {
   cards: Array<{ room_id: string; card_seq: number; post: PreparedPost }>;
   /** Rooms whose card is not reposted, and why. */
   cards_skipped: Array<{ room_id: string; reason: string }>;
+  /** Every room's latest recorded card_seq as planned, checked again before
+   * anything is recorded and at the announce: a card published meanwhile
+   * refuses rather than leaving the successor a stale one. */
+  card_seqs: string;
 }
 
 /** The successor recorded for the current directory and not announced yet. */
@@ -98,6 +102,15 @@ function recordedDescriptor(row: HubDirectoryRow): MissionDescriptor {
   }
   return descriptor;
 }
+
+/** Every room's latest recorded card_seq, canonical, for the re-checks. */
+function latestCardSeqs(ctx: FleetContext): string {
+  const fleet = ctx.store.fleet;
+  const rooms = [...new Set(fleet.listSeasons().map((season) => season.room_id))].sort();
+  return JSON.stringify(rooms.map((roomId) => [roomId, fleet.latestCard(roomId)?.card_seq ?? 0]));
+}
+
+const CARDS_CHANGED = "a room's card was published while this act was open, so the successor would get a stale card";
 
 /** Each fleet room's latest card whose season is still live, as recorded
  * (the exact door-signed bytes, never re-signed), framed for `missionId`. */
@@ -193,6 +206,7 @@ export async function planDirectorySuccessor(ctx: FleetContext, input: { days?: 
   const summary = sealDocument("directory_successor", notice, { privateKey: await doorKey(ctx, hub), fingerprint: hub.door_fingerprint }).summary;
   const noticePost = preparePost(ctx, "directory_successor", from.mission_id, summary, DIRECTORY_GATE_ROOM);
   const { cards, cards_skipped: cardsSkipped } = cardReposts(ctx, mission.mission_id, now);
+  const cardSeqs = latestCardSeqs(ctx);
   const verb = mode === "create" ? "create" : mode === "resume"
     ? "resume creating (same id and bytes; the first request was never confirmed)" : "finish announcing (created already)";
   const preview = actPreview("hub.directory.successor", from.mission_id, now.toISOString(), [
@@ -214,7 +228,8 @@ export async function planDirectorySuccessor(ctx: FleetContext, input: { days?: 
     cards: cards.map((card) => ({ room_id: card.room_id, card_seq: card.card_seq, mission_id: card.post.mission_id, event_id: card.post.event_id, summary: card.post.summary })),
     cards_skipped: cardsSkipped,
   });
-  return { preview, mode, from, mission, seat, notice, notice_post: noticePost, notice_seat: noticeSeat, cards, cards_skipped: cardsSkipped };
+  return { preview, mode, from, mission, seat, notice, notice_post: noticePost, notice_seat: noticeSeat, cards, cards_skipped: cardsSkipped,
+    card_seqs: cardSeqs };
 }
 
 export interface SuccessorOutcome {
@@ -238,6 +253,9 @@ export async function executeDirectorySuccessor(ctx: FleetContext, plan: Success
     const live = requireLiveHub(ctx);
     if (live.directory_mission_id !== plan.from.mission_id) {
       throw new LobbyError("announce_changed", "the hub's directory changed while the prompt was open; nothing was recorded or sent");
+    }
+    if (latestCardSeqs(ctx) !== plan.card_seqs) {
+      throw new LobbyError("announce_changed", `${CARDS_CHANGED}; nothing was recorded or sent. Run hub directory successor again`);
     }
     const row = fleet.hubDirectory(missionId);
     const open = openSuccessor(ctx, live);
@@ -318,6 +336,11 @@ export async function executeDirectorySuccessor(ctx: FleetContext, plan: Success
     const row = fleet.hubDirectory(missionId);
     if (live.directory_mission_id !== plan.from.mission_id || row?.state !== "successor" || row.notice_event_id !== null) {
       throw new LobbyError("announce_changed", "the hub's directory chain changed while this act ran; nothing was announced. Run hub directory successor again");
+    }
+    if (latestCardSeqs(ctx) !== plan.card_seqs) {
+      // Nothing is re-signed: the next run finishes with the room's new latest card.
+      throw new LobbyError("announce_changed",
+        `${CARDS_CHANGED}; successor directory ${missionId} is created and recorded, and nothing was announced. Run hub directory successor again to finish`);
     }
     if (fleet.hubDirectory(plan.from.mission_id) === null) {
       // A chain that does not record the current directory yet (it predates version 5 in some way): record it now.
