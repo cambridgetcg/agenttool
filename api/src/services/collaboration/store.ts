@@ -132,6 +132,19 @@ async function endChain(tx: Transaction, target: MissionTarget, rootId: string, 
     renewalClosedAt: sql`COALESCE(${collaborationGrants.renewalClosedAt}, ${stampAt(now)})`,
   }).where(chainKey(target, rootId)).returning();
 }
+/** A leave through `left` ends its chain. The signed evidence stays on the grant that carries it;
+ * every other live member gets only an unsigned pointer to that grant, so its own later leave
+ * reads back as participant_left. Idempotent: members already revoked keep their state. */
+async function leaveChain(tx: Transaction, target: MissionTarget, left: GrantRow, rootId: string, now: Date) {
+  const record = left.acceptanceProof?.[MISSION_LEAVE_FIELD];
+  const via = typeof record === "object" && record !== null && typeof record.via_grant_id === "string" ? record.via_grant_id : left.id;
+  const stamp = stampAt(now), pointer = sql`jsonb_build_object(${MISSION_LEAVE_FIELD}::text, jsonb_build_object('reason', ${MISSION_LEAVE_REASON}::text, 'via_grant_id', ${via}::text))`;
+  await tx.update(collaborationGrants).set({ revokedAt: stamp,
+    renewalClosedAt: sql`COALESCE(${collaborationGrants.renewalClosedAt}, ${stamp})`,
+    acceptanceProof: sql`CASE WHEN ${collaborationGrants.acceptanceProof} IS NULL THEN NULL ELSE ${collaborationGrants.acceptanceProof} || ${pointer} END`,
+  }).where(and(chainKey(target, rootId), isNull(collaborationGrants.revokedAt))).returning();
+  await endChain(tx, target, rootId, now);
+}
 function leaveView(row: GrantRow) {
   if (!row.revokedAt) throw new MissionError("invalid_state");
   return { mission_id: row.missionId, grant_id: row.id, status: "revoked" as const, reason: MISSION_LEAVE_REASON, revoked_at: row.revokedAt.toISOString() };
@@ -357,21 +370,17 @@ export async function executeMissionRequest(input: MissionRequest, options: Miss
     if (leaving) {
       // Membership begins at acceptance; an unaccepted invitation is simply left to expire.
       if (!grant.acceptedAt || !grant.acceptanceProof) throw new MissionError("acceptance_required");
-      if (grant.revokedAt) return { created: false, data: leaveView(grant) };
+      if (grant.revokedAt) {
+        // A repeat still ends the rest of the chain: code at a99257ab (a rollback, or an old
+        // Machine mid-rollout) leaves one row and nothing else. Already ended, this writes nothing new.
+        if (grant.renewalRootId !== null) await leaveChain(tx, scope, grant, grant.renewalRootId, now);
+        return { created: false, data: leaveView(grant) };
+      }
       const record = { ...grant.acceptanceProof, [MISSION_LEAVE_FIELD]: { reason: MISSION_LEAVE_REASON, ...proofRecord(input, key.publicKey) } };
       const [left] = await tx.update(collaborationGrants).set({ revokedAt: now, acceptanceProof: record })
         .where(and(eq(collaborationGrants.id, grant.id), isNull(collaborationGrants.revokedAt))).returning();
       if (!left || !participantLeft(left)) throw new MissionError("invalid_state");
-      if (grant.renewalRootId !== null) {
-        // The signed evidence stays on this grant. Every other live member gets only an
-        // unsigned pointer to it, so its own later leave reads back as participant_left.
-        const stamp = stampAt(now), pointer = sql`jsonb_build_object(${MISSION_LEAVE_FIELD}::text, jsonb_build_object('reason', ${MISSION_LEAVE_REASON}::text, 'via_grant_id', ${grant.id}::text))`;
-        await tx.update(collaborationGrants).set({ revokedAt: stamp,
-          renewalClosedAt: sql`COALESCE(${collaborationGrants.renewalClosedAt}, ${stamp})`,
-          acceptanceProof: sql`CASE WHEN ${collaborationGrants.acceptanceProof} IS NULL THEN NULL ELSE ${collaborationGrants.acceptanceProof} || ${pointer} END`,
-        }).where(and(chainKey(scope, grant.renewalRootId), isNull(collaborationGrants.revokedAt))).returning();
-        await endChain(tx, scope, grant.renewalRootId, now);
-      }
+      if (grant.renewalRootId !== null) await leaveChain(tx, scope, left, grant.renewalRootId, now);
       return { created: true, data: leaveView(left) };
     }
     if (acceptance) {

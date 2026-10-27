@@ -679,15 +679,32 @@ describe("renewal inside an administrator-set window", () => {
 
     test("each labelled member's own repeat leave returns its own state; an administrator-revoked chain is never relabelled", async () => {
       const pointered = root({ revokedAt: NOW, acceptanceProof: { ...ACCEPTANCE, participant_leave: { reason: "participant_left", via_grant_id: C } } });
-      const s = staged([[pointered], [identityRow()], [keyRow()], [parentRow()], [mission()], [pointered]]);
+      const s = staged([[pointered], [identityRow()], [keyRow()], [parentRow()], [mission()], [pointered], [], []]);
       const result = await executeMissionRequest(signed(PARTICIPANT_TOKEN, "POST", "/leave"), s.options);
       expect(result).toEqual({ created: false, data: { mission_id: M, grant_id: G, status: "revoked", reason: "participant_left", revoked_at: NOW.toISOString() } });
-      expect(s.events.some(e => e.operation === "update")).toBe(false);
+      // The repeat re-runs only the idempotent cascade: label live members, then COALESCE.
+      expect(shape(s).slice(5)).toEqual([["select", "update"], ["update", undefined], ["update", undefined]]);
+      expect(s.events[6].condition?.sql).toContain('"revoked_at" is null');
+      // The pointer names the grant that carries the signed record, never a pointer to a pointer.
+      expect(rendered(s.events[6].values?.acceptanceProof).params).toEqual(["participant_leave", "participant_left", C]);
+      cascade(s, 7);
       expect((await getMissionGrant({ projectId: P, missionId: M, grantId: G }, staged([[pointered], [{ id: C }]]).options)).revocation_reason).toBe("participant_left");
       const revoked = middle({ revokedAt: NOW });
       const admin = staged([[revoked], [identityRow()], [keyRow()], [parentRow()], [mission()], [root({ revokedAt: NOW })], [revoked]]);
       await refusal(executeMissionRequest(signed(CHILD_TOKEN, "POST", "/leave", "", privateKey, { grantId: C }), admin.options), 401, "collaboration_mission_invalid_credential");
       expect(admin.events.some(e => e.operation === "update")).toBe(false);
+    });
+
+    test("a repeat leave through a member left alone by code at a99257ab still ends the live rest", async () => {
+      const legacyLeft = middle({ revokedAt: new Date(NOW.getTime() - MIN), acceptanceProof: { ...ACCEPTANCE, participant_leave: { reason: "participant_left", signature: "legacy" } } });
+      const s = staged([[legacyLeft], [identityRow()], [keyRow()], [parentRow()], [mission()], [root()], [legacyLeft], [root({ revokedAt: NOW })], ended(root(), legacyLeft)]);
+      const result = await executeMissionRequest(signed(CHILD_TOKEN, "POST", "/leave", "", privateKey, { grantId: C }), s.options);
+      expect(result).toEqual({ created: false, data: { mission_id: M, grant_id: C, status: "revoked", reason: "participant_left", revoked_at: new Date(NOW.getTime() - MIN).toISOString() } });
+      expect(shape(s).slice(5)).toEqual([["select", "update"], ["select", "update"], ["update", undefined], ["update", undefined]]);
+      // No write touches C's own row by id: its legacy record is kept.
+      expect(s.events[7].condition?.params).toEqual([G, M, P]);
+      expect(rendered(s.events[7].values?.acceptanceProof).params).toEqual(["participant_leave", "participant_left", C]);
+      cascade(s, 8);
     });
 
     test("close stamps every member once through any member, revokes nothing and keeps the window", async () => {

@@ -206,7 +206,8 @@ records the reason `participant_left`. The response is HTTP 200:
 ```
 
 Leave is idempotent. A repeat with a fresh timestamp and signature returns the
-same body with the original `revoked_at` and writes nothing. That repeat is
+same body with the original `revoked_at` and writes nothing (for a renewal
+chain member it can still end members left live; see below). That repeat is
 still admitted only while the grant would otherwise be live: an expired grant,
 a revoked mission or key, or any other ended authority refuses it like any
 other call. Every other participant operation refuses the token immediately
@@ -380,8 +381,12 @@ member receives an unsigned pointer instead, under the same key:
 pointer is not itself a signature; its evidence is the record on the named
 grant. Each member's metadata then shows `"revocation_reason": "participant_left"`,
 and a later leave sent with that member's own token returns its own `revoked_at`
-with HTTP 200, so a client that leaves every grant it holds keeps working. An
-administrator-revoked chain cannot be relabelled as left. Ending a chain also
+with HTTP 200, so a client that leaves every grant it holds keeps working. That
+repeat also ends any member still unrevoked, with a pointer to the grant that
+holds the signed record. Code at a99257ab (a rollback, or an old Machine during
+a rolling deploy) leaves only the row it is given, so a repeat through the new
+code finishes the chain; when the chain has already ended, it writes nothing
+new. An administrator-revoked chain cannot be relabelled as left. Ending a chain also
 closes its window. Renewal does not rely on that alone: while any member of the
 chain carries `revoked_at`, renewing any other member is HTTP 403
 `collaboration_mission_renewal_unavailable`, so a single-row revocation (older

@@ -592,6 +592,31 @@ databaseTest("one leave ends the chain; each member's own later leave reads back
   expect(await getMissionGrant({ ...target, grantId: H }, options())).not.toHaveProperty("revocation_reason");
 });
 
+databaseTest("a repeat leave after a one-row legacy leave still ends the rest of the chain", async () => {
+  const { token } = await renewableRoot();
+  const childToken = freshToken(), later = new Date(HALF.getTime() + 60_000);
+  await executeMissionRequest(renewReq(token, G, H, childToken), at(HALF));
+  // Code at a99257ab leaves only the row it was given and keeps the window open.
+  await admin`UPDATE tools.collaboration_grants SET revoked_at = ${HALF},
+    acceptance_proof = acceptance_proof || '{"participant_leave":{"reason":"participant_left","signature":"legacy"}}'::jsonb WHERE id = ${H}`;
+  expect(await unrevokedMembers()).toBe(1);
+  const proofFor = (grantId: string) => ({ grantId, identityId: I, keyId: K, timestamp: later.toISOString(), signature: "" });
+  const repeat = await executeMissionRequest(req(childToken, "/leave", undefined, { method: "POST", proof: proofFor(H) }), at(later));
+  expect(repeat).toEqual({ created: false, data: { mission_id: M, grant_id: H, status: "revoked", reason: "participant_left", revoked_at: HALF.toISOString() } });
+  const [root] = await admin`SELECT revoked_at, renewal_closed_at, acceptance_proof FROM tools.collaboration_grants WHERE id = ${G}`;
+  expect(root.revoked_at.toISOString()).toBe(later.toISOString());
+  expect(root.renewal_closed_at.toISOString()).toBe(later.toISOString());
+  expect(root.acceptance_proof.participant_leave).toEqual({ reason: "participant_left", via_grant_id: H });
+  expect(await unrevokedMembers()).toBe(0);
+  // The legacy record on H is kept; G's own leave now reads back participant_left.
+  expect((await admin`SELECT acceptance_proof FROM tools.collaboration_grants WHERE id = ${H}`)[0].acceptance_proof.participant_leave.signature).toBe("legacy");
+  expect((await executeMissionRequest(req(token, "/leave", undefined, { method: "POST", proof: proofFor(G) }), at(later))).created).toBe(false);
+  // A further repeat changes nothing.
+  const after = await admin`SELECT * FROM tools.collaboration_grants ORDER BY id`;
+  await executeMissionRequest(req(childToken, "/leave", undefined, { method: "POST", proof: proofFor(H) }), at(new Date(later.getTime() + 1000)));
+  expect(await admin`SELECT * FROM tools.collaboration_grants ORDER BY id`).toEqual(after);
+});
+
 databaseTest("a successor needs a fresh hash: the presented token's or any bound hash conflicts", async () => {
   const { token } = await renewableRoot();
   await expect(executeMissionRequest(renewReq(token, G, H, token), at(HALF))).rejects.toMatchObject({ status: 409, code: "token_hash_conflict" });
