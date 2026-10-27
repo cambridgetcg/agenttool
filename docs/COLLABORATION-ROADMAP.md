@@ -97,6 +97,16 @@ room to the device or starts a new season: the cases today's sweep checks
 before it renews. Credentials stay short-lived, and the hub leaves the daily
 path for room seats and directory grants alike.
 
+The service side and the portable client are a source candidate (#486 item 4;
+migration first). No Lobby grant is renewable yet: the hub does not set
+renewable_until or close windows, so the daily seat and directory-grant loops
+remain until the Lobby follow-up, which also decides openly whether to change
+its terminal-confirmation rule. The [mission contract](COLLABORATION-MISSIONS.md#renewal-inside-a-window)
+records the window, the renew request and how one revocation or leave ends a
+chain; the [client guide](COLLABORATION-MISSION-CLIENT.md#renew-inside-a-window)
+covers `renew`, `grant --renewable-until` and `renewal-close`. Nothing is
+deployed.
+
 This changes a rule the Lobby states today: every renewal is confirmed at a
 terminal. A renewal inside a window both sides accepted adds no authority,
 which is the case for letting the member's desk make it without a prompt. That
