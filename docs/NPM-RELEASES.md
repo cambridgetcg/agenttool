@@ -21,6 +21,65 @@ Since 2026-10-12 new versions are released from the public repository
 its `publish-npm.yml` stages each exact artifact, and a version becomes public
 only after a maintainer approves the stage with 2FA. The operator procedure
 behind these receipts is kept in the operator runbook (`infra/NPM-RELEASE-RUNBOOK.md`, not published).
+
+## Wallet 0.1.4 prepared — 2026-10-27
+
+**Not published.** Anonymous registry reads on 2026-10-27: npm
+`@agenttool/wallet` versions `0.1.0` and `0.1.3`, dist-tags
+`{latest: 0.1.3}`, no 0.1.4 and no deprecation on 0.1.3. The public
+repository has no `wallet-v*` tag or GitHub Release.
+
+Version 0.1.4 ships the Wallet authorization fix merged in
+[#460](https://github.com/cambridgetcg/agenttool/pull/460) (merge
+`95336467`, 2026-10-13): overlapping call rules resolve most-restrictively,
+the authorization `context` is snapshotted as closed plain data, and seven
+negative vectors ship in the tarball. Published 0.1.3 (SHA-256
+`33f3b81c…ae87`, matching its LOVE manifest) reads only the first matching
+call rule: run against the negative vectors, it accepts
+`overlap-call-method-approval` and `overlap-mixed-rule-transfer-approval`,
+which 0.1.4 refuses with `CAPABILITY_DENIED`. The other five cases are
+refused by both. The source was already public at version string 0.1.3: the
+`packages/wallet` tree in the public repository's `main` (`f6ca0130`) is
+blob-identical to private `main`. The version bump separates the two
+behaviours by name.
+
+The release commit moves every pin of the Wallet version to 0.1.4:
+`packages/wallet/package.json`, `PACKAGE_VERSION` in
+`packages/wallet/src/constants.ts`, `packages/wallet/tests/release.test.ts`,
+`bin/tests/love-packages.test.ts`, the packed Wallet and Zerone adapter smoke
+step in `.github/workflows/ci.yml` and in
+`public/overlay/.github/workflows/ci.yml` (the public repository's CI), and
+`bin/tests/boring-spine-gate.test.ts`, which checks that step. The adapter's
+own `0.1.2` pin in that step is unchanged. The commit also points
+`repository`, `homepage` and `bugs` at the public repository, turns the
+README "Unreleased" section into "Changes in 0.1.4", and corrects the README
+and CLAUDE.md sentences that called the 0.1.1/0.1.2 GitHub assets public.
+Version 0.1.4 gets no LOVE manifest; new versions are packed from the public
+repository. `@agenttool/wallet-zerone` 0.1.2 is not changed: its `^0.1.2`
+peer already admits 0.1.4, and with the packed 0.1.4 installed in place of its
+locked Wallet 0.1.3, its typecheck and all 39 of its tests pass.
+
+Remaining steps, in order, following the public release path in the operator
+runbook:
+
+1. The once-only npm trust step for packages released before 2026-10-12
+   (operator runbook). The only stage attempted from the public repository so
+   far, `relational-geometry-v0.1.0-dev.1` in run
+   [`39288082185`](https://github.com/cambridgetcg/agenttool-packages/actions/runs/39288082185)
+   on 2026-10-19, failed at `npm stage publish` with `E401`.
+2. Merge the release PR, project the merged `main` into
+   `cambridgetcg/agenttool-packages`, and wait for public CI on that commit.
+3. Tag `wallet-v0.1.4` with `bin/public-release-tag.ts --package wallet`.
+4. Dispatch `publish-npm.yml` with `package=wallet`, `tag=wallet-v0.1.4`,
+   `authentication=trusted`, `npm_tag=latest`: first `dry_run=true`, then
+   `dry_run=false` to stage.
+5. A maintainer inspects the stage, checks its SHA-256 against the run
+   summary, and approves it with 2FA.
+6. After the approval, dispatch once more to record
+   `already_published_exact`, then update the pages that name 0.1.3 as the
+   current Wallet, record the publication here, and deprecate
+   `@agenttool/wallet@<0.1.4` with a pointer to 0.1.4.
+
 ## Collab 0.5.0 public distribution — 2026-10-10
 
 `@agenttool/collab@0.5.0` is distributed through a public GitHub Release.
