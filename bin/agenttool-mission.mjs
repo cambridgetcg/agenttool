@@ -424,7 +424,7 @@ function abandon(root, pending) {
   linkSync(from, to); unlinkSync(from); syncDirectory(root);
 }
 /** Everything this device knows about the predecessor; actions and window only while it is readable. */
-function check(view, before, pending, { echo = false } = {}) {
+function check(view, before, pending, { echo = false, record = 'the pending record' } = {}) {
   const g = view?.grant, r = g?.renewal, m = view?.mission;
   const ok = view && typeof view === 'object' && g && r && m && tokenFree(view, g, r, m)
     && g.grant_id === pending.grant_id && r.renewed_from_grant_id === before.grant_id
@@ -438,7 +438,7 @@ function check(view, before, pending, { echo = false } = {}) {
     && (before.renewable_until === null || Date.parse(r.renewable_until) <= Date.parse(before.renewable_until))
     && (!echo || (view.token_sha256 === pending.token_sha256 && view.token_source === 'participant'));
   if (!ok) throw new RenewalError('renewal_response_invalid', `The renewal response for grant ${pending.grant_id} does not confirm the expected successor. Nothing was installed.`,
-    { delivered: 'unknown', next: 'Inspect the pending record and the grant with its administrator before any new attempt.' });
+    { delivered: 'unknown', next: `Inspect ${record} and the grant with its administrator before any new attempt.` });
   return g;
 }
 function install(root, local, before, pending, g) {
@@ -604,7 +604,7 @@ async function renewedElsewhere(root, local, key, before, successor, options) {
     throw new RenewalError('renewal_pending_mismatch', `renewal-abandoned-${successor}.json does not belong to this invitation.`,
       { next: 'Inspect the abandoned record and invitation.json before any new attempt.' });
   const found = await probe(root, key, before, record, options);
-  if (found.view) return { ...install(root, local, before, record, check(found.view, before, record)), recovered_abandoned: true };
+  if (found.view) return { ...install(root, local, before, record, check(found.view, before, record, { record: `renewal-abandoned-${successor}.json` })), recovered_abandoned: true };
   throw new RenewalError('renewal_abandoned', `Grant ${before.grant_id} was renewed to ${successor}, which this device recorded but can no longer read; it has ended.`,
     { next: 'This grant cannot renew again; ask the administrator for a new grant.' });
 }

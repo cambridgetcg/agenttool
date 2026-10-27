@@ -294,6 +294,55 @@ describe.skipIf(process.platform === "win32")("participant renew", () => {
     expect(existsSync(pendingFile(g))).toBe(false);
   });
 
+  test("recovery through an abandoned record installs only a confirmed successor of this invitation", async () => {
+    // A stored successor whose pending record was later abandoned, and a predecessor that names it.
+    const setup = async () => {
+      const f = fixture(), s = service(f, "store-then-drop");
+      await stop(client.renew(f.state, { fetchImpl: s.fetchImpl }));
+      const child = JSON.parse(s.calls[1].body!).grant_id, file = join(f.state, `renewal-abandoned-${child}.json`);
+      const record = JSON.parse(readFileSync(pendingFile(f), "utf8"));
+      rmSync(pendingFile(f));
+      f.predecessor.renewal = { ...f.predecessor.renewal, renewed_to_grant_id: child };
+      return { f, s, child, file, record };
+    };
+    // (a) The successor-signed read does not confirm the expected successor: nothing is installed.
+    for (const [name, patch] of [
+      ["other-identity", (g: any) => { g.identity_id = "55555555-5555-4555-8555-555555555555"; }],
+      ["revoked", (g: any) => { g.revoked_at = iso(Date.now()); }],
+      ["widened", (g: any) => { g.actions = ["mission.observe", "mission.read", "mission.admin"]; }],
+      ["other-origin", (g: any) => { g.origin = "https://other.invalid"; }],
+      ["not-extending", (g: any) => { g.expires_at = iso(Date.now() + 10 * MIN); }],
+    ] as Array<[string, (grant: any) => void]>) {
+      const { f, s, child, file, record } = await setup();
+      writeFileSync(file, JSON.stringify(record), { mode: 0o600 });
+      patch(s.children.get(child));
+      const before = readFileSync(join(f.state, "invitation.json"), "utf8");
+      const error = await stop(client.renew(f.state, { fetchImpl: s.fetchImpl }));
+      expect(error.stop_reason, name).toBe("renewal_response_invalid");
+      expect(error.next, name).toContain(`renewal-abandoned-${child}.json`);
+      expect(error.next, name).not.toContain("pending record");
+      expect(readFileSync(join(f.state, "invitation.json"), "utf8"), name).toBe(before);
+      expect(existsSync(file), name).toBe(true);
+      expect(s.calls.slice(2).map(c => `${c.method} ${c.grant === G ? "G" : c.grant === child ? "child" : "other"}`), name).toEqual(["GET G", "GET child"]);
+    }
+    // (b) The abandoned record under that name belongs to another predecessor, mission or grant: nothing is read as the successor.
+    const X = "55555555-5555-4555-8555-555555555555";
+    for (const [name, change] of [
+      ["other-predecessor", (r: any) => ({ ...r, predecessor_grant_id: X })],
+      ["other-mission", (r: any) => ({ ...r, mission_id: X })],
+      ["other-grant", (r: any) => ({ ...r, grant_id: X, body_utf8: JSON.stringify({ ...JSON.parse(r.body_utf8), grant_id: X }) })],
+    ] as Array<[string, (record: any) => any]>) {
+      const { f, s, child, file, record } = await setup();
+      writeFileSync(file, JSON.stringify(change(record)), { mode: 0o600 });
+      const before = readFileSync(join(f.state, "invitation.json"), "utf8");
+      const error = await stop(client.renew(f.state, { fetchImpl: s.fetchImpl }));
+      expect(error.stop_reason, name).toBe("renewal_pending_mismatch");
+      expect(s.calls.slice(2).filter(c => c.grant !== G), name).toHaveLength(0);
+      expect(s.calls.filter(c => c.method === "POST"), name).toHaveLength(1);
+      expect(readFileSync(join(f.state, "invitation.json"), "utf8"), name).toBe(before);
+    }
+  });
+
   test("a 5xx on the invitation read or the recovery probe is uncertain: the record is kept and nothing is abandoned", async () => {
     const abandoned = (f: ReturnType<typeof fixture>) => readdirSync(f.state).some(name => name.startsWith("renewal-abandoned-"));
     // No pending record: nothing was sent, so nothing is delivered.
