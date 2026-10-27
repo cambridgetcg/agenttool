@@ -20,7 +20,7 @@ import { DeskSecrets } from "./secrets.js";
 import type { RoomCard } from "./room.js";
 import { openDocument, type FleetCard, type SignedEnvelope } from "./signed.js";
 import { ACT_SCHEMA, type ActPreview, type LobbyStore } from "./store.js";
-import type { DeskGrantRow, DeskRow } from "./fleet-store.js";
+import type { DeskGrantRow, DeskRow, HubRow } from "./fleet-store.js";
 import type { ConfirmRequest } from "./tty.js";
 import type { MissionAction, MissionEvent } from "./wire.js";
 
@@ -113,7 +113,7 @@ export function roomGate(ctx: FleetContext, roomId: string): GateRoom {
   const desk = requireJoinedDesk(ctx);
   const door = doorPin(ctx);
   if (door === null) throw new LobbyError("door_not_pinned", "the door key is not pinned on this desk; run fleet join");
-  const card = fleetView(ctx, desk.directory_mission_id, door).cards.get(roomId);
+  const card = deskFleetView(ctx, desk, door).cards.get(roomId);
   if (card === undefined) throw new LobbyError("card_not_found", "no door-verified card for that room in the local cache; run fleet sync");
   return gateOfCard(card.envelope.body);
 }
@@ -218,6 +218,59 @@ export function fleetView(ctx: FleetContext, missionId: string, door: DoorPin | 
   return readFleetEvents(ctx.store.fleet.events(missionId), door);
 }
 
+// ── The directory chain (schema version 5) ─────────────────────────────
+
+/** A directory the hub keeps live: the `current` one its `hub` row points at,
+ * and while it has not ended, the `previous` one a successor replaced. */
+export interface LiveDirectory {
+  mission_id: string;
+  mission_digest: string;
+  expires_at: string;
+  role: "current" | "previous";
+}
+
+/** The hub's live directories, current first. During a rollover's overlap
+ * door documents may go to both, and knocks and requests are read from both;
+ * a previous directory drops out once it ends or is revoked. */
+export function hubLiveDirectories(ctx: FleetContext, hub: HubRow, now: Date = ctx.now()): LiveDirectory[] {
+  const live: LiveDirectory[] = [{
+    mission_id: hub.directory_mission_id, mission_digest: hub.directory_digest, expires_at: hub.directory_expires_at, role: "current",
+  }];
+  for (const row of ctx.store.fleet.hubDirectories()) {
+    if (row.state !== "previous" || row.revoked_at !== null || Date.parse(row.expires_at) <= now.getTime()) continue;
+    if (row.mission_id === hub.directory_mission_id) continue;
+    live.push({ mission_id: row.mission_id, mission_digest: row.mission_digest, expires_at: row.expires_at, role: "previous" });
+  }
+  return live;
+}
+
+/** The directory this desk was in before its current one (it moved to a
+ * door-signed successor), or null. */
+export function deskPreviousDirectory(ctx: FleetContext, desk: Pick<DeskRow, "directory_mission_id">): string | null {
+  if (desk.directory_mission_id === null) return null;
+  const row = ctx.store.fleet.deskDirectories().find((entry) => entry.mission_id === desk.directory_mission_id);
+  return row?.predecessor_mission_id ?? null;
+}
+
+/** The fleet hall as this desk sees it: its current directory's cached
+ * events, after those of the directory it moved from (so a knock, admission
+ * or notice posted there before the move still counts, and the newest card
+ * per room still wins). Reads the local cache only. */
+export function deskFleetView(ctx: FleetContext, desk: Pick<DeskRow, "directory_mission_id">, door: DoorPin | null): FleetView {
+  const previous = deskPreviousDirectory(ctx, desk);
+  const events = [...(previous === null ? [] : ctx.store.fleet.events(previous)), ...ctx.store.fleet.events(desk.directory_mission_id!)];
+  return readFleetEvents(events, door);
+}
+
+/** Read the previous directory's new events while this desk may still read
+ * it; nothing when it may not. Reads only. */
+export async function syncPreviousDirectory(ctx: FleetContext, desk: Pick<DeskRow, "directory_mission_id">): Promise<void> {
+  const previous = deskPreviousDirectory(ctx, desk);
+  if (previous === null) return;
+  const seat = liveSeat(ctx, previous, "mission.read");
+  if (seat !== null) await syncMission(ctx, seat);
+}
+
 export interface PreparedPost {
   kind: string;
   mission_id: string;
@@ -267,14 +320,14 @@ export function currentGate(ctx: FleetContext, kind: string, missionId: string, 
   if (envelope === null || envelope.kind !== kind) {
     throw new LobbyError("outbox_unreadable", "the event is not the lobby document its outbox row names; it is not sent");
   }
-  // Directory renewal documents name no room: the directory's own gate, as for its descriptor.
-  if (kind === "directory_renew" || kind === "directory_renewal") return DIRECTORY_GATE_ROOM;
+  // Directory renewal and successor documents name no room: the directory's own gate, as for its descriptor.
+  if (kind === "directory_renew" || kind === "directory_renewal" || kind === "directory_successor") return DIRECTORY_GATE_ROOM;
   const roomId = (envelope.body as { room_id: string }).room_id;
   if (kind === "knock") {
     const desk = requireJoinedDesk(ctx);
     const door = doorPin(ctx);
     if (door === null) throw new LobbyError("door_not_pinned", "the door key is not pinned on this desk; run fleet join");
-    const card = fleetView(ctx, desk.directory_mission_id, door).cards.get(roomId);
+    const card = deskFleetView(ctx, desk, door).cards.get(roomId);
     if (card === undefined) throw new LobbyError("card_not_found", "no door-verified card for that room in the local cache; run fleet sync");
     return gateOfCard(card.envelope.body);
   }

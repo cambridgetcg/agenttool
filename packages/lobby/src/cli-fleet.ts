@@ -1,9 +1,9 @@
 /** Fleet-hall commands of the agenttool-lobby CLI.
  *
  * Reads (sync, browse, card, knocks, status) need no confirmation.
- * Consequential acts (hub init, hub relay, hub season, hub seat, room
- * publish, hub admit, hub deny, fleet join, fleet renew, knock, ready,
- * outbox retry) show
+ * Consequential acts (hub init, hub relay, hub season, hub seat, hub
+ * directory successor, room publish, hub admit, hub deny, fleet join, fleet
+ * renew, knock, ready, outbox retry) show
  * their exact bytes on /dev/tty, need "yes" typed there, record those bytes
  * in the audit log, and only then touch the network. enroll-device sends
  * nothing and is audited without a prompt. Secrets never reach stdout or
@@ -27,6 +27,7 @@ import {
   planReady,
 } from "./desk.js";
 import { directoryStatus, executeFleetRenew, planFleetRenew } from "./directory-renewal.js";
+import { executeDirectorySuccessor, planDirectorySuccessor } from "./directory-rollover.js";
 import { LobbyError } from "./errors.js";
 import {
   executeAdmit,
@@ -213,7 +214,9 @@ export async function fleetCommand(ctx: FleetContext, args: string[], io: FleetI
       const outcome = await consequentialAsync(ctx, io, plan.preview, () => executeJoin(ctx, plan));
       if (!outcome.confirmed) return outcome.code;
       io.stdout(`joined the fleet directory ${plan.packet.directory.mission_id}; grant until ${outcome.value.expires_at}` +
-        `${outcome.value.pinned ? `; door ${plan.packet.door.fingerprint} pinned` : ""}\naudit: recorded fleet.join sha256 ${plan.preview.sha256}\n`);
+        `${outcome.value.pinned ? `; door ${plan.packet.door.fingerprint} pinned` : ""}` +
+        `${plan.move === null ? "" : `; moved from directory ${plan.move.from_mission_id} to its door-signed successor (door pin unchanged)`}` +
+        `\naudit: recorded fleet.join sha256 ${plan.preview.sha256}\n`);
       return EXIT_OK;
     }
     case "renew": {
@@ -223,7 +226,8 @@ export async function fleetCommand(ctx: FleetContext, args: string[], io: FleetI
       const planned = await planFleetRenew(ctx);
       if ("idle" in planned) {
         const idle = planned.idle;
-        io.stdout(`nothing to do: directory renew request ${idle.request.event_id} (grant id ${idle.request.grant_id}) is open until ` +
+        io.stdout(`nothing to do: directory renew request ${idle.request.event_id} (grant id ${idle.request.grant_id}` +
+          `${idle.request.mission_id === ctx.store.fleet.desk()?.directory_mission_id ? "" : ` in the successor directory ${idle.request.mission_id}`}) is open until ` +
           `${idle.request.expires_at} and the hub has not renewed it yet\n` +
           `your directory grant ends ${idle.grant_expires_at ?? "(none live)"}; the hub must run hub renew-sweep before then, ` +
           "then run fleet renew again here\n");
@@ -236,12 +240,17 @@ export async function fleetCommand(ctx: FleetContext, args: string[], io: FleetI
       if (outcome.value.picked_up !== null) {
         io.stdout(`picked up directory grant ${outcome.value.picked_up.grant_id} until ${outcome.value.picked_up.expires_at}\n`);
       }
+      if (outcome.value.moved_to !== null) {
+        io.stdout(`moved this desk to the door-signed successor directory ${outcome.value.moved_to}; the door pin is unchanged\n`);
+      }
       if (outcome.value.request === null) {
         if (plan.no_request !== null) io.stdout(`no next directory renew request: ${plan.no_request}\n`);
         return EXIT_OK;
       }
       io.stdout(`next directory renew request: grant id ${plan.request!.body.grant_id}, token sha256 ${plan.request!.body.token_sha256}, ` +
-        `good until ${plan.request!.body.expires_at}; after the hub's renew-sweep, run fleet renew again\n`);
+        `good until ${plan.request!.body.expires_at}` +
+        `${plan.request!.body.mission_id === plan.request!.post.mission_id ? "" : `, for a grant in the door-signed successor directory ${plan.request!.body.mission_id}`}` +
+        "; after the hub's renew-sweep, run fleet renew again\n");
       return reportPosts(io, [outcome.value.request]);
     }
     case "sync": {
@@ -326,7 +335,12 @@ export async function fleetCommand(ctx: FleetContext, args: string[], io: FleetI
           `directory ${desk.directory_mission_id ?? "(not joined)"}; door ${desk.door_fingerprint ?? "(not pinned)"}\n` +
           (directory === null ? "" : `directory ends ${directory.ends_at ?? "(unknown here)"}; directory grant until ${directory.grant_expires_at ?? "(none)"}; ` +
             `${request === null ? "no open renew request" : `renew request ${request.event_id} ${request.posted ? "posted" : "NOT POSTED (outbox retry)"}` +
-              ` until ${request.expires_at}${request.expired ? " (expired)" : ""}`}\n`) +
+              ` until ${request.expires_at}${request.expired ? " (expired)" : ""}`}\n` +
+            (directory.successor === null ? "" : directory.successor.state === "conflicting"
+              ? "successor: the door signed more than one successor of this directory; fleet renew refuses. Ask the hub\n"
+              : `successor: the door announced directory ${directory.successor.mission_id} until ${directory.successor.expires_at}; ` +
+                "this desk moves there with its next fleet renew pickups\n") +
+            (directory.previous_mission_id === null ? "" : `moved from directory ${directory.previous_mission_id}\n`)) +
           `${grants.map((grant) => `grant ${grant.grant_id} ${grant.purpose} ${grant.mission_id} until ${grant.expires_at ?? "?"} ${grant.accepted_at === null ? "(not accepted)" : "(accepted)"}`).join("\n")}\n`);
       return EXIT_OK;
     }
@@ -462,6 +476,11 @@ export async function hubCommand(ctx: FleetContext, args: string[], io: FleetIo)
         door_fingerprint: hub.door_fingerprint,
         keychain: { account: hub.keychain_account, bearer_service: hub.bearer_service, door_service: hub.door_service },
         directory: { mission_id: hub.directory_mission_id, mission_digest: hub.directory_digest, expires_at: hub.directory_expires_at, mode: hub.directory_mode },
+        // The directory chain (schema version 5): current, previous while a rollover overlaps, and a successor not announced yet.
+        directories: ctx.store.fleet.hubDirectories().map((row) => ({
+          mission_id: row.mission_id, state: row.state, expires_at: row.expires_at, predecessor_mission_id: row.predecessor_mission_id,
+          notice_event_id: row.notice_event_id, revoked_at: row.revoked_at,
+        })),
         devices: ctx.store.fleet.listDevices().map((device) => ({
           fingerprint: device.fingerprint, identity_id: device.identity_id, display_name: device.display_name, enrolled_at: device.enrolled_at,
           directory_paused_at: device.directory_paused_at ?? null,
@@ -469,6 +488,8 @@ export async function hubCommand(ctx: FleetContext, args: string[], io: FleetIo)
       };
       io.stdout(values.json ? `${JSON.stringify(view, null, 2)}\n`
         : `project ${view.project_id}\ndoor ${view.door_fingerprint}\ndirectory ${view.directory.mission_id} until ${view.directory.expires_at}\n` +
+          `${view.directories.filter((row) => row.mission_id !== view.directory.mission_id)
+            .map((row) => `${row.state} directory ${row.mission_id} until ${row.expires_at}${row.revoked_at === null ? "" : " (revoked)"}\n`).join("")}` +
           `${view.devices.map((device) => `device ${device.fingerprint} did:at:${device.identity_id} ${JSON.stringify(device.display_name)}` +
             (device.directory_paused_at === null ? "" : "  DIRECTORY RENEWAL PAUSED")).join("\n")}\n`);
       return EXIT_OK;
@@ -533,8 +554,25 @@ export async function hubCommand(ctx: FleetContext, args: string[], io: FleetIo)
       }
       throw new FleetUsageError("hub season open <room_id> [--days N] | hub season adopt <room_id> --mission UUID --digest sha256:...");
     }
+    case "directory": {
+      const [mode, ...more] = rest;
+      if (mode !== "successor") throw new FleetUsageError("hub directory successor [--days 1-30]");
+      const { values, positionals: extra } = parseArgs({ args: more, allowPositionals: true, strict: true, options: { days: { type: "string" } } });
+      positionals(extra, 0, "hub directory successor [--days 1-30]");
+      const days = wholeNumber(values.days, "--days");
+      const headless = withoutTerminal(ctx, io);
+      if (headless !== null) return headless;
+      const plan = await planDirectorySuccessor(ctx, days === undefined ? {} : { days });
+      const outcome = await consequentialAsync(ctx, io, plan.preview, () => executeDirectorySuccessor(ctx, plan));
+      if (!outcome.confirmed) return outcome.code;
+      io.stdout(`announced successor directory ${outcome.value.mission_id} digest ${outcome.value.mission_digest} until ${outcome.value.expires_at}` +
+        `${outcome.value.seat_expires_at === null ? "" : `; hub seat until ${outcome.value.seat_expires_at}`}\n` +
+        `the previous directory ${plan.from.mission_id} stays readable until ${plan.from.expires_at}; each desk moves with its next fleet renew pickups\n` +
+        `audit: recorded hub.directory.successor sha256 ${plan.preview.sha256}\n`);
+      return reportPosts(io, outcome.value.posts);
+    }
     case "seat": {
-      const [target] = positionals(parseArgs({ args: rest, allowPositionals: true, strict: true, options: {} }).positionals, 1, "hub seat directory|<room_id>");
+      const [target] = positionals(parseArgs({ args: rest, allowPositionals: true, strict: true, options: {} }).positionals, 1, "hub seat directory|<room_id>|<previous directory id>");
       const headless = withoutTerminal(ctx, io);
       if (headless !== null) return headless;
       const plan = planHubSeat(ctx, { target: target! });
@@ -603,5 +641,5 @@ export async function roomPublishCommand(ctx: FleetContext, args: string[], io: 
   const outcome = await consequentialAsync(ctx, io, plan.preview, () => executePublish(ctx, plan));
   if (!outcome.confirmed) return outcome.code;
   io.stdout(`published card #${plan.card.card_seq} for ${plan.card.room_id}\naudit: recorded room.publish sha256 ${plan.preview.sha256}\n`);
-  return reportPosts(io, [outcome.value]);
+  return reportPosts(io, outcome.value);
 }

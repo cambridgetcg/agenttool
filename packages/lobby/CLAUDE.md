@@ -8,8 +8,8 @@
 This private package is the 大廳 Lobby desk: the **local hall** (room cards,
 the private ledger, the pin book, the audit log, the egress gate), the
 **fleet hall v0** (hub and door, device enrollment, door-signed cards, knocks,
-admit/deny and Ready on agenttool collaboration missions, and directory
-renewal inside the Lobby) and, inside a room,
+admit/deny and Ready on agenttool collaboration missions, directory
+renewal inside the Lobby and directory rollover) and, inside a room,
 **table talk**, renewal inside the term, leave, kick and block, the emergency
 stop and the weekly access digest, with a read-only stdio MCP view. It is MVP
 steps 1, 2, 7 and 8 of the 2026-10-16 Lobby design; README `Concepts`
@@ -81,8 +81,8 @@ restates the design terms it implements.
 - **Consequential acts belong to the CLI and the terminal.** Promotion, pin
   changes and every fleet act that signs, sends, grants, revokes, posts or
   accepts (table talk, renew request and accept, leave, the renew sweep, member
-  add, pause and resume, `fleet renew`, `hub device pause` and resume, roster
-  posts, kick, block, unblock, stop) go through
+  add, pause and resume, `fleet renew`, `hub device pause` and resume,
+  `hub directory successor`, roster posts, kick, block, unblock, stop) go through
   `plan*` → `confirmOnTty` → record → `execute*`. The confirmation shows the
   exact canonical bytes, including every document or request body to be sent,
   reads `/dev/tty` and never stdin, and fails closed without a terminal. Fleet
@@ -103,6 +103,13 @@ restates the design terms it implements.
   and compares it with the packet's key before any Keychain read, audit
   record, prompt or request, refusing with `device_fingerprint_mismatch`
   without naming the expected code. Do not add a path that relays without it.
+  A desk changes directory only to the door-signed successor of its own
+  directory: a `directory_successor` notice signed by the pinned door
+  (verified against the pinned key) whose `from` is exactly the desk's
+  directory and digest, and whose successor's charter names that door and
+  exactly that predecessor (`fleet renew` pickup, or a `fleet join` with the
+  same door typed again). The door pin itself never changes; do not add a
+  path that moves a desk or re-pins a door on anything else.
 - **Removal and the stop never wait on the network.** Kick, block and stop
   record their local effect (member state, block, stop) before the first
   request; after a stop the hub issues nothing (`requireLiveHub`, at plan and
@@ -134,7 +141,8 @@ restates the design terms it implements.
   authentic directory renew note carried it first (`grantIdClaimants`); a
   copy under another key is never granted and never burns the original, one
   hash binds one grant per sweep, and the newest renew request per member and
-  room (and per device, for the directory) wins across sweeps.
+  room (and per device, for the directory) wins across sweeps. Ownership spans
+  every directory of the hub's chain, so it holds across a rollover.
 - **Signed documents are compact and hex.** `agenttool-lobby-signed/v1`
   documents fit one 1000-character observation, signature included, and use
   hex for signatures, digests and public keys (the gate refuses key-like
@@ -187,13 +195,14 @@ next version adds one step `from` the last `to` and moves
 `STATE_SCHEMA_VERSION`.
 
 Version 4 is directory renewal inside the Lobby (Build 2A,
-`lobby/directory-renew`). The next numbers are reserved, in this order
+`lobby/directory-renew`) and version 5 directory rollover (Build 2B,
+`lobby/directory-rollover`). The next numbers are reserved, in this order
 (2026-10-27 lobby builds):
 
 | Version | Build |
 |---|---|
 | 4 | directory renew (Build 2A): taken |
-| 5 | directory rollover (Build 2B) |
+| 5 | directory rollover (Build 2B): taken |
 | 6 | room seat leases (Build 5) |
 | 7 | renewal by signature, lobby side (Build 3 C0) |
 | 8 | pairing (Build 4 PR-3) |

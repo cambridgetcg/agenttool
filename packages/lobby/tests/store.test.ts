@@ -280,6 +280,7 @@ describe("state schema versions and the upgrade chain", () => {
     "hub_devices", "hub_grants", "hub_members", "hub_seasons", "outbox"];
   const V3_TABLES = ["desk_renewals", "hub_blocks", "hub_extra_grants", "hub_processed_notes", "hub_renewals", "hub_rosters"];
   const V4_TABLES = ["desk_directory_renewals", "hub_directory_renewals"];
+  const V5_TABLES = ["desk_directories", "hub_directories"];
 
   function tables(home: string): string[] {
     const raw = new Database(join(home, DATABASE_FILE), { readonly: true });
@@ -295,7 +296,7 @@ describe("state schema versions and the upgrade chain", () => {
     store.close();
     // Rebuild what a version-1 desk left behind: no fleet tables, version 1.
     const raw = new Database(join(home, DATABASE_FILE));
-    for (const table of [...FLEET_TABLES, ...V3_TABLES, ...V4_TABLES]) raw.exec(`DROP TABLE ${table}`);
+    for (const table of [...FLEET_TABLES, ...V3_TABLES, ...V4_TABLES, ...V5_TABLES]) raw.exec(`DROP TABLE ${table}`);
     raw.exec("UPDATE meta SET value = '1' WHERE key = 'schema_version'");
     raw.close();
 
@@ -313,7 +314,7 @@ describe("state schema versions and the upgrade chain", () => {
     expect(upgraded.fleet.v3).toBe(true);
     expect(upgraded.listRooms()).toEqual([room]);
     upgraded.close();
-    for (const table of [...FLEET_TABLES, ...V3_TABLES, ...V4_TABLES]) expect(tables(home)).toContain(table);
+    for (const table of [...FLEET_TABLES, ...V3_TABLES, ...V4_TABLES, ...V5_TABLES]) expect(tables(home)).toContain(table);
   });
 
   test("a version-2 file is read without the version-3 tables and upgraded once, keeping every row", () => {
@@ -322,7 +323,7 @@ describe("state schema versions and the upgrade chain", () => {
     store.close();
     // Rebuild what a version-2 desk left behind: the version-2 fleet tables only.
     const raw = new Database(join(home, DATABASE_FILE));
-    for (const table of [...FLEET_TABLES, ...V3_TABLES, ...V4_TABLES]) raw.exec(`DROP TABLE ${table}`);
+    for (const table of [...FLEET_TABLES, ...V3_TABLES, ...V4_TABLES, ...V5_TABLES]) raw.exec(`DROP TABLE ${table}`);
     raw.exec(FLEET_SCHEMA_SQL);
     raw.exec("UPDATE meta SET value = '2' WHERE key = 'schema_version'");
     raw.query(`INSERT INTO hub_members (mission_id, room_id, identity_id, tier, term_ends_at, knock_id, grant_id, admitted_at)
@@ -346,7 +347,7 @@ describe("state schema versions and the upgrade chain", () => {
     upgraded.close();
     // A second open does not run the upgrade again.
     LobbyStore.open(home).close();
-    for (const table of [...V3_TABLES, ...V4_TABLES]) expect(tables(home)).toContain(table);
+    for (const table of [...V3_TABLES, ...V4_TABLES, ...V5_TABLES]) expect(tables(home)).toContain(table);
   });
 
   test("a version-3 file gets the directory renewal tables and columns once, keeping its devices and grants", () => {
@@ -371,7 +372,7 @@ describe("state schema versions and the upgrade chain", () => {
     reader.close();
 
     const upgraded = LobbyStore.open(home);
-    expect(upgraded.stateVersion).toBe("4");
+    expect(upgraded.stateVersion).toBe(STATE_SCHEMA_VERSION);
     expect(upgraded.fleet.v4).toBe(true);
     expect(upgraded.fleet.device("22222222-2222-4222-8222-222222222222")).toMatchObject({ display_name: "desk one", directory_paused_at: null });
     expect(upgraded.fleet.desk()).toMatchObject({ joined_at: T0.toISOString(), directory_expires_at: null });
@@ -385,6 +386,53 @@ describe("state schema versions and the upgrade chain", () => {
     expect(v4reader.fleet.v4).toBe(true);
     expect(v4reader.fleet.deskDirectoryRenewals()).toEqual([]);
     v4reader.close();
+  });
+
+  test("a version-4 file gets the directory chain once, with the hub's directory as current and the desk's as joined", () => {
+    const { home } = legacyFile("4");
+    const directory = "11111111-1111-4111-8111-111111111111";
+    const digest = `sha256:${"a".repeat(64)}`;
+    const raw = new Database(join(home, DATABASE_FILE));
+    raw.exec(`INSERT INTO desk (singleton, project_id, origin, identity_id, signing_key_id, public_key, fingerprint, display_name, created_at,
+        directory_mission_id, directory_digest, door_fingerprint, joined_at, directory_expires_at)
+      VALUES (1, '66666666-6666-4666-8666-666666666666', 'https://api.agenttool.dev', '22222222-2222-4222-8222-222222222222',
+        '33333333-3333-4333-8333-333333333333', 'k', '0123456789abcdef', 'desk one', '${T0.toISOString()}',
+        '${directory}', '${digest}', 'fedcba9876543210', '${T0.toISOString()}', '2026-11-15T12:00:00.000Z')`);
+    raw.exec(`INSERT INTO hub (singleton, project_id, origin, keychain_account, bearer_service, door_service, door_public_key, door_fingerprint,
+        directory_mission_id, directory_descriptor, directory_digest, directory_expires_at, directory_mode, directory_state, created_at)
+      VALUES (1, '66666666-6666-4666-8666-666666666666', 'https://api.agenttool.dev', 'a', 'b', 'c', 'k', 'fedcba9876543210',
+        '${directory}', '{}', '${digest}', '2026-11-15T12:00:00.000Z', 'created', 'active', '${T0.toISOString()}')`);
+    raw.close();
+
+    // The read-only handle reads version 4 as having no chain.
+    const reader = LobbyStore.openReadOnly(home)!;
+    expect(reader.stateVersion).toBe("4");
+    expect(reader.fleet.v5).toBe(false);
+    expect(reader.fleet.hubDirectories()).toEqual([]);
+    expect(reader.fleet.deskDirectories()).toEqual([]);
+    reader.close();
+
+    const upgraded = LobbyStore.open(home);
+    expect(upgraded.stateVersion).toBe("5");
+    expect(upgraded.fleet.hubDirectories()).toEqual([{
+      mission_id: directory, mission_digest: digest, descriptor: "{}", expires_at: "2026-11-15T12:00:00.000Z", predecessor_mission_id: null,
+      mode: "created", state: "current", notice_event_id: null, announced_at: null, revoked_at: null, recorded_at: T0.toISOString(),
+    }]);
+    expect(upgraded.fleet.deskDirectories()).toEqual([
+      { mission_id: directory, mission_digest: digest, predecessor_mission_id: null, how: "join", entered_at: T0.toISOString() },
+    ]);
+    // Nothing existing was rewritten: the singletons still point at the directory.
+    expect(upgraded.fleet.hub()).toMatchObject({ directory_mission_id: directory, directory_state: "active" });
+    expect(upgraded.fleet.desk()).toMatchObject({ directory_mission_id: directory, directory_expires_at: "2026-11-15T12:00:00.000Z" });
+    upgraded.close();
+    // A second open runs no step again: still one row each.
+    LobbyStore.open(home).close();
+    const again = LobbyStore.openReadOnly(home)!;
+    expect(again.fleet.v5).toBe(true);
+    expect(again.fleet.hubDirectories()).toHaveLength(1);
+    expect(again.fleet.deskDirectories()).toHaveLength(1);
+    again.close();
+    for (const table of V5_TABLES) expect(tables(home)).toContain(table);
   });
 
   test("an unknown version is refused by both handles", () => {
@@ -413,7 +461,7 @@ describe("state schema versions and the upgrade chain", () => {
    * joined by newlines. These are frozen from the released code, not from the
    * code under test: each value is what a new desk at that release wrote
    * (1: 1fd7d4c1, a395ed11; 2: 20abfae2 to 8434539b; 3: 8ab54047 to 57004ab2;
-   * 4: lobby/directory-renew, Build 2A).
+   * 4: lobby/directory-renew, Build 2A, 97e03047; 5: lobby/directory-rollover, Build 2B).
    * Editing `SCHEMA_SQL` or a released step changes a fixture below and fails
    * here, because real desks at that version would not have the edit. A new
    * version adds one line, taken from a new desk once its step is final. */
@@ -422,6 +470,7 @@ describe("state schema versions and the upgrade chain", () => {
     "2": "dd929e4e296c22ead6f3d49f297790d10e048bc76608ced611bbef8d5f4b03b2",
     "3": "578aa41feab26266068638cca521d027004176a36f91dd0a2aebb6d699bfd847",
     "4": "211fe29754ee389302f9ad60402e205243a299cd79d08adb236903a11badb4df",
+    "5": "dfe205b206419877123e4021379d7cb240e08bf197265bbd69343083b83e50ab",
   };
 
   function schemaDigest(objects: string[]): string {
@@ -474,7 +523,7 @@ describe("state schema versions and the upgrade chain", () => {
     expect(schemaDigest(schemaOf(fresh).objects)).toBe(RELEASED_SCHEMAS[STATE_SCHEMA_VERSION]!);
   });
 
-  // Every version the chain knows: 1 to 4 today, and each later one as it lands.
+  // Every version the chain knows: 1 to 5 today, and each later one as it lands.
   for (const version of ["1", ...SCHEMA_STEPS.map((step) => step.to)]) {
     test(`a version-${version} file opens, upgrades to version ${STATE_SCHEMA_VERSION} once and keeps its rooms`, () => {
       const fresh = tempHome().home;

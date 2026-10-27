@@ -182,4 +182,61 @@ describe("lobby fleet hall through the API's mission gateway and enrollment rout
     expect(again.grant.accepted_at).toBe(acceptedAt);
     await device.run("fleet", "sync");
   });
+
+  test("directory rollover: the successor, its notice and two desks' moves pass the real gateway", async () => {
+    let clock = Date.parse("2026-10-16T12:00:00.000Z");
+    const now = () => new Date(clock);
+    const memory = memoryService(now);
+    const fetchImpl = apiApp(memory);
+    const hub = lobbyDesk(fetchImpl, now, cleanups);
+    const desks = [lobbyDesk(fetchImpl, now, cleanups), lobbyDesk(fetchImpl, now, cleanups)];
+    await hub.keychain.add({ service: "agenttool-lobby.hub-bearer", account: "agenttool-lobby" }, BEARER);
+    const init = await hub.yes("hub", "init", "--project", PROJECT);
+    const door = /door fingerprint ([0-9a-f]{16})/.exec(init)![1]!;
+    const oldId = /directory ([0-9a-f-]{36})/.exec(init)![1]!;
+    for (const who of [hub, ...desks]) {
+      const enrolled = await who.exec("enroll-device", "--project", PROJECT);
+      const join = await hub.yes("hub", "relay", "--packet-file", who.file("packet.json", enrolled.stdout), "--device-fingerprint", codeShown(enrolled.stderr));
+      await who.yes("fleet", "join", "--packet-file", who.file("join.json", join), "--door-fingerprint", door);
+    }
+    clock += 3_600_000;
+
+    // The hub creates the successor through the gateway, takes its seat there and posts the door-signed notice in the old directory.
+    const announced = await hub.yes("hub", "directory", "successor", "--days", "30");
+    const [, newId, newDigest] = /announced successor directory ([0-9a-f-]{36}) digest (sha256:[0-9a-f]{64})/.exec(announced)!;
+    // The API's own digest of the successor's charter is the one the desk computed and the notice names.
+    const created = memory.missions.get(newId!)!;
+    expect(created.row.digest).toBe(newDigest);
+    expect(created.row.descriptor.resources.map((resource: any) => resource.format)).toEqual(["agenttool-lobby-door/v1", "agenttool-lobby-directory-ref/v1"]);
+    const notice = memory.missions.get(oldId)!.events.map((event: any) => openDocument(event.observation.summary))
+      .find((document: any) => document?.kind === "directory_successor");
+    expect(notice).toMatchObject({ signer: door, body: { from_mission_id: oldId, to_mission_id: newId, to_mission_digest: newDigest } });
+
+    // Each desk asks for its successor grant from the old directory; one sweep issues both; each pickup moves the desk.
+    clock += 60_000;
+    for (const desk of desks) {
+      await desk.yes("fleet", "renew");
+      expect(desk.lastBytes().request).toMatchObject({ mission_id: oldId, target_mission_id: newId });
+    }
+    clock += 60_000;
+    await hub.yes("hub", "renew-sweep");
+    expect(hub.lastBytes().directory_renewals.map((item: any) => item.grant.mission_id)).toEqual([newId, newId]);
+    clock += 60_000;
+    for (const desk of desks) {
+      const moved = await desk.yes("fleet", "renew");
+      expect(moved).toContain(`moved this desk to the door-signed successor directory ${newId}`);
+      expect(desk.lastBytes().pickup.move).toMatchObject({ from_mission_id: oldId, to_mission_id: newId });
+      const status = JSON.parse(await desk.run("fleet", "status", "--json"));
+      expect(status.desk).toMatchObject({ directory_mission_id: newId, door_fingerprint: door });
+      expect(status.directory).toMatchObject({ mission_id: newId, previous_mission_id: oldId });
+      // The grant in the successor was accepted with the successor's digest through the gateway.
+      const grant = [...memory.grants.values()].find((item: any) => item.missionId === newId && item.id === desk.lastBytes().pickup.grant_id)!;
+      expect(grant.acceptedAt).not.toBeNull();
+      // And it reads the successor through the gateway.
+      await desk.run("fleet", "sync");
+    }
+    // Both desks' next requests were posted in the successor with the grants just picked up.
+    const posted = memory.missions.get(newId!)!.events.map((event: any) => openDocument(event.observation.summary)?.kind);
+    expect(posted.filter((kind: any) => kind === "directory_renew")).toHaveLength(2);
+  });
 });

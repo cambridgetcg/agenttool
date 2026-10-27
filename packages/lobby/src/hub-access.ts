@@ -55,6 +55,7 @@ import {
   earliest,
   fleetView,
   gateOfRoom,
+  hubLiveDirectories,
   liveSeat,
   preparePost,
   queuePost,
@@ -262,12 +263,13 @@ function sweepHeadings(plan: { renewals: SweepRenewal[]; directory_renewals: Dir
     ...(mode === "seats_only" ? not("nothing was read") : plan.renewals.map((renewal) => `  renew did:at:${renewal.identity_id} in ${renewal.room_id}: grant ${renewal.issue.grant_id} ` +
       `${renewal.issue.actions.join("+")} until ${renewal.issue.expires_at} (term ends ${renewal.notice.term_ends_at}); ` +
       `${renewal.basis === "list" ? "token hash from the supplied list" : `request ${renewal.request_event_id}`}; ` +
-      `notice to ${renewal.posts.map(({ post }) => post.mission_id === hub.directory_mission_id ? `the directory ${post.mission_id}` : `the room ${post.mission_id}`).join(" and ")}`)),
+      `notice to ${renewal.posts.map(({ post }) => post.mission_id === renewal.season.mission_id ? `the room ${post.mission_id}`
+        : post.mission_id === hub.directory_mission_id ? `the directory ${post.mission_id}` : `the previous directory ${post.mission_id}`).join(" and ")}`)),
     `directory renewals, one per device (${plan.directory_renewals.length}):`,
     ...(mode === "rooms" ? not("--room or --rooms-only") : mode === "seats_only" ? not("nothing was read")
       : plan.directory_renewals.map((item) => `  ${directoryRenewalLine(item)}`)),
     `hub desk seats (${plan.hub_seats.length}):`,
-    ...(mode === "rooms" ? not("--room or --rooms-only") : plan.hub_seats.map((seat) => `  ${hubSeatLine(seat)}`)),
+    ...(mode === "rooms" ? not("--room or --rooms-only") : plan.hub_seats.map((seat) => `  ${hubSeatLine(seat, hub.directory_mission_id)}`)),
   ];
 }
 
@@ -305,9 +307,17 @@ export async function planRenewSweep(ctx: FleetContext, input: { room_id?: strin
   const seasons = fleet.listSeasons().filter((season) => season.state === "current" && season.revoked_at == null
     && Date.parse(season.expires_at) > now.getTime() && (roomFilter === null || season.room_id === roomFilter));
   if (roomFilter !== null && seasons.length === 0) throw new LobbyError("no_season", "this room has no current season");
-  // Reads only, with the hub desk's own seats: the directory and each season.
+  // Reads only, with the hub desk's own seats: the directory (during a
+  // rollover's overlap the previous one too, while the hub may read it) and each season.
   const skipped: SweepSkip[] = [];
+  const directories = hubLiveDirectories(ctx, hub, now);
+  const directoryIds = new Set(directories.map((directory) => directory.mission_id));
   await syncMission(ctx, requireSeat(ctx, hub.directory_mission_id, "mission.read", 0, "; run hub seat directory").seat);
+  for (const directory of directories.filter((entry) => entry.role === "previous")) {
+    const seat = liveSeat(ctx, directory.mission_id, "mission.read");
+    if (seat === null) skipped.push({ source: `directory:${directory.mission_id}`, room_id: null, identity_id: null, reason: "hub_seat_lapsed" });
+    else await syncMission(ctx, seat);
+  }
   const readable: SeasonRow[] = [];
   for (const season of seasons) {
     const seat = liveSeat(ctx, season.mission_id, "mission.read");
@@ -320,7 +330,7 @@ export async function planRenewSweep(ctx: FleetContext, input: { room_id?: strin
     readable.push(season);
   }
   const seasonOfRoom = new Map(readable.map((season) => [season.room_id, season]));
-  const notes: NoteEntry[] = [hub.directory_mission_id, ...readable.map((season) => season.mission_id)]
+  const notes: NoteEntry[] = [...directoryIds, ...readable.map((season) => season.mission_id)]
     .flatMap((missionId) => fleetView(ctx, missionId, doorOf(hub)).deskNotes);
 
   // Who claimed each token hash first, across every cached knock, renew note
@@ -359,7 +369,7 @@ export async function planRenewSweep(ctx: FleetContext, input: { room_id?: strin
       if (!renewed) skip(source, body.room_id, null, forgery);
       continue;
     }
-    if (entry.event.mission_id !== season.mission_id && entry.event.mission_id !== hub.directory_mission_id) {
+    if (entry.event.mission_id !== season.mission_id && !directoryIds.has(entry.event.mission_id)) {
       if (!renewed) skip(source, body.room_id, body.identity_id, "posted_elsewhere");
       continue;
     }
@@ -437,7 +447,7 @@ export async function planRenewSweep(ctx: FleetContext, input: { room_id?: strin
   }
   // Directory renewals: every enrolled desk's newest request in the directory.
   let directoryCandidates = mode === "full"
-    ? directoryRenewalCandidates(ctx, hub, [hub.directory_mission_id, ...readable.map((season) => season.mission_id)], now,
+    ? directoryRenewalCandidates(ctx, hub, directories, [...directoryIds, ...readable.map((season) => season.mission_id)], now,
       { tokens: claimants, grantIds: grantIdClaimants(ctx, hub) }, (item) => skipped.push(item))
     : { candidates: [], expired: 0 };
   expired += directoryCandidates.expired;
@@ -481,13 +491,18 @@ export async function planRenewSweep(ctx: FleetContext, input: { room_id?: strin
     }
     // The notice always goes to the directory, which the member can read with
     // its directory grant even after its room grant has lapsed (renewal is
-    // manual, so the sweep often runs after that). A request made in the room
-    // is answered in the room too, while the hub may post there.
+    // manual, so the sweep often runs after that); during a rollover's overlap
+    // to the previous directory as well, while the hub may post there, for a
+    // member that has not moved yet. A request made in the room is answered
+    // in the room too, while the hub may post there.
     const directorySeat = liveSeat(ctx, hub.directory_mission_id, "mission.observe", 5 * 60_000);
     if (directorySeat === null) {
       skip(source, candidate.room_id, candidate.member.identity_id, "hub_directory_seat_lapsed");
       continue;
     }
+    const previousSeats = directories.filter((directory) => directory.role === "previous")
+      .map((directory) => liveSeat(ctx, directory.mission_id, "mission.observe", 5 * 60_000))
+      .filter((seat): seat is Seat => seat !== null);
     const seasonSeat = candidate.posted_to === candidate.season.mission_id
       ? liveSeat(ctx, candidate.season.mission_id, "mission.observe", 5 * 60_000) : null;
     const issue: GrantIssue = {
@@ -527,6 +542,7 @@ export async function planRenewSweep(ctx: FleetContext, input: { room_id?: strin
       notice,
       posts: [
         { post: preparePost(ctx, "renewal", hub.directory_mission_id, summary, gate), seat: directorySeat },
+        ...previousSeats.map((seat) => ({ post: preparePost(ctx, "renewal", seat.mission_id, summary, gate), seat })),
         ...(seasonSeat === null ? [] : [{ post: preparePost(ctx, "renewal", candidate.season.mission_id, summary, gate), seat: seasonSeat }]),
       ],
     });
@@ -1244,6 +1260,12 @@ export function planStop(ctx: FleetContext, input: { include_adopted: boolean })
   if (hub.directory_revoked_at == null && (hub.directory_mode === "created" || input.include_adopted)) {
     missions.push({ mission_id: hub.directory_mission_id, kind: "directory", mode: hub.directory_mode, room_id: null });
   }
+  // Every other directory of the chain not yet revoked: the previous one, and
+  // a successor created (or asked for) but not announced yet.
+  for (const row of fleet.hubDirectories()) {
+    if (row.mission_id === hub.directory_mission_id || row.revoked_at !== null || (row.mode === "adopted" && !input.include_adopted)) continue;
+    missions.push({ mission_id: row.mission_id, kind: "directory", mode: row.mode, room_id: null });
+  }
   const grants: Revocation[] = fleet.listHubGrants()
     .filter((grant) => grant.revoke_state !== "revoked" && Date.parse(grant.expires_at) > now.getTime())
     .map((grant) => ({ mission_id: grant.mission_id, grant_id: grant.grant_id, source: "hub" as const }));
@@ -1254,7 +1276,8 @@ export function planStop(ctx: FleetContext, input: { include_adopted: boolean })
   }
   const manual = manualRotationStep(hub);
   const adoptedLeft = fleet.listSeasons().filter((season) => season.mode === "adopted" && season.revoked_at == null).length
-    + (hub.directory_mode === "adopted" && hub.directory_revoked_at == null ? 1 : 0);
+    + (hub.directory_mode === "adopted" && hub.directory_revoked_at == null ? 1 : 0)
+    + fleet.hubDirectories().filter((row) => row.mission_id !== hub.directory_mission_id && row.mode === "adopted" && row.revoked_at === null).length;
   const preview = actPreview("hub.stop", hub.project_id, now.toISOString(), [
     "EMERGENCY STOP: this hub issues no more access afterwards (recorded locally first)",
     ...missions.map((mission) => `revoke ${mission.kind} mission ${mission.mission_id} (${mission.mode}): POST .../revoke, zero body bytes`),
@@ -1291,10 +1314,17 @@ export async function executeStop(ctx: FleetContext, plan: StopPlan): Promise<St
   for (const mission of plan.missions) {
     try {
       const view = await admin.revokeMission(mission.mission_id);
-      if (mission.kind === "directory") fleet.setDirectoryRevoked(view.revoked_at!);
-      else fleet.markSeasonRevoked(mission.mission_id, view.revoked_at!);
+      if (mission.kind === "directory") {
+        if (mission.mission_id === hub.directory_mission_id) fleet.setDirectoryRevoked(view.revoked_at!);
+        if (fleet.v5) fleet.markHubDirectoryRevoked(mission.mission_id, view.revoked_at!);
+      } else fleet.markSeasonRevoked(mission.mission_id, view.revoked_at!);
       missions.push({ mission_id: mission.mission_id, kind: mission.kind, status: "revoked" });
     } catch (error) {
+      // A successor whose creation was never confirmed and that the service
+      // definitely does not have: nothing to revoke, so it is forgotten.
+      if (mission.kind === "directory" && !mayHaveTakenEffect(error) && fleet.hubDirectory(mission.mission_id)?.state === "pending") {
+        fleet.dropPendingHubDirectory(mission.mission_id);
+      }
       missions.push({ mission_id: mission.mission_id, kind: mission.kind, ...failureOf(error) });
     }
   }

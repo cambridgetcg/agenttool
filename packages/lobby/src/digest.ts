@@ -2,7 +2,8 @@
  *
  * Built only from this hub's own records (lobby.sqlite and the audit log):
  * who holds which grant, terms, expiries, pauses, blocks and the recent
- * admits, kicks, blocks, leaves and renewals (room and directory). It reads no Keychain item,
+ * admits, kicks, blocks, leaves and renewals (room and directory), and the
+ * directory chain with which directory each device is in. It reads no Keychain item,
  * contacts no service and posts nothing. It holds no token, key or bearer
  * (token hashes are left out too: a person does not need them). The report
  * is written to a new owner-only file; the CLI prints only its path.
@@ -13,7 +14,7 @@ import { isAbsolute, join } from "node:path";
 import { LobbyError } from "./errors.js";
 import { assertPrivateDirectory } from "./home.js";
 import { requireHub } from "./hub.js";
-import { DAY_MS, HOUR_MS, type FleetContext } from "./ops.js";
+import { DAY_MS, HOUR_MS, hubLiveDirectories, type FleetContext } from "./ops.js";
 import { writeNewPrivateFile } from "./secrets.js";
 import { TERMINAL_UNSAFE } from "./text.js";
 
@@ -21,7 +22,7 @@ export const DIGEST_DEFAULT_DAYS = 7;
 const REPORTS_DIR = "reports";
 
 /** Acts the digest lists as recent access changes (and their outcomes). */
-const ACCESS_ACTS = /^(hub\.(init|relay|admit|deny|season\.\w+|seat|renew\.sweep|member\.\w+|device\.\w+|roster\.post|kick|block|unblock|stop)|room\.(publish|promote))(\.outcome)?$/;
+const ACCESS_ACTS = /^(hub\.(init|relay|admit|deny|season\.\w+|seat|directory\.successor|renew\.sweep|member\.\w+|device\.\w+|roster\.post|kick|block|unblock|stop)|room\.(publish|promote))(\.outcome)?$/;
 
 function cell(text: string): string {
   // Self-declared names never break the table or the terminal: line breaks
@@ -72,18 +73,27 @@ export function buildAccessDigest(ctx: FleetContext, input: { days?: number } = 
     `- door fingerprint ${hub.door_fingerprint}`,
     `- directory ${hub.directory_mission_id} (${hub.directory_mode}) ends ${hub.directory_expires_at} (${until(now, hub.directory_expires_at)})` +
       (hub.directory_revoked_at == null ? "" : `; revoked ${hub.directory_revoked_at}`),
+    ...fleet.hubDirectories().filter((row) => row.mission_id !== hub.directory_mission_id).map((row) =>
+      `- ${row.state === "pending" ? "successor asked for, never confirmed:" : row.state === "successor" ? "successor created, not announced:" : `${row.state} directory`} ` +
+      `${row.mission_id} ends ${row.expires_at} (${until(now, row.expires_at)})${row.revoked_at === null ? "" : `; revoked ${row.revoked_at}`}`),
     `- emergency stop: ${hub.stopped_at == null ? "none" : `recorded ${hub.stopped_at}; this hub issues no more access`}`,
     "",
     `## Fleet devices (${devices.length})`,
     "",
-    "| fingerprint | identity | name (self-declared) | enrolled | directory grant ends | state |",
-    "|---|---|---|---|---|---|",
+    "| fingerprint | identity | name (self-declared) | enrolled | directory grant ends | in directory | state |",
+    "|---|---|---|---|---|---|---|",
   ];
+  const live = hubLiveDirectories(ctx, hub, now);
+  const roleOf = (missionId: string) => live.find((directory) => directory.mission_id === missionId)?.role ?? "ended";
+  const notMoved: string[] = [];
   for (const device of devices) {
     const directory = grants.filter((grant) => grant.identity_id === device.identity_id && grant.purpose === "directory")
       .sort((left, right) => left.expires_at < right.expires_at ? 1 : -1)[0];
+    const role = directory === undefined ? null : roleOf(directory.mission_id);
+    if (role === "previous") notMoved.push(who(device.identity_id));
     lines.push(`| ${device.fingerprint} | did:at:${device.identity_id} | ${cell(device.display_name)} | ${device.enrolled_at} | ` +
-      `${directory === undefined ? "-" : `${directory.expires_at} (${until(now, directory.expires_at)})`} | ${directory === undefined ? "-" : grantState(directory)}` +
+      `${directory === undefined ? "-" : `${directory.expires_at} (${until(now, directory.expires_at)})`} | ` +
+      `${directory === undefined ? "-" : `${directory.mission_id} (${role})`} | ${directory === undefined ? "-" : grantState(directory)}` +
       `${device.directory_paused_at == null ? "" : `; directory renewal paused since ${device.directory_paused_at}`} |`);
   }
   lines.push("", "## Rooms", "");
@@ -128,7 +138,13 @@ export function buildAccessDigest(ctx: FleetContext, input: { days?: number } = 
     if (blocks.length > 0) lines.push(...blocks.map((block) => `- blocked: ${who(block.identity_id)} since ${block.blocked_at}`), "");
   }
   if (Date.parse(hub.directory_expires_at) - now.getTime() <= 7 * DAY_MS) {
-    expiring.push(`- the directory ends ${hub.directory_expires_at} (${until(now, hub.directory_expires_at)}); every device needs a new join after it`);
+    expiring.push(`- the directory ends ${hub.directory_expires_at} (${until(now, hub.directory_expires_at)}); run hub directory successor before then, ` +
+      "and each device moves with its next fleet renew pickups (after it ends, every device joins again)");
+  }
+  for (const directory of live.filter((entry) => entry.role === "previous")) {
+    expiring.push(`- the previous directory ${directory.mission_id} ends ${directory.expires_at} (${until(now, directory.expires_at)}); ` +
+      (notMoved.length === 0 ? "every device's newest directory grant is in the current one"
+        : `not moved yet (newest directory grant still there): ${notMoved.join(", ")}`));
   }
   lines.push("## Ending soon", "", ...(expiring.length === 0 ? ["(nothing ends within the next 48 hours for grants or 7 days for terms, seasons and the directory)"] : expiring), "");
 
