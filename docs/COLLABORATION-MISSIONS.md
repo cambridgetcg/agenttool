@@ -234,10 +234,14 @@ foreign keys. Renewal is not delegation and adds no authority.
 
 The window is bounded at issue. `renewable_until` is later than the grant's
 `expires_at`, at most 30 days after issue, and no later than the mission's or
-the issuing key's expiry. The grant itself lasts at least one hour. A malformed
-window is refused with HTTP 400 `collaboration_mission_invalid_request`; one past
-the mission or the issuing key is HTTP 401 `collaboration_mission_invalid_credential`,
-like an over-long grant. The window never changes afterwards. The member's term
+the issuing key's expiry. The grant itself lasts at least one hour. A
+noncanonical `renewable_until` (for example without milliseconds) is refused
+with HTTP 400 `invalid_mission_grant_request`, like any other malformed grant
+field. A well-formed window that breaks these bounds (not after `expires_at`,
+more than 30 days out, or a grant shorter than one hour) is HTTP 400
+`collaboration_mission_invalid_request`; one past the mission or the issuing
+key is HTTP 401 `collaboration_mission_invalid_credential`, like an over-long
+grant. The window never changes afterwards. The member's term
 in a hub such as the Lobby is state this service cannot see: the administrator
 chooses `renewable_until` no later than that term and
 [closes the window](#closing-a-window) when it pauses a member, closes a room or
@@ -474,10 +478,15 @@ Authentication denial does not fall back to a broader credential or public view.
 
 **Deploy and rollback.** Renewal needs migration
 `20261027T134854_collaboration_grant_renewal.sql` before the code: the code
-reads the new columns on every grant query, so on the old schema every mission
-request would fail. The deploy gate refuses pending migrations, so apply it
-first. The migration is additive and older code keeps working on the new
-schema. Older code does not cascade, so before any rollback close and revoke
+reads the new columns on every grant query, so on the old schema every request
+that reads a grant (participant admission, grant issue, inspect, revoke, renew)
+would fail; mission-only administrator routes do not. A default `bin/deploy.sh`
+applies the migration in Phase 1, before the API. With `--no-migrate` the gate
+does **not** refuse it: this is an ordinary, unprotected migration, so the
+survey only warns and the API still rolls out. Before a `--no-migrate` deploy,
+apply it (`bin/migrate-pending.sh` or `bin/fly-migrate-one.sh`) and require a
+clean `bin/migrate-pending.sh --dry-run`. The migration is additive and older
+code keeps working on the new schema. Older code does not cascade, so before any rollback close and revoke
 live chains (or revoke the mission); otherwise successors stay valid for up to
 24 hours.
 
