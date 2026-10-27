@@ -392,12 +392,12 @@ Every stop prints one JSON object on stderr and exits 1:
 
 | `stop_reason` | When | Pending record | `next` |
 |---|---|---|---|
-| `renewal_uncertain` | The request, the invitation read or the recovery read did not complete, the service returned 5xx to any of them, or an answer was not readable JSON (a proxy's HTML or empty error page) | Kept (none is created when the first read fails) | Run `renew` again to resend the same request |
+| `renewal_uncertain` | The request, the invitation read or the recovery read did not complete, the service returned 5xx to any of them, an answer was not readable JSON (a proxy's HTML or empty error page), or a resend reached a service without the renew route (HTTP 404 `mission_route_not_found`) | Kept (none is created when the first read fails) | Run `renew` again to resend the same request |
 | `renewal_unavailable` | No open window before sending, or HTTP 403 `collaboration_mission_renewal_unavailable` after | Renamed `renewal-abandoned-<grant_id>.json` | Inspect the window; after it ends, ask for a new grant |
 | `renewal_abandoned` | The successor was never recorded and your grant has lapsed or ended (the recovery read got 401), or a successor this device abandoned earlier has ended | Renamed `renewal-abandoned-<grant_id>.json` (an earlier one stays as it is) | Ask the administrator for a new grant |
 | `renewal_conflict` | HTTP 409, or the invitation names a successor this device has no record of: your grant was already renewed by a request this device did not record | Kept (none is created before sending) | See below |
 | `renewal_response_invalid` | The response does not confirm the expected successor; nothing installed | Kept | Inspect with the administrator before any new attempt |
-| `renewal_refused` | Any other refusal, with its fixed service `code` | Kept, or renamed when a resend could never succeed (`token_hash_conflict`, invalid request, no renew route on a first send) | A fixed sentence per code |
+| `renewal_refused` | Any other refusal, with its fixed service `code` | Kept, or renamed when a resend could never succeed (`token_hash_conflict`, invalid request, no renew route on a first send; on a resend that 404 is `renewal_uncertain`) | A fixed sentence per code |
 | `renewal_pending_mismatch` | The pending record belongs to another invitation, or `invitation.json` changed during the run (the successor was confirmed but not installed) | Kept | Inspect both files |
 | `renewal_in_progress` | Another `renew` holds `renewal.lock`; nothing was read or sent | Untouched | Wait for it; if none is running, inspect and remove `renewal.lock` |
 
