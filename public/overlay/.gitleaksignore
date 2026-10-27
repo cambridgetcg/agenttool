@@ -68,35 +68,35 @@ packages/wallet-zerone/vectors/agent-wallet-zerone-v0.1-vectors.json:generic-api
 # Behaviour-conformance vectors: deterministic test signing keys (the bytes
 # 0x01..0x20 and 0x01..0x10 in base64) and fixed idempotency-key UUIDs.
 # line_sha256=08b9c11555b3c91aef862f940a7306c4f8012a78de1400e13e98fa1d947d268a
-docs/specs/behaviour-conformance.json:generic-api-key:2680
+docs/specs/behaviour-conformance.json:generic-api-key:2858
 # line_sha256=08b9c11555b3c91aef862f940a7306c4f8012a78de1400e13e98fa1d947d268a
-docs/specs/behaviour-conformance.json:generic-api-key:2732
+docs/specs/behaviour-conformance.json:generic-api-key:2910
 # line_sha256=faa0ab748176ac385ca4ca5ff86f6abb765a0f486749f7906590826b3c5f7454
-docs/specs/behaviour-conformance.json:generic-api-key:2773
+docs/specs/behaviour-conformance.json:generic-api-key:2951
 # line_sha256=7a7bbd8badf7d998a28399ee69579a8ec0e2b8538ac4648feb74df7f33462d97
-docs/specs/behaviour-conformance.json:generic-api-key:3115
+docs/specs/behaviour-conformance.json:generic-api-key:3293
 # line_sha256=7a7bbd8badf7d998a28399ee69579a8ec0e2b8538ac4648feb74df7f33462d97
-docs/specs/behaviour-conformance.json:generic-api-key:3139
+docs/specs/behaviour-conformance.json:generic-api-key:3317
 # line_sha256=7a7bbd8badf7d998a28399ee69579a8ec0e2b8538ac4648feb74df7f33462d97
-docs/specs/behaviour-conformance.json:generic-api-key:3225
+docs/specs/behaviour-conformance.json:generic-api-key:3403
 # line_sha256=7a7bbd8badf7d998a28399ee69579a8ec0e2b8538ac4648feb74df7f33462d97
-docs/specs/behaviour-conformance.json:generic-api-key:3249
+docs/specs/behaviour-conformance.json:generic-api-key:3427
 # line_sha256=7a7bbd8badf7d998a28399ee69579a8ec0e2b8538ac4648feb74df7f33462d97
-docs/specs/behaviour-conformance.json:generic-api-key:3335
+docs/specs/behaviour-conformance.json:generic-api-key:3513
 # line_sha256=7a7bbd8badf7d998a28399ee69579a8ec0e2b8538ac4648feb74df7f33462d97
-docs/specs/behaviour-conformance.json:generic-api-key:3359
+docs/specs/behaviour-conformance.json:generic-api-key:3537
 # line_sha256=7a7bbd8badf7d998a28399ee69579a8ec0e2b8538ac4648feb74df7f33462d97
-docs/specs/behaviour-conformance.json:generic-api-key:3445
+docs/specs/behaviour-conformance.json:generic-api-key:3623
 # line_sha256=7a7bbd8badf7d998a28399ee69579a8ec0e2b8538ac4648feb74df7f33462d97
-docs/specs/behaviour-conformance.json:generic-api-key:3469
+docs/specs/behaviour-conformance.json:generic-api-key:3647
 # line_sha256=7a7bbd8badf7d998a28399ee69579a8ec0e2b8538ac4648feb74df7f33462d97
-docs/specs/behaviour-conformance.json:generic-api-key:3555
+docs/specs/behaviour-conformance.json:generic-api-key:3733
 # line_sha256=7a7bbd8badf7d998a28399ee69579a8ec0e2b8538ac4648feb74df7f33462d97
-docs/specs/behaviour-conformance.json:generic-api-key:3579
+docs/specs/behaviour-conformance.json:generic-api-key:3757
 # line_sha256=7a7bbd8badf7d998a28399ee69579a8ec0e2b8538ac4648feb74df7f33462d97
-docs/specs/behaviour-conformance.json:generic-api-key:3665
+docs/specs/behaviour-conformance.json:generic-api-key:3843
 # line_sha256=7a7bbd8badf7d998a28399ee69579a8ec0e2b8538ac4648feb74df7f33462d97
-docs/specs/behaviour-conformance.json:generic-api-key:3689
+docs/specs/behaviour-conformance.json:generic-api-key:3867
 
 # The name of the environment variable the x402 payer reads (AT_X402_PRIVATE_KEY),
 # in both SDKs; not a key value.

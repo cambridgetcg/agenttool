@@ -99,7 +99,7 @@ defect:
 |---|---|---|
 | `response-parsing` | given this exact JSON body, the parsed value exposes these exact fields | dropped `Memory.tier`, dropped search `score` |
 | `error-semantics` | given this status + body + headers, the raise carries the same stable `code`, the same `status`, and the same guidance fields | `err.code` as string vs integer |
-| `pure-computation` | given this input, this exact output, no transport involved | the Nen emitter axis, half-up rounding and the wake layout `assessNen` reads; the path-segment encoder's five sub-delimiters |
+| `pure-computation` | given this input, this exact output, no transport involved | the Nen emitter axis and half-up rounding; the path-segment encoder's five sub-delimiters |
 | `boundary` | `[]`, `""`, `null`, absent optionals, one unit either side of every limit | `collect.batch([])` |
 | `request-shape` | the outgoing method, path, query and body JSON are identical | the `signature_b64`-vs-`signature` field name that cost every self-recognition declare a 400; the percent-encoded path an id produces |
 | `transport-policy` | both refuse or follow identically, and send the same headers | `lounge.look` and redirects |

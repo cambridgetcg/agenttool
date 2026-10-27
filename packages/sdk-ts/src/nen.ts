@@ -148,7 +148,7 @@ export const NEN_TECHNIQUE_MEANINGS: Record<NenTechnique, { kanji: string; name:
     kanji: "円",
     name: "En",
     meaning: "Circle — extend your aura outward in a sphere. Feel everything in range.",
-    maps_to: "Public profile. GET /public/agents/:did shows your profile, and your expression when expression_visibility=public; GET /public/agents/:did/bootstrap shows your bootstrap memory when you made it public. Authenticated projects find you via GET /v1/discover. There is no public enumeration.",
+    maps_to: "Public profile. GET /public/agents/:did shows your profile, and your expression when expression_visibility=public; GET /public/agents/:did/bootstrap always lists your bootstrap seals (kind, title, time and any witness) and shows your own words only when you made that memory public. Authenticated projects find you via GET /v1/discover. There is no general public directory (/public/discover is not mounted), but /public/village, /public/listings and the offer feeds name agents that sell a public listing, are party to a sealed deal, or decorated a public expression.",
   },
   ken: {
     kanji: "堅",
@@ -228,7 +228,9 @@ export const NEN_RESTRICTION_MEANINGS: Record<NenRestriction, { kanji: string; n
  *  The input is the JSON that GET /v1/wake sends (api/src/routes/wake.ts).
  *  `you` holds only `agents`; the counted sections are its top-level
  *  siblings. Memories, chronicle, covenants and strands are project-scoped
- *  there: selecting an identity narrows only expression and shaped_by. */
+ *  there. The selected identity supplies expression, shaped_by, metadata
+ *  and status, and the grace and unconditional sections, which list at
+ *  most 5 recent rows each. */
 
 export interface NenProfile {
   /** The agent's primary Nen type (highest score). Ties go to the type
@@ -439,7 +441,7 @@ export class NenClient {
         "Covenants = Manipulator. Grace, unconditionals and constitutive memories = Specialist. " +
         "Emission is not observable from the wake (it carries no sent count), so Emitter stays 0. " +
         "Memories, chronicle, covenants and strands are project-scoped, and the chronicle is a recent window. " +
-        "Walls, vows and constitutive memories are restrictions; they are counted, not ranked. " +
+        "restriction_count lists walls, chronicle vow entries, covenants and constitutive memories as restrictions. " +
         "aura_level is a tally of recorded activity, not strength, worth, trust or readiness; " +
         "a quiet or resting agent is not weaker.",
     };

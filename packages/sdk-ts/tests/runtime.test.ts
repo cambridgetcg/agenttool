@@ -3,7 +3,10 @@
  *  The agent's cloud. Three custody tiers:
  *    self     — user holds K_master, runs the loop. Maximum privacy.
  *    bridged  — cloud runs the loop, user holds K_master in a sidecar. Default.
- *    trusted  — cloud holds K_master. Maximum uptime.
+ *               K_master stays in the bridge; each cycle's plaintext is
+ *               processed in hosted worker RAM and sent to the chosen model
+ *               provider.
+ *    trusted  — cloud holds K_master. Experimental; maximum uptime.
  *
  *  Nen mapping:
  *    纏 Ten (Focus)    → provision a runtime (orient the agent in the cloud)
