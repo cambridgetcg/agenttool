@@ -418,14 +418,17 @@ describe("renewal inside an administrator-set window", () => {
 
   describe("renewing", () => {
     test("a live accepted root renews into a born-accepted successor with the same scope and no token", async () => {
-      const request = renew(), s = staged(renewSteps(root(), root(), [], inserted));
+      const request = renew(), s = staged(renewSteps(root(), root(), [], [], inserted));
       const result = await executeMissionRequest(request, s.options);
       expect(shape(s)).toEqual([["select", undefined], ["select", "share"], ["select", "share"], ["select", "share"], ["select", "share"],
-        ["select", "update"], ["select", undefined], ["insert", undefined]]);
+        ["select", "update"], ["select", undefined], ["select", undefined], ["insert", undefined]]);
       expect(s.configs).toEqual([{ isolationLevel: "read committed" }]);
       expect(s.events[6].condition?.params).toEqual([G]);
-      const values = s.events[7].values!;
-      expect(s.events[7].conflict).toBe("any");
+      // Any revoked member of the whole chain, under the root lock.
+      expect(s.events[7].condition?.sql).toContain('"revoked_at" is not null');
+      expect(s.events[7].condition?.params).toEqual([G, M, P]);
+      const values = s.events[8].values!;
+      expect(s.events[8].conflict).toBe("any");
       expect(values).toMatchObject({ id: N, tokenHash: NEXT_HASH, projectId: P, missionId: M, identityId: I, signingKeyId: K, issuingApiKeyId: A,
         origin: ORIGIN, actions: ["mission.observe", "mission.read"], issuedAt: NOW, acceptedAt: NOW, expiresAt: new Date(NOW.getTime() + 3_600_000),
         revokedAt: null, renewableUntil: WINDOW, renewalClosedAt: null, renewalRootId: G, renewedFromGrantId: G });
@@ -439,20 +442,20 @@ describe("renewal inside an administrator-set window", () => {
     });
 
     test("a middle member locks the root before itself and copies the root's window", async () => {
-      const s = staged(renewSteps(middle(), root(), [], inserted));
+      const s = staged(renewSteps(middle(), root(), [], [], inserted));
       const result = await executeMissionRequest(renew(CHILD_TOKEN, C), s.options);
-      expect(shape(s).slice(5)).toEqual([["select", "update"], ["select", "update"], ["select", undefined], ["insert", undefined]]);
+      expect(shape(s).slice(5)).toEqual([["select", "update"], ["select", "update"], ["select", undefined], ["select", undefined], ["insert", undefined]]);
       expect(s.events[5].condition?.params).toContain(G);
       expect(s.events[6].condition?.params).toContain(C);
       expect(result.data.grant).toMatchObject({ renewal: { root_grant_id: G, renewed_from_grant_id: C } });
-      expect(s.events[8].values).toMatchObject({ renewalRootId: G, renewedFromGrantId: C, renewableUntil: WINDOW });
+      expect(s.events[9].values).toMatchObject({ renewalRootId: G, renewedFromGrantId: C, renewableUntil: WINDOW });
     });
 
     test("a read-only chain renews read-only: actions are copied from G, never widened", async () => {
       const narrow = { actions: ["mission.read"] };
-      const s = staged(renewSteps(middle(narrow), root(narrow), [], inserted));
+      const s = staged(renewSteps(middle(narrow), root(narrow), [], [], inserted));
       const result = await executeMissionRequest(renew(CHILD_TOKEN, C), s.options);
-      expect(s.events[8].values?.actions).toEqual(["mission.read"]);
+      expect(s.events[9].values?.actions).toEqual(["mission.read"]);
       expect((result.data.grant as { actions: string[] }).actions).toEqual(["mission.read"]);
     });
 
@@ -464,9 +467,9 @@ describe("renewal inside an administrator-set window", () => {
         [root(), { expiresAt: at(40 * MIN) }, {}, at(40 * MIN)],
         [root(), {}, { expiresAt: at(50 * MIN) }, at(50 * MIN)],
       ] as Array<[Record<string, unknown>, Record<string, unknown>, Record<string, unknown>, Date]>) {
-        const s = staged([[rootRow], [identityRow()], [keyRow()], [{ ...parentRow(), ...parentOverrides }], [mission(missionOverrides)], [rootRow], [], inserted]);
+        const s = staged([[rootRow], [identityRow()], [keyRow()], [{ ...parentRow(), ...parentOverrides }], [mission(missionOverrides)], [rootRow], [], [], inserted]);
         const result = await executeMissionRequest(renew(), s.options);
-        expect(s.events[7].values?.expiresAt).toEqual(expected);
+        expect(s.events[8].values?.expiresAt).toEqual(expected);
         expect((result.data.grant as { expires_at: string }).expires_at).toBe(expected.toISOString());
       }
     });
@@ -495,6 +498,18 @@ describe("renewal inside an administrator-set window", () => {
       const s = staged(renewSteps(middle(), root({ renewalClosedAt: new Date(NOW.getTime() - MIN) }), []));
       await refusal(executeMissionRequest(renew(CHILD_TOKEN, C), s.options), 403, "collaboration_mission_renewal_unavailable");
       noInsert(s);
+    });
+
+    test("a member revoked alone (by code at a99257ab) ends renewal of every live member", async () => {
+      // The root, or any other member, carries revoked_at while the window stays open.
+      for (const [presented, rootRow, token, grantId] of [
+        [middle(), root({ revokedAt: new Date(NOW.getTime() - MIN) }), CHILD_TOKEN, C],
+        [root(), root(), PARTICIPANT_TOKEN, G],
+      ] as Array<[Record<string, unknown>, Record<string, unknown>, string, string]>) {
+        const s = staged(renewSteps(presented, rootRow, [], [{ id: N }]));
+        await refusal(executeMissionRequest(renew(token, grantId), s.options), 403, "collaboration_mission_renewal_unavailable");
+        noInsert(s);
+      }
     });
 
     test("an unaccepted root needs acceptance, and a different mission digest conflicts", async () => {
@@ -546,11 +561,11 @@ describe("renewal inside an administrator-set window", () => {
     });
 
     test("a taken grant ID conflicts and a taken hash is token_hash_conflict", async () => {
-      const id = staged(renewSteps(root(), root(), [], [], [{ id: N }]));
+      const id = staged(renewSteps(root(), root(), [], [], [], [{ id: N }]));
       await refusal(executeMissionRequest(renew(), id.options), 409, "collaboration_mission_conflict");
-      const hash = staged(renewSteps(root(), root(), [], [], []));
+      const hash = staged(renewSteps(root(), root(), [], [], [], []));
       await refusal(executeMissionRequest(renew(), hash.options), 409, "token_hash_conflict");
-      expect(hash.events[8].condition?.params).toEqual([N]);
+      expect(hash.events[9].condition?.params).toEqual([N]);
       expect(id.rollbacks() + hash.rollbacks()).toBe(2);
     });
 
@@ -558,7 +573,7 @@ describe("renewal inside an administrator-set window", () => {
       const request = renew();
       const child = middle({ id: N, tokenHash: NEXT_HASH, issuedAt: NOW, acceptedAt: NOW, expiresAt: new Date(NOW.getTime() + 3_600_000),
         acceptanceProof: { body_sha256: sha256(body()), signed_grant_id: G } });
-      const first = await executeMissionRequest(request, staged(renewSteps(root(), root(), [], inserted)).options);
+      const first = await executeMissionRequest(request, staged(renewSteps(root(), root(), [], [], inserted)).options);
       const later = new Date(NOW.getTime() + 2_000);
       for (const rootRow of [root(), root({ renewalClosedAt: NOW })]) {
         const s = staged(renewSteps(rootRow, rootRow, [child], []), later);

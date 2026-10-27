@@ -494,6 +494,29 @@ databaseTest("a successor opens at its own halfway, not the root's, so a chain c
   expect((await executeMissionRequest(renewReq(childToken, H, E, freshToken(), open), at(open))).created).toBe(true);
 });
 
+// Code at a99257ab revokes or leaves one row and leaves the window open (rollback, or an
+// old Machine mid-rollout). Any revoked member then refuses renewal of the rest.
+const legacyRevoke = (id: string, time: Date) => admin`UPDATE tools.collaboration_grants SET revoked_at = ${time} WHERE id = ${id}`;
+databaseTest("a root revoked by one-row legacy code refuses renewal of its live successor", async () => {
+  const { token } = await renewableRoot();
+  const childToken = freshToken();
+  await executeMissionRequest(renewReq(token, G, H, childToken), at(HALF));
+  await legacyRevoke(G, HALF);
+  const open = new Date(HALF.getTime() + 1_800_000);
+  await expect(executeMissionRequest(renewReq(childToken, H, E, freshToken(), open), at(open))).rejects.toMatchObject({ status: 403, code: "collaboration_mission_renewal_unavailable" });
+  expect((await admin`SELECT count(*)::int AS n FROM tools.collaboration_grants WHERE renewal_root_id = ${G}`)[0].n).toBe(2);
+});
+databaseTest("a middle member revoked by one-row legacy code refuses renewal of the head", async () => {
+  const { token } = await renewableRoot();
+  const childToken = freshToken(), headToken = freshToken(), open = new Date(HALF.getTime() + 1_800_000);
+  await executeMissionRequest(renewReq(token, G, H, childToken), at(HALF));
+  await executeMissionRequest(renewReq(childToken, H, E, headToken, open), at(open));
+  await legacyRevoke(H, open);
+  const headOpen = new Date(open.getTime() + 1_800_000), next = uid(43);
+  await expect(executeMissionRequest(renewReq(headToken, E, next, freshToken(), headOpen), at(headOpen))).rejects.toMatchObject({ status: 403, code: "collaboration_mission_renewal_unavailable" });
+  expect((await admin`SELECT count(*)::int AS n FROM tools.collaboration_grants WHERE id = ${next}`)[0].n).toBe(0);
+});
+
 databaseTest("migration constraints keep a chain linear and within its root's whole scope", async () => {
   const { token } = await renewableRoot();
   await executeMissionRequest(renewReq(token, G, H, freshToken()), at(HALF));

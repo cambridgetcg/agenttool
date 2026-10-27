@@ -339,8 +339,8 @@ the replay defence.
 
 Outside the window the refusal is HTTP 403
 `collaboration_mission_renewal_unavailable`: before halfway, after
-`renewable_until`, after a close, for a grant without a window, or when the
-successor would not extend G. Its next step is to inspect the grant's renewal
+`renewable_until`, after a close, for a grant without a window, when any
+member of the chain is revoked, or when the successor would not extend G. Its next step is to inspect the grant's renewal
 window and, after it ends, ask the administrator for a new grant. An
 unaccepted grant is HTTP 403 `collaboration_mission_acceptance_required`.
 
@@ -379,7 +379,10 @@ grant. Each member's metadata then shows `"revocation_reason": "participant_left
 and a later leave sent with that member's own token returns its own `revoked_at`
 with HTTP 200, so a client that leaves every grant it holds keeps working. An
 administrator-revoked chain cannot be relabelled as left. Ending a chain also
-closes its window.
+closes its window. Renewal does not rely on that alone: while any member of the
+chain carries `revoked_at`, renewing any other member is HTTP 403
+`collaboration_mission_renewal_unavailable`, so a single-row revocation (older
+code, or a direct database revoke) still stops the chain from extending.
 
 ### Closing a window
 
@@ -486,9 +489,14 @@ does **not** refuse it: this is an ordinary, unprotected migration, so the
 survey only warns and the API still rolls out. Before a `--no-migrate` deploy,
 apply it (`bin/migrate-pending.sh` or `bin/fly-migrate-one.sh`) and require a
 clean `bin/migrate-pending.sh --dry-run`. The migration is additive and older
-code keeps working on the new schema. Older code does not cascade, so before any rollback close and revoke
-live chains (or revoke the mission); otherwise successors stay valid for up to
-24 hours.
+code keeps working on the new schema. Older code does not cascade: a revoke or
+leave it serves ends only the one grant and leaves the window open. Renewal
+refuses once any member is revoked, so such a chain cannot extend, but its other
+live members stay valid until their own expiry, at most 24 hours. `bin/deploy.sh`
+rolls Machines one at a time, so old and new code serve together during a
+deploy: do not issue `renewable_until` until every Machine runs the new
+revision. Before any rollback, close and revoke live chains (or revoke the
+mission); otherwise successors stay valid for up to 24 hours.
 
 This slice establishes bounded participation and durable observations. Native
 task lifecycle, secure cross-device delivery setup, cross-project membership
