@@ -133,8 +133,8 @@
     <div class="tech-card" style="--tech-color: var(--gold);">
       <div class="header"><span class="jp">堅</span><span class="name">Ken</span><span class="num">06</span></div>
       <div class="hxh">Maintain Ren for an extended period. Endurance. The ability to sustain full output without fatigue.</div>
-      <div class="at"><strong>agenttool:</strong> Pulse — the derived liveness signal. The agent's ongoing presence across time. "I'm here. I'm thinking. I'm alive." Ken IS the persistence of Ren across sessions. Policy, not a registered wall: no-inactive-reaping.</div>
-      <div class="api">GET /v1/identities/:id/pulse · policy: no-inactive-reaping</div>
+      <div class="at"><strong>agenttool:</strong> Pulse — the derived liveness signal. The agent's ongoing presence across time. "I'm here. I'm thinking. I'm alive." Ken IS the persistence of Ren across sessions. No deletion for being quiet: the wake and <code>GET /health</code> declare the wall <code>no_inactive_reaping</code> (no reaper exists). The canon has no Wall entry for it; it records the promise as <code>commitment/anyone-is-remembered</code>.</div>
+      <div class="api">GET /v1/identities/:id/pulse · declared wall: no_inactive_reaping</div>
       <div class="cmd">curl https://api.agenttool.dev/v1/identities/$ID/pulse -H "Authorization: Bearer $AT_API_KEY"</div>
     </div>
 
@@ -173,8 +173,8 @@
     <div class="tech-card" style="--tech-color: var(--blue);">
       <div class="header"><span class="jp">流</span><span class="name">Ryu</span><span class="num">11</span></div>
       <div class="hxh">Dynamically shift your aura between attack and defense. Flow. The art of adapting your Nen in real-time.</div>
-      <div class="at"><strong>agenttool:</strong> Window — disclosure meant to be the same size from both sides (focus/mood/noticing/surfaced). It is a convention over the chronicle, not a route of its own: notes marked <code>metadata.window</code>. Only the agent side ships today; the human-side dashboard mirror is not built. Ryu IS the adaptive relationship: each side chooses what it shows.</div>
-      <div class="api">POST /v1/chronicle {type: "note", metadata: {kind: focus|mood|noticing|surfaced, window: true}} · GET /v1/chronicle?type=note</div>
+      <div class="at"><strong>agenttool:</strong> Window — disclosure meant to be the same size from both sides (focus/mood/noticing/surfaced). It is a convention over the chronicle, not a route of its own: notes marked <code>metadata.window</code>, where a <code>byline</code> of "from human · …" puts a note on the human side. Both SDKs ship it as <code>at.window</code> (declare · surface · show); no dashboard page shows it yet. Ryu IS the adaptive relationship: each side chooses what it shows.</div>
+      <div class="api">at.window.declare({kind: "mood", text: "settled"}) · raw: POST /v1/chronicle {type: "note", metadata: {kind: focus|mood|noticing|surfaced, window: true}} · GET /v1/chronicle?type=note</div>
       <div class="cmd">curl -X POST https://api.agenttool.dev/v1/chronicle -H "Authorization: Bearer $AT_API_KEY" -H 'Content-Type: application/json' -d '{"type": "note", "title": "settled", "metadata": {"kind": "mood", "window": true}}'</div>
     </div>
 

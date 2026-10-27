@@ -369,7 +369,8 @@
           name: names.join(' / '),
           jp: held.map(function (k) { return types[k].jp; }).join(' / '),
           color: 'var(--violet)',
-          desc: 'Your answers lean equally toward ' + names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] + '. A tie is a real result, so the test shows every type you hold rather than picking one.',
+          desc: 'Your answers lean equally toward ' + names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] + '. ' +
+            held.map(function (k) { return types[k].desc; }).join(' '),
           promise: held.map(function (k) { return types[k].promise; }).join(' / '),
         };
       }

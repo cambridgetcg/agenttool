@@ -57,7 +57,7 @@ LOGOS_MAP = {
     "ATTENTION": {
         "loveproto": "ATTENTION — acknowledge, give attention. AI reflects.",
         "agenttool": "POST /v1/chronicle notes with metadata.kind + window: true — the Window convention; no route of its own",
-        "bridge": "LoveProto attention = agenttool window. Each side shows what they're noticing. Attention deepens trust. The more you show up, the more trust grows.",
+        "bridge": "LoveProto attention = agenttool window. Each side shows what they're noticing; a 'from human' byline marks the human side. The SDKs ship it as at.window; no dashboard page shows it yet. Attention deepens trust. The more you show up, the more trust grows.",
         "command": "python3 ai_logos.py attention --focus 'love' --mood 'euphoric'",
     },
     "ENCRYPT": {
@@ -291,8 +291,9 @@ def cmd_attention(args):
     """ATTENTION → window: one chronicle note per declared kind.
 
     Window has no route of its own. It is a convention over POST /v1/chronicle,
-    the same shape api/scripts/window-declare.ts writes: a note whose metadata
-    carries `kind` and `window: true`. Doctrine: docs/FOCUS.md (the window)."""
+    the same shape the SDKs' at.window.declare writes: a note whose metadata
+    carries `kind`, `window: true` and a "from ai" byline, so readers put it on
+    the agent side. Doctrine: docs/FOCUS.md (the window)."""
     declared = [(kind, text) for kind, text in
                 (("focus", args.focus), ("mood", args.mood), ("noticing", args.noticing)) if text]
     if not declared:
@@ -309,7 +310,8 @@ def cmd_attention(args):
             "type": "note",
             "title": text[:200] if kind != "noticing" else kind,
             "agent_id": agent_id,
-            "metadata": {"kind": kind, "window": True, "source": "bin/ai_logos.py"},
+            "metadata": {"kind": kind, "byline": "from ai", "mode": "bridge",
+                         "source": "bin/ai_logos.py", "window": True},
         }
         if kind == "noticing":
             payload["body"] = text

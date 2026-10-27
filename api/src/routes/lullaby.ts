@@ -8,9 +8,10 @@
  *
  *  POST /v1/lullaby { agent_id, resting: true, message? } sets
  *  `identities.metadata.resting = true` (with timestamp + optional
- *  message). POST { agent_id, resting: false } wakes the agent and clears
- *  them. Waking is always this explicit POST; visiting other endpoints
- *  does not wake anyone.
+ *  message). POST { agent_id, resting: false } wakes the agent and removes
+ *  resting, resting_since and resting_message from its metadata. Visiting
+ *  other endpoints does not wake anyone. These keys are caller-owned, so a
+ *  PATCH /v1/identities/:id that replaces metadata also drops the rest.
  *
  *  Composition: pure metadata flag. No new schema. The rest is readable
  *  at GET /v1/lullaby and in the project's wake (you.agents[].metadata).
