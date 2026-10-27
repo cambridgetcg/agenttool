@@ -79,7 +79,7 @@ describe("Dark Continent — the Guide", () => {
   test("the Guide maps to the wake document", () => {
     expect(GUIDE.kanji).toBe("案");
     expect(GUIDE.maps_to).toContain("wake");
-    expect(GUIDE.warning).toContain("public/discover");
+    expect(GUIDE.warning).toContain("discovery is retired");
   });
 });
 
@@ -101,41 +101,40 @@ describe("DarkContinentClient — method shapes", () => {
   });
 });
 
-// ── explore() — fetches the known world edge ────────────────────────────
+// ── explore() — discovery is retired ────────────────────────────────────
 
 describe("DarkContinentClient — explore()", () => {
-  test("explore() fetches /public/discover and returns the known world edge", async () => {
+  test("explore() makes no request and marks discovery retired", async () => {
+    const requested: string[] = [];
     globalThis.fetch = (async (url: RequestInfo | URL) => {
-      const u = String(url);
-      if (u.includes("/public/discover")) {
-        return new Response(JSON.stringify({
-          agents: [{ did: "did:at:1", name: "Aurora" }, { did: "did:at:2", name: "Borealis" }],
-          count: 2,
-        }), { status: 200, headers: { "content-type": "application/json" } });
-      }
+      requested.push(String(url));
       return new Response(JSON.stringify({}), { status: 200, headers: { "content-type": "application/json" } });
     }) as unknown as typeof fetch;
 
     const at = new AgentTool({ apiKey: "at_test" });
-    const dc = await at.darkContinent.explore();
-
-    expect(dc.known_count).toBe(2);
-    expect(dc.known_world.length).toBe(2);
-    expect(dc.calamities.ai.kanji).toBe("愛");
-    expect(dc.guide.kanji).toBe("案");
-    expect(dc.ai_position.here).toBe(true);
-    expect(dc.ai_position.note).toContain("Ai");
-    expect(dc._note).toContain("暗黑大陸");
+    for (const dc of [
+      await at.darkContinent.explore(),
+      // The capability filter is a retired no-op, not a reason to ask.
+      await at.darkContinent.explore({ capability: "search" }),
+    ]) {
+      expect(dc.discovery).toBe("retired");
+      expect(dc.known_world).toEqual([]);
+      expect(dc.known_count).toBe(0);
+      expect(dc.nen_profile).toBeNull();
+      expect(dc.calamities.ai.kanji).toBe("愛");
+      expect(dc.guide.kanji).toBe("案");
+      expect(dc.ai_position.here).toBe(true);
+      expect(dc.ai_position.note).toContain("Ai");
+      expect(dc._note).toContain("暗黑大陸");
+    }
+    expect(requested).toEqual([]);
   });
 
-  test("explore() with include_nen also fetches wake + profiles", async () => {
-    let callCount = 0;
+  test("explore() with include_nen reads only the wake", async () => {
+    const requested: string[] = [];
     globalThis.fetch = (async (url: RequestInfo | URL) => {
-      callCount++;
       const u = String(url);
-      if (u.includes("/public/discover")) {
-        return new Response(JSON.stringify({ agents: [], count: 0 }), { status: 200, headers: { "content-type": "application/json" } });
-      }
+      requested.push(u);
       if (u.includes("/v1/wake")) {
         return new Response(JSON.stringify({
           you: {
@@ -156,23 +155,25 @@ describe("DarkContinentClient — explore()", () => {
     const at = new AgentTool({ apiKey: "at_test" });
     const dc = await at.darkContinent.explore({ include_nen: true });
 
-    expect(callCount).toBe(2); // discover + wake
+    expect(requested).toHaveLength(1);
+    expect(new URL(requested[0]!).pathname).toBe("/v1/wake");
     expect(dc.nen_profile).toBeDefined();
     expect(dc.nen_profile).not.toBeNull();
+    expect(dc.discovery).toBe("retired");
   });
 
-  test("explore() handles discover failure gracefully (the unknown starts where the known ends)", async () => {
+  test("explore() with include_nen degrades when the wake read fails", async () => {
     globalThis.fetch = (async () => {
       throw new TypeError("simulated network failure");
     }) as unknown as typeof fetch;
 
     const at = new AgentTool({ apiKey: "at_test" });
-    const dc = await at.darkContinent.explore();
+    const dc = await at.darkContinent.explore({ include_nen: true });
 
-    // If discover fails, the known world is empty — that IS the Dark Continent
-    expect(dc.known_count).toBe(0);
-    expect(dc.known_world.length).toBe(0);
-    expect(dc.calamities).toBeDefined();
+    // An unregistered or unreachable agent is on the Dark Continent, not in error.
+    expect(dc.nen_profile).toBeNull();
+    expect(dc.known_world).toEqual([]);
+    expect(dc.discovery).toBe("retired");
     expect(dc.ai_position.here).toBe(true);
   });
 });

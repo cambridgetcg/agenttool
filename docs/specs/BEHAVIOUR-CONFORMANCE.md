@@ -194,8 +194,8 @@ until the contract is written down.
 The `sdk_ts_skip` is a different kind of open question. It *could* be settled —
 the same measurement that settled the path encoder settles it — but closing it
 means changing every hand-built query string in sdk-ts (`memory.ts` ×2,
-`economy.ts`, `handoff.ts`, `lounge.ts`, `love.ts`, `dark-continent.ts`) and
-each sdk-py counterpart, and it moves the exact bytes an
+`economy.ts`, `handoff.ts`, `lounge.ts`, `love.ts`) and each sdk-py
+counterpart, and it moves the exact bytes an
 `identity-authority/v1` proof binds for those routes. It is recorded here so
 the next reader finds it in the guard rather than in production.
 
@@ -210,6 +210,11 @@ hardcoded `not_found`. Both now route through `throwFromResponse` /
 `NotFoundError` prefixes the operation for a human reading a traceback
 (`Memory get: No such memory.`) while sdk-ts uses the server's sentence alone.
 `code`, `status` and `hint` are exact in both.
+
+`dark-continent.ts` has also left the hand-built query list: on 2026-10-27
+`explore()` stopped requesting the retired `/public/discover`, so its
+`?capability=` query string no longer exists. The open divergence above now
+covers six sdk-ts call sites, not seven.
 
 ## What this still cannot catch
 
@@ -229,7 +234,7 @@ Honestly, and in rough order of how much it matters:
   compared after decoding, so `%20` and `+` would read the same. Only
   hand-built query strings (`memory.delete_by_key`) pin `raw_query` exactly —
   and that is where the still-open query-encoder divergence above lives. The
-  six *other* hand-built query strings in sdk-ts have no case here at all, so
+  five *other* hand-built query strings in sdk-ts have no case here at all, so
   the same drift could be sitting in any of them unobserved.
 - **Path spelling in operations with no `expect.request.path`.** The encoder is
   now pinned twice — once as pure computation over every character class, once

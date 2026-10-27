@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
+
+const sourceProfilesUrl = new URL("../source-profiles/", import.meta.url);
 
 const packageJson = JSON.parse(
   await readFile(new URL("../package.json", import.meta.url), "utf8"),
@@ -89,6 +91,32 @@ test("the historical SDK 0.17 framework remains frozen as the live SDK advances"
   assert.equal(
     sha256(manifestBytes),
     "9a3f7e9bbb8d7b954103898a4ff8db08137f8af148a227518b80998f9e47628f",
+  );
+});
+
+test("newer source profiles stay in the source checkout, outside the package", async () => {
+  const names = await readdir(sourceProfilesUrl);
+  const manifests = names.filter((name) => name.endsWith(".manifest.json"));
+  assert.ok(manifests.length > 0);
+  for (const name of manifests) {
+    const manifest = JSON.parse(
+      await readFile(new URL(name, sourceProfilesUrl), "utf8"),
+    );
+    const snapshotBytes = await readFile(
+      new URL(`../${manifest.snapshot.path}`, import.meta.url),
+    );
+    assert.equal(manifest.distribution, "source_checkout_only");
+    assert.equal(manifest.semantic_diff.structure, "unchanged");
+    assert.equal(sha256(snapshotBytes), manifest.snapshot.sha256);
+  }
+  assert.equal(
+    packageJson.files.some((entry) => entry.startsWith("source-profiles")),
+    false,
+  );
+  assert.equal(JSON.stringify(packageJson.exports).includes("source-profiles"), false);
+  assert.equal(
+    packageJson.exports["./framework"],
+    "./frameworks/agenttool-sdk-0.17.0.json",
   );
 });
 

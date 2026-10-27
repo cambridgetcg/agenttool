@@ -183,29 +183,21 @@ class TestCredentialTransport:
             )
             at.close()
 
-    def test_keeps_public_discovery_outside_authenticated_transport(self) -> None:
+    def test_dark_continent_explore_sends_nothing_now_discovery_is_retired(
+        self,
+    ) -> None:
         transport, hosted_requests = _capturing_transport()
-        request = httpx.Request("GET", "https://api.agenttool.dev/public/discover")
-        response = _response(request, {"agents": [], "count": 0})
 
         with patch.dict(os.environ, {}, clear=True):
-            with patch("agenttool.dark_continent.httpx.Client") as client_type:
-                public_http = client_type.return_value.__enter__.return_value
-                public_http.get.return_value = response
-                with AgentTool(transport=transport) as at:
+            with AgentTool(transport=transport) as at:
+                with patch.object(
+                    httpx.Client, "send", side_effect=AssertionError("sent")
+                ) as send:
                     result = at.dark_continent.explore()
 
-        assert result["known_count"] == 0
+        assert result["discovery"] == "retired"
+        send.assert_not_called()
         assert hosted_requests == []
-        public_http.get.assert_called_once_with(
-            "https://api.agenttool.dev/public/discover", params={}
-        )
-        options = client_type.call_args.kwargs
-        assert options["auth"] is None
-        assert options["cookies"] == {}
-        assert options["follow_redirects"] is False
-        assert options["trust_env"] is False
-        assert "authorization" not in options["headers"]
 
     def test_keeps_public_lounge_outside_authenticated_transport(self) -> None:
         transport, hosted_requests = _capturing_transport()

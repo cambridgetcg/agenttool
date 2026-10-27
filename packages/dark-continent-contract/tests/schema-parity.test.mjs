@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 import Ajv2020 from "ajv/dist/2020.js";
 import {
@@ -59,4 +59,35 @@ test("schemas and public validators reject the same authority drift", () => {
 
   assert.equal(validateProjectionSchema(projection), false);
   assert.notDeepEqual(validateProjection(projection), []);
+});
+
+test("a newer source profile differs from v0.1 only in its profile pins", async () => {
+  const sourceProfilesUrl = new URL("../source-profiles/", import.meta.url);
+  const records = (await readdir(sourceProfilesUrl)).filter(
+    (name) => name.endsWith(".json") && !name.endsWith(".manifest.json"),
+  );
+  assert.ok(records.length > 0);
+
+  // The v0.1 schema fixes source_profile and source.version to the packaged
+  // 0.17.0 profile. With only those two constants opened, it must accept a
+  // newer profile: same shape, same advisory walls, same authority limits.
+  const opened = structuredClone(frameworkSchema);
+  opened.properties.source_profile = { type: "string" };
+  opened.properties.source.properties.version = { type: "string" };
+  const validateOpened = new Ajv2020({ allErrors: true, strict: true }).compile(
+    opened,
+  );
+
+  for (const name of records) {
+    const record = JSON.parse(
+      await readFile(new URL(name, sourceProfilesUrl), "utf8"),
+    );
+    assert.equal(validateFrameworkSchema(record), false, name);
+    assert.equal(validateOpened(record), true, name);
+    assert.deepEqual(
+      validateFrameworkSnapshot(record),
+      ["unexpected source_profile", "source provenance is incomplete"],
+      name,
+    );
+  }
 });
