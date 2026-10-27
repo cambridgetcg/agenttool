@@ -21,7 +21,7 @@ import {
 import { checkLobbyEntry, defaultLobbyEntry, LobbyCli, parseCard } from "./lobby-cli.js";
 import { launchContext } from "./probes.js";
 import {
-  claimListener, fetcherPidPath, listenerRooms, roomFiles, readBell, readListener, readPidfile, releaseListener, staleness, writeListener,
+  claimListener, fetcherPidPath, listenerRooms, roomFiles, readBell, readListener, readPidfile, releaseListener, sameClaim, staleness, writeListener,
   type LivenessDeps, type Staleness,
 } from "./registry.js";
 import {
@@ -118,6 +118,13 @@ export async function startWatcher(ctx: DoorbellContext, listener: Listener): Pr
   if (pid === null) return null;
   const started = await processStarted(ctx.spawner, pid);
   if (started === null) return null;
+  // The claim may have been lost meanwhile (two reclaims of a stale listener at once): record the
+  // watcher only in a listener file that still holds this claim, else stop the watcher just started.
+  const current = readListener(ctx.doorbellHome, listener.room_id);
+  if (current.kind !== "ok" || !sameClaim(current.listener, listener)) {
+    await terminateIfSame(ctx.spawner, pid, started);
+    return null;
+  }
   const armed = { ...listener, watcher_pid: pid, watcher_started: started };
   writeListener(ctx.doorbellHome, armed);
   return armed;
@@ -211,7 +218,9 @@ export async function listen(ctx: DoorbellContext, options: ListenOptions): Prom
   }
   const armed = await startWatcher(ctx, listener);
   if (armed === null) {
-    releaseListener(ctx.doorbellHome, options.room);
+    const current = readListener(ctx.doorbellHome, options.room);
+    if (current.kind === "ok" && sameClaim(current.listener, listener)) releaseListener(ctx.doorbellHome, options.room);
+    else throw new DoorbellError("listener_race", "another process claimed the room at the same moment; try again");
     throw new DoorbellError("watcher_start_failed", "the watcher could not be started; nothing is listening");
   }
   const fetcher = await startFetcherIfNeeded(ctx);

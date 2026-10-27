@@ -8,6 +8,7 @@ import { handleClaudeHook, hooksSnippet, readHookInput } from "../src/hook.js";
 import { listenerPath, readListener, rungPath, writeMark } from "../src/registry.js";
 import { NOTE_PATTERN } from "../src/ring.js";
 import type { Starter } from "../src/run.js";
+import { Watcher, WATCH_TICK_MS } from "../src/watcher.js";
 import { CANARY, NOW, ROOM_A, ROOM_B } from "./helpers.js";
 import { fakePs, LSTART, makeDoorbellWorld, OWNER, SEAT, SESSION, WATCHER } from "./doorbell-helpers.js";
 
@@ -92,6 +93,23 @@ describe("hook claude-code", () => {
     expect(world.allFileText()).not.toContain(CANARY);
   });
 
+  test("UserPromptSubmit covers messages whose ring failed", async () => {
+    const { world, hook } = hookWorld();
+    world.listener();
+    const watcher = new Watcher({
+      doorbellHome: world.doorbellHome, lobbyHome: world.lobbyHome, roomId: ROOM_A, pid: WATCHER,
+      ring: async () => ({ ok: false, code: "ECONNREFUSED" }), ownerGone: () => false, now: () => world.clock,
+    });
+    world.bell({ seq: 1, head_cursor: "10" });
+    await watcher.tick();
+    world.bell({ seq: 2, head_cursor: "12", new: 2, addressed: 1 });
+    world.clock += WATCH_TICK_MS;
+    await watcher.tick();
+    expect(await hook(event("UserPromptSubmit"))).toEqual([
+      `[lobby] 2 new Lobby message(s) in ${ROOM_A} after cursor 10 (1 addressed to this desk, 0 unverified); no message text here; read with room_read (room_id ${ROOM_A}, after 10).`,
+    ]);
+  });
+
   test("UserPromptSubmit names a lapse even before the head is known", async () => {
     const { world, hook } = hookWorld();
     world.listener();
@@ -132,6 +150,22 @@ describe("hook claude-code", () => {
     world.listener();
     expect(await hook({ ...event("SessionStart", { source: "clear" }), session_id: NEW_SESSION })).toEqual([]);
     expect(readListener(world.doorbellHome, ROOM_A)).toMatchObject({ kind: "ok", listener: { seat_ref: `claude-code:${NEW_SESSION}`, owner_pid: OWNER } });
+  });
+
+  test("a resume to another session in the same process does not move the listener (only /clear does)", async () => {
+    const { world, started, hook } = hookWorld();
+    world.listener();
+    expect(await hook({ ...event("SessionStart", { source: "resume" }), session_id: NEW_SESSION })).toEqual([]);
+    expect(readListener(world.doorbellHome, ROOM_A)).toMatchObject({ kind: "ok", listener: { seat_ref: SEAT, owner_pid: OWNER, watcher_pid: WATCHER } });
+    expect(started.filter((start) => start.argv.includes("watch"))).toEqual([]);
+  });
+
+  test("SessionEnd from another process with the same seat ref leaves the live holder's listener alone", async () => {
+    const { world, hook } = hookWorld();
+    world.listener();
+    world.procs.set(NEW_OWNER, LSTART);
+    await hook(event("SessionEnd", { reason: "prompt_input_exit" }), { CLAUDE_PID: String(NEW_OWNER) });
+    expect(readListener(world.doorbellHome, ROOM_A)).toMatchObject({ kind: "ok", listener: { owner_pid: OWNER } });
   });
 
   test("SessionEnd: an exiting process releases its listeners; clear, resume and unknown reasons keep them", async () => {

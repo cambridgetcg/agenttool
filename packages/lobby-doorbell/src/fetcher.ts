@@ -193,7 +193,9 @@ export class Fetcher {
       Object.assign(start, { catching: false, head: listener.from_cursor, base: listener.from_cursor });
     }
     this.rooms.set(listener.room_id, start);
-    if (!start.catching) this.writeBell(start);
+    // A new seq, not a rewrite under the old one: a reader whose mark holds that seq must see the
+    // reset to ok, or the next stop or lapse on this arm would look like no transition.
+    if (!start.catching) this.bump(start);
     return start;
   }
 
@@ -397,10 +399,14 @@ export async function claimFetcherPidfile(home: string, pid: number, liveness: L
     if (createPrivateJson(path, { pid, started, at: iso(liveness.now()) })) return { started };
     const current = readPidfile(path);
     if (current === "unreadable") throw new DoorbellError("fetcher_pidfile_unreadable", "fetcher.pid is not a valid pidfile; check it with agenttool-lobby-doorbell status");
-    if (current !== null && (await sameProcess(liveness, current.pid, current.started)) === "same") {
+    if (current === null) continue;
+    if ((await sameProcess(liveness, current.pid, current.started)) === "same") {
       throw new DoorbellError("fetcher_running", `a fetcher already runs as pid ${current.pid}`);
     }
-    removePrivateFile(path);
+    // Remove only the stale record just checked: if another process reclaimed it meanwhile, its
+    // fresh pidfile stays and this claim's next create fails against it.
+    const again = readPidfile(path);
+    if (again !== null && again !== "unreadable" && again.pid === current.pid && again.started === current.started && again.at === current.at) removePrivateFile(path);
   }
   throw new DoorbellError("fetcher_running", "another fetcher claimed the pidfile at the same moment");
 }

@@ -108,6 +108,12 @@ export function releaseListener(home: string, room: string): void {
   removePrivateFile(notedPath(home, room));
 }
 
+/** Whether two listener records are the same claim: the same arm by the same session and owner process. */
+export function sameClaim(left: Listener, right: Listener): boolean {
+  return left.room_id === right.room_id && left.armed_at === right.armed_at && left.seat_ref === right.seat_ref
+    && left.owner_pid === right.owner_pid && left.owner_started === right.owner_started;
+}
+
 export type Claim = { claimed: true } | { claimed: false; holder: Listener };
 
 /** Claims the room with an exclusive create. A stale holder is cleared and the claim retried once. */
@@ -123,8 +129,12 @@ export async function claimListener(home: string, listener: Listener, deps: Live
     if (current.kind === "unreadable") {
       throw new DoorbellError("listener_unreadable", "the room's listener file is not a valid listener; run agenttool-lobby-doorbell status");
     }
-    if (current.kind === "ok" && (await staleness(current.listener, deps)) === null) return { claimed: false, holder: current.listener };
-    releaseListener(home, listener.room_id);
+    if (current.kind === "absent") continue;
+    if ((await staleness(current.listener, deps)) === null) return { claimed: false, holder: current.listener };
+    // Release only the stale claim just checked: if another process reclaimed the room meanwhile,
+    // its fresh claim stays and this one's next create fails against it.
+    const again = readListener(home, listener.room_id);
+    if (again.kind === "ok" && JSON.stringify(again.listener) === JSON.stringify(current.listener)) releaseListener(home, listener.room_id);
   }
   throw new DoorbellError("listener_race", "another process claimed the room at the same moment; try again");
 }

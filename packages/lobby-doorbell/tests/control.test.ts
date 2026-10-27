@@ -8,7 +8,7 @@ import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCli } from "../src/cli.js";
-import { createPrivateJson, ensurePrivateDirectory } from "../src/home.js";
+import { createPrivateJson, ensurePrivateDirectory, writePrivateJson } from "../src/home.js";
 import { fetcherPidPath, listenerPath, readListener } from "../src/registry.js";
 import { pidAlive, type Starter } from "../src/run.js";
 import { CANARY, card, makeWorld, ROOM_A, type World } from "./helpers.js";
@@ -51,7 +51,7 @@ interface Run {
   stderr: string;
 }
 
-async function controlWorld(options: { desk?: boolean } = {}) {
+async function controlWorld(options: { desk?: boolean; onStart?: (argv: readonly string[]) => void } = {}) {
   const world = makeWorld(options);
   world.setScenario({ ...world.scenario, [`fleet card ${ROOM_A} --json`]: { stdout: card(ROOM_A) } });
   const socket = await inbox();
@@ -59,7 +59,9 @@ async function controlWorld(options: { desk?: boolean } = {}) {
   const starter: Starter = {
     start(argv, env) {
       started.push({ argv, env });
-      return sleeper();
+      const pid = sleeper();
+      options.onStart?.(argv);
+      return pid;
     },
   };
   const env = (extra: Record<string, string | undefined> = {}) => ({
@@ -154,6 +156,40 @@ describe("listen", () => {
     run = await controlWorld({ desk: false });
     expect((await run.cli(["listen", "--room", ROOM_A])).stderr).toContain("no_desk");
     expect(run.started).toEqual([]);
+  });
+});
+
+describe("claims lost and refused starts", () => {
+  test("listen that loses its claim before recording the watcher stops that watcher and leaves the new holder alone", async () => {
+    let doorbellHome = "";
+    const { world, started, cli } = await controlWorld({
+      onStart(argv) {
+        if (!argv.includes("watch")) return;
+        // Another session reclaims the room between this claim and the watcher's record.
+        const read = readListener(doorbellHome, ROOM_A);
+        if (read.kind !== "ok") throw new Error("no listener");
+        writePrivateJson(listenerPath(doorbellHome, ROOM_A), { ...read.listener, seat_ref: `claude-code:${OTHER_SESSION}`, armed_at: new Date(Date.parse(read.listener.armed_at) + 1).toISOString() });
+      },
+    });
+    doorbellHome = join(world.stateHome, "agenttool", "lobby-doorbell");
+    const result = await cli(["listen", "--room", ROOM_A]);
+    expect([result.code, result.stderr.split(":")[1]?.trim()]).toEqual([1, "listener_race"]);
+    expect(readListener(doorbellHome, ROOM_A)).toMatchObject({ kind: "ok", listener: { seat_ref: `claude-code:${OTHER_SESSION}`, watcher_pid: null } });
+    const watcher = children[0]!;
+    expect(started).toHaveLength(1);
+    expect(await Promise.race([watcher.exited.then(() => "exited"), Bun.sleep(5_000).then(() => "running")])).toBe("exited");
+  });
+
+  test("fetch refuses a launchd context and the STOP brake before it claims anything", async () => {
+    const { world, cli } = await controlWorld();
+    const doorbellHome = join(world.stateHome, "agenttool", "lobby-doorbell");
+    const entry = ["--lobby-entry", join(world.root, "no-such-lobby-cli")];
+    const launchd = await cli(["fetch", ...entry], { TERM_PROGRAM: undefined, XPC_SERVICE_NAME: "com.example.agent" });
+    expect([launchd.code, launchd.stderr.split(":")[1]?.trim()]).toEqual([1, "launchd_context"]);
+    writeFileSync(join(world.lobbyHome, "STOP"), "stopped\n", { mode: 0o600 });
+    const stopped = await cli(["fetch", ...entry]);
+    expect([stopped.code, stopped.stderr.split(":")[1]?.trim()]).toEqual([1, "stopped"]);
+    expect(existsSync(fetcherPidPath(doorbellHome))).toBe(false);
   });
 });
 

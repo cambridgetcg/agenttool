@@ -113,9 +113,13 @@ export class Watcher {
         return;
       }
       const from = change.from_cursor ?? bell.base_cursor ?? "0";
-      await this.ring(messageRing({ room_id: room, from_cursor: from, head_cursor: bell.head_cursor, counts: change, watcher_pid: this.deps.pid }), "messages");
-      this.lastRing = now;
-      next = markAt(bell);
+      const rang = await this.ring(messageRing({ room_id: room, from_cursor: from, head_cursor: bell.head_cursor, counts: change, watcher_pid: this.deps.pid }), "messages");
+      // Only a delivered ring moves the counts: after a failed one (or STOP) the mark keeps them, so
+      // the next ring or the UserPromptSubmit note still covers these messages. It is not retried here.
+      if (rang) {
+        this.lastRing = now;
+        next = markAt(bell);
+      }
     }
     writeMark(rungPath(home, room), next);
   }

@@ -148,6 +148,52 @@ describe("the watcher", () => {
     expect(rings).toEqual([]);
   });
 
+  test("STOP that appears between a tick's checks and its ring: nothing rings, and the counts stay unrung", async () => {
+    let stopNow = false;
+    const { world, rings, tick } = watcherWorld({ ownerGone: () => {
+      // ownerGone runs after the tick's own STOP check: STOP lands just before the ring.
+      if (stopNow) writeFileSync(join(world.lobbyHome, "STOP"), "stopped\n", { mode: 0o600 });
+      return false;
+    } });
+    counts(world, 1, "10", 0, 0);
+    await tick();
+    counts(world, 2, "11", 1, 1);
+    stopNow = true;
+    expect(await tick()).toBeNull();
+    expect(rings).toEqual([]);
+    expect(readMark(rungPath(world.doorbellHome, ROOM_A), ROOM_A)).toMatchObject({ seq: 2, cursor: "10", new: 0, addressed: 0 });
+  });
+
+  test("a failed ring is not recorded as rung: the next ring covers those messages too", async () => {
+    const world = makeDoorbellWorld();
+    world.listener();
+    const results = [{ ok: false, code: "ECONNREFUSED" }, { ok: true, code: null }];
+    const rings: string[] = [];
+    const watcher = new Watcher({
+      doorbellHome: world.doorbellHome, lobbyHome: world.lobbyHome, roomId: ROOM_A, pid: WATCHER,
+      ring: async (text) => { rings.push(text); return results.shift()!; },
+      ownerGone: () => false, now: () => world.clock,
+    });
+    counts(world, 1, "10", 0, 0);
+    world.clock += WATCH_TICK_MS;
+    await watcher.tick();
+    counts(world, 2, "12", 2, 1);
+    world.clock += WATCH_TICK_MS;
+    await watcher.tick();
+    expect(rings).toHaveLength(1);
+    expect(readMark(rungPath(world.doorbellHome, ROOM_A), ROOM_A)).toMatchObject({ seq: 2, cursor: "10", new: 0, addressed: 0 });
+    // Not retried in a loop: the same bell rings nothing more.
+    world.clock += WATCH_TICK_MS;
+    await watcher.tick();
+    expect(rings).toHaveLength(1);
+    // The next news rings at once (the failed ring set no 60 s gap) and covers both bursts.
+    counts(world, 3, "13", 3, 2);
+    world.clock += WATCH_TICK_MS;
+    await watcher.tick();
+    expect(rings).toHaveLength(2);
+    expect(rings[1]).toContain("3 new table message(s) after cursor 10 (head 13), 2 addressed");
+  });
+
   test("exits when the owner is gone, its listener is removed or names another watcher, or on SIGTERM", async () => {
     let gone = false;
     let run = watcherWorld({ ownerGone: () => gone });

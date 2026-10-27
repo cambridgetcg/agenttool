@@ -2,13 +2,14 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  ACTIVE_WINDOW_MS, claimFetcherPidfile, fetcherState, LIFETIME_MS, NO_LISTENER_EXIT_MS, readFetcherStatus, releaseFetcherPidfile, TICK_MS,
+  ACTIVE_WINDOW_MS, claimFetcherPidfile, ensureFetcher, fetcherState, LIFETIME_MS, NO_LISTENER_EXIT_MS, readFetcherStatus, releaseFetcherPidfile, TICK_MS,
 } from "../src/fetcher.js";
 import { parseBell } from "../src/formats.js";
 import { readPrivateJson } from "../src/home.js";
-import { bellPath, fetcherPidPath, readBell } from "../src/registry.js";
-import { CANARY, ROOM_A } from "./helpers.js";
-import { FETCHER, LSTART, makeDoorbellWorld, OTHER, OWNER, UUID_GRANT_2, type DoorbellWorld } from "./doorbell-helpers.js";
+import { bellPath, claimListener, fetcherPidPath, readBell, readListener } from "../src/registry.js";
+import { Watcher, WATCH_TICK_MS } from "../src/watcher.js";
+import { CANARY, ROOM_A, ROOM_B } from "./helpers.js";
+import { FETCHER, LSTART, makeDoorbellWorld, OTHER, OWNER, UUID_GRANT_2, WATCHER, type DoorbellWorld } from "./doorbell-helpers.js";
 
 const history = (count: number) => Array.from({ length: count }, (_, index) => ({ cursor: index + 1, from_me: index % 3 === 0, to_me: index % 2 === 0 }));
 
@@ -84,6 +85,25 @@ describe("the fetcher", () => {
     expect(readBell(world.doorbellHome, ROOM_A)).toMatchObject({ state: "stopped", reason: "stopped" });
   });
 
+  test("STOP is checked before every poll, and at the start of a cycle even with no live listener", async () => {
+    let world = makeDoorbellWorld();
+    world.listener();
+    world.listener({ room_id: ROOM_B });
+    const tablePage = world.reader.tablePage.bind(world.reader);
+    world.reader.tablePage = async (room, after, cached) => {
+      const outcome = await tablePage(room, after, cached);
+      // STOP is written while the first room is being read, between the two rooms of one cycle.
+      writeFileSync(join(world.lobbyHome, "STOP"), "stopped by a test\n", { mode: 0o600 });
+      return outcome;
+    };
+    expect(await world.fetcher().cycle()).toBe("stopped");
+    expect(world.calls).toHaveLength(1);
+
+    world = makeDoorbellWorld();
+    writeFileSync(join(world.lobbyHome, "STOP"), "stopped by a test\n", { mode: 0o600 });
+    expect(await world.fetcher().cycle()).toBe("stopped");
+  });
+
   test("the 12 h lifetime, SIGTERM and 120 s without a live listener each end it", async () => {
     let world = makeDoorbellWorld();
     world.listener({ expires_at: new Date(world.clock + 12 * 3_600_000).toISOString() });
@@ -149,13 +169,53 @@ describe("the fetcher", () => {
     world.procs.set(9_000_005, LSTART);
     world.clock += TICK_MS;
     await fetcher.cycle();
-    expect(readBell(world.doorbellHome, listener.room_id)).toMatchObject({ base_cursor: "3", head_cursor: "5", new: 2, addressed: 2, seq: 3 });
+    // seq 3 is the restored bell (a new seq, so readers see the restart); seq 4 the poll that found cursor 5.
+    expect(readBell(world.doorbellHome, listener.room_id)).toMatchObject({ base_cursor: "3", head_cursor: "5", new: 2, addressed: 2, seq: 4 });
 
     world.clock += 60_000;
     world.listener();
     world.clock += TICK_MS;
     await fetcher.cycle();
     expect(readBell(world.doorbellHome, listener.room_id)).toMatchObject({ base_cursor: "5", head_cursor: "5", new: 0, addressed: 0 });
+  });
+});
+
+describe("stopped twice on one arm", () => {
+  test("a fetcher restarted on the same arm raises seq, so a second stop rings again", async () => {
+    const world = makeDoorbellWorld();
+    world.events = history(3);
+    world.listener();
+    const rings: string[] = [];
+    const watcher = new Watcher({
+      doorbellHome: world.doorbellHome, lobbyHome: world.lobbyHome, roomId: ROOM_A, pid: WATCHER,
+      ring: async (text) => { rings.push(text); return { ok: true, code: null }; },
+      ownerGone: () => false, now: () => world.clock,
+    });
+    const stoppedRings = () => rings.filter((ring) => ring.includes("the fetcher stopped")).length;
+    let fetcher = world.fetcher();
+    await fetcher.cycle();
+    await watcher.tick();
+    world.failures.push({ kind: "failed", code: "cli_exit" });
+    world.clock += TICK_MS;
+    expect(await fetcher.cycle()).toBe("fatal");
+    await watcher.tick();
+    expect(stoppedRings()).toBe(1);
+    const stopped = readBell(world.doorbellHome, ROOM_A)!;
+    // The ring's advice (listen again) starts a new fetcher that continues the arm.
+    world.procs.set(9_000_005, LSTART);
+    fetcher = world.fetcher(9_000_005);
+    world.clock += TICK_MS;
+    await fetcher.cycle();
+    expect(readBell(world.doorbellHome, ROOM_A)).toMatchObject({ state: "ok", reason: null, seq: stopped.seq + 1 });
+    world.clock += WATCH_TICK_MS;
+    await watcher.tick();
+    // A quiet room, then the new fetcher fails too.
+    world.failures.push({ kind: "failed", code: "cli_exit" });
+    world.clock += 60_000;
+    expect(await fetcher.cycle()).toBe("fatal");
+    world.clock += WATCH_TICK_MS;
+    await watcher.tick();
+    expect(stoppedRings()).toBe(2);
   });
 });
 
@@ -272,6 +332,61 @@ describe("the pidfile", () => {
     expect(existsSync(fetcherPidPath(world.doorbellHome))).toBe(true);
     releaseFetcherPidfile(world.doorbellHome, OTHER);
     expect(existsSync(fetcherPidPath(world.doorbellHome))).toBe(false);
+  });
+
+  test("a stale pidfile is removed only while it still holds the record that was checked", async () => {
+    const world = makeDoorbellWorld();
+    const stale = { pid: FETCHER, started: "Wed Oct 29 08:00:00 2026", at: new Date(world.clock).toISOString() };
+    writeFileSync(fetcherPidPath(world.doorbellHome), JSON.stringify(stale), { mode: 0o600 });
+    world.procs.set(OTHER, LSTART);
+    const reclaimer = 9_000_006;
+    world.procs.set(reclaimer, LSTART);
+    let swapped = false;
+    const liveness = {
+      ...world.liveness,
+      alive: (pid: number) => {
+        // Another process reclaims the stale pidfile while this one is checking it.
+        if (pid === FETCHER && !swapped) {
+          swapped = true;
+          writeFileSync(fetcherPidPath(world.doorbellHome), JSON.stringify({ pid: reclaimer, started: LSTART, at: stale.at }), { mode: 0o600 });
+        }
+        return world.procs.has(pid);
+      },
+    };
+    await expect(claimFetcherPidfile(world.doorbellHome, OTHER, liveness)).rejects.toThrow(`already runs as pid ${reclaimer}`);
+    expect(readPrivateJson(fetcherPidPath(world.doorbellHome))).toMatchObject({ pid: reclaimer });
+  });
+
+  test("a stale listener is released only while it still holds the claim that was checked", async () => {
+    const world = makeDoorbellWorld();
+    const stale = world.listener();
+    world.procs.delete(OWNER);
+    world.procs.set(OTHER, LSTART);
+    const fresh = 9_000_007;
+    let swapped = false;
+    const liveness = {
+      ...world.liveness,
+      alive: (pid: number) => {
+        // Another session reclaims the stale listener while this one is checking it.
+        if (pid === OWNER && !swapped) {
+          swapped = true;
+          world.procs.set(fresh, LSTART);
+          world.listener({ seat_ref: "claude-code:6f6e6d6c-6b6a-4968-a766-656463626160", owner_pid: fresh });
+        }
+        return world.procs.has(pid);
+      },
+    };
+    const mine = { ...stale, seat_ref: "claude-code:7f7e7d7c-7b7a-4978-b776-757473727170", owner_pid: OTHER, watcher_pid: null, watcher_started: null };
+    const claim = await claimListener(world.doorbellHome, mine, liveness);
+    expect(claim).toMatchObject({ claimed: false, holder: { owner_pid: fresh } });
+    expect(readListener(world.doorbellHome, ROOM_A)).toMatchObject({ kind: "ok", listener: { owner_pid: fresh } });
+  });
+
+  test("ensureFetcher starts nothing while a fetcher runs", async () => {
+    const world = makeDoorbellWorld();
+    await claimFetcherPidfile(world.doorbellHome, FETCHER, world.liveness);
+    const starter = { start: () => { throw new Error("must not start a second fetcher"); } };
+    expect(await ensureFetcher({ home: world.doorbellHome, liveness: world.liveness, starter, argv: ["fetch"], env: {} })).toEqual({ state: "running", pid: FETCHER });
   });
 
   test("an unreadable pidfile is refused, never overwritten", async () => {

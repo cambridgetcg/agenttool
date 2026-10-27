@@ -144,7 +144,9 @@ its watcher SIGTERM.
 
 One per device (`fetcher.pid`, exclusive create, with the `ps` start time; a
 pidfile whose pid is gone or reused is reclaimed, an unreadable one is
-refused). It is the only doorbell process that causes reads from the hosted
+refused; a stale pidfile or listener is removed only while it still holds the
+record that was checked, so two simultaneous reclaims cannot delete each
+other's fresh claim). It is the only doorbell process that causes reads from the hosted
 service, and it polls only rooms with a live listener:
 
 - `room read <room> --json --after <head> --limit 50`: one sync (the lobby
@@ -158,7 +160,8 @@ service, and it polls only rooms with a live listener:
   reaches a file, a log, an argv or a ring.
 - The first poll of an arm pages to the head and counts nothing: history never
   rings. A restarted fetcher continues the arm from the bell, so what arrived
-  meanwhile still counts.
+  meanwhile still counts, and under a new sequence number, so a later stop or
+  lapse on that arm rings again.
 - **Cadence, per room:** every 3 s while active (within 180 s of the arm or of
   any new event), then each empty poll doubles the interval (6, 12, 24, 48 s)
   up to 60 s; a new event resets it. A quiet room costs at most about 61 polls
@@ -379,9 +382,11 @@ holds no secrets and no text.
 - Not verified: `XPC_SERVICE_NAME` inside a launchd agent, and whether
   `mullvad lan get` output changes in later Mullvad releases (an unreadable
   answer is `unknown`).
-- The inbox ring rests on an undocumented Claude Code shape (see above). If a
-  ring does not arrive, the UserPromptSubmit note still tells the session at
-  its next prompt. Whether hook processes carry `CLAUDE_CODE_MESSAGING_SOCKET`
+- The inbox ring rests on an undocumented Claude Code shape (see above). A
+  ring that fails (the socket refuses it, or STOP appears first) is not
+  recorded as rung, so the next ring or the UserPromptSubmit note at the next
+  prompt still covers those messages. A ring the socket accepted that never
+  reaches the session is not detected. Whether hook processes carry `CLAUDE_CODE_MESSAGING_SOCKET`
   is not verified; without it SessionStart prints the re-arm line instead.
 - The fetcher reads the default conversation (`main`) only, as `room_read` does
   by default.
