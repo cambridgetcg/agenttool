@@ -267,8 +267,8 @@ CREATE TABLE IF NOT EXISTS hub_processed_notes (
 
 /** Version 3 → 4: room seat leases (src/lease.ts). Additive only: two new
  * tables. A lease's record, bounds and binding never change after it is
- * written; it ends at most once (revoked or void, each set once); its
- * counters only grow; neither table loses a row. Send rows are append-only
+ * written; it ends at most once (revoked or void, never both, and either
+ * set once); its counters only grow; neither table loses a row. Send rows are append-only
  * and join the outbox by `event_id` for their delivery state. No secret is
  * stored: a lease id is a handle, a seat ref an unverified label. */
 export const FLEET_V4_UPGRADE_SQL = `
@@ -299,6 +299,7 @@ CREATE TABLE IF NOT EXISTS desk_leases (
   void_reason TEXT,
   CHECK (sent_messages <= max_messages AND sent_chars <= max_total_chars),
   CHECK ((voided_at IS NULL) = (void_reason IS NULL)),
+  CHECK (revoked_at IS NULL OR voided_at IS NULL),
   CHECK (julianday(expires_at) > julianday(issued_at)
     AND (julianday(expires_at) - julianday(issued_at)) * 1440 <= 480.001)
 ) STRICT;

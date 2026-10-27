@@ -390,6 +390,14 @@ describe("state schema versions and the upgrade chain", () => {
     expect(store.fleet.voidLease(leaseId, "other", "2026-10-27T02:00:00.000Z")).toBe(false);
     expect(store.fleet.revokeLease(leaseId, "2026-10-27T02:00:00.000Z")).toBe(false);
     expect(raw(`UPDATE desk_leases SET voided_at = NULL, void_reason = NULL WHERE lease_id = '${leaseId}'`)).toThrow("lease_ends_once_and_counters_only_grow");
+    // A second, different end is refused by SQLite itself, not only by the store's WHERE clauses.
+    expect(raw(`UPDATE desk_leases SET revoked_at = '2026-10-27T02:00:00.000Z' WHERE lease_id = '${leaseId}'`)).toThrow("CHECK constraint failed");
+    const revokedId = `lease_${"cd".repeat(16)}`;
+    store.fleet.addLease({ ...base, lease_id: revokedId, expires_at: "2026-10-27T08:00:00.000Z" });
+    expect(store.fleet.revokeLease(revokedId, "2026-10-27T01:00:00.000Z")).toBe(true);
+    expect(raw(`UPDATE desk_leases SET voided_at = '2026-10-27T02:00:00.000Z', void_reason = 'stop_file' WHERE lease_id = '${revokedId}'`))
+      .toThrow("CHECK constraint failed");
+    expect(store.fleet.lease(revokedId)).toMatchObject({ revoked_at: "2026-10-27T01:00:00.000Z", voided_at: null });
     expect(store.fleet.lease(leaseId)).toMatchObject({ void_reason: "stop_file", voided_at: "2026-10-27T01:00:00.000Z" });
     store.close();
   });
@@ -428,7 +436,7 @@ describe("state schema versions and the upgrade chain", () => {
     "1": "7aac6b19c22d1c6d332df147db6b2eae0474ce566a880a472de5c01ad3f73fa7",
     "2": "dd929e4e296c22ead6f3d49f297790d10e048bc76608ced611bbef8d5f4b03b2",
     "3": "578aa41feab26266068638cca521d027004176a36f91dd0a2aebb6d699bfd847",
-    "4": "cbe96702a6cc6314a206068b419543389f6b0e162d737a5f0666c436f30e5c75",
+    "4": "f60612400b74b18e96245845fb967ffe130ef871d8299dd08082fcfeff7cac16",
   };
 
   function schemaDigest(objects: string[]): string {

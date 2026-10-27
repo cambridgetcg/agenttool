@@ -270,7 +270,8 @@ audited without a prompt: `room.say.lease` (each send under a lease, with
 the lease id, its record's SHA-256, the send's number, the declared seat ref,
 the idempotency key, the grant used and the exact raw body, written with the
 budget reservation and the outbox row before any network effect),
-`room.lease.revoke` and `room.lease.void` (`{lease_id, reason}`). See
+`room.lease.revoke` and `room.lease.void` (`{lease_id, reason}`, plus
+`refused_event_id` when the room refused a reserved send at send time). See
 [Room seat leases](#room-seat-leases).
 
 Act records:
@@ -311,7 +312,11 @@ join, open doors and public joining are off, and `residency=device` rooms
 the terminal: every consequential fleet act first checks that a controlling
 terminal exists and exits `3` without one, before it plans anything, so a
 headless caller (an agent's shell tool, a cron job) reads no Keychain item,
-uses no bearer or token, signs nothing and sends nothing. With a person
+uses no bearer or token, signs nothing and sends nothing, with one exception:
+`room say --lease` still reads no Keychain item, but it uses the grant tokens
+its lease is bound to (from `secrets/`) and the desk key to post table talk
+inside a lease a person confirmed at a terminal (see
+[Room seat leases](#room-seat-leases)). With a person
 present, two reads happen while the prompt is being prepared rather than after
 it: the door key signs the documents so the prompt can show their exact signed
 bytes, and `hub season adopt` / `hub init --adopt-directory` read the named
@@ -803,7 +808,9 @@ tool call dies or times out, the agent runs the identical command again. With
 
 1. loads the lease; the same key and the same request reports the stored send
    again and sends nothing (`replayed: true`); a different request under that
-   key is `idempotency_key_reused`; a pending one is `lease_send_uncertain`;
+   key is `idempotency_key_reused`; a pending one is `lease_send_uncertain`,
+   and one the room refused at send time (nothing left the device; its
+   `room.lease.void` entry names the event) is `lease_send_refused`;
 2. refuses a revoked, void or ended lease, or one for another room;
 3. voids every lease on this desk when the STOP file exists, and on the hub
    desk when the hub's stop is recorded;

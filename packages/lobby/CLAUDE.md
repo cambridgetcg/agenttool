@@ -48,9 +48,12 @@ restates the design terms it implements.
   hub's login Keychain. Only the CLI reads them, and only with a person at the
   controlling terminal: every consequential fleet command checks
   `ctx.hasTerminal()` before it plans (exit 3 otherwise), and
-  `requireKeychain` refuses without one. The one command that runs without a
-  terminal is `room say --lease` (exception 1 below): it reads no Keychain
-  item and uses only the desk's own grant, the one its lease is bound to. Two reads precede the prompt by
+  `requireKeychain` refuses without one. The one consequential act that runs
+  without a terminal is `room say --lease` (exception 1 below): it reads no
+  Keychain item and uses only the grants its lease is bound to (the season
+  grant, and on a member desk the directory grant). Revoking a lease narrows
+  rather than acts, so `room lease revoke` needs no terminal either (it is
+  audited); `room lease list|show` are reads. Two reads precede the prompt by
   design, and nothing else may: the door key signs so the prompt shows exact
   signed bytes, and an adopt reads the named mission with the bearer (a `GET`)
   so the prompt shows its charter. Every request that changes state goes after

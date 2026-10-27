@@ -156,10 +156,11 @@ function isActive(row: LeaseRow, now: Date): boolean {
 
 /** End one lease for good, audited without a prompt. False when it had
  * already ended (another process got there first): nothing is written then. */
-function voidLease(ctx: FleetContext, leaseId: string, reason: string): boolean {
+function voidLease(ctx: FleetContext, leaseId: string, reason: string, refusedEventId?: string): boolean {
   const at = ctx.now().toISOString();
+  const record = refusedEventId === undefined ? { lease_id: leaseId, reason } : { lease_id: leaseId, reason, refused_event_id: refusedEventId };
   try {
-    return ctx.store.recordActWith(actPreview("room.lease.void", leaseId, at, [], { lease_id: leaseId, reason }), () => {
+    return ctx.store.recordActWith(actPreview("room.lease.void", leaseId, at, [], record), () => {
       if (!ctx.store.fleet.voidLease(leaseId, reason, at)) throw new LobbyError("lease_already_ended", "the lease had already ended");
       return true;
     });
@@ -582,6 +583,13 @@ function voidAndRefuse(ctx: FleetContext, leaseId: string, reason: string, messa
   throw new LobbyError("lease_void", `${message}; the lease is now void (${reason})`, { reason });
 }
 
+/** True when this lease's void records that the room refused this event at
+ * send time: it was reserved and audited, and never left the device. */
+function refusedAtSend(ctx: FleetContext, leaseId: string, eventId: string): boolean {
+  return ctx.store.listAudit().some((entry) => entry.act === "room.lease.void" && entry.subject === leaseId
+    && (JSON.parse(entry.bytes) as { refused_event_id?: unknown }).refused_event_id === eventId);
+}
+
 function definiteRefusal(error: unknown): boolean {
   return error instanceof LobbyError && error.code === "hosted_refused" && typeof error.details.status === "number" && error.details.status < 500;
 }
@@ -652,6 +660,11 @@ export async function sendUnderLease(ctx: FleetContext, input: LeaseSendInput): 
     }
     const replay = receiptOf(ctx, loaded, existing, true);
     if (replay.status === "stored") return replay;
+    if (refusedAtSend(ctx, leaseId, existing.event_id)) {
+      throw new LobbyError("lease_send_refused",
+        `this message (event ${existing.event_id}) was refused by the room's gate at send time and never sent; the lease is void (room_narrowed)`,
+        { event_id: existing.event_id });
+    }
     throw new LobbyError("lease_send_uncertain",
       `this message (event ${existing.event_id}) was saved and sent once without a verified receipt; it may already be stored. ` +
       `It is never resent automatically: a person at the terminal runs: agenttool-lobby outbox retry ${existing.event_id}`,
@@ -815,7 +828,9 @@ export async function sendUnderLease(ctx: FleetContext, input: LeaseSendInput): 
   const outcome: PostOutcome = await sendPost(ctx, composed.post, seat);
   const send = fleet.leaseSend(leaseId, key)!;
   if (outcome.status === "refused") {
-    voidLease(ctx, leaseId, "room_narrowed");
+    // Nothing left the device. The void names the event, so a replay of this
+    // key reports it as refused rather than as possibly stored.
+    voidLease(ctx, leaseId, "room_narrowed", composed.post.event_id);
     throw new LobbyError("lease_void", `the room as it is now refuses the message (${outcome.error}); nothing was sent and the lease is now void (room_narrowed)`, { reason: "room_narrowed" });
   }
   const result = receiptOf(ctx, loaded, send, false);

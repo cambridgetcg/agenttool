@@ -11,8 +11,11 @@ import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
 import { runCli } from "../src/cli.js";
+import { LobbyError } from "../src/errors.js";
 import { DATABASE_FILE } from "../src/home.js";
 import type { SecretStore } from "../src/keychain.js";
+import { sendUnderLease, type LeaseSendResult } from "../src/lease.js";
+import type { FleetContext } from "../src/ops.js";
 import { defaultSeatRef } from "../src/seat-ref.js";
 import { LobbyStore } from "../src/store.js";
 import { confirmOnTty, showOnTty } from "../src/tty.js";
@@ -112,6 +115,32 @@ function sql(desk: Desk, statement: string, params: Record<string, string> = {})
   const raw = new Database(join(desk.home, DATABASE_FILE));
   raw.query(statement).run(params);
   raw.close();
+}
+
+/** Call sendUnderLease directly, with no terminal, running `meanwhile` after
+ * every check outside the reservation and just before the reservation's
+ * transaction: the window another process could act in. */
+async function sendRacing(fleet: Fleet, desk: Desk, leaseId: string, key: string, text: string,
+  meanwhile: (ctx: FleetContext) => void): Promise<{ result?: LeaseSendResult; error?: LobbyError }> {
+  const store = LobbyStore.open(desk.home);
+  const now = () => new Date(fleet.world.clock.now);
+  const ctx: FleetContext = {
+    store, home: desk.home, now, keychain: null, hasTerminal: () => false, sleep: async () => {}, seatRef: null,
+    hosted: { fetchImpl: fleet.world.hosted.fetch, now, deviceTerms: DEVICE_TERMS },
+  };
+  const reserve = store.recordActWith.bind(store);
+  store.recordActWith = ((plan, run) => {
+    if (plan.act === "room.say.lease") meanwhile(ctx);
+    return reserve(plan, run);
+  }) as typeof store.recordActWith;
+  try {
+    return { result: await sendUnderLease(ctx, { room_id: fleet.roomId, lease_id: leaseId, idempotency_key: key, text }) };
+  } catch (error) {
+    if (error instanceof LobbyError) return { error };
+    throw error;
+  } finally {
+    store.close();
+  }
 }
 
 describe("making a lease at the terminal", () => {
@@ -264,6 +293,28 @@ describe("sending under a lease with no terminal", () => {
     expect((await fleet.device.run("audit", "verify")).stdout).toMatch(/^audit chain intact/);
   });
 
+  test("after the season grant is renewed, a lease still posts under its bound grant, never the successor", async () => {
+    const fleet = await seatedFleet();
+    const leaseId = await lease(fleet.device, fleet.roomId);
+    const bound = (await leaseOf(fleet.device, leaseId)).grant_id;
+    // Hours later, so the renewed grant ends later than the bound one and
+    // currentDeskGrant would pick the successor.
+    fleet.world.advance(4 * 3_600_000);
+    await ok(fleet.device.yes("room", "renew", "request", fleet.roomId));
+    await ok(fleet.hub.yes("hub", "renew-sweep"));
+    await ok(fleet.device.yes("room", "renew", "accept", fleet.roomId));
+    const status = await json(fleet.device.run("fleet", "status", "--json"));
+    const successor = status.grants.find((grant: any) => grant.purpose === "season" && grant.grant_id !== bound)?.grant_id;
+    expect(successor).toBeString();
+    const sent = await say(fleet, fleet.device, leaseId, "after the renewal");
+    expect(sent.code).toBe(0);
+    const out = JSON.parse(sent.stdout);
+    const posted = fleet.world.hosted.missions.get(fleet.seasonId)!.events.find((event) => event.event_id === out.event_id)!;
+    const sends = (await json(fleet.device.run("room", "lease", "show", leaseId, "--json"))).sends;
+    expect([posted.grant_id, out.grant_id, sends[0].grant_id]).toEqual([bound, bound, bound]);
+    expect(bound).not.toBe(successor);
+  });
+
   test("the host desk sends under a lease too, and neither desk's Keychain is touched", async () => {
     const fleet = await seatedFleet();
     const leaseId = await lease(fleet.hub, fleet.roomId);
@@ -345,6 +396,26 @@ describe("closed refusals under a lease (nothing sent, the lease stays)", () => 
     expect(refused.code).toBe(1);
     expect(refused.stderr).toContain("to_not_member");
     expect((await leaseOf(fleet.device, leaseId)).state).toBe("active");
+  });
+
+  test("a recipient whose key differs from the one the lease snapshotted is refused", async () => {
+    const fleet = await seatedFleet();
+    const leaseId = await lease(fleet.device, fleet.roomId);
+    // Stand in for a re-keyed recipient: the snapshot names the hub with
+    // another key than the newest roster pins. (The bounds trigger is
+    // dropped on this test file only; real desks keep it.)
+    const raw = new Database(join(fleet.device.home, DATABASE_FILE));
+    raw.exec("DROP TRIGGER desk_leases_bounds_are_fixed");
+    const record = JSON.parse((raw.query("SELECT record FROM desk_leases WHERE lease_id = $id").get({ $id: leaseId }) as { record: string }).record);
+    raw.close();
+    record.recipients = record.recipients.map((recipient: { identity_id: string; fingerprint: string }) => ({ ...recipient, fingerprint: `${recipient.fingerprint.slice(0, -4)}0000` }));
+    sql(fleet.device, "UPDATE desk_leases SET record = $record WHERE lease_id = $id", { $record: JSON.stringify(record), $id: leaseId });
+    const posts = chatPosts(fleet);
+    const refused = await say(fleet, fleet.device, leaseId, "is this still you");
+    expect(refused.code).toBe(1);
+    expect(JSON.parse(refused.stdout)).toMatchObject({ ok: false, error: "lease_recipient_not_covered" });
+    expect(chatPosts(fleet)).toBe(posts);
+    expect(await leaseOf(fleet.device, leaseId)).toMatchObject({ state: "active", sent_messages: 0 });
   });
 
   test("a lease bound to a seat refuses another seat or none; --any-seat takes any", async () => {
@@ -632,6 +703,48 @@ describe("idempotency, uncertainty and races", () => {
     const refused = await say(fleet, fleet.device, leaseId, "hello");
     expect(refused.stderr).toContain("lease_recheck_uncertain");
     expect(await leaseOf(fleet.device, leaseId)).toMatchObject({ state: "active", sent_messages: 0 });
+  });
+
+  test("a STOP file or the lease's end arriving just before the reservation sends nothing and spends nothing", async () => {
+    const fleet = await seatedFleet();
+    const posts = chatPosts(fleet);
+    const stopped = await lease(fleet.device, fleet.roomId);
+    const raced = await sendRacing(fleet, fleet.device, stopped, "race-stop-01", "just in time", () => writeFileSync(join(fleet.device.home, "STOP"), ""));
+    expect(raced.error?.code).toBe("lease_stopped");
+    expect(await leaseOf(fleet.device, stopped)).toMatchObject({ sent_messages: 0 });
+    rmSync(join(fleet.device.home, "STOP"));
+    // A fresh fleet, so the STOP above has voided nothing this half uses.
+    const other = await seatedFleet();
+    const ending = await lease(other.device, other.roomId, "--minutes", "60");
+    const otherPosts = chatPosts(other);
+    const late = await sendRacing(other, other.device, ending, "race-end-001", "just in time", () => other.world.advance(61 * 60_000));
+    expect(late.error?.code).toBe("lease_expired");
+    expect([chatPosts(fleet), chatPosts(other)]).toEqual([posts, otherPosts]);
+    expect(await leaseOf(other.device, ending)).toMatchObject({ sent_messages: 0, sends: { stored: 0, pending: 0 } });
+    expect((await auditOf(other.device)).some((entry) => entry.act === "room.say.lease")).toBe(false);
+  });
+
+  test("a room that narrows after the checks refuses at send time: nothing leaves, the lease is void, and a replay says refused", async () => {
+    const fleet = await seatedFleet();
+    const leaseId = await lease(fleet.hub, fleet.roomId);
+    const posts = chatPosts(fleet);
+    const narrow = (ctx: FleetContext) => {
+      ctx.store.applyPromotion(ctx.store.planPromotion(fleet.roomId, { residency: "device", hostable: false }, ctx.now()));
+    };
+    const refused = await sendRacing(fleet, fleet.hub, leaseId, "narrow-0001", "about to stay home", narrow);
+    expect(refused.error).toMatchObject({ code: "lease_void", details: { reason: "room_narrowed" } });
+    expect(chatPosts(fleet)).toBe(posts);
+    expect((await leaseOf(fleet.hub, leaseId)).state).toBe("void: room_narrowed");
+    const voids = (await auditOf(fleet.hub)).filter((entry) => entry.act === "room.lease.void").map((entry) => JSON.parse(entry.bytes));
+    const reserved = (await auditOf(fleet.hub)).find((entry) => entry.act === "room.say.lease")!;
+    expect(voids).toMatchObject([{ reason: "room_narrowed", refused_event_id: JSON.parse(reserved.bytes).event_id }]);
+    // The same key again reports the refusal, not a send that may be stored.
+    const replay = await headless(fleet.world, fleet.hub, ["room", "say", fleet.roomId, "--lease", leaseId, "--idempotency-key", "narrow-0001",
+      "--text", "about to stay home", "--json"]);
+    expect(replay.code).toBe(1);
+    expect(JSON.parse(replay.stdout)).toMatchObject({ ok: false, error: "lease_send_refused" });
+    expect(replay.stderr).not.toContain("may already be stored");
+    expect(chatPosts(fleet)).toBe(posts);
   });
 
   test("two sends racing for the last slot: exactly one is reserved and sent", async () => {
