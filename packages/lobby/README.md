@@ -93,9 +93,11 @@ a relative `XDG_STATE_HOME` is ignored, as the XDG specification requires.
   new file.
 
 `lobby.sqlite` uses schema version `3` (rollback journal, `secure_delete`). An
-older file is upgraded explicitly, one step at a time, the first time the CLI
-opens it for writing: 1 → 2 adds the fleet tables, 2 → 3 adds the version-3
-columns and tables below (all additive; nothing existing changes). The
+older file is upgraded explicitly, one step at a time and each step once, the
+first time the CLI opens it for writing: 1 → 2 adds the fleet tables, 2 → 3
+adds the version-3 columns and tables below (all additive; nothing existing
+changes). The steps are `SCHEMA_STEPS` in `src/store.ts`; a current file takes
+none. A file from a newer desk is refused, not opened. The
 read-only MCP handle reads a version-1 file as "no fleet state yet" and a
 version-2 file as fleet state without the version-3 tables. Local-hall tables:
 

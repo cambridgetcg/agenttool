@@ -12,7 +12,7 @@
  *
  * Version 3 is reached from version 2 by `FLEET_V3_UPGRADE_SQL`, run once in
  * the same transaction that records the new version; nothing existing is
- * rewritten.
+ * rewritten. The steps are chained in src/store.ts (`SCHEMA_STEPS`).
  *
  * No secret is stored here: the desk key and token preimages live in
  * `<home>/secrets` (src/secrets.ts); the project bearer and door key live in
@@ -470,18 +470,20 @@ function withActions<T extends { actions: MissionAction[] }>(row: Row | null): T
 /** Fleet tables over the same handle as LobbyStore. Writes require a
  * writable store; the MCP's read-only handle can only call readers. */
 export class FleetStore {
-  /** The fleet tables exist (state version 2 or 3). */
+  /** The fleet tables exist (state version 2 or later). */
   readonly available: boolean;
-  /** The table-talk, renewal and removal tables and columns exist (state version 3). */
+  /** The table-talk, renewal and removal tables and columns exist (state version 3 or later). */
   readonly v3: boolean;
 
+  /** `stateVersion` is one LobbyStore has already accepted as readable. */
   constructor(
     private readonly db: Database,
     private readonly writable: boolean,
     stateVersion: string,
   ) {
-    this.available = stateVersion === "2" || stateVersion === "3";
-    this.v3 = stateVersion === "3";
+    const version = Number(stateVersion);
+    this.available = version >= 2;
+    this.v3 = version >= 3;
   }
 
   private write(): void {

@@ -165,3 +165,29 @@ restates the design terms it implements.
   card, act, packet or document format changes mean a new format string, not
   an in-place edit.
 - Root `AGENTS.md`, `CLAUDE.md` and `docs/RIGHTS-OF-LIFE.md` also apply.
+
+## Schema versions
+
+`lobby.sqlite` is at `STATE_SCHEMA_VERSION`, and `SCHEMA_STEPS` is its
+upgrade chain (both in `src/store.ts`): one function per step (1 → 2,
+2 → 3, ...), run in order, each exactly once per file, inside the immediate
+transaction that records the new version. A released step is never edited, and a new file takes every step. The
+next version adds one step `from` the last `to` and moves
+`STATE_SCHEMA_VERSION`.
+
+The next numbers are reserved, in this order (2026-10-27 lobby builds):
+
+| Version | Build |
+|---|---|
+| 4 | directory renew (Build 2A) |
+| 5 | directory rollover (Build 2B) |
+| 6 | room seat leases (Build 5) |
+| 7 | renewal by signature, lobby side (Build 3 C0) |
+| 8 | pairing (Build 4 PR-3) |
+
+Whoever merges out of this order renumbers on rebase. `tests/store.test.ts`
+catches a mistake: the chain must run from 1 without a gap and end at
+`STATE_SCHEMA_VERSION`, a file at every version it knows must upgrade once to
+the same schema a new file gets, and each released version's schema is frozen
+there as a digest (`RELEASED_SCHEMAS`), so editing `SCHEMA_SQL` or a released
+step fails. A new version adds its digest once its step is final.
