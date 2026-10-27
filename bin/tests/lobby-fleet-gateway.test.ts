@@ -9,6 +9,9 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { canonicalMissionRequestBytes, missionSha256, verifyMissionProof } from "../../api/src/services/collaboration/proof";
 import { correspondenceCanonicalJson } from "../../api/src/services/correspondence/canonical";
 import { canonicalIdentityEnrollmentBytes } from "../../api/src/services/identity/enrollment";
+import { ParticipantClient } from "../../packages/lobby/src/hosted";
+import { DeskSecrets } from "../../packages/lobby/src/secrets";
+import { openDocument } from "../../packages/lobby/src/signed";
 import {
   deviceCode, enrollmentDigest, generateKeyPair, LOBBY_ORIGIN, missionDigest, publicKeyBase64, requestDigest, signBytes, validateMissionDescriptor,
 } from "../../packages/lobby/src/wire";
@@ -121,5 +124,62 @@ describe("lobby fleet hall through the API's mission gateway and enrollment rout
     expect(seasonGrants.every(grant => grant.acceptedAt !== null)).toBe(true);
     // The admission, then the keyed roster (the host and the new member fit one part).
     expect(memory.missions.get(seasonId!)!.events.map((event: any) => JSON.parse(event.observation.summary).kind)).toEqual(["admission", "member_roster"]);
+  });
+
+  test("directory renewal: a desk-chosen grant id and hash pass the gateway; invitation before issue is 401; accept is idempotent", async () => {
+    let clock = Date.parse("2026-10-16T12:00:00.000Z");
+    const now = () => new Date(clock);
+    const memory = memoryService(now);
+    const fetchImpl = apiApp(memory);
+    const hub = lobbyDesk(fetchImpl, now, cleanups);
+    const device = lobbyDesk(fetchImpl, now, cleanups);
+    await hub.keychain.add({ service: "agenttool-lobby.hub-bearer", account: "agenttool-lobby" }, BEARER);
+    const init = await hub.yes("hub", "init", "--project", PROJECT);
+    const door = /door fingerprint ([0-9a-f]{16})/.exec(init)![1]!;
+    const directoryId = /directory ([0-9a-f-]{36})/.exec(init)![1]!;
+    for (const who of [hub, device]) {
+      const enrolled = await who.exec("enroll-device", "--project", PROJECT);
+      const join = await hub.yes("hub", "relay", "--packet-file", who.file("packet.json", enrolled.stdout), "--device-fingerprint", codeShown(enrolled.stderr));
+      await who.yes("fleet", "join", "--packet-file", who.file("join.json", join), "--door-fingerprint", door);
+    }
+    clock += 60_000;
+
+    // The desk posts a signed directory_renew naming a grant id and token hash it chose.
+    await device.yes("fleet", "renew");
+    const request = device.lastBytes().request;
+    const observed = memory.missions.get(directoryId)!.events.at(-1);
+    expect(JSON.parse(observed.observation.summary)).toMatchObject({ kind: "directory_renew", body: { grant_id: request.grant_id, token_sha256: request.token_sha256 } });
+
+    // Before the hub issues it, the gateway refuses the invitation (401) and the desk records nothing.
+    const refused = await device.exec("fleet", "renew");
+    expect(refused.code).toBe(0);
+    expect(refused.stdout).toContain("nothing to do");
+    expect(memory.requests.filter(item => item.operation === "invitation").length).toBeGreaterThan(0);
+
+    // One sweep five hours on: the desk's grant with its own id and hash, and the hub desk's own seats.
+    clock += 5 * 3_600_000;
+    const swept = await hub.yes("hub", "renew-sweep");
+    expect(swept).toContain(`renewed the directory grant of did:at:`);
+    const issued = memory.grants.get(request.grant_id)!;
+    expect(issued).toMatchObject({ missionId: directoryId, tokenHash: request.token_sha256, acceptedAt: null });
+    expect(hub.lastBytes().hub_seats.map((seat: any) => seat.purpose)).toEqual(["directory"]);
+    const notice = memory.missions.get(directoryId)!.events.map((event: any) => openDocument(event.observation.summary))
+      .find((document: any) => document?.kind === "directory_renewal");
+    expect(notice!.body).toMatchObject({ invitation: { grant_id: request.grant_id, token_sha256: request.token_sha256 } });
+
+    // The relay grant lapses; fleet renew picks the grant up through the gateway and posts the next request with it.
+    clock += 19 * 3_600_000;
+    const picked = await device.yes("fleet", "renew");
+    expect(picked).toContain(`picked up directory grant ${request.grant_id}`);
+    const acceptedAt = memory.grants.get(request.grant_id)!.acceptedAt;
+    expect(acceptedAt).not.toBeNull();
+    expect(memory.missions.get(directoryId)!.events.at(-1).grant_id).toBe(request.grant_id);
+    // A second accept of the same grant is answered with the same acceptance.
+    const identity = JSON.parse(await device.run("fleet", "status", "--json")).desk;
+    const client = new ParticipantClient(DeskSecrets.open(device.home), { fetchImpl, now });
+    const seat = { mission_id: directoryId, grant_id: request.grant_id, identity_id: identity.identity_id, signing_key_id: identity.signing_key_id, token_sha256: request.token_sha256 };
+    const again = await client.accept(seat, device.lastBytes().pickup.mission_digest);
+    expect(again.grant.accepted_at).toBe(acceptedAt);
+    await device.run("fleet", "sync");
   });
 });

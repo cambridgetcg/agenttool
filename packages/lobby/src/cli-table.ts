@@ -5,7 +5,8 @@
  * confirmation; room read and wait print every message wrapped as untrusted
  * data. Every act that sends, signs, grants, revokes or accepts (room say,
  * room renew request/accept, room leave, hub renew-sweep, hub member
- * add/pause/resume, hub roster post, hub kick/block/unblock, hub stop) checks
+ * add/pause/resume, hub device pause/resume, hub roster post, hub
+ * kick/block/unblock, hub stop) checks
  * for a person at the terminal first, shows its exact bytes on /dev/tty,
  * needs "yes" typed there, and records those bytes in the audit log before
  * any network effect. Contract: packages/lobby/README.md#table-talk.
@@ -24,6 +25,7 @@ import {
   withoutTerminal,
   type FleetIo,
 } from "./cli-fleet.js";
+import { executeDevicePause, planDevicePause } from "./directory-renewal.js";
 import { writeAccessDigest } from "./digest.js";
 import {
   executeMemberAdd,
@@ -65,7 +67,7 @@ import {
 } from "./talk.js";
 
 export const ROOM_TABLE_COMMANDS = ["say", "read", "wait", "sync", "roster", "renew", "leave"] as const;
-export const HUB_ACCESS_COMMANDS = ["renew-sweep", "member", "members", "roster", "kick", "block", "unblock", "stop", "digest"] as const;
+export const HUB_ACCESS_COMMANDS = ["renew-sweep", "member", "members", "device", "roster", "kick", "block", "unblock", "stop", "digest"] as const;
 
 const READ_SOURCE = "this desk's local cache of the room's season, refreshed from the service by this command";
 
@@ -271,9 +273,10 @@ export async function hubAccessCommand(ctx: FleetContext, args: string[], io: Fl
   switch (sub) {
     case "renew-sweep": {
       const { values, positionals: extra } = parseArgs({
-        args: rest, allowPositionals: true, strict: true, options: { room: { type: "string" }, "hashes-file": { type: "string" } },
+        args: rest, allowPositionals: true, strict: true,
+        options: { room: { type: "string" }, "hashes-file": { type: "string" }, "rooms-only": { type: "boolean" } },
       });
-      positionals(extra, 0, "hub renew-sweep [--room ROOM_ID] [--hashes-file FILE]");
+      positionals(extra, 0, "hub renew-sweep [--rooms-only | --room ROOM_ID [--hashes-file FILE]]");
       if (values["hashes-file"] !== undefined && values.room === undefined) throw new FleetUsageError("--hashes-file needs --room naming the same room");
       const headless = withoutTerminal(ctx, io);
       if (headless !== null) return headless;
@@ -281,11 +284,13 @@ export async function hubAccessCommand(ctx: FleetContext, args: string[], io: Fl
       const plan = await planRenewSweep(ctx, {
         ...(values.room === undefined ? {} : { room_id: values.room }),
         ...(hashes === undefined ? {} : { hashes }),
+        ...(values["rooms-only"] === true ? { rooms_only: true } : {}),
       });
-      if (plan.renewals.length === 0 && plan.leaves.length === 0) {
+      if (plan.renewals.length === 0 && plan.leaves.length === 0 && plan.directory_renewals.length === 0 && plan.hub_seats.length === 0) {
         io.stdout(`nothing to renew or record${plan.skipped.length === 0 ? "" : `; skipped:\n${plan.skipped.map((item) =>
           `  ${item.source}${item.identity_id === null ? "" : ` did:at:${item.identity_id}`}: ${item.reason}`).join("\n")}`}\n` +
-          (plan.expired_requests > 0 ? `${plan.expired_requests} expired request(s) ignored\n` : ""));
+          (plan.expired_requests > 0 ? `${plan.expired_requests} expired request(s) ignored\n` : "") +
+          (plan.mode === "seats_only" ? "the hub desk's directory seat has lapsed and needs nothing it could renew here; run hub seat directory\n" : ""));
         return EXIT_OK;
       }
       const outcome = await consequentialAsync(ctx, io, plan.preview, () => executeRenewSweep(ctx, plan));
@@ -311,13 +316,53 @@ export async function hubAccessCommand(ctx: FleetContext, args: string[], io: Fl
             "Nothing was retried; inspect that grant id before any new attempt, and ask the member for a fresh token hash\n");
         }
       }
+      for (const renewal of outcome.value.directory_renewals) {
+        if (renewal.status === "renewed") {
+          io.stdout(`renewed the directory grant of did:at:${renewal.identity_id}: grant ${renewal.grant_id} until ${renewal.grant_expires_at}\n`);
+          if (reportPosts(io, renewal.notice === undefined ? [] : [renewal.notice]) !== EXIT_OK) code = EXIT_REFUSED;
+        } else if (renewal.status === "withdrawn") {
+          code = EXIT_REFUSED;
+          io.stderr(`agenttool-lobby: no directory renewal for did:at:${renewal.identity_id}: ${renewal.error}\n`);
+        } else if (renewal.status === "refused") {
+          code = EXIT_REFUSED;
+          io.stderr(`agenttool-lobby: directory grant ${renewal.grant_id} for did:at:${renewal.identity_id}: refused (${renewal.error}). ` +
+            "The service created nothing and nothing was retried; the device posts a fresh request with fleet renew\n");
+        } else {
+          code = EXIT_REFUSED;
+          io.stderr(`agenttool-lobby: directory grant ${renewal.grant_id} for did:at:${renewal.identity_id}: ${renewal.status} (${renewal.error}). ` +
+            "Nothing was retried; inspect that grant id before any new attempt. The device may still pick it up with fleet renew\n");
+        }
+      }
       if (reportPosts(io, outcome.value.rosters) !== EXIT_OK) code = EXIT_REFUSED;
       if (outcome.value.leaves > 0) io.stdout(`recorded ${outcome.value.leaves} leave(s)\n`);
+      for (const seat of outcome.value.hub_seats) {
+        const where = seat.purpose === "directory" ? "the directory" : `room ${seat.room_id}`;
+        if (seat.status === "renewed") io.stdout(`hub desk seat in ${where} ${seat.mission_id} until ${seat.expires_at}\n`);
+        else {
+          code = EXIT_REFUSED;
+          io.stderr(`agenttool-lobby: hub desk seat ${seat.grant_id} in ${where}: ${seat.status} (${seat.error}). ` +
+            `Nothing was retried; take it with: hub seat ${seat.purpose === "directory" ? "directory" : seat.room_id}\n`);
+        }
+      }
+      if (plan.mode === "seats_only") io.stdout("the hub desk's directory seat had lapsed, so this sweep read nothing: run hub renew-sweep again to read requests\n");
       if (templates.length > 0) {
         io.stdout(`${JSON.stringify({ invitation_templates: templates }, null, 2)}\n`);
         io.stderr("agenttool-lobby: the invitation templates above hold no secret; a member using the participant client assembles one with its own token\n");
       }
       return code;
+    }
+    case "device": {
+      const [mode, ...more] = rest;
+      if (mode !== "pause" && mode !== "resume") throw new FleetUsageError("hub device pause|resume <identity_id>");
+      const [identity] = positionals(parseArgs({ args: more, allowPositionals: true, strict: true, options: {} }).positionals, 1,
+        `hub device ${mode} <identity_id>`);
+      const headless = withoutTerminal(ctx, io);
+      if (headless !== null) return headless;
+      const plan = planDevicePause(ctx, { identity_id: identity!, pause: mode === "pause" });
+      const outcome = await consequentialAsync(ctx, io, plan.preview, async () => executeDevicePause(ctx, plan));
+      if (!outcome.confirmed) return outcome.code;
+      io.stdout(`${mode === "pause" ? "paused" : "resumed"} directory renewal for did:at:${plan.identity_id}\naudit: recorded ${plan.preview.act} sha256 ${plan.preview.sha256}\n`);
+      return EXIT_OK;
     }
     case "members": {
       const { values, positionals: extra } = parseArgs({ args: rest, allowPositionals: true, strict: true, options: { json: { type: "boolean" } } });

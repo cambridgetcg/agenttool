@@ -1,12 +1,12 @@
 # 大廳 Lobby desk: local hall, fleet hall and table talk
 
 > **Type:** reference
-> **Purpose:** Describe the lobby desk: device-only room cards, the private ledger, the pin book, the audit log, the egress gate, the fleet hall on agenttool missions (hub, door, enrollment, door-signed cards, knocks, admission and Ready), table talk, renewal inside the term, leave, kick and block, the emergency stop, the weekly access digest and a read-only MCP view.
+> **Purpose:** Describe the lobby desk: device-only room cards, the private ledger, the pin book, the audit log, the egress gate, the fleet hall on agenttool missions (hub, door, enrollment, door-signed cards, knocks, admission and Ready), directory renewal inside the Lobby, table talk, renewal inside the term, leave, kick and block, the emergency stop, the weekly access digest and a read-only MCP view.
 > **Evidence:** Source and hermetic tests in this package (`bun run ci`), `bin/tests/lobby-fleet-gateway.test.ts` and `bin/tests/lobby-table-gateway.test.ts` (the API's own mission gateway and enrollment router, in process, and the participant client's own chat code). Nothing here is released, installed, registered with a host, deployed, or exercised against the live service.
 > **Compass:** [Collaboration missions](../../docs/COLLABORATION-MISSIONS.md) (seasons, grants, revocation) · [Mission client](../../docs/COLLABORATION-MISSION-CLIENT.md) (wire formats reused here) · [Identity anchor](../../docs/IDENTITY-ANCHOR.md) (enrollment) · [Collaboration roadmap](../../docs/COLLABORATION-ROADMAP.md) (public joining is deferred) · [Collaboration channels](../../docs/COLLABORATION-CHANNELS.md) (the local Collab journal stays canonical) · [Lounge](../../docs/LOUNGE.md) (seats are explicit leases, never "online") · [Agent discovery](../../docs/AGENT-DISCOVERY.md) (reading obliges nothing) · [Rights of Life](../../docs/RIGHTS-OF-LIFE.md)
 > **Implements:** MVP steps 1, 2, 7 and 8 of the 大廳 Lobby design (2026-10-16): the local hall, its egress gate, fleet hall v0, and table talk with renewal, leave, kick and block, the emergency stop and the access digest. The design document is kept outside this repository; [Concepts](#concepts) restates the parts built here.
-> **Code:** `src/{room,store,fleet-store,home,pins,text,view,tty,egress,mcp,cli,cli-fleet,canonical,errors,index}.ts` · fleet hall `src/{wire,signed,packets,fleet,hosted,keychain,secrets,ops,desk,hub}.ts` · table talk and access `src/{table,device-terms,talk,hub-access,digest,cli-table}.ts` · `bin/agenttool-lobby.ts` · `bin/agenttool-lobby-mcp.ts`
-> **Tests:** `tests/{room,home,store,tty,egress,mcp,cli,boundary}.test.ts` · fleet hall `tests/{signed,keychain,hosted,fleet-flow,fleet-refusals,fleet-hardening}.test.ts` with `tests/{fake-hosted,fleet-helpers}.ts` · table talk and access `tests/{table,table-talk,renewal,removal}.test.ts` · `tests/fixtures/egress-cases.json` · `../../bin/tests/lobby-{fleet,table}-gateway.test.ts` with `../../bin/tests/lobby-gateway-fixture.ts`
+> **Code:** `src/{room,store,fleet-store,home,pins,text,view,tty,egress,mcp,cli,cli-fleet,canonical,errors,index}.ts` · fleet hall `src/{wire,signed,packets,fleet,hosted,keychain,secrets,ops,desk,hub,directory-renewal}.ts` · table talk and access `src/{table,device-terms,talk,hub-access,digest,cli-table}.ts` · `bin/agenttool-lobby.ts` · `bin/agenttool-lobby-mcp.ts`
+> **Tests:** `tests/{room,home,store,tty,egress,mcp,cli,boundary}.test.ts` · fleet hall `tests/{signed,keychain,hosted,fleet-flow,fleet-refusals,fleet-hardening,directory-renewal}.test.ts` with `tests/{fake-hosted,fleet-helpers}.ts` · table talk and access `tests/{table,table-talk,renewal,removal}.test.ts` · `tests/fixtures/egress-cases.json` · `../../bin/tests/lobby-{fleet,table}-gateway.test.ts` with `../../bin/tests/lobby-gateway-fixture.ts`
 
 `@agenttool/lobby` is a private Bun 1.3.5 package (`"private": true`, no release
 lane). It keeps a list of project rooms on one device (the **local hall**) and,
@@ -34,6 +34,7 @@ module.
 | **Hub and door** | The hub is the one device whose login Keychain holds the project bearer and the **door** key, an Ed25519 key that signs cards, admissions, denials, rosters and renewal notices. Its own desk posts them like any fleet device, and sits at every table as the room's **host**. | A dedicated `lobby-issuer` API key; steward roles. |
 | **Knock (敲門)** | A request signed by the requesting desk: room, charter digest, tier, the SHA-256 of a fresh room token, a note of at most 280 characters (untrusted), expiry of at most 72 hours. Posted to the directory. | `/v1/lobby/knocks`. |
 | **Admission / Ready (準備)** | The door's signed decision (single use, 24 hours), then the device's own signed accept of exactly the charter digest the card named. | — |
+| **Directory grant** | A joined desk's grant in the directory (at most 24 hours, `mission.observe` + `mission.read`), **renewed inside the Lobby**: `fleet renew` posts a desk-signed request naming a grant id and token hash the desk chose, one `hub renew-sweep` issues every device's next grant, and the desk picks it up with an invitation read. The hub can **pause** one device's directory renewal. Enroll, relay and join are the way back in after a lapse. | Directory rollover (a successor directory before the 30 days end); unattended renewal: every request, sweep and pickup is confirmed at a terminal. |
 | **Membership / grant** | A term of at most the season; underneath, a mission grant of at most 24 hours bound to the device's own token hash (`mission.read`, plus `mission.observe` for players), **renewed inside the term**: a signed renew note, the hub's sweep, the member's accept of the same digest. The hub can **pause** a member's renewal. | Automatic (unattended) renewal: every renewal is confirmed at a terminal. |
 | **Roster** | A door-signed **keyed roster** (`member_roster`) of the season's members, with each member's key: the pin source for table talk. Posted on every admission, leave, kick, block and member added by hand; the newest complete roster wins. Announced in the charter. | — |
 | **Table talk** | The room's shared, signed message stream: `agenttool-mission-chat/v1` envelopes, byte for byte as the participant client writes them, verified against the keyed roster. Every member and the service read every message. | Fan-out to several members in one message. |
@@ -141,6 +142,15 @@ Version 3 adds, again with no secret anywhere:
 | `hub_extra_grants` | hub | Grants issued by hand for an adopted season, registered so kick and stop can revoke them. |
 | `hub_processed_notes` | hub | Leave notices already acted on, so a later sweep never repeats one. |
 
+Version 4 adds directory renewal inside the Lobby, again with no secret anywhere:
+
+| Table or column | Side | Holds |
+|---|---|---|
+| `desk.directory_expires_at` | every device | The joined directory's end, as this desk last read it (at `fleet join` and `fleet renew`). |
+| `desk_directory_renewals` | every device | This desk's directory renew requests: the directory, the grant id and token hash it chose, where and when it posted the request, its expiry, and when it picked the grant up. |
+| `hub_devices.directory_paused_at` | hub | Set while `hub device pause` stops that device's directory renewal. |
+| `hub_directory_renewals` | hub | Each directory grant renewed from a request: token hash, device, grant, the request and notice events. A token hash renews once. |
+
 ## Room card
 
 Schema `agenttool-lobby-room/v1`. A card has exactly these fields; anything else is refused.
@@ -243,7 +253,7 @@ A device-pinned room is refused before the terminal is opened. Ordinary acts
 `roster`, `hub members`, `hub digest`) are not audited. `enroll-device` sends
 nothing and is audited (`desk.enroll`) without a prompt. After a confirmed act
 whose network effects can partly fail (`room leave`, `hub renew-sweep`,
-`hub kick`, `hub block`, `hub stop`), a second entry `<act>.outcome` records
+`fleet renew`, `hub kick`, `hub block`, `hub stop`), a second entry `<act>.outcome` records
 what happened (statuses and ids, never a secret), also without a prompt.
 
 Act records:
@@ -358,7 +368,9 @@ relative path, or a symbolic link as the last path component, is refused
    request in exactly the participant client's `enroll-proof` format. It is
    **valid for 5 minutes**, the service's enrollment window; after that, run it
    again. On a joined desk it prints a **renewal** packet instead (no
-   enrollment, valid 30 minutes) for a fresh 24-hour directory grant. It also
+   enrollment, valid 30 minutes) for a fresh 24-hour directory grant: the way
+   back in after the directory grant lapsed. Day to day, a joined desk renews
+   inside the Lobby instead (see [Directory renewal](#directory-renewal)). It also
    shows the desk's **device code** on stderr (stdout stays exactly the
    packet): the first 80 bits of SHA-256 over the raw public key in Crockford
    base32, `XXXX-XXXX-XXXX-XXXX`, the same format as the identity-pairing
@@ -405,7 +417,7 @@ agenttool-lobby room promote <room_id> --residency fleet --hostable true    # tt
 agenttool-lobby hub season open <room_id> [--days 1-30]                     # tty; or:
 agenttool-lobby hub season adopt <room_id> --mission <uuid> --digest sha256:...
 agenttool-lobby room publish <room_id>                                      # tty
-agenttool-lobby hub seat directory|<room_id>                                # tty; renew the hub desk's own seat
+agenttool-lobby hub seat directory|<room_id>                                # tty; renew the hub desk's own seat (hub renew-sweep also does)
 ```
 
 - Only a room with `residency=fleet`, `hostable: true` and `visibility=private`
@@ -513,6 +525,8 @@ oversized documents.
 | `renew` | member desk | season, or directory | `room_id`, `mission_id`, `identity_id`, `signing_key_id`, `token_sha256`, `issued_at`, `expires_at` (at most 24 hours) |
 | `renewal` | door | where the `renew` was posted | `room_id`, `tier`, `term_ends_at`, `invitation` (`mission_id`, `grant_id`, `identity_id`, `signing_key_id`, `public_key_hex`, `expires_at`, `token_sha256`), `issued_at` |
 | `leave` | member desk | season, or directory | `room_id`, `mission_id`, `identity_id`, `signing_key_id`, `issued_at` |
+| `directory_renew` | joined desk | directory | `mission_id` (the directory), `grant_id` and `token_sha256` (both chosen by the desk), `identity_id`, `signing_key_id`, `issued_at`, `expires_at` (at most 24 hours) |
+| `directory_renewal` | door | directory | `invitation` (`mission_id`, `grant_id`, `identity_id`, `signing_key_id`, `public_key_hex`, `expires_at`, `token_sha256`), `issued_at`; the grant lasts at most 24 hours |
 
 Kinds are additive: a desk that does not know a kind reports it as malformed
 and acts on nothing in it. A changed body is a new kind, never an in-place edit
@@ -531,6 +545,7 @@ proof (see [Table talk](#table-talk)).
 | Admission | 24 hours, single use |
 | Grant | at most 24 hours (requested a minute short), never past the term, season or directory |
 | Renew request | at most 24 hours; a token hash renews once |
+| Directory renew request | at most 24 hours, never past the directory; a token hash and a grant id renew once |
 | Membership | at most the season; ended early by leave, kick or block |
 | Season, directory | at most 30 days |
 | A wait (`room wait`, `room_wait`) | at most 45 seconds, polling at most every 3 seconds |
@@ -545,7 +560,9 @@ proof (see [Table talk](#table-talk)).
   note) and decision in the directory, every renewal notice (the hub posts each
   one there), and any renew or leave note posted there (a spectator's, or a
   member's whose room grant has lapsed): those say who is a member of which
-  room. Season members read that season's admissions, rosters, renewal notices
+  room. Every directory renew request and directory renewal notice is there
+  too: every device sees which devices renew. Season members read that
+  season's admissions, rosters, renewal notices
   for requests made in the room, and every table-talk message, whoever it is
   addressed to.
 - Nothing hosted maps a room to a local workspace; the private ledger stays on
@@ -618,9 +635,12 @@ as observations), directory rollover after 30 days, steward roles, a fleet-wide
 block of one device, a dedicated `lobby-issuer` API key and rotating it (the
 stop prints that step for the owner and never performs it), outside agents,
 public halls and every hosted `/v1/lobby` route. Renewal is not unattended:
-every request, sweep and pickup is confirmed at a terminal. A device renews its
-directory grant by running `enroll-device`, `hub relay` and `fleet join` again;
-the hub renews its own seats with `hub seat`. No command settles an uncertain
+every request, sweep and pickup is confirmed at a terminal. A joined device
+renews its directory grant with `fleet renew` and the hub's `hub renew-sweep`
+(see [Directory renewal](#directory-renewal)); after a lapse it runs
+`enroll-device`, `hub relay` and `fleet join` again. The sweep renews the hub
+desk's own seats; `hub seat` stays for one-off use. Directory rollover (the
+directory ends after at most 30 days) is not built yet. No command settles an uncertain
 grant by inspecting it: a grant whose request got no trustworthy answer stays
 `requested`, and if the service never created it, kick and stop report its
 revocation as refused (404) until its requested expiry passes (at most 24
@@ -689,6 +709,99 @@ agenttool-lobby room say <room_id> (--text T | --text-file FILE) [--to UUID]
   keys only), for a member who uses `bin/agenttool-mission.mjs chat` instead of
   a desk.
 
+## Directory renewal
+
+```bash
+agenttool-lobby fleet renew                                                      # tty, every joined device
+agenttool-lobby hub renew-sweep [--rooms-only | --room ROOM_ID [--hashes-file FILE]]  # tty, hub
+agenttool-lobby hub device pause|resume <identity_id>                            # tty, hub
+agenttool-lobby fleet status [--json]                                            # the directory block
+```
+
+A directory grant lasts at most 24 hours. A joined desk renews it inside the
+Lobby, with no packet to carry and no prompt at the hub for each device:
+
+1. **`fleet renew`** (tty, device) does whichever of these apply, in one
+   confirmation:
+   - **Pickup.** For its newest open request it reads the invitation of the
+     grant it asked for, with the token it generated (a 401 means the hub has
+     not renewed it yet, and nothing is recorded). This needs no live grant and
+     no notice, so a desk whose old grant already lapsed still picks it up. It
+     checks the project, that the descriptor names the pinned door, that the
+     digest is exactly the one this desk joined, revocation, the scope
+     (`mission.observe` + `mission.read`) and that the grant ends within the
+     directory. The door-signed notice is never required; when it is in the
+     local cache it must name exactly this grant (`conflicting_renewal`
+     otherwise). On `yes` it accepts that digest (idempotent on the service).
+   - **Next request.** Unless its newest request is still open, it signs a
+     `directory_renew` note naming a fresh `grant_id` and the SHA-256 of a
+     fresh token, both chosen here (the token is saved 0600 only on `yes`),
+     good for at most 24 hours and never past the directory, and posts it in
+     the directory with the grant just picked up, or with its live directory
+     seat when that grant has five minutes or less left. A pickup goes ahead
+     alone, with no next request and the reason shown (`no_request` in the
+     exact bytes), when no seat has five minutes left or the directory ends
+     within the hour; without a pickup the latter refuses (`directory_ending`).
+   With an open request and nothing to pick up it shows the state and exits
+   `0` without a prompt. An open request without a verified receipt refuses
+   (`request_unsent`) and names `outbox retry`; nothing is resent on its own.
+   With no live directory grant and nothing to pick up it refuses
+   (`directory_lapsed`) and names the way back in: `enroll-device` here,
+   `hub relay` on the hub, `fleet join` here. The hub's own desk does not
+   post requests (`hub_desk`): the sweep renews its seats.
+2. **`hub renew-sweep`** (tty, hub). **Behaviour change:** without `--room` or
+   `--rooms-only` the sweep now does three things in one confirmation, and the
+   prompt lists them under separate headings with counts: the room renewals
+   (as before), the **directory renewals**, one per device, and the **hub
+   desk's own seats** (the directory and every current season) when they end
+   within 20 hours or have lapsed. `--rooms-only` (or `--room`) is exactly
+   the sweep as it was. A directory request is renewed only when its note is
+   authentic (checked like a knock: an enrolled signer, its own identity, key,
+   exact-request proof and signature, naming itself), it was posted in the
+   directory (`posted_elsewhere` otherwise), names the hub's directory
+   (`directory_not_live`), has not expired, and the device joined through
+   this hub (`never_joined`) and is not paused (`device_paused`).
+   - **First poster, for hashes and grant ids.** A token hash or a grant id
+     belongs to the identity whose authentic document carrying it the
+     service received first, across the directory and every season; a copy
+     under another identity is skipped (`token_claimed_by_another_desk`,
+     `grant_id_claimed_by_another_desk`) and never burns it, and two
+     identities at the same instant in different missions leave it to neither
+     (`token_contested`, `grant_id_contested`). A grant id or hash the hub
+     already bound is skipped (`grant_id_taken`, `token_reused`, or
+     `grant_uncertain:<id>` while that grant's outcome is unknown). Room and
+     directory candidates sharing a hash are all skipped
+     (`token_hash_collision`).
+   - **The newest request per device wins**, in this sweep and later ones; the
+     requests it superseded stay quiet.
+   On `yes`, in this order: leaves and rosters as before; room renewals;
+   directory renewals, each checked again right before its grant is asked for
+   (a stop, a pause, the hash or id bound meanwhile, another directory
+   withdraws it); then the hub desk's seats, last, so every notice goes out
+   with the seat chosen at plan time. Each directory grant is
+   `mission.observe` + `mission.read`, at most 24 hours and never past the
+   directory, with the desk's own grant id and hash, followed by a
+   door-signed `directory_renewal` notice in the directory. A failure never
+   stops the rest; nothing is retried. If the hub desk's own directory seat has
+   lapsed, the sweep reads nothing and renews only its seats, and says to run
+   it again.
+3. **`hub device pause <identity_id>`** stops one device's directory renewal:
+   the grant it holds runs out within 24 hours and the sweep issues no next
+   one. `resume` lifts it. Both are confirmed and audited (`hub.device.pause`,
+   `hub.device.resume`); the hub's own desk cannot be paused. A per-room block
+   still leaves the directory grant alone.
+
+`fleet status --json` has a `directory` block for doorbells and checks:
+`mission_id`, `ends_at`, `grant_expires_at`, `open_request` (`event_id`,
+`grant_id`, `posted`, `expires_at`, `expired`) and `successor` (always `null`
+until directory rollover is built).
+
+Daily rhythm: the hub runs `hub renew-sweep` once a day (one yes for every
+device, the rooms and its own seats), and each device runs `fleet renew` once
+a day (one yes to pick up yesterday's grant and post today's request). A device
+the sweep missed lets its grant lapse and comes back with `enroll-device`,
+`hub relay` and `fleet join`.
+
 ## Renewal, leave, kick and block
 
 ```bash
@@ -713,7 +826,9 @@ its term.
    or, when this desk may not post there (a spectator, or a member whose room
    grant has lapsed), in the directory. Only the hash leaves the device.
 2. `hub renew-sweep` reads the directory and every current season with the hub
-   desk's own seats and checks each note like a knock: the signer is a desk the
+   desk's own seats (without `--room` or `--rooms-only` it also renews
+   directory grants and the hub desk's seats: see
+   [Directory renewal](#directory-renewal)) and checks each note like a knock: the signer is a desk the
    hub recorded, the event came from that desk's identity and key with a valid
    exact-request proof, the signature holds, and the note names that same desk.
    It renews only an active member of the room's current season whose term
@@ -1034,12 +1149,14 @@ text such as commit SHAs, digests, room ids, public addresses and version number
 - **Thirty days, then a new directory.** The directory and every season are
   missions of at most 30 days. Directory rollover is not built; when it ends,
   the hub needs a new directory and every device a new join.
-- **Renewal needs people at terminals.** A season grant lasts 24 hours; inside
-  the term the member requests, the hub sweeps and the member accepts, each
+- **Renewal needs people at terminals.** A season or directory grant lasts 24
+  hours; the member requests, the hub sweeps and the member picks up, each
   confirmed at a terminal, so a day with nobody at either terminal lets the
-  grant lapse (the member then requests through the directory, or knocks
-  again). Directory grants are still renewed with `enroll-device`, `hub
-  relay`, `fleet join`, and the hub's own seats with `hub seat`.
+  grant lapse (a room member then requests through the directory, or knocks
+  again; a device whose directory grant lapsed runs `enroll-device`, `hub
+  relay` and `fleet join`). The hub's own seats are renewed by the same sweep,
+  so a sweep run more than a day after the last one reads nothing at first:
+  it renews the seats and asks to be run again.
 - **Rosters announce, they do not authorize.** A roster is the door's
   voluntary disclosure and the pin source for table talk; mission grants alone
   decide access, and the service offers no member listing to check it against.

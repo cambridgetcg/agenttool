@@ -82,15 +82,19 @@ describe("renewal inside the term", () => {
     expect(accepted.stdout).toContain(`accepted digest ${fleet.seasonDigest} again`);
     expect(JSON.parse(shownBytes(device))).toMatchObject({ act: "room.renew.accept", mission_digest: fleet.seasonDigest, invitation_template: printed });
     expect(issued.accepted_at).not.toBeNull();
+    // The same sweep renewed the hub desk's own seats, which ended within 20 hours.
+    expect(sweepBytes.hub_seats.map((seat: any) => [seat.purpose, seat.mission_id])).toEqual([["directory", fleet.directoryId], ["season", fleet.seasonId]]);
+    expect(swept.stdout).toContain(`hub desk seat in the directory ${fleet.directoryId} until`);
+    // A second sweep finds nothing new; the processed request is quiet and the seats are fresh.
+    expect((await ok(hub.yes("hub", "renew-sweep"))).stdout).toContain("nothing to renew");
     // The new grant carries the seat past the old one's end.
     fleet.world.advance(6 * HOUR);
     await ok(device.yes("room", "say", fleet.roomId, "--text", "still here after the renewal"));
-    // The hub's own seats are renewed with hub seat, as before; the sweep says so when they lapse.
-    expect((await hub.yes("hub", "renew-sweep")).stderr).toContain("run hub seat directory");
+    // With --rooms-only the sweep is what it was before directory renewal: it
+    // renews no seat and says so when the hub's own seat has lapsed.
+    fleet.world.advance(25 * HOUR);
+    expect((await hub.yes("hub", "renew-sweep", "--rooms-only")).stderr).toContain("run hub seat directory");
     await ok(hub.yes("hub", "seat", "directory"));
-    await ok(hub.yes("hub", "seat", fleet.roomId));
-    // A second sweep finds nothing new; the processed request is quiet.
-    expect((await ok(hub.yes("hub", "renew-sweep"))).stdout).toContain("nothing to renew");
   });
 
   test("a spectator, who may not post in the room, renews through the directory", async () => {

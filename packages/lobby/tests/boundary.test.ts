@@ -153,7 +153,7 @@ describe("network and process boundary", () => {
 describe("read-only MCP boundary", () => {
   test("the MCP server's import graph reaches no transport, Keychain, desk secret or act code", () => {
     const closure = localClosure("bin/agenttool-lobby-mcp.ts");
-    for (const forbidden of ["src/hosted.ts", "src/keychain.ts", "src/secrets.ts", "src/ops.ts", "src/desk.ts",
+    for (const forbidden of ["src/hosted.ts", "src/keychain.ts", "src/secrets.ts", "src/ops.ts", "src/desk.ts", "src/directory-renewal.ts",
       "src/hub.ts", "src/hub-access.ts", "src/talk.ts", "src/digest.ts", "src/cli.ts", "src/cli-fleet.ts",
       "src/cli-table.ts", "src/packets.ts", "src/tty.ts"]) {
       expect({ forbidden, reached: closure.has(forbidden) }).toEqual({ forbidden, reached: false });

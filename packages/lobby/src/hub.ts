@@ -61,6 +61,7 @@ import {
   verifyDocument,
   type AdmissionBody,
   type DenialBody,
+  type DirectoryRenewBody,
   type FleetCard,
   type KeyedMember,
   type KnockBody,
@@ -571,7 +572,7 @@ export async function executeRelay(ctx: FleetContext, plan: RelayPlan): Promise<
 
 // ── The hub desk's own seats ───────────────────────────────────────────
 
-interface SeatIssue {
+export interface SeatIssue {
   mission_id: string;
   mission_digest: string;
   purpose: "directory" | "season";
@@ -580,7 +581,7 @@ interface SeatIssue {
   writeToken: () => void;
 }
 
-function planSeatIssue(ctx: FleetContext, desk: DeskRow, mission: { mission_id: string; mission_digest: string; expires_at: string },
+export function planSeatIssue(ctx: FleetContext, desk: DeskRow, mission: { mission_id: string; mission_digest: string; expires_at: string },
   purpose: "directory" | "season", roomId: string | null): SeatIssue {
   const now = ctx.now();
   const token = DeskSecrets.open(ctx.home).prepareToken(now);
@@ -601,12 +602,12 @@ function planSeatIssue(ctx: FleetContext, desk: DeskRow, mission: { mission_id: 
   };
 }
 
-function seatRecord(seat: SeatIssue) {
+export function seatRecord(seat: SeatIssue) {
   return { mission_id: seat.mission_id, grant_id: seat.issue.grant_id, identity_id: seat.issue.identity_id,
     actions: seat.issue.actions, expires_at: seat.issue.expires_at, token_sha256: seat.issue.token_sha256 };
 }
 
-async function executeSeatIssue(ctx: FleetContext, admin: AdminClient, desk: DeskRow, seat: SeatIssue): Promise<string> {
+export async function executeSeatIssue(ctx: FleetContext, admin: AdminClient, desk: DeskRow, seat: SeatIssue): Promise<string> {
   const fleet = ctx.store.fleet;
   const now = ctx.now().toISOString();
   seat.writeToken();
@@ -932,11 +933,12 @@ function knockForgery(ctx: FleetContext, entry: KnockEntry): string | null {
 }
 
 export type NoteEntry = { envelope: SignedEnvelope<RenewBody | LeaveBody>; summary: string; event: MissionEvent };
+export type DirectoryNoteEntry = { envelope: SignedEnvelope<DirectoryRenewBody>; summary: string; event: MissionEvent };
 
-/** Why a desk note (renew, leave) did not come from the enrolled desk that
- * signed it, or null when it did: the knock checks, plus the note names that
- * same desk. */
-export function noteForgery(ctx: FleetContext, entry: NoteEntry): string | null {
+/** Why a desk note (renew, leave, directory_renew) did not come from the
+ * enrolled desk that signed it, or null when it did: the knock checks, plus
+ * the note names that same desk. */
+export function noteForgery(ctx: FleetContext, entry: NoteEntry | DirectoryNoteEntry): string | null {
   const device = ctx.store.fleet.deviceByFingerprint(entry.envelope.signer);
   if (device === null) return "unknown_desk";
   if (entry.event.identity_id !== device.identity_id || entry.event.signing_key_id !== device.signing_key_id) return "sender_mismatch";
@@ -950,24 +952,49 @@ export function noteForgery(ctx: FleetContext, entry: NoteEntry): string | null 
 
 // ── Token-hash claims ──────────────────────────────────────────────────
 
+/** Who first claimed each value: the identity whose authentic document
+ * carrying it the service received first, across the directory and every
+ * season this hub records (read from the local cache). Two identities
+ * claiming one value at the same instant in different missions (whose order
+ * is unknown) leave it to neither: null. */
+function firstClaimants(claims: Array<{ value: string; identity: string; at: number; mission: string; seq: bigint }>): Map<string, string | null> {
+  claims.sort((left, right) => left.at - right.at || (left.mission < right.mission ? -1 : left.mission > right.mission ? 1 : 0)
+    || (left.seq < right.seq ? -1 : left.seq > right.seq ? 1 : 0));
+  const first = new Map<string, (typeof claims)[number]>();
+  const owners = new Map<string, string | null>();
+  for (const claim of claims) {
+    const head = first.get(claim.value);
+    if (head === undefined) {
+      first.set(claim.value, claim);
+      owners.set(claim.value, claim.identity);
+    } else if (claim.identity !== head.identity && claim.at === head.at && claim.mission !== head.mission) {
+      owners.set(claim.value, null);
+    }
+  }
+  return owners;
+}
+
+/** The missions whose cached events say who claimed what: the directory and every season. */
+function claimMissions(ctx: FleetContext, hub: HubRow): Set<string> {
+  return new Set([hub.directory_mission_id, ...ctx.store.fleet.listSeasons().map((season) => season.mission_id)]);
+}
+
 /** Who may have a grant bound to each token hash the hub can see: the
- * identity whose authentic knock or renew note carrying it the service
- * received first, across the directory and every season this hub records
- * (read from the local cache). Every fleet device reads the directory, and
- * every season member reads that season, so a desk can copy another desk's
- * hash into a document signed with its own key; the copy is received later
- * and never takes the hash. Two identities claiming one hash at the same
- * instant in different missions (whose order is unknown) leave it to
- * neither: null. Forged documents claim nothing. A hash posted nowhere (a
+ * identity whose authentic knock, renew note or directory renew note carrying
+ * it the service received first, across the directory and every season this
+ * hub records (read from the local cache). Every fleet device reads the
+ * directory, and every season member reads that season, so a desk can copy
+ * another desk's hash into a document signed with its own key; the copy is
+ * received later and never takes the hash. Two identities claiming one hash
+ * at the same instant in different missions (whose order is unknown) leave it
+ * to neither: null. Forged documents claim nothing. A hash posted nowhere (a
  * hand-supplied list) has no entry. */
 export function tokenClaimants(ctx: FleetContext, hub: HubRow): Map<string, string | null> {
-  type Claim = { token: string; identity: string; at: number; mission: string; seq: bigint };
-  const claims: Claim[] = [];
-  const missions = new Set([hub.directory_mission_id, ...ctx.store.fleet.listSeasons().map((season) => season.mission_id)]);
-  for (const missionId of missions) {
+  const claims: Array<{ value: string; identity: string; at: number; mission: string; seq: bigint }> = [];
+  for (const missionId of claimMissions(ctx, hub)) {
     const view = fleetView(ctx, missionId, doorOf(hub));
     const claim = (token: string, identity: string, event: MissionEvent) =>
-      claims.push({ token, identity, at: Date.parse(event.received_at), mission: missionId, seq: BigInt(event.received_seq) });
+      claims.push({ value: token, identity, at: Date.parse(event.received_at), mission: missionId, seq: BigInt(event.received_seq) });
     for (const entry of view.knocks) {
       if (knockForgery(ctx, entry) === null) claim(entry.envelope.body.token_sha256, entry.event.identity_id, entry.event);
     }
@@ -976,21 +1003,28 @@ export function tokenClaimants(ctx: FleetContext, hub: HubRow): Map<string, stri
         claim((entry.envelope.body as RenewBody).token_sha256, entry.envelope.body.identity_id, entry.event);
       }
     }
-  }
-  claims.sort((left, right) => left.at - right.at || (left.mission < right.mission ? -1 : left.mission > right.mission ? 1 : 0)
-    || (left.seq < right.seq ? -1 : left.seq > right.seq ? 1 : 0));
-  const first = new Map<string, Claim>();
-  const owners = new Map<string, string | null>();
-  for (const claim of claims) {
-    const head = first.get(claim.token);
-    if (head === undefined) {
-      first.set(claim.token, claim);
-      owners.set(claim.token, claim.identity);
-    } else if (claim.identity !== head.identity && claim.at === head.at && claim.mission !== head.mission) {
-      owners.set(claim.token, null);
+    for (const entry of view.directoryRenewRequests) {
+      if (noteForgery(ctx, entry) === null) claim(entry.envelope.body.token_sha256, entry.envelope.body.identity_id, entry.event);
     }
   }
-  return owners;
+  return firstClaimants(claims);
+}
+
+/** Who may have a grant with each desk-chosen grant id the hub can see: the
+ * identity whose authentic directory renew note carrying it the service
+ * received first (the first-poster rule of tokenClaimants, for grant ids). A
+ * copy under another identity never takes the id; a same-instant contest in
+ * different missions leaves it to neither (null). */
+export function grantIdClaimants(ctx: FleetContext, hub: HubRow): Map<string, string | null> {
+  const claims: Array<{ value: string; identity: string; at: number; mission: string; seq: bigint }> = [];
+  for (const missionId of claimMissions(ctx, hub)) {
+    for (const entry of fleetView(ctx, missionId, doorOf(hub)).directoryRenewRequests) {
+      if (noteForgery(ctx, entry) !== null) continue;
+      claims.push({ value: entry.envelope.body.grant_id, identity: entry.envelope.body.identity_id,
+        at: Date.parse(entry.event.received_at), mission: missionId, seq: BigInt(entry.event.received_seq) });
+    }
+  }
+  return firstClaimants(claims);
 }
 
 /** Why `identity` may not have a grant bound to `token`, judged by who claimed

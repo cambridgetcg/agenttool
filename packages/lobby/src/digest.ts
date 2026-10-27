@@ -2,7 +2,7 @@
  *
  * Built only from this hub's own records (lobby.sqlite and the audit log):
  * who holds which grant, terms, expiries, pauses, blocks and the recent
- * admits, kicks, blocks, leaves and renewals. It reads no Keychain item,
+ * admits, kicks, blocks, leaves and renewals (room and directory). It reads no Keychain item,
  * contacts no service and posts nothing. It holds no token, key or bearer
  * (token hashes are left out too: a person does not need them). The report
  * is written to a new owner-only file; the CLI prints only its path.
@@ -21,7 +21,7 @@ export const DIGEST_DEFAULT_DAYS = 7;
 const REPORTS_DIR = "reports";
 
 /** Acts the digest lists as recent access changes (and their outcomes). */
-const ACCESS_ACTS = /^(hub\.(init|relay|admit|deny|season\.\w+|seat|renew\.sweep|member\.\w+|roster\.post|kick|block|unblock|stop)|room\.(publish|promote))(\.outcome)?$/;
+const ACCESS_ACTS = /^(hub\.(init|relay|admit|deny|season\.\w+|seat|renew\.sweep|member\.\w+|device\.\w+|roster\.post|kick|block|unblock|stop)|room\.(publish|promote))(\.outcome)?$/;
 
 function cell(text: string): string {
   // Self-declared names never break the table or the terminal: line breaks
@@ -83,7 +83,8 @@ export function buildAccessDigest(ctx: FleetContext, input: { days?: number } = 
     const directory = grants.filter((grant) => grant.identity_id === device.identity_id && grant.purpose === "directory")
       .sort((left, right) => left.expires_at < right.expires_at ? 1 : -1)[0];
     lines.push(`| ${device.fingerprint} | did:at:${device.identity_id} | ${cell(device.display_name)} | ${device.enrolled_at} | ` +
-      `${directory === undefined ? "-" : `${directory.expires_at} (${until(now, directory.expires_at)})`} | ${directory === undefined ? "-" : grantState(directory)} |`);
+      `${directory === undefined ? "-" : `${directory.expires_at} (${until(now, directory.expires_at)})`} | ${directory === undefined ? "-" : grantState(directory)}` +
+      `${device.directory_paused_at == null ? "" : `; directory renewal paused since ${device.directory_paused_at}`} |`);
   }
   lines.push("", "## Rooms", "");
   const seasons = fleet.listSeasons();
@@ -135,12 +136,14 @@ export function buildAccessDigest(ctx: FleetContext, input: { days?: number } = 
   const admitted = fleet.listDecisions().filter((decision) => inWindow(decision.decided_at));
   const changed = fleet.allMembers().filter((member) => (member.state ?? "active") !== "active" && inWindow(member.changed_at));
   const renewed = fleet.listRenewals().filter((renewal) => inWindow(renewal.renewed_at));
+  const directoryRenewed = fleet.listDirectoryRenewals().filter((renewal) => inWindow(renewal.renewed_at));
   lines.push(
     ...admitted.map((decision) => `- ${decision.decided_at} ${decision.decision} ${who(decision.identity_id)} (knock ${decision.knock_id}) in ${decision.room_id}`),
     ...changed.map((member) => `- ${member.changed_at} ${member.state} ${who(member.identity_id)} in ${member.room_id}`),
     ...renewed.map((renewal) => `- ${renewal.renewed_at} renewed ${who(renewal.identity_id)} in ${renewal.room_id} (grant ${renewal.grant_id}, from ${renewal.basis === "list" ? "a supplied hash list" : "a signed request"})`),
+    ...directoryRenewed.map((renewal) => `- ${renewal.renewed_at} renewed the directory grant of ${who(renewal.identity_id)} (grant ${renewal.grant_id}, from a signed request)`),
   );
-  if (admitted.length + changed.length + renewed.length === 0) lines.push("(no admissions, denials, leaves, kicks, blocks or renewals)");
+  if (admitted.length + changed.length + renewed.length + directoryRenewed.length === 0) lines.push("(no admissions, denials, leaves, kicks, blocks or renewals)");
   lines.push("", "### Audited access acts", "", "| at | act | subject |", "|---|---|---|");
   const acts = ctx.store.listAudit().filter((entry) => ACCESS_ACTS.test(entry.act) && inWindow(entry.at));
   lines.push(...(acts.length === 0 ? ["| - | (none) | - |"] : acts.map((entry) => `| ${entry.at} | ${entry.act} | ${cell(entry.subject)} |`)));
