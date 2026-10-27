@@ -4,9 +4,10 @@ import { join } from "node:path";
 import { canonicalJson, sha256Hex } from "../src/canonical.js";
 import { LobbyError } from "../src/errors.js";
 import { FLEET_SCHEMA_SQL } from "../src/fleet-store.js";
-import { DATABASE_FILE } from "../src/home.js";
+import { DATABASE_FILE, preparePrivateHome } from "../src/home.js";
 import { fingerprintOf } from "../src/pins.js";
-import { LobbyStore, parseLedgerTarget } from "../src/store.js";
+import { newRoomCard } from "../src/room.js";
+import { LobbyStore, parseLedgerTarget, SCHEMA_SQL, SCHEMA_STEPS, STATE_SCHEMA_VERSION } from "../src/store.js";
 import { cleanupTempHomes, fakePublicKey, tempHome } from "./helpers.js";
 
 afterEach(cleanupTempHomes);
@@ -274,7 +275,7 @@ describe("read-only view", () => {
   });
 });
 
-describe("state schema versions 2 and 3", () => {
+describe("state schema versions and the upgrade chain", () => {
   const FLEET_TABLES = ["cursors", "desk", "desk_grants", "desk_knocks", "events", "hub", "hub_cards", "hub_decisions",
     "hub_devices", "hub_grants", "hub_members", "hub_seasons", "outbox"];
   const V3_TABLES = ["desk_renewals", "hub_blocks", "hub_extra_grants", "hub_processed_notes", "hub_renewals", "hub_rosters"];
@@ -355,6 +356,100 @@ describe("state schema versions 2 and 3", () => {
     raw.close();
     expect(errorCode(() => LobbyStore.open(home))).toBe("unsupported_state_version");
     expect(errorCode(() => LobbyStore.openReadOnly(home))).toBe("unsupported_state_version");
+  });
+
+  /** What a file's schema is, and SQLite's schema cookie, which moves on every
+   * CREATE, ALTER or DROP that changes the schema and on nothing else. */
+  function schemaOf(home: string): { cookie: number; version: string; objects: string[] } {
+    const raw = new Database(join(home, DATABASE_FILE), { readonly: true });
+    const { schema_version: cookie } = raw.query("PRAGMA schema_version").get() as { schema_version: number };
+    const { value: version } = raw.query("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string };
+    const objects = (raw.query("SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY type, name")
+      .all() as Array<{ type: string; name: string; sql: string }>).map((row) => `${row.type} ${row.name}: ${row.sql}`);
+    raw.close();
+    return { cookie, version, objects };
+  }
+
+  /** A file as a desk of `version` left it, with one local-hall room in it:
+   * the version-1 tables, then the chain's own steps up to `version` and no
+   * further, so the fixture does not move when the current version does. */
+  function legacyFile(version: string): { home: string; roomId: string } {
+    const { home } = tempHome();
+    const raw = new Database(preparePrivateHome(home), { create: false, readwrite: true, strict: true });
+    raw.exec(SCHEMA_SQL);
+    let at = "1";
+    for (const step of SCHEMA_STEPS) {
+      if (at === version) break;
+      step.apply(raw);
+      at = step.to;
+    }
+    expect(at).toBe(version);
+    raw.query("INSERT INTO meta (key, value) VALUES ('schema_version', $value)").run({ value: version });
+    const card = newRoomCard({ title: `written at version ${version}` }, T0);
+    raw.query(`INSERT INTO rooms (room_id, card, status, door, visibility, residency, hostable, device_pinned,
+        created_at, updated_at)
+      VALUES ($room_id, $card, $status, $door, $visibility, $residency, $hostable, 0, $at, $at)`)
+      .run({
+        room_id: card.room_id, card: canonicalJson(card), status: card.status, door: card.door,
+        visibility: card.visibility, residency: card.residency, hostable: card.hostable ? 1 : 0, at: card.created_at,
+      });
+    raw.close();
+    return { home, roomId: card.room_id };
+  }
+
+  test("the upgrade chain is contiguous from version 1 and ends at the current version", () => {
+    expect(SCHEMA_STEPS.length).toBeGreaterThan(0);
+    let version = "1";
+    for (const step of SCHEMA_STEPS) {
+      expect(step.from).toBe(version);
+      expect(Number(step.to)).toBe(Number(step.from) + 1);
+      version = step.to;
+    }
+    expect(version).toBe(STATE_SCHEMA_VERSION);
+  });
+
+  // Every version the chain knows: 1, 2 and 3 today, and each later one as it lands.
+  for (const version of ["1", ...SCHEMA_STEPS.map((step) => step.to)]) {
+    test(`a version-${version} file opens, upgrades to version ${STATE_SCHEMA_VERSION} once and keeps its rooms`, () => {
+      const fresh = tempHome().home;
+      LobbyStore.open(fresh).close();
+      const target = schemaOf(fresh);
+
+      const { home, roomId } = legacyFile(version);
+      const before = schemaOf(home);
+      expect(before.version).toBe(version);
+
+      const opened = LobbyStore.open(home);
+      expect(opened.stateVersion).toBe(STATE_SCHEMA_VERSION);
+      expect(opened.listRooms().map((card) => card.room_id)).toEqual([roomId]);
+      opened.close();
+      const after = schemaOf(home);
+      expect(after.version).toBe(STATE_SCHEMA_VERSION);
+      // Every path reaches the schema a new file gets, column for column.
+      expect(after.objects).toEqual(target.objects);
+      // A current file takes no step: nothing in its schema is touched.
+      if (version === STATE_SCHEMA_VERSION) expect(after.cookie).toBe(before.cookie);
+
+      // Reopening runs no step again: no ALTER, no CREATE, the same schema.
+      LobbyStore.open(home).close();
+      LobbyStore.open(home).close();
+      expect(schemaOf(home)).toEqual(after);
+      const reader = LobbyStore.openReadOnly(home)!;
+      expect(reader.stateVersion).toBe(STATE_SCHEMA_VERSION);
+      reader.close();
+    });
+  }
+
+  test("the next, not yet known version is refused by both handles and the file is left as it was", () => {
+    const { home } = legacyFile("3");
+    const next = String(Number(STATE_SCHEMA_VERSION) + 1);
+    const raw = new Database(join(home, DATABASE_FILE));
+    raw.query("UPDATE meta SET value = $value WHERE key = 'schema_version'").run({ $value: next });
+    raw.close();
+    const before = schemaOf(home);
+    expect(errorCode(() => LobbyStore.open(home))).toBe("unsupported_state_version");
+    expect(errorCode(() => LobbyStore.openReadOnly(home))).toBe("unsupported_state_version");
+    expect(schemaOf(home)).toEqual(before);
   });
 
   test("hub decisions are final", () => {

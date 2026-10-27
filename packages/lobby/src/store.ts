@@ -40,15 +40,18 @@ import { FLEET_SCHEMA_SQL, FLEET_V3_UPGRADE_SQL, FleetStore } from "./fleet-stor
 
 /** Version 2 adds the fleet-hall tables; version 3 adds table talk, renewal,
  * leave, kick and block and the emergency stop (src/fleet-store.ts). An older
- * file is upgraded explicitly, one step at a time, when the CLI opens it for
- * writing; the read-only MCP handle reads version 1 as "no fleet state yet"
- * and version 2 as fleet state without the version-3 tables. */
+ * file is upgraded explicitly, one step at a time (`SCHEMA_STEPS`), when the
+ * CLI opens it for writing; the read-only MCP handle reads version 1 as "no
+ * fleet state yet" and version 2 as fleet state without the version-3 tables.
+ * Later numbers are reserved in packages/lobby/CLAUDE.md ("Schema versions"). */
 export const STATE_SCHEMA_VERSION = "3";
-const READABLE_VERSIONS = ["1", "2", "3"] as const;
 export const ACT_SCHEMA = "agenttool-lobby-act/v1" as const;
 const GENESIS_HASH = "0".repeat(64);
 
-const SCHEMA_SQL = `
+/** Version 1, the local hall: the base of the upgrade chain. It runs on every
+ * open (every statement is `IF NOT EXISTS`, so a file that has it is not
+ * touched) and is never edited; a change is a new step in `SCHEMA_STEPS`. */
+export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -127,6 +130,59 @@ BEGIN
   SELECT RAISE(ABORT, 'audit_is_append_only');
 END;
 `;
+
+/** One explicit upgrade step: it takes a file at version `from` to version
+ * `to` and runs exactly once per file, inside the immediate transaction of
+ * `LobbyStore.open` that also records the new version. The steps so far only
+ * add (tables, nullable or defaulted columns); a step that changes existing
+ * rows says so. A released step is never edited: a change is a new step. */
+export interface SchemaStep {
+  readonly from: string;
+  readonly to: string;
+  readonly apply: (db: Database) => void;
+}
+
+/** 1 → 2: the fleet-hall tables (src/fleet-store.ts `FLEET_SCHEMA_SQL`). */
+function upgradeV1ToV2(db: Database): void {
+  db.exec(FLEET_SCHEMA_SQL);
+}
+
+/** 2 → 3: table talk, renewal, leave, kick and block, the emergency stop
+ * (src/fleet-store.ts `FLEET_V3_UPGRADE_SQL`, plain `ALTER TABLE ... ADD
+ * COLUMN`, so it must never run on a file that already has version 3). */
+function upgradeV2ToV3(db: Database): void {
+  db.exec(FLEET_V3_UPGRADE_SQL);
+}
+
+/** The upgrade chain, in order. A new file is created at version 1
+ * (`SCHEMA_SQL`) and takes every step, so every desk reaches one schema by
+ * one path. The next version adds one function and one entry here (`from`
+ * the last `to`) and moves `STATE_SCHEMA_VERSION`; the numbers are reserved in
+ * packages/lobby/CLAUDE.md, and tests/store.test.ts checks the chain is
+ * contiguous and ends at `STATE_SCHEMA_VERSION`. */
+export const SCHEMA_STEPS: readonly SchemaStep[] = [
+  { from: "1", to: "2", apply: upgradeV1ToV2 },
+  { from: "2", to: "3", apply: upgradeV2ToV3 },
+  // Next: { from: "3", to: "4", apply: upgradeV3ToV4 } (reserved: Build 2A).
+];
+
+/** Every version this code can read: the base version and each step's target. */
+const READABLE_VERSIONS: readonly string[] = ["1", ...SCHEMA_STEPS.map((step) => step.to)];
+
+/** Take `db` from `from` to `STATE_SCHEMA_VERSION`, one step at a time. Runs
+ * nothing when the file is already current. The caller holds the transaction
+ * and records the version. */
+function upgradeSchema(db: Database, from: string): void {
+  let version = from;
+  while (version !== STATE_SCHEMA_VERSION) {
+    const step = SCHEMA_STEPS.find((candidate) => candidate.from === version);
+    if (step === undefined) {
+      throw new LobbyError("unsupported_state_version", "lobby.sqlite was written by another desk version");
+    }
+    step.apply(db);
+    version = step.to;
+  }
+}
 
 export interface RoomFilter {
   tag?: string;
@@ -264,14 +320,13 @@ export class LobbyStore {
           | { value: string }
           | null;
         const from = row?.value ?? null;
-        if (from !== null && !(READABLE_VERSIONS as readonly string[]).includes(from)) {
+        if (from !== null && !READABLE_VERSIONS.includes(from)) {
           throw new LobbyError("unsupported_state_version", "lobby.sqlite was written by another desk version");
         }
-        // Explicit upgrades: 1 -> 2 adds the fleet tables, 2 -> 3 adds the
-        // version-3 columns and tables. Nothing existing is rewritten. A new
-        // file takes the same steps, so every desk reaches one schema.
-        db.exec(FLEET_SCHEMA_SQL);
-        if (from !== STATE_SCHEMA_VERSION) db.exec(FLEET_V3_UPGRADE_SQL);
+        // Explicit upgrades, one step per version (`SCHEMA_STEPS`). A new
+        // file has just been created at version 1 and takes every step; a
+        // current file takes none.
+        upgradeSchema(db, from ?? "1");
         if (from === null) {
           db.query("INSERT INTO meta (key, value) VALUES ('schema_version', $value)")
             .run({ value: STATE_SCHEMA_VERSION });
@@ -304,7 +359,7 @@ export class LobbyStore {
       const row = db.query("SELECT value FROM meta WHERE key = 'schema_version'").get() as
         | { value: string }
         | null;
-      if (row === null || !(READABLE_VERSIONS as readonly string[]).includes(row.value)) {
+      if (row === null || !READABLE_VERSIONS.includes(row.value)) {
         throw new LobbyError("unsupported_state_version", "lobby.sqlite was written by another desk version");
       }
       return new LobbyStore(db, true, row.value);
