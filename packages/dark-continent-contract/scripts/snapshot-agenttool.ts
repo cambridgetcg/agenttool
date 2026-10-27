@@ -22,6 +22,11 @@ import {
 // the previous profile into HISTORY, and write it with `bun run snapshot`. A
 // structural change (ids, order, fields, wall status, authority flags) is refused
 // here, because it needs a contract version decision rather than a new profile.
+//
+// A profile is named by the first 12 hex digits of its TypeScript digest, the
+// projection source. A Python-only change leaves the projection and the name as
+// they are: re-pin `pySha256` on the newest profile, which rewrites only its
+// manifest.
 
 const TS_SOURCE = "packages/sdk-ts/src/dark-continent.ts";
 const PY_SOURCE = "packages/sdk-py/src/agenttool/dark_continent.py";
@@ -83,6 +88,19 @@ function readPackage(path: string): Buffer | null {
 }
 
 const problems: string[] = [];
+
+// 0. The newest profile's name and paths carry its TypeScript digest.
+const digestName = CURRENT.tsSha256.slice(0, 12);
+if (
+  CURRENT.id !== `agenttool-sdk-ts-source-${digestName}` ||
+  CURRENT.framework !== `source-profiles/agenttool-sdk-source-${digestName}.json` ||
+  CURRENT.manifest !==
+    `source-profiles/agenttool-sdk-source-${digestName}.manifest.json`
+) {
+  problems.push(
+    `${CURRENT.id} and its paths must be named by its TypeScript digest prefix ${digestName}`,
+  );
+}
 
 // 1. History stays byte-identical.
 for (const profile of HISTORY) {

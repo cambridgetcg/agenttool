@@ -38,4 +38,7 @@ Continent source drifts from it. A source change needs a reviewed new profile
 in `scripts/snapshot-agenttool.ts` (pinned digests, a label that implies no
 release, the declared semantic diff), the diff recorded in the README, and a new
 contract version when compatibility requires it. The script refuses structural
-changes, which always need that contract decision.
+changes, which always need that contract decision. A profile is named by its
+TypeScript digest, and the script refuses a name that does not match it; a
+Python-only change re-pins `pySha256` on the newest profile, which rewrites only
+its manifest.

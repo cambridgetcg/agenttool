@@ -27,9 +27,9 @@ It does not:
 - Contract ID: `agenttool.dark-continent/0.1`
 - Snapshot format: `agenttool-dark-continent-framework/v0.1`
 - Projection format: `dark-continent-projection/v0.1`
-- Source profile: `agenttool-sdk-ts-0.17.0`
+- Packaged source profile: `agenttool-sdk-ts-0.17.0`
 
-The committed snapshot is generated from
+The packaged snapshot was generated from
 `packages/sdk-ts/src/dark-continent.ts`. The Python file is recorded as a
 sibling implementation, not falsely claimed to have byte-for-byte identical
 prose.
@@ -46,10 +46,12 @@ projected into the v0.1 framework shape. Profiles are kept oldest first in
 | `agenttool-sdk-ts-source-0e1ba1166111` | `source-profiles/agenttool-sdk-source-0e1ba1166111.json` (SHA-256 `dd41b49d…`) and its manifest | Newest. The live SDK sources must match it. Source checkout only, not packaged |
 
 The TypeScript Dark Continent source is byte-identical in every SDK tag from
-`sdk-v0.17.0` through `sdk-v0.23.0`. The newest profile is the source after
-that tag. No registry
-serves it, so it is named by the first 12 hex digits of its TypeScript SHA-256,
-and its `source.version` reads `after-0.23.0` rather than a release version.
+`sdk-v0.17.0` to `sdk-v0.22.1` in the private source repository and in
+`sdk-v0.23.0` in the public one. The newest profile is the source after that
+tag. No registry serves it, so it is named by the first 12 hex digits of its
+TypeScript SHA-256, and its `source.version` reads `after-0.23.0` rather than a
+release version. A Python-only change keeps that name and re-pins only the
+profile's manifest.
 
 Semantic diff from `agenttool-sdk-ts-0.17.0`, inspected on 2026-10-27:
 
