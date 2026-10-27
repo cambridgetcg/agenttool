@@ -269,6 +269,31 @@ describe.skipIf(process.platform === "win32")("participant renew", () => {
     expect(await client.renew(g.state, { fetchImpl: t.fetchImpl })).not.toHaveProperty("warnings");
   });
 
+  test("leave refuses while a renewal is pending and the imported grant has lapsed, naming the successor; it sends nothing", async () => {
+    const f = fixture(), s = service(f, "store-then-drop");
+    await stop(client.renew(f.state, { fetchImpl: s.fetchImpl }));
+    const child = JSON.parse(s.calls[1].body!).grant_id;
+    lapse(f);
+    const calls = s.calls.length;
+    await expect(client.leave(f.state, { fetchImpl: s.fetchImpl })).rejects.toThrow(`A renewal is pending: successor ${child} may be live`);
+    expect(s.calls).toHaveLength(calls);
+    // After renew resolves the record, leave signs as the installed successor.
+    await client.renew(f.state, { fetchImpl: s.fetchImpl });
+    let left: { grant: string; path: string } | null = null;
+    const result = await client.leave(f.state, { fetchImpl: async (url: string, init: RequestInit) => {
+      left = { grant: new Headers(init.headers).get("X-Agenttool-Mission-Grant-Id")!, path: new URL(url).pathname };
+      return new Response(JSON.stringify({ mission_id: M, grant_id: child, status: "revoked", reason: "participant_left", revoked_at: iso(Date.now()) }));
+    } });
+    expect(left).toEqual({ grant: child, path: `/v1/collaboration/missions/${M}/leave` });
+    expect(result).toMatchObject({ grant_id: child, recorded: true });
+    // With a live predecessor a pending record does not block leave: the service ends the whole chain.
+    const g = fixture(), t = service(g, "store-then-drop");
+    await stop(client.renew(g.state, { fetchImpl: t.fetchImpl }));
+    const live = await client.leave(g.state, { fetchImpl: async () =>
+      new Response(JSON.stringify({ mission_id: M, grant_id: G, status: "revoked", reason: "participant_left", revoked_at: iso(Date.now()) })) });
+    expect(live).toMatchObject({ grant_id: G, recorded: true });
+  });
+
   test("not yet open prints when it opens and sends nothing beyond the read", async () => {
     const now = Date.now();
     const f = fixture({ issued_at: iso(now - 10 * MIN), expires_at: iso(now + 20 * MIN) }), s = service(f);
@@ -587,7 +612,8 @@ globalThis.fetch = async (url, init) => {
       for (const secret of [TOKEN, BEARER, ...tokens]) expect(output.stdout + output.stderr).not.toContain(secret);
     }
     const help = run(["--help"], f.parent);
-    for (const line of ["renew --state DIR", "--renewable-until ISO", "renewal-close --bearer-file FILE"]) expect(help.stdout).toContain(line);
+    for (const line of ["renew --state DIR", "--renewable-until ISO", "renewal-close --bearer-file FILE", "chain, every member including the current one"]) expect(help.stdout).toContain(line);
+    expect(help.stdout).not.toContain("Revoke only this participant's own grant");
   });
 });
 

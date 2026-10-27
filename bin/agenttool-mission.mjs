@@ -324,11 +324,23 @@ export async function accept(path, selectedDigest, options) {
   if (view.mission.mission_digest !== selectedDigest) fail('The selected mission digest does not match the invitation.');
   return request(path, 'POST', '/accept', JSON.stringify({ mission_digest: selectedDigest }), options);
 }
-/** Revoke only this participant's own grant with the same signed proof as accept/events
- * and zero body bytes. The service requires an accepted grant. Idempotent on the
- * service; the first local record is never overwritten.
+/** Revoke this participant's own grant with the same signed proof as accept/events
+ * and zero body bytes; for a renewal chain member the service ends every member,
+ * including a successor, and closes the window. The service requires an accepted
+ * grant. Idempotent on the service; the first local record is never overwritten.
  */
 export async function leave(path, options) {
+  const root = stateRoot(path), pendingFile = join(root, 'renewal-pending.json');
+  if (existsSync(pendingFile)) {
+    // A lapsed predecessor cannot sign, but a successor the service may have issued is live.
+    // (While the predecessor lives, its leave ends that successor with the rest of the chain.)
+    const saved = validateProfile(JSON.parse(privateRead(join(root, 'invitation.json'))), enrollment(root), { lapsed: true });
+    if (Date.parse(saved.expires_at) <= Date.now()) {
+      let successor = 'its successor';
+      try { successor = `successor ${readPending(pendingFile).grant_id}`; } catch { /* A damaged record still blocks. */ }
+      fail(`A renewal is pending: ${successor} may be live on the service while invitation.json has lapsed. Run renew to resolve it, then leave. Nothing was sent.`);
+    }
+  }
   const p = profile(path);
   let result;
   try { result = await request(path, 'POST', '/leave', LEAVE_BODY, options); }
@@ -795,7 +807,8 @@ send --state DIR --summary-file FILE           Selected UTF-8 text, <=1000 scala
 events --state DIR [--after 0]                  One page, explicit string cursor
 wait --state DIR [--after 0] [--seconds 30]      Bounded polling; maximum 45 seconds
 retry --state DIR --event-id UUID               Explicit exact-body retry
-leave --state DIR                               Revoke only this participant's own grant
+leave --state DIR                               Revoke this participant's own grant; in a renewal
+                                                chain, every member including the current one
 renew --state DIR                               Renew this grant inside its window: one request, saved
                                                 first; prints no token; run again to resolve uncertainty
 grant --bearer-file FILE --grant-file FILE --token-sha256 HEX --template-file NEW [--origin URL]

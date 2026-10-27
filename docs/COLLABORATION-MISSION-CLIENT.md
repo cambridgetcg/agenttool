@@ -407,8 +407,18 @@ headers as `accept` and `events`; the signed digest covers the SHA-256 of the
 empty body. The service refuses any body. Leaving needs an accepted grant: an
 unaccepted invitation is refused with
 `HTTP 403 collaboration_mission_acceptance_required` and is simply left to
-expire. The service revokes only this participant's own grant with reason
-`participant_left`; other grants and the mission continue. The client checks
+expire. The service revokes this participant's own grant with reason
+`participant_left`. For a grant in a renewal chain it ends every member of the
+chain, including any successor, and closes the window: leaving through an old
+predecessor (for example a token kept in `invitation.replaced-*.json`) also
+ends the grant you currently use. Every other grant and the mission continue.
+
+If `renewal-pending.json` exists and `invitation.json` has lapsed, `leave`
+refuses before sending anything: the service may already hold a live successor
+that the lapsed grant can no longer sign for. Run `renew` to resolve the record
+(it installs the successor or abandons the record), then `leave`. While the
+imported grant is still live, `leave` proceeds and the service ends the
+successor with the rest of the chain. The client checks
 that the response names this mission and grant with `status: "revoked"`,
 `reason: "participant_left"` and a canonical `revoked_at`, then records it once
 as `left-<grant_id>.json` (0600) in the state directory. Leaving is idempotent:

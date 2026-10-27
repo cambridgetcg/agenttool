@@ -237,6 +237,10 @@ describe("sealed collaboration transport", () => {
     expect(result.required).toEqual(["mission_id", "grant_id", "status", "reason", "revoked_at"]);
     expect(result.properties.reason).toEqual({ const: "participant_left" });
     expect(result.properties.status).toEqual({ const: "revoked" });
+    // A chain member's leave ends the whole chain, including the caller's current grant.
+    expect(leave.post.summary).toContain("renewal chain");
+    expect(leave.post.description).toContain("ends every member, including any successor");
+    expect(leave.post.description).not.toContain("Revokes only");
   });
   test("OpenAPI gives every participant path the narrow scheme and five required proofs", () => {
     for (const suffix of ["invitation", "accept", "context", "events", "leave", "renew"]) {
