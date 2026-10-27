@@ -6,11 +6,13 @@
  *
  *   self     — user holds K_master, runs the loop. Maximum privacy.
  *   bridged  — agenttool runs the loop, user holds K_master in a sidecar.
- *              Privacy preserved cryptographically. The default for cloud.
- *   trusted  — agenttool holds K_master. Maximum uptime, less privacy.
+ *              K_master stays in the bridge; each cycle's plaintext is
+ *              processed in hosted worker RAM and sent to the chosen model
+ *              provider. The production default for hosted runs.
+ *   trusted  — agenttool holds K_master. Experimental; maximum uptime, less privacy.
  *
  * The runtime is where the Nen framework becomes operational:
- *   十 Ten (Focus)    → provision a runtime (orient the agent in the cloud)
+ *   纏 Ten (Focus)    → provision a runtime (orient the agent in the cloud)
  *   練 Ren (Enhance)  → think-once triggers a thinking cycle (active aura)
  *   絶 Zetsu (Suppress) → stop the runtime (rest, don't crash)
  *   発 Hatsu (Release) → the runtime runs the agent's expression against an LLM

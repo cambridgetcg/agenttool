@@ -1,7 +1,7 @@
 # Behaviour-conformance fixture
 
 **Artifact:** [`behaviour-conformance.json`](behaviour-conformance.json) —
-14 operations, 128 cases, one file, read by both SDK test suites.
+14 operations, 131 cases, one file, read by both SDK test suites.
 
 ## Why this exists
 
@@ -21,7 +21,12 @@ and 2 green:
   TypeScript and `inbox_total` in Python — the same wake JSON classified the
   same agent as a different Nen type. Alongside it, `Math.round` (half-up)
   against Python's banker's `round()`, so scores at an exact `.5` differed by
-  one.
+  one. Both SDKs, and this fixture's first Nen cases, also read the wake's
+  sections nested under `you`, where the server never put them, and the
+  emitter fix above settled on a mail `total` the server never sent: a real
+  wake profiled almost nothing. The cases now use the layout of
+  `api/src/routes/wake.ts` (JSON branch), and the emitter axis stays 0
+  because the wake carries no sent count.
 - `err.code` was a stable string in TypeScript and an HTTP status integer in
   Python. One `if` branch, two meanings.
 - `Memory.from_dict` silently dropped `tier` — the asymmetry-clause field —
@@ -53,10 +58,12 @@ Different answer. The parity gate said green because it compares spelling.
 
 1. **There is no server oracle here — so the fixture is hand-authored.**
    Layer 1 can generate its expected hex by executing `api/src/**`. Most of
-   layer 3 has no server counterpart at all: `assessNen`, the chronicle title
-   guard, `collect.batch`, and the shape of an outgoing request body are SDK
-   behaviour. Each expectation is written from the documented contract and then
-   **cross-checked against both implementations**.
+   layer 3 has no server counterpart at all: `assessNen`'s arithmetic, the
+   chronicle title guard, `collect.batch`, and the shape of an outgoing request
+   body are SDK behaviour. Each expectation is written from the documented
+   contract and then **cross-checked against both implementations**.
+   `assessNen`'s input shape does have an oracle: `api/src/routes/wake.ts`,
+   JSON branch.
    *Where a server oracle does exist, it wins.* `url.encode_path_segment` is
    the case in point: the expectation is not a preference between two
    defensible encodings, it is what the stack was measured doing. A Hono app
@@ -246,8 +253,9 @@ Honestly, and in rough order of how much it matters:
   and the wake's `format=md` text rendering are untested here.
 - **Real server agreement.** A case pins that both SDKs behave *identically*,
   not that the behaviour matches production. When the two agree with each other
-  and disagree with `api.agenttool.dev`, this fixture stays green. Layer 1 and
-  the API suite are what bind the server.
+  and disagree with `api.agenttool.dev`, this fixture stays green — which is
+  how `assessNen` read a wake layout the server never sent while every case
+  here passed. Layer 1 and the API suite are what bind the server.
 - **Every operation not listed.** 13 of the SDK's ~30 clients are covered.
   The uncovered ones are not asserted to be correct — they are simply not yet
   described. Adding one is the cheapest contribution this file takes.

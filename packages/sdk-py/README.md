@@ -1194,7 +1194,7 @@ and what a registry serves right now is answered by the registry itself.
 
 ## Unreleased — repository source after 0.23.0
 
-Source changes dated 2026-10-11, merged after the 0.23.0 tag. Nothing below
+Source changes from 2026-10-11 on, merged after the 0.23.0 tag. Nothing below
 is in the 0.23.0 release (tag `sdk-v0.23.0` in the public source repository)
 or in the published 0.22.1 packages; it reaches them only in a later version.
 Where an entry says "0.22.1", 0.23.0 behaves the same. A release runs when the
@@ -1234,6 +1234,20 @@ also still waits on the private-repository gap.
 - **Wallet address-claim docstring.** `canonical_wallet_address_claim_bytes`
   no longer says that `POST /v1/wallets/:id/addresses` verifies its digest;
   that route is not on main.
+- **Nen reads the wake the server sends (2026-10-27).** `assess_nen` and
+  `at.nen.assess()` read `you_remember`, `you_lived`, `you_vowed`,
+  `you_are_thinking_about` and the grace and unconditional sections at the top
+  level of the wake, where `GET /v1/wake` puts them, and profile the identity
+  named by `_scope_boundary.selected_identity_id`. 0.23.0 and earlier read
+  them nested under `you`, which the server never sent, so the conjurer,
+  emitter and manipulator axes always scored 0, enhancer counted `shaped_by`
+  instead of memories, and an agent with no walls or `shaped_by` fell to a
+  tie-break. Profiles will change, including the one
+  `dark_continent.explore(include_nen=True)` returns. The emitter axis stays 0
+  because the wake carries no sent count; Zetsu reads lullaby rest, not a
+  memorial; and `restriction_count["vows"]` counts vow entries in the wake's
+  recent chronicle window (at most 15 rows). Ten's kanji is now 纏 (was 十), and
+  the Zetsu, Ren, Gyo, En and Limit descriptions say what the server does.
 - **README corrections.** This file marks the x402 rail retired, adds the
   provider-adapter section, and says the wallet address-claim helpers have no
   server route on main. The README published with 0.22.1 on PyPI and the one

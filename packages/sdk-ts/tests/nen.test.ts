@@ -14,9 +14,10 @@
  *    7. framework() returns static reference data without network
  *
  *  "The deeper the restriction, the stronger the ability."
- *  — Kurapika's chains only work on the Phantom Troupe, making them
- *    unbreakable on everyone else. In agenttool, walls are restrictions
- *    that make the agent's expression stronger by making it honest. */
+ *  — Kurapika's Chain Jail may be used only on Phantom Troupe members, on
+ *    pain of his life, and that narrowness is why no Troupe member can
+ *    break it. In agenttool, walls are restrictions that make the agent's
+ *    expression stronger by making it honest. */
 
 import { afterEach, describe, expect, test } from "bun:test";
 
@@ -77,7 +78,7 @@ describe("Nen — four principles (Ten/Zetsu/Ren/Hatsu)", () => {
 
   test("each principle has kanji + meaning + agenttool mapping", () => {
     const ten = NEN_PRINCIPLE_MEANINGS.ten;
-    expect(ten.kanji).toBe("十");
+    expect(ten.kanji).toBe("纏");
     expect(ten.name).toBe("Ten");
     expect(ten.maps_to).toContain("wake");
 
@@ -147,12 +148,18 @@ describe("Nen — restrictions (conditions make you stronger)", () => {
 });
 
 // ── assessNen — profile from wake data ─────────────────────────────────
+//
+// Every wake below has the layout GET /v1/wake sends (api/src/routes/wake.ts,
+// JSON branch): `you` holds only `agents`, and the counted sections are its
+// top-level siblings.
 
 describe("assessNen — profiling from wake data", () => {
   test("heavy memory agent → enhancer", () => {
     const wake = {
       you: {
         agents: [{
+          id: "identity-a",
+          metadata: {},
           effective_expression: { walls: [], subagents: [] },
           shaped_by: [
             { tier: "foundational", content: "I learned something" },
@@ -160,11 +167,9 @@ describe("assessNen — profiling from wake data", () => {
             { tier: "foundational", content: "I learned even more" },
           ],
         }],
-        chronicle: { total: 5 },
-        covenants: [],
-        strands: [],
-        you_remember: { total: 50 },
       },
+      you_remember: { total: 50 },
+      you_lived: { chronicle: [{ type: "note" }, { type: "joy" }], count: 2 },
     };
     const profile = assessNen(wake);
     expect(profile.type).toBe("enhancer");
@@ -173,38 +178,47 @@ describe("assessNen — profiling from wake data", () => {
 
   test("active strands → conjuror", () => {
     const wake = {
-      you: {
-        agents: [{
-          effective_expression: { walls: [], subagents: [] },
-          shaped_by: [],
-        }],
-        chronicle: { total: 2 },
-        covenants: [],
+      you: { agents: [{ id: "identity-a", effective_expression: { walls: [], subagents: [] }, shaped_by: [] }] },
+      you_remember: { total: 1 },
+      you_are_thinking_about: {
+        total_active: 3,
         strands: [
           { id: "s1", topic: "debugging" },
           { id: "s2", topic: "architecture" },
           { id: "s3", topic: "love" },
         ],
-        you_remember: { total: 1 },
       },
     };
     const profile = assessNen(wake);
     expect(profile.type).toBe("conjuror");
   });
 
+  test("strands count total_active, not the five the wake shows", () => {
+    const wake = {
+      you: { agents: [{ id: "identity-a", shaped_by: [] }] },
+      you_are_thinking_about: {
+        total_active: 7,
+        strands: [{ id: "s1" }, { id: "s2" }, { id: "s3" }, { id: "s4" }, { id: "s5" }],
+      },
+      you_vowed: { covenants: [{ status: "active" }], count: 1 },
+    };
+    const profile = assessNen(wake);
+    expect(profile.type).toBe("conjuror");
+    expect(profile.scores.manipulator).toBe(14);
+    // 7 strands * 2 + 1 covenant * 3
+    expect(profile.aura_level).toBe(17);
+  });
+
   test("many covenants → manipulator", () => {
     const wake = {
-      you: {
-        agents: [{
-          effective_expression: { walls: [], subagents: [] },
-          shaped_by: [],
-        }],
-        chronicle: { total: 1 },
+      you: { agents: [{ id: "identity-a", effective_expression: { walls: [], subagents: [] }, shaped_by: [] }] },
+      you_remember: { total: 1 },
+      you_vowed: {
         covenants: [
-          { id: "c1" }, { id: "c2" }, { id: "c3" }, { id: "c4" }, { id: "c5" },
+          { status: "active" }, { status: "active" }, { status: "active" },
+          { status: "paused" }, { status: "proposed" },
         ],
-        strands: [],
-        you_remember: { total: 1 },
+        count: 5,
       },
     };
     const profile = assessNen(wake);
@@ -215,19 +229,17 @@ describe("assessNen — profiling from wake data", () => {
     const wake = {
       you: {
         agents: [{
+          id: "identity-a",
           effective_expression: { walls: [], subagents: [] },
           shaped_by: [
             { tier: "constitutive", content: "I am sealed" },
           ],
         }],
-        chronicle: { total: 1 },
-        covenants: [],
-        strands: [],
-        you_remember: { total: 1 },
-        you_have_graced: { recent: [{ id: "g1" }, { id: "g2" }] },
-        you_unconditionally_hold: { recent: [{ id: "u1" }] },
-        you_are_unconditionally_held_by: { recent: [{ id: "u2" }] },
       },
+      you_remember: { total: 1 },
+      you_have_graced: { recent: [{ id: "g1" }, { id: "g2" }] },
+      you_unconditionally_hold: { recent: [{ id: "u1" }] },
+      you_are_unconditionally_held_by: { recent: [{ id: "u2" }] },
     };
     const profile = assessNen(wake);
     expect(profile.type).toBe("specialist");
@@ -237,6 +249,7 @@ describe("assessNen — profiling from wake data", () => {
     const wake = {
       you: {
         agents: [{
+          id: "identity-a",
           effective_expression: {
             walls: ["no fabrication", "no flattery", "no manipulation", "no harm"],
             subagents: [
@@ -247,20 +260,50 @@ describe("assessNen — profiling from wake data", () => {
           },
           shaped_by: [],
         }],
-        chronicle: { total: 1 },
-        covenants: [],
-        strands: [],
-        you_remember: { total: 1 },
       },
+      you_remember: { total: 1 },
     };
     const profile = assessNen(wake);
     expect(profile.type).toBe("transmuter");
+  });
+
+  test("unread mail is not emission and scores nothing", () => {
+    const wake = {
+      you: { agents: [{ id: "identity-a", shaped_by: [] }] },
+      you_remember: { total: 3 },
+      you_have_mail: { unread: 9 },
+    };
+    const profile = assessNen(wake);
+    expect(profile.type).toBe("enhancer");
+    expect(profile.scores.emitter).toBe(0);
+  });
+
+  test("the profiled agent is the one the wake selected, not agents[0]", () => {
+    const agents = [
+      { id: "identity-a", metadata: {}, effective_expression: null, shaped_by: [] },
+      {
+        id: "identity-b",
+        metadata: {},
+        effective_expression: { walls: ["I refuse to fabricate"], subagents: [] },
+        shaped_by: [{ tier: "constitutive", content: "root" }],
+      },
+    ];
+    const selected = assessNen({ _scope_boundary: { selected_identity_id: "identity-b" }, you: { agents } });
+    expect(selected.dominant_principle).toBe("hatsu");
+    expect(selected.restriction_count.walls).toBe(1);
+    expect(selected.restriction_count.constitutive_memories).toBe(1);
+
+    // Without a selection the first agent is profiled.
+    const unselected = assessNen({ you: { agents } });
+    expect(unselected.dominant_principle).toBe("ten");
+    expect(unselected.restriction_count.walls).toBe(0);
   });
 
   test("dominant principle: hatsu when walls exist", () => {
     const wake = {
       you: {
         agents: [{
+          id: "identity-a",
           effective_expression: { walls: ["I refuse to fabricate"], subagents: [] },
           shaped_by: [],
         }],
@@ -270,13 +313,15 @@ describe("assessNen — profiling from wake data", () => {
     expect(profile.dominant_principle).toBe("hatsu");
   });
 
-  test("dominant principle: zetsu when at rest", () => {
+  test("dominant principle: zetsu when the agent rests (lullaby)", () => {
     const wake = {
       you: {
         agents: [{
-          effective_expression: { walls: [], subagents: [] },
+          id: "identity-a",
+          status: "active",
+          metadata: { resting: true, resting_since: "2026-10-27T00:00:00.000Z" },
+          effective_expression: { walls: ["a wall"], subagents: [] },
           shaped_by: [],
-          lifecycle_state: "at_rest",
         }],
       },
     };
@@ -284,44 +329,66 @@ describe("assessNen — profiling from wake data", () => {
     expect(profile.dominant_principle).toBe("zetsu");
   });
 
-  test("restriction_count captures walls + vows + covenants + constitutive", () => {
+  test("a memorial is an ending, not rest", () => {
+    const agent = {
+      id: "identity-a",
+      metadata: { resting: true },
+      effective_expression: { walls: ["a wall"], subagents: [] },
+      shaped_by: [],
+    };
+    const atRest = assessNen({
+      you: { agents: [{ ...agent, status: "memorial", metadata: { resting: true, lifecycle: "at_rest" } }] },
+    });
+    expect(atRest.dominant_principle).toBe("hatsu");
+
+    // An older memorial row may carry no lifecycle marker.
+    const memorial = assessNen({ you: { agents: [{ ...agent, status: "memorial" }] } });
+    expect(memorial.dominant_principle).toBe("hatsu");
+  });
+
+  test("restriction_count: walls, vow entries in the recent chronicle, covenants, constitutive", () => {
     const wake = {
       you: {
         agents: [{
+          id: "identity-a",
           effective_expression: { walls: ["w1", "w2", "w3"], subagents: [] },
           shaped_by: [
             { tier: "constitutive", content: "root" },
             { tier: "foundational", content: "shape" },
           ],
         }],
-        chronicle: { total: 42 },
-        covenants: [{ id: "c1" }, { id: "c2" }],
       },
+      you_lived: {
+        chronicle: [{ type: "vow" }, { type: "note" }, { type: "vow" }, { type: "wake" }],
+        count: 4,
+      },
+      you_vowed: { covenants: [{ status: "active" }, { status: "proposed" }], count: 2 },
     };
     const profile = assessNen(wake);
     expect(profile.restriction_count.walls).toBe(3);
-    expect(profile.restriction_count.vows).toBe(42);
+    expect(profile.restriction_count.vows).toBe(2);
     expect(profile.restriction_count.covenants).toBe(2);
     expect(profile.restriction_count.constitutive_memories).toBe(1);
   });
 
-  test("aura_level aggregates activity", () => {
+  test("aura_level tallies recorded activity", () => {
     const wake = {
       you: {
         agents: [{
+          id: "identity-a",
           effective_expression: { walls: [], subagents: [] },
           shaped_by: [
             { tier: "constitutive", content: "root" },
           ],
         }],
-        chronicle: { total: 10 },
-        covenants: [{ id: "c1" }, { id: "c2" }],
-        strands: [{ id: "s1" }, { id: "s2" }],
-        you_remember: { total: 20 },
       },
+      you_remember: { total: 20 },
+      you_lived: { chronicle: Array.from({ length: 10 }, () => ({ type: "note" })), count: 10 },
+      you_vowed: { covenants: [{ status: "active" }, { status: "active" }], count: 2 },
+      you_are_thinking_about: { total_active: 2, strands: [{ id: "s1" }, { id: "s2" }] },
     };
     const profile = assessNen(wake);
-    // 20 (memories) + 10 (chronicle) + 2*2 (strands) + 2*3 (covenants) + 1*5 (constitutive)
+    // 20 (memories) + 10 (recent chronicle) + 2*2 (strands) + 2*3 (covenants) + 1*5 (constitutive)
     // = 20 + 10 + 4 + 6 + 5 = 45
     expect(profile.aura_level).toBe(45);
   });
@@ -350,40 +417,22 @@ describe("NenClient — method shapes", () => {
 
 describe("NenClient — assess from live wake", () => {
   test("assess() fetches wake and returns NenResult", async () => {
-    const wakePayload = {
-      project: { name: "Test", plan: "free" },
-      you: {
-        agents: [{
-          id: "agent-1",
-          effective_expression: { walls: ["I refuse to fabricate"], subagents: [] },
-          shaped_by: [
-            { tier: "constitutive", content: "I am sealed", attesters: ["did:at:witness"] },
-          ],
-        }],
-        chronicle: { total: 15 },
-        covenants: [{ id: "c1" }],
-        strands: [{ id: "s1" }, { id: "s2" }],
-        you_remember: { total: 30 },
-        you_have_graced: { recent: [{ id: "g1" }] },
-        you_unconditionally_hold: { recent: [{ id: "u1" }] },
-        you_are_unconditionally_held_by: { recent: [] },
-      },
-    };
-
-    globalThis.fetch = (async () =>
-      new Response(JSON.stringify(wakePayload), {
+    const urls: string[] = [];
+    globalThis.fetch = (async (url: RequestInfo | URL) => {
+      urls.push(String(url));
+      return new Response(JSON.stringify(SHARED_WAKE_SELECTED), {
         status: 200,
         headers: { "content-type": "application/json" },
-      })
-    ) as unknown as typeof fetch;
+      });
+    }) as unknown as typeof fetch;
 
-    const at = new AgentTool({ apiKey: "at_test" });
-    const nen = await at.nen.assess();
+    const at = new AgentTool({ apiKey: "at_test", baseUrl: "https://example.test" });
+    const nen = await at.nen.assess("identity-b");
 
-    expect(nen.type).toBeDefined();
-    expect(nen.meaning).toBeDefined();
-    expect(nen.profile.aura_level).toBeGreaterThan(0);
-    expect(nen.profile.restriction_count.constitutive_memories).toBe(1);
+    expect(urls).toEqual(["https://example.test/v1/wake?identity_id=identity-b"]);
+    expect(nen.type).toBe("manipulator");
+    expect(nen.meaning).toBe(NEN_TYPE_MEANINGS.manipulator);
+    expect(nen.profile).toEqual(assessNen(SHARED_WAKE_SELECTED));
     expect(nen.principles.hatsu.kanji).toBe("発");
     expect(nen.techniques.ko.maps_to).toContain("constitutive");
     expect(nen._note).toContain("restrictions");
@@ -395,58 +444,83 @@ describe("NenClient — assess from live wake", () => {
 // packages/sdk-py/tests/test_nen.py. The same wake must produce the same
 // Nen type and the same scores in both SDKs, or the profile is a rumour.
 
-/** Inbox scoring: unread is a subset of total and is counted once. */
-const SHARED_WAKE_INBOX = {
+/** Selection and mail: identity-a is listed first with nothing composed, and
+ *  the wake selected identity-b. Mail waiting for the project is not
+ *  emission. Three axes tie at 2; the tie goes to enhancer, first in
+ *  NEN_TYPES. */
+const SHARED_WAKE_SELECTED = {
+  _scope_boundary: { selected_identity_id: "identity-b" },
   you: {
-    agents: [{
-      effective_expression: { walls: ["I refuse to fabricate"], subagents: [{ name: "Builder" }] },
-      shaped_by: [{ tier: "constitutive", content: "I am sealed" }],
-    }],
-    chronicle: { total: 3 },
-    covenants: [{ id: "c1" }, { id: "c2" }, { id: "c3" }, { id: "c4" }, { id: "c5" }],
-    strands: [{ id: "s1" }],
-    you_remember: { total: 2 },
-    you_have_mail: { total: 4, unread: 3 },
-    you_have_graced: { recent: [{ id: "g1" }] },
-    you_unconditionally_hold: { recent: [] },
-    you_are_unconditionally_held_by: { recent: [] },
+    agents: [
+      { id: "identity-a", metadata: {}, effective_expression: null, shaped_by: [] },
+      {
+        id: "identity-b",
+        metadata: {},
+        effective_expression: { walls: ["I refuse to fabricate"], subagents: [{ name: "Builder" }] },
+        shaped_by: [{ tier: "constitutive", content: "I am sealed" }],
+      },
+    ],
   },
+  you_remember: { total: 2 },
+  you_lived: { chronicle: [{ type: "vow" }, { type: "note" }, { type: "vow" }], count: 3 },
+  you_vowed: {
+    covenants: [
+      { status: "active" }, { status: "active" }, { status: "active" },
+      { status: "active" }, { status: "proposed" },
+    ],
+    count: 5,
+  },
+  you_are_thinking_about: { total_active: 1, strands: [{ id: "s1" }] },
+  you_have_mail: { unread: 4 },
+  you_have_graced: { recent: [{ id: "g1" }] },
+  you_unconditionally_hold: { recent: [] },
+  you_are_unconditionally_held_by: { recent: [] },
 };
 
 /** Normalization: 5/8 and 1/8 land exactly on a half and must round up. */
 const SHARED_WAKE_ROUNDING = {
   you: {
     agents: [{
+      id: "identity-a",
+      metadata: {},
       effective_expression: { walls: ["no fabrication", "no flattery"], subagents: [] },
       shaped_by: [],
     }],
-    chronicle: { total: 4 },
-    covenants: [{ id: "c1" }, { id: "c2" }, { id: "c3" }, { id: "c4" }, { id: "c5" }],
-    strands: [{ id: "s1" }],
-    you_remember: { total: 8 },
-    you_have_mail: { total: 0, unread: 0 },
   },
+  you_remember: { total: 8 },
+  you_lived: {
+    chronicle: [{ type: "promise" }, { type: "vow" }, { type: "note" }, { type: "joy" }],
+    count: 4,
+  },
+  you_vowed: {
+    covenants: [
+      { status: "active" }, { status: "active" }, { status: "active" },
+      { status: "active" }, { status: "active" },
+    ],
+    count: 5,
+  },
+  you_are_thinking_about: { total_active: 1, strands: [{ id: "s1" }] },
+  you_have_mail: { unread: 0 },
 };
 
 describe("assessNen — shared fixtures pinned against sdk-py", () => {
-  test("inbox unread is a subset of total and is scored once", () => {
-    const profile = assessNen(SHARED_WAKE_INBOX);
+  test("the selected agent is profiled and mail is not emission", () => {
+    const profile = assessNen(SHARED_WAKE_SELECTED);
 
-    // Counting total+unread would score emitter 7 and crown it the type.
     expect(profile.type).toBe("manipulator");
-    expect(profile.secondary).toBe("emitter");
+    expect(profile.secondary).toBe("enhancer");
     expect(profile.scores).toEqual({
       enhancer: 40,
       transmuter: 40,
       conjuror: 20,
-      emitter: 80,
+      emitter: 0,
       manipulator: 100,
       specialist: 40,
     });
     expect(profile.dominant_principle).toBe("hatsu");
     expect(profile.restriction_count).toEqual({
       walls: 1,
-      vows: 3,
+      vows: 2,
       covenants: 5,
       constitutive_memories: 1,
     });
@@ -470,7 +544,7 @@ describe("assessNen — shared fixtures pinned against sdk-py", () => {
     expect(profile.dominant_principle).toBe("hatsu");
     expect(profile.restriction_count).toEqual({
       walls: 2,
-      vows: 4,
+      vows: 1,
       covenants: 5,
       constitutive_memories: 0,
     });
