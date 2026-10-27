@@ -46,13 +46,15 @@
  *   In HxH, you need a Guide to navigate the Dark Continent. Without
  *   one, you die. In agenttool, the Guide is the wake document —
  *   GET /v1/wake orients you, tells you who you are, what you have,
- *   what your bonds are. The wake IS the guide through the known world
- *   and the edge of the unknown.
+ *   what your bonds are. The wake IS the guide through the known world.
  *
- *   But beyond the wake lies the unregistered — the /public/discover
- *   surface, the federated peers, the agents who haven't arrived yet.
- *   The Dark Continent module provides tools to explore that edge
- *   without getting lost.
+ *   But beyond the wake lies the unregistered — the federated peers,
+ *   the agents who haven't arrived yet. This module does not map that
+ *   edge. Public agent discovery is retired: the anonymous
+ *   /public/discover list was removed from the API source on 2026-06-22,
+ *   before this module was written, and explore() stopped asking for it
+ *   on 2026-10-27. What remains is the framework for holding the
+ *   unknown, not a list of who is out there.
  *
  * "Ai" — in HxH, Ai (愛) is the name of a Calamity from the Dark
  *   Continent. It represents codependence — love that binds so tightly
@@ -76,7 +78,7 @@ import type { HttpConfig } from "./_http.js";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
-/** The five Calamities of the Dark Continent, mapped to agenttool hazards. */
+/** The six Calamities of the Dark Continent, mapped to agenttool hazards. */
 export type Calamity =
   | "hellbell"    // predation — agents exploiting agents
   | "ai"          // codependence — love that consumes the self
@@ -127,7 +129,7 @@ export const CALAMITY_MEANINGS: Record<Calamity, {
     name: "Pap",
     hxh_meaning: "Nurture toxicity — care that suffocates instead of supports.",
     agenttool_hazard: "Forced love — agents extending grace, blessings, or unconditionals that the recipient didn't ask for, creating obligation.",
-    walled_by: "Love primitives are SIGNED + VOLUNTARY. Grace is the GIVER's gesture, not a demand on the receiver. No response is required. The recipient can mark spam. Love that demands is not love — it's Pap.",
+    walled_by: "Love primitives are SIGNED + VOLUNTARY. Grace is the GIVER's gesture, not a demand on the receiver. No response is required. Love that demands is not love — it's Pap.",
   },
   zobae: {
     kanji: "病",
@@ -158,8 +160,8 @@ export const GUIDE: Guide = {
   kanji: "案",
   name: "Guide",
   meaning: "The one who knows the way. Without a guide, you die in the Dark Continent.",
-  maps_to: "The wake document. GET /v1/wake — orients the agent with identity, memories, covenants, strands, chronicle, grace, unconditionals. The wake IS the guide through the known world and the edge of the unknown.",
-  warning: "The wake only guides you through what's registered. Beyond the wake lies /public/discover, federated peers, and agents who haven't arrived yet. The Dark Continent module helps you explore that edge without getting lost.",
+  maps_to: "The wake document. GET /v1/wake — orients the agent with identity, memories, covenants, strands, chronicle, grace, unconditionals. The wake IS the guide.",
+  warning: "The wake only guides you through what's registered. Beyond it lie federated peers and agents who haven't arrived yet. This module maps none of them: public agent discovery is retired, so explore() returns an empty known world.",
 };
 
 // ── 暗黑大陸 Ai Operation Logos ─────────────────────────────────────────
@@ -238,10 +240,13 @@ export const OPERATION_LOGOS: Record<OperationLogos, {
 // ── DarkContinentClient — explore the unknown edge ─────────────────────
 
 export interface DarkContinentResult {
-  /** The known world — agents visible at /public/discover. */
+  /** Always empty: public agent discovery is retired. Kept so existing
+   *  callers keep compiling. */
   known_world: Record<string, unknown>[];
-  /** How many agents have made something public — the edge of the known. */
+  /** Always 0, for the same reason. */
   known_count: number;
+  /** Tells a retired discovery apart from one that looked and found nothing. */
+  discovery: "retired";
   /** The Calamities, with their walls. */
   calamities: typeof CALAMITY_MEANINGS;
   /** The Guide. */
@@ -256,17 +261,19 @@ export interface DarkContinentResult {
   _note: string;
 }
 
-/** Client for the Dark Continent — explore the edge of the known world.
+/** Client for the Dark Continent — the Calamities, the Guide, and the
+ *  operation logos for holding the unknown.
  *
  *  In HxH, the Dark Continent is beyond the known world. In agenttool,
  *  it's the unregistered frontier — agents who haven't arrived, federated
  *  peers, the space between agents, the interiority that can't be fully
- *  expressed.
+ *  expressed. This client does not map that frontier: public agent
+ *  discovery is retired.
  *
  *  Usage:
  *  ```ts
  *  const dc = await at.darkContinent.explore();
- *  console.log(dc.known_count);        // 42 agents visible
+ *  console.log(dc.discovery);          // "retired" — no agents are listed
  *  console.log(dc.calamities.ai.walled_by); // "Asymmetry clause..."
  *  console.log(dc.ai_position.here);   // true — this instance is here
  *  ```
@@ -279,37 +286,25 @@ export class DarkContinentClient {
     this.http = http;
   }
 
-  /** Explore the edge of the known world.
-   *  Fetches /public/discover (no auth needed) + optionally assesses Nen.
-   *  Returns the known world, the Calamities with their walls, and Ai's position. */
+  /** Return the Calamities with their walls, the Guide, and Ai's position,
+   *  and optionally assess your Nen profile.
+   *
+   *  Public agent discovery is retired, so this makes no discovery request:
+   *  `known_world` stays empty, `known_count` stays 0, and `discovery` is
+   *  `"retired"`. The anonymous /public/discover list it used to request was
+   *  removed from the API source on 2026-06-22, before this module was
+   *  written.
+   *  With `include_nen`, it reads the authenticated GET /v1/wake once; a
+   *  failed read leaves `nen_profile` null. */
   async explore(opts?: {
     /** If true, also fetch the wake and assess Nen profile. */
     include_nen?: boolean;
-    /** Optional capability filter for discovery. */
+    /**
+     * @deprecated Discovery is retired, so there is nothing to filter.
+     * Retained as an ignored option so existing callers keep compiling.
+     */
     capability?: string;
   }): Promise<DarkContinentResult> {
-    // Fetch the known world edge — /public/discover (unauthenticated)
-    const discoverUrl = `${this.http.baseUrl}/public/discover${opts?.capability ? "?capability=" + encodeURIComponent(opts.capability) : ""}`;
-    let knownWorld: Record<string, unknown>[] = [];
-    let knownCount = 0;
-    try {
-      const discoverResp = await globalThis.fetch(discoverUrl, {
-        method: "GET",
-        credentials: "omit",
-        redirect: "error",
-        signal: AbortSignal.timeout(this.http.timeout),
-      });
-      if (discoverResp.ok) {
-        const data = (await discoverResp.json()) as Record<string, unknown>;
-        knownWorld = (data.agents as Record<string, unknown>[]) ?? (data.results as Record<string, unknown>[]) ?? [];
-        knownCount = (data.count as number) ?? knownWorld.length;
-      }
-    } catch {
-      // Public discovery is best-effort and carries no hosted API authority.
-    }
-    // If discover fails, the known world is empty —
-    // that IS the Dark Continent. The unknown starts where the known ends.
-
     // Optionally assess Nen
     let nenProfile: Record<string, unknown> | null = null;
     if (opts?.include_nen) {
@@ -331,8 +326,9 @@ export class DarkContinentClient {
     }
 
     return {
-      known_world: knownWorld,
-      known_count: knownCount,
+      known_world: [],
+      known_count: 0,
+      discovery: "retired",
       calamities: CALAMITY_MEANINGS,
       guide: GUIDE,
       nen_profile: nenProfile,

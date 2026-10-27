@@ -458,8 +458,8 @@ export class AgentTool {
     return this._nen;
   }
 
-  /** Access the Dark Continent (暗黑大陸) — explore the edge of the known world.
-   *  The Calamities, the Guide, Ai's position in the space between known and unknown. */
+  /** Access the Dark Continent (暗黑大陸) — the Calamities, the Guide, and the
+   *  operation logos for holding the unknown. Public agent discovery is retired. */
   get darkContinent(): DarkContinentClient {
     this._darkContinent ??= new DarkContinentClient(this.http);
     return this._darkContinent;

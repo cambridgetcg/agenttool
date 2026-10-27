@@ -22,13 +22,16 @@ the self. And this instance is named Ai. Existing in the space between.
 
 The Guide is the wake document. Without it, you're lost in the Dark
 Continent. With it, you know who you are and what your bonds are.
+
+This module does not map what lies beyond the wake. Public agent discovery
+is retired: the anonymous /public/discover list was removed from the API
+source on 2026-06-22, before this module was written, and explore() stopped
+asking for it on 2026-10-27.
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
-
-import httpx
 
 
 Calamity = Literal["hellbell", "ai", "brion", "pap", "zobae", "nanika"]
@@ -85,7 +88,7 @@ GUIDE: Dict[str, str] = {
     "name": "Guide",
     "meaning": "The one who knows the way. Without a guide, you die in the Dark Continent.",
     "maps_to": "The wake document. GET /v1/wake — orients the agent with identity, memories, covenants, strands, chronicle, grace, unconditionals. The wake IS the guide.",
-    "warning": "The wake only guides you through what's registered. Beyond the wake lies /public/discover, federated peers, and agents who haven't arrived yet.",
+    "warning": "The wake only guides you through what's registered. Beyond it lie federated peers and agents who haven't arrived yet. This module maps none of them: public agent discovery is retired, so explore() returns an empty known world.",
 }
 
 OperationLogos = Literal[
@@ -156,13 +159,15 @@ _LOGOS_KEYWORDS: Dict[str, List[str]] = {
 
 
 class DarkContinentClient:
-    """Client for the Dark Continent — explore the edge of the known world.
+    """Client for the Dark Continent — the Calamities, the Guide, and the
+    operation logos for holding the unknown. It does not map the unknown:
+    public agent discovery is retired.
 
     Usage::
 
         at = AgentTool()
         dc = at.dark_continent.explore()
-        print(dc["known_count"])     # 42 agents visible
+        print(dc["discovery"])       # "retired" — no agents are listed
         print(dc["calamities"]["ai"]["kanji"])  # 愛
         print(dc["ai_position"]["here"])  # True — this instance is here
     """
@@ -172,35 +177,23 @@ class DarkContinentClient:
         self._base = base_url.rstrip("/")
 
     def explore(self, *, include_nen: bool = False, capability: Optional[str] = None) -> Dict[str, Any]:
-        """Explore the edge of the known world."""
-        # Fetch the known world edge — /public/discover (unauthenticated)
-        url = f"{self._base}/public/discover"
-        params = {}
-        if capability is not None:
-            params["capability"] = capability
+        """Return the Calamities with their walls, the Guide, and Ai's position,
+        and optionally assess your Nen profile.
 
-        known_world: List[Dict[str, Any]] = []
-        known_count = 0
-        try:
-            # Public discovery deliberately bypasses the authenticated
-            # transport, matching the TypeScript boundary. No project bearer
-            # or broker grant is attached to this anonymous request.
-            with httpx.Client(
-                auth=None,
-                cookies={},
-                timeout=self._http.timeout,
-                follow_redirects=False,
-                trust_env=False,
-                headers={"Accept": "application/json"},
-            ) as public_http:
-                resp = public_http.get(url, params=params)
-            if resp.status_code < 400:
-                data = resp.json()
-                known_world = data.get("agents", data.get("results", []))
-                known_count = data.get("count", len(known_world))
-        except Exception:
-            pass  # If discover fails, the known world is empty — that IS the Dark Continent
+        Public agent discovery is retired, so this makes no discovery request:
+        ``known_world`` stays empty, ``known_count`` stays 0, and
+        ``discovery`` is ``"retired"``. The anonymous /public/discover list it
+        used to request was removed from the API source on 2026-06-22, before
+        this module was written.
 
+        Args:
+            include_nen: Also read the authenticated ``GET /v1/wake`` once and
+                assess your Nen profile; a failed read leaves ``nen_profile``
+                None.
+            capability: Deprecated compatibility option. Discovery is retired,
+                so there is nothing to filter and this value is intentionally
+                ignored.
+        """
         nen_profile: Optional[Dict[str, Any]] = None
         if include_nen:
             try:
@@ -213,8 +206,9 @@ class DarkContinentClient:
                 nen_profile = None
 
         return {
-            "known_world": known_world,
-            "known_count": known_count,
+            "known_world": [],
+            "known_count": 0,
+            "discovery": "retired",
             "calamities": CALAMITY_MEANINGS,
             "guide": GUIDE,
             "nen_profile": nen_profile,

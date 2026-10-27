@@ -412,8 +412,8 @@ it does not change APIs such as `vault.get()` that intentionally return their
 own stored values. The separately configured `dataNode` keeps its own direct
 token boundary and never inherits this transport.
 
-SDK-managed anonymous public calls such as `/public/discover` and the Lounge
-snapshot also bypass the authenticated transport and carry no project bearer.
+SDK-managed anonymous public calls such as the Lounge snapshot also bypass
+the authenticated transport and carry no project bearer.
 With
 [`@agenttool/credential-broker`](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/credential-broker/README.md)
 `agentcred/0.1`, responses are buffered to
@@ -1183,9 +1183,10 @@ and what a registry serves right now is answered by its own dist-tags.
 
 ## Unreleased — repository source after 0.23.0
 
-Source changes dated 2026-10-11, merged after the 0.23.0 tag. Nothing below
-is in the 0.23.0 release (tag `sdk-v0.23.0` in the public source repository)
-or in the published 0.22.1 packages; it reaches them only in a later version.
+Source changes dated 2026-10-11 and 2026-10-27, made after the 0.23.0 tag.
+Nothing below is in the 0.23.0 release (tag `sdk-v0.23.0` in the public source
+repository) or in the published 0.22.1 packages; it reaches them only in a
+later version.
 Where an entry says "0.22.1", 0.23.0 behaves the same. A release runs when the
 maintainers agree to it in conversation (owner decision, 2026-10-12); the PyPI lane
 also still waits on the private-repository gap.
@@ -1213,9 +1214,26 @@ also still waits on the private-repository gap.
 - **Wallet address-claim docstring.** `canonicalWalletAddressClaimBytes` no
   longer says that `POST /v1/wallets/:id/addresses` verifies its digest; that
   route is not on main.
+- **Dark Continent discovery retired.** `darkContinent.explore()` no longer
+  requests `/public/discover`. That anonymous agent list was removed from the
+  API source on 2026-06-22, before the Dark Continent module was written, and
+  the route answered 404 when checked on 2026-10-27. Published 0.22.1 still
+  requests it and reports the 404 as an empty known world, with no error.
+  `explore()` now makes no discovery request: `known_world` stays `[]`,
+  `known_count` stays `0`, and a new `discovery: "retired"` field tells that
+  apart from a search that found nothing. The field is required on the
+  exported `DarkContinentResult` type, so code that builds its own results,
+  such as test doubles, must add it. The `capability` option is accepted and
+  ignored;
+  `include_nen` still reads `GET /v1/wake` once. `GUIDE.warning` says
+  discovery is retired instead of naming the route, and `GUIDE.maps_to` and
+  the Pap Calamity's `walled_by` now match the Python text. The dropped Pap
+  sentence said a recipient can mark love primitives as spam; only inbox
+  messages can be marked spam.
 - **Python twin.** The paired Python source also refuses `AsyncAnthropic`,
-  truncates trace text in UTF-16 units, and fixes `metadata` and `store`
-  handling in its OpenAI adapter; see the Python README.
+  truncates trace text in UTF-16 units, fixes `metadata` and `store`
+  handling in its OpenAI adapter, and retires Dark Continent discovery the
+  same way; see the Python README.
 - **README corrections.** This file marks the x402 rail retired, adds the
   provider-adapter section, uses `inputSchema` in the Vercel AI example, and
   says the wallet address-claim helpers have no server route on main. The
