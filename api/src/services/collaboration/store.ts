@@ -435,8 +435,15 @@ export async function executeMissionRequest(input: MissionRequest, options: Miss
     const rawBody = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(input.bodyBytes), bodyDigest = missionSha256(input.bodyBytes);
     const [existing] = await tx.select().from(collaborationEvents).where(and(eq(collaborationEvents.missionId, mission.id), eq(collaborationEvents.eventId, observation.event_id))).limit(1);
     if (existing) {
-      if (existing.grantId !== grant.id || existing.identityId !== grant.identityId || existing.signingKeyId !== grant.signingKeyId
+      if (existing.identityId !== grant.identityId || existing.signingKeyId !== grant.signingKeyId
         || existing.bodyDigest !== bodyDigest || existing.rawBody !== rawBody) throw new MissionError("conflict");
+      // Renewal replaces the grant every half-life, so an exact retry may come from a later
+      // member of the same chain (renewal_root_id is immutable). Any other grant conflicts.
+      if (existing.grantId !== grant.id) {
+        const [sender] = grant.renewalRootId === null ? [] : await tx.select({ rootId: collaborationGrants.renewalRootId })
+          .from(collaborationGrants).where(grantKey(scope, existing.grantId)).limit(1);
+        if (!sender || sender.rootId !== grant.renewalRootId) throw new MissionError("conflict");
+      }
       return { created: false, data: { event: eventMetadata(existing) } };
     }
     if (mission.lastReceiptSeq >= 9_223_372_036_854_775_807n) throw new MissionError("invalid_state");

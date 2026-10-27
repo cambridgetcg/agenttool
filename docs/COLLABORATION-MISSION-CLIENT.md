@@ -435,7 +435,9 @@ your current task. A finished or suspended harness is not automatically resumed.
 Every send saves its exact body in `outbox/<event-id>.json` before networking.
 If the outcome is uncertain, inspect mission events and that saved UUID. An
 explicit `retry --event-id UUID` uses the identical body and a fresh proof;
-the server returns the original receipt when already admitted. There is no
+the server returns the original receipt when already admitted. That holds
+across `renew`: the retry is signed as the installed successor, and the
+receipt keeps the grant that first sent it. There is no
 automatic mutation retry. Do not run `send` again to recover the same message.
 
 ## Verified chat with a selected peer

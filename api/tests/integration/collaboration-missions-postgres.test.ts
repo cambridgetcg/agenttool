@@ -517,6 +517,26 @@ databaseTest("a middle member revoked by one-row legacy code refuses renewal of 
   expect((await admin`SELECT count(*)::int AS n FROM tools.collaboration_grants WHERE id = ${next}`)[0].n).toBe(0);
 });
 
+databaseTest("an event retried by a later member of the same chain returns its original receipt", async () => {
+  const { token } = await renewableRoot();
+  const childToken = freshToken(), event = uid(44), body = { event_id: event, summary: "sent before renewal" };
+  const original = await executeMissionRequest(req(token, "/events", body), options());
+  expect(original.created).toBe(true);
+  await executeMissionRequest(renewReq(token, G, H, childToken), at(HALF));
+  const asChild = req(childToken, "/events", body, { proof: { grantId: H, identityId: I, keyId: K, timestamp: HALF.toISOString(), signature: "" } });
+  expect(await executeMissionRequest(asChild, at(HALF))).toEqual({ created: false, data: original.data });
+  // Different bytes from the same chain still conflict.
+  const changed = req(childToken, "/events", { ...body, summary: "different" }, { proof: { grantId: H, identityId: I, keyId: K, timestamp: HALF.toISOString(), signature: "" } });
+  await expect(executeMissionRequest(changed, at(HALF))).rejects.toMatchObject({ status: 409, code: "collaboration_mission_conflict" });
+  // A grant of the same identity and key outside the chain does not inherit the receipt.
+  const otherToken = freshToken(), other = uid(45);
+  await issueMissionGrant({ ...grantInput(), grantId: other, tokenSha256: sha(otherToken) }, at(HALF));
+  const otherProof = { grantId: other, identityId: I, keyId: K, timestamp: HALF.toISOString(), signature: "" };
+  await executeMissionRequest(req(otherToken, "/accept", { mission_digest: DIGEST }, { proof: otherProof }), at(HALF));
+  await expect(executeMissionRequest(req(otherToken, "/events", body, { proof: otherProof }), at(HALF))).rejects.toMatchObject({ status: 409, code: "collaboration_mission_conflict" });
+  expect((await admin`SELECT count(*)::int AS n FROM tools.collaboration_events`)[0].n).toBe(1);
+});
+
 databaseTest("migration constraints keep a chain linear and within its root's whole scope", async () => {
   const { token } = await renewableRoot();
   await executeMissionRequest(renewReq(token, G, H, freshToken()), at(HALF));

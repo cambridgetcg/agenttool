@@ -175,6 +175,9 @@ to continue; it is not a complete export or a promise that more events will arri
 
 An event UUID is unique within its mission. Retrying the same UUID with the same
 grant, identity, key and **exact raw body bytes** returns the original receipt.
+A later member of the same renewal chain counts as the same grant here, so an
+event sent before a renewal can still be retried after it; the receipt keeps the
+original sender's `grant_id`. Any grant outside the chain conflicts.
 Changing whitespace counts as changing bytes and conflicts. A fresh timestamp
 and signature may be used for an exact-body retry. Current authority is checked
 before retry lookup, so a stored receipt never bypasses expiry or revocation.
