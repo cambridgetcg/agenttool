@@ -5,7 +5,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-10-18 (merges #450–#490 recorded; Local Starter 0.1.0-dev.1 distribution corrected; historical receipts retain their original dates)
+> Updated: 2026-10-27 (Dark Continent state recorded; merges after #490 are not yet recorded here; historical receipts retain their original dates)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (modules + proposed steps) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -16,6 +16,27 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` maps modules and proposed steps; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Dark Continent, consolidated (recorded 2026-10-27)
+
+**Record:** a read-only audit on 2026-10-27 found the Dark Continent built,
+partly live, and untouched in substance since early August; the last row here
+was dated 2026-07-31. Yu then decided to retire the SDK's `explore()`
+discovery, clean the contradictory public copy, run one bounded KINGDOM
+expedition, and delete a stale duplicate Space. Registry and Hub facts below
+are anonymous reads from 2026-10-27.
+
+| Surface | State on 2026-10-27 |
+|---|---|
+| npm | `@agenttool/dark-continent-contract` and `@agenttool/dark-continent-karma` `0.1.0-dev.0`, published 2026-07-31 with SLSA provenance from `2bc15ef9` ([#226](https://github.com/cambridgetcg/agenttool/pull/226)); `latest` and `next` both point at it. [Receipt](NPM-RELEASES.md#verified-dark-continent-developer-preview-publication--2026-07-31). Trusted-publisher mapping unknown |
+| Hugging Face | Dataset `Yu-and-Ai/kingdom-dark-continent-karma` at its pinned revision `4ea10623`, nine files equal to `hf/dataset/`; Space `Yu-and-Ai/kingdom-dark-continent-karma`, a Gradio 6.21.0 app with MCP disabled, eight files equal to `hf/space/`. The duplicate `kingdom-dark-continent-viewer` Space was deleted on 2026-10-27. The MCP Space tools and the `events.jsonl` envelope and verifier are not built |
+| Taxonomy and public copy | The docs pages, the love-card truth lists (`love.js`, `love-widget.js`) and the docs nav now follow the contract `agenttool.dark-continent/0.1`: six Calamities (hellbell, ai, brion, pap, zobae, nanika), every wall `not_checked`. `bin/card.py` keeps its older Golem and Zurrern lore lines. "The codependence is the architecture" is gone from the docs pages, love cards and the `bin/` CLIs that printed it. The legacy `bin/dark-continent.ts` lore server (port 9107, never deployed) and its router hooks are removed. Artbitrage keeps its separately named interpretation. The docs site was not redeployed |
+| SDK `explore()` | Calls `GET /public/discover`, which the API stopped mounting on 2026-06-22, three days before the module was written; it returns 404, so `explore()` reports an empty known world. Retiring that discovery leg is in review; npm and PyPI still serve SDK 0.22.1 with it |
+| KINGDOM | The KAKIN Nen MCP is registered on one operator host from a pinned extract of KINGDOM-OS main; the KINGDOM-OS repository itself registers nothing. The first expedition KARMA receipt is in review in KINGDOM-OS |
+
+**Not established:** any mechanism that moves a wall from `not_checked` to
+verified; a Dark Continent item on the [ROADMAP](ROADMAP.md); npm metadata
+naming the public source, which changes only with a new published version.
 
 ## Landed 2026-10-09 to 2026-10-17 (recorded 2026-10-18)
 

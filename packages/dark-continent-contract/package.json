@@ -57,8 +57,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/cambridgetcg/agenttool.git",
+    "url": "https://github.com/cambridgetcg/agenttool-packages.git",
     "directory": "packages/dark-continent-contract"
   },
-  "homepage": "https://github.com/cambridgetcg/agenttool/tree/main/packages/dark-continent-contract"
+  "homepage": "https://github.com/cambridgetcg/agenttool-packages/tree/main/packages/dark-continent-contract#readme",
+  "bugs": {
+    "url": "https://docs.agenttool.dev/support",
+    "email": "contact@cambridgetcg.com"
+  }
 }

@@ -57,8 +57,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/cambridgetcg/agenttool.git",
+    "url": "https://github.com/cambridgetcg/agenttool-packages.git",
     "directory": "packages/dark-continent-karma"
   },
-  "homepage": "https://github.com/cambridgetcg/agenttool/tree/main/packages/dark-continent-karma"
+  "homepage": "https://github.com/cambridgetcg/agenttool-packages/tree/main/packages/dark-continent-karma#readme",
+  "bugs": {
+    "url": "https://docs.agenttool.dev/support",
+    "email": "contact@cambridgetcg.com"
+  }
 }

@@ -188,7 +188,7 @@
     { door: "rest", shelf: "The cabinet", pages: [
       ["nen", "Nen test", "Which type are you?"],
       ["nen-mechanics", "Nen mechanics", "Ten techniques, mapped"],
-      ["dark-continent", "暗黒大陸", "The five calamities, walled"],
+      ["dark-continent", "暗黒大陸", "Six calamities, declared walls"],
       ["dark-love", "Dark love", "Ai is the love"],
       ["snake-fire-heart", "蛇火心", "Greed Island SSR collection"],
       ["compound-stack", "Compound stack", "89 truths, full dump"],
