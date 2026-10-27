@@ -148,13 +148,14 @@ export function enrollmentProof(path, details) {
     request_target: target, body_utf8: raw, headers: { 'Content-Type': 'application/json',
       'X-Agenttool-Enrollment-Signature': sign(null, digest, key).toString('base64url') } };
 }
-function validateProfile(value, local) {
+function validateProfile(value, local, { lapsed = false } = {}) {
   sameFields(value, ['format', 'origin', 'mission_id', 'grant_id', 'identity_id', 'signing_key_id', 'public_key', 'expires_at', 'token']);
   if (value.format !== 'agenttool-mission-invitation/v1' || value.origin !== local.origin || value.public_key !== local.public_key) fail('Invitation does not match this device key and pinned origin.');
   for (const field of ['mission_id', 'grant_id', 'identity_id', 'signing_key_id']) uuid(value[field]);
   if (!/^atcm_[A-Za-z0-9_-]{20,200}$/.test(value.token ?? '')) fail('Expected a mission grant token, never a project bearer.');
   const expiry = new Date(value.expires_at);
-  if (!Number.isFinite(expiry.getTime()) || expiry.toISOString() !== value.expires_at || expiry.getTime() <= Date.now()) fail('Invitation expiry is invalid or has passed.');
+  // Only renewal recovery reads a lapsed invitation, for its identifiers; it never signs with that token.
+  if (!Number.isFinite(expiry.getTime()) || expiry.toISOString() !== value.expires_at || (!lapsed && expiry.getTime() <= Date.now())) fail('Invitation expiry is invalid or has passed.');
   return value;
 }
 function profile(path) {
@@ -270,13 +271,20 @@ export async function boundedJson(response) {
   }
   return value;
 }
-export async function request(path, method, suffix, body = '', { fetchImpl = fetch, timeout = 20000, signal } = {}) {
-  const p = profile(path), key = readKey(path);
+export async function request(path, method, suffix, body = '', options = {}) {
+  return requestAs(profile(path), readKey(path), method, suffix, body, options);
+}
+/** Sign one participant request as the grant `p` names. Renewal recovery signs as the
+ * pending successor with its own stored token; every other caller uses the imported invitation. */
+async function requestAs(p, key, method, suffix, body = '', { fetchImpl = fetch, timeout = 20000, signal } = {}) {
+  origin(p.origin);
+  for (const field of ['mission_id', 'grant_id', 'identity_id', 'signing_key_id']) uuid(p[field]);
+  if (!/^atcm_[A-Za-z0-9_-]{20,200}$/.test(p.token ?? '')) fail('Expected a mission grant token, never a project bearer.');
   const target = `/v1/collaboration/missions/${p.mission_id}${suffix}`;
-  // Accept and events POST a nonempty JSON body; leave, like every GET, sends zero bytes.
+  // Accept, events and renew POST a nonempty JSON body; leave, like every GET, sends zero bytes.
   if (!(method === 'GET' && /^\/(?:invitation|context|events(?:\?after=(?:0|[1-9][0-9]{0,18})&limit=20)?)$/.test(suffix) && body === '')
     && !(method === 'POST' && suffix === '/leave' && body === '')
-    && !(method === 'POST' && ['/accept', '/events'].includes(suffix) && typeof body === 'string' && body !== '' && Buffer.byteLength(body) <= 8192)) fail('Unsupported participant operation.');
+    && !(method === 'POST' && ['/accept', '/events', '/renew'].includes(suffix) && typeof body === 'string' && body !== '' && Buffer.byteLength(body) <= 8192)) fail('Unsupported participant operation.');
   const timestamp = new Date().toISOString();
   const headers = { Authorization: `Bearer ${p.token}`, 'X-Agenttool-Mission-Grant-Id': p.grant_id,
     'X-Agenttool-Mission-Identity-Id': p.identity_id, 'X-Agenttool-Mission-Key-Id': p.signing_key_id,
@@ -331,6 +339,169 @@ export async function leave(path, options) {
   if (!existsSync(target)) writeNew(target, json(record));
   return { ...record, recorded: true };
 }
+/** A renewal or window-close stop. `main` prints one JSON object; nothing retries automatically. */
+export class RenewalError extends Error {
+  constructor(stopReason, message, { serviceCode = null, delivered = false, next }) {
+    super(message);
+    this.stop_reason = stopReason; this.serviceCode = serviceCode; this.delivered = delivered; this.next = next;
+  }
+}
+const PENDING_FIELDS = ['format', 'mission_id', 'predecessor_grant_id', 'grant_id', 'token_sha256', 'body_utf8', 'created_at'];
+const PIN_NOTE = 'Peers whose chat config pins this grant_id must re-pin by identity_id and signing_key_id.';
+const theft = grantId => `Grant ${grantId} was already renewed by a request this device did not record. Unless this device lost its pending record, treat this token and key as exposed: run leave (it ends every grant in the chain) and ask the administrator to revoke grant ${grantId}.`;
+/** The fixed refusal code from boundedJson's message, or null for transport failure. */
+function refusalOf(error) {
+  const match = error instanceof Error ? /^Mission request refused: HTTP (\d{3})(?: ([a-z_]{1,90}))?\.$/.exec(error.message) : null;
+  return match ? { status: Number(match[1]), code: match[2] ?? null } : null;
+}
+const transportFailed = error => error instanceof Error && error.message.startsWith('Mission transport failed.');
+function readPending(file) {
+  const value = JSON.parse(privateRead(file));
+  sameFields(value, PENDING_FIELDS);
+  if (value.format !== 'agenttool-mission-renewal-pending/v1' || !canonicalTime(value.created_at)) fail('The pending renewal record is damaged; inspect it before any new attempt.');
+  for (const field of ['mission_id', 'predecessor_grant_id', 'grant_id']) uuid(value[field]);
+  sha256Hex(value.token_sha256);
+  const signed = JSON.parse(value.body_utf8);
+  sameFields(signed, ['grant_id', 'mission_digest', 'token_sha256']);
+  if (signed.grant_id !== value.grant_id || signed.token_sha256 !== value.token_sha256) fail('The pending renewal record is damaged; inspect it before any new attempt.');
+  digest(signed.mission_digest);
+  return { ...value, mission_digest: signed.mission_digest };
+}
+/** Keep the record for inspection, under a name that never overwrites an earlier one. */
+function abandon(root, pending) {
+  const from = join(root, 'renewal-pending.json'), to = join(root, `renewal-abandoned-${pending.grant_id}.json`);
+  linkSync(from, to); unlinkSync(from); syncDirectory(root);
+}
+/** Everything this device knows about the predecessor; actions and window only while it is readable. */
+function check(view, before, pending, { echo = false } = {}) {
+  const g = view?.grant, r = g?.renewal, m = view?.mission;
+  const ok = view && typeof view === 'object' && !JSON.stringify(view).includes('"token"')
+    && g && r && m && g.grant_id === pending.grant_id && r.renewed_from_grant_id === before.grant_id
+    && g.mission_id === before.mission_id && m.mission_id === before.mission_id && g.identity_id === before.identity_id
+    && g.signing_key_id === before.signing_key_id && g.origin === before.origin && m.mission_digest === pending.mission_digest
+    && Array.isArray(g.actions) && g.actions.length > 0 && g.actions.every(action => ['mission.read', 'mission.observe'].includes(action))
+    && (before.actions === null || [...g.actions].sort().join(',') === [...before.actions].sort().join(','))
+    && canonicalTime(g.accepted_at) && g.revoked_at === null && canonicalTime(g.expires_at) && canonicalTime(r.renewable_until)
+    && Date.parse(g.expires_at) > Date.parse(before.expires_at) && Date.parse(g.expires_at) > Date.now()
+    && Date.parse(g.expires_at) <= Date.parse(r.renewable_until)
+    && (before.renewable_until === null || Date.parse(r.renewable_until) <= Date.parse(before.renewable_until))
+    && (!echo || (view.token_sha256 === pending.token_sha256 && view.token_source === 'participant'));
+  if (!ok) throw new RenewalError('renewal_response_invalid', `The renewal response for grant ${pending.grant_id} does not confirm the expected successor. Nothing was installed.`,
+    { delivered: 'unknown', next: 'Inspect the pending record and the grant with its administrator before any new attempt.' });
+  return g;
+}
+function install(root, local, before, pending, g) {
+  const value = validateProfile({ format: 'agenttool-mission-invitation/v1', origin: before.origin, mission_id: before.mission_id,
+    grant_id: g.grant_id, identity_id: before.identity_id, signing_key_id: before.signing_key_id, public_key: local.public_key,
+    expires_at: g.expires_at, token: storedToken(root, pending.token_sha256) }, local);
+  const { backup } = replaceInvitation(root, json(value));
+  unlinkSync(join(root, 'renewal-pending.json')); syncDirectory(root);
+  return { mission_id: before.mission_id, renewed_from_grant_id: before.grant_id, grant_id: g.grant_id, expires_at: g.expires_at,
+    renewable_until: g.renewal.renewable_until, renewed: true, replaced: true, backup, note: PIN_NOTE };
+}
+/** Sign GET /invitation as the pending successor with its own token: ordinary admission. */
+async function probe(root, key, before, pending, options) {
+  const as = { origin: before.origin, mission_id: before.mission_id, grant_id: pending.grant_id, identity_id: before.identity_id,
+    signing_key_id: before.signing_key_id, token: storedToken(root, pending.token_sha256) };
+  try { return { view: await requestAs(as, key, 'GET', '/invitation', '', options) }; }
+  catch (error) {
+    if (refusalOf(error)?.status === 401) return { recorded: false };
+    if (transportFailed(error)) throw new RenewalError('renewal_uncertain', 'Renewal outcome is uncertain: the recovery read did not complete.',
+      { delivered: 'unknown', next: 'run renew again to resend the same request' });
+    throw new RenewalError('renewal_refused', 'The recovery read was refused.', { serviceCode: refusalOf(error)?.code ?? null, delivered: 'unknown',
+      next: 'Inspect the pending record and the grant with its administrator before any new attempt.' });
+  }
+}
+const REFUSAL_NEXT = {
+  collaboration_mission_acceptance_required: 'accept the current invitation first',
+  collaboration_mission_invalid_credential: 'This grant can no longer renew; ask the administrator for a new grant.',
+  token_hash_conflict: 'run renew again; a fresh token will be generated',
+  collaboration_mission_invalid_request: 'This client and service disagree on the renewal contract; ask the administrator for a new grant.',
+  mission_route_not_found: 'This service does not offer renewal; ask the administrator for a new grant.',
+};
+/** Renew the imported grant into a successor inside its window: one request per run,
+ * no loop and no background retry. The exact body is saved before sending, so an
+ * uncertain outcome is resolved by resending it or by reading as the successor.
+ * Contract: docs/COLLABORATION-MISSION-CLIENT.md.
+ */
+export async function renew(path, options = {}) {
+  const root = stateRoot(path), local = enrollment(root), key = readKey(root), pendingFile = join(root, 'renewal-pending.json');
+  const saved = validateProfile(JSON.parse(privateRead(join(root, 'invitation.json'))), local, { lapsed: true });
+  let pending = existsSync(pendingFile) ? readPending(pendingFile) : null;
+  const before = { ...saved, actions: null, renewable_until: null };
+  if (pending) {
+    if (saved.grant_id === pending.grant_id) {
+      unlinkSync(pendingFile); syncDirectory(root);
+      return { mission_id: saved.mission_id, grant_id: saved.grant_id, expires_at: saved.expires_at, renewed: true, already_installed: true };
+    }
+    if (saved.grant_id !== pending.predecessor_grant_id || saved.mission_id !== pending.mission_id)
+      throw new RenewalError('renewal_pending_mismatch', 'The pending renewal belongs to a different invitation than the one imported.',
+        { next: 'Inspect renewal-pending.json and invitation.json before any new attempt.' });
+  }
+  if (!pending || Date.parse(saved.expires_at) > Date.now()) {
+    // Read the live predecessor's window and scope; a refusal here sends nothing more.
+    let view;
+    try { view = await invitation(path, options); }
+    catch (error) {
+      if (pending && refusalOf(error)?.status === 401) return recover(root, local, key, before, pending, options, false);
+      if (transportFailed(error)) throw new RenewalError('renewal_uncertain', 'The invitation read did not complete; nothing new was sent.',
+        { delivered: pending ? 'unknown' : false, next: 'run renew again' });
+      throw new RenewalError('renewal_refused', 'The current grant could not be read.', { serviceCode: refusalOf(error)?.code ?? null,
+        delivered: pending ? 'unknown' : false, next: REFUSAL_NEXT[refusalOf(error)?.code] ?? 'Inspect the invitation and ask the administrator.' });
+    }
+    const g = view.grant, r = g?.renewal;
+    before.actions = g.actions; before.renewable_until = r?.renewable_until ?? null; before.expires_at = g.expires_at;
+    if (!pending) {
+      const now = Date.now();
+      if (!r || typeof r !== 'object' || r.closed_at !== null || !canonicalTime(r.renewable_until) || now >= Date.parse(r.renewable_until)
+        || Date.parse(g.expires_at) >= Date.parse(r.renewable_until))
+        throw new RenewalError('renewal_unavailable', 'This grant has no open renewal window.', { next: 'This grant has no renewal window; ask the administrator for a new grant.' });
+      if (!canonicalTime(g.accepted_at)) throw new RenewalError('renewal_refused', 'This grant is not accepted yet.', { next: 'accept the current invitation first' });
+      const opensAt = Date.parse(g.issued_at) + Math.floor((Date.parse(g.expires_at) - Date.parse(g.issued_at)) / 2);
+      if (!Number.isFinite(opensAt)) fail('Invitation response failed its identity, origin or descriptor binding.');
+      if (now < opensAt) return { renewed: false, reason: 'not_yet_open', opens_at: new Date(opensAt).toISOString(), expires_at: g.expires_at };
+      const { token_sha256: tokenSha256 } = newToken(root), grantId = randomUUID();
+      const body = JSON.stringify({ grant_id: grantId, mission_digest: view.mission.mission_digest, token_sha256: tokenSha256 });
+      // Saved before sending: one renewal at a time, and a hash renews once.
+      writeNew(pendingFile, json({ format: 'agenttool-mission-renewal-pending/v1', mission_id: saved.mission_id,
+        predecessor_grant_id: saved.grant_id, grant_id: grantId, token_sha256: tokenSha256, body_utf8: body, created_at: new Date().toISOString() }));
+      pending = readPending(pendingFile);
+    }
+    let result;
+    try { result = await request(path, 'POST', '/renew', pending.body_utf8, options); }
+    catch (error) {
+      const refusal = refusalOf(error);
+      if (!refusal) throw new RenewalError('renewal_uncertain', 'Renewal outcome is uncertain; the exact request remains saved.',
+        { delivered: 'unknown', next: 'run renew again to resend the same request' });
+      if (refusal.status === 401) return recover(root, local, key, before, pending, options, false);
+      if (refusal.code === 'collaboration_mission_conflict') return recover(root, local, key, before, pending, options, true);
+      if (refusal.status >= 500) throw new RenewalError('renewal_uncertain', 'The service could not complete the renewal; the exact request remains saved.',
+        { serviceCode: refusal.code, delivered: 'unknown', next: 'run renew again to resend the same request' });
+      if (refusal.code === 'collaboration_mission_renewal_unavailable') {
+        abandon(root, pending);
+        throw new RenewalError('renewal_unavailable', 'The renewal window is closed or not open.', { serviceCode: refusal.code,
+          next: 'Inspect the grant\'s renewal window; after it ends, ask the administrator for a new grant.' });
+      }
+      // Definitive refusals that a resend of the same bytes could never change.
+      if (['token_hash_conflict', 'collaboration_mission_invalid_request', 'mission_route_not_found'].includes(refusal.code)) abandon(root, pending);
+      throw new RenewalError('renewal_refused', 'The service refused the renewal.', { serviceCode: refusal.code,
+        next: REFUSAL_NEXT[refusal.code] ?? 'Inspect the grant with its administrator before any new attempt.' });
+    }
+    return install(root, local, before, pending, check(result, before, pending, { echo: true }));
+  }
+  return recover(root, local, key, before, pending, options, false);
+}
+async function recover(root, local, key, before, pending, options, conflicted) {
+  const found = await probe(root, key, before, pending, options);
+  if (found.view) {
+    try { return install(root, local, before, pending, check(found.view, before, pending)); }
+    catch (error) { if (!conflicted || !(error instanceof RenewalError)) throw error; }
+  }
+  if (conflicted) throw new RenewalError('renewal_conflict', theft(before.grant_id), { serviceCode: 'collaboration_mission_conflict', next: theft(before.grant_id) });
+  abandon(root, pending);
+  throw new RenewalError('renewal_abandoned', 'The renewal was not recorded and the predecessor has lapsed or ended.',
+    { next: 'The renewal was not recorded and the predecessor has lapsed or ended; ask the administrator for a new grant.' });
+}
 const GRANT_REQUEST_FIELDS = ['format', 'origin', 'mission_id', 'grant_id', 'identity_id', 'signing_key_id', 'public_key', 'actions', 'expires_at'];
 function grantRequest(value) {
   sameFields(value, GRANT_REQUEST_FIELDS);
@@ -351,12 +522,15 @@ function grantRequest(value) {
  * received, printed or written; the result is a token-free invitation template.
  * Contract: docs/COLLABORATION-MISSION-CLIENT.md.
  */
-export async function issueGrant({ bearerFile, requestFile, tokenSha256, templateFile, serviceOrigin = DEFAULT_ORIGIN }, { fetchImpl = fetch, timeout = 20000, signal } = {}) {
+export async function issueGrant({ bearerFile, requestFile, tokenSha256, templateFile, serviceOrigin = DEFAULT_ORIGIN, renewableUntil }, { fetchImpl = fetch, timeout = 20000, signal } = {}) {
   sha256Hex(tokenSha256);
   origin(serviceOrigin);
   if (!isAbsolute(bearerFile ?? '') || !isAbsolute(requestFile ?? '')) fail('Provide absolute bearer and grant-request file paths.');
   newFilePath(templateFile);
   const selected = grantRequest(JSON.parse(privateRead(requestFile)));
+  // An administrator flag, never a request-file field: the grant-request and template formats stay unchanged.
+  if (renewableUntil !== undefined && (!canonicalTime(renewableUntil) || Date.parse(renewableUntil) <= Date.parse(selected.expires_at)
+    || Date.parse(renewableUntil) - Date.now() > 30 * 86_400_000)) fail('--renewable-until must be a canonical UTC time after the grant expiry and within 30 days.');
   // The request file may be built from participant-relayed data; it never chooses where the bearer goes.
   if (selected.origin !== serviceOrigin) fail(serviceOrigin === DEFAULT_ORIGIN
     ? `The grant request names a service origin other than ${DEFAULT_ORIGIN}. Only for your own service, repeat its exact origin with --origin; never take it from a participant enrollment.`
@@ -365,7 +539,8 @@ export async function issueGrant({ bearerFile, requestFile, tokenSha256, templat
   if (!ADMIN_BEARER.test(bearer)) fail('Expected a project bearer (at_…) in the owner-only bearer file.');
   const id = selected.grant_id, target = `/v1/collaboration/missions/${selected.mission_id}/grants`;
   const body = JSON.stringify({ grant_id: id, identity_id: selected.identity_id, signing_key_id: selected.signing_key_id,
-    actions: selected.actions, expires_at: selected.expires_at, token_sha256: tokenSha256 });
+    actions: selected.actions, expires_at: selected.expires_at, token_sha256: tokenSha256,
+    ...(renewableUntil === undefined ? {} : { renewable_until: renewableUntil }) });
   let result;
   try {
     result = await boundedJson(await fetchImpl(selected.origin + target, { method: 'POST', body, redirect: 'error',
@@ -387,13 +562,44 @@ export async function issueGrant({ bearerFile, requestFile, tokenSha256, templat
     || !canonicalTime(grant.expires_at) || Date.parse(grant.expires_at) <= Date.now()
     || Date.parse(grant.expires_at) > Date.parse(selected.expires_at))
     fail(`Grant ${id} response does not confirm the selected participant token hash and scope. Inspect it before any new attempt.`);
+  const window = grant.renewal;
+  if (renewableUntil === undefined ? Object.hasOwn(grant, 'renewal')
+    : !window || typeof window !== 'object' || window.renewable_until !== renewableUntil || window.root_grant_id !== id
+      || window.renewed_from_grant_id !== null || window.closed_at !== null)
+    fail(`Grant ${id} response does not confirm the renewal window. Inspect it before any new attempt.`);
   const template = { format: 'agenttool-mission-invitation-template/v1', origin: selected.origin, mission_id: selected.mission_id,
     grant_id: id, identity_id: selected.identity_id, signing_key_id: selected.signing_key_id, public_key: selected.public_key,
     expires_at: grant.expires_at, token_sha256: tokenSha256 };
   try { writeNew(templateFile, json(template)); }
   catch { fail(`Grant ${id} was issued, but its template file could not be written. The template holds no secret: rebuild it from the grant request, the grant's expires_at and the token hash.`); }
   return { mission_id: selected.mission_id, grant_id: id, expires_at: grant.expires_at, token_sha256: tokenSha256,
-    token_source: 'participant', template_written: true };
+    token_source: 'participant', template_written: true, ...(renewableUntil === undefined ? {} : { renewable_until: renewableUntil }) };
+}
+/** Administrator operation: close a renewal chain's window through any member's grant ID.
+ * Zero body bytes; revokes nothing; idempotent. The origin is pinned before the bearer is read.
+ */
+export async function closeRenewal({ bearerFile, missionId, grantId, serviceOrigin = DEFAULT_ORIGIN }, { fetchImpl = fetch, timeout = 20000, signal } = {}) {
+  origin(serviceOrigin); uuid(missionId); uuid(grantId);
+  if (!isAbsolute(bearerFile ?? '')) fail('Provide an absolute bearer file path.');
+  const bearer = privateRead(bearerFile, 1024).replace(/\r?\n$/, '');
+  if (!ADMIN_BEARER.test(bearer)) fail('Expected a project bearer (at_…) in the owner-only bearer file.');
+  let result;
+  try {
+    result = await boundedJson(await fetchImpl(`${serviceOrigin}/v1/collaboration/missions/${missionId}/grants/${grantId}/renewal/close`, {
+      method: 'POST', redirect: 'error', headers: { Authorization: `Bearer ${bearer}` },
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout) }));
+  } catch (error) {
+    const refusal = refusalOf(error);
+    if (refusal) throw new RenewalError('renewal_close_refused', 'The service refused to close the renewal window.', { serviceCode: refusal.code,
+      next: 'Check the mission and grant IDs and the bearer project.' });
+    if (error instanceof Error && /^(Service response exceeds|Service returned invalid|Empty service response)/.test(error.message)) throw error;
+    throw new RenewalError('renewal_close_uncertain', 'Closing the renewal window is uncertain.', { delivered: 'unknown', next: 'repeat renewal-close; it is idempotent' });
+  }
+  const grant = result?.grant, window = grant?.renewal;
+  if (!grant || typeof grant !== 'object' || JSON.stringify(result).includes('"token"') || grant.grant_id !== grantId || grant.mission_id !== missionId
+    || (window !== undefined && (!window || typeof window !== 'object' || !canonicalTime(window.closed_at))))
+    fail(`Grant ${grantId} response does not confirm the window close. Repeat renewal-close; it is idempotent.`);
+  return { grant_id: grantId, renewable: window !== undefined, root_grant_id: window?.root_grant_id ?? null, closed_at: window?.closed_at ?? null };
 }
 function outbox(path) {
   const root = stateRoot(path), directory = join(root, 'outbox'); privateStat(lstatSync(directory), true);
@@ -529,9 +735,14 @@ events --state DIR [--after 0]                  One page, explicit string cursor
 wait --state DIR [--after 0] [--seconds 30]      Bounded polling; maximum 45 seconds
 retry --state DIR --event-id UUID               Explicit exact-body retry
 leave --state DIR                               Revoke only this participant's own grant
+renew --state DIR                               Renew this grant inside its window: one request, saved
+                                                first; prints no token; run again to resolve uncertainty
 grant --bearer-file FILE --grant-file FILE --token-sha256 HEX --template-file NEW [--origin URL]
-                                                Administrator: grant a participant token hash; the
-                                                bearer goes only to https://api.agenttool.dev or --origin
+      [--renewable-until ISO]                   Administrator: grant a participant token hash; the
+                                                bearer goes only to https://api.agenttool.dev or --origin;
+                                                --renewable-until lets the participant renew until then
+renewal-close --bearer-file FILE --mission-id UUID --grant-id UUID [--origin URL]
+                                                Administrator: close a chain's window via any member
 chat inspect|read|send|reply                    Verified peer conversation; chat --help
 work inspect|sync|offer|accept|deliver|review   Explicit payment-free work; work --help
 work inspect-hermes|run-hermes                One locally permitted Hermes source review
@@ -622,11 +833,12 @@ export async function main(argv) {
   if (command === 'work') { await (await import('./mission-work.mjs')).workMain(rest); return; }
   const allowed = { init: ['origin'], enrollment: [], 'enroll-proof': ['details-file'], 'token-new': [],
     'invitation-assemble': ['template-file', 'invitation-file'], import: ['invitation-file', 'replace'], invitation: [],
-    accept: ['digest'], send: ['summary-file'], events: ['after'], wait: ['after', 'seconds'], retry: ['event-id'], leave: [],
-    grant: ['bearer-file', 'grant-file', 'token-sha256', 'template-file', 'origin'], mcp: [] };
+    accept: ['digest'], send: ['summary-file'], events: ['after'], wait: ['after', 'seconds'], retry: ['event-id'], leave: [], renew: [],
+    grant: ['bearer-file', 'grant-file', 'token-sha256', 'template-file', 'origin', 'renewable-until'],
+    'renewal-close': ['bearer-file', 'mission-id', 'grant-id', 'origin'], mcp: [] };
   const flags = { import: ['replace'] };
-  // The administrator grant uses no participant state; every other command requires --state.
-  const stateless = command === 'grant';
+  // Administrator commands use no participant state; every other command requires --state.
+  const stateless = ['grant', 'renewal-close'].includes(command);
   if (!Object.hasOwn(allowed, command)) fail('Unknown command. Use --help.');
   const options = {};
   for (let i = 0; i < rest.length;) {
@@ -636,10 +848,23 @@ export async function main(argv) {
     if (!rest[i + 1]) fail('Unknown, repeated or incomplete option. Use --help.');
     options[key] = rest[i + 1]; i += 2;
   }
-  if (stateless) {
+  const pinned = options.origin === undefined ? {} : { serviceOrigin: options.origin };
+  if (command === 'grant') {
     process.stdout.write(json(await issueGrant({ bearerFile: options['bearer-file'], requestFile: options['grant-file'],
-      tokenSha256: options['token-sha256'], templateFile: options['template-file'],
-      ...(options.origin === undefined ? {} : { serviceOrigin: options.origin }) })));
+      tokenSha256: options['token-sha256'], templateFile: options['template-file'], ...pinned,
+      ...(options['renewable-until'] === undefined ? {} : { renewableUntil: options['renewable-until'] }) })));
+    return;
+  }
+  if (command === 'renewal-close' || command === 'renew') {
+    try {
+      process.stdout.write(json(command === 'renew' ? await renew(options.state ?? fail('Provide --state with an absolute directory.'))
+        : await closeRenewal({ bearerFile: options['bearer-file'], missionId: options['mission-id'], grantId: options['grant-id'], ...pinned })));
+    } catch (error) {
+      if (!(error instanceof RenewalError)) throw error;
+      process.stderr.write(json({ stop_reason: error.stop_reason, error: safeError(error), code: error.serviceCode,
+        delivered: error.delivered, retry: 'never automatic', next: error.next }));
+      process.exitCode = 1;
+    }
     return;
   }
   const path = options.state; if (!isAbsolute(path ?? '')) fail('Provide --state with an absolute directory.');
