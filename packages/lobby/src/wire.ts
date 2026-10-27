@@ -395,6 +395,50 @@ export function verifyBytes(publicKey: string, bytes: Uint8Array, signature: Uin
   }
 }
 
+// ── Device codes: the one human-typed name of a device's key ────────────
+
+const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+/** A normalised device code: 16 Crockford base32 characters, no dashes. */
+export const DEVICE_CODE_PATTERN = /^[0-9A-HJKMNP-TV-Z]{16}$/;
+
+function crockfordBase32(bytes: Uint8Array, chars: number): string {
+  let bits = 0;
+  let value = 0;
+  let out = "";
+  for (const byte of bytes) {
+    value = ((value << 8) | byte) & 0xffff;
+    bits += 8;
+    while (bits >= 5 && out.length < chars) {
+      out += CROCKFORD[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+  return out;
+}
+
+/** The device code a person reads on a device and types at the hub: the first
+ * 80 bits of SHA-256 over the raw 32-byte Ed25519 public key, in Crockford
+ * base32, shown as XXXX-XXXX-XXXX-XXXX. Ported byte for byte from the
+ * identity-pairing enrollment fingerprint (PR #487, api/src/services/identity/
+ * pairing.ts enrollmentFingerprint), so both features show one format. */
+export function deviceCode(publicKey: string): string {
+  const raw = crockfordBase32(sha256Bytes(rawPublicKey(publicKey)).subarray(0, 10), 16);
+  return raw.match(/.{4}/g)!.join("-");
+}
+
+/** A typed device code, normalised as the pairing code is: case, whitespace
+ * and dashes are ignored, I and L read as 1, O reads as 0. Null when what
+ * remains is not 16 Crockford characters. */
+export function normalizeDeviceCode(input: string): string | null {
+  const normalized = String(input).toUpperCase().replace(/[\s-]/g, "").replace(/[IL]/g, "1").replace(/O/g, "0");
+  return DEVICE_CODE_PATTERN.test(normalized) ? normalized : null;
+}
+
+/** True when a typed device code names exactly this public key. */
+export function deviceCodeMatches(typed: string, publicKey: string): boolean {
+  return normalizeDeviceCode(typed) === deviceCode(publicKey).replace(/-/g, "");
+}
+
 const BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 function base58btc(bytes: Uint8Array): string {

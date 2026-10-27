@@ -8,7 +8,8 @@ import { buildLobbyMcpServer } from "../src/mcp.js";
 import { LobbyStore } from "../src/store.js";
 import { checkEgress } from "../src/egress.js";
 import { FAKE_BEARER, FAKE_PROJECT } from "./fake-hosted.js";
-import { bootstrapFleet, DEVICE_TERMS, expectNoSecretIn, ok, shownBytes } from "./fleet-helpers.js";
+import { deviceCode } from "../src/wire.js";
+import { bootstrapFleet, deviceCodeShown, DEVICE_TERMS, expectNoSecretIn, ok, shownBytes } from "./fleet-helpers.js";
 import { cleanupTempHomes } from "./helpers.js";
 
 afterEach(cleanupTempHomes);
@@ -98,6 +99,38 @@ describe("fleet hall end to end", () => {
       "room.publish", "hub.relay", "hub.admit"]);
     const deviceActs = JSON.parse((await ok(device.run("audit", "list", "--json"))).stdout).entries.map((entry: any) => entry.act);
     expect(deviceActs).toEqual(["desk.enroll", "fleet.join", "fleet.knock", "fleet.ready"]);
+  });
+
+  test("hub relay takes the device from the code typed at the hub; the packet and the join packet are unchanged", async () => {
+    const fleet = await bootstrapFleet();
+    const { hub } = fleet;
+    const laptop = fleet.world.desk("laptop");
+    const enrolled = await ok(laptop.run("enroll-device", "--project", FAKE_PROJECT));
+    const packet = JSON.parse(enrolled.stdout);
+    // stdout stays exactly the packet; the code is on stderr only, for the person to read.
+    expect(enrolled.stdout).toBe(`${JSON.stringify(packet, null, 2)}\n`);
+    const code = deviceCodeShown(enrolled.stderr);
+    expect(code).toBe(deviceCode(packet.public_key));
+    expect(enrolled.stdout).not.toContain(code);
+    expect(Object.keys(packet).sort()).toEqual(["directory_token_sha256", "display_name", "enrollment_request", "fingerprint", "format",
+      "identity_id", "issued_at", "kind", "origin", "packet_sig", "project_id", "public_key", "signing_key_id", "valid_until"]);
+
+    const relayed = await ok(hub.yes("hub", "relay", "--packet-file", laptop.file("p.json", enrolled.stdout), "--device-fingerprint", code));
+    expect(hub.terminal.written.join("")).toContain(`device code ${code} typed at this terminal matches the packet's key`);
+    const bytes = JSON.parse(shownBytes(hub));
+    expect(bytes).toMatchObject({ act: "hub.relay", device: { identity_id: packet.identity_id, fingerprint: packet.fingerprint, device_code: code } });
+    const store = LobbyStore.open(hub.home);
+    expect(store.listAudit().at(-1)!.bytes).toBe(shownBytes(hub));
+    store.close();
+    // The join packet is the same agenttool-lobby-join/v1 document as before C1: no new field, no code.
+    const join = JSON.parse(relayed.stdout);
+    expect(relayed.stdout).toBe(`${JSON.stringify(join, null, 2)}\n`);
+    expect(Object.keys(join).sort()).toEqual(["directory", "door", "format", "invitation_template", "origin", "project_id"]);
+    expect(join).toMatchObject({ format: "agenttool-lobby-join/v1", project_id: FAKE_PROJECT, door: { fingerprint: fleet.doorFingerprint },
+      directory: { mission_id: fleet.directoryId }, invitation_template: { identity_id: packet.identity_id, public_key: packet.public_key,
+        token_sha256: packet.directory_token_sha256 } });
+    expect(relayed.stdout).not.toContain(code);
+    await ok(laptop.yes("fleet", "join", "--packet-file", laptop.file("j.json", relayed.stdout), "--door-fingerprint", fleet.doorFingerprint));
   });
 
   test("custody: no bearer, token or key ever reaches a posted text, a request body, stdout or the MCP", async () => {

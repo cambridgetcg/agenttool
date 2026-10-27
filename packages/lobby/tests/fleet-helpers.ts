@@ -124,11 +124,25 @@ export interface Fleet {
   seasonDigest: string;
 }
 
+/** The device code enroll-device showed on the device's stderr, as a person
+ * reads it off that screen to type at the hub. */
+export function deviceCodeShown(stderr: string): string {
+  const match = /device code ([0-9A-HJKMNP-TV-Z]{4}(?:-[0-9A-HJKMNP-TV-Z]{4}){3})\n/.exec(stderr);
+  if (match === null) throw new Error(`enroll-device showed no device code: ${stderr}`);
+  return match[1]!;
+}
+
+/** hub relay of a packet enroll-device just printed on `device`, typing the
+ * device code it showed there. */
+export function relayArgs(device: Desk, enrolled: { stdout: string; stderr: string }, name = `packet-${crypto.randomUUID()}.json`): string[] {
+  return ["hub", "relay", "--packet-file", device.file(name, enrolled.stdout), "--device-fingerprint", deviceCodeShown(enrolled.stderr)];
+}
+
 /** Enroll one desk through the hub: enroll-device → hub relay → fleet join. */
 export async function enrollThroughHub(hub: Desk, device: Desk, doorFingerprint: string | null = null): Promise<{ packet: any; join: any }> {
   const enrolled = await ok(device.run("enroll-device", "--project", FAKE_PROJECT));
   const packet = JSON.parse(enrolled.stdout);
-  const relayed = await ok(hub.yes("hub", "relay", "--packet-file", device.file(`packet-${crypto.randomUUID()}.json`, enrolled.stdout)));
+  const relayed = await ok(hub.yes(...relayArgs(device, enrolled)));
   const join = JSON.parse(relayed.stdout);
   await ok(device.yes("fleet", "join", "--packet-file", device.file(`join-${crypto.randomUUID()}.json`, relayed.stdout),
     "--door-fingerprint", doorFingerprint ?? join.door.fingerprint));
@@ -189,7 +203,7 @@ export async function json(result: Promise<{ code: number; stdout: string; stder
 
 async function enrollHub(hub: Desk, doorFingerprint: string): Promise<void> {
   const enrolled = await ok(hub.run("enroll-device", "--project", FAKE_PROJECT));
-  const relayed = await ok(hub.yes("hub", "relay", "--packet-file", hub.file("hub-packet.json", enrolled.stdout)));
+  const relayed = await ok(hub.yes(...relayArgs(hub, enrolled, "hub-packet.json")));
   await ok(hub.yes("fleet", "join", "--packet-file", hub.file("hub-join.json", relayed.stdout), "--door-fingerprint", doorFingerprint));
 }
 

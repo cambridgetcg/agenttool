@@ -32,8 +32,9 @@ async function fleetThroughGateway() {
   const init = await hub.yes("hub", "init", "--project", PROJECT);
   const door = /door fingerprint ([0-9a-f]{16})/.exec(init)![1]!;
   for (const who of [hub, device, second]) {
-    const packet = await who.run("enroll-device", "--project", PROJECT);
-    const join = await hub.yes("hub", "relay", "--packet-file", who.file("packet.json", packet));
+    const enrolled = await who.exec("enroll-device", "--project", PROJECT);
+    const code = /device code ([0-9A-Z-]{19})\n/.exec(enrolled.stderr)![1]!;
+    const join = await hub.yes("hub", "relay", "--packet-file", who.file("packet.json", enrolled.stdout), "--device-fingerprint", code);
     await who.yes("fleet", "join", "--packet-file", who.file("join.json", join), "--door-fingerprint", door);
   }
   const roomId = JSON.parse(await hub.run("room", "add", "--title", "Zerone season 1", "--door", "knock", "--json")).card.room_id as string;
