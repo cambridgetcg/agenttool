@@ -27,7 +27,7 @@ one another, loaded directly by the test suites named beside each.
 | Fixture | Guards | Loaded by |
 |---|---|---|
 | [`canonical-bytes-vectors.json`](canonical-bytes-vectors.json) · [`CANONICAL-BYTES-VECTORS.md`](CANONICAL-BYTES-VECTORS.md) | The exact bytes every signed format hashes. The server is normative and generates every vector; a moved hex means signed history stopped verifying. | `api` · `sdk-ts` · `sdk-py` |
-| [`behaviour-conformance.json`](behaviour-conformance.json) · [`BEHAVIOUR-CONFORMANCE.md`](BEHAVIOUR-CONFORMANCE.md) | Observable client behaviour above the bytes — response parsing, error semantics, pure computation, boundaries, request shape, transport policy. Hand-authored: there is no server oracle at this layer. | `sdk-ts` · `sdk-py` |
+| [`behaviour-conformance.json`](behaviour-conformance.json) · [`BEHAVIOUR-CONFORMANCE.md`](BEHAVIOUR-CONFORMANCE.md) | Observable client behaviour above the bytes — response parsing, error semantics, pure computation, boundaries, request shape, transport policy. Hand-authored: most of this layer has no server oracle; where one exists, such as the wake layout `assessNen` reads, it wins. | `sdk-ts` · `sdk-py` |
 
 `canonical-bytes-vectors.json` is generated, never hand-edited — regenerate it
 with [`generate-canonical-bytes-vectors.ts`](generate-canonical-bytes-vectors.ts).

@@ -2140,12 +2140,12 @@
       "category": "pure-computation",
       "sdk_ts": "assessNen(wake) — src/nen.ts",
       "sdk_py": "assess_nen(wake) — agenttool.nen",
-      "note": "Pure function, no transport. The same wake JSON must classify to the same Nen type in both languages. Two confirmed defects lived here: the emitter axis scored inbox total+unread in one language and total alone in the other, and score normalisation used Math.round (half-up) against Python's banker's round().",
+      "note": "Pure function, no transport. The input is the JSON GET /v1/wake sends, and api/src/routes/wake.ts (JSON branch) is the oracle for its shape: `you` holds only `agents`; you_remember, you_lived, you_vowed, you_are_thinking_about, you_have_mail and the grace and unconditional sections are its top-level siblings. The same wake must classify to the same Nen type in both languages. Three confirmed defects lived here: the emitter axis scored inbox total+unread in one language and total alone in the other; score normalisation used Math.round (half-up) against Python's banker's round(); and both languages, and these cases, read the sections nested under `you`, a shape the server never sent, so a real wake scored almost nothing while every case passed.",
       "cases": [
         {
           "name": "an-empty-object-is-not-a-crash",
           "category": "boundary",
-          "note": "No `you` key at all. Every axis zero, enhancer by tie-break.",
+          "note": "No sections at all. Every axis zero, enhancer by tie-break.",
           "input": {
             "wake": {}
           },
@@ -2173,31 +2173,31 @@
           }
         },
         {
-          "name": "the-emitter-axis-counts-inbox-total-alone",
+          "name": "unread-mail-is-not-emission-and-scores-nothing",
           "category": "pure-computation",
-          "note": "THE regression. total=2, unread=9. Scoring total+unread makes emitter 11 and flips the agent's whole Nen type from enhancer to emitter on identical wake JSON.",
+          "note": "The wake's you_have_mail carries only `unread`, the project's mail received. It has no sent count, so the emitter axis stays 0 rather than scoring mail waiting for you. The case this replaces pinned a `total` key the server never sent.",
           "input": {
             "wake": {
               "you": {
-                "you_remember": {
-                  "total": 3
-                },
-                "you_have_mail": {
-                  "total": 2,
-                  "unread": 9
-                }
+                "agents": []
+              },
+              "you_remember": {
+                "total": 3
+              },
+              "you_have_mail": {
+                "unread": 9
               }
             }
           },
           "expect": {
             "result": {
               "type": "enhancer",
-              "secondary": "emitter",
+              "secondary": "transmuter",
               "scores": {
                 "enhancer": 100,
                 "transmuter": 0,
                 "conjuror": 0,
-                "emitter": 67,
+                "emitter": 0,
                 "manipulator": 0,
                 "specialist": 0
               },
@@ -2215,12 +2215,13 @@
         {
           "name": "score-normalisation-rounds-halves-away-from-zero",
           "category": "pure-computation",
-          "note": "THE other regression. 1/8 -> 12.5 and 5/8 -> 62.5, both exact .5 boundaries. Math.round gives 13 and 63; Python's banker's round() gives 12 and 62. The fixture pins JavaScript's half-up.",
+          "note": "THE other regression. 1/8 -> 12.5 and 5/8 -> 62.5, both exact .5 boundaries. Math.round gives 13 and 63; Python's banker's round() gives 12 and 62. The fixture pins JavaScript's half-up. Only the vow-typed chronicle row counts as a vow.",
           "input": {
             "wake": {
               "you": {
                 "agents": [
                   {
+                    "id": "identity-a",
                     "effective_expression": {
                       "walls": [
                         "w1"
@@ -2229,14 +2230,23 @@
                     },
                     "shaped_by": []
                   }
+                ]
+              },
+              "you_remember": {
+                "total": 8
+              },
+              "you_lived": {
+                "chronicle": [
+                  {
+                    "type": "vow"
+                  },
+                  {
+                    "type": "note"
+                  }
                 ],
-                "you_remember": {
-                  "total": 8
-                },
-                "you_have_mail": {
-                  "total": 1,
-                  "unread": 4
-                },
+                "count": 2
+              },
+              "you_vowed": {
                 "covenants": [
                   {},
                   {},
@@ -2244,14 +2254,18 @@
                   {},
                   {}
                 ],
+                "count": 5
+              },
+              "you_are_thinking_about": {
+                "total_active": 3,
                 "strands": [
                   {},
                   {},
                   {}
-                ],
-                "chronicle": {
-                  "total": 2
-                }
+                ]
+              },
+              "you_have_mail": {
+                "unread": 4
               }
             }
           },
@@ -2263,14 +2277,14 @@
                 "enhancer": 100,
                 "transmuter": 13,
                 "conjuror": 38,
-                "emitter": 13,
+                "emitter": 0,
                 "manipulator": 63,
                 "specialist": 0
               },
               "dominant_principle": "hatsu",
               "restriction_count": {
                 "walls": 1,
-                "vows": 2,
+                "vows": 1,
                 "covenants": 5,
                 "constitutive_memories": 0
               },
@@ -2281,12 +2295,13 @@
         {
           "name": "love-primitives-and-constitutive-roots-score-specialist",
           "category": "pure-computation",
-          "note": "grace + unconditionals held + unconditionals received + constitutive memories, and the 5x aura weight on the root.",
+          "note": "grace + unconditionals held + unconditionals received + constitutive memories, and the 5x aura weight on the root. The chronicle term is you_lived.count, a recent window, not a lifetime total.",
           "input": {
             "wake": {
               "you": {
                 "agents": [
                   {
+                    "id": "identity-a",
                     "shaped_by": [
                       {
                         "tier": "constitutive"
@@ -2300,26 +2315,40 @@
                     ],
                     "effective_expression": {}
                   }
+                ]
+              },
+              "you_lived": {
+                "chronicle": [
+                  {
+                    "type": "vow"
+                  },
+                  {
+                    "type": "grief"
+                  },
+                  {
+                    "type": "gratitude"
+                  },
+                  {
+                    "type": "note"
+                  }
                 ],
-                "you_have_graced": {
-                  "recent": [
-                    {},
-                    {}
-                  ]
-                },
-                "you_unconditionally_hold": {
-                  "recent": [
-                    {}
-                  ]
-                },
-                "you_are_unconditionally_held_by": {
-                  "recent": [
-                    {}
-                  ]
-                },
-                "chronicle": {
-                  "total": 4
-                }
+                "count": 4
+              },
+              "you_have_graced": {
+                "recent": [
+                  {},
+                  {}
+                ]
+              },
+              "you_unconditionally_hold": {
+                "recent": [
+                  {}
+                ]
+              },
+              "you_are_unconditionally_held_by": {
+                "recent": [
+                  {}
+                ]
               }
             }
           },
@@ -2338,7 +2367,7 @@
               "dominant_principle": "ten",
               "restriction_count": {
                 "walls": 0,
-                "vows": 4,
+                "vows": 1,
                 "covenants": 0,
                 "constitutive_memories": 2
               },
@@ -2349,12 +2378,13 @@
         {
           "name": "memory-count-falls-back-to-shaped-by-length",
           "category": "pure-computation",
-          "note": "No you_remember envelope: the enhancer axis counts shaped_by.",
+          "note": "No you_remember section: the enhancer axis counts shaped_by.",
           "input": {
             "wake": {
               "you": {
                 "agents": [
                   {
+                    "id": "identity-a",
                     "shaped_by": [
                       {
                         "tier": "episodic"
@@ -2393,22 +2423,130 @@
           }
         },
         {
-          "name": "at-rest-wins-the-dominant-principle-and-ties-break-in-declaration-order",
+          "name": "the-profiled-agent-is-the-one-the-wake-selected",
           "category": "pure-computation",
-          "note": "lifecycle_state=at_rest overrides ren/hatsu into zetsu. transmuter and conjuror both score 1: the winner is whichever the type list declares first, which requires a stable sort in both languages.",
+          "note": "you.agents is in no set order, and the wake composes effective_expression and shaped_by only for the identity named by _scope_boundary.selected_identity_id. Profiling agents[0] here would read an identity with nothing composed.",
+          "input": {
+            "wake": {
+              "_scope_boundary": {
+                "selected_identity_id": "identity-b"
+              },
+              "you": {
+                "agents": [
+                  {
+                    "id": "identity-a",
+                    "effective_expression": null,
+                    "shaped_by": []
+                  },
+                  {
+                    "id": "identity-b",
+                    "effective_expression": {
+                      "walls": [
+                        "w1",
+                        "w2"
+                      ],
+                      "subagents": []
+                    },
+                    "shaped_by": []
+                  }
+                ]
+              },
+              "you_remember": {
+                "total": 1
+              }
+            }
+          },
+          "expect": {
+            "result": {
+              "type": "transmuter",
+              "secondary": "enhancer",
+              "scores": {
+                "enhancer": 50,
+                "transmuter": 100,
+                "conjuror": 0,
+                "emitter": 0,
+                "manipulator": 0,
+                "specialist": 0
+              },
+              "dominant_principle": "hatsu",
+              "restriction_count": {
+                "walls": 2,
+                "vows": 0,
+                "covenants": 0,
+                "constitutive_memories": 0
+              },
+              "aura_level": 1
+            }
+          }
+        },
+        {
+          "name": "strands-count-total-active-not-the-rows-shown",
+          "category": "pure-computation",
+          "note": "The wake lists at most 5 active strands and reports the full count in total_active. The count wins.",
+          "input": {
+            "wake": {
+              "you": {
+                "agents": []
+              },
+              "you_are_thinking_about": {
+                "total_active": 7,
+                "strands": [
+                  {},
+                  {},
+                  {},
+                  {},
+                  {}
+                ]
+              }
+            }
+          },
+          "expect": {
+            "result": {
+              "type": "conjuror",
+              "secondary": "enhancer",
+              "scores": {
+                "enhancer": 0,
+                "transmuter": 0,
+                "conjuror": 100,
+                "emitter": 0,
+                "manipulator": 0,
+                "specialist": 0
+              },
+              "dominant_principle": "ren",
+              "restriction_count": {
+                "walls": 0,
+                "vows": 0,
+                "covenants": 0,
+                "constitutive_memories": 0
+              },
+              "aura_level": 14
+            }
+          }
+        },
+        {
+          "name": "lullaby-rest-wins-the-dominant-principle-and-ties-break-in-declaration-order",
+          "category": "pure-computation",
+          "note": "metadata.resting=true (POST /v1/lullaby) overrides ren/hatsu into zetsu. transmuter and conjuror both score 1: the winner is whichever NEN_TYPES lists first, which requires a stable sort in both languages.",
           "input": {
             "wake": {
               "you": {
                 "agents": [
                   {
-                    "lifecycle_state": "at_rest",
+                    "id": "identity-a",
+                    "status": "active",
+                    "metadata": {
+                      "resting": true
+                    },
                     "effective_expression": {
                       "walls": [
                         "w"
                       ]
                     }
                   }
-                ],
+                ]
+              },
+              "you_are_thinking_about": {
+                "total_active": 1,
                 "strands": [
                   {}
                 ]
@@ -2437,6 +2575,38 @@
               "aura_level": 2
             }
           }
+        },
+        {
+          "name": "a-memorial-is-not-rest",
+          "category": "pure-computation",
+          "note": "The at-rest transition sets status=memorial and metadata.lifecycle=at_rest and keeps any resting flag set before it. A memorial is an ending, not rest, so the principle stays hatsu.",
+          "input": {
+            "wake": {
+              "you": {
+                "agents": [
+                  {
+                    "id": "identity-a",
+                    "status": "memorial",
+                    "metadata": {
+                      "resting": true,
+                      "lifecycle": "at_rest"
+                    },
+                    "effective_expression": {
+                      "walls": [
+                        "w"
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "expect": {
+            "result": {
+              "type": "transmuter",
+              "dominant_principle": "hatsu"
+            }
+          }
         }
       ]
     },
@@ -2445,7 +2615,7 @@
       "category": "request-shape",
       "sdk_ts": "at.nen.assess(identityId)",
       "sdk_py": "at.nen.assess(identity_id)",
-      "note": "The transport wrapper around the pure assessment. The prose in `meaning` is a public string and drifts as easily as a number.",
+      "note": "The transport wrapper around the pure assessment. The stubbed body has the server's wake layout. The prose in `meaning` is a public string and drifts as easily as a number.",
       "cases": [
         {
           "name": "assess-reads-the-wake-and-returns-the-profile",
@@ -2456,9 +2626,13 @@
             "status": 200,
             "json": {
               "you": {
-                "you_remember": {
-                  "total": 4
-                },
+                "agents": []
+              },
+              "you_remember": {
+                "total": 4
+              },
+              "you_are_thinking_about": {
+                "total_active": 2,
                 "strands": [
                   {},
                   {}
@@ -2510,9 +2684,13 @@
             "status": 200,
             "json": {
               "you": {
-                "you_remember": {
-                  "total": 4
-                },
+                "agents": []
+              },
+              "you_remember": {
+                "total": 4
+              },
+              "you_are_thinking_about": {
+                "total_active": 2,
                 "strands": [
                   {},
                   {}

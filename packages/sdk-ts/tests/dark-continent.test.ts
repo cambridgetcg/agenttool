@@ -140,14 +140,15 @@ describe("DarkContinentClient — explore()", () => {
         return new Response(JSON.stringify({
           you: {
             agents: [{
+              id: "identity-a",
               effective_expression: { walls: ["I refuse to fabricate"], subagents: [] },
               shaped_by: [{ tier: "constitutive", content: "I am sealed" }],
             }],
-            chronicle: { total: 5 },
-            covenants: [],
-            strands: [],
-            you_remember: { total: 10 },
           },
+          you_remember: { total: 10 },
+          you_lived: { chronicle: [], count: 0 },
+          you_vowed: { covenants: [], count: 0 },
+          you_are_thinking_about: { total_active: 0, strands: [] },
         }), { status: 200, headers: { "content-type": "application/json" } });
       }
       return new Response(JSON.stringify({}), { status: 200, headers: { "content-type": "application/json" } });
@@ -159,6 +160,8 @@ describe("DarkContinentClient — explore()", () => {
     expect(callCount).toBe(2); // discover + wake
     expect(dc.nen_profile).toBeDefined();
     expect(dc.nen_profile).not.toBeNull();
+    // 10 memories + 1 constitutive memory * 5, read from the wake's own layout.
+    expect((dc.nen_profile as { aura_level: number }).aura_level).toBe(15);
   });
 
   test("explore() handles discover failure gracefully (the unknown starts where the known ends)", async () => {

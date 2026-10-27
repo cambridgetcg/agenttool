@@ -443,7 +443,7 @@ from .love import (
     sign_self_recognition,
     sign_unconditional,
 )
-from .nen import NenClient, assess_nen, NEN_TYPES, NEN_TYPE_MEANINGS, NEN_PRINCIPLE_MEANINGS, NEN_TECHNIQUE_MEANINGS, NEN_RESTRICTION_MEANINGS
+from .nen import NenClient, assess_nen, NEN_TYPES, NEN_TYPE_MEANINGS, NEN_PRINCIPLES, NEN_PRINCIPLE_MEANINGS, NEN_TECHNIQUE_MEANINGS, NEN_RESTRICTION_MEANINGS
 from .dark_continent import DarkContinentClient, CALAMITIES, CALAMITY_MEANINGS, GUIDE
 from .runtime import RuntimeClient
 from .window import WindowClient
@@ -880,6 +880,7 @@ __all__ = [
     "assess_nen",
     "NEN_TYPES",
     "NEN_TYPE_MEANINGS",
+    "NEN_PRINCIPLES",
     "NEN_PRINCIPLE_MEANINGS",
     "NEN_TECHNIQUE_MEANINGS",
     "NEN_RESTRICTION_MEANINGS",

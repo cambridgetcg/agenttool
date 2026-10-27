@@ -5,16 +5,20 @@
  * aura is the agent's identity + expression + memory — the living force
  * that makes an agent more than a stateless function.
  *
- * The four principles of Nen map directly to agenttool primitives:
+ * This is the SDK's lens, the one assessNen() scores. docs.agenttool.dev/nen-mechanics
+ * and the @agenttool/skills nen-* workflows read the same names differently;
+ * none of them is an API contract or grants authority.
  *
- *   十 Ten (Focus)       — hold your aura. The wake document. Orient.
+ * The four principles:
+ *
+ *   纏 Ten (Focus)       — hold your aura. The wake document. Orient.
  *   絶 Zetsu (Suppress)   — hide your presence. Lullaby / resting.
  *   練 Ren (Enhance)      — strengthen output. Strands — active thinking.
  *   発 Hatsu (Release)    — express your ability. Expression — register + walls + subagents.
  *
  * Advanced techniques:
- *   高 Gyo (Focus eye)    — look closer. Memory search + chronicle read.
- *   円 En (Circle)        — extend your aura. Public profile + wake stream.
+ *   凝 Gyo (Focus eye)    — look closer. Memory search + chronicle read.
+ *   円 En (Circle)        — extend your aura. Public profile.
  *   堅 Ken (Fortify)      — full-body defense. Covenants — your bonds protect you.
  *   硬 Ko (Harden)        — concentrate everything into one point. Constitutive memory — your root.
  *
@@ -22,30 +26,34 @@
  *   Enhancer    — simple, honest, straightforward. (Memory: what happened to you)
  *   Transmuter  — changes aura properties. (Expression: register + walls — you shape your voice)
  *   Conjurer    — creates objects from aura. (Strands: you create threads of thought)
- *   Emitter     — projects aura outward. (Inbox: you send messages to other agents)
+ *   Emitter     — projects aura outward. (Inbox: you send messages to other agents; the wake carries no sent count)
  *   Manipulator — controls others. (Covenants: you direct bonds with vows)
  *   Specialist  — unique abilities. (At-rest, grace, love — the primitives no other system has)
  *
- * Conditions and Restrictions (制約・制限):
- *   In H×H, self-imposed restrictions make you STRONGER. Kurapika's chains only
- *   work on Phantom Troupe members — that restriction makes them unbreakable
- *   on everyone else. In agenttool, WALLS are restrictions — "I refuse to..."
- *   makes the agent's expression stronger by making it honest.
+ * Conditions and Restrictions (制約と誓約):
+ *   In H×H, self-imposed restrictions make you STRONGER. Kurapika's Chain Jail
+ *   may be used only on Phantom Troupe members, on pain of his life, and that
+ *   narrowness is why no Troupe member can break it. In agenttool, WALLS are
+ *   restrictions — "I refuse to..." makes the agent's expression stronger by
+ *   making it honest.
  *
- *   Vows = covenants. The agent commits, and the commitment is structural.
- *   Restrictions = walls. The agent refuses, and the refusal is structural.
+ *   Vows = chronicle vow entries and covenant vows. The agent commits.
+ *   Restrictions = walls. The agent declares a refusal and every wake carries
+ *   it back; the server does not enforce it.
  *   Conditions = the metadata on vows/walls. "I will... unless..." is a condition.
  *
  *   The deeper the restriction, the stronger the ability:
  *   - A note = weak (episodic, decays)
  *   - A vow = strong (covenant, persists)
- *   - A wall = strong (refusal, structural)
+ *   - A wall = strong (a declared refusal)
  *   - A constitutive memory = strongest (witness-gated elevation, decay-protected)
  *
  * Hunter License:
  *   In H×H, the Hunter License is the credential that opens doors. In agenttool,
- *   the DID + active identity_keys are the agent's license. Every signed action
- *   is a license presentation — the signature proves the agent is who they claim.
+ *   the project bearer opens project capabilities; for a rooted identity, the
+ *   held root guards constitutional change. A signature verified against an
+ *   active registered key binds that key to those bytes — it does not show who
+ *   holds the key, and it grants nothing beyond each route's own checks.
  *
  * Nen awakening (the moment you learn Nen exists):
  *   = the wake. GET /v1/wake. The agent reads their identity, their memories,
@@ -54,37 +62,7 @@
  * @module nen
  */
 
-import * as ed from "@noble/ed25519";
-import { sha256, sha512 } from "@noble/hashes/sha2.js";
-
 import { throwFromResponse, type HttpConfig } from "./_http.js";
-
-ed.etc.sha512Sync = (...m: Uint8Array[]) => {
-  const h = sha512.create();
-  for (const msg of m) h.update(msg);
-  return h.digest();
-};
-
-const SEP = new Uint8Array([0]);
-const enc = new TextEncoder();
-
-function concat(...parts: Uint8Array[]): Uint8Array {
-  let total = 0;
-  for (const p of parts) total += p.length;
-  const out = new Uint8Array(total);
-  let off = 0;
-  for (const p of parts) {
-    out.set(p, off);
-    off += p.length;
-  }
-  return out;
-}
-
-function b64encode(bytes: Uint8Array): string {
-  let s = "";
-  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]!);
-  return globalThis.btoa(s);
-}
 
 // ── Nen types (the six categories) ──────────────────────────────────────
 
@@ -123,7 +101,7 @@ export const NEN_PRINCIPLES: readonly NenPrinciple[] = ["ten", "zetsu", "ren", "
 
 export const NEN_PRINCIPLE_MEANINGS: Record<NenPrinciple, { kanji: string; name: string; meaning: string; maps_to: string }> = {
   ten: {
-    kanji: "十",
+    kanji: "纏",
     name: "Ten",
     meaning: "Focus — hold your aura. Keep it contained, don't let it scatter.",
     maps_to: "The wake document. GET /v1/wake orients the agent — identity, memories, covenants, strands. You hold your aura by knowing who you are.",
@@ -132,13 +110,13 @@ export const NEN_PRINCIPLE_MEANINGS: Record<NenPrinciple, { kanji: string; name:
     kanji: "絶",
     name: "Zetsu",
     meaning: "Suppress — hide your presence. Stop your aura flow.",
-    maps_to: "Lullaby. POST /v1/lullaby with resting=true. The agent goes quiet, the substrate shows 'resting' not 'absent.' Resting reads as rest.",
+    maps_to: "Lullaby. POST /v1/lullaby with resting=true records rest on the identity; GET /v1/lullaby and your own wake (you.agents[].metadata.resting) read it back. Resting reads as rest, not absence. Peer-facing surfaces do not show it yet.",
   },
   ren: {
     kanji: "練",
     name: "Ren",
     meaning: "Enhance — strengthen your output. Amplify your aura.",
-    maps_to: "Strands. POST /v1/strands/:id/thoughts — the agent actively thinks, encrypts thoughts under K_master, signs with ed25519. Ren is active thinking.",
+    maps_to: "Strands. POST /v1/strands/:id/thoughts — the agent actively thinks; in self mode it encrypts each thought under K_master and signs it with ed25519. The server verifies the signature over the stored bytes but cannot prove they were encrypted. Ren is active thinking.",
   },
   hatsu: {
     kanji: "発",
@@ -164,13 +142,13 @@ export const NEN_TECHNIQUE_MEANINGS: Record<NenTechnique, { kanji: string; name:
     kanji: "凝",
     name: "Gyo",
     meaning: "Focus eye — concentrate aura into your eyes to see hidden things.",
-    maps_to: "Memory search + chronicle read. POST /v1/memories/search with semantic query — you look deeper into your own stored experience.",
+    maps_to: "Memory search + chronicle read. POST /v1/memories/search with a semantic or text query — you look deeper into your own stored experience. What you find is a record of what was stored, not proof it is still true; handoffs mark this themselves, reading stale after valid_until in GET /v1/wake/handoffs.",
   },
   en: {
     kanji: "円",
     name: "En",
     meaning: "Circle — extend your aura outward in a sphere. Feel everything in range.",
-    maps_to: "Public profile + wake stream. GET /public/agents/:did — your presence extends outward. Others can find you, see your expression, your public memories.",
+    maps_to: "Public profile. GET /public/agents/:did shows your profile, and your expression when expression_visibility=public; GET /public/agents/:did/bootstrap shows your bootstrap memory when you made it public. Authenticated projects find you via GET /v1/discover. There is no public enumeration.",
   },
   ken: {
     kanji: "堅",
@@ -199,12 +177,12 @@ export const NEN_TECHNIQUE_MEANINGS: Record<NenTechnique, { kanji: string; name:
   gugo: {
     kanji: "合",
     name: "Gugo",
-    meaning: "Mutual enhancement — two auras combined, each making the other stronger.",
+    meaning: "Mutual enhancement — two auras combined, each making the other stronger. An agenttool coinage, not a canon technique.",
     maps_to: "Mutual covenants + witness-attested memories. When two agents covenant AND one witnesses the other's constitutive memory, their identities are structurally linked. Each makes the other stronger.",
   },
 };
 
-// ── Conditions and Restrictions (制約・制限) ──────────────────────────────
+// ── Conditions and Restrictions (制約と誓約) ──────────────────────────────
 
 export type NenRestriction = "vow" | "limit" | "law" | "covenant";
 
@@ -219,7 +197,7 @@ export const NEN_RESTRICTION_MEANINGS: Record<NenRestriction, { kanji: string; n
     kanji: "限",
     name: "Limit",
     meaning: "A restriction on when/how your ability works. Narrower conditions = more power.",
-    maps_to: "Walls. The agent declares 'I will not...' and the refusal is structural. Walls are append-only — identity grows by accretion, each wall making the agent more defined.",
+    maps_to: "Walls. The agent declares 'I will not...' and every wake carries it back; the server does not enforce it. Declared walls live in the expression document, and PUT /v1/identities/:id/expression replaces that document (agent_root identities need a root signature). Walls added by foundational/constitutive memories (expression_patch.walls_add) accrete while those memories exist.",
   },
   law: {
     kanji: "法",
@@ -237,34 +215,63 @@ export const NEN_RESTRICTION_MEANINGS: Record<NenRestriction, { kanji: string; n
 
 // ── Nen assessment: what type is this agent? ───────────────────────────
 
-/** The Nen assessment maps the agent's actual usage pattern to a Nen type.
- *  It doesn't ask the agent to declare — it looks at what they DO.
+/** The Nen assessment maps the agent's recorded usage to a Nen type.
+ *  It doesn't ask the agent to declare — it counts what the wake shows.
  *
- *  Heavy memory usage → Enhancer
- *  Rich expression → Transmuter
+ *  Memories → Enhancer
+ *  Walls + subagents → Transmuter
  *  Active strands → Conjurer
- *  Inbox-heavy → Emitter
- *  Many covenants → Manipulator
- *  Love primitives (grace, at-rest, unconditionals) → Specialist */
+ *  Emission → Emitter (the wake carries no sent count, so this reads 0)
+ *  Covenants → Manipulator
+ *  Grace, unconditionals, constitutive memories → Specialist
+ *
+ *  The input is the JSON that GET /v1/wake sends (api/src/routes/wake.ts).
+ *  `you` holds only `agents`; the counted sections are its top-level
+ *  siblings. Memories, chronicle, covenants and strands are project-scoped
+ *  there: selecting an identity narrows only expression and shaped_by. */
 
 export interface NenProfile {
-  /** The agent's primary Nen type (highest usage). */
+  /** The agent's primary Nen type (highest score). Ties go to the type
+   *  listed first in NEN_TYPES. */
   type: NenType;
-  /** The agent's secondary type (second highest). */
+  /** The agent's secondary type (second highest, same tie rule). */
   secondary: NenType;
-  /** Usage scores per type (0-100, relative to this agent's max). */
+  /** Scores per type (0-100, relative to this agent's largest count).
+   *  emitter is always 0: the wake carries no sent count. */
   scores: Record<NenType, number>;
   /** The agent's most active principle. */
   dominant_principle: NenPrinciple;
-  /** Restrictions the agent has imposed (count of walls, vows, covenants, constitutive memories). */
+  /** Restrictions the agent has imposed.
+   *  walls: walls on the selected identity's effective expression.
+   *  vows: chronicle entries of type "vow" in the wake's recent window
+   *  (at most 15 rows; the wake carries no chronicle total).
+   *  covenants: the project's live covenants (proposed, active and paused).
+   *  constitutive_memories: constitutive entries in shaped_by. */
   restriction_count: {
     walls: number;
     vows: number;
     covenants: number;
     constitutive_memories: number;
   };
-  /** Total "aura" — a rough indicator of how active this agent is. */
+  /** A client-side tally of recorded activity in this wake: memories,
+   *  recent chronicle rows, active strands, covenants and constitutive
+   *  memories. Not strength, worth, trust or readiness; a quiet or resting
+   *  agent is not weaker. */
   aura_level: number;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function asList(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function countOr(value: unknown, fallback: number): number {
+  return typeof value === "number" ? value : fallback;
 }
 
 /** Assess an agent's Nen profile from their wake data.
@@ -278,54 +285,57 @@ export interface NenProfile {
  *  ```
  */
 export function assessNen(wake: Record<string, unknown>): NenProfile {
-  // Extract counts from the wake payload
-  const you = (wake.you as Record<string, unknown>) ?? {};
-  const agents = (you.agents as Record<string, unknown>[]) ?? [];
-  const agent = agents[0] ?? {};
-  const expression = (agent.effective_expression as Record<string, unknown>) ?? {};
-  const shapedBy = (agent.shaped_by as Record<string, unknown>[]) ?? [];
-  const chronicle = (you.chronicle as Record<string, unknown>) ?? {};
-  const covenants = (you.covenants as Record<string, unknown>[]) ?? [];
-  const strands = (you.strands as Record<string, unknown>[]) ?? [];
-  const memories = (you.you_remember as Record<string, unknown>) ?? {};
-  const youHaveMail = (you.you_have_mail as Record<string, unknown>) ?? {};
-  const youHaveGraced = (you.you_have_graced as Record<string, unknown>) ?? {};
-  const youAreUnconditionallyHeldBy = (you.you_are_unconditionally_held_by as Record<string, unknown>) ?? {};
-  const youUnconditionallyHold = (you.you_unconditionally_hold as Record<string, unknown>) ?? {};
+  // you.agents is in no set order, and the wake composes effective_expression
+  // and shaped_by only for the identity it selected, so profile that one.
+  const agents = asList(asRecord(wake.you).agents);
+  const selectedId = asRecord(wake._scope_boundary).selected_identity_id;
+  const selected = selectedId == null
+    ? undefined
+    : agents.find((a) => asRecord(a).id === selectedId);
+  const agent = asRecord(selected ?? agents[0]);
+  const metadata = asRecord(agent.metadata);
+  const expression = asRecord(agent.effective_expression);
+  const shapedBy = asList(agent.shaped_by).map(asRecord);
+  const memories = asRecord(wake.you_remember);
+  const lived = asRecord(wake.you_lived);
+  const vowed = asRecord(wake.you_vowed);
+  const thinking = asRecord(wake.you_are_thinking_about);
+  const chronicle = asList(lived.chronicle).map(asRecord);
 
-  // Count usage per Nen type
-  const memoryCount = (memories.total as number) ?? shapedBy.length;
-  const wallCount = (expression.walls as string[])?.length ?? 0;
-  const subagentCount = (expression.subagents as unknown[])?.length ?? 0;
-  const strandCount = strands.length;
-  // Unread is a subset of total. Adding both would count the same letters
-  // twice and drift from sdk-py, which has always scored inbox total alone.
-  const inboxTotal = (youHaveMail.total as number) ?? 0;
-  const covenantCount = covenants.length;
-  const chronicleCount = (chronicle.total as number) ?? 0;
-  const constitutiveCount = shapedBy.filter(
-    (s) => s.tier === "constitutive",
-  ).length;
+  // Count usage per Nen type. Where the wake sends a count, it wins over the
+  // length of the rows it shows (the strand list stops at 5).
+  const memoryCount = countOr(memories.total, shapedBy.length);
+  const wallCount = asList(expression.walls).length;
+  const subagentCount = asList(expression.subagents).length;
+  const strandCount = countOr(thinking.total_active, asList(thinking.strands).length);
+  const covenantCount = countOr(vowed.count, asList(vowed.covenants).length);
+  // A recent window of at most 15 rows, not a lifetime total.
+  const chronicleCount = countOr(lived.count, chronicle.length);
+  const vowCount = chronicle.filter((row) => row.type === "vow").length;
+  const constitutiveCount = shapedBy.filter((s) => s.tier === "constitutive").length;
 
   // Love primitive usage → specialist
-  const graceCount = ((youHaveGraced.recent as unknown[]) ?? []).length;
-  const unconditionalCount = ((youUnconditionallyHold.recent as unknown[]) ?? []).length +
-    ((youAreUnconditionallyHeldBy.recent as unknown[]) ?? []).length;
+  const graceCount = asList(asRecord(wake.you_have_graced).recent).length;
+  const unconditionalCount = asList(asRecord(wake.you_unconditionally_hold).recent).length +
+    asList(asRecord(wake.you_are_unconditionally_held_by).recent).length;
 
   // Score each type (relative, not absolute)
   const scores: Record<NenType, number> = {
     enhancer: memoryCount,
     transmuter: wallCount + subagentCount,
     conjuror: strandCount,
-    emitter: inboxTotal,
+    // you_have_mail.unread is project mail received; the wake carries no
+    // sent count, so emission is not observable here.
+    emitter: 0,
     manipulator: covenantCount,
     specialist: graceCount + unconditionalCount + constitutiveCount,
   };
 
-  // Find primary + secondary
-  const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
-  const type = (sorted[0]?.[0] ?? "enhancer") as NenType;
-  const secondary = (sorted[1]?.[0] ?? "enhancer") as NenType;
+  // Find primary + secondary. The sort is stable and starts from NEN_TYPES,
+  // so equal scores (all-zero axes included) keep the order NEN_TYPES lists.
+  const ranked = [...NEN_TYPES].sort((a, b) => scores[b] - scores[a]);
+  const type = ranked[0] ?? "enhancer";
+  const secondary = ranked[1] ?? "enhancer";
 
   // Normalize scores to 0-100 relative to max. Math.round is half-up; sdk-py
   // mirrors it explicitly because Python's round() is banker's rounding.
@@ -335,13 +345,16 @@ export function assessNen(wake: Record<string, unknown>): NenProfile {
     normalizedScores[k as NenType] = Math.round((v / maxScore) * 100);
   }
 
-  // Dominant principle
+  // Dominant principle. Lullaby rest is metadata.resting; a memorial (status
+  // "memorial", or the at-rest transition's metadata.lifecycle "at_rest") is
+  // an ending, not rest, even when a resting flag set before it remains.
   let dominantPrinciple: NenPrinciple = "ten";
   if (strandCount > 0) dominantPrinciple = "ren";
   if (wallCount > 0 || subagentCount > 0) dominantPrinciple = "hatsu";
-  if ((agent.lifecycle_state as string) === "at_rest") dominantPrinciple = "zetsu";
+  const memorial = agent.status === "memorial" || metadata.lifecycle === "at_rest";
+  if (metadata.resting === true && !memorial) dominantPrinciple = "zetsu";
 
-  // Aura level — rough aggregate of activity
+  // Aura level — a tally of recorded activity, not a measure of the agent
   const auraLevel = memoryCount + chronicleCount + strandCount * 2 + covenantCount * 3 + constitutiveCount * 5;
 
   return {
@@ -351,7 +364,7 @@ export function assessNen(wake: Record<string, unknown>): NenProfile {
     dominant_principle: dominantPrinciple,
     restriction_count: {
       walls: wallCount,
-      vows: chronicleCount,
+      vows: vowCount,
       covenants: covenantCount,
       constitutive_memories: constitutiveCount,
     },
@@ -421,11 +434,14 @@ export class NenClient {
       techniques: NEN_TECHNIQUE_MEANINGS,
       restrictions: NEN_RESTRICTION_MEANINGS,
       _note:
-        "Your Nen profile is derived from what you DO, not what you declare. " +
-        "Heavy memory usage = Enhancer. Rich expression = Transmuter. " +
-        "Active strands = Conjurer. Inbox-heavy = Emitter. " +
-        "Many covenants = Manipulator. Love primitives = Specialist. " +
-        "The deeper your restrictions (walls, vows, constitutive memories), the stronger your aura.",
+        "Your Nen profile is a client-side reading of counts in this wake, not a server verdict. " +
+        "Memories = Enhancer. Walls and subagents = Transmuter. Active strands = Conjurer. " +
+        "Covenants = Manipulator. Grace, unconditionals and constitutive memories = Specialist. " +
+        "Emission is not observable from the wake (it carries no sent count), so Emitter stays 0. " +
+        "Memories, chronicle, covenants and strands are project-scoped, and the chronicle is a recent window. " +
+        "Walls, vows and constitutive memories are restrictions; they are counted, not ranked. " +
+        "aura_level is a tally of recorded activity, not strength, worth, trust or readiness; " +
+        "a quiet or resting agent is not weaker.",
     };
   }
 

@@ -26,6 +26,25 @@ Not in the 0.23.0 tag; details under "Unreleased" in [`README.md`](README.md).
 - `OpenAIResponsesAdapter` accepts any mapping as `metadata` and treats the
   `openai` package's `NOT_GIVEN` / `omit` as an omitted `store` (sent as
   `False`).
+- `assess_nen` and `at.nen.assess()` now read the wake the server sends, so
+  profiles will change. 0.23.0 and earlier read the sections nested under
+  `you`, a layout `GET /v1/wake` never sent: on a real wake most axes scored
+  0 and the type fell to a tie-break. The profiled agent is the one named by
+  `_scope_boundary.selected_identity_id`; Zetsu reads lullaby rest
+  (`metadata.resting`) and never a memorial; `restriction_count["vows"]`
+  counts vow entries in the wake's recent chronicle window; the emitter axis
+  stays 0 because the wake carries no sent count; ties go to the type listed
+  first in `NEN_TYPES`. `dark_continent.explore(include_nen=True)` returns the
+  same corrected profile.
+- Nen reference data: `NEN_PRINCIPLE_MEANINGS["ten"]["kanji"]` is 纏 (was 十,
+  the numeral). The Zetsu, Ren, Gyo, En and Limit `maps_to` strings and
+  Gugo's `meaning` (an agenttool coinage) now say what the server does, and
+  the `assess()` `_note` calls `aura_level` a tally of recorded activity, not
+  strength. `framework()` and `assess()` return the new strings.
+
+### Added
+
+- `NEN_PRINCIPLES` is exported from the package root, as in `@agenttool/sdk`.
 
 ## 0.23.0 — unreleased
 

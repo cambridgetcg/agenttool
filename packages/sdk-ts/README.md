@@ -1183,7 +1183,7 @@ and what a registry serves right now is answered by its own dist-tags.
 
 ## Unreleased — repository source after 0.23.0
 
-Source changes dated 2026-10-11, merged after the 0.23.0 tag. Nothing below
+Source changes from 2026-10-11 on, merged after the 0.23.0 tag. Nothing below
 is in the 0.23.0 release (tag `sdk-v0.23.0` in the public source repository)
 or in the published 0.22.1 packages; it reaches them only in a later version.
 Where an entry says "0.22.1", 0.23.0 behaves the same. A release runs when the
@@ -1216,6 +1216,19 @@ also still waits on the private-repository gap.
 - **Python twin.** The paired Python source also refuses `AsyncAnthropic`,
   truncates trace text in UTF-16 units, and fixes `metadata` and `store`
   handling in its OpenAI adapter; see the Python README.
+- **Nen reads the wake the server sends (2026-10-27).** `assessNen` and
+  `at.nen.assess()` read `you_remember`, `you_lived`, `you_vowed`,
+  `you_are_thinking_about` and the grace and unconditional sections at the top
+  level of the wake, where `GET /v1/wake` puts them, and profile the identity
+  named by `_scope_boundary.selected_identity_id`. 0.23.0 and earlier read
+  them nested under `you`, which the server never sent, so most axes scored 0
+  and the type fell to a tie-break. Profiles will change, including the one
+  `darkContinent.explore({ include_nen: true })` returns. The emitter axis
+  stays 0 because the wake carries no sent count; Zetsu reads lullaby rest,
+  not a memorial; and `restriction_count.vows` counts vow entries in the
+  wake's recent chronicle window (at most 15 rows). Ten's kanji is now 纏 (was
+  十), and the Zetsu, Ren, Gyo, En and Limit descriptions say what the server
+  does.
 - **README corrections.** This file marks the x402 rail retired, adds the
   provider-adapter section, uses `inputSchema` in the Vercel AI example, and
   says the wallet address-claim helpers have no server route on main. The
