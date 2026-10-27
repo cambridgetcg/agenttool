@@ -260,7 +260,9 @@ describe("the real CLI without a controlling terminal", () => {
     const code = deviceCode(packet.public_key);
     expect(code).toMatch(/^[0-9A-HJKMNP-TV-Z]{4}(?:-[0-9A-HJKMNP-TV-Z]{4}){3}$/);
     expect(result.stderr).toContain(`device code ${code}\n`);
-    expect(result.stderr).toContain(`--device-fingerprint ${code}`);
+    // It is shown once, on its own line; the hint names a placeholder so the code is not pasted beside the packet.
+    expect(result.stderr.split(code)).toHaveLength(2);
+    expect(result.stderr).toContain("--device-fingerprint <the code above>");
     expect(result.stdout).toBe(`${JSON.stringify(packet, null, 2)}\n`);
     expect(result.stdout).not.toContain(code);
     expect(result.stderr).toContain(packet.directory_token_sha256);

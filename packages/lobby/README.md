@@ -360,9 +360,12 @@ relative path, or a symbolic link as the last path component, is refused
    shows the desk's **device code** on stderr (stdout stays exactly the
    packet): the first 80 bits of SHA-256 over the raw public key in Crockford
    base32, `XXXX-XXXX-XXXX-XXXX`, the same format as the identity-pairing
-   enrollment fingerprint. Read it from this screen to type at the hub.
+   enrollment fingerprint. Read it from this screen to type at the hub, and
+   don't send it with the packet: a code carried beside a swapped packet would
+   vouch for it.
 3. **`hub relay`** (tty, hub) needs `--device-fingerprint`, the device code
-   typed from the device's own screen (without it: usage error, exit `2`).
+   typed from the device's own screen (without it, or with an empty value:
+   usage error, exit `2`).
    Case, spaces and dashes are ignored, and I and L read as 1, O as 0. Right
    after the packet parses, and before any Keychain read, audit record, prompt
    or request, the code must name the packet's public key; otherwise it refuses

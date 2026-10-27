@@ -181,8 +181,9 @@ export function enrollDeviceCommand(ctx: FleetContext, args: string[], io: Fleet
     `  VALID ${packet.kind === "enroll" ? "5" : "30"} MINUTES (until ${packet.valid_until}): carry it to the hub now for hub relay.`,
     "  If the window passes, run enroll-device again for a fresh packet.",
     `  device code ${code}`,
-    `  Read it from this screen and type it at the hub: hub relay --packet-file FILE --device-fingerprint ${code}`,
-    "  The hub checks the packet's key against the code typed there and never takes the code from the packet.",
+    "  Read it from this screen and type it at the hub: hub relay --packet-file FILE --device-fingerprint <the code above>",
+    "  Do not send the code with the packet: the hub checks the packet's key against the code typed there,",
+    "  so a code carried beside a swapped packet would vouch for it.",
     "",
   ].join("\n"));
   return EXIT_OK;
@@ -442,7 +443,8 @@ export async function hubCommand(ctx: FleetContext, args: string[], io: FleetIo)
         options: { "packet-file": { type: "string" }, "device-fingerprint": { type: "string" } },
       });
       positionals(extra, 0, "hub relay --packet-file FILE --device-fingerprint CODE");
-      if (values["device-fingerprint"] === undefined) {
+      // An empty or blank value is the same as no flag: a usage error, exit 2.
+      if (values["device-fingerprint"] === undefined || values["device-fingerprint"].trim() === "") {
         throw new FleetUsageError("hub relay needs --device-fingerprint: type the device code that enroll-device showed on the device's own screen");
       }
       const headless = withoutTerminal(ctx, io);

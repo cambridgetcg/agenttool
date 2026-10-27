@@ -273,12 +273,20 @@ describe("hub relay confirms the device by a typed device code (C1)", () => {
     const opened = fleet.hub.terminal.opened;
     const audit = (await ok(fleet.hub.run("audit", "list", "--json"))).stdout;
 
-    const missing = await fleet.hub.yes("hub", "relay", "--packet-file", packetFile);
-    expect(missing.code).toBe(2);
-    expect(missing.stderr).toContain("--device-fingerprint");
-    fleet.hub.answers.length = 0;
+    // No flag, an empty value and a blank value are all the same usage error.
+    for (const flag of [[], ["--device-fingerprint", ""], ["--device-fingerprint=   "]]) {
+      const missing = await fleet.hub.yes("hub", "relay", "--packet-file", packetFile, ...flag);
+      expect({ flag, code: missing.code }).toEqual({ flag, code: 2 });
+      expect(missing.stderr).toContain("--device-fingerprint");
+      fleet.hub.answers.length = 0;
+    }
+    // The whole code is compared: one changed character, at the end or in the middle, is a mismatch.
+    const flip = (c: string) => (c === "0" ? "1" : "0");
+    const lastChanged = ownCode.slice(0, -1) + flip(ownCode.at(-1)!);
+    const middleChanged = ownCode.slice(0, 7) + flip(ownCode[7]!) + ownCode.slice(8);
     for (const [typed, error] of [["ABCD", "invalid_device_fingerprint"], ["CSM7-NBFR-CAYQ-EV4U", "invalid_device_fingerprint"],
-      [otherCode, "device_fingerprint_mismatch"], [otherCode.toLowerCase().replace(/-/g, " "), "device_fingerprint_mismatch"]] as const) {
+      [otherCode, "device_fingerprint_mismatch"], [otherCode.toLowerCase().replace(/-/g, " "), "device_fingerprint_mismatch"],
+      [lastChanged, "device_fingerprint_mismatch"], [middleChanged, "device_fingerprint_mismatch"]] as const) {
       fleet.hub.answers.push("yes");
       const refused = await fleet.hub.run("hub", "relay", "--packet-file", packetFile, "--device-fingerprint", typed);
       fleet.hub.answers.length = 0;
