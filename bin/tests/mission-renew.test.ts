@@ -187,6 +187,17 @@ describe.skipIf(process.platform === "win32")("participant renew", () => {
     expect(invitationFile(g).grant_id).toBe(G);
   });
 
+  test("a lapsed invitation with no pending record fails locally: nothing is read, generated or sent", async () => {
+    const f = fixture();
+    lapse(f);
+    let calls = 0;
+    await expect(client.renew(f.state, { fetchImpl: async () => { calls++; return new Response("{}"); } })).rejects.toThrow("Invitation expiry is invalid or has passed.");
+    expect(calls).toBe(0);
+    expect(existsSync(pendingFile(f))).toBe(false);
+    expect(existsSync(join(f.state, "tokens"))).toBe(false);
+    expect(existsSync(join(f.state, "renewal.lock"))).toBe(false);
+  });
+
   test("a record left after a completed install is only cleaned up", async () => {
     const f = fixture(), s = service(f);
     let saved = "";
@@ -466,6 +477,10 @@ describe.skipIf(process.platform === "win32")("participant renew", () => {
       ["revoked", (v: any) => { v.grant.revoked_at = iso(now); }],
       ["unaccepted", (v: any) => { v.grant.accepted_at = null; }],
       ["other-key", (v: any) => { v.grant.signing_key_id = "55555555-5555-4555-8555-555555555555"; }],
+      ["other-identity", (v: any) => { v.grant.identity_id = "55555555-5555-4555-8555-555555555555"; }],
+      ["other-grant-mission", (v: any) => { v.grant.mission_id = "55555555-5555-4555-8555-555555555555"; }],
+      ["other-mission", (v: any) => { v.mission.mission_id = "55555555-5555-4555-8555-555555555555"; }],
+      ["other-origin", (v: any) => { v.grant.origin = "https://other.invalid"; }],
       ["echo", (v: any) => { v.token_sha256 = "0".repeat(64); }],
       ["source", (v: any) => { v.token_source = "server"; }],
     ] as Array<[string, (view: any) => void]>) {
@@ -634,7 +649,8 @@ describe.skipIf(process.platform === "win32")("administrator window commands", (
     expect(bodies[1]).toBe(JSON.stringify({ grant_id: G, identity_id: I, signing_key_id: K, actions: a.request.actions, expires_at: a.request.expires_at, token_sha256: tokenSha256 }));
     expect(plain).not.toHaveProperty("renewable_until");
     for (const [flag, renewal] of [[until, () => undefined], [until, () => ({ ...window, renewable_until: iso(Date.parse(until) + 1) })],
-      [until, () => ({ ...window, closed_at: iso(Date.now()) })], [until, () => ({ ...window, renewed_from_grant_id: K })], [undefined, () => window]] as const) {
+      [until, () => ({ ...window, closed_at: iso(Date.now()) })], [until, () => ({ ...window, renewed_from_grant_id: K })],
+      [until, () => ({ ...window, root_grant_id: K })], [undefined, () => window]] as const) {
       rmSync(a.templateFile, { force: true });
       await expect(client.issueGrant({ bearerFile: a.bearerFile, requestFile: a.requestFile, tokenSha256, templateFile: a.templateFile, serviceOrigin: ORIGIN,
         ...(flag === undefined ? {} : { renewableUntil: flag }) }, answer(renewal))).rejects.toThrow("does not confirm the renewal window");
