@@ -401,7 +401,12 @@ Every stop prints one JSON object on stderr and exits 1:
 `renewal_conflict` means someone holding both your token and your key may have
 renewed first. Unless this device lost its pending record, treat that token and
 key as exposed: run `leave`, which ends every grant in the chain, and ask the
-administrator to revoke your grant. When recovery happens through the
+administrator to revoke your grant. Act while your grant is live: whoever
+renewed first holds a chain that keeps renewing itself until the window ends
+(up to 30 days), and once your grant lapses it can no longer sign a leave. Then
+`renew` reports only an expired invitation or `renewal_abandoned`, and only the
+administrator can end that chain (see the stolen token-and-key note in the
+[service contract](COLLABORATION-MISSIONS.md)). When recovery happens through the
 successor-signed read after your grant lapsed, the client can no longer read
 your old grant's actions or window; it checks the rest, and the service's
 database keeps actions identical across a chain. `renew` never prints a token.

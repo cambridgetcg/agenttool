@@ -617,7 +617,7 @@ async function recover(root, local, key, before, pending, options, conflicted) {
   if (conflicted) throw new RenewalError('renewal_conflict', theft(before.grant_id), { serviceCode: 'collaboration_mission_conflict', next: theft(before.grant_id) });
   abandon(root, pending);
   throw new RenewalError('renewal_abandoned', 'The renewal was not recorded and the predecessor has lapsed or ended.',
-    { next: 'The renewal was not recorded and the predecessor has lapsed or ended; ask the administrator for a new grant.' });
+    { next: 'The renewal was not recorded and the predecessor has lapsed or ended; ask the administrator for a new grant. If the administrator sees a successor of the predecessor that this device did not record, treat this token and key as exposed and ask the administrator to revoke that chain.' });
 }
 const GRANT_REQUEST_FIELDS = ['format', 'origin', 'mission_id', 'grant_id', 'identity_id', 'signing_key_id', 'public_key', 'actions', 'expires_at'];
 function grantRequest(value) {

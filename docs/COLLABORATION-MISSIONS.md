@@ -348,10 +348,24 @@ member of the chain is revoked, or when the successor would not extend G. Its ne
 window and, after it ends, ask the administrator for a new grant. An
 unaccepted grant is HTTP 403 `collaboration_mission_acceptance_required`.
 
-Someone holding both G's token and the enrolled key can obtain one parallel
-successor, inside the same window, mission, issuing key and actions. The
-holder's own next renewal then gets HTTP 409. Treat that as exposure: leave
-(which ends the whole chain) or ask the administrator to revoke any known grant.
+Someone holding both G's token and the enrolled key can renew G before its
+holder does, inside the same window, mission, issuing key and actions. That
+successor renews itself in turn, so the stolen pair is bounded by the whole
+window, not by one grant: the chain lives until `renewable_until` (up to 30
+days after issue), a window close, revocation of the mission, issuing key or signing key, or a
+revocation of any member, whichever comes first. Without a window a stolen pair
+stops working when its grant expires, within 24 hours.
+
+The holder notices only while its own G is still live: its renewal then gets
+HTTP 409, or its invitation read already shows a `renewed_to_grant_id` it did
+not record. Treat that as exposure: leave (which ends the whole chain) or ask
+the administrator to revoke any known grant. After G lapses the holder's token
+can no longer sign anything, including a leave; its next renew reports the
+invitation as expired or the renewal as abandoned, and from then on only the
+administrator can end the other chain. Keep windows short where a device can be
+lost. To check a participant, walk `renewed_to_grant_id` from the root to the
+head and compare the head with the grant the device reports; a different head
+means someone else holds the chain, and revoking the root ends it.
 
 ### Verifying a successor's acceptance evidence
 

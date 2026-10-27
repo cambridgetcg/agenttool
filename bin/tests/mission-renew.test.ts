@@ -182,6 +182,7 @@ describe.skipIf(process.platform === "win32")("participant renew", () => {
     const abandoned = await stop(client.renew(g.state, { fetchImpl: lost.fetchImpl }));
     expect(abandoned).toMatchObject({ stop_reason: "renewal_abandoned", delivered: false });
     expect(abandoned.next).toContain("ask the administrator for a new grant");
+    expect(abandoned.next).toContain("a successor of the predecessor that this device did not record, treat this token and key as exposed");
     expect(existsSync(pendingFile(g))).toBe(false);
     expect(JSON.parse(readFileSync(join(g.state, `renewal-abandoned-${pending.grant_id}.json`), "utf8"))).toEqual(pending);
     expect(invitationFile(g).grant_id).toBe(G);
