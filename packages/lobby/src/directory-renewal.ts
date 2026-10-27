@@ -71,6 +71,9 @@ const DIRECTORY_ACTIONS: MissionAction[] = ["mission.observe", "mission.read"];
 
 const FALLBACK = "enroll-device here, hub relay on the hub, fleet join here";
 
+/** A seat must have this long left to post with. */
+const POST_MARGIN_MS = 5 * 60_000;
+
 // ── Hub: which directory requests to renew ─────────────────────────────
 
 export interface DirectorySkip {
@@ -388,7 +391,10 @@ interface NextRequest {
 export interface FleetRenewPlan {
   preview: ActPreview;
   pickup: Pickup | null;
+  /** Null only beside a pickup, when no next request can be posted; see `no_request`. */
   request: NextRequest | null;
+  /** Why a pickup goes ahead without a next request, or null. */
+  no_request: string | null;
   /** The directory's end as read in this plan, recorded on yes. */
   directory_expires_at: string;
 }
@@ -501,35 +507,48 @@ export async function planFleetRenew(ctx: FleetContext): Promise<{ plan: FleetRe
       },
     };
   }
-  const posting = pickup === null ? liveSeat(ctx, directoryId, "mission.observe", 5 * 60_000) : null;
-  if (pickup === null && posting === null) {
-    throw new LobbyError("directory_lapsed",
-      `this desk holds no live directory grant to post a renew request with, and the hub issued none to pick up; renew it the long way: ${FALLBACK}`);
+  // The grant just picked up posts the next request when it has five minutes
+  // left; otherwise a live directory seat does.
+  const pickupPosts = pickup !== null && Date.parse(pickup.grant.expires_at) > now.getTime() + POST_MARGIN_MS;
+  const posting = pickupPosts ? null : liveSeat(ctx, directoryId, "mission.observe", POST_MARGIN_MS);
+  let noRequest: string | null = null;
+  if (!pickupPosts && posting === null) {
+    if (pickup === null) {
+      throw new LobbyError("directory_lapsed",
+        `this desk holds no live directory grant to post a renew request with, and the hub issued none to pick up; renew it the long way: ${FALLBACK}`);
+    }
+    noRequest = `the grant picked up ends within five minutes, too soon to post the next request with; after it ends, use ${FALLBACK}`;
   }
   if (directoryEnds === null) {
-    // A read with no effect: the directory's end bounds the request.
+    // A read with no effect: the directory's end bounds the request. (With a
+    // pickup the end is already known, so `posting` is a live seat here.)
     directoryEnds = (await participant(ctx).invitation(posting!)).mission.expires_at;
   }
   if (Date.parse(directoryEnds) <= now.getTime() + HOUR_MS) {
-    throw new LobbyError("directory_ending", `the directory ends at ${directoryEnds}, within the hour; a new directory is needed`);
+    // A grant the hub issued before the last hour is still picked up.
+    if (pickup === null) throw new LobbyError("directory_ending", `the directory ends at ${directoryEnds}, within the hour; a new directory is needed`);
+    noRequest ??= `the directory ends at ${directoryEnds}, within the hour; a new directory is needed`;
   }
-  const token = secrets.prepareToken(now);
-  const body: DirectoryRenewBody = {
-    mission_id: directoryId,
-    grant_id: newUuid(),
-    identity_id: desk.identity_id,
-    signing_key_id: desk.signing_key_id,
-    token_sha256: token.token_sha256,
-    issued_at: now.toISOString(),
-    expires_at: earliest(now.getTime() + RENEW_MAX_MS - CLOCK_MARGIN_MS, directoryEnds),
-  };
-  const sealed = sealDocument("directory_renew", body, { privateKey: secrets.deskKey(), fingerprint: desk.fingerprint });
-  request = {
-    body,
-    post: preparePost(ctx, "directory_renew", directoryId, sealed.summary, DIRECTORY_GATE_ROOM),
-    seat: posting,
-    writeToken: token.write,
-  };
+  let sealedSummary: string | null = null;
+  if (noRequest === null) {
+    const token = secrets.prepareToken(now);
+    const body: DirectoryRenewBody = {
+      mission_id: directoryId,
+      grant_id: newUuid(),
+      identity_id: desk.identity_id,
+      signing_key_id: desk.signing_key_id,
+      token_sha256: token.token_sha256,
+      issued_at: now.toISOString(),
+      expires_at: earliest(now.getTime() + RENEW_MAX_MS - CLOCK_MARGIN_MS, directoryEnds),
+    };
+    sealedSummary = sealDocument("directory_renew", body, { privateKey: secrets.deskKey(), fingerprint: desk.fingerprint }).summary;
+    request = {
+      body,
+      post: preparePost(ctx, "directory_renew", directoryId, sealedSummary, DIRECTORY_GATE_ROOM),
+      seat: posting,
+      writeToken: token.write,
+    };
+  }
 
   const holdsUntil = pickup?.grant.expires_at ?? heldDirectoryGrantEnd(ctx, directoryId);
   const at = now.toISOString();
@@ -540,9 +559,11 @@ export async function planFleetRenew(ctx: FleetContext): Promise<{ plan: FleetRe
       pickup.notice_sha256 === null ? "door-signed notice: not in the local cache (not needed for the pickup)"
         : `door-signed notice: seen, names exactly this grant (sha256 ${pickup.notice_sha256})`,
     ]),
-    `post a desk-signed directory_renew request to the fleet directory ${directoryId}: grant id ${body.grant_id}, ` +
-      `token sha256 ${body.token_sha256} (the token itself stays on this desk); good until ${body.expires_at}`,
-    `the hub must run hub renew-sweep before ${holdsUntil ?? "your directory grant ends"}; after that, use ${FALLBACK}`,
+    ...(request === null ? [`no next request: ${noRequest}`] : [
+      `post a desk-signed directory_renew request to the fleet directory ${directoryId}: grant id ${request.body.grant_id}, ` +
+        `token sha256 ${request.body.token_sha256} (the token itself stays on this desk); good until ${request.body.expires_at}`,
+      `the hub must run hub renew-sweep before ${holdsUntil ?? "your directory grant ends"}; after that, use ${FALLBACK}`,
+    ]),
   ], {
     pickup: pickup === null ? null : {
       mission_id: pickup.mission.mission_id,
@@ -554,10 +575,11 @@ export async function planFleetRenew(ctx: FleetContext): Promise<{ plan: FleetRe
       request_event_id: pickup.row.request_event_id,
       notice_sha256: pickup.notice_sha256,
     },
-    request: { mission_id: directoryId, event_id: request.post.event_id, grant_id: body.grant_id, token_sha256: body.token_sha256,
-      expires_at: body.expires_at, summary: sealed.summary },
+    request: request === null ? null : { mission_id: directoryId, event_id: request.post.event_id, grant_id: request.body.grant_id,
+      token_sha256: request.body.token_sha256, expires_at: request.body.expires_at, summary: sealedSummary },
+    ...(noRequest === null ? {} : { no_request: noRequest }),
   });
-  return { plan: { preview, pickup, request, directory_expires_at: directoryEnds } };
+  return { plan: { preview, pickup, request, no_request: noRequest, directory_expires_at: directoryEnds } };
 }
 
 export interface FleetRenewOutcome {

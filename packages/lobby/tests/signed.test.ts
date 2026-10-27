@@ -8,6 +8,7 @@ import {
   openDocument,
   ROSTER_PART_MEMBERS,
   sealDocument,
+  SIGNED_KINDS,
   verifyDocument,
   type AdmissionBody,
   type DirectoryRenewalBody,
@@ -280,6 +281,31 @@ describe("directory renewal documents (schema version 4)", () => {
     expect(view.directoryRenewals.map((entry) => entry.envelope.body)).toEqual([renewal]);
     expect(view.deskNotes).toEqual([]);
     expect(view.unverified.map((item) => [item.kind, item.reason])).toEqual([["directory_renewal", "signer_not_door"]]);
+  });
+
+  test("an older reader, which knows neither kind, treats both as malformed and acts on nothing", () => {
+    const desk = signer();
+    const door = signer();
+    const events = [sealDocument("directory_renew", renew, desk).summary, sealDocument("directory_renewal", renewal, door).summary]
+      .map((summary, index) => {
+        const event_id = crypto.randomUUID();
+        return {
+          event_id, mission_id: UUID_A, grant_id: UUID_B, identity_id: renew.identity_id, signing_key_id: renew.signing_key_id,
+          received_seq: String(index + 1), received_at: T, raw_body: JSON.stringify({ event_id, summary }), body_sha256: "", proof: {},
+        };
+      });
+    // The previous release's kind list: the same reader without the two version 4 kinds.
+    const kinds = SIGNED_KINDS as unknown as string[];
+    const saved = [...kinds];
+    kinds.splice(0, kinds.length, ...saved.filter((kind) => kind !== "directory_renew" && kind !== "directory_renewal"));
+    try {
+      const view = readFleetEvents(events, { fingerprint: door.fingerprint, public_key: door.publicKey });
+      expect(view.unverified.map((item) => item.reason)).toEqual(["malformed_document", "malformed_document"]);
+      expect([view.directoryRenewRequests, view.directoryRenewals, view.deskNotes, view.renewals, view.knocks]).toEqual([[], [], [], [], []]);
+    } finally {
+      kinds.splice(0, kinds.length, ...saved);
+    }
+    expect(readFleetEvents(events, { fingerprint: door.fingerprint, public_key: door.publicKey }).unverified).toEqual([]);
   });
 });
 

@@ -737,7 +737,11 @@ Lobby, with no packet to carry and no prompt at the hub for each device:
      `directory_renew` note naming a fresh `grant_id` and the SHA-256 of a
      fresh token, both chosen here (the token is saved 0600 only on `yes`),
      good for at most 24 hours and never past the directory, and posts it in
-     the directory with its live directory seat or the grant just picked up.
+     the directory with the grant just picked up, or with its live directory
+     seat when that grant has five minutes or less left. A pickup goes ahead
+     alone, with no next request and the reason shown (`no_request` in the
+     exact bytes), when no seat has five minutes left or the directory ends
+     within the hour; without a pickup the latter refuses (`directory_ending`).
    With an open request and nothing to pick up it shows the state and exits
    `0` without a prompt. An open request without a verified receipt refuses
    (`request_unsent`) and names `outbox retry`; nothing is resent on its own.

@@ -236,7 +236,10 @@ export async function fleetCommand(ctx: FleetContext, args: string[], io: FleetI
       if (outcome.value.picked_up !== null) {
         io.stdout(`picked up directory grant ${outcome.value.picked_up.grant_id} until ${outcome.value.picked_up.expires_at}\n`);
       }
-      if (outcome.value.request === null) return EXIT_OK;
+      if (outcome.value.request === null) {
+        if (plan.no_request !== null) io.stdout(`no next directory renew request: ${plan.no_request}\n`);
+        return EXIT_OK;
+      }
       io.stdout(`next directory renew request: grant id ${plan.request!.body.grant_id}, token sha256 ${plan.request!.body.token_sha256}, ` +
         `good until ${plan.request!.body.expires_at}; after the hub's renew-sweep, run fleet renew again\n`);
       return reportPosts(io, [outcome.value.request]);
@@ -314,8 +317,8 @@ export async function fleetCommand(ctx: FleetContext, args: string[], io: FleetI
           display_name: desk.display_name, project_id: desk.project_id, origin: desk.origin,
           directory_mission_id: desk.directory_mission_id, door_fingerprint: desk.door_fingerprint, joined_at: desk.joined_at,
         },
-        grants,
         directory,
+        grants,
       };
       const request = directory?.open_request ?? null;
       io.stdout(values.json ? `${JSON.stringify(status, null, 2)}\n` : desk === null ? "no desk identity on this device; run enroll-device\n"

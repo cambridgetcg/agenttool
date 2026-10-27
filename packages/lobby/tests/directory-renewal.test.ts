@@ -5,13 +5,16 @@
  * read alone, after its old grant lapsed. Fake service, file-backed Keychain
  * stand-in, scripted terminals. */
 import { afterEach, describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
+import { join } from "node:path";
 import { readFleetEvents } from "../src/fleet.js";
+import { readDoorKey } from "../src/keychain.js";
 import { DIRECTORY_GATE_ROOM } from "../src/hosted.js";
 import { DeskSecrets } from "../src/secrets.js";
 import { openDocument, sealDocument, type DirectoryRenewalBody, type DirectoryRenewBody } from "../src/signed.js";
 import { LobbyStore } from "../src/store.js";
 import { checkEgress } from "../src/egress.js";
-import { newUuid } from "../src/wire.js";
+import { missionDigest, newUuid } from "../src/wire.js";
 import {
   bootstrapFleet,
   deskOf,
@@ -66,6 +69,46 @@ function handRequest(fleet: Fleet, signer: Desk, overrides: Partial<DirectoryRen
     ...overrides,
   };
   return sealDocument("directory_renew", body, { privateKey: secrets.deskKey(), fingerprint: desk.fingerprint }).summary;
+}
+
+/** Answer invitation reads of `grantId` with a view `change` rewrote, as a
+ * misbehaving service would; every other request is untouched. */
+function rewriteInvitation(fleet: Fleet, grantId: string, change: (view: { mission: any; grant: any }) => void): void {
+  const hosted = fleet.world.hosted;
+  hosted.intercept = (request, process) => {
+    const response = process();
+    if (request.method !== "GET" || request.path !== `/v1/collaboration/missions/${fleet.directoryId}/invitation` || response.status !== 200) return response;
+    const view = { mission: hosted.missionView(hosted.missions.get(fleet.directoryId)!), grant: hosted.grantView(hosted.grants.get(grantId)!) };
+    change(view);
+    return new Response(JSON.stringify(view), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+}
+
+function acceptsOf(fleet: Fleet): number {
+  return fleet.world.hosted.seen.filter((seen) => seen.method === "POST" && seen.path === `/v1/collaboration/missions/${fleet.directoryId}/accept`).length;
+}
+
+function grantsWithToken(fleet: Fleet, tokenSha256: string): string[] {
+  return [...fleet.world.hosted.grants.values()].filter((grant) => grant.token_sha256 === tokenSha256).map((grant) => grant.grant_id);
+}
+
+/** The hub's issued directory grant for a desk (from its relay). */
+function hubDirectoryGrant(fleet: Fleet, desk: Desk) {
+  const store = LobbyStore.open(fleet.hub.home);
+  try {
+    return store.fleet.listHubGrants().find((grant) => grant.identity_id === deskOf(desk).identity_id && grant.purpose === "directory")!;
+  } finally {
+    store.close();
+  }
+}
+
+/** The desk posts a request with fleet renew, and one sweep renews it. */
+async function renewedOnce(fleet: Fleet): Promise<{ grant_id: string; token_sha256: string; event_id: string }> {
+  await ok(fleet.device.yes("fleet", "renew"));
+  const request = JSON.parse(shownBytes(fleet.device)).request;
+  await ok(fleet.hub.yes("hub", "renew-sweep"));
+  expect(fleet.world.hosted.grants.has(request.grant_id)).toBe(true);
+  return request;
 }
 
 describe("directory renewal inside the Lobby", () => {
@@ -362,5 +405,227 @@ describe("directory renewal inside the Lobby", () => {
     const refused = await fleet.hub.yes("fleet", "renew");
     expect(refused.code).toBe(1);
     expect(refused.stderr).toContain("hub_desk");
+  });
+});
+
+describe("a pickup accepts exactly the directory this desk joined", () => {
+  const NOW = () => new Date().toISOString().replace(/\.\d{3}Z$/, ".000Z");
+  const cases: Array<[string, string, (view: { mission: any; grant: any }) => void]> = [
+    ["another digest", "digest_changed", (view) => {
+      view.mission.descriptor = { ...view.mission.descriptor, purpose: `${view.mission.descriptor.purpose} (changed)` };
+      view.mission.mission_digest = missionDigest(view.mission.descriptor);
+    }],
+    ["a revoked grant", "directory_closed", (view) => {
+      view.grant.revoked_at = NOW();
+    }],
+    ["a revoked directory", "directory_closed", (view) => {
+      view.mission.revoked_at = NOW();
+    }],
+    ["the wrong actions", "grant_mismatch", (view) => {
+      view.grant.actions = ["mission.read"];
+    }],
+    ["an expiry past the directory", "grant_mismatch", (view) => {
+      view.grant.expires_at = new Date(Date.parse(view.mission.expires_at) + MINUTE).toISOString();
+    }],
+  ];
+  for (const [what, code, change] of cases) {
+    test(`${what}: ${code}, before any prompt, and no accept is sent`, async () => {
+      const fleet = await bootstrapFleet();
+      const request = await renewedOnce(fleet);
+      rewriteInvitation(fleet, request.grant_id, change);
+      const accepts = acceptsOf(fleet);
+      const opened = fleet.device.terminal.opened;
+      const refused = await fleet.device.run("fleet", "renew");
+      fleet.world.hosted.intercept = null;
+      expect(refused.code).toBe(1);
+      expect(refused.stderr).toContain(code);
+      expect(acceptsOf(fleet)).toBe(accepts);
+      expect(fleet.device.terminal.opened).toBe(opened);
+      expect(fleet.world.hosted.grants.get(request.grant_id)!.accepted_at).toBeNull();
+      // The service answering truthfully again, the same grant is picked up.
+      expect((await ok(fleet.device.yes("fleet", "renew"))).stdout).toContain(`picked up directory grant ${request.grant_id}`);
+    });
+  }
+
+  test("a door-signed directory_renewal naming another grant for the same token: conflicting_renewal, no accept", async () => {
+    const fleet = await bootstrapFleet();
+    const { hub, device, world } = fleet;
+    const request = await renewedOnce(fleet);
+    const genuine = directoryNotices(fleet);
+    expect(genuine.map((notice) => notice.invitation.grant_id)).toEqual([request.grant_id]);
+    const door = await readDoorKey(hub.keychain, { service: "agenttool-lobby.door-key", account: "agenttool-lobby" });
+    const forged: DirectoryRenewalBody = { ...genuine[0]!, invitation: { ...genuine[0]!.invitation, grant_id: newUuid() } };
+    await postAs(world, hub, fleet.directoryId, sealDocument("directory_renewal", forged, { privateKey: door, fingerprint: fleet.doorFingerprint }).summary);
+    const accepts = acceptsOf(fleet);
+    const refused = await device.run("fleet", "renew");
+    expect(refused.code).toBe(1);
+    expect(refused.stderr).toContain("conflicting_renewal");
+    expect(acceptsOf(fleet)).toBe(accepts);
+    expect(world.hosted.grants.get(request.grant_id)!.accepted_at).toBeNull();
+  });
+});
+
+describe("the sweep renews only a live, joined, unbound request", () => {
+  test("a request naming another mission: directory_not_live", async () => {
+    const fleet = await bootstrapFleet();
+    const summary = handRequest(fleet, fleet.device, { mission_id: fleet.seasonId });
+    await postAs(fleet.world, fleet.device, fleet.directoryId, summary);
+    const swept = await ok(fleet.hub.run("hub", "renew-sweep"));
+    expect(swept.stdout).toContain(`did:at:${deskOf(fleet.device).identity_id}: directory_not_live`);
+    expect(fleet.world.hosted.grants.has((openDocument(summary)!.body as DirectoryRenewBody).grant_id)).toBe(false);
+  });
+
+  test("a device the hub never issued a directory grant: never_joined", async () => {
+    const fleet = await bootstrapFleet();
+    await ok(fleet.device.yes("fleet", "renew"));
+    const request = JSON.parse(shownBytes(fleet.device)).request;
+    // Stand in for a device enrolled here whose directory grant the hub never recorded.
+    const db = new Database(join(fleet.hub.home, "lobby.sqlite"));
+    db.run("DELETE FROM hub_grants WHERE identity_id = ? AND purpose = 'directory'", [deskOf(fleet.device).identity_id]);
+    db.close();
+    const swept = await ok(fleet.hub.run("hub", "renew-sweep"));
+    expect(swept.stdout).toContain(`did:at:${deskOf(fleet.device).identity_id}: never_joined`);
+    expect(fleet.world.hosted.grants.has(request.grant_id)).toBe(false);
+  });
+
+  test("a request signed by the hub's own desk: hub_desk (the sweep's seat part renews that desk)", async () => {
+    const fleet = await bootstrapFleet();
+    const summary = handRequest(fleet, fleet.hub);
+    await postAs(fleet.world, fleet.hub, fleet.directoryId, summary);
+    const swept = await ok(fleet.hub.run("hub", "renew-sweep"));
+    expect(swept.stdout).toContain(`did:at:${deskOf(fleet.hub).identity_id}: hub_desk`);
+    expect(fleet.world.hosted.grants.has((openDocument(summary)!.body as DirectoryRenewBody).grant_id)).toBe(false);
+  });
+
+  test("an expired request is counted and never renewed", async () => {
+    const fleet = await bootstrapFleet();
+    const summary = handRequest(fleet, fleet.device, { expires_at: new Date(fleet.world.clock.now.getTime() + MINUTE).toISOString() });
+    await postAs(fleet.world, fleet.device, fleet.directoryId, summary);
+    fleet.world.advance(2 * MINUTE);
+    const swept = await ok(fleet.hub.run("hub", "renew-sweep"));
+    expect(swept.stdout).toContain("nothing to renew");
+    expect(swept.stdout).toContain("1 expired request(s) ignored");
+    expect(fleet.world.hosted.grants.has((openDocument(summary)!.body as DirectoryRenewBody).grant_id)).toBe(false);
+  });
+
+  test("a grant id the hub already bound: grant_id_taken", async () => {
+    const fleet = await bootstrapFleet();
+    const taken = hubDirectoryGrant(fleet, fleet.device).grant_id;
+    const summary = handRequest(fleet, fleet.device, { grant_id: taken });
+    await postAs(fleet.world, fleet.device, fleet.directoryId, summary);
+    const swept = await ok(fleet.hub.run("hub", "renew-sweep"));
+    expect(swept.stdout).toContain(`did:at:${deskOf(fleet.device).identity_id}: grant_id_taken`);
+    expect(grantsWithToken(fleet, (openDocument(summary)!.body as DirectoryRenewBody).token_sha256)).toEqual([]);
+  });
+
+  test("one token hash in a room renew and a directory renew: both skipped as token_hash_collision", async () => {
+    const fleet = await seatedFleet();
+    const requested = await ok(fleet.device.yes("room", "renew", "request", fleet.roomId));
+    const token = /token sha256 ([0-9a-f]{64})/.exec(requested.stdout)![1]!;
+    await postAs(fleet.world, fleet.device, fleet.directoryId, handRequest(fleet, fleet.device, { token_sha256: token }));
+    const swept = await ok(fleet.hub.run("hub", "renew-sweep"));
+    expect(swept.stdout).toContain("nothing to renew");
+    expect(swept.stdout.match(/token_hash_collision/g)).toHaveLength(2);
+    expect(grantsWithToken(fleet, token)).toEqual([]);
+  });
+
+  test("a token, a grant id or the directory changed while the sweep's prompt is open withdraws the renewal", async () => {
+    const changes: Array<[string, (fleet: Fleet, request: { grant_id: string; token_sha256: string }) => Promise<void>]> = [
+      // Another terminal's sweep renews the same request first.
+      ["renewed", async (fleet) => {
+        await ok(fleet.world.desk("hub-other-terminal", { of: fleet.hub }).yes("hub", "renew-sweep"));
+      }],
+      // Another terminal binds the desk's grant id to some other grant.
+      ["grant_id_taken", async (fleet, request) => {
+        const store = LobbyStore.open(fleet.hub.home);
+        const desk = deskOf(fleet.device);
+        try {
+          store.fleet.addHubGrant({
+            grant_id: request.grant_id, mission_id: fleet.directoryId, identity_id: desk.identity_id, signing_key_id: desk.signing_key_id,
+            actions: ["mission.observe", "mission.read"], token_sha256: "f".repeat(64), expires_at: new Date(fleet.world.clock.now.getTime() + HOUR).toISOString(),
+            purpose: "directory", room_id: null, state: "issued", requested_at: fleet.world.clock.now.toISOString(),
+          });
+        } finally {
+          store.close();
+        }
+      }],
+      // The hub's records name another directory.
+      ["directory_changed", async (fleet) => {
+        const db = new Database(join(fleet.hub.home, "lobby.sqlite"));
+        db.run("UPDATE hub SET directory_mission_id = ?", [newUuid()]);
+        db.close();
+      }],
+    ];
+    for (const [reason, change] of changes) {
+      const fleet = await bootstrapFleet();
+      const { hub, device, world } = fleet;
+      await ok(device.yes("fleet", "renew"));
+      const request = JSON.parse(shownBytes(device)).request;
+      const result = await runWhilePromptOpen(world, hub, ["hub", "renew-sweep"], () => change(fleet, request));
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain(`no directory renewal for did:at:${deskOf(device).identity_id}`);
+      expect(result.stderr).toContain(reason);
+      const outcome = (await json(hub.run("audit", "list", "--json"))).entries.filter((entry: any) => entry.act === "hub.renew.sweep.outcome").at(-1);
+      expect(JSON.parse(outcome.bytes).directory_renewals[0]).toMatchObject({ status: "withdrawn" });
+      // At most the other terminal's one grant request reached the service.
+      const posted = world.hosted.seen.filter((seen) => seen.method === "POST" && seen.path.endsWith("/grants") && JSON.parse(seen.body).grant_id === request.grant_id);
+      expect(posted).toHaveLength(reason === "renewed" ? 1 : 0);
+    }
+  });
+});
+
+describe("near the directory's end", () => {
+  test("requests and grants stop at the directory's end; in its last hour the sweep issues none and a desk still picks up", async () => {
+    const fleet = await bootstrapFleet({ initArgs: ["--days", "1"] });
+    const { hub, device, world } = fleet;
+    const ends = world.hosted.missions.get(fleet.directoryId)!.expires_at;
+    world.advance(12 * HOUR);
+    await ok(device.yes("fleet", "renew"));
+    const request = JSON.parse(shownBytes(device)).request;
+    expect(request.expires_at).toBe(ends);
+    await ok(hub.yes("hub", "renew-sweep"));
+    const issued = JSON.parse(shownBytes(hub)).directory_renewals;
+    expect(issued.map((item: any) => [item.grant.grant_id, item.grant.expires_at])).toEqual([[request.grant_id, ends]]);
+
+    // The last hour: a fresh request is skipped as directory_ending.
+    world.advance(Date.parse(ends) - 30 * MINUTE - world.clock.now.getTime());
+    const late = handRequest(fleet, device, { expires_at: ends });
+    await postAs(world, device, fleet.directoryId, late);
+    const swept = await hub.yes("hub", "renew-sweep");
+    expect(swept.code).toBe(0);
+    expect(swept.stdout + hub.terminal.written.join("")).toContain(`did:at:${deskOf(device).identity_id}: directory_ending`);
+    expect(world.hosted.grants.has((openDocument(late)!.body as DirectoryRenewBody).grant_id)).toBe(false);
+
+    // The grant the hub issued earlier is still picked up; no next request is posted.
+    const events = world.hosted.missions.get(fleet.directoryId)!.events.length;
+    const picked = await ok(device.yes("fleet", "renew"));
+    const bytes = JSON.parse(shownBytes(device));
+    expect(bytes.pickup).toMatchObject({ grant_id: request.grant_id });
+    expect(bytes.request).toBeNull();
+    expect(bytes.no_request).toContain("within the hour");
+    expect(picked.stdout).toContain(`picked up directory grant ${request.grant_id}`);
+    expect(picked.stdout).toContain("no next directory renew request");
+    expect(world.hosted.grants.get(request.grant_id)!.accepted_at).not.toBeNull();
+    expect(world.hosted.missions.get(fleet.directoryId)!.events.length).toBe(events);
+  });
+
+  test("a grant picked up with under five minutes left is accepted but posts no request", async () => {
+    const fleet = await bootstrapFleet();
+    const { hub, device, world } = fleet;
+    await ok(device.yes("fleet", "renew"));
+    const request = JSON.parse(shownBytes(device)).request;
+    world.advance(HOUR);
+    await ok(hub.yes("hub", "renew-sweep"));
+    const grantEnds = world.hosted.grants.get(request.grant_id)!.expires_at;
+    world.advance(Date.parse(grantEnds) - 4 * MINUTE - world.clock.now.getTime());
+    const events = world.hosted.missions.get(fleet.directoryId)!.events.length;
+    const picked = await ok(device.yes("fleet", "renew"));
+    const bytes = JSON.parse(shownBytes(device));
+    expect(bytes.pickup).toMatchObject({ grant_id: request.grant_id });
+    expect(bytes.request).toBeNull();
+    expect(bytes.no_request).toContain("five minutes");
+    expect(bytes.no_request).toContain(FALLBACK);
+    expect(picked.stdout).toContain(`picked up directory grant ${request.grant_id}`);
+    expect(world.hosted.missions.get(fleet.directoryId)!.events.length).toBe(events);
   });
 });
