@@ -1,10 +1,12 @@
 /** Local probes: Mullvad's lan setting, the launch context, and the doorbell's
- * own files (pidfile, listeners, bells, fetcher status). PR 1 creates none of
- * those files; netcheck reports them when a later doorbell has, and validates
- * every field it keeps against an id pattern, a canonical time or a closed set.
+ * own files (pidfile, listeners, bells, fetcher status), which the fetcher and
+ * `listen` write. Netcheck validates every field it keeps against an id
+ * pattern, a canonical time or a closed set; a bell must pass the same full
+ * validator the watcher uses (src/formats.ts).
  */
 import { lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { parseBell, type BellState } from "./formats.js";
 import { inspectPrivateDirectory, type DirectoryState, type Environment } from "./home.js";
 import { isCanonicalTime } from "./lobby-cli.js";
 import { childEnvironment, MULLVAD_PATHS, PS_PATH, ROOM_ID_PATTERN, type Spawner } from "./run.js";
@@ -68,7 +70,6 @@ export function launchContext(env: Environment): LaunchContext {
 
 // ── the doorbell's own files ───────────────────────────────────────────
 
-export const BELL_STATES = ["ok", "grant-lapsed", "hosted-unreachable", "stopped", "unknown"] as const;
 const FILE_MAX = 64 * 1024;
 
 export interface DoorbellState {
@@ -76,7 +77,7 @@ export interface DoorbellState {
   /** `unknown`: a pidfile exists but could not be read or checked. */
   fetcher: "absent" | "running" | "stale" | "unknown";
   listeners: string[];
-  bells: Array<{ room_id: string; state: typeof BELL_STATES[number] | "unreadable" }>;
+  bells: Array<{ room_id: string; state: BellState | "unreadable" }>;
   /** Per room, from fetcher.json: the last successful poll. */
   last_ok_at: Record<string, string | null>;
   unreadable: number;
@@ -125,11 +126,9 @@ export async function probeDoorbell(home: string, spawner: Spawner, env: Environ
   state.listeners = roomFiles(join(home, "listeners"));
   for (const roomId of roomFiles(join(home, "bells"))) {
     try {
-      const bell = readSmallJson(join(home, "bells", `${roomId}.json`)) as Record<string, unknown>;
-      const valid = bell?.format === "agenttool-lobby-bell/v1" && bell.room_id === roomId
-        && (BELL_STATES as readonly unknown[]).includes(bell.state);
-      state.bells.push({ room_id: roomId, state: valid ? bell.state as typeof BELL_STATES[number] : "unreadable" });
-      if (!valid) state.unreadable += 1;
+      const bell = parseBell(readSmallJson(join(home, "bells", `${roomId}.json`)), roomId);
+      state.bells.push({ room_id: roomId, state: bell === null ? "unreadable" : bell.state });
+      if (bell === null) state.unreadable += 1;
     } catch {
       state.bells.push({ room_id: roomId, state: "unreadable" });
       state.unreadable += 1;

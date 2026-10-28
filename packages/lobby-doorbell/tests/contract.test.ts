@@ -8,6 +8,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { checkLobbyContract, CONTRACT } from "../contract/lobby-contract.js";
 import { LOBBY_ORIGIN } from "../src/health.js";
+import { messageRing } from "../src/ring.js";
 import { packageRoot } from "./helpers.js";
 
 const lobbySrc = join(packageRoot, "..", "lobby", "src");
@@ -61,5 +62,20 @@ describe("the lobby contract", () => {
       .map((failure) => failure.file)).toEqual(["cli.ts"]);
     expect(checkLobbyContract(source({ file: "home.ts", from: 'join(base, "agenttool", "lobby")', to: 'join(base, "agenttool", "desk")' }))
       .map((failure) => failure.file)).toEqual(["home.ts"]);
+  });
+
+  test.skipIf(!present)("the ring's reply line stays in step with the lobby: room say --lease and the MCP tool names", () => {
+    const reply = messageRing({ room_id: `room_${"a".repeat(32)}`, from_cursor: "1", head_cursor: "2", counts: { new: 1, addressed: 1, unverified: 0 }, watcher_pid: 2 });
+    expect(reply).toContain("Reply with room_say_draft, or room say --lease if a person gave this seat a lease.");
+    expect(reply).toContain("room_read");
+    // A lobby whose room say lost --lease (or renamed it) fails, as does a renamed reply or read tool.
+    expect(checkLobbyContract(source({ file: "cli-table.ts", from: 'lease: { type: "string" }, "idempotency-key"', to: '"lease-id": { type: "string" }, "idempotency-key"' }))
+      .map((failure) => failure.file)).toEqual(["cli-table.ts"]);
+    expect(checkLobbyContract(source({ file: "cli-table.ts", from: "[--lease LEASE_ID --idempotency-key K", to: "[--lease-id LEASE_ID --idempotency-key K" }))
+      .map((failure) => failure.file)).toEqual(["cli-table.ts"]);
+    expect(checkLobbyContract(source({ file: "mcp.ts", from: '"room_say_draft"] as const;', to: '"room_draft"] as const;' }))
+      .map((failure) => failure.file)).toEqual(["mcp.ts"]);
+    expect(checkLobbyContract(source({ file: "mcp.ts", from: '"room_read", ', to: '"table_read", ' }))
+      .map((failure) => failure.file)).toEqual(["mcp.ts"]);
   });
 });

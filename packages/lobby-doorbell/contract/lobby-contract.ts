@@ -57,7 +57,7 @@ export const CONTRACT: readonly ContractCheck[] = [
   },
   {
     file: "hosted.ts",
-    why: "a refused hosted read carries `HTTP <status> <code>` (read by the PR 2 fetcher)",
+    why: "a refused hosted read carries `HTTP <status> <code>` (the fetcher keeps only the status)",
     patterns: [literal("`the service refused the request: HTTP ${response.status} ${code}`")],
   },
   {
@@ -129,12 +129,56 @@ export const CONTRACT: readonly ContractCheck[] = [
       literal("if (!/^(0|[1-9][0-9]{0,18})$/.test(value))"),
       literal("cached: { type: \"boolean\" }, json: { type: \"boolean\" }"),
       literal("sync: values.cached !== true,"),
+      literal("options: { after: { type: \"string\" }, limit: { type: \"string\" },"),
     ],
+  },
+  {
+    file: "table.ts",
+    why: "the fetcher reads pages of at most 50 items: cursors, from_me/to_me and the unverified list, and pages on has_more",
+    patterns: [
+      literal("export const READ_LIMIT_MAX = 50;"),
+      literal("unverified: read.unverified,"),
+      literal("next_cursor: read.next_cursor,"),
+      literal("has_more: read.has_more,"),
+      /export interface TableMessage \{[^}]*\bcursor: string;[^}]*\bto_me: boolean;/,
+      /export interface TableUnverified \{[^}]*\bcursor: string;/,
+    ],
+  },
+  {
+    file: "talk.ts",
+    why: "a non-cached read syncs first, and a desk with no live grant is refused with no_seat before any request",
+    patterns: [
+      literal("if (input.sync) await roomSync(ctx, input.room_id);"),
+      /const seat = liveSeat\(ctx, scope\.mission_id, "mission\.read"\);\s*if \(seat === null\) \{[\s\S]{0,300}throw new LobbyError\("no_seat"/,
+    ],
+  },
+  {
+    file: "ops.ts",
+    why: "the fetcher's refusal table: not_seated, sync_page_limit",
+    patterns: [literal('throw new LobbyError("not_seated"'), literal('throw new LobbyError("sync_page_limit"')],
+  },
+  {
+    file: "hosted.ts",
+    why: "the fetcher's refusal table: an uncertain transport and an invalid response",
+    patterns: [literal('new LobbyError("hosted_uncertain"'), literal('throw new LobbyError("hosted_invalid_response"')],
   },
   {
     file: "talk.ts",
     why: "a cached read reports synced_at and needs no live grant",
     patterns: [literal("return { scope, conversation, read, synced_at: ctx.store.fleet.lastSynced(scope.mission_id) };")],
+  },
+  {
+    file: "cli-table.ts",
+    why: "a message ring's reply line names `room say --lease` (src/ring.ts REPLY): room say still takes --lease with --idempotency-key",
+    patterns: [
+      literal('lease: { type: "string" }, "idempotency-key": { type: "string" }, json: { type: "boolean" },'),
+      /"room say <room_id> [^"\n]*\[--lease LEASE_ID --idempotency-key K\b/,
+    ],
+  },
+  {
+    file: "mcp.ts",
+    why: "rings name the MCP tools room_read (to read) and room_say_draft (to reply)",
+    patterns: [/export const LOBBY_TOOL_NAMES = \[[^\]]*"room_read"[^\]]*"room_say_draft"[^\]]*\] as const;/],
   },
 ];
 
