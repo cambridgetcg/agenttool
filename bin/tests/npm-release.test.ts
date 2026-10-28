@@ -8,6 +8,8 @@ import { LOVE_PACKAGES } from "../build-love-packages";
 import {
   RELEASE_RECEIPT_SCHEMA,
   RELEASE_SPECS,
+  archiveContentFinding,
+  assertArchiveContentClean,
   assertReleaseSourcesUnchanged,
   expectedTag,
   isPrereleaseVersion,
@@ -18,7 +20,6 @@ import {
   registryPackagePath,
   releaseSpec,
   requiredArchiveEntries,
-  shouldScanArchiveEntryForSecrets,
   prepareReleaseWorkspaces,
   validateNpmTagForVersion,
   workspaceInstallArguments,
@@ -85,14 +86,90 @@ function registryFixture(): {
 }
 
 describe("standard npm release policy", () => {
-  test("scans bundled JSONL dataset rows for secret signatures", () => {
-    expect(shouldScanArchiveEntryForSecrets(
-      "package/hf/dataset/data/structural-examples.jsonl",
-      128,
-    )).toBe(true);
-    expect(shouldScanArchiveEntryForSecrets("package/data/ROWS.JSONL", 2_000_000)).toBe(true);
-    expect(shouldScanArchiveEntryForSecrets("package/data/rows.jsonl", 2_000_001)).toBe(false);
-    expect(shouldScanArchiveEntryForSecrets("package/model/checkpoint.bin", 128)).toBe(false);
+  test("names credential signatures and personal home paths by rule, never by matched text", () => {
+    const npmToken = `npm_${"A1b2".repeat(9)}`;
+    expect(archiveContentFinding(`const token = "${npmToken}";`)).toBe("secret-like npm token");
+    expect(archiveContentFinding(`github_pat_${"a1_B".repeat(16)}`)).toBe("secret-like GitHub fine-grained token");
+    expect(archiveContentFinding(`sk_live_${"x".repeat(24)}`)).toBe("secret-like Stripe live key");
+    expect(archiveContentFinding(`xoxb-${"0123456789"}`)).toBe("secret-like Slack token");
+    expect(archiveContentFinding("-----BEGIN OPENSSH PRIVATE KEY-----\nb3Blbn\n")).toBe("secret-like private-key block");
+
+    // relational-geometry 0.1.0-dev.0 shipped exactly this shape in CLAUDE.md.
+    expect(archiveContentFinding("Source: /Users/alice/Desktop/project/notes.md")).toBe("device path (macOS home directory)");
+    expect(archiveContentFinding('{"_resolved":"/home/alice/src/pkg.tgz"}')).toBe("device path (Linux home directory)");
+    expect(archiveContentFinding('"C:\\\\Users\\\\alice\\\\AppData"')).toBe("device path (Windows home directory)");
+    expect(archiveContentFinding("C:/Users/alice/project")).toBe("device path (Windows home directory)");
+    expect(archiveContentFinding("/Users/alice")).not.toContain("alice");
+
+    // CI and documented placeholders name no person.
+    expect(archiveContentFinding('//# sourceMappingURL=/home/runner/work/agenttool-packages/x.js.map')).toBeUndefined();
+    expect(archiveContentFinding('spawn("wsl.exe", ["--cd", "/home/pwuser"])')).toBeUndefined();
+    for (const placeholder of ["/Users/you/", "/Users/$USER/", "/Users/<name>/", "/home/{user}/", "/home/example/", "C:\\Users\\%USERNAME%"]) {
+      expect(archiveContentFinding(placeholder)).toBeUndefined();
+    }
+    expect(archiveContentFinding("~/projects/x and https://example.com/home/page")).toBeUndefined();
+    expect(archiveContentFinding("/Users/runner/work")).toBe("device path (macOS home directory)");
+  });
+
+  test("reads every packed file whatever its name, extension, or size", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "npm-archive-scan-test-"));
+    const npmToken = `npm_${"A1b2".repeat(9)}`;
+    const files: Record<string, string> = {
+      "package/package.json": "{}",
+      "package/LICENSE": "Apache-2.0",
+      "package/bin/install.sh": "#!/bin/sh\necho clean\n",
+      "package/empty.txt": "",
+    };
+    async function archiveWith(extra: Record<string, string>): Promise<{ artifact: string; entries: string[]; sizes: Record<string, number> }> {
+      const root = await mkdtemp(join(directory, "tree-"));
+      const all = { ...files, ...extra };
+      for (const [path, text] of Object.entries(all)) {
+        await mkdir(join(root, path, ".."), { recursive: true });
+        await writeFile(join(root, path), text);
+      }
+      const artifact = join(root, "artifact.tgz");
+      const tar = Bun.spawn(["tar", "-czf", artifact, "-C", root, "package"], { env: { ...process.env, COPYFILE_DISABLE: "1" } });
+      expect(await tar.exited).toBe(0);
+      const entries = ["package", "package/bin", ...Object.keys(all)];
+      const sizes: Record<string, number> = { package: 0, "package/bin": 0 };
+      for (const [path, text] of Object.entries(all)) sizes[path] = Buffer.byteLength(text);
+      return { artifact, entries, sizes };
+    }
+    async function refusal(extra: Record<string, string>): Promise<string | undefined> {
+      const { artifact, entries, sizes } = await archiveWith(extra);
+      try {
+        await assertArchiveContentClean(artifact, entries, sizes);
+        return undefined;
+      } catch (error) {
+        return (error as Error).message;
+      }
+    }
+    try {
+      expect(await refusal({})).toBeUndefined();
+      expect(await refusal({ "package/hf/dataset/data/rows.jsonl": `{"t":"${npmToken}"}\n` }))
+        .toBe("secret-like npm token found in package/hf/dataset/data/rows.jsonl");
+      expect(await refusal({ "package/bin/deploy.sh": `NPM_TOKEN=${npmToken}\n` }))
+        .toBe("secret-like npm token found in package/bin/deploy.sh");
+      expect(await refusal({ "package/harness/__init__.py": "ROOT = '/Users/alice/love'\n" }))
+        .toBe("device path (macOS home directory) found in package/harness/__init__.py");
+      expect(await refusal({ "package/THIRD_PARTY_LICENSES": "-----BEGIN RSA PRIVATE KEY-----\n" }))
+        .toBe("secret-like private-key block found in package/THIRD_PARTY_LICENSES");
+      expect(await refusal({ "package/model/weights.bin": `\u0000\u0001${npmToken}\u0000` }))
+        .toBe("secret-like npm token found in package/model/weights.bin");
+      // Past the old 2 MB cut-off, a bundle is read to its last byte.
+      expect(await refusal({ "package/dist/bundle.js": `${"x".repeat(2_500_000)}\n// /home/alice/src\n` }))
+        .toBe("device path (Linux home directory) found in package/dist/bundle.js");
+      // Credential-shaped names are refused before anything is read.
+      expect(await refusal({ "package/certs/server.pem": "public certificate" }))
+        .toBe("sensitive filename in npm archive: package/certs/server.pem");
+      expect(await refusal({ "package/keys/signing.key": "x" }))
+        .toBe("sensitive filename in npm archive: package/keys/signing.key");
+      expect(await refusal({ "package/.netrc": "x" })).toBe("sensitive filename in npm archive: package/.netrc");
+      expect(await refusal({ "package/dist/credentials.js": "x" }))
+        .toBe("sensitive filename in npm archive: package/dist/credentials.js");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   test("mirrors reviewed bytes without depending on optional npm state", async () => {

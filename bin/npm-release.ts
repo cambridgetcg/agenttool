@@ -485,18 +485,51 @@ const SAFE_NPM_TAG = /^[a-z][a-z0-9._-]*$/;
 const COMMIT = /^[0-9a-f]{40}$/;
 /** npm's own stage-id check (lib/utils/validate-uuid.js in npm 11.17.0). */
 const STAGE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const TEXT_ARCHIVE_ENTRY = /\.(?:cjs|css|html|js|json|jsonl|jsx|map|md|mjs|mts|toml|ts|tsx|txt|yaml|yml)$/i;
-const SENSITIVE_ARCHIVE_PATH = /(?:^|\/)(?:\.env(?:\..*)?|\.npmrc|credentials(?:\.json)?|id_ed25519|id_rsa)$/i;
+/** The public guard's credential-shaped basenames (SENSITIVE_BASENAME in tools/public-guard.ts). */
+const SENSITIVE_ARCHIVE_PATH =
+  /(?:^|\/)(?:\.env(?:\.[^/]*)?|\.envrc|\.npmrc|\.netrc|\.pypirc|credentials(?:\.[^/]*)?|id_rsa|id_ed25519|id_ecdsa|id_dsa|[^/]+\.(?:pem|key|p12|pfx|jks|keystore)|\.DS_Store)$/i;
+/** The public guard's credential signatures (SECRET_RULES in tools/public-guard.ts), which merged this list with its own. */
 const SECRET_SIGNATURES = [
   { name: "private-key block", pattern: /-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----/ },
   { name: "AWS access key", pattern: /\bAKIA[0-9A-Z]{16}\b/ },
   { name: "GitHub token", pattern: /\bgh[pousr]_[A-Za-z0-9]{36,}\b/ },
+  { name: "GitHub fine-grained token", pattern: /\bgithub_pat_[A-Za-z0-9_]{60,}/ },
   { name: "npm token", pattern: /\bnpm_[A-Za-z0-9]{36,}\b/ },
-  { name: "Slack token", pattern: /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/ },
+  { name: "Slack token", pattern: /\bxox[baprs]-[A-Za-z0-9-]{10,}/ },
+  { name: "Stripe live key", pattern: /\b[sr]k_live_[A-Za-z0-9]{16,}/ },
 ] as const;
+/** The public guard's placeholder home names; a name not starting with a letter or digit is a variable or template ($USER, {name}). */
+const PLACEHOLDER_HOMES = new Set(["nobody", "test", "example", "person", "you"]);
+/**
+ * The public guard's home-directory rules (PERSONAL_RULES in tools/public-guard.ts).
+ * Two Linux home names name no person: `runner`, the GitHub-hosted runner
+ * whose workspace prepare builds in, and `pwuser`, the user of the Playwright
+ * images, whose home browser's vendored playwright-core names.
+ */
+const DEVICE_PATH_RULES: readonly { name: string; pattern: RegExp; permitted: readonly string[] }[] = [
+  // First, so that C:/Users/<name> is named for what it is.
+  { name: "Windows home directory", pattern: /\b[A-Za-z]:(?:\\\\|\\|\/)Users(?:\\\\|\\|\/)([^\\/\s"'`<>(),;:]+)/g, permitted: [] },
+  { name: "macOS home directory", pattern: /\/Users\/([^/\s"'`<>()\\,;:]+)/g, permitted: [] },
+  { name: "Linux home directory", pattern: /(?<![\w.-])\/home\/([^/\s"'`<>()\\,;:]+)/g, permitted: ["runner", "pwuser"] },
+];
 
-export function shouldScanArchiveEntryForSecrets(entry: string, size: number): boolean {
-  return TEXT_ARCHIVE_ENTRY.test(entry) && size <= 2_000_000;
+/**
+ * The first credential signature or device path in one packed file, named by
+ * its rule only: the matched text is never echoed.
+ */
+export function archiveContentFinding(text: string): string | undefined {
+  for (const signature of SECRET_SIGNATURES) {
+    if (signature.pattern.test(text)) return `secret-like ${signature.name}`;
+  }
+  for (const rule of DEVICE_PATH_RULES) {
+    for (const match of text.matchAll(rule.pattern)) {
+      const home = match[1] ?? "";
+      if (!PLACEHOLDER_HOMES.has(home) && !rule.permitted.includes(home) && /^[A-Za-z0-9]/.test(home)) {
+        return `device path (${rule.name})`;
+      }
+    }
+  }
+  return undefined;
 }
 
 function fail(message: string): never {
@@ -1580,13 +1613,29 @@ async function verifyArchive(artifact: string, spec: ReleaseSpec, expectedVersio
     fail("packed package repository directory does not match the allowlisted source path");
   }
 
+  await assertArchiveContentClean(artifact, entries, inspected.sizes);
+}
+
+/**
+ * Refuses a credential-shaped filename anywhere in the archive, and reads
+ * every non-empty file, whatever its name, extension, or size, for a
+ * credential signature or a device path. A key, a script, or an
+ * extensionless file can carry a secret as well as a .js file can, and a
+ * large bundle is where one would hide. inspectNpmTarball already bounds the
+ * whole archive (MAX_TAR_EXPANDED_BYTES), so no file needs a size exception.
+ * A binary file is read as UTF-8; the ASCII signatures survive that.
+ */
+export async function assertArchiveContentClean(
+  artifact: string,
+  entries: readonly string[],
+  sizes: Readonly<Record<string, number>>,
+): Promise<void> {
   for (const entry of entries) {
     if (SENSITIVE_ARCHIVE_PATH.test(entry)) fail(`sensitive filename in npm archive: ${entry}`);
-    if (!shouldScanArchiveEntryForSecrets(entry, inspected.sizes[entry])) continue;
-    const text = await archiveText(artifact, entry);
-    for (const signature of SECRET_SIGNATURES) {
-      if (signature.pattern.test(text)) fail(`secret-like ${signature.name} found in ${entry}`);
-    }
+    // Directories and empty files carry no bytes.
+    if ((sizes[entry] ?? 0) === 0) continue;
+    const finding = archiveContentFinding(await archiveText(artifact, entry));
+    if (finding !== undefined) fail(`${finding} found in ${entry}`);
   }
 }
 
