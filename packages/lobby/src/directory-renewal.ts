@@ -27,6 +27,7 @@ import { LobbyError } from "./errors.js";
 import type { DoorPin, VerifiedDocument } from "./fleet.js";
 import type { DeskDirectoryRenewalRow, DeskRow, HubDeviceRow, HubRow } from "./fleet-store.js";
 import { DIRECTORY_GATE_ROOM, type GrantIssue, type GrantView, type MissionView, type ParticipantSeat } from "./hosted.js";
+import { endMovedLeases, leasesEndedByMove } from "./lease.js";
 import {
   claimBlocker,
   doorOf,
@@ -518,6 +519,14 @@ function successorMismatch(read: { mission: MissionView; grant: GrantView }, not
   return null;
 }
 
+/** The prompt line naming the room seat leases a move out of `fromMissionId` ends, if any. */
+export function movedLeasesLine(ctx: FleetContext, fromMissionId: string | null): string[] {
+  if (fromMissionId === null) return [];
+  const ended = leasesEndedByMove(ctx, fromMissionId);
+  return ended.length === 0 ? [] : [`the move ends ${ended.length} room seat lease(s) bound to this desk's directory grant in ${fromMissionId} ` +
+    `(void: directory_moved; a lease is never carried into the successor's grant): ${ended.join(", ")}`];
+}
+
 export async function planFleetRenew(ctx: FleetContext): Promise<{ plan: FleetRenewPlan } | { idle: FleetRenewIdle }> {
   const desk = requireJoinedDesk(ctx);
   const fleet = ctx.store.fleet;
@@ -685,6 +694,7 @@ export async function planFleetRenew(ctx: FleetContext): Promise<{ plan: FleetRe
         : `move this desk from directory ${pickup.move.from_mission_id} to its door-signed successor ${pickup.mission.mission_id} ` +
           `(notice sha256 ${pickup.move.notice.sha256}); accept its digest ${pickup.mission.mission_digest}, whose charter names the pinned door ` +
           `and that directory as its predecessor; the door pin is unchanged`,
+      ...movedLeasesLine(ctx, pickup.move === null ? null : pickup.move.from_mission_id),
       pickup.notice_sha256 === null ? "door-signed notice: not in the local cache (not needed for the pickup)"
         : `door-signed notice: seen, names exactly this grant (sha256 ${pickup.notice_sha256})`,
     ]),
@@ -782,6 +792,9 @@ export async function executeFleetRenew(ctx: FleetContext, plan: FleetRenewPlan)
     });
     pickedUp = { grant_id: pickup.seat.grant_id, expires_at: accepted.grant.expires_at };
     movedTo = pickup.move === null ? null : pickup.mission.mission_id;
+    // The move ends every room seat lease bound to a directory grant in the
+    // directory this desk left; none is carried into the successor's grant.
+    if (movedTo !== null) endMovedLeases(ctx);
   }
   let posted: PostOutcome | null = null;
   if (plan.request !== null) {

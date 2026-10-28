@@ -166,7 +166,8 @@ export function buildAccessDigest(ctx: FleetContext, input: { days?: number } = 
   const leases = fleet.listLeases().map((row) => leaseView(ctx, row))
     .filter((lease) => lease.state === "active" || inWindow(lease.issued_at) || inWindow(lease.revoked_at) || inWindow(lease.voided_at));
   lines.push("", "## Seat leases on this desk", "",
-    "Leases are local to the desk that holds them; a member desk's leases show in its own `room lease list`.", "");
+    "Leases are local to the desk that holds them; a member desk's leases show in its own `room lease list`.",
+    "A lease stays bound to the directory grant it was made under: a desk's move to the successor directory ends it (`void: directory_moved`), never carrying it into the successor's grant.", "");
   if (leases.length === 0) lines.push("(no lease active or issued, revoked or voided in the window)");
   else {
     lines.push("| lease | room | seat ref | issued | ends | ends by | recipients | messages | characters | stored / pending | state |",

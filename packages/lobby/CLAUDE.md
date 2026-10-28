@@ -132,7 +132,8 @@ restates the design terms it implements.
      accept, `fleet renew`, `hub seat`, `enroll-device`/`hub relay`/`fleet
      join`) is confirmed at a terminal, and a lease never renews anything: a
      lease stays bound to the directory grant it was made under, and a
-     renewed directory grant does not carry it on.
+     renewed directory grant does not carry it on; a move to the successor
+     directory ends it (`directory_moved`).
 - **Pins come from people, not rooms.** The door key is pinned only at
   `fleet join`, from a fingerprint the person types, and only if the directory
   descriptor names the same key. Members' keys are pinned per season only by a
@@ -253,7 +254,8 @@ Version 4 is directory renewal inside the Lobby (Build 2A,
 
 Each build takes the next free version when it merges. Whoever merges out of
 this order renumbers when it integrates main and updates this table (room
-seat leases were reserved 6 and took 5 after #535 took 4). `tests/store.test.ts`
+seat leases were reserved 6 and took 5 after #535 took 4; directory rollover
+was reserved 5 and took 6 after #536 took 5). `tests/store.test.ts`
 catches a mistake: the chain must run from 1 without a gap and end at
 `STATE_SCHEMA_VERSION`, a file at every version it knows must upgrade once to
 the same schema a new file gets, and each released version's schema is frozen

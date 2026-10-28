@@ -24,7 +24,11 @@
  *   A void is final and audited too (`room.lease.void`).
  *
  * A lease never covers another act, never widens or extends itself, and is
- * never created without a terminal. It reads no Keychain item: the desk key
+ * never created without a terminal. It stays with the directory grant it was
+ * made under: when its desk moves to the door-signed successor directory
+ * (`fleet renew` or `fleet join`, src/directory-renewal.ts and src/desk.ts),
+ * the move ends it (`void: directory_moved`), so it is never carried into the
+ * successor's grant and never outlives the grant it binds. It reads no Keychain item: the desk key
  * and grant tokens come from `<home>/secrets` through the one transport, as
  * for every participant call. Contract: packages/lobby/README.md#room-seat-leases.
  */
@@ -183,13 +187,48 @@ function voidAll(ctx: FleetContext, reason: string): number {
 /** Run by every CLI command once lobby.sqlite is open: while the STOP file
  * exists, or once this desk's hub has recorded an emergency stop, every lease
  * that has not ended is voided and audited, so removing the file later
- * brings none back. Reads only when there is nothing to void. */
+ * brings none back; otherwise a lease its desk's move has ended is voided
+ * (`endMovedLeases`). Reads only when there is nothing to void. */
 export function enforceLeaseStops(ctx: FleetContext): void {
   if (!ctx.store.fleet.v5 || ctx.store.readonly) return;
   const open = ctx.store.fleet.listLeases().some((row) => !isEnded(row));
   if (!open) return;
   if (stopFilePresent(ctx.home)) voidAll(ctx, "stop_file");
   else if (hubStopped(ctx)) voidAll(ctx, "hub_stopped");
+  else endMovedLeases(ctx);
+}
+
+/** True when the directory grant a lease binds is in a directory this desk
+ * has left: it moved to the door-signed successor (`fleet renew` or `fleet
+ * join`). A host desk's lease binds no directory grant and never moves. */
+function directoryMoved(ctx: FleetContext, directoryGrantId: string | null): boolean {
+  if (directoryGrantId === null) return false;
+  const bound = ctx.store.fleet.deskGrant(directoryGrantId);
+  const desk = ctx.store.fleet.desk();
+  return bound !== null && desk !== null && bound.mission_id !== desk.directory_mission_id;
+}
+
+/** The active leases on this desk bound to a directory grant in `missionId`:
+ * the ones a move out of that directory ends (for the move's prompt). */
+export function leasesEndedByMove(ctx: FleetContext, missionId: string): string[] {
+  if (!ctx.store.fleet.v5) return [];
+  const now = ctx.now();
+  return ctx.store.fleet.listLeases().filter((row) => isActive(row, now) && row.directory_grant_id !== null
+    && ctx.store.fleet.deskGrant(row.directory_grant_id)?.mission_id === missionId).map((row) => row.lease_id);
+}
+
+/** A move to the successor directory ends every active lease bound to a
+ * directory grant in the directory this desk left, audited as a void
+ * (`directory_moved`): a lease is never carried into the successor's grant.
+ * Run right after a move and by every CLI command. Returns how many. */
+export function endMovedLeases(ctx: FleetContext): number {
+  if (!ctx.store.fleet.v5 || ctx.store.readonly) return 0;
+  const now = ctx.now();
+  let voided = 0;
+  for (const row of ctx.store.fleet.listLeases()) {
+    if (isActive(row, now) && directoryMoved(ctx, row.directory_grant_id) && voidLease(ctx, row.lease_id, "directory_moved")) voided += 1;
+  }
+  return voided;
 }
 
 // ── where a lease lives ────────────────────────────────────────────────
@@ -398,6 +437,9 @@ export function executeLease(ctx: FleetContext, plan: LeasePlan): LeaseRow {
     refuseCrowded(ctx, record.room_id, record.seat_ref, now);
     if (!liveGrant(ctx.store.fleet.deskGrant(record.grant_id), now, "mission.observe")) {
       throw new LobbyError("no_seat", "the season grant this lease binds is no longer live; nothing was written");
+    }
+    if (directoryMoved(ctx, record.directory_grant_id)) {
+      throw new LobbyError("directory_changed", "this desk moved to the successor directory while the prompt was open; nothing was written. Make the lease again");
     }
     ctx.store.fleet.addLease({
       lease_id: record.lease_id,
@@ -709,6 +751,10 @@ export async function sendUnderLease(ctx: FleetContext, input: LeaseSendInput): 
   if (!liveGrant(bound, now, "mission.observe")) throw new LobbyError("lease_expired", "the season grant this lease binds ends within a minute; the lease ends with it");
   let directory: DeskGrantRow | null = null;
   if (loaded.directory_grant_id !== null) {
+    if (directoryMoved(ctx, loaded.directory_grant_id)) {
+      voidAndRefuse(ctx, leaseId, "directory_moved",
+        "this desk moved to the successor directory; a lease stays with the directory grant it was made under and is never carried into the successor's");
+    }
     directory = fleet.deskGrant(loaded.directory_grant_id);
     if (!liveGrant(directory, now, "mission.read")) throw new LobbyError("lease_expired", "the directory grant this lease binds has ended or ends within a minute; the lease ends with it");
   }
@@ -794,6 +840,9 @@ export async function sendUnderLease(ctx: FleetContext, input: LeaseSendInput): 
     }
     refuseEnded(fresh, inside);
     if (stopFilePresent(ctx.home)) throw new LobbyError("lease_stopped", `a STOP file appeared in this desk's home (${STOP_FILE}); nothing was sent`);
+    if (directoryMoved(ctx, fresh.directory_grant_id)) {
+      throw new LobbyError("directory_changed", "this desk moved to the successor directory meanwhile; nothing was sent, and the lease ends with the move");
+    }
     refuseOverBudget(fresh, chars, inside);
     if (fresh.sent_messages + 1 !== n) {
       throw new LobbyError("lease_changed", "another send under this lease was reserved meanwhile; nothing was sent, run the command again");

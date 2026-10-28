@@ -8,7 +8,8 @@
 import { LobbyError } from "./errors.js";
 import { filterFleetCards, type FleetCardFilter, type FleetView, type UnverifiedEvent, type VerifiedDocument } from "./fleet.js";
 import { DIRECTORY_GATE_ROOM, assertSendable, type GateRoom, type GrantView, type MissionView, type ParticipantSeat } from "./hosted.js";
-import { successorOf, type SuccessorNotice } from "./directory-renewal.js";
+import { movedLeasesLine, successorOf, type SuccessorNotice } from "./directory-renewal.js";
+import { endMovedLeases } from "./lease.js";
 import {
   actPreview,
   currentGate,
@@ -214,7 +215,7 @@ export async function planJoin(ctx: FleetContext, input: { packetText: string; d
     `purpose ${JSON.stringify(mission.descriptor.purpose)}`,
     `grant ${grant.grant_id} ${grant.actions.join("+")} until ${grant.expires_at}`,
     ...(successor === null ? [] : [`move this desk from directory ${desk.directory_mission_id} to its door-signed successor ` +
-      `${mission.mission_id} (notice sha256 ${successor.sha256}); the door pin is unchanged`]),
+      `${mission.mission_id} (notice sha256 ${successor.sha256}); the door pin is unchanged`, ...movedLeasesLine(ctx, desk.directory_mission_id)]),
   ], {
     directory: {
       mission_id: mission.mission_id,
@@ -280,6 +281,8 @@ export async function executeJoin(ctx: FleetContext, plan: JoinPlan): Promise<{ 
     // The directory's end, for fleet renew and fleet status (version 4).
     if (fleet.v4 && fleet.desk()?.directory_mission_id === plan.mission.mission_id) fleet.setDeskDirectoryExpiry(plan.mission.expires_at);
   });
+  // A move ends every room seat lease bound to the directory this desk left.
+  if (plan.move !== null) endMovedLeases(ctx);
   return { grant_id: plan.seat.grant_id, expires_at: accepted.grant.expires_at, pinned: plan.pin !== null };
 }
 

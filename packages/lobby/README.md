@@ -932,7 +932,9 @@ device joins again and no packet is carried.
    moved meanwhile refuses with nothing accepted or sent, `directory_changed`),
    the grant is accepted and the desk points
    at the successor (`desk_directories` records the move). Its next request
-   goes out in the successor. A desk thus moves over two daily renewals.
+   goes out in the successor. A desk thus moves over two daily renewals. The
+   move ends the desk's [room seat leases](#room-seat-leases) bound to the old
+   directory grant.
 3. **While both live** (the old directory `previous` until it ends): `hub
    knocks` reads both and lists each knock with its directory; an admission or
    denial goes to the directory the knock was posted in (and the season);
@@ -1059,8 +1061,9 @@ tool call dies or times out, the agent runs the identical command again. With
    message over the per-message, total or count budget or sooner than the
    spacing allows (`lease_message_too_long`, `lease_chars_exhausted`,
    `lease_budget_exhausted`, `lease_too_soon`);
-5. checks the lease's bound grants: left (`grant_left`, void) or ending within
-   a minute (`lease_expired`);
+5. checks the lease's bound grants: left (`grant_left`, void), in a directory
+   this desk has moved out of (`directory_moved`, void) or ending within a
+   minute (`lease_expired`);
 6. reads the season, and on a member desk the directory, with exactly those
    grants: a definite refusal (a kick, a block, the hub's stop revoked the
    grant) voids the lease (`grant_refused`); an uncertain read refuses with
@@ -1097,7 +1100,11 @@ directory grant it was made under, and its end is at most a minute before that
 grant's. When `fleet renew` picks up the next directory grant, the lease does
 not move to it: it ends with the grant it binds (`ends by directory_grant`),
 and a person makes a new lease under the new grant at a terminal. Renewing
-never widens or extends a lease.
+never widens or extends a lease. A desk's move to the door-signed successor
+directory (`fleet renew` pickup or a fallback `fleet join`, whose prompt names
+the leases) ends every lease bound to a directory grant in the directory it
+left, audited by that act as `room.lease.void` (`directory_moved`): a lease is
+never carried into the successor's grant and never outlives the one it binds.
 
 **What a lease is not.**
 
