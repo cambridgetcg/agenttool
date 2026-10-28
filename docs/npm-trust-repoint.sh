@@ -23,7 +23,7 @@
 # lockdown, for all 47 packages (the 38 below and the 9 outside the public
 # release allowlist). It creates no configuration.
 #   1. `npm trust list` for every package, saved under trust-before/.
-#   2. Per configuration: revoke it when it names the old private repository
+#   2. Per configuration: revoke it when it names the old repository
 #      cambridgetcg/agenttool, or when it allows direct publish
 #      (createPackage) from any repository. A stage-only GitHub configuration
 #      of any other repository (Xenia's own, or one made by enable) is kept

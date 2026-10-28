@@ -332,11 +332,11 @@ without mutation.
 
 ## npm trust: lock down now, enable per release (Yu, trusted device)
 
-The packages on npm must not trust the private repository, must not let any
-workflow publish them directly, and must refuse publication by any npm token.
-A package released by the public route then needs trust of the public
-repository's workflow for **stage publish only**, so a GitHub OIDC token can
-never publish without Yu's approval.
+The packages on npm must not trust this repository, `cambridgetcg/agenttool`,
+must not let any workflow publish them directly, and must refuse publication by
+any npm token. A package released by the public route then needs trust of the
+`cambridgetcg/agenttool-packages` workflow for **stage publish only**, so a
+GitHub OIDC token can never publish without Yu's approval.
 
 Since 2026-10-02 npm expires a new trust configuration 48 hours after creation
 unless its first publish succeeds (GitHub changelog, "Unvalidated npm trusted
@@ -377,11 +377,10 @@ packages and nine released other ways (`@agenttool/xenia`,
 the equivalent of:
 
 ```bash
-NPM="npx --yes npm@11.17.0"
-$NPM trust list <pkg> --json        # saved under trust-before/
-$NPM trust revoke <pkg> --id <id>   # each configuration to revoke (below)
-$NPM access set mfa=publish <pkg>   # "Require 2FA and disallow tokens"
-$NPM trust list <pkg> --json        # saved under trust-after/; checked
+npx --yes npm@11.17.0 trust list <pkg> --json        # saved under trust-before/
+npx --yes npm@11.17.0 trust revoke <pkg> --id <id>   # each configuration to revoke (below)
+npx --yes npm@11.17.0 access set mfa=publish <pkg>   # "Require 2FA and disallow tokens"
+npx --yes npm@11.17.0 trust list <pkg> --json        # saved under trust-after/; checked
 ```
 
 It creates no configuration. It revokes every configuration that names
@@ -406,8 +405,8 @@ one listed is expected.
 On 2026-10-19 the listing showed 22 packages trusting `cambridgetcg/agenttool`
 `publish-npm.yml` in `npm-bootstrap` with `createPackage` and
 `createStagedPackage`, and 16 with none. Until they are revoked, a workflow file
-of that name added to the private repository again could publish them
-directly. A re-run finds nothing more to revoke and sets the same access again.
+of that name added to this repository again could publish them directly. A
+re-run finds nothing more to revoke and sets the same access again.
 
 **What lockdown closes outside the public route.** The nine outside packages
 were not listed on 2026-10-19, so their trust is unknown: read their lines in
@@ -496,10 +495,10 @@ Local Starter; it runs from a copy without the checkout, so
 equivalent of:
 
 ```bash
-$NPM trust list @agenttool/<key> --json   # saved under trust-before/; empty, or exactly the target
-$NPM trust github @agenttool/<key> --repo cambridgetcg/agenttool-packages \
+npx --yes npm@11.17.0 trust list @agenttool/<key> --json   # saved under trust-before/; empty, or exactly the target
+npx --yes npm@11.17.0 trust github @agenttool/<key> --repo cambridgetcg/agenttool-packages \
   --file publish-npm.yml --env npm-bootstrap --allow-stage-publish --yes
-$NPM trust list @agenttool/<key> --json   # saved under trust-after/; must be exactly the target
+npx --yes npm@11.17.0 trust list @agenttool/<key> --json   # saved under trust-after/; must be exactly the target
 ```
 
 There is deliberately no `--allow-publish`. A package with any configuration
@@ -533,8 +532,8 @@ entry behind, as
 did with no configuration at all.
 
 If the deadline passes first, revoke the configuration
-(`$NPM trust revoke @agenttool/<key> --id <id>`, with the id the script
-printed) and run `enable` again just before the release. If npm refuses to
+(`npx --yes npm@11.17.0 trust revoke @agenttool/<key> --id <id>`, with the id
+the script printed) and run `enable` again just before the release. If npm refuses to
 revoke an expired configuration, delete it on the package's Settings page on
 npmjs.com, as npm's page says to, and run `enable` again. If it can be neither
 revoked nor deleted and still appears in the listing, `enable` keeps treating

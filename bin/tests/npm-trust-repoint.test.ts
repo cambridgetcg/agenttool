@@ -25,7 +25,7 @@ const OUTSIDE = [
   "@agenttool/whitehack-scan", "@rhetorlint/core", "@rhetorlint/rules-en", "@rhetorlint/cli", "yutabase",
 ];
 const ALL = [...ON_NPM.map((key) => `@agenttool/${key}`), ...OUTSIDE];
-/** The 22 packages whose listing on 2026-10-19 trusted the private repository, with direct publish. */
+/** The 22 packages whose listing on 2026-10-19 trusted the old repository, cambridgetcg/agenttool, with direct publish. */
 const OLD_TRUST = [
   "adds", "data", "data-sync", "dark-continent-karma", "wake-continuity", "deepseek-kingdom", "heaven",
   "credential-broker", "sdk", "wallet", "wallet-zerone", "telescope", "browser", "alchemy", "alchemy-agentcred",
