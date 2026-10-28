@@ -113,20 +113,32 @@ The workflow:
    the spec's declared gate scripts) without a publish credential or OIDC
    permission, then `npm pack`s it into runner temp space;
 5. checks package identity, repository, Apache-2.0 terms, archive paths and
-   entry types, secret-like signatures, size, and hashes, and writes the
-   prepared receipt to the run summary;
+   entry types, size, and hashes; reads every packed file, whatever its name,
+   extension or size (as UTF-8, and a BOM-marked UTF-16 file as UTF-16 too),
+   for the public guard's credential signatures and macOS, Linux and Windows
+   home paths (Linux `/home/runner` and `/home/pwuser` excepted); refuses the
+   guard's credential-shaped filenames and any file in a `.env` or `.env.*`
+   directory; and writes the prepared receipt to the run summary;
 6. stops there when `dry_run` is true (the default);
 7. otherwise transfers only that tarball and its path-independent receipt to a
    second job, which enters the protected `npm-bootstrap` GitHub environment
    and runs `check-inputs` again against the registry as it is then;
-8. rechecks the downloaded bytes, then creates or reuses the tag's GitHub
+8. for a trusted run that changes the registry, runs `check-trust`: it makes
+   npm's OIDC token exchange and refuses, before anything is mirrored, signed
+   or staged, unless npm returns a token (both tokens are masked; the npm
+   token is discarded). A bootstrap or verify-only run skips it, so a
+   bootstrap run without its secret still mirrors before publish refuses;
+9. rechecks the downloaded bytes, then creates or reuses the tag's GitHub
    Release in the public repository, uploads the exact tarball if absent,
    re-downloads it, and requires byte identity;
-9. with `publish_mode: stage` (the default) stages the tarball with
-   `npm stage publish --provenance --ignore-scripts`, checks that npm staged
+10. with `publish_mode: stage` (the default) stages the tarball with
+   `npm stage publish --provenance --ignore-scripts`, prints npm's `oidc`
+   debug-log lines (token-shaped text shown as `***`) and, on failure, its
+   `--json` output (a failed exchange inside npm ends in ENEEDAUTH, before
+   provenance is signed), checks that npm staged
    the prepared bytes, and writes the stage id, the SHA-256, and the approval
    commands to the summary, leaving the receipt without a result; and
-10. on a later dispatch after the maintainer's `npm stage approve`, finds the
+11. on a later dispatch after the maintainer's `npm stage approve`, finds the
     published version, requires byte identity and the requested dist-tag, and
     records `already_published_exact`.
 
@@ -269,7 +281,9 @@ sol access run github -- workflow run publish-npm.yml \
 Prereleases require `npm_tag=next`. Pass the `authentication`, `npm_tag`, and
 `publish_mode` the real run will use: the first step, `check-inputs`, refuses
 what the real run would refuse and logs the planned action (`stage` for a new
-version, `verify-existing` for one already on npm). The run then prepares and
+version, `verify-existing` for one already on npm). It cannot check npm trust:
+the prepare job has no OIDC identity, so `check-trust` runs only in the real
+run. Enable the package's trust within 48 hours before that dispatch. The run then prepares and
 checks the artifact without any credential and puts the receipt (size, SHA-1,
 SHA-256, integrity) in its summary. Nothing is mirrored, staged, or published.
 
@@ -282,6 +296,12 @@ The job re-checks the bytes, creates or reuses the tag's GitHub Release in the
 public repository with the exact tarball, then runs `npm stage publish`. Its
 summary shows the stage id, the SHA-256 to expect, and the commands below;
 `stage.json` holds the same record. The receipt gets no result yet.
+
+Before the mirror, `check-trust` confirms that npm trusts this workflow for the
+package. If it refuses, nothing is public yet: run the trust script's
+`enable <key>`. If the trust entry is already listed, it may have expired:
+revoke it and enable again. If a fresh one is refused too, `check-trust` and
+npm disagree, which needs a code fix and a new tag.
 
 The GitHub Release is public from this step, before npm approval. If a stage is
 rejected, delete that GitHub Release as well.
@@ -403,7 +423,10 @@ token that cannot publish:
    and paste the token yourself.
 3. Dispatch with `-f authentication=bootstrap -f npm_tag=next -f dry_run=false`
    (`publish_mode` stays `stage`).
-   Bootstrap is refused for any package that already exists.
+   Bootstrap is refused for any package that already exists. If the secret
+   was not set, the run mirrors a public prerelease before publish refuses:
+   set the secret and dispatch again, which reuses the release, or delete the
+   release if the bootstrap is abandoned.
 4. Once the stage id is in the summary:
    `sol access run github -- secret delete NPM_TOKEN --env npm-bootstrap --repo cambridgetcg/agenttool-packages`,
    then revoke the token on npm. Approval and verification need no token.
