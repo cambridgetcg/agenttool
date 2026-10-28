@@ -18,7 +18,7 @@
  *   listeners and stops their watchers; the fetcher exits on its own once it
  *   has had no listener for 120 s.
  */
-import { delta, markAt, type Bell, type Listener, type Mark } from "./formats.js";
+import { delta, markAt, newStop, type Bell, type Listener, type Mark } from "./formats.js";
 import { appendLogLine, type Environment } from "./home.js";
 import {
   emptyMark, listenerRooms, notedPath, readBell, readListener, readMark, releaseListener, rungPath, sameProcess, writeListener, writeMark,
@@ -153,7 +153,10 @@ function promptNotes(ctx: DoorbellContext, mine: Listener[]): string[] {
     if (noted !== null && noted.armed_at === bell.armed_at && noted.seq === bell.seq) continue;
     const base = baseMark(bell, noted, readMark(rungPath(ctx.doorbellHome, room), room));
     let next: Mark = { ...base, seq: bell.seq, state: bell.state, reason: bell.reason };
-    if ((bell.state !== base.state || bell.reason !== base.reason) && bell.state !== "ok") lines.push(stateNote({ room_id: room, state: bell.state, reason: bell.reason }));
+    // A change of state, or a new stop at a later seq (see newStop: its ok may have lasted one poll).
+    if ((bell.state !== base.state || bell.reason !== base.reason || newStop(bell, base)) && bell.state !== "ok") {
+      lines.push(stateNote({ room_id: room, state: bell.state, reason: bell.reason }));
+    }
     const change = delta(bell, base);
     if (change === null) next = markAt(bell);
     else if (bell.head_cursor !== null && (listener.mode === "addressed" ? change.addressed > 0 : change.new > 0)) {

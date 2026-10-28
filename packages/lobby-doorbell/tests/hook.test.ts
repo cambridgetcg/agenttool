@@ -144,6 +144,22 @@ describe("hook claude-code", () => {
     ]);
   });
 
+  test("UserPromptSubmit notes each stop once, a stop at a later seq too, even when the ok in between was never seen", async () => {
+    const { world, hook } = hookWorld();
+    world.listener();
+    const stopped = `[lobby] ${ROOM_A}: stopped (cli_failed); check with agenttool-lobby-doorbell status.`;
+    world.bell({ seq: 1, head_cursor: "10" });
+    expect(await hook(event("UserPromptSubmit"))).toEqual([]);
+    world.bell({ seq: 2, head_cursor: "10", state: "stopped", reason: "cli_failed" });
+    expect(await hook(event("UserPromptSubmit"))).toEqual([stopped]);
+    expect(await hook(event("UserPromptSubmit"))).toEqual([]);
+    // A re-armed fetcher's ok (seq 3) and its stop (seq 4) came between two prompts.
+    world.bell({ seq: 4, head_cursor: "10", state: "stopped", reason: "cli_failed" });
+    expect(await hook(event("UserPromptSubmit"))).toEqual([stopped]);
+    expect(await hook(event("UserPromptSubmit"))).toEqual([]);
+    expect(stopped).toMatch(NOTE_PATTERN);
+  });
+
   test("UserPromptSubmit names a lapse even before the head is known", async () => {
     const { world, hook } = hookWorld();
     world.listener();

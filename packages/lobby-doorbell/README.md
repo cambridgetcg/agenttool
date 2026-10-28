@@ -174,9 +174,14 @@ and it polls only rooms with a live listener:
   meanwhile still counts, under a new sequence number. It carries the bell's
   state: a room that was `grant-lapsed` or `hosted-unreachable` stays so
   until a poll says otherwise, so nothing rings or notes a transition that did
-  not happen. A `stopped` bell keeps its reason and time until the new fetcher
-  polls the room. Then it reads `ok` under a new sequence number, so a later
-  stop or lapse on that arm rings again.
+  not happen. A `stopped` bell keeps its reason and time, and its sequence
+  number, until the new fetcher polls the room. Then it reads `ok` under a new
+  sequence number. A stopped bell therefore reaches a higher sequence number
+  only by passing through another state, and the watcher and the prompt hook
+  read a stopped bell past the one they last saw as a new stop. A later stop
+  on that arm rings and notes again even when the poll fails at once and the
+  `ok` lasts a single `room read`. A later lapse rings again once the room
+  has read `ok` in between.
 - **After a fatal stop** (the last row of the table below), a fetcher started
   within 300 s of the stop polls no room until 300 s after it. The stopped
   bell's reason and time are the record; a bell dated in the future counts
@@ -227,10 +232,20 @@ room renew request / hub renew-sweep / room renew accept") and into a stopped
 fetcher, and once at the listener's expiry. The first stopped ring of an arm
 says how to re-arm (`listen --room R`). Any later stop on the same arm rings
 "the fetcher stopped again (<reason>). Do not re-arm; ask a person to check
-agenttool-lobby-doorbell status." That way an agent that follows the rings
-cannot loop on a persistent failure. A stopped ring that failed to reach the
-inbox does not count. It never rings for `hosted-unreachable`, and rings
-nothing while STOP exists. Ring and note text follow the closed grammar
+agenttool-lobby-doorbell status." A stop is new when the bell turns
+`stopped`, or when a stopped bell's sequence number passes the one the
+watcher last read. So the second stop rings even when the re-armed fetcher's
+first poll after its hold fails at once. That way an agent that follows the
+rings stops re-arming after two stops, and the hold already limits a
+persistent failure to one hosted read per 300 s. A stopped ring that failed
+to reach the inbox does not count. The watcher keeps "this arm has stopped
+before" in memory, so a watcher started again in between (a SessionStart
+re-arm) rings the re-arm text once more. It never rings for
+`hosted-unreachable`, and rings nothing while STOP exists. When the fetcher
+stops within 60 s of a message ring, with new messages on that same bell,
+the stop rings at once and the messages ring once the 60 s have passed. A
+watcher that restarts within those 60 s leaves those messages to the next
+ring or the prompt note. Ring and note text follow the closed grammar
 `agenttool-lobby-bell/v2` (`src/ring.ts`): validated ids, cursors, numbers,
 closed codes and fixed words only, never a room title, card text, display
 name, device name, path or lease id. (v1 was the spec's "Reply only with
@@ -265,7 +280,7 @@ failure) and **does nothing at all for a session that is not a listener**.
 | Event | For a listener's session |
 |---|---|
 | SessionStart | `resume` in a new process re-owns the listener (unless the old owner still runs); `clear` moves it to the new session id (a continuation). Makes sure the fetcher runs. Re-arms the watcher when the hook sees the session's inbox socket; otherwise prints `[lobby] this session listened to room_<id>; re-arm with: agenttool-lobby-doorbell listen --room room_<id>`. |
-| UserPromptSubmit | Per room with news since the last ring or note: `[lobby] <n> new Lobby message(s) in room_<id> after cursor <c> (<a> addressed to this desk, <u> unverified); no message text here; read with room_read (room_id room_<id>, after <c>).` Plus one line per transition into a state other than ok. Forward only; it never repeats what the watcher rang. |
+| UserPromptSubmit | Per room with news since the last ring or note: `[lobby] <n> new Lobby message(s) in room_<id> after cursor <c> (<a> addressed to this desk, <u> unverified); no message text here; read with room_read (room_id room_<id>, after <c>).` Plus one line per transition into a state other than ok, and one for each new stop (a stopped bell past the sequence number of the last note). Forward only; it never repeats what the watcher rang. |
 | SessionEnd | For `prompt_input_exit`, `logout` or `other`: releases this process's listeners and stops their watchers. `clear`, `resume` and unknown reasons keep them. |
 
 `install-hooks --print` prints the `~/.claude/settings.json` snippet (three

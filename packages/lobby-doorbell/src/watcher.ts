@@ -5,18 +5,20 @@
  * It reads only the room's bell and its own mark. It rings forward only: an
  * `addressed` listener when messages addressed to this desk arrived since the
  * last ring, an `all` listener when any message from another desk did; and
- * once per transition into grant-lapsed or a stopped fetcher. The first
- * stopped ring of an arm says how to re-arm; any later one on that arm asks
- * for a person instead, so an agent that follows the rings cannot loop on a
- * persistent failure. Rings within 60 s coalesce into one. It rings nothing
- * for hosted-unreachable, and nothing at all while STOP exists.
+ * once per transition into grant-lapsed, and once per stop (a bell turning
+ * stopped, or a stopped bell past the seq this watcher last read: see
+ * newStop). The first stopped ring of an arm says how to re-arm; any later
+ * one on that arm asks for a person instead, so an agent that follows the
+ * rings stops re-arming after two stops. Message rings within 60 s coalesce
+ * into one. It rings nothing for hosted-unreachable, and nothing at all while
+ * STOP exists.
  *
  * It exits when the owning Claude Code process or its socket is gone, on STOP,
  * on SIGTERM, when its listener file is removed or names another watcher, and
  * at the listener's expiry (after one ring asking for a re-arm).
  */
 import { appendLogLine, stopPresent } from "./home.js";
-import { delta, markAt, type Listener, type Mark } from "./formats.js";
+import { delta, markAt, newStop, type Listener, type Mark } from "./formats.js";
 import { emptyMark, readBell, readListener, readMark, releaseListener, rungPath, writeMark, ARM_GRACE_MS } from "./registry.js";
 import { expiredRing, lapsedRing, messageRing, stoppedAgainRing, stoppedRing } from "./ring.js";
 import type { Ring } from "./claude-inbox.js";
@@ -41,6 +43,8 @@ export class Watcher {
   private terminating = false;
   /** The arm whose stopped ring was delivered; a later stop on it asks for a person. */
   private stoppedArm: string | null = null;
+  /** A burst held back by the 60 s gap on a stopped bell, whose mark already has the bell's seq. */
+  private heldStopped = false;
   private readonly startedAt: number;
 
   constructor(private readonly deps: WatcherDeps) {
@@ -95,17 +99,18 @@ export class Watcher {
     if (bell === null || bell.armed_at !== listener.armed_at) return;
     const stored = readMark(rungPath(home, room), room);
     const mark: Mark = stored !== null && stored.armed_at === bell.armed_at ? stored : emptyMark(bell);
-    if (bell.seq === mark.seq && stored !== null) return;
+    if (bell.seq === mark.seq && stored !== null && !this.heldStopped) return;
+    this.heldStopped = false;
     let next: Mark = { ...mark, seq: bell.seq, state: bell.state, reason: bell.reason };
 
-    if (bell.state !== mark.state || bell.reason !== mark.reason) {
-      if (bell.state === "grant-lapsed" && mark.state !== "grant-lapsed") {
-        await this.ring(lapsedRing({ room_id: room, reason: bell.reason, watcher_pid: this.deps.pid }), "grant-lapsed");
-      } else if (bell.state === "stopped" && mark.state !== "stopped" && bell.reason !== "stopped") {
-        const again = this.stoppedArm === bell.armed_at;
-        const input = { room_id: room, reason: bell.reason, watcher_pid: this.deps.pid };
-        if (await this.ring(again ? stoppedAgainRing(input) : stoppedRing(input), again ? "stopped_again" : "stopped")) this.stoppedArm = bell.armed_at;
-      }
+    if (bell.state === "grant-lapsed" && mark.state !== "grant-lapsed") {
+      await this.ring(lapsedRing({ room_id: room, reason: bell.reason, watcher_pid: this.deps.pid }), "grant-lapsed");
+    } else if (bell.reason !== "stopped" && newStop(bell, mark)) {
+      // A stop this mark has not seen: a change of state, or a stopped bell at a later seq (the ok of a
+      // re-armed fetcher whose first poll failed at once lasts one `room read`, too short to see).
+      const again = this.stoppedArm === bell.armed_at;
+      const input = { room_id: room, reason: bell.reason, watcher_pid: this.deps.pid };
+      if (await this.ring(again ? stoppedAgainRing(input) : stoppedRing(input), again ? "stopped_again" : "stopped")) this.stoppedArm = bell.armed_at;
     }
 
     const change = delta(bell, mark);
@@ -114,8 +119,15 @@ export class Watcher {
       next = markAt(bell);
     } else if (bell.head_cursor !== null && (listener.mode === "addressed" ? change.addressed > 0 : change.new > 0)) {
       if (now - this.lastRing < MIN_RING_GAP_MS) {
-        // Coalesce: keep the counters where they were, so the later ring covers this burst too.
-        if (next.state !== mark.state || next.reason !== mark.reason) writeMark(rungPath(home, room), { ...next, seq: mark.seq });
+        // Coalesce: keep the counters where they were, so the later ring covers this burst too. The mark
+        // keeps its old seq, so the next tick looks again (after a restart too), and takes any new state.
+        // A stopped bell is the exception: its stop is recorded at the seq where it was seen (newStop
+        // reads a stopped mark's seq that way, so an older seq would ring the same stop twice), and
+        // heldStopped keeps this watcher looking until the ring.
+        if (bell.state === "stopped") {
+          this.heldStopped = true;
+          writeMark(rungPath(home, room), next);
+        } else if (next.state !== mark.state || next.reason !== mark.reason) writeMark(rungPath(home, room), { ...next, seq: mark.seq });
         return;
       }
       const from = change.from_cursor ?? bell.base_cursor ?? "0";

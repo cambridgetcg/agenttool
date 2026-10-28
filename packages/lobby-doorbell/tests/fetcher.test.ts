@@ -11,7 +11,7 @@ import * as home from "../src/home.js";
 import { readPrivateJson, writePrivateJson } from "../src/home.js";
 import { handleClaudeHook } from "../src/hook.js";
 import { bellPath, claimListener, fetcherPidPath, listenerPath, readBell, readListener } from "../src/registry.js";
-import { RING_PATTERN } from "../src/ring.js";
+import { NOTE_PATTERN, RING_PATTERN, stoppedAgainRing } from "../src/ring.js";
 import { Watcher, WATCH_TICK_MS } from "../src/watcher.js";
 import { CANARY, NOW, ROOM_A, ROOM_B } from "./helpers.js";
 import { fakePs, FETCHER, LSTART, makeDoorbellWorld, OTHER, OWNER, SESSION, UUID_GRANT_2, WATCHER, type DoorbellWorld } from "./doorbell-helpers.js";
@@ -256,14 +256,89 @@ describe("stopped twice on one arm", () => {
     for (const ring of rings) expect(ring).toMatch(RING_PATTERN);
   });
 
+  test("a persistent failure: the first poll after the hold fails at once; the second stop still rings for a person and notes, and the next fetcher holds 300 s from it", async () => {
+    const world = makeDoorbellWorld();
+    world.events = history(3);
+    world.listener();
+    const rings: string[] = [];
+    const notes: string[] = [];
+    const watcher = ringingWatcher(world, rings);
+    const look = async () => {
+      world.clock += WATCH_TICK_MS;
+      await watcher.tick();
+      notes.push(...await promptNotes(world));
+    };
+    let fetcher = world.fetcher();
+    await fetcher.cycle();
+    await look();
+    world.failures.push({ kind: "failed", code: "cli_exit" });
+    world.clock += TICK_MS;
+    expect(await fetcher.cycle()).toBe("fatal");
+    const firstStop = world.clock;
+    await look();
+    expect(rings).toEqual([expect.stringContaining("the fetcher stopped (cli_failed). Check with agenttool-lobby-doorbell status; re-arm with")]);
+    expect(notes).toEqual([`[lobby] ${ROOM_A}: stopped (cli_failed); check with agenttool-lobby-doorbell status.`]);
+
+    // The agent re-arms as the ring says. The new fetcher holds; the watcher and the prompt hook look at
+    // every cycle of the hold, and the bell does not change under them.
+    world.procs.set(9_000_005, LSTART);
+    fetcher = world.fetcher(9_000_005);
+    const syncs = world.syncCalls();
+    world.clock += TICK_MS;
+    while (world.clock < firstStop + RESTART_AFTER_FATAL_MS) {
+      expect(await fetcher.cycle()).toBeNull();
+      await look();
+      world.clock += TICK_MS;
+    }
+    expect(world.syncCalls()).toBe(syncs);
+    expect(rings).toHaveLength(1);
+    expect(notes).toHaveLength(1);
+    const held = readBell(world.doorbellHome, ROOM_A)!;
+    // The failure persists: the first poll after the hold fails at once. Its ok (seq + 1) and its stop
+    // (seq + 2) land within one cycle, so no reader sees the ok; the seq still tells this stop apart.
+    world.failures.push({ kind: "failed", code: "cli_exit" });
+    expect(await fetcher.cycle()).toBe("fatal");
+    const secondStop = world.clock;
+    expect(world.syncCalls()).toBe(syncs + 1);
+    expect(readBell(world.doorbellHome, ROOM_A)).toMatchObject({
+      state: "stopped", reason: "cli_failed", seq: held.seq + 2, at: new Date(secondStop).toISOString(), fetcher_pid: 9_000_005,
+    });
+    await look();
+    expect(rings).toHaveLength(2);
+    expect(rings[1]).toBe(stoppedAgainRing({ room_id: ROOM_A, reason: "cli_failed", watcher_pid: WATCHER }));
+    expect(notes).toEqual([
+      `[lobby] ${ROOM_A}: stopped (cli_failed); check with agenttool-lobby-doorbell status.`,
+      `[lobby] ${ROOM_A}: stopped (cli_failed); check with agenttool-lobby-doorbell status.`,
+    ]);
+    // Looking again changes nothing: one ring and one note per stop.
+    await look();
+    expect(rings).toHaveLength(2);
+    expect(notes).toHaveLength(2);
+
+    // Another re-arm anyway: its fetcher reads nothing until 300 s after the second stop.
+    world.procs.set(9_000_006, LSTART);
+    fetcher = world.fetcher(9_000_006);
+    world.clock += TICK_MS;
+    while (world.clock < secondStop + RESTART_AFTER_FATAL_MS) {
+      expect(await fetcher.cycle()).toBeNull();
+      world.clock += TICK_MS;
+    }
+    expect(world.syncCalls()).toBe(syncs + 1);
+    expect(await fetcher.cycle()).toBeNull();
+    expect(world.syncCalls()).toBe(syncs + 2);
+    for (const ring of rings) expect(ring).toMatch(RING_PATTERN);
+    for (const note of notes) expect(note).toMatch(NOTE_PATTERN);
+  });
+
   test("the hold covers every room, counts from the stop (never more than 300 s from now), and only follows a fatal stop", async () => {
-    /** Room A has the given bell; room B has none. Returns when each room's first sync came, after the fetcher started. */
-    const firstSyncs = async (bell: Partial<Bell>) => {
+    /** Room A has the given bell, and room B the second one or none. Returns when each room's first sync came, after the fetcher started. */
+    const firstSyncs = async (bell: Partial<Bell>, bellB?: Partial<Bell>) => {
       const world = makeDoorbellWorld();
       world.events = history(3);
       world.listener();
       world.listener({ room_id: ROOM_B });
       world.bell({ seq: 4, base_cursor: "3", head_cursor: "3", ...bell });
+      if (bellB !== undefined) world.bell({ seq: 4, base_cursor: "3", head_cursor: "3", ...bellB, room_id: ROOM_B });
       const fetcher = world.fetcher();
       while (world.syncCalls() === 0 && world.clock - NOW <= 2 * RESTART_AFTER_FATAL_MS) {
         await fetcher.cycle();
@@ -271,8 +346,16 @@ describe("stopped twice on one arm", () => {
       }
       return world.calls.filter((call) => !call.cached).map((call) => call.at - NOW);
     };
+    const fatalAt = (ms: number) => ({ state: "stopped" as const, reason: "lobby_refused" as const, at: new Date(NOW + ms).toISOString() });
     // A fatal stop 99 s before the fetcher started, on room A's bell: neither room is read until 300 s after it.
-    expect(await firstSyncs({ state: "stopped", reason: "lobby_refused", at: new Date(NOW - 99_000).toISOString() })).toEqual([201_000, 201_000]);
+    expect(await firstSyncs(fatalAt(-99_000))).toEqual([201_000, 201_000]);
+    // The same on room B's bell, which the fetcher reads after room A's: room A waits too.
+    expect(await firstSyncs({}, fatalAt(-99_000))).toEqual([201_000, 201_000]);
+    // A stop on an older arm's bell holds too: unlisten and listen again buy no immediate hosted read.
+    expect(await firstSyncs({ ...fatalAt(-99_000), armed_at: new Date(NOW - 3_600_000).toISOString() })).toEqual([201_000, 201_000]);
+    // Two stops: the hold runs to 300 s after the later one, whichever room's bell is read first.
+    expect(await firstSyncs(fatalAt(-12_000), fatalAt(-201_000))).toEqual([288_000, 288_000]);
+    expect(await firstSyncs(fatalAt(-201_000), fatalAt(-12_000))).toEqual([288_000, 288_000]);
     // A bell dated in the future holds for 300 s from now, not longer.
     expect(await firstSyncs({ state: "stopped", reason: "cli_failed", at: new Date(NOW + 3_600_000).toISOString() })).toEqual([300_000, 300_000]);
     // A fatal stop 300 s old or older, and stops that were not failures, hold nothing.

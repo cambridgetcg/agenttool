@@ -220,6 +220,15 @@ export function delta(bell: Bell, mark: Mark | null): (Counters & { from_cursor:
   return result.new < 0 || result.addressed < 0 || result.unverified < 0 ? null : result;
 }
 
+/** Whether the bell shows a stop that a reader's mark (of the bell's arm, at the seq it last read) has
+ * not seen. Within one arm a stopped bell reaches a higher seq only by passing through another state:
+ * a fetcher that restores a stopped bell keeps its seq until it polls the room and writes ok, and a
+ * stopping fetcher skips a bell that is stopped already. So a stopped bell past a stopped mark's seq
+ * is a new stop, even when the ok in between lasted only one `room read` and no reader saw it. */
+export function newStop(bell: Bell, mark: Mark): boolean {
+  return bell.state === "stopped" && (mark.state !== "stopped" || bell.seq > mark.seq);
+}
+
 /** A mark at the bell's current position. */
 export function markAt(bell: Bell): Mark {
   return {

@@ -177,6 +177,56 @@ describe("the watcher", () => {
     expect(rings.at(-1)).toBe(stoppedRing(input("cli_failed")));
   });
 
+  test("a stopped bell at a later seq is a new stop, even when the ok in between was never seen; each stop rings once", async () => {
+    const { world, rings, tick } = watcherWorld();
+    const stop = (reason: "cli_failed" | "lobby_refused" | "stopped") => ({ state: "stopped", reason });
+    const input = (reason: "cli_failed" | "lobby_refused") => ({ room_id: ROOM_A, reason, watcher_pid: WATCHER });
+    counts(world, 1, "10", 0, 0);
+    await tick();
+    counts(world, 2, "10", 0, 0, stop("cli_failed"));
+    await tick();
+    await tick();
+    expect(rings).toEqual([stoppedRing(input("cli_failed"))]);
+    // A re-armed fetcher's first poll failed at once: its ok (seq 3) and its stop (seq 4) fell between two ticks.
+    counts(world, 4, "10", 0, 0, stop("cli_failed"));
+    await tick();
+    await tick();
+    expect(rings).toEqual([stoppedRing(input("cli_failed")), stoppedAgainRing(input("cli_failed"))]);
+    counts(world, 6, "10", 0, 0, stop("lobby_refused"));
+    await tick();
+    expect(rings.at(-1)).toBe(stoppedAgainRing(input("lobby_refused")));
+    // A stop by the STOP brake never rings, at a later seq either.
+    counts(world, 8, "10", 0, 0, stop("stopped"));
+    await tick();
+    expect(rings).toHaveLength(3);
+    expect(readMark(rungPath(world.doorbellHome, ROOM_A), ROOM_A)).toMatchObject({ seq: 8, state: "stopped", reason: "stopped" });
+  });
+
+  test("a burst held back by the 60 s gap when the fetcher stops: the stop rings once, the burst once after the gap", async () => {
+    const { world, rings, tick } = watcherWorld();
+    counts(world, 1, "10", 0, 0);
+    await tick();
+    counts(world, 2, "11", 1, 1);
+    await tick();
+    expect(rings).toHaveLength(1);
+    // Within 60 s of that ring the fetcher found one more message and stopped: one bell carries both.
+    counts(world, 3, "12", 2, 2, { state: "stopped", reason: "fetcher_lifetime" });
+    await tick();
+    expect(rings).toHaveLength(2);
+    expect(rings[1]).toBe(stoppedRing({ room_id: ROOM_A, reason: "fetcher_lifetime", watcher_pid: WATCHER }));
+    // The held burst keeps the counts behind, while the stop is recorded where it was seen: no second stop.
+    expect(readMark(rungPath(world.doorbellHome, ROOM_A), ROOM_A)).toMatchObject({ seq: 3, cursor: "11", new: 1, state: "stopped" });
+    for (let index = 0; index < 10; index += 1) await tick();
+    expect(rings).toHaveLength(2);
+    await tick(MIN_RING_GAP_MS);
+    expect(rings).toHaveLength(3);
+    expect(rings[2]).toContain("1 new table message(s) after cursor 11 (head 12), 1 addressed to this desk");
+    await tick();
+    await tick(MIN_RING_GAP_MS);
+    expect(rings).toHaveLength(3);
+    expect(readMark(rungPath(world.doorbellHome, ROOM_A), ROOM_A)).toMatchObject({ seq: 3, cursor: "12", new: 2, state: "stopped" });
+  });
+
   test("a grant that lapsed before the first catch-up (no head yet) still rings once", async () => {
     const { world, rings, tick } = watcherWorld();
     counts(world, 1, "0", 0, 0, { base_cursor: null, head_cursor: null, state: "grant-lapsed", reason: "no_seat" });
