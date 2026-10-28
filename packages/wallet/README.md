@@ -16,17 +16,30 @@ It also provides a deliberately narrow signer interface, exact-byte request
 binding, a forward-only submission lifecycle, and a pure continuity
 compare-and-swap rule.
 
-Version `0.1.3` is the current package release. Its checked-in exact
+Version `0.1.4` is the version of this source. It is released from the public
+repository [`cambridgetcg/agenttool-packages`](https://github.com/cambridgetcg/agenttool-packages):
+the release run packs the tarball, records its size and SHA-256 in the run
+summary, attaches those exact bytes to the GitHub Release `wallet-v0.1.4`, and
+stages them on npm, where they become public only after a maintainer approves
+the stage with 2FA. Run `npm view @agenttool/wallet versions` to see whether
+0.1.4 is published, and compare the tarball's SHA-256 with the GitHub Release
+asset before relying on it. Version 0.1.4 has no `love-package/v1` manifest:
+the docs.agenttool.dev LOVE mirror does not ingest versions released from the
+public repository. It tightens authorization; see
+[Changes in 0.1.4](#changes-in-014).
+
+Version `0.1.3` is the newest LOVE release. Its checked-in exact
 Apache-2.0 `love-package/v1` manifest binds the tarball's size, SHA-256, and
 source revision; npm and GitHub are optional mirrors whose exact availability
 must be checked independently. The exact-version `0.1.1` and `0.1.2` LOVE
-artifacts remain byte-addressable and are not rewritten. Their currently
-public GitHub assets were byte-verified separately, but GitHub reports those
-release records as mutable, so the optional locator is not an immutability
-guarantee. The `0.1.1` package incorrectly called itself unreleased; the
-`0.1.2` erratum ambiguously described the LOVE and GitHub bytes together as
-immutable. This paragraph supersedes both statements without rewriting either
-historical artifact. As independently checked on 2026-07-29, npm serves the
+artifacts remain byte-addressable and are not rewritten. Their GitHub assets
+were byte-verified separately while the source repository was public (it has
+been private since 2026-09-25), but GitHub reports those release records as
+mutable, so the optional locator is not an immutability guarantee. The
+`0.1.1` package incorrectly called itself unreleased; the `0.1.2` erratum
+ambiguously described the LOVE and GitHub bytes together as immutable. This
+paragraph supersedes both statements without rewriting either historical
+artifact. As independently checked on 2026-07-29, npm serves the
 byte-identical `0.1.3` artifact.
 
 The package does not create a wallet, derive or store a seed, export a private
@@ -40,7 +53,9 @@ is one such narrow local adapter. It adds exact Zerone message/direct-sign
 bytes, secp256k1 verification, and injected query/simulation/broadcast/lookup
 interfaces while leaving keys, custody, endpoints, durable reservations, and
 settlement tracking to the host. Public package bytes do not expand this core
-package's protocol or imply hosted execution.
+package's protocol or imply hosted execution. Its `^0.1.2` peer range also
+admits Wallet 0.1.3, which lacks the 0.1.4 authorization changes, so install
+Wallet 0.1.4 or later (pin it exactly) beside it.
 
 ## Development
 
@@ -57,10 +72,10 @@ source checkout they live at:
 - `schema/agent-wallet-v0.1.schema.json`
 - `vectors/agent-wallet-v0.1-vectors.json`
 
-Negative vectors, cases a conforming implementation must refuse, live in the
-source checkout at `vectors/agent-wallet-v0.1-negative-vectors.json`. They
-have no subpath export, and the published `0.1.3` artifact does not contain
-them.
+Negative vectors, cases a conforming implementation must refuse, live at
+`vectors/agent-wallet-v0.1-negative-vectors.json`. They have no subpath
+export. Version 0.1.4 is the first package version that contains them; the
+0.1.3 and earlier artifacts do not.
 
 ## Record verification
 
@@ -93,9 +108,9 @@ const authorization = assertIntentWithinCapabilityStatic({
 `context` must be plain data: exactly `now` and `usage`, with `usage` holding
 exactly `revocation_nonce`, `intent_count`, `spent`, and
 `host_verified_approval_ids`, and each `spent` entry exactly `asset_id` and
-`amount_atomic`. This source refuses extra keys, accessors, and non-plain
-objects, such as a class-backed database row, with `INVALID_INPUT`; the
-published `0.1.3` artifact does not (see [Unreleased](#unreleased-source-after-013)).
+`amount_atomic`. Since 0.1.4, extra keys, accessors, and non-plain objects,
+such as a class-backed database row, are refused with `INVALID_INPUT`; 0.1.3
+and earlier accept them (see [Changes in 0.1.4](#changes-in-014)).
 
 That final helper checks signed relationships, allowlists, deadlines,
 host-supplied approval counts, simulation effects, cumulative spend input, and
@@ -149,12 +164,14 @@ rejected. Public validators snapshot data properties before semantic checks.
 The normative draft is
 [`docs/specs/AGENT-WALLET-0.1.md`](https://docs.agenttool.dev/AGENT-WALLET-0.1.md).
 
-## Unreleased
+## Changes in 0.1.4
 
-
-Source only. There has been no version bump or release, so the published
-`0.1.3` artifact (LOVE, and its npm and GitHub mirrors) does not contain these
-changes.
+These changes are relative to 0.1.3, at the source revision its LOVE
+manifest records. The 0.1.3 artifact (LOVE, and its npm and GitHub mirrors)
+does not contain them. Both changes tighten authorization: a capability that
+relied on first-match leniency, or a `context` that is not plain data, is
+refused by 0.1.4. Upgrade from 0.1.3 before relying on approval rules that
+overlap.
 
 ### Changed
 
@@ -188,9 +205,9 @@ changes.
 - `vectors/agent-wallet-v0.1-negative-vectors.json`: seven deterministic cases
   a conforming implementation must refuse (signature scalar not reduced,
   small-order authority key, both overlapping-rule shapes, simulation fee asset
-  mismatch, watch-only descriptor, failed simulation). `files` already includes
-  `vectors/`, so a future release tarball would carry it; it has no subpath
-  export, and the `./vectors.json` export is unchanged.
+  mismatch, watch-only descriptor, failed simulation). The tarball carries it
+  under `vectors/`; it has no subpath export, and the `./vectors.json` export
+  is unchanged.
 
 ### Documentation
 
@@ -198,6 +215,13 @@ changes.
   cross-record binding check (§5.5, §12), and names `intent_id` and
   (`grant_id`, `nonce`) as the intent replay dedupe keys; a host must not
   rely on `record_id` as one (§6 step 6).
+
+### Package metadata
+
+- `repository`, `homepage`, and `bugs` name the public source repository
+  `cambridgetcg/agenttool-packages` and the public support page, so npm
+  provenance points at source anyone can read. Earlier versions named the
+  source repository, which is now private.
 
 ## Security reporting
 
