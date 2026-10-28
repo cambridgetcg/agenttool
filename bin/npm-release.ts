@@ -34,8 +34,8 @@ export const RELEASE_REPOSITORY = "cambridgetcg/agenttool-packages" as const;
 export const RELEASE_REPOSITORY_URL = `https://github.com/${RELEASE_REPOSITORY}` as const;
 export const EXPECTED_REPOSITORY = `${RELEASE_REPOSITORY_URL}.git` as const;
 /** The workflow file and environment of the publish job, which with RELEASE_REPOSITORY are what an npm trusted publisher names. */
-export const PUBLISH_WORKFLOW_FILE = "publish-npm.yml";
-export const PUBLISH_ENVIRONMENT = "npm-bootstrap";
+const PUBLISH_WORKFLOW_FILE = "publish-npm.yml";
+const PUBLISH_ENVIRONMENT = "npm-bootstrap";
 export const RELEASE_RECEIPT_SCHEMA = "agenttool.npm-release/1";
 export const STAGE_RECEIPT_SCHEMA = "agenttool.npm-stage/1";
 export const PINNED_BUN = "1.3.5";
@@ -1946,7 +1946,9 @@ export function trustedPublisherCheckNeeded(
  * npm would make (assertTrustedPublisherExchange), so a package whose npm
  * trusted publishers do not match this workflow is refused while the run has
  * mirrored, signed, and staged nothing. A bootstrap run, and a run that only
- * verifies an existing version, need no OIDC token.
+ * verifies an existing version, need no OIDC token. This step receives no
+ * secret, so it cannot see whether a bootstrap run has its token: without
+ * one, publish refuses that run after the mirror.
  */
 async function checkTrust(
   packageKey: string,
@@ -1964,7 +1966,9 @@ async function checkTrust(
     planned_action: action,
     trusted_publisher: exchange
       ? "npm exchanged this workflow's OIDC identity for a token; the token was discarded"
-      : `not checked: ${action === "verify-existing" ? "verifying an existing version needs no npm token" : "bootstrap uses the reviewed token"}`,
+      : `not checked: ${action === "verify-existing"
+        ? "verifying an existing version needs no npm token"
+        : "bootstrap authenticates with NODE_AUTH_TOKEN, which only the publish step receives; it refuses there, after the mirror, if the secret is absent"}`,
   }, null, 2));
 }
 
@@ -2587,8 +2591,32 @@ export function npmOidcExchangeUrl(name: string): string {
 
 export type OidcFetch = (url: string, init: RequestInit) => Promise<Response>;
 
-function timedOidcFetch(url: string, init: RequestInit): Promise<Response> {
-  return fetch(url, { ...init, redirect: "error", signal: AbortSignal.timeout(30_000) });
+/** The redirect statuses npm 11.17.0's fetch follows (minipass-fetch isRedirect), and its default limit (`follow`). */
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const MAX_OIDC_REDIRECTS = 20;
+
+/**
+ * One OIDC request, 30 seconds per hop. It follows a redirect as npm's
+ * make-fetch-happen does (GET after a 303, or after a 301 or 302 to a POST),
+ * but only within one origin, the one place the bearer may go.
+ * make-fetch-happen drops the bearer on another host, where npm would get no
+ * token either, so such a redirect is returned as it is, and refused.
+ */
+export async function timedOidcFetch(url: string, init: RequestInit): Promise<Response> {
+  let target = new URL(url);
+  let request = init;
+  for (let hops = 0; ; hops += 1) {
+    const response = await fetch(target.href, { ...request, redirect: "manual", signal: AbortSignal.timeout(30_000) });
+    const location = response.headers.get("location");
+    if (!REDIRECT_STATUSES.has(response.status) || location === null || hops === MAX_OIDC_REDIRECTS) return response;
+    const next = new URL(location, target);
+    if (next.origin !== target.origin) return response;
+    if (response.status === 303 || (request.method === "POST" && [301, 302].includes(response.status))) {
+      request = { ...request, method: "GET" };
+    }
+    await response.body?.cancel();
+    target = next;
+  }
 }
 
 /** Hides a credential in the rest of this job's log, as actions/core setSecret does; the runner consumes the command line. */
@@ -2605,8 +2633,13 @@ async function jsonObject(response: Response): Promise<Record<string, unknown> |
   }
 }
 
-/** A bearer value that one workflow-command line can mask: printable ASCII without spaces. */
-const BEARER_VALUE = /^[\x21-\x7e]+$/;
+/**
+ * A bearer value that one workflow-command line can mask as it is: printable
+ * ASCII without spaces or `%`, since the runner decodes %25, %0D, and %0A in
+ * a command's data (actions/core escapeData). GitHub's ID token is base64url
+ * with dots, and npm's tokens are letters, digits, and `_`.
+ */
+const BEARER_VALUE = /^[\x21-\x24\x26-\x7e]+$/;
 
 /**
  * The OIDC token exchange npm 11.17.0 makes before it stages
@@ -2616,7 +2649,11 @@ const BEARER_VALUE = /^[\x21-\x7e]+$/;
  * publishers matches this workflow run. npm itself logs a failed exchange only
  * at verbose level and carries on without a token. Both tokens are masked in
  * the job log as soon as they exist and are never printed; the npm token is
- * dropped unused and expires on its own.
+ * dropped unused and expires on its own. npm's API documents 400 (bad
+ * request), 401 (unauthorized), and 404 (package not found) for this call,
+ * but not which one a missing trusted publisher gets. This runs only for a
+ * package that exists, so a 401, 403, or 404 is read as no matching trusted
+ * publisher, and any other refusal is reported as it is.
  */
 export async function assertTrustedPublisherExchange(
   spec: Pick<ReleaseSpec, "key" | "name">,
@@ -2629,6 +2666,7 @@ export async function assertTrustedPublisherExchange(
   const environment = options.environment ?? process.env;
   const oidcFetch = options.fetch ?? timedOidcFetch;
   const mask = options.mask ?? maskInActionsLog;
+  const exchangeUrl = npmOidcExchangeUrl(spec.name);
   const requestUrl = environment.ACTIONS_ID_TOKEN_REQUEST_URL;
   const requestToken = environment.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
   if (!requestUrl || !requestToken) fail("trusted publication requires the GitHub OIDC request environment (id-token: write)");
@@ -2650,7 +2688,7 @@ export async function assertTrustedPublisherExchange(
   mask(idToken);
   let exchanged: Response;
   try {
-    exchanged = await oidcFetch(npmOidcExchangeUrl(spec.name), {
+    exchanged = await oidcFetch(exchangeUrl, {
       method: "POST",
       headers: { accept: "application/json", authorization: `Bearer ${idToken}` },
     });
@@ -2668,16 +2706,23 @@ export async function assertTrustedPublisherExchange(
   const said = typeof message === "string"
     ? `: ${message.split(idToken).join("***").replace(/[\u0000-\u001f\u007f-\u009f]+/g, " ").slice(0, 200)}`
     : "";
+  const nothing = "This run has mirrored, signed, and staged nothing.";
   if (exchanged.status === 429 || exchanged.status >= 500) {
     fail(`npm's OIDC token exchange is unavailable (HTTP ${exchanged.status}${said}); dispatch again later`);
+  }
+  if (![401, 403, 404].includes(exchanged.status)) {
+    fail(`npm's OIDC token exchange gave this workflow no token for ${spec.name} (HTTP ${exchanged.status}${said}), so npm could not stage it. ${nothing}`);
   }
   fail(
     `no trusted-publisher configuration on npm matches this workflow for ${spec.name} ` +
       `(npm's OIDC exchange answered HTTP ${exchanged.status}${said}). npm stages it only for a trusted publisher ` +
       `naming exactly ${RELEASE_REPOSITORY}, ${PUBLISH_WORKFLOW_FILE}, environment ${PUBLISH_ENVIRONMENT}; ` +
       "a new one expires unless a publication validates it within 48 hours. " +
-      `Run docs/npm-trust-repoint.sh enable ${spec.key}, then dispatch this tag again within 48 hours. ` +
-      "This run has mirrored, signed, and staged nothing.",
+      `The maintainer runs \`bash npm-trust-repoint.sh enable ${spec.key}\` ` +
+      "(docs/npm-trust-repoint.sh in the private source repository), then dispatches this tag again within 48 hours. " +
+      "If `npm trust list` already shows exactly that binding, it may have expired: revoke it and run enable again. " +
+      "If a fresh one is refused too, this check and npm disagree, which needs a fix to bin/npm-release.ts and a new tag. " +
+      nothing,
   );
 }
 

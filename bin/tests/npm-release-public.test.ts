@@ -44,6 +44,7 @@ import {
   runNpmPublication,
   stageApprovalSummary,
   stageReceipt,
+  timedOidcFetch,
   trustedPublisherCheckNeeded,
   validatePackageManifest,
   type FetchJson,
@@ -346,11 +347,96 @@ describe("npm authentication fails before any public residue", () => {
         "(npm's OIDC exchange answered HTTP 404: no trusted publisher for *** ::warning::x).",
     );
     expect(message).toContain(`a trusted publisher naming exactly ${RELEASE_REPOSITORY}, publish-npm.yml, environment npm-bootstrap;`);
-    expect(message).toContain("Run docs/npm-trust-repoint.sh enable relational-geometry, then dispatch this tag again within 48 hours.");
+    // npm-trust/lockdown-then-enable's mode; the script exists only in the private source repository.
+    expect(message).toContain(
+      "The maintainer runs `bash npm-trust-repoint.sh enable relational-geometry` " +
+        "(docs/npm-trust-repoint.sh in the private source repository), then dispatches this tag again within 48 hours.",
+    );
+    expect(message).toContain("If `npm trust list` already shows exactly that binding, it may have expired: revoke it and run enable again.");
+    expect(message).toContain("If a fresh one is refused too, this check and npm disagree, which needs a fix to bin/npm-release.ts and a new tag.");
     expect(message).toEndWith("This run has mirrored, signed, and staged nothing.");
     expect(message).not.toContain(ID_TOKEN);
     expect(message).not.toContain("\n");
     expect(untrusted.masked).toEqual([ID_TOKEN]);
+
+    for (const status of [401, 403]) {
+      const refused = fakeOidc({ status, body: { message: "OIDC token exchange error - unauthorized" } });
+      expect(await refusal(assertTrustedPublisherExchange(spec, refused.options))).toStartWith(
+        `no trusted-publisher configuration on npm matches this workflow for @agenttool/relational-geometry (npm's OIDC exchange answered HTTP ${status}: `,
+      );
+    }
+  });
+
+  test("reports any other refusal as it is, not as a missing trusted publisher", async () => {
+    // npm's API documents 400 as "OIDC token exchange error - bad request".
+    const bad = fakeOidc({ status: 400, body: { message: "OIDC token exchange error - bad request" } });
+    expect(await refusal(assertTrustedPublisherExchange(spec, bad.options))).toBe(
+      "npm's OIDC token exchange gave this workflow no token for @agenttool/relational-geometry " +
+        "(HTTP 400: OIDC token exchange error - bad request), so npm could not stage it. " +
+        "This run has mirrored, signed, and staged nothing.",
+    );
+    const moved = fakeOidc({ status: 302, body: undefined });
+    expect(await refusal(assertTrustedPublisherExchange(spec, moved.options)))
+      .toStartWith("npm's OIDC token exchange gave this workflow no token for @agenttool/relational-geometry (HTTP 302), ");
+  });
+
+  test("masks only tokens a workflow command carries as they are, and checks the name before asking for any", async () => {
+    // The runner decodes %25, %0D, and %0A in ::add-mask:: data, so a token with `%` would be masked wrongly.
+    const percentNpm = fakeOidc({ status: 200, body: { token: "abc%0Adef" } });
+    expect(await refusal(assertTrustedPublisherExchange(spec, percentNpm.options))).toContain("without a usable token");
+    expect(percentNpm.masked).toEqual([ID_TOKEN]);
+    const percentId = fakeOidc({ status: 200, body: { token: NPM_TOKEN } }, { status: 200, body: { value: "eyJ%25x" } });
+    expect(await refusal(assertTrustedPublisherExchange(spec, percentId.options)))
+      .toBe("GitHub issued no OIDC ID token for npm:registry.npmjs.org (HTTP 200)");
+    expect(percentId.masked).toEqual([]);
+
+    const unnamed = fakeOidc({ status: 200, body: { token: NPM_TOKEN } });
+    expect(await refusal(assertTrustedPublisherExchange({ key: "x", name: "@agenttool/../x" as `@agenttool/${string}` }, unnamed.options)))
+      .toBe("invalid scoped package name: @agenttool/../x");
+    expect(unnamed.calls).toHaveLength(0);
+  });
+
+  test("follows an OIDC redirect only within one origin, as npm keeps its bearer only there", async () => {
+    // A loopback server; nothing leaves this machine.
+    const seen: string[] = [];
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(request: Request): Response {
+        const { pathname: path, port } = new URL(request.url);
+        seen.push(`${request.method} ${path} ${request.headers.get("authorization") ?? "-"}`);
+        const to = (status: number, location: string) => new Response(null, { status, headers: { location } });
+        if (path === "/issue") return to(307, "/issued");
+        if (path === "/exchange") return to(302, "/exchanged");
+        if (path === "/away") return to(302, `http://localhost:${port}/elsewhere`);
+        if (path === "/loop") return to(308, "/loop");
+        return Response.json({ path });
+      },
+    });
+    const origin = `http://127.0.0.1:${server.port}`;
+    try {
+      const issued = await timedOidcFetch(`${origin}/issue`, { headers: { authorization: "Bearer a" } });
+      expect([issued.status, await issued.json()]).toEqual([200, { path: "/issued" }]);
+      const exchanged = await timedOidcFetch(`${origin}/exchange`, { method: "POST", headers: { authorization: "Bearer b" } });
+      expect([exchanged.status, await exchanged.json()]).toEqual([200, { path: "/exchanged" }]);
+      const away = await timedOidcFetch(`${origin}/away`, { headers: { authorization: "Bearer c" } });
+      expect([away.status, away.headers.get("location")]).toEqual([302, `http://localhost:${server.port}/elsewhere`]);
+      const loop = await timedOidcFetch(`${origin}/loop`, {});
+      expect(loop.status).toBe(308);
+      expect(seen.slice(0, 5)).toEqual([
+        "GET /issue Bearer a",
+        "GET /issued Bearer a",
+        // As make-fetch-happen does: a 301 or 302 to a POST continues as GET.
+        "POST /exchange Bearer b",
+        "GET /exchanged Bearer b",
+        "GET /away Bearer c",
+      ]);
+      expect(seen.filter((line) => line.includes("/elsewhere"))).toEqual([]);
+      // The first request and npm's 20 redirects, then the last redirect is returned and refused.
+      expect(seen.filter((line) => line.includes("/loop"))).toHaveLength(21);
+    } finally {
+      server.stop(true);
+    }
   });
 
   test("tells a busy or broken exchange apart from a missing trusted publisher", async () => {
