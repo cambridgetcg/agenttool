@@ -3,8 +3,9 @@
  * closed refusal and void, idempotent replay, a lost response, a race on the
  * last budget slot, the STOP file, the hub's stop, kick and block, and the
  * egress gate on every lease send (CJK, Kana, Hangul and Thai neighbours of a
- * device term included), and leases beside directory renewal (a renewed
- * directory grant never carries a lease on). Fake service, file-backed
+ * device term included), leases beside directory renewal (a renewed
+ * directory grant never carries a lease on) and beside directory rollover (a
+ * move to the successor ends a lease). Fake service, file-backed
  * Keychain stand-in for the hub's own terminal acts, and a Keychain spy that
  * fails if a lease path ever touches it. Contract: packages/lobby/README.md#room-seat-leases. */
 import { Database } from "bun:sqlite";
@@ -26,6 +27,8 @@ import {
   enrollThroughHub,
   json,
   ok,
+  relayArgs,
+  runWhilePromptOpen,
   seatedFleet,
   shownBytes,
   type Desk,
@@ -775,6 +778,7 @@ describe("what the hub's digest shows", () => {
     await ok(fleet.hub.run("hub", "digest", "--out", out));
     const text = readFileSync(out, "utf8");
     expect(text).toContain("## Seat leases on this desk");
+    expect(text).toContain("a desk's move to the successor directory ends it (`void: directory_moved`), never carrying it into the successor's grant");
     expect(text).toContain(`| ${leaseId} | ${fleet.roomId} | codex:dddddddd-4444-4444-8444-444444444444 |`);
     expect(text).toContain("| active |");
     expect(text).toMatch(/\| room\.lease \| lease_/);
@@ -878,6 +882,129 @@ describe("leases beside directory renewal (schema 4, #535)", () => {
     expect(text).toContain(`| ${hubLease} | ${fleet.roomId} | codex:eeeeeeee-5555-4555-8555-555555555555 |`);
     expect(text).toContain("1 send(s) under leases (room.say.lease)");
     expect(text).not.toContain(deviceLease);
+  });
+});
+
+describe("leases beside directory rollover (schema 6, #541)", () => {
+  const HOUR = 3_600_000;
+
+  /** A seated member with a lease, then the hub's successor, announced and
+   * asked for: the next `fleet renew` moves the desk. */
+  async function rolledWithLease(): Promise<{ fleet: Fleet & { knockId: string }; leaseId: string; made: any; directoryId: string; successorId: string }> {
+    const fleet = await seatedFleet();
+    const leaseId = await lease(fleet.device, fleet.roomId);
+    const made = await leaseOf(fleet.device, leaseId);
+    const directoryId = (await json(fleet.device.run("fleet", "status", "--json"))).desk.directory_mission_id as string;
+    fleet.world.advance(HOUR);
+    await ok(fleet.hub.yes("hub", "directory", "successor", "--days", "30"));
+    const successorId = (await json(fleet.hub.run("hub", "show", "--json"))).directory.mission_id as string;
+    await ok(fleet.device.run("fleet", "sync"));
+    await ok(fleet.device.yes("fleet", "renew"));
+    await ok(fleet.hub.yes("hub", "renew-sweep"));
+    return { fleet, leaseId, made, directoryId, successorId };
+  }
+
+  test("a move to the successor ends a member's lease: never carried into the successor's grant, and a new lease binds the new one", async () => {
+    const { fleet, leaseId, made, directoryId, successorId } = await rolledWithLease();
+    const { device } = fleet;
+    // Before the move the lease still sends, under its bound grants.
+    expect((await say(fleet, device, leaseId, "before the move")).code).toBe(0);
+    expect((await leaseOf(device, leaseId)).state).toBe("active");
+    const posts = chatPosts(fleet);
+    await ok(device.yes("fleet", "renew"));
+    expect(device.terminal.written.join("")).toContain(`the move ends 1 room seat lease(s) bound to this desk's directory grant in ${directoryId}`);
+    const status = await json(device.run("fleet", "status", "--json"));
+    expect(status.desk.directory_mission_id).toBe(successorId);
+    // The lease keeps its record, binding and end, and is void: it ends with the move, before the grant it binds.
+    const after = await leaseOf(device, leaseId);
+    expect([after.directory_grant_id, after.expires_at, after.ends_by, after.state])
+      .toEqual([made.directory_grant_id, made.expires_at, made.ends_by, "void: directory_moved"]);
+    const bound = status.grants.find((grant: any) => grant.grant_id === made.directory_grant_id);
+    expect(bound.mission_id).toBe(directoryId);
+    expect(Date.parse(after.voided_at)).toBeLessThan(Date.parse(bound.expires_at));
+    const acts = await auditOf(device);
+    // The move's own act records the void, between its confirmation and its outcome.
+    const names = acts.map((entry) => entry.act);
+    const voids = acts.filter((entry) => entry.act === "room.lease.void");
+    expect(voids.map((entry) => JSON.parse(entry.bytes))).toEqual([expect.objectContaining({ lease_id: leaseId, reason: "directory_moved" })]);
+    expect(names.slice(names.lastIndexOf("fleet.renew"))).toEqual(["fleet.renew", "room.lease.void", "fleet.renew.outcome"]);
+    const refused = await say(fleet, device, leaseId, "after the move");
+    expect(refused.code).not.toBe(0);
+    expect(JSON.parse(refused.stdout)).toMatchObject({ ok: false, error: "lease_void" });
+    expect(refused.stderr).toContain("directory_moved");
+    expect(chatPosts(fleet)).toBe(posts);
+    // A person makes a new lease at the terminal: it binds the successor's grant.
+    const next = await lease(device, fleet.roomId);
+    const remade = await leaseOf(device, next);
+    expect(status.grants.find((grant: any) => grant.grant_id === remade.directory_grant_id)?.mission_id).toBe(successorId);
+    expect(remade.state).toBe("active");
+    expect((await say(fleet, device, next, "under the new lease")).code).toBe(0);
+  });
+
+  test("a fallback join into the successor ends the lease in the join's own act", async () => {
+    const fleet = await seatedFleet();
+    const { hub, device, world } = fleet;
+    const leaseId = await lease(device, fleet.roomId);
+    const directoryId = (await json(device.run("fleet", "status", "--json"))).desk.directory_mission_id as string;
+    world.advance(HOUR);
+    await ok(hub.yes("hub", "directory", "successor", "--days", "30"));
+    await ok(device.run("fleet", "sync"));
+    const enrolled = await ok(device.run("enroll-device"));
+    const relayed = await ok(hub.yes(...relayArgs(device, enrolled)));
+    await ok(device.yes("fleet", "join", "--packet-file", device.file("join-moved.json", relayed.stdout), "--door-fingerprint", fleet.doorFingerprint));
+    expect(device.terminal.written.join("")).toContain(`the move ends 1 room seat lease(s) bound to this desk's directory grant in ${directoryId}`);
+    // Recorded by the join itself, before any other command runs.
+    const store = LobbyStore.open(device.home);
+    expect(store.fleet.desk()!.directory_mission_id).not.toBe(directoryId);
+    expect(store.fleet.lease(leaseId)).toMatchObject({ void_reason: "directory_moved", revoked_at: null });
+    store.close();
+  });
+
+  /** Point the desk at the successor by hand, as another process's move
+   * would, without that move's own voids. */
+  function moveByHand(fleet: Fleet, directoryId: string, successorId: string, store?: LobbyStore): void {
+    const mission = fleet.world.hosted.missions.get(successorId)!;
+    const own = store ?? LobbyStore.open(fleet.device.home);
+    own.fleet.moveDeskDirectory({ mission_id: successorId, mission_digest: fleet.world.hosted.missionView(mission).mission_digest,
+      expires_at: mission.expires_at, predecessor_mission_id: directoryId, how: "successor", at: fleet.world.clock.now.toISOString() });
+    if (store === undefined) own.close();
+  }
+
+  test("sent after another process moved the desk: void (directory_moved) before any read, nothing sent", async () => {
+    const { fleet, leaseId, directoryId, successorId } = await rolledWithLease();
+    moveByHand(fleet, directoryId, successorId);
+    const reads = fleet.world.hosted.seen.length;
+    const raced = await sendRacing(fleet, fleet.device, leaseId, "moved-before-01", "after a move elsewhere", () => {});
+    expect(raced.error?.code).toBe("lease_void");
+    expect(raced.error?.details.reason).toBe("directory_moved");
+    expect(fleet.world.hosted.seen.length).toBe(reads);
+    expect(await leaseOf(fleet.device, leaseId)).toMatchObject({ state: "void: directory_moved", sent_messages: 0 });
+  });
+
+  test("a move between the checks and the reservation sends nothing and spends nothing", async () => {
+    const { fleet, leaseId, directoryId, successorId } = await rolledWithLease();
+    const posts = chatPosts(fleet);
+    const raced = await sendRacing(fleet, fleet.device, leaseId, "moved-racing-01", "racing a move", (ctx) => {
+      moveByHand(fleet, directoryId, successorId, ctx.store);
+    });
+    expect(raced.error?.code).toBe("directory_changed");
+    expect(chatPosts(fleet)).toBe(posts);
+    const after = await leaseOf(fleet.device, leaseId);
+    expect([after.sent_messages, after.state]).toEqual([0, "void: directory_moved"]);
+    expect((await auditOf(fleet.device)).map((entry) => entry.act)).not.toContain("room.say.lease");
+  });
+
+  test("a move while the lease prompt is open writes no lease (directory_changed)", async () => {
+    const { fleet } = await rolledWithLease();
+    const { device, world } = fleet;
+    const other = world.desk("device-other", { of: device });
+    const result = await runWhilePromptOpen(world, device, ["room", "lease", fleet.roomId, "--seat-ref", SEAT_A], async () => {
+      await ok(other.yes("fleet", "renew"));
+    });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("directory_changed");
+    const leases = (await json(device.run("room", "lease", "list", "--all", "--json"))).leases;
+    expect(leases.map((row: any) => [row.seat_ref, row.state])).toEqual([[null, "void: directory_moved"]]);
   });
 });
 

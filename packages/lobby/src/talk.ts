@@ -28,6 +28,8 @@ import {
   CLOCK_MARGIN_MS,
   doorPin,
   earliest,
+  deskFleetView,
+  deskPreviousDirectory,
   fleetView,
   liveSeat,
   participant,
@@ -182,7 +184,7 @@ export function roomRoster(ctx: FleetContext, roomId: string): { scope: RoomScop
 export function roomChatConfig(ctx: FleetContext, input: { room_id: string; conversation?: string }) {
   const { scope, roster } = roomRoster(ctx, input.room_id);
   const mine = roster.members.find((member) => member.identity_id === scope.desk.identity_id);
-  const card = fleetView(ctx, scope.desk.directory_mission_id, scope.door).cards.get(scope.room_id)?.envelope.body;
+  const card = deskFleetView(ctx, scope.desk, scope.door).cards.get(scope.room_id)?.envelope.body;
   const seasonEnd = card !== undefined && card.season.mission_id === scope.mission_id ? card.season.expires_at : null;
   const ends = [seasonEnd, mine?.term_ends_at].filter((value): value is string => value != null);
   if (ends.length === 0) throw new LobbyError("season_unknown", "neither the card nor the roster says when this season ends; run fleet sync and room sync");
@@ -297,7 +299,7 @@ export interface RenewRequestPlan {
 export async function planRenewRequest(ctx: FleetContext, input: { room_id: string }): Promise<RenewRequestPlan> {
   const scope = roomScope(ctx, input.room_id);
   const now = ctx.now();
-  const card = fleetView(ctx, scope.desk.directory_mission_id, scope.door).cards.get(scope.room_id)?.envelope.body;
+  const card = deskFleetView(ctx, scope.desk, scope.door).cards.get(scope.room_id)?.envelope.body;
   if (card !== undefined && card.season.mission_id !== scope.mission_id) {
     throw new LobbyError("season_changed", "this room has a new season; renewal does not carry into it. Knock on the new season instead");
   }
@@ -367,14 +369,18 @@ export async function planRenewAccept(ctx: FleetContext, input: { room_id: strin
   // Read wherever this desk still may: the hub posts the renewal notice to the
   // directory, and in the room too when the request was made there.
   let readable = 0;
-  for (const missionId of [scope.mission_id, scope.desk.directory_mission_id]) {
+  // The directory this desk moved from too, while it may read it: a notice for
+  // a request made before the move is posted there.
+  const previous = deskPreviousDirectory(ctx, scope.desk);
+  const directories = previous === null ? [scope.desk.directory_mission_id] : [scope.desk.directory_mission_id, previous];
+  for (const missionId of [scope.mission_id, ...directories]) {
     const seat = liveSeat(ctx, missionId, "mission.read");
     if (seat === null) continue;
     readable += 1;
     await syncMission(ctx, seat);
   }
   const hashes = new Set(pending.map((row) => row.token_sha256));
-  const notices: VerifiedDocument<RenewalBody>[] = [scope.mission_id, scope.desk.directory_mission_id]
+  const notices: VerifiedDocument<RenewalBody>[] = [scope.mission_id, ...directories]
     .flatMap((missionId) => fleetView(ctx, missionId, scope.door).renewals)
     .filter((document) => {
       const body = document.envelope.body;

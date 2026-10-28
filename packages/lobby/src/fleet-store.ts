@@ -1,4 +1,4 @@
-/** Fleet-hall state in lobby.sqlite (schema version 5).
+/** Fleet-hall state in lobby.sqlite (schema version 6).
  *
  * Desk side (every enrolled device): its desk identity and directory join,
  * the grants it holds (and which it left), the knocks it sent, its pending
@@ -12,9 +12,11 @@
  *
  * Version 3 is reached from version 2 by `FLEET_V3_UPGRADE_SQL`, version 4
  * (directory renewal inside the Lobby) from version 3 by
- * `FLEET_V4_UPGRADE_SQL`, and version 5 (room seat leases: `desk_leases`,
- * `desk_lease_sends`) from version 4 by
- * `FLEET_V5_UPGRADE_SQL`, each run once in the same transaction that records
+ * `FLEET_V4_UPGRADE_SQL`, version 5 (room seat leases: `desk_leases`,
+ * `desk_lease_sends`) from version 4 by `FLEET_V5_UPGRADE_SQL`, and version 6
+ * (directory rollover: the hub's directory chain and the desk's directory
+ * history) from version 5 by
+ * `FLEET_V6_UPGRADE_SQL`, each run once in the same transaction that records
  * the new version; nothing existing is rewritten. The steps are chained in
  * src/store.ts (`SCHEMA_STEPS`).
  *
@@ -389,6 +391,48 @@ BEGIN
 END;
 `;
 
+/** Version 5 → 6: directory rollover. Two new tables, and one derived row in
+ * each (this step adds rows; it changes none): the hub's active directory as
+ * its `current` chain entry, and the desk's joined directory as entered by
+ * `join`. The `hub` and `desk` singletons stay the pointer to the current
+ * directory; a successor's announcement moves the pointer and the chain in
+ * one transaction. */
+export const FLEET_V6_UPGRADE_SQL = `
+CREATE TABLE IF NOT EXISTS hub_directories (
+  mission_id TEXT PRIMARY KEY,
+  mission_digest TEXT NOT NULL,
+  descriptor TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  predecessor_mission_id TEXT,
+  mode TEXT NOT NULL CHECK (mode IN ('created', 'adopted')),
+  state TEXT NOT NULL CHECK (state IN ('pending', 'successor', 'current', 'previous')),
+  notice_event_id TEXT,
+  announced_at TEXT,
+  revoked_at TEXT,
+  recorded_at TEXT NOT NULL
+) STRICT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS hub_directories_one_current ON hub_directories (state) WHERE state = 'current';
+
+CREATE TABLE IF NOT EXISTS desk_directories (
+  mission_id TEXT PRIMARY KEY,
+  mission_digest TEXT NOT NULL,
+  predecessor_mission_id TEXT,
+  how TEXT NOT NULL CHECK (how IN ('join', 'successor')),
+  entered_at TEXT NOT NULL
+) STRICT;
+
+INSERT INTO hub_directories (mission_id, mission_digest, descriptor, expires_at, predecessor_mission_id, mode, state,
+    notice_event_id, announced_at, revoked_at, recorded_at)
+  SELECT directory_mission_id, directory_digest, directory_descriptor, directory_expires_at, NULL, directory_mode, 'current',
+    NULL, NULL, directory_revoked_at, created_at
+  FROM hub WHERE singleton = 1 AND directory_state = 'active';
+
+INSERT INTO desk_directories (mission_id, mission_digest, predecessor_mission_id, how, entered_at)
+  SELECT directory_mission_id, directory_digest, NULL, 'join', joined_at
+  FROM desk WHERE singleton = 1 AND joined_at IS NOT NULL AND directory_mission_id IS NOT NULL AND directory_digest IS NOT NULL;
+`;
+
 export interface DeskRow {
   project_id: string;
   origin: string;
@@ -565,6 +609,34 @@ export interface DirectoryRenewalRow {
   renewed_at: string;
 }
 
+/** One directory in the hub's chain (version 6). `pending`: creation asked
+ * for, never confirmed; `successor`: created, not announced yet; `current`:
+ * the one the `hub` row points at; `previous`: the one before it, live until
+ * it ends. */
+export interface HubDirectoryRow {
+  mission_id: string;
+  mission_digest: string;
+  descriptor: string;
+  expires_at: string;
+  predecessor_mission_id: string | null;
+  mode: "created" | "adopted";
+  state: "pending" | "successor" | "current" | "previous";
+  notice_event_id: string | null;
+  announced_at: string | null;
+  revoked_at: string | null;
+  recorded_at: string;
+}
+
+/** A directory this desk entered (version 6): by `fleet join`, or by moving
+ * to a door-signed successor. */
+export interface DeskDirectoryRow {
+  mission_id: string;
+  mission_digest: string;
+  predecessor_mission_id: string | null;
+  how: "join" | "successor";
+  entered_at: string;
+}
+
 export interface BlockRow {
   room_id: string;
   identity_id: string;
@@ -674,6 +746,8 @@ export class FleetStore {
   readonly v4: boolean;
   /** The room seat lease tables exist (state version 5 or later). */
   readonly v5: boolean;
+  /** The directory chain tables exist (state version 6 or later): directory rollover. */
+  readonly chain: boolean;
 
   /** `stateVersion` is one LobbyStore has already accepted as readable. */
   constructor(
@@ -686,6 +760,7 @@ export class FleetStore {
     this.v3 = version >= 3;
     this.v4 = version >= 4;
     this.v5 = version >= 5;
+    this.chain = version >= 6;
   }
 
   private write(): void {
@@ -720,6 +795,10 @@ export class FleetStore {
       `UPDATE desk SET directory_mission_id = $directory_mission_id, directory_digest = $directory_digest,
          door_fingerprint = $door_fingerprint, joined_at = $joined_at WHERE singleton = 1`,
     ).run({ ...input });
+    if (this.chain) {
+      this.addDeskDirectory({ mission_id: input.directory_mission_id, mission_digest: input.directory_digest,
+        predecessor_mission_id: null, how: "join", entered_at: input.joined_at });
+    }
   }
 
   addDeskGrant(row: DeskGrantRow): void {
@@ -910,11 +989,25 @@ export class FleetStore {
          $door_public_key, $door_fingerprint, $directory_mission_id, $directory_descriptor, $directory_digest,
          $directory_expires_at, $directory_mode, $directory_state, $created_at)`,
     ).run({ ...row });
+    if (row.directory_state === "active") this.recordCurrentDirectory();
   }
 
   activateDirectory(): void {
     this.write();
     this.db.query("UPDATE hub SET directory_state = 'active' WHERE singleton = 1").run();
+    this.recordCurrentDirectory();
+  }
+
+  /** The hub's active directory as the `current` entry of its chain (version 6). */
+  private recordCurrentDirectory(): void {
+    if (!this.chain) return;
+    this.db.query(
+      `INSERT INTO hub_directories (mission_id, mission_digest, descriptor, expires_at, predecessor_mission_id, mode, state,
+         notice_event_id, announced_at, revoked_at, recorded_at)
+       SELECT directory_mission_id, directory_digest, directory_descriptor, directory_expires_at, NULL, directory_mode, 'current',
+         NULL, NULL, NULL, created_at FROM hub WHERE singleton = 1 AND directory_state = 'active'
+       ON CONFLICT (mission_id) DO NOTHING`,
+    ).run();
   }
 
   /** Forget a hub whose directory was never activated (only while pending). */
@@ -1326,10 +1419,11 @@ export class FleetStore {
     ).run({ ...row });
   }
 
-  /** This desk's directory renew requests, newest first. */
+  /** This desk's directory renew requests, newest first (two in one
+   * instant: the one recorded last). */
   deskDirectoryRenewals(): DeskDirectoryRenewalRow[] {
     if (!this.v4) return [];
-    return this.db.query("SELECT * FROM desk_directory_renewals ORDER BY requested_at DESC, token_sha256 ASC")
+    return this.db.query("SELECT * FROM desk_directory_renewals ORDER BY requested_at DESC, rowid DESC")
       .all() as DeskDirectoryRenewalRow[];
   }
 
@@ -1371,6 +1465,94 @@ export class FleetStore {
   listDirectoryRenewals(): DirectoryRenewalRow[] {
     if (!this.v4) return [];
     return this.db.query("SELECT * FROM hub_directory_renewals ORDER BY renewed_at ASC, token_sha256 ASC").all() as DirectoryRenewalRow[];
+  }
+
+  // ── Version 6: the directory chain ─────────────────────────────────
+
+  private writeChain(): void {
+    this.write();
+    if (!this.chain) throw new LobbyError("state_not_upgraded", "this desk state has no version-6 directory chain tables yet");
+  }
+
+  /** Every directory in the hub's chain, oldest first (read-only views too). */
+  hubDirectories(): HubDirectoryRow[] {
+    if (!this.chain) return [];
+    return this.db.query("SELECT * FROM hub_directories ORDER BY recorded_at ASC, mission_id ASC").all() as HubDirectoryRow[];
+  }
+
+  hubDirectory(missionId: string): HubDirectoryRow | null {
+    if (!this.chain) return null;
+    return this.db.query("SELECT * FROM hub_directories WHERE mission_id = $mission_id").get({ mission_id: missionId }) as HubDirectoryRow | null;
+  }
+
+  addHubDirectory(row: HubDirectoryRow): void {
+    this.writeChain();
+    this.db.query(
+      `INSERT INTO hub_directories (mission_id, mission_digest, descriptor, expires_at, predecessor_mission_id, mode, state,
+         notice_event_id, announced_at, revoked_at, recorded_at)
+       VALUES ($mission_id, $mission_digest, $descriptor, $expires_at, $predecessor_mission_id, $mode, $state,
+         $notice_event_id, $announced_at, $revoked_at, $recorded_at)`,
+    ).run({ ...row });
+  }
+
+  /** A pending successor the service definitely refused to create, forgotten. */
+  dropPendingHubDirectory(missionId: string): void {
+    this.writeChain();
+    this.db.query("DELETE FROM hub_directories WHERE mission_id = $mission_id AND state = 'pending'").run({ mission_id: missionId });
+  }
+
+  /** A pending successor confirmed created. False when no pending record was
+   * there to mark (a hub stop forgot it while the create was in flight). */
+  markHubDirectoryCreated(missionId: string): boolean {
+    this.writeChain();
+    return this.db.query("UPDATE hub_directories SET state = 'successor' WHERE mission_id = $mission_id AND state = 'pending'")
+      .run({ mission_id: missionId }).changes > 0;
+  }
+
+  markHubDirectoryRevoked(missionId: string, at: string): void {
+    this.writeChain();
+    this.db.query("UPDATE hub_directories SET revoked_at = coalesce(revoked_at, $at) WHERE mission_id = $mission_id").run({ mission_id: missionId, at });
+  }
+
+  /** Announce a created successor: it becomes `current` (with the notice that
+   * announced it), the directory the hub pointed at becomes `previous`, and
+   * the `hub` row points at the successor. Call inside the act's transaction. */
+  announceHubSuccessor(input: { from_mission_id: string; to: HubDirectoryRow; notice_event_id: string; at: string }): void {
+    this.writeChain();
+    this.db.query("UPDATE hub_directories SET state = 'previous' WHERE mission_id = $mission_id").run({ mission_id: input.from_mission_id });
+    this.db.query(
+      `UPDATE hub_directories SET state = 'current', notice_event_id = $notice_event_id, announced_at = $at
+       WHERE mission_id = $mission_id AND state = 'successor'`,
+    ).run({ mission_id: input.to.mission_id, notice_event_id: input.notice_event_id, at: input.at });
+    this.db.query(
+      `UPDATE hub SET directory_mission_id = $mission_id, directory_descriptor = $descriptor, directory_digest = $digest,
+         directory_expires_at = $expires_at, directory_mode = $mode, directory_revoked_at = NULL WHERE singleton = 1`,
+    ).run({ mission_id: input.to.mission_id, descriptor: input.to.descriptor, digest: input.to.mission_digest, expires_at: input.to.expires_at, mode: input.to.mode });
+  }
+
+  /** The directories this desk entered, oldest first (read-only views too). */
+  deskDirectories(): DeskDirectoryRow[] {
+    if (!this.chain) return [];
+    return this.db.query("SELECT * FROM desk_directories ORDER BY entered_at ASC, mission_id ASC").all() as DeskDirectoryRow[];
+  }
+
+  addDeskDirectory(row: DeskDirectoryRow): void {
+    this.writeChain();
+    this.db.query(
+      `INSERT INTO desk_directories (mission_id, mission_digest, predecessor_mission_id, how, entered_at)
+       VALUES ($mission_id, $mission_digest, $predecessor_mission_id, $how, $entered_at) ON CONFLICT (mission_id) DO NOTHING`,
+    ).run({ ...row });
+  }
+
+  /** Point this desk at another directory (a door-signed successor); the door pin is untouched. */
+  moveDeskDirectory(input: { mission_id: string; mission_digest: string; expires_at: string; predecessor_mission_id: string; how: "join" | "successor"; at: string }): void {
+    this.writeChain();
+    this.db.query(
+      `UPDATE desk SET directory_mission_id = $mission_id, directory_digest = $mission_digest, directory_expires_at = $expires_at
+       WHERE singleton = 1`,
+    ).run({ mission_id: input.mission_id, mission_digest: input.mission_digest, expires_at: input.expires_at });
+    this.addDeskDirectory({ mission_id: input.mission_id, mission_digest: input.mission_digest,
+      predecessor_mission_id: input.predecessor_mission_id, how: input.how, entered_at: input.at });
   }
 
   listDecisions(): DecisionRow[] {

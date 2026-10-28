@@ -8,12 +8,14 @@
 import { LobbyError } from "./errors.js";
 import { filterFleetCards, type FleetCardFilter, type FleetView, type UnverifiedEvent, type VerifiedDocument } from "./fleet.js";
 import { DIRECTORY_GATE_ROOM, assertSendable, type GateRoom, type GrantView, type MissionView, type ParticipantSeat } from "./hosted.js";
+import { movedLeasesLine, successorOf, type SuccessorNotice } from "./directory-renewal.js";
+import { endMovedLeases } from "./lease.js";
 import {
   actPreview,
   currentGate,
+  deskFleetView,
   deviceTerms,
   doorPin,
-  fleetView,
   gateOfCard,
   participant,
   preparePost,
@@ -22,11 +24,12 @@ import {
   requireSeat,
   sendPost,
   syncMission,
+  syncPreviousDirectory,
   type FleetContext,
   type PostOutcome,
   type PreparedPost,
 } from "./ops.js";
-import { buildEnrollmentPacket, namesDoor, parseJoinPacket, type EnrollmentPacket, type JoinPacket } from "./packets.js";
+import { buildEnrollmentPacket, namesDoor, namesPredecessor, parseJoinPacket, type EnrollmentPacket, type JoinPacket } from "./packets.js";
 import { assertFingerprint, newPinRecord, type PinRecord } from "./pins.js";
 import { DeskSecrets } from "./secrets.js";
 import {
@@ -121,6 +124,9 @@ export interface JoinPlan {
   mission: MissionView;
   grant: GrantView;
   pin: PinRecord | null;
+  /** Set when a joined desk joins the door-signed successor of its
+   * directory (the way back in after a lapse during a rollover). */
+  move: { from_mission_id: string; notice: SuccessorNotice } | null;
 }
 
 /** Validate a carried join packet against this desk and the typed door
@@ -141,12 +147,23 @@ export async function planJoin(ctx: FleetContext, input: { packetText: string; d
   if (!DeskSecrets.open(ctx.home).hasToken(template.token_sha256)) {
     throw new LobbyError("token_not_found", "no token generated on this desk matches the packet's token hash");
   }
+  // A joined desk stays in its directory, with one exception: the
+  // door-signed successor of that directory (the pinned door's own notice is
+  // in this desk's cache, and the charter names the door and its predecessor
+  // below). The door pin never changes.
+  let successor: SuccessorNotice | null = null;
   if (desk.joined_at !== null) {
-    if (packet.directory.mission_id !== desk.directory_mission_id) {
-      throw new LobbyError("directory_changed", "this desk joined another directory mission; moving directories is not supported yet");
-    }
     if (packet.door.fingerprint !== desk.door_fingerprint) {
       throw new LobbyError("door_changed", "the packet names a different door key from the one this desk pinned");
+    }
+    if (packet.directory.mission_id !== desk.directory_mission_id) {
+      const door = doorPin(ctx);
+      successor = door === null ? null : successorOf(ctx, desk, door, now);
+      if (successor === null || successor.body.to_mission_id !== packet.directory.mission_id
+        || successor.body.to_mission_digest !== packet.directory.mission_digest) {
+        throw new LobbyError("directory_changed",
+          "this desk joined another directory mission; it moves only to the door-signed successor of its own directory");
+      }
     }
   }
   if (Date.parse(template.expires_at) <= now.getTime()) throw new LobbyError("grant_expired", "the directory grant in this packet has expired");
@@ -173,6 +190,11 @@ export async function planJoin(ctx: FleetContext, input: { packetText: string; d
   if (!grant.actions.includes("mission.read") || !grant.actions.includes("mission.observe")) {
     throw new LobbyError("grant_scope", "the directory grant must allow mission.read and mission.observe");
   }
+  if (successor !== null && (mission.expires_at !== successor.body.to_expires_at
+    || !namesPredecessor(mission.descriptor, { mission_id: desk.directory_mission_id!, mission_digest: desk.directory_digest! }))) {
+    throw new LobbyError("successor_mismatch",
+      "the directory is not exactly the door-signed successor of this desk's directory (its end or its predecessor differs); nothing was accepted");
+  }
   const at = now.toISOString();
   // Pin whenever the door key is not in the pin book: at the first join, and
   // again on a joined desk whose door pin was removed (the typed fingerprint
@@ -192,6 +214,8 @@ export async function planJoin(ctx: FleetContext, input: { packetText: string; d
     `digest ${mission.mission_digest} (accepting exactly this descriptor)`,
     `purpose ${JSON.stringify(mission.descriptor.purpose)}`,
     `grant ${grant.grant_id} ${grant.actions.join("+")} until ${grant.expires_at}`,
+    ...(successor === null ? [] : [`move this desk from directory ${desk.directory_mission_id} to its door-signed successor ` +
+      `${mission.mission_id} (notice sha256 ${successor.sha256}); the door pin is unchanged`, ...movedLeasesLine(ctx, desk.directory_mission_id)]),
   ], {
     directory: {
       mission_id: mission.mission_id,
@@ -201,13 +225,22 @@ export async function planJoin(ctx: FleetContext, input: { packetText: string; d
     },
     door: { fingerprint: packet.door.fingerprint, public_key: packet.door.public_key, pin: pinState },
     grant: { grant_id: grant.grant_id, actions: grant.actions, expires_at: grant.expires_at, token_sha256: template.token_sha256 },
+    ...(successor === null ? {} : {
+      move: { from_mission_id: desk.directory_mission_id, to_mission_id: mission.mission_id,
+        successor_notice: { event_id: successor.event_id, sha256: successor.sha256 } },
+    }),
   });
-  return { preview, packet, seat, mission, grant, pin };
+  return { preview, packet, seat, mission, grant, pin, move: successor === null ? null : { from_mission_id: desk.directory_mission_id!, notice: successor } };
 }
 
 export async function executeJoin(ctx: FleetContext, plan: JoinPlan): Promise<{ grant_id: string; expires_at: string; pinned: boolean }> {
-  const accepted = await participant(ctx).accept(plan.seat, plan.mission.mission_digest);
   const fleet = ctx.store.fleet;
+  // A move is checked before the accept (and again where it is recorded):
+  // another terminal may have moved this desk while the prompt was open.
+  if (plan.move !== null && fleet.desk()?.directory_mission_id !== plan.move.from_mission_id) {
+    throw new LobbyError("directory_changed", "this desk's directory changed while the prompt was open; nothing was accepted or recorded");
+  }
+  const accepted = await participant(ctx).accept(plan.seat, plan.mission.mission_digest);
   const at = ctx.now().toISOString();
   fleet.transaction(() => {
     if (fleet.deskGrant(plan.seat.grant_id) === null) {
@@ -232,8 +265,17 @@ export async function executeJoin(ctx: FleetContext, plan: JoinPlan): Promise<{ 
     }
     if (plan.pin !== null) ctx.store.insertPinWithinAct(plan.pin);
     // The first join records the directory and door; a later join (renewal,
-    // or restoring a removed door pin) keeps them as they are.
-    if (fleet.desk()?.joined_at === null) {
+    // or restoring a removed door pin) keeps them as they are, except a join
+    // into the door-signed successor, which moves the desk there.
+    if (plan.move !== null) {
+      if (fleet.desk()?.directory_mission_id !== plan.move.from_mission_id) {
+        throw new LobbyError("directory_changed", "this desk's directory changed while this act ran; nothing was recorded. Run fleet join again");
+      }
+      fleet.moveDeskDirectory({
+        mission_id: plan.mission.mission_id, mission_digest: plan.mission.mission_digest, expires_at: plan.mission.expires_at,
+        predecessor_mission_id: plan.move.from_mission_id, how: "join", at,
+      });
+    } else if (fleet.desk()?.joined_at === null) {
       fleet.setDeskJoined({
         directory_mission_id: plan.packet.directory.mission_id,
         directory_digest: plan.mission.mission_digest,
@@ -244,6 +286,8 @@ export async function executeJoin(ctx: FleetContext, plan: JoinPlan): Promise<{ 
     // The directory's end, for fleet renew and fleet status (version 4).
     if (fleet.v4 && fleet.desk()?.directory_mission_id === plan.mission.mission_id) fleet.setDeskDirectoryExpiry(plan.mission.expires_at);
   });
+  // A move ends every room seat lease bound to the directory this desk left.
+  if (plan.move !== null) endMovedLeases(ctx);
   return { grant_id: plan.seat.grant_id, expires_at: accepted.grant.expires_at, pinned: plan.pin !== null };
 }
 
@@ -253,7 +297,11 @@ export async function fleetSync(ctx: FleetContext): Promise<{ added: number; cur
   const desk = requireJoinedDesk(ctx);
   const { seat } = requireSeat(ctx, desk.directory_mission_id, "mission.read", 0,
     "; renew it: enroll-device here, hub relay on the hub, fleet join here");
-  return syncMission(ctx, seat);
+  const result = await syncMission(ctx, seat);
+  // The directory this desk moved from, while it may still read it: a knock
+  // posted there before the move is answered there.
+  await syncPreviousDirectory(ctx, desk);
+  return result;
 }
 
 export interface FleetListing {
@@ -265,7 +313,7 @@ export interface FleetListing {
 /** Cards from the local cache, re-verified against the pinned door key now. */
 export function fleetCards(ctx: FleetContext, filter: FleetCardFilter = {}): FleetListing {
   const desk = requireJoinedDesk(ctx);
-  const view = fleetView(ctx, desk.directory_mission_id, doorPin(ctx));
+  const view = deskFleetView(ctx, desk, doorPin(ctx));
   return {
     cards: filterFleetCards(view, filter),
     unverified: view.unverified,
@@ -299,7 +347,7 @@ export function planKnock(ctx: FleetContext, input: { room_id: string; tier: "pl
   if (door === null) throw new LobbyError("door_not_pinned", "the door key is not pinned on this desk; run fleet join");
   const { seat } = requireSeat(ctx, desk.directory_mission_id, "mission.observe", 5 * 60_000,
     "; renew it: enroll-device here, hub relay on the hub, fleet join here");
-  const card = requireCard(fleetView(ctx, desk.directory_mission_id, door), input.room_id).envelope.body;
+  const card = requireCard(deskFleetView(ctx, desk, door), input.room_id).envelope.body;
   if (card.door !== "knock") throw new LobbyError("door_invite_only", "this room's door is invite-only; it takes no knocks");
   if (card.status === "closed") throw new LobbyError("room_closed", "this room is closed");
   if (Date.parse(card.season.expires_at) <= now.getTime()) throw new LobbyError("season_ended", "this room's season has ended");
@@ -365,7 +413,7 @@ export interface KnockState {
 
 export function knockStates(ctx: FleetContext): KnockState[] {
   const desk = requireJoinedDesk(ctx);
-  const view = fleetView(ctx, desk.directory_mission_id, doorPin(ctx));
+  const view = deskFleetView(ctx, desk, doorPin(ctx));
   const now = ctx.now().getTime();
   return ctx.store.fleet.listDeskKnocks().map((knock) => {
     const mine = (body: { knock_id: string; identity_id: string }) => body.knock_id === knock.knock_id && body.identity_id === desk.identity_id;
@@ -413,7 +461,8 @@ export async function planReady(ctx: FleetContext, input: { knock_id: string }):
   const door = doorPin(ctx);
   if (door === null) throw new LobbyError("door_not_pinned", "the door key is not pinned on this desk; run fleet join");
   await fleetSync(ctx);
-  const view = fleetView(ctx, desk.directory_mission_id, door);
+  // The admission may be in the directory this desk moved from, where it knocked.
+  const view = deskFleetView(ctx, desk, door);
   const mine = (body: { knock_id: string; identity_id: string }) => body.knock_id === knockId && body.identity_id === desk.identity_id;
   const denial = view.denials.find((document) => mine(document.envelope.body));
   if (denial !== undefined) {

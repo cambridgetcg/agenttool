@@ -13,13 +13,21 @@
  *   season seats when they end within `HUB_SEAT_RENEW_BELOW_MS`.
  * - `hub device pause|resume` (tty, hub) stops or restarts one device's
  *   directory renewal; the grant it holds then runs out within 24 hours.
+ * - Directory rollover (schema version 6; src/directory-rollover.ts): while a
+ *   successor overlaps the previous directory the sweep reads requests in
+ *   both, renews a grant in either while it is live, and renews the hub
+ *   desk's seats in both; `fleet renew` aims its next request at the
+ *   door-signed successor of its directory and moves the desk there when it
+ *   picks that grant up.
  * Enroll-device, hub relay and fleet join stay the way back in after a lapse.
  * Every act here is confirmed at /dev/tty and audited before any network
  * effect; nothing is retried. Contract: packages/lobby/README.md#directory-renewal.
  */
 import { LobbyError } from "./errors.js";
-import type { DeskDirectoryRenewalRow, HubDeviceRow, HubRow } from "./fleet-store.js";
+import type { DoorPin, VerifiedDocument } from "./fleet.js";
+import type { DeskDirectoryRenewalRow, DeskRow, HubDeviceRow, HubRow } from "./fleet-store.js";
 import { DIRECTORY_GATE_ROOM, type GrantIssue, type GrantView, type MissionView, type ParticipantSeat } from "./hosted.js";
+import { endMovedLeases, leasesEndedByMove } from "./lease.js";
 import {
   claimBlocker,
   doorOf,
@@ -35,10 +43,13 @@ import {
   actPreview,
   CLOCK_MARGIN_MS,
   DAY_MS,
+  deskFleetView,
+  deskPreviousDirectory,
   doorPin,
   earliest,
   fleetView,
   HOUR_MS,
+  hubLiveDirectories,
   liveSeat,
   participant,
   preparePost,
@@ -47,10 +58,11 @@ import {
   sendPost,
   syncMission,
   type FleetContext,
+  type LiveDirectory,
   type PostOutcome,
   type PreparedPost,
 } from "./ops.js";
-import { namesDoor } from "./packets.js";
+import { namesDoor, namesPredecessor } from "./packets.js";
 import { DeskSecrets } from "./secrets.js";
 import {
   documentSha256,
@@ -59,6 +71,7 @@ import {
   sealDocument,
   type DirectoryRenewalBody,
   type DirectoryRenewBody,
+  type DirectorySuccessorBody,
 } from "./signed.js";
 import type { ActPreview } from "./store.js";
 import { assertUuid, newUuid, type MissionAction } from "./wire.js";
@@ -86,6 +99,8 @@ export interface DirectorySkip {
 export interface DirectoryCandidate {
   entry: DirectoryNoteEntry;
   device: HubDeviceRow;
+  /** The live directory the request asks a grant in. */
+  target: LiveDirectory;
 }
 
 /** Why the hub's own records forbid binding this token hash to a directory
@@ -117,18 +132,21 @@ function grantClaimBlocker(claimants: ReadonlyMap<string, string | null>, grantI
 }
 
 /** The newest authentic, live, unclaimed `directory_renew` request per
- * device, from the cached events of `missions` (the directory and the
+ * device, from the cached events of `missions` (the live directories and the
  * seasons the sweep read). A request is renewed only when it was posted in
- * the hub's directory, names that directory, comes from an enrolled desk
- * that joined through this hub, is not paused, and its token hash and grant
- * id belong to it (first poster). A request already renewed still counts as
- * the newest, so an older one is never renewed after it, and requests it
+ * one of the hub's live directories, names one of them (during a rollover's
+ * overlap a desk that has not moved yet asks for its first grant in the
+ * successor from the previous directory), comes from an enrolled desk that
+ * joined through this hub, is not paused, and its token hash and grant id
+ * belong to it (first poster). A request already renewed still counts as the
+ * newest, so an older one is never renewed after it, and requests it
  * superseded stay quiet. */
-export function directoryRenewalCandidates(ctx: FleetContext, hub: HubRow, missions: readonly string[], now: Date,
-  claims: { tokens: ReadonlyMap<string, string | null>; grantIds: ReadonlyMap<string, string | null> },
+export function directoryRenewalCandidates(ctx: FleetContext, hub: HubRow, directories: readonly LiveDirectory[], missions: readonly string[],
+  now: Date, claims: { tokens: ReadonlyMap<string, string | null>; grantIds: ReadonlyMap<string, string | null> },
   skip: (item: DirectorySkip) => void): { candidates: DirectoryCandidate[]; expired: number } {
   const fleet = ctx.store.fleet;
   const hubDesk = fleet.desk();
+  const live = new Map(directories.map((directory) => [directory.mission_id, directory]));
   const entries = missions.flatMap((missionId) => fleetView(ctx, missionId, doorOf(hub)).directoryRenewRequests);
   type Request = { entry: DirectoryNoteEntry; renewed: boolean };
   const newest = new Map<string, Request>();
@@ -147,17 +165,19 @@ export function directoryRenewalCandidates(ctx: FleetContext, hub: HubRow, missi
       if (!renewed) skip({ source, room_id: null, identity_id: null, reason: forgery });
       continue;
     }
-    // Posting in the directory needs a live directory grant, so the post
+    // Posting in a directory needs a live directory grant, so the post
     // itself shows the desk had not lapsed; a request riding in a season does not count.
-    if (entry.event.mission_id !== hub.directory_mission_id) {
+    if (!live.has(entry.event.mission_id)) {
       if (!renewed) skip({ source, room_id: null, identity_id: body.identity_id, reason: "posted_elsewhere" });
       continue;
     }
-    if (body.mission_id !== hub.directory_mission_id) {
+    if (!live.has(body.mission_id)) {
       if (!renewed) skip({ source, room_id: null, identity_id: body.identity_id, reason: "directory_not_live" });
       continue;
     }
-    const key = `${body.identity_id}:${body.mission_id}`;
+    // One newest request per device, whichever live directory it names: a
+    // desk asking for its successor grant supersedes its older request.
+    const key = body.identity_id;
     const request: Request = { entry, renewed };
     const current = newest.get(key);
     if (current === undefined) newest.set(key, request);
@@ -195,7 +215,7 @@ export function directoryRenewalCandidates(ctx: FleetContext, hub: HubRow, missi
       skip({ source, room_id: null, identity_id: body.identity_id, reason: blocker });
       continue;
     }
-    candidates.push({ entry: request.entry, device: device! });
+    candidates.push({ entry: request.entry, device: device!, target: live.get(body.mission_id)! });
   }
   return { candidates, expired };
 }
@@ -205,6 +225,7 @@ export interface DirectoryRenewalItem {
   request_sha256: string;
   identity_id: string;
   device: HubDeviceRow;
+  /** The directory the grant is issued in. */
   mission_id: string;
   issue: GrantIssue;
   notice: DirectoryRenewalBody;
@@ -213,19 +234,21 @@ export interface DirectoryRenewalItem {
 }
 
 /** Seal the notices for the candidates that survived the collision checks.
- * Each needs the hub desk's directory seat with five minutes left to post it. */
-export function directoryRenewalItems(ctx: FleetContext, hub: HubRow, candidates: readonly DirectoryCandidate[], now: Date,
+ * Each grant is issued in the directory the request names; its notice goes
+ * to the directory the request was posted in, which needs the hub desk's
+ * seat there with five minutes left. */
+export function directoryRenewalItems(ctx: FleetContext, _hub: HubRow, candidates: readonly DirectoryCandidate[], now: Date,
   signer: { privateKey: Parameters<typeof sealDocument>[2]["privateKey"]; fingerprint: string } | null,
   skip: (item: DirectorySkip) => void): DirectoryRenewalItem[] {
   const items: DirectoryRenewalItem[] = [];
-  for (const { entry, device } of candidates) {
+  for (const { entry, device, target } of candidates) {
     const body = entry.envelope.body;
     const source = `event:${entry.event.event_id}`;
-    if (Date.parse(hub.directory_expires_at) <= now.getTime() + HOUR_MS) {
+    if (Date.parse(target.expires_at) <= now.getTime() + HOUR_MS) {
       skip({ source, room_id: null, identity_id: body.identity_id, reason: "directory_ending" });
       continue;
     }
-    const seat = liveSeat(ctx, hub.directory_mission_id, "mission.observe", 5 * 60_000);
+    const seat = liveSeat(ctx, entry.event.mission_id, "mission.observe", 5 * 60_000);
     if (seat === null || signer === null) {
       skip({ source, room_id: null, identity_id: body.identity_id, reason: "hub_directory_seat_lapsed" });
       continue;
@@ -235,12 +258,12 @@ export function directoryRenewalItems(ctx: FleetContext, hub: HubRow, candidates
       identity_id: device.identity_id,
       signing_key_id: device.signing_key_id,
       actions: [...DIRECTORY_ACTIONS],
-      expires_at: earliest(now.getTime() + DAY_MS - CLOCK_MARGIN_MS, hub.directory_expires_at),
+      expires_at: earliest(now.getTime() + DAY_MS - CLOCK_MARGIN_MS, target.expires_at),
       token_sha256: body.token_sha256,
     };
     const notice: DirectoryRenewalBody = {
       invitation: {
-        mission_id: hub.directory_mission_id,
+        mission_id: target.mission_id,
         grant_id: issue.grant_id,
         identity_id: issue.identity_id,
         signing_key_id: issue.signing_key_id,
@@ -256,10 +279,10 @@ export function directoryRenewalItems(ctx: FleetContext, hub: HubRow, candidates
       request_sha256: documentSha256(entry.summary),
       identity_id: device.identity_id,
       device,
-      mission_id: hub.directory_mission_id,
+      mission_id: target.mission_id,
       issue,
       notice,
-      post: preparePost(ctx, "directory_renewal", hub.directory_mission_id, summary, DIRECTORY_GATE_ROOM),
+      post: preparePost(ctx, "directory_renewal", entry.event.mission_id, summary, DIRECTORY_GATE_ROOM),
       seat,
     });
   }
@@ -279,7 +302,9 @@ export function directoryRenewalRecord(item: DirectoryRenewalItem) {
 export function directoryRenewalLine(item: DirectoryRenewalItem): string {
   return `device ${item.device.fingerprint} ${JSON.stringify(item.device.display_name)} (name is self-declared) did:at:${item.identity_id}: ` +
     `grant ${item.issue.grant_id} mission.observe+mission.read until ${item.issue.expires_at}, bound to the desk's own token hash ` +
-    `${item.issue.token_sha256}; request ${item.request_event_id}; notice to the directory ${item.mission_id}`;
+    `${item.issue.token_sha256}; request ${item.request_event_id}; ` +
+    (item.post.mission_id === item.mission_id ? `notice to the directory ${item.mission_id}`
+      : `grant in the successor directory ${item.mission_id}; notice to the directory ${item.post.mission_id} the request came from`);
 }
 
 /** Why a planned directory renewal may no longer be issued, judged by the
@@ -287,7 +312,11 @@ export function directoryRenewalLine(item: DirectoryRenewalItem): string {
  * while the prompt was open), or null. */
 export function directoryRenewalWithdrawn(ctx: FleetContext, item: DirectoryRenewalItem): string | null {
   const fleet = ctx.store.fleet;
-  if (fleet.hub()?.directory_mission_id !== item.mission_id) return "directory_changed";
+  const hub = fleet.hub();
+  // The directory the grant is for (and the one the notice goes to) must still be live.
+  if (hub === null) return "directory_changed";
+  const live = hubLiveDirectories(ctx, hub).map((directory) => directory.mission_id);
+  if (!live.includes(item.mission_id) || !live.includes(item.post.mission_id)) return "directory_changed";
   const device = fleet.device(item.identity_id);
   if (device === null) return "unknown_desk";
   if (device.directory_paused_at != null) return "device_paused";
@@ -297,15 +326,16 @@ export function directoryRenewalWithdrawn(ctx: FleetContext, item: DirectoryRene
 // ── Hub: the hub desk's own seats ──────────────────────────────────────
 
 /** The hub desk's seats that end within HUB_SEAT_RENEW_BELOW_MS (or have
- * lapsed): the directory and every current season that still has more than
- * an hour to run. A seat that already reaches its mission's end is left
- * alone. Tokens are prepared in memory and written only on yes. */
+ * lapsed): every live directory (during a rollover's overlap, the previous
+ * one too) and every current season that still has more than an hour to run.
+ * A seat that already reaches its mission's end is left alone. Tokens are
+ * prepared in memory and written only on yes. */
 export function planHubSeatRenewals(ctx: FleetContext, hub: HubRow, now: Date): SeatIssue[] {
   const fleet = ctx.store.fleet;
   const desk = fleet.desk();
   if (desk === null || fleet.device(desk.identity_id) === null) return [];
   const missions: Array<{ mission: { mission_id: string; mission_digest: string; expires_at: string }; purpose: "directory" | "season"; room_id: string | null }> = [
-    { mission: { mission_id: hub.directory_mission_id, mission_digest: hub.directory_digest, expires_at: hub.directory_expires_at }, purpose: "directory", room_id: null },
+    ...hubLiveDirectories(ctx, hub, now).map((directory) => ({ mission: directory, purpose: "directory" as const, room_id: null })),
     ...fleet.listSeasons()
       .filter((season) => season.state === "current" && season.revoked_at == null)
       .map((season) => ({ mission: season, purpose: "season" as const, room_id: season.room_id })),
@@ -326,8 +356,10 @@ export function hubSeatRecord(seat: SeatIssue) {
   return { ...seatRecord(seat), purpose: seat.purpose, room_id: seat.room_id, mission_digest: seat.mission_digest };
 }
 
-export function hubSeatLine(seat: SeatIssue): string {
-  return `hub desk seat in ${seat.purpose === "directory" ? "the directory" : `room ${seat.room_id}`} ${seat.mission_id}: ` +
+export function hubSeatLine(seat: SeatIssue, currentDirectory?: string): string {
+  const where = seat.purpose === "season" ? `room ${seat.room_id}`
+    : currentDirectory === undefined || seat.mission_id === currentDirectory ? "the directory" : "the previous directory";
+  return `hub desk seat in ${where} ${seat.mission_id}: ` +
     `grant ${seat.issue.grant_id} mission.observe+mission.read until ${seat.issue.expires_at}; accept digest ${seat.mission_digest}`;
 }
 
@@ -370,6 +402,45 @@ export function executeDevicePause(ctx: FleetContext, plan: DevicePausePlan): vo
   ctx.store.fleet.setDevicePaused(plan.identity_id, plan.pause ? plan.preview.at : null);
 }
 
+// ── Desk: the door-signed successor of this desk's directory ───────────
+
+/** A verified `directory_successor` notice naming this desk's directory. */
+export interface SuccessorNotice {
+  body: DirectorySuccessorBody;
+  event_id: string;
+  sha256: string;
+}
+
+/** The door-signed successor of this desk's directory, from the local cache
+ * of that directory: notices signed by the pinned door (verified against the
+ * pinned key) whose `from` is exactly the directory and digest this desk is
+ * in, and whose successor has more than an hour to run. Copies of one notice
+ * are one successor; two different successors refuse
+ * (`conflicting_successors`): the desk never chooses between them. A notice
+ * naming another directory as `from` (a replay of an older rollover, or one
+ * copied into the successor) is ignored. */
+export function successorOf(ctx: FleetContext, desk: Pick<DeskRow, "directory_mission_id" | "directory_digest">, door: DoorPin, now: Date)
+  : SuccessorNotice | null {
+  if (desk.directory_mission_id === null) return null;
+  const notices = fleetView(ctx, desk.directory_mission_id, door).successors.filter((document: VerifiedDocument<DirectorySuccessorBody>) => {
+    const body = document.envelope.body;
+    return body.from_mission_id === desk.directory_mission_id && body.from_mission_digest === desk.directory_digest
+      && Date.parse(body.to_expires_at) > now.getTime() + HOUR_MS;
+  });
+  const targets = new Map<string, VerifiedDocument<DirectorySuccessorBody>>();
+  for (const document of notices) {
+    const body = document.envelope.body;
+    const key = `${body.to_mission_id}:${body.to_mission_digest}:${body.to_expires_at}`;
+    if (!targets.has(key)) targets.set(key, document);
+  }
+  if (targets.size > 1) {
+    throw new LobbyError("conflicting_successors",
+      `the door signed ${targets.size} different successors of this desk's directory; nothing was accepted or sent. Ask the hub`);
+  }
+  const document = [...targets.values()][0];
+  return document === undefined ? null : { body: document.envelope.body, event_id: document.event.event_id, sha256: documentSha256(document.summary) };
+}
+
 // ── Desk: fleet renew ──────────────────────────────────────────────────
 
 interface Pickup {
@@ -378,6 +449,9 @@ interface Pickup {
   mission: MissionView;
   grant: GrantView;
   notice_sha256: string | null;
+  /** Set when the grant is in the door-signed successor of this desk's
+   * directory: accepting it moves the desk there. */
+  move: { from_mission_id: string; notice: SuccessorNotice } | null;
 }
 
 interface NextRequest {
@@ -395,14 +469,17 @@ export interface FleetRenewPlan {
   request: NextRequest | null;
   /** Why a pickup goes ahead without a next request, or null. */
   no_request: string | null;
-  /** The directory's end as read in this plan, recorded on yes. */
-  directory_expires_at: string;
+  /** The current directory's end as read in this plan, recorded on yes
+   * (null when this act moves the desk, which records the successor's end). */
+  directory_expires_at: string | null;
+  /** This desk's directory as planned; a move by another terminal refuses. */
+  directory_mission_id: string;
 }
 
 /** Nothing to do: the state, and why no prompt was shown. */
 export interface FleetRenewIdle {
   status: "request_open";
-  request: { event_id: string; grant_id: string; expires_at: string };
+  request: { event_id: string; grant_id: string; expires_at: string; mission_id: string };
   grant_expires_at: string | null;
 }
 
@@ -421,6 +498,35 @@ function heldDirectoryGrantEnd(ctx: FleetContext, missionId: string): string | n
   return recorded?.expires_at ?? null;
 }
 
+/** Why the grant read from the successor may not be accepted, or null: the
+ * mission must be exactly the one the door-signed notice names (id, digest,
+ * end), its charter must name the pinned door and exactly this desk's
+ * directory as its predecessor, it must be in this desk's project, and the
+ * grant must be live, observe+read and within the mission. */
+function successorMismatch(read: { mission: MissionView; grant: GrantView }, notice: SuccessorNotice, door: DoorPin,
+  from: { mission_id: string; mission_digest: string }, projectId: string): string | null {
+  const { mission, grant } = read;
+  if (mission.mission_id !== notice.body.to_mission_id) return "the mission is not the one the door-signed notice names";
+  if (mission.mission_digest !== notice.body.to_mission_digest) return "the mission's digest differs from the door-signed notice";
+  if (mission.expires_at !== notice.body.to_expires_at) return "the mission's end differs from the door-signed notice";
+  if (mission.project_id !== projectId) return "the mission belongs to another project than this desk's";
+  if (!namesDoor(mission.descriptor, door)) return "the charter does not name this desk's pinned door key";
+  if (!namesPredecessor(mission.descriptor, from)) return "the charter does not name this desk's directory as its predecessor";
+  if (mission.revoked_at !== null || grant.revoked_at !== null) return "the mission or the grant is revoked";
+  if (grant.actions.join(",") !== DIRECTORY_ACTIONS.join(",") || Date.parse(grant.expires_at) > Date.parse(mission.expires_at)) {
+    return "the grant is not mission.observe+mission.read within the mission";
+  }
+  return null;
+}
+
+/** The prompt line naming the room seat leases a move out of `fromMissionId` ends, if any. */
+export function movedLeasesLine(ctx: FleetContext, fromMissionId: string | null): string[] {
+  if (fromMissionId === null) return [];
+  const ended = leasesEndedByMove(ctx, fromMissionId);
+  return ended.length === 0 ? [] : [`the move ends ${ended.length} room seat lease(s) bound to this desk's directory grant in ${fromMissionId} ` +
+    `(void: directory_moved; a lease is never carried into the successor's grant): ${ended.join(", ")}`];
+}
+
 export async function planFleetRenew(ctx: FleetContext): Promise<{ plan: FleetRenewPlan } | { idle: FleetRenewIdle }> {
   const desk = requireJoinedDesk(ctx);
   const fleet = ctx.store.fleet;
@@ -431,13 +537,21 @@ export async function planFleetRenew(ctx: FleetContext): Promise<{ plan: FleetRe
   if (door === null) throw new LobbyError("door_not_pinned", "the door key is not pinned on this desk; run fleet join");
   const now = ctx.now();
   const directoryId = desk.directory_mission_id;
+  const from = { mission_id: directoryId, mission_digest: desk.directory_digest };
   // A read with no effect, before the prompt, while this desk may still read.
   const reading = liveSeat(ctx, directoryId, "mission.read");
   if (reading !== null) await syncMission(ctx, reading);
   const secrets = DeskSecrets.open(ctx.home);
 
   // 1. Pick up the grant the hub issued for this desk's newest request, if any.
-  const newest = fleet.deskDirectoryRenewals()[0];
+  // A request still open for a directory this desk has since left (it moved
+  // by a fallback `fleet join` meanwhile) is stale: its grant would be in a
+  // directory this desk does not return to. It is neither picked up nor
+  // waited on; a fresh request is posted from this desk's directory.
+  const latest = fleet.deskDirectoryRenewals()[0];
+  const left = fleet.deskDirectories().filter((row) => row.mission_id !== directoryId).map((row) => row.mission_id);
+  const stale = latest !== undefined && latest.accepted_at === null && left.includes(latest.mission_id) ? latest : null;
+  const newest = stale === null ? latest : undefined;
   let pickup: Pickup | null = null;
   // A grant issued just before its request ran out lasts at most 24 hours more.
   if (newest !== undefined && newest.accepted_at === null && Date.parse(newest.expires_at) + DAY_MS > now.getTime()) {
@@ -457,24 +571,38 @@ export async function planFleetRenew(ctx: FleetContext): Promise<{ plan: FleetRe
     }
     if (read !== null) {
       const { mission, grant } = read;
-      if (mission.project_id !== desk.project_id) {
-        throw new LobbyError("project_mismatch", "the directory mission belongs to another project than this desk's; nothing was accepted");
-      }
-      if (!namesDoor(mission.descriptor, door)) {
-        throw new LobbyError("door_not_in_charter", "the directory descriptor does not name this desk's pinned door key; nothing was accepted");
-      }
-      if (mission.mission_digest !== desk.directory_digest) {
-        throw new LobbyError("digest_changed", "the directory's digest differs from the one this desk joined; nothing was accepted");
-      }
-      if (mission.revoked_at !== null || grant.revoked_at !== null) {
-        throw new LobbyError("directory_closed", "the directory mission or the renewed grant is revoked; nothing was accepted");
-      }
-      if (grant.actions.join(",") !== DIRECTORY_ACTIONS.join(",") || Date.parse(grant.expires_at) > Date.parse(mission.expires_at)) {
-        throw new LobbyError("grant_mismatch", "the renewed directory grant is not mission.observe+mission.read within the directory");
+      let move: Pickup["move"] = null;
+      if (newest.mission_id !== directoryId) {
+        // The grant is in another directory: accepted only as the door-signed
+        // successor of this desk's directory, never because a request named it.
+        const notice = successorOf(ctx, desk, door, now);
+        const why = notice === null || notice.body.to_mission_id !== newest.mission_id
+          ? "no door-signed successor of this desk's directory names that mission"
+          : successorMismatch(read, notice, door, from, desk.project_id);
+        if (why !== null) {
+          throw new LobbyError("successor_mismatch", `${why}; nothing was accepted and this desk stays in directory ${directoryId}. Ask the hub`);
+        }
+        move = { from_mission_id: directoryId, notice: notice! };
+      } else {
+        if (mission.project_id !== desk.project_id) {
+          throw new LobbyError("project_mismatch", "the directory mission belongs to another project than this desk's; nothing was accepted");
+        }
+        if (!namesDoor(mission.descriptor, door)) {
+          throw new LobbyError("door_not_in_charter", "the directory descriptor does not name this desk's pinned door key; nothing was accepted");
+        }
+        if (mission.mission_digest !== desk.directory_digest) {
+          throw new LobbyError("digest_changed", "the directory's digest differs from the one this desk joined; nothing was accepted");
+        }
+        if (mission.revoked_at !== null || grant.revoked_at !== null) {
+          throw new LobbyError("directory_closed", "the directory mission or the renewed grant is revoked; nothing was accepted");
+        }
+        if (grant.actions.join(",") !== DIRECTORY_ACTIONS.join(",") || Date.parse(grant.expires_at) > Date.parse(mission.expires_at)) {
+          throw new LobbyError("grant_mismatch", "the renewed directory grant is not mission.observe+mission.read within the directory");
+        }
       }
       // The door-signed notice is an audit trail, never required; when it is
-      // here it must name exactly this grant.
-      const notices = fleetView(ctx, directoryId, door).directoryRenewals
+      // here (in this desk's directory or the one it moved from) it must name exactly this grant.
+      const notices = deskFleetView(ctx, desk, door).directoryRenewals
         .filter((document) => document.envelope.body.invitation.token_sha256 === newest.token_sha256);
       const keyHex = publicKeyHexOf(desk.public_key);
       for (const document of notices) {
@@ -484,13 +612,12 @@ export async function planFleetRenew(ctx: FleetContext): Promise<{ plan: FleetRe
           throw new LobbyError("conflicting_renewal", "a door-signed directory renewal for this token names another grant; nothing was accepted. Ask the hub");
         }
       }
-      pickup = { row: newest, seat, mission, grant, notice_sha256: notices.length === 0 ? null : documentSha256(notices[0]!.summary) };
+      pickup = { row: newest, seat, mission, grant, notice_sha256: notices.length === 0 ? null : documentSha256(notices[0]!.summary), move };
     }
   }
 
   // 2. The next request, unless the newest one is still open.
   let request: NextRequest | null = null;
-  let directoryEnds = pickup?.mission.expires_at ?? desk.directory_expires_at ?? null;
   const open = pickup === null && newest !== undefined && newest.accepted_at === null && Date.parse(newest.expires_at) > now.getTime()
     ? newest : null;
   if (open !== null) {
@@ -502,13 +629,23 @@ export async function planFleetRenew(ctx: FleetContext): Promise<{ plan: FleetRe
     return {
       idle: {
         status: "request_open",
-        request: { event_id: open.request_event_id, grant_id: open.grant_id, expires_at: open.expires_at },
+        request: { event_id: open.request_event_id, grant_id: open.grant_id, expires_at: open.expires_at, mission_id: open.mission_id },
         grant_expires_at: heldDirectoryGrantEnd(ctx, directoryId),
       },
     };
   }
+  // The directory the next request asks a grant in: the successor this act
+  // moves to; else the door-signed successor of this desk's directory, asked
+  // for from here (the hub reads requests in both while they overlap); else
+  // this desk's directory.
+  const successor = pickup?.move === null || pickup === null ? successorOf(ctx, desk, door, now) : null;
+  const target = pickup?.move != null
+    ? { mission_id: pickup.mission.mission_id, expires_at: pickup.mission.expires_at, successor: pickup.move.notice }
+    : successor !== null
+      ? { mission_id: successor.body.to_mission_id, expires_at: successor.body.to_expires_at, successor }
+      : null;
   // The grant just picked up posts the next request when it has five minutes
-  // left; otherwise a live directory seat does.
+  // left (in the directory it is for); otherwise a live seat in this desk's directory does.
   const pickupPosts = pickup !== null && Date.parse(pickup.grant.expires_at) > now.getTime() + POST_MARGIN_MS;
   const posting = pickupPosts ? null : liveSeat(ctx, directoryId, "mission.observe", POST_MARGIN_MS);
   let noRequest: string | null = null;
@@ -519,32 +656,36 @@ export async function planFleetRenew(ctx: FleetContext): Promise<{ plan: FleetRe
     }
     noRequest = `the grant picked up ends within five minutes, too soon to post the next request with; after it ends, use ${FALLBACK}`;
   }
-  if (directoryEnds === null) {
+  let currentEnds = pickup?.move != null ? null : pickup?.mission.expires_at ?? desk.directory_expires_at ?? null;
+  if (target === null && currentEnds === null) {
     // A read with no effect: the directory's end bounds the request. (With a
     // pickup the end is already known, so `posting` is a live seat here.)
-    directoryEnds = (await participant(ctx).invitation(posting!)).mission.expires_at;
+    currentEnds = (await participant(ctx).invitation(posting!)).mission.expires_at;
   }
-  if (Date.parse(directoryEnds) <= now.getTime() + HOUR_MS) {
+  const requestEnds = target?.expires_at ?? currentEnds!;
+  if (Date.parse(requestEnds) <= now.getTime() + HOUR_MS) {
     // A grant the hub issued before the last hour is still picked up.
-    if (pickup === null) throw new LobbyError("directory_ending", `the directory ends at ${directoryEnds}, within the hour; a new directory is needed`);
-    noRequest ??= `the directory ends at ${directoryEnds}, within the hour; a new directory is needed`;
+    if (pickup === null) throw new LobbyError("directory_ending", `the directory ends at ${requestEnds}, within the hour; a new directory is needed`);
+    noRequest ??= `the directory ends at ${requestEnds}, within the hour; a new directory is needed`;
   }
+  const postIn = pickupPosts ? pickup!.seat.mission_id : directoryId;
+  const targetId = target?.mission_id ?? directoryId;
   let sealedSummary: string | null = null;
   if (noRequest === null) {
     const token = secrets.prepareToken(now);
     const body: DirectoryRenewBody = {
-      mission_id: directoryId,
+      mission_id: targetId,
       grant_id: newUuid(),
       identity_id: desk.identity_id,
       signing_key_id: desk.signing_key_id,
       token_sha256: token.token_sha256,
       issued_at: now.toISOString(),
-      expires_at: earliest(now.getTime() + RENEW_MAX_MS - CLOCK_MARGIN_MS, directoryEnds),
+      expires_at: earliest(now.getTime() + RENEW_MAX_MS - CLOCK_MARGIN_MS, requestEnds),
     };
     sealedSummary = sealDocument("directory_renew", body, { privateKey: secrets.deskKey(), fingerprint: desk.fingerprint }).summary;
     request = {
       body,
-      post: preparePost(ctx, "directory_renew", directoryId, sealedSummary, DIRECTORY_GATE_ROOM),
+      post: preparePost(ctx, "directory_renew", postIn, sealedSummary, DIRECTORY_GATE_ROOM),
       seat: posting,
       writeToken: token.write,
     };
@@ -553,15 +694,24 @@ export async function planFleetRenew(ctx: FleetContext): Promise<{ plan: FleetRe
   const holdsUntil = pickup?.grant.expires_at ?? heldDirectoryGrantEnd(ctx, directoryId);
   const at = now.toISOString();
   const preview = actPreview("fleet.renew", directoryId, at, [
+    ...(stale === null ? [] : [`your last request ${stale.request_event_id} asked for a grant in directory ${stale.mission_id}, ` +
+      "which this desk has left; it is not picked up, and a new request is posted from this desk's directory"]),
     ...(pickup === null ? [] : [
       `pick up directory grant ${pickup.grant.grant_id} ${pickup.grant.actions.join("+")} until ${pickup.grant.expires_at} (your request ${pickup.row.request_event_id})`,
-      `accept the same directory digest this desk joined: ${pickup.mission.mission_digest}`,
+      pickup.move === null
+        ? `accept the same directory digest this desk joined: ${pickup.mission.mission_digest}`
+        : `move this desk from directory ${pickup.move.from_mission_id} to its door-signed successor ${pickup.mission.mission_id} ` +
+          `(notice sha256 ${pickup.move.notice.sha256}); accept its digest ${pickup.mission.mission_digest}, whose charter names the pinned door ` +
+          `and that directory as its predecessor; the door pin is unchanged`,
+      ...movedLeasesLine(ctx, pickup.move === null ? null : pickup.move.from_mission_id),
       pickup.notice_sha256 === null ? "door-signed notice: not in the local cache (not needed for the pickup)"
         : `door-signed notice: seen, names exactly this grant (sha256 ${pickup.notice_sha256})`,
     ]),
     ...(request === null ? [`no next request: ${noRequest}`] : [
-      `post a desk-signed directory_renew request to the fleet directory ${directoryId}: grant id ${request.body.grant_id}, ` +
+      `post a desk-signed directory_renew request to the fleet directory ${postIn}: grant id ${request.body.grant_id}, ` +
         `token sha256 ${request.body.token_sha256} (the token itself stays on this desk); good until ${request.body.expires_at}`,
+      ...(targetId === postIn ? [] : [`the request asks for a grant in the door-signed successor directory ${targetId} (notice sha256 ` +
+        `${target!.successor.sha256}); this desk moves there when it picks that grant up`]),
       `the hub must run hub renew-sweep before ${holdsUntil ?? "your directory grant ends"}; after that, use ${FALLBACK}`,
     ]),
   ], {
@@ -574,16 +724,26 @@ export async function planFleetRenew(ctx: FleetContext): Promise<{ plan: FleetRe
       token_sha256: pickup.row.token_sha256,
       request_event_id: pickup.row.request_event_id,
       notice_sha256: pickup.notice_sha256,
+      ...(pickup.move === null ? {} : {
+        move: { from_mission_id: pickup.move.from_mission_id, to_mission_id: pickup.mission.mission_id,
+          successor_notice: { event_id: pickup.move.notice.event_id, sha256: pickup.move.notice.sha256 } },
+      }),
     },
-    request: request === null ? null : { mission_id: directoryId, event_id: request.post.event_id, grant_id: request.body.grant_id,
-      token_sha256: request.body.token_sha256, expires_at: request.body.expires_at, summary: sealedSummary },
+    request: request === null ? null : {
+      mission_id: postIn, event_id: request.post.event_id, grant_id: request.body.grant_id,
+      token_sha256: request.body.token_sha256, expires_at: request.body.expires_at, summary: sealedSummary,
+      ...(targetId === postIn ? {} : { target_mission_id: targetId }),
+    },
     ...(noRequest === null ? {} : { no_request: noRequest }),
+    ...(stale === null ? {} : { stale_request: { request_event_id: stale.request_event_id, mission_id: stale.mission_id } }),
   });
-  return { plan: { preview, pickup, request, no_request: noRequest, directory_expires_at: directoryEnds } };
+  return { plan: { preview, pickup, request, no_request: noRequest, directory_expires_at: currentEnds, directory_mission_id: directoryId } };
 }
 
 export interface FleetRenewOutcome {
   picked_up: { grant_id: string; expires_at: string } | null;
+  /** The directory this act moved the desk to, or null. */
+  moved_to: string | null;
   request: PostOutcome | null;
 }
 
@@ -592,6 +752,12 @@ export async function executeFleetRenew(ctx: FleetContext, plan: FleetRenewPlan)
   const fleet = ctx.store.fleet;
   const at = ctx.now().toISOString();
   let pickedUp: FleetRenewOutcome["picked_up"] = null;
+  let movedTo: string | null = null;
+  // Checked before the first network effect (and again where a pickup is
+  // recorded): another terminal may have moved this desk while the prompt was open.
+  if (desk.directory_mission_id !== plan.directory_mission_id) {
+    throw new LobbyError("directory_changed", "this desk's directory changed while the prompt was open; nothing was accepted, recorded or sent");
+  }
   if (plan.pickup !== null) {
     // Idempotent on the service: an accepted grant is accepted again. An
     // uncertain accept records nothing; running fleet renew again re-reads it.
@@ -618,10 +784,27 @@ export async function executeFleetRenew(ctx: FleetContext, plan: FleetRenewPlan)
           accepted_at: accepted.grant.accepted_at!,
         });
       }
+      if (fleet.desk()?.directory_mission_id !== plan.directory_mission_id) {
+        throw new LobbyError("directory_changed", "this desk's directory changed while this act ran; nothing was recorded. Run fleet renew again");
+      }
       fleet.markDeskDirectoryRenewalAccepted(pickup.row.token_sha256, at);
-      fleet.setDeskDirectoryExpiry(accepted.mission.expires_at);
+      if (pickup.move !== null) {
+        // The move: this desk's directory is now the door-signed successor. The door pin is untouched.
+        fleet.moveDeskDirectory({
+          mission_id: pickup.mission.mission_id,
+          mission_digest: pickup.mission.mission_digest,
+          expires_at: accepted.mission.expires_at,
+          predecessor_mission_id: pickup.move.from_mission_id,
+          how: "successor",
+          at,
+        });
+      } else fleet.setDeskDirectoryExpiry(accepted.mission.expires_at);
     });
     pickedUp = { grant_id: pickup.seat.grant_id, expires_at: accepted.grant.expires_at };
+    movedTo = pickup.move === null ? null : pickup.mission.mission_id;
+    // The move ends every room seat lease bound to a directory grant in the
+    // directory this desk left; none is carried into the successor's grant.
+    if (movedTo !== null) endMovedLeases(ctx);
   }
   let posted: PostOutcome | null = null;
   if (plan.request !== null) {
@@ -640,15 +823,16 @@ export async function executeFleetRenew(ctx: FleetContext, plan: FleetRenewPlan)
         requested_at: request.body.issued_at,
         expires_at: request.body.expires_at,
       });
-      fleet.setDeskDirectoryExpiry(plan.directory_expires_at);
+      if (movedTo === null && plan.directory_expires_at !== null) fleet.setDeskDirectoryExpiry(plan.directory_expires_at);
     });
     posted = await sendPost(ctx, request.post, seat);
   }
   ctx.store.recordAct(actPreview("fleet.renew.outcome", plan.preview.subject, ctx.now().toISOString(), [], {
     picked_up: pickedUp,
+    ...(movedTo === null ? {} : { moved_to: movedTo }),
     request: posted === null ? null : { event_id: posted.event_id, status: posted.status },
   }));
-  return { picked_up: pickedUp, request: posted };
+  return { picked_up: pickedUp, moved_to: movedTo, request: posted };
 }
 
 // ── Desk: status ───────────────────────────────────────────────────────
@@ -657,18 +841,37 @@ export interface DirectoryStatus {
   mission_id: string;
   ends_at: string | null;
   grant_expires_at: string | null;
-  open_request: { event_id: string; grant_id: string; posted: boolean; expires_at: string; expired: boolean } | null;
-  /** Directory rollover (a later build): always null here. */
-  successor: null;
+  open_request: { event_id: string; grant_id: string; posted: boolean; expires_at: string; expired: boolean; mission_id: string } | null;
+  /** The door-signed successor of this desk's directory, from the local
+   * cache: announced (the next request names it), or conflicting (the door
+   * signed more than one; fleet renew refuses), or null. */
+  successor: { state: "announced"; mission_id: string; mission_digest: string; expires_at: string; notice_event_id: string }
+    | { state: "conflicting" } | null;
+  /** The directory this desk moved from, while it may matter, or null. */
+  previous_mission_id: string | null;
 }
 
 /** This desk's directory renewal state, from local records only. */
 export function directoryStatus(ctx: FleetContext): DirectoryStatus | null {
   const desk = ctx.store.fleet.desk();
   if (desk === null || desk.directory_mission_id === null) return null;
-  const now = ctx.now().getTime();
+  const now = ctx.now();
   const newest = ctx.store.fleet.deskDirectoryRenewals()[0];
   const open = newest !== undefined && newest.accepted_at === null ? newest : null;
+  const door = doorPin(ctx);
+  let successor: DirectoryStatus["successor"] = null;
+  if (door !== null) {
+    try {
+      const notice = successorOf(ctx, desk, door, now);
+      if (notice !== null) {
+        successor = { state: "announced", mission_id: notice.body.to_mission_id, mission_digest: notice.body.to_mission_digest,
+          expires_at: notice.body.to_expires_at, notice_event_id: notice.event_id };
+      }
+    } catch (error) {
+      if (!(error instanceof LobbyError) || error.code !== "conflicting_successors") throw error;
+      successor = { state: "conflicting" };
+    }
+  }
   return {
     mission_id: desk.directory_mission_id,
     ends_at: desk.directory_expires_at ?? null,
@@ -678,8 +881,10 @@ export function directoryStatus(ctx: FleetContext): DirectoryStatus | null {
       grant_id: open.grant_id,
       posted: ctx.store.fleet.outbox(open.request_event_id)?.state === "stored",
       expires_at: open.expires_at,
-      expired: Date.parse(open.expires_at) <= now,
+      expired: Date.parse(open.expires_at) <= now.getTime(),
+      mission_id: open.mission_id,
     },
-    successor: null,
+    successor,
+    previous_mission_id: deskPreviousDirectory(ctx, desk),
   };
 }

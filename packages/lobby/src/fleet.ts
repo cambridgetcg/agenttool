@@ -19,6 +19,7 @@ import {
   type DenialBody,
   type DirectoryRenewalBody,
   type DirectoryRenewBody,
+  type DirectorySuccessorBody,
   type FleetCard,
   type KnockBody,
   type LeaveBody,
@@ -87,6 +88,8 @@ export interface FleetView {
   directoryRenewRequests: Array<{ envelope: SignedEnvelope<DirectoryRenewBody>; summary: string; event: MissionEvent }>;
   /** Door-signed notices of renewed directory grants, in receipt order. */
   directoryRenewals: VerifiedDocument<DirectoryRenewalBody>[];
+  /** Door-signed notices naming a directory's successor, in receipt order. */
+  successors: VerifiedDocument<DirectorySuccessorBody>[];
   unverified: UnverifiedEvent[];
 }
 
@@ -138,7 +141,7 @@ export function verifyEventProof(event: MissionEvent, publicKey: string): boolea
 export function readFleetEvents(events: readonly MissionEvent[], door: DoorPin | null): FleetView {
   const view: FleetView = {
     cards: new Map(), admissions: [], denials: [], rosters: [], memberRosters: [], renewals: [], knocks: [], deskNotes: [],
-    directoryRenewRequests: [], directoryRenewals: [], unverified: [],
+    directoryRenewRequests: [], directoryRenewals: [], successors: [], unverified: [],
   };
   const reject = (event: MissionEvent, kind: string | null, reason: UnverifiedReason) => {
     view.unverified.push({ event_id: event.event_id, received_seq: event.received_seq, kind, reason, authority: "none" });
@@ -220,6 +223,9 @@ export function readFleetEvents(events: readonly MissionEvent[], door: DoorPin |
         break;
       case "directory_renewal":
         view.directoryRenewals.push(verified as VerifiedDocument<DirectoryRenewalBody>);
+        break;
+      case "directory_successor":
+        view.successors.push(verified as VerifiedDocument<DirectorySuccessorBody>);
         break;
     }
   }

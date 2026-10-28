@@ -49,6 +49,7 @@ export const JOIN_PACKET_FORMAT = "agenttool-lobby-join/v1" as const;
 export const ENROLL_PACKET_MS = 5 * 60_000;
 export const RENEW_PACKET_MS = 30 * 60_000;
 export const DOOR_RESOURCE_FORMAT = "agenttool-lobby-door/v1";
+export const DIRECTORY_REF_FORMAT = "agenttool-lobby-directory-ref/v1";
 const RESERVED_IDS = new Set(["00000000-0000-0000-0000-000000000000", "ffffffff-ffff-ffff-ffff-ffffffffffff"]);
 
 export interface EnrollmentPacket {
@@ -272,6 +273,24 @@ export function namesDoor(descriptor: MissionDescriptor, door: DoorKey): boolean
   const expected = doorResource(door);
   return descriptor.resources.some((resource) =>
     resource.uri === expected.uri && resource.format === expected.format && resource.digest === expected.digest);
+}
+
+/** A successor directory's charter resource naming its predecessor: the
+ * predecessor's mission id, and the SHA-256 of that id and its digest. It
+ * gives the successor its own digest and chains it to the directory before. */
+export function predecessorResource(predecessor: { mission_id: string; mission_digest: string }): MissionReference {
+  return {
+    uri: `urn:agenttool-lobby:directory:${predecessor.mission_id}`,
+    format: DIRECTORY_REF_FORMAT,
+    digest: `sha256:${sha256HexOf(`${predecessor.mission_id}\0${predecessor.mission_digest}`)}`,
+  };
+}
+
+/** True when the charter names exactly this predecessor and no other one. */
+export function namesPredecessor(descriptor: MissionDescriptor, predecessor: { mission_id: string; mission_digest: string }): boolean {
+  const expected = predecessorResource(predecessor);
+  const named = descriptor.resources.filter((resource) => resource.format === DIRECTORY_REF_FORMAT);
+  return named.length === 1 && named[0]!.uri === expected.uri && named[0]!.digest === expected.digest;
 }
 
 // ── Join packet (hub → device) ─────────────────────────────────────────

@@ -7,9 +7,10 @@
  * gate refuses key-like base64 runs.
  *
  * Kinds and signers:
- * - `card`, `admission`, `denial`, `roster`, `member_roster`, `renewal` and
- *   `directory_renewal` are signed by the hub's **door** key and verified
- *   against the door key pinned on each device out of band.
+ * - `card`, `admission`, `denial`, `roster`, `member_roster`, `renewal`,
+ *   `directory_renewal` and `directory_successor` are signed by the hub's
+ *   **door** key and verified against the door key pinned on each device out
+ *   of band.
  * - `knock`, `renew`, `leave` and `directory_renew` are signed by a member
  *   device's **desk** key and verified by the hub against the public key it
  *   recorded when it relayed (or, for an adopted season, added) that device.
@@ -47,15 +48,18 @@ import {
 
 export const SIGNED_FORMAT = "agenttool-lobby-signed/v1" as const;
 export const SIGNED_KINDS = ["card", "knock", "admission", "denial", "roster", "member_roster", "renewal", "renew", "leave",
-  "directory_renew", "directory_renewal"] as const;
+  "directory_renew", "directory_renewal", "directory_successor"] as const;
 export type SignedKind = typeof SIGNED_KINDS[number];
 /** Kinds only the door may sign. */
-export const DOOR_KINDS: readonly SignedKind[] = ["card", "admission", "denial", "roster", "member_roster", "renewal", "directory_renewal"];
+export const DOOR_KINDS: readonly SignedKind[] = ["card", "admission", "denial", "roster", "member_roster", "renewal", "directory_renewal",
+  "directory_successor"];
 /** Kinds a member desk signs about a room it sits in; the hub verifies them against its device registry. */
 export const DESK_NOTE_KINDS: readonly SignedKind[] = ["renew", "leave"];
 
 export const KNOCK_MAX_MS = 72 * 3_600_000;
 export const ADMISSION_MAX_MS = 24 * 3_600_000;
+/** A directory (and so its successor) lasts at most 30 days. */
+export const DIRECTORY_MAX_MS = 30 * 24 * 3_600_000;
 /** A renew request is good for at most 24 hours. */
 export const RENEW_MAX_MS = 24 * 3_600_000;
 export const NOTE_MAX = 280;
@@ -236,8 +240,22 @@ export interface DirectoryRenewalBody {
   issued_at: string;
 }
 
+/** The door's signed notice that directory `from` has a successor, `to`
+ * (schema version 6): the next directory mission, whose charter names the
+ * same door and `from` as its predecessor. A desk that joined `from` moves to
+ * `to` on its next renewal pickup; the door pin never changes. */
+export interface DirectorySuccessorBody {
+  from_mission_id: string;
+  from_mission_digest: string;
+  from_expires_at: string;
+  to_mission_id: string;
+  to_mission_digest: string;
+  to_expires_at: string;
+  issued_at: string;
+}
+
 export type SignedBody = FleetCard | KnockBody | AdmissionBody | DenialBody | RosterBody | MemberRosterBody | RenewBody
-  | LeaveBody | RenewalBody | DirectoryRenewBody | DirectoryRenewalBody;
+  | LeaveBody | RenewalBody | DirectoryRenewBody | DirectoryRenewalBody | DirectorySuccessorBody;
 
 export interface SignedEnvelope<B = SignedBody> {
   format: typeof SIGNED_FORMAT;
@@ -538,6 +556,28 @@ export function validateDirectoryRenewal(value: unknown): DirectoryRenewalBody {
   return body;
 }
 
+export function validateDirectorySuccessor(value: unknown): DirectorySuccessorBody {
+  const record = exact(value, ["from_mission_id", "from_mission_digest", "from_expires_at", "to_mission_id", "to_mission_digest",
+    "to_expires_at", "issued_at"], "directory successor");
+  const body: DirectorySuccessorBody = {
+    from_mission_id: assertUuid(record.from_mission_id, "from_mission_id"),
+    from_mission_digest: assertDigest(record.from_mission_digest, "from_mission_digest"),
+    from_expires_at: assertCanonicalTime(record.from_expires_at, "from_expires_at"),
+    to_mission_id: assertUuid(record.to_mission_id, "to_mission_id"),
+    to_mission_digest: assertDigest(record.to_mission_digest, "to_mission_digest"),
+    to_expires_at: assertCanonicalTime(record.to_expires_at, "to_expires_at"),
+    issued_at: assertCanonicalTime(record.issued_at, "issued_at"),
+  };
+  if (body.from_mission_id === body.to_mission_id) {
+    throw new LobbyError("invalid_signed_document", "a directory's successor is another mission");
+  }
+  const toEnds = Date.parse(body.to_expires_at);
+  if (toEnds <= Date.parse(body.from_expires_at) || toEnds - Date.parse(body.issued_at) > DIRECTORY_MAX_MS) {
+    throw new LobbyError("invalid_signed_document", "a successor directory ends after its predecessor and within 30 days of the notice");
+  }
+  return body;
+}
+
 /** Members per roster part: what fits one observation with the signature. */
 export const ROSTER_PART_MEMBERS = 4;
 /** Keyed members per member_roster part: each carries two ids and a 64-hex key. */
@@ -555,6 +595,7 @@ const VALIDATORS: Record<SignedKind, (value: unknown) => SignedBody> = {
   leave: validateLeave,
   directory_renew: validateDirectoryRenew,
   directory_renewal: validateDirectoryRenewal,
+  directory_successor: validateDirectorySuccessor,
 };
 
 export function signingDigest(kind: SignedKind, body: SignedBody): Buffer {

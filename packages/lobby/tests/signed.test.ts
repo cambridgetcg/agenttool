@@ -2,7 +2,8 @@
 import { describe, expect, test } from "bun:test";
 import { LobbyError } from "../src/errors.js";
 import { readFleetEvents } from "../src/fleet.js";
-import { buildEnrollmentPacket, doorResource, namesDoor, parseEnrollmentPacket, parseJoinPacket } from "../src/packets.js";
+import { buildEnrollmentPacket, doorResource, namesDoor, namesPredecessor, parseEnrollmentPacket, parseJoinPacket } from "../src/packets.js";
+import { directoryDescriptor } from "../src/hub.js";
 import {
   documentSha256,
   openDocument,
@@ -13,6 +14,7 @@ import {
   type AdmissionBody,
   type DirectoryRenewalBody,
   type DirectoryRenewBody,
+  type DirectorySuccessorBody,
   type FleetCard,
   type KnockBody,
   type RosterBody,
@@ -306,6 +308,71 @@ describe("directory renewal documents (schema version 4)", () => {
       kinds.splice(0, kinds.length, ...saved);
     }
     expect(readFleetEvents(events, { fingerprint: door.fingerprint, public_key: door.publicKey }).unverified).toEqual([]);
+  });
+});
+
+describe("directory rollover documents (schema version 6)", () => {
+  const DAY = 86_400_000;
+  const successor: DirectorySuccessorBody = {
+    from_mission_id: UUID_A, from_mission_digest: `sha256:${"a".repeat(64)}`, from_expires_at: LATER(10 * DAY),
+    to_mission_id: UUID_B, to_mission_digest: `sha256:${"b".repeat(64)}`, to_expires_at: LATER(30 * DAY - 60_000), issued_at: T,
+  };
+
+  test("the door's successor notice round-trips, verifies, fits one observation, and counts only when the pinned door signed it", () => {
+    const door = signer();
+    const desk = signer();
+    const sealed = sealDocument("directory_successor", successor, door);
+    expect(openDocument(sealed.summary)).toMatchObject({ kind: "directory_successor", body: successor });
+    expect(verifyDocument(openDocument(sealed.summary)!, door.publicKey)).toBe(true);
+    expect([...sealed.summary].length).toBeLessThanOrEqual(1000);
+    const events = [sealed.summary, sealDocument("directory_successor", successor, desk).summary].map((summary, index) => {
+      const event_id = crypto.randomUUID();
+      return {
+        event_id, mission_id: UUID_A, grant_id: UUID_B, identity_id: UUID_A, signing_key_id: UUID_B,
+        received_seq: String(index + 1), received_at: T, raw_body: JSON.stringify({ event_id, summary }), body_sha256: "", proof: {},
+      };
+    });
+    const view = readFleetEvents(events, { fingerprint: door.fingerprint, public_key: door.publicKey });
+    expect(view.successors.map((entry) => entry.envelope.body)).toEqual([successor]);
+    expect(view.unverified.map((item) => [item.kind, item.reason])).toEqual([["directory_successor", "signer_not_door"]]);
+    // An older reader, without the kind, treats it as malformed and acts on nothing.
+    const kinds = SIGNED_KINDS as unknown as string[];
+    const saved = [...kinds];
+    kinds.splice(0, kinds.length, ...saved.filter((kind) => kind !== "directory_successor"));
+    try {
+      const old = readFleetEvents(events, { fingerprint: door.fingerprint, public_key: door.publicKey });
+      expect(old.unverified.map((item) => item.reason)).toEqual(["malformed_document", "malformed_document"]);
+      expect(old.successors).toEqual([]);
+    } finally {
+      kinds.splice(0, kinds.length, ...saved);
+    }
+  });
+
+  test("a successor is another mission that ends after its predecessor and within 30 days of the notice", () => {
+    const door = signer();
+    expect(errorCode(() => sealDocument("directory_successor", { ...successor, to_mission_id: UUID_A }, door))).toBe("invalid_signed_document");
+    expect(errorCode(() => sealDocument("directory_successor", { ...successor, to_expires_at: successor.from_expires_at }, door))).toBe("invalid_signed_document");
+    expect(errorCode(() => sealDocument("directory_successor", { ...successor, to_expires_at: LATER(30 * DAY + 1) }, door))).toBe("invalid_signed_document");
+    expect(errorCode(() => sealDocument("directory_successor", { ...successor, from_mission_digest: "a".repeat(64) }, door))).toBe("invalid_from_mission_digest");
+    expect(errorCode(() => sealDocument("directory_successor", { ...successor, room_id: ROOM } as never, door))).toBe("invalid_signed_document");
+  });
+
+  test("a successor charter names the same door and exactly its predecessor; the first directory's charter is unchanged", () => {
+    const door = signer();
+    const key = { public_key: door.publicKey, fingerprint: door.fingerprint };
+    const first = directoryDescriptor(key);
+    expect(first.resources).toEqual([doorResource(key)]);
+    const predecessor = { mission_id: UUID_A, mission_digest: missionDigest(first) };
+    const next = validateMissionDescriptor(directoryDescriptor(key, predecessor));
+    expect(namesDoor(next, key)).toBe(true);
+    expect(namesPredecessor(next, predecessor)).toBe(true);
+    expect(namesPredecessor(next, { ...predecessor, mission_id: UUID_B })).toBe(false);
+    expect(namesPredecessor(next, { ...predecessor, mission_digest: `sha256:${"c".repeat(64)}` })).toBe(false);
+    expect(namesPredecessor(first, predecessor)).toBe(false);
+    expect(missionDigest(next)).not.toBe(missionDigest(first));
+    // Two predecessors named is no predecessor.
+    const twice = { ...next, resources: [...next.resources, directoryDescriptor(key, { ...predecessor, mission_id: UUID_B }).resources[1]!] };
+    expect(namesPredecessor(twice, predecessor)).toBe(false);
   });
 });
 
