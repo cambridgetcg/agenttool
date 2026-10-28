@@ -33,8 +33,7 @@ Apache-2.0 `love-package/v1` manifest binds the tarball's size, SHA-256, and
 source revision; npm and GitHub are optional mirrors whose exact availability
 must be checked independently. The exact-version `0.1.1` and `0.1.2` LOVE
 artifacts remain byte-addressable and are not rewritten. Their GitHub assets
-were byte-verified separately while the source repository was public (it has
-been private since 2026-09-25), but GitHub reports those release records as
+were byte-verified separately, but GitHub reports those release records as
 mutable, so the optional locator is not an immutability guarantee. The
 `0.1.1` package incorrectly called itself unreleased; the `0.1.2` erratum
 ambiguously described the LOVE and GitHub bytes together as immutable. This
@@ -48,7 +47,7 @@ endpoint, broadcast automatically, or persist counters. Those responsibilities
 belong to explicit adapters and a durable host implementation.
 
 The separate
-[`@agenttool/wallet-zerone`](../wallet-zerone/README.md) `0.1.2` LOVE package
+[`@agenttool/wallet-zerone`](https://github.com/cambridgetcg/agenttool-packages/tree/main/packages/wallet-zerone#readme) `0.1.2` LOVE package
 is one such narrow local adapter. It adds exact Zerone message/direct-sign
 bytes, secp256k1 verification, and injected query/simulation/broadcast/lookup
 interfaces while leaving keys, custody, endpoints, durable reservations, and
@@ -215,13 +214,38 @@ overlap.
   cross-record binding check (§5.5, §12), and names `intent_id` and
   (`grant_id`, `nonce`) as the intent replay dedupe keys; a host must not
   rely on `record_id` as one (§6 step 6).
+- The README and `CLAUDE.md` release notes say how 0.1.4 is released (from
+  `cambridgetcg/agenttool-packages` through the staged npm path, with no
+  `love-package/v1` manifest) and that 0.1.3 stays the newest LOVE release.
+  They now say npm serves the byte-identical 0.1.3 artifact, checked
+  2026-07-29 (`CLAUDE.md` gives its SHA-256), where 0.1.3 said npm still
+  served 0.1.0. They no longer call the 0.1.1 and 0.1.2 GitHub assets
+  currently public, as 0.1.3 did; their repository, `cambridgetcg/agenttool`,
+  was private from 2026-09-25 to 2026-10-28.
+- Security reports go by email to `contact@cambridgetcg.com` instead of the
+  repository security contact. Links to the protocol draft, canonical byte
+  recipes, and Zerone profile point at docs.agenttool.dev, and the
+  `@agenttool/wallet-zerone` link points at its README in
+  `cambridgetcg/agenttool-packages`, instead of relative paths that do not
+  resolve inside the tarball.
+- The README and `CLAUDE.md` name `@agenttool/wallet-zerone` 0.1.2 instead
+  of 0.1.1, and the README warns that its `^0.1.2` peer range also admits
+  Wallet 0.1.3.
+- `CLAUDE.md` describes the separate Whitehack adapter at Whitehack 0.10.0
+  (was 0.8.1), its digest-checked loader, and when its test file runs or
+  skips; none of them is part of this package. It names the adapter's
+  repository, `cambridgetcg/agenttool`, where 0.1.3 called the adapter
+  private.
 
 ### Package metadata
 
 - `repository`, `homepage`, and `bugs` name the public source repository
   `cambridgetcg/agenttool-packages` and the public support page, so npm
-  provenance points at source anyone can read. Earlier versions named the
-  source repository, which is now private.
+  provenance points at source anyone can read. In 0.1.3, `repository` and
+  the `bugs` link npm derived from it named the development repository
+  `cambridgetcg/agenttool`, which was made private on 2026-09-25 and public
+  again on 2026-10-28, and `homepage` was the protocol draft on
+  docs.agenttool.dev.
 
 ## Security reporting
 
