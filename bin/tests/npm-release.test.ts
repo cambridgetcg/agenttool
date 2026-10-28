@@ -4,10 +4,13 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { LOVE_PACKAGES } from "../build-love-packages";
+import { PERSONAL_RULES, SECRET_RULES } from "../../public/overlay/tools/public-guard.ts";
 
 import {
+  DEVICE_PATH_RULES,
   RELEASE_RECEIPT_SCHEMA,
   RELEASE_SPECS,
+  SECRET_SIGNATURES,
   archiveContentFinding,
   assertArchiveContentClean,
   assertReleaseSourcesUnchanged,
@@ -111,6 +114,13 @@ describe("standard npm release policy", () => {
     expect(archiveContentFinding("/Users/runner/work")).toBe("device path (macOS home directory)");
   });
 
+  test("keeps the public guard's credential signatures and home-path rules", () => {
+    // The tarball scan was once narrower than the guard (F18); the guard holds the merged list.
+    const sources = (rules: readonly { pattern: RegExp }[]) => rules.map((rule) => rule.pattern.source).sort();
+    expect(sources(SECRET_SIGNATURES)).toEqual(sources(SECRET_RULES));
+    expect(sources(DEVICE_PATH_RULES)).toEqual(sources(PERSONAL_RULES.filter((rule) => rule.id.endsWith("home-path"))));
+  });
+
   test("reads every packed file whatever its name, extension, or size", async () => {
     const directory = await mkdtemp(join(tmpdir(), "npm-archive-scan-test-"));
     const npmToken = `npm_${"A1b2".repeat(9)}`;
@@ -167,6 +177,11 @@ describe("standard npm release policy", () => {
       expect(await refusal({ "package/.netrc": "x" })).toBe("sensitive filename in npm archive: package/.netrc");
       expect(await refusal({ "package/dist/credentials.js": "x" }))
         .toBe("sensitive filename in npm archive: package/dist/credentials.js");
+      // Inside a .env or .env.* directory a file of any name is an env file.
+      for (const path of ["package/.env.d/production", "package/.env.local/secrets.json", "package/config/.env/app"]) {
+        expect(await refusal({ [path]: "KEY=value\n" })).toBe(`sensitive filename in npm archive: ${path}`);
+      }
+      expect(await refusal({ "package/docs/.environment/notes.md": "x" })).toBeUndefined();
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

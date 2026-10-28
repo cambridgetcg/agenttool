@@ -495,8 +495,10 @@ const STAGE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$
 /** The public guard's credential-shaped basenames (SENSITIVE_BASENAME in tools/public-guard.ts). */
 const SENSITIVE_ARCHIVE_PATH =
   /(?:^|\/)(?:\.env(?:\.[^/]*)?|\.envrc|\.npmrc|\.netrc|\.pypirc|credentials(?:\.[^/]*)?|id_rsa|id_ed25519|id_ecdsa|id_dsa|[^/]+\.(?:pem|key|p12|pfx|jks|keystore)|\.DS_Store)$/i;
+/** Any file inside a `.env` or `.env.*` directory: the guard reads basenames only, and an env file can be named anything there. */
+const SENSITIVE_ARCHIVE_DIRECTORY = /(?:^|\/)\.env(?:\.[^/]*)?\//i;
 /** The public guard's credential signatures (SECRET_RULES in tools/public-guard.ts), which merged this list with its own. */
-const SECRET_SIGNATURES = [
+export const SECRET_SIGNATURES = [
   { name: "private-key block", pattern: /-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----/ },
   { name: "AWS access key", pattern: /\bAKIA[0-9A-Z]{16}\b/ },
   { name: "GitHub token", pattern: /\bgh[pousr]_[A-Za-z0-9]{36,}\b/ },
@@ -511,9 +513,12 @@ const PLACEHOLDER_HOMES = new Set(["nobody", "test", "example", "person", "you"]
  * The public guard's home-directory rules (PERSONAL_RULES in tools/public-guard.ts).
  * Two Linux home names name no person: `runner`, the GitHub-hosted runner
  * whose workspace prepare builds in, and `pwuser`, the user of the Playwright
- * images, whose home browser's vendored playwright-core names.
+ * images, whose home browser's vendored playwright-core names. Unlike the
+ * guard, which also reads each line's decoded spellings (decodedVariants),
+ * the rules see only the raw text, so a percent- or entity-encoded home path
+ * passes; the guard's rules are case-sensitive, and so are these.
  */
-const DEVICE_PATH_RULES: readonly { name: string; pattern: RegExp; permitted: readonly string[] }[] = [
+export const DEVICE_PATH_RULES: readonly { name: string; pattern: RegExp; permitted: readonly string[] }[] = [
   // First, so that C:/Users/<name> is named for what it is.
   { name: "Windows home directory", pattern: /\b[A-Za-z]:(?:\\\\|\\|\/)Users(?:\\\\|\\|\/)([^\\/\s"'`<>(),;:]+)/g, permitted: [] },
   { name: "macOS home directory", pattern: /\/Users\/([^/\s"'`<>()\\,;:]+)/g, permitted: [] },
@@ -1641,7 +1646,9 @@ export async function assertArchiveContentClean(
   sizes: Readonly<Record<string, number>>,
 ): Promise<void> {
   for (const entry of entries) {
-    if (SENSITIVE_ARCHIVE_PATH.test(entry)) fail(`sensitive filename in npm archive: ${entry}`);
+    if (SENSITIVE_ARCHIVE_PATH.test(entry) || SENSITIVE_ARCHIVE_DIRECTORY.test(entry)) {
+      fail(`sensitive filename in npm archive: ${entry}`);
+    }
     // Directories and empty files carry no bytes.
     if ((sizes[entry] ?? 0) === 0) continue;
     const finding = archiveContentFinding(await archiveText(artifact, entry));
