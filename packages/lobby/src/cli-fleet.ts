@@ -119,9 +119,22 @@ export function withoutTerminal(ctx: FleetContext, io: FleetIo): number | null {
 /** Show and confirm; on yes record the bytes, then run the act. */
 export async function consequentialAsync<T>(ctx: FleetContext, io: FleetIo, preview: ActPreview, run: () => Promise<T>)
   : Promise<{ confirmed: true; value: T } | { confirmed: false; code: number }> {
+  return confirmThen(io, () => confirmAndRecord(ctx, io.confirm, preview), run);
+}
+
+/** Show and confirm; on yes run an act that records the confirmed bytes
+ * itself, in the same transaction as its local writes (`room lease`, through
+ * `LobbyStore.recordActWith`). */
+export async function consequentialRecordedBy<T>(io: FleetIo, preview: ActPreview, run: () => Promise<T>)
+  : Promise<{ confirmed: true; value: T } | { confirmed: false; code: number }> {
+  return confirmThen(io, () => io.confirm(preview), run);
+}
+
+async function confirmThen<T>(io: FleetIo, ask: () => Promise<boolean>, run: () => Promise<T>)
+  : Promise<{ confirmed: true; value: T } | { confirmed: false; code: number }> {
   let confirmed: boolean;
   try {
-    confirmed = await confirmAndRecord(ctx, io.confirm, preview);
+    confirmed = await ask();
   } catch (error) {
     if (error instanceof LobbyError && (error.code === "tty_unavailable" || error.code === "unsafe_preview")) {
       io.stderr(`agenttool-lobby: ${error.code}: ${error.message}\n`);

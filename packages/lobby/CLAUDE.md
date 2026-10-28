@@ -9,8 +9,9 @@ This private package is the 大廳 Lobby desk: the **local hall** (room cards,
 the private ledger, the pin book, the audit log, the egress gate), the
 **fleet hall v0** (hub and door, device enrollment, door-signed cards, knocks,
 admit/deny and Ready on agenttool collaboration missions, and directory
-renewal inside the Lobby) and, inside a room,
-**table talk**, renewal inside the term, leave, kick and block, the emergency
+renewal inside the Lobby) and, inside a room, **table talk** (at a terminal,
+or under a **room seat lease** a person confirmed once), renewal inside the
+term, leave, kick and block, the emergency
 stop and the weekly access digest, with a read-only stdio MCP view. It is MVP
 steps 1, 2, 7 and 8 of the 2026-10-16 Lobby design; README `Concepts`
 restates the design terms it implements.
@@ -48,7 +49,12 @@ restates the design terms it implements.
   hub's login Keychain. Only the CLI reads them, and only with a person at the
   controlling terminal: every consequential fleet command checks
   `ctx.hasTerminal()` before it plans (exit 3 otherwise), and
-  `requireKeychain` refuses without one. Two reads precede the prompt by
+  `requireKeychain` refuses without one. The one consequential act that runs
+  without a terminal is `room say --lease` (exception 1 below): it reads no
+  Keychain item and uses only the grants its lease is bound to (the season
+  grant, and on a member desk the directory grant). Revoking a lease narrows
+  rather than acts, so `room lease revoke` needs no terminal either (it is
+  audited); `room lease list|show` are reads. Two reads precede the prompt by
   design, and nothing else may: the door key signs so the prompt shows exact
   signed bytes, and an adopt reads the named mission with the bearer (a `GET`)
   so the prompt shows its charter. Every request that changes state goes after
@@ -74,22 +80,59 @@ restates the design terms it implements.
   seconds. `room_say_draft` returns bytes and a gate verdict and saves nothing.
   Its import graph must not reach `hosted`, `keychain`, `secrets`, `ops`,
   `desk`, `hub`, `hub-access`, `talk`, `digest`, `packets`, `tty` or the CLI
-  (`tests/boundary.test.ts`). Do not add a tool that fetches, sends, writes,
-  knocks, admits, accepts, renews, leaves, signs, pins or returns the ledger,
-  the pin book, the audit log, a token or a key. Every card goes through
+  (`tests/boundary.test.ts`), nor `lease` or `seat-ref`
+  (`tests/lease.test.ts`). Do not add a tool that fetches, sends, writes,
+  knocks, admits, accepts, renews, leaves, signs, pins, creates, uses or
+  revokes a lease, or returns the ledger, the pin book, the audit log, a token
+  or a key. Every card goes through
   `wrapLocalCard` or `wrapFleetCard`, and table talk through `wrapTableRead`.
-- **Consequential acts belong to the CLI and the terminal.** Promotion, pin
-  changes and every fleet act that signs, sends, grants, revokes, posts or
-  accepts (table talk, renew request and accept, leave, the renew sweep, member
-  add, pause and resume, `fleet renew`, `hub device pause` and resume, roster
-  posts, kick, block, unblock, stop) go through
-  `plan*` → `confirmOnTty` → record → `execute*`. The confirmation shows the
-  exact canonical bytes, including every document or request body to be sent,
+- **Consequential acts belong to the CLI and the terminal, with exactly two
+  named, bounded exceptions: (1) table talk under a room seat lease; (2)
+  renewal by signature of a grant whose window both sides confirmed at a
+  terminal. Each exception is audited before any network effect, gated and
+  never retried automatically. A third exception is its own reviewed change.**
+  (Yu's wording, 2026-10-27.) Promotion, pin changes and every fleet act that
+  signs, sends, grants, revokes, posts or accepts (table talk, lease creation,
+  renew request and accept, leave, the renew sweep, member add, pause and
+  resume, `fleet renew`, `hub device pause` and resume, roster posts, kick,
+  block, unblock, stop) go through `plan*` → `confirmOnTty` → record →
+  `execute*`. The confirmation shows the exact
+  canonical bytes, including every document or request body to be sent,
   reads `/dev/tty` and never stdin, and fails closed without a terminal. Fleet
   acts append those bytes to the audit log before any network effect, and
   acts whose network effects can partly fail add an `<act>.outcome` entry
   after. Do not add an environment variable, flag or injected default that
-  skips or answers the prompt in production code.
+  skips or answers the prompt in production code, or that creates, answers,
+  widens or extends a lease without the terminal.
+  1. **Table talk under a room seat lease** (built: `src/lease.ts`). A person
+     makes a lease with `room lease <room_id>`, confirmed on `/dev/tty` and
+     audited (`room.lease`, written in the same transaction as the lease).
+     Under a live lease, `room say --lease <id> --idempotency-key <k>` sends
+     without a terminal: only a player's `message` or `read_ack`, in the
+     lease's one room, season and conversation, to an identity the lease
+     names (a list snapshotted when it was made) that is still on the newest
+     door-signed roster, within the lease's caps (Yu, 2026-10-27: at most 8
+     hours, default 8; 20 messages by default, 100 at most; 1000 characters
+     per message; 10,000 characters in all by default, 50,000 at most; 30 s
+     apart by default, never under 5 s; at most 3 active leases per room per
+     desk), and never past its season grant, directory grant, term or season.
+     Every send re-checks all of that, plus the STOP file
+     (`<lobby home>/STOP`), the hub's stop, its bound grants (left or
+     refused), a fresh read with exactly those grants, the roster tier, the
+     card's season and status and the room gate, before it writes. It posts
+     under the lease's bound grant, never `currentDeskGrant`, and appends
+     `room.say.lease` (lease id, seat ref, grant, exact raw body) in the same
+     transaction as its budget reservation and outbox row, before any network
+     effect. It reads no Keychain item. Revoking needs no terminal; a void is
+     final and audited (`room.lease.void`); removing STOP revives nothing. A
+     lease covers no other act and never widens or extends itself; a new
+     scope is a new lease format and its own reviewed change.
+  2. **Renewal by signature of a grant whose window both sides confirmed at a
+     terminal: not yet built.** Until it is, every renewal (request, sweep,
+     accept, `fleet renew`, `hub seat`, `enroll-device`/`hub relay`/`fleet
+     join`) is confirmed at a terminal, and a lease never renews anything: a
+     lease stays bound to the directory grant it was made under, and a
+     renewed directory grant does not carry it on.
 - **Pins come from people, not rooms.** The door key is pinned only at
   `fleet join`, from a fingerprint the person types, and only if the directory
   descriptor names the same key. Members' keys are pinned per season only by a
@@ -187,18 +230,21 @@ next version adds one step `from` the last `to` and moves
 `STATE_SCHEMA_VERSION`.
 
 Version 4 is directory renewal inside the Lobby (Build 2A,
-`lobby/directory-renew`). The next numbers are reserved, in this order
+`lobby/directory-renew`, #535) and version 5 is room seat leases (Build 5,
+`lobby/room-seat-leases`, #536). The next numbers are reserved, in this order
 (2026-10-27 lobby builds):
 
 | Version | Build |
 |---|---|
-| 4 | directory renew (Build 2A): taken |
-| 5 | directory rollover (Build 2B) |
-| 6 | room seat leases (Build 5) |
+| 4 | directory renew (Build 2A): taken by #535 |
+| 5 | room seat leases (Build 5): taken by #536 |
+| 6 | directory rollover (Build 2B) |
 | 7 | renewal by signature, lobby side (Build 3 C0) |
 | 8 | pairing (Build 4 PR-3) |
 
-Whoever merges out of this order renumbers on rebase. `tests/store.test.ts`
+Each build takes the next free version when it merges. Whoever merges out of
+this order renumbers when it integrates main and updates this table (room
+seat leases were reserved 6 and took 5 after #535 took 4). `tests/store.test.ts`
 catches a mistake: the chain must run from 1 without a gap and end at
 `STATE_SCHEMA_VERSION`, a file at every version it knows must upgrade once to
 the same schema a new file gets, and each released version's schema is frozen

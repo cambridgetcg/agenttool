@@ -204,19 +204,29 @@ export interface SayPlan {
   seat: ParticipantSeat;
 }
 
-export async function planSay(ctx: FleetContext, input: {
+export interface SayInput {
   room_id: string;
   text: string;
   to?: string;
   in_reply_to?: string;
   kind?: ChatKind;
   conversation?: string;
-}): Promise<SayPlan> {
-  const scope = roomScope(ctx, input.room_id);
-  const { seat } = requireSeat(ctx, scope.mission_id, "mission.observe", 60_000,
-    "; spectators read the table but do not post, and a lapsed member renews first (room renew request, then room renew accept)");
-  // Read first, so the roster and any message being answered are current.
-  await roomSync(ctx, scope.room_id);
+}
+
+export interface ComposedSay {
+  conversation: string;
+  envelope: ChatEnvelope;
+  to: RosterPin;
+  post: PreparedPost;
+}
+
+/** One message built from the local cache as it is now: this desk must be on
+ * the newest door-signed roster, the destination comes from that roster (and
+ * an answer goes to the verified sender of the message it answers), and the
+ * envelope is gated and framed for the room. Nothing is saved or sent. Used
+ * by `room say` at a terminal (planSay) and under a room seat lease
+ * (src/lease.ts), after each has read the room. */
+export function composeSay(ctx: FleetContext, scope: RoomScope, input: SayInput): ComposedSay {
   const conversation = assertConversation(input.conversation ?? DEFAULT_CONVERSATION);
   const events = ctx.store.fleet.events(scope.mission_id);
   const roster = rosterOf(events, scope.door, scope);
@@ -241,6 +251,16 @@ export async function planSay(ctx: FleetContext, input: {
     ...(input.in_reply_to === undefined ? {} : { in_reply_to: input.in_reply_to }),
   });
   const post = preparePost(ctx, "chat", scope.mission_id, summary, roomGate(ctx, scope.room_id));
+  return { conversation, envelope, to, post };
+}
+
+export async function planSay(ctx: FleetContext, input: SayInput): Promise<SayPlan> {
+  const scope = roomScope(ctx, input.room_id);
+  const { seat } = requireSeat(ctx, scope.mission_id, "mission.observe", 60_000,
+    "; spectators read the table but do not post, and a lapsed member renews first (room renew request, then room renew accept)");
+  // Read first, so the roster and any message being answered are current.
+  await roomSync(ctx, scope.room_id);
+  const { conversation, envelope, to, post } = composeSay(ctx, scope, input);
   const at = ctx.now().toISOString();
   const preview = actPreview("room.say", scope.room_id, at, [
     `room ${scope.room_id} season ${scope.mission_id}; conversation ${conversation}`,
