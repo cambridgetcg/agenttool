@@ -22,6 +22,18 @@ export const API_SITEMAP_PATHS = [
   "/v1/pathways",
 ] as const;
 
+/** Public GET doors the API advertises elsewhere (llms.txt, agent.txt, the
+ * Link header) that robots.txt allows by exact path. They stay out of the
+ * sitemap, which keeps its own selected list.
+ */
+export const API_ROBOTS_ADVERTISED_PATHS = [
+  "/health",
+  "/v1/welcome",
+  "/.well-known/agent.json",
+  "/llms-full.txt",
+  "/public/love-bomb",
+] as const;
+
 function httpsOrigin(value: string): string {
   const parsed = new URL(value);
   if (
@@ -40,6 +52,7 @@ export function buildApiRobotsTxt(
   const api = httpsOrigin(publicBase);
   const allowedDiscoveryPaths = [
     ...API_SITEMAP_PATHS,
+    ...API_ROBOTS_ADVERTISED_PATHS,
     "/sitemap.xml",
   ].map((path) => `Allow: ${path}$`);
   return [
