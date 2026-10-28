@@ -311,7 +311,17 @@ export async function executeDirectorySuccessor(ctx: FleetContext, plan: Success
       throw new LobbyError("project_mismatch",
         `successor mission ${view.mission_id} was created in project ${view.project_id}, not this hub's ${hub.project_id}: the Keychain bearer is for another project. Nothing was announced`);
     }
-    fleet.markHubDirectoryCreated(missionId);
+    if (!fleet.markHubDirectoryCreated(missionId) && fleet.hubDirectory(missionId) === null) {
+      // Its pending record was forgotten while the create was in flight (a
+      // hub stop whose revoke found nothing yet): the service now holds a
+      // live successor no record lists. Named for the person; nothing is
+      // revoked or retried here. (A record another terminal already marked
+      // created is still there, and the announce checks the chain again.)
+      throw new LobbyError("successor_unrecorded",
+        `successor directory ${missionId} was created on the service after this hub forgot its pending record (a hub stop while the create was in flight); ` +
+        "nothing was announced, recorded or retried. It is live and unrevoked, and no later hub stop lists it: revoke it by hand from a terminal " +
+        `(POST /v1/collaboration/missions/${missionId}/revoke, zero body bytes, with this hub's bearer), or rotate the API key as the stop's manual step says`);
+    }
   }
   // 3. The hub desk's seat in the successor. A failure leaves the successor
   // recorded and unannounced; the next run finishes.

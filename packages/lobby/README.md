@@ -951,9 +951,13 @@ device joins again and no packet is carried.
    the old directory ends it is ignored everywhere; nothing retires it early.
 4. **The way back in.** A joined desk refuses a join packet for another
    directory (`directory_changed`) with exactly one exception: the
-   door-signed successor of its own directory, whose notice is in its local
-   cache, whose charter names the pinned door (the typed fingerprint must
-   still match) and its directory as predecessor. So a device that lapsed
+   door-signed successor of its own directory, exactly the mission the notice
+   names (id and digest), whose notice is in its local cache, whose charter
+   names the pinned door (the typed fingerprint must still match) and its
+   directory as predecessor, with the notice's end. On `yes` the move is
+   checked again before the accept and where it is recorded (a desk another
+   terminal moved meanwhile refuses with nothing accepted or recorded,
+   `directory_changed`). So a device that lapsed
    after it read the notice comes back with `enroll-device`, `hub relay` and
    `fleet join`, and moves. A renew request it left open for the old
    directory is then stale: the next `fleet renew` neither picks its grant up
@@ -962,7 +966,11 @@ device joins again and no packet is carried.
    new identity.
 5. **`hub stop`** revokes every directory of the chain not yet revoked: the
    current one, the previous one, and a successor created or asked for but
-   not announced (one the service definitely never created is forgotten).
+   not announced (one the service definitely never created is forgotten). If
+   that create was still in flight and lands after the stop forgot it, `hub
+   directory successor` refuses with `successor_unrecorded`, naming the live
+   successor so the owner revokes it by hand; nothing revokes, retries or
+   announces it, and no later `hub stop` lists it.
 
 `hub show --json` lists the chain (`directories`), `fleet status` shows the
 successor and the directory a desk moved from, and `hub digest` shows the

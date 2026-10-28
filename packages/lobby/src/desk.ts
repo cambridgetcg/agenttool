@@ -234,8 +234,13 @@ export async function planJoin(ctx: FleetContext, input: { packetText: string; d
 }
 
 export async function executeJoin(ctx: FleetContext, plan: JoinPlan): Promise<{ grant_id: string; expires_at: string; pinned: boolean }> {
-  const accepted = await participant(ctx).accept(plan.seat, plan.mission.mission_digest);
   const fleet = ctx.store.fleet;
+  // A move is checked before the accept (and again where it is recorded):
+  // another terminal may have moved this desk while the prompt was open.
+  if (plan.move !== null && fleet.desk()?.directory_mission_id !== plan.move.from_mission_id) {
+    throw new LobbyError("directory_changed", "this desk's directory changed while the prompt was open; nothing was accepted or recorded");
+  }
+  const accepted = await participant(ctx).accept(plan.seat, plan.mission.mission_digest);
   const at = ctx.now().toISOString();
   fleet.transaction(() => {
     if (fleet.deskGrant(plan.seat.grant_id) === null) {
@@ -264,7 +269,7 @@ export async function executeJoin(ctx: FleetContext, plan: JoinPlan): Promise<{ 
     // into the door-signed successor, which moves the desk there.
     if (plan.move !== null) {
       if (fleet.desk()?.directory_mission_id !== plan.move.from_mission_id) {
-        throw new LobbyError("directory_changed", "this desk's directory changed while the prompt was open; nothing was recorded");
+        throw new LobbyError("directory_changed", "this desk's directory changed while this act ran; nothing was recorded. Run fleet join again");
       }
       fleet.moveDeskDirectory({
         mission_id: plan.mission.mission_id, mission_digest: plan.mission.mission_digest, expires_at: plan.mission.expires_at,

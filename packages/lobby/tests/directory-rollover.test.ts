@@ -9,8 +9,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { directoryDescriptor } from "../src/hub.js";
 import { readDoorKey } from "../src/keychain.js";
-import { DIRECTORY_REF_FORMAT, predecessorResource } from "../src/packets.js";
-import { generateKeyPair, missionDigest, newUuid, publicKeyBase64, publicKeyFingerprint, type MissionDescriptor } from "../src/wire.js";
+import { DIRECTORY_REF_FORMAT, JOIN_PACKET_FORMAT, predecessorResource } from "../src/packets.js";
+import { generateKeyPair, INVITATION_TEMPLATE_FORMAT, LOBBY_ORIGIN, missionDigest, newUuid, publicKeyBase64, publicKeyFingerprint, type MissionDescriptor } from "../src/wire.js";
 import { openDocument, sealDocument, type DirectorySuccessorBody, type FleetCard } from "../src/signed.js";
 import { LobbyStore } from "../src/store.js";
 import { FAKE_BEARER } from "./fake-hosted.js";
@@ -92,7 +92,7 @@ async function createMission(fleet: Fleet, descriptor: MissionDescriptor, expire
 
 /** Issue `desk`'s open directory request straight into `missionId` (as a
  * holder of the bearer could), bypassing the hub's sweep. */
-async function issueOpenRequest(fleet: Fleet, desk: Desk, missionId: string): Promise<string> {
+async function issueOpenRequest(fleet: Fleet, desk: Desk, missionId: string, actions = ["mission.observe", "mission.read"]): Promise<string> {
   const store = LobbyStore.open(desk.home);
   const row = store.fleet.deskDirectoryRenewals()[0]!;
   store.close();
@@ -103,7 +103,7 @@ async function issueOpenRequest(fleet: Fleet, desk: Desk, missionId: string): Pr
     headers: { Authorization: `Bearer ${FAKE_BEARER}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       grant_id: row.grant_id, identity_id: identity.identity_id, signing_key_id: identity.signing_key_id,
-      actions: ["mission.observe", "mission.read"], expires_at: new Date(fleet.world.clock.now.getTime() + 20 * HOUR).toISOString(),
+      actions, expires_at: new Date(fleet.world.clock.now.getTime() + 20 * HOUR).toISOString(),
       token_sha256: row.token_sha256,
     }),
   });
@@ -136,6 +136,58 @@ function inOtherProject(fleet: Fleet, match: (request: { method: string; path: s
     }
     return new Response(JSON.stringify(view), { status: response.status, headers: { "Content-Type": "application/json" } });
   };
+}
+
+/** A join packet written by hand for `mission`, as anyone could carry one:
+ * the desk's fresh enroll token, with a grant for it issued straight on the
+ * service with the bearer (as a holder of the bearer could), never relayed. */
+async function handJoinPacket(fleet: Fleet, desk: Desk, mission: { mission_id: string; mission_digest: string },
+  door?: { public_key: string; fingerprint: string }): Promise<{ path: string; grant_id: string }> {
+  const enrolled = JSON.parse((await ok(desk.run("enroll-device"))).stdout);
+  const store = LobbyStore.open(fleet.hub.home);
+  const hub = store.fleet.hub()!;
+  store.close();
+  const grantId = newUuid();
+  const expiresAt = new Date(fleet.world.clock.now.getTime() + 20 * HOUR).toISOString();
+  const response = await fleet.world.hosted.fetch(`${LOBBY_ORIGIN}/v1/collaboration/missions/${mission.mission_id}/grants`, {
+    method: "POST",
+    redirect: "error",
+    headers: { Authorization: `Bearer ${FAKE_BEARER}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ grant_id: grantId, identity_id: enrolled.identity_id, signing_key_id: enrolled.signing_key_id,
+      actions: ["mission.observe", "mission.read"], expires_at: expiresAt, token_sha256: enrolled.directory_token_sha256 }),
+  });
+  expect(response.status).toBe(201);
+  const packet = {
+    format: JOIN_PACKET_FORMAT, origin: LOBBY_ORIGIN, project_id: enrolled.project_id,
+    door: door ?? { public_key: hub.door_public_key, fingerprint: hub.door_fingerprint },
+    directory: { mission_id: mission.mission_id, mission_digest: mission.mission_digest },
+    invitation_template: { format: INVITATION_TEMPLATE_FORMAT, origin: LOBBY_ORIGIN, mission_id: mission.mission_id, grant_id: grantId,
+      identity_id: enrolled.identity_id, signing_key_id: enrolled.signing_key_id, public_key: enrolled.public_key, expires_at: expiresAt,
+      token_sha256: enrolled.directory_token_sha256 },
+  };
+  return { path: desk.file(`hand-join-${grantId}.json`, JSON.stringify(packet)), grant_id: grantId };
+}
+
+/** Point `desk` at the successor by hand, as another terminal's move would. */
+function moveByHand(fleet: Rolled, desk: Desk, how: "join" | "successor" = "join"): void {
+  const mission = fleet.world.hosted.missions.get(fleet.successorId)!;
+  const store = LobbyStore.open(desk.home);
+  store.fleet.moveDeskDirectory({ mission_id: fleet.successorId, mission_digest: mission.digest, expires_at: mission.expires_at,
+    predecessor_mission_id: fleet.directoryId, how, at: fleet.world.clock.now.toISOString() });
+  store.close();
+}
+
+/** A device whose directory grant lapsed after it read the notice, holding a
+ * relayed join packet for the successor. */
+async function lapsedWithJoinPacket(): Promise<Rolled & { packet: string; joinGrantId: string }> {
+  const fleet = await rolledOver();
+  const { hub, device, world } = fleet;
+  await ok(device.run("fleet", "sync"));
+  world.advance(DAY);
+  const enrolled = await ok(device.run("enroll-device"));
+  const { relayArgs } = await import("./fleet-helpers.js");
+  const relayed = await ok(hub.yes(...relayArgs(device, enrolled)));
+  return { ...fleet, packet: device.file(`join-${newUuid()}.json`, relayed.stdout), joinGrantId: JSON.parse(relayed.stdout).invitation_template.grant_id };
 }
 
 /** Take a mission's events matching `drop` off the service (as if never posted). */
@@ -295,6 +347,25 @@ describe("hub directory successor", () => {
     expect(JSON.parse(shownBytes(hub)).successor.mission_id).not.toBe(planned.mission_id);
   });
 
+  test("the same id holding the same charter with another end: successor_conflict, nothing announced, and the pending record is forgotten", async () => {
+    const fleet = await bootstrapFleet();
+    const { hub, world } = fleet;
+    world.advance(HOUR);
+    world.hosted.failNext = (seen) => seen.method === "POST" && seen.path === "/v1/collaboration/missions";
+    expect((await hub.yes("hub", "directory", "successor")).stderr).toContain("successor_uncertain");
+    const planned = JSON.parse(shownBytes(hub)).successor;
+    // A holder of the bearer takes that id with the very charter, ending a minute earlier.
+    const taken = await createMission(fleet, planned.descriptor, new Date(Date.parse(planned.expires_at) - MINUTE).toISOString(), planned.mission_id);
+    expect(taken.mission_digest).toBe(planned.mission_digest);
+    const refused = await hub.yes("hub", "directory", "successor");
+    expect(refused.code).toBe(1);
+    expect(refused.stderr).toContain("successor_conflict");
+    expect(kindsIn(fleet, fleet.directoryId)).not.toContain("directory_successor");
+    const store = LobbyStore.open(hub.home);
+    expect(store.fleet.hubDirectory(planned.mission_id)).toBeNull();
+    store.close();
+  });
+
   test("a successor the service puts in another project: project_mismatch, nothing announced, and the pending record is forgotten", async () => {
     const fleet = await bootstrapFleet();
     const { hub, world } = fleet;
@@ -313,6 +384,38 @@ describe("hub directory successor", () => {
     expect((await json(hub.run("hub", "show", "--json"))).directory.mission_id).toBe(fleet.directoryId);
     await ok(hub.yes("hub", "directory", "successor", "--days", "30"));
     expect(JSON.parse(shownBytes(hub))).toMatchObject({ mode: "create" });
+  });
+
+  test("a stale card naming an ended season is not reposted, even once the room's next season is open", async () => {
+    const fleet = await bootstrapFleet();
+    const { hub, world } = fleet;
+    const added = await ok(hub.run("room", "add", "--title", "Short season", "--purpose", "a one-day season", "--door", "knock",
+      "--slot", "reviewer:player:1", "--json"));
+    const shortRoom = JSON.parse(added.stdout).card.room_id as string;
+    await ok(hub.yes("room", "promote", shortRoom, "--residency", "fleet", "--hostable", "true"));
+    await ok(hub.yes("hub", "season", "open", shortRoom, "--days", "1"));
+    await ok(hub.yes("room", "publish", shortRoom));
+    world.advance(DAY + HOUR);
+    await ok(hub.yes("hub", "renew-sweep"));
+    // The next season is open, and its card not published yet: the latest card still names the ended season.
+    await ok(hub.yes("hub", "season", "open", shortRoom, "--days", "5"));
+    await ok(hub.yes("hub", "directory", "successor"));
+    const bytes = JSON.parse(shownBytes(hub));
+    expect(bytes.cards.map((card: any) => card.room_id)).toEqual([fleet.roomId]);
+    expect(bytes.cards_skipped).toEqual([{ room_id: shortRoom, reason: "season_ended" }]);
+  });
+
+  test("a card naming a season the room has replaced is not reposted once the room's current season has ended", async () => {
+    const fleet = await bootstrapFleet();
+    const { hub, world } = fleet;
+    // A one-day season replaces the room's 30-day one, and no card is published for it: the latest card names the old, still-live season.
+    await ok(hub.yes("hub", "season", "open", fleet.roomId, "--days", "1"));
+    world.advance(DAY + HOUR);
+    await ok(hub.yes("hub", "renew-sweep"));
+    await ok(hub.yes("hub", "directory", "successor"));
+    const bytes = JSON.parse(shownBytes(hub));
+    expect(bytes.cards).toEqual([]);
+    expect(bytes.cards_skipped).toEqual([{ room_id: fleet.roomId, reason: "season_ended" }]);
   });
 
   test("a room whose season ended is not reposted to the successor", async () => {
@@ -428,6 +531,188 @@ describe("another terminal while a prompt is open", () => {
     // The other terminal's accept only.
     expect(accepts()).toBe(before + 1);
     expect((await status(device)).mission_id).toBe(fleet.successorId);
+  });
+});
+
+describe("another terminal while a prompt is open: moves, successors and the chain", () => {
+  test("a desk moved by another terminal during its fleet renew accept: nothing recorded, no next request", async () => {
+    const fleet = await rolledOver();
+    const { hub, device, world } = fleet;
+    await ok(device.run("fleet", "sync"));
+    await ok(device.yes("fleet", "renew"));
+    await ok(hub.yes("hub", "renew-sweep"));
+    const before = LobbyStore.open(device.home);
+    const pickup = before.fleet.deskDirectoryRenewals()[0]!;
+    before.close();
+    const posts = () => world.hosted.seen.filter((seen) => seen.method === "POST" && seen.path.endsWith("/events")).length;
+    const posted = posts();
+    world.hosted.intercept = (request, process) => {
+      const response = process();
+      if (request.method === "POST" && request.path === `/v1/collaboration/missions/${fleet.successorId}/accept`) {
+        world.hosted.intercept = null;
+        moveByHand(fleet, device);
+      }
+      return response;
+    };
+    const result = await device.yes("fleet", "renew");
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("directory_changed");
+    expect(result.stderr).toContain("while this act ran; nothing was recorded");
+    const after = LobbyStore.open(device.home);
+    expect(after.fleet.deskGrant(pickup.grant_id)).toBeNull();
+    expect(after.fleet.deskDirectoryRenewals()[0]).toMatchObject({ token_sha256: pickup.token_sha256, accepted_at: null });
+    after.close();
+    expect(posts()).toBe(posted);
+    expect((await auditActs(device)).at(-1)).toBe("fleet.renew");
+  });
+
+  test("a desk moved by another terminal while its fleet join prompt is open: nothing accepted or recorded", async () => {
+    const fleet = await lapsedWithJoinPacket();
+    const { device, world } = fleet;
+    const accepts = () => world.hosted.seen.filter((seen) => seen.method === "POST" && seen.path === `/v1/collaboration/missions/${fleet.successorId}/accept`).length;
+    const before = accepts();
+    const result = await runWhilePromptOpen(world, device, ["fleet", "join", "--packet-file", fleet.packet, "--door-fingerprint", fleet.doorFingerprint],
+      async () => moveByHand(fleet, device, "successor"));
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("directory_changed");
+    expect(result.stderr).toContain("nothing was accepted or recorded");
+    expect(world.hosted.grants.get(fleet.joinGrantId)!.accepted_at).toBeNull();
+    expect(accepts()).toBe(before);
+  });
+
+  test("a desk moved by another terminal during its fleet join accept: nothing recorded", async () => {
+    const fleet = await lapsedWithJoinPacket();
+    const { device, world } = fleet;
+    world.hosted.intercept = (request, process) => {
+      const response = process();
+      if (request.method === "POST" && request.path === `/v1/collaboration/missions/${fleet.successorId}/accept`) {
+        world.hosted.intercept = null;
+        moveByHand(fleet, device, "successor");
+      }
+      return response;
+    };
+    const result = await device.yes("fleet", "join", "--packet-file", fleet.packet, "--door-fingerprint", fleet.doorFingerprint);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("directory_changed");
+    expect(result.stderr).toContain("while this act ran; nothing was recorded");
+    const store = LobbyStore.open(device.home);
+    expect(store.fleet.deskGrant(fleet.joinGrantId)).toBeNull();
+    expect(store.fleet.deskDirectories().map((row) => [row.mission_id, row.how])).toEqual([[fleet.directoryId, "join"], [fleet.successorId, "successor"]]);
+    store.close();
+  });
+
+  test("a successor announced by another terminal while this one's prompt is open: nothing recorded or created", async () => {
+    const fleet = await bootstrapFleet();
+    const { hub, world } = fleet;
+    world.advance(HOUR);
+    const other = world.desk("hub-other", { of: hub });
+    const missions = world.hosted.missions.size;
+    const result = await runWhilePromptOpen(world, hub, ["hub", "directory", "successor", "--days", "30"], async () => {
+      await ok(other.yes("hub", "directory", "successor", "--days", "30"));
+    });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("announce_changed");
+    expect(result.stderr).toContain("the hub's directory changed while the prompt was open; nothing was recorded or sent");
+    expect(world.hosted.missions.size).toBe(missions + 1);
+    const chain = (await json(hub.run("hub", "show", "--json"))).directories;
+    expect(chain.map((row: any) => row.state).sort()).toEqual(["current", "previous"]);
+    expect(summariesOf(fleet, fleet.directoryId).filter((summary) => openDocument(summary)?.kind === "directory_successor")).toHaveLength(1);
+  });
+
+  test("a successor recorded by another terminal while this one's prompt is open: nothing recorded or created", async () => {
+    const fleet = await bootstrapFleet();
+    const { hub, world } = fleet;
+    world.advance(HOUR);
+    const other = world.desk("hub-other", { of: hub });
+    const missions = world.hosted.missions.size;
+    const result = await runWhilePromptOpen(world, hub, ["hub", "directory", "successor", "--days", "30"], async () => {
+      // The other terminal creates its successor and fails at the seat: recorded, not announced.
+      world.hosted.failNext = (seen) => seen.method === "POST" && /\/missions\/[0-9a-f-]{36}\/grants$/.test(seen.path);
+      expect((await other.yes("hub", "directory", "successor", "--days", "30")).code).toBe(1);
+    });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("another successor was recorded while the prompt was open");
+    expect(world.hosted.missions.size).toBe(missions + 1);
+    const chain = (await json(hub.run("hub", "show", "--json"))).directories;
+    expect(chain.map((row: any) => row.state).sort()).toEqual(["current", "successor"]);
+  });
+
+  test("a resume finished by another terminal while this one's prompt is open: no third create", async () => {
+    const fleet = await bootstrapFleet();
+    const { hub, world } = fleet;
+    world.advance(HOUR);
+    world.hosted.loseResponse = (seen) => seen.method === "POST" && seen.path === "/v1/collaboration/missions";
+    expect((await hub.yes("hub", "directory", "successor")).stderr).toContain("successor_uncertain");
+    const planned = JSON.parse(shownBytes(hub)).successor.mission_id as string;
+    const other = world.desk("hub-other", { of: hub });
+    const result = await runWhilePromptOpen(world, hub, ["hub", "directory", "successor"], async () => {
+      // The other terminal resumes: its create confirms the successor, then its seat fails.
+      world.hosted.failNext = (seen) => seen.method === "POST" && /\/missions\/[0-9a-f-]{36}\/grants$/.test(seen.path);
+      expect((await other.yes("hub", "directory", "successor")).code).toBe(1);
+    });
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("the successor's record changed while the prompt was open; nothing was sent");
+    const creates = world.hosted.seen.filter((seen) => seen.method === "POST" && seen.path === "/v1/collaboration/missions"
+      && JSON.parse(seen.body).mission_id === planned);
+    expect(creates).toHaveLength(2);
+    expect(kindsIn(fleet, fleet.directoryId)).not.toContain("directory_successor");
+  });
+
+  test("a resume another terminal confirms while this one's create is in flight carries on to one announcement", async () => {
+    const fleet = await bootstrapFleet();
+    const { hub, world } = fleet;
+    world.advance(HOUR);
+    world.hosted.loseResponse = (seen) => seen.method === "POST" && seen.path === "/v1/collaboration/missions";
+    expect((await hub.yes("hub", "directory", "successor")).stderr).toContain("successor_uncertain");
+    const planned = JSON.parse(shownBytes(hub)).successor.mission_id as string;
+    world.hosted.intercept = (request, process) => {
+      const response = process();
+      if (request.method === "POST" && request.path === "/v1/collaboration/missions") {
+        world.hosted.intercept = null;
+        // The other terminal's own resume confirmed it first: the record is `successor`, not forgotten.
+        const store = LobbyStore.open(hub.home);
+        expect(store.fleet.markHubDirectoryCreated(planned)).toBe(true);
+        store.close();
+      }
+      return response;
+    };
+    const resumed = await ok(hub.yes("hub", "directory", "successor"));
+    expect(resumed.stdout).toContain(`announced successor directory ${planned}`);
+    expect(summariesOf(fleet, fleet.directoryId).filter((summary) => openDocument(summary)?.kind === "directory_successor")).toHaveLength(1);
+  });
+
+  test("another terminal announcing between this one's checks and its announce: refused, and no second notice is signed or sent", async () => {
+    const fleet = await bootstrapFleet();
+    const { hub, world } = fleet;
+    world.advance(HOUR);
+    world.hosted.failNext = (seen) => seen.method === "POST" && /\/missions\/[0-9a-f-]{36}\/grants$/.test(seen.path);
+    expect((await hub.yes("hub", "directory", "successor")).code).toBe(1);
+    const successorId = JSON.parse(shownBytes(hub)).successor.mission_id as string;
+    const otherNotice = newUuid();
+    world.hosted.intercept = (request, process) => {
+      const response = process();
+      if (request.method === "POST" && request.path === `/v1/collaboration/missions/${successorId}/grants`) {
+        world.hosted.intercept = null;
+        // The other terminal announces the same successor while this one takes its seat there.
+        const store = LobbyStore.open(hub.home);
+        const row = store.fleet.hubDirectory(successorId)!;
+        store.fleet.transaction(() => {
+          store.fleet.announceHubSuccessor({ from_mission_id: fleet.directoryId, to: row, notice_event_id: otherNotice, at: world.clock.now.toISOString() });
+          store.fleet.moveDeskDirectory({ mission_id: successorId, mission_digest: row.mission_digest, expires_at: row.expires_at,
+            predecessor_mission_id: fleet.directoryId, how: "successor", at: world.clock.now.toISOString() });
+        });
+        store.close();
+      }
+      return response;
+    };
+    const result = await hub.yes("hub", "directory", "successor");
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("the hub's directory chain changed while this act ran; nothing was announced");
+    expect(kindsIn(fleet, fleet.directoryId)).not.toContain("directory_successor");
+    const store = LobbyStore.open(hub.home);
+    expect(store.fleet.hubDirectory(successorId)).toMatchObject({ state: "current", notice_event_id: otherNotice });
+    expect(store.fleet.outbox(JSON.parse(shownBytes(hub)).notice.event_id)).toBeNull();
+    store.close();
   });
 });
 
@@ -657,6 +942,120 @@ describe("desks move to the successor on their next fleet renew pickups", () => 
     const late = world.desk("late");
     await enrollThroughHub(hub, late, fleet.doorFingerprint);
     expect((await status(late)).mission_id).toBe(fleet.successorId);
+  });
+
+  for (const what of ["mission", "grant"] as const) {
+    test(`a successor ${what} the service reports revoked: successor_mismatch at pickup, nothing accepted, the desk stays`, async () => {
+      const fleet = await rolledOver();
+      const { hub, device, world } = fleet;
+      await ok(device.run("fleet", "sync"));
+      await ok(device.yes("fleet", "renew"));
+      await ok(hub.yes("hub", "renew-sweep"));
+      const hosted = world.hosted;
+      const identity = deskOf(device).identity_id;
+      const grant = [...hosted.grants.values()].find((entry) => entry.mission_id === fleet.successorId && entry.identity_id === identity)!;
+      hosted.intercept = (request, process) => {
+        const response = process();
+        if (request.method !== "GET" || request.path !== `/v1/collaboration/missions/${fleet.successorId}/invitation` || response.status !== 200) return response;
+        const at = world.clock.now.toISOString();
+        const mission = hosted.missionView(hosted.missions.get(fleet.successorId)!);
+        return new Response(JSON.stringify({
+          mission: what === "mission" ? { ...mission, revoked_at: at } : mission,
+          grant: what === "grant" ? { ...hosted.grantView(grant), revoked_at: at } : hosted.grantView(grant),
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      };
+      const refused = await device.yes("fleet", "renew");
+      hosted.intercept = null;
+      expect(refused.code).toBe(1);
+      expect(refused.stderr).toContain("successor_mismatch");
+      expect(refused.stderr).toContain("revoked");
+      expect(grant.accepted_at).toBeNull();
+      expect((await status(device)).mission_id).toBe(fleet.directoryId);
+    });
+  }
+
+  test("a successor grant that is not observe+read: successor_mismatch at pickup, nothing accepted, the desk stays", async () => {
+    const fleet = await rolledOver();
+    const { device, world } = fleet;
+    await ok(device.run("fleet", "sync"));
+    await ok(device.yes("fleet", "renew"));
+    expect(JSON.parse(shownBytes(device)).request.target_mission_id).toBe(fleet.successorId);
+    // A holder of the bearer issues the request's grant in the successor, read-only.
+    const grantId = await issueOpenRequest(fleet, device, fleet.successorId, ["mission.read"]);
+    const refused = await device.yes("fleet", "renew");
+    expect(refused.code).toBe(1);
+    expect(refused.stderr).toContain("successor_mismatch");
+    expect(refused.stderr).toContain("not mission.observe+mission.read");
+    expect(world.hosted.grants.get(grantId)!.accepted_at).toBeNull();
+    expect((await status(device)).mission_id).toBe(fleet.directoryId);
+  });
+
+  test("a successor within its last hour is no successor: fleet status shows none", async () => {
+    const fleet = await rolledOver();
+    const { device, world } = fleet;
+    await ok(device.run("fleet", "sync"));
+    expect((await status(device)).successor).toMatchObject({ state: "announced", mission_id: fleet.successorId });
+    const ends = Date.parse(world.hosted.missions.get(fleet.successorId)!.expires_at);
+    world.advance(ends - HOUR - MINUTE - world.clock.now.getTime());
+    expect((await status(device)).successor).toMatchObject({ state: "announced", mission_id: fleet.successorId });
+    world.advance(2 * MINUTE);
+    expect((await status(device)).successor).toBeNull();
+  });
+
+  test("a joined desk refuses a join packet naming another door, even with that door's fingerprint typed (door_changed)", async () => {
+    const fleet = await bootstrapFleet();
+    const { device, world } = fleet;
+    const other = publicKeyBase64(generateKeyPair());
+    const door = { public_key: other, fingerprint: publicKeyFingerprint(other) };
+    const d1 = world.hosted.missions.get(fleet.directoryId)!;
+    const { path, grant_id } = await handJoinPacket(fleet, device, { mission_id: fleet.directoryId, mission_digest: d1.digest }, door);
+    const refused = await device.yes("fleet", "join", "--packet-file", path, "--door-fingerprint", door.fingerprint);
+    expect(refused.code).toBe(1);
+    expect(refused.stderr).toContain("door_changed");
+    expect(world.hosted.grants.get(grant_id)!.accepted_at).toBeNull();
+    const pins = await json(device.run("pin", "list", "--json"));
+    expect(pins.pins.map((pin: any) => pin.fingerprint)).toEqual([fleet.doorFingerprint]);
+  });
+
+  test("a join packet for a twin of the successor (same charter and end, another id) is refused: only the mission the notice names", async () => {
+    const fleet = await rolledOver();
+    const { device, world } = fleet;
+    await ok(device.run("fleet", "sync"));
+    const successor = world.hosted.missions.get(fleet.successorId)!;
+    const twin = await createMission(fleet, successor.descriptor, successor.expires_at);
+    expect(twin.mission_digest).toBe(fleet.successorDigest);
+    const { path, grant_id } = await handJoinPacket(fleet, device, twin);
+    const refused = await device.yes("fleet", "join", "--packet-file", path, "--door-fingerprint", fleet.doorFingerprint);
+    expect(refused.code).toBe(1);
+    expect(refused.stderr).toContain("directory_changed");
+    expect(world.hosted.grants.get(grant_id)!.accepted_at).toBeNull();
+    expect((await status(device)).mission_id).toBe(fleet.directoryId);
+  });
+
+  test("a join packet for a door-signed successor whose charter names another predecessor is refused", async () => {
+    const fleet = await bootstrapFleet();
+    const { device, hub, world } = fleet;
+    world.advance(HOUR);
+    const store = LobbyStore.open(hub.home);
+    const row = store.fleet.hub()!;
+    store.close();
+    const d1 = world.hosted.missions.get(fleet.directoryId)!;
+    const expiresAt = new Date(world.clock.now.getTime() + 30 * DAY - MINUTE).toISOString();
+    const target = await createMission(fleet, directoryDescriptor({ public_key: row.door_public_key, fingerprint: row.door_fingerprint },
+      { mission_id: newUuid(), mission_digest: `sha256:${"b".repeat(64)}` }), expiresAt);
+    await postAs(world, hub, fleet.directoryId, await doorSigned(fleet, {
+      from_mission_id: fleet.directoryId, from_mission_digest: d1.digest, from_expires_at: d1.expires_at,
+      to_mission_id: target.mission_id, to_mission_digest: target.mission_digest, to_expires_at: expiresAt, issued_at: world.clock.now.toISOString(),
+    }));
+    await ok(device.run("fleet", "sync"));
+    expect((await status(device)).successor).toMatchObject({ state: "announced", mission_id: target.mission_id });
+    const { path, grant_id } = await handJoinPacket(fleet, device, target);
+    const refused = await device.yes("fleet", "join", "--packet-file", path, "--door-fingerprint", fleet.doorFingerprint);
+    expect(refused.code).toBe(1);
+    expect(refused.stderr).toContain("successor_mismatch");
+    expect(refused.stderr).toContain("predecessor");
+    expect(world.hosted.grants.get(grant_id)!.accepted_at).toBeNull();
+    expect((await status(device)).mission_id).toBe(fleet.directoryId);
   });
 
   for (const sweepFirst of [false, true]) {
@@ -953,6 +1352,39 @@ describe("the stop", () => {
     const store = LobbyStore.open(hub.home);
     expect(store.fleet.hubDirectory(planned)).toBeNull();
     store.close();
+  });
+
+  test("a stop whose revoke beats an in-flight create: successor_unrecorded names the live orphan, nothing is revoked, retried or seated", async () => {
+    const fleet = await bootstrapFleet();
+    const { hub, world } = fleet;
+    world.advance(HOUR);
+    let planned = "";
+    world.hosted.intercept = (request, process) => {
+      if (request.method === "POST" && request.path === "/v1/collaboration/missions") {
+        world.hosted.intercept = null;
+        planned = JSON.parse(request.body).mission_id as string;
+        // Another terminal's stop: recorded, then its revoke of the pending successor found nothing (404), so it forgot the record.
+        const store = LobbyStore.open(hub.home);
+        store.fleet.setHubStopped(world.clock.now.toISOString());
+        store.fleet.dropPendingHubDirectory(planned);
+        store.close();
+      }
+      return process();
+    };
+    const posts = world.hosted.seen.length;
+    const result = await hub.yes("hub", "directory", "successor");
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("successor_unrecorded");
+    expect(result.stderr).toContain(`successor directory ${planned} was created on the service`);
+    expect(result.stderr).toContain(`POST /v1/collaboration/missions/${planned}/revoke`);
+    expect(result.stderr).not.toContain("created and recorded");
+    // The service holds it, live; this hub has no record, sent nothing after the create and revoked nothing.
+    expect(world.hosted.missions.get(planned)!.revoked_at).toBeNull();
+    expect(world.hosted.seen.slice(posts).map((seen) => `${seen.method} ${seen.path}`)).toEqual(["POST /v1/collaboration/missions"]);
+    const store = LobbyStore.open(hub.home);
+    expect(store.fleet.hubDirectory(planned)).toBeNull();
+    store.close();
+    expect(kindsIn(fleet, fleet.directoryId)).not.toContain("directory_successor");
   });
 
   test("a stop revokes a successor created but not announced; a stop while the prompt is open announces nothing", async () => {

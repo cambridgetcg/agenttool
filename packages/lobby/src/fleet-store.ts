@@ -1501,9 +1501,12 @@ export class FleetStore {
     this.db.query("DELETE FROM hub_directories WHERE mission_id = $mission_id AND state = 'pending'").run({ mission_id: missionId });
   }
 
-  markHubDirectoryCreated(missionId: string): void {
+  /** A pending successor confirmed created. False when no pending record was
+   * there to mark (a hub stop forgot it while the create was in flight). */
+  markHubDirectoryCreated(missionId: string): boolean {
     this.writeChain();
-    this.db.query("UPDATE hub_directories SET state = 'successor' WHERE mission_id = $mission_id AND state = 'pending'").run({ mission_id: missionId });
+    return this.db.query("UPDATE hub_directories SET state = 'successor' WHERE mission_id = $mission_id AND state = 'pending'")
+      .run({ mission_id: missionId }).changes > 0;
   }
 
   markHubDirectoryRevoked(missionId: string, at: string): void {
