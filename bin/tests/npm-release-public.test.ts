@@ -341,7 +341,9 @@ describe("npm authentication fails before any public residue", () => {
     ]);
     // The npm-* headers npm 11.17.0 sends for `npm stage publish`; no user agent claims to be npm.
     const exchangeHeaders = new Headers(accepted.calls[1]?.init.headers);
-    expect([...exchangeHeaders.keys()].sort()).toEqual(["accept", "authorization", "npm-auth-type", "npm-command"]);
+    const names: string[] = [];
+    exchangeHeaders.forEach((_value, name) => names.push(name));
+    expect(names.sort()).toEqual(["accept", "authorization", "npm-auth-type", "npm-command"]);
     expect([exchangeHeaders.get("npm-command"), exchangeHeaders.get("npm-auth-type")]).toEqual(["stage", "web"]);
     const publishing = fakeOidc({ status: 200, body: { token: NPM_TOKEN } });
     await assertTrustedPublisherExchange(spec, { ...publishing.options, npmCommand: "publish" });
