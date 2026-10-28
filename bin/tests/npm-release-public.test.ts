@@ -561,6 +561,7 @@ describe("npm authentication fails before any public residue", () => {
       expect(existsSync(logs as string)).toBe(false);
       expect(logged).toContain("npm's oidc log lines:\n1 verbose oidc Failed token exchange request with body message: package not found");
       expect(logged).toContain(`${eneedauth}\n`);
+      expect(logged).toContain("npm's debug log was removed with its temporary directory; only its oidc lines are kept (above)");
       expect(logged.join("\n")).not.toContain("verbose cli");
 
       logged.length = 0;
@@ -570,6 +571,7 @@ describe("npm authentication fails before any public residue", () => {
       expect(accepted).toEqual({ exitCode: 0, stdout: `${staged}\n` });
       expect(logged).toContain("npm's oidc log lines:\n1 verbose oidc Successfully retrieved and set token");
       expect(logged).toContain(`${staged}\n`);
+      expect(logged.join("\n")).not.toContain("debug log was removed");
     } finally {
       spy.mockRestore();
       await rm(directory, { recursive: true, force: true });

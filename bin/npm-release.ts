@@ -2766,7 +2766,7 @@ export function npmFailureMessage(
 /**
  * Runs npm once to stage or publish the prepared artifact. npm's debug log
  * goes to a fresh directory; its oidc lines are printed and the directory is
- * removed. npm's captured stdout is printed whether or not npm succeeded
+ * removed, which a failure says, since npm's own output names the log. npm's captured stdout is printed whether or not npm succeeded
  * (stderr is not captured and reaches the log as npm writes it), and a
  * failure refuses with npmFailureMessage.
  */
@@ -2799,7 +2799,11 @@ export async function runNpmPublication(
   // Keep npm's own record in the log, staged or not: with --json, npm
   // prints its error record there too.
   if (action === "stage") console.error(npmRun.stdout);
-  if (npmRun.exitCode !== 0) fail(npmFailureMessage(action, authentication, npmRun));
+  if (npmRun.exitCode !== 0) {
+    // npm's last stderr line names its complete log, which is gone by now.
+    console.error("npm's debug log was removed with its temporary directory; only its oidc lines are kept (above)");
+    fail(npmFailureMessage(action, authentication, npmRun));
+  }
   return npmRun;
 }
 
