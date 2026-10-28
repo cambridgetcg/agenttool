@@ -227,6 +227,38 @@ describe("the watcher", () => {
     expect(readMark(rungPath(world.doorbellHome, ROOM_A), ROOM_A)).toMatchObject({ seq: 3, cursor: "12", new: 2, state: "stopped" });
   });
 
+  test("a held burst on a stopped bell whose ring fails is not retried in a loop", async () => {
+    const world = makeDoorbellWorld();
+    world.listener();
+    // The message ring and the stopped ring are delivered; the held burst's ring fails.
+    const results = [{ ok: true, code: null }, { ok: true, code: null }, { ok: false, code: "ECONNREFUSED" }];
+    const rings: string[] = [];
+    const watcher = new Watcher({
+      doorbellHome: world.doorbellHome, lobbyHome: world.lobbyHome, roomId: ROOM_A, pid: WATCHER,
+      ring: async (text) => { rings.push(text); return results.shift() ?? { ok: true, code: null }; },
+      ownerGone: () => false, now: () => world.clock,
+    });
+    const tick = async (ms = WATCH_TICK_MS) => {
+      world.clock += ms;
+      await watcher.tick();
+    };
+    counts(world, 1, "10", 0, 0);
+    await tick();
+    counts(world, 2, "11", 1, 1);
+    await tick();
+    counts(world, 3, "12", 2, 2, { state: "stopped", reason: "cli_failed" });
+    await tick();
+    expect(rings).toHaveLength(2);
+    await tick(MIN_RING_GAP_MS);
+    expect(rings).toHaveLength(3);
+    expect(rings[2]).toContain("1 new table message(s) after cursor 11 (head 12)");
+    // The failed ring is logged and left to the next ring or the prompt note, not retried every tick.
+    for (let index = 0; index < 5; index += 1) await tick();
+    await tick(MIN_RING_GAP_MS);
+    expect(rings).toHaveLength(3);
+    expect(readMark(rungPath(world.doorbellHome, ROOM_A), ROOM_A)).toMatchObject({ seq: 3, cursor: "11", new: 1, state: "stopped" });
+  });
+
   test("a grant that lapsed before the first catch-up (no head yet) still rings once", async () => {
     const { world, rings, tick } = watcherWorld();
     counts(world, 1, "0", 0, 0, { base_cursor: null, head_cursor: null, state: "grant-lapsed", reason: "no_seat" });
