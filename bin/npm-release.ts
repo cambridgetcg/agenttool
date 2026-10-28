@@ -15,7 +15,8 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
-import { appendFile, copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { appendFile, copyFile, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
 import { inspectNpmTarball } from "./build-love-packages";
@@ -724,13 +725,16 @@ export function planDispatch(
  * the package's visibility (libnpmpublish ensureProvenanceGeneration).
  * `--ignore-scripts` is a global npm option; a tarball spec runs no scripts
  * anyway. `--json` makes npm print the stage id in a parseable record.
+ * `--logs-dir` sends npm's debug log, the only place its verbose `oidc` lines
+ * reach without raising the log level, to a directory publish reads and removes.
  */
 export function npmPublishArguments(
   action: "stage" | "publish",
   artifactPath: string,
   npmTag: string,
+  logsDirectory: string,
 ): string[] {
-  const shared = ["--access", "public", "--tag", npmTag, "--provenance", "--ignore-scripts"];
+  const shared = ["--access", "public", "--tag", npmTag, "--provenance", "--ignore-scripts", "--logs-dir", logsDirectory];
   return action === "stage"
     ? ["stage", "publish", artifactPath, ...shared, "--json"]
     : ["publish", artifactPath, ...shared];
@@ -2485,6 +2489,109 @@ export function stageApprovalSummary(staged: StageReceipt): string {
   ].join("\n");
 }
 
+/**
+ * The environment npm runs in. setup-node writes `_authToken=${NODE_AUTH_TOKEN}`
+ * into the job's npmrc, and npm 11.17.0 keeps an undefined variable as that
+ * literal text (@npmcli/config lib/env-replace.js), which it would send as a
+ * bearer token after signing provenance. A trusted run therefore sets it
+ * empty instead of deleting it: an empty token is no credential
+ * (getCredentialsByURI), so when npm's OIDC exchange yields no token npm
+ * stops with ENEEDAUTH before libnpmpublish signs provenance
+ * (lib/commands/publish.js).
+ */
+export function npmPublishEnvironment(
+  authentication: AuthenticationMode,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): Record<string, string | undefined> {
+  const npmEnvironment = { ...environment };
+  if (authentication === "bootstrap") {
+    if (!npmEnvironment.NODE_AUTH_TOKEN) fail("reviewed bootstrap publication requires NODE_AUTH_TOKEN");
+  } else {
+    npmEnvironment.NODE_AUTH_TOKEN = "";
+    if (!npmEnvironment.ACTIONS_ID_TOKEN_REQUEST_URL || !npmEnvironment.ACTIONS_ID_TOKEN_REQUEST_TOKEN) {
+      fail("trusted publication requires the GitHub OIDC request environment");
+    }
+  }
+  return npmEnvironment;
+}
+
+/** npm's `oidc` lines, at any level, from one of its debug logs (`<count> <level> oidc <message>`). */
+export function oidcLogLines(debugLog: string): string[] {
+  return debugLog.split(/\r?\n/).filter((line) => /^\d+ [a-z]+ oidc /.test(line));
+}
+
+/**
+ * The `oidc` lines of every debug log npm wrote to a --logs-dir. In npm
+ * 11.17.0 they hold only lib/utils/oidc.js's fixed texts and the error
+ * messages GitHub or the registry returned, and npm redacts every log line.
+ */
+export async function npmOidcLogLines(logsDirectory: string): Promise<string[]> {
+  const logs = (await readdir(logsDirectory)).filter((name) => /-debug-\d+\.log$/.test(name)).sort();
+  const lines: string[] = [];
+  for (const name of logs) lines.push(...oidcLogLines(await readFile(join(logsDirectory, name), "utf8")));
+  return lines;
+}
+
+/** Why one npm run failed, with npm's own `--json` error code when it printed one. */
+export function npmFailureMessage(
+  action: "stage" | "publish",
+  authentication: AuthenticationMode,
+  run: CommandResult,
+): string {
+  const verb = action === "stage" ? "npm stage publish" : "npm publish";
+  let code: unknown;
+  try {
+    code = (JSON.parse(run.stdout) as { error?: { code?: unknown } }).error?.code;
+  } catch {
+    code = undefined;
+  }
+  if (authentication === "trusted" && code === "ENEEDAUTH") {
+    return `${verb} exited ${run.exitCode} (ENEEDAUTH): npm's OIDC exchange gave it no token (its oidc lines are above), so it stopped before signing provenance or staging`;
+  }
+  const label = typeof code === "string" ? ` (${code})` : "";
+  return `${verb} exited ${run.exitCode}${label}; npm's output is above. Check ${action === "stage" ? "`npm stage list`" : "the registry"} before any retry`;
+}
+
+/**
+ * Runs npm once to stage or publish the prepared artifact. npm's debug log
+ * goes to a fresh directory; its oidc lines are printed and the directory is
+ * removed. npm's captured stdout is printed whether or not npm succeeded
+ * (stderr is not captured and reaches the log as npm writes it), and a
+ * failure refuses with npmFailureMessage.
+ */
+export async function runNpmPublication(
+  action: "stage" | "publish",
+  authentication: AuthenticationMode,
+  artifactPath: string,
+  npmTag: string,
+  npm = "npm",
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): Promise<CommandResult> {
+  const npmEnvironment = npmPublishEnvironment(authentication, environment);
+  const logsDirectory = await mkdtemp(join(tmpdir(), "agenttool-npm-logs-"));
+  let npmRun: CommandResult;
+  let oidcLines: string[];
+  try {
+    npmRun = await command(npm, npmPublishArguments(action, artifactPath, npmTag, logsDirectory), {
+      env: npmEnvironment,
+      capture: action === "stage",
+      allowFailure: true,
+    });
+    oidcLines = await npmOidcLogLines(logsDirectory).catch(() => ["(npm's debug log could not be read)"]);
+  } finally {
+    await rm(logsDirectory, { recursive: true, force: true });
+  }
+  // npm reports how its OIDC exchange went only at verbose level, which
+  // reaches its debug log but not this job's log.
+  if (oidcLines.length > 0) console.error(["npm's oidc log lines:", ...oidcLines].join("\n"));
+  else if (authentication === "trusted") console.error("npm's debug log has no oidc lines");
+  // Keep npm's own record in the log, staged or not: with --json, npm
+  // prints its error record there too.
+  if (action === "stage") console.error(npmRun.stdout);
+  if (npmRun.exitCode !== 0) fail(npmFailureMessage(action, authentication, npmRun));
+  return npmRun;
+}
+
 async function publish(
   receiptPath: string,
   authentication: AuthenticationMode,
@@ -2513,22 +2620,8 @@ async function publish(
     tarball = await pollRegistry(receipt, npmTag);
     status = "already_published_exact";
   } else {
-    const publishEnvironment = { ...process.env };
-    if (authentication === "bootstrap") {
-      if (!publishEnvironment.NODE_AUTH_TOKEN) fail("reviewed bootstrap publication requires NODE_AUTH_TOKEN");
-    } else {
-      delete publishEnvironment.NODE_AUTH_TOKEN;
-      if (!publishEnvironment.ACTIONS_ID_TOKEN_REQUEST_URL || !publishEnvironment.ACTIONS_ID_TOKEN_REQUEST_TOKEN) {
-        fail("trusted publication requires the GitHub OIDC request environment");
-      }
-    }
-    const npmRun = await command("npm", npmPublishArguments(action, artifactPath, npmTag), {
-      env: publishEnvironment,
-      capture: action === "stage",
-    });
+    const npmRun = await runNpmPublication(action, authentication, artifactPath, npmTag);
     if (action === "stage") {
-      // Keep npm's own record in the log even if it cannot be parsed below.
-      console.error(npmRun.stdout);
       // Staged, not published: no registry poll and no receipt result.
       const staged = stageReceipt(
         receipt,

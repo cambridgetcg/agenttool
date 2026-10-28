@@ -1,4 +1,4 @@
-import { describe, expect, setDefaultTimeout, test } from "bun:test";
+import { describe, expect, setDefaultTimeout, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -22,7 +22,11 @@ import {
   assertReleaseTagObject,
   historicalLoveManifestPath,
   isReleaseRemote,
+  npmFailureMessage,
+  npmOidcLogLines,
   npmPublishArguments,
+  npmPublishEnvironment,
+  oidcLogLines,
   packGateScripts,
   parseAuthentication,
   parsePublishMode,
@@ -34,6 +38,7 @@ import {
   readStageReceipt,
   releaseSpec,
   releaseTagMessage,
+  runNpmPublication,
   stageApprovalSummary,
   stageReceipt,
   validatePackageManifest,
@@ -198,11 +203,13 @@ describe("staged publication", () => {
   });
 
   test("passes the npm 11.17.0 flags for each action", () => {
-    expect(npmPublishArguments("stage", "/tmp/a.tgz", "next")).toEqual([
-      "stage", "publish", "/tmp/a.tgz", "--access", "public", "--tag", "next", "--provenance", "--ignore-scripts", "--json",
+    expect(npmPublishArguments("stage", "/tmp/a.tgz", "next", "/tmp/logs")).toEqual([
+      "stage", "publish", "/tmp/a.tgz", "--access", "public", "--tag", "next", "--provenance", "--ignore-scripts",
+      "--logs-dir", "/tmp/logs", "--json",
     ]);
-    expect(npmPublishArguments("publish", "/tmp/a.tgz", "latest")).toEqual([
+    expect(npmPublishArguments("publish", "/tmp/a.tgz", "latest", "/tmp/logs")).toEqual([
       "publish", "/tmp/a.tgz", "--access", "public", "--tag", "latest", "--provenance", "--ignore-scripts",
+      "--logs-dir", "/tmp/logs",
     ]);
   });
 
@@ -271,6 +278,126 @@ describe("staged publication", () => {
     expect(summary).toContain(`shasum -a 256 agenttool-math-cards-0.1.0-dev.2-${STAGE_ID}.tgz`);
     expect(summary).toContain(`# expect ${receipt.artifact.sha256}`);
     expect(summary).toContain(`npx --yes npm@11.17.0 stage approve ${STAGE_ID}`);
+  });
+});
+
+describe("npm authentication fails before any public residue", () => {
+  const OIDC_ENVIRONMENT = {
+    ACTIONS_ID_TOKEN_REQUEST_URL: "https://token.actions.example/_apis/idtoken?api-version=2.0",
+    ACTIONS_ID_TOKEN_REQUEST_TOKEN: "request-token-fixture",
+  };
+
+  async function refusal(promise: Promise<unknown>): Promise<string> {
+    const error = await promise.then(() => undefined, (caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Error);
+    return (error as Error).message;
+  }
+
+  test("a trusted run hands npm an empty NODE_AUTH_TOKEN, so the npmrc placeholder becomes no credential", () => {
+    // Deleting it left setup-node's `_authToken=${NODE_AUTH_TOKEN}` as literal text, sent as a bearer (run 39288082185).
+    const trusted = npmPublishEnvironment("trusted", { ...OIDC_ENVIRONMENT, NODE_AUTH_TOKEN: "stale" });
+    expect(Object.hasOwn(trusted, "NODE_AUTH_TOKEN")).toBe(true);
+    expect(trusted.NODE_AUTH_TOKEN).toBe("");
+    expect(npmPublishEnvironment("trusted", OIDC_ENVIRONMENT).NODE_AUTH_TOKEN).toBe("");
+    expect(() => npmPublishEnvironment("trusted", {})).toThrow("requires the GitHub OIDC request environment");
+    expect(npmPublishEnvironment("bootstrap", { NODE_AUTH_TOKEN: "reviewed" }).NODE_AUTH_TOKEN).toBe("reviewed");
+    expect(() => npmPublishEnvironment("bootstrap", { ...OIDC_ENVIRONMENT, NODE_AUTH_TOKEN: "" })).toThrow("requires NODE_AUTH_TOKEN");
+  });
+
+  test("reads only npm's oidc lines from its debug logs", async () => {
+    const log = [
+      "0 verbose cli /usr/bin/node /usr/bin/npm",
+      "12 verbose oidc Failed token exchange request with body message: package not found",
+      "13 silly oidc Skipped because no id_token available\r",
+      "14 http fetch POST 404 https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/@a%2fb 80ms",
+      "verbose oidc an unprefixed line",
+      "",
+    ].join("\n");
+    expect(oidcLogLines(log)).toEqual([
+      "12 verbose oidc Failed token exchange request with body message: package not found",
+      "13 silly oidc Skipped because no id_token available",
+    ]);
+    const directory = await mkdtemp(join(tmpdir(), "npm-oidc-log-test-"));
+    try {
+      await writeFile(join(directory, "2026-10-28T10_00_00_000Z-debug-1.log"), "40 verbose oidc Successfully retrieved and set token\n");
+      await writeFile(join(directory, "2026-10-28T10_00_00_000Z-debug-0.log"), log);
+      await writeFile(join(directory, "notes.txt"), "1 verbose oidc not npm's log\n");
+      expect(await npmOidcLogLines(directory)).toEqual([...oidcLogLines(log), "40 verbose oidc Successfully retrieved and set token"]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("names npm's own error code, and what ENEEDAUTH means in a trusted run", () => {
+    const eneedauth = JSON.stringify({ error: { code: "ENEEDAUTH", summary: "This command requires you to be logged in to https://registry.npmjs.org/" } });
+    expect(npmFailureMessage("stage", "trusted", { exitCode: 1, stdout: eneedauth })).toBe(
+      "npm stage publish exited 1 (ENEEDAUTH): npm's OIDC exchange gave it no token (its oidc lines are above), so it stopped before signing provenance or staging",
+    );
+    expect(npmFailureMessage("stage", "trusted", { exitCode: 1, stdout: JSON.stringify({ error: { code: "E403" } }) }))
+      .toBe("npm stage publish exited 1 (E403); npm's output is above. Check `npm stage list` before any retry");
+    expect(npmFailureMessage("publish", "bootstrap", { exitCode: 1, stdout: "" }))
+      .toBe("npm publish exited 1; npm's output is above. Check the registry before any retry");
+  });
+
+  test("a fake npm sees an empty token, and its stdout, oidc lines, and failure reach the log", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "npm-fake-test-"));
+    const npm = join(directory, "npm");
+    const record = join(directory, "record.txt");
+    await writeFile(npm, [
+      "#!/bin/bash",
+      "# Stands in for npm 11.17.0: records its token and --logs-dir, writes a debug log there, prints, exits.",
+      'logs=""',
+      'while [ "$#" -gt 0 ]; do if [ "$1" = "--logs-dir" ]; then logs="$2"; shift; fi; shift; done',
+      'printf "%s\\n%s\\n" "${NODE_AUTH_TOKEN-unset}" "$logs" > "$FAKE_NPM_RECORD"',
+      'printf "%s\\n" "0 verbose cli /usr/bin/node /usr/bin/npm" "1 verbose oidc $FAKE_NPM_OIDC" > "$logs/2026-10-28T10_00_00_000Z-debug-0.log"',
+      'printf "%s\\n" "$FAKE_NPM_STDOUT"',
+      'exit "$FAKE_NPM_EXIT"',
+      "",
+    ].join("\n"), { mode: 0o755 });
+    const environment = (exit: number, oidc: string, stdout: string) => ({
+      PATH: process.env.PATH,
+      ...OIDC_ENVIRONMENT,
+      NODE_AUTH_TOKEN: "stale",
+      FAKE_NPM_RECORD: record,
+      FAKE_NPM_EXIT: String(exit),
+      FAKE_NPM_OIDC: oidc,
+      FAKE_NPM_STDOUT: stdout,
+    });
+    const logged: string[] = [];
+    const spy = spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      logged.push(args.map(String).join(" "));
+    });
+    try {
+      const eneedauth = JSON.stringify({ error: { code: "ENEEDAUTH", summary: "This command requires you to be logged in to https://registry.npmjs.org/" } });
+      const failed = await refusal(runNpmPublication("stage", "trusted", "/tmp/a.tgz", "next", npm,
+        environment(1, "Failed token exchange request with body message: package not found", eneedauth)));
+      expect(failed).toStartWith("npm stage publish exited 1 (ENEEDAUTH)");
+      const [token, logs] = (await readFile(record, "utf8")).split("\n");
+      expect(token).toBe("");
+      expect(existsSync(logs as string)).toBe(false);
+      expect(logged).toContain("npm's oidc log lines:\n1 verbose oidc Failed token exchange request with body message: package not found");
+      expect(logged).toContain(`${eneedauth}\n`);
+      expect(logged.join("\n")).not.toContain("verbose cli");
+
+      logged.length = 0;
+      const staged = JSON.stringify({ "@agenttool/relational-geometry": { stageId: STAGE_ID } });
+      const accepted = await runNpmPublication("stage", "trusted", "/tmp/a.tgz", "next", npm,
+        environment(0, "Successfully retrieved and set token", staged));
+      expect(accepted).toEqual({ exitCode: 0, stdout: `${staged}\n` });
+      expect(logged).toContain("npm's oidc log lines:\n1 verbose oidc Successfully retrieved and set token");
+      expect(logged).toContain(`${staged}\n`);
+    } finally {
+      spy.mockRestore();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("publish runs npm only through runNpmPublication", () => {
+    const script = readFileSync(join(ROOT, "bin", "npm-release.ts"), "utf8");
+    const body = script.split("\nasync function publish(")[1]?.split("\nasync function mirror(")[0] ?? "";
+    expect(body).toContain("await runNpmPublication(action, authentication, artifactPath, npmTag)");
+    expect(body).not.toContain("NODE_AUTH_TOKEN");
+    expect(script).not.toContain("delete publishEnvironment.NODE_AUTH_TOKEN");
   });
 });
 
@@ -487,4 +614,5 @@ describe("the public publish workflow", () => {
     expect(source).not.toContain("--otp");
     expect(source).not.toMatch(/\n\s+(?:push|pull_request|schedule):/u);
   });
+
 });
