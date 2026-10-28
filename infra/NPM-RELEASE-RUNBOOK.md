@@ -27,13 +27,13 @@ Its `publish-npm.yml` stages each exact artifact with `npm stage publish`, and
 the version is not public on npm until a maintainer approves the stage with
 2FA. Follow the [public release path](#public-release-path-from-2026-10-12).
 This private repository no longer has a publish workflow for these packages,
-but two older credentials can still publish them directly until Yu closes
-them: the trusted-publisher configurations that name this repository, which
-the [trust lockdown](#npm-trust-lock-down-now-enable-per-release-yu-trusted-device)
-revokes, and the scope-wide, bypass-2FA `NPM_TOKEN` in this repository's
-`npm-bootstrap` environment (see
-[public repository settings](#public-repository-settings-yu-once)). Do not run
-`npm publish` from a normal local shell.
+but the trusted-publisher configurations that name it can still publish 22 of
+them directly until Yu revokes them (see the
+[trust lockdown](#npm-trust-lock-down-now-enable-per-release-yu-trusted-device)).
+The scope-wide, bypass-2FA `NPM_TOKEN` that this repository's `npm-bootstrap`
+environment held was deleted on 2026-10-28; the token itself awaits revocation
+on npm (see [public repository settings](#public-repository-settings-yu-once)).
+Do not run `npm publish` from a normal local shell.
 
 The Gospel literary edition has one separate, exact-name route:
 [`publish-gospel.yml`](../.github/workflows/publish-gospel.yml), documented in
@@ -283,8 +283,9 @@ SHA-256, integrity) in its summary. Nothing is mirrored, staged, or published.
 First Yu runs `bash npm-trust-repoint.sh enable <key>`
 ([enable](#enable-one-package-just-before-its-release)); the stage and its
 approval must follow within 48 hours. Then dispatch the same inputs with
-`-f dry_run=false` (`publish_mode` defaults to `stage`). The `npm-bootstrap` environment admits only release tags and has no
-required reviewer (owner decision, 2026-10-13).
+`-f dry_run=false` (`publish_mode` defaults to `stage`). The `npm-bootstrap`
+environment admits only release tags and has no required reviewer (owner
+decision, 2026-10-13).
 The job re-checks the bytes, creates or reuses the tag's GitHub Release in the
 public repository with the exact tarball, then runs `npm stage publish`. Its
 summary shows the stage id, the SHA-256 to expect, and the commands below;
@@ -341,11 +342,16 @@ Since 2026-10-02 npm expires a new trust configuration 48 hours after creation
 unless its first publish succeeds (GitHub changelog, "Unvalidated npm trusted
 publishing configurations now expire", 2026-10-02; npm's trusted-publishing
 page: it "must complete its first successful publish within 2 days"). An
-expired configuration stays listed but can no longer authorize or be edited,
-and `npm trust list` (npm 11.17.0) does not show the expiry. Trust is therefore
-never created ahead of a release: the script that once re-pointed all 38
-packages in one run now has two separate modes, and without one it prints its
-usage and does nothing.
+expired configuration "can no longer be used or edited" and stays visible in
+the package's trusted-publisher settings on npmjs.com; npm's page says to
+"delete the expired configuration, create a new one" and publish within 2
+days. Whether `npm trust list` still lists an expired configuration, and
+whether `npm trust revoke` can delete one, are unverified; npm 11.17.0's
+listing prints only id, type, file, repository, environment and permissions,
+so it never shows the expiry. Trust is therefore never created ahead of a
+release: the script that once re-pointed all 38 packages in one run now has
+two separate modes, and without one it prints its usage and does nothing.
+`DRY_RUN` must be `1` or `0`; any other value is refused.
 
 [`npm-trust-repoint.sh`](../docs/npm-trust-repoint.sh) needs only Node with
 npx, makes every npm call with `npx --yes npm@11.17.0`, pauses 2 seconds
@@ -383,19 +389,58 @@ It creates no configuration. It revokes every configuration that names
 `createPackage` (direct `npm publish`), whatever the repository. It keeps a
 GitHub configuration of any other repository whose only permission is
 `createStagedPackage`, such as Xenia's own stage route or one made by `enable`.
-Anything else (another provider, unknown permissions, an unreadable listing) is
-left alone and reported, and the run exits non-zero. The final check fails if
-any package still names the old repository or allows direct publish.
+Anything else (another provider, unknown permissions such as npm's separate
+dist-tag option, an unreadable listing) is left alone and reported, and the run
+exits non-zero. The final check passes a package only when its listing
+afterwards is empty or stage-only, so a listing or classifier that fails also
+fails the run. Both a dry run and a real run end by listing the stage-only
+trust that stays, with its repository, file and environment: check that each
+one is expected.
 
 On 2026-10-19 the listing showed 22 packages trusting `cambridgetcg/agenttool`
 `publish-npm.yml` in `npm-bootstrap` with `createPackage` and
 `createStagedPackage`, and 16 with none. Until they are revoked, a workflow file
 of that name added to the private repository again could publish them
-directly. The nine outside packages were not listed then; read their plan in
-the dry run. A route outside the public one whose configuration allowed direct
-publish (Xenia's, if so) needs a new stage-only configuration of its own just
-before its next release. A re-run finds nothing more to revoke and sets the
-same access again.
+directly. A re-run finds nothing more to revoke and sets the same access again.
+
+**What lockdown closes outside the public route.** The nine outside packages
+were not listed on 2026-10-19, so their trust is unknown: read their lines in
+the dry-run plan before the real run. Their workflows (read through the GitHub
+API on 2026-10-28) and npm's publisher records (anonymous registry reads, same
+day) show:
+
+- yutabase (`cambridgetcg/yutabase` `publish-npm.yml`, environment
+  `npm-bootstrap`), `@agenttool/hf-kingdom-lab` (`cambridgetcg/hf-kingdom-lab`
+  `publish-npm.yml`, environment `npm-release`) and the three `@rhetorlint`
+  packages (`cambridgetcg/rhetorlint-spec` `release.yml`, environment
+  `npm-release`, through `scripts/publish-npm-ci.mjs`) run a direct
+  `npm publish` over OIDC. Trust that lets them work allows direct publish, so
+  lockdown revokes it and those routes stop. yutabase 0.1.0-candidate.3 was
+  published that way (npm records GitHub Actions, trusted publisher
+  `oidc:ea1f7fe7…`, no approver), so it has such a configuration. Every
+  hf-kingdom-lab and RhetorLint version was published by the `agenttool`
+  user, so whether those have trust is unknown. A stage-only configuration
+  alone does not bring such a route back: its workflow must first change to
+  `npm stage publish` (or be retired; Yu decides), and the configuration made
+  for it starts its own 48-hour clock.
+- `@agenttool/xenia` stages through `cambridgetcg/xenia` `stage-xenia.yml`
+  (environment `npm-bootstrap`). Its 0.1.0-beta.4 to beta.7 went through
+  trusted publisher `oidc:8246391c…` and were approved by `agenttool`, so that
+  configuration is validated. Lockdown keeps it if it is stage-only. If it also
+  allows direct publish, lockdown revokes a validated configuration, and the
+  next Xenia stage needs a new one made just before it.
+- `@agenttool/gospel-of-the-logos` was published by this repository's
+  `publish-gospel.yml`. Any trust it has names `cambridgetcg/agenttool`, so
+  lockdown revokes it, and any re-run would revoke it again: that route stays
+  closed.
+
+`enable` refuses these nine, so a new stage-only configuration for one of them
+is made by hand, just before its stage, for example for Xenia:
+
+```bash
+npx --yes npm@11.17.0 trust github @agenttool/xenia --repo cambridgetcg/xenia \
+  --file stage-xenia.yml --env npm-bootstrap --allow-stage-publish --yes
+```
 
 Disallowing tokens is required, not optional. npm's 2FA settings page says a
 bypass-2FA token "will bypass 2FA requirements for publishing, regardless of
@@ -407,12 +452,17 @@ trusted-publishing page says the setting "only affects traditional token
 authentication" and that trusted publishers "will continue to work normally",
 so OIDC staging keeps working, and Yu can still publish interactively with
 2FA (the 2FA page: maintainers "must publish interactively"). npm suggests
-restricting tokens only after trusted publishing has been seen to work; here
-the two token routes, `publish-gospel.yml` and whitehack's
-`publish-whitehack.yml`, lost their `NPM_TOKEN` secrets on 2026-10-28, so
-nothing in use is lost by doing it first. npm has no command to read the
-setting back: after the run, open one package's Settings page on npmjs.com and
-check that "Require two-factor authentication and disallow tokens" is selected.
+restricting tokens only after trusted publishing has been seen to work. Here no
+token route is still usable: the token routes (this repository's
+`publish-gospel.yml`, whitehack's `publish-whitehack.yml` and xenia's
+`publish-xenia-surface.yml`) have no `NPM_TOKEN` secret in their environment or
+repository (read 2026-10-28); the first two lost theirs that day. So
+disallowing tokens first loses no token route; the npm tokens themselves still
+await revocation by Yu on npmjs.com. The OIDC routes above are what lockdown
+can stop, through its revokes, not through this setting. npm has no command to
+read the setting back: after the run, open one package's Settings page on
+npmjs.com and check that "Require two-factor authentication and disallow
+tokens" is selected.
 
 ### Enable one package (just before its release)
 
@@ -435,18 +485,40 @@ $NPM trust github @agenttool/<key> --repo cambridgetcg/agenttool-packages \
 $NPM trust list @agenttool/<key> --json   # saved under trust-after/; must be exactly the target
 ```
 
-There is deliberately no `--allow-publish`. A package that already has exactly
-the target is left as it is; one with any other configuration is refused (run
-lockdown first). Run `enable` only once the package's release tag exists on
-the public repository and its CI run is green. The script then prints the
-deadline, 48 hours from creation, and what must happen before it: dispatch the
-tag with `dry_run: false` ([step 6](#6-stage)) and approve the stage with 2FA
-([step 7](#7-approve-yu-on-the-trusted-device)). Whether a stage that is not
-yet approved validates the configuration is undocumented, so approve within
-the 48 hours. If the deadline passes first, revoke the configuration
+There is deliberately no `--allow-publish`. A package with any configuration
+other than exactly the target is refused (run lockdown first). That includes
+stage-only trust of the public repository with another workflow file or
+environment, which npm's OIDC exchange would not match. Run `enable` only once
+the package's release tag exists on the public repository and its CI run is
+green. When it creates the configuration, the script writes the deadline, 48
+hours later, to `expires-by.txt` in its record directory before anything else
+can fail. It then prints the deadline and what must happen before it: dispatch
+the tag with `dry_run: false` ([step 6](#6-stage)) and approve the stage with
+2FA ([step 7](#7-approve-yu-on-the-trusted-device)). Whether a stage that is
+not yet approved validates the configuration is undocumented, so approve
+within the 48 hours. If the listing after creation is not exactly the target,
+the script prints a revoke command for each configuration listed and exits
+non-zero: do not dispatch.
+
+A package that already has exactly the target is left as it is. npm shows
+neither when that configuration was made nor whether it has expired. The
+script prints the deadline from the newest earlier `enable` record beside its
+own record directory, if there is one, and says to revoke and re-enable before
+dispatching unless a stage through it was approved or it is known to be under
+48 hours old. A dispatch through an expired configuration fails at npm, and
+can leave a public GitHub Release and a Rekor entry behind, as
+[run 39288082185](https://github.com/cambridgetcg/agenttool-packages/actions/runs/39288082185)
+did with no configuration at all.
+
+If the deadline passes first, revoke the configuration
 (`$NPM trust revoke @agenttool/<key> --id <id>`, with the id the script
-printed) and run `enable` again just before the release; `npm trust list`
-does not say that it expired.
+printed) and run `enable` again just before the release. If npm refuses to
+revoke an expired configuration, delete it on the package's Settings page on
+npmjs.com, as npm's page says to, and run `enable` again. If it can be neither
+revoked nor deleted and still appears in the listing, `enable` keeps treating
+it as the target: confirm the expiry on the Settings page, create the target
+by hand with the `trust github` command above (whether npm accepts a second
+identical configuration is unverified), and stage within 48 hours.
 
 The first package is the canary: `@agenttool/relational-geometry`, staged by
 re-dispatching its existing tag `relational-geometry-v0.1.0-dev.1`. If that
@@ -483,8 +555,9 @@ token that cannot publish:
    `-f authentication=trusted` to verify (step 8).
 6. Disallow tokens for it now:
    `npx --yes npm@11.17.0 access set mfa=publish @agenttool/local-starter`.
-   Add `local-starter` to the script (its `PACKAGES` list and counts) and
-   drop its exclusion in `bin/tests/npm-trust-repoint.test.ts`, so lockdown
+   Add `local-starter` to the script (its `PACKAGES` list and counts), remove
+   `enable`'s Local Starter refusal from the script, and drop its exclusion and
+   its refusal case in `bin/tests/npm-trust-repoint.test.ts`, so lockdown
    covers it and [enable](#enable-one-package-just-before-its-release) can give
    it stage-only trust just before its next release; created earlier, that
    trust would expire unused.
@@ -494,10 +567,10 @@ publicly visible from staging onward; whether it also takes the package's
 `latest` tag is unverified. If npm refuses to stage a new package, the fallback
 is `-f publish_mode=publish` with a **Read and write (publish and stage)**
 token with Bypass 2FA, again on the `@agenttool` scope for a day. That token
-can create any new `@agenttool` package name, though not publish the 47
-existing ones once lockdown has set them to disallow tokens; delete it
-straight after the run. The release tool refuses `publish_mode: publish` for
-any `trusted` run.
+can create any new `@agenttool` package name, though not publish the 43
+existing `@agenttool` packages once lockdown has set them to disallow tokens;
+delete it straight after the run. The release tool refuses
+`publish_mode: publish` for any `trusted` run.
 
 ## Public repository settings (Yu, once)
 
@@ -580,8 +653,7 @@ package, just before its release):
 | Allowed action | `npm stage publish` only (`--allow-stage-publish`, no `--allow-publish`) |
 
 Until 2026-10-12 the repository was `agenttool` and the allowed action
-`npm publish`; that private workflow no longer exists, but on 2026-10-19 22
-packages still trusted it until the [lockdown](#npm-trust-lock-down-now-enable-per-release-yu-trusted-device) revokes them.
+`npm publish`; that private publisher no longer exists.
 
 The Environment field is optional in npm. Leaving it blank does not itself
 break this workflow, but setting it to the exact, case-sensitive
