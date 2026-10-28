@@ -339,6 +339,13 @@ describe("npm authentication fails before any public residue", () => {
       ["GET", "https://token.actions.example/_apis/idtoken?api-version=2.0&audience=npm%3Aregistry.npmjs.org", "Bearer request-token-fixture"],
       ["POST", "https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/@agenttool%2frelational-geometry", `Bearer ${ID_TOKEN}`],
     ]);
+    // The npm-* headers npm 11.17.0 sends for `npm stage publish`; no user agent claims to be npm.
+    const exchangeHeaders = new Headers(accepted.calls[1]?.init.headers);
+    expect([...exchangeHeaders.keys()].sort()).toEqual(["accept", "authorization", "npm-auth-type", "npm-command"]);
+    expect([exchangeHeaders.get("npm-command"), exchangeHeaders.get("npm-auth-type")]).toEqual(["stage", "web"]);
+    const publishing = fakeOidc({ status: 200, body: { token: NPM_TOKEN } });
+    await assertTrustedPublisherExchange(spec, { ...publishing.options, npmCommand: "publish" });
+    expect(new Headers(publishing.calls[1]?.init.headers).get("npm-command")).toBe("publish");
 
     const untrusted = fakeOidc({ status: 404, body: { message: `no trusted publisher for ${ID_TOKEN}\n::warning::x` } });
     const message = await refusal(assertTrustedPublisherExchange(spec, untrusted.options));

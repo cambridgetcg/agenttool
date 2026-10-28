@@ -1959,7 +1959,7 @@ async function checkTrust(
   ensureWorkflowContext();
   const { spec, version, action } = await plannedDispatch(packageKey, authentication, npmTag, mode);
   const exchange = trustedPublisherCheckNeeded(authentication, action);
-  if (exchange) await assertTrustedPublisherExchange(spec);
+  if (exchange) await assertTrustedPublisherExchange(spec, { npmCommand: action === "publish" ? "publish" : "stage" });
   console.log(JSON.stringify({
     package: `${spec.name}@${version}`,
     authentication,
@@ -2661,6 +2661,8 @@ export async function assertTrustedPublisherExchange(
     environment?: Readonly<Record<string, string | undefined>>;
     fetch?: OidcFetch;
     mask?: (secret: string) => void;
+    /** The npm command the run will make: `npm stage publish` is `stage`. */
+    npmCommand?: "stage" | "publish";
   } = {},
 ): Promise<void> {
   const environment = options.environment ?? process.env;
@@ -2690,7 +2692,16 @@ export async function assertTrustedPublisherExchange(
   try {
     exchanged = await oidcFetch(exchangeUrl, {
       method: "POST",
-      headers: { accept: "application/json", authorization: `Bearer ${idToken}` },
+      // npm's own npm-* headers on this request (npm-registry-fetch
+      // getHeaders): its top-level command and its auth-type default. npm
+      // sets no npm-session, and no npm-scope outside a scoped project. The
+      // user agent stays this tool's: it is not npm.
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${idToken}`,
+        "npm-auth-type": "web",
+        "npm-command": options.npmCommand ?? "stage",
+      },
     });
   } catch {
     fail("npm's OIDC token exchange did not answer; dispatch again later");
