@@ -544,7 +544,14 @@ export async function planFleetRenew(ctx: FleetContext): Promise<{ plan: FleetRe
   const secrets = DeskSecrets.open(ctx.home);
 
   // 1. Pick up the grant the hub issued for this desk's newest request, if any.
-  const newest = fleet.deskDirectoryRenewals()[0];
+  // A request still open for a directory this desk has since left (it moved
+  // by a fallback `fleet join` meanwhile) is stale: its grant would be in a
+  // directory this desk does not return to. It is neither picked up nor
+  // waited on; a fresh request is posted from this desk's directory.
+  const latest = fleet.deskDirectoryRenewals()[0];
+  const left = fleet.deskDirectories().filter((row) => row.mission_id !== directoryId).map((row) => row.mission_id);
+  const stale = latest !== undefined && latest.accepted_at === null && left.includes(latest.mission_id) ? latest : null;
+  const newest = stale === null ? latest : undefined;
   let pickup: Pickup | null = null;
   // A grant issued just before its request ran out lasts at most 24 hours more.
   if (newest !== undefined && newest.accepted_at === null && Date.parse(newest.expires_at) + DAY_MS > now.getTime()) {
@@ -687,6 +694,8 @@ export async function planFleetRenew(ctx: FleetContext): Promise<{ plan: FleetRe
   const holdsUntil = pickup?.grant.expires_at ?? heldDirectoryGrantEnd(ctx, directoryId);
   const at = now.toISOString();
   const preview = actPreview("fleet.renew", directoryId, at, [
+    ...(stale === null ? [] : [`your last request ${stale.request_event_id} asked for a grant in directory ${stale.mission_id}, ` +
+      "which this desk has left; it is not picked up, and a new request is posted from this desk's directory"]),
     ...(pickup === null ? [] : [
       `pick up directory grant ${pickup.grant.grant_id} ${pickup.grant.actions.join("+")} until ${pickup.grant.expires_at} (your request ${pickup.row.request_event_id})`,
       pickup.move === null
@@ -726,6 +735,7 @@ export async function planFleetRenew(ctx: FleetContext): Promise<{ plan: FleetRe
       ...(targetId === postIn ? {} : { target_mission_id: targetId }),
     },
     ...(noRequest === null ? {} : { no_request: noRequest }),
+    ...(stale === null ? {} : { stale_request: { request_event_id: stale.request_event_id, mission_id: stale.mission_id } }),
   });
   return { plan: { preview, pickup, request, no_request: noRequest, directory_expires_at: currentEnds, directory_mission_id: directoryId } };
 }

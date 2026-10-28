@@ -955,8 +955,11 @@ device joins again and no packet is carried.
    cache, whose charter names the pinned door (the typed fingerprint must
    still match) and its directory as predecessor. So a device that lapsed
    after it read the notice comes back with `enroll-device`, `hub relay` and
-   `fleet join`, and moves. One that never read it starts again as a new
-   identity.
+   `fleet join`, and moves. A renew request it left open for the old
+   directory is then stale: the next `fleet renew` neither picks its grant up
+   nor waits on it (the prompt and the act's `stale_request` name it) and asks
+   again from the successor. One that never read the notice starts again as a
+   new identity.
 5. **`hub stop`** revokes every directory of the chain not yet revoked: the
    current one, the previous one, and a successor created or asked for but
    not announced (one the service definitely never created is forgotten).

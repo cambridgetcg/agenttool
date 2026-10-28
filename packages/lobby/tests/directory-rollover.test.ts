@@ -659,6 +659,50 @@ describe("desks move to the successor on their next fleet renew pickups", () => 
     expect((await status(late)).mission_id).toBe(fleet.successorId);
   });
 
+  for (const sweepFirst of [false, true]) {
+    test(`after a fallback join into the successor, a request still open in the old directory is stale: fleet renew asks again from the successor (sweep ${sweepFirst ? "before" : "after"} the join)`, async () => {
+      const fleet = await bootstrapFleet();
+      const { hub, device, world } = fleet;
+      world.advance(HOUR);
+      // A request in the old directory, for the old directory, then the successor is announced and read.
+      await ok(device.yes("fleet", "renew"));
+      const old = JSON.parse(shownBytes(device)).request;
+      expect(old.mission_id).toBe(fleet.directoryId);
+      await ok(hub.yes("hub", "directory", "successor"));
+      const successorId = JSON.parse(shownBytes(hub)).successor.mission_id as string;
+      await ok(device.run("fleet", "sync"));
+      if (sweepFirst) await ok(hub.yes("hub", "renew-sweep"));
+      // The way back in: enroll-device, hub relay, fleet join into the successor.
+      const enrolled = await ok(device.run("enroll-device"));
+      const { relayArgs } = await import("./fleet-helpers.js");
+      const relayed = await ok(hub.yes(...relayArgs(device, enrolled)));
+      await ok(device.yes("fleet", "join", "--packet-file", device.file("join-stale.json", relayed.stdout), "--door-fingerprint", fleet.doorFingerprint));
+      expect(await status(device)).toMatchObject({ mission_id: successorId, open_request: { event_id: old.event_id, mission_id: fleet.directoryId } });
+      if (!sweepFirst) {
+        // The hub still issues the old request's grant, in the old directory: it is live there.
+        await ok(hub.yes("hub", "renew-sweep"));
+        expect(JSON.parse(shownBytes(hub)).directory_renewals.map((item: any) => item.grant.mission_id)).toEqual([fleet.directoryId]);
+      }
+      // fleet renew neither picks that grant up nor waits on it: it asks again, from and for the successor.
+      const renewed = await ok(device.yes("fleet", "renew"));
+      const bytes = JSON.parse(shownBytes(device));
+      expect(bytes.pickup).toBeNull();
+      expect(bytes.stale_request).toEqual({ request_event_id: old.event_id, mission_id: fleet.directoryId });
+      expect(bytes.request).toMatchObject({ mission_id: successorId });
+      expect(bytes.request.target_mission_id).toBeUndefined();
+      expect(device.terminal.written.join("")).toContain(`your last request ${old.event_id} asked for a grant in directory ${fleet.directoryId}, which this desk has left`);
+      expect(renewed.stderr).not.toContain("successor_mismatch");
+      expect((await status(device)).open_request).toMatchObject({ event_id: bytes.request.event_id, mission_id: successorId, posted: true });
+      // The next sweep issues it in the successor, and the next fleet renew picks it up there.
+      world.advance(HOUR);
+      await ok(hub.yes("hub", "renew-sweep"));
+      expect(JSON.parse(shownBytes(hub)).directory_renewals.map((item: any) => item.grant.mission_id)).toEqual([successorId]);
+      await ok(device.yes("fleet", "renew"));
+      expect(JSON.parse(shownBytes(device)).pickup).toMatchObject({ mission_id: successorId, grant_id: bytes.request.grant_id });
+      expect((await status(device)).mission_id).toBe(successorId);
+    });
+  }
+
   for (const [what, change, code] of [
     ["digest", (body: DirectorySuccessorBody) => ({ ...body, to_mission_digest: `sha256:${"e".repeat(64)}` }), "directory_changed"],
     ["end", (body: DirectorySuccessorBody) => ({ ...body, to_expires_at: new Date(Date.parse(body.to_expires_at) - MINUTE).toISOString() }),
