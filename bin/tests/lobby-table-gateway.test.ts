@@ -85,6 +85,34 @@ describe("lobby table talk and access through the API's mission gateway", () => 
     expect(new Set(fleet.memory.requests.map((request) => request.operation))).toEqual(new Set(["invitation", "accept", "observe", "list"]));
   });
 
+  test("a message sent under a room seat lease is exactly message() and verifies with verifyChatEvent()", async () => {
+    const fleet = await fleetThroughGateway();
+    const hubStatus = await fleet.status(fleet.hub);
+    const hubId = hubStatus.desk.identity_id as string;
+    const made = await fleet.device.yes("room", "lease", fleet.roomId, "--any-seat", "--to", hubId, "--messages", "2");
+    const leaseId = /lease (lease_[0-9a-f]{32})/.exec(made)![1]!;
+    const argv = ["room", "say", fleet.roomId, "--lease", leaseId, "--idempotency-key", "gateway-0001", "--to", hubId, "--text", "hello under a lease", "--json"];
+    const sent = JSON.parse(await fleet.device.run(...argv));
+    expect(sent).toMatchObject({ ok: true, status: "stored", replayed: false, lease: { lease_id: leaseId, sent_messages: 1 } });
+    // Posted under the lease's bound season grant.
+    const deviceSeason = (await fleet.status(fleet.device)).grants.find((grant: any) => grant.purpose === "season");
+    expect(sent.grant_id).toBe(deviceSeason.grant_id);
+
+    const config = JSON.parse(await fleet.hub.run("room", "roster", fleet.roomId, "--chat-config"));
+    const event = fleet.memory.missions.get(fleet.seasonId)!.events.find((item: any) => item.observation.summary.includes("hello under a lease"));
+    // Byte for byte the participant client's own envelope, as a terminal room say sends it.
+    expect(event.observation.summary).toBe(JSON.stringify(message(config, hubId, "message", "hello under a lease")));
+    const hubSeason = hubStatus.grants.find((grant: any) => grant.purpose === "season");
+    const p = { origin: ORIGIN, mission_id: fleet.seasonId, identity_id: hubId, signing_key_id: hubStatus.desk.signing_key_id, grant_id: hubSeason.grant_id };
+    expect(verifyChatEvent(event, p, config)?.message).toEqual({
+      format: "agenttool-mission-chat/v1", conversation: "table", to_identity: hubId, kind: "message", text: "hello under a lease",
+    });
+    // The same key again is reported from the local record, not sent again.
+    const observes = fleet.memory.requests.filter((request) => request.operation === "observe").length;
+    expect(JSON.parse(await fleet.device.run(...argv))).toMatchObject({ status: "stored", replayed: true, event_id: sent.event_id });
+    expect(fleet.memory.requests.filter((request) => request.operation === "observe")).toHaveLength(observes);
+  });
+
   test("renewal, leave with zero body bytes, kick, block and the emergency stop", async () => {
     const fleet = await fleetThroughGateway();
     const { memory, hub, device, second } = fleet;

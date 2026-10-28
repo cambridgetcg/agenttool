@@ -10,10 +10,18 @@
  * for a person at the terminal first, shows its exact bytes on /dev/tty,
  * needs "yes" typed there, and records those bytes in the audit log before
  * any network effect. Contract: packages/lobby/README.md#table-talk.
+ *
+ * The one exception in this file is table talk under a room seat lease
+ * (src/lease.ts): `room lease <room_id>` is confirmed once at the terminal
+ * like every other act, and then `room say --lease` sends without one, inside
+ * the lease's bounds. `room lease list|show|revoke` need no terminal.
+ * Contract: packages/lobby/README.md#room-seat-leases.
  */
 import { parseArgs } from "node:util";
 import {
   consequentialAsync,
+  consequentialRecordedBy,
+  EXIT_NOT_CONFIRMED,
   EXIT_OK,
   EXIT_REFUSED,
   FleetUsageError,
@@ -46,9 +54,24 @@ import {
   planUnblock,
   type RevocationOutcome,
 } from "./hub-access.js";
-import type { FleetContext } from "./ops.js";
+import {
+  assertIdempotencyKey,
+  assertLeaseId,
+  executeLease,
+  LEASE_LIMITS,
+  leaseCommandFor,
+  listLeases,
+  planLease,
+  revokeLeases,
+  sendUnderLease,
+  showLease,
+  type LeaseView,
+} from "./lease.js";
+import { LobbyError } from "./errors.js";
+import { NO_TERMINAL_MESSAGE, type FleetContext } from "./ops.js";
+import { validateSeatRef } from "./seat-ref.js";
 import { SLOT_TIERS, type SlotTier } from "./room.js";
-import { CHAT_KINDS, rosterView, wrapTableRead, type ChatKind } from "./table.js";
+import { CHAT_KINDS, CONVERSATION_PATTERN, rosterView, wrapTableRead, type ChatKind } from "./table.js";
 import {
   executeLeave,
   executeRenewAccept,
@@ -66,7 +89,7 @@ import {
   type RoomRead,
 } from "./talk.js";
 
-export const ROOM_TABLE_COMMANDS = ["say", "read", "wait", "sync", "roster", "renew", "leave"] as const;
+export const ROOM_TABLE_COMMANDS = ["say", "read", "wait", "sync", "roster", "renew", "leave", "lease"] as const;
 export const HUB_ACCESS_COMMANDS = ["renew-sweep", "member", "members", "device", "roster", "kick", "block", "unblock", "stop", "digest"] as const;
 
 const READ_SOURCE = "this desk's local cache of the room's season, refreshed from the service by this command";
@@ -113,6 +136,157 @@ function reportRevocations(io: FleetIo, revocations: RevocationOutcome[]): numbe
     }
   }
   return open;
+}
+
+/** A whole number flag inside [min, max], or undefined when absent. */
+function boundedFlag(value: string | undefined, flag: string, limits: { min: number; max: number }): number | undefined {
+  if (value === undefined) return undefined;
+  if (!/^\d{1,6}$/.test(value)) throw new FleetUsageError(`${flag} must be a whole number`);
+  const number = Number.parseInt(value, 10);
+  if (number < limits.min || number > limits.max) throw new FleetUsageError(`${flag} is ${limits.min}-${limits.max}`);
+  return number;
+}
+
+function leaseLine(view: LeaseView): string {
+  return `${view.lease_id}  ${view.state}  ${view.room_id}  seat ${view.seat_ref ?? "any"}  until ${view.expires_at} (${view.ends_by})  ` +
+    `${view.sent_messages}/${view.max_messages} messages, ${view.sent_chars}/${view.max_total_chars} characters, ` +
+    `${view.recipients.length} recipient(s)${view.sends.pending > 0 ? `, ${view.sends.pending} pending` : ""}`;
+}
+
+const LEASE_USAGE = "room lease <room_id> (--seat-ref REF | --any-seat) [--to UUID]... [--minutes 1-480] [--messages 1-100] " +
+  "[--chars 1-50000] [--interval-seconds 5-3600] [--conversation C] | room lease list [--all] [--json] | " +
+  "room lease show <lease_id> [--json] | room lease revoke (<lease_id> | --all [--room ROOM_ID])";
+
+async function roomLeaseCommand(ctx: FleetContext, args: string[], io: FleetIo): Promise<number> {
+  const [first, ...rest] = args;
+  if (first === "list") {
+    const { values, positionals: extra } = parseArgs({ args: rest, allowPositionals: true, strict: true, options: { all: { type: "boolean" }, json: { type: "boolean" } } });
+    positionals(extra, 0, "room lease list [--all] [--json]");
+    const leases = listLeases(ctx, { all: values.all === true });
+    if (values.json) io.stdout(`${JSON.stringify({ leases }, null, 2)}\n`);
+    else io.stdout(leases.length === 0 ? `(no ${values.all ? "" : "active "}leases on this desk)\n` : `${leases.map(leaseLine).join("\n")}\n`);
+    return EXIT_OK;
+  }
+  if (first === "show") {
+    const { values, positionals: extra } = parseArgs({ args: rest, allowPositionals: true, strict: true, options: { json: { type: "boolean" } } });
+    const [leaseId] = positionals(extra, 1, "room lease show <lease_id> [--json]");
+    const shown = showLease(ctx, leaseId!);
+    if (values.json) io.stdout(`${JSON.stringify(shown, null, 2)}\n`);
+    else {
+      io.stdout(`${leaseLine(shown.lease)}\n` +
+        `recipients: ${shown.record.recipients.map((recipient) => `${recipient.fingerprint} did:at:${recipient.identity_id}`).join(", ")}\n` +
+        `${shown.sends.map((send) => `  #${send.n}  ${send.reserved_at}  ${send.kind} ${send.event_id} -> did:at:${send.to_identity}  ${send.state}  seat ${send.seat_ref ?? "none"}`).join("\n")}${shown.sends.length === 0 ? "  (no sends)" : ""}\n`);
+    }
+    return EXIT_OK;
+  }
+  if (first === "revoke") {
+    const { values, positionals: extra } = parseArgs({ args: rest, allowPositionals: true, strict: true, options: { all: { type: "boolean" }, room: { type: "string" } } });
+    if (values.all === true ? extra.length !== 0 : extra.length !== 1 || values.room !== undefined) {
+      throw new FleetUsageError("room lease revoke (<lease_id> | --all [--room ROOM_ID])");
+    }
+    const result = revokeLeases(ctx, values.all === true
+      ? { all: true, ...(values.room === undefined ? {} : { room_id: values.room }) }
+      : { lease_id: extra[0]! });
+    for (const id of result.revoked) io.stdout(`revoked lease ${id}; audit: recorded room.lease.revoke\n`);
+    for (const id of result.already_ended) io.stdout(`lease ${id} had already ended\n`);
+    if (result.revoked.length + result.already_ended.length === 0) io.stdout("(no leases to revoke)\n");
+    return EXIT_OK;
+  }
+  const { values, positionals: extra } = parseArgs({
+    args, allowPositionals: true, strict: true,
+    options: {
+      "seat-ref": { type: "string" }, "any-seat": { type: "boolean" }, to: { type: "string", multiple: true },
+      minutes: { type: "string" }, messages: { type: "string" }, chars: { type: "string" }, "interval-seconds": { type: "string" },
+      conversation: { type: "string" },
+    },
+  });
+  const [roomId] = positionals(extra, 1, LEASE_USAGE);
+  if (!/^room_[0-9a-f]{32}$/.test(roomId!)) throw new FleetUsageError(LEASE_USAGE);
+  if (values["seat-ref"] !== undefined && values["any-seat"] === true) {
+    throw new FleetUsageError("room lease takes one of --seat-ref REF (bind the lease to that seat) or --any-seat, not both");
+  }
+  let seatRef: string | null = null;
+  if (values["seat-ref"] !== undefined) {
+    try {
+      seatRef = validateSeatRef(values["seat-ref"]);
+    } catch (error) {
+      throw new FleetUsageError((error as Error).message);
+    }
+  }
+  const minutes = boundedFlag(values.minutes, "--minutes", LEASE_LIMITS.minutes);
+  const messages = boundedFlag(values.messages, "--messages", LEASE_LIMITS.messages);
+  const chars = boundedFlag(values.chars, "--chars", LEASE_LIMITS.totalChars);
+  const interval = boundedFlag(values["interval-seconds"], "--interval-seconds", LEASE_LIMITS.intervalSeconds);
+  for (const identity of values.to ?? []) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(identity)) throw new FleetUsageError("--to is an identity UUID");
+  }
+  if (values.conversation !== undefined && !CONVERSATION_PATTERN.test(values.conversation)) {
+    throw new FleetUsageError("--conversation is 1-64 letters, digits, dots, underscores or hyphens, starting with a letter or digit");
+  }
+  if (!ctx.hasTerminal()) {
+    // Nothing is planned, read or written: a person makes the lease at a terminal.
+    io.stderr(`agenttool-lobby: tty_unavailable: ${NO_TERMINAL_MESSAGE}\n` +
+      "agenttool-lobby: a lease is made by a person at a terminal. Ask them to run:\n" +
+      `  ${leaseCommandFor(args, ctx.seatRef ?? null)}\n`);
+    return EXIT_NOT_CONFIRMED;
+  }
+  if (values["seat-ref"] === undefined && values["any-seat"] !== true) {
+    throw new FleetUsageError("room lease needs one of --seat-ref REF (bind the lease to that seat) or --any-seat");
+  }
+  const plan = await planLease(ctx, {
+    room_id: roomId!,
+    seat_ref: seatRef,
+    to: values.to ?? [],
+    ...(minutes === undefined ? {} : { minutes }),
+    ...(messages === undefined ? {} : { messages }),
+    ...(chars === undefined ? {} : { total_chars: chars }),
+    ...(interval === undefined ? {} : { interval_seconds: interval }),
+    ...(values.conversation === undefined ? {} : { conversation: values.conversation }),
+  });
+  const outcome = await consequentialRecordedBy(io, plan.preview, async () => executeLease(ctx, plan));
+  if (!outcome.confirmed) return outcome.code;
+  io.stdout(`lease ${plan.record.lease_id} for ${roomId} until ${plan.record.expires_at} (ends by ${plan.record.ends_by.replace("_", " ")})\n` +
+    `audit: recorded room.lease sha256 ${plan.preview.sha256}\n` +
+    `agents send with: agenttool-lobby room say ${roomId} --lease ${plan.record.lease_id} --idempotency-key <key> --to <identity> --text-file <file> --json\n` +
+    `revoke with: agenttool-lobby room lease revoke ${plan.record.lease_id}\n`);
+  return EXIT_OK;
+}
+
+async function leaseSayCommand(ctx: FleetContext, io: FleetIo, input: {
+  room_id: string; lease_id: string; idempotency_key: string; text: string; to?: string; in_reply_to?: string; kind?: ChatKind; conversation?: string; json: boolean;
+}): Promise<number> {
+  const { json, ...send } = input;
+  let result;
+  try {
+    result = await sendUnderLease(ctx, send);
+  } catch (error) {
+    if (json && error instanceof LobbyError) {
+      io.stdout(`${JSON.stringify({ ok: false, error: error.code, message: error.message, ...error.details })}\n`);
+    }
+    throw error;
+  }
+  const lease = {
+    lease_id: result.lease.lease_id, state: result.lease.state, sent_messages: result.lease.sent_messages, max_messages: result.lease.max_messages,
+    sent_chars: result.lease.sent_chars, max_total_chars: result.lease.max_total_chars, next_send_at: result.lease.next_send_at, expires_at: result.lease.expires_at,
+  };
+  const next = `a person runs: agenttool-lobby outbox retry ${result.event_id}`;
+  if (json) {
+    io.stdout(`${JSON.stringify({
+      ok: result.status === "stored", status: result.status, replayed: result.replayed, event_id: result.event_id, mission_id: result.mission_id,
+      grant_id: result.grant_id, received_seq: result.received_seq, audit_sha256: result.audit_sha256, lease,
+      ...(result.status === "pending" ? { error: result.error, next } : {}), ...(result.voided === undefined ? {} : { voided: result.voided }),
+    })}\n`);
+  } else if (result.status === "stored") {
+    io.stdout(`${result.replayed ? "already posted" : "posted"} chat ${result.event_id} to mission ${result.mission_id} (receipt seq ${result.received_seq}) ` +
+      `under lease ${lease.lease_id}: ${lease.sent_messages}/${lease.max_messages} messages, ${lease.sent_chars}/${lease.max_total_chars} characters\n`);
+  }
+  if (result.status === "pending") {
+    io.stderr(`agenttool-lobby: chat ${result.event_id} is saved in the outbox but has no verified receipt (${result.error}). ` +
+      `It may already be stored and counts against the lease. Nothing was retried; ${next}\n` +
+      (result.voided === undefined ? "" : `agenttool-lobby: the lease is now void (${result.voided})\n`));
+    return EXIT_REFUSED;
+  }
+  return EXIT_OK;
 }
 
 // ── room ───────────────────────────────────────────────────────────────
@@ -187,18 +361,46 @@ export async function roomTableCommand(ctx: FleetContext, args: string[], io: Fl
       }
       return EXIT_OK;
     }
+    case "lease":
+      return roomLeaseCommand(ctx, rest, io);
     case "say": {
       const { values, positionals: extra } = parseArgs({
         args: rest, allowPositionals: true, strict: true,
         options: {
           text: { type: "string" }, "text-file": { type: "string" }, to: { type: "string" },
           "in-reply-to": { type: "string" }, kind: { type: "string" }, conversation: { type: "string" },
+          lease: { type: "string" }, "idempotency-key": { type: "string" }, json: { type: "boolean" },
         },
       });
-      const [roomId] = positionals(extra, 1, "room say <room_id> (--text T | --text-file FILE) [--to UUID] [--in-reply-to EVENT [--kind message|read_ack]] [--conversation C]");
+      const [roomId] = positionals(extra, 1, "room say <room_id> (--text T | --text-file FILE) [--to UUID] [--in-reply-to EVENT [--kind message|read_ack]] [--conversation C] [--lease LEASE_ID --idempotency-key K [--json]]");
       if ((values.text === undefined) === (values["text-file"] === undefined)) throw new FleetUsageError("room say needs exactly one of --text or --text-file");
       const kind = oneOf(values.kind, CHAT_KINDS, "--kind") as ChatKind | undefined;
       if (kind === "read_ack" && values["in-reply-to"] === undefined) throw new FleetUsageError("a read_ack needs --in-reply-to naming the message read");
+      if ((values.lease === undefined) !== (values["idempotency-key"] === undefined)) {
+        throw new FleetUsageError("--lease and --idempotency-key go together: a send under a lease names its lease and an idempotency key");
+      }
+      if (values.json === true && values.lease === undefined) throw new FleetUsageError("--json is for a send under a lease (--lease)");
+      if (values.lease !== undefined) {
+        // Under a lease: no terminal. The lease a person confirmed is the bound.
+        try {
+          assertLeaseId(values.lease);
+          assertIdempotencyKey(values["idempotency-key"]);
+        } catch (error) {
+          throw new FleetUsageError((error as Error).message);
+        }
+        const text = values.text ?? readPacketFile(values["text-file"], "--text-file", "text").replace(/\r?\n$/, "");
+        return leaseSayCommand(ctx, io, {
+          room_id: roomId!,
+          lease_id: values.lease,
+          idempotency_key: values["idempotency-key"]!,
+          text,
+          json: values.json === true,
+          ...(values.to === undefined ? {} : { to: values.to }),
+          ...(values["in-reply-to"] === undefined ? {} : { in_reply_to: values["in-reply-to"] }),
+          ...(kind === undefined ? {} : { kind }),
+          ...(values.conversation === undefined ? {} : { conversation: values.conversation }),
+        });
+      }
       const headless = withoutTerminal(ctx, io);
       if (headless !== null) return headless;
       // One trailing newline, as an editor saves a file, is not part of the message.
