@@ -389,13 +389,19 @@ It creates no configuration. It revokes every configuration that names
 `createPackage` (direct `npm publish`), whatever the repository. It keeps a
 GitHub configuration of any other repository whose only permission is
 `createStagedPackage`, such as Xenia's own stage route or one made by `enable`.
-Anything else (another provider, unknown permissions such as npm's separate
-dist-tag option, an unreadable listing) is left alone and reported, and the run
-exits non-zero. The final check passes a package only when its listing
-afterwards is empty or stage-only, so a listing or classifier that fails also
-fails the run. Both a dry run and a real run end by listing the stage-only
-trust that stays, with its repository, file and environment: check that each
-one is expected.
+It never revokes stage-only trust, but it marks one "needs review" and exits
+non-zero when `cambridgetcg` does not own its repository (someone else
+controls that repository), or when it has no workflow file or environment (it
+then matches more than the job it was made for). Anything else (another provider, unknown permissions such as npm's
+separate dist-tag option, an unreadable listing) is left alone and reported,
+and the run exits non-zero. For a configuration it leaves to you, the script
+prints the `trust revoke` command when the id is readable, and does not run
+it. The final check passes a package only when its listing afterwards is empty
+or stage-only, so a listing or classifier that fails also fails the run. Every
+run that gets past its listings ends by listing the stage-only trust that
+stays, with its repository, file and environment, or `none`; when some package
+needs attention, it adds that such a package may have more. Check that each
+one listed is expected.
 
 On 2026-10-19 the listing showed 22 packages trusting `cambridgetcg/agenttool`
 `publish-npm.yml` in `npm-bootstrap` with `createPackage` and
@@ -417,7 +423,8 @@ day) show:
   `npm publish` over OIDC. Trust that lets them work allows direct publish, so
   lockdown revokes it and those routes stop. yutabase 0.1.0-candidate.3 was
   published that way (npm records GitHub Actions, trusted publisher
-  `oidc:ea1f7fe7…`, no approver), so it has such a configuration. Every
+  `oidc:ea1f7fe7…`, no approver), so it had a direct-publish configuration
+  on 2026-07-29; the dry run shows whether it still exists. Every
   hf-kingdom-lab and RhetorLint version was published by the `agenttool`
   user, so whether those have trust is unknown. A stage-only configuration
   alone does not bring such a route back: its workflow must first change to
@@ -429,10 +436,20 @@ day) show:
   configuration is validated. Lockdown keeps it if it is stage-only. If it also
   allows direct publish, lockdown revokes a validated configuration, and the
   next Xenia stage needs a new one made just before it.
-- `@agenttool/gospel-of-the-logos` was published by this repository's
-  `publish-gospel.yml`. Any trust it has names `cambridgetcg/agenttool`, so
-  lockdown revokes it, and any re-run would revoke it again: that route stays
-  closed.
+- `@agenttool/whitehack-scan` (whitehack `publish-whitehack.yml`) and
+  `@agenttool/xenia-surface` (xenia `publish-xenia-surface.yml`), both in
+  environment `npm-bootstrap`, are token routes with no token left (below).
+  Both also grant `id-token: write` and run `npm publish`, which in npm 11.17.0
+  tries an OIDC exchange by itself (whitehack installs 11.17.0; xenia-surface
+  installs 11.18.0, not read). Either would publish directly if a
+  direct-publish configuration named it, and lockdown revokes any such
+  configuration. Their packages' trust was not listed.
+- `@agenttool/gospel-of-the-logos` 0.1.0 was published by the `agenttool`
+  user, through this repository's `publish-gospel.yml` and its token. Its
+  trust was never listed. That workflow was its only route, so any trust made
+  for it would name `cambridgetcg/agenttool`; lockdown revokes such trust, and
+  would again on any re-run, so that route stays closed. Any other trust shows
+  in the dry-run plan like the rest.
 
 `enable` refuses these nine, so a new stage-only configuration for one of them
 is made by hand, just before its stage, for example for Xenia:
@@ -458,11 +475,11 @@ token route is still usable: the token routes (this repository's
 `publish-xenia-surface.yml`) have no `NPM_TOKEN` secret in their environment or
 repository (read 2026-10-28); the first two lost theirs that day. So
 disallowing tokens first loses no token route; the npm tokens themselves still
-await revocation by Yu on npmjs.com. The OIDC routes above are what lockdown
-can stop, through its revokes, not through this setting. npm has no command to
-read the setting back: after the run, open one package's Settings page on
-npmjs.com and check that "Require two-factor authentication and disallow
-tokens" is selected.
+await revocation by Yu on npmjs.com. Lockdown stops the OIDC routes above,
+including any OIDC use of these token workflows, through its revokes, not
+through this setting. npm has no command to read the setting back: after the
+run, open one package's Settings page on npmjs.com and check that "Require
+two-factor authentication and disallow tokens" is selected.
 
 ### Enable one package (just before its release)
 
@@ -498,15 +515,20 @@ the tag with `dry_run: false` ([step 6](#6-stage)) and approve the stage with
 not yet approved validates the configuration is undocumented, so approve
 within the 48 hours. If the listing after creation is not exactly the target,
 the script prints a revoke command for each configuration listed and exits
-non-zero: do not dispatch.
+non-zero: do not dispatch. If `trust github` itself fails, npm may still have
+created the configuration (it reads the registry's answer after sending the
+request), so the script records the deadline as
+`<deadline> (if npm created it)` and says to check with
+`DRY_RUN=1 bash npm-trust-repoint.sh enable <key>`.
 
 A package that already has exactly the target is left as it is. npm shows
 neither when that configuration was made nor whether it has expired. The
 script prints the deadline from the newest earlier `enable` record beside its
 own record directory, if there is one, and says to revoke and re-enable before
 dispatching unless a stage through it was approved or it is known to be under
-48 hours old. A dispatch through an expired configuration fails at npm, and
-can leave a public GitHub Release and a Rekor entry behind, as
+48 hours old. A dry run prints the same notice. A dispatch through an expired
+configuration fails at npm, and can leave a public GitHub Release and a Rekor
+entry behind, as
 [run 39288082185](https://github.com/cambridgetcg/agenttool-packages/actions/runs/39288082185)
 did with no configuration at all.
 
