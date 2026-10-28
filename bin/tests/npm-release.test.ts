@@ -116,9 +116,28 @@ describe("standard npm release policy", () => {
 
   test("keeps the public guard's credential signatures and home-path rules", () => {
     // The tarball scan was once narrower than the guard (F18); the guard holds the merged list.
-    const sources = (rules: readonly { pattern: RegExp }[]) => rules.map((rule) => rule.pattern.source).sort();
-    expect(sources(SECRET_SIGNATURES)).toEqual(sources(SECRET_RULES));
-    expect(sources(DEVICE_PATH_RULES)).toEqual(sources(PERSONAL_RULES.filter((rule) => rule.id.endsWith("home-path"))));
+    // g and u change how a pattern is applied, not what it matches here; any other flag (an i) would.
+    const shapes = (rules: readonly { pattern: RegExp }[]) =>
+      rules.map((rule) => `/${rule.pattern.source}/${rule.pattern.flags.replace(/[gu]/g, "")}`).sort();
+    const homeRules = PERSONAL_RULES.filter((rule) => rule.id.endsWith("home-path"));
+    expect(shapes(SECRET_SIGNATURES)).toEqual(shapes(SECRET_RULES));
+    expect(shapes(DEVICE_PATH_RULES)).toEqual(shapes(homeRules));
+
+    // Both let the same placeholder homes through; the scan alone also lets Linux's runner and pwuser through.
+    const paths: Record<string, (home: string) => string> = {
+      "personal/home-path": (home) => `/Users/${home}/x`,
+      "personal/unix-home-path": (home) => `/home/${home}/x`,
+      "personal/windows-home-path": (home) => `C:\\Users\\${home}\\x`,
+    };
+    for (const rule of homeRules) {
+      for (const home of ["nobody", "test", "example", "person", "you", "$USER", "{user}", "alice", "Example", "runner", "pwuser"]) {
+        const path = (paths[rule.id] as (home: string) => string)(home);
+        const match = new RegExp(rule.pattern.source, rule.pattern.flags.replace("g", "")).exec(path);
+        const guardPasses = match === null || rule.permit?.(match) === true;
+        const scanOnly = rule.id === "personal/unix-home-path" && ["runner", "pwuser"].includes(home);
+        expect([path, archiveContentFinding(path) === undefined]).toEqual([path, guardPasses || scanOnly]);
+      }
+    }
   });
 
   test("reads every packed file whatever its name, extension, or size", async () => {
