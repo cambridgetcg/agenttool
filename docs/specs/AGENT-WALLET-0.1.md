@@ -202,10 +202,11 @@ approval if any matching rule has `requires_approval: true`. Rule order
 therefore never changes the outcome. This only tightens authorization. A
 capability that relied on first-match leniency, where only the first matching
 rule in sorted order was read, will now be denied unless the host supplies at
-least `approval_threshold` distinct approval IDs. The published
-`@agenttool/wallet` 0.1.3 artifact still has first-match behaviour until a
-release ships the source change (see the Unreleased section of
-`packages/wallet/README.md` in the private source repository).
+least `approval_threshold` distinct approval IDs. The `@agenttool/wallet`
+0.1.3 artifact and earlier versions have first-match behaviour. Version 0.1.4
+evaluates every matching rule (see "Changes in 0.1.4" in
+`packages/wallet/README.md`); check the npm registry for whether 0.1.4 is
+published before relying on it.
 
 Spend and fee limits use CAIP-19 assets and atomic amounts. `max_total` is a
 cumulative bound over durable usage for the capability and revocation epoch,

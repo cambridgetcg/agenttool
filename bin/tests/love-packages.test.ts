@@ -332,7 +332,7 @@ describe("LOVE Package release inventory", () => {
       await readFile(join(REPO_ROOT, "packages/wallet-zerone/package.json"), "utf8"),
     );
 
-    expect(wallet.version).toBe("0.1.3");
+    expect(wallet.version).toBe("0.1.4");
     expect(adapter.version).toBe("0.1.2");
     expect(adapter.peerDependencies?.["@agenttool/wallet"]).toBe("^0.1.2");
     expect(adapter.devDependencies?.["@agenttool/wallet"]).toBe("0.1.3");
