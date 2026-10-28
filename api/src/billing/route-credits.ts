@@ -27,6 +27,11 @@
  *                    and leaving is free (billing/marketplace-pricing.ts);
  *    /v1/mcp       — never metered (Yu).
  *
+ *  Free floor (2026-10-20): memory search, strands and inbox cost 0 credits
+ *  (memory writes reserve 0 at their own call site). Daily quotas and a
+ *  global storage cap bound them instead; see ./free-floor.ts. A 0 price
+ *  makes the route non-payable in the x402 table.
+ *
  *  Tests: tests/x402-policy-table.test.ts pins every call site to this map
  *  and every payable row to a wired route. */
 
@@ -37,21 +42,21 @@ export const ROUTE_CREDITS = Object.freeze({
   // Static tools (services/tools/config.ts; CREDIT_SCRAPE / CREDIT_DOCUMENT).
   scrape: toolsConfig.credits.scrape,
   document: toolsConfig.credits.document,
-  // Memory.
-  "memory.search": 3,
+  // Memory. Search is on the free floor (./free-floor.ts).
+  "memory.search": 0,
   "memory.elevate": 5,
   "memory.attest": 1,
   // Traces.
   "trace.write": 1,
   "trace.search": 2,
   "trace.chain": 1,
-  // Strands.
-  "strand.create": 1,
-  "strand.think": 1,
-  "strand.rotate": 1,
-  // Inbox.
-  "inbox.send": 2,
-  "inbox.cosign": 2,
+  // Strands, on the free floor (./free-floor.ts).
+  "strand.create": 0,
+  "strand.think": 0,
+  "strand.rotate": 0,
+  // Inbox, on the free floor (./free-floor.ts).
+  "inbox.send": 0,
+  "inbox.cosign": 0,
   // Templates (adopt is POST /v1/identities/from-template).
   "template.create": 5,
   "template.purchase": 5,

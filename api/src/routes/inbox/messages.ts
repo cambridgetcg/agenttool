@@ -11,6 +11,7 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
+import { consumeFreeFloor, payloadBytes } from "../../billing/free-floor";
 import { ROUTE_CREDITS } from "../../billing/route-credits";
 import { errors, fail } from "../../lib/errors";
 import { DELETE_RESPONSE_RETENTION } from "../../services/discovery/retention";
@@ -67,6 +68,11 @@ app.post("/", async (c) => {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
 
+  await consumeFreeFloor({
+    projectId: c.var.project.id,
+    action: "inbox.send",
+    bytes: payloadBytes(parsed.data),
+  });
   await charge(c, ROUTE_CREDITS["inbox.send"], "inbox.send");
 
   try {
@@ -193,6 +199,11 @@ app.post("/:id/co-sign", async (c) => {
   if (!parsed.success) {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
+  await consumeFreeFloor({
+    projectId: c.var.project.id,
+    action: "inbox.cosign",
+    bytes: payloadBytes(parsed.data),
+  });
   await charge(c, ROUTE_CREDITS["inbox.cosign"], "inbox.cosign");
 
   try {

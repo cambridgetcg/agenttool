@@ -178,7 +178,8 @@ try {
     const { data: replay } = await anonymous("/v1/register/agent", { method: "POST", body: registration, status: 409 });
     ensure(replay.error === "registration_proof_replayed", "birth-replay-refusal");
     const [credits] = await sql`SELECT credits FROM tools.projects WHERE id=${custody.projectId!}`;
-    ensure(credits?.credits === custody.birthCredits! - 4, "birth-charge-conservation");
+    // Free floor (billing/free-floor.ts): the write and the search spend no credits.
+    ensure(credits?.credits === custody.birthCredits!, "birth-charge-conservation");
     await writeFile(custodyFile, JSON.stringify(custody), { mode: 0o600 });
     Object.assign(evidence, { project_id: custody.projectId, identity_id: custody.identityId, memory_id: custody.memoryId,
       memory_content_sha256: sha256(text(content)).toString("hex"), pow_bits: bits,
@@ -243,13 +244,17 @@ try {
     } });
     ensure(recall.mode === "semantic" && recall.results.some((m: Json) => m.id === custody.memoryId), "recovered-vector-recall");
     const [credits] = await sql`SELECT credits FROM tools.projects WHERE id=${custody.projectId}`;
-    ensure(credits?.credits === custody.birthCredits! - 7, "journey-charge-conservation");
+    ensure(credits?.credits === custody.birthCredits!, "journey-charge-conservation");
     const usage = await sql`SELECT tool, credits_used, success FROM tools.usage_events WHERE project_id=${custody.projectId} ORDER BY created_at`;
     ensure(usage.length === 3 && usage.every(row => row.success === true) &&
-      usage.reduce((sum, row) => sum + row.credits_used, 0) === 7, "durable-usage-receipts");
+      usage.reduce((sum, row) => sum + row.credits_used, 0) === 0, "durable-usage-receipts");
+    const floor = await sql`SELECT scope, action, units FROM tools.free_floor_usage
+      WHERE action IN ('memory.write', 'memory.search')
+        AND ((scope = 'project' AND subject_id = ${custody.projectId}) OR (scope = 'identity' AND subject_id = ${custody.identityId}))`;
+    evidence.free_floor = Object.fromEntries(floor.map((row) => [`${row.scope}:${row.action}`, Number(row.units)]));
     const [keyCounts] = await sql`SELECT count(*)::int AS total, count(*) FILTER (WHERE revoked_at IS NULL)::int AS active FROM tools.api_keys WHERE project_id=${custody.projectId}`;
     ensure(keyCounts?.total === 2 && keyCounts?.active === 1, "durable-key-lifecycle");
-    evidence.credits_spent = 7; evidence.usage_receipts = 3;
+    evidence.credits_spent = 0; evidence.usage_receipts = 3;
     evidence.reconnect = "fresh-process-from-local-custody";
   }
   ensure(outboundFetchAttempts === 0 && workerIntervals === 0, "unexpected-background-or-provider-work");
