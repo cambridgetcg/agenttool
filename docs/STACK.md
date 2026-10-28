@@ -1032,6 +1032,25 @@ Explicit modes keep stateful and paid checks out of the default:
 Use `bin/preflight.sh list` to inspect the classified test tiers. Optional
 stateful and paid tiers are selected by mode, never implicit skip toggles.
 
+GitHub CI (`.github/workflows/ci.yml`) narrows only pull requests. Its first
+job, `Changed areas`, runs [`bin/ci-changed-areas.sh`](../bin/ci-changed-areas.sh)
+to map the pull request's changed paths, including both sides of a rename, to
+the jobs that read them. A job is skipped only when that classifier succeeded
+and reported it `false`. Pushes and other events, git failures, unrecognised
+paths, more than 10,000 distinct changed paths, lockfiles, shared preparation
+scripts, and changes to the workflow or the classifier run every job. The one
+lockfile exception is `packages/sdk-py/uv.lock`, which among the filtered jobs
+only the Python SDK job reads. The Linux API gate always runs, because its
+scanners read nearly the whole tree. The required `API and protocol` result
+fails on any failed or cancelled prerequisite and accepts a skip only as
+reported. A skip is an inference from mapped inputs, not a test result; a
+mapping gap surfaces on the next push to `main`.
+[`bin/tests/ci-changed-areas.test.ts`](../bin/tests/ci-changed-areas.test.ts)
+pins the rules, the workflow wiring, and drift guards for symlinks, `file:`
+dependencies, gated packages, paths that job code names, the `package.json`
+files above modules a job imports from another tree, and tracked paths that
+no rule matches.
+
 Optional, run separately when meaningful:
 
 ```bash
