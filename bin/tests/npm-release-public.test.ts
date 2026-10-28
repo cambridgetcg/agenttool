@@ -497,18 +497,23 @@ describe("npm authentication fails before any public residue", () => {
     expect(outside.code).toBe(1);
   });
 
-  test("reads only npm's oidc lines from its debug logs", async () => {
+  test("reads only npm's oidc lines from its debug logs, with token-shaped text hidden", async () => {
+    // JWT-shaped as npm's matcher sees it (three dotted base64url segments), but no real token.
+    const jwtShaped = ["fixture-header", "fixture-payload", "fixture-signature-0123456789"].join(".");
+    const npmToken = `npm_${"A1b2".repeat(9)}`;
     const log = [
       "0 verbose cli /usr/bin/node /usr/bin/npm",
       "12 verbose oidc Failed token exchange request with body message: package not found",
       "13 silly oidc Skipped because no id_token available\r",
       "14 http fetch POST 404 https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/@a%2fb 80ms",
       "verbose oidc an unprefixed line",
+      `15 verbose oidc Failure with message: rejected ${jwtShaped} and ${npmToken} from npm/11.17.0 at registry.npmjs.org`,
       "",
     ].join("\n");
     expect(oidcLogLines(log)).toEqual([
       "12 verbose oidc Failed token exchange request with body message: package not found",
       "13 silly oidc Skipped because no id_token available",
+      "15 verbose oidc Failure with message: rejected *** and *** from npm/11.17.0 at registry.npmjs.org",
     ]);
     const directory = await mkdtemp(join(tmpdir(), "npm-oidc-log-test-"));
     try {

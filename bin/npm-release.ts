@@ -2743,15 +2743,35 @@ export async function assertTrustedPublisherExchange(
   );
 }
 
-/** npm's `oidc` lines, at any level, from one of its debug logs (`<count> <level> oidc <message>`). */
+/**
+ * @npmcli/redact's JSON_WEB_TOKEN and NPM_SECRET patterns (lib/matchers.js
+ * in npm 11.17.0). npm's log redaction (redactLog) applies only the second,
+ * with URL passwords and UUIDs, so a JWT reaches npm's debug log as it is.
+ */
+const OIDC_LINE_CREDENTIALS = [
+  /\b[A-Za-z0-9-_]{10,}(?!\.\d+\.)\.[A-Za-z0-9-_]{3,}\.[A-Za-z0-9-_]{20,}\b/gi,
+  /\b(npms?_)[a-zA-Z0-9]{36,48}\b/gi,
+];
+
+/**
+ * npm's `oidc` lines, at any level, from one of its debug logs (`<count>
+ * <level> oidc <message>`), with any JWT- or npm-token-shaped text replaced
+ * by `***`.
+ */
 export function oidcLogLines(debugLog: string): string[] {
-  return debugLog.split(/\r?\n/).filter((line) => /^\d+ [a-z]+ oidc /.test(line));
+  return debugLog.split(/\r?\n/)
+    .filter((line) => /^\d+ [a-z]+ oidc /.test(line))
+    .map((line) => OIDC_LINE_CREDENTIALS.reduce((text, pattern) => text.replace(pattern, "***"), line));
 }
 
 /**
  * The `oidc` lines of every debug log npm wrote to a --logs-dir. In npm
- * 11.17.0 they hold only lib/utils/oidc.js's fixed texts and the error
- * messages GitHub or the registry returned, and npm redacts every log line.
+ * 11.17.0 they hold lib/utils/oidc.js's fixed texts, the registry's error
+ * message, and the message of any error its last catch caught, which can be
+ * anything. Printed, they reach a public log. The runner masks the ID token
+ * check-trust asked for, but not the one npm asks for itself, which npm's
+ * exchange turns into an npm token for as long as it lasts; npm does not
+ * redact a JWT, so oidcLogLines does.
  */
 export async function npmOidcLogLines(logsDirectory: string): Promise<string[]> {
   const logs = (await readdir(logsDirectory)).filter((name) => /-debug-\d+\.log$/.test(name)).sort();
@@ -2783,9 +2803,10 @@ export function npmFailureMessage(
 /**
  * Runs npm once to stage or publish the prepared artifact. npm's debug log
  * goes to a fresh directory; its oidc lines are printed and the directory is
- * removed, which a failure says, since npm's own output names the log. npm's captured stdout is printed whether or not npm succeeded
- * (stderr is not captured and reaches the log as npm writes it), and a
- * failure refuses with npmFailureMessage.
+ * removed, which a failure says, since npm's own output names the log.
+ * npm's captured stdout is printed whether or not npm succeeded (stderr is
+ * not captured and reaches the log as npm writes it), and a failure refuses
+ * with npmFailureMessage.
  */
 export async function runNpmPublication(
   action: "stage" | "publish",
