@@ -68,12 +68,21 @@ npm pack --ignore-scripts --dry-run
 
 ## Release State
 
-Version `0.1.3` is the current package release. Its checked-in
+Version `0.1.4` is this source's version. It adds the overlapping-rule and
+closed-context authorization changes and ships the negative vectors (README
+"Changes in 0.1.4"). It is released from the public repository
+`cambridgetcg/agenttool-packages` through the staged npm path, so its release
+record is that run's receipt, the GitHub Release `wallet-v0.1.4`, and npm; it
+has no `love-package/v1` manifest. Check `npm view @agenttool/wallet versions`
+before assuming it is published.
+
+Version `0.1.3` is the newest LOVE release. Its checked-in
 `love-package/v1` manifest is the exact release record; npm and GitHub remain
 optional mirrors rather than package-name or release authority. The
 exact-version Wallet `0.1.1` and `0.1.2` LOVE artifacts remain byte-addressable
-and are not rewritten. Their currently public GitHub assets were independently
-byte-verified, but GitHub reports the release records as mutable, so those
+and are not rewritten. Their GitHub assets were independently byte-verified
+while the source repository was public (it has been private since
+2026-09-25), but GitHub reports the release records as mutable, so those
 optional locators are not immutability guarantees. Version `0.1.1`
 incorrectly called itself unreleased; `0.1.2` ambiguously described the LOVE
 and GitHub bytes together as immutable. This is the public erratum; never
