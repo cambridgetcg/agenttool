@@ -8,8 +8,10 @@
  * `AGENTOOL_COLLAB_SEAT_REF` (one T); until lane Nuance settles that
  * spelling, the doorbell (and Build 5's seat leases) take no override, so a
  * listener and a lease for the same Claude session carry the same string.
- * tests/claude-inbox.test.ts ("seat refs") holds the shared test vectors
- * and, once collab's copy is on the branch, the line-by-line comparison.
+ * The lobby's copy for room seat leases (packages/lobby/src/seat-ref.ts,
+ * #536) makes the same choice. tests/claude-inbox.test.ts ("seat refs")
+ * holds the shared test vectors and the line-by-line comparison with each
+ * copy present: the lobby's, and collab's once it is on the branch.
  */
 export const MAX_SEAT_REF = 200;
 const SEAT_REF = /^[A-Za-z0-9][A-Za-z0-9._:@/+-]*$/;

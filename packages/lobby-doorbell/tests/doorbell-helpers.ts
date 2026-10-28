@@ -10,7 +10,7 @@ import { Fetcher, type TableReader } from "../src/fetcher.js";
 import { BELL_FORMAT, LISTENER_FORMAT, type Bell, type Listener } from "../src/formats.js";
 import { ensurePrivateDirectory, writePrivateJson, BELLS_DIRECTORY, LISTENERS_DIRECTORY } from "../src/home.js";
 import type { CliOutcome } from "../src/lobby-cli.js";
-import { bellPath, listenerPath, type LivenessDeps } from "../src/registry.js";
+import { bellPath, fetcherPidPath, listenerPath, type LivenessDeps } from "../src/registry.js";
 import type { RunResult, Spawner } from "../src/run.js";
 import { CANARY, NOW, ROOM_A } from "./helpers.js";
 
@@ -144,8 +144,10 @@ export function makeDoorbellWorld(): DoorbellWorld {
       return bell;
     },
     fetcher(pid = FETCHER) {
+      // As fetchCommand does after claimFetcherPidfile: the pidfile names this fetcher (a later one replaces it).
+      writePrivateJson(fetcherPidPath(doorbellHome), { pid, started: LSTART, at: new Date(world.clock).toISOString() });
       return new Fetcher({
-        doorbellHome, lobbyHome, cli: world.reader, liveness: world.liveness, now: () => world.clock, pid, launchContext: "terminal",
+        doorbellHome, lobbyHome, cli: world.reader, liveness: world.liveness, now: () => world.clock, pid, started: LSTART, launchContext: "terminal",
       });
     },
     syncCalls() {

@@ -15,11 +15,16 @@
  * locally every 60 s, a 401/403/404 holds the room until its season grant id
  * changes, 429 waits 300 s, an uncertain or failed read climbs 60 -> 120 ->
  * 300 s and is never retried at once, and anything unexpected stops the
- * fetcher after marking the bells (it never loops on an error).
+ * fetcher after marking the bells (it never loops on an error). A fetcher
+ * started within 300 s of such a stop (the stopped bell keeps its reason and
+ * time) polls nothing until 300 s after it, so re-arming cannot turn a
+ * persistent failure into a loop of hosted reads.
  *
- * Every 3 s cycle first checks STOP, the 12 h lifetime and SIGTERM. With no
- * live listener for 120 s it exits. It never renews, sends, signs or accepts
- * anything, never restarts itself, and is never a launchd agent.
+ * Every 3 s cycle first checks that fetcher.pid still names this process and
+ * its start time (else another fetcher owns the bells: it exits and touches
+ * nothing), then STOP, the 12 h lifetime and SIGTERM. With no live listener
+ * for 120 s it exits. It never renews, sends, signs or accepts anything,
+ * never restarts itself, and is never a launchd agent.
  */
 import { DoorbellError } from "./errors.js";
 import {
@@ -43,10 +48,16 @@ export const NO_LISTENER_EXIT_MS = 120_000;
 export const LAPSED_RECHECK_MS = 60_000;
 export const RATE_LIMITED_MS = 300_000;
 export const UNREACHABLE_LADDER_MS = [60_000, 120_000, 300_000] as const;
+/** After a fatal stop, a new fetcher polls nothing until this long after it (the ladder's top). */
+export const RESTART_AFTER_FATAL_MS = 300_000;
 /** Cached pages read after one sync before the next cycle continues (each costs no request). */
 export const MAX_CACHED_PAGES = 100;
 
-export type FetcherExit = "stopped" | "fetcher_lifetime" | "no_listeners" | "sigterm" | "fatal";
+/** The reasons a poll stops the fetcher with. A stopped bell with one of them holds back the next fetcher. */
+export const FATAL_REASONS = ["cli_unparseable", "cli_failed", "lobby_refused"] as const satisfies readonly BellReason[];
+type FatalReason = typeof FATAL_REASONS[number];
+
+export type FetcherExit = "stopped" | "superseded" | "fetcher_lifetime" | "no_listeners" | "sigterm" | "fatal";
 
 export interface TableReader {
   tablePage(roomId: string, after: string, cached: boolean): Promise<CliOutcome>;
@@ -60,6 +71,8 @@ export interface FetcherDeps {
   liveness: LivenessDeps;
   now: () => number;
   pid: number;
+  /** This process's `ps` start time, as its fetcher.pid records it. */
+  started: string;
   launchContext: FetcherStatus["launch_context"];
 }
 
@@ -67,6 +80,8 @@ interface RoomRuntime {
   room_id: string;
   armed_at: string;
   catching: boolean;
+  /** Restored from a stopped bell: it reads ok (under a new seq) only when this fetcher polls the room. */
+  reset_pending: boolean;
   head: string | null;
   base: string | null;
   counters: Counters;
@@ -90,13 +105,15 @@ const add = (left: Counters, right: Counters): Counters => ({
   new: left.new + right.new, addressed: left.addressed + right.addressed, unverified: left.unverified + right.unverified,
 });
 
-type PollResult = "ok" | { fatal: BellReason; code: string | null };
+type PollResult = "ok" | { fatal: FatalReason; code: string | null };
 
 export class Fetcher {
   private readonly rooms = new Map<string, RoomRuntime>();
   readonly startedAt: number;
   private lastLiveAt: number;
   private terminating = false;
+  /** No room is polled before this (a fatal stop found on a bell this fetcher restored). */
+  private holdUntil = 0;
 
   constructor(private readonly deps: FetcherDeps) {
     this.startedAt = deps.now();
@@ -116,9 +133,22 @@ export class Fetcher {
     appendLogLine(this.deps.doorbellHome, { at: iso(this.deps.now()), act: "fetch", pid: this.deps.pid, ...record });
   }
 
+  /** Whether fetcher.pid still names this process: its pid and its start time. */
+  private holdsPidfile(): boolean {
+    const current = readPidfile(fetcherPidPath(this.deps.doorbellHome));
+    return current !== null && current !== "unreadable" && current.pid === this.deps.pid && current.started === this.deps.started;
+  }
+
   /** One cycle. Returns why the fetcher must exit, or null to keep going. */
   async cycle(): Promise<FetcherExit | null> {
     const now = this.deps.now();
+    if (!this.holdsPidfile()) {
+      // Another fetcher holds fetcher.pid (two reclaims at once can both proceed), or it is gone:
+      // the bells and fetcher.json are not this process's any more, so it exits and leaves them
+      // as they are (under STOP too: the holder marks them). A double fetcher lasts one cycle.
+      this.log({ event: "exit", reason: "superseded" });
+      return "superseded";
+    }
     if (stopPresent(this.deps.lobbyHome)) return this.finish("stopped", "stopped");
     if (now - this.startedAt >= LIFETIME_MS) return this.finish("fetcher_lifetime", "fetcher_lifetime");
     if (this.terminating) return this.finish("sigterm", "fetcher_stopped");
@@ -141,12 +171,19 @@ export class Fetcher {
     }
     this.lastLiveAt = now;
 
-    for (const listener of live) {
+    // Every room's runtime first: a fatal stop on any restored bell holds back every poll.
+    const runtimes = live.map((listener) => this.runtimeFor(listener, now));
+    for (const runtime of runtimes) {
       // STOP and SIGTERM are checked before every poll, not only once per cycle.
       if (stopPresent(this.deps.lobbyHome)) return this.finish("stopped", "stopped");
       if (this.terminating) return this.finish("sigterm", "fetcher_stopped");
-      const runtime = this.runtimeFor(listener, now);
-      if (this.deps.now() < runtime.next_at) continue;
+      const at = this.deps.now();
+      if (at < runtime.next_at || at < this.holdUntil) continue;
+      if (runtime.reset_pending) {
+        // This fetcher reads the room again: from now on its bell is this fetcher's, and ok.
+        runtime.reset_pending = false;
+        this.setState(runtime, "ok", null);
+      }
       const result = await this.poll(runtime);
       if (result !== "ok") {
         this.log({ event: "fatal", room_id: runtime.room_id, reason: result.fatal, code: result.code });
@@ -162,11 +199,13 @@ export class Fetcher {
     const existing = this.rooms.get(listener.room_id);
     if (existing !== undefined && existing.armed_at === listener.armed_at) return existing;
     const bell = readBell(this.deps.doorbellHome, listener.room_id);
+    if (bell !== null) this.holdAfterFatal(bell, now);
     const sameArm = bell !== null && bell.armed_at === listener.armed_at;
     const start: RoomRuntime = {
       room_id: listener.room_id,
       armed_at: listener.armed_at,
       catching: true,
+      reset_pending: false,
       head: null,
       base: null,
       counters: { ...ZERO },
@@ -183,6 +222,12 @@ export class Fetcher {
       last_ok_at: null,
       polls: [],
     };
+    if (sameArm) {
+      // The arm's state carries over: a room that was lapsed or unreachable still is until a poll
+      // says otherwise, so readers see no transition that did not happen (and nothing rings twice).
+      // A stopped bell stays stopped, keeping its reason and time, until this fetcher polls the room.
+      Object.assign(start, { state: bell.state, reason: bell.reason, reset_pending: bell.state === "stopped" });
+    }
     if (sameArm && bell.head_cursor !== null && bell.base_cursor !== null) {
       // A restarted fetcher continues the arm: what arrived meanwhile still counts.
       Object.assign(start, {
@@ -193,10 +238,21 @@ export class Fetcher {
       Object.assign(start, { catching: false, head: listener.from_cursor, base: listener.from_cursor });
     }
     this.rooms.set(listener.room_id, start);
-    // A new seq, not a rewrite under the old one: a reader whose mark holds that seq must see the
-    // reset to ok, or the next stop or lapse on this arm would look like no transition.
-    if (!start.catching) this.bump(start);
+    // A new seq, not a rewrite under the old one, so readers see this fetcher's bell. (A stopped bell
+    // gets its new seq with the reset to ok, just before the first poll: then a later stop rings again.)
+    if (!start.catching && !start.reset_pending) this.bump(start);
     return start;
+  }
+
+  /** A bell left stopped by a fatal poll holds back every poll until RESTART_AFTER_FATAL_MS after that
+   * stop (a bell dated in the future counts from now): a re-arm after a persistent failure does not
+   * buy an immediate hosted read. */
+  private holdAfterFatal(bell: Bell, now: number): void {
+    if (bell.state !== "stopped" || !(FATAL_REASONS as readonly unknown[]).includes(bell.reason)) return;
+    const until = Math.min(Date.parse(bell.at), now) + RESTART_AFTER_FATAL_MS;
+    if (until <= Math.max(now, this.holdUntil)) return;
+    this.holdUntil = until;
+    this.log({ event: "hold", room_id: bell.room_id, reason: bell.reason, until: iso(until) });
   }
 
   private async poll(runtime: RoomRuntime): Promise<PollResult> {

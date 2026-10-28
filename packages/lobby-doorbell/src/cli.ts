@@ -119,7 +119,7 @@ async function fetchCommand(io: CliIo, rest: string[]): Promise<number> {
   if (checkLobbyEntry(ctx.lobbyEntry).state !== "ok") throw new DoorbellError("no_lobby_cli", "the pinned lobby CLI is missing or unsafe");
   ensurePrivateDirectory(ctx.doorbellHome);
   const pid = io.pid ?? process.pid;
-  await claimFetcherPidfile(ctx.doorbellHome, pid, ctx.liveness);
+  const { started } = await claimFetcherPidfile(ctx.doorbellHome, pid, ctx.liveness);
   const fetcher = new Fetcher({
     doorbellHome: ctx.doorbellHome,
     lobbyHome: ctx.lobbyHome,
@@ -127,6 +127,7 @@ async function fetchCommand(io: CliIo, rest: string[]): Promise<number> {
     liveness: ctx.liveness,
     now: ctx.now,
     pid,
+    started,
     launchContext: launch.context,
   });
   io.onTerminate?.(() => fetcher.terminate());

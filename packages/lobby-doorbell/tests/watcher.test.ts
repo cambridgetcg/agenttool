@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { listenerPath, readMark, rungPath } from "../src/registry.js";
-import { expiredRing, lapsedRing, messageRing, NOTE_PATTERN, newMessagesNote, rearmNote, RING_GRAMMAR, RING_PATTERN, stateNote, stoppedRing } from "../src/ring.js";
+import {
+  expiredRing, lapsedRing, messageRing, NOTE_PATTERN, newMessagesNote, rearmNote, RING_GRAMMAR, RING_PATTERN, stateNote, stoppedAgainRing, stoppedRing,
+} from "../src/ring.js";
 import { MIN_RING_GAP_MS, Watcher, WATCH_TICK_MS } from "../src/watcher.js";
 import { CANARY, NOW, ROOM_A } from "./helpers.js";
 import { makeDoorbellWorld, OTHER, WATCHER, type DoorbellWorld } from "./doorbell-helpers.js";
@@ -41,6 +43,7 @@ describe("ring text (grammar agenttool-lobby-bell/v2)", () => {
       lapsedRing({ room_id: ROOM_A, reason: "refused_401", watcher_pid: 4242 }),
       stoppedRing({ room_id: ROOM_A, reason: "fetcher_lifetime", watcher_pid: 4242 }),
       expiredRing({ room_id: ROOM_A, hours: 12 }),
+      stoppedAgainRing({ room_id: ROOM_A, reason: "lobby_refused", watcher_pid: 4242 }),
     ];
     for (const ring of rings) {
       expect({ ring, matches: RING_PATTERN.test(ring) }).toEqual({ ring, matches: true });
@@ -62,6 +65,10 @@ describe("ring text (grammar agenttool-lobby-bell/v2)", () => {
     expect(RING_PATTERN.test(`${ring} ${CANARY}`)).toBe(false);
     expect(RING_PATTERN.test(ring.replace(`--room ${ROOM_A}`, `--room room_${"b".repeat(32)}`))).toBe(false);
     expect(RING_PATTERN.test(lapsedRing({ room_id: ROOM_A, reason: "no_seat", watcher_pid: 1 }).replace("no_seat", "No Seat!"))).toBe(false);
+    const again = stoppedAgainRing({ room_id: ROOM_A, reason: "cli_failed", watcher_pid: 1 });
+    expect(again).not.toContain("listen --room");
+    expect(RING_PATTERN.test(again.replace("cli_failed", CANARY))).toBe(false);
+    expect(RING_PATTERN.test(again.replace("Do not re-arm; ", `re-arm with: agenttool-lobby-doorbell listen --room ${ROOM_A}; `))).toBe(false);
   });
 });
 
@@ -129,6 +136,45 @@ describe("the watcher", () => {
     counts(world, 8, "10", 0, 0, { state: "stopped", reason: "stopped" });
     await tick();
     expect(rings).toHaveLength(2);
+  });
+
+  test("a later stop on the same arm asks for a person instead of a re-arm; a failed ring does not count, and a new arm starts over", async () => {
+    const world = makeDoorbellWorld();
+    world.listener();
+    const results = [{ ok: false, code: "ECONNREFUSED" }];
+    const rings: string[] = [];
+    const watcher = new Watcher({
+      doorbellHome: world.doorbellHome, lobbyHome: world.lobbyHome, roomId: ROOM_A, pid: WATCHER,
+      ring: async (text) => { rings.push(text); return results.shift() ?? { ok: true, code: null }; },
+      ownerGone: () => false, now: () => world.clock,
+    });
+    const step = async (seq: number, extra: object = {}) => {
+      counts(world, seq, "10", 0, 0, extra);
+      world.clock += WATCH_TICK_MS;
+      await watcher.tick();
+    };
+    const stop = (reason: string) => ({ state: "stopped", reason });
+    await step(1);
+    await step(2, stop("cli_failed"));
+    await step(3);
+    await step(4, stop("cli_failed"));
+    await step(5);
+    await step(6, stop("lobby_refused"));
+    await step(7);
+    await step(8, stop("fetcher_stopped"));
+    const input = (reason: "cli_failed" | "lobby_refused" | "fetcher_stopped") => ({ room_id: ROOM_A, reason, watcher_pid: WATCHER });
+    expect(rings).toEqual([
+      stoppedRing(input("cli_failed")), // not delivered
+      stoppedRing(input("cli_failed")),
+      stoppedAgainRing(input("lobby_refused")),
+      stoppedAgainRing(input("fetcher_stopped")),
+    ]);
+    // A new arm (a fresh listen) starts over: its first stop says how to re-arm.
+    const armed = new Date(world.clock).toISOString();
+    world.listener({ armed_at: armed });
+    await step(9, { armed_at: armed });
+    await step(10, { armed_at: armed, ...stop("cli_failed") });
+    expect(rings.at(-1)).toBe(stoppedRing(input("cli_failed")));
   });
 
   test("a grant that lapsed before the first catch-up (no head yet) still rings once", async () => {

@@ -1,15 +1,20 @@
-import { describe, expect, test } from "bun:test";
-import { existsSync, writeFileSync } from "node:fs";
+import { describe, expect, spyOn, test } from "bun:test";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { makeContext, startWatcher } from "../src/control.js";
 import {
-  ACTIVE_WINDOW_MS, claimFetcherPidfile, ensureFetcher, fetcherState, LIFETIME_MS, NO_LISTENER_EXIT_MS, readFetcherStatus, releaseFetcherPidfile, TICK_MS,
+  ACTIVE_WINDOW_MS, claimFetcherPidfile, ensureFetcher, fetcherState, LIFETIME_MS, NO_LISTENER_EXIT_MS, readFetcherStatus, releaseFetcherPidfile,
+  RESTART_AFTER_FATAL_MS, TICK_MS,
 } from "../src/fetcher.js";
-import { parseBell } from "../src/formats.js";
-import { readPrivateJson } from "../src/home.js";
-import { bellPath, claimListener, fetcherPidPath, readBell, readListener } from "../src/registry.js";
+import { parseBell, type Bell } from "../src/formats.js";
+import * as home from "../src/home.js";
+import { readPrivateJson, writePrivateJson } from "../src/home.js";
+import { handleClaudeHook } from "../src/hook.js";
+import { bellPath, claimListener, fetcherPidPath, listenerPath, readBell, readListener } from "../src/registry.js";
+import { RING_PATTERN } from "../src/ring.js";
 import { Watcher, WATCH_TICK_MS } from "../src/watcher.js";
-import { CANARY, ROOM_A, ROOM_B } from "./helpers.js";
-import { FETCHER, LSTART, makeDoorbellWorld, OTHER, OWNER, UUID_GRANT_2, WATCHER, type DoorbellWorld } from "./doorbell-helpers.js";
+import { CANARY, NOW, ROOM_A, ROOM_B } from "./helpers.js";
+import { fakePs, FETCHER, LSTART, makeDoorbellWorld, OTHER, OWNER, SESSION, UUID_GRANT_2, WATCHER, type DoorbellWorld } from "./doorbell-helpers.js";
 
 const history = (count: number) => Array.from({ length: count }, (_, index) => ({ cursor: index + 1, from_me: index % 3 === 0, to_me: index % 2 === 0 }));
 
@@ -180,17 +185,31 @@ describe("the fetcher", () => {
   });
 });
 
+function ringingWatcher(world: DoorbellWorld, rings: string[]) {
+  return new Watcher({
+    doorbellHome: world.doorbellHome, lobbyHome: world.lobbyHome, roomId: ROOM_A, pid: WATCHER,
+    ring: async (text) => { rings.push(text); return { ok: true, code: null }; },
+    ownerGone: () => false, now: () => world.clock,
+  });
+}
+
+/** The UserPromptSubmit hook of the listening session, as Claude Code runs it. */
+async function promptNotes(world: DoorbellWorld): Promise<string[]> {
+  const context = makeContext({
+    env: { HOME: join(world.root, "home"), XDG_STATE_HOME: join(world.root, "state"), CLAUDE_PID: String(OWNER) }, selfEntry: null,
+    homeDir: join(world.root, "home"), now: () => world.clock, spawner: () => fakePs(world.procs),
+    starter: () => ({ start: () => { throw new Error("a prompt note starts nothing"); } }), alive: (pid) => world.procs.has(pid),
+  });
+  return handleClaudeHook(context, { hook_event_name: "UserPromptSubmit", session_id: SESSION });
+}
+
 describe("stopped twice on one arm", () => {
-  test("a fetcher restarted on the same arm raises seq, so a second stop rings again", async () => {
+  test("a restarted fetcher waits out 300 s after a fatal stop, then reads ok under a new seq, so a second stop rings again and asks for a person", async () => {
     const world = makeDoorbellWorld();
     world.events = history(3);
     world.listener();
     const rings: string[] = [];
-    const watcher = new Watcher({
-      doorbellHome: world.doorbellHome, lobbyHome: world.lobbyHome, roomId: ROOM_A, pid: WATCHER,
-      ring: async (text) => { rings.push(text); return { ok: true, code: null }; },
-      ownerGone: () => false, now: () => world.clock,
-    });
+    const watcher = ringingWatcher(world, rings);
     const stoppedRings = () => rings.filter((ring) => ring.includes("the fetcher stopped")).length;
     let fetcher = world.fetcher();
     await fetcher.cycle();
@@ -198,24 +217,171 @@ describe("stopped twice on one arm", () => {
     world.failures.push({ kind: "failed", code: "cli_exit" });
     world.clock += TICK_MS;
     expect(await fetcher.cycle()).toBe("fatal");
+    const stoppedAt = world.clock;
     await watcher.tick();
     expect(stoppedRings()).toBe(1);
+    expect(rings[0]).toContain(`re-arm with: agenttool-lobby-doorbell listen --room ${ROOM_A}`);
     const stopped = readBell(world.doorbellHome, ROOM_A)!;
-    // The ring's advice (listen again) starts a new fetcher that continues the arm.
+    expect(stopped).toMatchObject({ state: "stopped", reason: "cli_failed", at: new Date(stoppedAt).toISOString() });
+    // The ring's advice (listen again) starts a new fetcher that continues the arm. It reads nothing until
+    // 300 s after the stop, and until it reads, the bell keeps the stop's reason and time.
     world.procs.set(9_000_005, LSTART);
     fetcher = world.fetcher(9_000_005);
+    const syncs = world.syncCalls();
     world.clock += TICK_MS;
-    await fetcher.cycle();
-    expect(readBell(world.doorbellHome, ROOM_A)).toMatchObject({ state: "ok", reason: null, seq: stopped.seq + 1 });
+    while (world.clock < stoppedAt + RESTART_AFTER_FATAL_MS) {
+      expect(await fetcher.cycle()).toBeNull();
+      await watcher.tick();
+      world.clock += TICK_MS;
+    }
+    expect(world.syncCalls()).toBe(syncs);
+    expect(readBell(world.doorbellHome, ROOM_A)).toEqual(stopped);
+    expect(readFetcherStatus(world.doorbellHome)!.rooms).toMatchObject([{ room_id: ROOM_A, state: "stopped", reason: "cli_failed", last_poll_at: null }]);
+    expect(stoppedRings()).toBe(1);
+    expect(await fetcher.cycle()).toBeNull();
+    expect(world.syncCalls()).toBe(syncs + 1);
+    expect(readBell(world.doorbellHome, ROOM_A)).toMatchObject({ state: "ok", reason: null, seq: stopped.seq + 1, fetcher_pid: 9_000_005 });
     world.clock += WATCH_TICK_MS;
     await watcher.tick();
-    // A quiet room, then the new fetcher fails too.
+    // A quiet room, then the new fetcher fails too: the second stop on this arm rings, and asks for a person
+    // instead of a re-arm.
     world.failures.push({ kind: "failed", code: "cli_exit" });
     world.clock += 60_000;
     expect(await fetcher.cycle()).toBe("fatal");
     world.clock += WATCH_TICK_MS;
     await watcher.tick();
     expect(stoppedRings()).toBe(2);
+    expect(rings[1]).toContain("the fetcher stopped again (cli_failed). Do not re-arm; ask a person to check agenttool-lobby-doorbell status.");
+    expect(rings[1]).not.toContain("listen --room");
+    for (const ring of rings) expect(ring).toMatch(RING_PATTERN);
+  });
+
+  test("the hold covers every room, counts from the stop (never more than 300 s from now), and only follows a fatal stop", async () => {
+    /** Room A has the given bell; room B has none. Returns when each room's first sync came, after the fetcher started. */
+    const firstSyncs = async (bell: Partial<Bell>) => {
+      const world = makeDoorbellWorld();
+      world.events = history(3);
+      world.listener();
+      world.listener({ room_id: ROOM_B });
+      world.bell({ seq: 4, base_cursor: "3", head_cursor: "3", ...bell });
+      const fetcher = world.fetcher();
+      while (world.syncCalls() === 0 && world.clock - NOW <= 2 * RESTART_AFTER_FATAL_MS) {
+        await fetcher.cycle();
+        world.clock += TICK_MS;
+      }
+      return world.calls.filter((call) => !call.cached).map((call) => call.at - NOW);
+    };
+    // A fatal stop 99 s before the fetcher started, on room A's bell: neither room is read until 300 s after it.
+    expect(await firstSyncs({ state: "stopped", reason: "lobby_refused", at: new Date(NOW - 99_000).toISOString() })).toEqual([201_000, 201_000]);
+    // A bell dated in the future holds for 300 s from now, not longer.
+    expect(await firstSyncs({ state: "stopped", reason: "cli_failed", at: new Date(NOW + 3_600_000).toISOString() })).toEqual([300_000, 300_000]);
+    // A fatal stop 300 s old or older, and stops that were not failures, hold nothing.
+    for (const bell of [
+      { state: "stopped" as const, reason: "cli_unparseable" as const, at: new Date(NOW - RESTART_AFTER_FATAL_MS).toISOString() },
+      { state: "stopped" as const, reason: "fetcher_lifetime" as const },
+      { state: "stopped" as const, reason: "fetcher_stopped" as const },
+      { state: "stopped" as const, reason: "no_listeners" as const },
+      { state: "stopped" as const, reason: "stopped" as const },
+      { state: "hosted-unreachable" as const, reason: "rate_limited" as const },
+    ]) expect({ bell, syncs: await firstSyncs(bell) }).toEqual({ bell, syncs: [0, 0] });
+  });
+});
+
+describe("a restart carries the arm's state", () => {
+  for (const [failure, state, rung] of [
+    [{ kind: "refused" as const, code: "no_seat" }, "grant-lapsed", 1],
+    [{ kind: "refused" as const, code: "hosted_uncertain" }, "hosted-unreachable", 0],
+  ] as const) {
+    test(`a ${state} room across a restart rings and notes once, even when both look between the restore and the first poll`, async () => {
+      const world = makeDoorbellWorld();
+      world.events = history(3);
+      world.listener();
+      const rings: string[] = [];
+      const notes: string[] = [];
+      const watcher = ringingWatcher(world, rings);
+      let fetcher = world.fetcher();
+      await fetcher.cycle();
+      await watcher.tick();
+      world.failures.push(failure);
+      world.clock += 60_000;
+      await fetcher.cycle();
+      world.clock += WATCH_TICK_MS;
+      await watcher.tick();
+      notes.push(...await promptNotes(world));
+      const before = readBell(world.doorbellHome, ROOM_A)!;
+      expect(before).toMatchObject({ state });
+      // A second fetcher continues the arm (a restart, SessionStart or a listen) while the failure lasts. Its
+      // first poll is slow: the watcher and the prompt hook both read the restored bell meanwhile.
+      world.procs.set(9_000_005, LSTART);
+      fetcher = world.fetcher(9_000_005);
+      const tablePage = world.reader.tablePage.bind(world.reader);
+      let looked = false;
+      world.reader.tablePage = async (room, after, cached) => {
+        if (!looked) {
+          looked = true;
+          expect(readBell(world.doorbellHome, ROOM_A)).toMatchObject({ state, reason: before.reason, seq: before.seq + 1, fetcher_pid: 9_000_005 });
+          world.clock += WATCH_TICK_MS;
+          await watcher.tick();
+          notes.push(...await promptNotes(world));
+        }
+        return tablePage(room, after, cached);
+      };
+      world.failures.push(failure);
+      world.clock += TICK_MS;
+      expect(await fetcher.cycle()).toBeNull();
+      expect(looked).toBe(true);
+      world.clock += WATCH_TICK_MS;
+      await watcher.tick();
+      notes.push(...await promptNotes(world));
+      expect(rings.filter((ring) => ring.includes(state))).toHaveLength(rung);
+      expect(notes.filter((note) => note.includes(state))).toHaveLength(1);
+      // The failure ends: that is a transition, so the next one on this arm rings (or notes) again.
+      world.clock += 120_000;
+      await fetcher.cycle();
+      expect(readBell(world.doorbellHome, ROOM_A)).toMatchObject({ state: "ok", reason: null });
+      world.clock += WATCH_TICK_MS;
+      await watcher.tick();
+      notes.push(...await promptNotes(world));
+      world.failures.push(failure);
+      world.clock += 120_000;
+      await fetcher.cycle();
+      world.clock += WATCH_TICK_MS;
+      await watcher.tick();
+      notes.push(...await promptNotes(world));
+      expect(rings.filter((ring) => ring.includes(state))).toHaveLength(2 * rung);
+      expect(notes.filter((note) => note.includes(state))).toHaveLength(2);
+    });
+  }
+});
+
+describe("one fetcher", () => {
+  test("a running fetcher whose fetcher.pid no longer names its pid and start time exits at the next cycle and touches nothing", async () => {
+    const at = new Date(NOW).toISOString();
+    for (const [what, change] of [
+      ["another fetcher's pidfile", (world: DoorbellWorld) => writePrivateJson(fetcherPidPath(world.doorbellHome), { pid: OTHER, started: LSTART, at })],
+      ["its pid with another start time", (world: DoorbellWorld) => writePrivateJson(fetcherPidPath(world.doorbellHome), { pid: FETCHER, started: "Wed Oct 29 08:00:00 2026", at })],
+      ["no pidfile", (world: DoorbellWorld) => rmSync(fetcherPidPath(world.doorbellHome))],
+      ["an unreadable pidfile", (world: DoorbellWorld) => writeFileSync(fetcherPidPath(world.doorbellHome), "{", { mode: 0o600 })],
+    ] as const) {
+      const world = makeDoorbellWorld();
+      world.events = history(3);
+      world.listener();
+      const fetcher = world.fetcher();
+      expect(await fetcher.cycle()).toBeNull();
+      const bell = readFileSync(bellPath(world.doorbellHome, ROOM_A), "utf8");
+      const status = readFileSync(join(world.doorbellHome, "fetcher.json"), "utf8");
+      change(world);
+      world.events.push({ cursor: 4, to_me: true });
+      const calls = world.calls.length;
+      // Not even STOP, its lifetime or SIGTERM makes it mark the bells: the fetcher holding the pidfile does.
+      writeFileSync(join(world.lobbyHome, "STOP"), "stopped by a test\n", { mode: 0o600 });
+      world.clock += LIFETIME_MS;
+      fetcher.terminate();
+      expect({ what, exit: await fetcher.cycle() }).toEqual({ what, exit: "superseded" });
+      expect({ what, calls: world.calls.length }).toEqual({ what, calls });
+      expect({ what, bell: readFileSync(bellPath(world.doorbellHome, ROOM_A), "utf8") }).toEqual({ what, bell });
+      expect({ what, status: readFileSync(join(world.doorbellHome, "fetcher.json"), "utf8") }).toEqual({ what, status });
+    }
   });
 });
 
@@ -334,27 +500,94 @@ describe("the pidfile", () => {
     expect(existsSync(fetcherPidPath(world.doorbellHome))).toBe(false);
   });
 
-  test("a stale pidfile is removed only while it still holds the record that was checked", async () => {
-    const world = makeDoorbellWorld();
-    const stale = { pid: FETCHER, started: "Wed Oct 29 08:00:00 2026", at: new Date(world.clock).toISOString() };
-    writeFileSync(fetcherPidPath(world.doorbellHome), JSON.stringify(stale), { mode: 0o600 });
-    world.procs.set(OTHER, LSTART);
+  test("a stale pidfile is removed only while it still holds the record that was checked, in every field", async () => {
+    const stale = { pid: FETCHER, started: "Wed Oct 29 08:00:00 2026", at: new Date(NOW).toISOString() };
     const reclaimer = 9_000_006;
-    world.procs.set(reclaimer, LSTART);
-    let swapped = false;
-    const liveness = {
-      ...world.liveness,
-      alive: (pid: number) => {
-        // Another process reclaims the stale pidfile while this one is checking it.
-        if (pid === FETCHER && !swapped) {
-          swapped = true;
-          writeFileSync(fetcherPidPath(world.doorbellHome), JSON.stringify({ pid: reclaimer, started: LSTART, at: stale.at }), { mode: 0o600 });
-        }
-        return world.procs.has(pid);
-      },
-    };
-    await expect(claimFetcherPidfile(world.doorbellHome, OTHER, liveness)).rejects.toThrow(`already runs as pid ${reclaimer}`);
-    expect(readPrivateJson(fetcherPidPath(world.doorbellHome))).toMatchObject({ pid: reclaimer });
+    for (const [what, fresh, refusal] of [
+      ["another pid and start time", { pid: reclaimer, started: LSTART, at: stale.at }, `already runs as pid ${reclaimer}`],
+      // Two processes can start within the same second: the pid alone tells them apart.
+      ["another pid, the same start time", { pid: reclaimer, started: stale.started, at: stale.at }, `already runs as pid ${reclaimer}`],
+      ["the same pid and start time, written at another time", { ...stale, at: new Date(NOW + 1_000).toISOString() }, "at the same moment"],
+    ] as const) {
+      const world = makeDoorbellWorld();
+      writeFileSync(fetcherPidPath(world.doorbellHome), JSON.stringify(stale), { mode: 0o600 });
+      world.procs.set(OTHER, LSTART);
+      if (fresh.pid === reclaimer) world.procs.set(reclaimer, fresh.started);
+      let swapped = false;
+      const liveness = {
+        ...world.liveness,
+        alive: (pid: number) => {
+          // Another process reclaims the stale pidfile while this one is checking it.
+          if (pid === FETCHER && !swapped) {
+            swapped = true;
+            writeFileSync(fetcherPidPath(world.doorbellHome), JSON.stringify(fresh), { mode: 0o600 });
+          }
+          return world.procs.has(pid);
+        },
+      };
+      await expect(claimFetcherPidfile(world.doorbellHome, OTHER, liveness)).rejects.toThrow(refusal);
+      if (fresh.pid === reclaimer) expect({ what, holder: readPrivateJson(fetcherPidPath(world.doorbellHome)) }).toEqual({ what, holder: fresh });
+    }
+  });
+
+  test("a claim whose blocking entry vanished between the create and the read tries again, for fetcher.pid and a listener", async () => {
+    const world = makeDoorbellWorld();
+    const mine = world.listener({ watcher_pid: null, watcher_started: null });
+    rmSync(listenerPath(world.doorbellHome, ROOM_A));
+    const create = home.createPrivateJson;
+    const blocked = new Set<string>();
+    let creates = 0;
+    // The first create of each file meets an entry that is gone again by the time the claim reads it.
+    const spy = spyOn(home, "createPrivateJson").mockImplementation((path: string, value: unknown) => {
+      creates += 1;
+      if (blocked.has(path)) return create(path, value);
+      blocked.add(path);
+      return false;
+    });
+    try {
+      expect(await claimFetcherPidfile(world.doorbellHome, FETCHER, world.liveness)).toEqual({ started: LSTART });
+      expect(await claimListener(world.doorbellHome, mine, world.liveness)).toEqual({ claimed: true });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(creates).toBe(4);
+    expect(readPrivateJson(fetcherPidPath(world.doorbellHome))).toMatchObject({ pid: FETCHER, started: LSTART });
+    expect(readListener(world.doorbellHome, ROOM_A)).toEqual({ kind: "ok", listener: mine });
+  });
+
+  test("listen records its watcher only in its own claim: a record that differs in any one claim field is another's, and stays", async () => {
+    const newWatcher = 9_000_012;
+    for (const [field, value] of [
+      ["armed_at", new Date(NOW + 1).toISOString()],
+      ["seat_ref", "claude-code:6f6e6d6c-6b6a-4968-a766-656463626160"],
+      ["owner_pid", OTHER],
+      ["owner_started", "Wed Oct 29 08:00:00 2026"],
+      [null, null],
+    ] as const) {
+      const world = makeDoorbellWorld();
+      const mine = world.listener({ watcher_pid: null, watcher_started: null });
+      const current = field === null ? mine : { ...mine, [field]: value };
+      const context = makeContext({
+        env: { HOME: join(world.root, "home"), XDG_STATE_HOME: join(world.root, "state") }, selfEntry: "/opt/synthetic/lobby-doorbell/bin/agenttool-lobby-doorbell.ts",
+        homeDir: join(world.root, "home"), now: () => world.clock, spawner: () => fakePs(world.procs), alive: (pid) => world.procs.has(pid),
+        starter: () => ({
+          start: () => {
+            // Between this claim and the watcher's record, the listener file comes to hold `current`.
+            writePrivateJson(listenerPath(world.doorbellHome, ROOM_A), current);
+            world.procs.set(newWatcher, LSTART);
+            return newWatcher;
+          },
+        }),
+      });
+      const armed = await startWatcher(context, mine);
+      if (field === null) {
+        expect(armed).toEqual({ ...mine, watcher_pid: newWatcher, watcher_started: LSTART });
+        expect(readListener(world.doorbellHome, ROOM_A)).toEqual({ kind: "ok", listener: armed! });
+      } else {
+        expect({ field, armed }).toEqual({ field, armed: null });
+        expect({ field, file: readListener(world.doorbellHome, ROOM_A) }).toEqual({ field, file: { kind: "ok", listener: current } });
+      }
+    }
   });
 
   test("a stale listener is released only while it still holds the claim that was checked", async () => {

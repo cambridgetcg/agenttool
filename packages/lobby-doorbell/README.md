@@ -131,7 +131,11 @@ fleet sync`), `listener_taken` (names the holder's seat ref),
 `claude-code:<CLAUDE_CODE_SESSION_ID>` (else `codex:<CODEX_THREAD_ID>`),
 lowercased. `src/seat-ref.ts` copies #491's `defaultSeatRef` and grammar
 verbatim, with one difference: no override variable, until the spelling of
-#491's `AGENTOOL_COLLAB_SEAT_REF` (one T) is settled. A seat ref is a routing
+#491's `AGENTOOL_COLLAB_SEAT_REF` (one T) is settled. The lobby's copy for
+room seat leases (`packages/lobby/src/seat-ref.ts`, #536) makes the same
+choice, so a listener and a lease for one session carry the same string. A
+test compares the lines with each copy present in the repository: the
+lobby's now, collab's once #491 is on the branch. A seat ref is a routing
 label; it authenticates and grants nothing.
 
 **One listener per room per device.** A listener is stale, and another seat
@@ -144,10 +148,17 @@ its watcher SIGTERM.
 
 One per device (`fetcher.pid`, exclusive create, with the `ps` start time; a
 pidfile whose pid is gone or reused is reclaimed, an unreadable one is
-refused; a stale pidfile or listener is removed only while it still holds the
-record that was checked, so two simultaneous reclaims cannot delete each
-other's fresh claim). It is the only doorbell process that causes reads from the hosted
-service, and it polls only rooms with a live listener:
+refused). A stale pidfile or listener is removed only while it still holds
+the record that was checked. That narrows the race between two simultaneous
+reclaims but does not close it: the re-read and the removal are two steps,
+so in a rare order both reclaims proceed. What follows bounds the damage. A
+running fetcher exits at the start of its next cycle once `fetcher.pid` no
+longer names its pid and start time, and leaves the bells and
+`fetcher.json` to the holder, so two fetchers overlap for at most one
+cycle. A watcher whose listener names another watcher exits within 30 s,
+although its `listen` may already have reported `listening`. The fetcher
+is the only doorbell process that causes reads from the hosted service,
+and it polls only rooms with a live listener:
 
 - `room read <room> --json --after <head> --limit 50`: one sync (the lobby
   CLI's own GETs with this desk's season grant; the token never leaves the
@@ -160,16 +171,26 @@ service, and it polls only rooms with a live listener:
   reaches a file, a log, an argv or a ring.
 - The first poll of an arm pages to the head and counts nothing: history never
   rings. A restarted fetcher continues the arm from the bell, so what arrived
-  meanwhile still counts, and under a new sequence number, so a later stop or
-  lapse on that arm rings again.
+  meanwhile still counts, under a new sequence number. It carries the bell's
+  state: a room that was `grant-lapsed` or `hosted-unreachable` stays so
+  until a poll says otherwise, so nothing rings or notes a transition that did
+  not happen. A `stopped` bell keeps its reason and time until the new fetcher
+  polls the room. Then it reads `ok` under a new sequence number, so a later
+  stop or lapse on that arm rings again.
+- **After a fatal stop** (the last row of the table below), a fetcher started
+  within 300 s of the stop polls no room until 300 s after it. The stopped
+  bell's reason and time are the record; a bell dated in the future counts
+  from now. Re-arming therefore cannot turn a persistent failure into a loop
+  of hosted reads.
 - **Cadence, per room:** every 3 s while active (within 180 s of the arm or of
   any new event), then each empty poll doubles the interval (6, 12, 24, 48 s)
   up to 60 s; a new event resets it. A quiet room costs at most about 61 polls
   an hour; `fetcher.json` publishes `polls_last_hour`.
-- Every 3 s cycle first checks STOP (also before every poll), its 12 h
-  lifetime and SIGTERM. With no live listener for 120 s it exits. It never
-  restarts itself, is never a launchd agent, and refuses to start in a
-  launchd context.
+- Every 3 s cycle first checks that `fetcher.pid` still names it (else it
+  logs and exits as `superseded`, leaving the bells and `fetcher.json`
+  alone), then STOP (also before every poll), its 12 h lifetime and SIGTERM. With no live listener for 120 s it
+  exits. It never restarts itself, is never a launchd agent, and refuses to
+  start in a launchd context.
 - **It never renews, sends, signs or accepts anything.** The hourly renewal
   trigger Yu approved on 2026-10-27 is a later PR, after the lobby side of
   renewal by signature.
@@ -183,7 +204,7 @@ service, and it polls only rooms with a live listener:
 | `hosted_refused` HTTP 429 | `hosted-unreachable` (`rate_limited`) | 300 s |
 | `hosted_uncertain`, `hosted_invalid_response`, 5xx, a CLI timeout | `hosted-unreachable` | 60, then 120, then 300 s; never an immediate re-poll |
 | `sync_page_limit` | `ok` (`page_limit`) | next cycle |
-| anything else, unparseable output, an unexpected exit | `stopped` | the fetcher exits (it never loops on an error) |
+| anything else, unparseable output, an unexpected exit | `stopped` (`lobby_refused`, `cli_unparseable`, `cli_failed`) | the fetcher exits (it never loops on an error); the next one polls nothing until 300 s after the stop |
 
 ### Bells and rings
 
@@ -203,15 +224,22 @@ Reply with room_say_draft, or room say --lease if a person gave this seat a leas
 
 It also rings once per transition into `grant-lapsed` ("a person must renew:
 room renew request / hub renew-sweep / room renew accept") and into a stopped
-fetcher, and once at the listener's expiry. It never rings for
-`hosted-unreachable`, and rings nothing while STOP exists. Ring and note text
-follow the closed grammar `agenttool-lobby-bell/v2` (`src/ring.ts`): validated
-ids, cursors, numbers, closed codes and fixed words only, never a room title,
-card text, display name, device name, path or lease id. (v1 was the spec's
-"Reply only with room_say_draft; a person sends it at a terminal", never
-shipped. Seat leases are Build 5; until one exists the `--lease` clause does
-not apply.) A ring grants nothing: the agent acts only on what `room_read`
-verifies.
+fetcher, and once at the listener's expiry. The first stopped ring of an arm
+says how to re-arm (`listen --room R`). Any later stop on the same arm rings
+"the fetcher stopped again (<reason>). Do not re-arm; ask a person to check
+agenttool-lobby-doorbell status." That way an agent that follows the rings
+cannot loop on a persistent failure. A stopped ring that failed to reach the
+inbox does not count. It never rings for `hosted-unreachable`, and rings
+nothing while STOP exists. Ring and note text follow the closed grammar
+`agenttool-lobby-bell/v2` (`src/ring.ts`): validated ids, cursors, numbers,
+closed codes and fixed words only, never a room title, card text, display
+name, device name, path or lease id. (v1 was the spec's "Reply only with
+room_say_draft; a person sends it at a terminal", never shipped. The
+"stopped again" shape joined v2 before v2 shipped.) The `--lease` clause
+refers to the lobby's room seat leases (#536). A person makes a lease at a
+terminal with `agenttool-lobby room lease`, and only then may this seat send
+with `room say --lease`; the contract below pins that flag. A ring grants
+nothing: the agent acts only on what `room_read` verifies.
 
 **The Claude Code inbox.** The watcher posts an auth line carrying
 `CLAUDE_CODE_MESSAGING_TOKEN`, then `{"type":"user","message":{"role":"user","content":...}}`,
@@ -255,7 +283,8 @@ has the start time on record. Never SIGKILL. `resume` removes STOP only after
 `resume` is typed at `/dev/tty`, failing closed without a terminal, so an agent
 cannot release a brake a person set. Removing STOP re-enables the doorbell
 only; `listen` re-arms it. STOP is the one device brake, shared with the
-lobby's seat leases when they land.
+lobby's room seat leases (#536): while it exists, any lobby command voids
+every lease on the desk for good, and removing it brings none back.
 
 ### status
 
@@ -334,8 +363,10 @@ home resolution, the refusal line format and exit codes, the `fleet status`
 50-item page limit, the cursor grammar and the BigInt cursor compare, the
 `room read` flags, the sync-before-read order and the refusal codes the
 fetcher's table names (`no_seat`, `not_seated`, `sync_page_limit`,
-`hosted_uncertain`, `hosted_invalid_response`, `HTTP <status>`). Additive
-changes pass; a renamed key or moved format fails.
+`hosted_uncertain`, `hosted_invalid_response`, `HTTP <status>`), and what a
+ring tells the agent to use: `room say ... --lease LEASE_ID --idempotency-key
+K` and the MCP tools `room_read` and `room_say_draft`. Additive changes pass;
+a renamed key, flag or tool, or a moved format, fails.
 
 ```sh
 bun run contract                                            # against ../lobby/src (part of bun run ci)
@@ -388,6 +419,12 @@ holds no secrets and no text.
   prompt still covers those messages. A ring the socket accepted that never
   reaches the session is not detected. Whether hook processes carry `CLAUDE_CODE_MESSAGING_SOCKET`
   is not verified; without it SessionStart prints the re-arm line instead.
+- A restarted fetcher carries a lapsed or unreachable state, but not its
+  wait. The same holds for a room's runtime re-created after its listener
+  looked stale for one cycle. Such a room is polled at once, so after a 429
+  or a 401/403/404 one more hosted read can follow a restart before the
+  300 s wait or the grant hold is set again. Only a fatal stop's 300 s hold
+  survives a restart.
 - The fetcher reads the default conversation (`main`) only, as `room_read` does
   by default.
 - A device asleep, or with no listening session for over 120 s, polls nothing;

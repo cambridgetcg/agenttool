@@ -167,6 +167,19 @@ export const CONTRACT: readonly ContractCheck[] = [
     why: "a cached read reports synced_at and needs no live grant",
     patterns: [literal("return { scope, conversation, read, synced_at: ctx.store.fleet.lastSynced(scope.mission_id) };")],
   },
+  {
+    file: "cli-table.ts",
+    why: "a message ring's reply line names `room say --lease` (src/ring.ts REPLY): room say still takes --lease with --idempotency-key",
+    patterns: [
+      literal('lease: { type: "string" }, "idempotency-key": { type: "string" }, json: { type: "boolean" },'),
+      /"room say <room_id> [^"\n]*\[--lease LEASE_ID --idempotency-key K\b/,
+    ],
+  },
+  {
+    file: "mcp.ts",
+    why: "rings name the MCP tools room_read (to read) and room_say_draft (to reply)",
+    patterns: [/export const LOBBY_TOOL_NAMES = \[[^\]]*"room_read"[^\]]*"room_say_draft"[^\]]*\] as const;/],
+  },
 ];
 
 export interface ContractFailure {

@@ -5,9 +5,11 @@
  * It reads only the room's bell and its own mark. It rings forward only: an
  * `addressed` listener when messages addressed to this desk arrived since the
  * last ring, an `all` listener when any message from another desk did; and
- * once per transition into grant-lapsed or a stopped fetcher. Rings within
- * 60 s coalesce into one. It rings nothing for hosted-unreachable, and
- * nothing at all while STOP exists.
+ * once per transition into grant-lapsed or a stopped fetcher. The first
+ * stopped ring of an arm says how to re-arm; any later one on that arm asks
+ * for a person instead, so an agent that follows the rings cannot loop on a
+ * persistent failure. Rings within 60 s coalesce into one. It rings nothing
+ * for hosted-unreachable, and nothing at all while STOP exists.
  *
  * It exits when the owning Claude Code process or its socket is gone, on STOP,
  * on SIGTERM, when its listener file is removed or names another watcher, and
@@ -16,7 +18,7 @@
 import { appendLogLine, stopPresent } from "./home.js";
 import { delta, markAt, type Listener, type Mark } from "./formats.js";
 import { emptyMark, readBell, readListener, readMark, releaseListener, rungPath, writeMark, ARM_GRACE_MS } from "./registry.js";
-import { expiredRing, lapsedRing, messageRing, stoppedRing } from "./ring.js";
+import { expiredRing, lapsedRing, messageRing, stoppedAgainRing, stoppedRing } from "./ring.js";
 import type { Ring } from "./claude-inbox.js";
 
 export const WATCH_TICK_MS = 2_000;
@@ -37,6 +39,8 @@ export interface WatcherDeps {
 export class Watcher {
   private lastRing = 0;
   private terminating = false;
+  /** The arm whose stopped ring was delivered; a later stop on it asks for a person. */
+  private stoppedArm: string | null = null;
   private readonly startedAt: number;
 
   constructor(private readonly deps: WatcherDeps) {
@@ -98,7 +102,9 @@ export class Watcher {
       if (bell.state === "grant-lapsed" && mark.state !== "grant-lapsed") {
         await this.ring(lapsedRing({ room_id: room, reason: bell.reason, watcher_pid: this.deps.pid }), "grant-lapsed");
       } else if (bell.state === "stopped" && mark.state !== "stopped" && bell.reason !== "stopped") {
-        await this.ring(stoppedRing({ room_id: room, reason: bell.reason, watcher_pid: this.deps.pid }), "stopped");
+        const again = this.stoppedArm === bell.armed_at;
+        const input = { room_id: room, reason: bell.reason, watcher_pid: this.deps.pid };
+        if (await this.ring(again ? stoppedAgainRing(input) : stoppedRing(input), again ? "stopped_again" : "stopped")) this.stoppedArm = bell.armed_at;
       }
     }
 

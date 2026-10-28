@@ -108,6 +108,40 @@ describe("hook claude-code", () => {
     expect(await hook(event("UserPromptSubmit"))).toEqual([
       `[lobby] 2 new Lobby message(s) in ${ROOM_A} after cursor 10 (1 addressed to this desk, 0 unverified); no message text here; read with room_read (room_id ${ROOM_A}, after 10).`,
     ]);
+    // The watcher's mark is now behind the note's: the next note starts after the note, not after the failed ring.
+    world.bell({ seq: 3, head_cursor: "13", new: 3, addressed: 2 });
+    expect(await hook(event("UserPromptSubmit"))).toEqual([
+      `[lobby] 1 new Lobby message(s) in ${ROOM_A} after cursor 12 (1 addressed to this desk, 0 unverified); no message text here; read with room_read (room_id ${ROOM_A}, after 12).`,
+    ]);
+  });
+
+  test("a note starts after whichever of the last ring and the last note reached the later cursor, even when only unverified events moved", async () => {
+    const { world, hook } = hookWorld();
+    world.listener();
+    const rings: string[] = [];
+    const watcher = new Watcher({
+      doorbellHome: world.doorbellHome, lobbyHome: world.lobbyHome, roomId: ROOM_A, pid: WATCHER,
+      ring: async (text) => { rings.push(text); return { ok: true, code: null }; }, ownerGone: () => false, now: () => world.clock,
+    });
+    world.bell({ seq: 1, head_cursor: "10" });
+    await watcher.tick();
+    expect(await hook(event("UserPromptSubmit"))).toEqual([]);
+    // An addressed message: the prompt hook tells the agent first.
+    world.bell({ seq: 2, head_cursor: "12", new: 1, addressed: 1 });
+    expect(await hook(event("UserPromptSubmit"))).toEqual([
+      `[lobby] 1 new Lobby message(s) in ${ROOM_A} after cursor 10 (1 addressed to this desk, 0 unverified); no message text here; read with room_read (room_id ${ROOM_A}, after 10).`,
+    ]);
+    // An unverified event arrives, then the watcher rings: its mark has the same `new` as the note's, a later cursor.
+    world.bell({ seq: 3, head_cursor: "13", new: 1, addressed: 1, unverified: 1 });
+    world.clock += WATCH_TICK_MS;
+    await watcher.tick();
+    expect(rings).toHaveLength(1);
+    expect(rings[0]).toContain("1 new table message(s) after cursor 10 (head 13), 1 addressed to this desk, 1 unverified.");
+    // The next note starts after the ring's cursor and does not count the unverified event again.
+    world.bell({ seq: 4, head_cursor: "14", new: 2, addressed: 2, unverified: 1 });
+    expect(await hook(event("UserPromptSubmit"))).toEqual([
+      `[lobby] 1 new Lobby message(s) in ${ROOM_A} after cursor 13 (1 addressed to this desk, 0 unverified); no message text here; read with room_read (room_id ${ROOM_A}, after 13).`,
+    ]);
   });
 
   test("UserPromptSubmit names a lapse even before the head is known", async () => {

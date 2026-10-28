@@ -90,16 +90,31 @@ describe("seat refs (copied from #491's seat-ref.ts, no override variable)", () 
     for (const bad of ["", "a".repeat(MAX_SEAT_REF + 1), ":leading", "has space", "new\nline", "é"]) expect(isSeatRef(bad)).toBe(false);
   });
 
-  const collabRef = join(packageRoot, "..", "collab", "src", "seat-ref.ts");
-  test.skipIf(!existsSync(collabRef))("matches collab's seat-ref.ts once it is on this branch", () => {
-    const source = readFileSync(collabRef, "utf8");
-    const ours = readFileSync(join(packageRoot, "src", "seat-ref.ts"), "utf8");
-    for (const line of [
-      "const SEAT_REF = /^[A-Za-z0-9][A-Za-z0-9._:@/+-]*$/;",
-      "const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;",
-      "export const MAX_SEAT_REF = 200;",
-      "  if (claude && UUID.test(claude)) return `claude-code:${claude.toLowerCase()}`;",
-      "  if (codex && UUID.test(codex)) return `codex:${codex.toLowerCase()}`;",
-    ]) expect({ line, collab: source.includes(line), ours: ours.includes(line) }).toEqual({ line, collab: true, ours: true });
-  });
+  // Line-by-line parity with each other copy in this repository: collab's (#491, once it is on this
+  // branch) and the lobby's room seat leases (#536). A listener and a lease for one session must carry
+  // the same seat ref. Each is skipped only where that package is absent (an install of this package alone).
+  const PARITY_LINES = [
+    "const SEAT_REF = /^[A-Za-z0-9][A-Za-z0-9._:@/+-]*$/;",
+    "const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;",
+    "export const MAX_SEAT_REF = 200;",
+    "  const claude = env.CLAUDE_CODE_SESSION_ID;",
+    "  if (claude && UUID.test(claude)) return `claude-code:${claude.toLowerCase()}`;",
+    "  const codex = env.CODEX_THREAD_ID;",
+    "  if (codex && UUID.test(codex)) return `codex:${codex.toLowerCase()}`;",
+  ];
+  const override = /env\.\w*SEAT_REF\b|\[["']\w*SEAT_REF["']\]/;
+  for (const [copy, path, hasOverride] of [
+    // #491 reads AGENTOOL_COLLAB_SEAT_REF (one T); the doorbell deliberately does not (src/seat-ref.ts).
+    ["collab", join(packageRoot, "..", "collab", "src", "seat-ref.ts"), null],
+    // The lobby's copy takes no override either, so a listener and a lease cannot disagree.
+    ["lobby", join(packageRoot, "..", "lobby", "src", "seat-ref.ts"), false],
+  ] as const) {
+    test.skipIf(!existsSync(path))(`matches ${copy}'s seat-ref.ts`, () => {
+      const source = readFileSync(path, "utf8");
+      const ours = readFileSync(join(packageRoot, "src", "seat-ref.ts"), "utf8");
+      for (const line of PARITY_LINES) expect({ line, [copy]: source.includes(line), ours: ours.includes(line) }).toEqual({ line, [copy]: true, ours: true });
+      expect(override.test(ours)).toBe(false);
+      if (hasOverride !== null) expect({ copy, override: override.test(source) }).toEqual({ copy, override: hasOverride });
+    });
+  }
 });

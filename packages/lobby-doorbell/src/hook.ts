@@ -130,13 +130,16 @@ async function sessionStart(ctx: DoorbellContext, input: HookInput, seatRef: str
 }
 
 /** The base to report from. Counts: whichever of the watcher's last ring and the hook's last note
- * told the agent more (both only grow within an arm), so a note never repeats a ring. State and seq:
- * the hook's own last note. */
+ * told the agent more, so a note never repeats a ring and never repeats an earlier note (a failed
+ * ring leaves the rung mark behind). Each mark's counts and cursor are one snapshot of the arm's bell,
+ * and within an arm both only grow, so the mark with the later cursor told more; comparing `new`
+ * alone misses events that only moved `unverified`. State and seq: the hook's own last note. */
 function baseMark(bell: Bell, noted: Mark | null, rung: Mark | null): Mark {
   const sameArm = (mark: Mark | null) => mark !== null && mark.armed_at === bell.armed_at ? mark : null;
+  const told = (mark: Mark) => mark.cursor === null ? -1n : BigInt(mark.cursor);
   const own = sameArm(noted) ?? emptyMark(bell);
   const ringer = sameArm(rung);
-  const counts = ringer !== null && ringer.new > own.new ? ringer : own;
+  const counts = ringer !== null && told(ringer) > told(own) ? ringer : own;
   return { ...counts, seq: own.seq, state: own.state, reason: own.reason };
 }
 
