@@ -2,12 +2,13 @@ name: Publish npm package
 
 # Manual release of one allowlisted package from an annotated release tag on
 # this public repository. A dry run (the default) only prepares and checks
-# the exact artifact without credentials. A real run mirrors it to this
-# repository's GitHub Release and then, by default, stages it with
-# `npm stage publish`: the version is not public on npm until a maintainer
-# approves the stage with 2FA. Dispatching again after approval verifies the
-# public registry bytes. Direct publication is refused except as a bootstrap
-# first-publication fallback. See bin/npm-release.ts.
+# the exact artifact without credentials. A real run first confirms, for a
+# trusted stage, that npm trusts this workflow for the package; it then
+# mirrors the artifact to this repository's GitHub Release and, by default,
+# stages it with `npm stage publish`: the version is not public on npm until
+# a maintainer approves the stage with 2FA. Dispatching again after approval
+# verifies the public registry bytes. Direct publication is refused except as
+# a bootstrap first-publication fallback. See bin/npm-release.ts.
 
 on:
   workflow_dispatch:
@@ -215,6 +216,20 @@ jobs:
         run: |
           set -euo pipefail
           bun bin/npm-release.ts check-inputs \
+            --package "$RELEASE_PACKAGE" \
+            --authentication "$RELEASE_AUTHENTICATION" \
+            --npm-tag "$RELEASE_NPM_TAG" \
+            --publish-mode "$RELEASE_PUBLISH_MODE"
+      - name: Refuse unless npm trusts this workflow, before any mutation
+        shell: bash
+        env:
+          RELEASE_PACKAGE: ${{ inputs.package }}
+          RELEASE_AUTHENTICATION: ${{ inputs.authentication }}
+          RELEASE_NPM_TAG: ${{ inputs.npm_tag }}
+          RELEASE_PUBLISH_MODE: ${{ inputs.publish_mode }}
+        run: |
+          set -euo pipefail
+          bun bin/npm-release.ts check-trust \
             --package "$RELEASE_PACKAGE" \
             --authentication "$RELEASE_AUTHENTICATION" \
             --npm-tag "$RELEASE_NPM_TAG" \

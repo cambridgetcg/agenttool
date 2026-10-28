@@ -9,6 +9,7 @@ import {
   DEFAULT_PUBLISH_MODE,
   EXPECTED_REPOSITORY,
   LOVE_MIRROR_ROOT,
+  NPM_OIDC_AUDIENCE,
   RELEASE_RECEIPT_SCHEMA,
   RELEASE_REPOSITORY,
   RELEASE_REPOSITORY_URL,
@@ -20,9 +21,11 @@ import {
   UNVERIFIED_CI_RUN,
   assertReleaseTagEvidence,
   assertReleaseTagObject,
+  assertTrustedPublisherExchange,
   historicalLoveManifestPath,
   isReleaseRemote,
   npmFailureMessage,
+  npmOidcExchangeUrl,
   npmOidcLogLines,
   npmPublishArguments,
   npmPublishEnvironment,
@@ -41,8 +44,10 @@ import {
   runNpmPublication,
   stageApprovalSummary,
   stageReceipt,
+  trustedPublisherCheckNeeded,
   validatePackageManifest,
   type FetchJson,
+  type OidcFetch,
   type PackageJson,
   type PreparedReceipt,
 } from "../npm-release";
@@ -286,6 +291,22 @@ describe("npm authentication fails before any public residue", () => {
     ACTIONS_ID_TOKEN_REQUEST_URL: "https://token.actions.example/_apis/idtoken?api-version=2.0",
     ACTIONS_ID_TOKEN_REQUEST_TOKEN: "request-token-fixture",
   };
+  const ID_TOKEN = "github-id-token-fixture";
+  const NPM_TOKEN = "npm-oidc-token-fixture";
+  const spec = releaseSpec("relational-geometry");
+  type Answer = { status: number; body: unknown } | Error;
+
+  function fakeOidc(exchange: Answer, issue: Answer = { status: 200, body: { value: ID_TOKEN } }) {
+    const calls: { url: string; init: RequestInit }[] = [];
+    const masked: string[] = [];
+    const fetch: OidcFetch = async (url, init) => {
+      calls.push({ url, init });
+      const answer = calls.length === 1 ? issue : exchange;
+      if (answer instanceof Error) throw answer;
+      return new Response(JSON.stringify(answer.body), { status: answer.status });
+    };
+    return { calls, masked, options: { environment: OIDC_ENVIRONMENT, fetch, mask: (secret: string) => masked.push(secret) } };
+  }
 
   async function refusal(promise: Promise<unknown>): Promise<string> {
     const error = await promise.then(() => undefined, (caught: unknown) => caught);
@@ -302,6 +323,83 @@ describe("npm authentication fails before any public residue", () => {
     expect(() => npmPublishEnvironment("trusted", {})).toThrow("requires the GitHub OIDC request environment");
     expect(npmPublishEnvironment("bootstrap", { NODE_AUTH_TOKEN: "reviewed" }).NODE_AUTH_TOKEN).toBe("reviewed");
     expect(() => npmPublishEnvironment("bootstrap", { ...OIDC_ENVIRONMENT, NODE_AUTH_TOKEN: "" })).toThrow("requires NODE_AUTH_TOKEN");
+  });
+
+  test("checks npm's trust with GitHub's ID token for npm's audience, masking both tokens and printing neither", async () => {
+    expect(NPM_OIDC_AUDIENCE).toBe("npm:registry.npmjs.org");
+    expect(npmOidcExchangeUrl("@agenttool/relational-geometry"))
+      .toBe("https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/@agenttool%2frelational-geometry");
+    expect(() => npmOidcExchangeUrl("../x")).toThrow("invalid scoped package name");
+
+    const accepted = fakeOidc({ status: 200, body: { token: NPM_TOKEN } });
+    expect(await assertTrustedPublisherExchange(spec, accepted.options)).toBeUndefined();
+    expect(accepted.masked).toEqual([ID_TOKEN, NPM_TOKEN]);
+    expect(accepted.calls.map((call) => [call.init.method ?? "GET", call.url, new Headers(call.init.headers).get("authorization")])).toEqual([
+      ["GET", "https://token.actions.example/_apis/idtoken?api-version=2.0&audience=npm%3Aregistry.npmjs.org", "Bearer request-token-fixture"],
+      ["POST", "https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/@agenttool%2frelational-geometry", `Bearer ${ID_TOKEN}`],
+    ]);
+
+    const untrusted = fakeOidc({ status: 404, body: { message: `no trusted publisher for ${ID_TOKEN}\n::warning::x` } });
+    const message = await refusal(assertTrustedPublisherExchange(spec, untrusted.options));
+    expect(message).toStartWith(
+      "no trusted-publisher configuration on npm matches this workflow for @agenttool/relational-geometry " +
+        "(npm's OIDC exchange answered HTTP 404: no trusted publisher for *** ::warning::x).",
+    );
+    expect(message).toContain(`a trusted publisher naming exactly ${RELEASE_REPOSITORY}, publish-npm.yml, environment npm-bootstrap;`);
+    expect(message).toContain("Run docs/npm-trust-repoint.sh enable relational-geometry, then dispatch this tag again within 48 hours.");
+    expect(message).toEndWith("This run has mirrored, signed, and staged nothing.");
+    expect(message).not.toContain(ID_TOKEN);
+    expect(message).not.toContain("\n");
+    expect(untrusted.masked).toEqual([ID_TOKEN]);
+  });
+
+  test("tells a busy or broken exchange apart from a missing trusted publisher", async () => {
+    const busy = fakeOidc({ status: 503, body: { message: "try later" } });
+    expect(await refusal(assertTrustedPublisherExchange(spec, busy.options)))
+      .toBe("npm's OIDC token exchange is unavailable (HTTP 503: try later); dispatch again later");
+    const tokenless = fakeOidc({ status: 200, body: {} });
+    expect(await refusal(assertTrustedPublisherExchange(spec, tokenless.options))).toContain("HTTP 200 without a usable token");
+    const unmaskable = fakeOidc({ status: 200, body: { token: `${NPM_TOKEN}\nnext` } });
+    expect(await refusal(assertTrustedPublisherExchange(spec, unmaskable.options))).toContain("without a usable token");
+    expect(unmaskable.masked).toEqual([ID_TOKEN]);
+    const silent = fakeOidc(new Error("connection reset"));
+    expect(await refusal(assertTrustedPublisherExchange(spec, silent.options)))
+      .toBe("npm's OIDC token exchange did not answer; dispatch again later");
+
+    const noIdToken = fakeOidc({ status: 200, body: { token: NPM_TOKEN } }, { status: 403, body: { message: "no id-token permission" } });
+    expect(await refusal(assertTrustedPublisherExchange(spec, noIdToken.options)))
+      .toBe("GitHub issued no OIDC ID token for npm:registry.npmjs.org (HTTP 403)");
+    expect(noIdToken.calls).toHaveLength(1);
+    expect(noIdToken.masked).toEqual([]);
+
+    const unset = fakeOidc({ status: 200, body: { token: NPM_TOKEN } });
+    expect(await refusal(assertTrustedPublisherExchange(spec, { ...unset.options, environment: {} })))
+      .toContain("requires the GitHub OIDC request environment");
+    expect(await refusal(assertTrustedPublisherExchange(spec, {
+      ...unset.options,
+      environment: { ...OIDC_ENVIRONMENT, ACTIONS_ID_TOKEN_REQUEST_URL: "http://token.actions.example/idtoken" },
+    }))).toBe("refusing a GitHub OIDC request URL that is not HTTPS");
+    expect(unset.calls).toHaveLength(0);
+
+    expect(trustedPublisherCheckNeeded("trusted", "stage")).toBe(true);
+    expect(trustedPublisherCheckNeeded("trusted", "verify-existing")).toBe(false);
+    expect(trustedPublisherCheckNeeded("bootstrap", "stage")).toBe(false);
+    expect(trustedPublisherCheckNeeded("bootstrap", "publish")).toBe(false);
+  });
+
+  test("check-trust takes check-inputs' options and runs only in the workflow", () => {
+    const run = (args: string[]) => {
+      const child = Bun.spawnSync(["bun", "bin/npm-release.ts", ...args], {
+        cwd: ROOT,
+        env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "" },
+      });
+      return { code: child.exitCode, stderr: child.stderr.toString() };
+    };
+    expect(run(["check-trust", "--package", "relational-geometry", "--otp", "1"]).stderr)
+      .toContain("check-trust accepts only --package, --authentication, --npm-tag, and optional --publish-mode");
+    const outside = run(["check-trust", "--package", "relational-geometry", "--authentication", "trusted", "--npm-tag", "next"]);
+    expect(outside.stderr).toContain("npm publication is restricted to the reviewed GitHub Actions workflow_dispatch path");
+    expect(outside.code).toBe(1);
   });
 
   test("reads only npm's oidc lines from its debug logs", async () => {
@@ -615,4 +713,26 @@ describe("the public publish workflow", () => {
     expect(source).not.toMatch(/\n\s+(?:push|pull_request|schedule):/u);
   });
 
+  test("asks npm for its trust after the input recheck and before the mirror, in the publish job only", async () => {
+    const workflow = Bun.YAML.parse(await readFile(PUBLISH_WORKFLOW, "utf8")) as {
+      jobs: Record<string, { steps: Array<{ run?: string; env?: Record<string, string> }> }>;
+    };
+    const prepare = workflow.jobs.prepare!;
+    const publish = workflow.jobs.publish!;
+    const index = (job: typeof prepare, text: string) => job.steps.findIndex((step) => step.run?.includes(text));
+    expect(index(prepare, "check-trust")).toBe(-1);
+    const trust = index(publish, "bun bin/npm-release.ts check-trust");
+    expect(trust).toBe(index(publish, "bun bin/npm-release.ts check-inputs") + 1);
+    expect(trust).toBe(index(publish, "bun bin/npm-release.ts mirror") - 1);
+    const step = publish.steps[trust]!;
+    expect(step.env).toEqual({
+      RELEASE_PACKAGE: "${{ inputs.package }}",
+      RELEASE_AUTHENTICATION: "${{ inputs.authentication }}",
+      RELEASE_NPM_TAG: "${{ inputs.npm_tag }}",
+      RELEASE_PUBLISH_MODE: "${{ inputs.publish_mode }}",
+    });
+    expect(step.run).not.toContain("${{");
+    expect(step.run).toContain('--publish-mode "$RELEASE_PUBLISH_MODE"');
+    expect(JSON.stringify(step)).not.toMatch(/secrets\.|NODE_AUTH_TOKEN/u);
+  });
 });
