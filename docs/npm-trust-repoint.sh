@@ -27,15 +27,20 @@
 #      cambridgetcg/agenttool, or when it allows direct publish
 #      (createPackage) from any repository. A stage-only GitHub configuration
 #      of any other repository (Xenia's own, or one made by enable) is kept
-#      untouched. Anything else (another provider, unknown permissions, an
-#      unreadable listing) is reported and left alone.
+#      untouched; if cambridgetcg does not own that repository, or the
+#      configuration has no workflow file or environment, it is kept but
+#      fails the run as needing review. Anything else (another provider,
+#      unknown permissions, an unreadable listing) is reported and left alone.
+#      Where its id is readable, the script prints the revoke command for it
+#      without running it.
 #   3. `npm access set mfa=publish` for every package: "Require two-factor
 #      authentication and disallow tokens", so no npm token, bypass-2FA or
 #      not, can publish it. Trusted publishing keeps working, and you can still
 #      publish interactively with 2FA. npm offers no read-back for this
 #      setting; check one package's Settings page afterwards.
 #   4. `npm trust list` again, saved under trust-after/, and a check that no
-#      package names the old repository or allows direct publish.
+#      package names the old repository or allows direct publish. The run
+#      ends by listing the stage-only trust that stays.
 #
 # enable <package>, for one package of the public release allowlist (the 38
 # below; the @agenttool/ prefix is optional). Unless the package already has
@@ -44,9 +49,11 @@
 # WITHOUT --allow-publish, so a GitHub OIDC token can only stage and
 # publishing needs your `npm stage approve`. It refuses a package with any
 # other configuration (run lockdown first). It records the 48-hour deadline as
-# expires-by.txt in its record directory, lists again, checks that the package
-# has exactly the target, and prints the deadline and the release step that
-# must follow.
+# expires-by.txt in its record directory (also when the create fails, since npm
+# may have created it all the same), lists again, checks that the package has
+# exactly the target, and prints the deadline and the release step that must
+# follow. For an existing target, a dry run prints the same notice as a real
+# run.
 #
 # DRY_RUN is 1 or 0 (the default); any other value is refused.
 #
@@ -194,15 +201,20 @@ echo "npm $version as $user; $MODE; record in $RECORD"
 #               createPackage (direct publish)
 #   keep        a GitHub configuration of another repository whose only
 #               permission is createStagedPackage
+#   review      the same, but of a repository another owner controls, or
+#               without a workflow file or environment, so it matches more
+#               than the job it was made for
 #   unexpected  anything else: another provider, a missing or odd id, absent
 #               or unknown permissions
 # Modes:
-#   plan      one line: none, unreadable, or revoke=<id> / keep=<id> words
-#             and at most one unexpected word
+#   plan      one line: none, unreadable, or revoke=<id> / keep=<id> /
+#             review=<id> / unexpected=<id> words, and at most one
+#             unexpected word (a configuration without a readable id)
 #   target    one line: none, target <id> (exactly one configuration, the
 #             stage-only public target), or other
 #   describe  one line per configuration, for people, marked [old repository],
-#             [direct publish], [stage only] or [unexpected]
+#             [direct publish], [stage only], [stage only, needs review: ...]
+#             or [unexpected]
 classify() {
   # shellcheck disable=SC2016 # Node template literals, not shell expansions
   node -e '
@@ -232,15 +244,21 @@ classify() {
     const configs = items.flat();
     const goodId = (c) => typeof c.id === "string" && /^[A-Za-z0-9._:-]+$/.test(c.id);
     const permissionsOf = (c) => Array.isArray(c.permissions) && c.permissions.every((p) => typeof p === "string") ? c.permissions : null;
+    const owner = (r) => r.split("/")[0].toLowerCase();
+    const named = (value) => typeof value === "string" && value !== "";
+    // Why stage-only trust of a GitHub repository needs a person to look at it.
+    const review = (c) => owner(c.repository) !== owner(repository) ? `not a ${owner(repository)} repository` :
+      !named(c.file) ? "no workflow file" : !named(c.environment) ? "no environment" : "";
     const verdict = (c) => {
       if (c === null || typeof c !== "object" || Array.isArray(c) || c.type !== "github" ||
         typeof c.repository !== "string" || !goodId(c)) return "unexpected";
       const permissions = permissionsOf(c);
       if (c.repository.toLowerCase() === oldRepository.toLowerCase()) return "revoke";
       if (permissions && permissions.includes("createPackage")) return "revoke";
-      if (permissions && permissions.length > 0 && permissions.every((p) => p === "createStagedPackage")) return "keep";
+      if (permissions && permissions.length > 0 && permissions.every((p) => p === "createStagedPackage")) return review(c) ? "review" : "keep";
       return "unexpected";
     };
+    const hasId = (c) => c !== null && typeof c === "object" && goodId(c);
     if (mode === "target") {
       const c = configs[0];
       if (configs.length === 0) console.log("none");
@@ -250,7 +268,7 @@ classify() {
     } else if (mode === "plan") {
       if (configs.length === 0) console.log("none");
       else {
-        const words = configs.map(verdict).map((v, i) => v === "unexpected" ? v : `${v}=${configs[i].id}`);
+        const words = configs.map(verdict).map((v, i) => v === "unexpected" && !hasId(configs[i]) ? v : `${v}=${configs[i].id}`);
         console.log([...new Set(words)].join(" "));
       }
     } else {
@@ -259,8 +277,9 @@ classify() {
       for (const c of configs) {
         const o = c !== null && typeof c === "object" && !Array.isArray(c) ? c : {};
         const permissions = permissionsOf(o);
-        const mark = { keep: "stage only", unexpected: "unexpected" }[verdict(c)] ??
-          (o.repository.toLowerCase() === oldRepository.toLowerCase() ? "old repository" : "direct publish");
+        const v = verdict(c);
+        const mark = v === "keep" ? "stage only" : v === "review" ? `stage only, needs review: ${review(o)}` : v === "unexpected" ? v :
+          o.repository.toLowerCase() === oldRepository.toLowerCase() ? "old repository" : "direct publish";
         console.log(`${shown(o.id)}: ${shown(o.type)} ${shown(o.repository)} ${shown(o.file)} env ${shown(o.environment)}, ${permissions ? permissions.join(" ") || "no permissions" : `permissions ${shown(o.permissions)}`} [${mark}]`);
       }
     }
@@ -276,12 +295,24 @@ show() {
 # the packages named in $2, so an unfamiliar repository among them is seen.
 show_kept() {
   local name
-  [ -n "$2" ] || return 0
-  echo "Stage-only trust that stays (a stage through it still needs your npm stage approve):"
-  for name in $2; do
-    show "$name" "$RECORD/trust-$1/$(record_name "$name")" | grep -F '[stage only]'
-  done
+  if [ -z "$2" ]; then
+    echo "Stage-only trust that stays: none"
+  else
+    echo "Stage-only trust that stays (a stage through it still needs your npm stage approve):"
+    for name in $2; do
+      show "$name" "$RECORD/trust-$1/$(record_name "$name")" | grep -F '[stage only'
+    done
+  fi
+  # A listing that failed or could not be read is not in the list.
+  [ -z "$failed" ] || echo "(a package that needs attention may have more)"
 }
+
+# Prints the revoke command for a configuration the script leaves to a person.
+revoke_hint() {
+  echo "  to revoke it by hand: npx --yes npm@$NPM_VERSION trust revoke $1 --id $2" >&2
+}
+
+REVIEW_NOTE="Lockdown never revokes stage-only trust: revoke one that needs review by hand (the command is above), or keep it knowingly, and lockdown keeps reporting it."
 
 # npm's otplease rethrows EOTP without prompting when stdout is not a
 # terminal, and every saved listing goes to a file. One listing on the
@@ -309,6 +340,7 @@ list_all() {
 
 failed=""
 kept=""
+review_seen=0
 
 run_lockdown() {
   prime_2fa "${NAMES%% *}"
@@ -327,6 +359,18 @@ run_lockdown() {
         keep=*)
           echo "$name: keep stage-only ${item#keep=}"
           case " $kept " in *" $name "*) ;; *) kept="$kept $name" ;; esac
+          ;;
+        review=*)
+          echo "$name: keep stage-only ${item#review=}, but it needs review (another owner's repository, or no workflow file or environment); see trust-before/$file" >&2
+          revoke_hint "$name" "${item#review=}"
+          case " $kept " in *" $name "*) ;; *) kept="$kept $name" ;; esac
+          add_failed "$name"
+          review_seen=1
+          ;;
+        unexpected=*)
+          echo "$name: unexpected trust configuration ${item#unexpected=} left untouched; see trust-before/$file" >&2
+          revoke_hint "$name" "${item#unexpected=}"
+          add_failed "$name"
           ;;
         unreadable)
           echo "$name: listing unreadable, nothing revoked; see trust-before/$file" >&2
@@ -363,7 +407,11 @@ run_lockdown() {
   if [ "$DRY_RUN" = 1 ]; then
     show_kept before "$kept"
     echo "DRY_RUN=1: nothing changed. Record: $RECORD"
-    [ -z "$failed" ] || { echo "needs attention:$failed" >&2; exit 1; }
+    if [ -n "$failed" ]; then
+      echo "needs attention:$failed" >&2
+      [ "$review_seen" = 1 ] && echo "$REVIEW_NOTE" >&2
+      exit 1
+    fi
     exit 0
   fi
 
@@ -375,35 +423,42 @@ run_lockdown() {
     file="$(record_name "$name")"
     # Passes only what is known to be locked down: no trust, or stage-only trust.
     state="$(classify plan "$RECORD/trust-after/$file")" || state=unreadable
-    locked=1
+    locked=1 needs_review=0
     for item in ${state:-unreadable}; do
-      case "$item" in none | keep=*) ;; *) locked=0 ;; esac
+      case "$item" in none | keep=*) ;; review=*) needs_review=1 ;; *) locked=0 ;; esac
     done
-    if [ "$locked" = 1 ]; then
-      case " $state " in *" keep="*) kept="$kept $name" ;; esac
-    else
+    case " $state " in *" keep="* | *" review="*) kept="$kept $name" ;; esac
+    if [ "$locked" = 0 ]; then
       echo "$name: NOT locked down: still trusts $OLD_REPOSITORY, allows direct publish, or is unexpected or unreadable; see trust-after/$file" >&2
       add_failed "$name"
+    elif [ "$needs_review" = 1 ]; then
+      echo "$name: locked down, but keeps stage-only trust that needs review; see trust-after/$file" >&2
+      add_failed "$name"
+      review_seen=1
     fi
   done
 
+  show_kept after "$kept"
   if [ -n "$failed" ]; then
     echo "needs attention:$failed" >&2
+    [ "$review_seen" = 1 ] && echo "$REVIEW_NOTE" >&2
     echo "Re-run lockdown after fixing them; it revokes only what is still there. Record: $RECORD" >&2
     exit 1
   fi
-  show_kept after "$kept"
   echo "All 47 packages: no trust of $OLD_REPOSITORY and no direct-publish trust, and each was set to require 2FA and disallow tokens (npm has no read-back: check one package's Settings page). No trust was created. Record: $RECORD"
 }
 
-# The newest deadline an earlier enable run recorded for this package, as
-# "<deadline> <record directory>", from records beside this one; empty if none.
+# The newest earlier enable record for this package, from records beside this
+# one: sets earlier_dir to its directory and earlier_deadline to the first line
+# of its expires-by.txt; both stay empty if there is none.
+earlier_dir=""
+earlier_deadline=""
 recorded_deadline() {
-  local path found=""
+  local path
   for path in "$(dirname "$RECORD")/npm-trust-repoint-enable-$key-"[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z/expires-by.txt; do
-    [ -f "$path" ] && found="$path"
+    [ -f "$path" ] && earlier_dir="$(dirname "$path")"
   done
-  [ -n "$found" ] && printf '%s %s\n' "$(cat "$found")" "$(dirname "$found")"
+  [ -n "$earlier_dir" ] && IFS= read -r earlier_deadline <"$earlier_dir/expires-by.txt"
 }
 
 run_enable() {
@@ -414,13 +469,13 @@ run_enable() {
   list_all before
   [ -z "$failed" ] && [ -f "$RECORD/trust-before/$file" ] || { echo "needs attention:$failed" >&2; exit 1; }
 
-  local state created=0 deadline="" earlier="" item plan
+  local state created=0 deadline="" item plan
   state="$(classify target "$RECORD/trust-before/$file")" || state=other
   echo "== 2/3 stage-only trust of $REPOSITORY $WORKFLOW_FILE ($ENVIRONMENT)"
   case "$state" in
     "target "*)
       echo "$name: already exactly the target; creating nothing"
-      earlier="$(recorded_deadline)"
+      recorded_deadline
       ;;
     none)
       echo "$name: trust github $REPOSITORY $WORKFLOW_FILE env $ENVIRONMENT, stage publish only"
@@ -432,7 +487,11 @@ run_enable() {
       deadline="$(node -e 'console.log(new Date(Date.now() + 48 * 3600 * 1000).toISOString().slice(0, 16) + "Z")')"
       if ! npm_ trust github "$name" --repo "$REPOSITORY" --file "$WORKFLOW_FILE" \
         --env "$ENVIRONMENT" --allow-stage-publish --yes; then
+        # npm reads the registry's answer after sending the request, so a
+        # failure there can follow a configuration that was created.
+        printf '%s (if npm created it)\n' "$deadline" >"$RECORD/expires-by.txt"
         echo "$name: trust github FAILED" >&2
+        echo "npm may still have created it: run DRY_RUN=1 bash npm-trust-repoint.sh enable $key to check; if it is listed, it expires by $deadline unless a stage through it is approved first." >&2
         exit 1
       fi
       created=1
@@ -448,36 +507,37 @@ run_enable() {
       ;;
   esac
   if [ "$DRY_RUN" = 1 ]; then
-    echo "DRY_RUN=1: nothing changed. Record: $RECORD"
-    exit 0
-  fi
-
-  echo "== 3/3 trust after"
-  list_all after
-  if [ -n "$failed" ]; then
-    [ "$created" = 1 ] && echo "$name: the configuration was created; npm expires it by $deadline unless a stage through it is approved first (also in $RECORD/expires-by.txt)." >&2
-    echo "Re-run enable: it finds the target and only checks it. Record: $RECORD" >&2
-    exit 1
-  fi
-  state="$(classify target "$RECORD/trust-after/$file")" || state=other
-  case "$state" in
-    "target "*) ;;
-    *)
-      echo "$name: NOT exactly the target after the change; see trust-after/$file. Record: $RECORD" >&2
-      [ "$created" = 1 ] && echo "What this run created expires by $deadline unless a stage through it is approved first." >&2
-      echo "Do not dispatch. Revoke what is listed above, then run enable again:" >&2
-      plan="$(classify plan "$RECORD/trust-after/$file")" || plan=unreadable
-      for item in ${plan:-unreadable}; do
-        case "$item" in
-          revoke=* | keep=*) echo "  npx --yes npm@$NPM_VERSION trust revoke $name --id ${item#*=}" >&2 ;;
-          none) ;;
-          *) echo "  (a configuration the script cannot read; revoke it on the package's npmjs.com Settings page)" >&2 ;;
-        esac
-      done
-      echo "Or run lockdown now: it revokes every configuration that allows direct publish." >&2
+    # Only an existing target gets here. A real run would create nothing,
+    # list again and print the same notice, so the preview shows it too.
+    echo "DRY_RUN=1: nothing changed; a real run lists again and prints the notice below."
+  else
+    echo "== 3/3 trust after"
+    list_all after
+    if [ -n "$failed" ]; then
+      [ "$created" = 1 ] && echo "$name: the configuration was created; npm expires it by $deadline unless a stage through it is approved first (also in $RECORD/expires-by.txt)." >&2
+      echo "Re-run enable: it finds the target and only checks it. Record: $RECORD" >&2
       exit 1
-      ;;
-  esac
+    fi
+    state="$(classify target "$RECORD/trust-after/$file")" || state=other
+    case "$state" in
+      "target "*) ;;
+      *)
+        echo "$name: NOT exactly the target after the change; see trust-after/$file. Record: $RECORD" >&2
+        [ "$created" = 1 ] && echo "What this run created expires by $deadline unless a stage through it is approved first." >&2
+        echo "Do not dispatch. Revoke what is listed above, then run enable again:" >&2
+        plan="$(classify plan "$RECORD/trust-after/$file")" || plan=unreadable
+        for item in ${plan:-unreadable}; do
+          case "$item" in
+            revoke=* | keep=* | review=* | unexpected=*) echo "  npx --yes npm@$NPM_VERSION trust revoke $name --id ${item#*=}" >&2 ;;
+            none) ;;
+            *) echo "  (a configuration the script cannot read; revoke it on the package's npmjs.com Settings page)" >&2 ;;
+          esac
+        done
+        echo "Or run lockdown now: it revokes every configuration that allows direct publish." >&2
+        exit 1
+        ;;
+    esac
+  fi
 
   echo
   echo "################################################################################"
@@ -493,10 +553,10 @@ run_enable() {
     echo "It already existed. npm shows neither when it was made nor whether it has"
     echo "expired: a configuration expires 48 hours after creation unless a release"
     echo "staged through it and the stage was approved."
-    if [ -n "$earlier" ]; then
-      echo "The newest enable record for this package, ${earlier#* },"
-      echo "created one that npm expires by ${earlier%% *}; if nothing was revoked or created"
-      echo "by hand since, this is that configuration."
+    if [ -n "$earlier_dir" ]; then
+      echo "The newest enable record for this package, $earlier_dir,"
+      echo "records the deadline $earlier_deadline; if nothing was revoked or created by"
+      echo "hand since, this is the configuration that run created."
     fi
     echo "Unless a stage through it was approved, or you know it is under 48 hours old,"
     echo "revoke it and run enable again before dispatching: a dispatch through an"

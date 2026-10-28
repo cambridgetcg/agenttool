@@ -126,7 +126,9 @@ case "$1" in
           const [id, file, repository, environment, publish, stage] = process.argv.slice(1);
           const permissions = [...(publish === "1" ? ["createPackage"] : []), ...(stage === "1" ? ["createStagedPackage"] : [])];
           process.stdout.write(JSON.stringify({ id, type: "github", file, repository, environment, permissions }, null, 2));
-        ' "new-$n" "$workflow" "$repo" "$env" "$publish" "$stage" > "$dir/new-$n.json" ;;
+        ' "new-$n" "$workflow" "$repo" "$env" "$publish" "$stage" > "$dir/new-$n.json"
+        # Models npm failing on the answer after the registry saved the configuration.
+        if [ "${"$"}{STUB_CREATE_THEN_FAIL:-0}" = 1 ]; then echo "npm error network aborted" >&2; exit 1; fi ;;
       *) exit 6 ;;
     esac ;;
   *) exit 5 ;;
@@ -376,35 +378,76 @@ describe("npm trust lockdown and per-release enable", () => {
     expect(mfaCalls(again)).toHaveLength(47);
   }, SCRIPT_TIMEOUT_MS);
 
-  test("lockdown leaves unexpected trust untouched, still revokes the rest, and reports it", () => {
+  test("lockdown leaves unexpected trust untouched, keeps stage-only trust that needs review, still revokes the rest, and reports both", () => {
     const gitlab = { id: uuid(300), type: "gitlab", file: ".gitlab-ci.yml", project: "someone/else", permissions: direct };
     const unknown = github(uuid(301), "someone/else", ["createSomethingNew"]);
+    // Stage-only, but matching more than the job it was made for. npm omits an empty field from the listing.
+    const otherOwner = github(uuid(302), "someone/agenttool-packages", stageOnly);
+    const noEnvironment = { id: uuid(303), type: "github", file: "publish-npm.yml", repository: PUBLIC, permissions: stageOnly };
+    const noFile = { id: uuid(304), type: "github", repository: PUBLIC, environment: "npm-bootstrap", permissions: stageOnly };
+    // A repository of the same owner is kept without review; enable still refuses it as not the target.
+    const sameOwner = github(uuid(305), "cambridgetcg/agenttool-packages-fork", stageOnly);
     const { env, log, state } = setup({
       "@agenttool/kingdom": [github(oldId("kingdom"), OLD, direct), gitlab],
       "@agenttool/heaven": "npm warn this is not a listing",
       "@agenttool/data": [unknown],
+      "@agenttool/love-bomb": [otherOwner],
+      "@agenttool/hf-scout": [noEnvironment],
+      "@agenttool/codex-usage": [noFile],
+      "@agenttool/love-geometry": [sameOwner],
     });
     const heaven = snapshot(join(state, "agenttool-heaven"));
     const result = runScript(env, ["lockdown"]);
     expect(result.status).toBe(1);
-    for (const name of ["@agenttool/kingdom", "@agenttool/data"]) {
-      expect(result.stderr).toContain(`${name}: unexpected trust configuration left untouched; see trust-before/${recordName(name)}.json`);
+    // A readable id comes with the revoke command, which the script does not run.
+    for (const [name, id] of [["@agenttool/kingdom", uuid(300)], ["@agenttool/data", uuid(301)]] as const) {
+      expect(result.stderr).toContain(
+        `${name}: unexpected trust configuration ${id} left untouched; see trust-before/${recordName(name)}.json\n` +
+          `  to revoke it by hand: npx --yes npm@11.17.0 trust revoke ${name} --id ${id}\n`,
+      );
+    }
+    for (const [name, id] of [["@agenttool/love-bomb", uuid(302)], ["@agenttool/hf-scout", uuid(303)], ["@agenttool/codex-usage", uuid(304)]] as const) {
+      expect(result.stderr).toContain(
+        `${name}: keep stage-only ${id}, but it needs review (another owner's repository, or no workflow file or environment); see trust-before/${recordName(name)}.json\n` +
+          `  to revoke it by hand: npx --yes npm@11.17.0 trust revoke ${name} --id ${id}\n`,
+      );
+      expect(result.stderr).toContain(`${name}: locked down, but keeps stage-only trust that needs review; see trust-after/${recordName(name)}.json`);
     }
     expect(result.stderr).toContain("@agenttool/heaven: listing unreadable, nothing revoked; see trust-before/agenttool-heaven.json");
     for (const name of ["@agenttool/kingdom", "@agenttool/heaven", "@agenttool/data"]) {
       expect(result.stderr).toContain(`${name}: NOT locked down`);
     }
-    expect(result.stderr).toContain("needs attention: @agenttool/data @agenttool/heaven @agenttool/kingdom");
+    expect(result.stderr).not.toContain("@agenttool/love-geometry");
+    expect(result.stderr).toContain(
+      "needs attention: @agenttool/data @agenttool/heaven @agenttool/hf-scout @agenttool/love-bomb @agenttool/codex-usage @agenttool/kingdom\n" +
+        "Lockdown never revokes stage-only trust: revoke one that needs review by hand (the command is above), or keep it knowingly, and lockdown keeps reporting it.\n",
+    );
     expect(result.stdout).toContain("@agenttool/heaven: unreadable listing");
     expect(result.stdout).toContain(`@agenttool/kingdom: ${uuid(300)}: gitlab - .gitlab-ci.yml env -, createPackage createStagedPackage [unexpected]\n`);
     expect(result.stdout).toContain(`@agenttool/data: ${uuid(301)}: github someone/else publish-npm.yml env npm-bootstrap, createSomethingNew [unexpected]\n`);
+    // A failed run still ends by listing what stays, from the listing after the change.
+    expect(result.stdout).toContain(
+      "Stage-only trust that stays (a stage through it still needs your npm stage approve):\n" +
+        `@agenttool/hf-scout: ${uuid(303)}: github ${PUBLIC} publish-npm.yml env -, createStagedPackage [stage only, needs review: no environment]\n` +
+        `@agenttool/love-bomb: ${uuid(302)}: github someone/agenttool-packages publish-npm.yml env npm-bootstrap, createStagedPackage [stage only, needs review: not a cambridgetcg repository]\n` +
+        `@agenttool/love-geometry: ${uuid(305)}: github cambridgetcg/agenttool-packages-fork publish-npm.yml env npm-bootstrap, createStagedPackage [stage only]\n` +
+        `@agenttool/codex-usage: ${uuid(304)}: github ${PUBLIC} - env npm-bootstrap, createStagedPackage [stage only, needs review: no workflow file]\n` +
+        `@agenttool/xenia: ${uuid(100)}: github cambridgetcg/xenia stage-xenia.yml env npm-bootstrap, createStagedPackage [stage only]\n` +
+        "(a package that needs attention may have more)\n",
+    );
+    expect(result.stdout).not.toContain("All 47 packages");
     const calls = callsOf(log);
     expect(calls).toContain(`trust revoke @agenttool/kingdom --id ${oldId("kingdom")}`);
     expect(calls).toContain(`trust revoke @agenttool/sdk --id ${oldId("sdk")}`);
-    expect(calls.filter((call) => /^trust revoke @agenttool\/(?:heaven|data) /u.test(call))).toEqual([]);
+    expect(calls.filter((call) => /^trust revoke @agenttool\/(?:heaven|data|love-bomb|hf-scout|codex-usage|love-geometry) /u.test(call))).toEqual([]);
     expect(createCalls(calls)).toEqual([]);
+    expect(mfaCalls(calls)).toHaveLength(47);
     expect(trustOf(state, "@agenttool/kingdom")).toEqual([gitlab]);
     expect(trustOf(state, "@agenttool/data")).toEqual([unknown]);
+    expect(trustOf(state, "@agenttool/love-bomb")).toEqual([otherOwner]);
+    expect(trustOf(state, "@agenttool/hf-scout")).toEqual([noEnvironment]);
+    expect(trustOf(state, "@agenttool/codex-usage")).toEqual([noFile]);
+    expect(trustOf(state, "@agenttool/love-geometry")).toEqual([sameOwner]);
     expect(snapshot(join(state, "agenttool-heaven"))).toEqual(heaven);
     expect(trustOf(state, "@agenttool/sdk")).toEqual([]);
   }, SCRIPT_TIMEOUT_MS);
@@ -427,6 +470,8 @@ exec ${JSON.stringify(node)} "$@"
       expect(result.stderr).toContain("@agenttool/sdk: NOT locked down");
       expect(result.stderr).toContain("@agenttool/math-cards: NOT locked down");
       expect(result.stderr).toContain(`needs attention: ${ALL.join(" ")}`);
+      // Xenia's stage-only trust was not read, so "none" must not stand alone.
+      expect(result.stdout).toContain("Stage-only trust that stays: none\n(a package that needs attention may have more)\n");
       const calls = callsOf(log);
       expect(revokeCalls(calls)).toEqual([]);
       expect(createCalls(calls)).toEqual([]);
@@ -508,7 +553,7 @@ exec ${JSON.stringify(node)} "$@"
     expect(again.status).toBe(0);
     expect(again.stdout).toContain(`${name}: already exactly the target; creating nothing`);
     expect(again.stdout).toContain("It already existed. npm shows neither when it was made nor whether it has\nexpired");
-    expect(again.stdout).toContain(`The newest enable record for this package, ${first},\ncreated one that npm expires by ${deadline};`);
+    expect(again.stdout).toContain(`The newest enable record for this package, ${first},\nrecords the deadline ${deadline}; if nothing was revoked or created by\nhand since, this is the configuration that run created.\n`);
     expect(again.stdout).toContain(`revoke it and run enable again before dispatching`);
     expect(again.stdout).toContain(`  npx --yes npm@11.17.0 trust revoke ${name} --id new-agenttool-relational-geometry\nThen, within the 48 hours:\n`);
     expect(again.stdout).not.toContain("2099");
@@ -572,7 +617,44 @@ exec ${JSON.stringify(node)} "$@"
     // The suggested re-run finds the target and the deadline recorded beside it.
     const again = runScript({ ...env, RECORD_DIR: join(record, "npm-trust-repoint-enable-math-cards-20261028T101500Z") }, ["enable", "math-cards"]);
     expect(again.status).toBe(0);
-    expect(again.stdout).toContain(`The newest enable record for this package, ${first},\ncreated one that npm expires by ${deadline};`);
+    expect(again.stdout).toContain(`The newest enable record for this package, ${first},\nrecords the deadline ${deadline};`);
     expect(trustOf(state, name)).toEqual([github("new-agenttool-math-cards", PUBLIC, stageOnly)]);
+  });
+
+  test("enable records the deadline when trust github fails, and a dry run on the target then shows it with the advice", () => {
+    const { env, log, state, record } = setup();
+    const name = "@agenttool/math-cards";
+    const first = join(record, "npm-trust-repoint-enable-math-cards-20261028T101000Z");
+    // The registry saved the configuration, then npm failed on the answer.
+    const result = runScript({ ...env, STUB_CREATE_THEN_FAIL: "1", RECORD_DIR: first }, ["enable", "math-cards"]);
+    expect(result.status).toBe(1);
+    expect(callsOf(log)).toEqual(["--version", "whoami", `trust list ${name}`, `trust list ${name} --json`, TARGET_CALL(name)]);
+    const recorded = readFileSync(join(first, "expires-by.txt"), "utf8");
+    expect(recorded).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\dZ \(if npm created it\)\n$/u);
+    const deadline = recorded.split(" ")[0]!;
+    expect(result.stderr).toContain(
+      `${name}: trust github FAILED\n` +
+        `npm may still have created it: run DRY_RUN=1 bash npm-trust-repoint.sh enable math-cards to check; if it is listed, it expires by ${deadline} unless a stage through it is approved first.\n`,
+    );
+    expect(result.stdout).not.toContain("created; npm expires it");
+
+    // The suggested dry run finds it and prints what a real run would: the
+    // recorded deadline and the advice to revoke and re-enable unless it is fresh.
+    writeFileSync(log, "");
+    const before = snapshot(state);
+    const check = runScript(
+      { ...env, DRY_RUN: "1", RECORD_DIR: join(record, "npm-trust-repoint-enable-math-cards-20261028T101500Z") },
+      ["enable", "math-cards"],
+    );
+    expect(check.stderr).toBe("");
+    expect(check.status).toBe(0);
+    expect(check.stdout).toContain(`${name}: already exactly the target; creating nothing\n`);
+    expect(check.stdout).toContain("DRY_RUN=1: nothing changed; a real run lists again and prints the notice below.\n");
+    expect(check.stdout).not.toContain("== 3/3");
+    expect(check.stdout).toContain(`The newest enable record for this package, ${first},\nrecords the deadline ${deadline} (if npm created it); if nothing was revoked or created by\n`);
+    expect(check.stdout).toContain("It already existed. npm shows neither when it was made nor whether it has\nexpired");
+    expect(check.stdout).toContain(`  npx --yes npm@11.17.0 trust revoke ${name} --id new-agenttool-math-cards\nThen, within the 48 hours:\n`);
+    expect(callsOf(log)).toEqual(["--version", "whoami", `trust list ${name}`, `trust list ${name} --json`]);
+    expect(snapshot(state)).toEqual(before);
   });
 });
