@@ -2759,8 +2759,8 @@ export async function assertTrustedPublisherExchange(
       `(npm's OIDC exchange answered HTTP ${exchanged.status}${said}). npm stages it only for a trusted publisher ` +
       `naming exactly ${RELEASE_REPOSITORY}, ${PUBLISH_WORKFLOW_FILE}, environment ${PUBLISH_ENVIRONMENT}; ` +
       "a new one expires unless a publication validates it within 48 hours. " +
-      `The maintainer runs \`bash npm-trust-repoint.sh enable ${spec.key}\` ` +
-      "(docs/npm-trust-repoint.sh in the private source repository), then dispatches this tag again within 48 hours. " +
+      `The maintainer runs their trust script, \`bash npm-trust-repoint.sh enable ${spec.key}\`, ` +
+      "then dispatches this tag again within 48 hours. " +
       "If `npm trust list` already shows exactly that binding, it may have expired: revoke it and run enable again. " +
       "If a fresh one is refused too, this check and npm disagree, which needs a fix to bin/npm-release.ts and a new tag. " +
       nothing,

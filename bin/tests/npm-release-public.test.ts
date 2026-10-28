@@ -354,11 +354,12 @@ describe("npm authentication fails before any public residue", () => {
         "(npm's OIDC exchange answered HTTP 404: no trusted publisher for *** ::warning::x).",
     );
     expect(message).toContain(`a trusted publisher naming exactly ${RELEASE_REPOSITORY}, publish-npm.yml, environment npm-bootstrap;`);
-    // npm-trust/lockdown-then-enable's mode; the script exists only in the private source repository.
+    // npm-trust/lockdown-then-enable's mode. The script is the maintainer's, and this text reaches public logs.
     expect(message).toContain(
-      "The maintainer runs `bash npm-trust-repoint.sh enable relational-geometry` " +
-        "(docs/npm-trust-repoint.sh in the private source repository), then dispatches this tag again within 48 hours.",
+      "The maintainer runs their trust script, `bash npm-trust-repoint.sh enable relational-geometry`, " +
+        "then dispatches this tag again within 48 hours.",
     );
+    expect(message).not.toContain("docs/");
     expect(message).toContain("If `npm trust list` already shows exactly that binding, it may have expired: revoke it and run enable again.");
     expect(message).toContain("If a fresh one is refused too, this check and npm disagree, which needs a fix to bin/npm-release.ts and a new tag.");
     expect(message).toEndWith("This run has mirrored, signed, and staged nothing.");
