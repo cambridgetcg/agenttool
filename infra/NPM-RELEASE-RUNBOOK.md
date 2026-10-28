@@ -26,7 +26,7 @@ the one-way projection described in [`public/README.md`](../public/README.md).
 Its `publish-npm.yml` stages each exact artifact with `npm stage publish`, and
 the version is not public on npm until a maintainer approves the stage with
 2FA. Follow the [public release path](#public-release-path-from-2026-10-12).
-This private repository no longer has a publish workflow for these packages,
+`cambridgetcg/agenttool` no longer has a publish workflow for these packages,
 but the trusted-publisher configurations that name it can still publish 22 of
 them directly until Yu revokes them (see the
 [trust lockdown](#npm-trust-lock-down-now-enable-per-release-yu-trusted-device)).
