@@ -1,6 +1,7 @@
 {
   "name": "@agenttool/scriptwriter",
   "version": "0.1.0",
+  "private": true,
   "description": "Decentralised scriptwriter recognition + communication protocol — local node any agent can stand up; byte-compatible with agenttool's /v1/guild/rrr cascade",
   "type": "module",
   "main": "src/index.ts",

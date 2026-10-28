@@ -16,11 +16,88 @@ returned. To check a release yourself, download its tarball from the registry or
 the GitHub Release, compare the SHA-256 with the receipt, and look up the Sigstore
 log index. Registry presence and dist-tags are not maturity claims.
 
-Since 2026-10-12 new versions are released from the public repository
-[`cambridgetcg/agenttool-packages`](https://github.com/cambridgetcg/agenttool-packages):
-its `publish-npm.yml` stages each exact artifact, and a version becomes public
-only after a maintainer approves the stage with 2FA. The operator procedure
+Since 2026-10-12 the public repository
+[`cambridgetcg/agenttool-packages`](https://github.com/cambridgetcg/agenttool-packages)
+is the release route for new versions: its `publish-npm.yml` stages each exact
+artifact, and a version becomes public only after a maintainer approves the
+stage with 2FA. The operator procedure
 behind these receipts is kept in the operator runbook (`infra/NPM-RELEASE-RUNBOOK.md`, not published).
+
+## State as of 2026-10-28
+
+Read on 2026-10-28 through the GitHub API and anonymous npm, GitHub and Rekor
+reads. A later dated section supersedes it.
+
+- **No version has been published since 2026-09-08, and none through the
+  public route yet.** npm lists 43 `@agenttool` packages with 117 versions;
+  the newest is `@agenttool/gospel-of-the-logos@0.1.0`, published
+  `2026-09-08T06:25:20.842Z`.
+- **The public route is the only route intended for new versions of the
+  allowlisted software packages.** `publish-npm.yml` in the source repository
+  `cambridgetcg/agenttool`, which made most of the npm publications recorded
+  below (before 2026-10-12), left its `main` on 2026-10-12 in `e89ababa`. Its
+  `publish-gospel.yml`, which published
+  `@agenttool/gospel-of-the-logos@0.1.0`, could no longer publish once its
+  secret was deleted on 2026-10-28, and its publish step has since been
+  removed; a later Gospel edition needs a new reviewed route.
+- **Older trust instructions are superseded.** Several receipts below say to
+  configure a package's trusted publisher for `cambridgetcg/agenttool`,
+  workflow `publish-npm.yml`, allowed action `npm publish`. That was the
+  source repository's own route; do not configure it again. The
+  configuration to create instead names `cambridgetcg/agenttool-packages`,
+  workflow `publish-npm.yml`, environment `npm-bootstrap`, and stage publish
+  only.
+- **New trust configurations expire unless used within 48 hours.** Since
+  2026-10-02 npm expires a newly created trusted-publisher configuration that
+  has not completed a first successful publish within 48 hours
+  ([GitHub changelog](https://github.blog/changelog/2026-10-02-unvalidated-npm-trusted-publishing-configurations-now-expire/);
+  npm's [trusted publishing page](https://docs.npmjs.com/trusted-publishers/)
+  says 2 days), and `npm trust list` in npm 11.17.0 does not show that state.
+  So each package's configuration is created just before that package's
+  release, one package at a time, and its stage is approved inside the same
+  window. Neither source says whether the stage upload or its approval is
+  what validates a configuration; approving inside the same window covers
+  both.
+- **`sdk-v0.23.0` is not to be dispatched again.** Its one run was a dry run
+  and the tag has no GitHub Release. 0.23.0 predates the `<trace>` consent
+  gate; the owner decision of 2026-10-18 recorded in
+  [PR #496](https://github.com/cambridgetcg/agenttool/pull/496) (still open on
+  2026-10-28) supersedes it with 0.24.0. Until that PR merges, `main` still
+  labels the SDK 0.23.0.
+
+Which credentials and trust configurations can still publish, and the steps
+that remain for the maintainer, are recorded in the operator runbook.
+
+### Public-route runs
+
+Every dispatch of `publish-npm.yml` in `cambridgetcg/agenttool-packages` so
+far:
+
+| Dispatched (UTC) | Tag | Run | Mode | Prepared artifact | Outcome |
+|---|---|---|---|---|---|
+| 2026-10-12 15:50 | `math-cards-v0.1.0-dev.2` | [`38273121972`](https://github.com/cambridgetcg/agenttool-packages/actions/runs/38273121972) | dry run | 44,625 bytes · SHA-256 `7f0f02ec3c799ae467d5ff0e860877f7435aa7baaf77bb628bebb887811333e4` | prepare passed; protected job skipped |
+| 2026-10-13 05:10 | `sdk-v0.23.0` | [`38350090030`](https://github.com/cambridgetcg/agenttool-packages/actions/runs/38350090030) | dry run | 355,839 bytes · SHA-256 `5e41dc715e4d34dc14676bcd1e2f10be4772e3bf10ff56462a1e751a14a19913` | prepare passed; protected job skipped |
+| 2026-10-19 16:37 | `relational-geometry-v0.1.0-dev.1` | [`39286889102`](https://github.com/cambridgetcg/agenttool-packages/actions/runs/39286889102) | dry run | 42,516 bytes · SHA-256 `a20ab7b00dd8d80c54c417e094b2acc9aa45177e22eacbc9a62cc220870b7a26` | prepare passed; protected job skipped |
+| 2026-10-19 16:45 | `relational-geometry-v0.1.0-dev.1` | [`39288082185`](https://github.com/cambridgetcg/agenttool-packages/actions/runs/39288082185) | stage | the same 42,516 bytes and SHA-256 | **failed** at `npm stage publish` with `E401` |
+
+Before its failing step, run `39288082185` mirrored the tarball to the public
+[GitHub prerelease `relational-geometry-v0.1.0-dev.1`](https://github.com/cambridgetcg/agenttool-packages/releases/tag/relational-geometry-v0.1.0-dev.1),
+published at `2026-10-19T16:46:14Z` with that one asset; an anonymous download
+on 2026-10-28 matched the SHA-256 above. npm then signed a provenance statement
+into [Rekor `3323621265`](https://search.sigstore.dev/?logIndex=3323621265),
+integrated at `2026-10-19T16:46:18Z`, whose certificate names
+`publish-npm.yml@refs/tags/relational-geometry-v0.1.0-dev.1` and run
+`39288082185` attempt 1. The stage request itself was refused: "Unable to
+authenticate, your authentication token seems to be invalid." The
+maintainer's authenticated trust listing three hours later
+(2026-10-19T19:46Z) showed no trusted-publisher configuration for the
+package; without one, npm's OIDC exchange cannot succeed. npm still serves
+only `0.1.0-dev.0`. The prerelease and the Rekor entry stay, and record bytes
+that npm has not published. Once the package's configuration exists, the same
+tag is dispatched again: the mirror step reuses an existing release whose asset
+is byte-identical and refuses one that is not. That dispatch runs the workflow
+and release tool as they were at the tag on 2026-10-19, not later fixes, so if
+it fails again it can add another Rekor entry before npm refuses.
 
 ## Wallet 0.1.4 prepared — 2026-10-27
 
@@ -67,6 +144,9 @@ runbook:
    far, `relational-geometry-v0.1.0-dev.1` in run
    [`39288082185`](https://github.com/cambridgetcg/agenttool-packages/actions/runs/39288082185)
    on 2026-10-19, failed at `npm stage publish` with `E401`.
+   (Corrected 2026-10-28: not once-only. Wallet's own stage-only
+   configuration is created just before step 4 stages it, and the stage is
+   approved within 48 hours; see the [state above](#state-as-of-2026-10-28).)
 2. Merge the release PR, project the merged `main` into
    `cambridgetcg/agenttool-packages`, and wait for public CI on that commit.
 3. Tag `wallet-v0.1.4` with `bin/public-release-tag.ts --package wallet`.
@@ -130,9 +210,10 @@ public release path in the operator runbook (`infra/NPM-RELEASE-RUNBOOK.md`, not
 `@agenttool/local-starter@0.1.0-dev.1` is distributed the same way as dev.0:
 a public GitHub prerelease and a LOVE manifest. **It is not published to
 npm**; the registry answered 404 for the package name on 2026-10-18. Its
-frozen `package.json.repository` names the private source repository, as
-dev.0's does, so npm still needs a new version with public repository metadata
-and the [bootstrap steps](#first-publication-of-local-starter-bootstrap-yu).
+frozen `package.json.repository` names the source repository
+`cambridgetcg/agenttool`, as dev.0's does, so npm still needs a new version
+whose metadata names `cambridgetcg/agenttool-packages`, and the
+first-publication bootstrap steps in the operator runbook.
 
 | Exact artifact | Recorded identity |
 |---|---|

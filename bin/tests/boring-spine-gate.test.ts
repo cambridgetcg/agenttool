@@ -1841,7 +1841,8 @@ exit 94
     ]);
   });
 
-  test("keeps Gospel publication frozen, manual-main-only, and protected", async () => {
+  test("keeps the Gospel edition frozen and its workflow verification-only", async () => {
+    // Publication retired (decided 2026-10-28): 0.1.0 is on npm and the token is gone.
     const workflow = await readFile(join(ROOT, ".github/workflows/publish-gospel.yml"), "utf8");
     const pin = JSON.parse(await readFile(join(ROOT, "bin/gospel-release/release.json"), "utf8"));
     expect(pin.name).toBe("@agenttool/gospel-of-the-logos");
@@ -1849,20 +1850,29 @@ exit 94
     expect(pin.sha256).toBe("f69353fe7e99dc4d3eb811dcf06b5c3f9c3a8099bd5100e6a5baa88ef6b75923");
     expect(pin.edition_sha256).toBe("8e03c1d6be0f7091d247f013c7391568d46dbe6ce16063aca2ceafa92b193018");
     expect(pin.source_url).toMatch(/^https:\/\/huggingface\.co\/datasets\/Yu-and-Ai\/gospel-of-the-logos\/resolve\/[a-f0-9]{40}\/release-artifacts\/agenttool-gospel-of-the-logos-0\.1\.0\.tgz$/);
-    const prepare = workflow.split("\n  prepare:\n")[1]?.split("\n  publish:\n")[0] ?? "";
-    const publish = workflow.split("\n  publish:\n")[1] ?? "";
+    const prepare = workflow.split("\n  prepare:\n")[1]?.split("\n  verify:\n")[0] ?? "";
+    const verify = workflow.split("\n  verify:\n")[1] ?? "";
     expect(prepare).toContain("release.py prepare");
     expect(prepare).toContain("python3 -m unittest discover");
-    expect(prepare).not.toMatch(/secrets\.|NODE_AUTH_TOKEN|environment:|id-token:/);
-    expect(publish).toContain("if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'");
-    expect(publish).toContain("needs: prepare");
-    expect(publish).toContain("environment: npm-bootstrap");
-    expect(publish).toContain("if: steps.registry.outputs.needed == 'true'");
-    expect(publish).toContain("--ignore-scripts --provenance --access public");
-    expect(publish).toContain("release.py registry-check");
-    expect(publish).toContain("release.py registry-verify");
-    expect(publish).not.toMatch(/npm pack|bun run|bun install|--otp/);
-    expect(workflow.match(/secrets\./g)).toHaveLength(1);
+    expect(verify).toContain("if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'");
+    expect(verify).toContain("needs: prepare");
+    expect(verify).toContain("release.py registry-check");
+    expect(verify).toContain("release.py registry-verify");
+    expect(verify).not.toMatch(/npm pack|bun run|bun install/);
+    expect(workflow).toContain("\npermissions: {}\n");
+    expect(workflow).not.toMatch(/secrets\s*[.[]|environment:|id-token|NODE_AUTH_TOKEN|npm (stage )?publish|--provenance|--otp/);
+    const parsed = Bun.YAML.parse(workflow) as {
+      on?: Record<string, unknown>;
+      permissions?: Record<string, string>;
+      jobs?: Record<string, { permissions?: Record<string, string>; environment?: unknown }>;
+    };
+    expect(Object.keys(parsed.on ?? {}).sort()).toEqual(["pull_request", "workflow_dispatch"]);
+    expect(parsed.permissions).toEqual({});
+    expect(Object.keys(parsed.jobs ?? {})).toEqual(["prepare", "verify"]);
+    for (const job of Object.values(parsed.jobs ?? {})) {
+      expect(job.permissions).toEqual({ contents: "read" });
+      expect(job.environment).toBeUndefined();
+    }
     expect(workflow).not.toContain("inputs.");
     expect(workflow).not.toMatch(/\n\s+push:/);
   });
