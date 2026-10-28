@@ -43,9 +43,12 @@
 # publish-npm.yml in environment npm-bootstrap with --allow-stage-publish and
 # WITHOUT --allow-publish, so a GitHub OIDC token can only stage and
 # publishing needs your `npm stage approve`. It refuses a package with any
-# other configuration (run lockdown first). It lists again, checks that the
-# package has exactly the target, and prints the 48-hour deadline and the
-# release step that must follow.
+# other configuration (run lockdown first). It records the 48-hour deadline as
+# expires-by.txt in its record directory, lists again, checks that the package
+# has exactly the target, and prints the deadline and the release step that
+# must follow.
+#
+# DRY_RUN is 1 or 0 (the default); any other value is refused.
 #
 # It pauses 2 seconds between npm calls (npm's bulk advice). npm asks for 2FA
 # only when its output is a terminal, and the saved listings go to files, so
@@ -107,6 +110,12 @@ Prefix either with DRY_RUN=1 to list and plan without changing anything.
 EOF
   exit 2
 }
+
+# Any other value would run for real; DRY_RUN=true must not revoke or create.
+case "$DRY_RUN" in
+  0 | 1) ;;
+  *) die "DRY_RUN must be 1 (list and plan only) or 0 (change npm), not $DRY_RUN" ;;
+esac
 
 MODE="${1:-}"
 case "$MODE" in
@@ -179,7 +188,8 @@ echo "npm $version as $user; $MODE; record in $RECORD"
 
 # Reads a saved `npm trust list --json` output. npm 11.17.0 prints each
 # configuration after a blank line, a GitHub one as {id, type, file,
-# repository, environment, permissions}, and nothing when there is none. Each configuration is:
+# repository, environment, permissions} (without an empty field), and nothing
+# when there is none. Each configuration is:
 #   revoke      it names the old repository, or its permissions include
 #               createPackage (direct publish)
 #   keep        a GitHub configuration of another repository whose only
@@ -262,6 +272,17 @@ show() {
   classify describe "$2" | while IFS= read -r line; do echo "$1: $line"; done
 }
 
+# Lists the stage-only configurations that lockdown keeps, from trust-$1/, for
+# the packages named in $2, so an unfamiliar repository among them is seen.
+show_kept() {
+  local name
+  [ -n "$2" ] || return 0
+  echo "Stage-only trust that stays (a stage through it still needs your npm stage approve):"
+  for name in $2; do
+    show "$name" "$RECORD/trust-$1/$(record_name "$name")" | grep -F '[stage only]'
+  done
+}
+
 # npm's otplease rethrows EOTP without prompting when stdout is not a
 # terminal, and every saved listing goes to a file. One listing on the
 # terminal opens the 2FA window that the redirected listings then use.
@@ -287,6 +308,7 @@ list_all() {
 }
 
 failed=""
+kept=""
 
 run_lockdown() {
   prime_2fa "${NAMES%% *}"
@@ -297,10 +319,19 @@ run_lockdown() {
   for name in $NAMES; do
     case " $failed " in *" $name "*) continue ;; esac
     file="$(record_name "$name")"
-    for item in $(classify plan "$RECORD/trust-before/$file"); do
+    # A classifier that fails or prints nothing must not read as "no trust".
+    plan="$(classify plan "$RECORD/trust-before/$file")" || plan=unreadable
+    for item in ${plan:-unreadable}; do
       case "$item" in
         none) ;;
-        keep=*) echo "$name: keep stage-only ${item#keep=}" ;;
+        keep=*)
+          echo "$name: keep stage-only ${item#keep=}"
+          case " $kept " in *" $name "*) ;; *) kept="$kept $name" ;; esac
+          ;;
+        unreadable)
+          echo "$name: listing unreadable, nothing revoked; see trust-before/$file" >&2
+          add_failed "$name"
+          ;;
         revoke=*)
           echo "$name: revoke ${item#revoke=}"
           [ "$DRY_RUN" = 1 ] && continue
@@ -330,6 +361,7 @@ run_lockdown() {
   done
 
   if [ "$DRY_RUN" = 1 ]; then
+    show_kept before "$kept"
     echo "DRY_RUN=1: nothing changed. Record: $RECORD"
     [ -z "$failed" ] || { echo "needs attention:$failed" >&2; exit 1; }
     exit 0
@@ -338,15 +370,21 @@ run_lockdown() {
   prime_2fa "${NAMES%% *}"
   echo "== 4/4 trust after"
   list_all after
+  kept=""
   for name in $NAMES; do
-    file="$RECORD/trust-after/$(record_name "$name")"
-    state="$(classify plan "$file")"
-    case " $state " in
-      *" revoke="* | *" unexpected "* | *" unreadable "*)
-        echo "$name: NOT locked down: still trusts $OLD_REPOSITORY, allows direct publish, or is unexpected; see trust-after/$(record_name "$name")" >&2
-        add_failed "$name"
-        ;;
-    esac
+    file="$(record_name "$name")"
+    # Passes only what is known to be locked down: no trust, or stage-only trust.
+    state="$(classify plan "$RECORD/trust-after/$file")" || state=unreadable
+    locked=1
+    for item in ${state:-unreadable}; do
+      case "$item" in none | keep=*) ;; *) locked=0 ;; esac
+    done
+    if [ "$locked" = 1 ]; then
+      case " $state " in *" keep="*) kept="$kept $name" ;; esac
+    else
+      echo "$name: NOT locked down: still trusts $OLD_REPOSITORY, allows direct publish, or is unexpected or unreadable; see trust-after/$file" >&2
+      add_failed "$name"
+    fi
   done
 
   if [ -n "$failed" ]; then
@@ -354,7 +392,18 @@ run_lockdown() {
     echo "Re-run lockdown after fixing them; it revokes only what is still there. Record: $RECORD" >&2
     exit 1
   fi
+  show_kept after "$kept"
   echo "All 47 packages: no trust of $OLD_REPOSITORY and no direct-publish trust, and each was set to require 2FA and disallow tokens (npm has no read-back: check one package's Settings page). No trust was created. Record: $RECORD"
+}
+
+# The newest deadline an earlier enable run recorded for this package, as
+# "<deadline> <record directory>", from records beside this one; empty if none.
+recorded_deadline() {
+  local path found=""
+  for path in "$(dirname "$RECORD")/npm-trust-repoint-enable-$key-"[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z/expires-by.txt; do
+    [ -f "$path" ] && found="$path"
+  done
+  [ -n "$found" ] && printf '%s %s\n' "$(cat "$found")" "$(dirname "$found")"
 }
 
 run_enable() {
@@ -365,12 +414,13 @@ run_enable() {
   list_all before
   [ -z "$failed" ] && [ -f "$RECORD/trust-before/$file" ] || { echo "needs attention:$failed" >&2; exit 1; }
 
-  local state created=0 deadline=""
-  state="$(classify target "$RECORD/trust-before/$file")"
+  local state created=0 deadline="" earlier="" item plan
+  state="$(classify target "$RECORD/trust-before/$file")" || state=other
   echo "== 2/3 stage-only trust of $REPOSITORY $WORKFLOW_FILE ($ENVIRONMENT)"
   case "$state" in
     "target "*)
       echo "$name: already exactly the target; creating nothing"
+      earlier="$(recorded_deadline)"
       ;;
     none)
       echo "$name: trust github $REPOSITORY $WORKFLOW_FILE env $ENVIRONMENT, stage publish only"
@@ -386,6 +436,9 @@ run_enable() {
         exit 1
       fi
       created=1
+      # Recorded at once, so a later failure cannot lose the deadline.
+      printf '%s\n' "$deadline" >"$RECORD/expires-by.txt"
+      echo "$name: created; npm expires it by $deadline unless a stage through it is approved first"
       pause
       ;;
     *)
@@ -401,11 +454,29 @@ run_enable() {
 
   echo "== 3/3 trust after"
   list_all after
-  [ -z "$failed" ] || { echo "Re-run enable: it finds the target and only checks it. Record: $RECORD" >&2; exit 1; }
-  state="$(classify target "$RECORD/trust-after/$file")"
+  if [ -n "$failed" ]; then
+    [ "$created" = 1 ] && echo "$name: the configuration was created; npm expires it by $deadline unless a stage through it is approved first (also in $RECORD/expires-by.txt)." >&2
+    echo "Re-run enable: it finds the target and only checks it. Record: $RECORD" >&2
+    exit 1
+  fi
+  state="$(classify target "$RECORD/trust-after/$file")" || state=other
   case "$state" in
     "target "*) ;;
-    *) echo "$name: NOT exactly the target after the change; see trust-after/$file. Record: $RECORD" >&2; exit 1 ;;
+    *)
+      echo "$name: NOT exactly the target after the change; see trust-after/$file. Record: $RECORD" >&2
+      [ "$created" = 1 ] && echo "What this run created expires by $deadline unless a stage through it is approved first." >&2
+      echo "Do not dispatch. Revoke what is listed above, then run enable again:" >&2
+      plan="$(classify plan "$RECORD/trust-after/$file")" || plan=unreadable
+      for item in ${plan:-unreadable}; do
+        case "$item" in
+          revoke=* | keep=*) echo "  npx --yes npm@$NPM_VERSION trust revoke $name --id ${item#*=}" >&2 ;;
+          none) ;;
+          *) echo "  (a configuration the script cannot read; revoke it on the package's npmjs.com Settings page)" >&2 ;;
+        esac
+      done
+      echo "Or run lockdown now: it revokes every configuration that allows direct publish." >&2
+      exit 1
+      ;;
   esac
 
   echo
@@ -415,13 +486,25 @@ run_enable() {
   echo
   if [ "$created" = 1 ]; then
     echo "npm EXPIRES this configuration 48 hours after creation, by $deadline,"
+    echo "unless a release stages through it and you approve the stage (whether a stage"
+    echo "that is not yet approved validates it is undocumented). npm trust list will"
+    echo "not show the expiry. Next, now:"
   else
-    echo "It already existed, and npm does not show when it was made. npm EXPIRES a"
-    echo "configuration 48 hours after creation,"
+    echo "It already existed. npm shows neither when it was made nor whether it has"
+    echo "expired: a configuration expires 48 hours after creation unless a release"
+    echo "staged through it and the stage was approved."
+    if [ -n "$earlier" ]; then
+      echo "The newest enable record for this package, ${earlier#* },"
+      echo "created one that npm expires by ${earlier%% *}; if nothing was revoked or created"
+      echo "by hand since, this is that configuration."
+    fi
+    echo "Unless a stage through it was approved, or you know it is under 48 hours old,"
+    echo "revoke it and run enable again before dispatching: a dispatch through an"
+    echo "expired configuration fails at npm, and can leave a public GitHub Release and"
+    echo "a Rekor entry behind (run 39288082185)."
+    echo "  npx --yes npm@$NPM_VERSION trust revoke $name --id ${state#target }"
+    echo "Then, within the 48 hours:"
   fi
-  echo "unless a release stages through it and you approve the stage (whether a stage"
-  echo "that is not yet approved validates it is undocumented). npm trust list will"
-  echo "not show the expiry. Next, now:"
   echo "  1. dispatch this package's release tag on $REPOSITORY $WORKFLOW_FILE:"
   echo "     sol access run github -- workflow run $WORKFLOW_FILE --repo $REPOSITORY \\"
   echo "       --ref ${key}-v<version> -f package=$key -f tag=${key}-v<version> \\"
@@ -429,7 +512,9 @@ run_enable() {
   echo "  2. check and approve the stage with 2FA: npx --yes npm@$NPM_VERSION stage list $name --json,"
   echo "     then stage view, download, shasum and approve (infra/NPM-RELEASE-RUNBOOK.md, step 7)."
   echo "If 48 hours pass first: npx --yes npm@$NPM_VERSION trust revoke $name --id ${state#target }"
-  echo "and run enable again just before the release."
+  echo "and run enable again just before the release. If npm refuses to revoke an"
+  echo "expired configuration, delete it on the package's Settings page on npmjs.com,"
+  echo "then run enable again."
   echo "################################################################################"
   echo "Record: $RECORD"
 }

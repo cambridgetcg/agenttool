@@ -94,6 +94,9 @@ case "$1" in
         # npm rethrows EOTP when its output is not a terminal; the stub models
         # an expired 2FA window for the saved (--json) listings only.
         [ "${"$"}{4:-}" = --json ] && [ "${"$"}{STUB_EOTP:-0}" = 1 ] && { echo "npm error code EOTP" >&2; exit 1; }
+        # The window lapses only once enable has created the configuration.
+        [ "${"$"}{4:-}" = --json ] && [ "${"$"}{STUB_EOTP_AFTER_CREATE:-0}" = 1 ] && [ -f "$dir/new-$n.json" ] &&
+          { echo "npm error code EOTP" >&2; exit 1; }
         set -- "$dir"/*.json
         [ -f "$1" ] || exit 0
         for f in "$@"; do printf '\n'; cat "$f"; printf '\n'; done
@@ -151,7 +154,7 @@ function defaultRegistry(): Record<string, Config[] | string> {
   return registry;
 }
 
-interface Run { state: string; record: string; log: string; env: Record<string, string> }
+interface Run { bin: string; state: string; record: string; log: string; env: Record<string, string> }
 
 /** A registry: a package maps to its configurations, or to raw listing text. */
 function setup(extra: Record<string, Config[] | string> = {}): Run {
@@ -170,6 +173,7 @@ function setup(extra: Record<string, Config[] | string> = {}): Run {
   const log = join(base, "npm.log");
   writeFileSync(log, "");
   return {
+    bin,
     state,
     record: join(base, "record"),
     log,
@@ -240,6 +244,15 @@ describe("npm trust lockdown and per-release enable", () => {
       expect(result.stderr).toContain("usage: bash npm-trust-repoint.sh lockdown");
       expect(result.stdout).toBe("");
     }
+    // Only 1 plans; any other value but 0 would otherwise run for real.
+    for (const value of ["true", "yes", "on", "2"]) {
+      for (const args of [["lockdown"], ["enable", "math-cards"]]) {
+        const result = runScript({ ...env, DRY_RUN: value }, args);
+        expect(result.status).toBe(2);
+        expect(result.stderr).toContain(`npm-trust-repoint: DRY_RUN must be 1 (list and plan only) or 0 (change npm), not ${value}`);
+        expect(result.stdout).toBe("");
+      }
+    }
     expect(callsOf(log)).toEqual([]);
     expect(existsSync(record)).toBe(false);
   });
@@ -282,7 +295,12 @@ describe("npm trust lockdown and per-release enable", () => {
     expect(result.stdout).toContain(`@agenttool/xenia: keep stage-only ${uuid(100)}`);
     expect(result.stdout).toContain(`yutabase: revoke ${uuid(101)}\n`);
     expect(result.stdout).toContain("@rhetorlint/cli: access set mfa=publish");
-    expect(result.stdout).toContain("DRY_RUN=1: nothing changed.");
+    // The trust that would stay is listed with its repository, file and environment.
+    expect(result.stdout).toContain(
+      "Stage-only trust that stays (a stage through it still needs your npm stage approve):\n" +
+        `@agenttool/xenia: ${uuid(100)}: github cambridgetcg/xenia stage-xenia.yml env npm-bootstrap, createStagedPackage [stage only]\n` +
+        "DRY_RUN=1: nothing changed.",
+    );
     const calls = callsOf(log);
     // One listing on the terminal opens the 2FA window before the saved listings.
     expect(calls.slice(0, 3)).toEqual(["--version", "whoami", PRIME]);
@@ -309,6 +327,14 @@ describe("npm trust lockdown and per-release enable", () => {
     expect(first.stderr).toBe("");
     expect(first.status).toBe(0);
     expect(first.stdout).toContain("All 47 packages: no trust of cambridgetcg/agenttool and no direct-publish trust, and each was set to require 2FA and disallow tokens (npm has no read-back: check one package's Settings page). No trust was created.");
+    // What survives, read from the listing after the change.
+    expect(first.stdout).toContain(
+      "Stage-only trust that stays (a stage through it still needs your npm stage approve):\n" +
+        `@agenttool/relational-geometry: ${uuid(200)}: github ${PUBLIC} publish-npm.yml env npm-bootstrap, createStagedPackage [stage only]\n` +
+        `@agenttool/kingdom: ${uuid(201)}: github ${PUBLIC} publish-npm.yml env npm-bootstrap, createStagedPackage [stage only]\n` +
+        `@agenttool/xenia: ${uuid(100)}: github cambridgetcg/xenia stage-xenia.yml env npm-bootstrap, createStagedPackage [stage only]\n` +
+        "All 47 packages:",
+    );
     const calls = callsOf(log);
     expect(calls.slice(0, 3)).toEqual(["--version", "whoami", PRIME]);
     expect(revokeCalls(calls).sort()).toEqual([
@@ -361,8 +387,11 @@ describe("npm trust lockdown and per-release enable", () => {
     const heaven = snapshot(join(state, "agenttool-heaven"));
     const result = runScript(env, ["lockdown"]);
     expect(result.status).toBe(1);
-    for (const name of ["@agenttool/kingdom", "@agenttool/heaven", "@agenttool/data"]) {
+    for (const name of ["@agenttool/kingdom", "@agenttool/data"]) {
       expect(result.stderr).toContain(`${name}: unexpected trust configuration left untouched; see trust-before/${recordName(name)}.json`);
+    }
+    expect(result.stderr).toContain("@agenttool/heaven: listing unreadable, nothing revoked; see trust-before/agenttool-heaven.json");
+    for (const name of ["@agenttool/kingdom", "@agenttool/heaven", "@agenttool/data"]) {
       expect(result.stderr).toContain(`${name}: NOT locked down`);
     }
     expect(result.stderr).toContain("needs attention: @agenttool/data @agenttool/heaven @agenttool/kingdom");
@@ -378,6 +407,31 @@ describe("npm trust lockdown and per-release enable", () => {
     expect(trustOf(state, "@agenttool/data")).toEqual([unknown]);
     expect(snapshot(join(state, "agenttool-heaven"))).toEqual(heaven);
     expect(trustOf(state, "@agenttool/sdk")).toEqual([]);
+  }, SCRIPT_TIMEOUT_MS);
+
+  test("lockdown fails closed when its classifier fails or prints nothing", () => {
+    const node = Bun.which("node");
+    expect(node).toBeTruthy();
+    // A node that prints nothing for every plan: killed or broken (exit 1), or silent (exit 0).
+    for (const status of [1, 0]) {
+      const { bin, env, log, state } = setup();
+      writeFileSync(join(bin, "node"), `#!/bin/bash
+for a in "$@"; do [ "$a" = plan ] && exit ${status}; done
+exec ${JSON.stringify(node)} "$@"
+`, { mode: 0o755 });
+      const result = runScript(env, ["lockdown"]);
+      expect(result.status).toBe(1);
+      expect(result.stdout).not.toContain("All 47 packages");
+      // Step 2 revokes nothing, and the check afterwards still fails every package.
+      expect(result.stderr).toContain("@agenttool/sdk: listing unreadable, nothing revoked; see trust-before/agenttool-sdk.json");
+      expect(result.stderr).toContain("@agenttool/sdk: NOT locked down");
+      expect(result.stderr).toContain("@agenttool/math-cards: NOT locked down");
+      expect(result.stderr).toContain(`needs attention: ${ALL.join(" ")}`);
+      const calls = callsOf(log);
+      expect(revokeCalls(calls)).toEqual([]);
+      expect(createCalls(calls)).toEqual([]);
+      expect(trustOf(state, "@agenttool/sdk")).toEqual([github(oldId("sdk"), OLD, direct)]);
+    }
   }, SCRIPT_TIMEOUT_MS);
 
   test("a lapsed 2FA window fails the saved listings closed, revokes nothing, and says to re-run", () => {
@@ -420,7 +474,9 @@ describe("npm trust lockdown and per-release enable", () => {
     const { env, log, state, record } = setup();
     const name = "@agenttool/relational-geometry";
     const target = github("new-agenttool-relational-geometry", PUBLIC, stageOnly);
-    const result = runScript(env, ["enable", name]);
+    // Named as the script names its own records, so a later run finds this one.
+    const first = join(record, "npm-trust-repoint-enable-relational-geometry-20261028T101000Z");
+    const result = runScript({ ...env, RECORD_DIR: first }, ["enable", name]);
     expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
     const calls = callsOf(log);
@@ -428,44 +484,95 @@ describe("npm trust lockdown and per-release enable", () => {
       "--version", "whoami", `trust list ${name}`, `trust list ${name} --json`, TARGET_CALL(name), `trust list ${name} --json`,
     ]);
     expect(trustOf(state, name)).toEqual([target]);
-    expect(readFileSync(join(record, "trust-after", "agenttool-relational-geometry.json"), "utf8")).toBe(`\n${JSON.stringify(target, null, 2)}\n\n`);
+    expect(readFileSync(join(first, "trust-after", "agenttool-relational-geometry.json"), "utf8")).toBe(`\n${JSON.stringify(target, null, 2)}\n\n`);
     // Nothing else is touched.
     expect(trustOf(state, "@agenttool/sdk")).toEqual([github(oldId("sdk"), OLD, direct)]);
     expect(readdirSync(state).filter((entry) => entry.endsWith(".mfa"))).toEqual([]);
-    expect(result.stdout).toMatch(/npm EXPIRES this configuration 48 hours after creation, by \d{4}-\d\d-\d\dT\d\d:\d\dZ,/u);
+    const deadline = readFileSync(join(first, "expires-by.txt"), "utf8").trim();
+    expect(deadline).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\dZ$/u);
+    expect(Date.parse(deadline) - Date.now()).toBeGreaterThan(47.9 * 3600_000);
+    expect(result.stdout).toContain(`${name}: created; npm expires it by ${deadline} unless a stage through it is approved first\n`);
+    expect(result.stdout).toContain(`npm EXPIRES this configuration 48 hours after creation, by ${deadline},`);
     expect(result.stdout).toContain("--ref relational-geometry-v<version> -f package=relational-geometry -f tag=relational-geometry-v<version>");
     expect(result.stdout).toContain("-f authentication=trusted -f npm_tag=<latest|next> -f dry_run=false");
     expect(result.stdout).toContain(`npx --yes npm@11.17.0 trust revoke ${name} --id new-agenttool-relational-geometry`);
 
+    // A re-run creates nothing, says to revoke and re-enable unless the
+    // configuration is known to be fresh or validated, and finds the deadline
+    // recorded beside it; a record of another package with the same prefix is ignored.
+    const other = join(record, "npm-trust-repoint-enable-relational-geometry-x-20261029T000000Z");
+    mkdirSync(other, { recursive: true });
+    writeFileSync(join(other, "expires-by.txt"), "2099-01-01T00:00Z\n");
     writeFileSync(log, "");
-    const again = runScript({ ...env, RECORD_DIR: `${record}-again` }, ["enable", "relational-geometry"]);
+    const again = runScript({ ...env, RECORD_DIR: join(record, "npm-trust-repoint-enable-relational-geometry-20261028T120000Z") }, ["enable", "relational-geometry"]);
     expect(again.status).toBe(0);
     expect(again.stdout).toContain(`${name}: already exactly the target; creating nothing`);
-    expect(again.stdout).toContain("It already existed, and npm does not show when it was made.");
+    expect(again.stdout).toContain("It already existed. npm shows neither when it was made nor whether it has\nexpired");
+    expect(again.stdout).toContain(`The newest enable record for this package, ${first},\ncreated one that npm expires by ${deadline};`);
+    expect(again.stdout).toContain(`revoke it and run enable again before dispatching`);
+    expect(again.stdout).toContain(`  npx --yes npm@11.17.0 trust revoke ${name} --id new-agenttool-relational-geometry\nThen, within the 48 hours:\n`);
+    expect(again.stdout).not.toContain("2099");
     expect(createCalls(callsOf(log))).toEqual([]);
     expect(trustOf(state, name)).toEqual([target]);
   });
 
-  test("enable refuses a package with any other trust and creates nothing", () => {
+  test("enable refuses a package with any other trust, even a near miss of the target, and creates nothing", () => {
+    // npm omits an empty field from the listing.
+    const noFile = { id: uuid(402), type: "github", repository: PUBLIC, environment: "npm-bootstrap", permissions: stageOnly };
+    const noEnvironment = { id: uuid(403), type: "github", file: "publish-npm.yml", repository: PUBLIC, permissions: stageOnly };
     const { env, log, state } = setup({
       "@agenttool/math-cards": [github(uuid(400), PUBLIC, stageOnly), github(uuid(401), PUBLIC, stageOnly, "other.yml")],
+      // Each alone is stage-only trust of the public repository, but not of the target.
+      "@agenttool/love-bomb": [github(uuid(404), PUBLIC, stageOnly, "other.yml")],
+      "@agenttool/love-geometry": [{ ...github(uuid(405), PUBLIC, stageOnly), environment: "production" }],
+      "@agenttool/hf-scout": [noEnvironment],
+      "@agenttool/codex-usage": [noFile],
+      "@agenttool/telescope": [github(uuid(406), "cambridgetcg/agenttool-packages-fork", stageOnly)],
     });
-    for (const key of ["sdk", "math-cards"]) {
+    for (const key of ["sdk", "math-cards", "love-bomb", "love-geometry", "hf-scout", "codex-usage", "telescope"]) {
       const result = runScript(env, ["enable", key]);
       expect(result.status).toBe(1);
       expect(result.stderr).toContain(`@agenttool/${key}: has trust other than exactly the target (above), so enable creates nothing.`);
       expect(result.stderr).toContain("Run lockdown first");
+      expect(result.stdout).not.toContain("trusts cambridgetcg/agenttool-packages");
     }
     expect(createCalls(callsOf(log))).toEqual([]);
     expect(trustOf(state, "@agenttool/sdk")).toEqual([github(oldId("sdk"), OLD, direct)]);
+    expect(trustOf(state, "@agenttool/hf-scout")).toEqual([noEnvironment]);
   });
 
-  test("enable fails when the listing afterwards is not exactly the target", () => {
+  test("enable fails when the listing afterwards is not exactly the target, and says how to remove it", () => {
     const { env, log } = setup();
     const result = runScript({ ...env, STUB_CREATE_WIDE: "1" }, ["enable", "math-cards"]);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("@agenttool/math-cards: NOT exactly the target after the change");
+    expect(result.stderr).toMatch(/What this run created expires by \d{4}-\d\d-\d\dT\d\d:\d\dZ unless a stage through it is approved first\./u);
+    expect(result.stderr).toContain(
+      "Do not dispatch. Revoke what is listed above, then run enable again:\n" +
+        "  npx --yes npm@11.17.0 trust revoke @agenttool/math-cards --id new-agenttool-math-cards\n" +
+        "Or run lockdown now: it revokes every configuration that allows direct publish.",
+    );
     expect(result.stdout).not.toContain("npm EXPIRES");
     expect(createCalls(callsOf(log))).toEqual([TARGET_CALL("@agenttool/math-cards")]);
+  });
+
+  test("enable keeps the deadline when the listing after creation fails", () => {
+    const { env, log, state, record } = setup();
+    const name = "@agenttool/math-cards";
+    const first = join(record, "npm-trust-repoint-enable-math-cards-20261028T101000Z");
+    const result = runScript({ ...env, STUB_EOTP_AFTER_CREATE: "1", RECORD_DIR: first }, ["enable", "math-cards"]);
+    expect(result.status).toBe(1);
+    expect(createCalls(callsOf(log))).toEqual([TARGET_CALL(name)]);
+    const deadline = readFileSync(join(first, "expires-by.txt"), "utf8").trim();
+    expect(deadline).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\dZ$/u);
+    expect(result.stdout).toContain(`${name}: created; npm expires it by ${deadline}`);
+    expect(result.stderr).toContain(`${name}: the configuration was created; npm expires it by ${deadline} unless a stage through it is approved first (also in ${first}/expires-by.txt).`);
+    expect(result.stderr).toContain("Re-run enable: it finds the target and only checks it.");
+
+    // The suggested re-run finds the target and the deadline recorded beside it.
+    const again = runScript({ ...env, RECORD_DIR: join(record, "npm-trust-repoint-enable-math-cards-20261028T101500Z") }, ["enable", "math-cards"]);
+    expect(again.status).toBe(0);
+    expect(again.stdout).toContain(`The newest enable record for this package, ${first},\ncreated one that npm expires by ${deadline};`);
+    expect(trustOf(state, name)).toEqual([github("new-agenttool-math-cards", PUBLIC, stageOnly)]);
   });
 });
