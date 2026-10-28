@@ -75,6 +75,22 @@ function json(value: unknown, status: number): Response {
 }
 
 describe("the gate reads the text a person typed, not its JSON form", () => {
+  test("hub init on a short-named host builds its directory plan before confirmation", async () => {
+    const w = world();
+    const hub = w.desk("hub", { deviceTerms: ["desk"] });
+    await hub.keychain.add({ service: "agenttool-lobby.hub-bearer", account: "agenttool-lobby" }, FAKE_BEARER);
+    hub.answers.push("no");
+    const result = await hub.run("hub", "init", "--project", FAKE_PROJECT);
+    expect(result.code).toBe(3);
+    expect(result.stderr).not.toContain("local_device_name");
+    expect(result.stderr).not.toContain("device_only_term");
+    const plan = JSON.parse(shownBytes(hub));
+    expect(plan.act).toBe("hub.init");
+    expect(plan.directory.mode).toBe("create");
+    expect(plan.directory.descriptor.format).toBe("agenttool-collaboration-mission/v1");
+    expect(w.hosted.seen).toHaveLength(0);
+  });
+
   test("knock notes and deny reasons split by a newline or tab are refused before the terminal and never posted", async () => {
     const fleet = await bootstrapFleet();
     const hosted = fleet.world.hosted;

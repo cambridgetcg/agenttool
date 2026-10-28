@@ -62,7 +62,9 @@ export interface EgressRoom {
 
 /** Optional context a transport adds: this machine's own names (for example
  * its hostname without `.local`). Each term is matched case-insensitively
- * after the same folding, with the separators between its words allowed to vary. */
+ * after the same folding, as a whole word or word sequence with the separators
+ * between its words allowed to vary. Edges in scripts without word spaces
+ * keep substring matching so names inside running text are still refused. */
 export interface EgressOptions {
   room: EgressRoom;
   deviceTerms?: readonly string[];
@@ -100,6 +102,9 @@ const LOCAL_HOSTNAME = /[a-z0-9]\.(?:local|lan|home\.arpa)(?![a-z0-9-])/i;
 // Matched on folded, lower-cased text.
 const DEVICE_NAME = /macbook|(?<![a-z])imac(?![a-z])|mac[\s._-]?(?:mini|studio|pro)(?![a-z])|iphone|ipad(?![a-z])/;
 const TERM_SEPARATOR = /[\s._-]+/;
+// Keep names embedded in running text refused at these script edges; ー has
+// Script=Common but is the Japanese prolonged sound mark. See README's gate contract.
+const NO_SPACE_SCRIPT = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}ー]/u;
 const REGEX_SPECIAL = /[\\^$.*+?()[\]{}|]/g;
 const HOME_PATH = [
   /\/(?:users|home)\//i,
@@ -179,7 +184,14 @@ function deviceTermPatterns(terms: unknown): RegExp[] {
     const words = foldForMatch(term).split(TERM_SEPARATOR).filter((word) => word.length > 0);
     if (words.join("").length < 4) continue;
     const escaped = words.map((word) => word.replace(REGEX_SPECIAL, "\\$&"));
-    patterns.push(new RegExp(escaped.join("[\\s._-]{0,3}")));
+    // Decide each folded edge separately: no-space scripts keep substring
+    // matching; other edges treat Unicode letters, numbers and marks as word
+    // continuations. Iterate code points so supplementary Han stays intact.
+    const characters = [...words.join("")];
+    const left = NO_SPACE_SCRIPT.test(characters[0]!) ? "" : String.raw`(?:^|[^\p{L}\p{N}\p{M}])`;
+    const right = NO_SPACE_SCRIPT.test(characters.at(-1)!) ? "" : String.raw`(?![\p{L}\p{N}\p{M}])`;
+    // Consume the left delimiter: Bun's lookbehind can split a surrogate pair.
+    patterns.push(new RegExp(`${left}${escaped.join("[\\s._-]{0,3}")}${right}`, "u"));
   }
   return patterns;
 }
