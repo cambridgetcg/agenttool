@@ -130,7 +130,7 @@ describe("standard npm release policy", () => {
       "package/bin/install.sh": "#!/bin/sh\necho clean\n",
       "package/empty.txt": "",
     };
-    async function archiveWith(extra: Record<string, string>): Promise<{ artifact: string; entries: string[]; sizes: Record<string, number> }> {
+    async function archiveWith(extra: Record<string, string | Buffer>): Promise<{ artifact: string; entries: string[]; sizes: Record<string, number> }> {
       const root = await mkdtemp(join(directory, "tree-"));
       const all = { ...files, ...extra };
       for (const [path, text] of Object.entries(all)) {
@@ -145,7 +145,7 @@ describe("standard npm release policy", () => {
       for (const [path, text] of Object.entries(all)) sizes[path] = Buffer.byteLength(text);
       return { artifact, entries, sizes };
     }
-    async function refusal(extra: Record<string, string>): Promise<string | undefined> {
+    async function refusal(extra: Record<string, string | Buffer>): Promise<string | undefined> {
       const { artifact, entries, sizes } = await archiveWith(extra);
       try {
         await assertArchiveContentClean(artifact, entries, sizes);
@@ -166,6 +166,13 @@ describe("standard npm release policy", () => {
         .toBe("secret-like private-key block found in package/THIRD_PARTY_LICENSES");
       expect(await refusal({ "package/model/weights.bin": `\u0000\u0001${npmToken}\u0000` }))
         .toBe("secret-like npm token found in package/model/weights.bin");
+      // BOM-marked UTF-16, as PowerShell 5 writes by default, is read as UTF-16 too.
+      const utf16le = (text: string) => Buffer.from(`\ufeff${text}`, "utf16le");
+      expect(await refusal({ "package/tools/setup.ps1.log": utf16le("Installed to C:\\Users\\alice\\AppData\r\n") }))
+        .toBe("device path (Windows home directory) found in package/tools/setup.ps1.log");
+      expect(await refusal({ "package/tools/env.txt": utf16le(`NPM_TOKEN=${npmToken}\r\n`).swap16() }))
+        .toBe("secret-like npm token found in package/tools/env.txt");
+      expect(await refusal({ "package/tools/notes.txt": utf16le("Installed to C:\\Users\\you\\AppData\r\n") })).toBeUndefined();
       // Past the old 2 MB cut-off, a bundle is read to its last byte.
       expect(await refusal({ "package/dist/bundle.js": `${"x".repeat(2_500_000)}\n// /home/alice/src\n` }))
         .toBe("device path (Linux home directory) found in package/dist/bundle.js");

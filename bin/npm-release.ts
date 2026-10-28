@@ -1129,8 +1129,29 @@ async function hashArtifact(path: string): Promise<ArtifactIdentity> {
   return artifactIdentity(new Uint8Array(await Bun.file(path).arrayBuffer()), basename(path));
 }
 
+/**
+ * What the scan reads of one packed file: its UTF-8 reading, and for a
+ * BOM-marked UTF-16 file (PowerShell 5's default output), its UTF-16 reading
+ * too, as the public guard's blobKind decodes it. UTF-16 without a BOM is
+ * read as UTF-8 only.
+ */
+export function archiveFileText(bytes: Uint8Array): string {
+  const utf8 = new TextDecoder().decode(bytes);
+  const little = bytes[0] === 0xff && bytes[1] === 0xfe;
+  if (!little && !(bytes[0] === 0xfe && bytes[1] === 0xff)) return utf8;
+  return `${utf8}\n${new TextDecoder(little ? "utf-16le" : "utf-16be").decode(bytes)}`;
+}
+
 async function archiveText(artifact: string, entry: string): Promise<string> {
-  return (await command("tar", ["-xOzf", artifact, entry], { capture: true, log: false })).stdout;
+  const tar = Bun.spawn(["tar", "-xOzf", artifact, entry], {
+    cwd: REPO_ROOT,
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "inherit",
+  });
+  const [exitCode, bytes] = await Promise.all([tar.exited, new Response(tar.stdout).arrayBuffer()]);
+  if (exitCode !== 0) fail(`tar exited ${exitCode}`);
+  return archiveFileText(new Uint8Array(bytes));
 }
 
 export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
@@ -1638,7 +1659,10 @@ async function verifyArchive(artifact: string, spec: ReleaseSpec, expectedVersio
  * extensionless file can carry a secret as well as a .js file can, and a
  * large bundle is where one would hide. inspectNpmTarball already bounds the
  * whole archive (MAX_TAR_EXPANDED_BYTES), so no file needs a size exception.
- * A binary file is read as UTF-8; the ASCII signatures survive that.
+ * Every file is read as UTF-8, where ASCII text survives even among binary
+ * bytes, and a BOM-marked UTF-16 file as UTF-16 too (archiveFileText).
+ * UTF-16 strings inside a binary file, which the guard's printableStrings
+ * reads, are not.
  */
 export async function assertArchiveContentClean(
   artifact: string,
