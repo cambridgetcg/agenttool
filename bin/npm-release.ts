@@ -1135,7 +1135,7 @@ async function hashArtifact(path: string): Promise<ArtifactIdentity> {
  * too, as the public guard's blobKind decodes it. UTF-16 without a BOM is
  * read as UTF-8 only.
  */
-export function archiveFileText(bytes: Uint8Array): string {
+function archiveFileText(bytes: Uint8Array): string {
   const utf8 = new TextDecoder().decode(bytes);
   const little = bytes[0] === 0xff && bytes[1] === 0xfe;
   if (!little && !(bytes[0] === 0xfe && bytes[1] === 0xff)) return utf8;

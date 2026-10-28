@@ -192,6 +192,9 @@ describe("standard npm release policy", () => {
       expect(await refusal({ "package/tools/env.txt": utf16le(`NPM_TOKEN=${npmToken}\r\n`).swap16() }))
         .toBe("secret-like npm token found in package/tools/env.txt");
       expect(await refusal({ "package/tools/notes.txt": utf16le("Installed to C:\\Users\\you\\AppData\r\n") })).toBeUndefined();
+      // Bytes that only start like UTF-16 keep their UTF-8 reading, so the BOM rule hides nothing.
+      expect(await refusal({ "package/model/blob.bin": Buffer.concat([Buffer.from([0xff, 0xfe, 0x00]), Buffer.from(npmToken)]) }))
+        .toBe("secret-like npm token found in package/model/blob.bin");
       // Past the old 2 MB cut-off, a bundle is read to its last byte.
       expect(await refusal({ "package/dist/bundle.js": `${"x".repeat(2_500_000)}\n// /home/alice/src\n` }))
         .toBe("device path (Linux home directory) found in package/dist/bundle.js");
