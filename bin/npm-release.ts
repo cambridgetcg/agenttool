@@ -1932,23 +1932,29 @@ async function plannedDispatch(
   return { spec, version, state, action };
 }
 
-/** Only a trusted stage needs npm's OIDC token; a trusted run never publishes directly. */
+/**
+ * Every trusted run that changes the registry needs npm's OIDC token. Today
+ * that is only a stage, since plannedDispatch refuses a trusted direct
+ * publish, but a change to that rule must not skip this check silently.
+ */
 export function trustedPublisherCheckNeeded(
   authentication: AuthenticationMode,
   action: "verify-existing" | "stage" | "publish",
 ): boolean {
-  return authentication === "trusted" && action === "stage";
+  return authentication === "trusted" && action !== "verify-existing";
 }
 
 /**
  * The publish job's step after check-inputs and before the GitHub Release
- * mirror. A trusted run that will stage first makes the OIDC token exchange
- * npm would make (assertTrustedPublisherExchange), so a package whose npm
- * trusted publishers do not match this workflow is refused while the run has
- * mirrored, signed, and staged nothing. A bootstrap run, and a run that only
- * verifies an existing version, need no OIDC token. This step receives no
- * secret, so it cannot see whether a bootstrap run has its token: without
- * one, publish refuses that run after the mirror.
+ * mirror. A trusted run that will change the registry first makes the OIDC
+ * token exchange npm would make (assertTrustedPublisherExchange), so a
+ * package whose npm trusted publishers do not match this workflow is refused
+ * while the run has mirrored, signed, and staged nothing. A bootstrap run,
+ * and a run that only verifies an existing version, need no OIDC token. This
+ * step receives no secret, so it cannot see whether a bootstrap run has its
+ * token: without one, publish refuses that run after the mirror. Setting the
+ * secret just before a bootstrap dispatch is the runbook's step, and the only
+ * control for that case.
  */
 async function checkTrust(
   packageKey: string,

@@ -475,6 +475,8 @@ describe("npm authentication fails before any public residue", () => {
     expect(unset.calls).toHaveLength(0);
 
     expect(trustedPublisherCheckNeeded("trusted", "stage")).toBe(true);
+    // plannedDispatch refuses this pairing today; if it ever passes, it is checked, not skipped.
+    expect(trustedPublisherCheckNeeded("trusted", "publish")).toBe(true);
     expect(trustedPublisherCheckNeeded("trusted", "verify-existing")).toBe(false);
     expect(trustedPublisherCheckNeeded("bootstrap", "stage")).toBe(false);
     expect(trustedPublisherCheckNeeded("bootstrap", "publish")).toBe(false);
