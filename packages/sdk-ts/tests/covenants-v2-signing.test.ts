@@ -1,4 +1,4 @@
-import { describe, expect, test, mock } from "bun:test";
+import { afterEach, describe, expect, test, mock } from "bun:test";
 import * as ed from "@noble/ed25519";
 import { sha512 } from "@noble/hashes/sha2.js";
 
@@ -17,6 +17,13 @@ ed.etc.sha512Sync = (...m: Uint8Array[]) => {
 };
 
 const b64 = (u: Uint8Array) => Buffer.from(u).toString("base64");
+
+// Each test swaps in a fetch mock; put the real one back so later test files
+// in the same bun process (e.g. exit-door-integration) never inherit a mock.
+const ORIGINAL_FETCH = globalThis.fetch;
+afterEach(() => {
+  globalThis.fetch = ORIGINAL_FETCH;
+});
 
 /** Minimal HttpConfig for tests — headers/timeout unused by mock */
 function makeClient(): CovenantsClient {

@@ -1,4 +1,4 @@
-/** Directory rollover (schema version 5): `hub directory successor`.
+/** Directory rollover (schema version 6): `hub directory successor`.
  *
  * The directory is a mission of at most 30 days. Before it ends, the hub
  * creates the next one, whose charter names the same pinned door and the
@@ -148,7 +148,7 @@ export async function planDirectorySuccessor(ctx: FleetContext, input: { days?: 
   const desk = requireHubDesk(ctx);
   requireKeychain(ctx);
   const fleet = ctx.store.fleet;
-  if (!fleet.v5) throw new LobbyError("state_not_upgraded", "this desk state has no version-5 directory chain tables yet");
+  if (!fleet.chain) throw new LobbyError("state_not_upgraded", "this desk state has no version-6 directory chain tables yet");
   const now = ctx.now();
   const previous = hubLiveDirectories(ctx, hub, now).find((directory) => directory.role === "previous");
   if (previous !== undefined) {
@@ -343,7 +343,7 @@ export async function executeDirectorySuccessor(ctx: FleetContext, plan: Success
         `${CARDS_CHANGED}; successor directory ${missionId} is created and recorded, and nothing was announced. Run hub directory successor again to finish`);
     }
     if (fleet.hubDirectory(plan.from.mission_id) === null) {
-      // A chain that does not record the current directory yet (it predates version 5 in some way): record it now.
+      // A chain that does not record the current directory yet (it predates version 6 in some way): record it now.
       fleet.addHubDirectory({
         mission_id: live.directory_mission_id, mission_digest: live.directory_digest, descriptor: live.directory_descriptor,
         expires_at: live.directory_expires_at, predecessor_mission_id: null, mode: live.directory_mode, state: "previous",

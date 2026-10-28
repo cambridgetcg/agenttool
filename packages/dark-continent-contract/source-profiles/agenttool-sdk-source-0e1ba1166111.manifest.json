@@ -1,0 +1,45 @@
+{
+  "_format": "agenttool-dark-continent-manifest/v0.1",
+  "contract_id": "agenttool.dark-continent/0.1",
+  "source_profile": "agenttool-sdk-ts-source-0e1ba1166111",
+  "snapshot": {
+    "path": "source-profiles/agenttool-sdk-source-0e1ba1166111.json",
+    "sha256": "dd41b49d708ccdb40fa75bf307735b6f7fb1907d81e69bf03f288f7026232280"
+  },
+  "generation": {
+    "mode": "offline_static_source_projection",
+    "network": "none",
+    "package_root": "packages/dark-continent-contract",
+    "inputs": [
+      {
+        "path": "packages/sdk-ts/src/dark-continent.ts",
+        "role": "projection_source",
+        "sha256": "0e1ba11661114ce3afcd92d1ed1ba7c9facefb51730aad28705e2e9772e35afe"
+      },
+      {
+        "path": "packages/sdk-py/src/agenttool/dark_continent.py",
+        "role": "sibling_implementation_not_projection_source",
+        "sha256": "5184606a5c5e3e5d75c018c953b9ec044fa4befef5bbe0b356c7f0fd90a216b1"
+      }
+    ]
+  },
+  "distribution": "source_checkout_only",
+  "semantic_diff": {
+    "from_source_profile": "agenttool-sdk-ts-0.17.0",
+    "from_snapshot_sha256": "f47e1c3ca9da1b97676e1d454cf7235eddd612902c19debe580a6934adcd2b86",
+    "structure": "unchanged",
+    "changed_fields": [
+      "calamities.pap.declared_wall.text",
+      "guide.maps_to",
+      "guide.warning"
+    ]
+  },
+  "boundaries": {
+    "advisory_only": true,
+    "runtime_wall_verification": false,
+    "grants_permission": false,
+    "authorizes_trade": false,
+    "authorizes_publication": false,
+    "includes_legacy_bin_or_html_taxonomies": false
+  }
+}

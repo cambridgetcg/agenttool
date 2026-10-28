@@ -1,4 +1,4 @@
-/** Fleet-hall state in lobby.sqlite (schema version 5).
+/** Fleet-hall state in lobby.sqlite (schema version 6).
  *
  * Desk side (every enrolled device): its desk identity and directory join,
  * the grants it holds (and which it left), the knocks it sent, its pending
@@ -12,9 +12,11 @@
  *
  * Version 3 is reached from version 2 by `FLEET_V3_UPGRADE_SQL`, version 4
  * (directory renewal inside the Lobby) from version 3 by
- * `FLEET_V4_UPGRADE_SQL`, and version 5 (directory rollover: the hub's
- * directory chain and the desk's directory history) from version 4 by
- * `FLEET_V5_UPGRADE_SQL`, each run once in the same transaction that records
+ * `FLEET_V4_UPGRADE_SQL`, version 5 (room seat leases: `desk_leases`,
+ * `desk_lease_sends`) from version 4 by `FLEET_V5_UPGRADE_SQL`, and version 6
+ * (directory rollover: the hub's directory chain and the desk's directory
+ * history) from version 5 by
+ * `FLEET_V6_UPGRADE_SQL`, each run once in the same transaction that records
  * the new version; nothing existing is rewritten. The steps are chained in
  * src/store.ts (`SCHEMA_STEPS`).
  *
@@ -296,13 +298,106 @@ CREATE TABLE IF NOT EXISTS hub_directory_renewals (
 ) STRICT;
 `;
 
-/** Version 4 → 5: directory rollover. Two new tables, and one derived row in
+/** Version 4 → 5: room seat leases (src/lease.ts). Additive only: two new
+ * tables. A lease's record, bounds and binding never change after it is
+ * written; it ends at most once (revoked or void, never both, and either
+ * set once); its counters only grow; neither table loses a row. Send rows are append-only
+ * and join the outbox by `event_id` for their delivery state. No secret is
+ * stored: a lease id is a handle, a seat ref an unverified label. */
+export const FLEET_V5_UPGRADE_SQL = `
+CREATE TABLE IF NOT EXISTS desk_leases (
+  lease_id TEXT PRIMARY KEY
+    CHECK (length(lease_id) = 38 AND substr(lease_id, 1, 6) = 'lease_'
+      AND substr(lease_id, 7) NOT GLOB '*[^0-9a-f]*'),
+  room_id TEXT NOT NULL,
+  mission_id TEXT NOT NULL,
+  grant_id TEXT NOT NULL,
+  directory_grant_id TEXT,
+  seat_ref TEXT,
+  record TEXT NOT NULL,
+  record_sha256 TEXT NOT NULL,
+  audit_seq INTEGER NOT NULL,
+  issued_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  max_messages INTEGER NOT NULL CHECK (max_messages BETWEEN 1 AND 100),
+  max_chars_per_message INTEGER NOT NULL CHECK (max_chars_per_message BETWEEN 1 AND 1000),
+  max_total_chars INTEGER NOT NULL CHECK (max_total_chars BETWEEN 1 AND 50000),
+  min_interval_ms INTEGER NOT NULL CHECK (min_interval_ms BETWEEN 5000 AND 3600000),
+  sent_messages INTEGER NOT NULL DEFAULT 0 CHECK (sent_messages >= 0),
+  sent_chars INTEGER NOT NULL DEFAULT 0 CHECK (sent_chars >= 0),
+  gate_refusals INTEGER NOT NULL DEFAULT 0 CHECK (gate_refusals >= 0),
+  last_send_at TEXT,
+  revoked_at TEXT,
+  voided_at TEXT,
+  void_reason TEXT,
+  CHECK (sent_messages <= max_messages AND sent_chars <= max_total_chars),
+  CHECK ((voided_at IS NULL) = (void_reason IS NULL)),
+  CHECK (revoked_at IS NULL OR voided_at IS NULL),
+  CHECK (julianday(expires_at) > julianday(issued_at)
+    AND (julianday(expires_at) - julianday(issued_at)) * 1440 <= 480.001)
+) STRICT;
+
+CREATE TRIGGER IF NOT EXISTS desk_leases_are_not_deleted
+BEFORE DELETE ON desk_leases
+BEGIN
+  SELECT RAISE(ABORT, 'leases_end_rather_than_delete');
+END;
+
+CREATE TRIGGER IF NOT EXISTS desk_leases_bounds_are_fixed
+BEFORE UPDATE OF lease_id, room_id, mission_id, grant_id, directory_grant_id, seat_ref, record, record_sha256,
+  audit_seq, issued_at, expires_at, max_messages, max_chars_per_message, max_total_chars, min_interval_ms ON desk_leases
+BEGIN
+  SELECT RAISE(ABORT, 'lease_bounds_are_fixed');
+END;
+
+CREATE TRIGGER IF NOT EXISTS desk_leases_end_once_and_only_grow
+BEFORE UPDATE ON desk_leases
+WHEN (OLD.revoked_at IS NOT NULL AND NEW.revoked_at IS NOT OLD.revoked_at)
+  OR (OLD.voided_at IS NOT NULL AND (NEW.voided_at IS NOT OLD.voided_at OR NEW.void_reason IS NOT OLD.void_reason))
+  OR NEW.sent_messages < OLD.sent_messages OR NEW.sent_chars < OLD.sent_chars OR NEW.gate_refusals < OLD.gate_refusals
+  OR (OLD.last_send_at IS NOT NULL AND (NEW.last_send_at IS NULL OR NEW.last_send_at < OLD.last_send_at))
+BEGIN
+  SELECT RAISE(ABORT, 'lease_ends_once_and_counters_only_grow');
+END;
+
+CREATE TABLE IF NOT EXISTS desk_lease_sends (
+  lease_id TEXT NOT NULL REFERENCES desk_leases(lease_id),
+  idempotency_key TEXT NOT NULL,
+  request_sha256 TEXT NOT NULL,
+  n INTEGER NOT NULL CHECK (n >= 1),
+  event_id TEXT NOT NULL UNIQUE,
+  mission_id TEXT NOT NULL,
+  grant_id TEXT NOT NULL,
+  to_identity TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('message', 'read_ack')),
+  chars INTEGER NOT NULL CHECK (chars BETWEEN 1 AND 1000),
+  seat_ref TEXT,
+  reserved_at TEXT NOT NULL,
+  audit_seq INTEGER NOT NULL,
+  PRIMARY KEY (lease_id, idempotency_key),
+  UNIQUE (lease_id, n)
+) STRICT;
+
+CREATE TRIGGER IF NOT EXISTS desk_lease_sends_are_not_updated
+BEFORE UPDATE ON desk_lease_sends
+BEGIN
+  SELECT RAISE(ABORT, 'lease_sends_are_append_only');
+END;
+
+CREATE TRIGGER IF NOT EXISTS desk_lease_sends_are_not_deleted
+BEFORE DELETE ON desk_lease_sends
+BEGIN
+  SELECT RAISE(ABORT, 'lease_sends_are_append_only');
+END;
+`;
+
+/** Version 5 → 6: directory rollover. Two new tables, and one derived row in
  * each (this step adds rows; it changes none): the hub's active directory as
  * its `current` chain entry, and the desk's joined directory as entered by
  * `join`. The `hub` and `desk` singletons stay the pointer to the current
  * directory; a successor's announcement moves the pointer and the chain in
  * one transaction. */
-export const FLEET_V5_UPGRADE_SQL = `
+export const FLEET_V6_UPGRADE_SQL = `
 CREATE TABLE IF NOT EXISTS hub_directories (
   mission_id TEXT PRIMARY KEY,
   mission_digest TEXT NOT NULL,
@@ -514,7 +609,7 @@ export interface DirectoryRenewalRow {
   renewed_at: string;
 }
 
-/** One directory in the hub's chain (version 5). `pending`: creation asked
+/** One directory in the hub's chain (version 6). `pending`: creation asked
  * for, never confirmed; `successor`: created, not announced yet; `current`:
  * the one the `hub` row points at; `previous`: the one before it, live until
  * it ends. */
@@ -532,7 +627,7 @@ export interface HubDirectoryRow {
   recorded_at: string;
 }
 
-/** A directory this desk entered (version 5): by `fleet join`, or by moving
+/** A directory this desk entered (version 6): by `fleet join`, or by moving
  * to a door-signed successor. */
 export interface DeskDirectoryRow {
   mission_id: string;
@@ -546,6 +641,48 @@ export interface BlockRow {
   room_id: string;
   identity_id: string;
   blocked_at: string;
+}
+
+export interface LeaseRow {
+  lease_id: string;
+  room_id: string;
+  mission_id: string;
+  grant_id: string;
+  directory_grant_id: string | null;
+  seat_ref: string | null;
+  record: string;
+  record_sha256: string;
+  audit_seq: number;
+  issued_at: string;
+  expires_at: string;
+  max_messages: number;
+  max_chars_per_message: number;
+  max_total_chars: number;
+  min_interval_ms: number;
+  sent_messages: number;
+  sent_chars: number;
+  gate_refusals: number;
+  last_send_at: string | null;
+  revoked_at: string | null;
+  voided_at: string | null;
+  void_reason: string | null;
+}
+
+export interface LeaseSendRow {
+  lease_id: string;
+  idempotency_key: string;
+  request_sha256: string;
+  n: number;
+  event_id: string;
+  mission_id: string;
+  /** The grant this send was saved and posted under: always the lease's bound grant. */
+  grant_id: string;
+  to_identity: string;
+  kind: "message" | "read_ack";
+  chars: number;
+  seat_ref: string | null;
+  reserved_at: string;
+  audit_seq: number;
 }
 
 export interface ExtraGrantRow {
@@ -607,8 +744,10 @@ export class FleetStore {
   readonly v3: boolean;
   /** The directory-renewal tables and columns exist (state version 4 or later). */
   readonly v4: boolean;
-  /** The directory chain tables exist (state version 5 or later). */
+  /** The room seat lease tables exist (state version 5 or later). */
   readonly v5: boolean;
+  /** The directory chain tables exist (state version 6 or later): directory rollover. */
+  readonly chain: boolean;
 
   /** `stateVersion` is one LobbyStore has already accepted as readable. */
   constructor(
@@ -621,6 +760,7 @@ export class FleetStore {
     this.v3 = version >= 3;
     this.v4 = version >= 4;
     this.v5 = version >= 5;
+    this.chain = version >= 6;
   }
 
   private write(): void {
@@ -655,7 +795,7 @@ export class FleetStore {
       `UPDATE desk SET directory_mission_id = $directory_mission_id, directory_digest = $directory_digest,
          door_fingerprint = $door_fingerprint, joined_at = $joined_at WHERE singleton = 1`,
     ).run({ ...input });
-    if (this.v5) {
+    if (this.chain) {
       this.addDeskDirectory({ mission_id: input.directory_mission_id, mission_digest: input.directory_digest,
         predecessor_mission_id: null, how: "join", entered_at: input.joined_at });
     }
@@ -858,9 +998,9 @@ export class FleetStore {
     this.recordCurrentDirectory();
   }
 
-  /** The hub's active directory as the `current` entry of its chain (version 5). */
+  /** The hub's active directory as the `current` entry of its chain (version 6). */
   private recordCurrentDirectory(): void {
-    if (!this.v5) return;
+    if (!this.chain) return;
     this.db.query(
       `INSERT INTO hub_directories (mission_id, mission_digest, descriptor, expires_at, predecessor_mission_id, mode, state,
          notice_event_id, announced_at, revoked_at, recorded_at)
@@ -1327,26 +1467,26 @@ export class FleetStore {
     return this.db.query("SELECT * FROM hub_directory_renewals ORDER BY renewed_at ASC, token_sha256 ASC").all() as DirectoryRenewalRow[];
   }
 
-  // ── Version 5: the directory chain ─────────────────────────────────
+  // ── Version 6: the directory chain ─────────────────────────────────
 
-  private writeV5(): void {
+  private writeChain(): void {
     this.write();
-    if (!this.v5) throw new LobbyError("state_not_upgraded", "this desk state has no version-5 directory chain tables yet");
+    if (!this.chain) throw new LobbyError("state_not_upgraded", "this desk state has no version-6 directory chain tables yet");
   }
 
   /** Every directory in the hub's chain, oldest first (read-only views too). */
   hubDirectories(): HubDirectoryRow[] {
-    if (!this.v5) return [];
+    if (!this.chain) return [];
     return this.db.query("SELECT * FROM hub_directories ORDER BY recorded_at ASC, mission_id ASC").all() as HubDirectoryRow[];
   }
 
   hubDirectory(missionId: string): HubDirectoryRow | null {
-    if (!this.v5) return null;
+    if (!this.chain) return null;
     return this.db.query("SELECT * FROM hub_directories WHERE mission_id = $mission_id").get({ mission_id: missionId }) as HubDirectoryRow | null;
   }
 
   addHubDirectory(row: HubDirectoryRow): void {
-    this.writeV5();
+    this.writeChain();
     this.db.query(
       `INSERT INTO hub_directories (mission_id, mission_digest, descriptor, expires_at, predecessor_mission_id, mode, state,
          notice_event_id, announced_at, revoked_at, recorded_at)
@@ -1357,17 +1497,17 @@ export class FleetStore {
 
   /** A pending successor the service definitely refused to create, forgotten. */
   dropPendingHubDirectory(missionId: string): void {
-    this.writeV5();
+    this.writeChain();
     this.db.query("DELETE FROM hub_directories WHERE mission_id = $mission_id AND state = 'pending'").run({ mission_id: missionId });
   }
 
   markHubDirectoryCreated(missionId: string): void {
-    this.writeV5();
+    this.writeChain();
     this.db.query("UPDATE hub_directories SET state = 'successor' WHERE mission_id = $mission_id AND state = 'pending'").run({ mission_id: missionId });
   }
 
   markHubDirectoryRevoked(missionId: string, at: string): void {
-    this.writeV5();
+    this.writeChain();
     this.db.query("UPDATE hub_directories SET revoked_at = coalesce(revoked_at, $at) WHERE mission_id = $mission_id").run({ mission_id: missionId, at });
   }
 
@@ -1375,7 +1515,7 @@ export class FleetStore {
    * announced it), the directory the hub pointed at becomes `previous`, and
    * the `hub` row points at the successor. Call inside the act's transaction. */
   announceHubSuccessor(input: { from_mission_id: string; to: HubDirectoryRow; notice_event_id: string; at: string }): void {
-    this.writeV5();
+    this.writeChain();
     this.db.query("UPDATE hub_directories SET state = 'previous' WHERE mission_id = $mission_id").run({ mission_id: input.from_mission_id });
     this.db.query(
       `UPDATE hub_directories SET state = 'current', notice_event_id = $notice_event_id, announced_at = $at
@@ -1389,12 +1529,12 @@ export class FleetStore {
 
   /** The directories this desk entered, oldest first (read-only views too). */
   deskDirectories(): DeskDirectoryRow[] {
-    if (!this.v5) return [];
+    if (!this.chain) return [];
     return this.db.query("SELECT * FROM desk_directories ORDER BY entered_at ASC, mission_id ASC").all() as DeskDirectoryRow[];
   }
 
   addDeskDirectory(row: DeskDirectoryRow): void {
-    this.writeV5();
+    this.writeChain();
     this.db.query(
       `INSERT INTO desk_directories (mission_id, mission_digest, predecessor_mission_id, how, entered_at)
        VALUES ($mission_id, $mission_digest, $predecessor_mission_id, $how, $entered_at) ON CONFLICT (mission_id) DO NOTHING`,
@@ -1403,7 +1543,7 @@ export class FleetStore {
 
   /** Point this desk at another directory (a door-signed successor); the door pin is untouched. */
   moveDeskDirectory(input: { mission_id: string; mission_digest: string; expires_at: string; predecessor_mission_id: string; how: "join" | "successor"; at: string }): void {
-    this.writeV5();
+    this.writeChain();
     this.db.query(
       `UPDATE desk SET directory_mission_id = $mission_id, directory_digest = $mission_digest, directory_expires_at = $expires_at
        WHERE singleton = 1`,
@@ -1415,5 +1555,85 @@ export class FleetStore {
   listDecisions(): DecisionRow[] {
     if (!this.available) return [];
     return this.db.query("SELECT * FROM hub_decisions ORDER BY decided_at ASC, knock_id ASC").all() as DecisionRow[];
+  }
+
+  // ── Version 5: room seat leases (desk side) ────────────────────────
+
+  private writeLeases(): void {
+    this.write();
+    if (!this.v5) throw new LobbyError("state_not_upgraded", "this desk state has no version-5 lease tables yet");
+  }
+
+  addLease(row: Omit<LeaseRow, "sent_messages" | "sent_chars" | "gate_refusals" | "last_send_at" | "revoked_at" | "voided_at" | "void_reason">): void {
+    this.writeLeases();
+    this.db.query(
+      `INSERT INTO desk_leases (lease_id, room_id, mission_id, grant_id, directory_grant_id, seat_ref, record, record_sha256,
+         audit_seq, issued_at, expires_at, max_messages, max_chars_per_message, max_total_chars, min_interval_ms)
+       VALUES ($lease_id, $room_id, $mission_id, $grant_id, $directory_grant_id, $seat_ref, $record, $record_sha256,
+         $audit_seq, $issued_at, $expires_at, $max_messages, $max_chars_per_message, $max_total_chars, $min_interval_ms)`,
+    ).run({ ...row });
+  }
+
+  lease(leaseId: string): LeaseRow | null {
+    if (!this.v5) return null;
+    return this.db.query("SELECT * FROM desk_leases WHERE lease_id = $lease_id").get({ lease_id: leaseId }) as LeaseRow | null;
+  }
+
+  /** Every lease this desk holds, oldest first (read-only views too; none before version 5). */
+  listLeases(): LeaseRow[] {
+    if (!this.v5) return [];
+    return this.db.query("SELECT * FROM desk_leases ORDER BY issued_at ASC, lease_id ASC").all() as LeaseRow[];
+  }
+
+  /** Mark a lease revoked; false when it had already ended (revoked or void). */
+  revokeLease(leaseId: string, at: string): boolean {
+    this.writeLeases();
+    return this.db.query(
+      "UPDATE desk_leases SET revoked_at = $at WHERE lease_id = $lease_id AND revoked_at IS NULL AND voided_at IS NULL",
+    ).run({ lease_id: leaseId, at }).changes === 1;
+  }
+
+  /** Mark a lease void for good; false when it had already ended. */
+  voidLease(leaseId: string, reason: string, at: string): boolean {
+    this.writeLeases();
+    return this.db.query(
+      `UPDATE desk_leases SET voided_at = $at, void_reason = $reason
+       WHERE lease_id = $lease_id AND revoked_at IS NULL AND voided_at IS NULL`,
+    ).run({ lease_id: leaseId, reason, at }).changes === 1;
+  }
+
+  /** Count one refusal by the egress gate under a lease. Returns the new count. */
+  countLeaseRefusal(leaseId: string): number {
+    this.writeLeases();
+    this.db.query("UPDATE desk_leases SET gate_refusals = gate_refusals + 1 WHERE lease_id = $lease_id").run({ lease_id: leaseId });
+    return (this.db.query("SELECT gate_refusals FROM desk_leases WHERE lease_id = $lease_id").get({ lease_id: leaseId }) as { gate_refusals: number }).gate_refusals;
+  }
+
+  /** Reserve one send: the send row and the counters, in the caller's transaction. */
+  addLeaseSend(row: LeaseSendRow): void {
+    this.writeLeases();
+    this.db.query(
+      `INSERT INTO desk_lease_sends (lease_id, idempotency_key, request_sha256, n, event_id, mission_id, grant_id, to_identity,
+         kind, chars, seat_ref, reserved_at, audit_seq)
+       VALUES ($lease_id, $idempotency_key, $request_sha256, $n, $event_id, $mission_id, $grant_id, $to_identity,
+         $kind, $chars, $seat_ref, $reserved_at, $audit_seq)`,
+    ).run({ ...row });
+    const result = this.db.query(
+      `UPDATE desk_leases SET sent_messages = sent_messages + 1, sent_chars = sent_chars + $chars, last_send_at = $at
+       WHERE lease_id = $lease_id AND revoked_at IS NULL AND voided_at IS NULL
+         AND sent_messages + 1 <= max_messages AND sent_chars + $chars <= max_total_chars`,
+    ).run({ lease_id: row.lease_id, chars: row.chars, at: row.reserved_at });
+    if (result.changes !== 1) throw new LobbyError("lease_budget_exhausted", "the lease has no budget left for this message; nothing was sent");
+  }
+
+  leaseSend(leaseId: string, idempotencyKey: string): LeaseSendRow | null {
+    if (!this.v5) return null;
+    return this.db.query("SELECT * FROM desk_lease_sends WHERE lease_id = $lease_id AND idempotency_key = $key")
+      .get({ lease_id: leaseId, key: idempotencyKey }) as LeaseSendRow | null;
+  }
+
+  leaseSends(leaseId: string): LeaseSendRow[] {
+    if (!this.v5) return [];
+    return this.db.query("SELECT * FROM desk_lease_sends WHERE lease_id = $lease_id ORDER BY n ASC").all({ lease_id: leaseId }) as LeaseSendRow[];
   }
 }

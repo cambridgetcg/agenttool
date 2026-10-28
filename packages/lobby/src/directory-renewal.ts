@@ -13,7 +13,7 @@
  *   season seats when they end within `HUB_SEAT_RENEW_BELOW_MS`.
  * - `hub device pause|resume` (tty, hub) stops or restarts one device's
  *   directory renewal; the grant it holds then runs out within 24 hours.
- * - Directory rollover (schema version 5; src/directory-rollover.ts): while a
+ * - Directory rollover (schema version 6; src/directory-rollover.ts): while a
  *   successor overlaps the previous directory the sweep reads requests in
  *   both, renews a grant in either while it is live, and renews the hub
  *   desk's seats in both; `fleet renew` aims its next request at the

@@ -754,9 +754,10 @@ const DELIBERATE_EXCEPTIONS = new Set([
   // an opaque callback — which is why they are named here by hand.)
   "data.ts:DataSyncClient.pull",
   "data.ts:DataSyncClient.status",
-  // 2. Public discovery is best-effort and carries no hosted API authority. A
-  // non-OK answer produces no error at all — an empty known world IS the Dark
-  // Continent. dark-continent.ts § DarkContinentClient.explore.
+  // 2. explore() makes no discovery request (public agent discovery is
+  // retired), and under include_nen a failed wake read leaves nen_profile null
+  // instead of raising — an unregistered agent is on the Dark Continent, not in
+  // error. dark-continent.ts § DarkContinentClient.explore.
   "dark-continent.ts:DarkContinentClient.explore",
   // 3. Collection is a pipeline of optional steps. Any step that fails is
   // recorded as a string in the result's `errors` list so the rest still run.
@@ -976,8 +977,9 @@ describe("guidance deliberately does not survive five surfaces", () => {
   }
 
   test("darkContinent.explore raises nothing at all", async () => {
-    // Public discovery carries no hosted API authority, and an unmapped edge
-    // is the subject matter, not a failure. Both SDKs swallow.
+    // Discovery is retired, so the only request is the include_nen wake read,
+    // and an unmapped agent is the subject matter, not a failure. Both SDKs
+    // swallow.
     stubFetch(guidedResponse);
     const result = await guidedClient().darkContinent.explore({ include_nen: true });
     expect(result.known_world).toEqual([]);

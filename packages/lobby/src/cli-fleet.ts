@@ -120,9 +120,22 @@ export function withoutTerminal(ctx: FleetContext, io: FleetIo): number | null {
 /** Show and confirm; on yes record the bytes, then run the act. */
 export async function consequentialAsync<T>(ctx: FleetContext, io: FleetIo, preview: ActPreview, run: () => Promise<T>)
   : Promise<{ confirmed: true; value: T } | { confirmed: false; code: number }> {
+  return confirmThen(io, () => confirmAndRecord(ctx, io.confirm, preview), run);
+}
+
+/** Show and confirm; on yes run an act that records the confirmed bytes
+ * itself, in the same transaction as its local writes (`room lease`, through
+ * `LobbyStore.recordActWith`). */
+export async function consequentialRecordedBy<T>(io: FleetIo, preview: ActPreview, run: () => Promise<T>)
+  : Promise<{ confirmed: true; value: T } | { confirmed: false; code: number }> {
+  return confirmThen(io, () => io.confirm(preview), run);
+}
+
+async function confirmThen<T>(io: FleetIo, ask: () => Promise<boolean>, run: () => Promise<T>)
+  : Promise<{ confirmed: true; value: T } | { confirmed: false; code: number }> {
   let confirmed: boolean;
   try {
-    confirmed = await confirmAndRecord(ctx, io.confirm, preview);
+    confirmed = await ask();
   } catch (error) {
     if (error instanceof LobbyError && (error.code === "tty_unavailable" || error.code === "unsafe_preview")) {
       io.stderr(`agenttool-lobby: ${error.code}: ${error.message}\n`);
@@ -476,7 +489,7 @@ export async function hubCommand(ctx: FleetContext, args: string[], io: FleetIo)
         door_fingerprint: hub.door_fingerprint,
         keychain: { account: hub.keychain_account, bearer_service: hub.bearer_service, door_service: hub.door_service },
         directory: { mission_id: hub.directory_mission_id, mission_digest: hub.directory_digest, expires_at: hub.directory_expires_at, mode: hub.directory_mode },
-        // The directory chain (schema version 5): current, previous while a rollover overlaps, and a successor not announced yet.
+        // The directory chain (schema version 6): current, previous while a rollover overlaps, and a successor not announced yet.
         directories: ctx.store.fleet.hubDirectories().map((row) => ({
           mission_id: row.mission_id, state: row.state, expires_at: row.expires_at, predecessor_mission_id: row.predecessor_mission_id,
           notice_event_id: row.notice_event_id, revoked_at: row.revoked_at,

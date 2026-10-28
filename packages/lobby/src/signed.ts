@@ -241,7 +241,7 @@ export interface DirectoryRenewalBody {
 }
 
 /** The door's signed notice that directory `from` has a successor, `to`
- * (schema version 5): the next directory mission, whose charter names the
+ * (schema version 6): the next directory mission, whose charter names the
  * same door and `from` as its predecessor. A desk that joined `from` moves to
  * `to` on its next renewal pickup; the door pin never changes. */
 export interface DirectorySuccessorBody {

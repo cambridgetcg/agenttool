@@ -1316,7 +1316,7 @@ export async function executeStop(ctx: FleetContext, plan: StopPlan): Promise<St
       const view = await admin.revokeMission(mission.mission_id);
       if (mission.kind === "directory") {
         if (mission.mission_id === hub.directory_mission_id) fleet.setDirectoryRevoked(view.revoked_at!);
-        if (fleet.v5) fleet.markHubDirectoryRevoked(mission.mission_id, view.revoked_at!);
+        if (fleet.chain) fleet.markHubDirectoryRevoked(mission.mission_id, view.revoked_at!);
       } else fleet.markSeasonRevoked(mission.mission_id, view.revoked_at!);
       missions.push({ mission_id: mission.mission_id, kind: mission.kind, status: "revoked" });
     } catch (error) {

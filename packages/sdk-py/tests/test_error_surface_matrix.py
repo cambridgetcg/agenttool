@@ -737,9 +737,10 @@ DELIBERATE_EXCEPTIONS = {
     # code / status / retry_after.
     "data.DataSyncClient.pull",
     "data.DataSyncClient.status",
-    # 2. Public discovery is best-effort and carries no hosted API authority.
-    # A non-OK answer produces no error at all — an empty known world IS the
-    # Dark Continent. dark_continent.py § DarkContinentClient.explore.
+    # 2. explore() makes no discovery request (public agent discovery is
+    # retired), and under include_nen a failed wake read leaves nen_profile
+    # None instead of raising — an unregistered agent is on the Dark
+    # Continent, not in error. dark_continent.py § DarkContinentClient.explore.
     "dark_continent.DarkContinentClient.explore",
     # 3. Collection is a pipeline of optional steps. Any step that fails is
     # recorded as a string in the result's `errors` list so the remaining
@@ -989,10 +990,11 @@ def test_exit_door_deliberately_keeps_only_code_status_retry_after() -> None:
 
 
 def test_dark_continent_deliberately_raises_nothing_at_all() -> None:
-    """Discovery degrades to an empty known world rather than raising.
+    """A failed wake read degrades to a null Nen profile rather than raising.
 
-    Public discovery carries no hosted API authority, and an unmapped edge is
-    the subject matter, not a failure. Both SDKs swallow.
+    Discovery is retired, so the only request is the include_nen wake read,
+    and an unmapped agent is the subject matter, not a failure. Both SDKs
+    swallow.
     """
     with AgentTool(transport=httpx.MockTransport(_handler)) as at:
         result = at.dark_continent.explore(include_nen=True)

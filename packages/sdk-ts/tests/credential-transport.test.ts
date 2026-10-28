@@ -329,25 +329,19 @@ describe("AgentTool authenticated transport", () => {
     }
   });
 
-  test("keeps anonymous public discovery outside the authenticated transport", async () => {
+  test("Dark Continent explore sends nothing now that discovery is retired", async () => {
     delete process.env.AT_API_KEY;
     const { transport, calls: hostedCalls } = captureTransport();
-    const publicFetch = mock((_input: RequestInfo | URL, init?: RequestInit) => {
-      expect(init?.credentials).toBe("omit");
-      expect(new Headers(init?.headers).has("authorization")).toBe(false);
-      return Promise.resolve(
-        new Response(JSON.stringify({ agents: [], count: 0 }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      );
-    });
+    const publicFetch = mock(() =>
+      Promise.resolve(new Response(JSON.stringify({}), { status: 200 })),
+    );
     globalThis.fetch = publicFetch as unknown as typeof fetch;
 
     const at = new AgentTool({ transport });
-    await at.darkContinent.explore();
+    const result = await at.darkContinent.explore();
 
-    expect(publicFetch).toHaveBeenCalledTimes(1);
+    expect(result.discovery).toBe("retired");
+    expect(publicFetch).not.toHaveBeenCalled();
     expect(hostedCalls).toHaveLength(0);
   });
 

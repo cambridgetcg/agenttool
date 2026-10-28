@@ -311,7 +311,7 @@ describe("directory renewal documents (schema version 4)", () => {
   });
 });
 
-describe("directory rollover documents (schema version 5)", () => {
+describe("directory rollover documents (schema version 6)", () => {
   const DAY = 86_400_000;
   const successor: DirectorySuccessorBody = {
     from_mission_id: UUID_A, from_mission_digest: `sha256:${"a".repeat(64)}`, from_expires_at: LATER(10 * DAY),
