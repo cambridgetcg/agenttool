@@ -14,7 +14,7 @@ import {
   removeSessionCredentialFile,
 } from "./session-file.js";
 import { CollabStore } from "./store.js";
-import { runCeremonyCli, type CeremonyIo } from "./ceremony.js";
+import { openInBrowser, runCeremonyCli, type CeremonyIo } from "./ceremony.js";
 import {
   PERSON_DESK_USAGE,
   runPersonDeskCli,
@@ -340,7 +340,11 @@ export function runCollabHostCli(
 export async function runCollabHostCliAsync(
   argv: string[],
   env: Record<string, string | undefined> = process.env,
-  io: CeremonyIo = { out: (line) => process.stdout.write(`${line}\n`) },
+  io: CeremonyIo = {
+    out: (line) => process.stdout.write(`${line}\n`),
+    note: (line) => process.stderr.write(`${line}\n`),
+    open: openInBrowser,
+  },
   personDeps: PersonDeskDeps = {},
 ): Promise<{ exit_code: 0 | 1 | 3; line: string }> {
   const ceremony = argv[0] === "person"

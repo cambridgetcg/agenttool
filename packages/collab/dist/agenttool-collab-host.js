@@ -6461,6 +6461,7 @@ function addSeconds(iso, seconds) {
 }
 
 // src/ceremony.ts
+import { spawn } from "child_process";
 import { randomBytes as randomBytes2 } from "crypto";
 
 // src/person-desk.ts
@@ -6580,7 +6581,7 @@ function confirmOnTty(request, options = {}) {
 var PERSON_DESK_PROTOCOL = "agenttool.collab-host/1";
 var EXIT_NOT_CONFIRMED = 3;
 var MAX_JSON_INPUT_BYTES = 64 * 1024;
-var PERSON_DESK_USAGE = "usage: agenttool-collab-host person <verb> [--db <path>], where <verb> is one of: " + "workspaces | voices --workspace <id> | proposals --workspace <id> [--proposal <id> | --limit <n>]" + " | inbox [--workspace <id>]" + " | challenge --proposal <id> --act agree | challenge --proposal <id> --act reject --reason <text>" + " | consent --proposal <id> [--passkey-assertion <path>|-]" + " | reject --proposal <id> --reason <text> [--passkey-assertion <path>|-]" + " | ceremony --proposal <id> --act agree|reject [--reason <text>] [--via <ssh-destination>] [--port <n>]" + " | say --workspace <id> --body <text> [--proposal <id>] --idempotency-key <key>" + " | propose --workspace <id> --question <text> --criteria <text> --extent <text>" + " [--known-conflicts <text>] [--topic <text>] [--consult-seconds <n>] --idempotency-key <key>" + " | withdraw --workspace <id> --proposal <id> --reason <text> --idempotency-key <key>" + " | passkey-enroll (--file <path>|- | --ceremony [--label <text>] [--port <n>])" + " | passkeys | passkey-export --credential <id> | passkey-revoke --credential <id>";
+var PERSON_DESK_USAGE = "usage: agenttool-collab-host person <verb> [--db <path>], where <verb> is one of: " + "workspaces | voices --workspace <id> | proposals --workspace <id> [--proposal <id> | --limit <n>]" + " | inbox [--workspace <id>]" + " | challenge --proposal <id> --act agree | challenge --proposal <id> --act reject --reason <text>" + " | consent --proposal <id> [--passkey-assertion <path>|-]" + " | reject --proposal <id> --reason <text> [--passkey-assertion <path>|-]" + " | ceremony --proposal <id> --act agree|reject [--reason <text>] [--via <ssh-destination>] [--port <n>] [--no-open]" + " | say --workspace <id> --body <text> [--proposal <id>] --idempotency-key <key>" + " | propose --workspace <id> --question <text> --criteria <text> --extent <text>" + " [--known-conflicts <text>] [--topic <text>] [--consult-seconds <n>] --idempotency-key <key>" + " | withdraw --workspace <id> --proposal <id> --reason <text> --idempotency-key <key>" + " | passkey-enroll (--file <path>|- | --ceremony [--label <text>] [--port <n>] [--no-open])" + " | passkeys | passkey-export --credential <id> | passkey-revoke --credential <id>";
 var VERB_OPTIONS = {
   workspaces: { required: [], optional: [] },
   voices: { required: ["workspace"], optional: [] },
@@ -6589,14 +6590,14 @@ var VERB_OPTIONS = {
   challenge: { required: ["proposal", "act"], optional: ["reason"] },
   consent: { required: ["proposal"], optional: ["passkey-assertion"] },
   reject: { required: ["proposal", "reason"], optional: ["passkey-assertion"] },
-  ceremony: { required: ["proposal", "act"], optional: ["reason", "via", "port"] },
+  ceremony: { required: ["proposal", "act"], optional: ["reason", "via", "port", "no-open"] },
   say: { required: ["workspace", "body", "idempotency-key"], optional: ["proposal"] },
   propose: {
     required: ["workspace", "question", "criteria", "extent", "idempotency-key"],
     optional: ["known-conflicts", "topic", "consult-seconds"]
   },
   withdraw: { required: ["workspace", "proposal", "reason", "idempotency-key"], optional: [] },
-  "passkey-enroll": { required: [], optional: ["file", "ceremony", "label", "port"] },
+  "passkey-enroll": { required: [], optional: ["file", "ceremony", "label", "port", "no-open"] },
   passkeys: { required: [], optional: [] },
   "passkey-export": { required: ["credential"], optional: [] },
   "passkey-revoke": { required: ["credential"], optional: [] }
@@ -6637,7 +6638,7 @@ var STRING_OPTIONS = [
   "port",
   "label"
 ];
-var BOOLEAN_OPTIONS = ["ceremony"];
+var BOOLEAN_OPTIONS = ["ceremony", "no-open"];
 function runPersonDeskCli(argv, env = process.env, deps = {}) {
   let command = "person";
   const emit = (payload, exitCode) => ({
@@ -6916,8 +6917,8 @@ function parsePersonArgs(argv) {
   if (verb === "passkey-enroll" && values.file === undefined === (values.ceremony !== true)) {
     throw new CollabError("usage_error", `passkey-enroll needs exactly one of --file or --ceremony; ${PERSON_DESK_USAGE}`);
   }
-  if (verb === "passkey-enroll" && values.port !== undefined && values.ceremony !== true) {
-    throw new CollabError("usage_error", `--port applies only with --ceremony; ${PERSON_DESK_USAGE}`);
+  if (verb === "passkey-enroll" && (values.port !== undefined || values["no-open"]) && values.ceremony !== true) {
+    throw new CollabError("usage_error", `--port and --no-open apply only with --ceremony; ${PERSON_DESK_USAGE}`);
   }
   return { verb, values };
 }
@@ -6999,6 +7000,25 @@ var DEFAULT_CEREMONY_PORT = 17778;
 var CEREMONY_TIMEOUT_MS = 180000;
 var MAX_POST_BYTES = 32 * 1024;
 var SSH_DESTINATION = /^[A-Za-z0-9][A-Za-z0-9._@-]{0,200}$/;
+function openInBrowser(url) {
+  if (process.platform !== "darwin")
+    return false;
+  try {
+    const child = spawn("/usr/bin/open", [url], { stdio: "ignore", detached: true });
+    child.on("error", () => {});
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+function atTerminal(deps) {
+  const tty = (deps.openTty ?? (() => openDevTty()))();
+  if (tty === null)
+    return false;
+  tty.close();
+  return true;
+}
 async function runCeremonyCli(argv, env, deps, io) {
   const first = argv.find((arg) => !arg.startsWith("-")) ?? "";
   const command = `person ${first}`;
@@ -7053,7 +7073,8 @@ async function signCeremony(values, env, deps, io, command) {
       rp_id: "localhost",
       credentials: passkeys.map((key) => key.credential_id)
     };
-    const result = await serveOnce(port, data, io, command, async (body) => {
+    const browser = values["no-open"] !== true && atTerminal(deps);
+    const result = await serveOnce(port, data, io, command, browser, async (body) => {
       const recorded = await table.record(challenge.proposal_report_id, act, challenge.reason, body.assertion);
       return {
         recorded: true,
@@ -7086,7 +7107,7 @@ async function enrollCeremony(values, env, deps, io, command) {
       rp_id: "localhost",
       label: values.label ?? "Touch ID"
     };
-    const result = await serveOnce(port, data, io, command, async (body) => {
+    const result = await serveOnce(port, data, io, command, values["no-open"] !== true, async (body) => {
       const input = body;
       checkCreateClientData(input.client_data_json, challenge, origin);
       const enrollment = normalizePasskeyEnrollment({
@@ -7204,7 +7225,7 @@ function portOf(origin) {
   }
   return Number(url.port);
 }
-async function serveOnce(port, data, io, command, onPost) {
+async function serveOnce(port, data, io, command, browser, onPost) {
   const token = randomBytes2(24).toString("base64url");
   const nonce = randomBytes2(16).toString("base64url");
   const origin = `http://localhost:${port}`;
@@ -7214,6 +7235,8 @@ async function serveOnce(port, data, io, command, onPost) {
     settle = resolve5;
   });
   let used = false;
+  const expiresAt = new Date(Date.now() + CEREMONY_TIMEOUT_MS).toISOString();
+  const page = ceremonyPage({ ...data, expires_at: expiresAt }, nonce);
   const headers = {
     "Cache-Control": "no-store",
     "Referrer-Policy": "no-referrer",
@@ -7233,11 +7256,22 @@ async function serveOnce(port, data, io, command, onPost) {
           return new Response("Open this page at localhost", { status: 421, headers });
         }
         if (request.method === "GET" && url.pathname === path) {
-          return new Response(ceremonyPage(data, nonce), { headers: { ...headers, "Content-Type": "text/html; charset=utf-8" } });
+          return new Response(page, { headers: { ...headers, "Content-Type": "text/html; charset=utf-8" } });
         }
-        if (request.method === "POST" && url.pathname === `${path}/done`) {
+        if (request.method === "POST" && url.pathname !== `${path}/done`) {
+          return Response.json({
+            ok: false,
+            error: "ceremony_expired",
+            message: "This page belongs to an earlier ceremony. Use the newest link your terminal printed."
+          }, { status: 410, headers });
+        }
+        if (request.method === "POST") {
           if (request.headers.get("origin") !== origin || used) {
-            return Response.json({ ok: false, error: "ceremony_closed" }, { status: 409, headers });
+            return Response.json({
+              ok: false,
+              error: "ceremony_closed",
+              message: "This ceremony has already finished. Start a new one to try again."
+            }, { status: 409, headers });
           }
           used = true;
           try {
@@ -7259,8 +7293,10 @@ async function serveOnce(port, data, io, command, onPost) {
   } catch {
     throw new CollabError("ceremony_port_busy", `Another program holds ${origin}; close it or finish its ceremony first`);
   }
-  const expiresAt = new Date(Date.now() + CEREMONY_TIMEOUT_MS).toISOString();
-  io.out(JSON.stringify({ protocol: PERSON_DESK_PROTOCOL, command, status: "open", url: `${origin}${path}`, expires_at: expiresAt }));
+  const pageUrl = `${origin}${path}`;
+  io.out(JSON.stringify({ protocol: PERSON_DESK_PROTOCOL, command, status: "open", url: pageUrl, expires_at: expiresAt }));
+  const closes = new Date(expiresAt).toLocaleTimeString();
+  io.note?.(browser && io.open?.(pageUrl) ? `Opened the page in your browser. If it did not appear, open ${pageUrl} before ${closes}.` : `Open ${pageUrl} in your browser before ${closes}.`);
   const timer = setTimeout(() => settle({ ok: false, error: new CollabError("ceremony_timeout", "The ceremony page was not used in time") }), CEREMONY_TIMEOUT_MS);
   try {
     const outcome = await finished;
@@ -7308,10 +7344,18 @@ button.go { color: var(--go); } button.stop { color: var(--stop); } button[disab
   const enc = (b) => { let s = ""; for (const x of new Uint8Array(b)) s += String.fromCharCode(x); return btoa(s).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/, ""); };
   const field = (label, value) => { if (!value) return; const l = document.createElement("div"); l.className = "label"; l.textContent = label; const v = document.createElement("div"); v.className = "value"; v.textContent = value; $("what").append(l, v); };
   const say = (text) => { $("result").textContent = text; };
+  const expired = "This page has expired. Start again from your terminal or YOUI, and use the newest link.";
+  let posted = false;
   const post = async (body) => {
-    const response = await fetch(location.pathname + "/done", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    return response.json();
+    let response;
+    try {
+      response = await fetch(location.pathname + "/done", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    } catch { return { ok: false, message: expired }; }
+    posted = true;
+    try { return await response.json(); } catch { return { ok: false, message: expired }; }
   };
+  const left = Date.parse(data.expires_at) - Date.now();
+  setTimeout(() => { if (!posted) { $("go").disabled = true; say(expired); } }, Math.max(0, left));
   if (data.kind === "sign") {
     $("title").textContent = data.act === "agree" ? "Agree to this proposal" : "Reject this proposal";
     $("sub").textContent = "Table: " + data.table + " \xB7 agents' position: " + data.position;
@@ -7547,8 +7591,13 @@ function runCollabHostCli(argv, env = process.env, clock = systemClock, personDe
     return emit(errorReceipt(error), 1);
   }
 }
-async function runCollabHostCliAsync(argv, env = process.env, io = { out: (line) => process.stdout.write(`${line}
-`) }, personDeps = {}) {
+async function runCollabHostCliAsync(argv, env = process.env, io = {
+  out: (line) => process.stdout.write(`${line}
+`),
+  note: (line) => process.stderr.write(`${line}
+`),
+  open: openInBrowser
+}, personDeps = {}) {
   const ceremony = argv[0] === "person" && !argv.some((arg) => arg === "--help" || arg === "-h") && (argv[1] === "ceremony" || argv[1] === "passkey-enroll" && argv.includes("--ceremony"));
   if (ceremony)
     return runCeremonyCli(argv.slice(1), env, personDeps, io);

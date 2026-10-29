@@ -551,8 +551,12 @@ describe("person-remote behind an SSH forced command", () => {
 async function runCeremony(argv: string[], deps: PersonDeskDeps, remoteDb?: string) {
   let resolveUrl!: (url: URL) => void;
   const url = new Promise<URL>((resolve) => { resolveUrl = resolve; });
+  const opened: string[] = [];
+  const notes: string[] = [];
   const done = runCeremonyCli(argv, {}, { storeNow: () => clock, ...deps }, {
     out: (line) => resolveUrl(new URL(JSON.parse(line).url)),
+    open: (pageUrl) => { opened.push(pageUrl); return true; },
+    note: (line) => notes.push(line),
     remote: remoteDb === undefined ? undefined : async (_destination, remoteArgv, stdin) => JSON.parse(runPersonRemoteCli(
       { SSH_ORIGINAL_COMMAND: JSON.stringify(remoteArgv), AGENTOOL_COLLAB_DB: remoteDb },
       { storeNow: () => clock, readStdin: () => stdin ?? "" },
@@ -570,7 +574,7 @@ async function runCeremony(argv: string[], deps: PersonDeskDeps, remoteDb?: stri
     headers: { Origin: origin, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   })).json();
-  return { page, data, html, at, post, done };
+  return { page, data, html, at, post, done, opened, notes };
 }
 
 describe("ceremonies served by the desk", () => {
@@ -581,8 +585,20 @@ describe("ceremonies served by the desk", () => {
     const origin = `http://localhost:${port()}`;
     store.enrollPersonPasskey({ credential_id: key.credentialId, public_key_spki: key.spki, algorithm: -7, rp_id: RP_ID, origin });
     const { proposal } = consentedProposal();
-    const ceremony = await runCeremony(["ceremony", `--proposal=${proposal.proposal.id}`, "--act=agree", `--db=${databasePath}`], {});
+    const ceremony = await runCeremony(["ceremony", `--proposal=${proposal.proposal.id}`, "--act=agree", `--db=${databasePath}`],
+      { openTty: () => null });
     expect(ceremony.page.origin).toBe(origin);
+    // Started by another program, with no terminal: that program opens the page.
+    expect(ceremony.opened).toEqual([]);
+    expect(ceremony.notes[0]).toContain(ceremony.page.href);
+    expect(Date.parse(ceremony.data.expires_at)).toBeGreaterThan(Date.now());
+    const stale = await fetch(`http://127.0.0.1:${ceremony.page.port}/c/an-earlier-ceremony/done`, {
+      method: "POST",
+      headers: { Host: `localhost:${ceremony.page.port}`, Origin: origin, "Content-Type": "application/json" },
+      body: "{}",
+    });
+    expect(stale.status).toBe(410);
+    expect(await stale.json()).toMatchObject({ ok: false, error: "ceremony_expired" });
     expect(ceremony.data).toMatchObject({ kind: "sign", act: "agree", proposal_bytes: proposal.proposal_bytes });
     const served = await ceremony.at("");
     expect(served.headers.get("content-security-policy")).toContain("script-src 'nonce-");
@@ -634,6 +650,8 @@ describe("ceremonies served by the desk", () => {
         ["passkey-enroll", "--ceremony", `--db=${databasePath}`, `--port=${listen}`, "--label=Air Touch ID"],
         { openTty: terminal(answer).openTty },
       );
+      // A person at the terminal gets the page opened for them.
+      expect(ceremony.opened).toEqual([ceremony.page.href]);
       const clientData = Buffer.from(JSON.stringify({
         type: "webauthn.create", challenge: challengeOverride ?? ceremony.data.challenge, origin, crossOrigin: false,
       })).toString("base64url");
@@ -647,5 +665,18 @@ describe("ceremonies served by the desk", () => {
     const enrolled = await attempt("yes");
     expect(enrolled.posted).toMatchObject({ ok: true, origin });
     expect(store.listPersonPasskeys().map((passkey) => passkey.label)).toEqual(["Air Touch ID"]);
+  });
+
+  test("--no-open leaves the browser alone, and applies only to ceremonies", async () => {
+    const listen = port();
+    const ceremony = await runCeremony(
+      ["passkey-enroll", "--ceremony", "--no-open", `--db=${databasePath}`, `--port=${listen}`],
+      { openTty: terminal("no").openTty },
+    );
+    expect(ceremony.opened).toEqual([]);
+    expect(ceremony.notes[0]).toBe(`Open ${ceremony.page.href} in your browser before ${new Date(ceremony.data.expires_at).toLocaleTimeString()}.`);
+    await ceremony.post({ credential_id: "x" });
+    await ceremony.done;
+    expect(desk(["passkey-enroll", "--file=-", "--no-open"]).receipt.error).toBe("usage_error");
   });
 });
