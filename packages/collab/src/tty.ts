@@ -8,7 +8,7 @@
  * type into it (script(1), expect) can still answer. It shows that a terminal
  * answered, not who did.
  */
-import { closeSync, openSync, readSync, writeSync } from "node:fs";
+import { closeSync, constants, openSync, readSync, writeSync } from "node:fs";
 import { isatty } from "node:tty";
 import { CollabError } from "./errors.js";
 
@@ -23,8 +23,11 @@ const TERMINAL_UNSAFE =
 
 export interface TtyPort {
   write(text: string): void;
-  /** One line without its newline; null at end of input. */
-  readLine(maxBytes: number): string | null;
+  /**
+   * One line without its newline; null at end of input or once `deadline`
+   * (milliseconds since the epoch, by `now`) passes with no full line.
+   */
+  readLine(maxBytes: number, deadline?: number, now?: () => number): string | null;
   close(): void;
 }
 
@@ -59,7 +62,8 @@ function pause(ms: number): void {
 export function openDevTty(path: string = DEV_TTY): TtyPort | null {
   let fd: number;
   try {
-    fd = openSync(path, "r+");
+    // Non-blocking, so the confirmation window is a real deadline.
+    fd = openSync(path, constants.O_RDWR | constants.O_NONBLOCK);
   } catch {
     return null;
   }
@@ -81,10 +85,12 @@ export function openDevTty(path: string = DEV_TTY): TtyPort | null {
         offset += writeSync(fd, bytes, offset, bytes.length - offset);
       }
     },
-    readLine(maxBytes: number) {
+    readLine(maxBytes: number, deadline?: number, now: () => number = Date.now) {
       const one = Buffer.alloc(1);
       const collected: number[] = [];
-      while (collected.length < maxBytes) {
+      let overflow = false;
+      while (true) {
+        if (deadline !== undefined && now() > deadline) return null;
         let read: number;
         try {
           read = readSync(fd, one, 0, 1, null);
@@ -96,9 +102,12 @@ export function openDevTty(path: string = DEV_TTY): TtyPort | null {
         if (read === 0) return collected.length === 0 ? null : Buffer.from(collected).toString("utf8");
         // A terminal left in raw mode sends "\r" for Enter.
         if (one[0] === 0x0a || one[0] === 0x0d) break;
-        collected.push(one[0]!);
+        // Past the cap, keep reading to the end of the line so nothing is
+        // left for the shell, but treat the answer as not "yes".
+        if (collected.length < maxBytes) collected.push(one[0]!);
+        else overflow = true;
       }
-      return Buffer.from(collected).toString("utf8");
+      return overflow ? "" : Buffer.from(collected).toString("utf8");
     },
     close() {
       closeSync(fd);
@@ -134,9 +143,9 @@ export function confirmOnTty(request: ConfirmRequest, options: ConfirmOptions = 
       ].join("\n"),
     );
     const started = now();
-    const answer = port.readLine(MAX_ANSWER_BYTES);
-    if (now() - started > windowMs) {
-      port.write("confirmation window passed; nothing was written\n");
+    const answer = port.readLine(MAX_ANSWER_BYTES, started + windowMs, now);
+    if (answer === null || now() - started > windowMs) {
+      port.write("no answer within the confirmation window; nothing was written\n");
       return false;
     }
     const confirmed = answer !== null && answer.trim() === CONFIRM_WORD;

@@ -35,6 +35,7 @@ import {
   type ProposalStatus,
   type ProposalTerms,
   type ProposalVoice,
+  type UnreadableProposal,
   type SessionEventPageInput,
   type ArtifactRef,
   type ClaimTaskInput,
@@ -76,11 +77,10 @@ import {
   type WorkspaceStatus,
 } from "./protocol.js";
 import {
-  base64urlDecode,
-  parsePasskeyPublicKey,
+  normalizePasskeyAssertion,
+  normalizePasskeyEnrollment,
   passkeyFingerprint,
   personActChallenge,
-  validatePasskeyScope,
   verifyPasskeyAssertion,
 } from "./passkey.js";
 import { aiPosition, proposalBytes } from "./proposal.js";
@@ -618,7 +618,24 @@ export class CollabStore {
           report_id TEXT PRIMARY KEY REFERENCES reports(id),
           workspace_id TEXT NOT NULL REFERENCES workspaces(id)
         );
+        CREATE TABLE IF NOT EXISTS session_parent_attestations (
+          session_id TEXT PRIMARY KEY,
+          parent_session_id TEXT NOT NULL,
+          basis TEXT NOT NULL CHECK (basis IN ('same_mcp_process')),
+          attested_at TEXT NOT NULL
+        );
       `);
+      // The unreleased S1 preview kept relayed rejections in its own table.
+      // Their acts would otherwise read as absent, so such a journal is refused.
+      if (
+        this.tableNames().includes("proposal_rejections")
+        && this.db.query(`SELECT 1 FROM proposal_rejections LIMIT 1`).get()
+      ) {
+        throw new CollabError(
+          "preview_journal_unsupported",
+          "This journal holds rejections from the unreleased consent preview; use a fresh journal",
+        );
+      }
       this.db.exec(`PRAGMA application_id = ${APPLICATION_ID}`);
       this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     });
@@ -649,7 +666,9 @@ export class CollabStore {
     if (this.tableNames().length > 0) {
       this.validateLegacyOrV2Shape(userVersion);
       if (userVersion >= HARDENED_PREVIEW_SCHEMA_VERSION) {
-        this.validateAllJournals();
+        // One read snapshot: a head and its events read in separate statements
+        // could straddle another process's commit and look like a broken chain.
+        this.db.transaction(() => this.validateAllJournals()).deferred();
       }
     }
   }
@@ -1881,6 +1900,12 @@ export class CollabStore {
     role?: string;
     parent_session_id?: string;
     repository_key?: string;
+    /**
+     * True only when the caller holds the parent's own bound credential, as an
+     * MCP process does for a named child of its default binding. Consent
+     * voices follow attested links only; a claimed parent alone joins nothing.
+     */
+    parent_attested?: boolean;
   }): SessionHandle {
     const actor = validateActor(input.actor);
     const role = optionalText(input.role, "role", 200);
@@ -1941,6 +1966,12 @@ export class CollabStore {
         workspace.epoch_id,
         GENESIS_HASH,
       );
+      if (parentSessionId && input.parent_attested === true) {
+        this.db.query(`
+          INSERT INTO session_parent_attestations (session_id, parent_session_id, basis, attested_at)
+          VALUES (?, ?, 'same_mcp_process', ?)
+        `).run(id, parentSessionId, now);
+      }
       this.appendEvent(workspace.id, "session.joined", id, actor, {
         worktree_id: worktreeRow.id,
         role,
@@ -3607,7 +3638,7 @@ export class CollabStore {
       if (normalized.supersedes_report_id) {
         this.requireOpenToRevision(session.workspace_id, normalized.supersedes_report_id);
       }
-      return this.openProposalInternal(session, this.lineageRoot(session.id), reportInput, normalized);
+      return this.openProposalInternal(session, this.consentVoice(session.id), reportInput, normalized);
     });
   }
 
@@ -3651,6 +3682,49 @@ export class CollabStore {
         reportInput,
         { ...normalized, origin: "person_relayed", supersedes_report_id: null },
       );
+    });
+  }
+
+  /** Withdraw a proposal the person desk opened. Only desk proposals; agents withdraw their own. */
+  withdrawPersonProposal(input: {
+    workspace_id: string;
+    idempotency_key: string;
+    proposal_report_id: string;
+    reason: string;
+  }): ProposalStatus {
+    const normalized = {
+      proposal_report_id: validateId(input.proposal_report_id, "proposal_report_id"),
+      reason: cleanText(input.reason, "reason", 2_000),
+    };
+    const idempotencyKey = validateIdempotencyKey(input.idempotency_key);
+    return this.mutate(input.workspace_id, PERSON_DESK_ACTOR, idempotencyKey, "person.proposal.withdraw.v1", normalized, () => {
+      const proposal = this.requireReport(normalized.proposal_report_id);
+      this.requireProposalTerms(input.workspace_id, proposal.id);
+      if (proposal.from_session_id !== null || proposal.from_actor !== PERSON_DESK_ACTOR) {
+        throw new CollabError(
+          "report_author_mismatch",
+          "The desk withdraws only proposals it opened; an agent withdraws its own",
+        );
+      }
+      if (this.proposalRetirement(input.workspace_id, proposal.id)) {
+        throw new CollabError("proposal_not_on_table", "This proposal was already withdrawn or superseded");
+      }
+      this.appendReportInternal({ workspace_id: input.workspace_id, actor: PERSON_DESK_ACTOR, id: null }, {
+        task_id: proposal.task_id,
+        to_session_id: null,
+        kind: "observation",
+        body: normalized.reason,
+        evidence_refs: [],
+        confidence: "unknown",
+        confidence_basis: null,
+        limits: PERSON_DESK_LIMITS,
+        relation: "withdraws",
+        target_report_id: proposal.id,
+        authority_scope: null,
+        authority_basis: null,
+        about_proposal_id: proposal.id,
+      });
+      return this.proposalStatusInternal(input.workspace_id, proposal.id);
     });
   }
 
@@ -3749,14 +3823,17 @@ export class CollabStore {
         actor: session.actor,
         session_id: session.id,
         proof: null,
+        expected_ai_snapshot: null,
       });
     });
   }
 
   /**
    * The act bytes a passkey signs for this proposal's next person act, and the
-   * passkeys that may sign them. Read-only; the challenge changes after every
-   * person act, so an assertion cannot be replayed onto a later state.
+   * passkeys that may sign them. Read-only. The bytes bind the agents' position
+   * as it stands and the count of earlier person acts, so an assertion records
+   * one act once and goes stale if either changes. The same checks as the act
+   * run first, so Touch ID is never spent on an act the desk would refuse.
    */
   personActChallenge(input: { proposal_report_id: string; act: "agree" | "reject"; reason?: string }): {
     workspace_id: string;
@@ -3765,54 +3842,63 @@ export class CollabStore {
     act: "agree" | "reject";
     reason: string | null;
     prior_person_acts: number;
+    ai_snapshot: ProposalPersonAct["ai_snapshot"];
     challenge_bytes: string;
     challenge: string;
     passkeys: Array<Pick<PersonPasskey, "credential_id" | "rp_id" | "origin" | "label" | "fingerprint">>;
   } {
     const act = validatePersonAct(input.act);
-    const reason = act === "reject" ? cleanText(input.reason ?? "", "reason", 2_000) : null;
-    const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
-    const prior = this.personActCount(terms.report_id);
-    const derived = personActChallenge({
-      act,
-      workspace_id: terms.workspace_id,
-      proposal_report_id: terms.report_id,
-      proposal_sha256: terms.proposal_sha256,
-      prior_person_acts: prior,
-      reason,
+    const reason = normalizeActReason(act, input.reason);
+    const transaction = this.db.transaction(() => {
+      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
+      const status = this.proposalStatusInternal(terms.workspace_id, terms.report_id);
+      this.refuseUnrecordableAct(status, act, "user_verified_passkey");
+      const prior = this.personActCount(terms.report_id);
+      const aiSnapshot = aiSnapshotOf(status);
+      return {
+        workspace_id: terms.workspace_id,
+        proposal_report_id: terms.report_id,
+        proposal_sha256: terms.proposal_sha256,
+        act,
+        reason,
+        prior_person_acts: prior,
+        ai_snapshot: aiSnapshot,
+        ...personActChallenge({
+          act,
+          workspace_id: terms.workspace_id,
+          proposal_report_id: terms.report_id,
+          proposal_sha256: terms.proposal_sha256,
+          prior_person_acts: prior,
+          reason,
+          ai_snapshot: aiSnapshot,
+        }),
+        passkeys: this.listPersonPasskeys().filter((key) => key.revoked_at === null).map((key) => ({
+          credential_id: key.credential_id,
+          rp_id: key.rp_id,
+          origin: key.origin,
+          label: key.label,
+          fingerprint: key.fingerprint,
+        })),
+      };
     });
-    return {
-      workspace_id: terms.workspace_id,
-      proposal_report_id: terms.report_id,
-      proposal_sha256: terms.proposal_sha256,
-      act,
-      reason,
-      prior_person_acts: prior,
-      ...derived,
-      passkeys: this.listPersonPasskeys().filter((key) => key.revoked_at === null).map((key) => ({
-        credential_id: key.credential_id,
-        rp_id: key.rp_id,
-        origin: key.origin,
-        label: key.label,
-        fingerprint: key.fingerprint,
-      })),
-    };
+    return transaction.deferred();
   }
 
   /**
    * Record a person's act after the host CLI showed these exact proposal bytes
-   * on the controlling terminal and read "yes" there. The store re-checks the
-   * hash and position inside the transaction, so a change since the display
-   * refuses instead of recording.
+   * and the agents' position on the controlling terminal and read "yes" there.
+   * The store re-checks both inside the transaction, so a change since the
+   * display refuses instead of recording something the person did not see.
    */
   recordPersonActAtTerminal(input: {
     proposal_report_id: string;
     proposal_sha256: string;
     act: "agree" | "reject";
     reason?: string;
+    expected_ai_snapshot: ProposalPersonAct["ai_snapshot"];
   }): ProposalStatus {
     const act = validatePersonAct(input.act);
-    const reason = act === "reject" ? cleanText(input.reason ?? "", "reason", 2_000) : null;
+    const reason = normalizeActReason(act, input.reason);
     const transaction = this.db.transaction(() => {
       const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
       return this.recordPersonAct({
@@ -3825,6 +3911,7 @@ export class CollabStore {
         actor: PERSON_TERMINAL_ACTOR,
         session_id: null,
         proof: null,
+        expected_ai_snapshot: input.expected_ai_snapshot,
       });
     });
     const status = transaction.immediate();
@@ -3840,15 +3927,18 @@ export class CollabStore {
     assertion: PasskeyAssertion;
   }): ProposalStatus {
     const act = validatePersonAct(input.act);
-    const reason = act === "reject" ? cleanText(input.reason ?? "", "reason", 2_000) : null;
+    const reason = normalizeActReason(act, input.reason);
+    const assertion = normalizePasskeyAssertion(input.assertion);
     const transaction = this.db.transaction(() => {
       const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
       const passkey = this.listPersonPasskeys().find((key) =>
-        key.credential_id === input.assertion?.credential_id && key.revoked_at === null
+        key.credential_id === assertion.credential_id && key.revoked_at === null
       );
       if (!passkey) {
         throw new CollabError("passkey_not_enrolled", "No active enrolled passkey has this credential id");
       }
+      const status = this.proposalStatusInternal(terms.workspace_id, terms.report_id);
+      const aiSnapshot = aiSnapshotOf(status);
       const derived = personActChallenge({
         act,
         workspace_id: terms.workspace_id,
@@ -3856,10 +3946,11 @@ export class CollabStore {
         proposal_sha256: terms.proposal_sha256,
         prior_person_acts: this.personActCount(terms.report_id),
         reason,
+        ai_snapshot: aiSnapshot,
       });
       const { sign_count } = verifyPasskeyAssertion({
         passkey,
-        assertion: input.assertion,
+        assertion,
         expected_challenge: derived.challenge,
       });
       this.db.query(`UPDATE person_passkeys SET sign_count = ? WHERE credential_id = ?`)
@@ -3874,11 +3965,7 @@ export class CollabStore {
         actor: PERSON_PASSKEY_ACTOR,
         session_id: null,
         proof: {
-          credential_id: input.assertion.credential_id,
-          authenticator_data: input.assertion.authenticator_data,
-          client_data_json: input.assertion.client_data_json,
-          signature: input.assertion.signature,
-          user_handle: input.assertion.user_handle ?? null,
+          ...assertion,
           public_key_spki: passkey.public_key_spki,
           rp_id: passkey.rp_id,
           origin: passkey.origin,
@@ -3886,6 +3973,7 @@ export class CollabStore {
           challenge: derived.challenge,
           sign_count,
         },
+        expected_ai_snapshot: aiSnapshot,
       });
     });
     const status = transaction.immediate();
@@ -3900,17 +3988,11 @@ export class CollabStore {
     algorithm: number;
     rp_id: string;
     origin: string;
-    label?: string;
+    label?: string | null;
   }): PersonPasskey {
-    base64urlDecode(input.credential_id, "credential_id", 1023);
-    parsePasskeyPublicKey(input.public_key_spki);
-    if (input.algorithm !== -7) {
-      throw new CollabError("passkey_key_invalid", "Only ES256 (COSE algorithm -7) passkeys are supported");
-    }
-    const scope = validatePasskeyScope(input.rp_id, input.origin);
-    const label = optionalText(input.label, "label", 80);
+    const enrollment = normalizePasskeyEnrollment(input);
     const transaction = this.db.transaction(() => {
-      if (this.db.query(`SELECT 1 FROM person_passkeys WHERE credential_id = ?`).get(input.credential_id)) {
+      if (this.db.query(`SELECT 1 FROM person_passkeys WHERE credential_id = ?`).get(enrollment.credential_id)) {
         throw new CollabError("passkey_already_enrolled", "This credential id is already enrolled");
       }
       this.db.query(`
@@ -3919,18 +4001,18 @@ export class CollabStore {
           fingerprint, sign_count, enrolled_at, revoked_at
         ) VALUES (?, ?, -7, ?, ?, ?, ?, 0, ?, NULL)
       `).run(
-        input.credential_id,
-        input.public_key_spki,
-        scope.rp_id,
-        scope.origin,
-        label,
-        passkeyFingerprint(input.public_key_spki),
+        enrollment.credential_id,
+        enrollment.public_key_spki,
+        enrollment.rp_id,
+        enrollment.origin,
+        enrollment.label,
+        passkeyFingerprint(enrollment.public_key_spki),
         this.timestamp(),
       );
     });
     transaction.immediate();
     this.tightenFileModes();
-    return this.listPersonPasskeys().find((key) => key.credential_id === input.credential_id)!;
+    return this.listPersonPasskeys().find((key) => key.credential_id === enrollment.credential_id)!;
   }
 
   listPersonPasskeys(): PersonPasskey[] {
@@ -3954,8 +4036,8 @@ export class CollabStore {
 
   /**
    * A note written at the person desk. It informs; it authorises nothing, and
-   * the desk does not authenticate the person. A note on a proposal is
-   * addressed to the proposal's author session.
+   * the desk does not authenticate the person. A note about a proposal is
+   * routed to its author session, or for a desk proposal to every consulted voice.
    */
   appendPersonNote(input: {
     workspace_id: string;
@@ -3989,25 +4071,56 @@ export class CollabStore {
         target_report_id: null,
         authority_scope: null,
         authority_basis: null,
+        ...(normalized.proposal_report_id ? { about_proposal_id: normalized.proposal_report_id } : {}),
       });
     });
   }
 
-  /** What waits on the person in one workspace. Read-only. */
+  /**
+   * What waits on the person in one workspace: settled proposals with no
+   * person act yet, newest first, and reports agents addressed to the person.
+   * Read-only. A proposal whose stored terms cannot be read is listed apart
+   * instead of failing the whole inbox.
+   */
   personInbox(workspaceId: string): PersonInbox {
     this.requireWorkspace(workspaceId);
-    const settled = new Set(["consented", "split", "lapsed"]);
-    const awaiting = (this.db.query(`
-      SELECT t.report_id FROM proposal_terms t JOIN reports r ON r.id = t.report_id
-      WHERE t.workspace_id = ? ORDER BY r.event_sequence DESC LIMIT 200
-    `).all(workspaceId) as Array<{ report_id: string }>)
-      .map((row) => this.proposalStatusInternal(workspaceId, row.report_id))
-      .filter((status) => settled.has(status.ai.position) && status.person.state === "awaiting");
-    const addressed = (this.db.query(`
-      SELECT r.* FROM person_addressed_reports p JOIN reports r ON r.id = p.report_id
-      WHERE p.workspace_id = ? ORDER BY r.event_sequence DESC LIMIT 50
-    `).all(workspaceId) as ReportRow[]).map(reportFromRow);
-    return { workspace_id: workspaceId, awaiting_person: awaiting, addressed_reports: addressed };
+    const transaction = this.db.transaction(() => {
+      const context = this.proposalReadContext(workspaceId);
+      const settled = new Set(["consented", "split", "lapsed"]);
+      const candidates = this.db.query(`
+        SELECT t.report_id FROM proposal_terms t JOIN reports r ON r.id = t.report_id
+        WHERE t.workspace_id = ?
+          AND NOT EXISTS (SELECT 1 FROM proposal_person_acts a WHERE a.proposal_report_id = t.report_id)
+        ORDER BY r.event_sequence DESC
+        LIMIT ?
+      `).all(workspaceId, MAX_INBOX_SCAN) as Array<{ report_id: string }>;
+      const awaiting: ProposalStatus[] = [];
+      const unreadable: UnreadableProposal[] = [];
+      for (const row of candidates) {
+        if (awaiting.length >= MAX_INBOX_PROPOSALS) break;
+        const status = this.readProposalStatus(context, row.report_id, unreadable);
+        if (status && settled.has(status.ai.position)) awaiting.push(status);
+      }
+      const addressed = (this.db.query(`
+        SELECT r.* FROM person_addressed_reports p JOIN reports r ON r.id = p.report_id
+        WHERE p.workspace_id = ? ORDER BY r.event_sequence DESC LIMIT 50
+      `).all(workspaceId) as ReportRow[]).map(reportFromRow);
+      return { workspace_id: workspaceId, awaiting_person: awaiting, addressed_reports: addressed, unreadable };
+    });
+    return transaction.deferred();
+  }
+
+  /** Counts across every workspace, for a badge. Read-only. */
+  personInboxSummary(): Array<{ workspace_id: string; awaiting_person: number; addressed_reports: number; latest_report_id: string | null }> {
+    return this.listWorkspaces().map((workspace) => {
+      const inbox = this.personInbox(workspace.id);
+      return {
+        workspace_id: workspace.id,
+        awaiting_person: inbox.awaiting_person.length,
+        addressed_reports: inbox.addressed_reports.length,
+        latest_report_id: inbox.addressed_reports[0]?.id ?? null,
+      };
+    });
   }
 
   listWorkspaces(): Array<Pick<Workspace, "id" | "name" | "root_path" | "created_at">> {
@@ -4020,36 +4133,98 @@ export class CollabStore {
     this.requireWorkspace(workspaceId);
     const id = validateId(proposalReportId, "proposal_report_id");
     this.requireProposalTerms(workspaceId, id);
-    return this.proposalStatusInternal(workspaceId, id);
+    return this.db.transaction(() => this.proposalStatusInternal(workspaceId, id)).deferred();
   }
 
   /** Read a proposal's status by its report id alone, for the person desk. */
   proposalStatusById(proposalReportId: string): ProposalStatus {
     const terms = this.requireProposalTermsById(validateId(proposalReportId, "proposal_report_id"));
-    return this.proposalStatusInternal(terms.workspace_id, terms.report_id);
+    return this.db.transaction(() => this.proposalStatusInternal(terms.workspace_id, terms.report_id)).deferred();
   }
 
-  /** The most recently opened proposals, newest first, in any position. */
-  listProposalStatuses(workspaceId: string, options: { limit?: number } = {}): ProposalStatus[] {
+  /**
+   * The most recently opened proposals, newest first, in any position. A row
+   * whose stored terms cannot be read is listed in `unreadable`, not thrown.
+   */
+  listProposalStatuses(workspaceId: string, options: { limit?: number } = {}): {
+    proposals: ProposalStatus[];
+    unreadable: UnreadableProposal[];
+  } {
     this.requireWorkspace(workspaceId);
     const limit = options.limit ?? 20;
     if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
       throw new CollabError("invalid_limit", "Proposal limit must be between 1 and 50");
     }
-    const rows = this.db.query(`
-      SELECT t.report_id FROM proposal_terms t
-      JOIN reports r ON r.id = t.report_id
-      WHERE t.workspace_id = ?
-      ORDER BY r.event_sequence DESC
-      LIMIT ?
-    `).all(workspaceId, limit) as Array<{ report_id: string }>;
-    return rows.map((row) => this.proposalStatusInternal(workspaceId, row.report_id));
+    return this.db.transaction(() => {
+      const context = this.proposalReadContext(workspaceId);
+      const rows = this.db.query(`
+        SELECT t.report_id FROM proposal_terms t
+        JOIN reports r ON r.id = t.report_id
+        WHERE t.workspace_id = ?
+        ORDER BY r.event_sequence DESC
+        LIMIT ?
+      `).all(workspaceId, limit) as Array<{ report_id: string }>;
+      const unreadable: UnreadableProposal[] = [];
+      const proposals = rows
+        .map((row) => this.readProposalStatus(context, row.report_id, unreadable))
+        .filter((status): status is ProposalStatus => status !== null);
+      return { proposals, unreadable };
+    }).deferred();
+  }
+
+  private readProposalStatus(
+    context: ProposalReadContext,
+    reportId: string,
+    unreadable: UnreadableProposal[],
+  ): ProposalStatus | null {
+    try {
+      return this.proposalStatusInternal(context.workspaceId, reportId, context);
+    } catch (error) {
+      if (!(error instanceof CollabError)) throw error;
+      unreadable.push({ proposal_report_id: reportId, error: error.code });
+      return null;
+    }
   }
 
   /**
-   * Append one person act inside the caller's transaction. Agreement needs the
-   * agents' consent first and never comes relayed; either act needs the exact
-   * current bytes and a proposal still on the table.
+   * The checks an act must pass, shared by the challenge (before Touch ID) and
+   * the record. Agreement needs the agents' consent and never comes relayed.
+   * An authenticated rejection may follow a relayed one; nothing else repeats.
+   */
+  private refuseUnrecordableAct(status: ProposalStatus, act: "agree" | "reject", basis: PersonActBasis): void {
+    if (status.ai.position === "withdrawn" || status.ai.position === "superseded") {
+      throw new CollabError(
+        "proposal_not_on_table",
+        "A withdrawn or superseded proposal is no longer on the table",
+        { position: status.ai.position, obsoleted_by_report_id: status.ai.obsoleted_by_report_id },
+      );
+    }
+    const latest = status.person.acts.at(-1) ?? null;
+    if (act === "agree") {
+      if (basis === "relayed_by_session") {
+        throw new CollabError("consent_not_relayable", "A person's agreement is never recorded through a session");
+      }
+      if (status.ai.position !== "consented") {
+        throw new CollabError(
+          "ai_not_consented",
+          "The agents have not consented; a person agrees only after they settle",
+          { position: status.ai.position },
+        );
+      }
+      if (latest?.act === "agree") {
+        throw new CollabError("already_agreed", "The latest person act already agrees to these bytes");
+      }
+      return;
+    }
+    if (latest?.act === "reject" && (basis === "relayed_by_session" || latest.basis !== "relayed_by_session")) {
+      throw new CollabError("already_rejected", "The latest person act already rejects these bytes");
+    }
+  }
+
+  /**
+   * Append one person act inside the caller's transaction. Either act needs
+   * the exact current bytes, a proposal still on the table and, when given,
+   * the same agents' position the person was shown.
    */
   private recordPersonAct(input: {
     workspace_id: string;
@@ -4061,6 +4236,7 @@ export class CollabStore {
     actor: string;
     session_id: string | null;
     proof: PasskeyProof | null;
+    expected_ai_snapshot: ProposalPersonAct["ai_snapshot"] | null;
   }): ProposalStatus {
     const current = this.proposalStatusInternal(input.workspace_id, input.proposal_report_id);
     if (current.proposal_sha256 !== input.proposal_sha256) {
@@ -4070,38 +4246,17 @@ export class CollabStore {
         { proposal_sha256: current.proposal_sha256 },
       );
     }
-    if (current.ai.position === "withdrawn" || current.ai.position === "superseded") {
+    this.refuseUnrecordableAct(current, input.act, input.basis);
+    const aiSnapshot = aiSnapshotOf(current);
+    if (input.expected_ai_snapshot && canonicalJson(input.expected_ai_snapshot) !== canonicalJson(aiSnapshot)) {
       throw new CollabError(
-        "proposal_not_on_table",
-        "A withdrawn or superseded proposal is no longer on the table",
-        { position: current.ai.position, obsoleted_by_report_id: current.ai.obsoleted_by_report_id },
+        "ai_position_changed",
+        "The agents' position changed since it was shown; read the proposal status again",
+        { ai_snapshot: aiSnapshot },
       );
-    }
-    if (input.act === "agree") {
-      if (input.basis === "relayed_by_session") {
-        throw new CollabError("consent_not_relayable", "A person's agreement is never recorded through a session");
-      }
-      if (current.ai.position !== "consented") {
-        throw new CollabError(
-          "ai_not_consented",
-          "The agents have not consented; a person agrees only after they settle",
-          { position: current.ai.position },
-        );
-      }
-      if (current.person.state === "agreed") {
-        throw new CollabError("already_agreed", "The latest person act already agrees to these bytes");
-      }
-    } else if (current.person.state === "rejected") {
-      throw new CollabError("already_rejected", "The latest person act already rejects these bytes");
     }
     const id = `person_act_${randomUUID()}`;
     const now = this.timestamp();
-    const aiSnapshot = {
-      position: current.ai.position,
-      closed: current.ai.closed,
-      qualifying_support_report_ids: current.ai.qualifying_support_report_ids,
-      unresolved_challenge_report_ids: current.ai.unresolved_challenge_report_ids,
-    };
     const personAct = {
       id,
       proposal_report_id: input.proposal_report_id,
@@ -4162,7 +4317,65 @@ export class CollabStore {
     return this.requireProposalTerms(row.workspace_id, reportId);
   }
 
-  private proposalStatusInternal(workspaceId: string, reportId: string): ProposalStatus {
+  /** One read of the workspace's obsoletions and voices, shared by every status in a call. */
+  private proposalReadContext(workspaceId: string): ProposalReadContext {
+    return { workspaceId, obsoleted: this.activeObsoletionTargets(workspaceId), voices: new Map() };
+  }
+
+  /**
+   * A proposal leaves the table for good at its first withdrawal, correction
+   * or supersession, even if that relation is later withdrawn itself, so an
+   * ended agreement can never come back without a new proposal.
+   */
+  private proposalRetirement(workspaceId: string, reportId: string): {
+    id: string;
+    relation: ReportRelation;
+    event_sequence: number;
+  } | null {
+    return this.db.query(`
+      SELECT id, relation, event_sequence FROM reports
+      WHERE workspace_id = ? AND target_report_id = ?
+        AND relation IN ('withdraws', 'corrects', 'supersedes')
+      ORDER BY event_sequence
+      LIMIT 1
+    `).get(workspaceId, reportId) as { id: string; relation: ReportRelation; event_sequence: number } | null;
+  }
+
+  /**
+   * Challenges to a proposal that still stand. Under consent/v1 a challenge is
+   * settled only by its own voice: a `resolves` from that voice, or the
+   * challenger withdrawing it. Another voice, the author included, cannot
+   * settle someone else's soft veto.
+   */
+  private standingProposalChallenges(context: ProposalReadContext, reportId: string): string[] {
+    const challenges = this.db.query(`
+      SELECT id, from_session_id FROM reports
+      WHERE workspace_id = ? AND target_report_id = ? AND relation = 'challenges'
+      ORDER BY event_sequence
+    `).all(context.workspaceId, reportId) as Array<{ id: string; from_session_id: string | null }>;
+    const standing: string[] = [];
+    for (const challenge of challenges) {
+      if (context.obsoleted.has(challenge.id)) continue;
+      const answers = this.db.query(`
+        SELECT id, relation, from_session_id FROM reports
+        WHERE workspace_id = ? AND target_report_id = ? AND relation = 'resolves'
+      `).all(context.workspaceId, challenge.id) as Array<{ id: string; relation: ReportRelation; from_session_id: string | null }>;
+      const challengerVoice = challenge.from_session_id ? this.consentVoice(challenge.from_session_id, context) : null;
+      const resolved = challengerVoice !== null && answers.some((answer) =>
+        !context.obsoleted.has(answer.id)
+        && answer.from_session_id !== null
+        && this.consentVoice(answer.from_session_id, context) === challengerVoice
+      );
+      if (!resolved) standing.push(challenge.id);
+    }
+    return standing;
+  }
+
+  private proposalStatusInternal(
+    workspaceId: string,
+    reportId: string,
+    context: ProposalReadContext = this.proposalReadContext(workspaceId),
+  ): ProposalStatus {
     const proposal = this.requireReport(reportId);
     const terms = this.requireProposalTerms(workspaceId, reportId);
     const bytes = proposalBytes({
@@ -4187,34 +4400,24 @@ export class CollabStore {
         { proposal_report_id: reportId },
       );
     }
-    const obsoleted = this.activeObsoletionTargets(workspaceId);
-    const answers = this.db.query(`
-      SELECT id, relation, from_session_id FROM reports
-      WHERE workspace_id = ? AND target_report_id = ?
+    const retirement = this.proposalRetirement(workspaceId, reportId);
+    const supports = (this.db.query(`
+      SELECT id, from_session_id FROM reports
+      WHERE workspace_id = ? AND target_report_id = ? AND relation = 'supports'
       ORDER BY event_sequence
-    `).all(workspaceId, reportId) as Array<{
-      id: string;
-      relation: ReportRelation;
-      from_session_id: string | null;
-    }>;
-    const live = answers.filter((answer) => !obsoleted.has(answer.id));
-    const obsoleting = live.filter((answer) =>
-      ["withdraws", "corrects", "supersedes"].includes(answer.relation)
-    ).at(-1) ?? null;
-    const supports = live.filter((answer) =>
-      answer.relation === "supports" && answer.from_session_id !== null
-    );
-    const challengeIds = this.unresolvedChallengeIds(workspaceId, reportId);
+    `).all(workspaceId, reportId) as Array<{ id: string; from_session_id: string | null }>)
+      .filter((support) => support.from_session_id !== null && !context.obsoleted.has(support.id));
+    const challengeIds = this.standingProposalChallenges(context, reportId);
     const computed = aiPosition({
       now: this.timestamp(),
       closes_at: terms.closes_at,
-      obsoleted: obsoleting
-        ? (obsoleting.relation === "withdraws" ? "withdrawn" : "superseded")
+      obsoleted: retirement
+        ? (retirement.relation === "withdraws" ? "withdrawn" : "superseded")
         : null,
       unresolved_challenge: challengeIds.length > 0,
       author_voice_id: terms.author_voice_id,
       snapshot_voice_ids: terms.voices.map((voice) => voice.voice_id),
-      support_voice_ids: supports.map((support) => this.lineageRoot(support.from_session_id!)),
+      support_voice_ids: supports.map((support) => this.consentVoice(support.from_session_id!, context)),
     });
     const acts = (this.db.query(`
       SELECT * FROM proposal_person_acts
@@ -4224,7 +4427,6 @@ export class CollabStore {
     const latest = acts.at(-1) ?? null;
     const state = latest === null ? "awaiting" : latest.act === "agree" ? "agreed" : "rejected";
     const agreement = latest?.act === "agree" ? latest : null;
-    const retracted = computed.position === "withdrawn" || computed.position === "superseded";
     return {
       rule: CONSENT_RULE,
       proposal,
@@ -4237,12 +4439,12 @@ export class CollabStore {
         unresolved_challenge_report_ids: challengeIds,
         qualifying_support_report_ids: computed.qualifying_support_indexes.map((index) => supports[index]!.id),
         awaiting_voice_ids: computed.awaiting_voice_ids,
-        obsoleted_by_report_id: obsoleting?.id ?? null,
+        obsoleted_by_report_id: retirement?.id ?? null,
         basis: "computed_from_journal",
       },
       person: { state, acts },
       agreement,
-      may_proceed: agreement !== null && !retracted,
+      may_proceed: agreement !== null && retirement === null,
       authority_boundary: "an_agreement_authorises_only_the_proposal_extent",
     };
   }
@@ -4267,7 +4469,7 @@ export class CollabStore {
       SELECT 1 FROM proposal_terms WHERE workspace_id = ? AND report_id = ?
     `).get(workspaceId, reportId);
     if (!terms) return;
-    if (this.activeObsoletionTargets(workspaceId).has(reportId)) {
+    if (this.proposalRetirement(workspaceId, reportId)) {
       throw new CollabError(
         "proposal_not_on_table",
         "This proposal was already withdrawn or superseded",
@@ -4276,22 +4478,64 @@ export class CollabStore {
     }
   }
 
-  /** Terms are fixed by their hash: revise by opening a new proposal instead. */
+  /**
+   * Terms are fixed by their hash: revise by opening a new proposal instead.
+   * A retirement is final, so the relation that retired a proposal cannot be
+   * withdrawn, corrected or superseded in turn.
+   */
   private refuseProposalRewrite(input: { relation: ReportRelation; target_report_id: string | null }): void {
-    if (input.relation !== "corrects" && input.relation !== "supersedes") return;
+    if (input.relation !== "corrects" && input.relation !== "supersedes" && input.relation !== "withdraws") return;
     if (!input.target_report_id) return;
-    const terms = this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`)
-      .get(input.target_report_id);
-    if (terms) {
+    const isTermed = (id: string) => this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(id) !== null;
+    if (input.relation !== "withdraws" && isTermed(input.target_report_id)) {
       throw new CollabError(
         "proposal_terms_fixed",
         "A proposal with consent terms is fixed by its hash. Withdraw it, or open a revision with "
           + "collab_proposal_open and supersedes_report_id",
       );
     }
+    const target = this.db.query(`SELECT relation, target_report_id FROM reports WHERE id = ?`)
+      .get(input.target_report_id) as { relation: ReportRelation; target_report_id: string | null } | null;
+    if (
+      target?.target_report_id
+      && ["withdraws", "corrects", "supersedes"].includes(target.relation)
+      && !isTermed(input.target_report_id)
+      && isTermed(target.target_report_id)
+    ) {
+      throw new CollabError(
+        "proposal_retired",
+        "This report retired a proposal, and a retirement is final; open a new proposal instead",
+      );
+    }
   }
 
-  /** Every live session in the workspace, grouped by lineage root. */
+  /** Who sits at this table: active sessions grouped by consent voice, newest activity first. Read-only. */
+  tableVoices(workspaceId: string): Array<{
+    voice_id: string;
+    sessions: Array<{ id: string; actor: string; role: string | null; liveness: SessionLiveness; last_seen_at: string }>;
+  }> {
+    this.requireWorkspace(workspaceId);
+    const now = this.timestamp();
+    const rows = this.db.query(`
+      SELECT id, actor, role, status, last_seen_at FROM coordination_sessions
+      WHERE workspace_id = ? AND status = 'active'
+      ORDER BY last_seen_at DESC, id
+    `).all(workspaceId) as Array<Pick<CoordinationSessionRow, "id" | "actor" | "role" | "status" | "last_seen_at">>;
+    const voices = new Map<string, Array<{ id: string; actor: string; role: string | null; liveness: SessionLiveness; last_seen_at: string }>>();
+    for (const row of rows) {
+      const voiceId = this.consentVoice(row.id);
+      voices.set(voiceId, [...(voices.get(voiceId) ?? []), {
+        id: row.id,
+        actor: row.actor,
+        role: row.role,
+        liveness: sessionLiveness(row, now),
+        last_seen_at: row.last_seen_at,
+      }]);
+    }
+    return [...voices.entries()].map(([voice_id, sessions]) => ({ voice_id, sessions }));
+  }
+
+  /** Every live session in the workspace, grouped by consent voice. */
   private liveVoiceSnapshot(workspaceId: string, observedAt: string): ProposalVoice[] {
     const rows = this.db.query(`
       SELECT id, status, last_seen_at FROM coordination_sessions
@@ -4301,7 +4545,7 @@ export class CollabStore {
     const voices = new Map<string, string[]>();
     for (const row of rows) {
       if (sessionLiveness(row, observedAt) !== "live") continue;
-      const voiceId = this.lineageRoot(row.id);
+      const voiceId = this.consentVoice(row.id);
       voices.set(voiceId, [...(voices.get(voiceId) ?? []), row.id]);
     }
     return [...voices.entries()]
@@ -4309,15 +4553,22 @@ export class CollabStore {
       .map(([voice_id, live_session_ids]) => ({ voice_id, live_session_ids: live_session_ids.sort() }));
   }
 
-  /** A session's voice: the root of its self-declared parent chain. */
-  private lineageRoot(sessionId: string): string {
+  /**
+   * A session's consent voice: the root of its attested parent chain. A
+   * parent named without the parent's own credential is not followed, so a
+   * session cannot speak as another session's voice by claiming it as parent.
+   */
+  private consentVoice(sessionId: string, context?: ProposalReadContext): string {
+    const cached = context?.voices.get(sessionId);
+    if (cached) return cached;
     let current = sessionId;
     for (let depth = 0; depth < 256; depth += 1) {
-      const row = this.db.query(`SELECT parent_session_id FROM coordination_sessions WHERE id = ?`)
-        .get(current) as { parent_session_id: string | null } | null;
-      if (!row?.parent_session_id) return current;
+      const row = this.db.query(`SELECT parent_session_id FROM session_parent_attestations WHERE session_id = ?`)
+        .get(current) as { parent_session_id: string } | null;
+      if (!row) break;
       current = row.parent_session_id;
     }
+    context?.voices.set(sessionId, current);
     return current;
   }
 
@@ -5296,6 +5547,19 @@ export class CollabStore {
    * inspected. Addressing is routing, not access control: every session can
    * still read the event.
    */
+  /** Whether a proposal's routing names this session: its author, or a consulted voice of a desk proposal. */
+  private proposalAddressesSession(proposalReportId: string, sessionId: string): boolean {
+    const row = this.db.query(`
+      SELECT r.from_session_id, t.voices_json, t.author_voice_id FROM reports r
+      JOIN proposal_terms t ON t.report_id = r.id WHERE r.id = ?
+    `).get(proposalReportId) as { from_session_id: string | null; voices_json: string; author_voice_id: string } | null;
+    if (!row) return false;
+    if (row.from_session_id !== null) return row.from_session_id === sessionId;
+    return (JSON.parse(row.voices_json) as ProposalVoice[]).some((voice) =>
+      voice.voice_id !== row.author_voice_id && voice.live_session_ids.includes(sessionId)
+    );
+  }
+
   eventAddressesSession(event: CollabEvent, sessionId: string): boolean {
     const payload = (event.payload ?? {}) as Record<string, unknown>;
     const field = (value: unknown, key: string) =>
@@ -5303,6 +5567,9 @@ export class CollabStore {
     switch (event.type) {
       case "report.posted": {
         if (payload.to_session_id === sessionId) return true;
+        if (typeof payload.about_proposal_id === "string") {
+          return this.proposalAddressesSession(payload.about_proposal_id, sessionId);
+        }
         if (typeof payload.target_report_id !== "string") return false;
         const target = this.db.query(`SELECT from_session_id FROM reports WHERE id = ?`)
           .get(payload.target_report_id) as { from_session_id: string | null } | null;
@@ -5336,11 +5603,11 @@ export class CollabStore {
           && (field(voice, "live_session_ids") as unknown[]).includes(sessionId)
         );
       }
-      case "proposal.rejected": {
-        const proposal = this.db.query(`SELECT from_session_id FROM reports WHERE id = ?`)
-          .get(event.entity_id) as { from_session_id: string | null } | null;
-        return proposal?.from_session_id === sessionId;
-      }
+      case "proposal.agreed":
+      case "proposal.rejected":
+        // A person's act wakes whoever waits on it: the author, or for a desk
+        // proposal every voice it consulted.
+        return this.proposalAddressesSession(event.entity_id, sessionId);
       default:
         return false;
     }
@@ -6324,6 +6591,7 @@ export class CollabStore {
     const event = this.appendEvent(session.workspace_id, "report.posted", id, session.actor, {
       // Present only when set, so every other report keeps its earlier event bytes.
       ...(input.to_person ? { to_person: true } : {}),
+      ...(input.about_proposal_id ? { about_proposal_id: input.about_proposal_id } : {}),
       task_id: input.task_id,
       to_session_id: input.to_session_id,
       kind: input.kind,
@@ -6966,7 +7234,12 @@ function normalizeLeaseInput<T extends LeaseTaskInput>(input: T): T {
 }
 
 function validateActor(value: string): string {
-  return cleanText(value, "actor", 200);
+  const actor = cleanText(value, "actor", 200);
+  // The person desk writes as person:desk, person:terminal and person:passkey.
+  if (/^person:/i.test(actor)) {
+    throw new CollabError("invalid_actor", "Actor labels beginning with person: are reserved for the person desk");
+  }
+  return actor;
 }
 
 function validateExpectedVersion(value: number): number {
@@ -7632,6 +7905,38 @@ interface ReportInternalInput {
   authority_basis: string | null;
   /** Also place the report in the person's inbox: routing, not access control. */
   to_person?: boolean;
+  /** A desk report about a proposal, routed to that proposal's voices. */
+  about_proposal_id?: string;
+}
+
+/** One read of a workspace's obsoletions and consent voices, shared across statuses. */
+interface ProposalReadContext {
+  workspaceId: string;
+  obsoleted: Set<string>;
+  voices: Map<string, string>;
+}
+
+const MAX_INBOX_SCAN = 500;
+const MAX_INBOX_PROPOSALS = 50;
+
+function aiSnapshotOf(status: ProposalStatus): ProposalPersonAct["ai_snapshot"] {
+  return {
+    position: status.ai.position,
+    closed: status.ai.closed,
+    qualifying_support_report_ids: status.ai.qualifying_support_report_ids,
+    unresolved_challenge_report_ids: status.ai.unresolved_challenge_report_ids,
+  };
+}
+
+/** A rejection needs a reason, which is signed with it; an agreement takes none. */
+function normalizeActReason(act: "agree" | "reject", reason: string | undefined): string | null {
+  if (act === "agree") {
+    if (reason !== undefined && reason.trim() !== "") {
+      throw new CollabError("invalid_reason", "An agreement takes no reason");
+    }
+    return null;
+  }
+  return cleanText(reason ?? "", "reason", 2_000);
 }
 
 /** Who appends a report: a credential-bound session, or the person desk (id null). */

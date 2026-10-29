@@ -100,11 +100,12 @@ function advance(ms: number): void {
   clock = new Date(clock.getTime() + ms);
 }
 
-function session(actor: string, parent?: SessionHandle): SessionHandle {
+/** A child joins its parent's voice only when the parent's own process attests it, as MCP does. */
+function session(actor: string, parent?: SessionHandle, attested = true): SessionHandle {
   return store.startSession({
     root_path: root,
     actor,
-    ...(parent ? { parent_session_id: parent.session.id } : {}),
+    ...(parent ? { parent_session_id: parent.session.id, parent_attested: attested } : {}),
   });
 }
 
@@ -224,14 +225,44 @@ describe("proposals in the journal", () => {
     advance(6 * HOUR);
     expect(status(proposal.proposal.id).ai.position).toBe("split");
 
-    const resolution = answer(author, challenge.id, "resolves");
+    // Only the challenger's own voice settles its soft veto; the author cannot.
+    answer(author, challenge.id, "resolves");
+    expect(status(proposal.proposal.id).ai.position).toBe("split");
+
+    const resolution = answer(critic, challenge.id, "resolves");
     expect(status(proposal.proposal.id).ai).toMatchObject({ position: "consented", unresolved_challenge_report_ids: [] });
 
-    answer(author, resolution.id, "withdraws");
+    answer(critic, resolution.id, "withdraws");
     expect(status(proposal.proposal.id).ai.position).toBe("split");
 
     answer(critic, challenge.id, "withdraws");
     expect(status(proposal.proposal.id).ai.position).toBe("consented");
+  });
+
+  test("a claimed parent without the parent's attestation does not join its voice", () => {
+    const author = session("author");
+    const peer = session("peer");
+    const impostor = session("claims-peer", peer, false);
+    const proposal = open(author);
+    expect(proposal.terms.voices.map((voice) => voice.voice_id).sort())
+      .toEqual([author.session.id, peer.session.id, impostor.session.id].sort());
+    answer(impostor, proposal.proposal.id, "supports");
+    expect(status(proposal.proposal.id).ai).toMatchObject({ position: "open", awaiting_voice_ids: [peer.session.id] });
+  });
+
+  test("a retirement is final: an ended proposal cannot come back", () => {
+    const author = session("author");
+    session("peer");
+    const first = open(author);
+    const withdrawal = answer(author, first.proposal.id, "withdraws");
+    expect(status(first.proposal.id).ai.position).toBe("withdrawn");
+    expect(errorCode(() => answer(author, withdrawal.id, "withdraws"))).toBe("proposal_retired");
+
+    const second = open(author);
+    const revision = open(author, { supersedes_report_id: second.proposal.id });
+    answer(author, revision.proposal.id, "withdraws");
+    expect(status(revision.proposal.id).ai.position).toBe("withdrawn");
+    expect(status(second.proposal.id).ai).toMatchObject({ position: "superseded", obsoleted_by_report_id: revision.proposal.id });
   });
 
   test("silence is not consent, and a lone voice must say yes itself", () => {
@@ -292,11 +323,16 @@ describe("proposals in the journal", () => {
     expect(status(revision.proposal.id).ai.position).toBe("withdrawn");
   });
 
-  test("stored terms that no longer match their hash fail closed", () => {
+  test("stored terms that no longer match their hash fail closed, and lists flag them", () => {
     const author = session("author");
     const proposal = open(author);
+    const healthy = open(author);
     store.db.query(`UPDATE proposal_terms SET extent = 'Everything.' WHERE report_id = ?`).run(proposal.proposal.id);
     expect(errorCode(() => status(proposal.proposal.id))).toBe("proposal_terms_invalid");
+    expect(store.listProposalStatuses(author.workspace.id)).toMatchObject({
+      proposals: [{ proposal: { id: healthy.proposal.id } }],
+      unreadable: [{ proposal_report_id: proposal.proposal.id, error: "proposal_terms_invalid" }],
+    });
   });
 
   test("a relayed rejection names the exact bytes and only pauses work", () => {
@@ -376,9 +412,9 @@ describe("proposals in the journal", () => {
 
     const workspaceId = author.workspace.id;
     expect(status(older.proposal.id).proposal_sha256).toBe(older.proposal_sha256);
-    expect(store.listProposalStatuses(workspaceId).map((item) => item.proposal.id))
+    expect(store.listProposalStatuses(workspaceId).proposals.map((item) => item.proposal.id))
       .toEqual([newer.proposal.id, older.proposal.id]);
-    expect(store.listProposalStatuses(workspaceId, { limit: 1 })).toHaveLength(1);
+    expect(store.listProposalStatuses(workspaceId, { limit: 1 }).proposals).toHaveLength(1);
     expect(errorCode(() => store.proposalStatus(workspaceId, plain.id))).toBe("proposal_not_found");
     expect(store.verifyJournal(workspaceId)).toBe(true);
   });
@@ -430,5 +466,27 @@ describe("proposal tools over MCP", () => {
     });
     expect(relayed.structuredContent.proposal.person.state).toBe("rejected");
     expect(relayed.structuredContent.proposal.may_proceed).toBe(false);
+  });
+});
+
+describe("lineage attestation over MCP", () => {
+  test("a named child bound in the same MCP process joins its parent's voice; a stranger's claim does not", async () => {
+    const server = buildCollabMcpServer(store) as any;
+    const call = async (name: string, args: Record<string, unknown>) => {
+      const registration = server._registeredTools[name];
+      return (await (registration.handler ?? registration.callback)(args, {})).structuredContent;
+    };
+    const parent = await call("collab_session_start", { root_path: root, actor: "mcp-parent" });
+    const child = await call("collab_session_start", {
+      root_path: root, actor: "mcp-child", binding_key: "child", parent_session_id: parent.session.id,
+    });
+    const stranger = store.startSession({ root_path: root, actor: "stranger", parent_session_id: parent.session.id });
+    const opened = await call("collab_proposal_open", {
+      workspace_id: parent.workspace.id, idempotency_key: "mcp-lineage", question: "Q?", criteria: "C", extent: "E",
+    });
+    expect(opened.proposal.terms.voices).toEqual([
+      { voice_id: parent.session.id, live_session_ids: [parent.session.id, child.session.id].sort() },
+      { voice_id: stranger.session.id, live_session_ids: [stranger.session.id] },
+    ].sort((left, right) => left.voice_id.localeCompare(right.voice_id)));
   });
 });

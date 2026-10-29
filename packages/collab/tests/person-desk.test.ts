@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { CollabError } from "../src/errors.js";
 import { runCollabHostCli } from "../src/host.js";
 import { personActChallenge, verifyPasskeyAssertion } from "../src/passkey.js";
-import { runPersonDeskCli, type PersonDeskDeps } from "../src/person-desk.js";
+import { runCeremonyCli } from "../src/ceremony.js";
+import { runPersonDeskCli, runPersonRemoteCli, type PersonDeskDeps } from "../src/person-desk.js";
 import type { PasskeyAssertion, PersonPasskey, SessionHandle } from "../src/protocol.js";
 import { CollabStore } from "../src/store.js";
 import type { TtyPort } from "../src/tty.js";
@@ -99,6 +100,7 @@ describe("passkey assertion verification", () => {
     proposal_sha256: "a".repeat(64),
     prior_person_acts: 0,
     reason: null,
+    ai_snapshot: { position: "consented", closed: false, qualifying_support_report_ids: [], unresolved_challenge_report_ids: [] },
   }).challenge;
 
   test("accepts a user-verified assertion over the expected challenge", () => {
@@ -425,5 +427,225 @@ describe("the person desk and inbox", () => {
     expect(JSON.parse(runCollabHostCli(["person", "--help"], {}).line)).toMatchObject({ status: "help" });
     expect(desk(["inbox", "--workspace", "ws_x", "--reason", "stray"]).receipt.error).toBe("usage_error");
     expect(desk(["consent"]).receipt.error).toBe("usage_error");
+  });
+});
+
+describe("person acts after review", () => {
+  test("an authenticated rejection may follow a relayed one, but not the reverse", () => {
+    const { peer, proposal } = consentedProposal();
+    const id = proposal.proposal.id;
+    const relay = (key: string) => store.relayProposalRejectionForSession({
+      ...peer.credential, idempotency_key: key, proposal_report_id: id, proposal_sha256: proposal.proposal_sha256, reason: "Relayed.",
+    });
+    relay("relay-1");
+    const signed = desk(["reject", "--proposal", id, "--reason", "My own no."], { openTty: terminal("yes").openTty });
+    expect(signed.receipt.proposal.person.acts.map((act: { basis: string }) => act.basis))
+      .toEqual(["relayed_by_session", "controlling_terminal"]);
+    expect(errorCode(() => relay("relay-2"))).toBe("already_rejected");
+  });
+
+  test("the terminal refuses when the agents' position changed after it was shown", () => {
+    const { proposal } = consentedProposal();
+    const shown = store.personActChallenge({ proposal_report_id: proposal.proposal.id, act: "agree" });
+    const late = session("late");
+    store.appendReportForSession({
+      ...late.credential, idempotency_key: "late-support", kind: "inference", body: "Me too.",
+      relation: "supports", target_report_id: proposal.proposal.id,
+    });
+    expect(errorCode(() => store.recordPersonActAtTerminal({
+      proposal_report_id: proposal.proposal.id,
+      proposal_sha256: proposal.proposal_sha256,
+      act: "agree",
+      expected_ai_snapshot: shown.ai_snapshot,
+    }))).toBe("ai_position_changed");
+  });
+
+  test("a challenge refuses an agreement before Touch ID is spent on it", () => {
+    const author = session("author");
+    session("peer");
+    const proposal = store.openProposalForSession({
+      ...author.credential, idempotency_key: "unsettled", question: "Q?", criteria: "C", extent: "E",
+    });
+    expect(desk(["challenge", "--proposal", proposal.proposal.id, "--act", "agree"]).receipt.error).toBe("ai_not_consented");
+    expect(desk(["challenge", "--proposal", proposal.proposal.id, "--act", "agree", "--reason", "x"]).receipt.error)
+      .toBe("invalid_reason");
+  });
+
+  test("the desk withdraws only its own proposals, and its notes reach the consulted voices", () => {
+    const first = session("first");
+    const second = session("second");
+    const workspace = first.workspace.id;
+    const opened = desk(["propose", "--workspace", workspace, "--question", "Q?", "--criteria", "C", "--extent", "E",
+      "--idempotency-key", "desk-p"]).receipt.proposal;
+    desk(["say", "--workspace", workspace, "--proposal", opened.proposal.id, "--body", "Context.", "--idempotency-key", "desk-n"]);
+    const note = store.eventsSince(workspace).events.at(-1)!;
+    expect(store.eventAddressesSession(note, first.session.id)).toBe(true);
+    expect(store.eventAddressesSession(note, second.session.id)).toBe(true);
+
+    const agentProposal = store.openProposalForSession({
+      ...first.credential, idempotency_key: "agent-p", question: "Agent Q?", criteria: "C", extent: "E",
+    });
+    expect(desk(["withdraw", "--workspace", workspace, "--proposal", agentProposal.proposal.id, "--reason", "No.",
+      "--idempotency-key", "w1"]).receipt.error).toBe("report_author_mismatch");
+    const withdrawn = desk(["withdraw", "--workspace", workspace, "--proposal", opened.proposal.id, "--reason", "Changed my mind.",
+      "--idempotency-key", "w2"]).receipt.proposal;
+    expect(withdrawn.ai.position).toBe("withdrawn");
+  });
+
+  test("an agreement wakes the proposal's author", () => {
+    const { author, peer, proposal } = consentedProposal();
+    desk(["consent", "--proposal", proposal.proposal.id], { openTty: terminal("yes").openTty });
+    const event = store.eventsSince(proposal.proposal.workspace_id).events.at(-1)!;
+    expect(event.type).toBe("proposal.agreed");
+    expect(store.eventAddressesSession(event, author.session.id)).toBe(true);
+    expect(store.eventAddressesSession(event, peer.session.id)).toBe(false);
+  });
+
+  test("the CLI refuses ambiguous input", () => {
+    const { proposal } = consentedProposal();
+    const workspace = proposal.proposal.workspace_id;
+    const id = proposal.proposal.id;
+    expect(desk(["proposals", `--workspace=${workspace}`, "--proposal=x", `--proposal=${id}`]).receipt.error).toBe("usage_error");
+    expect(desk(["proposals", `--workspace=${workspace}`, "--proposal="]).receipt.error).toBe("usage_error");
+    expect(desk(["proposals", `--workspace=${workspace}`, `--proposal=${id}`, "--limit=2"]).receipt.error).toBe("usage_error");
+    expect(desk(["toString"]).receipt).toMatchObject({ error: "usage_error", command: "person" });
+    expect(desk(["consent", "--reason", "x", "--proposal", id]).receipt).toMatchObject({ error: "usage_error", command: "person consent" });
+  });
+
+  test("assertions carry only WebAuthn's fields, bounded", () => {
+    const key = makePasskey();
+    store.enrollPersonPasskey({ credential_id: key.credentialId, public_key_spki: key.spki, algorithm: -7, rp_id: RP_ID, origin: ORIGIN });
+    const { proposal } = consentedProposal();
+    const challenge = store.personActChallenge({ proposal_report_id: proposal.proposal.id, act: "agree" });
+    const assertion = assert(key, challenge.challenge);
+    const act = (extra: Record<string, unknown>) => errorCode(() => store.recordPersonActWithPasskey({
+      proposal_report_id: proposal.proposal.id, act: "agree", assertion: { ...assertion, ...extra } as PasskeyAssertion,
+    }));
+    expect(act({ user_handle: Buffer.alloc(65).toString("base64url") })).toBe("passkey_assertion_invalid");
+    expect(act({ injected: "x" })).toBe("passkey_assertion_invalid");
+  });
+
+  test("actor labels beginning with person: are reserved for the desk", () => {
+    expect(errorCode(() => session("person:passkey"))).toBe("invalid_actor");
+  });
+});
+
+describe("person-remote behind an SSH forced command", () => {
+  const remote = (argv: unknown, stdin?: string) => JSON.parse(runPersonRemoteCli(
+    { SSH_ORIGINAL_COMMAND: typeof argv === "string" ? argv : JSON.stringify(argv), AGENTOOL_COLLAB_DB: databasePath },
+    { storeNow: () => clock, readStdin: () => stdin ?? "" },
+  ).line);
+
+  test("reads a JSON argv, never a shell line, and allows only desk verbs that need no terminal or browser", () => {
+    session("anyone");
+    expect(remote(["workspaces"]).status).toBe("ok");
+    expect(remote("workspaces; rm -rf /").error).toBe("usage_error");
+    for (const verb of ["passkey-enroll", "passkey-revoke", "passkey-export", "ceremony"]) {
+      expect(remote([verb]).error).toBe("remote_verb_refused");
+    }
+    expect(remote(["workspaces", "--db=/tmp/elsewhere.sqlite"]).error).toBe("remote_verb_refused");
+    expect(remote(["consent", "--proposal=report_x"]).error).toBe("remote_verb_refused");
+  });
+});
+
+async function runCeremony(argv: string[], deps: PersonDeskDeps, remoteDb?: string) {
+  let resolveUrl!: (url: URL) => void;
+  const url = new Promise<URL>((resolve) => { resolveUrl = resolve; });
+  const done = runCeremonyCli(argv, {}, { storeNow: () => clock, ...deps }, {
+    out: (line) => resolveUrl(new URL(JSON.parse(line).url)),
+    remote: remoteDb === undefined ? undefined : async (_destination, remoteArgv, stdin) => JSON.parse(runPersonRemoteCli(
+      { SSH_ORIGINAL_COMMAND: JSON.stringify(remoteArgv), AGENTOOL_COLLAB_DB: remoteDb },
+      { storeNow: () => clock, readStdin: () => stdin ?? "" },
+    ).line),
+  });
+  const page = await Promise.race([url, done.then((result) => { throw new Error(result.line); })]);
+  const at = (path: string, init: RequestInit = {}) => fetch(`http://127.0.0.1:${page.port}${page.pathname}${path}`, {
+    ...init,
+    headers: { Host: `localhost:${page.port}`, ...(init.headers ?? {}) },
+  });
+  const html = await (await at("")).text();
+  const data = JSON.parse(html.match(/<script type="application\/json" id="data">(.*?)<\/script>/s)![1]!);
+  const post = async (body: unknown, origin = `http://localhost:${page.port}`) => (await at("/done", {
+    method: "POST",
+    headers: { Origin: origin, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  })).json();
+  return { page, data, html, at, post, done };
+}
+
+describe("ceremonies served by the desk", () => {
+  const port = () => 20_000 + Math.floor(Math.random() * 20_000);
+
+  test("a signing page shows the exact bytes and records one passkey act", async () => {
+    const key = makePasskey();
+    const origin = `http://localhost:${port()}`;
+    store.enrollPersonPasskey({ credential_id: key.credentialId, public_key_spki: key.spki, algorithm: -7, rp_id: RP_ID, origin });
+    const { proposal } = consentedProposal();
+    const ceremony = await runCeremony(["ceremony", `--proposal=${proposal.proposal.id}`, "--act=agree", `--db=${databasePath}`], {});
+    expect(ceremony.page.origin).toBe(origin);
+    expect(ceremony.data).toMatchObject({ kind: "sign", act: "agree", proposal_bytes: proposal.proposal_bytes });
+    const served = await ceremony.at("");
+    expect(served.headers.get("content-security-policy")).toContain("script-src 'nonce-");
+    expect(ceremony.html).not.toContain("<script>");
+    expect((await ceremony.at("", { headers: { Host: "evil.test" } })).status).toBe(421);
+    expect(await ceremony.post({ assertion: assert(key, ceremony.data.challenge, { origin }) }, "http://localhost:1"))
+      .toMatchObject({ ok: false, error: "ceremony_closed" });
+    expect(await ceremony.post({ assertion: assert(key, ceremony.data.challenge, { origin }) }))
+      .toMatchObject({ ok: true, may_proceed: true });
+    expect(JSON.parse((await ceremony.done).line)).toMatchObject({ status: "ok", recorded: true, may_proceed: true });
+    expect(store.proposalStatusById(proposal.proposal.id).agreement).toMatchObject({ basis: "user_verified_passkey" });
+  });
+
+  test("a signing page for another device's table verifies there", async () => {
+    const remoteDb = join(directory, "remote", "collab.sqlite");
+    const remoteRoot = join(directory, "remote-repo");
+    mkdirSync(remoteRoot);
+    const remoteStore = new CollabStore(remoteDb, { now: () => clock });
+    try {
+      const a = remoteStore.startSession({ root_path: remoteRoot, actor: "lab-author" });
+      const b = remoteStore.startSession({ root_path: remoteRoot, actor: "lab-peer" });
+      const proposal = remoteStore.openProposalForSession({
+        ...a.credential, idempotency_key: "lab-open", question: "Lab Q?", criteria: "C", extent: "E",
+      });
+      remoteStore.appendReportForSession({
+        ...b.credential, idempotency_key: "lab-support", kind: "inference", body: "Yes.", relation: "supports",
+        target_report_id: proposal.proposal.id,
+      });
+      const key = makePasskey();
+      const origin = `http://localhost:${port()}`;
+      remoteStore.enrollPersonPasskey({ credential_id: key.credentialId, public_key_spki: key.spki, algorithm: -7, rp_id: RP_ID, origin });
+      const ceremony = await runCeremony(["ceremony", `--proposal=${proposal.proposal.id}`, "--act=agree", "--via=lab"], {}, remoteDb);
+      expect(ceremony.data.table).toBe("lab");
+      expect(await ceremony.post({ assertion: assert(key, ceremony.data.challenge, { origin }) })).toMatchObject({ ok: true });
+      await ceremony.done;
+      expect(remoteStore.proposalStatusById(proposal.proposal.id).may_proceed).toBe(true);
+    } finally {
+      remoteStore.close();
+    }
+  });
+
+  test("an enrolment page needs the terminal's yes and a key this page created", async () => {
+    const key = makePasskey();
+    let origin = "";
+    const attempt = async (answer: string, challengeOverride?: string) => {
+      const listen = port();
+      origin = `http://localhost:${listen}`;
+      const ceremony = await runCeremony(
+        ["passkey-enroll", "--ceremony", `--db=${databasePath}`, `--port=${listen}`, "--label=Air Touch ID"],
+        { openTty: terminal(answer).openTty },
+      );
+      const clientData = Buffer.from(JSON.stringify({
+        type: "webauthn.create", challenge: challengeOverride ?? ceremony.data.challenge, origin, crossOrigin: false,
+      })).toString("base64url");
+      const posted = await ceremony.post({
+        credential_id: key.credentialId, public_key_spki: key.spki, algorithm: -7, client_data_json: clientData,
+      });
+      return { posted, final: JSON.parse((await ceremony.done).line) };
+    };
+    expect((await attempt("yes", "forged")).posted).toMatchObject({ ok: false, error: "passkey_assertion_invalid" });
+    expect((await attempt("no")).final.status).toBe("cancelled");
+    const enrolled = await attempt("yes");
+    expect(enrolled.posted).toMatchObject({ ok: true, origin });
+    expect(store.listPersonPasskeys().map((passkey) => passkey.label)).toEqual(["Air Touch ID"]);
   });
 });

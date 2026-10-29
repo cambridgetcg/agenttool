@@ -11,7 +11,7 @@ const request = { act: "agree to a proposal", summary: ["extent: collab"], bytes
 describe("terminal confirmation", () => {
   test("renders hidden and line-breaking characters as escapes", () => {
     expect(terminalRendering("a​b c\nd")).toBe("a\\u{200B}b\\u{2028}c\nd");
-    expect(terminalRendering("宇恆 yes")).toBe("宇恆 yes");
+    expect(terminalRendering("決定 yes")).toBe("決定 yes");
   });
 
   test("confirms only yes typed within the window", () => {

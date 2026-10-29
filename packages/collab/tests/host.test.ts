@@ -220,7 +220,8 @@ describe("agenttool-collab-host end", () => {
         usage: "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]"
           + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]"
           + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]"
-          + ` | agenttool-collab-host person ... (${PERSON_DESK_USAGE})`,
+          + ` | agenttool-collab-host person ... (${PERSON_DESK_USAGE})`
+          + " | agenttool-collab-host person-remote (SSH forced command; reads a JSON argv from SSH_ORIGINAL_COMMAND)",
       });
     }
   });

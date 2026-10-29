@@ -14,7 +14,13 @@ import {
   removeSessionCredentialFile,
 } from "./session-file.js";
 import { CollabStore } from "./store.js";
-import { PERSON_DESK_USAGE, runPersonDeskCli, type PersonDeskDeps } from "./person-desk.js";
+import { runCeremonyCli, type CeremonyIo } from "./ceremony.js";
+import {
+  PERSON_DESK_USAGE,
+  runPersonDeskCli,
+  runPersonRemoteCli,
+  type PersonDeskDeps,
+} from "./person-desk.js";
 
 export const COLLAB_HOST_PROTOCOL = "agenttool.collab-host/1" as const;
 
@@ -22,7 +28,8 @@ export const COLLAB_HOST_USAGE =
   "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]"
   + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]"
   + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]"
-  + ` | agenttool-collab-host person ... (${PERSON_DESK_USAGE})`;
+  + ` | agenttool-collab-host person ... (${PERSON_DESK_USAGE})`
+  + " | agenttool-collab-host person-remote (SSH forced command; reads a JSON argv from SSH_ORIGINAL_COMMAND)";
 
 /** The trimmed-length limit endSession applies to its reason. */
 const MAX_HOST_REASON = 2_000;
@@ -253,6 +260,7 @@ export function runCollabHostCli(
 ): { exit_code: 0 | 1 | 3; line: string } {
   // The person desk has its own verbs and receipts; it never reads a session credential.
   if (argv[0] === "person") return runPersonDeskCli(argv.slice(1), env, personDeps);
+  if (argv[0] === "person-remote" && argv.length === 1) return runPersonRemoteCli(env, personDeps);
   let secret: string | null = null;
   if (argv.some((arg) => arg === "--help" || arg === "-h")) {
     const help: HostHelpReceipt = { protocol: COLLAB_HOST_PROTOCOL, status: "help", usage: COLLAB_HOST_USAGE };
@@ -322,6 +330,24 @@ export function runCollabHostCli(
   } catch (error) {
     return emit(errorReceipt(error), 1);
   }
+}
+
+/**
+ * The bin entry: as runCollabHostCli, plus the person desk's ceremonies, which
+ * serve a page and so finish asynchronously. A ceremony prints its page line
+ * through `io` first; the returned line is its final receipt.
+ */
+export async function runCollabHostCliAsync(
+  argv: string[],
+  env: Record<string, string | undefined> = process.env,
+  io: CeremonyIo = { out: (line) => process.stdout.write(`${line}\n`) },
+  personDeps: PersonDeskDeps = {},
+): Promise<{ exit_code: 0 | 1 | 3; line: string }> {
+  const ceremony = argv[0] === "person"
+    && !argv.some((arg) => arg === "--help" || arg === "-h")
+    && (argv[1] === "ceremony" || (argv[1] === "passkey-enroll" && argv.includes("--ceremony")));
+  if (ceremony) return runCeremonyCli(argv.slice(1), env, personDeps, io);
+  return runCollabHostCli(argv, env, systemClock, personDeps);
 }
 
 type HostArgs =

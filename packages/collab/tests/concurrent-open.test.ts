@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CollabStore } from "../src/store.js";
 
-// The person desk opens a store per call, and YOUI may make several calls at
-// once. Opening must wait for a concurrent opener instead of failing its
+// The person desk opens a store per call, and a desk client may make several
+// calls at once. Opening must wait for a concurrent opener instead of failing its
 // preflight read with "database is locked".
 
 let directory: string;

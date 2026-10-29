@@ -441,11 +441,18 @@ export interface ProposalStatus {
   authority_boundary: "an_agreement_authorises_only_the_proposal_extent";
 }
 
+/** A proposal row whose stored terms could not be read; listed instead of failing the read. */
+export interface UnreadableProposal {
+  proposal_report_id: string;
+  error: string;
+}
+
 /** A person's view across one workspace: what waits on them, and what was addressed to them. */
 export interface PersonInbox {
   workspace_id: string;
   awaiting_person: ProposalStatus[];
   addressed_reports: CollabReport[];
+  unreadable: UnreadableProposal[];
 }
 
 export interface TaskReview {

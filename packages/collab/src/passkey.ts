@@ -18,7 +18,12 @@
 import { createHash, createPublicKey, verify, type KeyObject } from "node:crypto";
 import { canonicalJson } from "./canonical.js";
 import { CollabError } from "./errors.js";
-import { PERSON_ACT_PROTOCOL, type PasskeyAssertion, type PersonPasskey } from "./protocol.js";
+import {
+  PERSON_ACT_PROTOCOL,
+  type PasskeyAssertion,
+  type PersonPasskey,
+  type ProposalPersonAct,
+} from "./protocol.js";
 
 const FLAG_USER_PRESENT = 0x01;
 const FLAG_USER_VERIFIED = 0x04;
@@ -46,12 +51,74 @@ export interface PersonActChallengeInput {
   proposal_sha256: string;
   prior_person_acts: number;
   reason: string | null;
+  /** The agents' position as the person sees it; a change makes the assertion stale. */
+  ai_snapshot: ProposalPersonAct["ai_snapshot"];
 }
 
 /** The canonical act bytes and the base64url WebAuthn challenge derived from them. */
 export function personActChallenge(input: PersonActChallengeInput): { challenge_bytes: string; challenge: string } {
   const challenge_bytes = canonicalJson({ protocol: PERSON_ACT_PROTOCOL, ...input });
   return { challenge_bytes, challenge: sha256(challenge_bytes).toString("base64url") };
+}
+
+const ASSERTION_FIELDS = new Set(["credential_id", "authenticator_data", "client_data_json", "signature", "user_handle"]);
+
+/** Keep exactly the assertion fields WebAuthn defines, bounded, before anything is journaled. */
+export function normalizePasskeyAssertion(value: unknown): PasskeyAssertion {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new CollabError("passkey_assertion_invalid", "The assertion must be a JSON object");
+  }
+  const input = value as Record<string, unknown>;
+  const unknown = Object.keys(input).filter((key) => !ASSERTION_FIELDS.has(key));
+  if (unknown.length > 0) {
+    throw new CollabError("passkey_assertion_invalid", "The assertion has fields WebAuthn does not define", { fields: unknown });
+  }
+  const field = (name: string, maxBytes: number) => {
+    base64urlDecode(input[name], name, maxBytes);
+    return input[name] as string;
+  };
+  const userHandle = input.user_handle === undefined || input.user_handle === null ? null : field("user_handle", 64);
+  return {
+    credential_id: field("credential_id", 1023),
+    authenticator_data: field("authenticator_data", 4096),
+    client_data_json: field("client_data_json", 4096),
+    signature: field("signature", 256),
+    user_handle: userHandle,
+  };
+}
+
+/** Check a passkey enrolment before it is shown at the terminal or stored. */
+export function normalizePasskeyEnrollment(input: {
+  credential_id: unknown;
+  public_key_spki: unknown;
+  algorithm: unknown;
+  rp_id: unknown;
+  origin: unknown;
+  label?: unknown;
+}): { credential_id: string; public_key_spki: string; algorithm: -7; rp_id: string; origin: string; label: string | null } {
+  base64urlDecode(input.credential_id, "credential_id", 1023);
+  if (typeof input.public_key_spki !== "string") {
+    throw new CollabError("passkey_key_invalid", "public_key_spki must be base64url DER");
+  }
+  parsePasskeyPublicKey(input.public_key_spki);
+  if (input.algorithm !== -7) {
+    throw new CollabError("passkey_key_invalid", "Only ES256 (COSE algorithm -7) passkeys are supported");
+  }
+  const scope = validatePasskeyScope(input.rp_id, input.origin);
+  let label: string | null = null;
+  if (input.label !== undefined && input.label !== null) {
+    if (typeof input.label !== "string" || input.label.trim().length > 80 || /[\u0000-\u001f\u007f]/.test(input.label)) {
+      throw new CollabError("passkey_label_invalid", "label must be at most 80 characters without control characters");
+    }
+    label = input.label.trim() || null;
+  }
+  return {
+    credential_id: input.credential_id as string,
+    public_key_spki: input.public_key_spki,
+    algorithm: -7,
+    ...scope,
+    label,
+  };
 }
 
 /** Parse an ES256 (P-256) SubjectPublicKeyInfo, or refuse. */
