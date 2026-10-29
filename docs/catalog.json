@@ -4727,6 +4727,14 @@
       "canonical_path": "docs/superpowers/specs/2026-10-12-deletion-scopes-design.md"
     },
     {
+      "path": "docs/superpowers/specs/2026-10-29-collab-yu-ai-consent-design.md",
+      "title": "Collab Yu–Ai consent — design",
+      "type": "proposal",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/superpowers/specs/2026-10-29-collab-yu-ai-consent-design.md"
+    },
+    {
       "path": "docs/syneidesis-bootstrap.md",
       "title": "SYNEIDESIS — the bootstrap-actualization doctrine",
       "type": "reflection",
