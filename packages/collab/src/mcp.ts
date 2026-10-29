@@ -18,6 +18,7 @@ import {
   type SessionHandle,
   type TaskStatus,
 } from "./protocol.js";
+import { defaultSeatRef, MAX_SEAT_REF } from "./seat-ref.js";
 import {
   removeSessionCredentialFile,
   writeSessionCredentialFile,
@@ -87,6 +88,8 @@ export interface CollabMcpServerOptions {
   };
   /** Host-held credentials only, never a model-facing resume argument. */
   resumed_sessions?: Record<string, BoundSession>;
+  /** Where a session start without seat_ref looks for one (defaults to process.env). */
+  environment?: Record<string, string | undefined>;
 }
 
 interface BoundSession {
@@ -111,6 +114,7 @@ export function buildCollabMcpServer(
     get binding() { return requestSlot.getStore()!.binding; },
     set binding(value: BoundSession | null) { requestSlot.getStore()!.binding = value; },
   };
+  const environment = options.environment ?? process.env;
   const server = new McpServer(
     { name: "agenttool-collab", version: COLLAB_PACKAGE_VERSION },
     {
@@ -309,6 +313,12 @@ export function buildCollabMcpServer(
         role: z.string().max(200).optional(),
         parent_session_id: z.string().min(1).optional(),
         repository_key: z.string().min(1).max(1000).optional(),
+        seat_ref: z.string().min(1).max(MAX_SEAT_REF).optional()
+          .describe(
+            "Opaque, unverified routing hint naming the execution seat that started this session. " +
+              "Omit it to use the host's declaration (AGENTOOL_COLLAB_SEAT_REF, else claude-code:<CLAUDE_CODE_SESSION_ID>); " +
+              "it authenticates nothing",
+          ),
       },
     },
     async (input) => call(() => {
@@ -329,16 +339,18 @@ export function buildCollabMcpServer(
       // of its own bindings; only then is the lineage attested for consent.
       const parentAttested = input.parent_session_id !== undefined
         && [...slots.values()].some((slot) => slot.binding?.handle.session.id === input.parent_session_id);
+      const seatRef = input.seat_ref ?? defaultSeatRef(environment);
       const handle = store.startSession({
         ...input,
         actor: input.actor ?? defaultActor(),
         parent_attested: parentAttested,
+        seat_ref: seatRef,
       });
       const credentialFile = store.defaultSessionCredentialPath(handle.session.id);
       try {
         const path = writeSessionCredentialFile(credentialFile, handle.credential);
         state.binding = { handle, credential_file: path };
-        return publicSessionBinding(state.binding);
+        return publicSessionBinding(state.binding, seatRef);
       } catch (error) {
         try {
           store.endSession({ ...handle.credential, reason: "credential_file_write_failed" });
@@ -1299,11 +1311,12 @@ function leaseMutationSchema<T extends z.ZodRawShape>(extra: T) {
   };
 }
 
-function publicSessionBinding(binding: BoundSession) {
+function publicSessionBinding(binding: BoundSession, seatRef: string | null) {
   return {
     workspace: binding.handle.workspace,
     worktree: binding.handle.worktree,
     session: binding.handle.session,
+    seat_ref: seatRef,
     credential_file_created: true,
     resume_environment_variable: "AGENTOOL_COLLAB_SESSION_FILE",
     session_file_name: `${binding.handle.session.id}.json`,

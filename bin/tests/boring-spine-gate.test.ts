@@ -970,6 +970,7 @@ describe("boring test spine", () => {
       "packages/codex-usage",
       "packages/collab-zerone",
       "packages/collab-courier",
+      "packages/execution-seat",
       "packages/lobby",
       "packages/lobby-doorbell",
       "packages/browser",
@@ -1040,6 +1041,7 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/collab && bun run ci");
     expect(preflight).toContain("cd packages/codex-usage && bun run ci");
     expect(workflow).toContain("broker, collab, Codex usage, collab-zerone");
+    expect(preflight).toContain("cd packages/execution-seat && bun run ci");
     expect(preflight).toContain("cd packages/lobby && bun run ci");
     expect(preflight).toContain("cd packages/lobby-doorbell && bun run ci");
     expect(preflight).toContain("cd packages/browser && bun run ci");

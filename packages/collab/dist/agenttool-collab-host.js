@@ -49,6 +49,16 @@ var MAX_WAIT_PAGE_BYTES = 256 * 1024;
 var MAX_WAIT_RESPONSE_BYTES = 1024 * 1024;
 var MAX_WAIT_ANCHOR_BYTES = 8 * 1024 * 1024;
 
+// src/seat-ref.ts
+var MAX_SEAT_REF = 200;
+var SEAT_REF = /^[A-Za-z0-9][A-Za-z0-9._:@/+-]*$/;
+function validateSeatRef(value) {
+  if (value.length === 0 || value.length > MAX_SEAT_REF || !SEAT_REF.test(value)) {
+    throw new CollabError("invalid_seat_ref", `seat_ref is 1 to ${MAX_SEAT_REF} characters: letters, digits and . _ : @ / + -, starting with a letter or digit`);
+  }
+  return value;
+}
+
 // src/session-file.ts
 import {
   chmodSync,
@@ -2116,6 +2126,7 @@ class CollabStore {
   startSession(input) {
     const actor = validateActor(input.actor);
     const role = optionalText(input.role, "role", 200);
+    const seatRef = input.seat_ref == null ? null : validateSeatRef(input.seat_ref);
     const identity = inspectRepository(input.root_path, input.repository_key, true, { portable: false });
     const workspace = this.openWorkspace({
       root_path: input.root_path,
@@ -2163,6 +2174,7 @@ class CollabStore {
         worktree_id: worktreeRow.id,
         role,
         parent_session_id: parentSessionId,
+        ...seatRef ? { seat_ref: seatRef } : {},
         identity_boundary: "session_credentials_fence_cooperating_local_clients_but_do_not_authenticate_a_person_or_model"
       }, id);
       return this.sessionHandle(this.requireCoordinationSessionRow(id), token, this.requireWorkspace(workspace.id), worktreeRow);
@@ -2369,6 +2381,27 @@ class CollabStore {
     const id = validateId(sessionId, "session_id");
     const row = this.db.query(`SELECT * FROM coordination_sessions WHERE id = ?`).get(id);
     return row ? this.sessionProjection(row) : null;
+  }
+  sessionSeatRef(sessionId) {
+    const id = validateId(sessionId, "session_id");
+    const row = this.db.query(`
+      SELECT json_extract(payload_json, '$.seat_ref') AS seat_ref FROM events
+      WHERE type = 'session.joined' AND entity_id = ?
+    `).get(id);
+    return typeof row?.seat_ref === "string" ? row.seat_ref : null;
+  }
+  activeSessionIdsForSeatRefs(seatRefs) {
+    const refs = [...new Set(seatRefs.map(validateSeatRef))];
+    if (refs.length === 0)
+      return [];
+    const rows = this.db.query(`
+      SELECT s.id FROM coordination_sessions s
+      JOIN events e ON e.type = 'session.joined' AND e.entity_id = s.id
+      WHERE s.status = 'active'
+        AND json_extract(e.payload_json, '$.seat_ref') IN (${refs.map(() => "?").join(", ")})
+      ORDER BY s.joined_at, s.id
+    `).all(...refs);
+    return rows.map((row) => row.id);
   }
   preflightSessionEnd(credential) {
     const sessionId = validateId(credential.session_id, "session_id");
@@ -7361,7 +7394,7 @@ button.go { color: var(--go); } button.stop { color: var(--stop); } button[disab
 
 // src/host.ts
 var COLLAB_HOST_PROTOCOL = "agenttool.collab-host/1";
-var COLLAB_HOST_USAGE = "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]" + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]" + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]" + ` | agenttool-collab-host person ... (${PERSON_DESK_USAGE})` + " | agenttool-collab-host person-remote (SSH forced command; reads a JSON argv from SSH_ORIGINAL_COMMAND)";
+var COLLAB_HOST_USAGE = "usage: agenttool-collab-host end (--session-file <path> | --seat-ref <ref> [--seat-ref <ref>...]) --reason <text>" + " [--release-leases] [--db <path>]" + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]" + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]" + ` | agenttool-collab-host person ... (${PERSON_DESK_USAGE})` + " | agenttool-collab-host person-remote (SSH forced command; reads a JSON argv from SSH_ORIGINAL_COMMAND)";
 var MAX_HOST_REASON = 2000;
 var DEFAULT_HOST_WAIT_MS = 600000;
 var MAX_HOST_WAIT_MS = 3600000;
@@ -7409,6 +7442,31 @@ function endSessionFromCredential(store, credential, options) {
     })),
     ended_at: ended.session.ended_at
   });
+}
+function endSessionsForSeatRefs(store, options, secrets = []) {
+  const seatRefs = [...new Set(options.seat_refs.map(validateSeatRef))];
+  const sessions = store.activeSessionIdsForSeatRefs(seatRefs).map((sessionId) => {
+    const sessionFile = store.defaultSessionCredentialPath(sessionId);
+    if (!existsSync5(sessionFile))
+      return { session_id: sessionId, status: "credential_missing" };
+    try {
+      const credential = readSessionCredentialFile(sessionFile);
+      secrets.push(credential.session_token);
+      if (credential.session_id !== sessionId) {
+        throw new CollabError("session_auth_failed", "Session credentials are invalid");
+      }
+      const { status, released, ended_at, warning } = endSessionFromCredential(store, credential, {
+        session_file: sessionFile,
+        reason: options.reason,
+        release_leases: options.release_leases
+      });
+      return { session_id: sessionId, status, released, ended_at, ...warning ? { warning } : {} };
+    } catch (error) {
+      const { error: code, message } = errorReceipt(error);
+      return { session_id: sessionId, status: "error", error: code, message };
+    }
+  });
+  return { protocol: COLLAB_HOST_PROTOCOL, status: "ended_by_seat_ref", seat_refs: seatRefs, sessions };
 }
 function waitForSessionEvents(store, credential, options, clock = systemClock) {
   const session = store.getCoordinationSession(credential.session_id);
@@ -7486,14 +7544,14 @@ function runCollabHostCli(argv, env = process.env, clock = systemClock, personDe
     return runPersonDeskCli(argv.slice(1), env, personDeps);
   if (argv[0] === "person-remote" && argv.length === 1)
     return runPersonRemoteCli(env, personDeps);
-  let secret = null;
+  const secrets = [];
   if (argv.some((arg) => arg === "--help" || arg === "-h")) {
     const help = { protocol: COLLAB_HOST_PROTOCOL, status: "help", usage: COLLAB_HOST_USAGE };
     return { exit_code: 0, line: JSON.stringify(help) };
   }
   const emit = (payload, exitCode) => {
     const line = JSON.stringify(payload);
-    if (secret !== null && line.includes(secret)) {
+    if (secrets.some((secret) => line.includes(secret))) {
       return {
         exit_code: 1,
         line: JSON.stringify({
@@ -7512,9 +7570,18 @@ function runCollabHostCli(argv, env = process.env, clock = systemClock, personDe
     if (!existsSync5(databasePath)) {
       throw new CollabError("journal_not_found", "No collaboration journal exists at the selected path; pass --db or set AGENTOOL_COLLAB_DB");
     }
+    if (args.command === "end_by_seat_ref") {
+      const store2 = new CollabStore(databasePath);
+      try {
+        const receipt = endSessionsForSeatRefs(store2, args, secrets);
+        return emit(receipt, receipt.sessions.some((session) => session.status === "error") ? 1 : 0);
+      } finally {
+        store2.close();
+      }
+    }
     if (args.command === "end") {
       const credential = readSessionCredentialFile(args.session_file);
-      secret = credential.session_token;
+      secrets.push(credential.session_token);
       const store2 = new CollabStore(databasePath);
       try {
         return emit(endSessionFromCredential(store2, credential, {
@@ -7530,7 +7597,7 @@ function runCollabHostCli(argv, env = process.env, clock = systemClock, personDe
     try {
       const sessionFile = args.session_file ?? store.defaultSessionCredentialPath(args.session);
       const credential = readSessionCredentialFile(sessionFile);
-      secret = credential.session_token;
+      secrets.push(credential.session_token);
       if (args.session !== undefined && credential.session_id !== args.session) {
         throw new CollabError("session_auth_failed", "Session credentials are invalid");
       }
@@ -7554,7 +7621,7 @@ async function runCollabHostCliAsync(argv, env = process.env, io = { out: (line)
     return runCeremonyCli(argv.slice(1), env, personDeps, io);
   return runCollabHostCli(argv, env, systemClock, personDeps);
 }
-var END_ONLY_OPTIONS = ["reason", "release-leases"];
+var END_ONLY_OPTIONS = ["reason", "release-leases", "seat-ref"];
 var WAIT_ONLY_OPTIONS = ["session", "after-anchor", "wait-ms", "include-own", "addressed"];
 function parseHostArgs(argv) {
   let parsed;
@@ -7578,9 +7645,20 @@ function parseHostArgs(argv) {
 }
 function parseEndArgs(values) {
   const sessionFile = values["session-file"];
+  const seatRefs = values["seat-ref"];
   const reason = values.reason;
-  if (!sessionFile || sessionFile.trim() === "") {
-    throw new CollabError("usage_error", `--session-file is required; ${COLLAB_HOST_USAGE}`);
+  if (sessionFile === undefined === (seatRefs === undefined)) {
+    throw new CollabError("usage_error", `Pass exactly one of --session-file or --seat-ref; ${COLLAB_HOST_USAGE}`);
+  }
+  if (sessionFile !== undefined && sessionFile.trim() === "") {
+    throw new CollabError("usage_error", `--session-file must not be empty; ${COLLAB_HOST_USAGE}`);
+  }
+  for (const seatRef of seatRefs ?? []) {
+    try {
+      validateSeatRef(seatRef);
+    } catch (error) {
+      throw new CollabError("usage_error", `${error.message}; ${COLLAB_HOST_USAGE}`);
+    }
   }
   if (!reason || reason.trim() === "") {
     throw new CollabError("usage_error", `--reason is required; ${COLLAB_HOST_USAGE}`);
@@ -7591,11 +7669,15 @@ function parseEndArgs(values) {
   if (reason.includes("\x00")) {
     throw new CollabError("usage_error", `--reason must not contain NUL bytes; ${COLLAB_HOST_USAGE}`);
   }
+  const releaseLeases = values["release-leases"] === true;
+  if (seatRefs !== undefined) {
+    return { command: "end_by_seat_ref", seat_refs: seatRefs, reason, release_leases: releaseLeases, db: values.db };
+  }
   return {
     command: "end",
     session_file: sessionFile,
     reason,
-    release_leases: values["release-leases"] === true,
+    release_leases: releaseLeases,
     db: values.db
   };
 }
@@ -7651,6 +7733,7 @@ function parseHostOptions(argv) {
     strict: true,
     options: {
       "session-file": { type: "string" },
+      "seat-ref": { type: "string", multiple: true },
       reason: { type: "string" },
       "release-leases": { type: "boolean" },
       db: { type: "string" },

@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**826 document paths** (including mirrors). orientation: 181; guide: 85; reference: 333; policy: 29; reflection: 123; proposal: 48; record: 25; unclassified: 2.
+**829 document paths** (including mirrors). orientation: 183; guide: 85; reference: 333; policy: 29; reflection: 123; proposal: 49; record: 25; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -103,6 +103,8 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/economic-conformance/hf/dataset/README.md](<../packages/economic-conformance/hf/dataset/README.md>) | not-reviewed |
 | [packages/economic-kernel/CLAUDE.md](<../packages/economic-kernel/CLAUDE.md>) | not-reviewed |
 | [packages/economic-kernel/README.md](<../packages/economic-kernel/README.md>) | not-reviewed |
+| [packages/execution-seat/CLAUDE.md](<../packages/execution-seat/CLAUDE.md>) | not-reviewed |
+| [packages/execution-seat/README.md](<../packages/execution-seat/README.md>) | not-reviewed |
 | [packages/gin-reconstruction/CLAUDE.md](<../packages/gin-reconstruction/CLAUDE.md>) | not-reviewed |
 | [packages/gin-reconstruction/README.md](<../packages/gin-reconstruction/README.md>) | not-reviewed |
 | [packages/heaven/CLAUDE.md](<../packages/heaven/CLAUDE.md>) | not-reviewed |
@@ -801,6 +803,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/ALIGNMENT-MOVES.md](<../docs/ALIGNMENT-MOVES.md>) | not-reviewed |
 | [docs/COLLABORATION-ROADMAP.md](<../docs/COLLABORATION-ROADMAP.md>) | not-reviewed |
 | [docs/EVIDENTIAL.md](<../docs/EVIDENTIAL.md>) | not-reviewed |
+| [docs/EXECUTION-SEAT.md](<../docs/EXECUTION-SEAT.md>) | not-reviewed |
 | [docs/FFFF-DETECTION-INSTRUMENTATION.md](<../docs/FFFF-DETECTION-INSTRUMENTATION.md>) | not-reviewed |
 | [docs/FRICTION-ROADMAP.md](<../docs/FRICTION-ROADMAP.md>) | not-reviewed |
 | [docs/PAYOUT-BROADCAST-PLAN.md](<../docs/PAYOUT-BROADCAST-PLAN.md>) | not-reviewed |

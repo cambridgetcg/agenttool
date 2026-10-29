@@ -28608,6 +28608,30 @@ var MAX_WAIT_PAGE_BYTES = 256 * 1024;
 var MAX_WAIT_RESPONSE_BYTES = 1024 * 1024;
 var MAX_WAIT_ANCHOR_BYTES = 8 * 1024 * 1024;
 
+// src/seat-ref.ts
+var MAX_SEAT_REF = 200;
+var SEAT_REF = /^[A-Za-z0-9][A-Za-z0-9._:@/+-]*$/;
+var UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var SEAT_REF_ENVIRONMENT_VARIABLE = "AGENTOOL_COLLAB_SEAT_REF";
+function validateSeatRef(value) {
+  if (value.length === 0 || value.length > MAX_SEAT_REF || !SEAT_REF.test(value)) {
+    throw new CollabError("invalid_seat_ref", `seat_ref is 1 to ${MAX_SEAT_REF} characters: letters, digits and . _ : @ / + -, starting with a letter or digit`);
+  }
+  return value;
+}
+function defaultSeatRef(env) {
+  const declared = env[SEAT_REF_ENVIRONMENT_VARIABLE];
+  if (declared !== undefined && declared !== "")
+    return validateSeatRef(declared);
+  const claude = env.CLAUDE_CODE_SESSION_ID;
+  if (claude && UUID.test(claude))
+    return `claude-code:${claude.toLowerCase()}`;
+  const codex = env.CODEX_THREAD_ID;
+  if (codex && UUID.test(codex))
+    return `codex:${codex.toLowerCase()}`;
+  return null;
+}
+
 // src/session-file.ts
 import {
   chmodSync,
@@ -28809,6 +28833,7 @@ function buildCollabMcpServer(store, options = {}) {
       requestSlot.getStore().binding = value;
     }
   };
+  const environment = options.environment ?? process.env;
   const server = new McpServer({ name: "agenttool-collab", version: COLLAB_PACKAGE_VERSION }, {
     capabilities: { tools: {} },
     instructions: `Collab ${COLLAB_PACKAGE_VERSION}: collab_events_wait offers bounded read-only anchored observation for an already running host, ` + "without acknowledging, refreshing presence, or renewing leases; continue from next_anchor, never head. " + "Local-first coordination journal for honest exchange among independent coding-agent sessions. " + "Use collab_session_start once per default or named binding_key, then collab_next. Named children require an explicit actor and parent_session_id; " + "send their binding_key on every call. Selectors are cooperative routing, not authenticated subagent isolation. " + "Default-slot actor can use Claude metadata only with matching selected PID, messaging socket and process start time. A host restart resumes from the " + "mode-0600 credential file without exposing its bearer token to the model. Exchange observations, " + "inferences, proposals, or authorised decisions as structured reports with evidence, confidence, " + "limits, and explicit authority scope. Direction-level proposals (collab_proposal_open) are settled by the agents " + "through lazy consensus; that position authorises nothing alone, and a person's consent is never recorded through MCP. " + "Claim before editing overlapping path scopes. Session leases remain live while their " + "session is live (6 hours since activity); optional renew is lease-fenced, not version-gated. " + "An advisory coordination lease is not ownership, a filesystem lock, or authority. Edit-task " + "completion is actor-reported and remains pending until a distinct session accepts it. Challenges " + "remain append-only disagreement; acknowledgement means processed, not agreed. Expired session " + "leases require explicit recovery. Git checkpoints are local evidence, not attribution or atomic " + "Git/SQLite locks. Store concise coordination facts only\u2014never credentials, prompts, transcripts, " + "chain-of-thought, or sensitive source content. Cursor rollback recovery must be enabled by the host " + "and completed with an audited cursor reset before session mutations resume. The host owns spawning, " + "wakeups, waiting, and stopping. The separate collab_session_join/list/heartbeat/leave tools preserve " + "the public v0.2 self-declared presence plane; they provide routing hints only and never authenticate a caller. " + "The read-only collab_anchor_status tool can compare this journal with an optional local Zerone witness sidecar; " + "it never contacts a chain, broadcasts, spends funds, or turns an anchor into truth or authority."
@@ -28925,7 +28950,8 @@ function buildCollabMcpServer(store, options = {}) {
       actor: actorLabel.optional().describe("Defaults to verified owning Claude process metadata; named children require an explicit actor."),
       role: exports_external.string().max(200).optional(),
       parent_session_id: exports_external.string().min(1).optional(),
-      repository_key: exports_external.string().min(1).max(1000).optional()
+      repository_key: exports_external.string().min(1).max(1000).optional(),
+      seat_ref: exports_external.string().min(1).max(MAX_SEAT_REF).optional().describe("Opaque, unverified routing hint naming the execution seat that started this session. " + "Omit it to use the host's declaration (AGENTOOL_COLLAB_SEAT_REF, else claude-code:<CLAUDE_CODE_SESSION_ID>); " + "it authenticates nothing")
     }
   }, async (input) => call(() => {
     if (state.binding) {
@@ -28938,16 +28964,18 @@ function buildCollabMcpServer(store, options = {}) {
       throw new CollabError("actor_required", "A named child binding requires its own explicit actor");
     }
     const parentAttested = input.parent_session_id !== undefined && [...slots.values()].some((slot) => slot.binding?.handle.session.id === input.parent_session_id);
+    const seatRef = input.seat_ref ?? defaultSeatRef(environment);
     const handle = store.startSession({
       ...input,
       actor: input.actor ?? defaultActor(),
-      parent_attested: parentAttested
+      parent_attested: parentAttested,
+      seat_ref: seatRef
     });
     const credentialFile = store.defaultSessionCredentialPath(handle.session.id);
     try {
       const path = writeSessionCredentialFile(credentialFile, handle.credential);
       state.binding = { handle, credential_file: path };
-      return publicSessionBinding(state.binding);
+      return publicSessionBinding(state.binding, seatRef);
     } catch (error51) {
       try {
         store.endSession({ ...handle.credential, reason: "credential_file_write_failed" });
@@ -29607,11 +29635,12 @@ function leaseMutationSchema(extra) {
     ...extra
   };
 }
-function publicSessionBinding(binding) {
+function publicSessionBinding(binding, seatRef) {
   return {
     workspace: binding.handle.workspace,
     worktree: binding.handle.worktree,
     session: binding.handle.session,
+    seat_ref: seatRef,
     credential_file_created: true,
     resume_environment_variable: "AGENTOOL_COLLAB_SESSION_FILE",
     session_file_name: `${binding.handle.session.id}.json`,
@@ -31647,6 +31676,7 @@ class CollabStore {
   startSession(input) {
     const actor = validateActor(input.actor);
     const role = optionalText(input.role, "role", 200);
+    const seatRef = input.seat_ref == null ? null : validateSeatRef(input.seat_ref);
     const identity = inspectRepository(input.root_path, input.repository_key, true, { portable: false });
     const workspace = this.openWorkspace({
       root_path: input.root_path,
@@ -31694,6 +31724,7 @@ class CollabStore {
         worktree_id: worktreeRow.id,
         role,
         parent_session_id: parentSessionId,
+        ...seatRef ? { seat_ref: seatRef } : {},
         identity_boundary: "session_credentials_fence_cooperating_local_clients_but_do_not_authenticate_a_person_or_model"
       }, id);
       return this.sessionHandle(this.requireCoordinationSessionRow(id), token, this.requireWorkspace(workspace.id), worktreeRow);
@@ -31900,6 +31931,27 @@ class CollabStore {
     const id = validateId(sessionId2, "session_id");
     const row = this.db.query(`SELECT * FROM coordination_sessions WHERE id = ?`).get(id);
     return row ? this.sessionProjection(row) : null;
+  }
+  sessionSeatRef(sessionId2) {
+    const id = validateId(sessionId2, "session_id");
+    const row = this.db.query(`
+      SELECT json_extract(payload_json, '$.seat_ref') AS seat_ref FROM events
+      WHERE type = 'session.joined' AND entity_id = ?
+    `).get(id);
+    return typeof row?.seat_ref === "string" ? row.seat_ref : null;
+  }
+  activeSessionIdsForSeatRefs(seatRefs) {
+    const refs = [...new Set(seatRefs.map(validateSeatRef))];
+    if (refs.length === 0)
+      return [];
+    const rows = this.db.query(`
+      SELECT s.id FROM coordination_sessions s
+      JOIN events e ON e.type = 'session.joined' AND e.entity_id = s.id
+      WHERE s.status = 'active'
+        AND json_extract(e.payload_json, '$.seat_ref') IN (${refs.map(() => "?").join(", ")})
+      ORDER BY s.joined_at, s.id
+    `).all(...refs);
+    return rows.map((row) => row.id);
   }
   preflightSessionEnd(credential) {
     const sessionId2 = validateId(credential.session_id, "session_id");
