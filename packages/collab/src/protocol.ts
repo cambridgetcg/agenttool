@@ -351,15 +351,65 @@ export interface ProposalTerms {
   created_at: string;
 }
 
-export interface ProposalRejection {
+export const PERSON_ACT_PROTOCOL = "agenttool.collab-person-act/1" as const;
+
+/** How a person's act reached the journal. Only a rejection may be relayed. */
+export type PersonActBasis = "relayed_by_session" | "controlling_terminal" | "user_verified_passkey";
+
+/** A platform passkey a person enrolled at the controlling terminal. */
+export interface PersonPasskey {
+  credential_id: string;
+  /** Base64url DER SubjectPublicKeyInfo; ES256 (P-256) only. */
+  public_key_spki: string;
+  algorithm: -7;
+  rp_id: string;
+  origin: string;
+  label: string | null;
+  /** SHA-256 of the public key DER, hex. */
+  fingerprint: string;
+  sign_count: number;
+  enrolled_at: string;
+  revoked_at: string | null;
+}
+
+/** A WebAuthn assertion as the browser returns it, base64url-encoded. */
+export interface PasskeyAssertion {
+  credential_id: string;
+  authenticator_data: string;
+  client_data_json: string;
+  signature: string;
+  user_handle?: string | null;
+}
+
+/** Everything needed to re-verify a passkey act without this database. */
+export interface PasskeyProof extends PasskeyAssertion {
+  public_key_spki: string;
+  rp_id: string;
+  origin: string;
+  /** The canonical act bytes whose SHA-256 is the WebAuthn challenge. */
+  challenge_bytes: string;
+  challenge: string;
+  sign_count: number;
+}
+
+export interface ProposalPersonAct {
   id: string;
   workspace_id: string;
   proposal_report_id: string;
   proposal_sha256: string;
+  act: "agree" | "reject";
   party: "person";
-  basis: "relayed_by_session" | "controlling_terminal";
-  reason: string;
+  basis: PersonActBasis;
+  reason: string | null;
   relayed_by_session_id: string | null;
+  /** The agents' position the person saw when acting. */
+  ai_snapshot: {
+    position: AiPosition;
+    closed: boolean;
+    qualifying_support_report_ids: string[];
+    unresolved_challenge_report_ids: string[];
+  };
+  proof: PasskeyProof | null;
   created_at: string;
   event_sequence: number;
 }
@@ -381,13 +431,21 @@ export interface ProposalStatus {
     basis: "computed_from_journal";
   };
   person: {
-    state: "awaiting" | "rejected";
-    rejections: ProposalRejection[];
+    /** The latest person act decides; a later act may change an earlier one. */
+    state: "awaiting" | "agreed" | "rejected";
+    acts: ProposalPersonAct[];
   };
-  agreement: null;
-  may_proceed: false;
-  authority_boundary:
-    "ai_consent_alone_authorises_nothing_work_proceeds_only_after_a_person_consents_at_the_controlling_terminal";
+  agreement: ProposalPersonAct | null;
+  /** True only while the latest person act agrees and the author has not withdrawn or superseded it. */
+  may_proceed: boolean;
+  authority_boundary: "an_agreement_authorises_only_the_proposal_extent";
+}
+
+/** A person's view across one workspace: what waits on them, and what was addressed to them. */
+export interface PersonInbox {
+  workspace_id: string;
+  awaiting_person: ProposalStatus[];
+  addressed_reports: CollabReport[];
 }
 
 export interface TaskReview {
@@ -427,6 +485,7 @@ export type CollabEventType =
   | "report.posted"
   | "decision.recorded"
   | "proposal.opened"
+  | "proposal.agreed"
   | "proposal.rejected"
   | "handoff.offered"
   | "handoff.accepted"

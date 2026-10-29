@@ -2,8 +2,8 @@
 // @bun
 
 // src/host.ts
-import { existsSync as existsSync4 } from "fs";
-import { parseArgs } from "util";
+import { existsSync as existsSync5 } from "fs";
+import { parseArgs as parseArgs2 } from "util";
 
 // src/database-path.ts
 import { homedir } from "os";
@@ -42,6 +42,7 @@ var PROPOSAL_BYTES_PROTOCOL = "agenttool.collab-proposal/1";
 var DEFAULT_PROPOSAL_CONSULT_SECONDS = 6 * 60 * 60;
 var MIN_PROPOSAL_CONSULT_SECONDS = 10 * 60;
 var MAX_PROPOSAL_CONSULT_SECONDS = 7 * 24 * 60 * 60;
+var PERSON_ACT_PROTOCOL = "agenttool.collab-person-act/1";
 var DEFAULT_WAIT_EVENT_LIMIT = 10;
 var MAX_WAIT_EVENT_LIMIT = 50;
 var MAX_WAIT_PAGE_BYTES = 256 * 1024;
@@ -120,7 +121,7 @@ function isOwnedByCurrentUser(uid) {
 
 // src/store.ts
 import { Database } from "bun:sqlite";
-import { createHash as createHash2, randomBytes, randomUUID, timingSafeEqual } from "crypto";
+import { createHash as createHash3, randomBytes, randomUUID, timingSafeEqual } from "crypto";
 import {
   chmodSync as chmodSync2,
   closeSync as closeSync3,
@@ -143,6 +144,108 @@ function sortValue(value) {
     return Object.fromEntries(entries);
   }
   return value;
+}
+
+// src/passkey.ts
+import { createHash, createPublicKey, verify } from "crypto";
+var FLAG_USER_PRESENT = 1;
+var FLAG_USER_VERIFIED = 4;
+var BASE64URL = /^[A-Za-z0-9_-]*$/;
+function base64urlDecode(value, field, maxBytes = 64 * 1024) {
+  if (typeof value !== "string" || !BASE64URL.test(value) || value.length === 0) {
+    throw new CollabError("passkey_assertion_invalid", `${field} must be non-empty base64url`);
+  }
+  const bytes = Buffer.from(value, "base64url");
+  if (bytes.length > maxBytes) {
+    throw new CollabError("passkey_assertion_invalid", `${field} exceeds ${maxBytes} bytes`);
+  }
+  return bytes;
+}
+function sha256(bytes) {
+  return createHash("sha256").update(bytes).digest();
+}
+function personActChallenge(input) {
+  const challenge_bytes = canonicalJson({ protocol: PERSON_ACT_PROTOCOL, ...input });
+  return { challenge_bytes, challenge: sha256(challenge_bytes).toString("base64url") };
+}
+function parsePasskeyPublicKey(spki) {
+  const der = base64urlDecode(spki, "public_key_spki", 1024);
+  let key;
+  try {
+    key = createPublicKey({ key: der, format: "der", type: "spki" });
+  } catch {
+    throw new CollabError("passkey_key_invalid", "public_key_spki is not a DER SubjectPublicKeyInfo");
+  }
+  if (key.asymmetricKeyType !== "ec" || key.asymmetricKeyDetails?.namedCurve !== "prime256v1") {
+    throw new CollabError("passkey_key_invalid", "Only ES256 (P-256) passkeys are supported");
+  }
+  return key;
+}
+function passkeyFingerprint(spki) {
+  return sha256(base64urlDecode(spki, "public_key_spki", 1024)).toString("hex");
+}
+function validatePasskeyScope(rpId, origin) {
+  if (typeof rpId !== "string" || !/^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/.test(rpId)) {
+    throw new CollabError("passkey_scope_invalid", "rp_id must be a lowercase host name");
+  }
+  let url;
+  try {
+    url = new URL(String(origin));
+  } catch {
+    throw new CollabError("passkey_scope_invalid", "origin must be a URL origin");
+  }
+  const secure = url.protocol === "https:" || url.protocol === "http:" && url.hostname === "localhost";
+  const hostMatches = url.hostname === rpId || url.hostname.endsWith(`.${rpId}`);
+  if (!secure || !hostMatches || url.origin !== origin) {
+    throw new CollabError("passkey_scope_invalid", "origin must be an https origin (or http://localhost) whose host is rp_id or one of its subdomains");
+  }
+  return { rp_id: rpId, origin: url.origin };
+}
+function verifyPasskeyAssertion(input) {
+  const { passkey, assertion } = input;
+  if (assertion.credential_id !== passkey.credential_id) {
+    throw new CollabError("passkey_not_enrolled", "The assertion names a different credential");
+  }
+  const clientDataBytes = base64urlDecode(assertion.client_data_json, "client_data_json");
+  const authenticatorData = base64urlDecode(assertion.authenticator_data, "authenticator_data");
+  const signature = base64urlDecode(assertion.signature, "signature", 256);
+  let clientData;
+  try {
+    const parsed = JSON.parse(clientDataBytes.toString("utf8"));
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
+      throw new Error("not an object");
+    clientData = parsed;
+  } catch {
+    throw new CollabError("passkey_assertion_invalid", "client_data_json is not a JSON object");
+  }
+  if (clientData.type !== "webauthn.get") {
+    throw new CollabError("passkey_assertion_invalid", "client data type must be webauthn.get");
+  }
+  if (clientData.challenge !== input.expected_challenge) {
+    throw new CollabError("passkey_challenge_mismatch", "The assertion signs a different act; request a fresh challenge for the current state");
+  }
+  if (clientData.origin !== passkey.origin || clientData.crossOrigin === true) {
+    throw new CollabError("passkey_origin_mismatch", "The assertion came from another origin");
+  }
+  if (authenticatorData.length < 37) {
+    throw new CollabError("passkey_assertion_invalid", "authenticator_data is too short");
+  }
+  if (!authenticatorData.subarray(0, 32).equals(sha256(passkey.rp_id))) {
+    throw new CollabError("passkey_rp_mismatch", "The assertion is for another relying party");
+  }
+  const flags = authenticatorData[32];
+  if ((flags & FLAG_USER_PRESENT) === 0 || (flags & FLAG_USER_VERIFIED) === 0) {
+    throw new CollabError("passkey_user_not_verified", "The authenticator did not report user presence and user verification");
+  }
+  const signCount = authenticatorData.readUInt32BE(33);
+  if ((signCount !== 0 || passkey.sign_count !== 0) && signCount <= passkey.sign_count) {
+    throw new CollabError("passkey_counter_regressed", "The signature counter did not increase");
+  }
+  const signed = Buffer.concat([authenticatorData, sha256(clientDataBytes)]);
+  const valid = verify("sha256", signed, { key: parsePasskeyPublicKey(passkey.public_key_spki), dsaEncoding: "der" }, signature);
+  if (!valid)
+    throw new CollabError("passkey_signature_invalid", "The passkey signature does not verify");
+  return { sign_count: signCount };
 }
 
 // src/proposal.ts
@@ -176,7 +279,7 @@ function aiPosition(input) {
 }
 
 // src/repository.ts
-import { createHash } from "crypto";
+import { createHash as createHash2 } from "crypto";
 import {
   closeSync as closeSync2,
   existsSync as existsSync2,
@@ -216,13 +319,13 @@ function inspectRepository(rootInput, explicitRepositoryKey, metadataOnly = fals
   const rootPath = topLevel && existsSync2(topLevel) ? realpathSync(topLevel) : requestedRoot;
   const explicitKey = explicitRepositoryKey?.trim();
   if (!topLevel) {
-    const repositoryKey2 = explicitKey ? `explicit:${sha256(explicitKey)}` : `local-path:${sha256(rootPath)}`;
+    const repositoryKey2 = explicitKey ? `explicit:${sha2562(explicitKey)}` : `local-path:${sha2562(rootPath)}`;
     return {
       requested_root_path: requestedRoot,
       root_path: rootPath,
       repository_key: repositoryKey2,
       git_common_dir_hash: null,
-      worktree_fingerprint: `path:${sha256(rootPath)}`,
+      worktree_fingerprint: `path:${sha2562(rootPath)}`,
       checkpoint: {
         worktree_id: worktreeId(rootPath, `path:${rootPath}`),
         head_sha: null,
@@ -239,9 +342,9 @@ function inspectRepository(rootInput, explicitRepositoryKey, metadataOnly = fals
   }
   const commonDir = realpathIfPresent(resolveGitPath(rootPath, commonDirOutput));
   const gitDir = realpathIfPresent(resolveGitPath(rootPath, gitDirOutput));
-  const commonDirHash = sha256(commonDir);
-  const repositoryKey = explicitKey ? `explicit:${sha256(explicitKey)}` : `local-git:${commonDirHash}`;
-  const fingerprint = `git:${sha256(`${commonDir}\x00${gitDir}`)}`;
+  const commonDirHash = sha2562(commonDir);
+  const repositoryKey = explicitKey ? `explicit:${sha2562(explicitKey)}` : `local-git:${commonDirHash}`;
+  const fingerprint = `git:${sha2562(`${commonDir}\x00${gitDir}`)}`;
   const id = worktreeId(rootPath, fingerprint);
   return {
     requested_root_path: requestedRoot,
@@ -268,7 +371,7 @@ function portableRepositoryKey(rootPath, optionsOrDeadline = {}) {
   const root = roots.stdout.toString("utf8").trim();
   if (!GIT_OBJECT_ID.test(root))
     return null;
-  return `git-root-remote:v1:${sha256(`${root}\x00${canonical}`)}`;
+  return `git-root-remote:v1:${sha2562(`${root}\x00${canonical}`)}`;
 }
 function canonicalRepositoryRemote(value) {
   if (/[\s\x00-\x1f\x7f]/.test(value) || value.includes("::") || value.includes("://") && !/^(https?|ssh|git):\/\//i.test(value))
@@ -432,7 +535,7 @@ function inspectSuccessorCommit(rootPath, commitSha, parentSha) {
   return { ok: true, commit_sha: commitSha, parent_sha: parentSha, changes };
 }
 function worktreeId(rootPath, fingerprint) {
-  return `wt_${sha256(`${rootPath}\x00${fingerprint}`).slice(0, 24)}`;
+  return `wt_${sha2562(`${rootPath}\x00${fingerprint}`).slice(0, 24)}`;
 }
 function resolveGitPath(rootPath, value) {
   return value.startsWith("/") ? value : resolve3(rootPath, value);
@@ -523,7 +626,7 @@ function digestUntrackedContent(rootPath, paths) {
     remainingBytes: MAX_UNTRACKED_BYTES,
     deadline: Date.now() + MAX_UNTRACKED_HASH_MS
   };
-  const aggregate = createHash("sha256");
+  const aggregate = createHash2("sha256");
   aggregate.update("agenttool.collab/untracked-state/v1\x00");
   for (const entry of entries) {
     if (Date.now() > budget.deadline)
@@ -572,7 +675,7 @@ function digestStableFile(path, budget) {
     const before = fstatSync(descriptor);
     if (!before.isFile() || before.size > budget.remainingBytes || Date.now() > budget.deadline)
       return null;
-    const hash = createHash("sha256");
+    const hash = createHash2("sha256");
     const buffer = Buffer.allocUnsafe(64 * 1024);
     while (true) {
       if (Date.now() > budget.deadline)
@@ -628,11 +731,11 @@ function lengthPrefix(value) {
   prefix.writeBigUInt64BE(BigInt(value));
   return prefix;
 }
-function sha256(value) {
-  return createHash("sha256").update(value).digest("hex");
+function sha2562(value) {
+  return createHash2("sha256").update(value).digest("hex");
 }
 function sha256Bytes(value) {
-  return createHash("sha256").update(value).digest("hex");
+  return createHash2("sha256").update(value).digest("hex");
 }
 
 // src/store.ts
@@ -851,22 +954,42 @@ class CollabStore {
         );
         CREATE INDEX IF NOT EXISTS proposal_terms_workspace_idx
           ON proposal_terms(workspace_id, created_at);
-        CREATE TABLE IF NOT EXISTS proposal_rejections (
+        CREATE TABLE IF NOT EXISTS proposal_person_acts (
           id TEXT PRIMARY KEY,
           workspace_id TEXT NOT NULL REFERENCES workspaces(id),
           proposal_report_id TEXT NOT NULL REFERENCES proposal_terms(report_id),
           proposal_sha256 TEXT NOT NULL,
+          act TEXT NOT NULL CHECK (act IN ('agree', 'reject')),
           party TEXT NOT NULL CHECK (party IN ('person')),
-          basis TEXT NOT NULL CHECK (basis IN ('relayed_by_session', 'controlling_terminal')),
-          reason TEXT NOT NULL,
+          basis TEXT NOT NULL CHECK (basis IN ('relayed_by_session', 'controlling_terminal', 'user_verified_passkey')),
+          reason TEXT,
           -- No foreign key: additive tables never reference the session table,
           -- which the schema-2 preview upgrade renames.
           relayed_by_session_id TEXT,
+          ai_snapshot_json TEXT NOT NULL,
+          proof_json TEXT,
           created_at TEXT NOT NULL,
-          event_sequence INTEGER NOT NULL
+          event_sequence INTEGER NOT NULL,
+          CHECK (act = 'reject' OR basis <> 'relayed_by_session')
         );
-        CREATE INDEX IF NOT EXISTS proposal_rejections_proposal_idx
-          ON proposal_rejections(proposal_report_id, event_sequence);
+        CREATE INDEX IF NOT EXISTS proposal_person_acts_proposal_idx
+          ON proposal_person_acts(proposal_report_id, event_sequence);
+        CREATE TABLE IF NOT EXISTS person_passkeys (
+          credential_id TEXT PRIMARY KEY,
+          public_key_spki TEXT NOT NULL,
+          algorithm INTEGER NOT NULL CHECK (algorithm = -7),
+          rp_id TEXT NOT NULL,
+          origin TEXT NOT NULL,
+          label TEXT,
+          fingerprint TEXT NOT NULL,
+          sign_count INTEGER NOT NULL DEFAULT 0,
+          enrolled_at TEXT NOT NULL,
+          revoked_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS person_addressed_reports (
+          report_id TEXT PRIMARY KEY REFERENCES reports(id),
+          workspace_id TEXT NOT NULL REFERENCES workspaces(id)
+        );
       `);
       this.db.exec(`PRAGMA application_id = ${APPLICATION_ID}`);
       this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
@@ -1766,7 +1889,7 @@ class CollabStore {
         });
       }
       const repositoryWorkspace = partitions[0] ?? this.portableRepositoryWorkspace(identity.portable_repository_key);
-      const id = repositoryWorkspace?.id ?? `ws_${sha2562(identity.repository_key).slice(0, 24)}`;
+      const id = repositoryWorkspace?.id ?? `ws_${sha2563(identity.repository_key).slice(0, 24)}`;
       const existing = this.getWorkspace(id);
       if (existing && !repositoryWorkspace) {
         throw new CollabError("workspace_identity_collision", "Workspace identity collision");
@@ -3059,7 +3182,8 @@ class CollabStore {
       relation: validateReportRelation(input.relation ?? "informs"),
       target_report_id: input.target_report_id ? validateId(input.target_report_id, "target_report_id") : null,
       authority_scope: optionalText(input.authority_scope, "authority_scope", 1000),
-      authority_basis: optionalText(input.authority_basis, "authority_basis", 2000)
+      authority_basis: optionalText(input.authority_basis, "authority_basis", 2000),
+      ...input.to_person === true ? { to_person: true } : {}
     };
     return this.mutateAsSession(input, input.idempotency_key, "report.append.v2", normalized, (session) => {
       this.validateReportInput(session, normalized);
@@ -3069,18 +3193,12 @@ class CollabStore {
   }
   openProposalForSession(input) {
     const normalized = {
+      ...normalizeProposalTerms(input),
       task_id: input.task_id ? validateId(input.task_id, "task_id") : null,
-      question: cleanText(input.question, "question", MAX_REPORT_BODY),
-      criteria: cleanText(input.criteria, "criteria", 4000),
-      extent: cleanText(input.extent, "extent", 1000),
-      known_conflicts: optionalText(input.known_conflicts, "known_conflicts", 4000),
-      evidence_refs: normalizeEvidenceRefs(input.evidence_refs ?? []),
       confidence: validateReportConfidence(input.confidence ?? "unknown"),
       confidence_basis: optionalText(input.confidence_basis, "confidence_basis", 2000),
       limits: optionalText(input.limits, "limits", 2000),
       origin: validateProposalOrigin(input.origin ?? "ai"),
-      topic: optionalText(input.topic, "topic", 200),
-      consult_seconds: validateConsultSeconds(input.consult_seconds),
       supersedes_report_id: input.supersedes_report_id ? validateId(input.supersedes_report_id, "supersedes_report_id") : null
     };
     return this.mutateAsSession(input, input.idempotency_key, "proposal.open.v1", normalized, (session) => {
@@ -3102,47 +3220,72 @@ class CollabStore {
       if (normalized.supersedes_report_id) {
         this.requireOpenToRevision(session.workspace_id, normalized.supersedes_report_id);
       }
-      const now = this.timestamp();
-      const voices = this.liveVoiceSnapshot(session.workspace_id, now);
-      const authorVoiceId = this.lineageRoot(session.id);
-      const report = this.appendReportInternal(session, reportInput);
-      const closesAt = new Date(Date.parse(now) + normalized.consult_seconds * 1000).toISOString();
-      const proposalSha256 = sha2562(proposalBytes({
-        workspace_id: session.workspace_id,
-        report_id: report.id,
-        task_id: normalized.task_id,
-        question: report.body,
-        criteria: normalized.criteria,
-        extent: normalized.extent,
-        relies_on: report.evidence_refs,
-        known_conflicts: normalized.known_conflicts,
-        limits: report.limits,
-        origin: normalized.origin,
-        topic: normalized.topic,
-        closes_at: closesAt,
-        supersedes_report_id: normalized.supersedes_report_id
-      }));
-      const event = this.appendEvent(session.workspace_id, "proposal.opened", report.id, session.actor, {
-        rule: CONSENT_RULE,
-        proposal_sha256: proposalSha256,
-        criteria: normalized.criteria,
-        extent: normalized.extent,
-        known_conflicts: normalized.known_conflicts,
-        origin: normalized.origin,
-        topic: normalized.topic,
-        closes_at: closesAt,
-        voices,
-        author_voice_id: authorVoiceId
-      }, session.id);
-      this.db.query(`
-        INSERT INTO proposal_terms (
-          report_id, workspace_id, rule, criteria, extent, known_conflicts, origin,
-          topic, closes_at, voices_json, author_voice_id, proposal_sha256,
-          opened_event_id, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(report.id, session.workspace_id, CONSENT_RULE, normalized.criteria, normalized.extent, normalized.known_conflicts, normalized.origin, normalized.topic, closesAt, canonicalJson(voices), authorVoiceId, proposalSha256, event.id, now);
-      return this.proposalStatusInternal(session.workspace_id, report.id);
+      return this.openProposalInternal(session, this.lineageRoot(session.id), reportInput, normalized);
     });
+  }
+  openPersonProposal(input) {
+    const normalized = normalizeProposalTerms(input);
+    const idempotencyKey = validateIdempotencyKey(input.idempotency_key);
+    return this.mutate(input.workspace_id, PERSON_DESK_ACTOR, idempotencyKey, "person.proposal.open.v1", normalized, () => {
+      for (const reference of normalized.evidence_refs)
+        this.requireEvidenceRef(input.workspace_id, reference);
+      const reportInput = {
+        task_id: null,
+        to_session_id: null,
+        kind: "proposal",
+        body: normalized.question,
+        evidence_refs: normalized.evidence_refs,
+        confidence: "unknown",
+        confidence_basis: null,
+        limits: PERSON_DESK_LIMITS,
+        relation: "informs",
+        target_report_id: null,
+        authority_scope: null,
+        authority_basis: null
+      };
+      return this.openProposalInternal({ workspace_id: input.workspace_id, actor: PERSON_DESK_ACTOR, id: null }, PERSON_VOICE_ID, reportInput, { ...normalized, origin: "person_relayed", supersedes_report_id: null });
+    });
+  }
+  openProposalInternal(author, authorVoiceId, reportInput, terms) {
+    const now = this.timestamp();
+    const voices = this.liveVoiceSnapshot(author.workspace_id, now);
+    const report = this.appendReportInternal(author, reportInput);
+    const closesAt = new Date(Date.parse(now) + terms.consult_seconds * 1000).toISOString();
+    const proposalSha256 = sha2563(proposalBytes({
+      workspace_id: author.workspace_id,
+      report_id: report.id,
+      task_id: report.task_id,
+      question: report.body,
+      criteria: terms.criteria,
+      extent: terms.extent,
+      relies_on: report.evidence_refs,
+      known_conflicts: terms.known_conflicts,
+      limits: report.limits,
+      origin: terms.origin,
+      topic: terms.topic,
+      closes_at: closesAt,
+      supersedes_report_id: terms.supersedes_report_id
+    }));
+    const event = this.appendEvent(author.workspace_id, "proposal.opened", report.id, author.actor, {
+      rule: CONSENT_RULE,
+      proposal_sha256: proposalSha256,
+      criteria: terms.criteria,
+      extent: terms.extent,
+      known_conflicts: terms.known_conflicts,
+      origin: terms.origin,
+      topic: terms.topic,
+      closes_at: closesAt,
+      voices,
+      author_voice_id: authorVoiceId
+    }, author.id);
+    this.db.query(`
+      INSERT INTO proposal_terms (
+        report_id, workspace_id, rule, criteria, extent, known_conflicts, origin,
+        topic, closes_at, voices_json, author_voice_id, proposal_sha256,
+        opened_event_id, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(report.id, author.workspace_id, CONSENT_RULE, terms.criteria, terms.extent, terms.known_conflicts, terms.origin, terms.topic, closesAt, canonicalJson(voices), authorVoiceId, proposalSha256, event.id, now);
+    return this.proposalStatusInternal(author.workspace_id, report.id);
   }
   relayProposalRejectionForSession(input) {
     const normalized = {
@@ -3152,39 +3295,213 @@ class CollabStore {
     };
     return this.mutateAsSession(input, input.idempotency_key, "proposal.reject.relay.v1", normalized, (session) => {
       const terms = this.requireProposalTerms(session.workspace_id, normalized.proposal_report_id);
-      if (terms.proposal_sha256 !== normalized.proposal_sha256) {
-        throw new CollabError("proposal_hash_mismatch", "The rejection names different proposal bytes; read collab_proposal_status and relay against its proposal_sha256", { proposal_sha256: terms.proposal_sha256 });
+      return this.recordPersonAct({
+        workspace_id: terms.workspace_id,
+        proposal_report_id: terms.report_id,
+        proposal_sha256: normalized.proposal_sha256,
+        act: "reject",
+        reason: normalized.reason,
+        basis: "relayed_by_session",
+        actor: session.actor,
+        session_id: session.id,
+        proof: null
+      });
+    });
+  }
+  personActChallenge(input) {
+    const act = validatePersonAct(input.act);
+    const reason = act === "reject" ? cleanText(input.reason ?? "", "reason", 2000) : null;
+    const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
+    const prior = this.personActCount(terms.report_id);
+    const derived = personActChallenge({
+      act,
+      workspace_id: terms.workspace_id,
+      proposal_report_id: terms.report_id,
+      proposal_sha256: terms.proposal_sha256,
+      prior_person_acts: prior,
+      reason
+    });
+    return {
+      workspace_id: terms.workspace_id,
+      proposal_report_id: terms.report_id,
+      proposal_sha256: terms.proposal_sha256,
+      act,
+      reason,
+      prior_person_acts: prior,
+      ...derived,
+      passkeys: this.listPersonPasskeys().filter((key) => key.revoked_at === null).map((key) => ({
+        credential_id: key.credential_id,
+        rp_id: key.rp_id,
+        origin: key.origin,
+        label: key.label,
+        fingerprint: key.fingerprint
+      }))
+    };
+  }
+  recordPersonActAtTerminal(input) {
+    const act = validatePersonAct(input.act);
+    const reason = act === "reject" ? cleanText(input.reason ?? "", "reason", 2000) : null;
+    const transaction = this.db.transaction(() => {
+      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
+      return this.recordPersonAct({
+        workspace_id: terms.workspace_id,
+        proposal_report_id: terms.report_id,
+        proposal_sha256: validateSha256(input.proposal_sha256),
+        act,
+        reason,
+        basis: "controlling_terminal",
+        actor: PERSON_TERMINAL_ACTOR,
+        session_id: null,
+        proof: null
+      });
+    });
+    const status = transaction.immediate();
+    this.tightenFileModes();
+    return status;
+  }
+  recordPersonActWithPasskey(input) {
+    const act = validatePersonAct(input.act);
+    const reason = act === "reject" ? cleanText(input.reason ?? "", "reason", 2000) : null;
+    const transaction = this.db.transaction(() => {
+      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
+      const passkey = this.listPersonPasskeys().find((key) => key.credential_id === input.assertion?.credential_id && key.revoked_at === null);
+      if (!passkey) {
+        throw new CollabError("passkey_not_enrolled", "No active enrolled passkey has this credential id");
       }
-      const current = this.proposalStatusInternal(session.workspace_id, terms.report_id);
-      if (current.ai.position === "withdrawn" || current.ai.position === "superseded") {
-        throw new CollabError("proposal_not_on_table", "A withdrawn or superseded proposal is no longer on the table", { position: current.ai.position, obsoleted_by_report_id: current.ai.obsoleted_by_report_id });
-      }
-      const id = `rejection_${randomUUID()}`;
-      const now = this.timestamp();
-      const rejection = {
-        id,
+      const derived = personActChallenge({
+        act,
+        workspace_id: terms.workspace_id,
         proposal_report_id: terms.report_id,
         proposal_sha256: terms.proposal_sha256,
-        party: "person",
-        basis: "relayed_by_session",
-        reason: normalized.reason,
-        relayed_by_session_id: session.id
-      };
-      const event = this.appendEvent(session.workspace_id, "proposal.rejected", terms.report_id, session.actor, { rejection }, session.id);
-      this.db.query(`
-        INSERT INTO proposal_rejections (
-          id, workspace_id, proposal_report_id, proposal_sha256, party, basis,
-          reason, relayed_by_session_id, created_at, event_sequence
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, session.workspace_id, terms.report_id, terms.proposal_sha256, rejection.party, rejection.basis, rejection.reason, session.id, now, event.sequence);
-      return this.proposalStatusInternal(session.workspace_id, terms.report_id);
+        prior_person_acts: this.personActCount(terms.report_id),
+        reason
+      });
+      const { sign_count } = verifyPasskeyAssertion({
+        passkey,
+        assertion: input.assertion,
+        expected_challenge: derived.challenge
+      });
+      this.db.query(`UPDATE person_passkeys SET sign_count = ? WHERE credential_id = ?`).run(sign_count, passkey.credential_id);
+      return this.recordPersonAct({
+        workspace_id: terms.workspace_id,
+        proposal_report_id: terms.report_id,
+        proposal_sha256: terms.proposal_sha256,
+        act,
+        reason,
+        basis: "user_verified_passkey",
+        actor: PERSON_PASSKEY_ACTOR,
+        session_id: null,
+        proof: {
+          credential_id: input.assertion.credential_id,
+          authenticator_data: input.assertion.authenticator_data,
+          client_data_json: input.assertion.client_data_json,
+          signature: input.assertion.signature,
+          user_handle: input.assertion.user_handle ?? null,
+          public_key_spki: passkey.public_key_spki,
+          rp_id: passkey.rp_id,
+          origin: passkey.origin,
+          challenge_bytes: derived.challenge_bytes,
+          challenge: derived.challenge,
+          sign_count
+        }
+      });
     });
+    const status = transaction.immediate();
+    this.tightenFileModes();
+    return status;
+  }
+  enrollPersonPasskey(input) {
+    base64urlDecode(input.credential_id, "credential_id", 1023);
+    parsePasskeyPublicKey(input.public_key_spki);
+    if (input.algorithm !== -7) {
+      throw new CollabError("passkey_key_invalid", "Only ES256 (COSE algorithm -7) passkeys are supported");
+    }
+    const scope = validatePasskeyScope(input.rp_id, input.origin);
+    const label = optionalText(input.label, "label", 80);
+    const transaction = this.db.transaction(() => {
+      if (this.db.query(`SELECT 1 FROM person_passkeys WHERE credential_id = ?`).get(input.credential_id)) {
+        throw new CollabError("passkey_already_enrolled", "This credential id is already enrolled");
+      }
+      this.db.query(`
+        INSERT INTO person_passkeys (
+          credential_id, public_key_spki, algorithm, rp_id, origin, label,
+          fingerprint, sign_count, enrolled_at, revoked_at
+        ) VALUES (?, ?, -7, ?, ?, ?, ?, 0, ?, NULL)
+      `).run(input.credential_id, input.public_key_spki, scope.rp_id, scope.origin, label, passkeyFingerprint(input.public_key_spki), this.timestamp());
+    });
+    transaction.immediate();
+    this.tightenFileModes();
+    return this.listPersonPasskeys().find((key) => key.credential_id === input.credential_id);
+  }
+  listPersonPasskeys() {
+    return this.db.query(`SELECT * FROM person_passkeys ORDER BY enrolled_at, credential_id`).all().map((row) => ({ ...row, algorithm: -7 }));
+  }
+  revokePersonPasskey(credentialId) {
+    const transaction = this.db.transaction(() => {
+      const changed = this.db.query(`
+        UPDATE person_passkeys SET revoked_at = ? WHERE credential_id = ? AND revoked_at IS NULL
+      `).run(this.timestamp(), credentialId);
+      if (changed.changes === 0) {
+        throw new CollabError("passkey_not_enrolled", "No active enrolled passkey has this credential id");
+      }
+    });
+    transaction.immediate();
+    this.tightenFileModes();
+    return this.listPersonPasskeys().find((key) => key.credential_id === credentialId);
+  }
+  appendPersonNote(input) {
+    const normalized = {
+      body: cleanText(input.body, "body", MAX_REPORT_BODY),
+      proposal_report_id: input.proposal_report_id ? validateId(input.proposal_report_id, "proposal_report_id") : null
+    };
+    const idempotencyKey = validateIdempotencyKey(input.idempotency_key);
+    return this.mutate(input.workspace_id, PERSON_DESK_ACTOR, idempotencyKey, "person.note.v1", normalized, () => {
+      let toSessionId = null;
+      if (normalized.proposal_report_id) {
+        const terms = this.requireProposalTerms(input.workspace_id, normalized.proposal_report_id);
+        toSessionId = this.requireReport(terms.report_id).from_session_id;
+      }
+      return this.appendReportInternal({ workspace_id: input.workspace_id, actor: PERSON_DESK_ACTOR, id: null }, {
+        task_id: null,
+        to_session_id: toSessionId,
+        kind: "observation",
+        body: normalized.body,
+        evidence_refs: normalized.proposal_report_id ? [`report:${normalized.proposal_report_id}`] : [],
+        confidence: "unknown",
+        confidence_basis: null,
+        limits: PERSON_DESK_LIMITS,
+        relation: "informs",
+        target_report_id: null,
+        authority_scope: null,
+        authority_basis: null
+      });
+    });
+  }
+  personInbox(workspaceId) {
+    this.requireWorkspace(workspaceId);
+    const settled = new Set(["consented", "split", "lapsed"]);
+    const awaiting = this.db.query(`
+      SELECT t.report_id FROM proposal_terms t JOIN reports r ON r.id = t.report_id
+      WHERE t.workspace_id = ? ORDER BY r.event_sequence DESC LIMIT 200
+    `).all(workspaceId).map((row) => this.proposalStatusInternal(workspaceId, row.report_id)).filter((status) => settled.has(status.ai.position) && status.person.state === "awaiting");
+    const addressed = this.db.query(`
+      SELECT r.* FROM person_addressed_reports p JOIN reports r ON r.id = p.report_id
+      WHERE p.workspace_id = ? ORDER BY r.event_sequence DESC LIMIT 50
+    `).all(workspaceId).map(reportFromRow);
+    return { workspace_id: workspaceId, awaiting_person: awaiting, addressed_reports: addressed };
+  }
+  listWorkspaces() {
+    return this.db.query(`SELECT id, name, root_path, created_at FROM workspaces ORDER BY created_at, id`).all();
   }
   proposalStatus(workspaceId, proposalReportId) {
     this.requireWorkspace(workspaceId);
     const id = validateId(proposalReportId, "proposal_report_id");
     this.requireProposalTerms(workspaceId, id);
     return this.proposalStatusInternal(workspaceId, id);
+  }
+  proposalStatusById(proposalReportId) {
+    const terms = this.requireProposalTermsById(validateId(proposalReportId, "proposal_report_id"));
+    return this.proposalStatusInternal(terms.workspace_id, terms.report_id);
   }
   listProposalStatuses(workspaceId, options = {}) {
     this.requireWorkspace(workspaceId);
@@ -3200,6 +3517,66 @@ class CollabStore {
       LIMIT ?
     `).all(workspaceId, limit);
     return rows.map((row) => this.proposalStatusInternal(workspaceId, row.report_id));
+  }
+  recordPersonAct(input) {
+    const current = this.proposalStatusInternal(input.workspace_id, input.proposal_report_id);
+    if (current.proposal_sha256 !== input.proposal_sha256) {
+      throw new CollabError("proposal_hash_mismatch", "The act names different proposal bytes; read the proposal status again", { proposal_sha256: current.proposal_sha256 });
+    }
+    if (current.ai.position === "withdrawn" || current.ai.position === "superseded") {
+      throw new CollabError("proposal_not_on_table", "A withdrawn or superseded proposal is no longer on the table", { position: current.ai.position, obsoleted_by_report_id: current.ai.obsoleted_by_report_id });
+    }
+    if (input.act === "agree") {
+      if (input.basis === "relayed_by_session") {
+        throw new CollabError("consent_not_relayable", "A person's agreement is never recorded through a session");
+      }
+      if (current.ai.position !== "consented") {
+        throw new CollabError("ai_not_consented", "The agents have not consented; a person agrees only after they settle", { position: current.ai.position });
+      }
+      if (current.person.state === "agreed") {
+        throw new CollabError("already_agreed", "The latest person act already agrees to these bytes");
+      }
+    } else if (current.person.state === "rejected") {
+      throw new CollabError("already_rejected", "The latest person act already rejects these bytes");
+    }
+    const id = `person_act_${randomUUID()}`;
+    const now = this.timestamp();
+    const aiSnapshot = {
+      position: current.ai.position,
+      closed: current.ai.closed,
+      qualifying_support_report_ids: current.ai.qualifying_support_report_ids,
+      unresolved_challenge_report_ids: current.ai.unresolved_challenge_report_ids
+    };
+    const personAct = {
+      id,
+      proposal_report_id: input.proposal_report_id,
+      proposal_sha256: input.proposal_sha256,
+      act: input.act,
+      party: "person",
+      basis: input.basis,
+      reason: input.reason,
+      relayed_by_session_id: input.basis === "relayed_by_session" ? input.session_id : null,
+      ai_snapshot: aiSnapshot,
+      proof: input.proof
+    };
+    const event = this.appendEvent(input.workspace_id, input.act === "agree" ? "proposal.agreed" : "proposal.rejected", input.proposal_report_id, input.actor, { person_act: personAct }, input.session_id);
+    this.db.query(`
+      INSERT INTO proposal_person_acts (
+        id, workspace_id, proposal_report_id, proposal_sha256, act, party, basis,
+        reason, relayed_by_session_id, ai_snapshot_json, proof_json, created_at, event_sequence
+      ) VALUES (?, ?, ?, ?, ?, 'person', ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, input.workspace_id, input.proposal_report_id, input.proposal_sha256, input.act, input.basis, input.reason, personAct.relayed_by_session_id, canonicalJson(aiSnapshot), input.proof ? canonicalJson(input.proof) : null, now, event.sequence);
+    return this.proposalStatusInternal(input.workspace_id, input.proposal_report_id);
+  }
+  personActCount(proposalReportId) {
+    return this.db.query(`SELECT COUNT(*) AS count FROM proposal_person_acts WHERE proposal_report_id = ?`).get(proposalReportId).count;
+  }
+  requireProposalTermsById(reportId) {
+    const row = this.db.query(`SELECT workspace_id FROM proposal_terms WHERE report_id = ?`).get(reportId);
+    if (!row) {
+      throw new CollabError("proposal_not_found", "No proposal with consent terms has this report id", { proposal_report_id: reportId });
+    }
+    return this.requireProposalTerms(row.workspace_id, reportId);
   }
   proposalStatusInternal(workspaceId, reportId) {
     const proposal = this.requireReport(reportId);
@@ -3219,7 +3596,7 @@ class CollabStore {
       closes_at: terms.closes_at,
       supersedes_report_id: proposal.relation === "supersedes" ? proposal.target_report_id : null
     });
-    if (sha2562(bytes) !== terms.proposal_sha256) {
+    if (sha2563(bytes) !== terms.proposal_sha256) {
       throw new CollabError("proposal_terms_invalid", "Stored proposal bytes no longer match their recorded hash", { proposal_report_id: reportId });
     }
     const obsoleted = this.activeObsoletionTargets(workspaceId);
@@ -3241,11 +3618,15 @@ class CollabStore {
       snapshot_voice_ids: terms.voices.map((voice) => voice.voice_id),
       support_voice_ids: supports.map((support) => this.lineageRoot(support.from_session_id))
     });
-    const rejections = this.db.query(`
-      SELECT * FROM proposal_rejections
+    const acts = this.db.query(`
+      SELECT * FROM proposal_person_acts
       WHERE workspace_id = ? AND proposal_report_id = ?
       ORDER BY event_sequence
-    `).all(workspaceId, reportId).map(proposalRejectionFromRow);
+    `).all(workspaceId, reportId).map(proposalPersonActFromRow);
+    const latest = acts.at(-1) ?? null;
+    const state = latest === null ? "awaiting" : latest.act === "agree" ? "agreed" : "rejected";
+    const agreement = latest?.act === "agree" ? latest : null;
+    const retracted = computed.position === "withdrawn" || computed.position === "superseded";
     return {
       rule: CONSENT_RULE,
       proposal,
@@ -3261,13 +3642,10 @@ class CollabStore {
         obsoleted_by_report_id: obsoleting?.id ?? null,
         basis: "computed_from_journal"
       },
-      person: {
-        state: rejections.length > 0 ? "rejected" : "awaiting",
-        rejections
-      },
-      agreement: null,
-      may_proceed: false,
-      authority_boundary: "ai_consent_alone_authorises_nothing_work_proceeds_only_after_a_person_consents_at_the_controlling_terminal"
+      person: { state, acts },
+      agreement,
+      may_proceed: agreement !== null && !retracted,
+      authority_boundary: "an_agreement_authorises_only_the_proposal_extent"
     };
   }
   requireProposalTerms(workspaceId, reportId) {
@@ -4066,7 +4444,7 @@ class CollabStore {
   }
   mutate(workspaceId, actor, idempotencyKey, operation, request, apply) {
     this.requireWorkspace(workspaceId);
-    const requestHash = sha2562(canonicalJson({ operation, request }));
+    const requestHash = sha2563(canonicalJson({ operation, request }));
     const transaction = this.db.transaction(() => {
       const existing = this.db.query(`
         SELECT operation, request_hash, response_json FROM mutations
@@ -4095,7 +4473,7 @@ class CollabStore {
   readSessionMutationReceipt(credential, idempotencyKeyInput, operation, request) {
     const session = this.authenticateSession(credential);
     const idempotencyKey = validateIdempotencyKey(idempotencyKeyInput);
-    const requestHash = sha2562(canonicalJson({ operation, request }));
+    const requestHash = sha2563(canonicalJson({ operation, request }));
     const existing = this.db.query(`
       SELECT operation, request_hash, response_json FROM mutations
       WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
@@ -4116,7 +4494,7 @@ class CollabStore {
       const session = this.authenticateSession(credential, options);
       this.recordSessionLeaseLapses(session, this.timestamp());
       const mutationActor = `session:${session.id}`;
-      const requestHash = sha2562(canonicalJson({ operation, request }));
+      const requestHash = sha2563(canonicalJson({ operation, request }));
       const existing = this.db.query(`
         SELECT operation, request_hash, response_json FROM mutations
         WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
@@ -4652,6 +5030,7 @@ class CollabStore {
     const id = `report_${randomUUID()}`;
     const now = this.timestamp();
     const event = this.appendEvent(session.workspace_id, "report.posted", id, session.actor, {
+      ...input.to_person ? { to_person: true } : {},
       task_id: input.task_id,
       to_session_id: input.to_session_id,
       kind: input.kind,
@@ -4673,6 +5052,9 @@ class CollabStore {
         created_at, event_sequence
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, session.workspace_id, input.task_id, session.id, session.actor, input.to_session_id, input.kind, input.body, canonicalJson(input.evidence_refs), input.confidence, input.confidence_basis, input.limits, input.relation, input.target_report_id, input.authority_scope, input.authority_basis, now, event.sequence);
+    if (input.to_person) {
+      this.db.query(`INSERT INTO person_addressed_reports (report_id, workspace_id) VALUES (?, ?)`).run(id, session.workspace_id);
+    }
     return this.requireReport(id);
   }
   requireReport(id) {
@@ -5385,10 +5767,10 @@ function eventFromRow(row) {
 function eventHash(event) {
   if (event.protocol === LEGACY_COLLAB_PROTOCOL) {
     const { hash: _hash2, session_id: _sessionId, ...body2 } = event;
-    return sha2562(canonicalJson(body2));
+    return sha2563(canonicalJson(body2));
   }
   const { hash: _hash, ...body } = event;
-  return sha2562(canonicalJson(body));
+  return sha2563(canonicalJson(body));
 }
 function verifyEventPage(events, afterSequence, predecessorHash, headSequence, headHash) {
   if (predecessorHash === null)
@@ -5554,8 +5936,35 @@ function proposalTermsFromRow(row) {
     created_at: row.created_at
   };
 }
-function proposalRejectionFromRow(row) {
-  return { ...row };
+function proposalPersonActFromRow(row) {
+  const { ai_snapshot_json, proof_json, ...rest } = row;
+  return {
+    ...rest,
+    ai_snapshot: JSON.parse(ai_snapshot_json),
+    proof: proof_json ? JSON.parse(proof_json) : null
+  };
+}
+var PERSON_DESK_ACTOR = "person:desk";
+var PERSON_TERMINAL_ACTOR = "person:terminal";
+var PERSON_PASSKEY_ACTOR = "person:passkey";
+var PERSON_VOICE_ID = "person";
+var PERSON_DESK_LIMITS = "Written at the person desk, which does not authenticate the person.";
+function validatePersonAct(value) {
+  if (value !== "agree" && value !== "reject") {
+    throw new CollabError("invalid_act", "act must be agree or reject");
+  }
+  return value;
+}
+function normalizeProposalTerms(input) {
+  return {
+    question: cleanText(input.question, "question", MAX_REPORT_BODY),
+    criteria: cleanText(input.criteria, "criteria", 4000),
+    extent: cleanText(input.extent, "extent", 1000),
+    known_conflicts: optionalText(input.known_conflicts, "known_conflicts", 4000),
+    evidence_refs: normalizeEvidenceRefs(input.evidence_refs ?? []),
+    topic: optionalText(input.topic, "topic", 200),
+    consult_seconds: validateConsultSeconds(input.consult_seconds)
+  };
 }
 function validateProposalOrigin(value) {
   if (value !== "ai" && value !== "person_relayed") {
@@ -5574,7 +5983,7 @@ function parseCheckpoint(json) {
   return json ? JSON.parse(json) : null;
 }
 function checkpointDigest(checkpoint) {
-  return sha2562(canonicalJson(checkpoint));
+  return sha2563(canonicalJson(checkpoint));
 }
 function checkpointStateMatches(left, right) {
   return left.worktree_id === right.worktree_id && left.head_sha === right.head_sha && left.branch === right.branch && left.algorithm === right.algorithm && left.index_sha256 === right.index_sha256 && left.state_sha256 === right.state_sha256 && left.dirty === right.dirty;
@@ -5680,7 +6089,7 @@ function sqlToBoolean(value) {
   return value === null ? null : value !== 0;
 }
 function hashSessionToken(token) {
-  return sha2562(`agenttool.collab/session-token/v1\x00${token}`);
+  return sha2563(`agenttool.collab/session-token/v1\x00${token}`);
 }
 function safeDigestEqual(left, right) {
   const leftBuffer = Buffer.from(left, "hex");
@@ -5783,14 +6192,14 @@ function safeRepositoryIdentity(rootPath) {
     return inspectRepository(rootPath);
   } catch {
     const root = resolve4(rootPath);
-    const repositoryKey = `local-path:${sha2562(root)}`;
-    const worktreeId2 = `wt_${sha2562(`${root}\x00path:${root}`).slice(0, 24)}`;
+    const repositoryKey = `local-path:${sha2563(root)}`;
+    const worktreeId2 = `wt_${sha2563(`${root}\x00path:${root}`).slice(0, 24)}`;
     return {
       requested_root_path: root,
       root_path: root,
       repository_key: repositoryKey,
       git_common_dir_hash: null,
-      worktree_fingerprint: `path:${sha2562(root)}`,
+      worktree_fingerprint: `path:${sha2563(root)}`,
       checkpoint: {
         worktree_id: worktreeId2,
         head_sha: null,
@@ -5801,16 +6210,395 @@ function safeRepositoryIdentity(rootPath) {
     };
   }
 }
-function sha2562(value) {
-  return createHash2("sha256").update(value).digest("hex");
+function sha2563(value) {
+  return createHash3("sha256").update(value).digest("hex");
 }
 function addSeconds(iso, seconds) {
   return new Date(new Date(iso).getTime() + seconds * 1000).toISOString();
 }
 
+// src/person-desk.ts
+import { createHash as createHash4 } from "crypto";
+import { existsSync as existsSync4, readFileSync as readFileSync2 } from "fs";
+import { parseArgs } from "util";
+
+// src/tty.ts
+import { closeSync as closeSync4, openSync as openSync4, readSync as readSync2, writeSync } from "fs";
+import { isatty } from "tty";
+var DEV_TTY = "/dev/tty";
+var CONFIRM_WORD = "yes";
+var DEFAULT_WINDOW_MS = 5 * 60 * 1000;
+var MAX_ANSWER_BYTES = 256;
+var TERMINAL_UNSAFE = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u2028\u2029\p{Cf}\p{Default_Ignorable_Code_Point}]/gu;
+function terminalRendering(text) {
+  return text.replace(TERMINAL_UNSAFE, (char) => `\\u{${char.codePointAt(0).toString(16).toUpperCase()}}`);
+}
+function pause(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+function openDevTty(path = DEV_TTY) {
+  let fd;
+  try {
+    fd = openSync4(path, "r+");
+  } catch {
+    return null;
+  }
+  let terminal = false;
+  try {
+    terminal = isatty(fd);
+  } catch {
+    terminal = false;
+  }
+  if (!terminal) {
+    closeSync4(fd);
+    return null;
+  }
+  return {
+    write(text) {
+      const bytes = Buffer.from(text, "utf8");
+      let offset = 0;
+      while (offset < bytes.length) {
+        offset += writeSync(fd, bytes, offset, bytes.length - offset);
+      }
+    },
+    readLine(maxBytes) {
+      const one = Buffer.alloc(1);
+      const collected = [];
+      while (collected.length < maxBytes) {
+        let read;
+        try {
+          read = readSync2(fd, one, 0, 1, null);
+        } catch (error) {
+          if (error.code !== "EAGAIN")
+            throw error;
+          pause(50);
+          continue;
+        }
+        if (read === 0)
+          return collected.length === 0 ? null : Buffer.from(collected).toString("utf8");
+        if (one[0] === 10 || one[0] === 13)
+          break;
+        collected.push(one[0]);
+      }
+      return Buffer.from(collected).toString("utf8");
+    },
+    close() {
+      closeSync4(fd);
+    }
+  };
+}
+function confirmOnTty(request, options = {}) {
+  const open = options.openTty ?? (() => openDevTty());
+  const now = options.now ?? Date.now;
+  const windowMs = options.windowMs ?? DEFAULT_WINDOW_MS;
+  const port = open();
+  if (port === null) {
+    throw new CollabError("tty_unavailable", "This act needs a person at the controlling terminal (/dev/tty); none is available, so nothing was written");
+  }
+  try {
+    const byteLength = Buffer.byteLength(request.bytes, "utf8");
+    const rendered = terminalRendering(request.bytes);
+    port.write([
+      "",
+      `agenttool-collab-host: person act ${terminalRendering(request.act)}`,
+      ...request.summary.map((line) => `  ${terminalRendering(line)}`),
+      `exact bytes (${byteLength} bytes, sha256 ${request.sha256})` + (rendered === request.bytes ? ":" : ", hidden characters shown as \\u{...}:"),
+      rendered,
+      `Type ${CONFIRM_WORD} to record exactly these bytes; anything else cancels: `
+    ].join(`
+`));
+    const started = now();
+    const answer = port.readLine(MAX_ANSWER_BYTES);
+    if (now() - started > windowMs) {
+      port.write(`confirmation window passed; nothing was written
+`);
+      return false;
+    }
+    const confirmed = answer !== null && answer.trim() === CONFIRM_WORD;
+    port.write(confirmed ? `confirmed
+` : `cancelled; nothing was written
+`);
+    return confirmed;
+  } finally {
+    port.close();
+  }
+}
+
+// src/person-desk.ts
+var PERSON_DESK_PROTOCOL = "agenttool.collab-host/1";
+var EXIT_NOT_CONFIRMED = 3;
+var MAX_JSON_INPUT_BYTES = 64 * 1024;
+var PERSON_DESK_USAGE = "usage: agenttool-collab-host person <verb> [--db <path>], where <verb> is one of: " + "workspaces | proposals --workspace <id> [--proposal <id>] [--limit <n>] | inbox --workspace <id>" + " | challenge --proposal <id> --act agree|reject [--reason <text>]" + " | consent --proposal <id> [--passkey-assertion <path>|-]" + " | reject --proposal <id> --reason <text> [--passkey-assertion <path>|-]" + " | say --workspace <id> --body <text> [--proposal <id>] --idempotency-key <key>" + " | propose --workspace <id> --question <text> --criteria <text> --extent <text>" + " [--known-conflicts <text>] [--topic <text>] [--consult-seconds <n>] --idempotency-key <key>" + " | passkey-enroll --file <path>|- | passkeys | passkey-revoke --credential <id>";
+var VERB_OPTIONS = {
+  workspaces: { required: [], optional: [] },
+  proposals: { required: ["workspace"], optional: ["proposal", "limit"] },
+  inbox: { required: ["workspace"], optional: [] },
+  challenge: { required: ["proposal", "act"], optional: ["reason"] },
+  consent: { required: ["proposal"], optional: ["passkey-assertion"] },
+  reject: { required: ["proposal", "reason"], optional: ["passkey-assertion"] },
+  say: { required: ["workspace", "body", "idempotency-key"], optional: ["proposal"] },
+  propose: {
+    required: ["workspace", "question", "criteria", "extent", "idempotency-key"],
+    optional: ["known-conflicts", "topic", "consult-seconds"]
+  },
+  "passkey-enroll": { required: ["file"], optional: [] },
+  passkeys: { required: [], optional: [] },
+  "passkey-revoke": { required: ["credential"], optional: [] }
+};
+var STRING_OPTIONS = [
+  "workspace",
+  "proposal",
+  "limit",
+  "act",
+  "reason",
+  "passkey-assertion",
+  "body",
+  "idempotency-key",
+  "question",
+  "criteria",
+  "extent",
+  "known-conflicts",
+  "topic",
+  "consult-seconds",
+  "file",
+  "credential",
+  "db"
+];
+function runPersonDeskCli(argv, env = process.env, deps = {}) {
+  let verb = "person";
+  const emit = (payload, exitCode) => ({
+    exit_code: exitCode,
+    line: JSON.stringify({ protocol: PERSON_DESK_PROTOCOL, command: verb, ...payload })
+  });
+  if (argv.some((arg) => arg === "--help" || arg === "-h")) {
+    return emit({ status: "help", usage: PERSON_DESK_USAGE }, 0);
+  }
+  try {
+    const { command, values } = parsePersonArgs(argv);
+    verb = `person ${command}`;
+    const databasePath = values.db ?? resolveDatabasePath(env);
+    if (!existsSync4(databasePath)) {
+      throw new CollabError("journal_not_found", "No collaboration journal exists at the selected path; pass --db or set AGENTOOL_COLLAB_DB");
+    }
+    const store = new CollabStore(databasePath, deps.storeNow ? { now: deps.storeNow } : {});
+    try {
+      const outcome = runVerb(store, command, values, deps);
+      return outcome.cancelled ? emit({ status: "cancelled", message: "Not confirmed at the terminal; nothing was written" }, EXIT_NOT_CONFIRMED) : emit({ status: "ok", ...outcome.result }, 0);
+    } finally {
+      store.close();
+    }
+  } catch (error) {
+    return emit(errorPayload(error), 1);
+  }
+}
+function runVerb(store, command, values, deps) {
+  const done = (result) => ({ cancelled: false, result });
+  switch (command) {
+    case "workspaces":
+      return done({ workspaces: store.listWorkspaces() });
+    case "proposals":
+      return values.proposal ? done({ proposal: store.proposalStatus(values.workspace, values.proposal) }) : done({ proposals: store.listProposalStatuses(values.workspace, { limit: parseInteger(values.limit, "limit") }) });
+    case "inbox":
+      return done({ inbox: store.personInbox(values.workspace) });
+    case "challenge":
+      return done({
+        challenge: store.personActChallenge({
+          proposal_report_id: values.proposal,
+          act: values.act,
+          reason: values.reason
+        })
+      });
+    case "consent":
+    case "reject": {
+      const act = command === "consent" ? "agree" : "reject";
+      if (values["passkey-assertion"] !== undefined) {
+        const assertion = readJsonInput(values["passkey-assertion"], deps);
+        return done({
+          proposal: store.recordPersonActWithPasskey({
+            proposal_report_id: values.proposal,
+            act,
+            reason: values.reason,
+            assertion
+          })
+        });
+      }
+      const status = store.proposalStatusById(values.proposal);
+      if (act === "agree" && status.ai.position !== "consented") {
+        throw new CollabError("ai_not_consented", "The agents have not consented; a person agrees only after they settle", { position: status.ai.position });
+      }
+      const confirmed = confirmOnTty({
+        act: act === "agree" ? "agree to a proposal" : "reject a proposal",
+        summary: actSummary(status, act, values.reason),
+        bytes: status.proposal_bytes,
+        sha256: status.proposal_sha256
+      }, { openTty: deps.openTty, now: deps.now });
+      if (!confirmed)
+        return { cancelled: true };
+      return done({
+        proposal: store.recordPersonActAtTerminal({
+          proposal_report_id: status.proposal.id,
+          proposal_sha256: status.proposal_sha256,
+          act,
+          reason: values.reason
+        })
+      });
+    }
+    case "say":
+      return done({
+        report: store.appendPersonNote({
+          workspace_id: values.workspace,
+          idempotency_key: values["idempotency-key"],
+          body: values.body,
+          proposal_report_id: values.proposal
+        })
+      });
+    case "propose":
+      return done({
+        proposal: store.openPersonProposal({
+          workspace_id: values.workspace,
+          idempotency_key: values["idempotency-key"],
+          question: values.question,
+          criteria: values.criteria,
+          extent: values.extent,
+          known_conflicts: values["known-conflicts"],
+          topic: values.topic,
+          consult_seconds: parseInteger(values["consult-seconds"], "consult-seconds")
+        })
+      });
+    case "passkey-enroll": {
+      const input = readJsonInput(values.file, deps);
+      const enrollment = {
+        credential_id: requireString(input.credential_id, "credential_id"),
+        public_key_spki: requireString(input.public_key_spki, "public_key_spki"),
+        algorithm: input.algorithm,
+        rp_id: requireString(input.rp_id, "rp_id"),
+        origin: requireString(input.origin, "origin"),
+        ...typeof input.label === "string" ? { label: input.label } : {}
+      };
+      parsePasskeyPublicKey(enrollment.public_key_spki);
+      const bytes = canonicalJson(enrollment);
+      const confirmed = confirmOnTty({
+        act: "enrol a passkey",
+        summary: [
+          `key fingerprint (sha256): ${passkeyFingerprint(enrollment.public_key_spki)}`,
+          `relying party ${enrollment.rp_id}, origin ${enrollment.origin}`,
+          "Enrol only a passkey you just created yourself; it will sign agreements in your name."
+        ],
+        bytes,
+        sha256: createHash4("sha256").update(bytes).digest("hex")
+      }, { openTty: deps.openTty, now: deps.now });
+      if (!confirmed)
+        return { cancelled: true };
+      return done({ passkey: store.enrollPersonPasskey(enrollment) });
+    }
+    case "passkeys":
+      return done({ passkeys: store.listPersonPasskeys() });
+    case "passkey-revoke": {
+      const passkey = store.listPersonPasskeys().find((key) => key.credential_id === values.credential);
+      if (!passkey || passkey.revoked_at !== null) {
+        throw new CollabError("passkey_not_enrolled", "No active enrolled passkey has this credential id");
+      }
+      const bytes = canonicalJson({ revoke: passkey.credential_id, fingerprint: passkey.fingerprint });
+      const confirmed = confirmOnTty({
+        act: "revoke a passkey",
+        summary: [`key fingerprint (sha256): ${passkey.fingerprint}`, `origin ${passkey.origin}`],
+        bytes,
+        sha256: createHash4("sha256").update(bytes).digest("hex")
+      }, { openTty: deps.openTty, now: deps.now });
+      if (!confirmed)
+        return { cancelled: true };
+      return done({ passkey: store.revokePersonPasskey(passkey.credential_id) });
+    }
+  }
+}
+function actSummary(status, act, reason) {
+  return [
+    `workspace ${status.proposal.workspace_id}, proposal ${status.proposal.id}`,
+    `agents' position: ${status.ai.position} (${status.ai.qualifying_support_report_ids.length} qualifying supports, ` + `${status.ai.unresolved_challenge_report_ids.length} unresolved challenges)`,
+    `extent: ${status.terms.extent}`,
+    act === "agree" ? "Agreeing authorises only this extent." : `reason: ${reason ?? ""}`
+  ];
+}
+function parsePersonArgs(argv) {
+  let parsed;
+  try {
+    parsed = parseArgs({
+      args: argv,
+      allowPositionals: true,
+      strict: true,
+      options: Object.fromEntries(STRING_OPTIONS.map((name) => [name, { type: "string" }]))
+    });
+  } catch (error) {
+    throw new CollabError("usage_error", `${error instanceof Error ? error.message : String(error)}; ${PERSON_DESK_USAGE}`);
+  }
+  const [command, ...extra] = parsed.positionals;
+  if (!command || !(command in VERB_OPTIONS) || extra.length > 0) {
+    throw new CollabError("usage_error", PERSON_DESK_USAGE);
+  }
+  const verb = command;
+  const values = parsed.values;
+  const { required, optional } = VERB_OPTIONS[verb];
+  for (const name of Object.keys(values)) {
+    if (name !== "db" && !required.includes(name) && !optional.includes(name)) {
+      throw new CollabError("usage_error", `--${name} does not apply to person ${verb}; ${PERSON_DESK_USAGE}`);
+    }
+  }
+  for (const name of required) {
+    const value = values[name];
+    if (value === undefined || value.trim() === "") {
+      throw new CollabError("usage_error", `--${name} is required for person ${verb}; ${PERSON_DESK_USAGE}`);
+    }
+  }
+  if (values.db !== undefined && values.db.trim() === "") {
+    throw new CollabError("usage_error", `--db must not be empty; ${PERSON_DESK_USAGE}`);
+  }
+  return { command: verb, values };
+}
+function parseInteger(value, name) {
+  if (value === undefined)
+    return;
+  if (!/^\d+$/.test(value.trim())) {
+    throw new CollabError("usage_error", `--${name} must be a non-negative integer; ${PERSON_DESK_USAGE}`);
+  }
+  return Number(value.trim());
+}
+function readJsonInput(path, deps) {
+  let text;
+  try {
+    text = path === "-" ? (deps.readStdin ?? (() => readFileSync2(0, "utf8")))() : readFileSync2(path, "utf8");
+  } catch {
+    throw new CollabError("input_unreadable", "The JSON input could not be read");
+  }
+  if (Buffer.byteLength(text, "utf8") > MAX_JSON_INPUT_BYTES) {
+    throw new CollabError("input_too_large", `The JSON input exceeds ${MAX_JSON_INPUT_BYTES} bytes`);
+  }
+  let value;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw new CollabError("input_invalid", "The input is not JSON");
+  }
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new CollabError("input_invalid", "The input must be a JSON object");
+  }
+  return value;
+}
+function requireString(value, field) {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new CollabError("input_invalid", `${field} must be a non-empty string`);
+  }
+  return value;
+}
+function errorPayload(error) {
+  if (error instanceof CollabError) {
+    return { ...error.details, status: "error", error: error.code, message: error.message };
+  }
+  return { status: "error", error: "internal_error", message: error instanceof Error ? error.message : String(error) };
+}
+
 // src/host.ts
 var COLLAB_HOST_PROTOCOL = "agenttool.collab-host/1";
-var COLLAB_HOST_USAGE = "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]" + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]" + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]";
+var COLLAB_HOST_USAGE = "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]" + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]" + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]" + ` | agenttool-collab-host person ... (${PERSON_DESK_USAGE})`;
 var MAX_HOST_REASON = 2000;
 var DEFAULT_HOST_WAIT_MS = 600000;
 var MAX_HOST_WAIT_MS = 3600000;
@@ -5930,7 +6718,9 @@ function removeRevokedFile(sessionFile, receipt) {
     return { ...receipt, warning: "session_file_remove_failed" };
   }
 }
-function runCollabHostCli(argv, env = process.env, clock = systemClock) {
+function runCollabHostCli(argv, env = process.env, clock = systemClock, personDeps = {}) {
+  if (argv[0] === "person")
+    return runPersonDeskCli(argv.slice(1), env, personDeps);
   let secret = null;
   if (argv.some((arg) => arg === "--help" || arg === "-h")) {
     const help = { protocol: COLLAB_HOST_PROTOCOL, status: "help", usage: COLLAB_HOST_USAGE };
@@ -5954,7 +6744,7 @@ function runCollabHostCli(argv, env = process.env, clock = systemClock) {
   try {
     const args = parseHostArgs(argv);
     const databasePath = args.db ?? resolveDatabasePath(env);
-    if (!existsSync4(databasePath)) {
+    if (!existsSync5(databasePath)) {
       throw new CollabError("journal_not_found", "No collaboration journal exists at the selected path; pass --db or set AGENTOOL_COLLAB_DB");
     }
     if (args.command === "end") {
@@ -6083,7 +6873,7 @@ function parseAnchor(raw) {
   return { epoch_id: anchor.epoch_id, sequence: anchor.sequence, hash: anchor.hash };
 }
 function parseHostOptions(argv) {
-  return parseArgs({
+  return parseArgs2({
     args: argv,
     allowPositionals: true,
     strict: true,

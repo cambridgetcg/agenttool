@@ -4,8 +4,8 @@
 > **Type:** reference · **Purpose:** local coordination and upgrade boundaries.
 > **Evidence:** `src/{store,mcp,repository,actor-default}.ts`; `tests/{session-fit,repository,migration-v2,mcp}.test.ts`.
 > **Implements:** Local observation and coordination, not host lifecycle or remote delivery.
-> **Code:** `src/{store,mcp,protocol,proposal,version}.ts`.
-> **Tests:** `tests/{events-wait,mcp,package,proposal-consent}.test.ts`.
+> **Code:** `src/{store,mcp,protocol,proposal,person-desk,passkey,tty,version}.ts`.
+> **Tests:** `tests/{events-wait,mcp,package,proposal-consent,person-desk,tty}.test.ts`.
 
 **DEVELOPMENT BUILD: 0.5.1-dev.0, 36 MCP tools. Unreleased.** Collab 0.5.0
 is released on GitHub only, as the
@@ -622,12 +622,49 @@ bytes named by `proposal_sha256`, as relayed by this session (`basis:
 relayed_by_session`), and addresses the `proposal.rejected` event to the
 proposal's author. A relayed rejection is forgeable, so it only pauses work.
 
-The agents' position authorises nothing by itself. `may_proceed` stays `false`
-and `agreement` stays `null` in this build: consent from a person is a separate,
-not-yet-built host command on the controlling terminal, and no MCP tool records
-it. Lineage is self-declared, so a session that does not name its parent counts
-as its own voice. Mixed servers do not share these guarantees: an older server
-ignores the terms and would accept a plain correction of a proposal.
+The agents' position authorises nothing by itself. Lineage is self-declared, so
+a session that does not name its parent counts as its own voice. Mixed servers
+do not share these guarantees: an older server ignores the terms and would
+accept a plain correction of a proposal.
+
+#### A person's acts and the person desk (unreleased)
+
+A person agrees or rejects through `agenttool-collab-host person`, never
+through MCP. Code: `src/{person-desk,passkey,tty}.ts`. Tests:
+`tests/{person-desk,tty}.test.ts`.
+
+| Verb | What it does |
+|---|---|
+| `workspaces`, `proposals --workspace <id> [--proposal <id>]`, `inbox --workspace <id>`, `passkeys` | read |
+| `consent --proposal <id>` / `reject --proposal <id> --reason <text>` | show the exact `proposal_bytes` on `/dev/tty` and record only on `yes` typed there (`basis: controlling_terminal`) |
+| `challenge --proposal <id> --act agree\|reject [--reason <text>]` | the act bytes and WebAuthn challenge for the next person act, and the passkeys that may sign it |
+| `consent` / `reject` with `--passkey-assertion <path>\|-` | verify a WebAuthn assertion over that challenge and record it with its proof (`basis: user_verified_passkey`); no terminal needed |
+| `passkey-enroll --file <path>\|-`, `passkey-revoke --credential <id>` | enrol or revoke an ES256 passkey, confirmed on `/dev/tty` |
+| `say --workspace <id> --body <text> [--proposal <id>]` | a desk note; on a proposal it is addressed to the author session |
+| `propose --workspace <id> --question ... --criteria ... --extent ...` | a desk proposal (`origin: person_relayed`, author voice `person`), settled by every agent voice |
+
+Agreement needs the agents' position to be `consented` and the exact current
+`proposal_sha256`; a rejection may come at any position, and
+`collab_proposal_relay_rejection` may relay one. The latest person act decides
+`person.state`. `may_proceed` is `true` only while that act agrees and the
+author has not withdrawn or superseded the proposal; it authorises only the
+proposal's `extent`. A later challenge does not silently revoke an agreement.
+
+The passkey challenge is the SHA-256 of canonical act bytes naming the act, the
+proposal hash, an optional reason, and the number of person acts before it, so
+one assertion records one act once. The store checks the client data type,
+challenge and origin, the RP ID hash, user presence and user verification, the
+signature counter, and the ES256 signature, then journals the assertion with
+the public key in the `proposal.agreed` or `proposal.rejected` event so it can be
+re-verified without this database. Which key was enrolled rests on the terminal
+confirmation, and a process that can write the journal could still rewrite it
+unless its head is witnessed elsewhere.
+
+The terminal route is a speed bump, not a sandbox: a process that can allocate
+a pseudo-terminal and type into it can answer. Desk notes and desk proposals are
+not authenticated as the person; they inform and authorise nothing. An agent
+can place a report in the person's inbox with `collab_report_append` and
+`to_person: true`; that is routing, not access control.
 
 ## Journal integrity and compatibility
 

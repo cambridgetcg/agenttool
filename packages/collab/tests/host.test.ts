@@ -4,6 +4,7 @@ import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { defaultDatabasePath, resolveDatabasePath } from "../src/database-path.js";
 import { MAX_HOST_WAIT_MS, runCollabHostCli, waitForSessionEvents } from "../src/host.js";
+import { PERSON_DESK_USAGE } from "../src/person-desk.js";
 import type { EventCursor, SessionHandle } from "../src/protocol.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
 import { CollabStore } from "../src/store.js";
@@ -218,7 +219,8 @@ describe("agenttool-collab-host end", () => {
         status: "help",
         usage: "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]"
           + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]"
-          + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]",
+          + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]"
+          + ` | agenttool-collab-host person ... (${PERSON_DESK_USAGE})`,
       });
     }
   });

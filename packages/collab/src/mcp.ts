@@ -890,6 +890,10 @@ export function buildCollabMcpServer(
         ),
         authority_scope: z.string().max(1000).optional(),
         authority_basis: z.string().max(2000).optional(),
+        to_person: z.boolean().optional().describe(
+          "Also place this report in the person's inbox at the person desk, for example to ask them something. "
+          + "Routing, not access control or authority.",
+        ),
       },
     },
     async ({ workspace_id, ...input }) => call(() => {
@@ -966,7 +970,8 @@ export function buildCollabMcpServer(
       title: "Read proposal consent status",
       description:
         "Read one proposal's consent status, or the most recent proposals newest first. The agents' position "
-        + "is computed from the journal; may_proceed stays false until a person consents at the terminal.",
+        + "is computed from the journal. may_proceed is true only while the latest person act agrees, made at the "
+        + "controlling terminal or with an enrolled passkey; an agreement authorises only the proposal's extent.",
       annotations: localReadOnly,
       inputSchema: {
         workspace_id: workspaceId,

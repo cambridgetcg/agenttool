@@ -180,7 +180,7 @@ describe("proposals in the journal", () => {
     });
     expect(opened).toMatchObject({
       ai: { position: "open", awaiting_voice_ids: [peer.session.id], basis: "computed_from_journal" },
-      person: { state: "awaiting", rejections: [] },
+      person: { state: "awaiting", acts: [] },
       agreement: null,
       may_proceed: false,
     });
@@ -314,7 +314,8 @@ describe("proposals in the journal", () => {
     expect(errorCode(() => relayRejection("0".repeat(64), "reject-wrong"))).toBe("proposal_hash_mismatch");
     const rejected = relayRejection(proposal.proposal_sha256, "reject");
     expect(rejected.person.state).toBe("rejected");
-    expect(rejected.person.rejections).toMatchObject([{
+    expect(rejected.person.acts).toMatchObject([{
+      act: "reject",
       party: "person",
       basis: "relayed_by_session",
       relayed_by_session_id: relay.session.id,

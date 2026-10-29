@@ -14,13 +14,15 @@ import {
   removeSessionCredentialFile,
 } from "./session-file.js";
 import { CollabStore } from "./store.js";
+import { PERSON_DESK_USAGE, runPersonDeskCli, type PersonDeskDeps } from "./person-desk.js";
 
 export const COLLAB_HOST_PROTOCOL = "agenttool.collab-host/1" as const;
 
 export const COLLAB_HOST_USAGE =
   "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]"
   + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]"
-  + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]";
+  + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]"
+  + ` | agenttool-collab-host person ... (${PERSON_DESK_USAGE})`;
 
 /** The trimmed-length limit endSession applies to its reason. */
 const MAX_HOST_REASON = 2_000;
@@ -247,7 +249,10 @@ export function runCollabHostCli(
   argv: string[],
   env: Record<string, string | undefined> = process.env,
   clock: HostWaitClock = systemClock,
-): { exit_code: 0 | 1; line: string } {
+  personDeps: PersonDeskDeps = {},
+): { exit_code: 0 | 1 | 3; line: string } {
+  // The person desk has its own verbs and receipts; it never reads a session credential.
+  if (argv[0] === "person") return runPersonDeskCli(argv.slice(1), env, personDeps);
   let secret: string | null = null;
   if (argv.some((arg) => arg === "--help" || arg === "-h")) {
     const help: HostHelpReceipt = { protocol: COLLAB_HOST_PROTOCOL, status: "help", usage: COLLAB_HOST_USAGE };
