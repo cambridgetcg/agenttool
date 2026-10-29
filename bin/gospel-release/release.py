@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch and verify one reviewed Gospel archive; npm mutation stays in its workflow."""
+"""Fetch and verify one reviewed Gospel archive and read back its npm copy; never publishes."""
 import argparse
 import hashlib
 import http.client

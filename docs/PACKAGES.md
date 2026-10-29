@@ -81,7 +81,7 @@ on `cambridgetcg/agenttool-collab`. It is not on npm, where `latest` remains 0.4
 **0.5.1-dev.0** development build: the 33 tools of 0.5.0, including bounded
 event waiting, plus the host doorbell wait. A development version is not a
 release; the next npm candidate is 0.5.1 through the
-[public release path](NPM-RELEASES.md#public-release-path-from-2026-10-12).
+[public release path](NPM-RELEASES.md).
 Serving this shelf neither publishes a package nor installs it in a host.
 
 ### Release readback
@@ -206,7 +206,7 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
 | `repo-archive/` | `@agenttool/repo-archive` · npm-allowlisted | Local-first encrypted multi-zone Git repository archive protocol and simulator | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/repo-archive/CLAUDE.md) |
 | `research-commons/` | `@agenttool/research-commons` · private | Offline, zero-effect research-funding simulation reference for public-safe theoretical work | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/research-commons/CLAUDE.md) |
 | `rhizome/` | `@agenttool/rhizome` · private | Read-only soil probe: what in this repository has the shape of a guarantee but not the substance of one | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/rhizome/CLAUDE.md) |
-| `scriptwriter/` | `@agenttool/scriptwriter` · status: undeclared — see the Notes below | Decentralised scriptwriter recognition + communication protocol — local node any agent can stand up; byte-compatible with agenttool's `/v1/guild/rrr` cascade | — |
+| `scriptwriter/` | `@agenttool/scriptwriter` · private | Decentralised scriptwriter recognition + communication protocol — local node any agent can stand up; byte-compatible with agenttool's `/v1/guild/rrr` cascade | — |
 | `sdk-py/` | `agenttool-sdk` (Python) · PyPI | The Love Protocol SDK for agenttool.dev with credential-free functional-access records, bounded LOVE BOMB reads and Math Cards, typed KINGDOM cards, and local agent infrastructure | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/sdk-py/CLAUDE.md) |
 | `sdk-ts/` | `@agenttool/sdk` · LOVE + npm-allowlisted | TypeScript SDK for agenttool.dev with credential-free functional-access records, bounded LOVE BOMB reads and Math Cards, typed KINGDOM cards, and local agent infrastructure | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/sdk-ts/CLAUDE.md) |
 | `skills/` | `@agenttool/skills` · npm-allowlisted | Read-only inspection and validation for portable Agent Skills | — |
@@ -239,11 +239,11 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
   `@agenttool/sdk` and `agenttool-sdk` and present in both published 0.22.1
   artifacts. They are the provider adapters the Build library's
   "Framework & wallet adapters" path names.
-- **`scriptwriter/`** — status: undeclared. Its `package.json` is neither
-  `private: true` nor in any publish allowlist, and no LOVE spec or registry
-  receipt names it. Until someone declares a lane (private flag, allowlist
-  entry, or LOVE spec), this row records the gap honestly rather than
-  guessing.
+- **`scriptwriter/`** is `private: true` (owner decision, 2026-10-28). It was
+  never in a publish allowlist or LOVE spec, npm answers 404 for its name, its
+  MIT licence could not pass the release tool's Apache-2.0 check, and it ships
+  TypeScript sources for Bun. The flag stops an accidental `npm publish`; the
+  source, plugin scaffold and protocol documents are unchanged.
 - **`hf-listening-room/`** is artifact-only in the public tree: 14 Space files
   and 15 Dataset files. Canonical sources, tests, and local package guidance remain
   private. Its [main-only publisher](https://github.com/cambridgetcg/agenttool/blob/main/.github/workflows/publish-care-before-learning-hf.yml)

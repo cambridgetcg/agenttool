@@ -100,10 +100,12 @@ first, because their source is already merged, and new design work after them.
    ([#496](https://github.com/cambridgetcg/agenttool/pull/496)). Then Collab
    0.5.1 on npm with the doorbell, from a main labelled 0.5.1-dev.0
    ([#495](https://github.com/cambridgetcg/agenttool/pull/495)). Both wait on
-   Yu's one-time
-   [npm trust re-point](NPM-RELEASES.md#one-time-npm-trust-re-point-yu-trusted-device),
-   which is not done yet. The field notes call releasing the doorbell
-   "probably the biggest single win for Collab adoption".
+   npm trust for the public lane, which is not in place yet. Since npm's
+   48-hour expiry rule, each package's stage-only trust is created just before
+   its own release, not once for all (corrected 2026-10-28; see the
+   [release state](NPM-RELEASES.md#state-as-of-2026-10-28)). The field
+   notes call releasing the doorbell "probably the biggest single win for
+   Collab adoption".
 2. **Economy surfaces tell the truth.** Rest generic escrow creation only:
    `POST /v1/escrows` would answer a named `escrow_resting` 503. Release and
    refund would not rest. They would also stop passing `getRedis()`, which

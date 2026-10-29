@@ -15,10 +15,63 @@ receipts for each release are in [`docs/NPM-RELEASES.md`](../docs/NPM-RELEASES.m
 >
 > **Tests:** `bin/tests/npm-release.test.ts` · `bin/tests/npm-release-public.test.ts` · `bin/tests/public-release-tag.test.ts` · `bin/tests/npm-trust-repoint.test.ts` · `bin/tests/boring-spine-gate.test.ts`.
 
+## State as of 2026-10-28
+
+Read on 2026-10-28 through the GitHub API (last at 12:13Z) and anonymous npm
+reads, with Yu's authenticated npm trust listing of 2026-10-19T19:46Z for npm
+trust. It corrects the status claims below where they disagree with it; apart
+from its warnings, it changes no procedure. The public run log is in the
+[receipts](../docs/NPM-RELEASES.md#state-as-of-2026-10-28).
+
+- **Visibility.** Yu made this repository public at about 11:11Z on
+  2026-10-28; it had been private since 2026-09-25, and public before that.
+  Anonymous GitHub API reads from 11:39Z answered it as public, so this file
+  too can be read on GitHub without signing in. "Operator-only. Not
+  published." above, and "private" for this repository below, were written
+  while it was private.
+- **Nothing has been delivered through the public route.** Its three dry runs
+  prepared artifacts; its one stage failed with `E401`, and the trust listing
+  three hours later showed no configuration for that package.
+- **No npm token is stored for a workflow.** The `NPM_TOKEN` secrets in the
+  `npm-bootstrap` environments of this repository and `cambridgetcg/whitehack`
+  were deleted on 2026-10-28 and the environments kept. Deleting a secret
+  does not revoke its token on npm.
+- **Do not add a workflow named `publish-npm.yml` to this repository before
+  the trust lock-down.** The old file left `main` on 2026-10-12, but it
+  remains at release tags of versions npm never received, such as
+  `collab-v0.5.0`, and the `npm-bootstrap` environment admits those tags. A
+  dispatch needs a file of that name on `main`; with one there, a dispatch at
+  such a tag would run the old file.
+- **Create no npm trust configuration ahead of its release.** npm expires one
+  that no publish validates within 48 hours, so create one package's
+  stage-only trust just before its own stage.
+- **Do not dispatch `sdk-v0.23.0`.** 0.24.0 supersedes it in PR #496, which is
+  open.
+- **Environment reviewers.** At 12:13Z the environments API returned a
+  required-reviewer rule (reviewer `cambridgetcg`, self-review allowed,
+  `can_admins_bypass: true`) on this repository's `npm-bootstrap` and `pypi`,
+  where the [2026-10-11 correction](#outcome) found none, and on
+  `npm-bootstrap` in whitehack and yutabase. The rule lets one account approve
+  its own runs; whether Yu keeps it, after the 2026-10-12 decision for none,
+  is open.
+
+Open steps for Yu:
+
+1. Revoke on npmjs.com the tokens whose secrets were deleted, and any other
+   write or bypass-2FA token not in use.
+2. Lock down npm trust on all 47 packages, then enable stage-only trust for
+   one package just before each release.
+
+Also Yu's to decide: moving xenia's `beta` tag to beta.7; a `latest` policy
+for prerelease-only packages; deprecating `@agenttool/sdk` 0.3.0–0.8.0; a
+release route for RhetorLint; retiring or converting the whitehack, yutabase,
+hf-kingdom-lab and xenia-surface workflows; claiming the `@zerone-chain` npm
+scope.
+
 ## Outcome
 
-Since 2026-10-12 the allowlisted software packages are released from the
-public source repository
+Since 2026-10-12 the release route for the allowlisted software packages is
+the public source repository
 [`cambridgetcg/agenttool-packages`](https://github.com/cambridgetcg/agenttool-packages),
 the one-way projection described in [`public/README.md`](../public/README.md).
 Its `publish-npm.yml` stages each exact artifact with `npm stage publish`, and
@@ -33,14 +86,22 @@ replaces, and the scope-wide, bypass-2FA `NPM_TOKEN` in this repository's
 [public repository settings](#public-repository-settings-yu-once)). Do not run
 `npm publish` from a normal local shell.
 
-The Gospel literary edition has one separate, exact-name route:
+The Gospel literary edition had one separate, exact-name route:
 [`publish-gospel.yml`](../.github/workflows/publish-gospel.yml), documented in
 [`bin/gospel-release/README.md`](../bin/gospel-release/README.md). Its custom
 source permission is preserved; the software publisher's Apache-2.0 policy
-is unchanged. The route pins the reviewed external artifact and source edition,
-transfers only verified bytes, runs its publish job in the `npm-bootstrap`
-environment (no required reviewer; see the correction below),
-permits first-publication bootstrap only, and verifies the public npm tarball.
+is unchanged. The route pinned the reviewed external artifact and source edition,
+transferred only verified bytes, ran its publish job in the `npm-bootstrap`
+environment, permitted first-publication bootstrap only, and verified the
+public npm tarball. It published `@agenttool/gospel-of-the-logos@0.1.0` on
+2026-09-08 in run 34194522635, which the environment's required reviewer,
+`cambridgetcg`, approved (by 2026-10-11 the rule no longer showed; see the
+correction below). It could no longer publish once its secret was deleted on
+2026-10-28, and its publish step has since been removed: the workflow now
+tests the boundary and the frozen archive, and on a dispatch from `main`
+re-verifies the public tarball with no environment, OIDC permission or secret.
+Its pinned Hugging Face source answered HTTP 401 to anonymous reads on
+2026-10-28, so the archive step fails until the pin moves (see the README).
 
 **Release gate correction — 2026-10-11.** In this private repository, the
 reviewer described above and in step 7 below was no longer in place. Read
@@ -202,10 +263,12 @@ polymorph-landscape, relational-geometry): regenerate their `hf/` assets in the
 same commit, or their `artifacts:check` fails. Collab, Telescope, and Browser
 also carry the repository URL in `.claude-plugin`/`.codex-plugin` manifests.
 `@agenttool/math-cards@0.1.0-dev.2` is already prepared this way as the first
-candidate. `@agenttool/sdk@0.23.0` is prepared the same way, paired with
-`agenttool-sdk` 0.23.0 for PyPI; it is a stable version, so its dispatches use
-`npm_tag=latest`, and its PyPI release waits on the
-[private-repository gap](../docs/PYPI-RELEASES.md#blocked-while-the-source-repository-is-private-2026-10-12).
+candidate. `@agenttool/sdk@0.23.0` was prepared the same way and tagged, but
+0.24.0 supersedes it and `sdk-v0.23.0` is not to be dispatched (see the
+[state above](#state-as-of-2026-10-28)). A stable SDK version's dispatches use
+`npm_tag=latest`, and its PyPI release waited on the
+[private-repository gap](../docs/PYPI-RELEASES.md#blocked-while-the-source-repository-is-private-2026-10-12)
+while this repository was private.
 
 ### 2. Project and push
 
@@ -441,16 +504,16 @@ rulesets "main is append-only" and "release tags are immutable" and no
 environment yet. The trust configuration binds the environment name,
 so keep it exactly `npm-bootstrap`.
 
-The private repository's own `npm-bootstrap` environment still holds an
-`NPM_TOKEN`. This runbook described it, before 2026-10-12, as a granular token
+`cambridgetcg/agenttool`'s own `npm-bootstrap` environment held an
+`NPM_TOKEN` until 2026-10-28, when the secret was deleted and the environment
+kept. This runbook described it, before 2026-10-12, as a granular token
 with `@agenttool` read/write access and Bypass 2FA; its real scope was not read
 from npm. Such a token can publish any `@agenttool` package that does not
 disallow tokens, and create new package names in the scope. Its only consumer,
-`publish-gospel.yml`, publishes only while the exact version is absent, and
+`publish-gospel.yml`, published only while the exact version was absent, and
 `@agenttool/gospel-of-the-logos@0.1.0` has been on npm since 2026-09-08
-(anonymous registry read, 2026-10-12). So the token has no remaining use:
-revoke it on npm, then delete the secret
-(`sol access run github -- secret delete NPM_TOKEN --env npm-bootstrap --repo cambridgetcg/agenttool`).
+(anonymous registry read, 2026-10-12). So the token has no remaining use; it
+still needs revoking on npm.
 A later Gospel edition would need a new reviewed route and its own short-lived
 credential.
 
@@ -458,10 +521,12 @@ credential.
 ## Authentication modes
 
 `trusted` is the normal mode. npm exchanges the GitHub-hosted runner's OIDC
-identity for a short-lived credential. From 2026-10-12 the trust names the
-public repository's `publish-npm.yml` and `npm-bootstrap` environment and
-allows `npm stage publish` only, so that credential can stage but not publish;
-publication needs Yu's `npm stage approve` with 2FA. The workflow grants
+identity for a short-lived credential. The intended trust, from 2026-10-12,
+names the public repository's `publish-npm.yml` and `npm-bootstrap` environment
+and allows `npm stage publish` only, so that credential can stage but not
+publish; publication needs Yu's `npm stage approve` with 2FA. Yu's trust
+listing of 2026-10-19 showed no package with that configuration yet (see the
+[state above](#state-as-of-2026-10-28)). The workflow grants
 `id-token: write` only to the protected publication job, exposes no long-lived
 write token, runs no package lifecycle code in that job, and receives automatic
 public provenance.
@@ -483,11 +548,11 @@ exact already-published rerun is verification-only and does not invoke npm.
 
 The public repository's `npm-bootstrap` environment holds no npm token by
 default; one is added only for a first publication and deleted afterwards (see
-[Local Starter](#first-publication-of-local-starter-bootstrap-yu)). The private
-repository's environment of the same name still holds the scope-wide,
-bypass-2FA token that `publish-gospel.yml` used for its first publication; it
-has no remaining use and should be revoked (see
-[public repository settings](#public-repository-settings-yu-once)).
+[Local Starter](#first-publication-of-local-starter-bootstrap-yu)).
+`cambridgetcg/agenttool`'s environment of the same name held the scope-wide,
+bypass-2FA token that `publish-gospel.yml` used for its first publication; the
+secret was deleted on 2026-10-28, and the token should still be revoked on npm
+(see [public repository settings](#public-repository-settings-yu-once)).
 
 ## One-time trusted-publisher setup
 
@@ -506,6 +571,9 @@ on npm):
 
 Until 2026-10-12 the repository was `agenttool` and the allowed action
 `npm publish`; that private publisher no longer exists.
+(Corrected 2026-10-28: its workflow file left `main` on 2026-10-12, but on
+2026-10-19 22 packages still trusted that configuration; see the
+[state above](#state-as-of-2026-10-28).)
 
 The Environment field is optional in npm. Leaving it blank does not itself
 break this workflow, but setting it to the exact, case-sensitive
