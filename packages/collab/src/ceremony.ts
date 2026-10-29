@@ -17,7 +17,13 @@
  * comes from, and the assertion goes to, that device's desk through its
  * `person-remote` forced command, which verifies it against its own enrolled
  * passkeys. The page and Touch ID stay on this device.
+ *
+ * A person who starts a ceremony at the terminal has the page opened in the
+ * browser for them (`--no-open` declines). A ceremony started by another
+ * program has no terminal, and that program opens the page itself: YOUI
+ * opens its window inside the click, and a second window would only confuse.
  */
+import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { CollabError } from "./errors.js";
 import { normalizePasskeyEnrollment } from "./passkey.js";
@@ -45,6 +51,30 @@ export interface CeremonyIo {
   out(line: string): void;
   /** Runs one person-desk verb on another device; tests replace it. */
   remote?: (destination: string, argv: string[], stdin?: string) => Promise<Record<string, unknown>>;
+  /** Opens the page in the person's browser; false when it could not try. */
+  open?: (url: string) => boolean;
+  /** A line for the person reading the terminal (stderr), not the receipt. */
+  note?: (line: string) => void;
+}
+
+/** macOS's `open`, by its fixed path and without a shell. */
+export function openInBrowser(url: string): boolean {
+  if (process.platform !== "darwin") return false;
+  try {
+    const child = spawn("/usr/bin/open", [url], { stdio: "ignore", detached: true });
+    child.on("error", () => {});
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function atTerminal(deps: PersonDeskDeps): boolean {
+  const tty = (deps.openTty ?? (() => openDevTty()))();
+  if (tty === null) return false;
+  tty.close();
+  return true;
 }
 
 type Table = {
@@ -131,7 +161,8 @@ async function signCeremony(
       rp_id: "localhost",
       credentials: passkeys.map((key) => key.credential_id),
     };
-    const result = await serveOnce(port, data, io, command, async (body) => {
+    const browser = values["no-open"] !== true && atTerminal(deps);
+    const result = await serveOnce(port, data, io, command, browser, async (body) => {
       const recorded = await table.record(challenge.proposal_report_id, act, challenge.reason, (body as { assertion?: unknown }).assertion);
       return {
         recorded: true,
@@ -172,7 +203,7 @@ async function enrollCeremony(
       rp_id: "localhost",
       label: values.label ?? "Touch ID",
     };
-    const result = await serveOnce(port, data, io, command, async (body) => {
+    const result = await serveOnce(port, data, io, command, values["no-open"] !== true, async (body) => {
       const input = body as Record<string, unknown>;
       checkCreateClientData(input.client_data_json, challenge, origin);
       const enrollment = normalizePasskeyEnrollment({
@@ -322,6 +353,7 @@ async function serveOnce(
   data: Record<string, unknown>,
   io: CeremonyIo,
   command: string,
+  browser: boolean,
   onPost: (body: unknown) => Promise<Record<string, unknown>>,
 ): Promise<Record<string, unknown>> {
   const token = randomBytes(24).toString("base64url");
@@ -333,6 +365,8 @@ async function serveOnce(
     settle = resolve;
   });
   let used = false;
+  const expiresAt = new Date(Date.now() + CEREMONY_TIMEOUT_MS).toISOString();
+  const page = ceremonyPage({ ...data, expires_at: expiresAt }, nonce);
   const headers = {
     "Cache-Control": "no-store",
     "Referrer-Policy": "no-referrer",
@@ -354,11 +388,23 @@ async function serveOnce(
           return new Response("Open this page at localhost", { status: 421, headers });
         }
         if (request.method === "GET" && url.pathname === path) {
-          return new Response(ceremonyPage(data, nonce), { headers: { ...headers, "Content-Type": "text/html; charset=utf-8" } });
+          return new Response(page, { headers: { ...headers, "Content-Type": "text/html; charset=utf-8" } });
         }
-        if (request.method === "POST" && url.pathname === `${path}/done`) {
+        if (request.method === "POST" && url.pathname !== `${path}/done`) {
+          // An older ceremony's page, still open, posting to the one listening now.
+          return Response.json({
+            ok: false,
+            error: "ceremony_expired",
+            message: "This page belongs to an earlier ceremony. Use the newest link your terminal printed.",
+          }, { status: 410, headers });
+        }
+        if (request.method === "POST") {
           if (request.headers.get("origin") !== origin || used) {
-            return Response.json({ ok: false, error: "ceremony_closed" }, { status: 409, headers });
+            return Response.json({
+              ok: false,
+              error: "ceremony_closed",
+              message: "This ceremony has already finished. Start a new one to try again.",
+            }, { status: 409, headers });
           }
           used = true;
           try {
@@ -379,8 +425,12 @@ async function serveOnce(
   } catch {
     throw new CollabError("ceremony_port_busy", `Another program holds ${origin}; close it or finish its ceremony first`);
   }
-  const expiresAt = new Date(Date.now() + CEREMONY_TIMEOUT_MS).toISOString();
-  io.out(JSON.stringify({ protocol: PERSON_DESK_PROTOCOL, command, status: "open", url: `${origin}${path}`, expires_at: expiresAt }));
+  const pageUrl = `${origin}${path}`;
+  io.out(JSON.stringify({ protocol: PERSON_DESK_PROTOCOL, command, status: "open", url: pageUrl, expires_at: expiresAt }));
+  const closes = new Date(expiresAt).toLocaleTimeString();
+  io.note?.(browser && io.open?.(pageUrl)
+    ? `Opened the page in your browser. If it did not appear, open ${pageUrl} before ${closes}.`
+    : `Open ${pageUrl} in your browser before ${closes}.`);
   const timer = setTimeout(() => settle({ ok: false, error: new CollabError("ceremony_timeout", "The ceremony page was not used in time") }), CEREMONY_TIMEOUT_MS);
   try {
     const outcome = await finished;
@@ -430,10 +480,18 @@ button.go { color: var(--go); } button.stop { color: var(--stop); } button[disab
   const enc = (b) => { let s = ""; for (const x of new Uint8Array(b)) s += String.fromCharCode(x); return btoa(s).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/, ""); };
   const field = (label, value) => { if (!value) return; const l = document.createElement("div"); l.className = "label"; l.textContent = label; const v = document.createElement("div"); v.className = "value"; v.textContent = value; $("what").append(l, v); };
   const say = (text) => { $("result").textContent = text; };
+  const expired = "This page has expired. Start again from your terminal or YOUI, and use the newest link.";
+  let posted = false;
   const post = async (body) => {
-    const response = await fetch(location.pathname + "/done", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    return response.json();
+    let response;
+    try {
+      response = await fetch(location.pathname + "/done", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    } catch { return { ok: false, message: expired }; }
+    posted = true;
+    try { return await response.json(); } catch { return { ok: false, message: expired }; }
   };
+  const left = Date.parse(data.expires_at) - Date.now();
+  setTimeout(() => { if (!posted) { $("go").disabled = true; say(expired); } }, Math.max(0, left));
   if (data.kind === "sign") {
     $("title").textContent = data.act === "agree" ? "Agree to this proposal" : "Reject this proposal";
     $("sub").textContent = "Table: " + data.table + " · agents' position: " + data.position;

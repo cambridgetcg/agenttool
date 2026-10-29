@@ -40,12 +40,12 @@ export const PERSON_DESK_USAGE =
   + " | challenge --proposal <id> --act agree | challenge --proposal <id> --act reject --reason <text>"
   + " | consent --proposal <id> [--passkey-assertion <path>|-]"
   + " | reject --proposal <id> --reason <text> [--passkey-assertion <path>|-]"
-  + " | ceremony --proposal <id> --act agree|reject [--reason <text>] [--via <ssh-destination>] [--port <n>]"
+  + " | ceremony --proposal <id> --act agree|reject [--reason <text>] [--via <ssh-destination>] [--port <n>] [--no-open]"
   + " | say --workspace <id> --body <text> [--proposal <id>] --idempotency-key <key>"
   + " | propose --workspace <id> --question <text> --criteria <text> --extent <text>"
   + " [--known-conflicts <text>] [--topic <text>] [--consult-seconds <n>] --idempotency-key <key>"
   + " | withdraw --workspace <id> --proposal <id> --reason <text> --idempotency-key <key>"
-  + " | passkey-enroll (--file <path>|- | --ceremony [--label <text>] [--port <n>])"
+  + " | passkey-enroll (--file <path>|- | --ceremony [--label <text>] [--port <n>] [--no-open])"
   + " | passkeys | passkey-export --credential <id> | passkey-revoke --credential <id>";
 
 export interface PersonDeskDeps {
@@ -69,14 +69,14 @@ export const VERB_OPTIONS: Record<Verb, { required: string[]; optional: string[]
   challenge: { required: ["proposal", "act"], optional: ["reason"] },
   consent: { required: ["proposal"], optional: ["passkey-assertion"] },
   reject: { required: ["proposal", "reason"], optional: ["passkey-assertion"] },
-  ceremony: { required: ["proposal", "act"], optional: ["reason", "via", "port"] },
+  ceremony: { required: ["proposal", "act"], optional: ["reason", "via", "port", "no-open"] },
   say: { required: ["workspace", "body", "idempotency-key"], optional: ["proposal"] },
   propose: {
     required: ["workspace", "question", "criteria", "extent", "idempotency-key"],
     optional: ["known-conflicts", "topic", "consult-seconds"],
   },
   withdraw: { required: ["workspace", "proposal", "reason", "idempotency-key"], optional: [] },
-  "passkey-enroll": { required: [], optional: ["file", "ceremony", "label", "port"] },
+  "passkey-enroll": { required: [], optional: ["file", "ceremony", "label", "port", "no-open"] },
   passkeys: { required: [], optional: [] },
   "passkey-export": { required: ["credential"], optional: [] },
   "passkey-revoke": { required: ["credential"], optional: [] },
@@ -96,9 +96,9 @@ const STRING_OPTIONS = [
   "idempotency-key", "question", "criteria", "extent", "known-conflicts", "topic",
   "consult-seconds", "file", "credential", "db", "via", "port", "label",
 ] as const;
-const BOOLEAN_OPTIONS = ["ceremony"] as const;
+const BOOLEAN_OPTIONS = ["ceremony", "no-open"] as const;
 
-export type Values = Partial<Record<(typeof STRING_OPTIONS)[number], string>> & { ceremony?: boolean };
+export type Values = Partial<Record<(typeof STRING_OPTIONS)[number], string>> & { ceremony?: boolean; "no-open"?: boolean };
 
 export function runPersonDeskCli(
   argv: string[],
@@ -414,8 +414,8 @@ export function parsePersonArgs(argv: string[]): { verb: Verb; values: Values } 
   if (verb === "passkey-enroll" && (values.file === undefined) === (values.ceremony !== true)) {
     throw new CollabError("usage_error", `passkey-enroll needs exactly one of --file or --ceremony; ${PERSON_DESK_USAGE}`);
   }
-  if (verb === "passkey-enroll" && values.port !== undefined && values.ceremony !== true) {
-    throw new CollabError("usage_error", `--port applies only with --ceremony; ${PERSON_DESK_USAGE}`);
+  if (verb === "passkey-enroll" && (values.port !== undefined || values["no-open"]) && values.ceremony !== true) {
+    throw new CollabError("usage_error", `--port and --no-open apply only with --ceremony; ${PERSON_DESK_USAGE}`);
   }
   return { verb, values };
 }
