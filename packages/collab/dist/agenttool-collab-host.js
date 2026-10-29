@@ -849,6 +849,7 @@ class CollabStore {
     }
     this.db = new Database(databasePath, { create: true, strict: true });
     try {
+      this.db.exec("PRAGMA busy_timeout = 5000");
       this.preflightDatabase();
       this.initialize();
     } catch (error) {

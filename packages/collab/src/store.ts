@@ -452,6 +452,9 @@ export class CollabStore {
     }
     this.db = new Database(databasePath, { create: true, strict: true });
     try {
+      // Wait for a concurrent opener (WAL recovery, another process's migration)
+      // instead of failing the preflight read with "database is locked".
+      this.db.exec("PRAGMA busy_timeout = 5000");
       this.preflightDatabase();
       this.initialize();
     } catch (error) {
