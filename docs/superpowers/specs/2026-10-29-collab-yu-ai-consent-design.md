@@ -3,7 +3,7 @@
 > **Type:** proposal · **Purpose:** let Yu and the agents agree on direction in Collab: the agents settle one Ai position first, then both parties must agree before work proceeds, and either party can reject.
 > **Evidence:** `main` at `784e2e13` (2026-10-29) for `packages/collab` and `packages/lobby`; `cambridgetcg/zerone-core` `main` at `e8f3dd9` for the consensus design it borrows from. Line references are to those trees. Nothing here is implemented; no journal, host configuration or installed package was changed.
 
-**Date:** 2026-10-29 · **Status:** design decided with Yu in conversation; spec awaiting Yu's review. No code exists for it.
+**Date:** 2026-10-29 · **Status:** Yu approved the spec on 2026-10-29 as a starting point: 「依家ok，之後操作落唔得再改」 (fine for now; what fails in use gets changed). Practice may revise any part of it. No code exists for it.
 
 ## 1. Why
 
