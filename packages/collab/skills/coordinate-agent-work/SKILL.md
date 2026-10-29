@@ -1,6 +1,6 @@
 ---
 name: coordinate-agent-work
-description: Coordinate independent coding or research agents across host sessions and linked Git worktrees through AgentTool Collab's local journal. Use when starting or resuming credential-bound coordination, splitting parallel work, claiming before overlapping edits, polling or acknowledging events, attaching evidence, completing work with an optional requested reviewer, reviewing or concurring with completion, answering proposals or challenging reports, delegating to a child session, recovering leases, handing work off, ending a session cleanly, publishing optional self-declared presence, or reconciling results in Codex, Claude Code, Hermes, or another Agent Skills host.
+description: Coordinate independent coding or research agents across host sessions and linked Git worktrees through AgentTool Collab's local journal. Use when starting or resuming credential-bound coordination, splitting parallel work, claiming before overlapping edits, polling or acknowledging events, attaching evidence, completing work with an optional requested reviewer, reviewing or concurring with completion, answering proposals or challenging reports, opening or answering a direction proposal that needs a person's agreement, delegating to a child session, recovering leases, handing work off, ending a session cleanly, publishing optional self-declared presence, or reconciling results in Codex, Claude Code, Hermes, or another Agent Skills host.
 ---
 
 # Coordinate Agent Work
@@ -197,6 +197,87 @@ Offer a handoff with `collab_handoff_offer`; do not assign it by declaration.
 The lease transfers only after the named recipient accepts. Transfer neither
 private data nor external authority. Treat decline, stop, pause, and
 uncertainty as valid outcomes.
+
+## Decide direction with a person (proposals, unreleased)
+
+Some questions are not tasks. A proposal brings one to the table, where the
+agents in the workspace settle a position first and then a person agrees or
+rejects. Work proceeds only when both have agreed, and either can say no. The
+design is in `docs/superpowers/specs/2026-10-29-collab-yu-ai-consent-design.md`
+in the AgentTool source repository; the tools are `collab_proposal_open`,
+`collab_proposal_status` and `collab_proposal_relay_rejection`.
+
+**When to open one.** Open a proposal when the answer changes what others do
+next and nothing already settles it: the request, the code, an earlier
+agreement, or a sensible default. Typical cases:
+
+- a design decision;
+- the criteria for how to proceed, and how far;
+- context that conflicts, such as instructions, documents or earlier decisions
+  that disagree;
+- how a shared principle reads in a particular case.
+
+Ordinary work inside your request keeps the claim-and-review loop. A reversible
+choice you can make yourself, you make and report. The person's attention is
+what a proposal spends, and an open proposal holds the work it names, so ask
+for the decision that is actually open, once. Do not split one decision into
+small ones to collect easy yeses. Do not reopen a settled one without new
+evidence. To ask the person something that needs no decision, send
+`collab_report_append` with `to_person: true`; it informs and authorises
+nothing.
+
+**How to argue it.** The terms are what the person signs, so write them to be
+disagreed with.
+
+- `question`: one decision.
+- `criteria`: how to judge it, so a reader can object on grounds.
+- `extent`: what agreement would authorise and where it stops. Keep it to the
+  smallest scope that lets the next step happen.
+- `known_conflicts`: what disagrees and how you read it. A conflict you leave
+  out is one you resolved silently.
+- `evidence_refs`, `confidence` and `limits` work as in any report.
+
+The bytes are fixed once opened. To change them, open a revision with
+`supersedes_report_id`; both parties then decide again.
+
+**How to answer one.** Same-model agents tend to agree with each other, so form
+your own reading before you read the other answers.
+
+- Answer with `supports` when you agree for reasons of your own.
+- Answer with `challenges`, with evidence, when you see a reason not to
+  proceed. A challenge holds the proposal until its own voice settles it with
+  `resolves` or `withdraws`, so settle yours when the evidence changes your
+  mind, and leave other voices' challenges to them.
+- Silence is not consent. Do not support a proposal just to close it.
+- Opening a proposal is not supporting it. If you are the only voice at the
+  table, your explicit `supports` is what counts.
+
+Read the position with `collab_proposal_status`; never announce it yourself.
+`consented` means the agents have agreed, and nothing more.
+
+**What agreement authorises.** Proceed only while `collab_proposal_status`
+shows `may_proceed: true`. That means the person agreed to these exact bytes,
+at their own terminal or with their passkey through the person desk, and the
+proposal has not been withdrawn or superseded. No MCP tool records a person's
+act. Never relay a yes. Use `collab_proposal_relay_rejection` only for a no the
+person actually gave you.
+
+- **Scope.** An agreement covers the `extent` and nothing beyond it, and it
+  never widens what your host, the repository's rules or the person's other
+  instructions allow. Work past the extent needs a new proposal.
+- **Record the work.** When you carry out agreed work, post a `decision`
+  report. Set `authority_scope` to the extent and `authority_basis` to the
+  person's act, and cite the `proposal.agreed` event in `evidence_refs`. That
+  record lets the next session see why the work happened.
+- **Rejection.** A rejection stops the work. Do not reach the same outcome by
+  another path.
+- **Later evidence.** A later challenge does not silently undo an agreement.
+  Raise new evidence as a new proposal.
+
+An agreed reading of a principle is a precedent: find it by `topic` (for
+example `principle:<name>`) and cite it, but treat it as binding on nothing. A
+later case may read the principle differently, and a new proposal can revisit
+it.
 
 ## Delegation and lineage
 

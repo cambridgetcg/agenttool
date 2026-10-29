@@ -584,6 +584,19 @@ Design: `docs/superpowers/specs/2026-10-29-collab-yu-ai-consent-design.md` in th
 AgentTool source repository. Code: `src/{proposal,store,mcp}.ts`. Tests:
 `tests/proposal-consent.test.ts`.
 
+Open a proposal when the answer changes what others do next and nothing
+already settles it: not the request, the code, an earlier agreement, or a
+sensible default. A proposal spends the person's attention and holds the work
+it names, so it carries one decision, criteria a reader can object to, the
+smallest `extent` that lets the next step happen, and the conflicts it knows
+of. Agents form their own reading before they read each other's answers,
+because same-model agents tend to agree with each other. Agreement authorises
+only the `extent`, and never more than the host, the repository's rules or the
+person's other instructions allow. The session that carries out agreed work
+records a `decision` report with that extent as its `authority_scope` and the
+`proposal.agreed` event in its evidence. The agent-facing guidance is in
+`skills/coordinate-agent-work/SKILL.md` ("Decide direction with a person").
+
 `collab_proposal_open` posts an ordinary `proposal` report with fixed terms:
 `criteria`, `extent` (what agreement would authorise and where it stops),
 optional `known_conflicts`, `origin` (`ai` or `person_relayed`, self-declared),
