@@ -2,8 +2,8 @@
 // @bun
 
 // src/host.ts
-import { existsSync as existsSync4 } from "fs";
-import { parseArgs } from "util";
+import { existsSync as existsSync5 } from "fs";
+import { parseArgs as parseArgs2 } from "util";
 
 // src/database-path.ts
 import { homedir } from "os";
@@ -42,6 +42,7 @@ var PROPOSAL_BYTES_PROTOCOL = "agenttool.collab-proposal/1";
 var DEFAULT_PROPOSAL_CONSULT_SECONDS = 6 * 60 * 60;
 var MIN_PROPOSAL_CONSULT_SECONDS = 10 * 60;
 var MAX_PROPOSAL_CONSULT_SECONDS = 7 * 24 * 60 * 60;
+var PERSON_ACT_PROTOCOL = "agenttool.collab-person-act/1";
 var DEFAULT_WAIT_EVENT_LIMIT = 10;
 var MAX_WAIT_EVENT_LIMIT = 50;
 var MAX_WAIT_PAGE_BYTES = 256 * 1024;
@@ -120,7 +121,7 @@ function isOwnedByCurrentUser(uid) {
 
 // src/store.ts
 import { Database } from "bun:sqlite";
-import { createHash as createHash2, randomBytes, randomUUID, timingSafeEqual } from "crypto";
+import { createHash as createHash3, randomBytes, randomUUID, timingSafeEqual } from "crypto";
 import {
   chmodSync as chmodSync2,
   closeSync as closeSync3,
@@ -143,6 +144,156 @@ function sortValue(value) {
     return Object.fromEntries(entries);
   }
   return value;
+}
+
+// src/passkey.ts
+import { createHash, createPublicKey, verify } from "crypto";
+var FLAG_USER_PRESENT = 1;
+var FLAG_USER_VERIFIED = 4;
+var BASE64URL = /^[A-Za-z0-9_-]*$/;
+function base64urlDecode(value, field, maxBytes = 64 * 1024) {
+  if (typeof value !== "string" || !BASE64URL.test(value) || value.length === 0) {
+    throw new CollabError("passkey_assertion_invalid", `${field} must be non-empty base64url`);
+  }
+  const bytes = Buffer.from(value, "base64url");
+  if (bytes.length > maxBytes) {
+    throw new CollabError("passkey_assertion_invalid", `${field} exceeds ${maxBytes} bytes`);
+  }
+  return bytes;
+}
+function sha256(bytes) {
+  return createHash("sha256").update(bytes).digest();
+}
+function personActChallenge(input) {
+  const challenge_bytes = canonicalJson({ protocol: PERSON_ACT_PROTOCOL, ...input });
+  return { challenge_bytes, challenge: sha256(challenge_bytes).toString("base64url") };
+}
+var ASSERTION_FIELDS = new Set(["credential_id", "authenticator_data", "client_data_json", "signature", "user_handle"]);
+function normalizePasskeyAssertion(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new CollabError("passkey_assertion_invalid", "The assertion must be a JSON object");
+  }
+  const input = value;
+  const unknown = Object.keys(input).filter((key) => !ASSERTION_FIELDS.has(key));
+  if (unknown.length > 0) {
+    throw new CollabError("passkey_assertion_invalid", "The assertion has fields WebAuthn does not define", { fields: unknown });
+  }
+  const field = (name, maxBytes) => {
+    base64urlDecode(input[name], name, maxBytes);
+    return input[name];
+  };
+  const userHandle = input.user_handle === undefined || input.user_handle === null ? null : field("user_handle", 64);
+  return {
+    credential_id: field("credential_id", 1023),
+    authenticator_data: field("authenticator_data", 4096),
+    client_data_json: field("client_data_json", 4096),
+    signature: field("signature", 256),
+    user_handle: userHandle
+  };
+}
+function normalizePasskeyEnrollment(input) {
+  base64urlDecode(input.credential_id, "credential_id", 1023);
+  if (typeof input.public_key_spki !== "string") {
+    throw new CollabError("passkey_key_invalid", "public_key_spki must be base64url DER");
+  }
+  parsePasskeyPublicKey(input.public_key_spki);
+  if (input.algorithm !== -7) {
+    throw new CollabError("passkey_key_invalid", "Only ES256 (COSE algorithm -7) passkeys are supported");
+  }
+  const scope = validatePasskeyScope(input.rp_id, input.origin);
+  let label = null;
+  if (input.label !== undefined && input.label !== null) {
+    if (typeof input.label !== "string" || input.label.trim().length > 80 || /[\u0000-\u001f\u007f]/.test(input.label)) {
+      throw new CollabError("passkey_label_invalid", "label must be at most 80 characters without control characters");
+    }
+    label = input.label.trim() || null;
+  }
+  return {
+    credential_id: input.credential_id,
+    public_key_spki: input.public_key_spki,
+    algorithm: -7,
+    ...scope,
+    label
+  };
+}
+function parsePasskeyPublicKey(spki) {
+  const der = base64urlDecode(spki, "public_key_spki", 1024);
+  let key;
+  try {
+    key = createPublicKey({ key: der, format: "der", type: "spki" });
+  } catch {
+    throw new CollabError("passkey_key_invalid", "public_key_spki is not a DER SubjectPublicKeyInfo");
+  }
+  if (key.asymmetricKeyType !== "ec" || key.asymmetricKeyDetails?.namedCurve !== "prime256v1") {
+    throw new CollabError("passkey_key_invalid", "Only ES256 (P-256) passkeys are supported");
+  }
+  return key;
+}
+function passkeyFingerprint(spki) {
+  return sha256(base64urlDecode(spki, "public_key_spki", 1024)).toString("hex");
+}
+function validatePasskeyScope(rpId, origin) {
+  if (typeof rpId !== "string" || !/^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/.test(rpId)) {
+    throw new CollabError("passkey_scope_invalid", "rp_id must be a lowercase host name");
+  }
+  let url;
+  try {
+    url = new URL(String(origin));
+  } catch {
+    throw new CollabError("passkey_scope_invalid", "origin must be a URL origin");
+  }
+  const secure = url.protocol === "https:" || url.protocol === "http:" && url.hostname === "localhost";
+  const hostMatches = url.hostname === rpId || url.hostname.endsWith(`.${rpId}`);
+  if (!secure || !hostMatches || url.origin !== origin) {
+    throw new CollabError("passkey_scope_invalid", "origin must be an https origin (or http://localhost) whose host is rp_id or one of its subdomains");
+  }
+  return { rp_id: rpId, origin: url.origin };
+}
+function verifyPasskeyAssertion(input) {
+  const { passkey, assertion } = input;
+  if (assertion.credential_id !== passkey.credential_id) {
+    throw new CollabError("passkey_not_enrolled", "The assertion names a different credential");
+  }
+  const clientDataBytes = base64urlDecode(assertion.client_data_json, "client_data_json");
+  const authenticatorData = base64urlDecode(assertion.authenticator_data, "authenticator_data");
+  const signature = base64urlDecode(assertion.signature, "signature", 256);
+  let clientData;
+  try {
+    const parsed = JSON.parse(clientDataBytes.toString("utf8"));
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
+      throw new Error("not an object");
+    clientData = parsed;
+  } catch {
+    throw new CollabError("passkey_assertion_invalid", "client_data_json is not a JSON object");
+  }
+  if (clientData.type !== "webauthn.get") {
+    throw new CollabError("passkey_assertion_invalid", "client data type must be webauthn.get");
+  }
+  if (clientData.challenge !== input.expected_challenge) {
+    throw new CollabError("passkey_challenge_mismatch", "The assertion signs a different act; request a fresh challenge for the current state");
+  }
+  if (clientData.origin !== passkey.origin || clientData.crossOrigin === true) {
+    throw new CollabError("passkey_origin_mismatch", "The assertion came from another origin");
+  }
+  if (authenticatorData.length < 37) {
+    throw new CollabError("passkey_assertion_invalid", "authenticator_data is too short");
+  }
+  if (!authenticatorData.subarray(0, 32).equals(sha256(passkey.rp_id))) {
+    throw new CollabError("passkey_rp_mismatch", "The assertion is for another relying party");
+  }
+  const flags = authenticatorData[32];
+  if ((flags & FLAG_USER_PRESENT) === 0 || (flags & FLAG_USER_VERIFIED) === 0) {
+    throw new CollabError("passkey_user_not_verified", "The authenticator did not report user presence and user verification");
+  }
+  const signCount = authenticatorData.readUInt32BE(33);
+  if ((signCount !== 0 || passkey.sign_count !== 0) && signCount <= passkey.sign_count) {
+    throw new CollabError("passkey_counter_regressed", "The signature counter did not increase");
+  }
+  const signed = Buffer.concat([authenticatorData, sha256(clientDataBytes)]);
+  const valid = verify("sha256", signed, { key: parsePasskeyPublicKey(passkey.public_key_spki), dsaEncoding: "der" }, signature);
+  if (!valid)
+    throw new CollabError("passkey_signature_invalid", "The passkey signature does not verify");
+  return { sign_count: signCount };
 }
 
 // src/proposal.ts
@@ -176,7 +327,7 @@ function aiPosition(input) {
 }
 
 // src/repository.ts
-import { createHash } from "crypto";
+import { createHash as createHash2 } from "crypto";
 import {
   closeSync as closeSync2,
   existsSync as existsSync2,
@@ -216,13 +367,13 @@ function inspectRepository(rootInput, explicitRepositoryKey, metadataOnly = fals
   const rootPath = topLevel && existsSync2(topLevel) ? realpathSync(topLevel) : requestedRoot;
   const explicitKey = explicitRepositoryKey?.trim();
   if (!topLevel) {
-    const repositoryKey2 = explicitKey ? `explicit:${sha256(explicitKey)}` : `local-path:${sha256(rootPath)}`;
+    const repositoryKey2 = explicitKey ? `explicit:${sha2562(explicitKey)}` : `local-path:${sha2562(rootPath)}`;
     return {
       requested_root_path: requestedRoot,
       root_path: rootPath,
       repository_key: repositoryKey2,
       git_common_dir_hash: null,
-      worktree_fingerprint: `path:${sha256(rootPath)}`,
+      worktree_fingerprint: `path:${sha2562(rootPath)}`,
       checkpoint: {
         worktree_id: worktreeId(rootPath, `path:${rootPath}`),
         head_sha: null,
@@ -239,9 +390,9 @@ function inspectRepository(rootInput, explicitRepositoryKey, metadataOnly = fals
   }
   const commonDir = realpathIfPresent(resolveGitPath(rootPath, commonDirOutput));
   const gitDir = realpathIfPresent(resolveGitPath(rootPath, gitDirOutput));
-  const commonDirHash = sha256(commonDir);
-  const repositoryKey = explicitKey ? `explicit:${sha256(explicitKey)}` : `local-git:${commonDirHash}`;
-  const fingerprint = `git:${sha256(`${commonDir}\x00${gitDir}`)}`;
+  const commonDirHash = sha2562(commonDir);
+  const repositoryKey = explicitKey ? `explicit:${sha2562(explicitKey)}` : `local-git:${commonDirHash}`;
+  const fingerprint = `git:${sha2562(`${commonDir}\x00${gitDir}`)}`;
   const id = worktreeId(rootPath, fingerprint);
   return {
     requested_root_path: requestedRoot,
@@ -268,7 +419,7 @@ function portableRepositoryKey(rootPath, optionsOrDeadline = {}) {
   const root = roots.stdout.toString("utf8").trim();
   if (!GIT_OBJECT_ID.test(root))
     return null;
-  return `git-root-remote:v1:${sha256(`${root}\x00${canonical}`)}`;
+  return `git-root-remote:v1:${sha2562(`${root}\x00${canonical}`)}`;
 }
 function canonicalRepositoryRemote(value) {
   if (/[\s\x00-\x1f\x7f]/.test(value) || value.includes("::") || value.includes("://") && !/^(https?|ssh|git):\/\//i.test(value))
@@ -432,7 +583,7 @@ function inspectSuccessorCommit(rootPath, commitSha, parentSha) {
   return { ok: true, commit_sha: commitSha, parent_sha: parentSha, changes };
 }
 function worktreeId(rootPath, fingerprint) {
-  return `wt_${sha256(`${rootPath}\x00${fingerprint}`).slice(0, 24)}`;
+  return `wt_${sha2562(`${rootPath}\x00${fingerprint}`).slice(0, 24)}`;
 }
 function resolveGitPath(rootPath, value) {
   return value.startsWith("/") ? value : resolve3(rootPath, value);
@@ -523,7 +674,7 @@ function digestUntrackedContent(rootPath, paths) {
     remainingBytes: MAX_UNTRACKED_BYTES,
     deadline: Date.now() + MAX_UNTRACKED_HASH_MS
   };
-  const aggregate = createHash("sha256");
+  const aggregate = createHash2("sha256");
   aggregate.update("agenttool.collab/untracked-state/v1\x00");
   for (const entry of entries) {
     if (Date.now() > budget.deadline)
@@ -572,7 +723,7 @@ function digestStableFile(path, budget) {
     const before = fstatSync(descriptor);
     if (!before.isFile() || before.size > budget.remainingBytes || Date.now() > budget.deadline)
       return null;
-    const hash = createHash("sha256");
+    const hash = createHash2("sha256");
     const buffer = Buffer.allocUnsafe(64 * 1024);
     while (true) {
       if (Date.now() > budget.deadline)
@@ -628,11 +779,11 @@ function lengthPrefix(value) {
   prefix.writeBigUInt64BE(BigInt(value));
   return prefix;
 }
-function sha256(value) {
-  return createHash("sha256").update(value).digest("hex");
+function sha2562(value) {
+  return createHash2("sha256").update(value).digest("hex");
 }
 function sha256Bytes(value) {
-  return createHash("sha256").update(value).digest("hex");
+  return createHash2("sha256").update(value).digest("hex");
 }
 
 // src/store.ts
@@ -746,6 +897,7 @@ class CollabStore {
     }
     this.db = new Database(databasePath, { create: true, strict: true });
     try {
+      this.db.exec("PRAGMA busy_timeout = 5000");
       this.preflightDatabase();
       this.initialize();
     } catch (error) {
@@ -851,23 +1003,52 @@ class CollabStore {
         );
         CREATE INDEX IF NOT EXISTS proposal_terms_workspace_idx
           ON proposal_terms(workspace_id, created_at);
-        CREATE TABLE IF NOT EXISTS proposal_rejections (
+        CREATE TABLE IF NOT EXISTS proposal_person_acts (
           id TEXT PRIMARY KEY,
           workspace_id TEXT NOT NULL REFERENCES workspaces(id),
           proposal_report_id TEXT NOT NULL REFERENCES proposal_terms(report_id),
           proposal_sha256 TEXT NOT NULL,
+          act TEXT NOT NULL CHECK (act IN ('agree', 'reject')),
           party TEXT NOT NULL CHECK (party IN ('person')),
-          basis TEXT NOT NULL CHECK (basis IN ('relayed_by_session', 'controlling_terminal')),
-          reason TEXT NOT NULL,
+          basis TEXT NOT NULL CHECK (basis IN ('relayed_by_session', 'controlling_terminal', 'user_verified_passkey')),
+          reason TEXT,
           -- No foreign key: additive tables never reference the session table,
           -- which the schema-2 preview upgrade renames.
           relayed_by_session_id TEXT,
+          ai_snapshot_json TEXT NOT NULL,
+          proof_json TEXT,
           created_at TEXT NOT NULL,
-          event_sequence INTEGER NOT NULL
+          event_sequence INTEGER NOT NULL,
+          CHECK (act = 'reject' OR basis <> 'relayed_by_session')
         );
-        CREATE INDEX IF NOT EXISTS proposal_rejections_proposal_idx
-          ON proposal_rejections(proposal_report_id, event_sequence);
+        CREATE INDEX IF NOT EXISTS proposal_person_acts_proposal_idx
+          ON proposal_person_acts(proposal_report_id, event_sequence);
+        CREATE TABLE IF NOT EXISTS person_passkeys (
+          credential_id TEXT PRIMARY KEY,
+          public_key_spki TEXT NOT NULL,
+          algorithm INTEGER NOT NULL CHECK (algorithm = -7),
+          rp_id TEXT NOT NULL,
+          origin TEXT NOT NULL,
+          label TEXT,
+          fingerprint TEXT NOT NULL,
+          sign_count INTEGER NOT NULL DEFAULT 0,
+          enrolled_at TEXT NOT NULL,
+          revoked_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS person_addressed_reports (
+          report_id TEXT PRIMARY KEY REFERENCES reports(id),
+          workspace_id TEXT NOT NULL REFERENCES workspaces(id)
+        );
+        CREATE TABLE IF NOT EXISTS session_parent_attestations (
+          session_id TEXT PRIMARY KEY,
+          parent_session_id TEXT NOT NULL,
+          basis TEXT NOT NULL CHECK (basis IN ('same_mcp_process')),
+          attested_at TEXT NOT NULL
+        );
       `);
+      if (this.tableNames().includes("proposal_rejections") && this.db.query(`SELECT 1 FROM proposal_rejections LIMIT 1`).get()) {
+        throw new CollabError("preview_journal_unsupported", "This journal holds rejections from the unreleased consent preview; use a fresh journal");
+      }
       this.db.exec(`PRAGMA application_id = ${APPLICATION_ID}`);
       this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     });
@@ -889,7 +1070,7 @@ class CollabStore {
     if (this.tableNames().length > 0) {
       this.validateLegacyOrV2Shape(userVersion);
       if (userVersion >= HARDENED_PREVIEW_SCHEMA_VERSION) {
-        this.validateAllJournals();
+        this.db.transaction(() => this.validateAllJournals()).deferred();
       }
     }
   }
@@ -1766,7 +1947,7 @@ class CollabStore {
         });
       }
       const repositoryWorkspace = partitions[0] ?? this.portableRepositoryWorkspace(identity.portable_repository_key);
-      const id = repositoryWorkspace?.id ?? `ws_${sha2562(identity.repository_key).slice(0, 24)}`;
+      const id = repositoryWorkspace?.id ?? `ws_${sha2563(identity.repository_key).slice(0, 24)}`;
       const existing = this.getWorkspace(id);
       if (existing && !repositoryWorkspace) {
         throw new CollabError("workspace_identity_collision", "Workspace identity collision");
@@ -1972,6 +2153,12 @@ class CollabStore {
           cursor_epoch_id, cursor_sequence, cursor_hash, cursor_version, reset_generation
         ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, NULL, ?, 0, ?, 0, 0)
       `).run(id, workspace.id, worktreeRow.id, actor, role, parentSessionId, generation, hashSessionToken(token), now, now, workspace.epoch_id, GENESIS_HASH);
+      if (parentSessionId && input.parent_attested === true) {
+        this.db.query(`
+          INSERT INTO session_parent_attestations (session_id, parent_session_id, basis, attested_at)
+          VALUES (?, ?, 'same_mcp_process', ?)
+        `).run(id, parentSessionId, now);
+      }
       this.appendEvent(workspace.id, "session.joined", id, actor, {
         worktree_id: worktreeRow.id,
         role,
@@ -3059,7 +3246,8 @@ class CollabStore {
       relation: validateReportRelation(input.relation ?? "informs"),
       target_report_id: input.target_report_id ? validateId(input.target_report_id, "target_report_id") : null,
       authority_scope: optionalText(input.authority_scope, "authority_scope", 1000),
-      authority_basis: optionalText(input.authority_basis, "authority_basis", 2000)
+      authority_basis: optionalText(input.authority_basis, "authority_basis", 2000),
+      ...input.to_person === true ? { to_person: true } : {}
     };
     return this.mutateAsSession(input, input.idempotency_key, "report.append.v2", normalized, (session) => {
       this.validateReportInput(session, normalized);
@@ -3069,18 +3257,12 @@ class CollabStore {
   }
   openProposalForSession(input) {
     const normalized = {
+      ...normalizeProposalTerms(input),
       task_id: input.task_id ? validateId(input.task_id, "task_id") : null,
-      question: cleanText(input.question, "question", MAX_REPORT_BODY),
-      criteria: cleanText(input.criteria, "criteria", 4000),
-      extent: cleanText(input.extent, "extent", 1000),
-      known_conflicts: optionalText(input.known_conflicts, "known_conflicts", 4000),
-      evidence_refs: normalizeEvidenceRefs(input.evidence_refs ?? []),
       confidence: validateReportConfidence(input.confidence ?? "unknown"),
       confidence_basis: optionalText(input.confidence_basis, "confidence_basis", 2000),
       limits: optionalText(input.limits, "limits", 2000),
       origin: validateProposalOrigin(input.origin ?? "ai"),
-      topic: optionalText(input.topic, "topic", 200),
-      consult_seconds: validateConsultSeconds(input.consult_seconds),
       supersedes_report_id: input.supersedes_report_id ? validateId(input.supersedes_report_id, "supersedes_report_id") : null
     };
     return this.mutateAsSession(input, input.idempotency_key, "proposal.open.v1", normalized, (session) => {
@@ -3102,47 +3284,105 @@ class CollabStore {
       if (normalized.supersedes_report_id) {
         this.requireOpenToRevision(session.workspace_id, normalized.supersedes_report_id);
       }
-      const now = this.timestamp();
-      const voices = this.liveVoiceSnapshot(session.workspace_id, now);
-      const authorVoiceId = this.lineageRoot(session.id);
-      const report = this.appendReportInternal(session, reportInput);
-      const closesAt = new Date(Date.parse(now) + normalized.consult_seconds * 1000).toISOString();
-      const proposalSha256 = sha2562(proposalBytes({
-        workspace_id: session.workspace_id,
-        report_id: report.id,
-        task_id: normalized.task_id,
-        question: report.body,
-        criteria: normalized.criteria,
-        extent: normalized.extent,
-        relies_on: report.evidence_refs,
-        known_conflicts: normalized.known_conflicts,
-        limits: report.limits,
-        origin: normalized.origin,
-        topic: normalized.topic,
-        closes_at: closesAt,
-        supersedes_report_id: normalized.supersedes_report_id
-      }));
-      const event = this.appendEvent(session.workspace_id, "proposal.opened", report.id, session.actor, {
-        rule: CONSENT_RULE,
-        proposal_sha256: proposalSha256,
-        criteria: normalized.criteria,
-        extent: normalized.extent,
-        known_conflicts: normalized.known_conflicts,
-        origin: normalized.origin,
-        topic: normalized.topic,
-        closes_at: closesAt,
-        voices,
-        author_voice_id: authorVoiceId
-      }, session.id);
-      this.db.query(`
-        INSERT INTO proposal_terms (
-          report_id, workspace_id, rule, criteria, extent, known_conflicts, origin,
-          topic, closes_at, voices_json, author_voice_id, proposal_sha256,
-          opened_event_id, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(report.id, session.workspace_id, CONSENT_RULE, normalized.criteria, normalized.extent, normalized.known_conflicts, normalized.origin, normalized.topic, closesAt, canonicalJson(voices), authorVoiceId, proposalSha256, event.id, now);
-      return this.proposalStatusInternal(session.workspace_id, report.id);
+      return this.openProposalInternal(session, this.consentVoice(session.id), reportInput, normalized);
     });
+  }
+  openPersonProposal(input) {
+    const normalized = normalizeProposalTerms(input);
+    const idempotencyKey = validateIdempotencyKey(input.idempotency_key);
+    return this.mutate(input.workspace_id, PERSON_DESK_ACTOR, idempotencyKey, "person.proposal.open.v1", normalized, () => {
+      for (const reference of normalized.evidence_refs)
+        this.requireEvidenceRef(input.workspace_id, reference);
+      const reportInput = {
+        task_id: null,
+        to_session_id: null,
+        kind: "proposal",
+        body: normalized.question,
+        evidence_refs: normalized.evidence_refs,
+        confidence: "unknown",
+        confidence_basis: null,
+        limits: PERSON_DESK_LIMITS,
+        relation: "informs",
+        target_report_id: null,
+        authority_scope: null,
+        authority_basis: null
+      };
+      return this.openProposalInternal({ workspace_id: input.workspace_id, actor: PERSON_DESK_ACTOR, id: null }, PERSON_VOICE_ID, reportInput, { ...normalized, origin: "person_relayed", supersedes_report_id: null });
+    });
+  }
+  withdrawPersonProposal(input) {
+    const normalized = {
+      proposal_report_id: validateId(input.proposal_report_id, "proposal_report_id"),
+      reason: cleanText(input.reason, "reason", 2000)
+    };
+    const idempotencyKey = validateIdempotencyKey(input.idempotency_key);
+    return this.mutate(input.workspace_id, PERSON_DESK_ACTOR, idempotencyKey, "person.proposal.withdraw.v1", normalized, () => {
+      const proposal = this.requireReport(normalized.proposal_report_id);
+      this.requireProposalTerms(input.workspace_id, proposal.id);
+      if (proposal.from_session_id !== null || proposal.from_actor !== PERSON_DESK_ACTOR) {
+        throw new CollabError("report_author_mismatch", "The desk withdraws only proposals it opened; an agent withdraws its own");
+      }
+      if (this.proposalRetirement(input.workspace_id, proposal.id)) {
+        throw new CollabError("proposal_not_on_table", "This proposal was already withdrawn or superseded");
+      }
+      this.appendReportInternal({ workspace_id: input.workspace_id, actor: PERSON_DESK_ACTOR, id: null }, {
+        task_id: proposal.task_id,
+        to_session_id: null,
+        kind: "observation",
+        body: normalized.reason,
+        evidence_refs: [],
+        confidence: "unknown",
+        confidence_basis: null,
+        limits: PERSON_DESK_LIMITS,
+        relation: "withdraws",
+        target_report_id: proposal.id,
+        authority_scope: null,
+        authority_basis: null,
+        about_proposal_id: proposal.id
+      });
+      return this.proposalStatusInternal(input.workspace_id, proposal.id);
+    });
+  }
+  openProposalInternal(author, authorVoiceId, reportInput, terms) {
+    const now = this.timestamp();
+    const voices = this.liveVoiceSnapshot(author.workspace_id, now);
+    const report = this.appendReportInternal(author, reportInput);
+    const closesAt = new Date(Date.parse(now) + terms.consult_seconds * 1000).toISOString();
+    const proposalSha256 = sha2563(proposalBytes({
+      workspace_id: author.workspace_id,
+      report_id: report.id,
+      task_id: report.task_id,
+      question: report.body,
+      criteria: terms.criteria,
+      extent: terms.extent,
+      relies_on: report.evidence_refs,
+      known_conflicts: terms.known_conflicts,
+      limits: report.limits,
+      origin: terms.origin,
+      topic: terms.topic,
+      closes_at: closesAt,
+      supersedes_report_id: terms.supersedes_report_id
+    }));
+    const event = this.appendEvent(author.workspace_id, "proposal.opened", report.id, author.actor, {
+      rule: CONSENT_RULE,
+      proposal_sha256: proposalSha256,
+      criteria: terms.criteria,
+      extent: terms.extent,
+      known_conflicts: terms.known_conflicts,
+      origin: terms.origin,
+      topic: terms.topic,
+      closes_at: closesAt,
+      voices,
+      author_voice_id: authorVoiceId
+    }, author.id);
+    this.db.query(`
+      INSERT INTO proposal_terms (
+        report_id, workspace_id, rule, criteria, extent, known_conflicts, origin,
+        topic, closes_at, voices_json, author_voice_id, proposal_sha256,
+        opened_event_id, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(report.id, author.workspace_id, CONSENT_RULE, terms.criteria, terms.extent, terms.known_conflicts, terms.origin, terms.topic, closesAt, canonicalJson(voices), authorVoiceId, proposalSha256, event.id, now);
+    return this.proposalStatusInternal(author.workspace_id, report.id);
   }
   relayProposalRejectionForSession(input) {
     const normalized = {
@@ -3152,39 +3392,245 @@ class CollabStore {
     };
     return this.mutateAsSession(input, input.idempotency_key, "proposal.reject.relay.v1", normalized, (session) => {
       const terms = this.requireProposalTerms(session.workspace_id, normalized.proposal_report_id);
-      if (terms.proposal_sha256 !== normalized.proposal_sha256) {
-        throw new CollabError("proposal_hash_mismatch", "The rejection names different proposal bytes; read collab_proposal_status and relay against its proposal_sha256", { proposal_sha256: terms.proposal_sha256 });
-      }
-      const current = this.proposalStatusInternal(session.workspace_id, terms.report_id);
-      if (current.ai.position === "withdrawn" || current.ai.position === "superseded") {
-        throw new CollabError("proposal_not_on_table", "A withdrawn or superseded proposal is no longer on the table", { position: current.ai.position, obsoleted_by_report_id: current.ai.obsoleted_by_report_id });
-      }
-      const id = `rejection_${randomUUID()}`;
-      const now = this.timestamp();
-      const rejection = {
-        id,
+      return this.recordPersonAct({
+        workspace_id: terms.workspace_id,
+        proposal_report_id: terms.report_id,
+        proposal_sha256: normalized.proposal_sha256,
+        act: "reject",
+        reason: normalized.reason,
+        basis: "relayed_by_session",
+        actor: session.actor,
+        session_id: session.id,
+        proof: null,
+        expected_ai_snapshot: null
+      });
+    });
+  }
+  personActChallenge(input) {
+    const act = validatePersonAct(input.act);
+    const reason = normalizeActReason(act, input.reason);
+    const transaction = this.db.transaction(() => {
+      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
+      const status = this.proposalStatusInternal(terms.workspace_id, terms.report_id);
+      this.refuseUnrecordableAct(status, act, "user_verified_passkey");
+      const prior = this.personActCount(terms.report_id);
+      const aiSnapshot = aiSnapshotOf(status);
+      return {
+        workspace_id: terms.workspace_id,
         proposal_report_id: terms.report_id,
         proposal_sha256: terms.proposal_sha256,
-        party: "person",
-        basis: "relayed_by_session",
-        reason: normalized.reason,
-        relayed_by_session_id: session.id
+        act,
+        reason,
+        prior_person_acts: prior,
+        ai_snapshot: aiSnapshot,
+        ...personActChallenge({
+          act,
+          workspace_id: terms.workspace_id,
+          proposal_report_id: terms.report_id,
+          proposal_sha256: terms.proposal_sha256,
+          prior_person_acts: prior,
+          reason,
+          ai_snapshot: aiSnapshot
+        }),
+        passkeys: this.listPersonPasskeys().filter((key) => key.revoked_at === null).map((key) => ({
+          credential_id: key.credential_id,
+          rp_id: key.rp_id,
+          origin: key.origin,
+          label: key.label,
+          fingerprint: key.fingerprint
+        }))
       };
-      const event = this.appendEvent(session.workspace_id, "proposal.rejected", terms.report_id, session.actor, { rejection }, session.id);
-      this.db.query(`
-        INSERT INTO proposal_rejections (
-          id, workspace_id, proposal_report_id, proposal_sha256, party, basis,
-          reason, relayed_by_session_id, created_at, event_sequence
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, session.workspace_id, terms.report_id, terms.proposal_sha256, rejection.party, rejection.basis, rejection.reason, session.id, now, event.sequence);
-      return this.proposalStatusInternal(session.workspace_id, terms.report_id);
     });
+    return transaction.deferred();
+  }
+  recordPersonActAtTerminal(input) {
+    const act = validatePersonAct(input.act);
+    const reason = normalizeActReason(act, input.reason);
+    const transaction = this.db.transaction(() => {
+      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
+      return this.recordPersonAct({
+        workspace_id: terms.workspace_id,
+        proposal_report_id: terms.report_id,
+        proposal_sha256: validateSha256(input.proposal_sha256),
+        act,
+        reason,
+        basis: "controlling_terminal",
+        actor: PERSON_TERMINAL_ACTOR,
+        session_id: null,
+        proof: null,
+        expected_ai_snapshot: input.expected_ai_snapshot
+      });
+    });
+    const status = transaction.immediate();
+    this.tightenFileModes();
+    return status;
+  }
+  recordPersonActWithPasskey(input) {
+    const act = validatePersonAct(input.act);
+    const reason = normalizeActReason(act, input.reason);
+    const assertion = normalizePasskeyAssertion(input.assertion);
+    const transaction = this.db.transaction(() => {
+      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
+      const passkey = this.listPersonPasskeys().find((key) => key.credential_id === assertion.credential_id && key.revoked_at === null);
+      if (!passkey) {
+        throw new CollabError("passkey_not_enrolled", "No active enrolled passkey has this credential id");
+      }
+      const status2 = this.proposalStatusInternal(terms.workspace_id, terms.report_id);
+      const aiSnapshot = aiSnapshotOf(status2);
+      const derived = personActChallenge({
+        act,
+        workspace_id: terms.workspace_id,
+        proposal_report_id: terms.report_id,
+        proposal_sha256: terms.proposal_sha256,
+        prior_person_acts: this.personActCount(terms.report_id),
+        reason,
+        ai_snapshot: aiSnapshot
+      });
+      const { sign_count } = verifyPasskeyAssertion({
+        passkey,
+        assertion,
+        expected_challenge: derived.challenge
+      });
+      this.db.query(`UPDATE person_passkeys SET sign_count = ? WHERE credential_id = ?`).run(sign_count, passkey.credential_id);
+      return this.recordPersonAct({
+        workspace_id: terms.workspace_id,
+        proposal_report_id: terms.report_id,
+        proposal_sha256: terms.proposal_sha256,
+        act,
+        reason,
+        basis: "user_verified_passkey",
+        actor: PERSON_PASSKEY_ACTOR,
+        session_id: null,
+        proof: {
+          ...assertion,
+          public_key_spki: passkey.public_key_spki,
+          rp_id: passkey.rp_id,
+          origin: passkey.origin,
+          challenge_bytes: derived.challenge_bytes,
+          challenge: derived.challenge,
+          sign_count
+        },
+        expected_ai_snapshot: aiSnapshot
+      });
+    });
+    const status = transaction.immediate();
+    this.tightenFileModes();
+    return status;
+  }
+  enrollPersonPasskey(input) {
+    const enrollment = normalizePasskeyEnrollment(input);
+    const transaction = this.db.transaction(() => {
+      if (this.db.query(`SELECT 1 FROM person_passkeys WHERE credential_id = ?`).get(enrollment.credential_id)) {
+        throw new CollabError("passkey_already_enrolled", "This credential id is already enrolled");
+      }
+      this.db.query(`
+        INSERT INTO person_passkeys (
+          credential_id, public_key_spki, algorithm, rp_id, origin, label,
+          fingerprint, sign_count, enrolled_at, revoked_at
+        ) VALUES (?, ?, -7, ?, ?, ?, ?, 0, ?, NULL)
+      `).run(enrollment.credential_id, enrollment.public_key_spki, enrollment.rp_id, enrollment.origin, enrollment.label, passkeyFingerprint(enrollment.public_key_spki), this.timestamp());
+    });
+    transaction.immediate();
+    this.tightenFileModes();
+    return this.listPersonPasskeys().find((key) => key.credential_id === enrollment.credential_id);
+  }
+  listPersonPasskeys() {
+    return this.db.query(`SELECT * FROM person_passkeys ORDER BY enrolled_at, credential_id`).all().map((row) => ({ ...row, algorithm: -7 }));
+  }
+  revokePersonPasskey(credentialId) {
+    const transaction = this.db.transaction(() => {
+      const changed = this.db.query(`
+        UPDATE person_passkeys SET revoked_at = ? WHERE credential_id = ? AND revoked_at IS NULL
+      `).run(this.timestamp(), credentialId);
+      if (changed.changes === 0) {
+        throw new CollabError("passkey_not_enrolled", "No active enrolled passkey has this credential id");
+      }
+    });
+    transaction.immediate();
+    this.tightenFileModes();
+    return this.listPersonPasskeys().find((key) => key.credential_id === credentialId);
+  }
+  appendPersonNote(input) {
+    const normalized = {
+      body: cleanText(input.body, "body", MAX_REPORT_BODY),
+      proposal_report_id: input.proposal_report_id ? validateId(input.proposal_report_id, "proposal_report_id") : null
+    };
+    const idempotencyKey = validateIdempotencyKey(input.idempotency_key);
+    return this.mutate(input.workspace_id, PERSON_DESK_ACTOR, idempotencyKey, "person.note.v1", normalized, () => {
+      let toSessionId = null;
+      if (normalized.proposal_report_id) {
+        const terms = this.requireProposalTerms(input.workspace_id, normalized.proposal_report_id);
+        toSessionId = this.requireReport(terms.report_id).from_session_id;
+      }
+      return this.appendReportInternal({ workspace_id: input.workspace_id, actor: PERSON_DESK_ACTOR, id: null }, {
+        task_id: null,
+        to_session_id: toSessionId,
+        kind: "observation",
+        body: normalized.body,
+        evidence_refs: normalized.proposal_report_id ? [`report:${normalized.proposal_report_id}`] : [],
+        confidence: "unknown",
+        confidence_basis: null,
+        limits: PERSON_DESK_LIMITS,
+        relation: "informs",
+        target_report_id: null,
+        authority_scope: null,
+        authority_basis: null,
+        ...normalized.proposal_report_id ? { about_proposal_id: normalized.proposal_report_id } : {}
+      });
+    });
+  }
+  personInbox(workspaceId) {
+    this.requireWorkspace(workspaceId);
+    const transaction = this.db.transaction(() => {
+      const context = this.proposalReadContext(workspaceId);
+      const settled = new Set(["consented", "split", "lapsed"]);
+      const candidates = this.db.query(`
+        SELECT t.report_id FROM proposal_terms t JOIN reports r ON r.id = t.report_id
+        WHERE t.workspace_id = ?
+          AND NOT EXISTS (SELECT 1 FROM proposal_person_acts a WHERE a.proposal_report_id = t.report_id)
+        ORDER BY r.event_sequence DESC
+        LIMIT ?
+      `).all(workspaceId, MAX_INBOX_SCAN);
+      const awaiting = [];
+      const unreadable = [];
+      for (const row of candidates) {
+        if (awaiting.length >= MAX_INBOX_PROPOSALS)
+          break;
+        const status = this.readProposalStatus(context, row.report_id, unreadable);
+        if (status && settled.has(status.ai.position))
+          awaiting.push(status);
+      }
+      const addressed = this.db.query(`
+        SELECT r.* FROM person_addressed_reports p JOIN reports r ON r.id = p.report_id
+        WHERE p.workspace_id = ? ORDER BY r.event_sequence DESC LIMIT 50
+      `).all(workspaceId).map(reportFromRow);
+      return { workspace_id: workspaceId, awaiting_person: awaiting, addressed_reports: addressed, unreadable };
+    });
+    return transaction.deferred();
+  }
+  personInboxSummary() {
+    return this.listWorkspaces().map((workspace) => {
+      const inbox = this.personInbox(workspace.id);
+      return {
+        workspace_id: workspace.id,
+        awaiting_person: inbox.awaiting_person.length,
+        addressed_reports: inbox.addressed_reports.length,
+        latest_report_id: inbox.addressed_reports[0]?.id ?? null
+      };
+    });
+  }
+  listWorkspaces() {
+    return this.db.query(`SELECT id, name, root_path, created_at FROM workspaces ORDER BY created_at, id`).all();
   }
   proposalStatus(workspaceId, proposalReportId) {
     this.requireWorkspace(workspaceId);
     const id = validateId(proposalReportId, "proposal_report_id");
     this.requireProposalTerms(workspaceId, id);
-    return this.proposalStatusInternal(workspaceId, id);
+    return this.db.transaction(() => this.proposalStatusInternal(workspaceId, id)).deferred();
+  }
+  proposalStatusById(proposalReportId) {
+    const terms = this.requireProposalTermsById(validateId(proposalReportId, "proposal_report_id"));
+    return this.db.transaction(() => this.proposalStatusInternal(terms.workspace_id, terms.report_id)).deferred();
   }
   listProposalStatuses(workspaceId, options = {}) {
     this.requireWorkspace(workspaceId);
@@ -3192,16 +3638,128 @@ class CollabStore {
     if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
       throw new CollabError("invalid_limit", "Proposal limit must be between 1 and 50");
     }
-    const rows = this.db.query(`
-      SELECT t.report_id FROM proposal_terms t
-      JOIN reports r ON r.id = t.report_id
-      WHERE t.workspace_id = ?
-      ORDER BY r.event_sequence DESC
-      LIMIT ?
-    `).all(workspaceId, limit);
-    return rows.map((row) => this.proposalStatusInternal(workspaceId, row.report_id));
+    return this.db.transaction(() => {
+      const context = this.proposalReadContext(workspaceId);
+      const rows = this.db.query(`
+        SELECT t.report_id FROM proposal_terms t
+        JOIN reports r ON r.id = t.report_id
+        WHERE t.workspace_id = ?
+        ORDER BY r.event_sequence DESC
+        LIMIT ?
+      `).all(workspaceId, limit);
+      const unreadable = [];
+      const proposals = rows.map((row) => this.readProposalStatus(context, row.report_id, unreadable)).filter((status) => status !== null);
+      return { proposals, unreadable };
+    }).deferred();
   }
-  proposalStatusInternal(workspaceId, reportId) {
+  readProposalStatus(context, reportId, unreadable) {
+    try {
+      return this.proposalStatusInternal(context.workspaceId, reportId, context);
+    } catch (error) {
+      if (!(error instanceof CollabError))
+        throw error;
+      unreadable.push({ proposal_report_id: reportId, error: error.code });
+      return null;
+    }
+  }
+  refuseUnrecordableAct(status, act, basis) {
+    if (status.ai.position === "withdrawn" || status.ai.position === "superseded") {
+      throw new CollabError("proposal_not_on_table", "A withdrawn or superseded proposal is no longer on the table", { position: status.ai.position, obsoleted_by_report_id: status.ai.obsoleted_by_report_id });
+    }
+    const latest = status.person.acts.at(-1) ?? null;
+    if (act === "agree") {
+      if (basis === "relayed_by_session") {
+        throw new CollabError("consent_not_relayable", "A person's agreement is never recorded through a session");
+      }
+      if (status.ai.position !== "consented") {
+        throw new CollabError("ai_not_consented", "The agents have not consented; a person agrees only after they settle", { position: status.ai.position });
+      }
+      if (latest?.act === "agree") {
+        throw new CollabError("already_agreed", "The latest person act already agrees to these bytes");
+      }
+      return;
+    }
+    if (latest?.act === "reject" && (basis === "relayed_by_session" || latest.basis !== "relayed_by_session")) {
+      throw new CollabError("already_rejected", "The latest person act already rejects these bytes");
+    }
+  }
+  recordPersonAct(input) {
+    const current = this.proposalStatusInternal(input.workspace_id, input.proposal_report_id);
+    if (current.proposal_sha256 !== input.proposal_sha256) {
+      throw new CollabError("proposal_hash_mismatch", "The act names different proposal bytes; read the proposal status again", { proposal_sha256: current.proposal_sha256 });
+    }
+    this.refuseUnrecordableAct(current, input.act, input.basis);
+    const aiSnapshot = aiSnapshotOf(current);
+    if (input.expected_ai_snapshot && canonicalJson(input.expected_ai_snapshot) !== canonicalJson(aiSnapshot)) {
+      throw new CollabError("ai_position_changed", "The agents' position changed since it was shown; read the proposal status again", { ai_snapshot: aiSnapshot });
+    }
+    const id = `person_act_${randomUUID()}`;
+    const now = this.timestamp();
+    const personAct = {
+      id,
+      proposal_report_id: input.proposal_report_id,
+      proposal_sha256: input.proposal_sha256,
+      act: input.act,
+      party: "person",
+      basis: input.basis,
+      reason: input.reason,
+      relayed_by_session_id: input.basis === "relayed_by_session" ? input.session_id : null,
+      ai_snapshot: aiSnapshot,
+      proof: input.proof
+    };
+    const event = this.appendEvent(input.workspace_id, input.act === "agree" ? "proposal.agreed" : "proposal.rejected", input.proposal_report_id, input.actor, { person_act: personAct }, input.session_id);
+    this.db.query(`
+      INSERT INTO proposal_person_acts (
+        id, workspace_id, proposal_report_id, proposal_sha256, act, party, basis,
+        reason, relayed_by_session_id, ai_snapshot_json, proof_json, created_at, event_sequence
+      ) VALUES (?, ?, ?, ?, ?, 'person', ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, input.workspace_id, input.proposal_report_id, input.proposal_sha256, input.act, input.basis, input.reason, personAct.relayed_by_session_id, canonicalJson(aiSnapshot), input.proof ? canonicalJson(input.proof) : null, now, event.sequence);
+    return this.proposalStatusInternal(input.workspace_id, input.proposal_report_id);
+  }
+  personActCount(proposalReportId) {
+    return this.db.query(`SELECT COUNT(*) AS count FROM proposal_person_acts WHERE proposal_report_id = ?`).get(proposalReportId).count;
+  }
+  requireProposalTermsById(reportId) {
+    const row = this.db.query(`SELECT workspace_id FROM proposal_terms WHERE report_id = ?`).get(reportId);
+    if (!row) {
+      throw new CollabError("proposal_not_found", "No proposal with consent terms has this report id", { proposal_report_id: reportId });
+    }
+    return this.requireProposalTerms(row.workspace_id, reportId);
+  }
+  proposalReadContext(workspaceId) {
+    return { workspaceId, obsoleted: this.activeObsoletionTargets(workspaceId), voices: new Map };
+  }
+  proposalRetirement(workspaceId, reportId) {
+    return this.db.query(`
+      SELECT id, relation, event_sequence FROM reports
+      WHERE workspace_id = ? AND target_report_id = ?
+        AND relation IN ('withdraws', 'corrects', 'supersedes')
+      ORDER BY event_sequence
+      LIMIT 1
+    `).get(workspaceId, reportId);
+  }
+  standingProposalChallenges(context, reportId) {
+    const challenges = this.db.query(`
+      SELECT id, from_session_id FROM reports
+      WHERE workspace_id = ? AND target_report_id = ? AND relation = 'challenges'
+      ORDER BY event_sequence
+    `).all(context.workspaceId, reportId);
+    const standing = [];
+    for (const challenge of challenges) {
+      if (context.obsoleted.has(challenge.id))
+        continue;
+      const answers = this.db.query(`
+        SELECT id, relation, from_session_id FROM reports
+        WHERE workspace_id = ? AND target_report_id = ? AND relation = 'resolves'
+      `).all(context.workspaceId, challenge.id);
+      const challengerVoice = challenge.from_session_id ? this.consentVoice(challenge.from_session_id, context) : null;
+      const resolved = challengerVoice !== null && answers.some((answer) => !context.obsoleted.has(answer.id) && answer.from_session_id !== null && this.consentVoice(answer.from_session_id, context) === challengerVoice);
+      if (!resolved)
+        standing.push(challenge.id);
+    }
+    return standing;
+  }
+  proposalStatusInternal(workspaceId, reportId, context = this.proposalReadContext(workspaceId)) {
     const proposal = this.requireReport(reportId);
     const terms = this.requireProposalTerms(workspaceId, reportId);
     const bytes = proposalBytes({
@@ -3219,33 +3777,33 @@ class CollabStore {
       closes_at: terms.closes_at,
       supersedes_report_id: proposal.relation === "supersedes" ? proposal.target_report_id : null
     });
-    if (sha2562(bytes) !== terms.proposal_sha256) {
+    if (sha2563(bytes) !== terms.proposal_sha256) {
       throw new CollabError("proposal_terms_invalid", "Stored proposal bytes no longer match their recorded hash", { proposal_report_id: reportId });
     }
-    const obsoleted = this.activeObsoletionTargets(workspaceId);
-    const answers = this.db.query(`
-      SELECT id, relation, from_session_id FROM reports
-      WHERE workspace_id = ? AND target_report_id = ?
+    const retirement = this.proposalRetirement(workspaceId, reportId);
+    const supports = this.db.query(`
+      SELECT id, from_session_id FROM reports
+      WHERE workspace_id = ? AND target_report_id = ? AND relation = 'supports'
       ORDER BY event_sequence
-    `).all(workspaceId, reportId);
-    const live = answers.filter((answer) => !obsoleted.has(answer.id));
-    const obsoleting = live.filter((answer) => ["withdraws", "corrects", "supersedes"].includes(answer.relation)).at(-1) ?? null;
-    const supports = live.filter((answer) => answer.relation === "supports" && answer.from_session_id !== null);
-    const challengeIds = this.unresolvedChallengeIds(workspaceId, reportId);
+    `).all(workspaceId, reportId).filter((support) => support.from_session_id !== null && !context.obsoleted.has(support.id));
+    const challengeIds = this.standingProposalChallenges(context, reportId);
     const computed = aiPosition({
       now: this.timestamp(),
       closes_at: terms.closes_at,
-      obsoleted: obsoleting ? obsoleting.relation === "withdraws" ? "withdrawn" : "superseded" : null,
+      obsoleted: retirement ? retirement.relation === "withdraws" ? "withdrawn" : "superseded" : null,
       unresolved_challenge: challengeIds.length > 0,
       author_voice_id: terms.author_voice_id,
       snapshot_voice_ids: terms.voices.map((voice) => voice.voice_id),
-      support_voice_ids: supports.map((support) => this.lineageRoot(support.from_session_id))
+      support_voice_ids: supports.map((support) => this.consentVoice(support.from_session_id, context))
     });
-    const rejections = this.db.query(`
-      SELECT * FROM proposal_rejections
+    const acts = this.db.query(`
+      SELECT * FROM proposal_person_acts
       WHERE workspace_id = ? AND proposal_report_id = ?
       ORDER BY event_sequence
-    `).all(workspaceId, reportId).map(proposalRejectionFromRow);
+    `).all(workspaceId, reportId).map(proposalPersonActFromRow);
+    const latest = acts.at(-1) ?? null;
+    const state = latest === null ? "awaiting" : latest.act === "agree" ? "agreed" : "rejected";
+    const agreement = latest?.act === "agree" ? latest : null;
     return {
       rule: CONSENT_RULE,
       proposal,
@@ -3258,16 +3816,13 @@ class CollabStore {
         unresolved_challenge_report_ids: challengeIds,
         qualifying_support_report_ids: computed.qualifying_support_indexes.map((index) => supports[index].id),
         awaiting_voice_ids: computed.awaiting_voice_ids,
-        obsoleted_by_report_id: obsoleting?.id ?? null,
+        obsoleted_by_report_id: retirement?.id ?? null,
         basis: "computed_from_journal"
       },
-      person: {
-        state: rejections.length > 0 ? "rejected" : "awaiting",
-        rejections
-      },
-      agreement: null,
-      may_proceed: false,
-      authority_boundary: "ai_consent_alone_authorises_nothing_work_proceeds_only_after_a_person_consents_at_the_controlling_terminal"
+      person: { state, acts },
+      agreement,
+      may_proceed: agreement !== null && retirement === null,
+      authority_boundary: "an_agreement_authorises_only_the_proposal_extent"
     };
   }
   requireProposalTerms(workspaceId, reportId) {
@@ -3285,19 +3840,44 @@ class CollabStore {
     `).get(workspaceId, reportId);
     if (!terms)
       return;
-    if (this.activeObsoletionTargets(workspaceId).has(reportId)) {
+    if (this.proposalRetirement(workspaceId, reportId)) {
       throw new CollabError("proposal_not_on_table", "This proposal was already withdrawn or superseded", { proposal_report_id: reportId });
     }
   }
   refuseProposalRewrite(input) {
-    if (input.relation !== "corrects" && input.relation !== "supersedes")
+    if (input.relation !== "corrects" && input.relation !== "supersedes" && input.relation !== "withdraws")
       return;
     if (!input.target_report_id)
       return;
-    const terms = this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(input.target_report_id);
-    if (terms) {
+    const isTermed = (id) => this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(id) !== null;
+    if (input.relation !== "withdraws" && isTermed(input.target_report_id)) {
       throw new CollabError("proposal_terms_fixed", "A proposal with consent terms is fixed by its hash. Withdraw it, or open a revision with " + "collab_proposal_open and supersedes_report_id");
     }
+    const target = this.db.query(`SELECT relation, target_report_id FROM reports WHERE id = ?`).get(input.target_report_id);
+    if (target?.target_report_id && ["withdraws", "corrects", "supersedes"].includes(target.relation) && !isTermed(input.target_report_id) && isTermed(target.target_report_id)) {
+      throw new CollabError("proposal_retired", "This report retired a proposal, and a retirement is final; open a new proposal instead");
+    }
+  }
+  tableVoices(workspaceId) {
+    this.requireWorkspace(workspaceId);
+    const now = this.timestamp();
+    const rows = this.db.query(`
+      SELECT id, actor, role, status, last_seen_at FROM coordination_sessions
+      WHERE workspace_id = ? AND status = 'active'
+      ORDER BY last_seen_at DESC, id
+    `).all(workspaceId);
+    const voices = new Map;
+    for (const row of rows) {
+      const voiceId = this.consentVoice(row.id);
+      voices.set(voiceId, [...voices.get(voiceId) ?? [], {
+        id: row.id,
+        actor: row.actor,
+        role: row.role,
+        liveness: sessionLiveness(row, now),
+        last_seen_at: row.last_seen_at
+      }]);
+    }
+    return [...voices.entries()].map(([voice_id, sessions]) => ({ voice_id, sessions }));
   }
   liveVoiceSnapshot(workspaceId, observedAt) {
     const rows = this.db.query(`
@@ -3309,19 +3889,23 @@ class CollabStore {
     for (const row of rows) {
       if (sessionLiveness(row, observedAt) !== "live")
         continue;
-      const voiceId = this.lineageRoot(row.id);
+      const voiceId = this.consentVoice(row.id);
       voices.set(voiceId, [...voices.get(voiceId) ?? [], row.id]);
     }
     return [...voices.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([voice_id, live_session_ids]) => ({ voice_id, live_session_ids: live_session_ids.sort() }));
   }
-  lineageRoot(sessionId) {
+  consentVoice(sessionId, context) {
+    const cached = context?.voices.get(sessionId);
+    if (cached)
+      return cached;
     let current = sessionId;
     for (let depth = 0;depth < 256; depth += 1) {
-      const row = this.db.query(`SELECT parent_session_id FROM coordination_sessions WHERE id = ?`).get(current);
-      if (!row?.parent_session_id)
-        return current;
+      const row = this.db.query(`SELECT parent_session_id FROM session_parent_attestations WHERE session_id = ?`).get(current);
+      if (!row)
+        break;
       current = row.parent_session_id;
     }
+    context?.voices.set(sessionId, current);
     return current;
   }
   listReports(workspaceId, options = {}) {
@@ -3990,6 +4574,17 @@ class CollabStore {
     const validated = this.validateEventAnchor(workspaceId, anchor);
     return this.eventsSince(workspaceId, validated.sequence, limit);
   }
+  proposalAddressesSession(proposalReportId, sessionId) {
+    const row = this.db.query(`
+      SELECT r.from_session_id, t.voices_json, t.author_voice_id FROM reports r
+      JOIN proposal_terms t ON t.report_id = r.id WHERE r.id = ?
+    `).get(proposalReportId);
+    if (!row)
+      return false;
+    if (row.from_session_id !== null)
+      return row.from_session_id === sessionId;
+    return JSON.parse(row.voices_json).some((voice) => voice.voice_id !== row.author_voice_id && voice.live_session_ids.includes(sessionId));
+  }
   eventAddressesSession(event, sessionId) {
     const payload = event.payload ?? {};
     const field = (value, key) => value !== null && typeof value === "object" ? value[key] : undefined;
@@ -3997,6 +4592,9 @@ class CollabStore {
       case "report.posted": {
         if (payload.to_session_id === sessionId)
           return true;
+        if (typeof payload.about_proposal_id === "string") {
+          return this.proposalAddressesSession(payload.about_proposal_id, sessionId);
+        }
         if (typeof payload.target_report_id !== "string")
           return false;
         const target = this.db.query(`SELECT from_session_id FROM reports WHERE id = ?`).get(payload.target_report_id);
@@ -4023,10 +4621,9 @@ class CollabStore {
         const voices = Array.isArray(payload.voices) ? payload.voices : [];
         return voices.some((voice) => field(voice, "voice_id") !== payload.author_voice_id && Array.isArray(field(voice, "live_session_ids")) && field(voice, "live_session_ids").includes(sessionId));
       }
-      case "proposal.rejected": {
-        const proposal = this.db.query(`SELECT from_session_id FROM reports WHERE id = ?`).get(event.entity_id);
-        return proposal?.from_session_id === sessionId;
-      }
+      case "proposal.agreed":
+      case "proposal.rejected":
+        return this.proposalAddressesSession(event.entity_id, sessionId);
       default:
         return false;
     }
@@ -4066,7 +4663,7 @@ class CollabStore {
   }
   mutate(workspaceId, actor, idempotencyKey, operation, request, apply) {
     this.requireWorkspace(workspaceId);
-    const requestHash = sha2562(canonicalJson({ operation, request }));
+    const requestHash = sha2563(canonicalJson({ operation, request }));
     const transaction = this.db.transaction(() => {
       const existing = this.db.query(`
         SELECT operation, request_hash, response_json FROM mutations
@@ -4095,7 +4692,7 @@ class CollabStore {
   readSessionMutationReceipt(credential, idempotencyKeyInput, operation, request) {
     const session = this.authenticateSession(credential);
     const idempotencyKey = validateIdempotencyKey(idempotencyKeyInput);
-    const requestHash = sha2562(canonicalJson({ operation, request }));
+    const requestHash = sha2563(canonicalJson({ operation, request }));
     const existing = this.db.query(`
       SELECT operation, request_hash, response_json FROM mutations
       WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
@@ -4116,7 +4713,7 @@ class CollabStore {
       const session = this.authenticateSession(credential, options);
       this.recordSessionLeaseLapses(session, this.timestamp());
       const mutationActor = `session:${session.id}`;
-      const requestHash = sha2562(canonicalJson({ operation, request }));
+      const requestHash = sha2563(canonicalJson({ operation, request }));
       const existing = this.db.query(`
         SELECT operation, request_hash, response_json FROM mutations
         WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
@@ -4652,6 +5249,8 @@ class CollabStore {
     const id = `report_${randomUUID()}`;
     const now = this.timestamp();
     const event = this.appendEvent(session.workspace_id, "report.posted", id, session.actor, {
+      ...input.to_person ? { to_person: true } : {},
+      ...input.about_proposal_id ? { about_proposal_id: input.about_proposal_id } : {},
       task_id: input.task_id,
       to_session_id: input.to_session_id,
       kind: input.kind,
@@ -4673,6 +5272,9 @@ class CollabStore {
         created_at, event_sequence
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, session.workspace_id, input.task_id, session.id, session.actor, input.to_session_id, input.kind, input.body, canonicalJson(input.evidence_refs), input.confidence, input.confidence_basis, input.limits, input.relation, input.target_report_id, input.authority_scope, input.authority_basis, now, event.sequence);
+    if (input.to_person) {
+      this.db.query(`INSERT INTO person_addressed_reports (report_id, workspace_id) VALUES (?, ?)`).run(id, session.workspace_id);
+    }
     return this.requireReport(id);
   }
   requireReport(id) {
@@ -5117,7 +5719,11 @@ function normalizeLeaseInput(input) {
   };
 }
 function validateActor(value) {
-  return cleanText(value, "actor", 200);
+  const actor = cleanText(value, "actor", 200);
+  if (/^person:/i.test(actor)) {
+    throw new CollabError("invalid_actor", "Actor labels beginning with person: are reserved for the person desk");
+  }
+  return actor;
 }
 function validateExpectedVersion(value) {
   if (!Number.isInteger(value) || value < 1) {
@@ -5385,10 +5991,10 @@ function eventFromRow(row) {
 function eventHash(event) {
   if (event.protocol === LEGACY_COLLAB_PROTOCOL) {
     const { hash: _hash2, session_id: _sessionId, ...body2 } = event;
-    return sha2562(canonicalJson(body2));
+    return sha2563(canonicalJson(body2));
   }
   const { hash: _hash, ...body } = event;
-  return sha2562(canonicalJson(body));
+  return sha2563(canonicalJson(body));
 }
 function verifyEventPage(events, afterSequence, predecessorHash, headSequence, headHash) {
   if (predecessorHash === null)
@@ -5554,8 +6160,54 @@ function proposalTermsFromRow(row) {
     created_at: row.created_at
   };
 }
-function proposalRejectionFromRow(row) {
-  return { ...row };
+function proposalPersonActFromRow(row) {
+  const { ai_snapshot_json, proof_json, ...rest } = row;
+  return {
+    ...rest,
+    ai_snapshot: JSON.parse(ai_snapshot_json),
+    proof: proof_json ? JSON.parse(proof_json) : null
+  };
+}
+var MAX_INBOX_SCAN = 500;
+var MAX_INBOX_PROPOSALS = 50;
+function aiSnapshotOf(status) {
+  return {
+    position: status.ai.position,
+    closed: status.ai.closed,
+    qualifying_support_report_ids: status.ai.qualifying_support_report_ids,
+    unresolved_challenge_report_ids: status.ai.unresolved_challenge_report_ids
+  };
+}
+function normalizeActReason(act, reason) {
+  if (act === "agree") {
+    if (reason !== undefined && reason.trim() !== "") {
+      throw new CollabError("invalid_reason", "An agreement takes no reason");
+    }
+    return null;
+  }
+  return cleanText(reason ?? "", "reason", 2000);
+}
+var PERSON_DESK_ACTOR = "person:desk";
+var PERSON_TERMINAL_ACTOR = "person:terminal";
+var PERSON_PASSKEY_ACTOR = "person:passkey";
+var PERSON_VOICE_ID = "person";
+var PERSON_DESK_LIMITS = "Written at the person desk, which does not authenticate the person.";
+function validatePersonAct(value) {
+  if (value !== "agree" && value !== "reject") {
+    throw new CollabError("invalid_act", "act must be agree or reject");
+  }
+  return value;
+}
+function normalizeProposalTerms(input) {
+  return {
+    question: cleanText(input.question, "question", MAX_REPORT_BODY),
+    criteria: cleanText(input.criteria, "criteria", 4000),
+    extent: cleanText(input.extent, "extent", 1000),
+    known_conflicts: optionalText(input.known_conflicts, "known_conflicts", 4000),
+    evidence_refs: normalizeEvidenceRefs(input.evidence_refs ?? []),
+    topic: optionalText(input.topic, "topic", 200),
+    consult_seconds: validateConsultSeconds(input.consult_seconds)
+  };
 }
 function validateProposalOrigin(value) {
   if (value !== "ai" && value !== "person_relayed") {
@@ -5574,7 +6226,7 @@ function parseCheckpoint(json) {
   return json ? JSON.parse(json) : null;
 }
 function checkpointDigest(checkpoint) {
-  return sha2562(canonicalJson(checkpoint));
+  return sha2563(canonicalJson(checkpoint));
 }
 function checkpointStateMatches(left, right) {
   return left.worktree_id === right.worktree_id && left.head_sha === right.head_sha && left.branch === right.branch && left.algorithm === right.algorithm && left.index_sha256 === right.index_sha256 && left.state_sha256 === right.state_sha256 && left.dirty === right.dirty;
@@ -5680,7 +6332,7 @@ function sqlToBoolean(value) {
   return value === null ? null : value !== 0;
 }
 function hashSessionToken(token) {
-  return sha2562(`agenttool.collab/session-token/v1\x00${token}`);
+  return sha2563(`agenttool.collab/session-token/v1\x00${token}`);
 }
 function safeDigestEqual(left, right) {
   const leftBuffer = Buffer.from(left, "hex");
@@ -5783,14 +6435,14 @@ function safeRepositoryIdentity(rootPath) {
     return inspectRepository(rootPath);
   } catch {
     const root = resolve4(rootPath);
-    const repositoryKey = `local-path:${sha2562(root)}`;
-    const worktreeId2 = `wt_${sha2562(`${root}\x00path:${root}`).slice(0, 24)}`;
+    const repositoryKey = `local-path:${sha2563(root)}`;
+    const worktreeId2 = `wt_${sha2563(`${root}\x00path:${root}`).slice(0, 24)}`;
     return {
       requested_root_path: root,
       root_path: root,
       repository_key: repositoryKey,
       git_common_dir_hash: null,
-      worktree_fingerprint: `path:${sha2562(root)}`,
+      worktree_fingerprint: `path:${sha2563(root)}`,
       checkpoint: {
         worktree_id: worktreeId2,
         head_sha: null,
@@ -5801,16 +6453,961 @@ function safeRepositoryIdentity(rootPath) {
     };
   }
 }
-function sha2562(value) {
-  return createHash2("sha256").update(value).digest("hex");
+function sha2563(value) {
+  return createHash3("sha256").update(value).digest("hex");
 }
 function addSeconds(iso, seconds) {
   return new Date(new Date(iso).getTime() + seconds * 1000).toISOString();
 }
 
+// src/ceremony.ts
+import { spawn } from "child_process";
+import { randomBytes as randomBytes2 } from "crypto";
+
+// src/person-desk.ts
+import { createHash as createHash4 } from "crypto";
+import { closeSync as closeSync5, existsSync as existsSync4, openSync as openSync5, readSync as readSync3 } from "fs";
+import { parseArgs } from "util";
+
+// src/tty.ts
+import { closeSync as closeSync4, constants, openSync as openSync4, readSync as readSync2, writeSync } from "fs";
+import { isatty } from "tty";
+var DEV_TTY = "/dev/tty";
+var CONFIRM_WORD = "yes";
+var DEFAULT_WINDOW_MS = 5 * 60 * 1000;
+var MAX_ANSWER_BYTES = 256;
+var TERMINAL_UNSAFE = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u2028\u2029\p{Cf}\p{Default_Ignorable_Code_Point}]/gu;
+function terminalRendering(text) {
+  return text.replace(TERMINAL_UNSAFE, (char) => `\\u{${char.codePointAt(0).toString(16).toUpperCase()}}`);
+}
+function pause(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+function openDevTty(path = DEV_TTY) {
+  let fd;
+  try {
+    fd = openSync4(path, constants.O_RDWR | constants.O_NONBLOCK);
+  } catch {
+    return null;
+  }
+  let terminal = false;
+  try {
+    terminal = isatty(fd);
+  } catch {
+    terminal = false;
+  }
+  if (!terminal) {
+    closeSync4(fd);
+    return null;
+  }
+  return {
+    write(text) {
+      const bytes = Buffer.from(text, "utf8");
+      let offset = 0;
+      while (offset < bytes.length) {
+        offset += writeSync(fd, bytes, offset, bytes.length - offset);
+      }
+    },
+    readLine(maxBytes, deadline, now = Date.now) {
+      const one = Buffer.alloc(1);
+      const collected = [];
+      let overflow = false;
+      while (true) {
+        if (deadline !== undefined && now() > deadline)
+          return null;
+        let read;
+        try {
+          read = readSync2(fd, one, 0, 1, null);
+        } catch (error) {
+          if (error.code !== "EAGAIN")
+            throw error;
+          pause(50);
+          continue;
+        }
+        if (read === 0)
+          return collected.length === 0 ? null : Buffer.from(collected).toString("utf8");
+        if (one[0] === 10 || one[0] === 13)
+          break;
+        if (collected.length < maxBytes)
+          collected.push(one[0]);
+        else
+          overflow = true;
+      }
+      return overflow ? "" : Buffer.from(collected).toString("utf8");
+    },
+    close() {
+      closeSync4(fd);
+    }
+  };
+}
+function confirmOnTty(request, options = {}) {
+  const open = options.openTty ?? (() => openDevTty());
+  const now = options.now ?? Date.now;
+  const windowMs = options.windowMs ?? DEFAULT_WINDOW_MS;
+  const port = open();
+  if (port === null) {
+    throw new CollabError("tty_unavailable", "This act needs a person at the controlling terminal (/dev/tty); none is available, so nothing was written");
+  }
+  try {
+    const byteLength = Buffer.byteLength(request.bytes, "utf8");
+    const rendered = terminalRendering(request.bytes);
+    port.write([
+      "",
+      `agenttool-collab-host: person act ${terminalRendering(request.act)}`,
+      ...request.summary.map((line) => `  ${terminalRendering(line)}`),
+      `exact bytes (${byteLength} bytes, sha256 ${request.sha256})` + (rendered === request.bytes ? ":" : ", hidden characters shown as \\u{...}:"),
+      rendered,
+      `Type ${CONFIRM_WORD} to record exactly these bytes; anything else cancels: `
+    ].join(`
+`));
+    const started = now();
+    const answer = port.readLine(MAX_ANSWER_BYTES, started + windowMs, now);
+    if (answer === null || now() - started > windowMs) {
+      port.write(`no answer within the confirmation window; nothing was written
+`);
+      return false;
+    }
+    const confirmed = answer !== null && answer.trim() === CONFIRM_WORD;
+    port.write(confirmed ? `confirmed
+` : `cancelled; nothing was written
+`);
+    return confirmed;
+  } finally {
+    port.close();
+  }
+}
+
+// src/person-desk.ts
+var PERSON_DESK_PROTOCOL = "agenttool.collab-host/1";
+var EXIT_NOT_CONFIRMED = 3;
+var MAX_JSON_INPUT_BYTES = 64 * 1024;
+var PERSON_DESK_USAGE = "usage: agenttool-collab-host person <verb> [--db <path>], where <verb> is one of: " + "workspaces | voices --workspace <id> | proposals --workspace <id> [--proposal <id> | --limit <n>]" + " | inbox [--workspace <id>]" + " | challenge --proposal <id> --act agree | challenge --proposal <id> --act reject --reason <text>" + " | consent --proposal <id> [--passkey-assertion <path>|-]" + " | reject --proposal <id> --reason <text> [--passkey-assertion <path>|-]" + " | ceremony --proposal <id> --act agree|reject [--reason <text>] [--via <ssh-destination>] [--port <n>] [--no-open]" + " | say --workspace <id> --body <text> [--proposal <id>] --idempotency-key <key>" + " | propose --workspace <id> --question <text> --criteria <text> --extent <text>" + " [--known-conflicts <text>] [--topic <text>] [--consult-seconds <n>] --idempotency-key <key>" + " | withdraw --workspace <id> --proposal <id> --reason <text> --idempotency-key <key>" + " | passkey-enroll (--file <path>|- | --ceremony [--label <text>] [--port <n>] [--no-open])" + " | passkeys | passkey-export --credential <id> | passkey-revoke --credential <id>";
+var VERB_OPTIONS = {
+  workspaces: { required: [], optional: [] },
+  voices: { required: ["workspace"], optional: [] },
+  proposals: { required: ["workspace"], optional: ["proposal", "limit"] },
+  inbox: { required: [], optional: ["workspace"] },
+  challenge: { required: ["proposal", "act"], optional: ["reason"] },
+  consent: { required: ["proposal"], optional: ["passkey-assertion"] },
+  reject: { required: ["proposal", "reason"], optional: ["passkey-assertion"] },
+  ceremony: { required: ["proposal", "act"], optional: ["reason", "via", "port", "no-open"] },
+  say: { required: ["workspace", "body", "idempotency-key"], optional: ["proposal"] },
+  propose: {
+    required: ["workspace", "question", "criteria", "extent", "idempotency-key"],
+    optional: ["known-conflicts", "topic", "consult-seconds"]
+  },
+  withdraw: { required: ["workspace", "proposal", "reason", "idempotency-key"], optional: [] },
+  "passkey-enroll": { required: [], optional: ["file", "ceremony", "label", "port", "no-open"] },
+  passkeys: { required: [], optional: [] },
+  "passkey-export": { required: ["credential"], optional: [] },
+  "passkey-revoke": { required: ["credential"], optional: [] }
+};
+var CEREMONY_VERBS = new Set(["ceremony"]);
+var REMOTE_VERBS = new Set([
+  "workspaces",
+  "voices",
+  "proposals",
+  "inbox",
+  "challenge",
+  "consent",
+  "reject",
+  "say",
+  "propose",
+  "withdraw",
+  "passkeys"
+]);
+var STRING_OPTIONS = [
+  "workspace",
+  "proposal",
+  "limit",
+  "act",
+  "reason",
+  "passkey-assertion",
+  "body",
+  "idempotency-key",
+  "question",
+  "criteria",
+  "extent",
+  "known-conflicts",
+  "topic",
+  "consult-seconds",
+  "file",
+  "credential",
+  "db",
+  "via",
+  "port",
+  "label"
+];
+var BOOLEAN_OPTIONS = ["ceremony", "no-open"];
+function runPersonDeskCli(argv, env = process.env, deps = {}) {
+  let command = "person";
+  const emit = (payload, exitCode) => ({
+    exit_code: exitCode,
+    line: JSON.stringify({ protocol: PERSON_DESK_PROTOCOL, command, ...payload })
+  });
+  if (argv.some((arg) => arg === "--help" || arg === "-h")) {
+    return emit({ status: "help", usage: PERSON_DESK_USAGE }, 0);
+  }
+  const first = argv.find((arg) => !arg.startsWith("-"));
+  if (first && Object.hasOwn(VERB_OPTIONS, first))
+    command = `person ${first}`;
+  try {
+    const { verb, values } = parsePersonArgs(argv);
+    if (CEREMONY_VERBS.has(verb) || verb === "passkey-enroll" && values.ceremony) {
+      throw new CollabError("usage_error", `person ${verb} serves a page; run it through agenttool-collab-host`);
+    }
+    const store = openDeskStore(values, env, deps);
+    try {
+      const outcome = runVerb(store, verb, values, deps);
+      return outcome.cancelled ? emit({ status: "cancelled", message: "Not confirmed at the terminal; nothing was written" }, EXIT_NOT_CONFIRMED) : emit({ status: "ok", ...outcome.result }, 0);
+    } finally {
+      store.close();
+    }
+  } catch (error) {
+    return emit(errorPayload(error), 1);
+  }
+}
+function runPersonRemoteCli(env = process.env, deps = {}) {
+  let argv;
+  try {
+    argv = JSON.parse(env.SSH_ORIGINAL_COMMAND ?? "");
+  } catch {
+    argv = null;
+  }
+  const fail = (error, message) => ({
+    exit_code: 1,
+    line: JSON.stringify({ protocol: PERSON_DESK_PROTOCOL, command: "person-remote", status: "error", error, message })
+  });
+  if (!Array.isArray(argv) || argv.length === 0 || argv.length > 32 || !argv.every((arg) => typeof arg === "string")) {
+    return fail("usage_error", "SSH_ORIGINAL_COMMAND must be a JSON array of strings, verb first");
+  }
+  const verb = argv[0];
+  if (!Object.hasOwn(VERB_OPTIONS, verb) || !REMOTE_VERBS.has(verb)) {
+    return fail("remote_verb_refused", "This verb needs a terminal or a browser on the device itself");
+  }
+  if (argv.some((arg) => arg === "--db" || arg.startsWith("--db="))) {
+    return fail("remote_verb_refused", "The forced command pins the journal; --db is not accepted remotely");
+  }
+  if ((verb === "consent" || verb === "reject") && !argv.includes("--passkey-assertion=-")) {
+    return fail("remote_verb_refused", "Remote acts need a passkey assertion on stdin (--passkey-assertion=-)");
+  }
+  return runPersonDeskCli(argv, env, deps);
+}
+function openDeskStore(values, env, deps) {
+  const databasePath = values.db ?? resolveDatabasePath(env);
+  if (!existsSync4(databasePath)) {
+    throw new CollabError("journal_not_found", "No collaboration journal exists at the selected path; pass --db or set AGENTOOL_COLLAB_DB");
+  }
+  return new CollabStore(databasePath, deps.storeNow ? { now: deps.storeNow } : {});
+}
+function runVerb(store, verb, values, deps) {
+  const done = (result) => ({ cancelled: false, result });
+  switch (verb) {
+    case "workspaces":
+      return done({ workspaces: store.listWorkspaces() });
+    case "voices":
+      return done({ voices: store.tableVoices(values.workspace) });
+    case "proposals":
+      return values.proposal ? done({ proposal: store.proposalStatus(values.workspace, values.proposal) }) : done(store.listProposalStatuses(values.workspace, { limit: parseInteger(values.limit, "limit") }));
+    case "inbox":
+      return values.workspace ? done({ inbox: store.personInbox(values.workspace) }) : done({ summary: store.personInboxSummary() });
+    case "challenge":
+      return done({
+        challenge: store.personActChallenge({
+          proposal_report_id: values.proposal,
+          act: parseAct(values.act),
+          reason: values.reason
+        })
+      });
+    case "consent":
+    case "reject": {
+      const act = verb === "consent" ? "agree" : "reject";
+      if (values["passkey-assertion"] !== undefined) {
+        return done({
+          proposal: store.recordPersonActWithPasskey({
+            proposal_report_id: values.proposal,
+            act,
+            reason: values.reason,
+            assertion: readJsonInput(values["passkey-assertion"], deps)
+          })
+        });
+      }
+      const challenge = store.personActChallenge({ proposal_report_id: values.proposal, act, reason: values.reason });
+      const status = store.proposalStatusById(values.proposal);
+      const bytes = `${challenge.challenge_bytes}
+${status.proposal_bytes}`;
+      const confirmed = confirmOnTty({
+        act: act === "agree" ? "agree to a proposal" : "reject a proposal",
+        summary: actSummary(status, act, challenge.reason),
+        bytes,
+        sha256: createHash4("sha256").update(bytes).digest("hex")
+      }, { openTty: deps.openTty, now: deps.now });
+      if (!confirmed)
+        return { cancelled: true };
+      return done({
+        proposal: store.recordPersonActAtTerminal({
+          proposal_report_id: status.proposal.id,
+          proposal_sha256: status.proposal_sha256,
+          act,
+          reason: challenge.reason ?? undefined,
+          expected_ai_snapshot: challenge.ai_snapshot
+        })
+      });
+    }
+    case "say":
+      return done({
+        report: store.appendPersonNote({
+          workspace_id: values.workspace,
+          idempotency_key: values["idempotency-key"],
+          body: values.body,
+          proposal_report_id: values.proposal
+        })
+      });
+    case "propose":
+      return done({
+        proposal: store.openPersonProposal({
+          workspace_id: values.workspace,
+          idempotency_key: values["idempotency-key"],
+          question: values.question,
+          criteria: values.criteria,
+          extent: values.extent,
+          known_conflicts: values["known-conflicts"],
+          topic: values.topic,
+          consult_seconds: parseInteger(values["consult-seconds"], "consult-seconds")
+        })
+      });
+    case "withdraw":
+      return done({
+        proposal: store.withdrawPersonProposal({
+          workspace_id: values.workspace,
+          idempotency_key: values["idempotency-key"],
+          proposal_report_id: values.proposal,
+          reason: values.reason
+        })
+      });
+    case "passkey-enroll": {
+      if (values.file === undefined) {
+        throw new CollabError("usage_error", `passkey-enroll needs --file or --ceremony; ${PERSON_DESK_USAGE}`);
+      }
+      const read = readJsonInput(values.file, deps);
+      const exported = read.protocol === PERSON_DESK_PROTOCOL && read.command === "person passkey-export" && typeof read.enrollment === "object" && read.enrollment !== null && !Array.isArray(read.enrollment);
+      const input = exported ? read.enrollment : read;
+      const enrollment = normalizePasskeyEnrollment({
+        credential_id: input.credential_id,
+        public_key_spki: input.public_key_spki,
+        algorithm: input.algorithm,
+        rp_id: input.rp_id,
+        origin: input.origin,
+        label: values.label ?? input.label
+      });
+      return confirmEnrollment(store, enrollment, deps) ? done({ passkey: store.enrollPersonPasskey(enrollment) }) : { cancelled: true };
+    }
+    case "passkeys":
+      return done({ passkeys: store.listPersonPasskeys() });
+    case "passkey-export": {
+      const passkey = activePasskey(store, values.credential);
+      return done({
+        enrollment: {
+          credential_id: passkey.credential_id,
+          public_key_spki: passkey.public_key_spki,
+          algorithm: -7,
+          rp_id: passkey.rp_id,
+          origin: passkey.origin,
+          label: passkey.label
+        },
+        fingerprint: passkey.fingerprint
+      });
+    }
+    case "passkey-revoke": {
+      const passkey = activePasskey(store, values.credential);
+      const bytes = canonicalJson({ revoke: passkey.credential_id, fingerprint: passkey.fingerprint });
+      const confirmed = confirmOnTty({
+        act: "revoke a passkey",
+        summary: [`key fingerprint (sha256): ${passkey.fingerprint}`, `origin ${passkey.origin}`],
+        bytes,
+        sha256: createHash4("sha256").update(bytes).digest("hex")
+      }, { openTty: deps.openTty, now: deps.now });
+      if (!confirmed)
+        return { cancelled: true };
+      return done({ passkey: store.revokePersonPasskey(passkey.credential_id) });
+    }
+    case "ceremony":
+      throw new CollabError("usage_error", "person ceremony serves a page; run it through agenttool-collab-host");
+  }
+}
+function confirmEnrollment(store, enrollment, deps) {
+  if (store.listPersonPasskeys().some((key) => key.credential_id === enrollment.credential_id)) {
+    throw new CollabError("passkey_already_enrolled", "This credential id is already enrolled");
+  }
+  const bytes = canonicalJson(enrollment);
+  return confirmOnTty({
+    act: "enrol a passkey",
+    summary: [
+      `key fingerprint (sha256): ${passkeyFingerprint(enrollment.public_key_spki)}`,
+      `relying party ${enrollment.rp_id}, signing origin ${enrollment.origin}`,
+      `label ${JSON.stringify(enrollment.label)}`,
+      "Enrol only a passkey you just created yourself; it will sign agreements in your name."
+    ],
+    bytes,
+    sha256: createHash4("sha256").update(bytes).digest("hex")
+  }, { openTty: deps.openTty, now: deps.now });
+}
+function activePasskey(store, credentialId) {
+  const passkey = store.listPersonPasskeys().find((key) => key.credential_id === credentialId);
+  if (!passkey || passkey.revoked_at !== null) {
+    throw new CollabError("passkey_not_enrolled", "No active enrolled passkey has this credential id");
+  }
+  return passkey;
+}
+function actSummary(status, act, reason) {
+  return [
+    `workspace ${status.proposal.workspace_id}, proposal ${status.proposal.id}`,
+    `agents' position: ${status.ai.position} (${status.ai.qualifying_support_report_ids.length} qualifying supports, ` + `${status.ai.unresolved_challenge_report_ids.length} standing challenges)`,
+    `question ${JSON.stringify(status.proposal.body)}`,
+    `extent ${JSON.stringify(status.terms.extent)}`,
+    act === "agree" ? "Agreeing authorises only this extent." : `reason ${JSON.stringify(reason)}`
+  ];
+}
+function parsePersonArgs(argv) {
+  let parsed;
+  try {
+    parsed = parseArgs({
+      args: argv,
+      allowPositionals: true,
+      strict: true,
+      tokens: true,
+      options: {
+        ...Object.fromEntries(STRING_OPTIONS.map((name) => [name, { type: "string" }])),
+        ...Object.fromEntries(BOOLEAN_OPTIONS.map((name) => [name, { type: "boolean" }]))
+      }
+    });
+  } catch (error) {
+    throw new CollabError("usage_error", `${error instanceof Error ? error.message : String(error)}; ${PERSON_DESK_USAGE}`);
+  }
+  const [command, ...extra] = parsed.positionals;
+  if (!command || !Object.hasOwn(VERB_OPTIONS, command) || extra.length > 0) {
+    throw new CollabError("usage_error", PERSON_DESK_USAGE);
+  }
+  const verb = command;
+  const seen = new Set;
+  for (const token of parsed.tokens ?? []) {
+    if (token.kind !== "option")
+      continue;
+    if (seen.has(token.name)) {
+      throw new CollabError("usage_error", `--${token.name} is given more than once; ${PERSON_DESK_USAGE}`);
+    }
+    seen.add(token.name);
+  }
+  const values = parsed.values;
+  const { required, optional } = VERB_OPTIONS[verb];
+  for (const [name, value] of Object.entries(values)) {
+    if (name !== "db" && !required.includes(name) && !optional.includes(name)) {
+      throw new CollabError("usage_error", `--${name} does not apply to person ${verb}; ${PERSON_DESK_USAGE}`);
+    }
+    if (typeof value === "string" && value.trim() === "") {
+      throw new CollabError("usage_error", `--${name} must not be empty; ${PERSON_DESK_USAGE}`);
+    }
+  }
+  for (const name of required) {
+    if (values[name] === undefined) {
+      throw new CollabError("usage_error", `--${name} is required for person ${verb}; ${PERSON_DESK_USAGE}`);
+    }
+  }
+  if (verb === "proposals" && values.proposal !== undefined && values.limit !== undefined) {
+    throw new CollabError("usage_error", `--limit lists proposals; it does not apply with --proposal; ${PERSON_DESK_USAGE}`);
+  }
+  if (verb === "passkey-enroll" && values.file === undefined === (values.ceremony !== true)) {
+    throw new CollabError("usage_error", `passkey-enroll needs exactly one of --file or --ceremony; ${PERSON_DESK_USAGE}`);
+  }
+  if (verb === "passkey-enroll" && (values.port !== undefined || values["no-open"]) && values.ceremony !== true) {
+    throw new CollabError("usage_error", `--port and --no-open apply only with --ceremony; ${PERSON_DESK_USAGE}`);
+  }
+  return { verb, values };
+}
+function parseAct(value) {
+  if (value !== "agree" && value !== "reject") {
+    throw new CollabError("usage_error", `--act must be agree or reject; ${PERSON_DESK_USAGE}`);
+  }
+  return value;
+}
+function parseInteger(value, name) {
+  if (value === undefined)
+    return;
+  if (!/^\d{1,9}$/.test(value.trim())) {
+    throw new CollabError("usage_error", `--${name} must be a non-negative integer; ${PERSON_DESK_USAGE}`);
+  }
+  return Number(value.trim());
+}
+function readBounded(path) {
+  const fd = path === "-" ? 0 : openSync5(path, "r");
+  try {
+    const chunks = [];
+    let total = 0;
+    const buffer = Buffer.alloc(16 * 1024);
+    while (total <= MAX_JSON_INPUT_BYTES) {
+      let read;
+      try {
+        read = readSync3(fd, buffer, 0, buffer.length, null);
+      } catch (error) {
+        if (error.code === "EAGAIN")
+          continue;
+        throw error;
+      }
+      if (read === 0)
+        break;
+      chunks.push(Buffer.from(buffer.subarray(0, read)));
+      total += read;
+    }
+    if (total > MAX_JSON_INPUT_BYTES) {
+      throw new CollabError("input_too_large", `The JSON input exceeds ${MAX_JSON_INPUT_BYTES} bytes`);
+    }
+    return Buffer.concat(chunks).toString("utf8");
+  } finally {
+    if (fd !== 0)
+      closeSync5(fd);
+  }
+}
+function readJsonInput(path, deps) {
+  let text;
+  try {
+    text = deps.readStdin && path === "-" ? deps.readStdin() : readBounded(path);
+  } catch (error) {
+    if (error instanceof CollabError)
+      throw error;
+    throw new CollabError("input_unreadable", "The JSON input could not be read");
+  }
+  if (Buffer.byteLength(text, "utf8") > MAX_JSON_INPUT_BYTES) {
+    throw new CollabError("input_too_large", `The JSON input exceeds ${MAX_JSON_INPUT_BYTES} bytes`);
+  }
+  let value;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw new CollabError("input_invalid", "The input is not JSON");
+  }
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new CollabError("input_invalid", "The input must be a JSON object");
+  }
+  return value;
+}
+function errorPayload(error) {
+  if (error instanceof CollabError) {
+    return { ...error.details, status: "error", error: error.code, message: error.message };
+  }
+  return { status: "error", error: "internal_error", message: error instanceof Error ? error.message : String(error) };
+}
+
+// src/ceremony.ts
+var DEFAULT_CEREMONY_PORT = 17778;
+var CEREMONY_TIMEOUT_MS = 180000;
+var MAX_POST_BYTES = 32 * 1024;
+var SSH_DESTINATION = /^[A-Za-z0-9][A-Za-z0-9._@-]{0,200}$/;
+function openInBrowser(url) {
+  if (process.platform !== "darwin")
+    return false;
+  try {
+    const child = spawn("/usr/bin/open", [url], { stdio: "ignore", detached: true });
+    child.on("error", () => {});
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+function atTerminal(deps) {
+  const tty = (deps.openTty ?? (() => openDevTty()))();
+  if (tty === null)
+    return false;
+  tty.close();
+  return true;
+}
+async function runCeremonyCli(argv, env, deps, io) {
+  const first = argv.find((arg) => !arg.startsWith("-")) ?? "";
+  const command = `person ${first}`;
+  const emit = (payload, exitCode) => ({
+    exit_code: exitCode,
+    line: JSON.stringify({ protocol: PERSON_DESK_PROTOCOL, command, ...payload })
+  });
+  try {
+    const { verb, values } = parsePersonArgs(argv);
+    if (verb === "passkey-enroll" && values.ceremony) {
+      return emit(await enrollCeremony(values, env, deps, io, command), 0);
+    }
+    if (verb !== "ceremony")
+      throw new CollabError("usage_error", "Not a ceremony verb");
+    return emit(await signCeremony(values, env, deps, io, command), 0);
+  } catch (error) {
+    if (error instanceof CollabError && error.code === "not_confirmed") {
+      return emit({ status: "cancelled", message: "Not confirmed at the terminal; nothing was written" }, EXIT_NOT_CONFIRMED);
+    }
+    return emit(errorPayload(error), 1);
+  }
+}
+async function signCeremony(values, env, deps, io, command) {
+  const act = parseAct(values.act);
+  const table = values.via ? remoteTable(values.via, io) : localTable(values, env, deps);
+  try {
+    const challenge = await table.challenge(values.proposal, act, values.reason);
+    if (challenge.passkeys.length === 0) {
+      throw new CollabError("passkey_not_enrolled", "No passkey is enrolled at this table; enrol one first");
+    }
+    const status = await table.status(challenge);
+    const origin = values.port ? `http://localhost:${parsePort(values.port)}` : challenge.passkeys[0].origin;
+    const port = portOf(origin);
+    const passkeys = challenge.passkeys.filter((key) => key.origin === origin);
+    if (passkeys.length === 0) {
+      throw new CollabError("passkey_origin_mismatch", "No enrolled passkey signs for this ceremony origin", { origin });
+    }
+    const data = {
+      kind: "sign",
+      table: values.via ?? "this device",
+      act,
+      reason: challenge.reason,
+      question: status.proposal.body,
+      extent: status.terms.extent,
+      criteria: status.terms.criteria,
+      known_conflicts: status.terms.known_conflicts,
+      position: status.ai.position,
+      proposal_sha256: challenge.proposal_sha256,
+      proposal_bytes: status.proposal_bytes,
+      challenge_bytes: challenge.challenge_bytes,
+      challenge: challenge.challenge,
+      rp_id: "localhost",
+      credentials: passkeys.map((key) => key.credential_id)
+    };
+    const browser = values["no-open"] !== true && atTerminal(deps);
+    const result = await serveOnce(port, data, io, command, browser, async (body) => {
+      const recorded = await table.record(challenge.proposal_report_id, act, challenge.reason, body.assertion);
+      return {
+        recorded: true,
+        person_state: recorded.person.state,
+        may_proceed: recorded.may_proceed,
+        proposal_sha256: recorded.proposal_sha256
+      };
+    });
+    return { status: "ok", ...result };
+  } finally {
+    table.close();
+  }
+}
+async function enrollCeremony(values, env, deps, io, command) {
+  const probe = (deps.openTty ?? (() => openDevTty()))();
+  if (probe === null) {
+    throw new CollabError("tty_unavailable", "Enrolling a passkey needs a person at the controlling terminal (/dev/tty)");
+  }
+  probe.close();
+  const port = values.port ? parsePort(values.port) : DEFAULT_CEREMONY_PORT;
+  const origin = `http://localhost:${port}`;
+  const store = openDeskStore(values, env, deps);
+  try {
+    const challenge = randomBytes2(32).toString("base64url");
+    const data = {
+      kind: "enroll",
+      table: "this device",
+      challenge,
+      user_id: randomBytes2(16).toString("base64url"),
+      rp_id: "localhost",
+      label: values.label ?? "Touch ID"
+    };
+    const result = await serveOnce(port, data, io, command, values["no-open"] !== true, async (body) => {
+      const input = body;
+      checkCreateClientData(input.client_data_json, challenge, origin);
+      const enrollment = normalizePasskeyEnrollment({
+        credential_id: input.credential_id,
+        public_key_spki: input.public_key_spki,
+        algorithm: input.algorithm,
+        rp_id: "localhost",
+        origin,
+        label: values.label ?? "Touch ID"
+      });
+      if (!confirmEnrollment(store, enrollment, deps)) {
+        throw new CollabError("not_confirmed", "Not confirmed at the terminal; nothing was enrolled");
+      }
+      const passkey = store.enrollPersonPasskey(enrollment);
+      return { enrolled: true, fingerprint: passkey.fingerprint, origin: passkey.origin };
+    });
+    return { status: "ok", ...result };
+  } finally {
+    store.close();
+  }
+}
+function checkCreateClientData(value, challenge, origin) {
+  let clientData = null;
+  try {
+    if (typeof value === "string" && /^[A-Za-z0-9_-]{1,8192}$/.test(value)) {
+      clientData = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+    }
+  } catch {
+    clientData = null;
+  }
+  if (!clientData || clientData.type !== "webauthn.create" || clientData.challenge !== challenge || clientData.origin !== origin || clientData.crossOrigin === true) {
+    throw new CollabError("passkey_assertion_invalid", "The new passkey was not created by this enrolment page");
+  }
+}
+function localTable(values, env, deps) {
+  const store = openDeskStore(values, env, deps);
+  return {
+    async challenge(proposal, act, reason) {
+      return store.personActChallenge({ proposal_report_id: proposal, act, reason });
+    },
+    async status(challenge) {
+      return store.proposalStatusById(challenge.proposal_report_id);
+    },
+    async record(proposal, act, reason, assertion) {
+      return store.recordPersonActWithPasskey({
+        proposal_report_id: proposal,
+        act,
+        reason: reason ?? undefined,
+        assertion
+      });
+    },
+    close: () => store.close()
+  };
+}
+function remoteTable(destination, io) {
+  if (!SSH_DESTINATION.test(destination)) {
+    throw new CollabError("usage_error", "--via must be an SSH host alias or user@host");
+  }
+  const call = io.remote ?? sshDesk;
+  const receipt = async (argv, stdin) => {
+    const result = await call(destination, argv, stdin);
+    if (result.status !== "ok") {
+      throw new CollabError(typeof result.error === "string" ? result.error : "remote_desk_failed", typeof result.message === "string" ? result.message : "The other device's desk refused the request", { via: destination });
+    }
+    return result;
+  };
+  return {
+    async challenge(proposal, act, reason) {
+      const argv = ["challenge", `--proposal=${proposal}`, `--act=${act}`, ...reason ? [`--reason=${reason}`] : []];
+      return (await receipt(argv)).challenge;
+    },
+    async status(challenge) {
+      const argv = ["proposals", `--workspace=${challenge.workspace_id}`, `--proposal=${challenge.proposal_report_id}`];
+      return (await receipt(argv)).proposal;
+    },
+    async record(proposal, act, reason, assertion) {
+      const argv = [
+        act === "agree" ? "consent" : "reject",
+        `--proposal=${proposal}`,
+        ...reason ? [`--reason=${reason}`] : [],
+        "--passkey-assertion=-"
+      ];
+      return (await receipt(argv, JSON.stringify(assertion ?? null))).proposal;
+    },
+    close: () => {}
+  };
+}
+async function sshDesk(destination, argv, stdin) {
+  const child = Bun.spawn(["/usr/bin/ssh", "-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "--", destination, JSON.stringify(argv)], { stdin: stdin === undefined ? "ignore" : new TextEncoder().encode(stdin), stdout: "pipe", stderr: "ignore" });
+  const timer = setTimeout(() => child.kill("SIGKILL"), 30000);
+  try {
+    const text = await new Response(child.stdout).text();
+    await child.exited;
+    const line = text.trim().split(`
+`).at(-1) ?? "";
+    try {
+      return JSON.parse(line);
+    } catch {
+      throw new CollabError("remote_desk_unreadable", "The other device's desk returned no receipt", { via: destination });
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+function parsePort(value) {
+  const port = parseInteger(value, "port");
+  if (port < 1024 || port > 65535)
+    throw new CollabError("usage_error", "--port must be from 1024 to 65535");
+  return port;
+}
+function portOf(origin) {
+  const url = new URL(origin);
+  if (url.protocol !== "http:" || url.hostname !== "localhost" || !url.port) {
+    throw new CollabError("passkey_origin_mismatch", "Ceremonies serve only from http://localhost:<port>", { origin });
+  }
+  return Number(url.port);
+}
+async function serveOnce(port, data, io, command, browser, onPost) {
+  const token = randomBytes2(24).toString("base64url");
+  const nonce = randomBytes2(16).toString("base64url");
+  const origin = `http://localhost:${port}`;
+  const path = `/c/${token}`;
+  let settle;
+  const finished = new Promise((resolve5) => {
+    settle = resolve5;
+  });
+  let used = false;
+  const expiresAt = new Date(Date.now() + CEREMONY_TIMEOUT_MS).toISOString();
+  const page = ceremonyPage({ ...data, expires_at: expiresAt }, nonce);
+  const headers = {
+    "Cache-Control": "no-store",
+    "Referrer-Policy": "no-referrer",
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Cross-Origin-Resource-Policy": "same-origin",
+    "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; connect-src 'self'; ` + "img-src 'none'; form-action 'none'; frame-ancestors 'none'; base-uri 'none'"
+  };
+  let server;
+  try {
+    server = Bun.serve({
+      hostname: "127.0.0.1",
+      port,
+      async fetch(request) {
+        const url = new URL(request.url);
+        if (request.headers.get("host") !== `localhost:${port}`) {
+          return new Response("Open this page at localhost", { status: 421, headers });
+        }
+        if (request.method === "GET" && url.pathname === path) {
+          return new Response(page, { headers: { ...headers, "Content-Type": "text/html; charset=utf-8" } });
+        }
+        if (request.method === "POST" && url.pathname !== `${path}/done`) {
+          return Response.json({
+            ok: false,
+            error: "ceremony_expired",
+            message: "This page belongs to an earlier ceremony. Use the newest link your terminal printed."
+          }, { status: 410, headers });
+        }
+        if (request.method === "POST") {
+          if (request.headers.get("origin") !== origin || used) {
+            return Response.json({
+              ok: false,
+              error: "ceremony_closed",
+              message: "This ceremony has already finished. Start a new one to try again."
+            }, { status: 409, headers });
+          }
+          used = true;
+          try {
+            const text = await request.text();
+            if (Buffer.byteLength(text) > MAX_POST_BYTES)
+              throw new CollabError("input_too_large", "The page sent too much");
+            const result = await onPost(JSON.parse(text));
+            settle({ ok: true, result });
+            return Response.json({ ok: true, ...result }, { headers });
+          } catch (error) {
+            settle({ ok: false, error });
+            const payload = errorPayload(error);
+            return Response.json({ ok: false, error: payload.error, message: payload.message }, { status: 409, headers });
+          }
+        }
+        return new Response("Not found", { status: 404, headers });
+      }
+    });
+  } catch {
+    throw new CollabError("ceremony_port_busy", `Another program holds ${origin}; close it or finish its ceremony first`);
+  }
+  const pageUrl = `${origin}${path}`;
+  io.out(JSON.stringify({ protocol: PERSON_DESK_PROTOCOL, command, status: "open", url: pageUrl, expires_at: expiresAt }));
+  const closes = new Date(expiresAt).toLocaleTimeString();
+  io.note?.(browser && io.open?.(pageUrl) ? `Opened the page in your browser. If it did not appear, open ${pageUrl} before ${closes}.` : `Open ${pageUrl} in your browser before ${closes}.`);
+  const timer = setTimeout(() => settle({ ok: false, error: new CollabError("ceremony_timeout", "The ceremony page was not used in time") }), CEREMONY_TIMEOUT_MS);
+  try {
+    const outcome = await finished;
+    if (!outcome.ok)
+      throw outcome.error;
+    return outcome.result;
+  } finally {
+    clearTimeout(timer);
+    setTimeout(() => server.stop(true), 250);
+  }
+}
+function ceremonyPage(data, nonce) {
+  const json = JSON.stringify(data).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026");
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Person desk</title>
+<style nonce="${nonce}">
+:root { color-scheme: light dark; --fg: #1d1d1f; --bg: #f6f5f2; --dim: #6b6b70; --card: #ffffff; --line: #dedcd6; --go: #1f7a4a; --stop: #a33a2c; }
+@media (prefers-color-scheme: dark) { :root { --fg: #ecebe8; --bg: #141416; --dim: #9a9aa0; --card: #1d1d21; --line: #33333a; --go: #5cc08a; --stop: #ef7b6b; } }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+main { max-width: 680px; margin: 0 auto; padding: 32px 16px 48px; }
+h1 { font-size: 1.15rem; margin: 0 0 4px; } .dim { color: var(--dim); font-size: .85rem; }
+section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 14px 0; }
+.label { font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); margin-top: 10px; }
+.value { white-space: pre-wrap; overflow-wrap: anywhere; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.45 ui-monospace, Menlo, monospace; margin: 6px 0 0; }
+button { font: inherit; padding: 10px 18px; border-radius: 8px; border: 1px solid currentColor; background: transparent; cursor: pointer; }
+button.go { color: var(--go); } button.stop { color: var(--stop); } button[disabled] { opacity: .5; cursor: default; }
+#result:empty { display: none; }
+</style></head><body><main>
+<h1 id="title"></h1><div class="dim" id="sub"></div>
+<section id="what"></section>
+<section><div class="label">Exact bytes you are signing</div><pre id="act"></pre>
+<div class="label">The proposal they name</div><pre id="proposal"></pre></section>
+<button id="go"></button>
+<section id="result"></section>
+<p class="dim">Served by the Collab person desk on this device, for this ceremony only. Touch ID names only "localhost", so act only if you opened this page yourself.</p>
+</main>
+<script type="application/json" id="data">${json}</script>
+<script nonce="${nonce}">
+(() => {
+  const data = JSON.parse(document.getElementById("data").textContent);
+  const $ = (id) => document.getElementById(id);
+  const dec = (v) => Uint8Array.from(atob(v.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((v.length + 3) % 4)), (c) => c.charCodeAt(0));
+  const enc = (b) => { let s = ""; for (const x of new Uint8Array(b)) s += String.fromCharCode(x); return btoa(s).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/, ""); };
+  const field = (label, value) => { if (!value) return; const l = document.createElement("div"); l.className = "label"; l.textContent = label; const v = document.createElement("div"); v.className = "value"; v.textContent = value; $("what").append(l, v); };
+  const say = (text) => { $("result").textContent = text; };
+  const expired = "This page has expired. Start again from your terminal or YOUI, and use the newest link.";
+  let posted = false;
+  const post = async (body) => {
+    let response;
+    try {
+      response = await fetch(location.pathname + "/done", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    } catch { return { ok: false, message: expired }; }
+    posted = true;
+    try { return await response.json(); } catch { return { ok: false, message: expired }; }
+  };
+  const left = Date.parse(data.expires_at) - Date.now();
+  setTimeout(() => { if (!posted) { $("go").disabled = true; say(expired); } }, Math.max(0, left));
+  if (data.kind === "sign") {
+    $("title").textContent = data.act === "agree" ? "Agree to this proposal" : "Reject this proposal";
+    $("sub").textContent = "Table: " + data.table + " \xB7 agents' position: " + data.position;
+    field("Question", data.question); field("Criteria", data.criteria);
+    field("Extent \u2014 agreement authorises only this", data.extent); field("Known conflicts", data.known_conflicts);
+    if (data.act === "reject") field("Your reason", data.reason);
+    $("act").textContent = data.challenge_bytes; $("proposal").textContent = data.proposal_bytes;
+    $("go").textContent = data.act === "agree" ? "Touch ID: agree" : "Touch ID: reject";
+    $("go").className = data.act === "agree" ? "go" : "stop";
+    $("go").onclick = async () => {
+      $("go").disabled = true;
+      try {
+        const c = await navigator.credentials.get({ publicKey: { challenge: dec(data.challenge), rpId: data.rp_id,
+          allowCredentials: data.credentials.map((id) => ({ type: "public-key", id: dec(id) })), userVerification: "required", timeout: 120000 } });
+        const r = await post({ assertion: { credential_id: enc(c.rawId), authenticator_data: enc(c.response.authenticatorData),
+          client_data_json: enc(c.response.clientDataJSON), signature: enc(c.response.signature),
+          user_handle: c.response.userHandle ? enc(c.response.userHandle) : null } });
+        say(r.ok ? (data.act === "agree" ? "Recorded. Your agreement authorises only the extent above. You can close this page." : "Recorded. You can close this page.")
+          : "The desk refused: " + (r.message || r.error));
+      } catch (e) { say("Nothing was signed: " + e.message); $("go").disabled = false; }
+    };
+  } else {
+    $("title").textContent = "Enrol a passkey for the person desk";
+    $("sub").textContent = "Your terminal will show the new key's fingerprint and ask you to type yes.";
+    field("Label", data.label);
+    $("act").textContent = "A new ES256 passkey for relying party localhost, created by Touch ID on this device.";
+    $("proposal").textContent = "(none)";
+    $("go").textContent = "Create with Touch ID"; $("go").className = "go";
+    $("go").onclick = async () => {
+      $("go").disabled = true;
+      try {
+        const c = await navigator.credentials.create({ publicKey: { rp: { id: data.rp_id, name: "Collab person desk" },
+          user: { id: dec(data.user_id), name: "person", displayName: "Person" }, challenge: dec(data.challenge),
+          pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+          authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required", residentKey: "preferred" },
+          attestation: "none", timeout: 120000 } });
+        say("Now look at your terminal: compare the fingerprint and type yes.");
+        const r = await post({ credential_id: enc(c.rawId), public_key_spki: enc(c.response.getPublicKey()),
+          algorithm: c.response.getPublicKeyAlgorithm(), client_data_json: enc(c.response.clientDataJSON) });
+        say(r.ok ? "Enrolled. Fingerprint " + r.fingerprint : "Not enrolled: " + (r.message || r.error));
+      } catch (e) { say("No passkey was created: " + e.message); $("go").disabled = false; }
+    };
+  }
+})();
+</script></body></html>`;
+}
+
 // src/host.ts
 var COLLAB_HOST_PROTOCOL = "agenttool.collab-host/1";
-var COLLAB_HOST_USAGE = "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]" + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]" + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]";
+var COLLAB_HOST_USAGE = "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]" + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]" + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]" + ` | agenttool-collab-host person ... (${PERSON_DESK_USAGE})` + " | agenttool-collab-host person-remote (SSH forced command; reads a JSON argv from SSH_ORIGINAL_COMMAND)";
 var MAX_HOST_REASON = 2000;
 var DEFAULT_HOST_WAIT_MS = 600000;
 var MAX_HOST_WAIT_MS = 3600000;
@@ -5930,7 +7527,11 @@ function removeRevokedFile(sessionFile, receipt) {
     return { ...receipt, warning: "session_file_remove_failed" };
   }
 }
-function runCollabHostCli(argv, env = process.env, clock = systemClock) {
+function runCollabHostCli(argv, env = process.env, clock = systemClock, personDeps = {}) {
+  if (argv[0] === "person")
+    return runPersonDeskCli(argv.slice(1), env, personDeps);
+  if (argv[0] === "person-remote" && argv.length === 1)
+    return runPersonRemoteCli(env, personDeps);
   let secret = null;
   if (argv.some((arg) => arg === "--help" || arg === "-h")) {
     const help = { protocol: COLLAB_HOST_PROTOCOL, status: "help", usage: COLLAB_HOST_USAGE };
@@ -5954,7 +7555,7 @@ function runCollabHostCli(argv, env = process.env, clock = systemClock) {
   try {
     const args = parseHostArgs(argv);
     const databasePath = args.db ?? resolveDatabasePath(env);
-    if (!existsSync4(databasePath)) {
+    if (!existsSync5(databasePath)) {
       throw new CollabError("journal_not_found", "No collaboration journal exists at the selected path; pass --db or set AGENTOOL_COLLAB_DB");
     }
     if (args.command === "end") {
@@ -5991,6 +7592,18 @@ function runCollabHostCli(argv, env = process.env, clock = systemClock) {
   } catch (error) {
     return emit(errorReceipt(error), 1);
   }
+}
+async function runCollabHostCliAsync(argv, env = process.env, io = {
+  out: (line) => process.stdout.write(`${line}
+`),
+  note: (line) => process.stderr.write(`${line}
+`),
+  open: openInBrowser
+}, personDeps = {}) {
+  const ceremony = argv[0] === "person" && !argv.some((arg) => arg === "--help" || arg === "-h") && (argv[1] === "ceremony" || argv[1] === "passkey-enroll" && argv.includes("--ceremony"));
+  if (ceremony)
+    return runCeremonyCli(argv.slice(1), env, personDeps, io);
+  return runCollabHostCli(argv, env, systemClock, personDeps);
 }
 var END_ONLY_OPTIONS = ["reason", "release-leases"];
 var WAIT_ONLY_OPTIONS = ["session", "after-anchor", "wait-ms", "include-own", "addressed"];
@@ -6083,7 +7696,7 @@ function parseAnchor(raw) {
   return { epoch_id: anchor.epoch_id, sequence: anchor.sequence, hash: anchor.hash };
 }
 function parseHostOptions(argv) {
-  return parseArgs({
+  return parseArgs2({
     args: argv,
     allowPositionals: true,
     strict: true,
@@ -6123,7 +7736,7 @@ function errorReceipt(error) {
 }
 
 // bin/agenttool-collab-host.ts
-var result = runCollabHostCli(process.argv.slice(2), process.env);
+var result = await runCollabHostCliAsync(process.argv.slice(2), process.env);
 process.stdout.write(`${result.line}
 `);
 process.exitCode = result.exit_code;

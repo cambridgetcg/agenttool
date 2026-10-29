@@ -4,8 +4,8 @@
 > **Type:** reference · **Purpose:** local coordination and upgrade boundaries.
 > **Evidence:** `src/{store,mcp,repository,actor-default}.ts`; `tests/{session-fit,repository,migration-v2,mcp}.test.ts`.
 > **Implements:** Local observation and coordination, not host lifecycle or remote delivery.
-> **Code:** `src/{store,mcp,protocol,proposal,version}.ts`.
-> **Tests:** `tests/{events-wait,mcp,package,proposal-consent}.test.ts`.
+> **Code:** `src/{store,mcp,protocol,proposal,person-desk,ceremony,passkey,tty,version}.ts`.
+> **Tests:** `tests/{events-wait,mcp,package,proposal-consent,person-desk,tty}.test.ts`.
 
 **DEVELOPMENT BUILD: 0.5.1-dev.0, 36 MCP tools. Unreleased.** Collab 0.5.0
 is released on GitHub only, as the
@@ -591,43 +591,134 @@ optional `known_conflicts`, `origin` (`ai` or `person_relayed`, self-declared),
 default 21,600). The report and terms are hashed into `proposal_sha256`, and
 `collab_proposal_status` returns those exact `proposal_bytes`. Terms cannot be
 corrected or superseded by a plain report (`proposal_terms_fixed`): withdraw the
-proposal, or open a revision with `supersedes_report_id`.
+proposal, or open a revision with `supersedes_report_id`. A proposal leaves the
+table for good at its first withdrawal or supersession; the relation that
+retired it cannot itself be withdrawn (`proposal_retired`).
 
-At open, the server snapshots the live voices in the workspace. A voice is a
-lineage group: a session and every session that names it, directly or through
-others, as `parent_session_id`. The snapshot is routing for the
-`proposal.opened` event, which addresses every snapshotted voice except the
-author's, and it decides early close. Anyone may challenge at any time.
+At open, the server snapshots the live voices in the workspace. A voice is an
+attested lineage group: a session and the children its own MCP process started
+under its binding (`collab_session_start` with `binding_key` and its
+`parent_session_id`). A `parent_session_id` named by any other process is
+recorded but not followed, so a session cannot speak as someone else's voice.
+The snapshot is routing for the `proposal.opened` event, which addresses every
+snapshotted voice except the author's, and it decides early close. Anyone may
+challenge at any time.
 
 Other sessions answer with `collab_report_append`: `supports`, `challenges`,
-and `resolves`. `collab_proposal_status` computes the agents' position under
-`consent/v1`; no session announces it:
+and `resolves`. A challenge is a soft veto: it stands until its own voice
+resolves or withdraws it; nobody else, the author included, can settle it.
+`collab_proposal_status` computes the agents' position under `consent/v1`; no
+session announces it:
 
 | Position | When |
 |---|---|
-| `open` | before the deadline, no unresolved challenge, not yet consented |
-| `challenged` | before the deadline, an unresolved challenge exists |
-| `consented` | no unresolved challenge, at least one `supports` from a voice other than the author's, and the deadline has passed or every other snapshotted voice has supported; a lone voice consents only through its own explicit `supports` |
-| `split` | the deadline passed with an unresolved challenge |
-| `lapsed` | the deadline passed with no unresolved challenge and no qualifying `supports`; silence is not consent |
+| `open` | before the deadline, no standing challenge, not yet consented |
+| `challenged` | before the deadline, a challenge stands |
+| `consented` | no standing challenge, at least one `supports` from a voice other than the author's, and the deadline has passed or every other snapshotted voice has supported; a lone voice consents only through its own explicit `supports` |
+| `split` | the deadline passed with a standing challenge |
+| `lapsed` | the deadline passed with no standing challenge and no qualifying `supports`; silence is not consent |
 | `withdrawn` / `superseded` | the author withdrew it or opened a revision |
 
 The deadline instant counts as closed. Confidence, extra supports, and the
 origin do not change the position. The position is recomputed from the journal
 on every read, so a later `resolves` or `supports` can move `split` or
-`lapsed` to `consented`.
+`lapsed` to `consented`. Lists and the inbox name a proposal whose stored terms
+fail their hash under `unreadable` instead of failing the whole read.
 
 `collab_proposal_relay_rejection` records that a person rejected the exact
 bytes named by `proposal_sha256`, as relayed by this session (`basis:
-relayed_by_session`), and addresses the `proposal.rejected` event to the
-proposal's author. A relayed rejection is forgeable, so it only pauses work.
+relayed_by_session`). A relayed rejection is forgeable, so it only pauses work.
 
-The agents' position authorises nothing by itself. `may_proceed` stays `false`
-and `agreement` stays `null` in this build: consent from a person is a separate,
-not-yet-built host command on the controlling terminal, and no MCP tool records
-it. Lineage is self-declared, so a session that does not name its parent counts
-as its own voice. Mixed servers do not share these guarantees: an older server
-ignores the terms and would accept a plain correction of a proposal.
+The agents' position authorises nothing by itself. A session that starts
+without an attested parent counts as its own voice, so one operator can still
+start several voices; consent/v1 does not prevent that, and the person's own
+act is what authorises work. Mixed servers do not share these guarantees: an
+older server ignores the terms and would accept a plain correction of a proposal.
+
+#### A person's acts and the person desk (unreleased)
+
+A person agrees or rejects through `agenttool-collab-host person`, never
+through MCP. Code: `src/{person-desk,ceremony,passkey,tty}.ts`. Tests:
+`tests/{person-desk,tty}.test.ts`.
+
+| Verb | What it does |
+|---|---|
+| `workspaces`, `voices --workspace <id>`, `proposals --workspace <id> [--proposal <id> \| --limit <n>]`, `inbox [--workspace <id>]`, `passkeys` | read; `inbox` without a workspace counts every workspace |
+| `consent --proposal <id>` / `reject --proposal <id> --reason <text>` | show the exact act and proposal bytes on `/dev/tty` and record only on `yes` typed there (`basis: controlling_terminal`) |
+| `ceremony --proposal <id> --act agree\|reject [--reason <text>] [--via <ssh-destination>] [--no-open]` | serve a one-time signing page on the passkey's origin (`http://localhost:17778` by default); Touch ID signs the act bytes and the desk records them (`basis: user_verified_passkey`) |
+| `passkey-enroll --ceremony [--label <text>] [--no-open]` | serve a one-time page that creates the passkey, then show its fingerprint on `/dev/tty` and enrol it only on `yes` |
+| `passkey-enroll --file <path>\|-`, `passkey-export --credential <id>`, `passkey-revoke --credential <id>` | enrol a passkey exported from another table, export one, or revoke one; enrol and revoke are confirmed on `/dev/tty` |
+| `challenge --proposal <id> --act agree` or `--act reject --reason <text>`, then `consent`/`reject` with `--passkey-assertion <path>\|-` | the same passkey act in two steps, for a page the desk does not serve |
+| `say --workspace <id> --body <text> [--proposal <id>] --idempotency-key <key>` | a desk note; about a proposal it is routed to the author session, or for a desk proposal to every consulted voice |
+| `propose --workspace <id> --question <text> --criteria <text> --extent <text> [--known-conflicts <text>] [--topic <text>] [--consult-seconds <n>] --idempotency-key <key>` | a desk proposal (`origin: person_relayed`, author voice `person`), settled by every agent voice |
+| `withdraw --workspace <id> --proposal <id> --reason <text> --idempotency-key <key>` | withdraw a proposal the desk opened |
+
+A ceremony started at a terminal opens its page in the browser (macOS
+`/usr/bin/open`; `--no-open` declines) and says on stderr when it closes. One
+started by another program has no terminal, so that program opens the page;
+YOUI opens its own window inside the click. Each page lasts three minutes and
+accepts one post. An older page still open says it has expired rather than
+posting into a newer ceremony.
+
+Agreement needs the agents' position to be `consented`, the exact current
+`proposal_sha256`, and the same position the person was shown; the challenge
+and the terminal refuse before any prompt otherwise. A rejection may come at
+any position. An authenticated rejection may follow a relayed one; nothing
+else repeats. The latest person act decides `person.state`. `may_proceed` is
+`true` only while that act agrees and the proposal is still on the table; it
+authorises only the proposal's `extent`. A later challenge does not silently
+revoke an agreement. `proposal.agreed` and `proposal.rejected` are addressed to
+the author, or for a desk proposal to its consulted voices.
+
+The passkey challenge is the SHA-256 of canonical act bytes naming the act, the
+proposal hash, the reason, the agents' position, and the number of person acts
+before it, so one assertion records one act once and goes stale if any of
+those change. The store checks the client data type, challenge and origin, the
+RP ID hash, user presence and user verification, the signature counter, and
+the ES256 signature, then journals the assertion with the public key in the
+event, so the act can be re-verified without this database.
+
+The ceremony pages come from the installed desk, not from an application that
+agents edit: the page that shows the bytes decides what Touch ID signs, and
+the system prompt names only "localhost". Each page lives at a one-time path
+with a per-ceremony nonce CSP, checks `Host` and `Origin`, accepts one post and
+closes after three minutes. That moves trust to the desk's installed bytes; a
+process running as the same user can still change those, and a process that can
+write the journal could still rewrite it unless its head is witnessed elsewhere.
+
+The terminal route is a speed bump, not a sandbox: a process that can allocate
+a pseudo-terminal and type into it can answer. Desk notes, desk proposals and
+their withdrawal are not authenticated as the person; they inform and
+authorise nothing. An agent can place a report in the person's inbox with
+`collab_report_append` and `to_person: true`; that is routing, not access
+control. Actor labels beginning with `person:` are reserved for the desk.
+
+#### One table per device
+
+Each device keeps its own journal, its own agents' voices and its own person
+desk. A person reaches another device's table through `agenttool-collab-host
+person-remote`, an SSH forced command that reads a JSON argv from
+`SSH_ORIGINAL_COMMAND`, never a shell line. It allows the read verbs, `say`,
+`propose`, `withdraw`, `challenge`, and `consent`/`reject` with
+`--passkey-assertion=-` only; it refuses enrolment, revocation, export,
+ceremonies and `--db`. A ceremony with `--via <destination>` serves the page
+on the person's own device and verifies at the remote table. To add a device:
+
+1. Install the same desk bundle on it and compare its SHA-256 sums.
+2. Point that device's agents' MCP configuration at the bundle.
+3. Export the person's passkey on a device that has it
+   (`person passkey-export --credential=<id> > passkey.json`; use the `=` form,
+   since a credential ID can begin with `-`), copy the receipt over, and run
+   `person passkey-enroll --file passkey.json` at the new device's own
+   terminal, comparing the fingerprint before typing `yes`. Enrolment reads the
+   export receipt as it is.
+4. On the new device, add one `authorized_keys` line for the person's
+   desk key, for example
+   `restrict,command="env AGENTOOL_COLLAB_DB=<journal> <bun> --no-env-file --config=/dev/null <bundle>/agenttool-collab-host.js person-remote" ssh-ed25519 AAAA… person-desk`.
+5. Add the device to the person's interface (for example YOUI's table list).
+
+Proposals do not cross devices: each table settles its own. Summaries can move
+between journals with `@agenttool/collab-courier`, which carries no authority.
 
 ## Journal integrity and compatibility
 

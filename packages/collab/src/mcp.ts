@@ -325,7 +325,15 @@ export function buildCollabMcpServer(
       if (requestSlot.getStore()!.key && input.actor === undefined) {
         throw new CollabError("actor_required", "A named child binding requires its own explicit actor");
       }
-      const handle = store.startSession({ ...input, actor: input.actor ?? defaultActor() });
+      // This process holds the parent's credential only when the parent is one
+      // of its own bindings; only then is the lineage attested for consent.
+      const parentAttested = input.parent_session_id !== undefined
+        && [...slots.values()].some((slot) => slot.binding?.handle.session.id === input.parent_session_id);
+      const handle = store.startSession({
+        ...input,
+        actor: input.actor ?? defaultActor(),
+        parent_attested: parentAttested,
+      });
       const credentialFile = store.defaultSessionCredentialPath(handle.session.id);
       try {
         const path = writeSessionCredentialFile(credentialFile, handle.credential);
@@ -890,6 +898,10 @@ export function buildCollabMcpServer(
         ),
         authority_scope: z.string().max(1000).optional(),
         authority_basis: z.string().max(2000).optional(),
+        to_person: z.boolean().optional().describe(
+          "Also place this report in the person's inbox at the person desk, for example to ask them something. "
+          + "Routing, not access control or authority.",
+        ),
       },
     },
     async ({ workspace_id, ...input }) => call(() => {
@@ -928,8 +940,9 @@ export function buildCollabMcpServer(
         `Open a proposal the agents settle by lazy consensus (${CONSENT_RULE}) before a person decides. `
         + "Answer it with collab_report_append supports, challenges and resolves. The agents' position is "
         + "computed from the journal and authorises nothing alone; a person consents only at the controlling "
-        + "terminal, never through MCP. Use it for design direction, criteria and extent, conflicting context "
-        + "and the reading of principles, not for every edit.",
+        + "terminal or with an enrolled passkey through the person desk, never through MCP. A challenge stands "
+        + "until its own voice resolves or withdraws it. Use it for design direction, criteria and extent, "
+        + "conflicting context and the reading of principles, not for every edit.",
       annotations: localRetrySafeMutation,
       inputSchema: {
         workspace_id: workspaceId,
@@ -966,7 +979,8 @@ export function buildCollabMcpServer(
       title: "Read proposal consent status",
       description:
         "Read one proposal's consent status, or the most recent proposals newest first. The agents' position "
-        + "is computed from the journal; may_proceed stays false until a person consents at the terminal.",
+        + "is computed from the journal. may_proceed is true only while the latest person act agrees, made at the "
+        + "controlling terminal or with an enrolled passkey; an agreement authorises only the proposal's extent.",
       annotations: localReadOnly,
       inputSchema: {
         workspace_id: workspaceId,
@@ -979,7 +993,7 @@ export function buildCollabMcpServer(
       requireWorkspace(workspace_id);
       return proposal_report_id
         ? { proposal: store.proposalStatus(workspace_id, proposal_report_id) }
-        : { proposals: store.listProposalStatuses(workspace_id, { limit }) };
+        : store.listProposalStatuses(workspace_id, { limit });
     }),
   );
 
