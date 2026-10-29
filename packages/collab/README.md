@@ -751,9 +751,12 @@ on the person's own device and verifies at the remote table. To add a device:
 
 1. Install the same desk bundle on it and compare its SHA-256 sums.
 2. Point that device's agents' MCP configuration at the bundle.
-3. Export the person's passkey on a device that has it (`person passkey-export`),
-   copy the enrolment JSON over, and run `person passkey-enroll --file` at the
-   new device's own terminal, comparing the fingerprint before typing `yes`.
+3. Export the person's passkey on a device that has it
+   (`person passkey-export --credential=<id> > passkey.json`; use the `=` form,
+   since a credential ID can begin with `-`), copy the receipt over, and run
+   `person passkey-enroll --file passkey.json` at the new device's own
+   terminal, comparing the fingerprint before typing `yes`. Enrolment reads the
+   export receipt as it is.
 4. On the new device, add one `authorized_keys` line for the person's
    desk key, for example
    `restrict,command="env AGENTOOL_COLLAB_DB=<journal> <bun> --no-env-file --config=/dev/null <bundle>/agenttool-collab-host.js person-remote" ssh-ed25519 AAAA… person-desk`.
