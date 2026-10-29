@@ -30,7 +30,8 @@ broadcast state, and continuity-head transitions.
 
 ## Whitehack Understanding Integration
 
-`bin/whitehack-wallet-understanding.ts` is a separate private, local adapter.
+`bin/whitehack-wallet-understanding.ts` is a separate local adapter in the
+`cambridgetcg/agenttool` development repository.
 It re-verifies caller-presented signed descriptor, capability, intent,
 simulation, and optional continuity records with this package, then projects
 only closed enum assertions into Whitehack 0.10.0's `createUnderstanding()`. Its
@@ -80,10 +81,9 @@ Version `0.1.3` is the newest LOVE release. Its checked-in
 `love-package/v1` manifest is the exact release record; npm and GitHub remain
 optional mirrors rather than package-name or release authority. The
 exact-version Wallet `0.1.1` and `0.1.2` LOVE artifacts remain byte-addressable
-and are not rewritten. Their GitHub assets were independently byte-verified
-while the source repository was public (it has been private since
-2026-09-25), but GitHub reports the release records as mutable, so those
-optional locators are not immutability guarantees. Version `0.1.1`
+and are not rewritten. Their GitHub assets were independently byte-verified,
+but GitHub reports the release records as mutable, so those optional locators
+are not immutability guarantees. Version `0.1.1`
 incorrectly called itself unreleased; `0.1.2` ambiguously described the LOVE
 and GitHub bytes together as immutable. This is the public erratum; never
 rewrite either historical artifact. As independently checked on 2026-07-29,
@@ -122,7 +122,7 @@ Canonical protocol draft:
 Canonical byte recipes:
 [`docs/CANONICAL-BYTES.md`](https://docs.agenttool.dev/CANONICAL-BYTES.md).
 Separate Zerone profile:
-[`docs/specs/AGENT-WALLET-ZERONE-0.1.md`](../../docs/specs/AGENT-WALLET-ZERONE-0.1.md).
+[`docs/specs/AGENT-WALLET-ZERONE-0.1.md`](https://docs.agenttool.dev/AGENT-WALLET-ZERONE-0.1.md).
 
 ## Kingdom Engine
 
