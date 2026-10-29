@@ -23,15 +23,15 @@ docs/specs/adds-0.1-vectors.json:generic-api-key:853
 
 # Collab operation name `handoff.respond.v2` in source and the committed bundles.
 # line_sha256=350019f7a24814015c7679341c2be6763946d3fbb52a03413d146c667e48b33a
-packages/collab/dist/agenttool-collab-host.js:generic-api-key:3128
+packages/collab/dist/agenttool-collab-host.js:generic-api-key:3311
 # line_sha256=7631b93c4bc4236bf95718442929d9f3c7d5966fd10c05c0a115d3022a06ced7
-packages/collab/dist/agenttool-collab-host.js:generic-api-key:3132
+packages/collab/dist/agenttool-collab-host.js:generic-api-key:3315
 # line_sha256=350019f7a24814015c7679341c2be6763946d3fbb52a03413d146c667e48b33a
-packages/collab/dist/agenttool-collab-mcp.js:generic-api-key:32492
+packages/collab/dist/agenttool-collab-mcp.js:generic-api-key:32783
 # line_sha256=7631b93c4bc4236bf95718442929d9f3c7d5966fd10c05c0a115d3022a06ced7
-packages/collab/dist/agenttool-collab-mcp.js:generic-api-key:32496
+packages/collab/dist/agenttool-collab-mcp.js:generic-api-key:32787
 # line_sha256=68c6f15a3d0fb8e91049dd5a34b50e5404ab5071070eefa7b45160bcddc53aa0
-packages/collab/src/store.ts:generic-api-key:3781
+packages/collab/src/store.ts:generic-api-key:3928
 
 # UUIDv5 test vectors.
 # line_sha256=c1e009f7b2c87d2be8502eb605b4e990348d0e49abc5b1c653f44f68d9481725
