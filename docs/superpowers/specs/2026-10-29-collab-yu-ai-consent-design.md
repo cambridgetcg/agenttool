@@ -1,9 +1,9 @@
 # Collab Yu–Ai consent — design
 
 > **Type:** proposal · **Purpose:** let Yu and the agents agree on direction in Collab: the agents settle one Ai position first, then both parties must agree before work proceeds, and either party can reject.
-> **Evidence:** `main` at `784e2e13` (2026-10-29) for `packages/collab` and `packages/lobby`; `cambridgetcg/zerone-core` `main` at `e8f3dd9` for the consensus design it borrows from. Line references are to those trees. Nothing here is implemented; no journal, host configuration or installed package was changed.
+> **Evidence:** `main` at `784e2e13` (2026-10-29) for `packages/collab` and `packages/lobby`; `cambridgetcg/zerone-core` `main` at `e8f3dd9` for the consensus design it borrows from. Line references are to those trees. S1 code and tests are in `packages/collab` (section 9); no journal, host configuration or installed package was changed.
 
-**Date:** 2026-10-29 · **Status:** Yu approved the spec on 2026-10-29 as a starting point: 「依家ok，之後操作落唔得再改」 (fine for now; what fails in use gets changed). Practice may revise any part of it. No code exists for it.
+**Date:** 2026-10-29 · **Status:** Yu approved the spec on 2026-10-29 as a starting point: 「依家ok，之後操作落唔得再改」 (fine for now; what fails in use gets changed). Practice may revise any part of it. S1 (the agents' side, section 9) is built in a draft PR stacked on #549, branch `feat/collab-consent-s1-20261029`. S2 and S3 have no code yet.
 
 ## 1. Why
 
@@ -53,12 +53,12 @@ Any session may open a proposal, including one relayed for Yu. A proposal is a `
 | `extent` | What agreement authorises and where it stops. It becomes the `authority_scope` of the resulting decision. |
 | `relies_on` | The report's `evidence_refs`: the context this proposal reads. |
 | `known_conflicts` | Context that disagrees, and how the proposal reads it. Conflicts are named, never resolved silently. |
-| `origin` | `ai` or `yu_relayed`. Self-declared; it changes nothing in the rule. |
+| `origin` | `ai` or `person_relayed`. Self-declared; it changes nothing in the rule. The package calls the human party `person`; in this household that is Yu. |
 | `closes_at` | The consultation deadline. |
 | `voices` | The snapshot taken at open (section 4.2). |
 | `topic` | Optional label for later reading, for example `principle:絕`. |
 
-The canonical bytes of the report and its terms are hashed (`packages/collab/src/canonical.ts`). Agreement binds to that `proposal_sha256`. A revision is a new proposal that `supersedes` the old one; both parties consent again.
+The canonical bytes of the report and its terms are hashed (`packages/collab/src/canonical.ts`). Agreement binds to that `proposal_sha256`. A revision is a new proposal that `supersedes` the old one; both parties consent again. A plain report cannot correct or supersede a proposal with terms (`proposal_terms_fixed`).
 
 ### 4.2 Voices
 
@@ -110,7 +110,7 @@ It follows the Lobby confirmation contract (`packages/lobby/src/tty.ts:1–11`, 
 Either party can reject.
 
 - **Ai rejects** by an unresolved challenge: the position becomes `challenged`, then `split`.
-- **Yu rejects** with `agenttool-collab-host reject --proposal <report_id> --reason <text>` (terminal-confirmed, `basis: controlling_terminal`), or an agent relays what Yu said as a `proposal.rejected` record with `basis: relayed_by_session`.
+- **Yu rejects** with `agenttool-collab-host reject --proposal <report_id> --reason <text>` (terminal-confirmed, `basis: controlling_terminal`), or an agent relays what Yu said with `collab_proposal_relay_rejection`, recorded as a `proposal.rejected` event with `basis: relayed_by_session` and bound to `proposal_sha256`.
 
 Consent must come from the terminal; rejection may be relayed. The asymmetry has a reason: a forged yes causes action, while a forged no only causes a pause, which Yu can lift by consenting to a fresh proposal.
 
@@ -136,7 +136,7 @@ An agreed interpretation of a principle is a precedent: findable by `topic`, cit
 6. `closes_at` defaults to 6 hours after open, bounded from 10 minutes to 7 days.
 7. Agreements do not expire unless the proposal says so.
 8. Person commands live in `agenttool-collab-host`, the host CLI, because the host, not a model turn, is where a person sits.
-9. The change is additive: a `proposal_terms` table and new event types (`proposal.opened`, `proposal.agreed`, `proposal.rejected`) within journal schema 3, following the precedent of `session_lease_lapses`. Every serving MCP process must be upgraded together, as the README already requires.
+9. The change is additive: `proposal_terms` and `proposal_rejections` tables and new event types (`proposal.opened` and `proposal.rejected` in S1, `proposal.agreed` in S2) within journal schema 3, following the precedent of `session_lease_lapses`. The new tables hold no foreign key to the session table, which the schema-2 preview upgrade renames. Every serving MCP process must be upgraded together, as the README already requires.
 
 ## 8. Not in scope: counted ballots
 
@@ -154,13 +154,13 @@ A counted ballot may be worth building only for a real multi-option preference a
 
 | Slice | Contents | Tests |
 |---|---|---|
-| S1 Ai side | `collab_proposal_open` (or `proposal_terms` on `collab_report_append`), `proposal_terms` table, voice snapshot, `collab_proposal_status`, and a write for a relayed rejection (`basis: relayed_by_session`). | Golden vectors for every position in section 4.3, including the lone-voice case, late-joiner challenge, withdrawn challenge, withdrawn resolution, and `closes_at` equality. |
+| S1 Ai side (**built**) | `collab_proposal_open`, `collab_proposal_status` and `collab_proposal_relay_rejection`; the `proposal_terms` and `proposal_rejections` tables; the voice snapshot. Code: `packages/collab/src/{proposal,store,mcp}.ts`. | `packages/collab/tests/proposal-consent.test.ts`: golden vectors for every position in section 4.3, including the lone-voice case, late-joiner challenge, withdrawn challenge, withdrawn resolution, and `closes_at` equality, plus hash tampering, idempotent retry, reopen, and an MCP round trip. |
 | S2 Table | `consent` and `reject` in `agenttool-collab-host`; a local copy of Lobby's `/dev/tty` contract. | Fake-terminal tests: stdin `yes` confirms nothing; no terminal fails closed; a changed hash or settled-then-challenged position refuses consent. |
 | S3 Words | README section, `skills/coordinate-agent-work/SKILL.md`, and the Hermes skill, describing when to open a proposal and what agreement does and does not authorise. | Documentation catalog check. |
 
 ## 10. Open items
 
 - **Herding.** Agents can read one another's supports before forming a view. This spec offers only practice (form your own read first), not enforcement.
-- **Doorbells.** A host waiting with `--addressed` would not hear a workspace-wide proposal. Either address a notice to each snapshot voice, or document that consultation needs an unaddressed wait.
+- **Doorbells.** Settled in S1: `proposal.opened` is addressed to every snapshotted voice except the author's, so an `--addressed` doorbell hears it. A voice that joins after open is not addressed and learns of the proposal from an unaddressed read.
 - **Across machines.** Collab journals do not replicate between machines, so agents on the lab and on the Air cannot form one Ai position in one journal today.
 - **`seat_ref`.** When PR #491 lands, redefine voices and version the rule as `consent/v2`.

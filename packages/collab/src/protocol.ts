@@ -305,6 +305,91 @@ export interface CollabReport {
   event_sequence: number;
 }
 
+/**
+ * Person–agent consent for direction-level proposals. The agents settle one
+ * position by lazy consensus; a person consents separately, never through MCP.
+ * Contract: docs/superpowers/specs/2026-10-29-collab-yu-ai-consent-design.md
+ * in the AgentTool source repository.
+ */
+export const CONSENT_RULE = "consent/v1" as const;
+export const PROPOSAL_BYTES_PROTOCOL = "agenttool.collab-proposal/1" as const;
+export const DEFAULT_PROPOSAL_CONSULT_SECONDS = 6 * 60 * 60;
+export const MIN_PROPOSAL_CONSULT_SECONDS = 10 * 60;
+export const MAX_PROPOSAL_CONSULT_SECONDS = 7 * 24 * 60 * 60;
+
+export type ProposalOrigin = "ai" | "person_relayed";
+
+export type AiPosition =
+  | "open"
+  | "challenged"
+  | "consented"
+  | "split"
+  | "lapsed"
+  | "withdrawn"
+  | "superseded";
+
+/** A lineage group: a root session and every session descending from it. */
+export interface ProposalVoice {
+  voice_id: string;
+  live_session_ids: string[];
+}
+
+export interface ProposalTerms {
+  report_id: string;
+  workspace_id: string;
+  rule: typeof CONSENT_RULE;
+  criteria: string;
+  extent: string;
+  known_conflicts: string | null;
+  origin: ProposalOrigin;
+  topic: string | null;
+  closes_at: string;
+  voices: ProposalVoice[];
+  author_voice_id: string;
+  proposal_sha256: string;
+  opened_event_id: string;
+  created_at: string;
+}
+
+export interface ProposalRejection {
+  id: string;
+  workspace_id: string;
+  proposal_report_id: string;
+  proposal_sha256: string;
+  party: "person";
+  basis: "relayed_by_session" | "controlling_terminal";
+  reason: string;
+  relayed_by_session_id: string | null;
+  created_at: string;
+  event_sequence: number;
+}
+
+export interface ProposalStatus {
+  rule: typeof CONSENT_RULE;
+  proposal: CollabReport;
+  terms: ProposalTerms;
+  /** The exact canonical bytes both parties agree to; proposal_sha256 hashes them. */
+  proposal_bytes: string;
+  proposal_sha256: string;
+  ai: {
+    position: AiPosition;
+    closed: boolean;
+    unresolved_challenge_report_ids: string[];
+    qualifying_support_report_ids: string[];
+    awaiting_voice_ids: string[];
+    obsoleted_by_report_id: string | null;
+    basis: "computed_from_journal";
+  };
+  person: {
+    state: "awaiting" | "rejected";
+    rejections: ProposalRejection[];
+  };
+  agreement: null;
+  may_proceed: false;
+  authority_boundary:
+    "ai_consent_alone_authorises_nothing_work_proceeds_only_after_a_person_consents_at_the_controlling_terminal";
+}
+
 export interface TaskReview {
   id: string;
   workspace_id: string;
@@ -341,6 +426,8 @@ export type CollabEventType =
   | "artifact.attached"
   | "report.posted"
   | "decision.recorded"
+  | "proposal.opened"
+  | "proposal.rejected"
   | "handoff.offered"
   | "handoff.accepted"
   | "handoff.declined"

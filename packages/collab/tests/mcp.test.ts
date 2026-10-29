@@ -159,6 +159,9 @@ describe("MCP surface", () => {
       "collab_handoff_respond",
       "collab_journal_verify",
       "collab_next",
+      "collab_proposal_open",
+      "collab_proposal_relay_rejection",
+      "collab_proposal_status",
       "collab_report_append",
       "collab_report_list",
       "collab_session_end",
@@ -247,6 +250,7 @@ describe("MCP surface", () => {
       "collab_events_since",
       "collab_events_wait",
       "collab_journal_verify",
+      "collab_proposal_status",
       "collab_report_list",
       "collab_session_list",
       "collab_task_get",
@@ -274,6 +278,8 @@ describe("MCP surface", () => {
       "collab_task_review",
       "collab_task_unblock",
       "collab_report_append",
+      "collab_proposal_open",
+      "collab_proposal_relay_rejection",
       "collab_workspace_open",
     ];
     const nonIdempotentMutations = [
@@ -1001,6 +1007,7 @@ describe("MCP surface", () => {
       .filter((name) => tools[name].inputSchema?.shape?.evidence_refs !== undefined)
       .sort();
     expect(withEvidence).toEqual([
+      "collab_proposal_open",
       "collab_report_append",
       "collab_task_complete",
       "collab_task_review",

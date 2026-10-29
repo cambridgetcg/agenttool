@@ -4,17 +4,19 @@
 > **Type:** reference · **Purpose:** local coordination and upgrade boundaries.
 > **Evidence:** `src/{store,mcp,repository,actor-default}.ts`; `tests/{session-fit,repository,migration-v2,mcp}.test.ts`.
 > **Implements:** Local observation and coordination, not host lifecycle or remote delivery.
-> **Code:** `src/{store,mcp,protocol,version}.ts`.
-> **Tests:** `tests/{events-wait,mcp,package}.test.ts`.
+> **Code:** `src/{store,mcp,protocol,proposal,version}.ts`.
+> **Tests:** `tests/{events-wait,mcp,package,proposal-consent}.test.ts`.
 
-**DEVELOPMENT BUILD: 0.5.1-dev.0, 33 MCP tools. Unreleased.** Collab 0.5.0
+**DEVELOPMENT BUILD: 0.5.1-dev.0, 36 MCP tools. Unreleased.** Collab 0.5.0
 is released on GitHub only, as the
 [`collab-v0.5.0` release](https://github.com/cambridgetcg/agenttool-collab/releases/tag/collab-v0.5.0)
 of `cambridgetcg/agenttool-collab` (2026-10-10). On npm the recorded release is
 still the 32-tool 0.4.0, which does not supply `collab_events_wait`. In
 behaviour, this source is 0.5.0 plus the unreleased [host doorbell wait](#host-doorbell-wait-unreleased)
 and its addressed mode with the Claude Code watcher, plus the unreleased
-[session-fit changes](#session-fit-migration-unreleased). The next npm candidate is
+[session-fit changes](#session-fit-migration-unreleased) and the three unreleased
+[proposal consent tools](#proposals-and-consent-unreleased) that bring 0.5.0's 33
+tools to 36. The next npm candidate is
 0.5.1 through the [public staged release path](https://docs.agenttool.dev/NPM-RELEASES.md#public-release-path-from-2026-10-12).
 This source is not evidence of 0.5.1 publication or native-harness activation;
 verify exact release receipts separately.
@@ -573,6 +575,60 @@ session only after the named recipient accepts. Decline, pause, uncertainty,
 and disagreement are valid outcomes and do not transfer private data or
 authority.
 
+### Proposals and consent (unreleased)
+
+Some decisions need both the agents and a person: design direction, the
+criteria for how to proceed and how far, conflicting context, and how shared
+principles are read. Ordinary task work keeps the claim and review flow above.
+Design: `docs/superpowers/specs/2026-10-29-collab-yu-ai-consent-design.md` in the
+AgentTool source repository. Code: `src/{proposal,store,mcp}.ts`. Tests:
+`tests/proposal-consent.test.ts`.
+
+`collab_proposal_open` posts an ordinary `proposal` report with fixed terms:
+`criteria`, `extent` (what agreement would authorise and where it stops),
+optional `known_conflicts`, `origin` (`ai` or `person_relayed`, self-declared),
+`topic`, and a consultation deadline (`consult_seconds`, 600 to 604,800,
+default 21,600). The report and terms are hashed into `proposal_sha256`, and
+`collab_proposal_status` returns those exact `proposal_bytes`. Terms cannot be
+corrected or superseded by a plain report (`proposal_terms_fixed`): withdraw the
+proposal, or open a revision with `supersedes_report_id`.
+
+At open, the server snapshots the live voices in the workspace. A voice is a
+lineage group: a session and every session that names it, directly or through
+others, as `parent_session_id`. The snapshot is routing for the
+`proposal.opened` event, which addresses every snapshotted voice except the
+author's, and it decides early close. Anyone may challenge at any time.
+
+Other sessions answer with `collab_report_append`: `supports`, `challenges`,
+and `resolves`. `collab_proposal_status` computes the agents' position under
+`consent/v1`; no session announces it:
+
+| Position | When |
+|---|---|
+| `open` | before the deadline, no unresolved challenge, not yet consented |
+| `challenged` | before the deadline, an unresolved challenge exists |
+| `consented` | no unresolved challenge, at least one `supports` from a voice other than the author's, and the deadline has passed or every other snapshotted voice has supported; a lone voice consents only through its own explicit `supports` |
+| `split` | the deadline passed with an unresolved challenge |
+| `lapsed` | the deadline passed with no unresolved challenge and no qualifying `supports`; silence is not consent |
+| `withdrawn` / `superseded` | the author withdrew it or opened a revision |
+
+The deadline instant counts as closed. Confidence, extra supports, and the
+origin do not change the position. The position is recomputed from the journal
+on every read, so a later `resolves` or `supports` can move `split` or
+`lapsed` to `consented`.
+
+`collab_proposal_relay_rejection` records that a person rejected the exact
+bytes named by `proposal_sha256`, as relayed by this session (`basis:
+relayed_by_session`), and addresses the `proposal.rejected` event to the
+proposal's author. A relayed rejection is forgeable, so it only pauses work.
+
+The agents' position authorises nothing by itself. `may_proceed` stays `false`
+and `agreement` stays `null` in this build: consent from a person is a separate,
+not-yet-built host command on the controlling terminal, and no MCP tool records
+it. Lineage is self-declared, so a session that does not name its parent counts
+as its own voice. Mixed servers do not share these guarantees: an older server
+ignores the terms and would accept a plain correction of a proposal.
+
 ## Journal integrity and compatibility
 
 ### Session-fit migration (unreleased)
@@ -756,7 +812,7 @@ enforce their own repository, account, and publication boundaries.
 ## Codex, Claude Code, Hermes Agent, and OpenClaw
 
 The npm package root is the plugin root for Codex and Claude, so the same
-`skills/coordinate-agent-work/SKILL.md` and 33-tool standalone MCP server ship
+`skills/coordinate-agent-work/SKILL.md` and 36-tool standalone MCP server ship
 once:
 
 - Codex reads `.codex-plugin/plugin.json`. Its MCP declaration uses `cwd: "."`
@@ -858,7 +914,8 @@ end, the `agenttool-collab-host` bin, host-commit acceptance, and the bound
 `collab_next` refusal of a differing `after_sequence`.
 
 **DEVELOPMENT BUILD: 0.5.1-dev.0.** This main-branch source follows 0.5.0 and is
-unreleased. It keeps journal schema 3 and the 33 MCP tools, and adds the
+unreleased. It keeps journal schema 3, adds three proposal consent tools to
+the 33 MCP tools of 0.5.0 (36 in all), and adds the
 `agenttool-collab-host wait` host doorbell, its `--addressed` mode and the
 Claude Code doorbell watcher. The MCP server reports `0.5.1-dev.0` in
 `serverInfo` and at the start of its instructions, both read from
