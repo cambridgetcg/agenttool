@@ -690,13 +690,20 @@ through MCP. Code: `src/{person-desk,ceremony,passkey,tty}.ts`. Tests:
 |---|---|
 | `workspaces`, `voices --workspace <id>`, `proposals --workspace <id> [--proposal <id> \| --limit <n>]`, `inbox [--workspace <id>]`, `passkeys` | read; `inbox` without a workspace counts every workspace |
 | `consent --proposal <id>` / `reject --proposal <id> --reason <text>` | show the exact act and proposal bytes on `/dev/tty` and record only on `yes` typed there (`basis: controlling_terminal`) |
-| `ceremony --proposal <id> --act agree\|reject [--reason <text>] [--via <ssh-destination>]` | serve a one-time signing page on the passkey's origin (`http://localhost:17778` by default); Touch ID signs the act bytes and the desk records them (`basis: user_verified_passkey`) |
-| `passkey-enroll --ceremony [--label <text>]` | serve a one-time page that creates the passkey, then show its fingerprint on `/dev/tty` and enrol it only on `yes` |
+| `ceremony --proposal <id> --act agree\|reject [--reason <text>] [--via <ssh-destination>] [--no-open]` | serve a one-time signing page on the passkey's origin (`http://localhost:17778` by default); Touch ID signs the act bytes and the desk records them (`basis: user_verified_passkey`) |
+| `passkey-enroll --ceremony [--label <text>] [--no-open]` | serve a one-time page that creates the passkey, then show its fingerprint on `/dev/tty` and enrol it only on `yes` |
 | `passkey-enroll --file <path>\|-`, `passkey-export --credential <id>`, `passkey-revoke --credential <id>` | enrol a passkey exported from another table, export one, or revoke one; enrol and revoke are confirmed on `/dev/tty` |
 | `challenge --proposal <id> --act agree` or `--act reject --reason <text>`, then `consent`/`reject` with `--passkey-assertion <path>\|-` | the same passkey act in two steps, for a page the desk does not serve |
 | `say --workspace <id> --body <text> [--proposal <id>] --idempotency-key <key>` | a desk note; about a proposal it is routed to the author session, or for a desk proposal to every consulted voice |
 | `propose --workspace <id> --question <text> --criteria <text> --extent <text> [--known-conflicts <text>] [--topic <text>] [--consult-seconds <n>] --idempotency-key <key>` | a desk proposal (`origin: person_relayed`, author voice `person`), settled by every agent voice |
 | `withdraw --workspace <id> --proposal <id> --reason <text> --idempotency-key <key>` | withdraw a proposal the desk opened |
+
+A ceremony started at a terminal opens its page in the browser (macOS
+`/usr/bin/open`; `--no-open` declines) and says on stderr when it closes. One
+started by another program has no terminal, so that program opens the page;
+YOUI opens its own window inside the click. Each page lasts three minutes and
+accepts one post. An older page still open says it has expired rather than
+posting into a newer ceremony.
 
 Agreement needs the agents' position to be `consented`, the exact current
 `proposal_sha256`, and the same position the person was shown; the challenge
