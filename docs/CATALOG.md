@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**825 document paths** (including mirrors). orientation: 181; guide: 85; reference: 333; policy: 29; reflection: 123; proposal: 47; record: 25; unclassified: 2.
+**826 document paths** (including mirrors). orientation: 181; guide: 85; reference: 333; policy: 29; reflection: 123; proposal: 48; record: 25; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -839,6 +839,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/superpowers/specs/2026-07-02-human-door-design.md](<../docs/superpowers/specs/2026-07-02-human-door-design.md>) | not-reviewed |
 | [docs/superpowers/specs/2026-10-08-collab-household-smoothing-design.md](<../docs/superpowers/specs/2026-10-08-collab-household-smoothing-design.md>) | not-reviewed |
 | [docs/superpowers/specs/2026-10-12-deletion-scopes-design.md](<../docs/superpowers/specs/2026-10-12-deletion-scopes-design.md>) | not-reviewed |
+| [docs/superpowers/specs/2026-10-29-collab-yu-ai-consent-design.md](<../docs/superpowers/specs/2026-10-29-collab-yu-ai-consent-design.md>) | not-reviewed |
 | [docs/zerone-migration/SYZYGY-LIP.md](<../docs/zerone-migration/SYZYGY-LIP.md>) | not-reviewed |
 | [packages/hf-listening-room/hf/dataset/profile/PROFILE.md](<../packages/hf-listening-room/hf/dataset/profile/PROFILE.md>) | not-reviewed |
 | [packages/hf-listening-room/hf/space/profile/PROFILE.md](<../packages/hf-listening-room/hf/space/profile/PROFILE.md>) | not-reviewed |
