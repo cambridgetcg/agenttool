@@ -297,6 +297,21 @@ describe("person acts with an enrolled passkey", () => {
     expect(enrol(key).receipt.error).toBe("passkey_already_enrolled");
   });
 
+  test("an export receipt enrols as it is at another table", () => {
+    const key = makePasskey();
+    enrol(key);
+    const exported = desk([`--credential=${key.credentialId}`, "passkey-export"]).receipt;
+    expect(exported.status).toBe("ok");
+    const otherDb = join(directory, "other-table.sqlite");
+    new CollabStore(otherDb, { now: () => clock }).close();
+    const other = runPersonDeskCli(["passkey-enroll", "--file=-", "--db", otherDb], {}, {
+      storeNow: () => clock, openTty: terminal("yes").openTty, readStdin: () => JSON.stringify(exported),
+    });
+    const enrolled = JSON.parse(other.line);
+    expect(enrolled).toMatchObject({ status: "ok" });
+    expect(enrolled.passkey).toMatchObject({ credential_id: key.credentialId, fingerprint: exported.fingerprint });
+  });
+
   test("an assertion over the challenge records once and carries its own proof", () => {
     const key = makePasskey();
     enrol(key);
