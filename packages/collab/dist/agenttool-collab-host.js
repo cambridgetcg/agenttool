@@ -6789,7 +6789,9 @@ ${status.proposal_bytes}`;
       if (values.file === undefined) {
         throw new CollabError("usage_error", `passkey-enroll needs --file or --ceremony; ${PERSON_DESK_USAGE}`);
       }
-      const input = readJsonInput(values.file, deps);
+      const read = readJsonInput(values.file, deps);
+      const exported = read.protocol === PERSON_DESK_PROTOCOL && read.command === "person passkey-export" && typeof read.enrollment === "object" && read.enrollment !== null && !Array.isArray(read.enrollment);
+      const input = exported ? read.enrollment : read;
       const enrollment = normalizePasskeyEnrollment({
         credential_id: input.credential_id,
         public_key_spki: input.public_key_spki,
