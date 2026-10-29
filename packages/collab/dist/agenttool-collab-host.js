@@ -37,6 +37,11 @@ var COLLAB_SESSION_PROTOCOL = "agenttool.collab.session/0.1";
 var SESSION_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
 var EVIDENCE_REF_PREFIXES = ["artifact:", "event:", "report:", "checkpoint:"];
 var EVIDENCE_REFS_DESCRIPTION = "Evidence references point inside this workspace's journal and start with artifact:, event:, " + "report:, or checkpoint: (a task's base_checkpoint_digest or result_checkpoint_digest), " + 'for example "artifact:artifact_<id>".';
+var CONSENT_RULE = "consent/v1";
+var PROPOSAL_BYTES_PROTOCOL = "agenttool.collab-proposal/1";
+var DEFAULT_PROPOSAL_CONSULT_SECONDS = 6 * 60 * 60;
+var MIN_PROPOSAL_CONSULT_SECONDS = 10 * 60;
+var MAX_PROPOSAL_CONSULT_SECONDS = 7 * 24 * 60 * 60;
 var DEFAULT_WAIT_EVENT_LIMIT = 10;
 var MAX_WAIT_EVENT_LIMIT = 50;
 var MAX_WAIT_PAGE_BYTES = 256 * 1024;
@@ -138,6 +143,36 @@ function sortValue(value) {
     return Object.fromEntries(entries);
   }
   return value;
+}
+
+// src/proposal.ts
+function proposalBytes(content) {
+  return canonicalJson({ protocol: PROPOSAL_BYTES_PROTOCOL, rule: CONSENT_RULE, ...content });
+}
+function aiPosition(input) {
+  const closed = Date.parse(input.now) >= Date.parse(input.closes_at);
+  const others = [...new Set(input.snapshot_voice_ids)].filter((voice) => voice !== input.author_voice_id).sort();
+  const lone = others.length === 0;
+  const qualifying_support_indexes = input.support_voice_ids.flatMap((voice, index) => lone || voice !== input.author_voice_id ? [index] : []);
+  const supported = new Set(qualifying_support_indexes.map((index) => input.support_voice_ids[index]));
+  const awaiting_voice_ids = others.filter((voice) => !supported.has(voice));
+  const result = (position) => ({
+    position,
+    closed,
+    qualifying_support_indexes,
+    awaiting_voice_ids
+  });
+  if (input.obsoleted)
+    return result(input.obsoleted);
+  const hasSupport = qualifying_support_indexes.length > 0;
+  if (!closed) {
+    if (input.unresolved_challenge)
+      return result("challenged");
+    return result(hasSupport && awaiting_voice_ids.length === 0 ? "consented" : "open");
+  }
+  if (input.unresolved_challenge)
+    return result("split");
+  return result(hasSupport ? "consented" : "lapsed");
 }
 
 // src/repository.ts
@@ -798,6 +833,40 @@ class CollabStore {
           lease_id TEXT PRIMARY KEY,
           effective_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS proposal_terms (
+          report_id TEXT PRIMARY KEY REFERENCES reports(id),
+          workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+          rule TEXT NOT NULL,
+          criteria TEXT NOT NULL,
+          extent TEXT NOT NULL,
+          known_conflicts TEXT,
+          origin TEXT NOT NULL CHECK (origin IN ('ai', 'person_relayed')),
+          topic TEXT,
+          closes_at TEXT NOT NULL,
+          voices_json TEXT NOT NULL,
+          author_voice_id TEXT NOT NULL,
+          proposal_sha256 TEXT NOT NULL,
+          opened_event_id TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS proposal_terms_workspace_idx
+          ON proposal_terms(workspace_id, created_at);
+        CREATE TABLE IF NOT EXISTS proposal_rejections (
+          id TEXT PRIMARY KEY,
+          workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+          proposal_report_id TEXT NOT NULL REFERENCES proposal_terms(report_id),
+          proposal_sha256 TEXT NOT NULL,
+          party TEXT NOT NULL CHECK (party IN ('person')),
+          basis TEXT NOT NULL CHECK (basis IN ('relayed_by_session', 'controlling_terminal')),
+          reason TEXT NOT NULL,
+          -- No foreign key: additive tables never reference the session table,
+          -- which the schema-2 preview upgrade renames.
+          relayed_by_session_id TEXT,
+          created_at TEXT NOT NULL,
+          event_sequence INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS proposal_rejections_proposal_idx
+          ON proposal_rejections(proposal_report_id, event_sequence);
       `);
       this.db.exec(`PRAGMA application_id = ${APPLICATION_ID}`);
       this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
@@ -2994,8 +3063,266 @@ class CollabStore {
     };
     return this.mutateAsSession(input, input.idempotency_key, "report.append.v2", normalized, (session) => {
       this.validateReportInput(session, normalized);
+      this.refuseProposalRewrite(normalized);
       return this.appendReportInternal(session, normalized);
     });
+  }
+  openProposalForSession(input) {
+    const normalized = {
+      task_id: input.task_id ? validateId(input.task_id, "task_id") : null,
+      question: cleanText(input.question, "question", MAX_REPORT_BODY),
+      criteria: cleanText(input.criteria, "criteria", 4000),
+      extent: cleanText(input.extent, "extent", 1000),
+      known_conflicts: optionalText(input.known_conflicts, "known_conflicts", 4000),
+      evidence_refs: normalizeEvidenceRefs(input.evidence_refs ?? []),
+      confidence: validateReportConfidence(input.confidence ?? "unknown"),
+      confidence_basis: optionalText(input.confidence_basis, "confidence_basis", 2000),
+      limits: optionalText(input.limits, "limits", 2000),
+      origin: validateProposalOrigin(input.origin ?? "ai"),
+      topic: optionalText(input.topic, "topic", 200),
+      consult_seconds: validateConsultSeconds(input.consult_seconds),
+      supersedes_report_id: input.supersedes_report_id ? validateId(input.supersedes_report_id, "supersedes_report_id") : null
+    };
+    return this.mutateAsSession(input, input.idempotency_key, "proposal.open.v1", normalized, (session) => {
+      const reportInput = {
+        task_id: normalized.task_id,
+        to_session_id: null,
+        kind: "proposal",
+        body: normalized.question,
+        evidence_refs: normalized.evidence_refs,
+        confidence: normalized.confidence,
+        confidence_basis: normalized.confidence_basis,
+        limits: normalized.limits,
+        relation: normalized.supersedes_report_id ? "supersedes" : "informs",
+        target_report_id: normalized.supersedes_report_id,
+        authority_scope: null,
+        authority_basis: null
+      };
+      this.validateReportInput(session, reportInput);
+      if (normalized.supersedes_report_id) {
+        this.requireOpenToRevision(session.workspace_id, normalized.supersedes_report_id);
+      }
+      const now = this.timestamp();
+      const voices = this.liveVoiceSnapshot(session.workspace_id, now);
+      const authorVoiceId = this.lineageRoot(session.id);
+      const report = this.appendReportInternal(session, reportInput);
+      const closesAt = new Date(Date.parse(now) + normalized.consult_seconds * 1000).toISOString();
+      const proposalSha256 = sha2562(proposalBytes({
+        workspace_id: session.workspace_id,
+        report_id: report.id,
+        task_id: normalized.task_id,
+        question: report.body,
+        criteria: normalized.criteria,
+        extent: normalized.extent,
+        relies_on: report.evidence_refs,
+        known_conflicts: normalized.known_conflicts,
+        limits: report.limits,
+        origin: normalized.origin,
+        topic: normalized.topic,
+        closes_at: closesAt,
+        supersedes_report_id: normalized.supersedes_report_id
+      }));
+      const event = this.appendEvent(session.workspace_id, "proposal.opened", report.id, session.actor, {
+        rule: CONSENT_RULE,
+        proposal_sha256: proposalSha256,
+        criteria: normalized.criteria,
+        extent: normalized.extent,
+        known_conflicts: normalized.known_conflicts,
+        origin: normalized.origin,
+        topic: normalized.topic,
+        closes_at: closesAt,
+        voices,
+        author_voice_id: authorVoiceId
+      }, session.id);
+      this.db.query(`
+        INSERT INTO proposal_terms (
+          report_id, workspace_id, rule, criteria, extent, known_conflicts, origin,
+          topic, closes_at, voices_json, author_voice_id, proposal_sha256,
+          opened_event_id, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(report.id, session.workspace_id, CONSENT_RULE, normalized.criteria, normalized.extent, normalized.known_conflicts, normalized.origin, normalized.topic, closesAt, canonicalJson(voices), authorVoiceId, proposalSha256, event.id, now);
+      return this.proposalStatusInternal(session.workspace_id, report.id);
+    });
+  }
+  relayProposalRejectionForSession(input) {
+    const normalized = {
+      proposal_report_id: validateId(input.proposal_report_id, "proposal_report_id"),
+      proposal_sha256: validateSha256(input.proposal_sha256),
+      reason: cleanText(input.reason, "reason", 2000)
+    };
+    return this.mutateAsSession(input, input.idempotency_key, "proposal.reject.relay.v1", normalized, (session) => {
+      const terms = this.requireProposalTerms(session.workspace_id, normalized.proposal_report_id);
+      if (terms.proposal_sha256 !== normalized.proposal_sha256) {
+        throw new CollabError("proposal_hash_mismatch", "The rejection names different proposal bytes; read collab_proposal_status and relay against its proposal_sha256", { proposal_sha256: terms.proposal_sha256 });
+      }
+      const current = this.proposalStatusInternal(session.workspace_id, terms.report_id);
+      if (current.ai.position === "withdrawn" || current.ai.position === "superseded") {
+        throw new CollabError("proposal_not_on_table", "A withdrawn or superseded proposal is no longer on the table", { position: current.ai.position, obsoleted_by_report_id: current.ai.obsoleted_by_report_id });
+      }
+      const id = `rejection_${randomUUID()}`;
+      const now = this.timestamp();
+      const rejection = {
+        id,
+        proposal_report_id: terms.report_id,
+        proposal_sha256: terms.proposal_sha256,
+        party: "person",
+        basis: "relayed_by_session",
+        reason: normalized.reason,
+        relayed_by_session_id: session.id
+      };
+      const event = this.appendEvent(session.workspace_id, "proposal.rejected", terms.report_id, session.actor, { rejection }, session.id);
+      this.db.query(`
+        INSERT INTO proposal_rejections (
+          id, workspace_id, proposal_report_id, proposal_sha256, party, basis,
+          reason, relayed_by_session_id, created_at, event_sequence
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, session.workspace_id, terms.report_id, terms.proposal_sha256, rejection.party, rejection.basis, rejection.reason, session.id, now, event.sequence);
+      return this.proposalStatusInternal(session.workspace_id, terms.report_id);
+    });
+  }
+  proposalStatus(workspaceId, proposalReportId) {
+    this.requireWorkspace(workspaceId);
+    const id = validateId(proposalReportId, "proposal_report_id");
+    this.requireProposalTerms(workspaceId, id);
+    return this.proposalStatusInternal(workspaceId, id);
+  }
+  listProposalStatuses(workspaceId, options = {}) {
+    this.requireWorkspace(workspaceId);
+    const limit = options.limit ?? 20;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+      throw new CollabError("invalid_limit", "Proposal limit must be between 1 and 50");
+    }
+    const rows = this.db.query(`
+      SELECT t.report_id FROM proposal_terms t
+      JOIN reports r ON r.id = t.report_id
+      WHERE t.workspace_id = ?
+      ORDER BY r.event_sequence DESC
+      LIMIT ?
+    `).all(workspaceId, limit);
+    return rows.map((row) => this.proposalStatusInternal(workspaceId, row.report_id));
+  }
+  proposalStatusInternal(workspaceId, reportId) {
+    const proposal = this.requireReport(reportId);
+    const terms = this.requireProposalTerms(workspaceId, reportId);
+    const bytes = proposalBytes({
+      workspace_id: workspaceId,
+      report_id: proposal.id,
+      task_id: proposal.task_id,
+      question: proposal.body,
+      criteria: terms.criteria,
+      extent: terms.extent,
+      relies_on: proposal.evidence_refs,
+      known_conflicts: terms.known_conflicts,
+      limits: proposal.limits,
+      origin: terms.origin,
+      topic: terms.topic,
+      closes_at: terms.closes_at,
+      supersedes_report_id: proposal.relation === "supersedes" ? proposal.target_report_id : null
+    });
+    if (sha2562(bytes) !== terms.proposal_sha256) {
+      throw new CollabError("proposal_terms_invalid", "Stored proposal bytes no longer match their recorded hash", { proposal_report_id: reportId });
+    }
+    const obsoleted = this.activeObsoletionTargets(workspaceId);
+    const answers = this.db.query(`
+      SELECT id, relation, from_session_id FROM reports
+      WHERE workspace_id = ? AND target_report_id = ?
+      ORDER BY event_sequence
+    `).all(workspaceId, reportId);
+    const live = answers.filter((answer) => !obsoleted.has(answer.id));
+    const obsoleting = live.filter((answer) => ["withdraws", "corrects", "supersedes"].includes(answer.relation)).at(-1) ?? null;
+    const supports = live.filter((answer) => answer.relation === "supports" && answer.from_session_id !== null);
+    const challengeIds = this.unresolvedChallengeIds(workspaceId, reportId);
+    const computed = aiPosition({
+      now: this.timestamp(),
+      closes_at: terms.closes_at,
+      obsoleted: obsoleting ? obsoleting.relation === "withdraws" ? "withdrawn" : "superseded" : null,
+      unresolved_challenge: challengeIds.length > 0,
+      author_voice_id: terms.author_voice_id,
+      snapshot_voice_ids: terms.voices.map((voice) => voice.voice_id),
+      support_voice_ids: supports.map((support) => this.lineageRoot(support.from_session_id))
+    });
+    const rejections = this.db.query(`
+      SELECT * FROM proposal_rejections
+      WHERE workspace_id = ? AND proposal_report_id = ?
+      ORDER BY event_sequence
+    `).all(workspaceId, reportId).map(proposalRejectionFromRow);
+    return {
+      rule: CONSENT_RULE,
+      proposal,
+      terms,
+      proposal_bytes: bytes,
+      proposal_sha256: terms.proposal_sha256,
+      ai: {
+        position: computed.position,
+        closed: computed.closed,
+        unresolved_challenge_report_ids: challengeIds,
+        qualifying_support_report_ids: computed.qualifying_support_indexes.map((index) => supports[index].id),
+        awaiting_voice_ids: computed.awaiting_voice_ids,
+        obsoleted_by_report_id: obsoleting?.id ?? null,
+        basis: "computed_from_journal"
+      },
+      person: {
+        state: rejections.length > 0 ? "rejected" : "awaiting",
+        rejections
+      },
+      agreement: null,
+      may_proceed: false,
+      authority_boundary: "ai_consent_alone_authorises_nothing_work_proceeds_only_after_a_person_consents_at_the_controlling_terminal"
+    };
+  }
+  requireProposalTerms(workspaceId, reportId) {
+    const row = this.db.query(`
+      SELECT * FROM proposal_terms WHERE workspace_id = ? AND report_id = ?
+    `).get(workspaceId, reportId);
+    if (!row) {
+      throw new CollabError("proposal_not_found", "No proposal with consent terms has this report id in this workspace", { proposal_report_id: reportId });
+    }
+    return proposalTermsFromRow(row);
+  }
+  requireOpenToRevision(workspaceId, reportId) {
+    const terms = this.db.query(`
+      SELECT 1 FROM proposal_terms WHERE workspace_id = ? AND report_id = ?
+    `).get(workspaceId, reportId);
+    if (!terms)
+      return;
+    if (this.activeObsoletionTargets(workspaceId).has(reportId)) {
+      throw new CollabError("proposal_not_on_table", "This proposal was already withdrawn or superseded", { proposal_report_id: reportId });
+    }
+  }
+  refuseProposalRewrite(input) {
+    if (input.relation !== "corrects" && input.relation !== "supersedes")
+      return;
+    if (!input.target_report_id)
+      return;
+    const terms = this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(input.target_report_id);
+    if (terms) {
+      throw new CollabError("proposal_terms_fixed", "A proposal with consent terms is fixed by its hash. Withdraw it, or open a revision with " + "collab_proposal_open and supersedes_report_id");
+    }
+  }
+  liveVoiceSnapshot(workspaceId, observedAt) {
+    const rows = this.db.query(`
+      SELECT id, status, last_seen_at FROM coordination_sessions
+      WHERE workspace_id = ? AND status = 'active'
+      ORDER BY id
+    `).all(workspaceId);
+    const voices = new Map;
+    for (const row of rows) {
+      if (sessionLiveness(row, observedAt) !== "live")
+        continue;
+      const voiceId = this.lineageRoot(row.id);
+      voices.set(voiceId, [...voices.get(voiceId) ?? [], row.id]);
+    }
+    return [...voices.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([voice_id, live_session_ids]) => ({ voice_id, live_session_ids: live_session_ids.sort() }));
+  }
+  lineageRoot(sessionId) {
+    let current = sessionId;
+    for (let depth = 0;depth < 256; depth += 1) {
+      const row = this.db.query(`SELECT parent_session_id FROM coordination_sessions WHERE id = ?`).get(current);
+      if (!row?.parent_session_id)
+        return current;
+      current = row.parent_session_id;
+    }
+    return current;
   }
   listReports(workspaceId, options = {}) {
     this.requireWorkspace(workspaceId);
@@ -3692,6 +4019,14 @@ class CollabStore {
       }
       case "task.recovered":
         return field(payload.prior_lease, "session_id") === sessionId;
+      case "proposal.opened": {
+        const voices = Array.isArray(payload.voices) ? payload.voices : [];
+        return voices.some((voice) => field(voice, "voice_id") !== payload.author_voice_id && Array.isArray(field(voice, "live_session_ids")) && field(voice, "live_session_ids").includes(sessionId));
+      }
+      case "proposal.rejected": {
+        const proposal = this.db.query(`SELECT from_session_id FROM reports WHERE id = ?`).get(event.entity_id);
+        return proposal?.from_session_id === sessionId;
+      }
       default:
         return false;
     }
@@ -4411,18 +4746,15 @@ class CollabStore {
     return payload.completion_report_id === row.completion_report_id && typeof payload.review_requested_session_id === "string" ? payload.review_requested_session_id : null;
   }
   hasUnresolvedChallenges(workspaceId, reportId) {
+    return this.unresolvedChallengeIds(workspaceId, reportId).length > 0;
+  }
+  unresolvedChallengeIds(workspaceId, reportId) {
     const challenges = this.db.query(`
       SELECT id FROM reports
       WHERE workspace_id = ? AND target_report_id = ? AND relation = 'challenges'
       ORDER BY event_sequence
     `).all(workspaceId, reportId);
-    for (const challenge of challenges) {
-      if (this.hasActiveReportRelation(workspaceId, challenge.id, new Set(["withdraws"])))
-        continue;
-      if (!this.hasActiveReportRelation(workspaceId, challenge.id, new Set(["resolves"])))
-        return true;
-    }
-    return false;
+    return challenges.filter((challenge) => !this.hasActiveReportRelation(workspaceId, challenge.id, new Set(["withdraws"])) && !this.hasActiveReportRelation(workspaceId, challenge.id, new Set(["resolves"]))).map((challenge) => challenge.id);
   }
   hasObsoletedCompletionReport(workspaceId, reportId) {
     return this.hasActiveReportRelation(workspaceId, reportId, new Set(["withdraws", "corrects", "supersedes"]));
@@ -5200,6 +5532,43 @@ function reportFromRow(row) {
 }
 function reviewFromRow(row) {
   return { ...row };
+}
+function proposalTermsFromRow(row) {
+  if (row.rule !== CONSENT_RULE) {
+    throw new CollabError("proposal_rule_unsupported", "This proposal was opened under a consent rule this package does not implement", { proposal_report_id: row.report_id, rule: row.rule });
+  }
+  return {
+    report_id: row.report_id,
+    workspace_id: row.workspace_id,
+    rule: CONSENT_RULE,
+    criteria: row.criteria,
+    extent: row.extent,
+    known_conflicts: row.known_conflicts,
+    origin: row.origin,
+    topic: row.topic,
+    closes_at: row.closes_at,
+    voices: JSON.parse(row.voices_json),
+    author_voice_id: row.author_voice_id,
+    proposal_sha256: row.proposal_sha256,
+    opened_event_id: row.opened_event_id,
+    created_at: row.created_at
+  };
+}
+function proposalRejectionFromRow(row) {
+  return { ...row };
+}
+function validateProposalOrigin(value) {
+  if (value !== "ai" && value !== "person_relayed") {
+    throw new CollabError("invalid_origin", "origin must be ai or person_relayed");
+  }
+  return value;
+}
+function validateConsultSeconds(value) {
+  const seconds = value ?? DEFAULT_PROPOSAL_CONSULT_SECONDS;
+  if (!Number.isInteger(seconds) || seconds < MIN_PROPOSAL_CONSULT_SECONDS || seconds > MAX_PROPOSAL_CONSULT_SECONDS) {
+    throw new CollabError("invalid_consult_seconds", `consult_seconds must be an integer between ${MIN_PROPOSAL_CONSULT_SECONDS} and ${MAX_PROPOSAL_CONSULT_SECONDS}`);
+  }
+  return seconds;
 }
 function parseCheckpoint(json) {
   return json ? JSON.parse(json) : null;

@@ -79,7 +79,8 @@ public [GitHub Release](https://github.com/cambridgetcg/agenttool-collab/release
 on `cambridgetcg/agenttool-collab`. It is not on npm, where `latest` remains 0.4.0.
 **Update, 2026-10-18.** Current Collab source on `main` is the unreleased
 **0.5.1-dev.0** development build: the 33 tools of 0.5.0, including bounded
-event waiting, plus the host doorbell wait. A development version is not a
+event waiting, plus the host doorbell wait and, from 2026-10-29, three
+proposal consent tools (36 in all). A development version is not a
 release; the next npm candidate is 0.5.1 through the
 [public release path](NPM-RELEASES.md).
 Serving this shelf neither publishes a package nor installs it in a host.

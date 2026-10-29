@@ -5,8 +5,12 @@ import { defaultActor } from "./actor-default.js";
 import { anchorStatusForWorkspace } from "./anchor-status.js";
 import { CollabError } from "./errors.js";
 import {
+  CONSENT_RULE,
+  DEFAULT_PROPOSAL_CONSULT_SECONDS,
   DEFAULT_WAIT_EVENT_LIMIT,
   EVIDENCE_REFS_DESCRIPTION,
+  MAX_PROPOSAL_CONSULT_SECONDS,
+  MIN_PROPOSAL_CONSULT_SECONDS,
   MAX_WAIT_EVENT_LIMIT,
   MAX_WAIT_MS,
   MAX_WAIT_RESPONSE_BYTES,
@@ -120,7 +124,9 @@ export function buildCollabMcpServer(
         "Default-slot actor can use Claude metadata only with matching selected PID, messaging socket and process start time. A host restart resumes from the " +
         "mode-0600 credential file without exposing its bearer token to the model. Exchange observations, " +
         "inferences, proposals, or authorised decisions as structured reports with evidence, confidence, " +
-        "limits, and explicit authority scope. Claim before editing overlapping path scopes. Session leases remain live while their " +
+        "limits, and explicit authority scope. Direction-level proposals (collab_proposal_open) are settled by the agents " +
+        "through lazy consensus; that position authorises nothing alone, and a person's consent is never recorded through MCP. " +
+        "Claim before editing overlapping path scopes. Session leases remain live while their " +
         "session is live (6 hours since activity); optional renew is lease-fenced, not version-gated. " +
         "An advisory coordination lease is not ownership, a filesystem lock, or authority. Edit-task " +
         "completion is actor-reported and remains pending until a distinct session accepts it. Challenges " +
@@ -912,6 +918,93 @@ export function buildCollabMcpServer(
     async ({ workspace_id, ...options }) => call(() => ({
       reports: store.listReports(workspace_id, options),
     })),
+  );
+
+  server.registerTool(
+    "collab_proposal_open",
+    {
+      title: "Open a direction-level proposal for consent",
+      description:
+        `Open a proposal the agents settle by lazy consensus (${CONSENT_RULE}) before a person decides. `
+        + "Answer it with collab_report_append supports, challenges and resolves. The agents' position is "
+        + "computed from the journal and authorises nothing alone; a person consents only at the controlling "
+        + "terminal, never through MCP. Use it for design direction, criteria and extent, conflicting context "
+        + "and the reading of principles, not for every edit.",
+      annotations: localRetrySafeMutation,
+      inputSchema: {
+        workspace_id: workspaceId,
+        idempotency_key: key,
+        question: z.string().min(1).max(8000).describe("What is being decided"),
+        criteria: z.string().min(1).max(4000).describe("How the parties judge which way to go"),
+        extent: z.string().min(1).max(1000).describe("What agreement would authorise, and where it stops"),
+        known_conflicts: z.string().max(4000).optional()
+          .describe("Context that disagrees, and how this proposal reads it. Name conflicts; never resolve them silently."),
+        evidence_refs: evidenceRefs,
+        confidence: z.enum(["high", "medium", "low", "unknown"]).optional(),
+        confidence_basis: z.string().max(2000).optional(),
+        limits: z.string().max(2000).optional(),
+        origin: z.enum(["ai", "person_relayed"]).optional()
+          .describe("ai (the default), or person_relayed when relaying a person's proposal. Self-declared; the rule ignores it."),
+        topic: z.string().max(200).optional().describe("Optional label for later reading, for example principle:<name>"),
+        consult_seconds: z.number().int()
+          .min(MIN_PROPOSAL_CONSULT_SECONDS).max(MAX_PROPOSAL_CONSULT_SECONDS).optional()
+          .describe(`Consultation window; default ${DEFAULT_PROPOSAL_CONSULT_SECONDS} seconds`),
+        task_id: z.string().min(1).optional(),
+        supersedes_report_id: z.string().min(1).optional()
+          .describe("Your own earlier proposal that this one revises"),
+      },
+    },
+    async ({ workspace_id, ...input }) => call(() => {
+      requireWorkspace(workspace_id);
+      return { proposal: store.openProposalForSession({ ...boundCredential(), ...input }) };
+    }),
+  );
+
+  server.registerTool(
+    "collab_proposal_status",
+    {
+      title: "Read proposal consent status",
+      description:
+        "Read one proposal's consent status, or the most recent proposals newest first. The agents' position "
+        + "is computed from the journal; may_proceed stays false until a person consents at the terminal.",
+      annotations: localReadOnly,
+      inputSchema: {
+        workspace_id: workspaceId,
+        proposal_report_id: z.string().min(1).optional()
+          .describe("One proposal; omit to list the most recent"),
+        limit: z.number().int().min(1).max(50).optional().describe("List size; default 20"),
+      },
+    },
+    async ({ workspace_id, proposal_report_id, limit }) => call(() => {
+      requireWorkspace(workspace_id);
+      return proposal_report_id
+        ? { proposal: store.proposalStatus(workspace_id, proposal_report_id) }
+        : { proposals: store.listProposalStatuses(workspace_id, { limit }) };
+    }),
+  );
+
+  server.registerTool(
+    "collab_proposal_relay_rejection",
+    {
+      title: "Relay a person's rejection of a proposal",
+      description:
+        "Record that a person rejected these exact proposal bytes, as relayed by this session "
+        + "(basis relayed_by_session). A relayed rejection is forgeable, so it can only pause work. "
+        + "A person's consent is never recorded this way.",
+      annotations: localRetrySafeMutation,
+      inputSchema: {
+        workspace_id: workspaceId,
+        idempotency_key: key,
+        proposal_report_id: z.string().min(1),
+        proposal_sha256: z.string().length(64)
+          .describe("The proposal_sha256 the person saw, from collab_proposal_status"),
+        reason: z.string().min(1).max(2000).describe("The person's reason, in brief"),
+      },
+    },
+    async ({ workspace_id, ...input }) => call(() => {
+      requireWorkspace(workspace_id);
+      return { proposal: store.relayProposalRejectionForSession({ ...boundCredential(), ...input }) };
+    }),
   );
 
   server.registerTool(
