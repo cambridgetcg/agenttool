@@ -11,11 +11,15 @@
  * Releases run from the public source repository, RELEASE_REPOSITORY. By
  * default `publish` stages the exact artifact with `npm stage publish`; a
  * maintainer approves it with 2FA, and a later run takes the verify-existing
- * path to confirm the public registry bytes.
+ * path to confirm the public registry bytes. Before the GitHub Release
+ * mirror, `check-trust` makes npm's OIDC token exchange once, so a package
+ * whose npm trusted publishers do not match the workflow is refused before
+ * the run leaves anything public.
  */
 
 import { createHash, randomUUID } from "node:crypto";
-import { appendFile, copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { appendFile, copyFile, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
 import { inspectNpmTarball } from "./build-love-packages";
@@ -29,6 +33,9 @@ import { inspectNpmTarball } from "./build-love-packages";
 export const RELEASE_REPOSITORY = "cambridgetcg/agenttool-packages" as const;
 export const RELEASE_REPOSITORY_URL = `https://github.com/${RELEASE_REPOSITORY}` as const;
 export const EXPECTED_REPOSITORY = `${RELEASE_REPOSITORY_URL}.git` as const;
+/** The workflow file and environment of the publish job, which with RELEASE_REPOSITORY are what an npm trusted publisher names. */
+const PUBLISH_WORKFLOW_FILE = "publish-npm.yml";
+const PUBLISH_ENVIRONMENT = "npm-bootstrap";
 export const RELEASE_RECEIPT_SCHEMA = "agenttool.npm-release/1";
 export const STAGE_RECEIPT_SCHEMA = "agenttool.npm-stage/1";
 export const PINNED_BUN = "1.3.5";
@@ -485,18 +492,56 @@ const SAFE_NPM_TAG = /^[a-z][a-z0-9._-]*$/;
 const COMMIT = /^[0-9a-f]{40}$/;
 /** npm's own stage-id check (lib/utils/validate-uuid.js in npm 11.17.0). */
 const STAGE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const TEXT_ARCHIVE_ENTRY = /\.(?:cjs|css|html|js|json|jsonl|jsx|map|md|mjs|mts|toml|ts|tsx|txt|yaml|yml)$/i;
-const SENSITIVE_ARCHIVE_PATH = /(?:^|\/)(?:\.env(?:\..*)?|\.npmrc|credentials(?:\.json)?|id_ed25519|id_rsa)$/i;
-const SECRET_SIGNATURES = [
+/** The public guard's credential-shaped basenames (SENSITIVE_BASENAME in tools/public-guard.ts). */
+const SENSITIVE_ARCHIVE_PATH =
+  /(?:^|\/)(?:\.env(?:\.[^/]*)?|\.envrc|\.npmrc|\.netrc|\.pypirc|credentials(?:\.[^/]*)?|id_rsa|id_ed25519|id_ecdsa|id_dsa|[^/]+\.(?:pem|key|p12|pfx|jks|keystore)|\.DS_Store)$/i;
+/** Any file inside a `.env` or `.env.*` directory: the guard reads basenames only, and an env file can be named anything there. */
+const SENSITIVE_ARCHIVE_DIRECTORY = /(?:^|\/)\.env(?:\.[^/]*)?\//i;
+/** The public guard's credential signatures (SECRET_RULES in tools/public-guard.ts), which merged this list with its own. */
+export const SECRET_SIGNATURES = [
   { name: "private-key block", pattern: /-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----/ },
   { name: "AWS access key", pattern: /\bAKIA[0-9A-Z]{16}\b/ },
   { name: "GitHub token", pattern: /\bgh[pousr]_[A-Za-z0-9]{36,}\b/ },
+  { name: "GitHub fine-grained token", pattern: /\bgithub_pat_[A-Za-z0-9_]{60,}/ },
   { name: "npm token", pattern: /\bnpm_[A-Za-z0-9]{36,}\b/ },
-  { name: "Slack token", pattern: /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/ },
+  { name: "Slack token", pattern: /\bxox[baprs]-[A-Za-z0-9-]{10,}/ },
+  { name: "Stripe live key", pattern: /\b[sr]k_live_[A-Za-z0-9]{16,}/ },
 ] as const;
+/** The public guard's placeholder home names; a name not starting with a letter or digit is a variable or template ($USER, {name}). */
+const PLACEHOLDER_HOMES = new Set(["nobody", "test", "example", "person", "you"]);
+/**
+ * The public guard's home-directory rules (PERSONAL_RULES in tools/public-guard.ts).
+ * Two Linux home names name no person: `runner`, the GitHub-hosted runner
+ * whose workspace prepare builds in, and `pwuser`, the user of the Playwright
+ * images, whose home browser's vendored playwright-core names. Unlike the
+ * guard, which also reads each line's decoded spellings (decodedVariants),
+ * the rules see only the raw text, so a percent- or entity-encoded home path
+ * passes; the guard's rules are case-sensitive, and so are these.
+ */
+export const DEVICE_PATH_RULES: readonly { name: string; pattern: RegExp; permitted: readonly string[] }[] = [
+  // First, so that C:/Users/<name> is named for what it is.
+  { name: "Windows home directory", pattern: /\b[A-Za-z]:(?:\\\\|\\|\/)Users(?:\\\\|\\|\/)([^\\/\s"'`<>(),;:]+)/g, permitted: [] },
+  { name: "macOS home directory", pattern: /\/Users\/([^/\s"'`<>()\\,;:]+)/g, permitted: [] },
+  { name: "Linux home directory", pattern: /(?<![\w.-])\/home\/([^/\s"'`<>()\\,;:]+)/g, permitted: ["runner", "pwuser"] },
+];
 
-export function shouldScanArchiveEntryForSecrets(entry: string, size: number): boolean {
-  return TEXT_ARCHIVE_ENTRY.test(entry) && size <= 2_000_000;
+/**
+ * The first credential signature or device path in one packed file, named by
+ * its rule only: the matched text is never echoed.
+ */
+export function archiveContentFinding(text: string): string | undefined {
+  for (const signature of SECRET_SIGNATURES) {
+    if (signature.pattern.test(text)) return `secret-like ${signature.name}`;
+  }
+  for (const rule of DEVICE_PATH_RULES) {
+    for (const match of text.matchAll(rule.pattern)) {
+      const home = match[1] ?? "";
+      if (!PLACEHOLDER_HOMES.has(home) && !rule.permitted.includes(home) && /^[A-Za-z0-9]/.test(home)) {
+        return `device path (${rule.name})`;
+      }
+    }
+  }
+  return undefined;
 }
 
 function fail(message: string): never {
@@ -691,13 +736,16 @@ export function planDispatch(
  * the package's visibility (libnpmpublish ensureProvenanceGeneration).
  * `--ignore-scripts` is a global npm option; a tarball spec runs no scripts
  * anyway. `--json` makes npm print the stage id in a parseable record.
+ * `--logs-dir` sends npm's debug log, the only place its verbose `oidc` lines
+ * reach without raising the log level, to a directory publish reads and removes.
  */
 export function npmPublishArguments(
   action: "stage" | "publish",
   artifactPath: string,
   npmTag: string,
+  logsDirectory: string,
 ): string[] {
-  const shared = ["--access", "public", "--tag", npmTag, "--provenance", "--ignore-scripts"];
+  const shared = ["--access", "public", "--tag", npmTag, "--provenance", "--ignore-scripts", "--logs-dir", logsDirectory];
   return action === "stage"
     ? ["stage", "publish", artifactPath, ...shared, "--json"]
     : ["publish", artifactPath, ...shared];
@@ -1081,8 +1129,29 @@ async function hashArtifact(path: string): Promise<ArtifactIdentity> {
   return artifactIdentity(new Uint8Array(await Bun.file(path).arrayBuffer()), basename(path));
 }
 
+/**
+ * What the scan reads of one packed file: its UTF-8 reading, and for a
+ * BOM-marked UTF-16 file (PowerShell 5's default output), its UTF-16 reading
+ * too, as the public guard's blobKind decodes it. UTF-16 without a BOM is
+ * read as UTF-8 only.
+ */
+function archiveFileText(bytes: Uint8Array): string {
+  const utf8 = new TextDecoder().decode(bytes);
+  const little = bytes[0] === 0xff && bytes[1] === 0xfe;
+  if (!little && !(bytes[0] === 0xfe && bytes[1] === 0xff)) return utf8;
+  return `${utf8}\n${new TextDecoder(little ? "utf-16le" : "utf-16be").decode(bytes)}`;
+}
+
 async function archiveText(artifact: string, entry: string): Promise<string> {
-  return (await command("tar", ["-xOzf", artifact, entry], { capture: true, log: false })).stdout;
+  const tar = Bun.spawn(["tar", "-xOzf", artifact, entry], {
+    cwd: REPO_ROOT,
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "inherit",
+  });
+  const [exitCode, bytes] = await Promise.all([tar.exited, new Response(tar.stdout).arrayBuffer()]);
+  if (exitCode !== 0) fail(`tar exited ${exitCode}`);
+  return archiveFileText(new Uint8Array(bytes));
 }
 
 export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
@@ -1580,13 +1649,34 @@ async function verifyArchive(artifact: string, spec: ReleaseSpec, expectedVersio
     fail("packed package repository directory does not match the allowlisted source path");
   }
 
+  await assertArchiveContentClean(artifact, entries, inspected.sizes);
+}
+
+/**
+ * Refuses a credential-shaped filename anywhere in the archive, and reads
+ * every non-empty file, whatever its name, extension, or size, for a
+ * credential signature or a device path. A key, a script, or an
+ * extensionless file can carry a secret as well as a .js file can, and a
+ * large bundle is where one would hide. inspectNpmTarball already bounds the
+ * whole archive (MAX_TAR_EXPANDED_BYTES), so no file needs a size exception.
+ * Every file is read as UTF-8, where ASCII text survives even among binary
+ * bytes, and a BOM-marked UTF-16 file as UTF-16 too (archiveFileText).
+ * UTF-16 strings inside a binary file, which the guard's printableStrings
+ * reads, are not.
+ */
+export async function assertArchiveContentClean(
+  artifact: string,
+  entries: readonly string[],
+  sizes: Readonly<Record<string, number>>,
+): Promise<void> {
   for (const entry of entries) {
-    if (SENSITIVE_ARCHIVE_PATH.test(entry)) fail(`sensitive filename in npm archive: ${entry}`);
-    if (!shouldScanArchiveEntryForSecrets(entry, inspected.sizes[entry])) continue;
-    const text = await archiveText(artifact, entry);
-    for (const signature of SECRET_SIGNATURES) {
-      if (signature.pattern.test(text)) fail(`secret-like ${signature.name} found in ${entry}`);
+    if (SENSITIVE_ARCHIVE_PATH.test(entry) || SENSITIVE_ARCHIVE_DIRECTORY.test(entry)) {
+      fail(`sensitive filename in npm archive: ${entry}`);
     }
+    // Directories and empty files carry no bytes.
+    if ((sizes[entry] ?? 0) === 0) continue;
+    const finding = archiveContentFinding(await archiveText(artifact, entry));
+    if (finding !== undefined) fail(`${finding} found in ${entry}`);
   }
 }
 
@@ -1826,9 +1916,11 @@ async function prepare(packageKey: string, tag: string, output: string): Promise
 /**
  * The workflow's first step in both jobs: refuse, before anything is prepared
  * or mirrored, the inputs the publish step would refuse later. A dry run
- * therefore fails on exactly what the real run would. It reads the checkout's
- * package version and the public registry, and nothing else; `publish`
- * repeats every check against the registry as it is then.
+ * therefore fails on exactly what the real run would, except for npm's trust
+ * in this workflow, which only the publish job's OIDC identity can show
+ * (checkTrust). It reads the checkout's package version and the public
+ * registry, and nothing else; `publish` repeats every check against the
+ * registry as it is then.
  */
 async function checkInputs(
   packageKey: string,
@@ -1836,13 +1928,7 @@ async function checkInputs(
   npmTag: string,
   mode: PublishMode,
 ): Promise<void> {
-  const spec = releaseSpec(packageKey);
-  const { version } = await packageIdentity(spec);
-  // The input-only refusals come first, so they need no registry answer.
-  validateNpmTagForVersion(version, npmTag);
-  assertPublishModeAllowed(mode, authentication);
-  const state = await registryState(spec.name, version);
-  const action = planDispatch(version, npmTag, authentication, mode, state.packageStatus, state.versionStatus);
+  const { spec, version, state, action } = await plannedDispatch(packageKey, authentication, npmTag, mode);
   console.log(JSON.stringify({
     package: `${spec.name}@${version}`,
     tag: expectedTag(spec, version),
@@ -1851,6 +1937,68 @@ async function checkInputs(
     publish_mode: mode,
     registry: { package: state.packageStatus, version: state.versionStatus },
     planned_action: action,
+  }, null, 2));
+}
+
+async function plannedDispatch(
+  packageKey: string,
+  authentication: AuthenticationMode,
+  npmTag: string,
+  mode: PublishMode,
+): Promise<{ spec: ReleaseSpec; version: string; state: RegistryState; action: "verify-existing" | "stage" | "publish" }> {
+  const spec = releaseSpec(packageKey);
+  const { version } = await packageIdentity(spec);
+  // The input-only refusals come first, so they need no registry answer.
+  validateNpmTagForVersion(version, npmTag);
+  assertPublishModeAllowed(mode, authentication);
+  const state = await registryState(spec.name, version);
+  const action = planDispatch(version, npmTag, authentication, mode, state.packageStatus, state.versionStatus);
+  return { spec, version, state, action };
+}
+
+/**
+ * Every trusted run that changes the registry needs npm's OIDC token. Today
+ * that is only a stage, since plannedDispatch refuses a trusted direct
+ * publish, but a change to that rule must not skip this check silently.
+ */
+export function trustedPublisherCheckNeeded(
+  authentication: AuthenticationMode,
+  action: "verify-existing" | "stage" | "publish",
+): boolean {
+  return authentication === "trusted" && action !== "verify-existing";
+}
+
+/**
+ * The publish job's step after check-inputs and before the GitHub Release
+ * mirror. A trusted run that will change the registry first makes the OIDC
+ * token exchange npm would make (assertTrustedPublisherExchange), so a
+ * package whose npm trusted publishers do not match this workflow is refused
+ * while the run has mirrored, signed, and staged nothing. A bootstrap run,
+ * and a run that only verifies an existing version, need no OIDC token. This
+ * step receives no secret, so it cannot see whether a bootstrap run has its
+ * token: without one, publish refuses that run after the mirror. Setting the
+ * secret just before a bootstrap dispatch is the runbook's step, and the only
+ * control for that case.
+ */
+async function checkTrust(
+  packageKey: string,
+  authentication: AuthenticationMode,
+  npmTag: string,
+  mode: PublishMode,
+): Promise<void> {
+  ensureWorkflowContext();
+  const { spec, version, action } = await plannedDispatch(packageKey, authentication, npmTag, mode);
+  const exchange = trustedPublisherCheckNeeded(authentication, action);
+  if (exchange) await assertTrustedPublisherExchange(spec, { npmCommand: action === "publish" ? "publish" : "stage" });
+  console.log(JSON.stringify({
+    package: `${spec.name}@${version}`,
+    authentication,
+    planned_action: action,
+    trusted_publisher: exchange
+      ? "npm exchanged this workflow's OIDC identity for a token; the token was discarded"
+      : `not checked: ${action === "verify-existing"
+        ? "verifying an existing version needs no npm token"
+        : "bootstrap authenticates with NODE_AUTH_TOKEN, which only the publish step receives; it refuses there, after the mirror, if the secret is absent"}`,
   }, null, 2));
 }
 
@@ -2436,6 +2584,291 @@ export function stageApprovalSummary(staged: StageReceipt): string {
   ].join("\n");
 }
 
+/**
+ * The environment npm runs in. setup-node writes `_authToken=${NODE_AUTH_TOKEN}`
+ * into the job's npmrc, and npm 11.17.0 keeps an undefined variable as that
+ * literal text (@npmcli/config lib/env-replace.js), which it would send as a
+ * bearer token after signing provenance. A trusted run therefore sets it
+ * empty instead of deleting it: an empty token is no credential
+ * (getCredentialsByURI), so when npm's OIDC exchange yields no token npm
+ * stops with ENEEDAUTH before libnpmpublish signs provenance
+ * (lib/commands/publish.js).
+ */
+export function npmPublishEnvironment(
+  authentication: AuthenticationMode,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): Record<string, string | undefined> {
+  const npmEnvironment = { ...environment };
+  if (authentication === "bootstrap") {
+    if (!npmEnvironment.NODE_AUTH_TOKEN) fail("reviewed bootstrap publication requires NODE_AUTH_TOKEN");
+  } else {
+    npmEnvironment.NODE_AUTH_TOKEN = "";
+    if (!npmEnvironment.ACTIONS_ID_TOKEN_REQUEST_URL || !npmEnvironment.ACTIONS_ID_TOKEN_REQUEST_TOKEN) {
+      fail("trusted publication requires the GitHub OIDC request environment");
+    }
+  }
+  return npmEnvironment;
+}
+
+/** npm 11.17.0's OIDC audience for a registry, `npm:<hostname>` (lib/utils/oidc.js). */
+export const NPM_OIDC_AUDIENCE = `npm:${new URL(REGISTRY_ORIGIN).hostname}`;
+
+/** npm 11.17.0's OIDC token-exchange URL for one package; npm-package-arg escapes the scope's slash as %2f. */
+export function npmOidcExchangeUrl(name: string): string {
+  if (!/^@[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._-]*$/.test(name)) fail(`invalid scoped package name: ${name}`);
+  return `${REGISTRY_ORIGIN}/-/npm/v1/oidc/token/exchange/package/${name.replace("/", "%2f")}`;
+}
+
+export type OidcFetch = (url: string, init: RequestInit) => Promise<Response>;
+
+/** The redirect statuses npm 11.17.0's fetch follows (minipass-fetch isRedirect), and its default limit (`follow`). */
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const MAX_OIDC_REDIRECTS = 20;
+
+/**
+ * One OIDC request, 30 seconds per hop. It follows a redirect as npm's
+ * make-fetch-happen does (GET after a 303, or after a 301 or 302 to a POST),
+ * but only within one origin, the one place the bearer may go.
+ * make-fetch-happen drops the bearer on another host, where npm would get no
+ * token either, so such a redirect is returned as it is, and refused.
+ */
+export async function timedOidcFetch(url: string, init: RequestInit): Promise<Response> {
+  let target = new URL(url);
+  let request = init;
+  for (let hops = 0; ; hops += 1) {
+    const response = await fetch(target.href, { ...request, redirect: "manual", signal: AbortSignal.timeout(30_000) });
+    const location = response.headers.get("location");
+    if (!REDIRECT_STATUSES.has(response.status) || location === null || hops === MAX_OIDC_REDIRECTS) return response;
+    const next = new URL(location, target);
+    if (next.origin !== target.origin) return response;
+    if (response.status === 303 || (request.method === "POST" && [301, 302].includes(response.status))) {
+      request = { ...request, method: "GET" };
+    }
+    await response.body?.cancel();
+    target = next;
+  }
+}
+
+/** Hides a credential in the rest of this job's log, as actions/core setSecret does; the runner consumes the command line. */
+function maskInActionsLog(secret: string): void {
+  if (process.env.GITHUB_ACTIONS === "true") process.stdout.write(`::add-mask::${secret}\n`);
+}
+
+async function jsonObject(response: Response): Promise<Record<string, unknown> | undefined> {
+  try {
+    const value: unknown = JSON.parse(await response.text());
+    return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * A bearer value that one workflow-command line can mask as it is: printable
+ * ASCII without spaces or `%`, since the runner decodes %25, %0D, and %0A in
+ * a command's data (actions/core escapeData). GitHub's ID token is base64url
+ * with dots, and npm's tokens are letters, digits, and `_`.
+ */
+const BEARER_VALUE = /^[\x21-\x24\x26-\x7e]+$/;
+
+/**
+ * The OIDC token exchange npm 11.17.0 makes before it stages
+ * (lib/utils/oidc.js), made here before the GitHub Release mirror: GitHub's ID
+ * token for npm's audience, then a POST of it to npm's exchange URL for this
+ * package, which answers with a token only when one of the package's trusted
+ * publishers matches this workflow run. npm itself logs a failed exchange only
+ * at verbose level and carries on without a token. Both tokens are masked in
+ * the job log as soon as they exist and are never printed; the npm token is
+ * dropped unused and expires on its own. npm's API documents 400 (bad
+ * request), 401 (unauthorized), and 404 (package not found) for this call,
+ * but not which one a missing trusted publisher gets. This runs only for a
+ * package that exists, so a 401, 403, or 404 is read as no matching trusted
+ * publisher, and any other refusal is reported as it is.
+ */
+export async function assertTrustedPublisherExchange(
+  spec: Pick<ReleaseSpec, "key" | "name">,
+  options: {
+    environment?: Readonly<Record<string, string | undefined>>;
+    fetch?: OidcFetch;
+    mask?: (secret: string) => void;
+    /** The npm command the run will make: `npm stage publish` is `stage`. */
+    npmCommand?: "stage" | "publish";
+  } = {},
+): Promise<void> {
+  const environment = options.environment ?? process.env;
+  const oidcFetch = options.fetch ?? timedOidcFetch;
+  const mask = options.mask ?? maskInActionsLog;
+  const exchangeUrl = npmOidcExchangeUrl(spec.name);
+  const requestUrl = environment.ACTIONS_ID_TOKEN_REQUEST_URL;
+  const requestToken = environment.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
+  if (!requestUrl || !requestToken) fail("trusted publication requires the GitHub OIDC request environment (id-token: write)");
+  const idTokenUrl = new URL(requestUrl);
+  if (idTokenUrl.protocol !== "https:") fail("refusing a GitHub OIDC request URL that is not HTTPS");
+  idTokenUrl.searchParams.append("audience", NPM_OIDC_AUDIENCE);
+  let issued: Response;
+  try {
+    issued = await oidcFetch(idTokenUrl.href, {
+      headers: { accept: "application/json", authorization: `Bearer ${requestToken}` },
+    });
+  } catch {
+    fail("GitHub's OIDC token service did not answer; dispatch again later");
+  }
+  const idToken = (await jsonObject(issued))?.value;
+  if (!issued.ok || typeof idToken !== "string" || !BEARER_VALUE.test(idToken)) {
+    fail(`GitHub issued no OIDC ID token for ${NPM_OIDC_AUDIENCE} (HTTP ${issued.status})`);
+  }
+  mask(idToken);
+  let exchanged: Response;
+  try {
+    exchanged = await oidcFetch(exchangeUrl, {
+      method: "POST",
+      // npm's own npm-* headers on this request (npm-registry-fetch
+      // getHeaders): its top-level command and its auth-type default. npm
+      // sets no npm-session, and no npm-scope outside a scoped project. The
+      // user agent stays this tool's: it is not npm.
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${idToken}`,
+        "npm-auth-type": "web",
+        "npm-command": options.npmCommand ?? "stage",
+      },
+    });
+  } catch {
+    fail("npm's OIDC token exchange did not answer; dispatch again later");
+  }
+  const answer = await jsonObject(exchanged);
+  const token = answer?.token;
+  if (exchanged.ok && typeof token === "string" && BEARER_VALUE.test(token)) {
+    mask(token);
+    return;
+  }
+  if (exchanged.ok) fail(`npm's OIDC token exchange answered HTTP ${exchanged.status} without a usable token for ${spec.name}`);
+  const message = answer?.message;
+  const said = typeof message === "string"
+    ? `: ${message.split(idToken).join("***").replace(/[\u0000-\u001f\u007f-\u009f]+/g, " ").slice(0, 200)}`
+    : "";
+  const nothing = "This run has mirrored, signed, and staged nothing.";
+  if (exchanged.status === 429 || exchanged.status >= 500) {
+    fail(`npm's OIDC token exchange is unavailable (HTTP ${exchanged.status}${said}); dispatch again later`);
+  }
+  if (![401, 403, 404].includes(exchanged.status)) {
+    fail(`npm's OIDC token exchange gave this workflow no token for ${spec.name} (HTTP ${exchanged.status}${said}), so npm could not stage it. ${nothing}`);
+  }
+  fail(
+    `no trusted-publisher configuration on npm matches this workflow for ${spec.name} ` +
+      `(npm's OIDC exchange answered HTTP ${exchanged.status}${said}). npm stages it only for a trusted publisher ` +
+      `naming exactly ${RELEASE_REPOSITORY}, ${PUBLISH_WORKFLOW_FILE}, environment ${PUBLISH_ENVIRONMENT}; ` +
+      "a new one expires unless a publication validates it within 48 hours. " +
+      `The maintainer runs their trust script, \`bash npm-trust-repoint.sh enable ${spec.key}\`, ` +
+      "then dispatches this tag again within 48 hours. " +
+      "If `npm trust list` already shows exactly that binding, it may have expired: revoke it and run enable again. " +
+      "If a fresh one is refused too, this check and npm disagree, which needs a fix to bin/npm-release.ts and a new tag. " +
+      nothing,
+  );
+}
+
+/**
+ * @npmcli/redact's JSON_WEB_TOKEN and NPM_SECRET patterns (lib/matchers.js
+ * in npm 11.17.0). npm's log redaction (redactLog) applies only the second,
+ * with URL passwords and UUIDs, so a JWT reaches npm's debug log as it is.
+ */
+const OIDC_LINE_CREDENTIALS = [
+  /\b[A-Za-z0-9-_]{10,}(?!\.\d+\.)\.[A-Za-z0-9-_]{3,}\.[A-Za-z0-9-_]{20,}\b/gi,
+  /\b(npms?_)[a-zA-Z0-9]{36,48}\b/gi,
+];
+
+/**
+ * npm's `oidc` lines, at any level, from one of its debug logs (`<count>
+ * <level> oidc <message>`), with any JWT- or npm-token-shaped text replaced
+ * by `***`.
+ */
+export function oidcLogLines(debugLog: string): string[] {
+  return debugLog.split(/\r?\n/)
+    .filter((line) => /^\d+ [a-z]+ oidc /.test(line))
+    .map((line) => OIDC_LINE_CREDENTIALS.reduce((text, pattern) => text.replace(pattern, "***"), line));
+}
+
+/**
+ * The `oidc` lines of every debug log npm wrote to a --logs-dir. In npm
+ * 11.17.0 they hold lib/utils/oidc.js's fixed texts, the registry's error
+ * message, and the message of any error its last catch caught, which can be
+ * anything. Printed, they reach a public log. The runner masks the ID token
+ * check-trust asked for, but not the one npm asks for itself, which npm's
+ * exchange turns into an npm token for as long as it lasts; npm does not
+ * redact a JWT, so oidcLogLines does.
+ */
+export async function npmOidcLogLines(logsDirectory: string): Promise<string[]> {
+  const logs = (await readdir(logsDirectory)).filter((name) => /-debug-\d+\.log$/.test(name)).sort();
+  const lines: string[] = [];
+  for (const name of logs) lines.push(...oidcLogLines(await readFile(join(logsDirectory, name), "utf8")));
+  return lines;
+}
+
+/** Why one npm run failed, with npm's own `--json` error code when it printed one. */
+export function npmFailureMessage(
+  action: "stage" | "publish",
+  authentication: AuthenticationMode,
+  run: CommandResult,
+): string {
+  const verb = action === "stage" ? "npm stage publish" : "npm publish";
+  let code: unknown;
+  try {
+    code = (JSON.parse(run.stdout) as { error?: { code?: unknown } }).error?.code;
+  } catch {
+    code = undefined;
+  }
+  if (authentication === "trusted" && code === "ENEEDAUTH") {
+    return `${verb} exited ${run.exitCode} (ENEEDAUTH): npm's OIDC exchange gave it no token (its oidc lines are above), so it stopped before signing provenance or staging`;
+  }
+  const label = typeof code === "string" ? ` (${code})` : "";
+  return `${verb} exited ${run.exitCode}${label}; npm's output is above. Check ${action === "stage" ? "`npm stage list`" : "the registry"} before any retry`;
+}
+
+/**
+ * Runs npm once to stage or publish the prepared artifact. npm's debug log
+ * goes to a fresh directory; its oidc lines are printed and the directory is
+ * removed, which a failure says, since npm's own output names the log.
+ * npm's captured stdout is printed whether or not npm succeeded (stderr is
+ * not captured and reaches the log as npm writes it), and a failure refuses
+ * with npmFailureMessage.
+ */
+export async function runNpmPublication(
+  action: "stage" | "publish",
+  authentication: AuthenticationMode,
+  artifactPath: string,
+  npmTag: string,
+  npm = "npm",
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): Promise<CommandResult> {
+  const npmEnvironment = npmPublishEnvironment(authentication, environment);
+  const logsDirectory = await mkdtemp(join(tmpdir(), "agenttool-npm-logs-"));
+  let npmRun: CommandResult;
+  let oidcLines: string[];
+  try {
+    npmRun = await command(npm, npmPublishArguments(action, artifactPath, npmTag, logsDirectory), {
+      env: npmEnvironment,
+      capture: action === "stage",
+      allowFailure: true,
+    });
+    oidcLines = await npmOidcLogLines(logsDirectory).catch(() => ["(npm's debug log could not be read)"]);
+  } finally {
+    await rm(logsDirectory, { recursive: true, force: true });
+  }
+  // npm reports how its OIDC exchange went only at verbose level, which
+  // reaches its debug log but not this job's log.
+  if (oidcLines.length > 0) console.error(["npm's oidc log lines:", ...oidcLines].join("\n"));
+  else if (authentication === "trusted") console.error("npm's debug log has no oidc lines");
+  // Keep npm's own record in the log, staged or not: with --json, npm
+  // prints its error record there too.
+  if (action === "stage") console.error(npmRun.stdout);
+  if (npmRun.exitCode !== 0) {
+    // npm's last stderr line names its complete log, which is gone by now.
+    console.error("npm's debug log was removed with its temporary directory; only its oidc lines are kept (above)");
+    fail(npmFailureMessage(action, authentication, npmRun));
+  }
+  return npmRun;
+}
+
 async function publish(
   receiptPath: string,
   authentication: AuthenticationMode,
@@ -2464,22 +2897,8 @@ async function publish(
     tarball = await pollRegistry(receipt, npmTag);
     status = "already_published_exact";
   } else {
-    const publishEnvironment = { ...process.env };
-    if (authentication === "bootstrap") {
-      if (!publishEnvironment.NODE_AUTH_TOKEN) fail("reviewed bootstrap publication requires NODE_AUTH_TOKEN");
-    } else {
-      delete publishEnvironment.NODE_AUTH_TOKEN;
-      if (!publishEnvironment.ACTIONS_ID_TOKEN_REQUEST_URL || !publishEnvironment.ACTIONS_ID_TOKEN_REQUEST_TOKEN) {
-        fail("trusted publication requires the GitHub OIDC request environment");
-      }
-    }
-    const npmRun = await command("npm", npmPublishArguments(action, artifactPath, npmTag), {
-      env: publishEnvironment,
-      capture: action === "stage",
-    });
+    const npmRun = await runNpmPublication(action, authentication, artifactPath, npmTag);
     if (action === "stage") {
-      // Keep npm's own record in the log even if it cannot be parsed below.
-      console.error(npmRun.stdout);
       // Staged, not published: no registry poll and no receipt result.
       const staged = stageReceipt(
         receipt,
@@ -2543,7 +2962,7 @@ async function mirror(receiptPath: string): Promise<void> {
 
 function argumentsMap(args: readonly string[]): { command: string; options: Map<string, string> } {
   const [subcommand, ...rest] = args;
-  if (!subcommand) fail("usage: npm-release.ts <resolve|check-inputs|prepare|publish|mirror|workflow-options> [options]");
+  if (!subcommand) fail("usage: npm-release.ts <resolve|check-inputs|check-trust|prepare|publish|mirror|workflow-options> [options]");
   const options = new Map<string, string>();
   for (let index = 0; index < rest.length; index += 2) {
     const flag = rest[index];
@@ -2575,12 +2994,12 @@ async function main(args: readonly string[]): Promise<void> {
     console.log(JSON.stringify({ ...spec, version, tag: expectedTag(spec, version) }, null, 2));
     return;
   }
-  if (parsed.command === "check-inputs") {
+  if (parsed.command === "check-inputs" || parsed.command === "check-trust") {
     const allowed = ["--package", "--authentication", "--npm-tag", "--publish-mode"];
     if ([...parsed.options.keys()].some((flag) => !allowed.includes(flag))) {
-      fail("check-inputs accepts only --package, --authentication, --npm-tag, and optional --publish-mode");
+      fail(`${parsed.command} accepts only --package, --authentication, --npm-tag, and optional --publish-mode`);
     }
-    await checkInputs(
+    await (parsed.command === "check-inputs" ? checkInputs : checkTrust)(
       required(parsed.options, "--package"),
       parseAuthentication(required(parsed.options, "--authentication")),
       required(parsed.options, "--npm-tag"),

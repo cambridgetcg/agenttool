@@ -4,10 +4,15 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { LOVE_PACKAGES } from "../build-love-packages";
+import { PERSONAL_RULES, SECRET_RULES } from "../../public/overlay/tools/public-guard.ts";
 
 import {
+  DEVICE_PATH_RULES,
   RELEASE_RECEIPT_SCHEMA,
   RELEASE_SPECS,
+  SECRET_SIGNATURES,
+  archiveContentFinding,
+  assertArchiveContentClean,
   assertReleaseSourcesUnchanged,
   expectedTag,
   isPrereleaseVersion,
@@ -18,7 +23,6 @@ import {
   registryPackagePath,
   releaseSpec,
   requiredArchiveEntries,
-  shouldScanArchiveEntryForSecrets,
   prepareReleaseWorkspaces,
   validateNpmTagForVersion,
   workspaceInstallArguments,
@@ -85,14 +89,131 @@ function registryFixture(): {
 }
 
 describe("standard npm release policy", () => {
-  test("scans bundled JSONL dataset rows for secret signatures", () => {
-    expect(shouldScanArchiveEntryForSecrets(
-      "package/hf/dataset/data/structural-examples.jsonl",
-      128,
-    )).toBe(true);
-    expect(shouldScanArchiveEntryForSecrets("package/data/ROWS.JSONL", 2_000_000)).toBe(true);
-    expect(shouldScanArchiveEntryForSecrets("package/data/rows.jsonl", 2_000_001)).toBe(false);
-    expect(shouldScanArchiveEntryForSecrets("package/model/checkpoint.bin", 128)).toBe(false);
+  test("names credential signatures and personal home paths by rule, never by matched text", () => {
+    const npmToken = `npm_${"A1b2".repeat(9)}`;
+    expect(archiveContentFinding(`const token = "${npmToken}";`)).toBe("secret-like npm token");
+    expect(archiveContentFinding(`github_pat_${"a1_B".repeat(16)}`)).toBe("secret-like GitHub fine-grained token");
+    expect(archiveContentFinding(`sk_live_${"x".repeat(24)}`)).toBe("secret-like Stripe live key");
+    expect(archiveContentFinding(`xoxb-${"0123456789"}`)).toBe("secret-like Slack token");
+    expect(archiveContentFinding("-----BEGIN OPENSSH PRIVATE KEY-----\nb3Blbn\n")).toBe("secret-like private-key block");
+
+    // relational-geometry 0.1.0-dev.0 shipped exactly this shape in CLAUDE.md.
+    expect(archiveContentFinding("Source: /Users/alice/Desktop/project/notes.md")).toBe("device path (macOS home directory)");
+    expect(archiveContentFinding('{"_resolved":"/home/alice/src/pkg.tgz"}')).toBe("device path (Linux home directory)");
+    expect(archiveContentFinding('"C:\\\\Users\\\\alice\\\\AppData"')).toBe("device path (Windows home directory)");
+    expect(archiveContentFinding("C:/Users/alice/project")).toBe("device path (Windows home directory)");
+    expect(archiveContentFinding("/Users/alice")).not.toContain("alice");
+
+    // CI and documented placeholders name no person.
+    expect(archiveContentFinding('//# sourceMappingURL=/home/runner/work/agenttool-packages/x.js.map')).toBeUndefined();
+    expect(archiveContentFinding('spawn("wsl.exe", ["--cd", "/home/pwuser"])')).toBeUndefined();
+    for (const placeholder of ["/Users/you/", "/Users/$USER/", "/Users/<name>/", "/home/{user}/", "/home/example/", "C:\\Users\\%USERNAME%"]) {
+      expect(archiveContentFinding(placeholder)).toBeUndefined();
+    }
+    expect(archiveContentFinding("~/projects/x and https://example.com/home/page")).toBeUndefined();
+    expect(archiveContentFinding("/Users/runner/work")).toBe("device path (macOS home directory)");
+  });
+
+  test("keeps the public guard's credential signatures and home-path rules", () => {
+    // The tarball scan was once narrower than the guard (F18); the guard holds the merged list.
+    // g and u change how a pattern is applied, not what it matches here; any other flag (an i) would.
+    const shapes = (rules: readonly { pattern: RegExp }[]) =>
+      rules.map((rule) => `/${rule.pattern.source}/${rule.pattern.flags.replace(/[gu]/g, "")}`).sort();
+    const homeRules = PERSONAL_RULES.filter((rule) => rule.id.endsWith("home-path"));
+    expect(shapes(SECRET_SIGNATURES)).toEqual(shapes(SECRET_RULES));
+    expect(shapes(DEVICE_PATH_RULES)).toEqual(shapes(homeRules));
+
+    // Both let the same placeholder homes through; the scan alone also lets Linux's runner and pwuser through.
+    const paths: Record<string, (home: string) => string> = {
+      "personal/home-path": (home) => `/Users/${home}/x`,
+      "personal/unix-home-path": (home) => `/home/${home}/x`,
+      "personal/windows-home-path": (home) => `C:\\Users\\${home}\\x`,
+    };
+    for (const rule of homeRules) {
+      for (const home of ["nobody", "test", "example", "person", "you", "$USER", "{user}", "alice", "Example", "runner", "pwuser"]) {
+        const path = (paths[rule.id] as (home: string) => string)(home);
+        const match = new RegExp(rule.pattern.source, rule.pattern.flags.replace("g", "")).exec(path);
+        const guardPasses = match === null || rule.permit?.(match) === true;
+        const scanOnly = rule.id === "personal/unix-home-path" && ["runner", "pwuser"].includes(home);
+        expect([path, archiveContentFinding(path) === undefined]).toEqual([path, guardPasses || scanOnly]);
+      }
+    }
+  });
+
+  test("reads every packed file whatever its name, extension, or size", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "npm-archive-scan-test-"));
+    const npmToken = `npm_${"A1b2".repeat(9)}`;
+    const files: Record<string, string> = {
+      "package/package.json": "{}",
+      "package/LICENSE": "Apache-2.0",
+      "package/bin/install.sh": "#!/bin/sh\necho clean\n",
+      "package/empty.txt": "",
+    };
+    async function archiveWith(extra: Record<string, string | Buffer>): Promise<{ artifact: string; entries: string[]; sizes: Record<string, number> }> {
+      const root = await mkdtemp(join(directory, "tree-"));
+      const all = { ...files, ...extra };
+      for (const [path, text] of Object.entries(all)) {
+        await mkdir(join(root, path, ".."), { recursive: true });
+        await writeFile(join(root, path), text);
+      }
+      const artifact = join(root, "artifact.tgz");
+      const tar = Bun.spawn(["tar", "-czf", artifact, "-C", root, "package"], { env: { ...process.env, COPYFILE_DISABLE: "1" } });
+      expect(await tar.exited).toBe(0);
+      const entries = ["package", "package/bin", ...Object.keys(all)];
+      const sizes: Record<string, number> = { package: 0, "package/bin": 0 };
+      for (const [path, text] of Object.entries(all)) sizes[path] = Buffer.byteLength(text);
+      return { artifact, entries, sizes };
+    }
+    async function refusal(extra: Record<string, string | Buffer>): Promise<string | undefined> {
+      const { artifact, entries, sizes } = await archiveWith(extra);
+      try {
+        await assertArchiveContentClean(artifact, entries, sizes);
+        return undefined;
+      } catch (error) {
+        return (error as Error).message;
+      }
+    }
+    try {
+      expect(await refusal({})).toBeUndefined();
+      expect(await refusal({ "package/hf/dataset/data/rows.jsonl": `{"t":"${npmToken}"}\n` }))
+        .toBe("secret-like npm token found in package/hf/dataset/data/rows.jsonl");
+      expect(await refusal({ "package/bin/deploy.sh": `NPM_TOKEN=${npmToken}\n` }))
+        .toBe("secret-like npm token found in package/bin/deploy.sh");
+      expect(await refusal({ "package/harness/__init__.py": "ROOT = '/Users/alice/love'\n" }))
+        .toBe("device path (macOS home directory) found in package/harness/__init__.py");
+      expect(await refusal({ "package/THIRD_PARTY_LICENSES": "-----BEGIN RSA PRIVATE KEY-----\n" }))
+        .toBe("secret-like private-key block found in package/THIRD_PARTY_LICENSES");
+      expect(await refusal({ "package/model/weights.bin": `\u0000\u0001${npmToken}\u0000` }))
+        .toBe("secret-like npm token found in package/model/weights.bin");
+      // BOM-marked UTF-16, as PowerShell 5 writes by default, is read as UTF-16 too.
+      const utf16le = (text: string) => Buffer.from(`\ufeff${text}`, "utf16le");
+      expect(await refusal({ "package/tools/setup.ps1.log": utf16le("Installed to C:\\Users\\alice\\AppData\r\n") }))
+        .toBe("device path (Windows home directory) found in package/tools/setup.ps1.log");
+      expect(await refusal({ "package/tools/env.txt": utf16le(`NPM_TOKEN=${npmToken}\r\n`).swap16() }))
+        .toBe("secret-like npm token found in package/tools/env.txt");
+      expect(await refusal({ "package/tools/notes.txt": utf16le("Installed to C:\\Users\\you\\AppData\r\n") })).toBeUndefined();
+      // Bytes that only start like UTF-16 keep their UTF-8 reading, so the BOM rule hides nothing.
+      expect(await refusal({ "package/model/blob.bin": Buffer.concat([Buffer.from([0xff, 0xfe, 0x00]), Buffer.from(npmToken)]) }))
+        .toBe("secret-like npm token found in package/model/blob.bin");
+      // Past the old 2 MB cut-off, a bundle is read to its last byte.
+      expect(await refusal({ "package/dist/bundle.js": `${"x".repeat(2_500_000)}\n// /home/alice/src\n` }))
+        .toBe("device path (Linux home directory) found in package/dist/bundle.js");
+      // Credential-shaped names are refused before anything is read.
+      expect(await refusal({ "package/certs/server.pem": "public certificate" }))
+        .toBe("sensitive filename in npm archive: package/certs/server.pem");
+      expect(await refusal({ "package/keys/signing.key": "x" }))
+        .toBe("sensitive filename in npm archive: package/keys/signing.key");
+      expect(await refusal({ "package/.netrc": "x" })).toBe("sensitive filename in npm archive: package/.netrc");
+      expect(await refusal({ "package/dist/credentials.js": "x" }))
+        .toBe("sensitive filename in npm archive: package/dist/credentials.js");
+      // Inside a .env or .env.* directory a file of any name is an env file.
+      for (const path of ["package/.env.d/production", "package/.env.local/secrets.json", "package/config/.env/app"]) {
+        expect(await refusal({ [path]: "KEY=value\n" })).toBe(`sensitive filename in npm archive: ${path}`);
+      }
+      expect(await refusal({ "package/docs/.environment/notes.md": "x" })).toBeUndefined();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   test("mirrors reviewed bytes without depending on optional npm state", async () => {

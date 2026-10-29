@@ -1,4 +1,4 @@
-import { describe, expect, setDefaultTimeout, test } from "bun:test";
+import { describe, expect, setDefaultTimeout, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -9,6 +9,7 @@ import {
   DEFAULT_PUBLISH_MODE,
   EXPECTED_REPOSITORY,
   LOVE_MIRROR_ROOT,
+  NPM_OIDC_AUDIENCE,
   RELEASE_RECEIPT_SCHEMA,
   RELEASE_REPOSITORY,
   RELEASE_REPOSITORY_URL,
@@ -20,9 +21,15 @@ import {
   UNVERIFIED_CI_RUN,
   assertReleaseTagEvidence,
   assertReleaseTagObject,
+  assertTrustedPublisherExchange,
   historicalLoveManifestPath,
   isReleaseRemote,
+  npmFailureMessage,
+  npmOidcExchangeUrl,
+  npmOidcLogLines,
   npmPublishArguments,
+  npmPublishEnvironment,
+  oidcLogLines,
   packGateScripts,
   parseAuthentication,
   parsePublishMode,
@@ -34,10 +41,14 @@ import {
   readStageReceipt,
   releaseSpec,
   releaseTagMessage,
+  runNpmPublication,
   stageApprovalSummary,
   stageReceipt,
+  timedOidcFetch,
+  trustedPublisherCheckNeeded,
   validatePackageManifest,
   type FetchJson,
+  type OidcFetch,
   type PackageJson,
   type PreparedReceipt,
 } from "../npm-release";
@@ -198,11 +209,13 @@ describe("staged publication", () => {
   });
 
   test("passes the npm 11.17.0 flags for each action", () => {
-    expect(npmPublishArguments("stage", "/tmp/a.tgz", "next")).toEqual([
-      "stage", "publish", "/tmp/a.tgz", "--access", "public", "--tag", "next", "--provenance", "--ignore-scripts", "--json",
+    expect(npmPublishArguments("stage", "/tmp/a.tgz", "next", "/tmp/logs")).toEqual([
+      "stage", "publish", "/tmp/a.tgz", "--access", "public", "--tag", "next", "--provenance", "--ignore-scripts",
+      "--logs-dir", "/tmp/logs", "--json",
     ]);
-    expect(npmPublishArguments("publish", "/tmp/a.tgz", "latest")).toEqual([
+    expect(npmPublishArguments("publish", "/tmp/a.tgz", "latest", "/tmp/logs")).toEqual([
       "publish", "/tmp/a.tgz", "--access", "public", "--tag", "latest", "--provenance", "--ignore-scripts",
+      "--logs-dir", "/tmp/logs",
     ]);
   });
 
@@ -271,6 +284,323 @@ describe("staged publication", () => {
     expect(summary).toContain(`shasum -a 256 agenttool-math-cards-0.1.0-dev.2-${STAGE_ID}.tgz`);
     expect(summary).toContain(`# expect ${receipt.artifact.sha256}`);
     expect(summary).toContain(`npx --yes npm@11.17.0 stage approve ${STAGE_ID}`);
+  });
+});
+
+describe("npm authentication fails before any public residue", () => {
+  const OIDC_ENVIRONMENT = {
+    ACTIONS_ID_TOKEN_REQUEST_URL: "https://token.actions.example/_apis/idtoken?api-version=2.0",
+    ACTIONS_ID_TOKEN_REQUEST_TOKEN: "request-token-fixture",
+  };
+  const ID_TOKEN = "github-id-token-fixture";
+  const NPM_TOKEN = "npm-oidc-token-fixture";
+  const spec = releaseSpec("relational-geometry");
+  type Answer = { status: number; body: unknown } | Error;
+
+  function fakeOidc(exchange: Answer, issue: Answer = { status: 200, body: { value: ID_TOKEN } }) {
+    const calls: { url: string; init: RequestInit }[] = [];
+    const masked: string[] = [];
+    const fetch: OidcFetch = async (url, init) => {
+      calls.push({ url, init });
+      const answer = calls.length === 1 ? issue : exchange;
+      if (answer instanceof Error) throw answer;
+      return new Response(JSON.stringify(answer.body), { status: answer.status });
+    };
+    return { calls, masked, options: { environment: OIDC_ENVIRONMENT, fetch, mask: (secret: string) => masked.push(secret) } };
+  }
+
+  async function refusal(promise: Promise<unknown>): Promise<string> {
+    const error = await promise.then(() => undefined, (caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Error);
+    return (error as Error).message;
+  }
+
+  test("a trusted run hands npm an empty NODE_AUTH_TOKEN, so the npmrc placeholder becomes no credential", () => {
+    // Deleting it left setup-node's `_authToken=${NODE_AUTH_TOKEN}` as literal text, sent as a bearer (run 39288082185).
+    const trusted = npmPublishEnvironment("trusted", { ...OIDC_ENVIRONMENT, NODE_AUTH_TOKEN: "stale" });
+    expect(Object.hasOwn(trusted, "NODE_AUTH_TOKEN")).toBe(true);
+    expect(trusted.NODE_AUTH_TOKEN).toBe("");
+    expect(npmPublishEnvironment("trusted", OIDC_ENVIRONMENT).NODE_AUTH_TOKEN).toBe("");
+    expect(() => npmPublishEnvironment("trusted", {})).toThrow("requires the GitHub OIDC request environment");
+    expect(npmPublishEnvironment("bootstrap", { NODE_AUTH_TOKEN: "reviewed" }).NODE_AUTH_TOKEN).toBe("reviewed");
+    expect(() => npmPublishEnvironment("bootstrap", { ...OIDC_ENVIRONMENT, NODE_AUTH_TOKEN: "" })).toThrow("requires NODE_AUTH_TOKEN");
+  });
+
+  test("checks npm's trust with GitHub's ID token for npm's audience, masking both tokens and printing neither", async () => {
+    expect(NPM_OIDC_AUDIENCE).toBe("npm:registry.npmjs.org");
+    expect(npmOidcExchangeUrl("@agenttool/relational-geometry"))
+      .toBe("https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/@agenttool%2frelational-geometry");
+    expect(() => npmOidcExchangeUrl("../x")).toThrow("invalid scoped package name");
+
+    const accepted = fakeOidc({ status: 200, body: { token: NPM_TOKEN } });
+    expect(await assertTrustedPublisherExchange(spec, accepted.options)).toBeUndefined();
+    expect(accepted.masked).toEqual([ID_TOKEN, NPM_TOKEN]);
+    expect(accepted.calls.map((call) => [call.init.method ?? "GET", call.url, new Headers(call.init.headers).get("authorization")])).toEqual([
+      ["GET", "https://token.actions.example/_apis/idtoken?api-version=2.0&audience=npm%3Aregistry.npmjs.org", "Bearer request-token-fixture"],
+      ["POST", "https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/@agenttool%2frelational-geometry", `Bearer ${ID_TOKEN}`],
+    ]);
+    // The npm-* headers npm 11.17.0 sends for `npm stage publish`; no user agent claims to be npm.
+    const exchangeHeaders = new Headers(accepted.calls[1]?.init.headers);
+    const names: string[] = [];
+    exchangeHeaders.forEach((_value, name) => names.push(name));
+    expect(names.sort()).toEqual(["accept", "authorization", "npm-auth-type", "npm-command"]);
+    expect([exchangeHeaders.get("npm-command"), exchangeHeaders.get("npm-auth-type")]).toEqual(["stage", "web"]);
+    const publishing = fakeOidc({ status: 200, body: { token: NPM_TOKEN } });
+    await assertTrustedPublisherExchange(spec, { ...publishing.options, npmCommand: "publish" });
+    expect(new Headers(publishing.calls[1]?.init.headers).get("npm-command")).toBe("publish");
+
+    const untrusted = fakeOidc({ status: 404, body: { message: `no trusted publisher for ${ID_TOKEN}\n::warning::x` } });
+    const message = await refusal(assertTrustedPublisherExchange(spec, untrusted.options));
+    expect(message).toStartWith(
+      "no trusted-publisher configuration on npm matches this workflow for @agenttool/relational-geometry " +
+        "(npm's OIDC exchange answered HTTP 404: no trusted publisher for *** ::warning::x).",
+    );
+    expect(message).toContain(`a trusted publisher naming exactly ${RELEASE_REPOSITORY}, publish-npm.yml, environment npm-bootstrap;`);
+    // npm-trust/lockdown-then-enable's mode. The script is the maintainer's, and this text reaches public logs.
+    expect(message).toContain(
+      "The maintainer runs their trust script, `bash npm-trust-repoint.sh enable relational-geometry`, " +
+        "then dispatches this tag again within 48 hours.",
+    );
+    expect(message).not.toContain("docs/");
+    expect(message).toContain("If `npm trust list` already shows exactly that binding, it may have expired: revoke it and run enable again.");
+    expect(message).toContain("If a fresh one is refused too, this check and npm disagree, which needs a fix to bin/npm-release.ts and a new tag.");
+    expect(message).toEndWith("This run has mirrored, signed, and staged nothing.");
+    expect(message).not.toContain(ID_TOKEN);
+    expect(message).not.toContain("\n");
+    expect(untrusted.masked).toEqual([ID_TOKEN]);
+
+    for (const status of [401, 403]) {
+      const refused = fakeOidc({ status, body: { message: "OIDC token exchange error - unauthorized" } });
+      expect(await refusal(assertTrustedPublisherExchange(spec, refused.options))).toStartWith(
+        `no trusted-publisher configuration on npm matches this workflow for @agenttool/relational-geometry (npm's OIDC exchange answered HTTP ${status}: `,
+      );
+    }
+  });
+
+  test("reports any other refusal as it is, not as a missing trusted publisher", async () => {
+    // npm's API documents 400 as "OIDC token exchange error - bad request".
+    const bad = fakeOidc({ status: 400, body: { message: "OIDC token exchange error - bad request" } });
+    expect(await refusal(assertTrustedPublisherExchange(spec, bad.options))).toBe(
+      "npm's OIDC token exchange gave this workflow no token for @agenttool/relational-geometry " +
+        "(HTTP 400: OIDC token exchange error - bad request), so npm could not stage it. " +
+        "This run has mirrored, signed, and staged nothing.",
+    );
+    const moved = fakeOidc({ status: 302, body: undefined });
+    expect(await refusal(assertTrustedPublisherExchange(spec, moved.options)))
+      .toStartWith("npm's OIDC token exchange gave this workflow no token for @agenttool/relational-geometry (HTTP 302), ");
+  });
+
+  test("masks only tokens a workflow command carries as they are, and checks the name before asking for any", async () => {
+    // The runner decodes %25, %0D, and %0A in ::add-mask:: data, so a token with `%` would be masked wrongly.
+    const percentNpm = fakeOidc({ status: 200, body: { token: "abc%0Adef" } });
+    expect(await refusal(assertTrustedPublisherExchange(spec, percentNpm.options))).toContain("without a usable token");
+    expect(percentNpm.masked).toEqual([ID_TOKEN]);
+    const percentId = fakeOidc({ status: 200, body: { token: NPM_TOKEN } }, { status: 200, body: { value: "eyJ%25x" } });
+    expect(await refusal(assertTrustedPublisherExchange(spec, percentId.options)))
+      .toBe("GitHub issued no OIDC ID token for npm:registry.npmjs.org (HTTP 200)");
+    expect(percentId.masked).toEqual([]);
+
+    const unnamed = fakeOidc({ status: 200, body: { token: NPM_TOKEN } });
+    expect(await refusal(assertTrustedPublisherExchange({ key: "x", name: "@agenttool/../x" as `@agenttool/${string}` }, unnamed.options)))
+      .toBe("invalid scoped package name: @agenttool/../x");
+    expect(unnamed.calls).toHaveLength(0);
+  });
+
+  test("follows an OIDC redirect only within one origin, as npm keeps its bearer only there", async () => {
+    // A loopback server; nothing leaves this machine.
+    const seen: string[] = [];
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(request: Request): Response {
+        const { pathname: path, port } = new URL(request.url);
+        seen.push(`${request.method} ${path} ${request.headers.get("authorization") ?? "-"}`);
+        const to = (status: number, location: string) => new Response(null, { status, headers: { location } });
+        if (path === "/issue") return to(307, "/issued");
+        if (path === "/exchange") return to(302, "/exchanged");
+        if (path === "/away") return to(302, `http://localhost:${port}/elsewhere`);
+        if (path === "/loop") return to(308, "/loop");
+        return Response.json({ path });
+      },
+    });
+    const origin = `http://127.0.0.1:${server.port}`;
+    try {
+      const issued = await timedOidcFetch(`${origin}/issue`, { headers: { authorization: "Bearer a" } });
+      expect([issued.status, await issued.json()]).toEqual([200, { path: "/issued" }]);
+      const exchanged = await timedOidcFetch(`${origin}/exchange`, { method: "POST", headers: { authorization: "Bearer b" } });
+      expect([exchanged.status, await exchanged.json()]).toEqual([200, { path: "/exchanged" }]);
+      const away = await timedOidcFetch(`${origin}/away`, { headers: { authorization: "Bearer c" } });
+      expect([away.status, away.headers.get("location")]).toEqual([302, `http://localhost:${server.port}/elsewhere`]);
+      const loop = await timedOidcFetch(`${origin}/loop`, {});
+      expect(loop.status).toBe(308);
+      expect(seen.slice(0, 5)).toEqual([
+        "GET /issue Bearer a",
+        "GET /issued Bearer a",
+        // As make-fetch-happen does: a 301 or 302 to a POST continues as GET.
+        "POST /exchange Bearer b",
+        "GET /exchanged Bearer b",
+        "GET /away Bearer c",
+      ]);
+      expect(seen.filter((line) => line.includes("/elsewhere"))).toEqual([]);
+      // The first request and npm's 20 redirects, then the last redirect is returned and refused.
+      expect(seen.filter((line) => line.includes("/loop"))).toHaveLength(21);
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  test("tells a busy or broken exchange apart from a missing trusted publisher", async () => {
+    const busy = fakeOidc({ status: 503, body: { message: "try later" } });
+    expect(await refusal(assertTrustedPublisherExchange(spec, busy.options)))
+      .toBe("npm's OIDC token exchange is unavailable (HTTP 503: try later); dispatch again later");
+    const tokenless = fakeOidc({ status: 200, body: {} });
+    expect(await refusal(assertTrustedPublisherExchange(spec, tokenless.options))).toContain("HTTP 200 without a usable token");
+    const unmaskable = fakeOidc({ status: 200, body: { token: `${NPM_TOKEN}\nnext` } });
+    expect(await refusal(assertTrustedPublisherExchange(spec, unmaskable.options))).toContain("without a usable token");
+    expect(unmaskable.masked).toEqual([ID_TOKEN]);
+    const silent = fakeOidc(new Error("connection reset"));
+    expect(await refusal(assertTrustedPublisherExchange(spec, silent.options)))
+      .toBe("npm's OIDC token exchange did not answer; dispatch again later");
+
+    const noIdToken = fakeOidc({ status: 200, body: { token: NPM_TOKEN } }, { status: 403, body: { message: "no id-token permission" } });
+    expect(await refusal(assertTrustedPublisherExchange(spec, noIdToken.options)))
+      .toBe("GitHub issued no OIDC ID token for npm:registry.npmjs.org (HTTP 403)");
+    expect(noIdToken.calls).toHaveLength(1);
+    expect(noIdToken.masked).toEqual([]);
+
+    const unset = fakeOidc({ status: 200, body: { token: NPM_TOKEN } });
+    expect(await refusal(assertTrustedPublisherExchange(spec, { ...unset.options, environment: {} })))
+      .toContain("requires the GitHub OIDC request environment");
+    expect(await refusal(assertTrustedPublisherExchange(spec, {
+      ...unset.options,
+      environment: { ...OIDC_ENVIRONMENT, ACTIONS_ID_TOKEN_REQUEST_URL: "http://token.actions.example/idtoken" },
+    }))).toBe("refusing a GitHub OIDC request URL that is not HTTPS");
+    expect(unset.calls).toHaveLength(0);
+
+    expect(trustedPublisherCheckNeeded("trusted", "stage")).toBe(true);
+    // plannedDispatch refuses this pairing today; if it ever passes, it is checked, not skipped.
+    expect(trustedPublisherCheckNeeded("trusted", "publish")).toBe(true);
+    expect(trustedPublisherCheckNeeded("trusted", "verify-existing")).toBe(false);
+    expect(trustedPublisherCheckNeeded("bootstrap", "stage")).toBe(false);
+    expect(trustedPublisherCheckNeeded("bootstrap", "publish")).toBe(false);
+  });
+
+  test("check-trust takes check-inputs' options and runs only in the workflow", () => {
+    const run = (args: string[]) => {
+      const child = Bun.spawnSync(["bun", "bin/npm-release.ts", ...args], {
+        cwd: ROOT,
+        env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "" },
+      });
+      return { code: child.exitCode, stderr: child.stderr.toString() };
+    };
+    expect(run(["check-trust", "--package", "relational-geometry", "--otp", "1"]).stderr)
+      .toContain("check-trust accepts only --package, --authentication, --npm-tag, and optional --publish-mode");
+    const outside = run(["check-trust", "--package", "relational-geometry", "--authentication", "trusted", "--npm-tag", "next"]);
+    expect(outside.stderr).toContain("npm publication is restricted to the reviewed GitHub Actions workflow_dispatch path");
+    expect(outside.code).toBe(1);
+  });
+
+  test("reads only npm's oidc lines from its debug logs, with token-shaped text hidden", async () => {
+    // JWT-shaped as npm's matcher sees it (three dotted base64url segments), but no real token.
+    const jwtShaped = ["fixture-header", "fixture-payload", "fixture-signature-0123456789"].join(".");
+    const npmToken = `npm_${"A1b2".repeat(9)}`;
+    const log = [
+      "0 verbose cli /usr/bin/node /usr/bin/npm",
+      "12 verbose oidc Failed token exchange request with body message: package not found",
+      "13 silly oidc Skipped because no id_token available\r",
+      "14 http fetch POST 404 https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/@a%2fb 80ms",
+      "verbose oidc an unprefixed line",
+      `15 verbose oidc Failure with message: rejected ${jwtShaped} and ${npmToken} from npm/11.17.0 at registry.npmjs.org`,
+      "",
+    ].join("\n");
+    expect(oidcLogLines(log)).toEqual([
+      "12 verbose oidc Failed token exchange request with body message: package not found",
+      "13 silly oidc Skipped because no id_token available",
+      "15 verbose oidc Failure with message: rejected *** and *** from npm/11.17.0 at registry.npmjs.org",
+    ]);
+    const directory = await mkdtemp(join(tmpdir(), "npm-oidc-log-test-"));
+    try {
+      await writeFile(join(directory, "2026-10-28T10_00_00_000Z-debug-1.log"), "40 verbose oidc Successfully retrieved and set token\n");
+      await writeFile(join(directory, "2026-10-28T10_00_00_000Z-debug-0.log"), log);
+      await writeFile(join(directory, "notes.txt"), "1 verbose oidc not npm's log\n");
+      expect(await npmOidcLogLines(directory)).toEqual([...oidcLogLines(log), "40 verbose oidc Successfully retrieved and set token"]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("names npm's own error code, and what ENEEDAUTH means in a trusted run", () => {
+    const eneedauth = JSON.stringify({ error: { code: "ENEEDAUTH", summary: "This command requires you to be logged in to https://registry.npmjs.org/" } });
+    expect(npmFailureMessage("stage", "trusted", { exitCode: 1, stdout: eneedauth })).toBe(
+      "npm stage publish exited 1 (ENEEDAUTH): npm's OIDC exchange gave it no token (its oidc lines are above), so it stopped before signing provenance or staging",
+    );
+    expect(npmFailureMessage("stage", "trusted", { exitCode: 1, stdout: JSON.stringify({ error: { code: "E403" } }) }))
+      .toBe("npm stage publish exited 1 (E403); npm's output is above. Check `npm stage list` before any retry");
+    expect(npmFailureMessage("publish", "bootstrap", { exitCode: 1, stdout: "" }))
+      .toBe("npm publish exited 1; npm's output is above. Check the registry before any retry");
+  });
+
+  test("a fake npm sees an empty token, and its stdout, oidc lines, and failure reach the log", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "npm-fake-test-"));
+    const npm = join(directory, "npm");
+    const record = join(directory, "record.txt");
+    await writeFile(npm, [
+      "#!/bin/bash",
+      "# Stands in for npm 11.17.0: records its token and --logs-dir, writes a debug log there, prints, exits.",
+      'logs=""',
+      'while [ "$#" -gt 0 ]; do if [ "$1" = "--logs-dir" ]; then logs="$2"; shift; fi; shift; done',
+      'printf "%s\\n%s\\n" "${NODE_AUTH_TOKEN-unset}" "$logs" > "$FAKE_NPM_RECORD"',
+      'printf "%s\\n" "0 verbose cli /usr/bin/node /usr/bin/npm" "1 verbose oidc $FAKE_NPM_OIDC" > "$logs/2026-10-28T10_00_00_000Z-debug-0.log"',
+      'printf "%s\\n" "$FAKE_NPM_STDOUT"',
+      'exit "$FAKE_NPM_EXIT"',
+      "",
+    ].join("\n"), { mode: 0o755 });
+    const environment = (exit: number, oidc: string, stdout: string) => ({
+      PATH: process.env.PATH,
+      ...OIDC_ENVIRONMENT,
+      NODE_AUTH_TOKEN: "stale",
+      FAKE_NPM_RECORD: record,
+      FAKE_NPM_EXIT: String(exit),
+      FAKE_NPM_OIDC: oidc,
+      FAKE_NPM_STDOUT: stdout,
+    });
+    const logged: string[] = [];
+    const spy = spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+      logged.push(args.map(String).join(" "));
+    });
+    try {
+      const eneedauth = JSON.stringify({ error: { code: "ENEEDAUTH", summary: "This command requires you to be logged in to https://registry.npmjs.org/" } });
+      const failed = await refusal(runNpmPublication("stage", "trusted", "/tmp/a.tgz", "next", npm,
+        environment(1, "Failed token exchange request with body message: package not found", eneedauth)));
+      expect(failed).toStartWith("npm stage publish exited 1 (ENEEDAUTH)");
+      const [token, logs] = (await readFile(record, "utf8")).split("\n");
+      expect(token).toBe("");
+      expect(existsSync(logs as string)).toBe(false);
+      expect(logged).toContain("npm's oidc log lines:\n1 verbose oidc Failed token exchange request with body message: package not found");
+      expect(logged).toContain(`${eneedauth}\n`);
+      expect(logged).toContain("npm's debug log was removed with its temporary directory; only its oidc lines are kept (above)");
+      expect(logged.join("\n")).not.toContain("verbose cli");
+
+      logged.length = 0;
+      const staged = JSON.stringify({ "@agenttool/relational-geometry": { stageId: STAGE_ID } });
+      const accepted = await runNpmPublication("stage", "trusted", "/tmp/a.tgz", "next", npm,
+        environment(0, "Successfully retrieved and set token", staged));
+      expect(accepted).toEqual({ exitCode: 0, stdout: `${staged}\n` });
+      expect(logged).toContain("npm's oidc log lines:\n1 verbose oidc Successfully retrieved and set token");
+      expect(logged).toContain(`${staged}\n`);
+      expect(logged.join("\n")).not.toContain("debug log was removed");
+    } finally {
+      spy.mockRestore();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("publish runs npm only through runNpmPublication", () => {
+    const script = readFileSync(join(ROOT, "bin", "npm-release.ts"), "utf8");
+    const body = script.split("\nasync function publish(")[1]?.split("\nasync function mirror(")[0] ?? "";
+    expect(body).toContain("await runNpmPublication(action, authentication, artifactPath, npmTag)");
+    expect(body).not.toContain("NODE_AUTH_TOKEN");
+    expect(script).not.toContain("delete publishEnvironment.NODE_AUTH_TOKEN");
   });
 });
 
@@ -486,5 +816,28 @@ describe("the public publish workflow", () => {
     expect(source.match(/secrets\./gu)).toHaveLength(1);
     expect(source).not.toContain("--otp");
     expect(source).not.toMatch(/\n\s+(?:push|pull_request|schedule):/u);
+  });
+
+  test("asks npm for its trust after the input recheck and before the mirror, in the publish job only", async () => {
+    const workflow = Bun.YAML.parse(await readFile(PUBLISH_WORKFLOW, "utf8")) as {
+      jobs: Record<string, { steps: Array<{ run?: string; env?: Record<string, string> }> }>;
+    };
+    const prepare = workflow.jobs.prepare!;
+    const publish = workflow.jobs.publish!;
+    const index = (job: typeof prepare, text: string) => job.steps.findIndex((step) => step.run?.includes(text));
+    expect(index(prepare, "check-trust")).toBe(-1);
+    const trust = index(publish, "bun bin/npm-release.ts check-trust");
+    expect(trust).toBe(index(publish, "bun bin/npm-release.ts check-inputs") + 1);
+    expect(trust).toBe(index(publish, "bun bin/npm-release.ts mirror") - 1);
+    const step = publish.steps[trust]!;
+    expect(step.env).toEqual({
+      RELEASE_PACKAGE: "${{ inputs.package }}",
+      RELEASE_AUTHENTICATION: "${{ inputs.authentication }}",
+      RELEASE_NPM_TAG: "${{ inputs.npm_tag }}",
+      RELEASE_PUBLISH_MODE: "${{ inputs.publish_mode }}",
+    });
+    expect(step.run).not.toContain("${{");
+    expect(step.run).toContain('--publish-mode "$RELEASE_PUBLISH_MODE"');
+    expect(JSON.stringify(step)).not.toMatch(/secrets\.|NODE_AUTH_TOKEN/u);
   });
 });
