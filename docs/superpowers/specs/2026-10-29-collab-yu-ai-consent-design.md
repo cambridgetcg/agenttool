@@ -3,7 +3,7 @@
 > **Type:** proposal · **Purpose:** let Yu and the agents agree on direction in Collab: the agents settle one Ai position first, then both parties must agree before work proceeds, and either party can reject.
 > **Evidence:** `main` at `784e2e13` (2026-10-29) for `packages/collab` and `packages/lobby`; `cambridgetcg/zerone-core` `main` at `e8f3dd9` for the consensus design it borrows from. Line references are to those trees. S1 and S2 code and tests are in `packages/collab` (section 9); no journal, host configuration or installed package was changed.
 
-**Date:** 2026-10-29 · **Status:** Yu approved the spec on 2026-10-29 as a starting point: 「依家ok，之後操作落唔得再改」 (fine for now; what fails in use gets changed). Practice may revise any part of it. S1 (the agents' side, section 9) is built in draft PR #550, stacked on #549. S2 (the person's acts and desk) is built in a draft PR stacked on #550, branch `feat/collab-consent-s2-20261029`. S3 has no code yet; the YOUI decision room (S4) lives in `cambridgetcg/love-unlimited`.
+**Date:** 2026-10-29 · **Status:** Yu approved the spec on 2026-10-29 as a starting point: 「依家ok，之後操作落唔得再改」 (fine for now; what fails in use gets changed). Practice may revise any part of it. S1 (the agents' side, section 9) is built in draft PR #550, stacked on #549. S2 (the person's acts and desk) is built in a draft PR stacked on #550, branch `feat/collab-consent-s2-20261029`. S3 has no code yet. The YOUI decision room (S4) is draft PR cambridgetcg/love-unlimited#7.
 
 ## 1. Why
 
@@ -178,7 +178,7 @@ A counted ballot may be worth building only for a real multi-option preference a
 |---|---|---|
 | S1 Ai side (**built**) | `collab_proposal_open`, `collab_proposal_status` and `collab_proposal_relay_rejection`; the `proposal_terms` and `proposal_rejections` tables; the voice snapshot. Code: `packages/collab/src/{proposal,store,mcp}.ts`. | `packages/collab/tests/proposal-consent.test.ts`: golden vectors for every position in section 4.3, including the lone-voice case, late-joiner challenge, withdrawn challenge, withdrawn resolution, and `closes_at` equality, plus hash tampering, idempotent retry, reopen, and an MCP round trip. |
 | S2 Table (**built**) | `agenttool-collab-host person` verbs; terminal and passkey acts; passkey enrolment; the person desk and inbox; `to_person`. Code: `packages/collab/src/{person-desk,passkey,tty,store}.ts`. | `packages/collab/tests/{person-desk,tty}.test.ts`: no terminal fails closed, only `yes` confirms, the agents must have consented, the latest act decides, withdrawal ends an agreement, every passkey check, replay refused, revocation, desk notes and proposals, inbox routing. |
-| S4 YOUI decision room | A YOUI panel over the person desk: proposals, the agents' position and challenges, Touch ID agree and reject, replies, Yu's own proposals, and inbox notifications. In `cambridgetcg/love-unlimited`. | YOUI's own tests. |
+| S4 YOUI decision room | A YOUI panel over the person desk: proposals, the agents' position and challenges, Touch ID agree and reject, replies, Yu's own proposals, and inbox notifications. Draft PR cambridgetcg/love-unlimited#7. | `tests/test_youi_decisions.mjs` there, including an end-to-end run against this desk. |
 | S3 Words | README section, `skills/coordinate-agent-work/SKILL.md`, and the Hermes skill, describing when to open a proposal and what agreement does and does not authorise. | Documentation catalog check. |
 
 ## 10. Open items
