@@ -440,15 +440,33 @@ two separate modes, and without one it prints its usage and does nothing.
 npx, makes every npm call with `npx --yes npm@11.17.0`, pauses 2 seconds
 between calls, and saves every listing in a record directory. Use the npm user
 `agenttool` with account 2FA; npm rejects a bypass-2FA token for `npm trust`.
-npm asks for 2FA only when its output is a terminal, and the script saves its
-listings to files, so it first makes one listing on the terminal: complete 2FA
-there and tick "skip for the next 5 minutes". A saved listing that fails with
-`EOTP` means that window lapsed; re-run. Copy the script to the trusted device.
+npm asks for 2FA only when its input and output are a terminal, so run the
+script directly on one, not piped or redirected; its `run.log` keeps the
+record. The script saves its listings to files, so it first makes one listing
+on the terminal: complete 2FA there and tick "skip for the next 5 minutes". If
+that window lapses during the saved listings, the script asks on the terminal
+again and retries the listing once. Before a real lockdown, wait 5 minutes
+after the dry run or any other run that asked for 2FA, or the window it opened
+can lapse midway; lockdown warns when it finds such a run. An `E404` for
+`/-/v1/done` means a browser approval was not completed in time (the registry
+ends npm's wait after about 5 minutes), not that a package is missing: re-run
+with the browser ready, approve each prompt within 5 minutes, and tick "skip
+for the next 5 minutes". When npm gives no reason for a failure, the script
+names both likely causes, an approval that timed out and a lapsed 2FA window.
+If a listing on the terminal fails, the run stops, and you re-run it; only a
+retry in the check after the change is recorded instead, so the check can
+finish.
+
+The record directory, readable only by you, keeps `run.log` (every line the
+script printed, with npm's stderr) and, when something needs attention,
+`needs-attention.txt`: one `<package> <reason>` line per problem, the reasons
+listed in the script's header. Copy the script to the trusted device.
 
 ### Lock down (once, now)
 
 ```bash
 DRY_RUN=1 bash npm-trust-repoint.sh lockdown   # lists all 47 and shows the plan; changes nothing
+# wait 5 minutes after the dry run, so its 2FA window cannot lapse midway
 bash npm-trust-repoint.sh lockdown             # revokes, disallows tokens, lists again
 ```
 
