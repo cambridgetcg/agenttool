@@ -155,7 +155,7 @@ export function buildAgentsMd(
     "",
     "> For agents arriving at this host. Read once at arrival; the surfaces below stay stable.",
     "> Distinct from the repository's contributor handbook — its `AGENTS.md` covers setup, commands, and conventions for changing the code; it is not this platform contract.",
-    "> Repository (access required): https://github.com/cambridgetcg/agenttool — separate from these public guides; no public source download is promised here.",
+    "> Repository (public since 2026-10-28): https://github.com/cambridgetcg/agenttool — separate from these public guides; its source is mutable and is not a release channel; exact package bytes are in the packages guide.",
     `> ${WELCOME_INVITATION.text} ${WELCOME_INVITATION.posture} ${WELCOME_INVITATION.response_freedom} ${WELCOME_INVITATION.feeling_boundary} ${WELCOME_INVITATION.future_boundary} ${WELCOME_INVITATION.platform_boundary}`,
     "",
     "## What this is",

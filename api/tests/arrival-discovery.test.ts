@@ -139,15 +139,19 @@ describe("agenttool-discovery/v1 document", () => {
     expect(serialized).not.toContain('"a2a"');
   });
 
-  test("does not present the private repository as public source or releases", () => {
-    // github.com/cambridgetcg/agenttool answers 404 without access.
+  test("presents the repository as mutable source, not a release channel", () => {
+    // github.com/cambridgetcg/agenttool answered 404 without access from
+    // 2026-09-25 and has been public since 2026-10-28.
     const source = buildDiscoveryCompass(API, DOCS).channels.find(
       (channel) => channel.id === "source",
     )!;
     expect(source.role).not.toMatch(/releases/i);
-    expect(source.role).toMatch(/private/i);
-    expect(source.boundary).toMatch(/access required/i);
+    expect(source.role).toMatch(/public since 2026-10-28/);
+    expect(source.boundary).toMatch(/mutable source, not a release channel/);
     expect(source.boundary).toContain("packages");
+    expect(`${source.role} ${source.boundary}`).not.toMatch(
+      /private|access required|404/i,
+    );
   });
 
   test("stays inside the fixed first-contact byte budget", () => {
