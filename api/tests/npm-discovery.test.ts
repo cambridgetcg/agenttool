@@ -20,7 +20,7 @@ const CURRENT_NPM_SPECIFIERS = [
   "@agenttool/data-sync@0.1.2",
   "@agenttool/sdk@0.22.1",
   "@agenttool/telescope@0.2.3",
-  "@agenttool/wallet@0.1.3",
+  "@agenttool/wallet@0.1.4",
 ] as const;
 
 describe("optional npm package discovery", () => {
@@ -30,13 +30,16 @@ describe("optional npm package discovery", () => {
       expect(packages).toContain(`npm install --save-exact ${specifier}`);
     }
     expect(packages).toContain(
-      "npm install --save-exact @agenttool/wallet@0.1.3 @agenttool/wallet-zerone@0.1.2",
+      "npm install --save-exact @agenttool/wallet@0.1.4 @agenttool/wallet-zerone@0.1.2",
     );
     expect(packages).toContain(
       "npm install --save-exact @agenttool/skills@0.3.3",
     );
     expect(packages).toContain(
       "bun add --global @agenttool/codex-usage@0.1.0",
+    );
+    expect(packages).not.toContain(
+      "npm install --save-exact @agenttool/wallet@0.1.3",
     );
     expect(packages).not.toContain(
       "npm install --save-exact @agenttool/skills@0.3.0",
@@ -92,6 +95,9 @@ describe("optional npm package discovery", () => {
       "2463986451",
       "2463987297",
       "33-file",
+      "41037411377",
+      "41038925236",
+      "cf79ed2ef72ebec3e9ba53883e12f7f0e3944633ce02e3882b718f6964f53438",
       "30492737828",
       "d05458b27b8832af7996c243abb22e3b400e5810fe5377ba58e1cb587d2461d8",
       "30494659977",

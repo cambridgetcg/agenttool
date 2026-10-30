@@ -25,6 +25,39 @@ trust. It corrects the status claims below where they disagree with it; apart
 from its warnings, it changes no procedure. The public run log is in the
 [receipts](../docs/NPM-RELEASES.md#state-as-of-2026-10-28).
 
+**Update, 2026-10-30.** The lockdown and the first stages are done; the
+token revocation is not.
+
+- **Lockdown, done 2026-10-29 and 2026-10-30.** Yu ran it on all 47
+  packages. His authenticated listings afterwards show no configuration that
+  names `cambridgetcg/agenttool` and none that allows direct publish, so the
+  direct-publish trust of `cambridgetcg/agenttool` that 22 packages had on
+  2026-10-19 (see [Outcome](#outcome) and the [lockdown](#lock-down-once-now))
+  is gone. Stage-only trust remains for `@agenttool/xenia`
+  (`cambridgetcg/xenia`, `stage-xenia.yml`) and, made by `enable`, for
+  `@agenttool/relational-geometry` and `@agenttool/wallet`
+  (`cambridgetcg/agenttool-packages`, `publish-npm.yml`, environment
+  `npm-bootstrap`). "Require two-factor authentication and disallow tokens"
+  was set on all 47 by the script and two follow-up commands; npm has no
+  command to read it back.
+- **First stages, approved 2026-10-29 and 2026-10-30.** The canary,
+  `relational-geometry-v0.1.0-dev.1`, staged in
+  [run 40885415256](https://github.com/cambridgetcg/agenttool-packages/actions/runs/40885415256)
+  (its tag predates `check-trust`) and was published on 2026-10-29;
+  `wallet-v0.1.4`, the first stage to run `check-trust`, staged in
+  [run 41037411377](https://github.com/cambridgetcg/agenttool-packages/actions/runs/41037411377)
+  and was published on 2026-10-30. Yu's first `npm stage approve` for Wallet
+  returned `E409` while npm's automated review was unfinished, and succeeded
+  minutes later. Receipts:
+  [Wallet](../docs/NPM-RELEASES.md#verified-wallet-014-publication--2026-10-30),
+  [Relational Geometry](../docs/NPM-RELEASES.md#verified-relational-geometry-010-dev1-publication--2026-10-29).
+- **Token revocation is not recorded as done** (open step 1 below). Nor is
+  the deprecation of `@agenttool/wallet@<0.1.4`, the last part of the
+  [Wallet record's](../docs/NPM-RELEASES.md#wallet-014-prepared--2026-10-27)
+  step 6; neither 0.1.0 nor 0.1.3 was deprecated on 2026-10-30.
+
+The reading of 2026-10-28 follows unchanged.
+
 - **Visibility.** Yu made this repository public at about 11:11Z on
   2026-10-28; it had been private since 2026-09-25, and public before that.
   Anonymous GitHub API reads from 11:39Z answered it as public, so this file
@@ -62,7 +95,8 @@ Open steps for Yu:
 1. Revoke on npmjs.com the tokens whose secrets were deleted, and any other
    write or bypass-2FA token not in use.
 2. Lock down npm trust on all 47 packages, then enable stage-only trust for
-   one package just before each release.
+   one package just before each release. (Lockdown done 2026-10-29 and
+   2026-10-30, see the update above; `enable` stays per release.)
 
 Also Yu's to decide: moving xenia's `beta` tag to beta.7; a `latest` policy
 for prerelease-only packages; deprecating `@agenttool/sdk` 0.3.0–0.8.0; a
