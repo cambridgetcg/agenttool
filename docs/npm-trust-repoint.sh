@@ -11,7 +11,7 @@
 # Run it on the device that holds the npm login for user "agenttool" (account
 # 2FA on; a bypass-2FA token is rejected by npm trust). It needs only Node with
 # npx; every npm call is `npx --yes npm@11.17.0`. It makes no other network
-# call and writes only a record directory.
+# call and writes only a record directory, readable only by you.
 #
 #   DRY_RUN=1 bash npm-trust-repoint.sh lockdown          # list and show the plan; change nothing
 #   bash npm-trust-repoint.sh lockdown                    # revoke, disallow tokens, list again
@@ -58,17 +58,19 @@
 # DRY_RUN is 1 or 0 (the default); any other value is refused.
 #
 # It pauses 2 seconds between npm calls (npm's bulk advice). npm asks for 2FA
-# only when its input and output are a terminal, and the saved listings go to
-# files, so before them the script makes one listing on the terminal: complete
-# 2FA there and tick "skip two-factor authentication for the next 5 minutes".
+# only when its input and output are a terminal, so run the script directly on
+# one, not piped or redirected (run.log keeps the record). The saved listings
+# go to files, so before them the script makes one listing on the terminal:
+# complete 2FA there and tick "skip two-factor authentication for the next 5
+# minutes".
 # A saved listing that fails with EOTP means the window lapsed during it: the
 # script asks on the terminal again and retries that listing once. Revoking,
 # access and creation print to the terminal, so npm asks again there if the
 # window lapses. While npm waits for a browser approval, the registry ends the
 # wait after about 5 minutes (Yu's runs of 2026-10-29/30) with E404 for
 # /-/v1/done; the script reports that as an approval that timed out, not a
-# missing package. A real lockdown warns when an earlier run beside it asked
-# for 2FA in the last 5 minutes: the window that run opened may lapse midway.
+# missing package. A real lockdown warns when an earlier run beside it may
+# have opened a skip-2FA window in the last 5 minutes: it may lapse midway.
 #
 # Besides the listings, the record directory keeps run.log (the script's own
 # lines and npm's stderr, which still reaches the terminal as it comes; npm's
@@ -179,7 +181,8 @@ fi
 
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 RECORD="${RECORD_DIR:-$PWD/npm-trust-repoint-$LABEL-$STAMP}"
-mkdir -p "$RECORD/trust-before" "$RECORD/trust-after" || die "cannot create $RECORD"
+# Private to you: run.log keeps npm's stderr, and npm does not redact its notices.
+(umask 077 && mkdir -p "$RECORD/trust-before" "$RECORD/trust-after") || die "cannot create $RECORD"
 RUN_LOG="$RECORD/run.log"
 # Run npm from an empty directory so no package.json supplies a default
 # package or repository.
@@ -206,6 +209,8 @@ npm_() {
 
 AUTH_TIMEOUT="npm's browser approval timed out (the registry's E404 for /-/v1/done means the prompt was not approved within about 5 minutes, not that the package is missing)"
 AUTH_ADVICE="Re-run with the browser ready: approve each npm prompt within 5 minutes, and tick \"skip for the next 5 minutes\" so the calls after it need no approval."
+# For EOTP from a call on the terminal, where npm would have asked for 2FA.
+EOTP_UNASKED="npm answered EOTP: it asks for 2FA only when the script runs directly on a terminal, not piped or redirected (run.log keeps the record); if it did ask, the one-time password was wrong or expired"
 
 # Runs npm with the script's stdin and stdout (the terminal, unless the caller
 # sends stdout to a file). Only its stderr is diverted, through tee: to the
@@ -254,12 +259,17 @@ add_failed() {
 }
 
 # Reports a failed npm call ($2) on package $1 and records it as $3, or as
-# auth-timeout when npm's error shows the browser approval timed out.
+# auth-timeout when npm's error shows the browser approval timed out, or as
+# eotp when a call on the terminal got EOTP (list_all reports a saved
+# listing's EOTP itself).
 npm_failed() {
   if [ "$npm_reason" = auth-timeout ]; then
     warn "$1: $2 FAILED: $AUTH_TIMEOUT"
     add_failed "$1" auth-timeout
     auth_timeout_seen=1
+  elif [ "$npm_reason" = eotp ]; then
+    warn "$1: $2 FAILED: $EOTP_UNASKED"
+    add_failed "$1" eotp
   else
     warn "$1: $2 FAILED"
     [ -s "$WORK/npm-stderr" ] ||
@@ -281,12 +291,15 @@ user="$(npm_ whoami)" || die "not logged in to npm; run: npx --yes npm@$NPM_VERS
 say "npm $version as $user; $MODE; record and run.log in $RECORD"
 [ "$DRY_RUN" = 1 ] && say "DRY_RUN=1: listing and planning only"
 
-# Records beside this one, named npm-trust-repoint-*, whose run asked for 2FA
-# (its run.log has a "== 2FA:" line) and wrote run.log in the last 5 minutes.
-# The script writes run.log after every npm call, so that time is no earlier
-# than the run's last 2FA, and the window it opened may still be open: npm may
-# not ask now, and the window can lapse midway through this run. A record
-# without run.log, from an earlier version of the script, is not counted.
+# Records beside this one, named npm-trust-repoint-*, whose run.log has a
+# "== 2FA:" line (the run reached a listing on the terminal, where npm may have
+# asked for 2FA) and was last written in the last 5 minutes. The script writes
+# run.log before and between its npm calls, so that time is usually close to
+# the run's last 2FA, and the window it opened may still be open: npm may not
+# ask now, and the window can lapse midway through this run. It is only a
+# hint: a run stopped just after a browser approval may have last written
+# run.log before that approval, and is then missed. A record without run.log,
+# from an earlier version of the script, is not counted.
 recent_records() {
   node -e '
     const fs = require("fs");
@@ -309,7 +322,7 @@ recent_records() {
 if [ "$DRY_RUN" = 0 ] && [ "$MODE" = lockdown ]; then
   recent="$(recent_records)"
   if [ -n "$recent" ]; then
-    warn "Note: an earlier run asked for 2FA in the last 5 minutes ($recent); the skip-2FA window it opened may lapse midway through this run."
+    warn "Note: an earlier run may have opened a skip-2FA window in the last 5 minutes ($recent); it may lapse midway through this run."
     warn "To avoid that, press Ctrl-C now (nothing has changed yet) and start again once 5 minutes have passed since it ended; otherwise a listing that hits EOTP is retried once."
   fi
 fi
@@ -453,7 +466,10 @@ prime_2fa() {
   say "== 2FA: one listing on the terminal; if npm asks, complete 2FA and tick \"skip for the next 5 minutes\""
   if ! npm_logged trust list "$1"; then
     [ "${2:-}" = after ] && return 1
+    # Lockdown's step 4 starts with this listing, and earlier steps may have failed some.
+    [ -z "$failed" ] || warn "needs attention so far:$failed; each one, with its reason: $RECORD/needs-attention.txt"
     [ "$npm_reason" = auth-timeout ] && die "npm trust list failed on the terminal: $AUTH_TIMEOUT. $AUTH_ADVICE"
+    [ "$npm_reason" = eotp ] && die "npm trust list failed on the terminal: $EOTP_UNASKED. Re-run."
     die "npm trust list failed on the terminal; finish 2FA or check the login, then re-run"
   fi
   pause
@@ -461,10 +477,12 @@ prime_2fa() {
 
 # Saves `npm trust list --json` for package $1 as $2, setting npm_status and
 # npm_reason. npm also prints its error into the saved listing, so an EOTP
-# there counts even when npm logs nothing.
+# there counts even when npm logs nothing. If bash cannot open $2, npm does not
+# run and the listing fails.
 save_listing() {
+  npm_status=1 npm_reason=""
   npm_logged trust list "$1" --json >"$2"
-  if [ "$npm_status" != 0 ] && [ -z "$npm_reason" ] && grep -q '"EOTP"' "$2"; then
+  if [ "$npm_status" != 0 ] && [ -z "$npm_reason" ] && grep -qs '"EOTP"' "$2"; then
     npm_reason=eotp
   fi
 }
@@ -655,7 +673,7 @@ run_enable() {
         printf '%s (if npm created it)\n' "$deadline" >"$RECORD/expires-by.txt"
         npm_failed "$name" "trust github" create-failed
         warn "npm may still have created it: run DRY_RUN=1 bash npm-trust-repoint.sh enable $key to check; if it is listed, it expires by $deadline unless a stage through it is approved first."
-        [ "$auth_timeout_seen" = 1 ] && warn "$AUTH_ADVICE"
+        report_attention
         exit 1
       fi
       created=1
@@ -668,6 +686,7 @@ run_enable() {
       warn "$name: has trust other than exactly the target (above), so enable creates nothing."
       warn "Run lockdown first; a configuration it keeps can be revoked by hand: npx --yes npm@$NPM_VERSION trust revoke $name --id <id>"
       add_failed "$name" other-trust
+      report_attention
       exit 1
       ;;
   esac
@@ -701,6 +720,7 @@ run_enable() {
           esac
         done
         warn "Or run lockdown now: it revokes every configuration that allows direct publish."
+        report_attention
         exit 1
         ;;
     esac

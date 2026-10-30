@@ -440,40 +440,33 @@ two separate modes, and without one it prints its usage and does nothing.
 npx, makes every npm call with `npx --yes npm@11.17.0`, pauses 2 seconds
 between calls, and saves every listing in a record directory. Use the npm user
 `agenttool` with account 2FA; npm rejects a bypass-2FA token for `npm trust`.
-npm asks for 2FA only when its input and output are a terminal (npm 11.17.0's
-`otplease` checks stdin and stdout), and the script saves its listings to
-files, so it first makes one listing on the terminal: complete 2FA there and
-tick "skip for the next 5 minutes". A saved listing that fails with `EOTP`
-means that window lapsed: the script asks on the terminal again and retries
-that listing once; if the retry fails too, later listings are not retried.
-Before any change, a failed listing on the terminal stops the run; in the
-check after the change, it is recorded and the check still finishes.
-Revoking, access and creation also run on the terminal, so npm asks there once
-the window has lapsed. While npm waits for the browser approval, the registry
-ends the wait after about 5 minutes (Yu's runs of 2026-10-29/30) with `E404`
-for `/-/v1/done`: that is an approval that timed out, not a missing package,
-and the script says so. Re-run with the browser ready and approve each prompt
-within 5 minutes. When npm gives no reason at all, the script says it may have
-been either. Start a real lockdown 5 minutes after any earlier run, the dry
-run included, last asked for 2FA, or that window can lapse midway (27 of the
-47 saved listings failed so in one of those runs); lockdown warns when such a
-run wrote its `run.log` in the last 5 minutes. `enable` needs no wait: it
-creates within seconds of starting, and retries a listing that hits `EOTP`.
+npm asks for 2FA only when its input and output are a terminal, so run the
+script directly on one, not piped or redirected; its `run.log` keeps the
+record. The script saves its listings to files, so it first makes one listing
+on the terminal: complete 2FA there and tick "skip for the next 5 minutes". If
+that window lapses during the saved listings, the script asks on the terminal
+again and retries the listing once. Before a real lockdown, wait 5 minutes
+after the dry run or any other run that asked for 2FA, or the window it opened
+can lapse midway; lockdown warns when it finds such a run. An `E404` for
+`/-/v1/done` means a browser approval was not completed in time (the registry
+ends npm's wait after about 5 minutes), not that a package is missing: re-run
+with the browser ready, approve each prompt within 5 minutes, and tick "skip
+for the next 5 minutes". When npm gives no reason for a failure, the script
+names both likely causes, an approval that timed out and a lapsed 2FA window.
+If a listing on the terminal fails, the run stops, and you re-run it; only a
+retry in the check after the change is recorded instead, so the check can
+finish.
 
-The record directory also keeps `run.log`, every line the script printed with
-npm's stderr, and, when something needs attention, `needs-attention.txt`. Only
-npm's stderr goes through `tee`, so it still reaches the terminal as it comes;
-npm's stdin and stdout stay the terminal, so its prompts and other output stay
-there and are not logged. `needs-attention.txt` has one `<package> <reason>`
-line per problem, the reason being `eotp`, `list-failed`, `auth-timeout`,
-`revoke-failed`, `access-failed`, `create-failed`, `review`, `unexpected`,
-`unreadable`, `not-locked`, `other-trust` or `not-target`. Copy the script to
-the trusted device.
+The record directory, readable only by you, keeps `run.log` (every line the
+script printed, with npm's stderr) and, when something needs attention,
+`needs-attention.txt`: one `<package> <reason>` line per problem, the reasons
+listed in the script's header. Copy the script to the trusted device.
 
 ### Lock down (once, now)
 
 ```bash
 DRY_RUN=1 bash npm-trust-repoint.sh lockdown   # lists all 47 and shows the plan; changes nothing
+# wait 5 minutes after the dry run, so its 2FA window cannot lapse midway
 bash npm-trust-repoint.sh lockdown             # revokes, disallows tokens, lists again
 ```
 
