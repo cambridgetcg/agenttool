@@ -175,8 +175,10 @@ export function buildDiscoveryCompass(
         id: "source",
         href: "https://github.com/cambridgetcg/agenttool",
         // Private from 2026-09-25 (404 without access); public since 2026-10-28.
+        // Its GitHub Releases (newest 2026-09-03) are all immutable=false.
         role: "development repository, public since 2026-10-28",
-        boundary: "mutable source, not a release channel; exact package bytes are on the packages channel",
+        boundary:
+          "mutable source, not the current release channel (new npm versions ship from cambridgetcg/agenttool-packages); its older GitHub Releases are mutable; exact package bytes are on the packages channel",
       },
       {
         id: "packages",
