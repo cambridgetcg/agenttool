@@ -248,7 +248,7 @@ describe("current outward operational claims", () => {
     expect(reachable).toMatch(
       /local_offline_source_only.*public_exact_artifact.*npm: "public_exact_mirror".*github_release: "public_mutable_mirror".*hosted: false.*custody: false.*hosted_rpc: false.*deployed_bridge: false/is,
     );
-    // The repository is public since 2026-10-28, but its Release is a
+    // The repository has been public since 2026-10-28, but its Release is a
     // mutable locator: no outward door may present it as an exact mirror or
     // link a mutable source tree or zerone-core in place of LOVE bytes.
     expect(reachable).not.toContain('github_release: "public_exact_mirror"');

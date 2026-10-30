@@ -81,7 +81,7 @@ describe("wake reachable doors", () => {
     );
   });
 
-  test("the Zerone door and its /public/gates card avoid the private repository", async () => {
+  test("the Zerone door and its /public/gates card name LOVE-pinned bytes, not mutable source trees", async () => {
     const [reachable, gates] = await Promise.all([
       readSource("../src/services/wake/reachable.ts"),
       readSource("../src/routes/public/gates.ts"),

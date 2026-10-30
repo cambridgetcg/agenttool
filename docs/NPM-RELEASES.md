@@ -317,11 +317,11 @@ bytes identical to it (`already_published_exact`, SHA-256
 `cf79ed2e…f53438`). The verify dispatch and this record from step 6 are done
 too. The docs pages that named 0.1.3 as the current npm Wallet are corrected
 in source, and reach docs.agenttool.dev only with a frontend publication.
-The API's `/.well-known/wake-keystone` is not corrected: its `agent_wallet`
-note, from `api/src/routes/well-known.ts`, still says npm `latest` is 0.1.3
-and that it is byte-verified against LOVE, and changing it needs a code
-change and an API deploy. The deprecation of `@agenttool/wallet@<0.1.4` is
-not done.)
+The API's `/.well-known/wake-keystone` `agent_wallet` note, from
+`api/src/routes/well-known.ts`, said npm `latest` is 0.1.3 and that it is
+byte-verified against LOVE. It is corrected in source in the same change as
+this record, and the served note changes only when that change is deployed
+to the API. The deprecation of `@agenttool/wallet@<0.1.4` is not done.)
 
 ## Collab 0.5.0 public distribution — 2026-10-10
 

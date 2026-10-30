@@ -170,7 +170,7 @@ export const ZERONE_REACHABLE = {
       availability: "local_offline_source_only",
       distribution: {
         // Anonymous reading: LOVE, npm 0.1.2 and the wallet-zerone-v0.1.2
-        // Release served the same bytes; the repository is public since
+        // Release served the same bytes; the repository has been public since
         // 2026-10-28.
         observed_at: "2026-10-30",
         love: "public_exact_artifact",
