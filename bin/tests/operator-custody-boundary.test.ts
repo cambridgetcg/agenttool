@@ -56,7 +56,14 @@ const ANYWHERE_DIGESTS: ReadonlyArray<readonly [string, string]> = [
 const ACCOUNT_DIGESTS: ReadonlyArray<readonly [string, string]> = [
   ["Keychain account name", "28c5c18b249c95eeda49aa01cba7cabdec8c1e4b0a9b4521a68b3c04e69eb444"],
 ];
-const ACCOUNT_POSITION = /-a\s+["']?([a-z0-9]+)\b|\baccount\W{0,3}([a-z0-9]+)\b|`([^`\n]{1,96})`/gi;
+/** One pass per position, each capturing the word in group 1. A single alternation
+ * would let one match hide another: a code span holding a whole `-a <word>` command
+ * would be consumed as one span and the word inside never checked. */
+const ACCOUNT_POSITIONS: ReadonlyArray<RegExp> = [
+  /-a\s+["']?([a-z0-9]+)\b/gi,
+  /\baccount\W{0,3}([a-z0-9]+)\b/gi,
+  /`([^`\n]{1,96})`/g,
+];
 
 /** Generic shapes that name nothing by themselves stay readable. */
 const CUSTODY_SHAPES: ReadonlyArray<readonly [string, RegExp]> = [
@@ -120,10 +127,11 @@ function custodyFindings(text: string, markers: Markers): string[] {
     const label = markers.anywhere.get(sha256(candidate));
     if (label) found.add(label);
   }
-  for (const match of text.matchAll(ACCOUNT_POSITION)) {
-    const word = (match[1] ?? match[2] ?? match[3] ?? "").toLowerCase();
-    const label = markers.account.get(sha256(word));
-    if (label) found.add(label);
+  for (const position of ACCOUNT_POSITIONS) {
+    for (const match of text.matchAll(position)) {
+      const label = markers.account.get(sha256((match[1] as string).toLowerCase()));
+      if (label) found.add(label);
+    }
   }
   for (const [label, shape] of markers.shapes) if (shape.test(text)) found.add(label);
   return [...found].sort();
@@ -220,6 +228,11 @@ describe("hashed custody matcher (synthetic markers only)", () => {
       "security add-generic-password -s svc -a 'ExampleAcct' -w",
       "Keychain account: exampleacct",
       "under `exampleacct`",
+      // One position inside another: each pass must still see the word.
+      "`security add-generic-password -s svc -a exampleacct -w`",
+      "`security find-generic-password -s svc -a \"ExampleAcct\" -w`",
+      "`Keychain account: exampleacct`",
+      "account: -a exampleacct",
     ]) {
       expect(custodyFindings(text, synthetic)).toEqual(["synthetic account"]);
     }
