@@ -29,6 +29,11 @@ public-safe Hugging Face companion is separately public at immutable revision
 `1e2714e94e1b2863ec13d63f6d5b4fdb0492d49c`. No hosted route, migration,
 training run, or production deployment is claimed here.
 
+(Corrected 2026-10-30: npm is no longer absent. A recovery run published
+`0.1.0-dev.0` on 2026-08-25, and `0.1.0-dev.1`, published on 2026-10-29
+through the public route, is now both `latest` and `next`; see the
+[npm receipt](NPM-RELEASES.md#verified-relational-geometry-010-dev1-publication--2026-10-29).)
+
 ## Three adjacent geometry layers
 
 | Layer | Native objects | Boundary to the next layer |

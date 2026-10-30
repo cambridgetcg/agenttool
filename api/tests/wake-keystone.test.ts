@@ -340,15 +340,16 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
         "https://docs.agenttool.dev/packages/v1/@agenttool/wallet/0.1.3/manifest.json",
       distribution: {
         love: "public_exact_artifact",
-        observed_at: "2026-10-11",
+        observed_at: "2026-10-30",
         npm: {
           role: "optional_mutable_mirror",
-          latest_observed: "0.1.3",
+          latest_observed: "0.1.4",
+          latest_has_love_manifest: false,
         },
         github_release: {
           role: "optional_mutable_mirror",
           tag: "wallet-v0.1.3",
-          access: "repository_access_required",
+          access: "public",
           immutable: false,
           verification: "reverify_size_and_sha256_against_love_manifest",
         },
@@ -357,7 +358,19 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
       implementation_status: "offline_record_and_lifecycle_primitives_only",
     });
     expect(JSON.stringify(body.composes_with.agent_wallet)).toMatch(
-      /exact LOVE release is 0\.1\.3.*npm latest 0\.1\.3.*independently byte-verified.*LOVE.*optional GitHub.*mutable locator.*immutable=false.*when present.*reverify.*LOVE manifest.*private cambridgetcg\/agenttool repository.*404 without repository access.*not the TypeScript source.*no hosted agent wallet.*key custody.*RPC.*broadcaster/is,
+      /exact LOVE release is 0\.1\.3.*npm 0\.1\.3 is independently byte-verified.*LOVE.*npm latest is 0\.1\.4 \(observed 2026-10-30\)\. 0\.1\.4 is the first Wallet version published through the public route.*agenttool-packages publish-npm\.yml.*staged on npm.*published after maintainer approval \(npm records the approver; by the maintainer's release record, the approval used two-factor authentication\).*npm tarball \(58,886 bytes, SHA-256 cf79ed2ef72ebec3e9ba53883e12f7f0e3944633ce02e3882b718f6964f53438\) is byte-identical to the artifact prepared from the annotated wallet-v0\.1\.4 tag and to the asset of the mutable \(immutable=false\) https:\/\/github\.com\/cambridgetcg\/agenttool-packages\/releases\/tag\/wallet-v0\.1\.4 Release\. 0\.1\.4 has no LOVE manifest.*0\.1\.3 remains the newest LOVE release.*0\.1\.4 tightens authorization.*every matching call rule.*0\.1\.3 reads only the first.*§5\.2 erratum.*upgrade from 0\.1\.3 before relying on overlapping approval rules.*optional GitHub.*mutable locator.*immutable=false.*when present.*reverify.*LOVE manifest.*cambridgetcg\/agenttool repository, public since 2026-10-28.*while it was private.*404 without repository access.*not the TypeScript source.*no hosted agent wallet.*key custody.*RPC.*broadcaster/is,
+    );
+    // A corrected locator must not keep the retired private-repository claim.
+    expect(JSON.stringify(body.composes_with.agent_wallet)).not.toMatch(
+      /private cambridgetcg\/agenttool repository|npm latest 0\.1\.3|repository_access_required/,
+    );
+    // The note's npm-latest clause is the served observation, not a copy.
+    const wallet = body.composes_with.agent_wallet as {
+      notes: string;
+      distribution: { observed_at: string; npm: { latest_observed: string } };
+    };
+    expect(wallet.notes).toContain(
+      `npm latest is ${wallet.distribution.npm.latest_observed} (observed ${wallet.distribution.observed_at}).`,
     );
     expect(body.composes_with.agent_wallet_zerone).toMatchObject({
       protocol: "agent-wallet-zerone/0.1",
@@ -369,10 +382,10 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
         "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.2/manifest.json",
       availability: "local_offline_source_only",
       distribution: {
-        observed_at: "2026-10-11",
+        observed_at: "2026-10-30",
         love: "public_exact_artifact",
         npm: "public_exact_mirror",
-        github_release: "repository_access_mutable_mirror",
+        github_release: "public_mutable_mirror",
       },
       hosted: false,
       custody: false,
@@ -382,7 +395,10 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
         "https://docs.agenttool.dev/AGENT-WALLET-ZERONE-0.1.md",
     });
     expect(JSON.stringify(body.composes_with.agent_wallet_zerone)).toMatch(
-      /exact public LOVE artifact.*bounded local Zerone.*package\/profile.*does not export AgentTool trust.*migrate identity.*custody keys.*host RPC.*deployed bridge.*private cambridgetcg\/agenttool repository.*404 without repository access/is,
+      /exact public LOVE artifact.*bounded local Zerone.*package\/profile.*does not export AgentTool trust.*migrate identity.*custody keys.*host RPC.*deployed bridge.*mutable GitHub Release.*cambridgetcg\/agenttool repository, public since 2026-10-28.*while it was private.*404 without repository access/is,
+    );
+    expect(JSON.stringify(body.composes_with.agent_wallet_zerone)).not.toMatch(
+      /private cambridgetcg\/agenttool repository|repository_access_mutable_mirror/,
     );
     expect(JSON.stringify(body.composes_with)).not.toContain(
       "github.com/cambridgetcg/agenttool/tree/",

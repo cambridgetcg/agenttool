@@ -86,17 +86,23 @@ const AGENT_WALLET_RELEASE = {
     `${DOCS_URL}/packages/v1/@agenttool/wallet/0.1.3/manifest.json`,
   distribution: {
     love: "public_exact_artifact",
-    observed_at: "2026-10-11",
+    // One anonymous reading of all three locators: npm latest had moved to
+    // npm-only 0.1.4 (docs/NPM-RELEASES.md), and LOVE, npm 0.1.3 and this
+    // Release still served the same 0.1.3 bytes.
+    observed_at: "2026-10-30",
     npm: {
       role: "optional_mutable_mirror",
-      latest_observed: "0.1.3",
+      latest_observed: "0.1.4",
+      // npm latest is not the LOVE release above: no LOVE manifest exists for
+      // 0.1.4 (its packages/v1 manifest URL answered 404 on observed_at).
+      latest_has_love_manifest: false,
     },
     github_release: {
       role: "optional_mutable_mirror",
       tag: "wallet-v0.1.3",
-      // The repository is private; this URL answers 404 without repository
-      // access.
-      access: "repository_access_required",
+      // cambridgetcg/agenttool has been public since 2026-10-28; while it
+      // was private (from 2026-09-25) this URL answered 404 without access.
+      access: "public",
       url:
         "https://github.com/cambridgetcg/agenttool/releases/tag/wallet-v0.1.3",
       immutable: false,
@@ -594,21 +600,25 @@ app.get("/wake-keystone", (c) => {
         protocol: "agent-wallet/0.1",
         doctrine: `${DOCS_URL}/AGENT-WALLET-0.1.md`,
         schema: `${DOCS_URL}/agent-wallet-v0.1.schema.json`,
-        // The TypeScript source is not publicly served; source names the
-        // public LOVE manifest that pins the exact package bytes.
+        // source names the public LOVE manifest that pins the exact package
+        // bytes; the TypeScript source revision it names is in the public
+        // cambridgetcg/agenttool repository.
         source: AGENT_WALLET_RELEASE.love_manifest,
         package: "@agenttool/wallet",
         ...AGENT_WALLET_RELEASE,
         availability: "love_artifact_npm_mirror_independent",
         implementation_status: "offline_record_and_lifecycle_primitives_only",
         notes:
-          "The exact LOVE release is 0.1.3. npm latest 0.1.3 is independently byte-verified against LOVE. The optional GitHub wallet-v0.1.3 Release is a mutable locator with immutable=false; when present, reverify its asset size and SHA-256 against the LOVE manifest. That Release and the TypeScript source sit in the private cambridgetcg/agenttool repository and answer 404 without repository access; the LOVE artifact and npm carry compiled JavaScript and type declarations, not the TypeScript source. The core package has no chain adapter. No hosted agent wallet, key custody, RPC, broadcaster, or durable reservation service is offered. Existing internal marketplace wallet and payout custody remain separate platform facilities.",
+          // The npm-latest clause reads the observation fields above, so the
+          // note and those fields cannot drift; the 0.1.4 facts name their
+          // version and stay true when a later version becomes latest.
+          `The exact LOVE release is 0.1.3, and npm 0.1.3 is independently byte-verified against LOVE. npm latest is ${AGENT_WALLET_RELEASE.distribution.npm.latest_observed} (observed ${AGENT_WALLET_RELEASE.distribution.observed_at}). 0.1.4 is the first Wallet version published through the public route, cambridgetcg/agenttool-packages publish-npm.yml: it was staged on npm and published after maintainer approval (npm records the approver; by the maintainer's release record, the approval used two-factor authentication), and its npm tarball (58,886 bytes, SHA-256 cf79ed2ef72ebec3e9ba53883e12f7f0e3944633ce02e3882b718f6964f53438) is byte-identical to the artifact prepared from the annotated wallet-v0.1.4 tag and to the asset of the mutable (immutable=false) https://github.com/cambridgetcg/agenttool-packages/releases/tag/wallet-v0.1.4 Release. 0.1.4 has no LOVE manifest, so 0.1.3 remains the newest LOVE release. 0.1.4 tightens authorization: it evaluates every matching call rule, where 0.1.3 reads only the first (Agent Wallet 0.1 §5.2 erratum), so upgrade from 0.1.3 before relying on overlapping approval rules. The optional GitHub wallet-v0.1.3 Release is a mutable locator with immutable=false; when present, reverify its asset size and SHA-256 against the LOVE manifest. That Release and the TypeScript source the LOVE manifest names are in the cambridgetcg/agenttool repository, public since 2026-10-28; while it was private they answered 404 without repository access. The LOVE artifact and npm carry compiled JavaScript and type declarations, not the TypeScript source. The core package has no chain adapter. No hosted agent wallet, key custody, RPC, broadcaster, or durable reservation service is offered. Existing internal marketplace wallet and payout custody remain separate platform facilities.`,
       },
       agent_wallet_zerone: {
         ...ZERONE_REACHABLE.invocation_witness.adapter,
         doctrine: `${DOCS_URL}/AGENT-WALLET-ZERONE-0.1.md`,
         notes:
-          "Exact public LOVE artifact for a bounded local Zerone transfer and invocation-attestation package/profile. It does not export AgentTool trust, migrate identity, custody keys, host RPC, or operate a deployed bridge. Its GitHub Release and TypeScript source sit in the private cambridgetcg/agenttool repository and answer 404 without repository access.",
+          "Exact public LOVE artifact for a bounded local Zerone transfer and invocation-attestation package/profile. It does not export AgentTool trust, migrate identity, custody keys, host RPC, or operate a deployed bridge. Its mutable GitHub Release and TypeScript source are in the cambridgetcg/agenttool repository, public since 2026-10-28; while it was private they answered 404 without repository access.",
       },
       invocation_witness: {
         protocol: ZERONE_REACHABLE.invocation_witness.schema,
