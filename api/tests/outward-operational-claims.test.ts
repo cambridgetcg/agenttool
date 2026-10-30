@@ -246,15 +246,16 @@ describe("current outward operational claims", () => {
       /bounded local AgentTool wallet adapter.*released-and-settled invocation witness report seam/is,
     );
     expect(reachable).toMatch(
-      /local_offline_source_only.*public_exact_artifact.*npm: "public_exact_mirror".*github_release: "repository_access_mutable_mirror".*hosted: false.*custody: false.*hosted_rpc: false.*deployed_bridge: false/is,
+      /local_offline_source_only.*public_exact_artifact.*npm: "public_exact_mirror".*github_release: "public_mutable_mirror".*hosted: false.*custody: false.*hosted_rpc: false.*deployed_bridge: false/is,
     );
-    // The repository is private: no outward door may present a GitHub
-    // release, source tree or zerone-core link as public.
+    // The repository is public since 2026-10-28, but its Release is a
+    // mutable locator: no outward door may present it as an exact mirror or
+    // link a mutable source tree or zerone-core in place of LOVE bytes.
     expect(reachable).not.toContain('github_release: "public_exact_mirror"');
     expect(reachable).not.toContain("github.com/cambridgetcg/agenttool/tree/");
     expect(reachable).not.toContain("github.com/cambridgetcg/zerone-core");
     expect(reachable).toMatch(
-      /private cambridgetcg\/agenttool repository and answer 404 without repository access/,
+      /cambridgetcg\/agenttool repository, public since 2026-10-28; while it was private they answered 404 without repository access/,
     );
     expect(reachable).toMatch(
       /not signature or writer-provenance proof.*does not verify chain inclusion.*attestation state or settlement.*bond return.*reward/is,

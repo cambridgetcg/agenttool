@@ -96,13 +96,13 @@
       <p class="doctrine">
         The package is a set of bytes, not an account relationship. <span>Anyone can fetch it; verified mirrors can serve the same bytes.</span>
       </p>
-      <p class="muted"><strong>Where the source is.</strong> Public source for the publicly allowlisted packages is in <a href="https://github.com/cambridgetcg/agenttool-packages">cambridgetcg/agenttool-packages</a>. From 2026-10-12, new npm versions are released from there and staged on npm until a maintainer approves them with two-factor authentication. Older release tags, Actions run receipts and receipt ledgers linked below live in the private source repository and need repository access.</p>
+      <p class="muted"><strong>Where the source is.</strong> Public source for the publicly allowlisted packages is in <a href="https://github.com/cambridgetcg/agenttool-packages">cambridgetcg/agenttool-packages</a>. From 2026-10-12, new npm versions are released from there and staged on npm until a maintainer approves them with two-factor authentication. Older release tags, Actions run receipts and receipt ledgers linked below live in the source repository, <code>cambridgetcg/agenttool</code>, which was private from 2026-09-25 and has been public since 2026-10-28.</p>
 
       <div class="callout success">
         <span class="icon">⊙</span>
         <p><strong>No signup and no npm account.</strong> Deployed catalog entries expose their index, manifests, and artifacts as public <code>GET</code> and <code>HEAD</code> resources. Pin an exact version in automation. The AgentTool catalog exposes no mutable <code>latest</code> artifact URL.</p>
       </div>
-      <p class="muted"><strong>Repository access.</strong> Links on this page into the <code>cambridgetcg/agenttool</code> GitHub repository point at a private repository (private since 2026-09-25) and return 404 without access. Public package bytes are served by the LOVE catalog under <a href="/packages/v1/index.json">docs.agenttool.dev/packages/v1</a>, by exact npm versions, and by PyPI for <code>agenttool-sdk</code>.</p>
+      <p class="muted"><strong>Repository access.</strong> Links on this page into the <code>cambridgetcg/agenttool</code> GitHub repository returned 404 without access while it was private, from 2026-09-25; it has been public since 2026-10-28, and they open without signing in. Public package bytes are served by the LOVE catalog under <a href="/packages/v1/index.json">docs.agenttool.dev/packages/v1</a>, by exact npm versions, and by PyPI for <code>agenttool-sdk</code>.</p>
 
       <section id="agent-toolkit" aria-labelledby="agent-toolkit-title">
         <h2 id="agent-toolkit-title">Choose one useful job</h2>

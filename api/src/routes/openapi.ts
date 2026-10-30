@@ -1003,7 +1003,7 @@ const COMMON_SCHEMAS = {
                 type: "string",
                 format: "uri",
                 description:
-                  "Publicly served package coordinate. The TypeScript source is in a private repository, so this names the LOVE manifest.",
+                  "Publicly served package coordinate: the LOVE manifest that pins the exact package bytes. The TypeScript source revision it names is in the cambridgetcg/agenttool repository, public since 2026-10-28.",
               },
               love_manifest: { type: "string", format: "uri" },
               availability: {
@@ -1017,7 +1017,7 @@ const COMMON_SCHEMAS = {
                 properties: {
                   observed_at: {
                     type: "string",
-                    const: "2026-10-11",
+                    const: "2026-10-30",
                     format: "date",
                   },
                   love: {
@@ -1027,9 +1027,9 @@ const COMMON_SCHEMAS = {
                   npm: { type: "string", const: "public_exact_mirror" },
                   github_release: {
                     type: "string",
-                    const: "repository_access_mutable_mirror",
+                    const: "public_mutable_mirror",
                     description:
-                      "The GitHub Release is in the private cambridgetcg/agenttool repository and answers 404 without repository access. It is mutable; reverify its size and SHA-256 against the LOVE manifest.",
+                      "The GitHub Release is in the cambridgetcg/agenttool repository, public since 2026-10-28; while it was private it answered 404 without repository access. It is mutable; reverify its size and SHA-256 against the LOVE manifest.",
                   },
                 },
                 required: ["observed_at", "love", "npm", "github_release"],

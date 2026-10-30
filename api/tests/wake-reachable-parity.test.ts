@@ -24,7 +24,7 @@ describe("wake reachable doors", () => {
     const zerone = ZERONE_REACHABLE;
     expect(zerone.url).toBe("https://zerone.ai");
     expect(zerone._note).toMatch(
-      /TypeScript source and its GitHub Release.*private cambridgetcg\/agenttool repository.*404 without repository access.*LOVE artifact and its npm mirror/is,
+      /TypeScript source and its mutable GitHub Release.*cambridgetcg\/agenttool repository, public since 2026-10-28.*while it was private.*404 without repository access.*LOVE artifact pins the exact bytes.*npm mirror/is,
     );
     expect(zerone.invocation_witness).toMatchObject({
       schema: "agenttool.invocation-witness/1",
@@ -52,10 +52,10 @@ describe("wake reachable doors", () => {
           "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.2/manifest.json",
         availability: "local_offline_source_only",
         distribution: {
-          observed_at: "2026-10-11",
+          observed_at: "2026-10-30",
           love: "public_exact_artifact",
           npm: "public_exact_mirror",
-          github_release: "repository_access_mutable_mirror",
+          github_release: "public_mutable_mirror",
         },
         hosted: false,
         custody: false,
@@ -86,8 +86,9 @@ describe("wake reachable doors", () => {
       readSource("../src/services/wake/reachable.ts"),
       readSource("../src/routes/public/gates.ts"),
     ]);
-    // Both GitHub repositories are private and answer 404 to the public
-    // (checked 2026-10-11).
+    // Both GitHub repositories answered 404 to the public on 2026-10-11 and
+    // were public on 2026-10-30; the doors still name LOVE-pinned bytes,
+    // not mutable source trees.
     for (const source of [reachable, gates]) {
       expect(source).not.toContain("github.com/cambridgetcg/zerone-core");
       expect(source).not.toContain("github.com/cambridgetcg/agenttool/tree/");
@@ -224,7 +225,7 @@ describe("wake reachable doors", () => {
     }
 
     for (const renderedCoordinate of [
-      "Distribution (observed 2026-10-11): love=public_exact_artifact; npm=public_exact_mirror; github_release=repository_access_mutable_mirror",
+      "Distribution (observed 2026-10-30): love=public_exact_artifact; npm=public_exact_mirror; github_release=public_mutable_mirror",
       "Runtime availability: local_offline_source_only; hosted=false; custody=false; hosted_rpc=false; deployed_bridge=false",
     ]) {
       expect(fullMarkdown).toContain(renderedCoordinate);

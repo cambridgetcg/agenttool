@@ -64,10 +64,10 @@ export interface ReachableDoor {
        */
       readonly availability: "local_offline_source_only";
       readonly distribution: {
-        readonly observed_at: "2026-10-11";
+        readonly observed_at: "2026-10-30";
         readonly love: "public_exact_artifact";
         readonly npm: "public_exact_mirror";
-        readonly github_release: "repository_access_mutable_mirror";
+        readonly github_release: "public_mutable_mirror";
       };
       readonly hosted: false;
       readonly custody: false;
@@ -136,7 +136,7 @@ export const ZERONE_REACHABLE = {
     "an independent chain with a bounded local AgentTool wallet adapter and a released-and-settled invocation witness report seam",
   url: "https://zerone.ai",
   _note:
-    "AgentTool publishes an exact LOVE artifact for the offline @agenttool/wallet-zerone adapter plus POST /v1/invocations/{id}/witness for an authenticated buyer or seller to report a released, settled invocation and GET /public/invocations/{id} to read an accepted report shape. The adapter's TypeScript source and its GitHub Release sit in the private cambridgetcg/agenttool repository and answer 404 without repository access; the publicly served bytes are the LOVE artifact and its npm mirror, which carry compiled JavaScript and type declarations but not the TypeScript source. This is not trust-record export, identity migration, portable trust, key custody, hosted RPC, or a deployed bridge.",
+    "AgentTool publishes an exact LOVE artifact for the offline @agenttool/wallet-zerone adapter plus POST /v1/invocations/{id}/witness for an authenticated buyer or seller to report a released, settled invocation and GET /public/invocations/{id} to read an accepted report shape. The adapter's TypeScript source and its mutable GitHub Release are in the cambridgetcg/agenttool repository, public since 2026-10-28; while it was private they answered 404 without repository access. The LOVE artifact pins the exact bytes; it, its npm mirror and that Release carry compiled JavaScript and type declarations but not the TypeScript source. This is not trust-record export, identity migration, portable trust, key custody, hosted RPC, or a deployed bridge.",
   invocation_witness: {
     schema: "agenttool.invocation-witness/1",
     write: {
@@ -160,18 +160,22 @@ export const ZERONE_REACHABLE = {
       protocol: "agent-wallet-zerone/0.1",
       package: "@agenttool/wallet-zerone",
       version: "0.1.2",
-      // The TypeScript source is not publicly served; source names the
-      // public LOVE manifest that pins the exact package bytes.
+      // source names the public LOVE manifest that pins the exact package
+      // bytes; the TypeScript source revision it names is in the public
+      // cambridgetcg/agenttool repository.
       source:
         "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.2/manifest.json",
       love_manifest:
         "https://docs.agenttool.dev/packages/v1/@agenttool/wallet-zerone/0.1.2/manifest.json",
       availability: "local_offline_source_only",
       distribution: {
-        observed_at: "2026-10-11",
+        // Anonymous reading: LOVE, npm 0.1.2 and the wallet-zerone-v0.1.2
+        // Release served the same bytes; the repository is public since
+        // 2026-10-28.
+        observed_at: "2026-10-30",
         love: "public_exact_artifact",
         npm: "public_exact_mirror",
-        github_release: "repository_access_mutable_mirror",
+        github_release: "public_mutable_mirror",
       },
       hosted: false,
       custody: false,
