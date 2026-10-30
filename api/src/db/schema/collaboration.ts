@@ -35,9 +35,23 @@ export const collaborationGrants = toolsSchema.table("collaboration_grants", {
   // TS-only widening: a participant self-leave nests its signed record here (no SQL change).
   acceptanceProof: jsonb("acceptance_proof").$type<MissionGrantProofs>(),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  // Renewal window (20261027T134854). All four are NULL on an unchained grant. The
+  // root names itself; a child names its root and predecessor and copies the window.
+  renewableUntil: timestamp("renewable_until", { withTimezone: true }),
+  renewalClosedAt: timestamp("renewal_closed_at", { withTimezone: true }),
+  renewalRootId: uuid("renewal_root_id"),
+  renewedFromGrantId: uuid("renewed_from_grant_id"),
 }, t => [
   foreignKey({ columns: [t.missionId, t.projectId], foreignColumns: [collaborationMissions.id, collaborationMissions.projectId], name: "collaboration_grant_mission" }),
   unique("collaboration_grant_event_subject").on(t.id, t.missionId, t.projectId, t.identityId, t.signingKeyId),
+  // Renewal adds no authority: chain members share the whole scope tuple.
+  unique("collaboration_grant_chain_scope").on(t.id, t.missionId, t.projectId, t.identityId, t.signingKeyId, t.issuingApiKeyId, t.origin, t.actions),
+  unique("collaboration_grant_renewed_once").on(t.renewedFromGrantId),
+  foreignKey({ columns: [t.renewalRootId, t.missionId, t.projectId, t.identityId, t.signingKeyId, t.issuingApiKeyId, t.origin, t.actions],
+    foreignColumns: [t.id, t.missionId, t.projectId, t.identityId, t.signingKeyId, t.issuingApiKeyId, t.origin, t.actions], name: "collaboration_grant_renewal_root" }),
+  foreignKey({ columns: [t.renewedFromGrantId, t.missionId, t.projectId, t.identityId, t.signingKeyId, t.issuingApiKeyId, t.origin, t.actions],
+    foreignColumns: [t.id, t.missionId, t.projectId, t.identityId, t.signingKeyId, t.issuingApiKeyId, t.origin, t.actions], name: "collaboration_grant_renewed_from" }),
+  index("idx_collaboration_grants_renewal_root").on(t.renewalRootId).where(sql`renewal_root_id IS NOT NULL`),
   index("idx_collaboration_grants_mission").on(t.missionId, t.projectId),
   index("idx_collaboration_grants_parent").on(t.issuingApiKeyId),
   check("collaboration_grant_hash", sql`${t.tokenHash} ~ '^[0-9a-f]{64}$'`),
@@ -46,6 +60,9 @@ export const collaborationGrants = toolsSchema.table("collaboration_grants", {
   check("collaboration_grant_expiry", sql`isfinite(${t.issuedAt}) AND isfinite(${t.expiresAt}) AND ${t.expiresAt} > ${t.issuedAt} AND ${t.expiresAt} <= ${t.issuedAt} + interval '24 hours'`),
   check("collaboration_grant_acceptance", sql`(${t.acceptedAt} IS NULL AND ${t.acceptanceProof} IS NULL) OR (${t.acceptedAt} IS NOT NULL AND isfinite(${t.acceptedAt}) AND ${t.acceptedAt} >= ${t.issuedAt} AND ${t.acceptedAt} < ${t.expiresAt} AND ${t.acceptanceProof} IS NOT NULL)`),
   check("collaboration_grant_revocation", sql`${t.revokedAt} IS NULL OR (isfinite(${t.revokedAt}) AND ${t.revokedAt} >= ${t.issuedAt})`),
+  check("collaboration_grant_renewal_chain", sql`(${t.renewalRootId} IS NULL AND ${t.renewedFromGrantId} IS NULL AND ${t.renewableUntil} IS NULL AND ${t.renewalClosedAt} IS NULL) OR (${t.renewalRootId} IS NOT NULL AND ${t.renewableUntil} IS NOT NULL AND (${t.renewedFromGrantId} IS NULL) = (${t.renewalRootId} = ${t.id}) AND (${t.renewedFromGrantId} IS NULL OR (${t.renewedFromGrantId} <> ${t.id} AND ${t.acceptedAt} = ${t.issuedAt} AND ${t.acceptanceProof} IS NOT NULL)))`),
+  check("collaboration_grant_renewal_window", sql`${t.renewableUntil} IS NULL OR (isfinite(${t.renewableUntil}) AND ${t.renewableUntil} >= ${t.expiresAt} AND ${t.renewableUntil} <= ${t.issuedAt} + interval '30 days')`),
+  check("collaboration_grant_renewal_closed", sql`${t.renewalClosedAt} IS NULL OR (isfinite(${t.renewalClosedAt}) AND ${t.renewalClosedAt} >= ${t.issuedAt})`),
 ]);
 
 export const collaborationEvents = toolsSchema.table("collaboration_events", {
