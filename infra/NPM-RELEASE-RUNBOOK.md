@@ -37,9 +37,12 @@ token revocation is not.
   (`cambridgetcg/xenia`, `stage-xenia.yml`) and, made by `enable`, for
   `@agenttool/relational-geometry` and `@agenttool/wallet`
   (`cambridgetcg/agenttool-packages`, `publish-npm.yml`, environment
-  `npm-bootstrap`). "Require two-factor authentication and disallow tokens"
-  was set on all 47 by the script and two follow-up commands; npm has no
-  command to read it back.
+  `npm-bootstrap`). By Yu's account, the script and two follow-up commands
+  set "Require two-factor authentication and disallow tokens" on all 47. It
+  has not been read back: npm's CLI cannot read it, and the Settings-page
+  check in the [lockdown](#lock-down-once-now) procedure is not recorded for
+  any package. Until the tokens are revoked, this unverified setting is what
+  is meant to stop them from publishing.
 - **First stages, approved 2026-10-29 and 2026-10-30.** The canary,
   `relational-geometry-v0.1.0-dev.1`, staged in
   [run 40885415256](https://github.com/cambridgetcg/agenttool-packages/actions/runs/40885415256)
@@ -56,7 +59,10 @@ token revocation is not.
   [Wallet record's](../docs/NPM-RELEASES.md#wallet-014-prepared--2026-10-27)
   step 6; neither 0.1.0 nor 0.1.3 was deprecated on 2026-10-30.
 
-The reading of 2026-10-28 follows unchanged.
+The reading of 2026-10-28 follows unchanged. Its "Nothing has been
+delivered" bullet no longer holds, and the lockdown that its
+`publish-npm.yml` warning waits for is done; the warning itself is left as
+written.
 
 - **Visibility.** Yu made this repository public at about 11:11Z on
   2026-10-28; it had been private since 2026-09-25, and public before that.

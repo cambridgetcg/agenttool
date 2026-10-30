@@ -41,10 +41,11 @@ npm user names `cambridgetcg/agenttool`, and none allows direct publish. The
 stage-only configurations that remain are Xenia's (`cambridgetcg/xenia`,
 `stage-xenia.yml`) and, for Relational Geometry and Wallet, the public route's
 (`cambridgetcg/agenttool-packages`, `publish-npm.yml`, environment
-`npm-bootstrap`). "Require two-factor authentication and disallow tokens" was
-set on all 47 packages by the lockdown script and two follow-up commands; npm
-has no command that reads the setting back. The reading of 2026-10-28
-follows unchanged.
+`npm-bootstrap`). By the maintainer's account, the lockdown script and two
+follow-up commands set "Require two-factor authentication and disallow
+tokens" on all 47 packages. That setting has not been read back: npm's
+command line has no way to read it, and no check of a package's Settings
+page on npmjs.com is recorded. The reading of 2026-10-28 follows unchanged.
 
 - **No version has been published since 2026-09-08, and none through the
   public route yet.** npm lists 43 `@agenttool` packages with 117 versions;
@@ -116,9 +117,10 @@ maintainer's authenticated trust listing three hours later
 (2026-10-19T19:46Z) showed no trusted-publisher configuration for the
 package; without one, npm's OIDC exchange cannot succeed. npm still serves
 only `0.1.0-dev.0`. The prerelease and the Rekor entry stay, and record bytes
-that npm has not published. Once the package's configuration exists, the same
-tag is dispatched again: the mirror step reuses an existing release whose asset
-is byte-identical and refuses one that is not. That dispatch runs the workflow
+that npm has not published. (Both held until 2026-10-29.) Once the
+package's configuration exists, the same tag is dispatched again: the mirror
+step reuses an existing release whose asset is byte-identical and refuses one
+that is not. That dispatch runs the workflow
 and release tool as they were at the tag on 2026-10-19, not later fixes, so if
 it fails again it can add another Rekor entry before npm refuses.
 
@@ -135,7 +137,11 @@ released through the public route. Trusted stage
 attempt 1, staged it with `npm_tag: latest` as stage
 `a334e443-f464-45a5-9fac-cfede11ae2b4`. The maintainer approved the stage
 with 2FA, and npm records publication at `2026-10-30T10:11:08.676Z` by GitHub
-Actions through trusted publisher `oidc:62e85598…`, with approver `agenttool`.
+Actions through the trusted publisher with `oidcConfigId`
+`62e85598-98fa-46b6-9266-91e47e410502`, with approver `agenttool`. (The 45
+earlier trusted publications of `@agenttool` versions, Wallet 0.1.3 among
+them, record that id with an `oidc:` prefix; this version and Relational
+Geometry 0.1.0-dev.1 record it without one. Anonymous reads, 2026-10-30.)
 Verify [run `41038925236`](https://github.com/cambridgetcg/agenttool-packages/actions/runs/41038925236)
 recorded `already_published_exact`.
 
@@ -154,9 +160,10 @@ recorded `already_published_exact`.
   `npm stage publish` then succeeded. The run uploaded the tarball to the new
   GitHub Release and re-downloaded it byte-identical (`uploaded_exact_asset`);
   the verify run found that asset exact (`existing_exact_asset`).
-- The maintainer's first `npm stage approve` was refused with `E409`, because
-  npm's automated review of the stage had not finished; a second attempt a
-  few minutes later succeeded.
+- By the maintainer's account, the first `npm stage approve` was refused
+  with `E409` because npm's automated review of the stage had not finished,
+  and the stage was approved a few minutes later. npm's approver record and
+  the publication time above are the parts a reader can check.
 - The prepared artifact, the
   [GitHub Release asset](https://github.com/cambridgetcg/agenttool-packages/releases/download/wallet-v0.1.4/agenttool-wallet-0.1.4.tgz)
   and an anonymous download of the
@@ -180,9 +187,10 @@ recorded `already_published_exact`.
 The version carries the call-rule fix described under
 [Wallet 0.1.4 prepared](#wallet-014-prepared--2026-10-27): overlapping call
 rules resolve most-restrictively, where published 0.1.3 reads only the first
-matching rule. Its npm metadata names the public repository, unlike 0.1.0 and
-0.1.3. It has no LOVE manifest, so the docs.agenttool.dev catalog's Wallet
-entry stays the exact 0.1.3 artifact. `@agenttool/wallet-zerone@0.1.2` is
+matching rule. Its npm metadata names `cambridgetcg/agenttool-packages`,
+where 0.1.0 and 0.1.3 name `cambridgetcg/agenttool`. It has no LOVE
+manifest, so the docs.agenttool.dev catalog's Wallet entry stays the exact
+0.1.3 artifact. `@agenttool/wallet-zerone@0.1.2` is
 unchanged; its `^0.1.2` peer admits 0.1.4. Neither 0.1.0 nor 0.1.3 is
 deprecated (anonymous read, 2026-10-30). Publication deploys nothing; the
 package still supplies capability, intent and receipt primitives, not bundled
@@ -197,8 +205,9 @@ attempt 1, dispatched the existing tag `relational-geometry-v0.1.0-dev.1`
 again once the package's stage-only trust existed, and staged it with
 `npm_tag: next` as stage `bed85648-37e8-4d4f-8805-a83b17f3635d`. The
 maintainer approved the stage with 2FA, and npm records publication at
-`2026-10-29T13:51:53.128Z` by GitHub Actions through trusted publisher
-`oidc:229e4d36…`, with approver `agenttool`. Verify
+`2026-10-29T13:51:53.128Z` by GitHub Actions through the trusted publisher
+with `oidcConfigId` `229e4d36-5ea1-4136-9d38-1a953bd49824`, with approver
+`agenttool`. Verify
 [run `40887484766`](https://github.com/cambridgetcg/agenttool-packages/actions/runs/40887484766)
 recorded `already_published_exact`.
 
@@ -301,9 +310,13 @@ runbook:
    `@agenttool/wallet@<0.1.4` with a pointer to 0.1.4.
 
 (2026-10-30: steps 1 to 5 are done, as are the verify dispatch and this
-record from step 6; the pages naming 0.1.3 as current are corrected in
-source, and reach docs.agenttool.dev only with a frontend publication. The
-deprecation of `@agenttool/wallet@<0.1.4` is not done.)
+record from step 6. The docs pages that named 0.1.3 as the current npm
+Wallet are corrected in source, and reach docs.agenttool.dev only with a
+frontend publication. The API's `/.well-known/wake-keystone` is not
+corrected: its `agent_wallet` note, from `api/src/routes/well-known.ts`,
+still says npm `latest` is 0.1.3 and that it is byte-verified against LOVE,
+and changing it needs a code change and an API deploy. The deprecation of
+`@agenttool/wallet@<0.1.4` is not done.)
 
 ## Collab 0.5.0 public distribution — 2026-10-10
 

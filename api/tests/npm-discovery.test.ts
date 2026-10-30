@@ -78,6 +78,12 @@ describe("optional npm package discovery", () => {
     expect(packages).toContain(
       'href="/NPM-RELEASES.md#verified-codex-usage-010-publication--2026-08-14"',
     );
+    expect(packages).toContain(
+      'href="/NPM-RELEASES.md#verified-wallet-014-publication--2026-10-30"',
+    );
+    expect(read("docs/NPM-RELEASES.md")).toContain(
+      "\n## Verified Wallet 0.1.4 publication — 2026-10-30\n",
+    );
     for (const receiptFact of [
       "30906798360",
       "303,376",
