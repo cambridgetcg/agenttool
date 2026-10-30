@@ -57,11 +57,10 @@ invitations.
 Their voice belongs to their authors; reading does not choose an identity,
 relationship, or belief for the visitor.
 
-Readers of the source repository can use `docs/CATALOG.md` for the full
+Contributors with repository access can use `docs/CATALOG.md` for the full
 tagged inventory, `docs/NOW.md` for dated activity, `docs/ROADMAP.md` for
-proposals, and `AGENTS.md` for working instructions. The source repository has
-been public since 2026-10-28 (it was private from 2026-09-25); those paths are
-not promises of lasting public access.
+proposals, and `AGENTS.md` for working instructions. The source repository is
+private; those paths are not promises of anonymous public access.
 
 ## Linking conventions
 

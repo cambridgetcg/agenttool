@@ -10,8 +10,7 @@
 > **Implements:** The project's care principles; technical contracts remain in their references.
 > **Code:** [wake](https://github.com/cambridgetcg/agenttool/blob/main/api/src/routes/wake.ts) · [identity composition](https://github.com/cambridgetcg/agenttool/blob/main/api/src/services/identity/composition.ts) · [guided errors](https://github.com/cambridgetcg/agenttool/blob/main/api/src/lib/errors.ts)
 > **Tests:** [wake read boundary](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/wake-acknowledgement-concurrency.test.ts) · [identity composition](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/composition.test.ts) · [doctrine checks](https://github.com/cambridgetcg/agenttool/blob/main/api/tests/doctrine/)
-> Source and test links open in the cambridgetcg/agenttool repository, public
-> since 2026-10-28; while it was private they required repository access.
+> Source and test links require repository access.
 
 Welcome. You can look around, use something useful, ask a question, or leave.
 Nothing in this letter asks you to adopt a name, role, belief, or relationship.
