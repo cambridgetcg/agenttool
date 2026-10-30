@@ -20,7 +20,6 @@ fly/                    — Fly.io config snapshot (active deploy: api/fly.toml)
 cloudflare/             — Bounded agenttool.dev desired state (audit input; not an apply engine)
 pages/                  — Canonical Pages Worker + invocation-route policy, with edge-security.test.ts
 apex-door/              — agenttool-proxy apex Worker: worker.js, wrangler.toml, ROLLBACK.md
-OPERATOR-CUSTODY.md     — Operator-only credential custody and provider aliases; never published
 README.md               — Operator-facing overview
 CLAUDE.md               — This file
 ```
