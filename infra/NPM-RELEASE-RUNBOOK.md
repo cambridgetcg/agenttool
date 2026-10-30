@@ -446,22 +446,29 @@ files, so it first makes one listing on the terminal: complete 2FA there and
 tick "skip for the next 5 minutes". A saved listing that fails with `EOTP`
 means that window lapsed: the script asks on the terminal again and retries
 that listing once; if the retry fails too, later listings are not retried.
+Before any change, a failed listing on the terminal stops the run; in the
+check after the change, it is recorded and the check still finishes.
 Revoking, access and creation also run on the terminal, so npm asks there once
-the window has lapsed. It waits for the browser approval (about 5 minutes in
-Yu's runs of 2026-10-29/30), then fails with `E404` for `/-/v1/done`: that is
-an approval that timed out, not a missing package, and the script says so.
-Re-run with the browser ready and approve each prompt within 5 minutes. Start
-a real run 5 minutes after a dry run, or the window the dry run opened can
-lapse midway (27 of the 47 saved listings failed so in one of those runs); the
-script warns when a record beside its own is under 5 minutes old.
+the window has lapsed. While npm waits for the browser approval, the registry
+ends the wait after about 5 minutes (Yu's runs of 2026-10-29/30) with `E404`
+for `/-/v1/done`: that is an approval that timed out, not a missing package,
+and the script says so. Re-run with the browser ready and approve each prompt
+within 5 minutes. When npm gives no reason at all, the script says it may have
+been either. Start a real lockdown 5 minutes after any earlier run, the dry
+run included, last asked for 2FA, or that window can lapse midway (27 of the
+47 saved listings failed so in one of those runs); lockdown warns when such a
+run wrote its `run.log` in the last 5 minutes. `enable` needs no wait: it
+creates within seconds of starting, and retries a listing that hits `EOTP`.
 
 The record directory also keeps `run.log`, every line the script printed with
-npm's stderr (npm's prompts and other output stay on the terminal; the script
-never pipes npm), and, when something needs attention, `needs-attention.txt`:
-one `<package> <reason>` line per problem, the reason being `eotp`,
-`list-failed`, `auth-timeout`, `revoke-failed`, `access-failed`,
-`create-failed`, `review`, `unexpected`, `unreadable`, `not-locked`,
-`other-trust` or `not-target`. Copy the script to the trusted device.
+npm's stderr, and, when something needs attention, `needs-attention.txt`. Only
+npm's stderr goes through `tee`, so it still reaches the terminal as it comes;
+npm's stdin and stdout stay the terminal, so its prompts and other output stay
+there and are not logged. `needs-attention.txt` has one `<package> <reason>`
+line per problem, the reason being `eotp`, `list-failed`, `auth-timeout`,
+`revoke-failed`, `access-failed`, `create-failed`, `review`, `unexpected`,
+`unreadable`, `not-locked`, `other-trust` or `not-target`. Copy the script to
+the trusted device.
 
 ### Lock down (once, now)
 

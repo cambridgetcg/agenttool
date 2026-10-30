@@ -64,13 +64,15 @@
 # A saved listing that fails with EOTP means the window lapsed during it: the
 # script asks on the terminal again and retries that listing once. Revoking,
 # access and creation print to the terminal, so npm asks again there if the
-# window lapses. npm waits about 5 minutes for a browser approval, then fails
-# with E404 for /-/v1/done; the script reports that as an approval that timed
-# out, not a missing package. A real run warns when a record beside its own is
-# under 5 minutes old: the window that run opened may lapse midway.
+# window lapses. While npm waits for a browser approval, the registry ends the
+# wait after about 5 minutes (Yu's runs of 2026-10-29/30) with E404 for
+# /-/v1/done; the script reports that as an approval that timed out, not a
+# missing package. A real lockdown warns when an earlier run beside it asked
+# for 2FA in the last 5 minutes: the window that run opened may lapse midway.
 #
 # Besides the listings, the record directory keeps run.log (the script's own
-# lines and npm's stderr; npm's prompts stay on the terminal only) and, when
+# lines and npm's stderr, which still reaches the terminal as it comes; npm's
+# prompts and other output stay on the terminal only) and, when
 # something needs attention, needs-attention.txt: "<package> <reason>" per
 # line, the reason one of eotp, list-failed, auth-timeout, revoke-failed,
 # access-failed, create-failed, review, unexpected, unreadable, not-locked,
@@ -184,9 +186,10 @@ RUN_LOG="$RECORD/run.log"
 WORK="$(mktemp -d)" || die "cannot create a temporary directory"
 trap 'rm -rf "$WORK"' EXIT
 cd "$WORK" || die "cannot enter $WORK"
+mkfifo "$WORK/npm-stderr-fifo" || die "cannot create a fifo in $WORK"
 
-# The script's own lines go to the terminal and to run.log. npm itself is
-# never piped: it asks for 2FA only on a terminal.
+# The script's own lines go to the terminal and to run.log. npm's stdin and
+# stdout are never piped: it asks for 2FA only on a terminal.
 say() {
   echo "$*"
   echo "$*" >>"$RUN_LOG"
@@ -201,21 +204,26 @@ npm_() {
   npx --yes "npm@$NPM_VERSION" "$@"
 }
 
-AUTH_TIMEOUT="npm's browser approval timed out (its E404 for /-/v1/done means the prompt was not approved within about 5 minutes, not that the package is missing)"
+AUTH_TIMEOUT="npm's browser approval timed out (the registry's E404 for /-/v1/done means the prompt was not approved within about 5 minutes, not that the package is missing)"
 AUTH_ADVICE="Re-run with the browser ready: approve each npm prompt within 5 minutes, and tick \"skip for the next 5 minutes\" so the calls after it need no approval."
 
 # Runs npm with the script's stdin and stdout (the terminal, unless the caller
-# sends stdout to a file) and captures only its stderr, shown after the call
-# and added to run.log. npm 11.17.0 decides whether to ask for 2FA from stdin
-# and stdout alone (otplease in lib/utils/auth.js, the browser prompt in
-# lib/utils/open-url.js), so its prompts still work. Sets npm_status, and
-# npm_reason to auth-timeout (npm's 404 for /-/v1/done: the browser approval
-# was not completed in time), eotp, or nothing.
+# sends stdout to a file). Only its stderr is diverted, through tee: to the
+# terminal as it comes, to run.log, and to a copy that the checks below read.
+# npm 11.17.0 decides whether to ask for 2FA from stdin and stdout alone
+# (otplease in lib/utils/auth.js, the browser prompt in lib/utils/open-url.js);
+# whether stderr is a terminal changes only its colour and progress bar. Sets
+# npm_status, and npm_reason to auth-timeout (the registry's 404 for
+# /-/v1/done: the browser approval was not completed in time), eotp, or nothing.
 npm_logged() {
-  npm_ "$@" 2>"$WORK/npm-stderr"
+  local tee_pid
+  : >"$WORK/npm-stderr"
+  # A fifo, not a process substitution: bash 3.2 cannot wait for one.
+  tee -a "$WORK/npm-stderr" "$RUN_LOG" <"$WORK/npm-stderr-fifo" >&2 &
+  tee_pid=$!
+  npm_ "$@" 2>"$WORK/npm-stderr-fifo"
   npm_status=$?
-  cat "$WORK/npm-stderr" >&2
-  cat "$WORK/npm-stderr" >>"$RUN_LOG"
+  wait "$tee_pid"
   npm_reason=""
   if [ "$npm_status" != 0 ]; then
     echo "npm exit status $npm_status" >>"$RUN_LOG"
@@ -254,6 +262,8 @@ npm_failed() {
     auth_timeout_seen=1
   else
     warn "$1: $2 FAILED"
+    [ -s "$WORK/npm-stderr" ] ||
+      warn "  npm gave no reason; if it asked for browser approval, it may have timed out (approve within 5 minutes and re-run), or the 2FA window lapsed (EOTP)."
     add_failed "$1" "$3"
   fi
 }
@@ -271,31 +281,36 @@ user="$(npm_ whoami)" || die "not logged in to npm; run: npx --yes npm@$NPM_VERS
 say "npm $version as $user; $MODE; record and run.log in $RECORD"
 [ "$DRY_RUN" = 1 ] && say "DRY_RUN=1: listing and planning only"
 
-# Records beside this one, named as this script names them, that are under 5
-# minutes old and whose run got as far as its 2FA listing (a record without
-# run.log is from an earlier version and counts): the 2FA window such a run
-# opened may still be open, so npm may not ask now and the window can lapse
-# midway through this run.
+# Records beside this one, named npm-trust-repoint-*, whose run asked for 2FA
+# (its run.log has a "== 2FA:" line) and wrote run.log in the last 5 minutes.
+# The script writes run.log after every npm call, so that time is no earlier
+# than the run's last 2FA, and the window it opened may still be open: npm may
+# not ask now, and the window can lapse midway through this run. A record
+# without run.log, from an earlier version of the script, is not counted.
 recent_records() {
   node -e '
     const fs = require("fs");
-    const [dir, self] = process.argv.slice(1);
+    const dir = process.argv[1];
     let entries = [];
     try { entries = fs.readdirSync(dir); } catch { process.exit(0); }
-    const asked = (entry) => { try { return fs.readFileSync(dir + "/" + entry + "/run.log", "utf8").includes("== 2FA:"); } catch { return true; } };
     const recent = entries.filter((entry) => {
-      const m = /^npm-trust-repoint-.+-(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z$/.exec(entry);
-      const age = m ? Date.now() - Date.UTC(m[1], m[2] - 1, m[3], m[4], m[5], m[6]) : -1;
-      return entry !== self && age >= 0 && age < 5 * 60 * 1000 && asked(entry);
+      if (!entry.startsWith("npm-trust-repoint-")) return false;
+      const log = dir + "/" + entry + "/run.log";
+      try {
+        return Date.now() - fs.statSync(log).mtimeMs < 5 * 60 * 1000 && fs.readFileSync(log, "utf8").includes("== 2FA:");
+      } catch { return false; }
     });
     if (recent.length) console.log(recent.sort().join(" "));
-  ' "$(dirname "$RECORD")" "$(basename "$RECORD")"
+  ' "$(dirname "$RECORD")"
 }
 
-if [ "$DRY_RUN" = 0 ]; then
+# Only lockdown warns: its 47 listings come before any change, so stopping at
+# the note is safe; enable creates within seconds, and retries its listings.
+if [ "$DRY_RUN" = 0 ] && [ "$MODE" = lockdown ]; then
   recent="$(recent_records)"
   if [ -n "$recent" ]; then
-    warn "Note: a record beside this one is under 5 minutes old ($recent). The skip-2FA window its run opened may still be open, so npm may not ask now and the window can lapse midway through this run. To avoid that, stop now (Ctrl-C) and start again once 5 minutes have passed since it; otherwise a saved listing that hits EOTP is retried once after 2FA on the terminal."
+    warn "Note: an earlier run asked for 2FA in the last 5 minutes ($recent); the skip-2FA window it opened may lapse midway through this run."
+    warn "To avoid that, press Ctrl-C now (nothing has changed yet) and start again once 5 minutes have passed since it ended; otherwise a listing that hits EOTP is retried once."
   fi
 fi
 
@@ -430,10 +445,14 @@ report_attention() {
 
 # npm's otplease rethrows EOTP without prompting when stdin or stdout is not a
 # terminal, and every saved listing goes to a file. One listing on the
-# terminal opens the 2FA window that the redirected listings then use.
+# terminal opens the 2FA window that the redirected listings then use. If it
+# fails, the run stops, so nothing changes while nobody approves npm's
+# prompts; with "after" as $2 (list_all's retry once npm has been changed) it
+# returns 1 instead, so the check after the change and its record still finish.
 prime_2fa() {
   say "== 2FA: one listing on the terminal; if npm asks, complete 2FA and tick \"skip for the next 5 minutes\""
   if ! npm_logged trust list "$1"; then
+    [ "${2:-}" = after ] && return 1
     [ "$npm_reason" = auth-timeout ] && die "npm trust list failed on the terminal: $AUTH_TIMEOUT. $AUTH_ADVICE"
     die "npm trust list failed on the terminal; finish 2FA or check the login, then re-run"
   fi
@@ -450,9 +469,10 @@ save_listing() {
   fi
 }
 
-# Saves `npm trust list --json` for every package under trust-<when>/. A
-# listing that hits EOTP is retried once, after 2FA on the terminal; once a
-# retry hits EOTP too, later listings are not retried.
+# Saves `npm trust list --json` for every package under trust-<when>/ ($1 is
+# before or after). A listing that hits EOTP is retried once, after 2FA on the
+# terminal; once a retry hits EOTP too, or that 2FA fails, later listings are
+# not retried.
 list_all() {
   local name path retry=1
   for name in $NAMES; do
@@ -461,7 +481,13 @@ list_all() {
     if [ "$npm_status" != 0 ] && [ "$npm_reason" = eotp ] && [ "$retry" = 1 ]; then
       say "$name: trust list hit EOTP: the 2FA window lapsed; asking on the terminal again, then retrying it once"
       pause
-      prime_2fa "$name"
+      if ! prime_2fa "$name" "$1"; then
+        # After the change only: its saved listing stays failed, and fails the check.
+        retry=0
+        npm_failed "$name" "trust list on the terminal" eotp
+        pause
+        continue
+      fi
       save_listing "$name" "$path"
       [ "$npm_reason" = eotp ] && retry=0
     fi
@@ -653,6 +679,7 @@ run_enable() {
     say "== 3/3 trust after"
     list_all after
     if [ -n "$failed" ]; then
+      report_attention
       [ "$created" = 1 ] && warn "$name: the configuration was created; npm expires it by $deadline unless a stage through it is approved first (also in $RECORD/expires-by.txt)."
       warn "Re-run enable: it finds the target and only checks it. Record: $RECORD"
       exit 1
