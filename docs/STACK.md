@@ -804,9 +804,10 @@ legacy Keychain account as fallback; `frontend-deploy.sh` likewise reads
 `agenttool-cloudflare-token` and `agenttool-cloudflare-account-id` entries.
 Consequently, `bin/agenttool-secret has ...` does not provision or prove those
 tool-specific entries. Use
-`security add-generic-password -U -s <service> -a <fixed-account> -w` for them;
-the final `-w` prompts without putting the value in argv or history. The fixed
-account names, and which machine holds which operator entries, are in the
+`security add-generic-password -U -s <service> -a <fixed-account> -w` for them,
+with the service and account that the tool's own fallback reads; the final `-w`
+prompts without putting the value in argv or history. Which machine holds which
+operator entries is recorded in the
 operator's custody note, kept outside this public repository.
 
 ### Server (Fly.io)
