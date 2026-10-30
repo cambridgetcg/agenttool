@@ -4807,14 +4807,6 @@
       "canonical_path": "infra/NPM-RELEASE-RUNBOOK.md"
     },
     {
-      "path": "infra/OPERATOR-CUSTODY.md",
-      "title": "Operator custody note",
-      "type": "reference",
-      "classification_basis": "declared-type",
-      "prose_review": "not-reviewed",
-      "canonical_path": "infra/OPERATOR-CUSTODY.md"
-    },
-    {
       "path": "infra/README.md",
       "title": "agenttool-infra",
       "type": "orientation",

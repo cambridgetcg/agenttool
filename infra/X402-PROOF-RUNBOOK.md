@@ -7,7 +7,7 @@
 > retries were retired on 2026-09-23, so nothing here is a current instruction.
 
 **Operator-only. Not published.** It names where the payer phrase and the
-operator's local payer and bearer files live. Like `infra/OPERATOR-CUSTODY.md`,
+operator's local payer and bearer files live. Like the npm release runbook,
 it stays in `infra/`, which no Pages project serves and the public package
 projection never includes.
 

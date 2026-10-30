@@ -719,7 +719,7 @@ DNS managed by Cloudflare. Zone: `agenttool.dev`.
 
 `agenttool-proxy` is reached only through its apex and www routes. Some legacy
 Workers and Pages projects have provider aliases under review; the details are
-in the operator-only custody note (`infra/OPERATOR-CUSTODY.md`, not published).
+in the operator's custody note, kept outside this public repository.
 
 The bounded desired-state map is
 `infra/cloudflare/agenttool.dev.desired.json`. Validate it without provider
@@ -807,7 +807,7 @@ tool-specific entries. Use
 `security add-generic-password -U -s <service> -a <fixed-account> -w` for them;
 the final `-w` prompts without putting the value in argv or history. The fixed
 account names, and which machine holds which operator entries, are in the
-operator-only custody note (`infra/OPERATOR-CUSTODY.md`, not published).
+operator's custody note, kept outside this public repository.
 
 ### Server (Fly.io)
 
