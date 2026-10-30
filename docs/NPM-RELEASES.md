@@ -45,7 +45,8 @@ stage-only configurations that remain are Xenia's (`cambridgetcg/xenia`,
 follow-up commands set "Require two-factor authentication and disallow
 tokens" on all 47 packages. That setting has not been read back: npm's
 command line has no way to read it, and no check of a package's Settings
-page on npmjs.com is recorded. The reading of 2026-10-28 follows unchanged.
+page on npmjs.com is recorded. The reading of 2026-10-28 follows, with dated
+notes where this update changes it.
 
 - **No version has been published since 2026-09-08, and none through the
   public route yet.** npm lists 43 `@agenttool` packages with 117 versions;
@@ -117,12 +118,12 @@ maintainer's authenticated trust listing three hours later
 (2026-10-19T19:46Z) showed no trusted-publisher configuration for the
 package; without one, npm's OIDC exchange cannot succeed. npm still serves
 only `0.1.0-dev.0`. The prerelease and the Rekor entry stay, and record bytes
-that npm has not published. (Both held until 2026-10-29.) Once the
-package's configuration exists, the same tag is dispatched again: the mirror
-step reuses an existing release whose asset is byte-identical and refuses one
-that is not. That dispatch runs the workflow
-and release tool as they were at the tag on 2026-10-19, not later fixes, so if
-it fails again it can add another Rekor entry before npm refuses.
+that npm has not published. (npm served only dev.0, and these bytes stayed
+unpublished, until 2026-10-29.) Once the package's configuration exists, the
+same tag is dispatched again: the mirror step reuses an existing release whose
+asset is byte-identical and refuses one that is not. That dispatch runs the
+workflow and release tool as they were at the tag on 2026-10-19, not later
+fixes, so if it fails again it can add another Rekor entry before npm refuses.
 
 (2026-10-30: that dispatch was run `40885415256`, after the package's
 stage-only trust was created. It reused the prerelease and npm published the
@@ -138,10 +139,10 @@ attempt 1, staged it with `npm_tag: latest` as stage
 `a334e443-f464-45a5-9fac-cfede11ae2b4`. The maintainer approved the stage
 with 2FA, and npm records publication at `2026-10-30T10:11:08.676Z` by GitHub
 Actions through the trusted publisher with `oidcConfigId`
-`62e85598-98fa-46b6-9266-91e47e410502`, with approver `agenttool`. (The 45
-earlier trusted publications of `@agenttool` versions, Wallet 0.1.3 among
-them, record that id with an `oidc:` prefix; this version and Relational
-Geometry 0.1.0-dev.1 record it without one. Anonymous reads, 2026-10-30.)
+`62e85598-98fa-46b6-9266-91e47e410502`, with approver `agenttool`. (Earlier
+trusted `@agenttool` publications, Wallet 0.1.3 among them, record that id
+with an `oidc:` prefix; this version and Relational Geometry 0.1.0-dev.1
+record it without one, as read anonymously on 2026-10-30.)
 Verify [run `41038925236`](https://github.com/cambridgetcg/agenttool-packages/actions/runs/41038925236)
 recorded `already_published_exact`.
 
@@ -309,14 +310,18 @@ runbook:
    current Wallet, record the publication here, and deprecate
    `@agenttool/wallet@<0.1.4` with a pointer to 0.1.4.
 
-(2026-10-30: steps 1 to 5 are done, as are the verify dispatch and this
-record from step 6. The docs pages that named 0.1.3 as the current npm
-Wallet are corrected in source, and reach docs.agenttool.dev only with a
-frontend publication. The API's `/.well-known/wake-keystone` is not
-corrected: its `agent_wallet` note, from `api/src/routes/well-known.ts`,
-still says npm `latest` is 0.1.3 and that it is byte-verified against LOVE,
-and changing it needs a code change and an API deploy. The deprecation of
-`@agenttool/wallet@<0.1.4` is not done.)
+(2026-10-30: steps 1 to 4 are done, and the stage was approved with 2FA
+(step 5). No record of the pre-approval SHA-256 comparison is kept, but
+verify run `41038925236` prepared the tag's tarball again and found npm's
+bytes identical to it (`already_published_exact`, SHA-256
+`cf79ed2e…f53438`). The verify dispatch and this record from step 6 are done
+too. The docs pages that named 0.1.3 as the current npm Wallet are corrected
+in source, and reach docs.agenttool.dev only with a frontend publication.
+The API's `/.well-known/wake-keystone` is not corrected: its `agent_wallet`
+note, from `api/src/routes/well-known.ts`, still says npm `latest` is 0.1.3
+and that it is byte-verified against LOVE, and changing it needs a code
+change and an API deploy. The deprecation of `@agenttool/wallet@<0.1.4` is
+not done.)
 
 ## Collab 0.5.0 public distribution — 2026-10-10
 

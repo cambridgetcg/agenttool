@@ -81,8 +81,15 @@ describe("optional npm package discovery", () => {
     expect(packages).toContain(
       'href="/NPM-RELEASES.md#verified-wallet-014-publication--2026-10-30"',
     );
-    expect(read("docs/NPM-RELEASES.md")).toContain(
+    const releases = read("docs/NPM-RELEASES.md");
+    expect(releases).toContain(
       "\n## Verified Wallet 0.1.4 publication — 2026-10-30\n",
+    );
+    expect(releases).toContain(
+      "\n## Verified Relational Geometry 0.1.0-dev.1 publication — 2026-10-29\n",
+    );
+    expect(read("docs/PRINCIPALITIES.md")).toContain(
+      "(NPM-RELEASES.md#verified-relational-geometry-010-dev1-publication--2026-10-29)",
     );
     for (const receiptFact of [
       "30906798360",
