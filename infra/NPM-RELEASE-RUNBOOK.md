@@ -9,7 +9,7 @@
 
 **Operator-only. Not published.** It describes which credentials can still publish,
 how the release environments are configured and the steps that need Yu's trusted
-device. Like `infra/OPERATOR-CUSTODY.md`, it stays in `infra/`, which no Pages
+device. Like the x402 proof runbook, it stays in `infra/`, which no Pages
 project serves and the public package projection never includes. The public
 receipts for each release are in [`docs/NPM-RELEASES.md`](../docs/NPM-RELEASES.md).
 
