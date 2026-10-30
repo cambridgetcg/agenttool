@@ -440,10 +440,28 @@ two separate modes, and without one it prints its usage and does nothing.
 npx, makes every npm call with `npx --yes npm@11.17.0`, pauses 2 seconds
 between calls, and saves every listing in a record directory. Use the npm user
 `agenttool` with account 2FA; npm rejects a bypass-2FA token for `npm trust`.
-npm asks for 2FA only when its output is a terminal, and the script saves its
-listings to files, so it first makes one listing on the terminal: complete 2FA
-there and tick "skip for the next 5 minutes". A saved listing that fails with
-`EOTP` means that window lapsed; re-run. Copy the script to the trusted device.
+npm asks for 2FA only when its input and output are a terminal (npm 11.17.0's
+`otplease` checks stdin and stdout), and the script saves its listings to
+files, so it first makes one listing on the terminal: complete 2FA there and
+tick "skip for the next 5 minutes". A saved listing that fails with `EOTP`
+means that window lapsed: the script asks on the terminal again and retries
+that listing once; if the retry fails too, later listings are not retried.
+Revoking, access and creation also run on the terminal, so npm asks there once
+the window has lapsed. It waits for the browser approval (about 5 minutes in
+Yu's runs of 2026-10-29/30), then fails with `E404` for `/-/v1/done`: that is
+an approval that timed out, not a missing package, and the script says so.
+Re-run with the browser ready and approve each prompt within 5 minutes. Start
+a real run 5 minutes after a dry run, or the window the dry run opened can
+lapse midway (27 of the 47 saved listings failed so in one of those runs); the
+script warns when a record beside its own is under 5 minutes old.
+
+The record directory also keeps `run.log`, every line the script printed with
+npm's stderr (npm's prompts and other output stay on the terminal; the script
+never pipes npm), and, when something needs attention, `needs-attention.txt`:
+one `<package> <reason>` line per problem, the reason being `eotp`,
+`list-failed`, `auth-timeout`, `revoke-failed`, `access-failed`,
+`create-failed`, `review`, `unexpected`, `unreadable`, `not-locked`,
+`other-trust` or `not-target`. Copy the script to the trusted device.
 
 ### Lock down (once, now)
 

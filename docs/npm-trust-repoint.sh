@@ -58,16 +58,29 @@
 # DRY_RUN is 1 or 0 (the default); any other value is refused.
 #
 # It pauses 2 seconds between npm calls (npm's bulk advice). npm asks for 2FA
-# only when its output is a terminal, and the saved listings go to files, so
-# before them the script makes one listing on the terminal: complete 2FA there
-# and tick "skip two-factor authentication for the next 5 minutes". Revoking,
+# only when its input and output are a terminal, and the saved listings go to
+# files, so before them the script makes one listing on the terminal: complete
+# 2FA there and tick "skip two-factor authentication for the next 5 minutes".
+# A saved listing that fails with EOTP means the window lapsed during it: the
+# script asks on the terminal again and retries that listing once. Revoking,
 # access and creation print to the terminal, so npm asks again there if the
-# window lapses. A saved listing that fails with EOTP means the window lapsed
-# during it; re-run. Both modes are safe to re-run: lockdown finds nothing left
-# to revoke and sets the same access again; enable finds the target and creates
-# nothing. @agenttool/local-starter is not on npm yet; npm trust needs an
-# existing package, so its first publication goes through the bootstrap path
-# first (infra/NPM-RELEASE-RUNBOOK.md) and it is not listed here.
+# window lapses. npm waits about 5 minutes for a browser approval, then fails
+# with E404 for /-/v1/done; the script reports that as an approval that timed
+# out, not a missing package. A real run warns when a record beside its own is
+# under 5 minutes old: the window that run opened may lapse midway.
+#
+# Besides the listings, the record directory keeps run.log (the script's own
+# lines and npm's stderr; npm's prompts stay on the terminal only) and, when
+# something needs attention, needs-attention.txt: "<package> <reason>" per
+# line, the reason one of eotp, list-failed, auth-timeout, revoke-failed,
+# access-failed, create-failed, review, unexpected, unreadable, not-locked,
+# other-trust or not-target.
+#
+# Both modes are safe to re-run: lockdown finds nothing left to revoke and sets
+# the same access again; enable finds the target and creates nothing.
+# @agenttool/local-starter is not on npm yet; npm trust needs an existing
+# package, so its first publication goes through the bootstrap path first
+# (infra/NPM-RELEASE-RUNBOOK.md) and it is not listed here.
 
 set -u
 
@@ -79,6 +92,8 @@ ENVIRONMENT=npm-bootstrap
 EXPECTED_USER="${EXPECTED_NPM_USER:-agenttool}"
 PAUSE_SECONDS="${PAUSE_SECONDS:-2}"
 DRY_RUN="${DRY_RUN:-0}"
+# Set once the record directory exists.
+RUN_LOG=""
 
 # The public release allowlist, RELEASE_SPECS in bin/npm-release.ts, without
 # Local Starter and in the same order; bin/tests/npm-trust-repoint.test.ts keeps
@@ -102,6 +117,7 @@ OUTSIDE_PACKAGES="@agenttool/xenia @agenttool/xenia-surface
 
 die() {
   echo "npm-trust-repoint: $*" >&2
+  [ -z "$RUN_LOG" ] || echo "npm-trust-repoint: $*" >>"$RUN_LOG"
   exit 2
 }
 
@@ -162,22 +178,84 @@ fi
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 RECORD="${RECORD_DIR:-$PWD/npm-trust-repoint-$LABEL-$STAMP}"
 mkdir -p "$RECORD/trust-before" "$RECORD/trust-after" || die "cannot create $RECORD"
+RUN_LOG="$RECORD/run.log"
 # Run npm from an empty directory so no package.json supplies a default
 # package or repository.
 WORK="$(mktemp -d)" || die "cannot create a temporary directory"
 trap 'rm -rf "$WORK"' EXIT
 cd "$WORK" || die "cannot enter $WORK"
 
+# The script's own lines go to the terminal and to run.log. npm itself is
+# never piped: it asks for 2FA only on a terminal.
+say() {
+  echo "$*"
+  echo "$*" >>"$RUN_LOG"
+}
+
+warn() {
+  echo "$*" >&2
+  echo "$*" >>"$RUN_LOG"
+}
+
 npm_() {
   npx --yes "npm@$NPM_VERSION" "$@"
+}
+
+AUTH_TIMEOUT="npm's browser approval timed out (its E404 for /-/v1/done means the prompt was not approved within about 5 minutes, not that the package is missing)"
+AUTH_ADVICE="Re-run with the browser ready: approve each npm prompt within 5 minutes, and tick \"skip for the next 5 minutes\" so the calls after it need no approval."
+
+# Runs npm with the script's stdin and stdout (the terminal, unless the caller
+# sends stdout to a file) and captures only its stderr, shown after the call
+# and added to run.log. npm 11.17.0 decides whether to ask for 2FA from stdin
+# and stdout alone (otplease in lib/utils/auth.js, the browser prompt in
+# lib/utils/open-url.js), so its prompts still work. Sets npm_status, and
+# npm_reason to auth-timeout (npm's 404 for /-/v1/done: the browser approval
+# was not completed in time), eotp, or nothing.
+npm_logged() {
+  npm_ "$@" 2>"$WORK/npm-stderr"
+  npm_status=$?
+  cat "$WORK/npm-stderr" >&2
+  cat "$WORK/npm-stderr" >>"$RUN_LOG"
+  npm_reason=""
+  if [ "$npm_status" != 0 ]; then
+    echo "npm exit status $npm_status" >>"$RUN_LOG"
+    if grep -q '404.*/-/v1/done' "$WORK/npm-stderr"; then
+      npm_reason=auth-timeout
+    elif grep -q EOTP "$WORK/npm-stderr"; then
+      npm_reason=eotp
+    fi
+  fi
+  return "$npm_status"
 }
 
 pause() {
   sleep "$PAUSE_SECONDS"
 }
 
+# Marks a package as needing attention, and adds "<package> <reason>" to
+# needs-attention.txt, once per reason.
 add_failed() {
   case " $failed " in *" $1 "*) ;; *) failed="$failed $1" ;; esac
+  case " $attention " in
+    *" $1=$2 "*) ;;
+    *)
+      attention="$attention $1=$2"
+      echo "$1 $2" >>"$RECORD/needs-attention.txt"
+      ;;
+  esac
+}
+
+# Reports a failed npm call ($2) on package $1 and records it as $3, or as
+# auth-timeout when npm's error shows the browser approval timed out.
+npm_failed() {
+  if [ "$npm_reason" = auth-timeout ]; then
+    warn "$1: $2 FAILED: $AUTH_TIMEOUT"
+    add_failed "$1" auth-timeout
+    auth_timeout_seen=1
+  else
+    warn "$1: $2 FAILED"
+    add_failed "$1" "$3"
+  fi
 }
 
 # The record file for a package: @scope/name is saved as scope-name.json.
@@ -190,8 +268,36 @@ version="$(npm_ --version)" || die "cannot run npm@$NPM_VERSION through npx"
 [ "$version" = "$NPM_VERSION" ] || die "npx ran npm $version, expected $NPM_VERSION"
 user="$(npm_ whoami)" || die "not logged in to npm; run: npx --yes npm@$NPM_VERSION login"
 [ "$user" = "$EXPECTED_USER" ] || die "logged in to npm as $user, expected $EXPECTED_USER (set EXPECTED_NPM_USER to override)"
-echo "npm $version as $user; $MODE; record in $RECORD"
-[ "$DRY_RUN" = 1 ] && echo "DRY_RUN=1: listing and planning only"
+say "npm $version as $user; $MODE; record and run.log in $RECORD"
+[ "$DRY_RUN" = 1 ] && say "DRY_RUN=1: listing and planning only"
+
+# Records beside this one, named as this script names them, that are under 5
+# minutes old and whose run got as far as its 2FA listing (a record without
+# run.log is from an earlier version and counts): the 2FA window such a run
+# opened may still be open, so npm may not ask now and the window can lapse
+# midway through this run.
+recent_records() {
+  node -e '
+    const fs = require("fs");
+    const [dir, self] = process.argv.slice(1);
+    let entries = [];
+    try { entries = fs.readdirSync(dir); } catch { process.exit(0); }
+    const asked = (entry) => { try { return fs.readFileSync(dir + "/" + entry + "/run.log", "utf8").includes("== 2FA:"); } catch { return true; } };
+    const recent = entries.filter((entry) => {
+      const m = /^npm-trust-repoint-.+-(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z$/.exec(entry);
+      const age = m ? Date.now() - Date.UTC(m[1], m[2] - 1, m[3], m[4], m[5], m[6]) : -1;
+      return entry !== self && age >= 0 && age < 5 * 60 * 1000 && asked(entry);
+    });
+    if (recent.length) console.log(recent.sort().join(" "));
+  ' "$(dirname "$RECORD")" "$(basename "$RECORD")"
+}
+
+if [ "$DRY_RUN" = 0 ]; then
+  recent="$(recent_records)"
+  if [ -n "$recent" ]; then
+    warn "Note: a record beside this one is under 5 minutes old ($recent). The skip-2FA window its run opened may still be open, so npm may not ask now and the window can lapse midway through this run. To avoid that, stop now (Ctrl-C) and start again once 5 minutes have passed since it; otherwise a saved listing that hits EOTP is retried once after 2FA on the terminal."
+  fi
+fi
 
 # Reads a saved `npm trust list --json` output. npm 11.17.0 prints each
 # configuration after a blank line, a GitHub one as {id, type, file,
@@ -309,45 +415,80 @@ show_kept() {
 
 # Prints the revoke command for a configuration the script leaves to a person.
 revoke_hint() {
-  echo "  to revoke it by hand: npx --yes npm@$NPM_VERSION trust revoke $1 --id $2" >&2
+  warn "  to revoke it by hand: npx --yes npm@$NPM_VERSION trust revoke $1 --id $2"
 }
 
 REVIEW_NOTE="Lockdown never revokes stage-only trust: revoke one that needs review by hand (the command is above), or keep it knowingly, and lockdown keeps reporting it."
 
-# npm's otplease rethrows EOTP without prompting when stdout is not a
+# Names the packages that need attention and the notes that apply.
+report_attention() {
+  warn "needs attention:$failed"
+  [ "$review_seen" = 1 ] && warn "$REVIEW_NOTE"
+  [ "$auth_timeout_seen" = 1 ] && warn "An npm browser approval timed out. $AUTH_ADVICE"
+  warn "Each one, with its reason: $RECORD/needs-attention.txt"
+}
+
+# npm's otplease rethrows EOTP without prompting when stdin or stdout is not a
 # terminal, and every saved listing goes to a file. One listing on the
 # terminal opens the 2FA window that the redirected listings then use.
 prime_2fa() {
-  echo "== 2FA: one listing on the terminal; if npm asks, complete 2FA and tick \"skip for the next 5 minutes\""
-  npm_ trust list "$1" || die "npm trust list failed on the terminal; finish 2FA or check the login, then re-run"
+  say "== 2FA: one listing on the terminal; if npm asks, complete 2FA and tick \"skip for the next 5 minutes\""
+  if ! npm_logged trust list "$1"; then
+    [ "$npm_reason" = auth-timeout ] && die "npm trust list failed on the terminal: $AUTH_TIMEOUT. $AUTH_ADVICE"
+    die "npm trust list failed on the terminal; finish 2FA or check the login, then re-run"
+  fi
   pause
 }
 
-# Saves `npm trust list --json` for every package under trust-<when>/.
+# Saves `npm trust list --json` for package $1 as $2, setting npm_status and
+# npm_reason. npm also prints its error into the saved listing, so an EOTP
+# there counts even when npm logs nothing.
+save_listing() {
+  npm_logged trust list "$1" --json >"$2"
+  if [ "$npm_status" != 0 ] && [ -z "$npm_reason" ] && grep -q '"EOTP"' "$2"; then
+    npm_reason=eotp
+  fi
+}
+
+# Saves `npm trust list --json` for every package under trust-<when>/. A
+# listing that hits EOTP is retried once, after 2FA on the terminal; once a
+# retry hits EOTP too, later listings are not retried.
 list_all() {
-  local name path
+  local name path retry=1
   for name in $NAMES; do
     path="$RECORD/trust-$1/$(record_name "$name")"
-    if npm_ trust list "$name" --json >"$path"; then
-      show "$name" "$path"
+    save_listing "$name" "$path"
+    if [ "$npm_status" != 0 ] && [ "$npm_reason" = eotp ] && [ "$retry" = 1 ]; then
+      say "$name: trust list hit EOTP: the 2FA window lapsed; asking on the terminal again, then retrying it once"
+      pause
+      prime_2fa "$name"
+      save_listing "$name" "$path"
+      [ "$npm_reason" = eotp ] && retry=0
+    fi
+    if [ "$npm_status" = 0 ]; then
+      show "$name" "$path" | tee -a "$RUN_LOG"
+    elif [ "$npm_reason" = eotp ]; then
+      warn "$name: trust list FAILED with EOTP: the 2FA window lapsed and did not reopen (when npm asks on the terminal, tick \"skip for the next 5 minutes\"); re-run"
+      add_failed "$name" eotp
     else
-      echo "$name: trust list FAILED (EOTP means the 2FA window lapsed; re-run)" >&2
-      add_failed "$name"
+      npm_failed "$name" "trust list" list-failed
     fi
     pause
   done
 }
 
 failed=""
+attention=""
 kept=""
 review_seen=0
+auth_timeout_seen=0
 
 run_lockdown() {
   prime_2fa "${NAMES%% *}"
-  echo "== 1/4 trust before"
+  say "== 1/4 trust before"
   list_all before
 
-  echo "== 2/4 revoke trust of $OLD_REPOSITORY and every direct-publish trust"
+  say "== 2/4 revoke trust of $OLD_REPOSITORY and every direct-publish trust"
   for name in $NAMES; do
     case " $failed " in *" $name "*) continue ;; esac
     file="$(record_name "$name")"
@@ -357,66 +498,63 @@ run_lockdown() {
       case "$item" in
         none) ;;
         keep=*)
-          echo "$name: keep stage-only ${item#keep=}"
+          say "$name: keep stage-only ${item#keep=}"
           case " $kept " in *" $name "*) ;; *) kept="$kept $name" ;; esac
           ;;
         review=*)
-          echo "$name: keep stage-only ${item#review=}, but it needs review (another owner's repository, or no workflow file or environment); see trust-before/$file" >&2
+          warn "$name: keep stage-only ${item#review=}, but it needs review (another owner's repository, or no workflow file or environment); see trust-before/$file"
           revoke_hint "$name" "${item#review=}"
           case " $kept " in *" $name "*) ;; *) kept="$kept $name" ;; esac
-          add_failed "$name"
+          add_failed "$name" review
           review_seen=1
           ;;
         unexpected=*)
-          echo "$name: unexpected trust configuration ${item#unexpected=} left untouched; see trust-before/$file" >&2
+          warn "$name: unexpected trust configuration ${item#unexpected=} left untouched; see trust-before/$file"
           revoke_hint "$name" "${item#unexpected=}"
-          add_failed "$name"
+          add_failed "$name" unexpected
           ;;
         unreadable)
-          echo "$name: listing unreadable, nothing revoked; see trust-before/$file" >&2
-          add_failed "$name"
+          warn "$name: listing unreadable, nothing revoked; see trust-before/$file"
+          add_failed "$name" unreadable
           ;;
         revoke=*)
-          echo "$name: revoke ${item#revoke=}"
+          say "$name: revoke ${item#revoke=}"
           [ "$DRY_RUN" = 1 ] && continue
-          if ! npm_ trust revoke "$name" --id "${item#revoke=}"; then
-            echo "$name: revoke ${item#revoke=} FAILED" >&2
-            add_failed "$name"
+          if ! npm_logged trust revoke "$name" --id "${item#revoke=}"; then
+            npm_failed "$name" "revoke ${item#revoke=}" revoke-failed
           fi
           pause
           ;;
         *)
-          echo "$name: unexpected trust configuration left untouched; see trust-before/$file" >&2
-          add_failed "$name"
+          warn "$name: unexpected trust configuration left untouched; see trust-before/$file"
+          add_failed "$name" unexpected
           ;;
       esac
     done
   done
 
-  echo "== 3/4 publishing access: require 2FA and disallow tokens"
+  say "== 3/4 publishing access: require 2FA and disallow tokens"
   for name in $NAMES; do
-    echo "$name: access set mfa=publish"
+    say "$name: access set mfa=publish"
     [ "$DRY_RUN" = 1 ] && continue
-    if ! npm_ access set mfa=publish "$name"; then
-      echo "$name: access set mfa=publish FAILED" >&2
-      add_failed "$name"
+    if ! npm_logged access set mfa=publish "$name"; then
+      npm_failed "$name" "access set mfa=publish" access-failed
     fi
     pause
   done
 
   if [ "$DRY_RUN" = 1 ]; then
-    show_kept before "$kept"
-    echo "DRY_RUN=1: nothing changed. Record: $RECORD"
+    show_kept before "$kept" | tee -a "$RUN_LOG"
+    say "DRY_RUN=1: nothing changed. Record: $RECORD"
     if [ -n "$failed" ]; then
-      echo "needs attention:$failed" >&2
-      [ "$review_seen" = 1 ] && echo "$REVIEW_NOTE" >&2
+      report_attention
       exit 1
     fi
     exit 0
   fi
 
   prime_2fa "${NAMES%% *}"
-  echo "== 4/4 trust after"
+  say "== 4/4 trust after"
   list_all after
   kept=""
   for name in $NAMES; do
@@ -429,23 +567,22 @@ run_lockdown() {
     done
     case " $state " in *" keep="* | *" review="*) kept="$kept $name" ;; esac
     if [ "$locked" = 0 ]; then
-      echo "$name: NOT locked down: still trusts $OLD_REPOSITORY, allows direct publish, or is unexpected or unreadable; see trust-after/$file" >&2
-      add_failed "$name"
+      warn "$name: NOT locked down: still trusts $OLD_REPOSITORY, allows direct publish, or is unexpected or unreadable; see trust-after/$file"
+      add_failed "$name" not-locked
     elif [ "$needs_review" = 1 ]; then
-      echo "$name: locked down, but keeps stage-only trust that needs review; see trust-after/$file" >&2
-      add_failed "$name"
+      warn "$name: locked down, but keeps stage-only trust that needs review; see trust-after/$file"
+      add_failed "$name" review
       review_seen=1
     fi
   done
 
-  show_kept after "$kept"
+  show_kept after "$kept" | tee -a "$RUN_LOG"
   if [ -n "$failed" ]; then
-    echo "needs attention:$failed" >&2
-    [ "$review_seen" = 1 ] && echo "$REVIEW_NOTE" >&2
-    echo "Re-run lockdown after fixing them; it revokes only what is still there. Record: $RECORD" >&2
+    report_attention
+    warn "Re-run lockdown after fixing them; it revokes only what is still there. Record: $RECORD"
     exit 1
   fi
-  echo "All 47 packages: no trust of $OLD_REPOSITORY and no direct-publish trust, and each was set to require 2FA and disallow tokens (npm has no read-back: check one package's Settings page). No trust was created. Record: $RECORD"
+  say "All 47 packages: no trust of $OLD_REPOSITORY and no direct-publish trust, and each was set to require 2FA and disallow tokens (npm has no read-back: check one package's Settings page). No trust was created. Record: $RECORD"
 }
 
 # The newest earlier enable record for this package, from records beside this
@@ -465,118 +602,121 @@ run_enable() {
   local name="$NAMES" file
   file="$(record_name "$name")"
   prime_2fa "$name"
-  echo "== 1/3 trust before"
+  say "== 1/3 trust before"
   list_all before
-  [ -z "$failed" ] && [ -f "$RECORD/trust-before/$file" ] || { echo "needs attention:$failed" >&2; exit 1; }
+  [ -z "$failed" ] && [ -f "$RECORD/trust-before/$file" ] || { report_attention; exit 1; }
 
   local state created=0 deadline="" item plan
   state="$(classify target "$RECORD/trust-before/$file")" || state=other
-  echo "== 2/3 stage-only trust of $REPOSITORY $WORKFLOW_FILE ($ENVIRONMENT)"
+  say "== 2/3 stage-only trust of $REPOSITORY $WORKFLOW_FILE ($ENVIRONMENT)"
   case "$state" in
     "target "*)
-      echo "$name: already exactly the target; creating nothing"
+      say "$name: already exactly the target; creating nothing"
       recorded_deadline
       ;;
     none)
-      echo "$name: trust github $REPOSITORY $WORKFLOW_FILE env $ENVIRONMENT, stage publish only"
+      say "$name: trust github $REPOSITORY $WORKFLOW_FILE env $ENVIRONMENT, stage publish only"
       if [ "$DRY_RUN" = 1 ]; then
-        echo "DRY_RUN=1: nothing changed. A real run starts npm's 48-hour validation clock: run it only when this package's release tag is ready to stage. Record: $RECORD"
+        say "DRY_RUN=1: nothing changed. A real run starts npm's 48-hour validation clock: run it only when this package's release tag is ready to stage. Record: $RECORD"
         exit 0
       fi
       # Taken before the call, so the deadline printed is never late.
       deadline="$(node -e 'console.log(new Date(Date.now() + 48 * 3600 * 1000).toISOString().slice(0, 16) + "Z")')"
-      if ! npm_ trust github "$name" --repo "$REPOSITORY" --file "$WORKFLOW_FILE" \
+      if ! npm_logged trust github "$name" --repo "$REPOSITORY" --file "$WORKFLOW_FILE" \
         --env "$ENVIRONMENT" --allow-stage-publish --yes; then
         # npm reads the registry's answer after sending the request, so a
         # failure there can follow a configuration that was created.
         printf '%s (if npm created it)\n' "$deadline" >"$RECORD/expires-by.txt"
-        echo "$name: trust github FAILED" >&2
-        echo "npm may still have created it: run DRY_RUN=1 bash npm-trust-repoint.sh enable $key to check; if it is listed, it expires by $deadline unless a stage through it is approved first." >&2
+        npm_failed "$name" "trust github" create-failed
+        warn "npm may still have created it: run DRY_RUN=1 bash npm-trust-repoint.sh enable $key to check; if it is listed, it expires by $deadline unless a stage through it is approved first."
+        [ "$auth_timeout_seen" = 1 ] && warn "$AUTH_ADVICE"
         exit 1
       fi
       created=1
       # Recorded at once, so a later failure cannot lose the deadline.
       printf '%s\n' "$deadline" >"$RECORD/expires-by.txt"
-      echo "$name: created; npm expires it by $deadline unless a stage through it is approved first"
+      say "$name: created; npm expires it by $deadline unless a stage through it is approved first"
       pause
       ;;
     *)
-      echo "$name: has trust other than exactly the target (above), so enable creates nothing." >&2
-      echo "Run lockdown first; a configuration it keeps can be revoked by hand: npx --yes npm@$NPM_VERSION trust revoke $name --id <id>" >&2
+      warn "$name: has trust other than exactly the target (above), so enable creates nothing."
+      warn "Run lockdown first; a configuration it keeps can be revoked by hand: npx --yes npm@$NPM_VERSION trust revoke $name --id <id>"
+      add_failed "$name" other-trust
       exit 1
       ;;
   esac
   if [ "$DRY_RUN" = 1 ]; then
     # Only an existing target gets here. A real run would create nothing,
     # list again and print the same notice, so the preview shows it too.
-    echo "DRY_RUN=1: nothing changed; a real run lists again and prints the notice below."
+    say "DRY_RUN=1: nothing changed; a real run lists again and prints the notice below."
   else
-    echo "== 3/3 trust after"
+    say "== 3/3 trust after"
     list_all after
     if [ -n "$failed" ]; then
-      [ "$created" = 1 ] && echo "$name: the configuration was created; npm expires it by $deadline unless a stage through it is approved first (also in $RECORD/expires-by.txt)." >&2
-      echo "Re-run enable: it finds the target and only checks it. Record: $RECORD" >&2
+      [ "$created" = 1 ] && warn "$name: the configuration was created; npm expires it by $deadline unless a stage through it is approved first (also in $RECORD/expires-by.txt)."
+      warn "Re-run enable: it finds the target and only checks it. Record: $RECORD"
       exit 1
     fi
     state="$(classify target "$RECORD/trust-after/$file")" || state=other
     case "$state" in
       "target "*) ;;
       *)
-        echo "$name: NOT exactly the target after the change; see trust-after/$file. Record: $RECORD" >&2
-        [ "$created" = 1 ] && echo "What this run created expires by $deadline unless a stage through it is approved first." >&2
-        echo "Do not dispatch. Revoke what is listed above, then run enable again:" >&2
+        warn "$name: NOT exactly the target after the change; see trust-after/$file. Record: $RECORD"
+        add_failed "$name" not-target
+        [ "$created" = 1 ] && warn "What this run created expires by $deadline unless a stage through it is approved first."
+        warn "Do not dispatch. Revoke what is listed above, then run enable again:"
         plan="$(classify plan "$RECORD/trust-after/$file")" || plan=unreadable
         for item in ${plan:-unreadable}; do
           case "$item" in
-            revoke=* | keep=* | review=* | unexpected=*) echo "  npx --yes npm@$NPM_VERSION trust revoke $name --id ${item#*=}" >&2 ;;
+            revoke=* | keep=* | review=* | unexpected=*) warn "  npx --yes npm@$NPM_VERSION trust revoke $name --id ${item#*=}" ;;
             none) ;;
-            *) echo "  (a configuration the script cannot read; revoke it on the package's npmjs.com Settings page)" >&2 ;;
+            *) warn "  (a configuration the script cannot read; revoke it on the package's npmjs.com Settings page)" ;;
           esac
         done
-        echo "Or run lockdown now: it revokes every configuration that allows direct publish." >&2
+        warn "Or run lockdown now: it revokes every configuration that allows direct publish."
         exit 1
         ;;
     esac
   fi
 
-  echo
-  echo "################################################################################"
-  echo "$name trusts $REPOSITORY $WORKFLOW_FILE"
-  echo "(environment $ENVIRONMENT) for stage publish only. Configuration id: ${state#target }"
-  echo
+  say
+  say "################################################################################"
+  say "$name trusts $REPOSITORY $WORKFLOW_FILE"
+  say "(environment $ENVIRONMENT) for stage publish only. Configuration id: ${state#target }"
+  say
   if [ "$created" = 1 ]; then
-    echo "npm EXPIRES this configuration 48 hours after creation, by $deadline,"
-    echo "unless a release stages through it and you approve the stage (whether a stage"
-    echo "that is not yet approved validates it is undocumented). npm trust list will"
-    echo "not show the expiry. Next, now:"
+    say "npm EXPIRES this configuration 48 hours after creation, by $deadline,"
+    say "unless a release stages through it and you approve the stage (whether a stage"
+    say "that is not yet approved validates it is undocumented). npm trust list will"
+    say "not show the expiry. Next, now:"
   else
-    echo "It already existed. npm shows neither when it was made nor whether it has"
-    echo "expired: a configuration expires 48 hours after creation unless a release"
-    echo "staged through it and the stage was approved."
+    say "It already existed. npm shows neither when it was made nor whether it has"
+    say "expired: a configuration expires 48 hours after creation unless a release"
+    say "staged through it and the stage was approved."
     if [ -n "$earlier_dir" ]; then
-      echo "The newest enable record for this package, $earlier_dir,"
-      echo "records the deadline $earlier_deadline; if nothing was revoked or created by"
-      echo "hand since, this is the configuration that run created."
+      say "The newest enable record for this package, $earlier_dir,"
+      say "records the deadline $earlier_deadline; if nothing was revoked or created by"
+      say "hand since, this is the configuration that run created."
     fi
-    echo "Unless a stage through it was approved, or you know it is under 48 hours old,"
-    echo "revoke it and run enable again before dispatching: a dispatch through an"
-    echo "expired configuration fails at npm, and can leave a public GitHub Release and"
-    echo "a Rekor entry behind (run 39288082185)."
-    echo "  npx --yes npm@$NPM_VERSION trust revoke $name --id ${state#target }"
-    echo "Then, within the 48 hours:"
+    say "Unless a stage through it was approved, or you know it is under 48 hours old,"
+    say "revoke it and run enable again before dispatching: a dispatch through an"
+    say "expired configuration fails at npm, and can leave a public GitHub Release and"
+    say "a Rekor entry behind (run 39288082185)."
+    say "  npx --yes npm@$NPM_VERSION trust revoke $name --id ${state#target }"
+    say "Then, within the 48 hours:"
   fi
-  echo "  1. dispatch this package's release tag on $REPOSITORY $WORKFLOW_FILE:"
-  echo "     sol access run github -- workflow run $WORKFLOW_FILE --repo $REPOSITORY \\"
-  echo "       --ref ${key}-v<version> -f package=$key -f tag=${key}-v<version> \\"
-  echo "       -f authentication=trusted -f npm_tag=<latest|next> -f dry_run=false"
-  echo "  2. check and approve the stage with 2FA: npx --yes npm@$NPM_VERSION stage list $name --json,"
-  echo "     then stage view, download, shasum and approve (infra/NPM-RELEASE-RUNBOOK.md, step 7)."
-  echo "If 48 hours pass first: npx --yes npm@$NPM_VERSION trust revoke $name --id ${state#target }"
-  echo "and run enable again just before the release. If npm refuses to revoke an"
-  echo "expired configuration, delete it on the package's Settings page on npmjs.com,"
-  echo "then run enable again."
-  echo "################################################################################"
-  echo "Record: $RECORD"
+  say "  1. dispatch this package's release tag on $REPOSITORY $WORKFLOW_FILE:"
+  say "     sol access run github -- workflow run $WORKFLOW_FILE --repo $REPOSITORY \\"
+  say "       --ref ${key}-v<version> -f package=$key -f tag=${key}-v<version> \\"
+  say "       -f authentication=trusted -f npm_tag=<latest|next> -f dry_run=false"
+  say "  2. check and approve the stage with 2FA: npx --yes npm@$NPM_VERSION stage list $name --json,"
+  say "     then stage view, download, shasum and approve (infra/NPM-RELEASE-RUNBOOK.md, step 7)."
+  say "If 48 hours pass first: npx --yes npm@$NPM_VERSION trust revoke $name --id ${state#target }"
+  say "and run enable again just before the release. If npm refuses to revoke an"
+  say "expired configuration, delete it on the package's Settings page on npmjs.com,"
+  say "then run enable again."
+  say "################################################################################"
+  say "Record: $RECORD"
 }
 
 run_"$MODE"

@@ -70,7 +70,7 @@ const REAL_SDK_LISTING = `
 /**
  * A stand-in for `npx --yes npm@11.17.0` that keeps each package's trust
  * configurations as files in a directory, prints them like npm 11.17.0, and
- * logs every call.
+ * logs every call (and, with STUB_TTY_LOG, whether it ran on a terminal).
  */
 function stubNpx(dir: string): void {
   mkdirSync(dir, { recursive: true });
@@ -78,6 +78,26 @@ function stubNpx(dir: string): void {
 [ "$1" = --yes ] && [ "$2" = npm@11.17.0 ] || { echo "unexpected npx call: $*" >&2; exit 9; }
 shift 2
 echo "$*" >> "$STUB_LOG"
+# npm 11.17.0 asks for 2FA only when its stdin and stdout are a terminal.
+if [ -n "${"$"}{STUB_TTY_LOG:-}" ]; then
+  where=redirected
+  [ -t 0 ] && [ -t 1 ] && where=terminal
+  echo "$where $*" >> "$STUB_TTY_LOG"
+fi
+# A browser approval nobody completed: npm prints the prompt on stdout, then
+# fails on the registry's 404 for the done URL, with npm's real (redacted) text.
+if [ -n "${"$"}{STUB_AUTH_TIMEOUT:-}" ] && printf '%s\n' "$*" | grep -Eq -- "$STUB_AUTH_TIMEOUT"; then
+  printf 'Authenticate your account at:\nhttps://www.npmjs.com/auth/cli/00000000-0000-4000-8000-00000000abcd\nPress ENTER to open in the browser...\n'
+  printf 'npm error code E404\nnpm error 404 Not Found - GET https://registry.npmjs.org/-/v1/done?authId=***\nnpm error A complete log of this run can be found in: %s/.npm/_logs/2026-10-29T21_14_03_123Z-debug-0.log\n' "$HOME" >&2
+  exit 1
+fi
+# npm 11.17.0 in --json mode prints its error as JSON on stdout (into the saved
+# listing) and logs it on stderr, unless its loglevel is silent (STUB_QUIET).
+eotp() {
+  printf '{\n  "error": {\n    "code": "EOTP",\n    "summary": "This operation requires a one-time password from your authenticator.",\n    "detail": "You can provide a one-time password by passing --otp=<code> to the command you ran."\n  }\n}\n'
+  [ "${"$"}{STUB_QUIET:-0}" = 1 ] || printf 'npm error code EOTP\nnpm error This operation requires a one-time password from your authenticator.\n' >&2
+  exit 1
+}
 case "$1" in
   --version) echo 11.17.0 ;;
   whoami) echo "$STUB_USER" ;;
@@ -92,11 +112,18 @@ case "$1" in
     case "$2" in
       list)
         # npm rethrows EOTP when its output is not a terminal; the stub models
-        # an expired 2FA window for the saved (--json) listings only.
-        [ "${"$"}{4:-}" = --json ] && [ "${"$"}{STUB_EOTP:-0}" = 1 ] && { echo "npm error code EOTP" >&2; exit 1; }
-        # The window lapses only once enable has created the configuration.
-        [ "${"$"}{4:-}" = --json ] && [ "${"$"}{STUB_EOTP_AFTER_CREATE:-0}" = 1 ] && [ -f "$dir/new-$n.json" ] &&
-          { echo "npm error code EOTP" >&2; exit 1; }
+        # an expired 2FA window for the saved (--json) listings only: every
+        # one (STUB_EOTP), every one of some packages (STUB_EOTP_FOR), or the
+        # first one of some packages (STUB_EOTP_ONCE).
+        if [ "${"$"}{4:-}" = --json ]; then
+          [ "${"$"}{STUB_EOTP:-0}" = 1 ] && eotp
+          case " ${"$"}{STUB_EOTP_FOR:-} " in *" $3 "*) eotp ;; esac
+          case " ${"$"}{STUB_EOTP_ONCE:-} " in
+            *" $3 "*) [ -f "$STUB_LOG.eotp-$n" ] || { : > "$STUB_LOG.eotp-$n"; eotp; } ;;
+          esac
+          # The window lapses only once enable has created the configuration.
+          [ "${"$"}{STUB_EOTP_AFTER_CREATE:-0}" = 1 ] && [ -f "$dir/new-$n.json" ] && eotp
+        fi
         set -- "$dir"/*.json
         [ -f "$1" ] || exit 0
         for f in "$@"; do printf '\n'; cat "$f"; printf '\n'; done
@@ -197,7 +224,45 @@ function runScript(env: Record<string, string>, args: string[]): { status: numbe
   return { status: result.status, stdout: result.stdout, stderr: result.stderr };
 }
 
+/**
+ * Runs the script on a pseudo-terminal, as on the trusted device, where stdin,
+ * stdout and stderr are the terminal; returns what the terminal showed.
+ */
+async function runOnTerminal(env: Record<string, string>, args: string[]): Promise<{ status: number; output: string }> {
+  let output = "";
+  const decoder = new TextDecoder();
+  const proc = Bun.spawn(["/bin/bash", SCRIPT, ...args], {
+    cwd: scratch,
+    env,
+    timeout: SCRIPT_TIMEOUT_MS,
+    terminal: { cols: 200, rows: 50, data: (_terminal, data) => { output += decoder.decode(data, { stream: true }); } },
+  });
+  const status = await proc.exited;
+  proc.terminal?.close();
+  return { status, output };
+}
+
 const callsOf = (log: string) => readFileSync(log, "utf8").split("\n").filter(Boolean);
+const linesOf = (text: string) => text.split("\n").filter(Boolean);
+/** The script's own lines on stdout: without what npm printed there (a listing on the terminal). */
+const ownLines = (stdout: string) => linesOf(stdout).filter((line) => !/^(?:[{}]|\s)/u.test(line));
+/** The first of `lines` that run.log does not hold in this order, if any. */
+function firstMissing(runLog: string, lines: string[]): string | undefined {
+  const logged = runLog.split("\n");
+  let at = 0;
+  for (const line of lines) {
+    at = logged.indexOf(line, at);
+    if (at < 0) return line;
+    at += 1;
+  }
+  return undefined;
+}
+
+const TIMED_OUT = "npm's browser approval timed out (its E404 for /-/v1/done means the prompt was not approved within about 5 minutes, not that the package is missing)";
+const AUTH_ADVICE = 'Re-run with the browser ready: approve each npm prompt within 5 minutes, and tick "skip for the next 5 minutes" so the calls after it need no approval.';
+const EOTP_FAILED = (name: string) =>
+  `${name}: trust list FAILED with EOTP: the 2FA window lapsed and did not reopen (when npm asks on the terminal, tick "skip for the next 5 minutes"); re-run\n`;
+const EOTP_RETRY = (name: string) => `${name}: trust list hit EOTP: the 2FA window lapsed; asking on the terminal again, then retrying it once\n`;
 
 /** Every file under the stub registry, for "nothing changed" checks. */
 function snapshot(dir: string, prefix = ""): Record<string, string> {
@@ -366,6 +431,12 @@ describe("npm trust lockdown and per-release enable", () => {
     expect(snapshot(join(state, "agenttool-xenia"))).toEqual(keptXenia);
     expect(readFileSync(join(record, "trust-after", "agenttool-sdk.json"), "utf8")).toBe("");
     expect(readFileSync(join(record, "trust-before", "agenttool-sdk.json"), "utf8")).toBe(REAL_SDK_LISTING);
+    // run.log keeps the script's own lines in order; npm's listing on the terminal is not among them.
+    const runLog = readFileSync(join(record, "run.log"), "utf8");
+    expect(firstMissing(runLog, ownLines(first.stdout))).toBeUndefined();
+    expect(runLog).toEndWith("No trust was created. Record: " + record + "\n");
+    expect(runLog).not.toContain('"repository"');
+    expect(existsSync(join(record, "needs-attention.txt"))).toBe(false);
 
     writeFileSync(log, "");
     const second = runScript({ ...env, RECORD_DIR: `${record}-again` }, ["lockdown"]);
@@ -387,7 +458,7 @@ describe("npm trust lockdown and per-release enable", () => {
     const noFile = { id: uuid(304), type: "github", repository: PUBLIC, environment: "npm-bootstrap", permissions: stageOnly };
     // A repository of the same owner is kept without review; enable still refuses it as not the target.
     const sameOwner = github(uuid(305), "cambridgetcg/agenttool-packages-fork", stageOnly);
-    const { env, log, state } = setup({
+    const { env, log, state, record } = setup({
       "@agenttool/kingdom": [github(oldId("kingdom"), OLD, direct), gitlab],
       "@agenttool/heaven": "npm warn this is not a listing",
       "@agenttool/data": [unknown],
@@ -436,6 +507,23 @@ describe("npm trust lockdown and per-release enable", () => {
         "(a package that needs attention may have more)\n",
     );
     expect(result.stdout).not.toContain("All 47 packages");
+    // Each package that needs attention, with a one-word reason per problem, in the order found.
+    expect(result.stderr).toContain(`Each one, with its reason: ${record}/needs-attention.txt\nRe-run lockdown after fixing them;`);
+    expect(readFileSync(join(record, "needs-attention.txt"), "utf8")).toBe(
+      [
+        "@agenttool/data unexpected", "@agenttool/heaven unreadable", "@agenttool/hf-scout review", "@agenttool/love-bomb review",
+        "@agenttool/codex-usage review", "@agenttool/kingdom unexpected",
+        "@agenttool/data not-locked", "@agenttool/heaven not-locked", "@agenttool/kingdom not-locked",
+      ].join("\n") + "\n",
+    );
+    // run.log holds every line of both streams, in the order they were printed.
+    const runLog = readFileSync(join(record, "run.log"), "utf8");
+    expect(firstMissing(runLog, linesOf(result.stderr))).toBeUndefined();
+    expect(firstMissing(runLog, ownLines(result.stdout))).toBeUndefined();
+    expect(runLog).toContain(
+      `@agenttool/data: unexpected trust configuration ${uuid(301)} left untouched; see trust-before/agenttool-data.json\n` +
+        `  to revoke it by hand: npx --yes npm@11.17.0 trust revoke @agenttool/data --id ${uuid(301)}\n`,
+    );
     const calls = callsOf(log);
     expect(calls).toContain(`trust revoke @agenttool/kingdom --id ${oldId("kingdom")}`);
     expect(calls).toContain(`trust revoke @agenttool/sdk --id ${oldId("sdk")}`);
@@ -479,16 +567,180 @@ exec ${JSON.stringify(node)} "$@"
     }
   }, SCRIPT_TIMEOUT_MS);
 
-  test("a lapsed 2FA window fails the saved listings closed, revokes nothing, and says to re-run", () => {
-    const { env, log, state } = setup();
+  test("a 2FA window that stays lapsed fails the saved listings closed after one retry, revokes nothing, and says to re-run", () => {
+    const { env, log, state, record } = setup();
     const result = runScript({ ...env, STUB_EOTP: "1" }, ["lockdown"]);
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("@agenttool/sdk: trust list FAILED (EOTP means the 2FA window lapsed; re-run)");
-    expect(result.stderr).toContain(`needs attention: ${ALL.join(" ")}`);
+    // The first listing that hits EOTP is retried once after 2FA on the terminal. That retry
+    // hits EOTP too, so later listings are not retried: a window that does not reopen costs one
+    // more terminal listing per phase, not one per package.
+    expect(result.stdout).toContain(EOTP_RETRY("@agenttool/adds"));
+    expect(result.stdout).not.toContain(EOTP_RETRY("@agenttool/data"));
+    expect(result.stderr).toContain(EOTP_FAILED("@agenttool/adds"));
+    expect(result.stderr).toContain(EOTP_FAILED("@agenttool/sdk"));
+    expect(result.stderr).toContain(`needs attention: ${ALL.join(" ")}\n`);
     const calls = callsOf(log);
+    expect(calls.filter((call) => /^trust list \S+$/u.test(call))).toEqual([PRIME, PRIME, PRIME, PRIME]);
+    expect(savedListings(calls)).toHaveLength(2 * 48);
     expect(revokeCalls(calls)).toEqual([]);
     expect(createCalls(calls)).toEqual([]);
     expect(trustOf(state, "@agenttool/sdk")).toEqual([github(oldId("sdk"), OLD, direct)]);
+    // npm prints its error into the saved listing, so the check afterwards cannot pass either.
+    expect(readFileSync(join(record, "trust-after", "agenttool-sdk.json"), "utf8")).toContain('"code": "EOTP"');
+    expect(readFileSync(join(record, "needs-attention.txt"), "utf8")).toBe(
+      [...ALL.map((name) => `${name} eotp`), ...ALL.map((name) => `${name} not-locked`)].join("\n") + "\n",
+    );
+  }, SCRIPT_TIMEOUT_MS);
+
+  test("a saved listing that hits EOTP is retried once after 2FA on the terminal, and the run goes on when the retry succeeds", () => {
+    const { env, log, state, record } = setup();
+    const result = runScript({ ...env, STUB_EOTP_ONCE: "@agenttool/sdk" }, ["lockdown"]);
+    expect(result.status).toBe(0);
+    // Only npm's own error reached stderr; the script reports nothing as failed.
+    expect(result.stderr).toBe("npm error code EOTP\nnpm error This operation requires a one-time password from your authenticator.\n");
+    expect(result.stdout).toContain(EOTP_RETRY("@agenttool/sdk") + "== 2FA: one listing on the terminal;");
+    expect(result.stdout).toContain(`@agenttool/sdk: revoke ${oldId("sdk")}\n`);
+    expect(result.stdout).toContain("All 47 packages:");
+    const calls = callsOf(log);
+    const sdk = ["trust list @agenttool/sdk --json", "trust list @agenttool/sdk", "trust list @agenttool/sdk --json"];
+    const at = calls.indexOf(sdk[1]!);
+    expect(calls.slice(at - 1, at + 2)).toEqual(sdk);
+    expect(calls.filter((call) => call.startsWith("trust list @agenttool/sdk"))).toEqual([...sdk, "trust list @agenttool/sdk --json"]);
+    expect(trustOf(state, "@agenttool/sdk")).toEqual([]);
+    expect(readFileSync(join(record, "trust-before", "agenttool-sdk.json"), "utf8")).toBe(REAL_SDK_LISTING);
+    expect(existsSync(join(record, "needs-attention.txt"))).toBe(false);
+    expect(readFileSync(join(record, "run.log"), "utf8")).toContain(`npm exit status 1\n${EOTP_RETRY("@agenttool/sdk")}`);
+
+    // With a silent loglevel npm prints the EOTP only into the saved listing; it is still recognised.
+    writeFileSync(log, "");
+    const quiet = runScript({ ...env, STUB_EOTP_ONCE: "@agenttool/math-cards", STUB_QUIET: "1", RECORD_DIR: `${record}-quiet` }, ["enable", "math-cards"]);
+    expect(quiet.stderr).toBe("");
+    expect(quiet.status).toBe(0);
+    const name = "@agenttool/math-cards";
+    expect(callsOf(log)).toEqual([
+      "--version", "whoami", `trust list ${name}`, `trust list ${name} --json`, `trust list ${name}`, `trust list ${name} --json`,
+      TARGET_CALL(name), `trust list ${name} --json`,
+    ]);
+  }, SCRIPT_TIMEOUT_MS);
+
+  test("a saved listing that hits EOTP again after its retry fails closed as eotp, and nothing loops", () => {
+    const { env, log, state, record } = setup();
+    const result = runScript({ ...env, STUB_EOTP_FOR: "@agenttool/sdk" }, ["lockdown"]);
+    expect(result.status).toBe(1);
+    const calls = callsOf(log);
+    // Before and after: the saved listing, the listing on the terminal, one retry.
+    const once = ["trust list @agenttool/sdk --json", "trust list @agenttool/sdk", "trust list @agenttool/sdk --json"];
+    expect(calls.filter((call) => call.startsWith("trust list @agenttool/sdk"))).toEqual([...once, ...once]);
+    expect(revokeCalls(calls)).not.toContain(`trust revoke @agenttool/sdk --id ${oldId("sdk")}`);
+    expect(revokeCalls(calls)).toContain(`trust revoke @agenttool/wallet --id ${oldId("wallet")}`);
+    expect(mfaCalls(calls)).toHaveLength(47);
+    expect(trustOf(state, "@agenttool/sdk")).toEqual([github(oldId("sdk"), OLD, direct)]);
+    expect(trustOf(state, "@agenttool/wallet")).toEqual([]);
+    expect(result.stderr).toContain(EOTP_FAILED("@agenttool/sdk"));
+    expect(result.stderr).toContain("@agenttool/sdk: NOT locked down");
+    expect(result.stderr).toContain(`needs attention: @agenttool/sdk\nEach one, with its reason: ${record}/needs-attention.txt\n`);
+    expect(readFileSync(join(record, "needs-attention.txt"), "utf8")).toBe("@agenttool/sdk eotp\n@agenttool/sdk not-locked\n");
+  }, SCRIPT_TIMEOUT_MS);
+
+  test("a browser approval that timed out is named as one, not as a missing package, and is recorded and logged", () => {
+    const { env, record } = setup({
+      // npm lists this configuration but cannot revoke it: its E404 there is an ordinary failure.
+      "@agenttool/heaven": `\n${JSON.stringify(github(oldId("heaven"), OLD, direct), null, 2)}\n\n`,
+    });
+    const result = runScript(
+      { ...env, STUB_AUTH_TIMEOUT: "^(access set mfa=publish @agenttool/sdk|trust revoke @agenttool/wallet .*)$" },
+      ["lockdown"],
+    );
+    expect(result.status).toBe(1);
+    const npmError = "npm error code E404\nnpm error 404 Not Found - GET https://registry.npmjs.org/-/v1/done?authId=***\n";
+    expect(result.stderr).toContain(npmError);
+    expect(result.stderr).toContain(`-debug-0.log\n@agenttool/wallet: revoke ${oldId("wallet")} FAILED: ${TIMED_OUT}\n`);
+    expect(result.stderr).toContain(`-debug-0.log\n@agenttool/sdk: access set mfa=publish FAILED: ${TIMED_OUT}\n`);
+    expect(result.stderr).toContain(`npm error code E404\n@agenttool/heaven: revoke ${oldId("heaven")} FAILED\n`);
+    expect(result.stderr).toContain(`An npm browser approval timed out. ${AUTH_ADVICE}\n`);
+    // npm's prompt went to the terminal, untouched.
+    expect(result.stdout).toContain("Authenticate your account at:\nhttps://www.npmjs.com/auth/cli/");
+    expect(readFileSync(join(record, "needs-attention.txt"), "utf8")).toBe(
+      "@agenttool/heaven revoke-failed\n@agenttool/wallet auth-timeout\n@agenttool/sdk auth-timeout\n" +
+        "@agenttool/heaven not-locked\n@agenttool/wallet not-locked\n",
+    );
+    const runLog = readFileSync(join(record, "run.log"), "utf8");
+    expect(runLog).toContain(`${npmError}npm error A complete log of this run can be found in:`);
+    expect(runLog).toContain(`-debug-0.log\nnpm exit status 1\n@agenttool/sdk: access set mfa=publish FAILED: ${TIMED_OUT}\n`);
+    expect(runLog).not.toContain("auth/cli");
+    expect(firstMissing(runLog, linesOf(result.stderr))).toBeUndefined();
+  }, SCRIPT_TIMEOUT_MS);
+
+  test("enable and the listing on the terminal name a timed-out browser approval too", () => {
+    const { env, record } = setup();
+    const create = runScript({ ...env, STUB_AUTH_TIMEOUT: "^trust github " }, ["enable", "math-cards"]);
+    expect(create.status).toBe(1);
+    expect(create.stderr).toContain(`@agenttool/math-cards: trust github FAILED: ${TIMED_OUT}\nnpm may still have created it:`);
+    expect(create.stderr).toContain(`${AUTH_ADVICE}\n`);
+    expect(readFileSync(join(record, "needs-attention.txt"), "utf8")).toBe("@agenttool/math-cards auth-timeout\n");
+
+    const primed = `${record}-prime`;
+    const prime = runScript({ ...env, STUB_AUTH_TIMEOUT: "^trust list @agenttool/math-cards$", RECORD_DIR: primed }, ["enable", "math-cards"]);
+    expect(prime.status).toBe(2);
+    const message = `npm-trust-repoint: npm trust list failed on the terminal: ${TIMED_OUT}. ${AUTH_ADVICE}\n`;
+    expect(prime.stderr).toContain(`-debug-0.log\n${message}`);
+    expect(readFileSync(join(primed, "run.log"), "utf8")).toEndWith(message);
+  });
+
+  test("npm keeps the terminal for every call that can ask for 2FA; only the saved listings go to files", async () => {
+    const { env, record } = setup();
+    const ttyLog = join(record, "..", "tty.log");
+    const lockdown = await runOnTerminal({ ...env, STUB_TTY_LOG: ttyLog }, ["lockdown"]);
+    expect(lockdown.output).toContain("All 47 packages:");
+    expect(lockdown.status).toBe(0);
+    const enable = await runOnTerminal({ ...env, STUB_TTY_LOG: ttyLog, RECORD_DIR: `${record}-enable` }, ["enable", "math-cards"]);
+    expect(enable.output).toContain("@agenttool/math-cards: created;");
+    expect(enable.status).toBe(0);
+    const seen = linesOf(readFileSync(ttyLog, "utf8"));
+    const interactive = seen.filter((line) => / (?:trust (?:revoke|github) |access |trust list \S+$)/u.test(line));
+    expect(interactive.filter((line) => line.includes(" trust revoke "))).toHaveLength(OLD_TRUST.length + 1);
+    expect(interactive.filter((line) => line.includes(" access "))).toHaveLength(47);
+    expect(interactive.filter((line) => line.includes(" trust github "))).toHaveLength(1);
+    expect(interactive.filter((line) => / trust list \S+$/u.test(line))).toHaveLength(3);
+    expect(interactive.filter((line) => !line.startsWith("terminal "))).toEqual([]);
+    const saved = seen.filter((line) => / --json$/u.test(line));
+    expect(saved).toHaveLength(2 * 47 + 2);
+    expect(saved.filter((line) => !line.startsWith("redirected "))).toEqual([]);
+  }, SCRIPT_TIMEOUT_MS);
+
+  test("a real run warns when a run beside it asked for 2FA under 5 minutes ago, and goes on", () => {
+    const { env, log, record } = setup();
+    const stamp = (ms: number) => new Date(ms).toISOString().replace(/[-:]/gu, "").replace(/\.\d+Z$/u, "Z");
+    const now = Date.now();
+    const named = (label: string, ms: number) => `npm-trust-repoint-${label}-${stamp(ms)}`;
+    const note = (records: string) =>
+      `Note: a record beside this one is under 5 minutes old (${records}). The skip-2FA window its run opened may still be open, ` +
+      "so npm may not ask now and the window can lapse midway through this run. To avoid that, stop now (Ctrl-C) and start " +
+      "again once 5 minutes have passed since it; otherwise a saved listing that hits EOTP is retried once after 2FA on the terminal.\n";
+    // Too old to matter, and a run stopped at this very note, before it asked npm for anything.
+    mkdirSync(join(record, named("lockdown", now - 6 * 60_000)), { recursive: true });
+    const stopped = named("lockdown", now - 30_000);
+    mkdirSync(join(record, stopped), { recursive: true });
+    writeFileSync(join(record, stopped, "run.log"), `npm 11.17.0 as agenttool; lockdown; record and run.log in ${join(record, stopped)}\n${note("x")}`);
+
+    // A dry run does not warn; the real run straight after it does, about the dry run alone.
+    const dryRun = named("enable-math-cards", now - 2_000);
+    const dry = runScript({ ...env, DRY_RUN: "1", RECORD_DIR: join(record, dryRun) }, ["enable", "math-cards"]);
+    expect(dry.stderr).toBe("");
+    expect(dry.status).toBe(0);
+    // Named as the script names its own records: it must not count itself.
+    const own = named("enable-math-cards", now);
+    const real = runScript({ ...env, RECORD_DIR: join(record, own) }, ["enable", "math-cards"]);
+    expect(real.stderr).toBe(note(dryRun));
+    expect(real.status).toBe(0);
+    expect(createCalls(callsOf(log))).toEqual([TARGET_CALL("@agenttool/math-cards")]);
+    expect(readFileSync(join(record, own, "run.log"), "utf8")).toContain(note(dryRun));
+
+    // A record without run.log, from an earlier version of the script, counts.
+    rmSync(join(record, dryRun, "run.log"));
+    const again = runScript({ ...env, RECORD_DIR: join(record, "again") }, ["enable", "math-cards"]);
+    expect(again.stderr).toBe(note(`${dryRun} ${own}`));
+    expect(again.status).toBe(0);
   }, SCRIPT_TIMEOUT_MS);
 
   test("stops before any listing when logged in as someone else", () => {
