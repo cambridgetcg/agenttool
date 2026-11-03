@@ -11,6 +11,12 @@ index; `--check` detects coverage or classification drift. See
 
 Operator + agent entry points. Bash + Bun, no compilation step unless noted.
 
+`bun --no-env-file bin/agenttool-llm.ts --cloud` accepts one JSON task on stdin and uses the
+local Ollama sign-in for DeepSeek V4.1 Flash, with Kimi K3 as a bounded backup
+after explicit availability rejections. It requires public or synthetic input;
+denials and stops are terminal. See [task routing](../docs/OLLAMA-TASK-ROUTING.md)
+for the handoff format, privacy boundary, and dated model assessment.
+
 `node bin/agenttool-mission.mjs --help` is the dependency-free Node 22+
 mission participant trial for macOS/Linux. It exposes selected signed mission
 observations through CLI or optional stdio MCP; keys and invitations remain in

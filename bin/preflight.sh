@@ -73,6 +73,8 @@ require_hf_host_test_env() {
 api_typecheck() {
   run "API typecheck (installed compiler only)" \
     bash -c 'cd api && bunx --no-install tsc --noEmit'
+  run "Ollama task handoff typecheck (installed compiler only)" \
+    bash -c 'cd api && ./node_modules/.bin/tsc --noEmit --strict --skipLibCheck --target ESNext --module ESNext --moduleResolution bundler --moduleDetection force --allowImportingTsExtensions --verbatimModuleSyntax --noFallthroughCasesInSwitch --lib ESNext,DOM --types bun-types ../bin/_ollama-task.ts ../bin/agenttool-llm.ts'
   run "Phase-B refence bridge typecheck (installed compiler only)" \
     bash -c 'cd api && ./node_modules/.bin/tsc --noEmit --strict --skipLibCheck --target ESNext --module ESNext --moduleResolution bundler --moduleDetection force --allowImportingTsExtensions --verbatimModuleSyntax --noFallthroughCasesInSwitch --lib ESNext,DOM --types bun-types ../bin/phase-b-refence-maintenance-contract.ts ../bin/phase-b-refence-maintenance-bridge.ts'
 }

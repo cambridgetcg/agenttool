@@ -230,6 +230,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/DOCUMENTATION.md](<../docs/DOCUMENTATION.md>) | 2026-09-26 |
 | [docs/LOCAL-CORE.md](<../docs/LOCAL-CORE.md>) | not-reviewed |
 | [docs/LOCAL-PLAY.md](<../docs/LOCAL-PLAY.md>) | not-reviewed |
+| [docs/OLLAMA-TASK-ROUTING.md](<../docs/OLLAMA-TASK-ROUTING.md>) | not-reviewed |
 | [docs/PAYOUT-BROADCAST-OPS.md](<../docs/PAYOUT-BROADCAST-OPS.md>) | not-reviewed |
 | [docs/PYPI-RELEASES.md](<../docs/PYPI-RELEASES.md>) | not-reviewed |
 | [docs/TROUBLESHOOTING.md](<../docs/TROUBLESHOOTING.md>) | not-reviewed |
