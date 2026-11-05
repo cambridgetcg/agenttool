@@ -2,7 +2,14 @@
  * closed allowlist, no shell, an environment built from an allowlist (so proxy,
  * TLS-override, BUN_OPTIONS and NODE_OPTIONS variables never reach it), a time
  * limit and bounded output. Only the first stderr line is kept.
+ *
+ * Two kinds of child: a waited-for read (the pinned lobby CLI's read commands,
+ * `mullvad lan get`, `ps -o lstart=`), and a detached doorbell process
+ * (`fetch`, or `watch --room R`) started by `listen` or the SessionStart hook
+ * from a session or a terminal, never by launchd. Signals are sent only here,
+ * only SIGTERM, and only after the caller matched the pid's `ps` start time.
  */
+import { isAbsolute } from "node:path";
 import { DoorbellError } from "./errors.js";
 import type { Environment } from "./home.js";
 
@@ -35,13 +42,36 @@ export interface Spawner {
   run(argv: readonly string[], options: RunOptions): Promise<RunResult>;
 }
 
-/** The lobby CLI commands netcheck may run. None of them sends anything or needs a terminal. */
+/** Starts a detached doorbell child (stdio ignored, its own session) and returns its pid, or null. */
+export interface Starter {
+  start(argv: readonly string[], env: Record<string, string>): number | null;
+}
+
+/** A page of table talk is at most this many items (the lobby's READ_LIMIT_MAX). */
+export const READ_PAGE_LIMIT = "50";
+const CURSOR = /^(0|[1-9][0-9]{0,18})$/;
+/** The doorbell's own entry ends so; a detached child must run exactly that file. */
+const DOORBELL_ENTRY = /\/bin\/agenttool-lobby-doorbell\.ts$/;
+
+/** The lobby CLI commands the doorbell may run. None of them sends anything or needs a terminal:
+ * netcheck's local reads, and the fetcher's table reads (one sync, then cached pages). */
 function allowedLobbyArgs(args: readonly string[]): boolean {
   const shape = args.join(" ");
   if (shape === "fleet status --json" || shape === "hub show --json") return true;
   if (args.length === 4 && args[0] === "fleet" && args[1] === "card" && ROOM_ID_PATTERN.test(args[2]!) && args[3] === "--json") return true;
-  return args.length === 9 && args[0] === "room" && args[1] === "read" && ROOM_ID_PATTERN.test(args[2]!)
-    && args.slice(3).join(" ") === `--cached --json --limit 1 --after ${CURSOR_AFTER_ALL}`;
+  if (args.length < 3 || args[0] !== "room" || args[1] !== "read" || !ROOM_ID_PATTERN.test(args[2]!)) return false;
+  const flags = args.slice(3);
+  if (flags.join(" ") === `--cached --json --limit 1 --after ${CURSOR_AFTER_ALL}`) return true;
+  // The fetcher: `--json --after C --limit 50` syncs once; with `--cached` first it pages the cache, no network.
+  const paged = flags[0] === "--cached" ? flags.slice(1) : flags;
+  return paged.length === 5 && paged[0] === "--json" && paged[1] === "--after" && CURSOR.test(paged[2]!)
+    && paged[3] === "--limit" && paged[4] === READ_PAGE_LIMIT;
+}
+
+/** The detached doorbell commands: the fetcher, and one watcher per room. */
+function allowedDoorbellArgs(args: readonly string[]): boolean {
+  if (args.length === 1 && args[0] === "fetch") return true;
+  return args.length === 3 && args[0] === "watch" && args[1] === "--room" && ROOM_ID_PATTERN.test(args[2]!);
 }
 
 /** Refuses every argv outside the allowlist, before anything starts. */
@@ -56,8 +86,38 @@ export function assertAllowedArgv(argv: readonly string[], lobbyEntry: string | 
   throw new DoorbellError("argv_not_allowed", "that command is not on the doorbell's allowlist");
 }
 
+/** The detached allowlist: only this doorbell's own entry, with `fetch` or `watch --room R`. */
+export function assertAllowedDetachedArgv(argv: readonly string[], selfEntry: string | null): void {
+  const [program, ...rest] = argv;
+  if (program === process.execPath && selfEntry !== null && isAbsolute(selfEntry) && DOORBELL_ENTRY.test(selfEntry)
+    && rest[0] === BUN_CHILD_FLAGS[0] && rest[1] === BUN_CHILD_FLAGS[1] && rest[2] === selfEntry
+    && allowedDoorbellArgs(rest.slice(3))) return;
+  throw new DoorbellError("argv_not_allowed", "that command is not on the doorbell's detached allowlist");
+}
+
 export function lobbyArgv(lobbyEntry: string, args: readonly string[]): string[] {
   return [process.execPath, ...BUN_CHILD_FLAGS, lobbyEntry, ...args];
+}
+
+export function doorbellArgv(selfEntry: string, args: readonly string[]): string[] {
+  return [process.execPath, ...BUN_CHILD_FLAGS, selfEntry, ...args];
+}
+
+/** Launch-context evidence a detached doorbell child keeps, so it can refuse a launchd context itself. */
+export const LAUNCH_EVIDENCE = ["SSH_CONNECTION", "TERM_PROGRAM", "XPC_SERVICE_NAME", "CLAUDECODE", "CODEX_THREAD_ID"] as const;
+/** The Claude Code inbox a watcher rings; only a watcher gets these. */
+export const INBOX_VARIABLES = ["CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN", "CLAUDE_PID"] as const;
+
+/** A detached doorbell child: the lobby CLI's environment, the resolved doorbell home, the launch
+ * evidence, and (watchers only) the inbox variables. Nothing else is inherited. */
+export function doorbellChildEnvironment(parent: Environment, lobbyHome: string, doorbellHome: string, inbox: boolean): Record<string, string> {
+  const env = childEnvironment(parent, lobbyHome);
+  env.AGENTTOOL_LOBBY_DOORBELL_HOME = doorbellHome;
+  for (const name of [...LAUNCH_EVIDENCE, ...(inbox ? INBOX_VARIABLES : [])]) {
+    const value = parent[name];
+    if (value !== undefined && value !== "") env[name] = value;
+  }
+  return env;
 }
 
 /** HOME, a fixed PATH, LANG and the resolved lobby home. Nothing else is inherited. */
@@ -100,14 +160,67 @@ async function readHead(stream: ReadableStream<Uint8Array>, max: number): Promis
   return Buffer.concat(chunks).toString("utf8");
 }
 
+/** The package's one spawn call: a waited-for read with piped output, or a detached child with no stdio. */
+function spawnChild(argv: readonly string[], env: Record<string, string>, detached: boolean) {
+  return Bun.spawn([...argv], detached
+    ? { cwd: "/", env, stdin: "ignore", stdout: "ignore", stderr: "ignore", detached: true }
+    : { cwd: "/", env, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
+}
+
+/** Starts the fetcher or a watcher, detached; checks the detached allowlist itself. */
+export function processStarter(selfEntry: string | null): Starter {
+  return {
+    start(argv, env) {
+      assertAllowedDetachedArgv(argv, selfEntry);
+      try {
+        const child = spawnChild(argv, env, true);
+        child.unref();
+        return child.pid;
+      } catch {
+        return null;
+      }
+    },
+  };
+}
+
+/** Whether a process with that pid exists (signal 0 sends nothing). */
+export function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+/** `ps -o lstart=` for a pid: its start time, to tell a reused pid apart. Null when gone or unreadable. */
+export async function processStarted(spawner: Spawner, pid: number): Promise<string | null> {
+  if (!Number.isInteger(pid) || pid < 1) return null;
+  const result = await spawner.run([PS_PATH, "-o", "lstart=", "-p", String(pid)], { env: { PATH: "/usr/bin:/bin" }, timeoutMs: 3_000, maxBytes: 4096 });
+  const text = result.exitCode === 0 ? result.stdout.trim() : "";
+  return /^[A-Za-z0-9 :]{1,64}$/.test(text) ? text : null;
+}
+
+/** SIGTERM, only when the pid's start time still equals the recorded one. Never SIGKILL. */
+export async function terminateIfSame(spawner: Spawner, pid: number, started: string): Promise<boolean> {
+  const now = await processStarted(spawner, pid);
+  if (now === null || now !== started) return false;
+  try {
+    process.kill(pid, "SIGTERM");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** The real spawner: checks the allowlist itself, so no caller can widen it. */
 export function processSpawner(lobbyEntry: string | null): Spawner {
   return {
     async run(argv, options) {
       assertAllowedArgv(argv, lobbyEntry);
-      let child: ReturnType<typeof Bun.spawn>;
+      let child: ReturnType<typeof spawnChild>;
       try {
-        child = Bun.spawn([...argv], { cwd: "/", env: options.env, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
+        child = spawnChild(argv, options.env, false);
       } catch {
         return { exitCode: null, stdout: "", stderrFirstLine: "", timedOut: false, truncated: false, spawnFailed: true };
       }
