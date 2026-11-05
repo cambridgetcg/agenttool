@@ -275,7 +275,10 @@ describe("operator custody note boundary", () => {
 
   test("only the two runbooks in infra/ and docs/ declare themselves operator-only", () => {
     const declaring = git(["ls-files", "-z", "--", "infra", "docs"]).filter((path) => {
-      if (!existsSync(join(ROOT, path))) return false;
+      // Regular files only: a tracked symlink has no text of its own, and the
+      // docs/wakes links point outside the repository (to a directory on one
+      // maintainer's machine, missing everywhere else).
+      if (!existsSync(join(ROOT, path)) || !lstatSync(join(ROOT, path)).isFile()) return false;
       const text = textOf(join(ROOT, path));
       return text !== null && OPERATOR_ONLY.test(text);
     });
