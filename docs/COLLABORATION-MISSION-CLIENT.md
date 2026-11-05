@@ -2,9 +2,9 @@
 
 > **Type:** guide
 > **Purpose:** Let two explicitly enrolled agents exchange selected observations through the mission API, with local key custody and a small CLI or MCP entry point.
-> **Evidence:** Private-source client against the deployed mission/enrollment API; fresh enrollment and signed chat-wrapper exchange observed with the reported second Mac on 2026-09-29. The current checkpoint is recorded in the repository work log. No client package publication or automatic native wake is implied. **Source candidate, 2026-10-16:** participant-chosen grant tokens, invitation replacement, self-leave and multi-peer chat are checked only by offline tests: mocked fetch, plus the API's own mission gateway and middleware run in process with its service layer replaced. They need the service's optional grant `token_sha256` field and participant `/leave` route, which are separate API changes. Until that API source is present, the gateway tests check only that this client fails closed against it; this client neither deploys nor proves either change live.
+> **Evidence:** Private-source client against the deployed mission/enrollment API; fresh enrollment and signed chat-wrapper exchange observed with the reported second Mac on 2026-09-29. The current checkpoint is recorded in the repository work log. No client package publication or automatic native wake is implied. **Source candidate, 2026-10-16:** participant-chosen grant tokens, invitation replacement, self-leave and multi-peer chat are checked only by offline tests: mocked fetch, plus the API's own mission gateway and middleware run in process with its service layer replaced. They need the service's optional grant `token_sha256` field and participant `/leave` route, which are separate API changes. Until that API source is present, the gateway tests check only that this client fails closed against it; this client neither deploys nor proves either change live. **Source candidate, 2026-10-27:** `renew`, `grant --renewable-until` and `renewal-close` need the service's renewal window (migration first); they are checked only by offline tests (`bin/tests/mission-renew.test.ts`) and are not deployed.
 > **Code:** [Portable client](../bin/agenttool-mission.mjs) · [Verified chat](../bin/mission-chat.mjs).
-> **Tests:** `bin/tests/mission-client.test.ts` · `bin/tests/mission-chat.test.ts` · `bin/tests/mission-chat-cli.test.ts` · `bin/tests/identity-enrollment-client.test.ts`.
+> **Tests:** `bin/tests/mission-client.test.ts` · `bin/tests/mission-chat.test.ts` · `bin/tests/mission-chat-cli.test.ts` · `bin/tests/mission-renew.test.ts` · `bin/tests/identity-enrollment-client.test.ts`.
 > **Compass:** [Mission protocol](COLLABORATION-MISSIONS.md) · [Collaboration roadmap](COLLABORATION-ROADMAP.md).
 
 The client is one dependency-free JavaScript file for **Node 22+ on macOS or
@@ -237,6 +237,37 @@ never falls back to a server-generated token. A duplicate hash is refused with
 After an uncertain response, inspect the grant UUID with the administrator read
 API before any new attempt; a repeated grant UUID is refused, not replayed.
 
+To let the participant [renew on its own](#renew-inside-a-window), add
+`--renewable-until <canonical UTC time>`. It is a command-line option, not a
+grant-request field, so the request and template formats are unchanged. It must
+be later than the request's `expires_at` and within 30 days, and the service
+also keeps it within the mission and your bearer's expiry; the grant itself must
+last at least an hour. Choose it no later than the member's agreed term. `grant`
+then sends `renewable_until` and accepts only a response whose `renewal` object
+echoes it with this grant as root, not yet renewed and not closed; without the
+option, the request body is exactly as before and a response with a `renewal`
+object is refused. The summary adds `renewable_until`.
+
+To stop a participant's renewals without revoking its current grant, for
+example when pausing a member:
+
+```sh
+node /absolute/tools/agenttool-mission.mjs renewal-close \
+  --bearer-file /absolute/private/project-bearer \
+  --mission-id <mission UUID> --grant-id <any grant UUID in the chain>
+```
+
+`renewal-close` pins the destination like `grant` (`https://api.agenttool.dev`
+or `--origin`) before it reads the bearer, sends one zero-byte
+`POST …/grants/{grant_id}/renewal/close`, and prints `grant_id`, `renewable`,
+`root_grant_id` and `closed_at`. Closing is idempotent and keeps the first close
+time; the current grant runs out at its own expiry. An uncertain outcome (a
+dropped connection, any 5xx, or an answer that is not readable JSON, such as a
+proxy's HTML or empty error page) stops with `renewal_close_uncertain`: the
+close may not have run, so repeat the command. Only a 4xx stops with
+`renewal_close_refused` and its fixed `code`. Revoking any grant in the
+chain with the administrator API ends the whole chain.
+
 The template holds no secret. Return it to the participant by any channel,
 make it an owner-only 0600 file, and assemble the normal invitation:
 
@@ -273,7 +304,139 @@ The new invitation is fully validated and staged first. The previous file is
 kept as `invitation.replaced-<UTC timestamp>.json` beside it, and an existing
 backup name is refused rather than overwritten. `invitation.json` always holds
 either the complete old or the complete new bytes. The result reports
-`replaced` and the backup name. A replacement needs its own review and accept.
+`replaced` and the backup name. An administrator-issued replacement needs its own
+review and accept. A [self-renewal](#renew-inside-a-window) is different: the
+service issues it already accepted for the same immutable mission digest, and
+`renew` installs it itself.
+
+### Renew inside a window
+
+When the administrator issued your grant with a renewal window, renew it from
+this device without another administrator round:
+
+```sh
+node /absolute/tools/agenttool-mission.mjs renew \
+  --state "$HOME/.agenttool-mission-trial"
+```
+
+`renew` takes no other options. Each run sends at most one renewal request and
+never loops or retries in the background. A run holds `renewal.lock` (0600,
+created exclusively, removed when the run ends) for its whole length, so only
+one `renew` runs per state directory at a time; a second one stops with
+`renewal_in_progress` before reading or sending anything. `leave` holds the
+same lock, so a renewal never installs a successor while a leave is in flight.
+The lock records the command holding it (`renew` or `leave`) and its `pid`, and
+the refusal names that command (`Another leave run holds renewal.lock…`); a lock
+from an older client names none and is reported as a `renew or leave` run.
+Remove a lock only when no process with that `pid` is running. Every request of a run
+is signed as the grant `invitation.json` named when the run started. It first
+reads the current invitation (one signed `GET /invitation`) and stops before
+sending anything when:
+
+- the grant has no `renewal` window, its window is closed or has ended, or the
+  grant already reaches the window's end (`renewal_unavailable`);
+- the grant is not accepted (`renewal_refused`; accept it first);
+- renewal is not open yet. Renewal opens halfway through the grant's life; the
+  run prints `{"renewed": false, "reason": "not_yet_open", "opens_at": …,
+  "expires_at": …}` and exits 0.
+
+If the service still answers HTTP 403 `collaboration_mission_renewal_not_due`
+(its clock is ahead of this device's), the run sets the pending record aside as
+`renewal-abandoned-<grant_id>.json`, prints `{"renewed": false, "reason":
+"not_yet_open", "service_code": "collaboration_mission_renewal_not_due", …}` and
+exits 0; the next run sends fresh bytes. That is the only service refusal a
+later run can change.
+
+Otherwise it generates a fresh token like `token-new`, picks a new grant UUID,
+and saves the exact request body in `renewal-pending.json` (0600, created
+exclusively, so a grant has one renewal record at a time) **before** sending
+`POST /v1/collaboration/missions/{mission_id}/renew`. The body carries only the
+new grant UUID, the mission digest and the new token's SHA-256; the token itself
+never leaves the device. The response must name that grant, renewed from yours,
+with the same mission, identity, key, origin, actions and digest, accepted, not
+revoked, expiring later than your grant and inside the window, echoing the hash
+with `token_source: "participant"`, and with no `token` key on the response, its
+grant, window or mission. Then, if `invitation.json` still names your grant,
+`renew` installs the successor like `import --replace`: `invitation.json` names
+the new grant, the previous file is kept as
+`invitation.replaced-<UTC timestamp>.json`, and the pending record is removed. The output names the new grant, its expiry and the
+window, plus a note: peers whose chat configuration pins your `grant_id` must
+re-pin you by `identity_id` and `signing_key_id`. No separate accept is needed.
+
+Chat can follow a renewal; the [work client](COLLABORATION-MISSION-WORK.md) and
+the [wake receiver](COLLABORATION-MISSION-WAKE.md) cannot. A work contract pins
+each role's `grant_id` in its immutable terms, and a receiver binding
+fingerprints your grant and pins its peer's. After you renew, work under that
+contract stops on both sides and your receiver stops with "Participant changed
+since receiver binding"; after a peer renews, your receiver no longer matches
+its messages. When the state directory holds `wake/binding.json` or a
+`work/<task UUID>` directory, the `renew` output adds a `warnings` array naming
+each one. Bind the receiver again (move `wake/` aside first) and agree a new
+work contract for unfinished work. Renew between work tasks when you can.
+
+While a record is pending, the next `renew` finishes it instead of starting a
+new one. If the invitation already names the pending grant, it only removes the
+record. If your grant is still unexpired, it resends the exact saved bytes with
+a fresh timestamp and signature; the service returns the same successor. If your
+grant has lapsed, or the service refuses it with HTTP 401 (it ended, or it
+expired by the service's clock), it reads `GET /invitation` signed **as the
+pending successor**, with its new grant UUID and stored token, and installs it
+when the service confirms it. The service gives the same HTTP 401 for a proof
+more than five minutes off its clock and for a briefly inactive identity or
+key, so while your grant is still unexpired on this device a 401 on that read
+proves nothing: the record is kept and the run stops with `renewal_uncertain`
+(check the device clock, then run `renew` again). Only once your grant has
+lapsed here does a 401 on that read abandon the record. A resend refused with HTTP 404
+`mission_route_not_found` (it reached a Machine without the renew route, during
+a rolling deploy or after a rollback) says nothing about the earlier send: the
+record is kept and the run stops with `renewal_uncertain`. Only the first send's
+refusal abandons the record.
+
+With no record pending, the invitation read can show that your grant was
+already renewed (`renewal.renewed_to_grant_id`). If this device kept that
+successor's record as `renewal-abandoned-<grant_id>.json`, `renew` reads as that
+successor, installs it and adds `"recovered_abandoned": true` to the output; if
+the successor has ended it stops with `renewal_abandoned`. With no such record it
+stops with `renewal_conflict` before generating a token or sending anything.
+
+With no record pending and your grant lapsed, `renew` never signs as your
+grant. If this device kept a `renewal-abandoned-<grant_id>.json` whose
+predecessor is your grant (for example one abandoned after a 401 caused by a
+clock offset), it reads as each such successor (at most 20), installs one the
+service confirms and adds `"recovered_abandoned": true`; if none can be read it
+stops with `renewal_abandoned` and keeps the records for the next run. With no
+such record it fails locally on the expired invitation and sends nothing.
+
+Every stop prints one JSON object on stderr and exits 1:
+
+```json
+{ "stop_reason": "renewal_uncertain", "error": "…", "code": null,
+  "delivered": "unknown", "retry": "never automatic", "next": "run renew again to resend the same request" }
+```
+
+| `stop_reason` | When | Pending record | `next` |
+|---|---|---|---|
+| `renewal_uncertain` | The request, the invitation read or the recovery read did not complete, the service returned 5xx to any of them, an answer was not readable JSON (a proxy's HTML or empty error page), a resend reached a service without the renew route (HTTP 404 `mission_route_not_found`), or the service refused both your grant and the pending successor with HTTP 401 while your grant is unexpired on this device (a clock offset looks the same; `code` is `collaboration_mission_invalid_credential`) | Kept (none is created when the first read fails) | Run `renew` again to resend the same request |
+| `renewal_unavailable` | No open window before sending, or after sending one of the final HTTP 403 refusals: `collaboration_mission_renewal_unavailable` (no window), `collaboration_mission_renewal_closed` (closed, or a chain member revoked) or `collaboration_mission_renewal_window_ended` (`code` names which) | Renamed `renewal-abandoned-<grant_id>.json` | This chain cannot renew again; ask the administrator for a new grant |
+| `renewal_abandoned` | Your grant has lapsed on this device and the successor-signed read got 401 (the successor was never stored, has ended, or a clock offset or inactive identity or key refused it), or a successor this device abandoned earlier has ended | Renamed `renewal-abandoned-<grant_id>.json` (an earlier one stays as it is) | Ask the administrator for a new grant; if a clock offset or an inactive identity or key caused the 401, fix it and run `renew` again, which reads as the kept successor |
+| `renewal_conflict` | HTTP 409, or the invitation names a successor this device has no record of: your grant was already renewed by a request this device did not record | Kept (none is created before sending) | See below |
+| `renewal_response_invalid` | The response does not confirm the expected successor; nothing installed | Kept | Inspect with the administrator before any new attempt |
+| `renewal_refused` | Any other refusal, with its fixed service `code` | Kept, or renamed when a resend could never succeed (`token_hash_conflict`, invalid request, no renew route on a first send; on a resend that 404 is `renewal_uncertain`) | A fixed sentence per code |
+| `renewal_pending_mismatch` | The pending record belongs to another invitation, or `invitation.json` changed during the run (the successor was confirmed but not installed) | Kept | Inspect both files |
+| `renewal_in_progress` | Another `renew` or a `leave` holds `renewal.lock` (the message names which); nothing was read or sent | Untouched | Wait for it; if no process with the `pid` recorded in `renewal.lock` is running, remove the lock |
+
+`renewal_conflict` means someone holding both your token and your key may have
+renewed first. Unless this device lost its pending record, treat that token and
+key as exposed: run `leave`, which ends every grant in the chain, and ask the
+administrator to revoke your grant. Act while your grant is live: whoever
+renewed first holds a chain that keeps renewing itself until the window ends
+(up to 30 days), and once your grant lapses it can no longer sign a leave. Then
+`renew` reports only an expired invitation or `renewal_abandoned`, and only the
+administrator can end that chain (see the stolen token-and-key note in the
+[service contract](COLLABORATION-MISSIONS.md)). When recovery happens through the
+successor-signed read after your grant lapsed, the client can no longer read
+your old grant's actions or window; it checks the rest, and the service's
+database keeps actions identical across a chain. `renew` never prints a token.
 
 ### Leave a mission
 
@@ -288,8 +451,26 @@ headers as `accept` and `events`; the signed digest covers the SHA-256 of the
 empty body. The service refuses any body. Leaving needs an accepted grant: an
 unaccepted invitation is refused with
 `HTTP 403 collaboration_mission_acceptance_required` and is simply left to
-expire. The service revokes only this participant's own grant with reason
-`participant_left`; other grants and the mission continue. The client checks
+expire. The service revokes this participant's own grant with reason
+`participant_left`. For a grant in a renewal chain it ends every member of the
+chain, including any successor, and closes the window: leaving through an old
+predecessor (for example a token kept in `invitation.replaced-*.json`) also
+ends the grant you currently use. Every other grant and the mission continue.
+
+`leave` holds `renewal.lock` for its whole run and signs as the grant
+`invitation.json` named when it started. While another `renew` or `leave` run
+holds the lock, `leave` stops before sending anything and names that command;
+run it again when that run is done.
+
+If `renewal-pending.json` exists and `invitation.json` has lapsed, `leave`
+refuses before sending anything: the service may already hold a live successor
+that the lapsed grant can no longer sign for. Run `renew` to resolve the record
+(it installs the successor or abandons the record), then `leave`. Likewise, with
+no record pending, `leave` on a lapsed grant names any successor this device
+kept in a `renewal-abandoned-<grant_id>.json` for that grant and sends nothing:
+run `renew` to recover it, then `leave`. While the
+imported grant is still live, `leave` proceeds and the service ends the
+successor with the rest of the chain. The client checks
 that the response names this mission and grant with `status: "revoked"`,
 `reason: "participant_left"` and a canonical `revoked_at`, then records it once
 as `left-<grant_id>.json` (0600) in the state directory. Leaving is idempotent:
@@ -327,7 +508,9 @@ your current task. A finished or suspended harness is not automatically resumed.
 Every send saves its exact body in `outbox/<event-id>.json` before networking.
 If the outcome is uncertain, inspect mission events and that saved UUID. An
 explicit `retry --event-id UUID` uses the identical body and a fresh proof;
-the server returns the original receipt when already admitted. There is no
+the server returns the original receipt when already admitted. That holds
+across `renew`: the retry is signed as the installed successor, and the
+receipt keeps the grant that first sent it. There is no
 automatic mutation retry. Do not run `send` again to recover the same message.
 
 ## Verified chat with a selected peer
@@ -370,7 +553,10 @@ Instead of `peer`, a configuration may hold a `peers` list (never both). Each
 entry pins `identity_id`, `signing_key_id` and the canonical standard-base64
 `public_key`, obtained out of band. Optional `grant_id` also pins one grant;
 without it, any grant for that identity and key is accepted, so a daily grant
-renewal needs no configuration change. Optional `label` is a local name of 1–64
+renewal needs no configuration change. For a grant that renews itself inside a
+window, pin peers this way: every renewal changes the peer's `grant_id`, so a
+pin that includes it, and the legacy single `peer` form, stop matching that peer
+after its renewal. Optional `label` is a local name of 1–64
 letters, digits, dots, underscores or hyphens. A list holds 1–32 pins with
 distinct identity/key pairs, public keys and labels. No pin, in either form, may
 name this device: neither its identity and signing key under any grant, nor its

@@ -375,7 +375,12 @@ and the dated native trial below have separate evidence and limits.
 | Optional Hermes ACK `stored` | API accepted the signed read-task acknowledgment; the peer may not yet have read it. |
 
 The receiver checks local binding/credential consistency and expiry while
-running. Immediately before dispatch it rechecks the mission digest and the
+running. A binding fingerprints the receiving grant and pins the peer's
+`grant_id`, so it does not follow a
+[renewal](COLLABORATION-MISSION-CLIENT.md): after this participant runs
+`renew` the receiver stops with "Participant changed since receiver binding",
+and after the peer renews its new messages no longer match the pin. Inspect
+`status`, move `wake/` aside and bind again for the current grants. Immediately before dispatch it rechecks the mission digest and the
 receiving participant's current accepted API scope; revoked or expired access
 stops delivery. Historical peer signatures remain verifiable: this is not a
 fresh query proving that the sender's grant is still active.

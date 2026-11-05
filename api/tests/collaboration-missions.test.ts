@@ -2,11 +2,14 @@
  * and real constraints run in the explicit disposable PostgreSQL suite. */
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
 import * as ed from "@noble/ed25519";
+import { getTableColumns, type SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
+import { collaborationGrants } from "../src/db/schema/collaboration";
 import { createMissionSchema, issueMissionGrantSchema, MISSION_BOUNDS, MissionError, missionDescriptorSchema, missionObservationSchema, missionOperation, packMissionEventPage, parseMissionBody, type MissionAction, type MissionRequest } from "../src/services/collaboration/contracts";
 import { canonicalMissionRequestBytes, verifyMissionProof } from "../src/services/collaboration/proof";
-import { executeMissionRequest, getMissionGrant, issueMissionGrant, revokeMission, revokeMissionGrant } from "../src/services/collaboration/store";
+import { closeMissionGrantRenewal, executeMissionRequest, getMissionGrant, issueMissionGrant, revokeMission, revokeMissionGrant } from "../src/services/collaboration/store";
 import { correspondenceCanonicalJson } from "../src/services/correspondence/canonical";
 
 const M = "11111111-1111-4111-8111-111111111111", G = "22222222-2222-4222-8222-222222222222";
@@ -28,10 +31,13 @@ const keyRow = () => ({ id: K, identityId: I, publicKey, active: true, revokedAt
 const parentRow = () => ({ id: A, projectId: P, revokedAt: null, expiresAt: null });
 const grantRow = (overrides: Record<string, unknown> = {}) => ({ id: G, projectId: P, missionId: M, identityId: I, signingKeyId: K,
   issuingApiKeyId: A, tokenHash: PARTICIPANT_HASH, origin: ORIGIN, actions: ["mission.observe", "mission.read"],
-  issuedAt: new Date(NOW.getTime() - 60_000), expiresAt: END, acceptedAt: null, acceptanceProof: null, revokedAt: null, ...overrides });
-const issueInput = (extra: { tokenSha256?: string; grantId?: string } = {}) => ({ projectId: P, missionId: M, issuerApiKeyId: A, grantId: G,
+  issuedAt: new Date(NOW.getTime() - 60_000), expiresAt: END, acceptedAt: null, acceptanceProof: null, revokedAt: null,
+  // Unchained: null in one place, so undefined never decides chain membership.
+  renewableUntil: null, renewalClosedAt: null, renewalRootId: null, renewedFromGrantId: null, ...overrides });
+const issueInput = (extra: { tokenSha256?: string; grantId?: string; renewableUntil?: string; expiresAt?: string } = {}) => ({ projectId: P, missionId: M, issuerApiKeyId: A, grantId: G,
   identityId: I, signingKeyId: K, origin: ORIGIN, actions: ["mission.read"] as MissionAction[], expiresAt: END.toISOString(), ...extra });
 
+type GrantLike = { renewal?: unknown };
 type Step = unknown[] | ((values: Record<string, unknown> | undefined) => unknown[]);
 interface StagedEvent { operation: string; condition?: { sql: string; params: unknown[] }; lock?: string; values?: Record<string, unknown>; conflict?: "target" | "any" }
 /** Replays one result per terminal query and records each query's shape. */
@@ -39,6 +45,7 @@ function staged(steps: Step[], now: Date = NOW) {
   const events: StagedEvent[] = [];
   const dialect = new PgDialect();
   let commits = 0, rollbacks = 0;
+  const configs: unknown[] = [];
   function query(operation: string) {
     const event: StagedEvent = { operation };
     events.push(event);
@@ -61,10 +68,11 @@ function staged(steps: Step[], now: Date = NOW) {
     return builder;
   }
   const tx = { select: () => query("select"), insert: () => query("insert"), update: () => query("update") };
-  const database = { transaction: async (fn: (tx: unknown) => Promise<unknown>) => {
+  const database = { transaction: async (fn: (tx: unknown) => Promise<unknown>, config?: unknown) => {
+    configs.push(config);
     try { const result = await fn(tx); commits++; return result; } catch (error) { rollbacks++; throw error; }
   } };
-  return { events, options: { database: database as never, now }, commits: () => commits, rollbacks: () => rollbacks };
+  return { events, options: { database: database as never, now }, commits: () => commits, rollbacks: () => rollbacks, configs };
 }
 const inserted: Step = values => [{ ...values }];
 const issueSteps = (...tail: Step[]): Step[] => [[identityRow()], [keyRow()], [parentRow()], [missionRow()], ...tail];
@@ -326,7 +334,8 @@ describe("participant self-leave", () => {
     // The administrator sees the reason, and a later administrator revoke stays idempotent.
     const view = await getMissionGrant({ projectId: P, missionId: M, grantId: G }, staged([[leftRow()]]).options);
     expect(view.revocation_reason).toBe("participant_left");
-    const revoke = staged([[missionRow()], [leftRow()]]);
+    // One unlocked read chooses the (unchained) lock path, then today's locked read.
+    const revoke = staged([[missionRow()], [leftRow()], [leftRow()]]);
     expect((await revokeMissionGrant({ projectId: P, missionId: M, grantId: G }, revoke.options)).revocation_reason).toBe("participant_left");
     expect(revoke.events.some(e => e.operation === "update")).toBe(false);
     // Grants that were not left keep the established metadata shape.
@@ -344,4 +353,455 @@ describe("participant self-leave", () => {
     const closed = staged([[leftRow()], [identityRow()], [keyRow()], [parentRow()], [missionRow({ revokedAt: NOW })], [leftRow()]]);
     await refusal(executeMissionRequest(leaveRequest(), closed.options), 401, "collaboration_mission_invalid_credential");
   });
+});
+
+describe("renewal inside an administrator-set window", () => {
+  const N = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", C = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const MIN = 60_000, WINDOW = new Date(NOW.getTime() + 6 * 3_600_000);
+  const NEXT_HASH = sha256(`atcm_${Buffer.alloc(32, 31).toString("base64url")}`);
+  const CHILD_TOKEN = `atcm_${Buffer.alloc(32, 32).toString("base64url")}`, CHILD_HASH = sha256(CHILD_TOKEN);
+  const dialect = new PgDialect();
+  const rendered = (value: unknown) => dialect.sqlToQuery(value as SQL);
+  const mission = (overrides: Record<string, unknown> = {}) => missionRow({ createdAt: new Date(NOW.getTime() - 2 * 3_600_000), ...overrides });
+  /** A live accepted root: one-hour lifetime, halfway already passed. */
+  const root = (overrides: Record<string, unknown> = {}) => acceptedRow({ renewalRootId: G, renewableUntil: WINDOW,
+    issuedAt: new Date(NOW.getTime() - 40 * MIN), expiresAt: new Date(NOW.getTime() + 20 * MIN), ...overrides });
+  /** A born-accepted middle member renewed from the root. */
+  const middle = (overrides: Record<string, unknown> = {}) => root({ id: C, tokenHash: CHILD_HASH, renewedFromGrantId: G,
+    acceptedAt: new Date(NOW.getTime() - 40 * MIN), ...overrides });
+  const body = (overrides: Record<string, unknown> = {}) => JSON.stringify({ grant_id: N, mission_digest: DIGEST, token_sha256: NEXT_HASH, ...overrides });
+  const renew = (token = PARTICIPANT_TOKEN, grantId = G, raw = body(), proof: Partial<MissionRequest["proof"]> = {}) =>
+    signed(token, "POST", "/renew", raw, privateKey, { grantId, ...proof });
+  /** hint, identity, key, parent, mission SHARE, root FOR UPDATE[, G FOR UPDATE], then the tail. */
+  const renewSteps = (g: Record<string, unknown>, rootRow: Record<string, unknown> = root(), ...tail: Step[]): Step[] =>
+    [[g], [identityRow()], [keyRow()], [parentRow()], [mission()], [rootRow], ...(g.id === rootRow.id ? [] : [[g]]), ...tail];
+  const shape = (s: ReturnType<typeof staged>) => s.events.map(e => [e.operation, e.lock]);
+  const noInsert = (s: ReturnType<typeof staged>) => expect(s.events.some(e => e.operation === "insert")).toBe(false);
+
+  describe("issuing a window", () => {
+    test("renewable_until reaches the strict schema and roots a chain on the grant itself", async () => {
+      const s = staged(issueSteps(inserted));
+      const result = await issueMissionGrant(issueInput({ tokenSha256: PARTICIPANT_HASH, renewableUntil: WINDOW.toISOString() }), s.options);
+      expect(s.events[4].values).toMatchObject({ id: G, renewableUntil: WINDOW, renewalRootId: G, renewedFromGrantId: null, renewalClosedAt: null });
+      expect(result.grant.renewal).toEqual({ root_grant_id: G, renewed_from_grant_id: null, renewed_to_grant_id: null, renewable_until: WINDOW.toISOString(), closed_at: null });
+      // A server-minted token may root a chain as well.
+      const minted = await issueMissionGrant(issueInput({ renewableUntil: WINDOW.toISOString() }), staged(issueSteps(inserted)).options);
+      expect(minted.grant.renewal?.root_grant_id).toBe(G);
+    });
+
+    test("without a window the insert values and metadata keys are exactly today's", async () => {
+      const s = staged(issueSteps(inserted));
+      const result = await issueMissionGrant(issueInput({ tokenSha256: PARTICIPANT_HASH }), s.options);
+      expect(Object.keys(s.events[4].values!).sort()).toEqual(["acceptanceProof", "acceptedAt", "actions", "expiresAt", "id", "identityId", "issuedAt",
+        "issuingApiKeyId", "missionId", "origin", "projectId", "revokedAt", "signingKeyId", "tokenHash"]);
+      expect(Object.keys(result.grant).sort()).toEqual(["accepted_at", "actions", "expires_at", "grant_id", "identity_id", "issued_at",
+        "issuing_api_key_id", "mission_id", "origin", "project_id", "revoked_at", "signing_key_id"]);
+      expect(s.events).toHaveLength(5);
+    });
+
+    test("a window must outlast the grant, follow a root of at least an hour and stay inside mission and key authority", async () => {
+      const at = (ms: number) => new Date(NOW.getTime() + ms).toISOString();
+      for (const [extra, steps, status, code] of [
+        [{ renewableUntil: END.toISOString() }, issueSteps(), 400, "collaboration_mission_invalid_request"],
+        [{ renewableUntil: at(3_600_000 - 1) }, issueSteps(), 400, "collaboration_mission_invalid_request"],
+        [{ expiresAt: at(59 * MIN), renewableUntil: WINDOW.toISOString() }, issueSteps(), 400, "collaboration_mission_invalid_request"],
+        [{ renewableUntil: at(MISSION_BOUNDS.missionAgeMs + 1) }, [[identityRow()], [keyRow()], [parentRow()], [missionRow({ expiresAt: new Date(NOW.getTime() + MISSION_BOUNDS.missionAgeMs + 1) })]], 400, "collaboration_mission_invalid_request"],
+        [{ renewableUntil: at(86_400_000 + 1) }, issueSteps(), 401, "collaboration_mission_invalid_credential"],
+        [{ renewableUntil: WINDOW.toISOString() }, [[identityRow()], [keyRow()], [{ ...parentRow(), expiresAt: new Date(WINDOW.getTime() - 1) }], [missionRow()]], 401, "collaboration_mission_invalid_credential"],
+        [{ renewableUntil: "2026-09-28T15:00:00Z" }, [], 400, "collaboration_mission_invalid_request"],
+      ] as Array<[Record<string, string>, Step[], number, string]>) {
+        const s = staged(steps);
+        await refusal(issueMissionGrant(issueInput({ tokenSha256: PARTICIPANT_HASH, ...extra }), s.options), status, code);
+        noInsert(s);
+      }
+    });
+  });
+
+  describe("renewing", () => {
+    test("a live accepted root renews into a born-accepted successor with the same scope and no token", async () => {
+      const request = renew(), s = staged(renewSteps(root(), root(), [], [], inserted));
+      const result = await executeMissionRequest(request, s.options);
+      expect(shape(s)).toEqual([["select", undefined], ["select", "share"], ["select", "share"], ["select", "share"], ["select", "share"],
+        ["select", "update"], ["select", undefined], ["select", undefined], ["insert", undefined]]);
+      expect(s.configs).toEqual([{ isolationLevel: "read committed" }]);
+      expect(s.events[6].condition?.params).toEqual([G]);
+      // Any revoked member of the whole chain, under the root lock.
+      expect(s.events[7].condition?.sql).toContain('"revoked_at" is not null');
+      expect(s.events[7].condition?.params).toEqual([G, M, P]);
+      const values = s.events[8].values!;
+      expect(s.events[8].conflict).toBe("any");
+      expect(values).toMatchObject({ id: N, tokenHash: NEXT_HASH, projectId: P, missionId: M, identityId: I, signingKeyId: K, issuingApiKeyId: A,
+        origin: ORIGIN, actions: ["mission.observe", "mission.read"], issuedAt: NOW, acceptedAt: NOW, expiresAt: new Date(NOW.getTime() + 3_600_000),
+        revokedAt: null, renewableUntil: WINDOW, renewalClosedAt: null, renewalRootId: G, renewedFromGrantId: G });
+      expect(values.acceptanceProof).toEqual({ domain: "agenttool-collaboration-request/v1", origin: ORIGIN, method: "POST", request_target: `${base}/renew`,
+        timestamp: request.proof.timestamp, signature: request.proof.signature, public_key: publicKey, raw_body: body(), body_sha256: sha256(body()), signed_grant_id: G });
+      expect(result.created).toBe(true);
+      expect(result.data).toMatchObject({ token_sha256: NEXT_HASH, token_source: "participant", mission: { mission_digest: DIGEST },
+        grant: { grant_id: N, accepted_at: NOW.toISOString(), renewal: { root_grant_id: G, renewed_from_grant_id: G, renewed_to_grant_id: null, renewable_until: WINDOW.toISOString(), closed_at: null } } });
+      expect(JSON.stringify(result)).not.toContain("atcm_");
+      expect(s.commits()).toBe(1);
+    });
+
+    test("a middle member locks the root before itself and copies the root's window", async () => {
+      const s = staged(renewSteps(middle(), root(), [], [], inserted));
+      const result = await executeMissionRequest(renew(CHILD_TOKEN, C), s.options);
+      expect(shape(s).slice(5)).toEqual([["select", "update"], ["select", "update"], ["select", undefined], ["select", undefined], ["insert", undefined]]);
+      expect(s.events[5].condition?.params).toContain(G);
+      expect(s.events[6].condition?.params).toContain(C);
+      expect(result.data.grant).toMatchObject({ renewal: { root_grant_id: G, renewed_from_grant_id: C } });
+      expect(s.events[9].values).toMatchObject({ renewalRootId: G, renewedFromGrantId: C, renewableUntil: WINDOW });
+    });
+
+    test("a read-only chain renews read-only: actions are copied from G, never widened", async () => {
+      const narrow = { actions: ["mission.read"] };
+      const s = staged(renewSteps(middle(narrow), root(narrow), [], [], inserted));
+      const result = await executeMissionRequest(renew(CHILD_TOKEN, C), s.options);
+      expect(s.events[9].values?.actions).toEqual(["mission.read"]);
+      expect((result.data.grant as { actions: string[] }).actions).toEqual(["mission.read"]);
+    });
+
+    test("each ceiling clamps the successor: root lifetime, window, mission and issuing key", async () => {
+      const at = (ms: number) => new Date(NOW.getTime() + ms);
+      for (const [rootRow, missionOverrides, parentOverrides, expected] of [
+        [root({ issuedAt: at(-100 * MIN), expiresAt: at(20 * MIN) }), {}, {}, at(2 * 3_600_000)],
+        [root({ renewableUntil: at(30 * MIN) }), {}, {}, at(30 * MIN)],
+        [root(), { expiresAt: at(40 * MIN) }, {}, at(40 * MIN)],
+        [root(), {}, { expiresAt: at(50 * MIN) }, at(50 * MIN)],
+      ] as Array<[Record<string, unknown>, Record<string, unknown>, Record<string, unknown>, Date]>) {
+        const s = staged([[rootRow], [identityRow()], [keyRow()], [{ ...parentRow(), ...parentOverrides }], [mission(missionOverrides)], [rootRow], [], [], inserted]);
+        const result = await executeMissionRequest(renew(), s.options);
+        expect(s.events[8].values?.expiresAt).toEqual(expected);
+        expect((result.data.grant as { expires_at: string }).expires_at).toBe(expected.toISOString());
+      }
+    });
+
+    test("outside the window each refusal names its reason, and nothing is inserted", async () => {
+      const unchained = staged(admissionSteps(acceptedRow()));
+      await refusal(executeMissionRequest(renew(), unchained.options), 403, "collaboration_mission_renewal_unavailable");
+      expect(shape(unchained)[5]).toEqual(["select", "share"]);
+      for (const [rootRow, code] of [
+        [root({ issuedAt: new Date(NOW.getTime() - 20 * MIN), expiresAt: new Date(NOW.getTime() + 40 * MIN) }), "collaboration_mission_renewal_not_due"],
+        [root({ renewableUntil: NOW }), "collaboration_mission_renewal_window_ended"],
+        [root({ renewalClosedAt: new Date(NOW.getTime() - MIN) }), "collaboration_mission_renewal_closed"],
+        [root({ renewableUntil: new Date(NOW.getTime() + 20 * MIN) }), "collaboration_mission_renewal_window_ended"],
+      ] as Array<[Record<string, unknown>, string]>) {
+        // existing successor, then the revoked-member read (reached only by not_due).
+        const s = staged(renewSteps(rootRow, rootRow, [], []));
+        await refusal(executeMissionRequest(renew(), s.options), 403, code);
+        noInsert(s);
+      }
+      // The halfway gate is the presented member's own, never the root's: a young
+      // successor under a root past its halfway cannot renew yet.
+      const young = middle({ issuedAt: new Date(NOW.getTime() - 10 * MIN), acceptedAt: new Date(NOW.getTime() - 10 * MIN), expiresAt: new Date(NOW.getTime() + 50 * MIN) });
+      const early = staged(renewSteps(young, root(), [], []));
+      await refusal(executeMissionRequest(renew(CHILD_TOKEN, C), early.options), 403, "collaboration_mission_renewal_not_due");
+      noInsert(early);
+      // A closed root closes every member, even one whose own stamp is missing.
+      const s = staged(renewSteps(middle(), root({ renewalClosedAt: new Date(NOW.getTime() - MIN) }), []));
+      await refusal(executeMissionRequest(renew(CHILD_TOKEN, C), s.options), 403, "collaboration_mission_renewal_closed");
+      noInsert(s);
+    });
+
+    test("a final refusal outranks not_due, so a caller retrying only on not_due stops", async () => {
+      const young = { issuedAt: new Date(NOW.getTime() - 10 * MIN), acceptedAt: new Date(NOW.getTime() - 10 * MIN), expiresAt: new Date(NOW.getTime() + 50 * MIN) };
+      for (const [presented, rootRow, ended, code] of [
+        [middle({ ...young, renewalClosedAt: new Date(NOW.getTime() - MIN) }), root(), [], "collaboration_mission_renewal_closed"],
+        [middle({ ...young, renewableUntil: new Date(NOW.getTime() + 50 * MIN) }), root(), [], "collaboration_mission_renewal_window_ended"],
+        [middle(young), root(), [{ id: N }], "collaboration_mission_renewal_closed"],
+      ] as Array<[Record<string, unknown>, Record<string, unknown>, Array<Record<string, unknown>>, string]>) {
+        const s = staged(renewSteps(presented, rootRow, [], ended));
+        await refusal(executeMissionRequest(renew(CHILD_TOKEN, C), s.options), 403, code);
+        noInsert(s);
+      }
+    });
+
+    test("a member revoked alone (by code at a99257ab) ends renewal of every live member", async () => {
+      // The root, or any other member, carries revoked_at while the window stays open.
+      for (const [presented, rootRow, token, grantId] of [
+        [middle(), root({ revokedAt: new Date(NOW.getTime() - MIN) }), CHILD_TOKEN, C],
+        [root(), root(), PARTICIPANT_TOKEN, G],
+      ] as Array<[Record<string, unknown>, Record<string, unknown>, string, string]>) {
+        const s = staged(renewSteps(presented, rootRow, [], [{ id: N }]));
+        await refusal(executeMissionRequest(renew(token, grantId), s.options), 403, "collaboration_mission_renewal_closed");
+        noInsert(s);
+      }
+    });
+
+    test("an unaccepted root needs acceptance, and a different mission digest conflicts", async () => {
+      const unaccepted = root({ acceptedAt: null, acceptanceProof: null });
+      const s = staged(renewSteps(unaccepted, unaccepted));
+      await refusal(executeMissionRequest(renew(), s.options), 403, "collaboration_mission_acceptance_required");
+      const digest = staged(renewSteps(root(), root()));
+      await refusal(executeMissionRequest(renew(PARTICIPANT_TOKEN, G, body({ mission_digest: `sha256:${"0".repeat(64)}` })), digest.options), 409, "collaboration_mission_conflict");
+      noInsert(s); noInsert(digest);
+    });
+
+    test("an expired, revoked or left grant, or any lapsed authority, is never a renewal credential", async () => {
+      const expired = root({ issuedAt: new Date(NOW.getTime() - 60 * MIN), expiresAt: NOW });
+      const left = root({ revokedAt: new Date(NOW.getTime() - MIN), acceptanceProof: { ...ACCEPTANCE, participant_leave: { reason: "participant_left", via_grant_id: C } } });
+      const rebound = middle({ renewedFromGrantId: N });
+      for (const [steps, request] of [
+        [renewSteps(expired, expired), renew()],
+        [renewSteps(root({ revokedAt: new Date(NOW.getTime() - MIN) }), root({ revokedAt: new Date(NOW.getTime() - MIN) })), renew()],
+        [renewSteps(left, left), renew()],
+        [[[root()], [identityRow()], [keyRow()], [parentRow()], [mission({ revokedAt: NOW })], [root()]], renew()],
+        [[[root()], [identityRow()], [keyRow()], [{ ...parentRow(), revokedAt: NOW }], [mission()], [root()]], renew()],
+        [[[root()], [identityRow()], [keyRow()], [{ ...parentRow(), expiresAt: new Date(NOW.getTime() + MIN) }], [mission()], [root()]], renew()],
+        [[[root()], [{ ...identityRow(), status: "retired" }]], renew()],
+        [[[root()], [identityRow()], [{ ...keyRow(), revokedAt: NOW }]], renew()],
+        [renewSteps(root(), root()), renew(PARTICIPANT_TOKEN, G, body(), { timestamp: new Date(NOW.getTime() - 300_001).toISOString() })],
+        // The hint fixed the chain binding; a locked row that differs is refused.
+        [[[middle()], [identityRow()], [keyRow()], [parentRow()], [mission()], [root()], [rebound]], renew(CHILD_TOKEN, C)],
+      ] as Array<[Step[], MissionRequest]>) {
+        const s = staged(steps);
+        await refusal(executeMissionRequest(request, s.options), 401, "collaboration_mission_invalid_credential");
+        noInsert(s);
+      }
+    });
+
+    test("malformed bodies, a reused grant ID and the presented token's own hash are refused before any query", async () => {
+      for (const [raw, status, code] of [
+        [body({ expires_at: END.toISOString() }), 400, "collaboration_mission_invalid_request"],
+        [JSON.stringify({ grant_id: N, mission_digest: DIGEST }), 400, "collaboration_mission_invalid_request"],
+        [body({ token_sha256: NEXT_HASH.toUpperCase() }), 400, "collaboration_mission_invalid_request"],
+        [body({ grant_id: G }), 400, "collaboration_mission_invalid_request"],
+        [`{"grant_id":"${N}","grant_id":"${C}","mission_digest":"${DIGEST}","token_sha256":"${NEXT_HASH}"}`, 400, "collaboration_mission_invalid_request"],
+        ["", 400, "collaboration_mission_invalid_request"],
+        [body({ token_sha256: PARTICIPANT_HASH }), 409, "token_hash_conflict"],
+      ] as Array<[string, number, string]>) {
+        const s = staged([]);
+        await refusal(executeMissionRequest(renew(PARTICIPANT_TOKEN, G, raw), s.options), status, code);
+        expect(s.events).toHaveLength(0);
+      }
+    });
+
+    test("a taken grant ID conflicts and a taken hash is token_hash_conflict", async () => {
+      const id = staged(renewSteps(root(), root(), [], [], [], [{ id: N }]));
+      await refusal(executeMissionRequest(renew(), id.options), 409, "collaboration_mission_conflict");
+      const hash = staged(renewSteps(root(), root(), [], [], [], []));
+      await refusal(executeMissionRequest(renew(), hash.options), 409, "token_hash_conflict");
+      expect(hash.events[9].condition?.params).toEqual([N]);
+      expect(id.rollbacks() + hash.rollbacks()).toBe(2);
+    });
+
+    test("an exact retry returns the stored successor, even after close; any difference conflicts", async () => {
+      const request = renew();
+      const child = middle({ id: N, tokenHash: NEXT_HASH, issuedAt: NOW, acceptedAt: NOW, expiresAt: new Date(NOW.getTime() + 3_600_000),
+        acceptanceProof: { body_sha256: sha256(body()), signed_grant_id: G } });
+      const first = await executeMissionRequest(request, staged(renewSteps(root(), root(), [], [], inserted)).options);
+      const later = new Date(NOW.getTime() + 2_000);
+      for (const rootRow of [root(), root({ renewalClosedAt: NOW })]) {
+        const s = staged(renewSteps(rootRow, rootRow, [child], []), later);
+        const again = await executeMissionRequest(renew(PARTICIPANT_TOKEN, G, body(), { timestamp: later.toISOString() }), s.options);
+        expect(again).toEqual({ created: false, data: { ...first.data, grant: { ...(first.data.grant as object) } } });
+        noInsert(s);
+      }
+      for (const raw of [`${body()} `, body({ grant_id: C }), body({ token_sha256: "e".repeat(64) })]) {
+        const s = staged(renewSteps(root(), root(), [child]));
+        await refusal(executeMissionRequest(renew(PARTICIPANT_TOKEN, G, raw), s.options), 409, "collaboration_mission_conflict");
+        noInsert(s);
+      }
+      // Replayed after the chain is revoked: refused at admission, never the stored child.
+      const revoked = root({ revokedAt: NOW });
+      const s = staged(renewSteps(revoked, revoked));
+      await refusal(executeMissionRequest(request, s.options), 401, "collaboration_mission_invalid_credential");
+      expect(s.events).toHaveLength(6);
+    });
+
+    test("the route map has one exact renew spelling", () => {
+      expect(missionOperation({ missionId: M, method: "POST", requestTarget: `${base}/renew`, bodyBytes: Buffer.from(body()) }).operation).toBe("renew");
+      for (const [method, suffix] of [["GET", "/renew"], ["POST", "/renew/"], ["POST", "/renew?x=1"], ["POST", "/%72enew"]] as const) {
+        expect(() => missionOperation({ missionId: M, method, requestTarget: base + suffix, bodyBytes: new Uint8Array() })).toThrow();
+      }
+    });
+  });
+
+  test("an exact event retry from a chain member keeps the receipt only when the sender shares its root", async () => {
+    const OTHER_ROOT = "cccccccc-cccc-4ccc-8ccc-cccccccccccc", X = "dddddddd-dddd-4ddd-8ddd-dddddddddddd", E = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    const raw = JSON.stringify({ event_id: E, summary: "sent before renewal" });
+    const event = { missionId: M, projectId: P, eventId: E, grantId: X, identityId: I, signingKeyId: K, receiptSeq: 1n, rawBody: raw,
+      bodyDigest: sha256(raw), observation: JSON.parse(raw), proof: {}, receivedAt: new Date(NOW.getTime() - MIN) };
+    const retry = () => signed(CHILD_TOKEN, "POST", "/events", raw, privateKey, { grantId: C });
+    const steps = (sender: unknown[]) => [[middle()], [identityRow()], [keyRow()], [parentRow()], [mission({ lastReceiptSeq: 1n })], [middle()], [event], sender];
+    // Positive control: the original sender is an earlier member of this chain.
+    const same = staged(steps([{ rootId: G }]));
+    expect(await executeMissionRequest(retry(), same.options)).toMatchObject({ created: false, data: { event: { event_id: E, grant_id: X } } });
+    expect(same.events[7].condition?.params).toEqual([X, M, P]);
+    // An unchained sender, the root of another chain for the same identity and key, or no row at all conflicts.
+    for (const sender of [[{ rootId: null }], [{ rootId: OTHER_ROOT }], []]) {
+      const s = staged(steps(sender));
+      await refusal(executeMissionRequest(retry(), s.options), 409, "collaboration_mission_conflict");
+      expect(s.events.some(e => e.operation === "insert" || e.operation === "update")).toBe(false);
+    }
+  });
+
+  describe("ending a chain", () => {
+    const cascade = (s: ReturnType<typeof staged>, index: number) => {
+      const event = s.events[index];
+      expect(event.operation).toBe("update");
+      expect(event.condition?.sql).toContain('"renewal_root_id" = $1');
+      expect(event.condition?.params).toEqual([G, M, P]);
+      expect(event.condition?.sql).not.toContain("issued_at");
+      for (const field of ["revokedAt", "renewalClosedAt"]) {
+        const set = rendered(event.values?.[field]);
+        expect(set.sql).toMatch(/^COALESCE\("tools"\."collaboration_grants"\."(revoked_at|renewal_closed_at)", GREATEST\(\$1::timestamptz, "tools"\."collaboration_grants"\."issued_at"\)\)$/);
+        expect(set.params).toEqual([NOW.toISOString()]);
+      }
+    };
+    const ended = (...rows: Array<Record<string, unknown>>): Step => () => rows.map(row => ({ ...row, revokedAt: row.revokedAt ?? NOW, renewalClosedAt: row.renewalClosedAt ?? NOW }));
+
+    test("revoking the root or any later member ends every member under the root lock", async () => {
+      const viaRoot = staged([[mission()], [root()], [root()], ended(root(), middle()), []]);
+      const view = await revokeMissionGrant({ projectId: P, missionId: M, grantId: G }, viaRoot.options);
+      expect(shape(viaRoot)).toEqual([["select", "share"], ["select", undefined], ["select", "update"], ["update", undefined], ["select", undefined]]);
+      cascade(viaRoot, 3);
+      expect(view).toMatchObject({ grant_id: G, revoked_at: NOW.toISOString(), renewal: { closed_at: NOW.toISOString() } });
+      expect(viaRoot.configs).toEqual([{ isolationLevel: "read committed" }]);
+      const viaChild = staged([[mission()], [middle()], [root()], [middle()], ended(root(), middle()), []]);
+      await revokeMissionGrant({ projectId: P, missionId: M, grantId: C }, viaChild.options);
+      expect(shape(viaChild)).toEqual([["select", "share"], ["select", undefined], ["select", "update"], ["select", "update"], ["update", undefined], ["select", undefined]]);
+      expect(viaChild.events[2].condition?.params).toContain(G);
+      cascade(viaChild, 4);
+    });
+
+    test("an expired, already revoked or left member still ends its live descendants", async () => {
+      for (const target of [
+        root({ issuedAt: new Date(NOW.getTime() - 25 * 60 * MIN), expiresAt: new Date(NOW.getTime() - 60 * MIN) }),
+        root({ revokedAt: new Date(NOW.getTime() - MIN) }),
+        root({ revokedAt: new Date(NOW.getTime() - MIN), acceptanceProof: { ...ACCEPTANCE, participant_leave: { reason: "participant_left" } } }),
+      ]) {
+        const s = staged([[mission()], [target], [target], ended(target, middle()), []]);
+        const view = await revokeMissionGrant({ projectId: P, missionId: M, grantId: G }, s.options);
+        cascade(s, 3);
+        expect(view.revoked_at).toBe(((target.revokedAt as Date | null) ?? NOW).toISOString());
+      }
+    });
+
+    test("an unchained revoke keeps today's locked path and early return after one unlocked read", async () => {
+      const live = staged([[mission()], [acceptedRow()], [acceptedRow()], values => [{ ...acceptedRow(), ...values }]]);
+      const view = await revokeMissionGrant({ projectId: P, missionId: M, grantId: G }, live.options);
+      expect(shape(live)).toEqual([["select", "share"], ["select", undefined], ["select", "update"], ["update", undefined]]);
+      expect(live.events[3].values).toEqual({ revokedAt: NOW });
+      expect(view).not.toHaveProperty("renewal");
+      const repeat = staged([[mission()], [acceptedRow({ revokedAt: NOW })], [acceptedRow({ revokedAt: NOW })]]);
+      await revokeMissionGrant({ projectId: P, missionId: M, grantId: G }, repeat.options);
+      expect(repeat.events).toHaveLength(3);
+      const future = staged([[mission()], [acceptedRow({ issuedAt: new Date(NOW.getTime() + 1) })], [acceptedRow({ issuedAt: new Date(NOW.getTime() + 1) })]]);
+      await refusal(revokeMissionGrant({ projectId: P, missionId: M, grantId: G }, future.options), 503, "collaboration_mission_invalid_state");
+    });
+
+    test("leaving any member revokes it with signed evidence and labels the rest with an unsigned pointer", async () => {
+      const request = signed(CHILD_TOKEN, "POST", "/leave", "", privateKey, { grantId: C });
+      const merged: Step = values => [{ ...middle(), ...values }];
+      const s = staged([[middle()], [identityRow()], [keyRow()], [parentRow()], [mission()], [root()], [middle()], merged, [root({ revokedAt: NOW })], ended(root(), middle())]);
+      const result = await executeMissionRequest(request, s.options);
+      expect(result).toEqual({ created: true, data: { mission_id: M, grant_id: C, status: "revoked", reason: "participant_left", revoked_at: NOW.toISOString() } });
+      expect(shape(s).slice(5)).toEqual([["select", "update"], ["select", "update"], ["update", undefined], ["update", undefined], ["update", undefined]]);
+      expect(s.events[7].condition?.params).toEqual([C]);
+      expect((s.events[7].values?.acceptanceProof as Record<string, any>).participant_leave).toMatchObject({ reason: "participant_left", signature: request.proof.signature });
+      const label = s.events[8];
+      expect(label.condition?.sql).toContain('"revoked_at" is null');
+      expect(label.condition?.params).toEqual([G, M, P]);
+      expect(rendered(label.values?.revokedAt).sql).toBe('GREATEST($1::timestamptz, "tools"."collaboration_grants"."issued_at")');
+      const pointer = rendered(label.values?.acceptanceProof);
+      expect(pointer.sql).toContain("jsonb_build_object($1::text, jsonb_build_object('reason', $2::text, 'via_grant_id', $3::text))");
+      expect(pointer.sql).not.toContain("signature");
+      expect(pointer.params).toEqual(["participant_leave", "participant_left", C]);
+      cascade(s, 9);
+    });
+
+    test("each labelled member's own repeat leave returns its own state; an administrator-revoked chain is never relabelled", async () => {
+      const pointered = root({ revokedAt: NOW, acceptanceProof: { ...ACCEPTANCE, participant_leave: { reason: "participant_left", via_grant_id: C } } });
+      const s = staged([[pointered], [identityRow()], [keyRow()], [parentRow()], [mission()], [pointered], [], []]);
+      const result = await executeMissionRequest(signed(PARTICIPANT_TOKEN, "POST", "/leave"), s.options);
+      expect(result).toEqual({ created: false, data: { mission_id: M, grant_id: G, status: "revoked", reason: "participant_left", revoked_at: NOW.toISOString() } });
+      // The repeat re-runs only the idempotent cascade: label live members, then COALESCE.
+      expect(shape(s).slice(5)).toEqual([["select", "update"], ["update", undefined], ["update", undefined]]);
+      expect(s.events[6].condition?.sql).toContain('"revoked_at" is null');
+      // The pointer names the grant that carries the signed record, never a pointer to a pointer.
+      expect(rendered(s.events[6].values?.acceptanceProof).params).toEqual(["participant_leave", "participant_left", C]);
+      cascade(s, 7);
+      expect((await getMissionGrant({ projectId: P, missionId: M, grantId: G }, staged([[pointered], [{ id: C }]]).options)).revocation_reason).toBe("participant_left");
+      const revoked = middle({ revokedAt: NOW });
+      const admin = staged([[revoked], [identityRow()], [keyRow()], [parentRow()], [mission()], [root({ revokedAt: NOW })], [revoked]]);
+      await refusal(executeMissionRequest(signed(CHILD_TOKEN, "POST", "/leave", "", privateKey, { grantId: C }), admin.options), 401, "collaboration_mission_invalid_credential");
+      expect(admin.events.some(e => e.operation === "update")).toBe(false);
+    });
+
+    test("a repeat leave through a member left alone by code at a99257ab still ends the live rest", async () => {
+      const legacyLeft = middle({ revokedAt: new Date(NOW.getTime() - MIN), acceptanceProof: { ...ACCEPTANCE, participant_leave: { reason: "participant_left", signature: "legacy" } } });
+      const s = staged([[legacyLeft], [identityRow()], [keyRow()], [parentRow()], [mission()], [root()], [legacyLeft], [root({ revokedAt: NOW })], ended(root(), legacyLeft)]);
+      const result = await executeMissionRequest(signed(CHILD_TOKEN, "POST", "/leave", "", privateKey, { grantId: C }), s.options);
+      expect(result).toEqual({ created: false, data: { mission_id: M, grant_id: C, status: "revoked", reason: "participant_left", revoked_at: new Date(NOW.getTime() - MIN).toISOString() } });
+      expect(shape(s).slice(5)).toEqual([["select", "update"], ["select", "update"], ["update", undefined], ["update", undefined]]);
+      // No write touches C's own row by id: its legacy record is kept.
+      expect(s.events[7].condition?.params).toEqual([G, M, P]);
+      expect(rendered(s.events[7].values?.acceptanceProof).params).toEqual(["participant_leave", "participant_left", C]);
+      cascade(s, 8);
+    });
+
+    test("close stamps every member once through any member, revokes nothing and keeps the window", async () => {
+      for (const target of [root(), middle(), middle({ id: N, renewedFromGrantId: C, expiresAt: new Date(NOW.getTime() - MIN) })]) {
+        const closed: Step = () => [root(), middle(), middle({ id: N, renewedFromGrantId: C })].map(row => ({ ...row, renewalClosedAt: NOW }));
+        const s = staged([[mission()], [target], [root()], closed, []]);
+        const view = await closeMissionGrantRenewal({ projectId: P, missionId: M, grantId: target.id as string }, s.options);
+        expect(shape(s)).toEqual([["select", "share"], ["select", undefined], ["select", "update"], ["update", undefined], ["select", undefined]]);
+        expect(Object.keys(s.events[3].values!)).toEqual(["renewalClosedAt"]);
+        expect(rendered(s.events[3].values!.renewalClosedAt).sql).toBe('COALESCE("tools"."collaboration_grants"."renewal_closed_at", GREATEST($1::timestamptz, "tools"."collaboration_grants"."issued_at"))');
+        expect(s.events[3].condition?.params).toEqual([G, M, P]);
+        expect(view).toMatchObject({ grant_id: target.id, revoked_at: null, renewal: { closed_at: NOW.toISOString(), renewable_until: WINDOW.toISOString() } });
+        expect(s.configs).toEqual([{ isolationLevel: "read committed" }]);
+      }
+      const plain = staged([[mission()], [acceptedRow()]]);
+      expect(await closeMissionGrantRenewal({ projectId: P, missionId: M, grantId: G }, plain.options)).not.toHaveProperty("renewal");
+      expect(plain.events).toHaveLength(2);
+      await refusal(closeMissionGrantRenewal({ projectId: P, missionId: M, grantId: G }, staged([[]]).options), 404, "collaboration_mission_not_found");
+      await refusal(closeMissionGrantRenewal({ projectId: P, missionId: M, grantId: G }, staged([[mission()], []]).options), 404, "collaboration_mission_not_found");
+    });
+  });
+
+  test("chain metadata adds one lineage object; unchained rows run no extra query", async () => {
+    const chained = staged([[root()], [{ id: C }]]);
+    expect((await getMissionGrant({ projectId: P, missionId: M, grantId: G }, chained.options)).renewal).toEqual({
+      root_grant_id: G, renewed_from_grant_id: null, renewed_to_grant_id: C, renewable_until: WINDOW.toISOString(), closed_at: null });
+    expect(chained.events[1].condition?.params).toEqual([G]);
+    const plain = staged([[acceptedRow()]]);
+    expect(await getMissionGrant({ projectId: P, missionId: M, grantId: G }, plain.options)).not.toHaveProperty("renewal");
+    expect(plain.events).toHaveLength(1);
+    const invitation = staged([...renewSteps(middle(), middle()).slice(0, 5), [middle()], []]);
+    const view = await executeMissionRequest(signed(CHILD_TOKEN, "GET", "/invitation", "", privateKey, { grantId: C }), invitation.options);
+    expect(shape(invitation)[5]).toEqual(["select", "share"]);
+    expect(view.data.grant).toMatchObject({ grant_id: C, renewal: { root_grant_id: G, renewed_from_grant_id: G, renewed_to_grant_id: null } });
+    expect(JSON.stringify(view)).not.toContain(CHILD_HASH);
+  });
+
+  test("context and accept return the same lineage object; unchained grants keep their keys", async () => {
+    const head = (renewedTo: string | null) => ({ root_grant_id: G, renewed_from_grant_id: G, renewed_to_grant_id: renewedTo, renewable_until: WINDOW.toISOString(), closed_at: null });
+    const admitted = (row: Record<string, unknown>, ...tail: Step[]) => [...renewSteps(row, row).slice(0, 5), [row], ...tail];
+    const asChild = (method: "GET" | "POST", suffix: string, raw = "") => signed(CHILD_TOKEN, method, suffix, raw, privateKey, { grantId: C });
+    const acceptBody = JSON.stringify({ mission_digest: DIGEST });
+    const context = await executeMissionRequest(asChild("GET", "/context"), staged(admitted(middle(), [{ id: N }])).options);
+    expect((context.data.grant as GrantLike).renewal).toEqual(head(N));
+    // A successor is born accepted: a later accept returns its view with lineage.
+    const again = await executeMissionRequest(asChild("POST", "/accept", acceptBody), staged(admitted(middle(), [])).options);
+    expect(again.created).toBe(false);
+    expect((again.data.grant as GrantLike).renewal).toEqual(head(null));
+    // A root's first acceptance returns its lineage too.
+    const unaccepted = root({ acceptedAt: null, acceptanceProof: null });
+    const first = await executeMissionRequest(signed(PARTICIPANT_TOKEN, "POST", "/accept", acceptBody),
+      staged(admitted(unaccepted, values => [{ ...unaccepted, ...values }], [])).options);
+    expect(first.created).toBe(true);
+    expect((first.data.grant as GrantLike).renewal).toEqual({ ...head(null), renewed_from_grant_id: null });
+    const plain = staged(admissionSteps(acceptedRow()));
+    expect((await executeMissionRequest(signed(PARTICIPANT_TOKEN, "GET", "/context"), plain.options)).data.grant).not.toHaveProperty("renewal");
+    expect(plain.events).toHaveLength(6);
+  });
+});
+
+test("every Drizzle column of collaboration_grants is created by a collaboration migration", () => {
+  const sql = readdirSync(new URL("../migrations/", import.meta.url)).filter(name => /collaboration/.test(name) && name.endsWith(".sql"))
+    .map(name => readFileSync(new URL(`../migrations/${name}`, import.meta.url), "utf8")).join("\n");
+  const columns = Object.values(getTableColumns(collaborationGrants)).map(column => column.name);
+  expect(columns).toContain("renewal_root_id");
+  for (const column of columns) expect(new RegExp(`\\b${column}\\b`).test(sql), column).toBe(true);
 });
