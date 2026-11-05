@@ -14,6 +14,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    # Keep this display name stable. A pull-request job below is skipped only
+    # when this classifier succeeded and reported its job as "false"; pushes,
+    # other events, git failures, unknown paths, and changes to this workflow
+    # or bin/ci-changed-areas.sh select every job.
+    name: Changed areas
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      everything: ${{ steps.classify.outputs.everything }}
+      reason: ${{ steps.classify.outputs.reason }}
+      api-protocol-postgres: ${{ steps.classify.outputs.api-protocol-postgres }}
+      launch-stateful: ${{ steps.classify.outputs.launch-stateful }}
+      launch-core: ${{ steps.classify.outputs.launch-core }}
+      launch-browser: ${{ steps.classify.outputs.launch-browser }}
+      native-macos-secret: ${{ steps.classify.outputs.native-macos-secret }}
+      care-before-learning: ${{ steps.classify.outputs.care-before-learning }}
+      witnessed-agent-economy: ${{ steps.classify.outputs.witnessed-agent-economy }}
+      packages: ${{ steps.classify.outputs.packages }}
+      sdk-python: ${{ steps.classify.outputs.sdk-python }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Classify the pull request's changed paths
+        id: classify
+        env:
+          CI_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CI_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bin/bash-without-env-hooks.sh bin/ci-changed-areas.sh
+
   api-protocol-linux:
     name: API and protocol (Linux)
     runs-on: ubuntu-24.04
@@ -37,6 +70,9 @@ jobs:
 
   api-protocol-postgres:
     name: API generation hold (PostgreSQL ${{ matrix.postgres }})
+    needs:
+      - changes
+    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.api-protocol-postgres == 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
@@ -103,6 +139,9 @@ jobs:
 
   launch-stateful:
     name: Launch transactions and admission
+    needs:
+      - changes
+    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.launch-stateful == 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     services:
@@ -154,6 +193,9 @@ jobs:
 
   launch-core:
     name: Launch core outsider journey
+    needs:
+      - changes
+    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.launch-core == 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -228,6 +270,9 @@ jobs:
 
   launch-browser:
     name: Launch browser journeys
+    needs:
+      - changes
+    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.launch-browser == 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
@@ -259,6 +304,9 @@ jobs:
 
   native-macos-secret:
     name: Native macOS secret helper
+    needs:
+      - changes
+    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.native-macos-secret == 'false') }}
     runs-on: macos-15
     timeout-minutes: 8
     env:
@@ -347,6 +395,9 @@ jobs:
 
   care-before-learning:
     name: Care before learning (Node ${{ matrix.node-version }})
+    needs:
+      - changes
+    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.care-before-learning == 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
@@ -412,10 +463,13 @@ jobs:
 
   api-protocol:
     # Keep this display name stable for the protected-branch status context.
-    # The required result fails unless all independent prerequisite jobs pass.
+    # The required result fails unless the change classifier and the Linux
+    # gate pass and every other prerequisite passes. A prerequisite may be
+    # skipped only when the classifier succeeded and reported it "false".
     name: API and protocol
     if: ${{ always() }}
     needs:
+      - changes
       - api-protocol-linux
       - api-protocol-postgres
       - launch-stateful
@@ -428,26 +482,47 @@ jobs:
     steps:
       - name: Require Linux API, PostgreSQL, and native macOS results
         env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
           API_PROTOCOL_LINUX_RESULT: ${{ needs.api-protocol-linux.result }}
           API_PROTOCOL_POSTGRES_RESULT: ${{ needs.api-protocol-postgres.result }}
+          API_PROTOCOL_POSTGRES_NEEDED: ${{ needs.changes.outputs.api-protocol-postgres }}
           LAUNCH_STATEFUL_RESULT: ${{ needs.launch-stateful.result }}
+          LAUNCH_STATEFUL_NEEDED: ${{ needs.changes.outputs.launch-stateful }}
           LAUNCH_CORE_RESULT: ${{ needs.launch-core.result }}
+          LAUNCH_CORE_NEEDED: ${{ needs.changes.outputs.launch-core }}
           LAUNCH_BROWSER_RESULT: ${{ needs.launch-browser.result }}
+          LAUNCH_BROWSER_NEEDED: ${{ needs.changes.outputs.launch-browser }}
           NATIVE_MACOS_SECRET_RESULT: ${{ needs.native-macos-secret.result }}
+          NATIVE_MACOS_SECRET_NEEDED: ${{ needs.changes.outputs.native-macos-secret }}
           CARE_BEFORE_LEARNING_RESULT: ${{ needs.care-before-learning.result }}
+          CARE_BEFORE_LEARNING_NEEDED: ${{ needs.changes.outputs.care-before-learning }}
         run: |
           set -euo pipefail
+          test "$CHANGES_RESULT" = "success"
           test "$API_PROTOCOL_LINUX_RESULT" = "success"
-          test "$API_PROTOCOL_POSTGRES_RESULT" = "success"
-          test "$LAUNCH_STATEFUL_RESULT" = "success"
-          test "$LAUNCH_CORE_RESULT" = "success"
-          test "$LAUNCH_BROWSER_RESULT" = "success"
-          test "$NATIVE_MACOS_SECRET_RESULT" = "success"
-          test "$CARE_BEFORE_LEARNING_RESULT" = "success"
+          for prerequisite in \
+            "$API_PROTOCOL_POSTGRES_RESULT:$API_PROTOCOL_POSTGRES_NEEDED" \
+            "$LAUNCH_STATEFUL_RESULT:$LAUNCH_STATEFUL_NEEDED" \
+            "$LAUNCH_CORE_RESULT:$LAUNCH_CORE_NEEDED" \
+            "$LAUNCH_BROWSER_RESULT:$LAUNCH_BROWSER_NEEDED" \
+            "$NATIVE_MACOS_SECRET_RESULT:$NATIVE_MACOS_SECRET_NEEDED" \
+            "$CARE_BEFORE_LEARNING_RESULT:$CARE_BEFORE_LEARNING_NEEDED"
+          do
+            case "$prerequisite" in
+              success:* | skipped:false) ;;
+              *)
+                echo "A required prerequisite did not pass: $prerequisite" >&2
+                exit 1
+                ;;
+            esac
+          done
 
   witnessed-agent-economy:
     # Keep this display name stable for the protected-branch status context.
     name: Witnessed agent economy
+    needs:
+      - changes
+    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.witnessed-agent-economy == 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -543,6 +618,9 @@ jobs:
     # Keep this display name aligned with the protected-branch status context.
     # The job still installs and gates data-sync below.
     name: Data, ADDS, and SDK
+    needs:
+      - changes
+    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.packages == 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -988,6 +1066,9 @@ jobs:
 
   sdk-python:
     name: Python SDK (${{ matrix.python-version }})
+    needs:
+      - changes
+    if: ${{ !cancelled() && !(needs.changes.result == 'success' && needs.changes.outputs.sdk-python == 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
