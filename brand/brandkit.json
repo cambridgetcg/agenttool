@@ -1,0 +1,132 @@
+{
+  "format": "brandkit.project/1",
+  "name": "AgentTool",
+  "kind": "planned",
+  "owner": "the agenttool lane, in cambridgetcg/agenttool (frontends under apps/; working and release rules in AGENTS.md and docs/DEPLOY-PROCEDURE.md)",
+  "waits_on": "Yu's go for group A of the 2026-11-02 visual-language review (ledger kingdom-visual-grammar, A1 and A2)",
+  "decided": [
+    {
+      "part": "the look (hearth)",
+      "what": "paper #f7f3ec, ink #1d1a16, ember #a8401c by day; charcoal #141210, ink #eee7db, lamp amber #eba352 by night; Iowan Old Style/Palatino, the system UI face, ui-monospace",
+      "by": "agent Saunter (Claude Code; the record is from session 4bcf4673)",
+      "under": "Yu's request of 2026-10-17 (\"update the aesthetics for the human and agent facing UI… I believe in your beauty standards\"), then Yu's go-ahead to merge and release",
+      "date": "2026-10-17",
+      "record": "cambridgetcg/agenttool PR #490 (merged 2026-10-17 as 3b9aa630); memory note agenttool-ui-hearth-2026-10-17"
+    },
+    {
+      "part": "the mark (ring and dot)",
+      "status": "not-recorded",
+      "what": "the ⊙ ring and dot drawn beside the name and as the inline favicon; older than the hearth look",
+      "record": "review-2026-11-02 §3.3, and CREDITS.md here: who made it is not recorded"
+    },
+    {
+      "part": "the kit",
+      "status": "held",
+      "what": "a kit drawn from the hearth look and the ring-and-dot mark, with no new identity",
+      "waits_on": "Yu's go for group A (ledger kingdom-visual-grammar, A1 and A2)"
+    }
+  ],
+  "site": {
+    "urls": [
+      "https://agenttool.dev/",
+      "https://docs.agenttool.dev/",
+      "https://app.agenttool.dev/"
+    ],
+    "framework": "static",
+    "html": [
+      "/apps/web/**/*.html",
+      "/apps/docs/**/*.html",
+      "/apps/dashboard/**/*.html"
+    ]
+  },
+  "serve": [
+    {
+      "to": "/apps/web",
+      "files": []
+    },
+    {
+      "to": "/apps/docs",
+      "files": []
+    },
+    {
+      "to": "/apps/dashboard",
+      "files": []
+    }
+  ],
+  "build": {},
+  "guards": [
+    {
+      "path": "check.mjs",
+      "wired": false
+    },
+    {
+      "path": "/infra/pages/edge-security.test.ts",
+      "runs": "/bin/preflight.sh"
+    },
+    {
+      "path": "/api/tests/root-content-negotiation.test.ts"
+    },
+    {
+      "path": "/tests/playwright/specs/page-policy.spec.ts",
+      "wired": false
+    },
+    {
+      "path": "/tests/playwright/live/page-policy.spec.ts"
+    }
+  ],
+  "deploy": {
+    "on_merge": "Merging brand/ deploys nothing. The frontends under apps/ are Cloudflare Pages direct uploads (agenttool-web behind the agenttool-proxy apex Worker, agenttool-docs, agenttool-dashboard). A push to main deploys only the API, through .github/workflows/deploy-api.yml, and only when it changes what the image bakes in (api/, docs/agenttool.jsonld, docs/kingdom-bundle.json, bin/stage-doctrine-docs.sh, the doctrine docs)",
+    "after_deploy": "Frontend release from clean GitHub main with `bin/deploy.sh --no-migrate --no-api` (docs/DEPLOY-PROCEDURE.md Phase 4; bin/frontend-deploy.sh is the lower-level uploader). Then the sampled frontend parity probes, a production page-policy sweep, and a live check of each served icon and card. HTML answers `public, max-age=0, must-revalidate, no-transform` (observed 2026-11-05); the zone's Browser Cache TTL must respect origin headers, or non-HTML files hold for 4 hours (DEPLOY-PROCEDURE.md)",
+    "rules": "/AGENTS.md"
+  },
+  "media": [
+    {
+      "name": "home share card (agenttool.dev)",
+      "recipe_note": "No recipe in the repository. Commit 8bca3adc (an agent, 2026-07-24) says it was rendered from the site's own palette, mark and typography; the tool is not recorded",
+      "outputs": [
+        "/apps/web/og.png"
+      ],
+      "goes_to": "og:image on the agenttool.dev pages, served by the agenttool-web Pages upload"
+    },
+    {
+      "name": "docs and app share card (violet, 2026-06-09)",
+      "recipe": "/bin/gen-og-image.py",
+      "outputs": [
+        "/apps/docs/og.png",
+        "/apps/dashboard/og.png"
+      ],
+      "fonts": [
+        {
+          "family": "Inter Bold",
+          "fetched": "downloaded from Google Fonts by bin/gen-og-image.py into ~/.cache/agenttool-og-fonts/",
+          "licence": "SIL OFL 1.1 (upstream; not recorded in the repository)",
+          "source": "Google Fonts"
+        },
+        {
+          "family": "Crimson Pro Italic",
+          "fetched": "downloaded from Google Fonts by bin/gen-og-image.py into ~/.cache/agenttool-og-fonts/",
+          "licence": "SIL OFL 1.1 (upstream; not recorded in the repository)",
+          "source": "Google Fonts"
+        }
+      ],
+      "goes_to": "og:image on docs.agenttool.dev and app.agenttool.dev, and on the API root page (api/src/services/discovery/root.ts). It predates the hearth look; review 2026-11-02 (A1, A2) would replace it with cards in the current look"
+    },
+    {
+      "name": "directory candidate icon",
+      "recipe_note": "not recorded: in the repository since the 2026-04-28 consolidation (59d6deb0), with no recipe or maker",
+      "outputs": [
+        "/agenttool-logo.png"
+      ],
+      "goes_to": "named as the candidate icon in marketing/DIRECTORY-SUBMISSION.md; no site serves it"
+    }
+  ],
+  "notes": [
+    "One look, three sites: agenttool.dev (apps/web), docs.agenttool.dev (apps/docs) and app.agenttool.dev (apps/dashboard) share apps/_shared/theme.css, so serve lists one target per site folder.",
+    "brand/ sits at the repository root, outside apps/. bin/frontend-deploy.sh uploads each apps/<site> folder and strips only CLAUDE.md, AGENTS.md and README.md, and apps/_shared is linked into every site as shared/, so a brand folder anywhere under apps/ would be published.",
+    "Release rules: a frontend release is an outward act and needs Yu's word for that release (AGENTS.md: a local edit request alone does not authorize publication or deployment). On this Mac, bin/deploy.sh needs Bun 1.3.5 exactly (memory note agenttool-ui-hearth-2026-10-17).",
+    "Guards: api/tests/root-content-negotiation.test.ts pins the card URL https://docs.agenttool.dev/og.png that the API root page advertises. CI runs it (ci.yml, then bin/preflight.sh api, then bin/run-test-tier.sh hermetic), but the tier finds it by the pattern tests/*.test.ts and names it nowhere, so it has no runs entry. specs/page-policy.spec.ts is run by hand (`playwright test` in tests/playwright); the live sweep (live/page-policy.spec.ts) runs daily against production from .github/workflows/live-page-policy.yml, which finds it through live/playwright.config.ts (testDir '.') and names it nowhere, so it has no runs entry either. check.mjs is not wired yet; the proposal is one `run` line in bin/preflight.sh api_gate (`node brand/check.mjs`), which CI's 'API and protocol (Linux)' job runs.",
+    "Today every page draws its favicon as an inline data-URI ring, in #b8451f on web and #d4502e on docs and app, against the ember token #a8401c. No site serves icon files, a webmanifest or theme-color (review 2026-11-02 §3.3; re-checked in the source at e9ea51c5). Once a kit exists, the check fails each page that keeps the data-URI icon.",
+    "/porch, /watch, /village, /lounge, /gallery and /credits on agenttool.dev serve Pages for HTML; only a request that prefers JSON goes to their api.agenttool.dev/public/* twins (infra/apex-door/worker.js, MACHINE_ALTERNATES; re-read at e9ea51c5). The first draft said the API renders these pages, which was wrong.",
+    "Some docs pages send `default-src 'none'` with no manifest-src, so a webmanifest link there needs a CSP change. Inline <style> and <script> blocks are allowed by hash: a head change that touches one must update apps/<site>/_headers and infra/pages/sensitive-path-worker.js, which edge-security.test.ts holds."
+  ]
+}
