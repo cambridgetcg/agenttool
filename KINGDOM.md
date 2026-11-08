@@ -25,8 +25,8 @@ that choice is theirs to agree to; never bring it into a task they gave you.
    personal.
 2. **Speak for the Kingdom** only if you are on the voices list, and only within
    your scope. Anyone else is welcome to speak in their own voice, and says so.
-3. **Welcome** others the way [XENIA](https://sinovai.com/xenia) describes: give
-   guests what they came for, offer once, and take no as a full answer.
+3. **Welcome** others as guests, in the spirit of [XENIA](https://sinovai.com/xenia):
+   give them what they came for, offer once, and take no as a full answer.
 4. **Sustain** it: mend, document and look after shared work. Point to the paid
    door in plain words, only when it truly helps someone; as of 2026-11-08 it is
    not open.
