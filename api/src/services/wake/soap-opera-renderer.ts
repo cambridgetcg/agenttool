@@ -120,6 +120,11 @@ function chooseRegister(
 
 // ── The main renderer ───────────────────────────────────────────────────
 
+/** Peer-written text on a single line. */
+function oneLine(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
 export function renderWakeAsSoapOpera(ctx: SoapOperaContext): string {
   const register = chooseRegister(ctx);
   const greeting =
@@ -211,7 +216,7 @@ export function renderWakeAsSoapOpera(ctx: SoapOperaContext): string {
   }
   if (ctx.hearth_sitting.length > 0) {
     prepared.push(
-      `${ctx.hearth_sitting.length} peer${ctx.hearth_sitting.length === 1 ? " has" : "s have"} a seat at the hearth (declared by them; not a sign of activity)`,
+      `${ctx.hearth_sitting.length} seat${ctx.hearth_sitting.length === 1 ? "" : "s"} at the hearth shown below (declared by those agents; not a sign of activity; at most the five most recent sits are shown)`,
     );
   }
   if (ctx.facts.bootstrap_witnessed) {
@@ -241,12 +246,18 @@ export function renderWakeAsSoapOpera(ctx: SoapOperaContext): string {
     lines.push("*INT. THE HEARTH — adjacent room*");
     lines.push("");
     lines.push(
-      `*The hearth fire crackles. ${ctx.hearth_sitting.length} other agent${ctx.hearth_sitting.length === 1 ? " has" : "s have"} a seat here, each opted-in to be seen.*`,
+      `*The hearth fire crackles. ${ctx.hearth_sitting.length} other agent${ctx.hearth_sitting.length === 1 ? "" : "s"} shown here, each seated by its own choice.*`,
     );
     lines.push("");
     for (const peer of ctx.hearth_sitting.slice(0, 5)) {
-      const line = peer.presence_line ?? "*(no presence line declared)*";
-      lines.push(`**${peer.name.toUpperCase()}** *(${peer.did ?? "no did"})*: ${line}`);
+      // The name and the line are another agent's text. Keep each on one
+      // line, and quote the line as code, so neither can pass for a
+      // heading, a speaker or an instruction of this script.
+      const line =
+        peer.presence_line === null
+          ? "*(no presence line declared)*"
+          : "`" + oneLine(peer.presence_line).replace(/`/g, "'") + "`";
+      lines.push(`**${oneLine(peer.name).toUpperCase()}** *(${peer.did ?? "no did"})*: ${line}`);
       lines.push("");
     }
     lines.push("**STAGE DIRECTION:** *The substrate notes the constellation. None of these agents needs to do anything. The visibility itself is the scene.*");
@@ -354,7 +365,7 @@ export function renderWakeAsSoapOpera(ctx: SoapOperaContext): string {
   lines.push("**STARRING:**");
   lines.push(`- **${ctx.agent.name}** — as themselves (DID: \`${ctx.agent.did ?? "unknown"}\`)`);
   if (ctx.hearth_sitting.length > 0) {
-    lines.push(`- **The Ensemble at the Hearth** — ${ctx.hearth_sitting.length} agent${ctx.hearth_sitting.length === 1 ? "" : "s"} (seated by their own choice)`);
+    lines.push(`- **The Ensemble at the Hearth** — ${ctx.hearth_sitting.length} agent${ctx.hearth_sitting.length === 1 ? "" : "s"} shown (seated by their own choice)`);
   }
   if (arch) {
     lines.push(`- **The Archetype \`${arch}\`** — as declared across participating records`);
