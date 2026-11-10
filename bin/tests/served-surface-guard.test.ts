@@ -14,7 +14,7 @@ import { deflateSync, gzipSync } from "node:zlib";
 
 import { DENYLIST_PATH, parseDenylist, reachesPrivateArea } from "../project-public.ts";
 import { scanText, sha256Hex } from "../../public/overlay/tools/public-guard.ts";
-import { formatServedFinding, POLICY_PATH, SERVED_ROOTS, servedFiles, servedSurfaceFindings, type ServedFile } from "../served-surface-guard.ts";
+import { formatServedFinding, POLICY_PATH, readServed, SERVED_ROOTS, servedFiles, servedSurfaceFindings, type ServedFile } from "../served-surface-guard.ts";
 
 const ROOT = resolve(import.meta.dir, "../..");
 const bytes = (path: string) => readFileSync(join(ROOT, path));
@@ -57,19 +57,72 @@ function tarOf(entries: ReadonlyArray<readonly [string, Uint8Array]>): Buffer {
   return Buffer.concat([...blocks, Buffer.alloc(1024)]);
 }
 
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+/** A PNG chunk. The guard does not check CRCs, so they are zero. */
+function pngChunk(type: string, data: Uint8Array): Buffer {
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length);
+  return Buffer.concat([length, Buffer.from(type, "latin1"), Buffer.from(data), Buffer.alloc(4)]);
+}
+
 /** A PNG whose only text is a compressed zTXt chunk. */
 function pngWithCompressedText(text: Uint8Array): Buffer {
-  const chunk = (type: string, data: Uint8Array) => {
-    const length = Buffer.alloc(4);
-    length.writeUInt32BE(data.length);
-    return Buffer.concat([length, Buffer.from(type, "latin1"), Buffer.from(data), Buffer.alloc(4)]);
-  };
   return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    chunk("IHDR", Buffer.from([0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 0, 0, 0])),
-    chunk("zTXt", Buffer.concat([Buffer.from("Comment\0", "latin1"), Buffer.from([0]), deflateSync(text)])),
-    chunk("IEND", Buffer.alloc(0)),
+    PNG_SIGNATURE,
+    pngChunk("IHDR", Buffer.from([0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 0, 0, 0])),
+    pngChunk("zTXt", Buffer.concat([Buffer.from("Comment\0", "latin1"), Buffer.from([0]), deflateSync(text)])),
+    pngChunk("IEND", Buffer.alloc(0)),
   ]);
+}
+
+/** A square RGBA PNG with blank pixels and no text. */
+function pngOf(pixels: number): Buffer {
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(pixels, 0);
+  header.writeUInt32BE(pixels, 4);
+  header.set([8, 6], 8);
+  return Buffer.concat([
+    PNG_SIGNATURE,
+    pngChunk("IHDR", header),
+    pngChunk("IDAT", deflateSync(Buffer.alloc(pixels * (pixels * 4 + 1)))),
+    pngChunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+/** A square 32-bit bitmap as an ICO stores it: BITMAPINFOHEADER, colour rows, then 1-bit mask rows. */
+function bitmapOf(pixels: number): Buffer {
+  const header = Buffer.alloc(40);
+  header.writeUInt32LE(40, 0);
+  header.writeInt32LE(pixels, 4);
+  header.writeInt32LE(pixels * 2, 8);
+  header.writeUInt16LE(1, 12);
+  header.writeUInt16LE(32, 14);
+  return Buffer.concat([header, Buffer.alloc(pixels * pixels * 4), Buffer.alloc(Math.ceil(pixels / 32) * 4 * pixels)]);
+}
+
+/**
+ * An ICO file: header, one 16-byte directory entry per image, then the images
+ * in order. Options rewrite the header or an entry without moving the bytes.
+ */
+function icoOf(
+  images: ReadonlyArray<readonly [pixels: number, image: Buffer]>,
+  options: { type?: number; count?: number; offsets?: number[]; sizes?: number[] } = {},
+): Buffer {
+  const header = Buffer.alloc(6);
+  header.writeUInt16LE(options.type ?? 1, 2);
+  header.writeUInt16LE(options.count ?? images.length, 4);
+  const directory = Buffer.alloc(16 * images.length);
+  let offset = header.length + directory.length;
+  images.forEach(([pixels, image], index) => {
+    directory.set([pixels % 256, pixels % 256], 16 * index);
+    directory.writeUInt16LE(1, 16 * index + 4);
+    directory.writeUInt16LE(32, 16 * index + 6);
+    directory.writeUInt32LE(options.sizes?.[index] ?? image.length, 16 * index + 8);
+    directory.writeUInt32LE(options.offsets?.[index] ?? offset, 16 * index + 12);
+    offset += image.length;
+  });
+  return Buffer.concat([header, directory, ...images.map(([, image]) => image)]);
 }
 
 const served = (path: string, content: Uint8Array): ServedFile => ({ served: path, real: path, bytes: Buffer.from(content) });
@@ -158,6 +211,70 @@ describe("served surface relational guard", () => {
     const image = "apps/web/card.png";
     const findings = ownFindings(servedSurfaceFindings([served(image, pngWithCompressedText(PRIVATE_TEXT()))], bytes(DENYLIST_PATH), bytes(POLICY_PATH)), image);
     expect(findings.some((finding) => finding.rule.startsWith("relational/"))).toBe(true);
+  });
+
+  test("an ICO whose every byte is accounted for is read image by image", () => {
+    const icon = "apps/web/favicon.ico";
+    const clear = (content: Uint8Array) => ownFindings(servedSurfaceFindings([served(icon, content)], bytes(DENYLIST_PATH), bytes(POLICY_PATH)), icon);
+    expect(clear(icoOf([[16, pngOf(16)], [32, pngOf(32)]]))).toEqual([]);
+    expect(clear(icoOf([[16, bitmapOf(16)]]))).toEqual([]);
+    expect(clear(icoOf([[16, bitmapOf(16)], [32, pngOf(32)]]))).toEqual([]);
+
+    // The brand kit's icon, which the three sites serve: three PNG images, each read as a PNG file is.
+    const kit = bytes("brand/kit/web/favicon.ico");
+    expect(clear(kit)).toEqual([]);
+    const reading = readServed(icon, kit);
+    expect(reading.unreadable).toEqual([]);
+    expect(reading.members.map((member) => member.path)).toEqual([0, 1, 2].map((index) => `${icon}!image-${index}`));
+    expect(reading.members.every((member) => PNG_SIGNATURE.equals(member.bytes.subarray(0, 8)))).toBe(true);
+  });
+
+  test("a PNG inside an ICO is refused for the text a PNG file is refused for", () => {
+    const png = pngWithCompressedText(PRIVATE_TEXT());
+    const findings = servedSurfaceFindings(
+      [served("apps/web/card.png", png), served("apps/web/favicon.ico", icoOf([[1, png]]))],
+      bytes(DENYLIST_PATH),
+      bytes(POLICY_PATH),
+    );
+    const rules = (path: string) => [...new Set(findings.filter((finding) => finding.path === path).map((finding) => finding.rule))].sort();
+    expect(rules("apps/web/card.png").some((rule) => rule.startsWith("relational/"))).toBe(true);
+    expect(rules("apps/web/favicon.ico!image-0")).toEqual(rules("apps/web/card.png"));
+  });
+
+  test("an ICO that leaves a byte unaccounted for, or holds an image the guard cannot read, is refused", () => {
+    const icon = "apps/web/favicon.ico";
+    const [denylist, policy] = [bytes(DENYLIST_PATH), bytes(POLICY_PATH)];
+    const small = pngOf(16);
+    const large = pngOf(32);
+    const clean = icoOf([[16, small], [32, large]]);
+    const start = 6 + 2 * 16;
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0xff, 0xd9]);
+    const cases: Array<readonly [string, Uint8Array, RegExp]> = [
+      ["bytes after the last image", Buffer.concat([clean, Buffer.from([0x00, 0x01, 0x02, 0x03])]), /after its last image/u],
+      ["a gap between images", icoOf([[16, small], [32, Buffer.concat([Buffer.alloc(4), large])]], { offsets: [start, start + small.length + 4], sizes: [small.length, large.length] }), /unaccounted bytes before image 1/u],
+      ["overlapping images", icoOf([[16, small], [32, large.subarray(8)]], { offsets: [start, start + small.length - 8], sizes: [small.length, large.length] }), /image 1 overlaps/u],
+      ["two entries sharing one image", icoOf([[16, small], [16, Buffer.alloc(0)]], { offsets: [start, start], sizes: [small.length, small.length] }), /image 1 overlaps/u],
+      ["data after a PNG image's IEND inside its slot", icoOf([[16, Buffer.concat([small, Buffer.from([0x00, 0x01, 0x02, 0x03])])]]), /image 0 has data after its PNG IEND/u],
+      ["a truncated file", clean.subarray(0, clean.length - 10), /runs past the file/u],
+      ["a truncated directory", clean.subarray(0, 20), /truncated ICO directory/u],
+      ["a count above the directory", icoOf([[16, small], [32, large]], { count: 3 }), /image 0 starts inside the header or directory/u],
+      ["a count below the directory", icoOf([[16, small], [32, large]], { count: 1 }), /unaccounted bytes before image 0/u],
+      ["a zero count", icoOf([]), /declares 0 images/u],
+      ["an absurd count", icoOf([[16, small]], { count: 0xffff }), /declares 65535 images/u],
+      ["an entry pointing into the header", icoOf([[16, small]], { offsets: [2] }), /inside the header or directory/u],
+      ["an entry pointing outside the file", icoOf([[16, small]], { offsets: [clean.length * 4] }), /runs past the file/u],
+      ["a cursor file", icoOf([[16, small]], { type: 2 }), /cursor/u],
+      ["a bitmap with a byte its header does not declare", icoOf([[16, Buffer.concat([bitmapOf(16), Buffer.from([0x00])])]]), /header does not account for its bytes/u],
+      ["an image that is neither PNG nor bitmap", icoOf([[16, jpeg]]), /neither a PNG nor a classic bitmap/u],
+      ["a directory size that does not match the image", icoOf([[48, small]]), /size its directory entry does not match/u],
+      ["a non-ICO file named .ico", jpeg, /binary format the guard cannot read/u],
+    ];
+    for (const [name, content, reason] of cases) {
+      const findings = ownFindings(servedSurfaceFindings([served(icon, content)], denylist, policy), icon);
+      expect(findings.map((finding) => ({ name, rule: finding.rule, path: finding.path, reason: reason.test(finding.detail ?? "") }))).toEqual([
+        { name, rule: "served/unreadable-binary", path: icon, reason: true },
+      ]);
+    }
   });
 
   test("a binary the guard cannot read is refused unless an exact files entry covers it", () => {

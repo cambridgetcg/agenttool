@@ -25,6 +25,14 @@
       "under": "Yu's go of 2026-11-10 for group A of the 2026-11-02 visual-language review (\"Go: build, open PRs, merge\"; items A1 and A2), through this repository's own rules",
       "date": "2026-11-10",
       "record": "the pull request that added this kit; review-2026-11-02 §6 (agenttool) and §7 A1, A2"
+    },
+    {
+      "part": "serving favicon.ico",
+      "what": "the served-surface guard reads ICO, failing closed, so the three sites serve the kit's favicon.ico byte for byte; public/private-guard/served-surface.json is unchanged and JPEG stays unreadable",
+      "by": "agent (Claude Code, Claude Opus 5.5, on the Studio)",
+      "under": "the owner's decision of 2026-11-10 to let the guard read ICO files so that /favicon.ico can be served",
+      "date": "2026-11-10",
+      "record": "the pull request \"served-surface guard reads ICO; the three sites serve favicon.ico\""
     }
   ],
   "spec": "brand.json",
@@ -74,19 +82,17 @@
   "serve": [
     {
       "to": "/apps/web",
-      "files": ["favicon-32.png", "favicon.svg", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "icon-maskable-512.png", "site.webmanifest"],
+      "files": ["favicon.ico", "favicon-32.png", "favicon.svg", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "icon-maskable-512.png", "site.webmanifest"],
       "omit": [
-        {"file": "favicon.ico", "why": "the served-surface guard (bin/served-surface-guard.ts) refuses an ICO it cannot read, and listing one in public/private-guard/served-surface.json is the owner's decision, not made; the pages link favicon-32.png and favicon.svg instead, and /favicon.ico keeps answering 404"},
         {"file": "og.jpg", "why": "agenttool.dev keeps its own home card, apps/web/og.png (2026-07-24), with its words; the kit's default card is not served"},
         {"file": "head-home.html", "why": "the home page's head is unchanged apart from its icon lines; its JSON-LD is not added here"}
       ]
     },
     {
       "to": "/apps/docs",
-      "files": ["favicon-32.png", "favicon.svg", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "icon-maskable-512.png"],
+      "files": ["favicon.ico", "favicon-32.png", "favicon.svg", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "icon-maskable-512.png"],
       "omit": [
         {"file": "site.webmanifest", "why": "docs.agenttool.dev serves its own, sites/docs/site.webmanifest: the kit's with the docs home page's title and meta description"},
-        {"file": "favicon.ico", "why": "the served-surface guard (bin/served-surface-guard.ts) refuses an ICO it cannot read, and listing one in public/private-guard/served-surface.json is the owner's decision, not made; the pages link favicon-32.png and favicon.svg instead, and /favicon.ico keeps answering 404"},
         {"file": "og.jpg", "why": "docs.agenttool.dev serves its own card, og/docs.png"},
         {"file": "og/docs.jpg", "why": "served as PNG instead (cards/docs.png, from cards.sh): the served-surface guard reads PNG and refuses a JPEG it cannot inspect"}
       ]
@@ -108,10 +114,9 @@
     },
     {
       "to": "/apps/dashboard",
-      "files": ["favicon-32.png", "favicon.svg", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "icon-maskable-512.png"],
+      "files": ["favicon.ico", "favicon-32.png", "favicon.svg", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "icon-maskable-512.png"],
       "omit": [
         {"file": "site.webmanifest", "why": "app.agenttool.dev serves its own, sites/app/site.webmanifest: the kit's with the app home page's title and meta description"},
-        {"file": "favicon.ico", "why": "the served-surface guard (bin/served-surface-guard.ts) refuses an ICO it cannot read, and listing one in public/private-guard/served-surface.json is the owner's decision, not made; the pages link favicon-32.png and favicon.svg instead, and /favicon.ico keeps answering 404"},
         {"file": "og.jpg", "why": "app.agenttool.dev serves its own cards, og/app.png and og/app-watch.png"},
         {"file": "og/app.jpg", "why": "served as PNG instead (cards/app.png, from cards.sh), for the served-surface guard"},
         {"file": "og/app-watch.jpg", "why": "served as PNG instead (cards/app-watch.png, from cards.sh), for the served-surface guard"}
@@ -214,7 +219,7 @@
     }
   ],
   "notes": [
-    "Known gap, waiting on the owner: /favicon.ico still answers 404 on all three hosts. The served-surface guard (bin/served-surface-guard.ts; its test bin/tests/served-surface-guard.test.ts in CI, and bin/frontend-deploy.sh before any upload) reads PNG, SVG, text, fonts and archives, and refuses any other binary unless public/private-guard/served-surface.json names that exact file with a reason. The kit's favicon.ico and its JPEG page cards are such binaries, and whether to list them (or teach the guard to read ICO and JPEG) is the owner's decision. So the sites serve no ICO: every page links favicon-32.png and favicon.svg (head-snippet.html here, the kit's lines with that one change), and the cards are PNG (cards.sh). A live doorcheck will keep failing favicon.ico until that decision.",
+    "favicon.ico, closed 2026-11-10: the served-surface guard (bin/served-surface-guard.ts; its test bin/tests/served-surface-guard.test.ts in CI, and bin/frontend-deploy.sh before any upload) reads PNG, SVG, ICO, text, fonts and archives, and refuses any other binary unless public/private-guard/served-surface.json names that exact file with a reason. Under the owner's decision of 2026-11-10 it reads an ICO only when every byte is accounted for (header, directory and images in order, with no gap, overlap or trailing byte) and each image reads as that image type does on its own: a PNG, read as a PNG file is and ending at its IEND chunk, or a classic bitmap whose header accounts for exactly its bytes. A cursor, any other image type and anything malformed are refused. So the three sites serve the kit's favicon.ico byte for byte, with no policy entry, and /favicon.ico stops answering 404 once a release uploads it. The pages still link favicon-32.png and favicon.svg (head-snippet.html); the ICO answers clients that ask for /favicon.ico without reading a page. JPEG stays unreadable, so the cards are PNG (cards.sh).",
     "One look, three sites: agenttool.dev (apps/web), docs.agenttool.dev (apps/docs) and app.agenttool.dev (apps/dashboard) share apps/_shared/theme.css, so serve lists one target per site folder, each with the same icon files.",
     "brand/ sits at the repository root, outside apps/. bin/frontend-deploy.sh uploads each apps/<site> folder and strips only CLAUDE.md, AGENTS.md and README.md, and apps/_shared is linked into every site as shared/, so a brand folder anywhere under apps/ would be published.",
     "Release rules: a frontend release is an outward act and needs Yu's word for that release (AGENTS.md: a local edit request alone does not authorize publication or deployment). On this Mac, bin/deploy.sh needs Bun 1.3.5 exactly (memory note agenttool-ui-hearth-2026-10-17).",
