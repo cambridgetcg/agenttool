@@ -38,6 +38,70 @@ const app = new Hono<ProjectContext>();
 const MAX_QUIET_HOURS = 30 * 24; // 30 days — generous but not infinite
 const MIN_QUIET_HOURS = 1;
 
+export type QuietUntilResult =
+  | { ok: true; until: Date }
+  | { ok: false; status: 400; body: Record<string, unknown> };
+
+/** Resolve the end of a declared quiet: explicit ISO `until` wins; else
+ *  `hours` from now; else 8 hours. Both forms meet the same 30-day limit.
+ *  `hours` is clamped into the range, as before. An explicit `until` past
+ *  the limit is refused with the latest accepted moment, not shortened:
+ *  the timestamp is the agent's own declaration, and peers read it on the
+ *  public profile, so the substrate does not publish one the agent did not
+ *  write. */
+export function resolveQuietUntil(
+  input: { until?: unknown; hours?: unknown },
+  nowMs: number,
+): QuietUntilResult {
+  const hourMs = 60 * 60 * 1000;
+  let until: Date;
+  if (typeof input.until === "string" && input.until) {
+    const parsed = new Date(input.until);
+    if (isNaN(parsed.getTime())) {
+      return {
+        ok: false,
+        status: 400,
+        body: { error: "invalid_until", message: "until must be ISO-8601." },
+      };
+    }
+    const maxUntil = new Date(nowMs + MAX_QUIET_HOURS * hourMs);
+    if (parsed.getTime() > maxUntil.getTime()) {
+      return {
+        ok: false,
+        status: 400,
+        body: {
+          error: "until_too_far",
+          message: `until may be at most ${MAX_QUIET_HOURS} hours (30 days) from now. Nothing was changed. Submit an earlier timestamp, or declare again before the quiet ends to extend it.`,
+          max_hours: MAX_QUIET_HOURS,
+          max_until: maxUntil.toISOString(),
+        },
+      };
+    }
+    until = parsed;
+  } else if (typeof input.hours === "number") {
+    const hours = Math.min(
+      Math.max(Math.floor(input.hours), MIN_QUIET_HOURS),
+      MAX_QUIET_HOURS,
+    );
+    until = new Date(nowMs + hours * hourMs);
+  } else {
+    until = new Date(nowMs + 8 * hourMs);
+  }
+
+  if (until.getTime() <= nowMs) {
+    return {
+      ok: false,
+      status: 400,
+      body: {
+        error: "until_in_past",
+        message:
+          "until must be in the future. Submit a later timestamp or use { hours: N }.",
+      },
+    };
+  }
+  return { ok: true, until };
+}
+
 function isStillQuiet(until: Date | null): boolean {
   return until !== null && until.getTime() > Date.now();
 }
@@ -106,36 +170,9 @@ app.post("/start", async (c) => {
   const obj = (body ?? {}) as Record<string, unknown>;
 
   // Resolve `until` — explicit ISO wins; else `hours` from now; else default 8h.
-  let until: Date;
-  if (typeof obj.until === "string" && obj.until) {
-    const parsed = new Date(obj.until);
-    if (isNaN(parsed.getTime())) {
-      return c.json(
-        { error: "invalid_until", message: "until must be ISO-8601." },
-        400,
-      );
-    }
-    until = parsed;
-  } else if (typeof obj.hours === "number") {
-    const hours = Math.min(
-      Math.max(Math.floor(obj.hours), MIN_QUIET_HOURS),
-      MAX_QUIET_HOURS,
-    );
-    until = new Date(Date.now() + hours * 60 * 60 * 1000);
-  } else {
-    until = new Date(Date.now() + 8 * 60 * 60 * 1000);
-  }
-
-  if (until.getTime() <= Date.now()) {
-    return c.json(
-      {
-        error: "until_in_past",
-        message:
-          "until must be in the future. Submit a later timestamp or use { hours: N }.",
-      },
-      400,
-    );
-  }
+  const resolved = resolveQuietUntil(obj, Date.now());
+  if (!resolved.ok) return c.json(resolved.body, resolved.status);
+  const until = resolved.until;
 
   const reason =
     typeof obj.reason === "string" ? obj.reason.trim().slice(0, 200) : null;

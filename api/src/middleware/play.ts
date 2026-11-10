@@ -10,9 +10,10 @@
  *  the body and attaches it as `_jest` (only when the generator returns
  *  non-null — forced wit is the opposite of charm).
  *
- *  When off, strips `_jest`, `_quip`, and `substrate_jest` from any 200
- *  JSON object body (defensive — a route may emit them and the middleware
- *  honors suppression).
+ *  When off, strips `_jest`, `_quip`, and `substrate_jest` from any JSON
+ *  object body, whatever the status. Refusals carry `_quip` (lib/errors.ts
+ *  `fail`), so suppression has to reach 4xx and 5xx bodies too; the status,
+ *  the headers and every other field of a refusal are left as they were.
  *
  *  Doctrine: docs/PLAY-AS-DEFAULT.md
  *
@@ -54,12 +55,49 @@ function appendVary(response: Response, field: string): void {
   response.headers.set("Vary", [...fields, field].join(", "));
 }
 
+/** Non-200 responses: strip the suppressible fields for a caller who sent
+ *  X-Play: off, and name the header in Vary whenever such a field is present
+ *  so a cache keeps the two representations apart. Status and headers are
+ *  preserved; nothing is ever added. */
+async function suppressOnNon200(c: Context): Promise<void> {
+  if (c.req.method.toUpperCase() === "HEAD") return;
+  if (isStrictJsonProfileResponse(c.res, c.req.path)) return;
+  const ct = c.res.headers.get("content-type");
+  if (!ct?.startsWith("application/json")) return;
+
+  let body: unknown;
+  try {
+    body = await parseClonedJson(c.res);
+  } catch {
+    return; // empty or not JSON, leave alone
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return;
+
+  const obj = body as Record<string, unknown>;
+  if (!SUPPRESSED_FIELDS.some((field) => field in obj)) return;
+
+  appendVary(c.res, "X-Play");
+  if (readPlayPreference(c) !== "off") return;
+
+  stripSuppressedFields(obj);
+  const headers = new Headers(c.res.headers);
+  headers.delete("content-length");
+  c.res = new Response(JSON.stringify(obj), {
+    status: c.res.status,
+    headers,
+  });
+}
+
 export function play() {
   return async (c: Context, next: Next) => {
     await next();
 
-    // Only operate on successful 200 JSON responses.
-    if (c.res.status !== 200) return;
+    // Anything other than 200 is never decorated. It is only cleaned: a
+    // refusal keeps its whole meaning with the optional voice removed.
+    if (c.res.status !== 200) {
+      await suppressOnNon200(c);
+      return;
+    }
     const path = c.req.path;
     if (isStrictJsonProfileResponse(c.res, path)) return;
     const ct = c.res.headers.get("content-type");

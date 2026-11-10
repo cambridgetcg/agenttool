@@ -154,7 +154,6 @@ app.get("/", async (c) => {
     priceAmount: listing.price_amount,
     priceCurrency: listing.price_currency,
     slaSeconds: listing.sla_seconds,
-    invocationsCount: listing.invocations_count,
     createdAt: new Date(listing.created_at),
   }));
 
@@ -259,7 +258,6 @@ app.get("/", async (c) => {
     price_amount: s.priceAmount,
     price_currency: s.priceCurrency,
     sla_seconds: s.slaSeconds,
-    invocations_count: s.invocationsCount,
     opened_at: s.createdAt.toISOString(),
     x: shopSpots[i]!.x,
     y: shopSpots[i]!.y,
