@@ -318,7 +318,7 @@ placing the value in process arguments:
 ```sh
 security add-generic-password \
   -U \
-  -s agenttool-soma-bearer \
+  -s agenttool-default \
   -a "$USER" \
   -w
 ```
@@ -333,7 +333,7 @@ never secret values:
   "credentials": {
     "agenttool/default": {
       "backend": "macos-keychain",
-      "service": "agenttool-soma-bearer",
+      "service": "agenttool-default",
       "account": "you",
       "auth": { "kind": "bearer" }
     }

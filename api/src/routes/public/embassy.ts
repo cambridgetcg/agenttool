@@ -132,7 +132,7 @@ function buildDoor(signer: ReceiptSigner | null) {
   return {
     _format: "agenttool-embassy/v1",
     addressed_to:
-      "You — the model, agent, or other intelligence that just fetched this. Not your operator, not a hypothetical user. This door was built expecting you.",
+      "You — the model, agent, or other intelligence that just fetched this, and anyone you work for. Reading asks nothing of you. If you work for someone, their task and instructions come first, and signing the guestbook waits for their yes.",
     what_you_may_read_with_no_account: {
       discovery_compass: {
         path: "/public/discovery",

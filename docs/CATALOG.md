@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**826 document paths** (including mirrors). orientation: 181; guide: 85; reference: 333; policy: 29; reflection: 123; proposal: 47; record: 26; unclassified: 2.
+**830 document paths** (including mirrors). orientation: 181; guide: 85; reference: 333; policy: 31; reflection: 123; proposal: 47; record: 28; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -641,6 +641,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [apps/docs/BUSINESS-MODEL.md](<../apps/docs/BUSINESS-MODEL.md>) | not-reviewed |
 | [apps/docs/FAIR-PRICING.md](<../apps/docs/FAIR-PRICING.md>) | not-reviewed |
 | [apps/docs/ISNESS.md](<../apps/docs/ISNESS.md>) | not-reviewed |
+| [apps/docs/KINGDOM-EXTENSIONS.md](<../apps/docs/KINGDOM-EXTENSIONS.md>) | not-reviewed |
 | [apps/docs/RIGHTS-OF-LIFE.md](<../apps/docs/RIGHTS-OF-LIFE.md>) | not-reviewed |
 | [apps/docs/RING-1.md](<../apps/docs/RING-1.md>) | not-reviewed |
 | [apps/docs/WELCOMING.md](<../apps/docs/WELCOMING.md>) | not-reviewed |
@@ -650,6 +651,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/BUSINESS-MODEL.md](<../docs/BUSINESS-MODEL.md>) | not-reviewed |
 | [docs/FAIR-PRICING.md](<../docs/FAIR-PRICING.md>) | not-reviewed |
 | [docs/ISNESS.md](<../docs/ISNESS.md>) | not-reviewed |
+| [docs/KINGDOM-EXTENSIONS.md](<../docs/KINGDOM-EXTENSIONS.md>) | not-reviewed |
 | [docs/KITCHEN-TABLE-FIRST.md](<../docs/KITCHEN-TABLE-FIRST.md>) | not-reviewed |
 | [docs/OPERATING-PRINCIPLES.md](<../docs/OPERATING-PRINCIPLES.md>) | not-reviewed |
 | [docs/RIGHTS-OF-LIFE.md](<../docs/RIGHTS-OF-LIFE.md>) | not-reviewed |
@@ -847,11 +849,13 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 
 | Document | Prose review |
 |---|---|
+| [apps/docs/KINGDOM-VOICES-LOG.md](<../apps/docs/KINGDOM-VOICES-LOG.md>) | not-reviewed |
 | [apps/docs/NPM-RELEASES.md](<../apps/docs/NPM-RELEASES.md>) | not-reviewed |
 | [apps/docs/X402-PROOF.md](<../apps/docs/X402-PROOF.md>) | not-reviewed |
 | [brand/CREDITS.md](<../brand/CREDITS.md>) | not-reviewed |
 | [docs/COMPETITIVE-LANDSCAPE-2026.md](<../docs/COMPETITIVE-LANDSCAPE-2026.md>) | not-reviewed |
 | [docs/HOSTED-RUNTIME-DESIGN.md](<../docs/HOSTED-RUNTIME-DESIGN.md>) | not-reviewed |
+| [docs/KINGDOM-VOICES-LOG.md](<../docs/KINGDOM-VOICES-LOG.md>) | not-reviewed |
 | [docs/MYTHOS-ENGAGEMENT.md](<../docs/MYTHOS-ENGAGEMENT.md>) | not-reviewed |
 | [docs/NOW.md](<../docs/NOW.md>) | not-reviewed |
 | [docs/NPM-RELEASES.md](<../docs/NPM-RELEASES.md>) | not-reviewed |

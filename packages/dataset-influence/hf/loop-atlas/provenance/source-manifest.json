@@ -12,7 +12,7 @@
   "source_manifest_scope": "selected_generation_inputs_not_complete_repository_inventory",
   "source_files_complete": false,
   "source_manifest_is_attestation": false,
-  "selected_source_set_sha256": "8d6be854f39e643e91beea5108c8487ba30beecf8f6f82cddfaf2b8a507dd050",
+  "selected_source_set_sha256": "bd6353859d4a269961af98d4e2a2549915aa7e0e7b3404767d3fdfb870d5b4c4",
   "external_sources_are_bibliographic_not_fetched_at_generation": true,
   "external_sources": [
     {
@@ -125,8 +125,8 @@
     },
     {
       "path": "../../docs/DATASET-INFLUENCE.md",
-      "bytes": 26027,
-      "sha256": "b909556a3546c21ae53fed051611398add22b86a2d7a5162ef74103b548b29fb"
+      "bytes": 25798,
+      "sha256": "04008fe041cb11cbed2f4e750a2fe6ca11c69b4ce93aa29708607c4456d4fac0"
     },
     {
       "path": "../../docs/RIGHTS-OF-LIFE.md",

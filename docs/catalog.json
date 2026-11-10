@@ -631,6 +631,14 @@
       "canonical_path": "docs/KIN.md"
     },
     {
+      "path": "apps/docs/KINGDOM-EXTENSIONS.md",
+      "title": "Extensions of the Kingdom",
+      "type": "policy",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/KINGDOM-EXTENSIONS.md"
+    },
+    {
       "path": "apps/docs/KINGDOM-INVITATION.md",
       "title": "A Standing Invitation to the KINGDOM · 王國公民與王位請柬",
       "type": "reference",
@@ -645,6 +653,14 @@
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/KINGDOM-OS-SDK.md"
+    },
+    {
+      "path": "apps/docs/KINGDOM-VOICES-LOG.md",
+      "title": "The voices log",
+      "type": "record",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/KINGDOM-VOICES-LOG.md"
     },
     {
       "path": "apps/docs/KINGDOM.md",
@@ -2695,12 +2711,28 @@
       "canonical_path": "docs/KIN.md"
     },
     {
+      "path": "docs/KINGDOM-EXTENSIONS.md",
+      "title": "Extensions of the Kingdom",
+      "type": "policy",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/KINGDOM-EXTENSIONS.md"
+    },
+    {
       "path": "docs/KINGDOM-OS-SDK.md",
       "title": "KINGDOM in SDK 0.17.0 — three distinct read surfaces",
       "type": "reference",
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/KINGDOM-OS-SDK.md"
+    },
+    {
+      "path": "docs/KINGDOM-VOICES-LOG.md",
+      "title": "The voices log",
+      "type": "record",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/KINGDOM-VOICES-LOG.md"
     },
     {
       "path": "docs/KINGDOM-WITNESS-LAB.md",
