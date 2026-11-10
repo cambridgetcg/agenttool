@@ -36,12 +36,23 @@ with no new mark and no new words:
   mode gives the accent. The PNG icons have no dark form. Choosing the night lamp for dark tabs is an agents' call
   within the site's own tokens.
 - **Icons served**: `favicon-32.png`, `favicon.svg`, `apple-touch-icon.png` (180, on paper `#f7f3ec`),
-  `icon-192.png`, `icon-512.png`, `icon-maskable-512.png` and `site.webmanifest` (display `browser`, so nothing new
-  offers to install). The kit's `favicon.ico` is not served (see "Deploying"), so `/favicon.ico` still answers 404. The generator scales the ring to fill the icon square and hints the 16 and 32 px cuts, so the
-  tab icon reads larger than the old data-URI, which drew the ring at 74% of its box.
-- **theme-color** `#F7F3EC` for a light system scheme and `#141210` for a dark one: the grounds the pages paint in
-  dawn and night. `mode.js` and `theme.js` follow the system scheme until a visitor picks a mode at that door; the
-  meta follows the system scheme only.
+  `icon-192.png`, `icon-512.png`, `icon-maskable-512.png` and a `site.webmanifest` per site (display `browser`, so
+  nothing new offers to install). agenttool.dev serves the kit's; docs and app serve `sites/docs/` and `sites/app/`,
+  the kit's with each home page's own `<title>` as `name` and its meta description as `description`. The kit's
+  `favicon.ico` is not served (see "Deploying"), so `/favicon.ico` still answers 404.
+- **The tab icon is drawn bigger and heavier than before.** For an untiled mark the generator fills the favicon
+  square (fixed at 98% at 16 px and 94% at 32 px; `icon.padding` sizes only the app icons) and hints the cuts. The
+  old data-URI drew the ring across 12 of 16 px and 24 of 32 px (about 74%). At 16 px the new ring spans all 16 px
+  with a 2 px stroke and a 4 px dot, where the old had about 1 px and 2 px: about 2.9 times the ink. At 32 px it spans
+  32 px with a 2 px stroke and a 6 px dot, where the old had 2 px and 4 px: about 1.6 times the ink. The kit has no
+  setting to keep the old proportion, so this is left for the owner.
+- **theme-color and color-scheme say what a page paints without JavaScript.** The 17 agenttool.dev pages
+  (`apps/web/style.css` has a `prefers-color-scheme` rule) and the four docs and app pages with
+  `data-layout="workspace"` that load `/shared/workspace.css` (docs `/`, `/agents`, `/roadmap`; app `/`) paint night
+  on a dark system with or without script: they carry `color-scheme: light dark` and the pair `#F7F3EC` (light) and
+  `#141210` (dark), as in `head-snippet.html`. The other 43 docs and app pages paint paper unless `mode.js` runs
+  (`apps/_shared/theme.css` has no fallback), so they carry one `theme-color` `#F7F3EC` and no `color-scheme` meta,
+  as before. The meta follows the system scheme, not the mode a visitor picks with the toggle.
 - **Cards** (1200×630 PNG, on paper, the page's own words):
 
   | Card | Served at | Title | Line | Words from |
@@ -61,13 +72,12 @@ with no new mark and no new words:
 
 | Site | Folder | Files |
 |---|---|---|
-| agenttool.dev | `apps/web` | the seven icon files |
-| docs.agenttool.dev | `apps/docs` | the seven icon files, `og/docs.png` |
-| app.agenttool.dev | `apps/dashboard` | the seven icon files, `og/app.png`, `og/app-watch.png` |
+| agenttool.dev | `apps/web` | the six icon files and the kit's `site.webmanifest` |
+| docs.agenttool.dev | `apps/docs` | the six icon files, `sites/docs/site.webmanifest`, `og/docs.png` |
+| app.agenttool.dev | `apps/dashboard` | the six icon files, `sites/app/site.webmanifest`, `og/app.png`, `og/app-watch.png` |
 
-Every page that drew the ring as a data-URI favicon now carries the lines in `head-snippet.html` (the kit's, with
-`favicon-32.png` in place of `favicon.ico`): the icon links, the manifest and the theme-color pair; docs and app pages that declared no `color-scheme` gained `light dark` (they all load `mode.js`, which sets the
-mode before first paint). The docs hearth pages that used the old card name `og/docs.png`, with its type, size and alt
+Every page that drew the ring as a data-URI favicon now carries the icon and manifest links in `head-snippet.html`
+(the kit's, with `favicon-32.png` in place of `favicon.ico`), with the scheme lines above. The docs hearth pages that used the old card name `og/docs.png`, with its type, size and alt
 text; app's two pages name theirs. Each page keeps its own title and description.
 
 Left as they are, and listed in `brandkit.json`: pages with their own icon (web garden, lounge, party, porch, room and

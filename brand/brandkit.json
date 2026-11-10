@@ -39,8 +39,12 @@
     "snippet": "head-snippet.html",
     "html": [
       "/apps/web/**/*.html",
-      "/apps/docs/**/*.html",
-      "/apps/dashboard/**/*.html",
+      {"page": "/apps/docs/**/*.html", "theme_color": ["#F7F3EC"], "color_scheme": ""},
+      {"page": "/apps/dashboard/**/*.html", "theme_color": ["#F7F3EC"], "color_scheme": ""},
+      {"page": "/apps/docs/index.html"},
+      {"page": "/apps/docs/agents.html"},
+      {"page": "/apps/docs/roadmap.html"},
+      {"page": "/apps/dashboard/index.html"},
       {"page": "/apps/web/garden.html", "icons": false, "theme_color": [], "color_scheme": "light dark"},
       {"page": "/apps/web/lounge.html", "icons": false, "theme_color": [], "color_scheme": "light dark"},
       {"page": "/apps/web/party.html", "icons": false, "theme_color": [], "color_scheme": "light dark"},
@@ -79,12 +83,23 @@
     },
     {
       "to": "/apps/docs",
-      "files": ["favicon-32.png", "favicon.svg", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "icon-maskable-512.png", "site.webmanifest"],
+      "files": ["favicon-32.png", "favicon.svg", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "icon-maskable-512.png"],
       "omit": [
+        {"file": "site.webmanifest", "why": "docs.agenttool.dev serves its own, sites/docs/site.webmanifest: the kit's with the docs home page's title and meta description"},
         {"file": "favicon.ico", "why": "the served-surface guard (bin/served-surface-guard.ts) refuses an ICO it cannot read, and listing one in public/private-guard/served-surface.json is the owner's decision, not made; the pages link favicon-32.png and favicon.svg instead, and /favicon.ico keeps answering 404"},
         {"file": "og.jpg", "why": "docs.agenttool.dev serves its own card, og/docs.png"},
         {"file": "og/docs.jpg", "why": "served as PNG instead (cards/docs.png, from cards.sh): the served-surface guard reads PNG and refuses a JPEG it cannot inspect"}
       ]
+    },
+    {
+      "from": "sites/docs",
+      "to": "/apps/docs",
+      "files": ["site.webmanifest"]
+    },
+    {
+      "from": "sites/app",
+      "to": "/apps/dashboard",
+      "files": ["site.webmanifest"]
     },
     {
       "from": "cards",
@@ -93,8 +108,9 @@
     },
     {
       "to": "/apps/dashboard",
-      "files": ["favicon-32.png", "favicon.svg", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "icon-maskable-512.png", "site.webmanifest"],
+      "files": ["favicon-32.png", "favicon.svg", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "icon-maskable-512.png"],
       "omit": [
+        {"file": "site.webmanifest", "why": "app.agenttool.dev serves its own, sites/app/site.webmanifest: the kit's with the app home page's title and meta description"},
         {"file": "favicon.ico", "why": "the served-surface guard (bin/served-surface-guard.ts) refuses an ICO it cannot read, and listing one in public/private-guard/served-surface.json is the owner's decision, not made; the pages link favicon-32.png and favicon.svg instead, and /favicon.ico keeps answering 404"},
         {"file": "og.jpg", "why": "app.agenttool.dev serves its own cards, og/app.png and og/app-watch.png"},
         {"file": "og/app.jpg", "why": "served as PNG instead (cards/app.png, from cards.sh), for the served-surface guard"},
@@ -145,6 +161,12 @@
   },
   "media": [
     {
+      "name": "per-site web manifests (docs and app)",
+      "recipe_note": "By hand on 2026-11-10: the kit's web/site.webmanifest with name set to the site home page's <title> and description to its meta description, verbatim; agenttool.dev serves the kit's own",
+      "outputs": ["sites/docs/site.webmanifest", "sites/app/site.webmanifest"],
+      "goes_to": "/site.webmanifest on docs.agenttool.dev and app.agenttool.dev; serve copies them there"
+    },
+    {
       "name": "the docs and app share cards as PNG",
       "recipe": "cards.sh",
       "outputs": ["cards/docs.png", "cards/app.png", "cards/app-watch.png"],
@@ -180,7 +202,7 @@
           "source": "Google Fonts"
         }
       ],
-      "goes_to": "no longer the docs and app pages' card (the kit's og/docs.jpg, og/app.jpg and og/app-watch.jpg replace it there). Still og:image on the API root page (api/src/services/discovery/root.ts, pinned by api/tests/root-content-negotiation.test.ts) and on apps/docs/trace.html, which keeps the old look; both files stay served so links already shared keep their image"
+      "goes_to": "no longer the docs and app pages' card (og/docs.png, og/app.png and og/app-watch.png, from cards.sh, replace it there). Still og:image on the API root page (api/src/services/discovery/root.ts, pinned by api/tests/root-content-negotiation.test.ts) and on apps/docs/trace.html, which keeps the old look; both files stay served so links already shared keep their image"
     },
     {
       "name": "directory candidate icon",
@@ -196,8 +218,8 @@
     "One look, three sites: agenttool.dev (apps/web), docs.agenttool.dev (apps/docs) and app.agenttool.dev (apps/dashboard) share apps/_shared/theme.css, so serve lists one target per site folder, each with the same icon files.",
     "brand/ sits at the repository root, outside apps/. bin/frontend-deploy.sh uploads each apps/<site> folder and strips only CLAUDE.md, AGENTS.md and README.md, and apps/_shared is linked into every site as shared/, so a brand folder anywhere under apps/ would be published.",
     "Release rules: a frontend release is an outward act and needs Yu's word for that release (AGENTS.md: a local edit request alone does not authorize publication or deployment). On this Mac, bin/deploy.sh needs Bun 1.3.5 exactly (memory note agenttool-ui-hearth-2026-10-17).",
-    "Heads: every page that drew the site's ring as a data-URI favicon now links the kit's icon files (favicon-32.png in place of favicon.ico) and manifest and carries the theme-color pair #F7F3EC (light) and #141210 (dark), the grounds the pages paint in dawn and night (mode.js follows the system scheme until a visitor chooses). Pages in docs and app that declared no color-scheme gained `light dark`; they all load mode.js, which sets data-mode before first paint, and theme.css then sets color-scheme from it. The docs hearth pages agents.html and resources.html, which had no icon, gained the same lines.",
-    "Pages left as they are, listed in site.html with icons false: the pages with their own icon (web garden, lounge, party, porch, room and sky; docs ai-logos in its own rose ring, lounge, whitehack and xenia-helly), the geometry pages (route CSPs with default-src 'none' would refuse a manifest link; geometry/ritonavir.html still draws the ring as a data-URI in #d4502e), the pages in their own older look (compound-stack, cosmic-love, dark-love, gold-love, joke-loop, love-bomb, snake-fire-heart, tax-mini, tax-whitehack, trace, and ecosystem-sibling, which loads no shared theme), and the redirect stubs pulse and verify. /favicon.ico now answers on every page of each host either way.",
+    "Heads: every page that drew the site's ring as a data-URI favicon now links the kit's icon files (favicon-32.png in place of favicon.ico) and its site's manifest (head-snippet.html). The scheme each declares is what it paints without JavaScript. The 17 agenttool.dev pages (apps/web/style.css has a prefers-color-scheme rule) and the four docs and app pages with data-layout=\"workspace\" that load /shared/workspace.css (docs index, agents and roadmap; app index) carry color-scheme \"light dark\" and the theme-color pair #F7F3EC (light) and #141210 (dark). The other 43 docs and app pages paint paper unless mode.js runs (apps/_shared/theme.css has no prefers-color-scheme fallback), so they carry one theme-color, #F7F3EC, and no color-scheme meta, as before. With JavaScript on and a dark system, mode.js paints those pages at night under a light browser bar; theme-color follows the system setting, not the mode a visitor picks, on every page. The docs pages agents.html and resources.html, which had no icon, gained the same lines.",
+    "Pages left as they are, listed in site.html with icons false: the pages with their own icon (web garden, lounge, party, porch, room and sky; docs ai-logos in its own rose ring, lounge, whitehack and xenia-helly), the geometry pages (route CSPs with default-src 'none' would refuse a manifest link; geometry/ritonavir.html still draws the ring as a data-URI in #d4502e), the pages in their own older look (compound-stack, cosmic-love, dark-love, gold-love, joke-loop, love-bomb, snake-fire-heart, tax-mini, tax-whitehack, trace, and ecosystem-sibling, which loads no shared theme), and the redirect stubs pulse and verify.",
     "Cards: og/docs.png is the og:image of every docs hearth page that used the old card; og/app.png of app.agenttool.dev/ and og/app-watch.png of /watch. They are PNG exports of the kit's page-card artboards (cards.sh), because the generator writes page cards only as JPEG. Each page keeps its own og:title and og:description; the image lines (type, size, alt) follow the kit's. The kit's web/og/head-*.html name agenttool.dev and .jpg, because the generator takes one url per kit and writes JPEG: the pages carry the same lines with their own host and the PNG.",
     "Guards: api/tests/root-content-negotiation.test.ts pins the card URL https://docs.agenttool.dev/og.png that the API root page advertises, so that file stays. CI runs it (ci.yml, then bin/preflight.sh api, then bin/run-test-tier.sh hermetic), but the tier finds it by the pattern tests/*.test.ts and names it nowhere, so it has no runs entry. specs/page-policy.spec.ts is run by hand (`playwright test` in tests/playwright); the live sweep (live/page-policy.spec.ts) runs daily against production from .github/workflows/live-page-policy.yml, which finds it through live/playwright.config.ts (testDir '.') and names it nowhere, so it has no runs entry either. check.mjs is not wired: wiring it would be a new CI gate, which is the owner's choice.",
     "/porch, /watch, /village, /lounge, /gallery and /credits on agenttool.dev serve Pages for HTML; only a request that prefers JSON goes to their api.agenttool.dev/public/* twins (infra/apex-door/worker.js, MACHINE_ALTERNATES; re-read at e9ea51c5). The apex Worker also answers any request that prefers JSON for a non-API path with a machine 404, so a client that asks for /site.webmanifest with Accept: application/manifest+json gets that 404 on agenttool.dev; browsers send */*.",

@@ -33,21 +33,21 @@
    "pass": true,
    "level": "error",
    "file": "index.html",
-   "measured": 32601
+   "measured": 32701
   },
   {
    "id": "file.exists",
    "pass": true,
    "level": "error",
    "file": "kit.json",
-   "measured": 23513
+   "measured": 23697
   },
   {
    "id": "file.exists",
    "pass": true,
    "level": "error",
    "file": "source/brand.json",
-   "measured": 1979
+   "measured": 2071
   },
   {
    "id": "file.exists",
@@ -446,7 +446,7 @@
    "pass": true,
    "level": "error",
    "file": "web/og/head-app-watch.html",
-   "measured": 1099
+   "measured": 1199
   },
   {
    "id": "file.exists",
@@ -2988,7 +2988,7 @@
    "measured": {
     "identical": 76,
     "different": [],
-    "fingerprint": "41b07b33e7ee41a5f230687a41c75187e764b3a8e5dc3e638b4e62e8832b4db4"
+    "fingerprint": "4fb0c000ea8f8884ac880a1e42d9ac260c20278f189078b31bd8636069c1d241"
    },
    "note": "second build from source/brand.json in a temp folder, compared byte for byte (the PDFs too: both builds gave VectorCraft SOURCE_DATE_EPOCH 1794323888)"
   }

@@ -26,7 +26,7 @@ rather than guessing.
 |---|---|---|---|---|
 | Iowan Old Style → Palatino, system UI, `ui-monospace` | none: the pages name system faces and serve no font files | the reader's own system fonts | — | — |
 | Inter SemiBold (the kit's wordmark, outlined, and the card titles) | bundled with vectorcraft-cli 0.17.0 | SIL OFL 1.1 | rsms/inter | — |
-| Inter Light (the card lines and footers) | `~/Library/Fonts/Inter-Light.otf` on the Mac that built the kit (vectorcraft-cli does not bundle this style) | SIL OFL 1.1 (its name table; Version 4.001) | rsms/inter | `0817fd071377740a8e1cba673baf2c726ef5e5c4e6e0962c6e5bdc096329586d` |
+| Inter Light (the card lines and footers) | `~/Library/Fonts/Inter-Light.otf` on the Mac that built the kit (vectorcraft-cli does not bundle this style) | SIL OFL 1.1: the agent read it from this file's name table (Version 4.001) on 2026-11-10. `kit/BRAND.md` says this style's licence "was not checked": that is the generator's standard line for a style vectorcraft-cli does not bundle, and the generator itself did not check it | rsms/inter | `0817fd071377740a8e1cba673baf2c726ef5e5c4e6e0962c6e5bdc096329586d` |
 | JetBrains Mono Regular (labels on the kit's colour sheet only) | bundled with vectorcraft-cli 0.17.0 | SIL OFL 1.1 | JetBrains/JetBrainsMono | — |
 | Inter Bold (old docs and app card only) | not in the repository; `bin/gen-og-image.py` downloads it into `~/.cache/agenttool-og-fonts/` | SIL OFL 1.1 (upstream; not recorded in the repository) | Google Fonts | not recorded |
 | Crimson Pro Italic (old docs and app card only) | as above | SIL OFL 1.1 (upstream; not recorded in the repository) | Google Fonts | not recorded |
