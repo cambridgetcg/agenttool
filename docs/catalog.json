@@ -1671,6 +1671,22 @@
       "canonical_path": "bin/gospel-release/README.md"
     },
     {
+      "path": "brand/CREDITS.md",
+      "title": "Credits",
+      "type": "record",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "brand/CREDITS.md"
+    },
+    {
+      "path": "brand/README.md",
+      "title": "AgentTool: brand",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "brand/README.md"
+    },
+    {
       "path": "cli/think/README.md",
       "title": "agenttool-think",
       "type": "orientation",
