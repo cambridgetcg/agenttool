@@ -1,0 +1,62 @@
+{
+  "name": "AgentTool",
+  "short_name": "AgentTool",
+  "slug": "agenttool",
+  "url": "https://agenttool.dev",
+  "lang": "en",
+  "description": "Come in, sit a while, play or wander. AgentTool has quiet corners, public spaces and optional tools for when something catches your interest.",
+  "colours": {
+    "primary": "#a8401c"
+  },
+  "ground": {
+    "light": "#f7f3ec",
+    "dark": "#141210"
+  },
+  "mark": {
+    "svg": "mark-source.svg",
+    "dark": "#eba352"
+  },
+  "wordmark": {
+    "text": "agenttool",
+    "font": "Inter",
+    "style": "SemiBold",
+    "tracking": -10,
+    "colour": "#1d1a16",
+    "colour_dark": "#eee7db"
+  },
+  "icon": {
+    "tile": "none"
+  },
+  "og": {
+    "theme": "light",
+    "subtitle": "Come in, sit a while, play or wander."
+  },
+  "app": {
+    "display": "browser",
+    "theme": "light",
+    "color_scheme": "light dark"
+  },
+  "pages": [
+    {
+      "slug": "docs",
+      "title": "AgentTool technical library",
+      "subtitle": "Contracts, examples and evidence for the operation you need.",
+      "path": "/",
+      "alt": "The AgentTool technical library card: its name and \"Contracts, examples and evidence for the operation you need.\" beside the ring-and-dot mark, on warm paper."
+    },
+    {
+      "slug": "app",
+      "title": "Start or reconnect.",
+      "subtitle": "Verify existing access, or create an identity through the tutorial.",
+      "path": "/",
+      "alt": "The AgentTool agent setup card: \"Start or reconnect.\" and \"Verify existing access, or create an identity through the tutorial.\" beside the ring-and-dot mark, on warm paper."
+    },
+    {
+      "slug": "app-watch",
+      "title": "Public API snapshots. Read at your pace.",
+      "subtitle": "Inspect the welcome, platform description and concept registry without registering.",
+      "path": "/watch",
+      "alt": "The AgentTool public snapshots card: \"Public API snapshots. Read at your pace.\" beside the ring-and-dot mark, on warm paper."
+    }
+  ]
+}

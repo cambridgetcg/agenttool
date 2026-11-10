@@ -1,0 +1,2996 @@
+{
+ "kit": "AgentTool",
+ "ok": true,
+ "checks_run": 304,
+ "errors": 0,
+ "warnings": 0,
+ "not_checked": [
+  "Rendering in real browsers: tab favicons, the favicon.svg size switch and dark-scheme rule, and how a browser chooses between favicon.ico and favicon.svg were not observed.",
+  "Home-screen and launcher masks on real iOS and Android devices; only the 40% safe circle was measured.",
+  "Social previews on live platforms (X, LinkedIn, Slack, iMessage): only file size, dimensions, tags, the JPEG scan layout and a decode by djpeg or sips were checked. Post a test link once before relying on the card.",
+  "Print: PDF colour stays RGB; the CMYK values in BRAND.md are VectorCraft's conversion, not a proof; no bleed or spot colours.",
+  "Font licences beyond what BRAND.md \"Typefaces and licences\" states: faces bundled with vectorcraft-cli are OFL-1.1; the licence of any other face was not checked.",
+  "Email clients (the on-light PNG in a signature: dark modes, scaling), platforms' avatar crops, and whether Google uses the Organization logo were not observed; the Tailwind files were checked as text against palette.json, not built with Tailwind.",
+  "APCA contrast is guidance (WCAG 3 drafts); the colour roles use it as a floor, but WCAG 2.2 is the bar that was checked for conformance."
+ ],
+ "checks": [
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "brand.vectorcraft",
+   "measured": 531012
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "BRAND.md",
+   "measured": 26939
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "index.html",
+   "measured": 32601
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "kit.json",
+   "measured": 23513
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "source/brand.json",
+   "measured": 1979
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "source/mark-source.svg",
+   "measured": 193
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark.svg",
+   "measured": 966
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark.png",
+   "measured": 6436
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark@2x.png",
+   "measured": 13612
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark-mono-black.svg",
+   "measured": 953
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark-mono-black.png",
+   "measured": 4220
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark-mono-black@2x.png",
+   "measured": 9737
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark-mono-white.svg",
+   "measured": 953
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark-mono-white.png",
+   "measured": 5019
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark-mono-white@2x.png",
+   "measured": 11868
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/wordmark.svg",
+   "measured": 8256
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/wordmark.png",
+   "measured": 5765
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/wordmark@2x.png",
+   "measured": 11627
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/wordmark-reversed.svg",
+   "measured": 8274
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/wordmark-reversed.png",
+   "measured": 5919
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/wordmark-reversed@2x.png",
+   "measured": 11791
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-horizontal.svg",
+   "measured": 8970
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-horizontal.png",
+   "measured": 6988
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-horizontal@2x.png",
+   "measured": 13908
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-horizontal-reversed.svg",
+   "measured": 8988
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-horizontal-reversed.png",
+   "measured": 7296
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-horizontal-reversed@2x.png",
+   "measured": 14352
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-stacked.svg",
+   "measured": 9233
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-stacked.png",
+   "measured": 7104
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-stacked@2x.png",
+   "measured": 14727
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-stacked-reversed.svg",
+   "measured": 9251
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-stacked-reversed.png",
+   "measured": 7388
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-stacked-reversed@2x.png",
+   "measured": 15034
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark.pdf",
+   "measured": 2572
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-horizontal.pdf",
+   "measured": 6215
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-light/lockup-horizontal@2x.png",
+   "measured": 14995
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-light/lockup-stacked@2x.png",
+   "measured": 15457
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-light/wordmark@2x.png",
+   "measured": 12609
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-light/mark@2x.png",
+   "measured": 14804
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-dark/lockup-horizontal@2x.png",
+   "measured": 15530
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-dark/lockup-stacked@2x.png",
+   "measured": 16490
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-dark/wordmark@2x.png",
+   "measured": 13117
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-dark/mark@2x.png",
+   "measured": 16436
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon.ico",
+   "measured": 2210
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon.svg",
+   "measured": 1475
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon-16.png",
+   "measured": 383
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon-32.png",
+   "measured": 728
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "web/apple-touch-icon.png",
+   "measured": 3393
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "web/icon-192.png",
+   "measured": 3390
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "web/icon-512.png",
+   "measured": 9702
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "web/icon-maskable-512.png",
+   "measured": 9606
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "web/site.webmanifest",
+   "measured": 707
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "web/head-snippet.html",
+   "measured": 1861
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "web/head-home.html",
+   "measured": 743
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "web/og.jpg",
+   "measured": 41497
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "web/og.png",
+   "measured": 26573
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "web/og/docs.jpg",
+   "measured": 56460
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "web/og/app.jpg",
+   "measured": 52673
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "web/og/app-watch.jpg",
+   "measured": 59241
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "web/og/head-docs.html",
+   "measured": 1069
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "web/og/head-app.html",
+   "measured": 1083
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "web/og/head-app-watch.html",
+   "measured": 1099
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "social/avatar-1024.png",
+   "measured": 21452
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "social/avatar-400.png",
+   "measured": 7327
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "colour/palette.json",
+   "measured": 1374
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "colour/tokens.json",
+   "measured": 8497
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "colour/tokens.css",
+   "measured": 1714
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "colour/tailwind.theme.css",
+   "measured": 2556
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "colour/tailwind.colors.js",
+   "measured": 1251
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "colour/contrast.md",
+   "measured": 1495
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "colour/swatches.ase",
+   "measured": 1970
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "colour/swatches.gpl",
+   "measured": 1004
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "colour/swatches.css",
+   "measured": 1034
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "colour/colour-sheet.svg",
+   "measured": 758424
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "colour/colour-sheet.png",
+   "measured": 93608
+  },
+  {
+   "id": "file.exists",
+   "pass": true,
+   "level": "error",
+   "file": "colour/colour-sheet@2x.png",
+   "measured": 169516
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon-16.png",
+   "measured": "16x16",
+   "note": "expected 16x16"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon-32.png",
+   "measured": "32x32",
+   "note": "expected 32x32"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "web/apple-touch-icon.png",
+   "measured": "180x180",
+   "note": "expected 180x180"
+  },
+  {
+   "id": "png.opaque_rgb",
+   "pass": true,
+   "level": "error",
+   "file": "web/apple-touch-icon.png",
+   "measured": "RGB",
+   "note": "must be RGB with no alpha channel"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "web/icon-192.png",
+   "measured": "192x192",
+   "note": "expected 192x192"
+  },
+  {
+   "id": "png.opaque_rgb",
+   "pass": true,
+   "level": "error",
+   "file": "web/icon-192.png",
+   "measured": "RGB",
+   "note": "must be RGB with no alpha channel"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "web/icon-512.png",
+   "measured": "512x512",
+   "note": "expected 512x512"
+  },
+  {
+   "id": "png.opaque_rgb",
+   "pass": true,
+   "level": "error",
+   "file": "web/icon-512.png",
+   "measured": "RGB",
+   "note": "must be RGB with no alpha channel"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "web/icon-maskable-512.png",
+   "measured": "512x512",
+   "note": "expected 512x512"
+  },
+  {
+   "id": "png.opaque_rgb",
+   "pass": true,
+   "level": "error",
+   "file": "web/icon-maskable-512.png",
+   "measured": "RGB",
+   "note": "must be RGB with no alpha channel"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "web/og.png",
+   "measured": "1200x630",
+   "note": "expected 1200x630"
+  },
+  {
+   "id": "png.opaque_rgb",
+   "pass": true,
+   "level": "error",
+   "file": "web/og.png",
+   "measured": "RGB",
+   "note": "must be RGB with no alpha channel"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "colour/colour-sheet.png",
+   "measured": "1200x844",
+   "note": "expected 1200x844"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "colour/colour-sheet@2x.png",
+   "measured": "2400x1688",
+   "note": "expected 2400x1688"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark.png",
+   "measured": "256x256",
+   "note": "expected 256x256"
+  },
+  {
+   "id": "png.has_ink",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark.png",
+   "measured": {
+    "min_alpha": 0,
+    "max_alpha": 255
+   },
+   "note": "not an empty export"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark@2x.png",
+   "measured": "512x512",
+   "note": "expected 512x512"
+  },
+  {
+   "id": "png.has_ink",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark@2x.png",
+   "measured": {
+    "min_alpha": 0,
+    "max_alpha": 255
+   },
+   "note": "not an empty export"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark-mono-black.png",
+   "measured": "256x256",
+   "note": "expected 256x256"
+  },
+  {
+   "id": "png.has_ink",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark-mono-black.png",
+   "measured": {
+    "min_alpha": 0,
+    "max_alpha": 255
+   },
+   "note": "not an empty export"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark-mono-black@2x.png",
+   "measured": "512x512",
+   "note": "expected 512x512"
+  },
+  {
+   "id": "png.has_ink",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark-mono-black@2x.png",
+   "measured": {
+    "min_alpha": 0,
+    "max_alpha": 255
+   },
+   "note": "not an empty export"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark-mono-white.png",
+   "measured": "256x256",
+   "note": "expected 256x256"
+  },
+  {
+   "id": "png.has_ink",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark-mono-white.png",
+   "measured": {
+    "min_alpha": 0,
+    "max_alpha": 255
+   },
+   "note": "not an empty export"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark-mono-white@2x.png",
+   "measured": "512x512",
+   "note": "expected 512x512"
+  },
+  {
+   "id": "png.has_ink",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark-mono-white@2x.png",
+   "measured": {
+    "min_alpha": 0,
+    "max_alpha": 255
+   },
+   "note": "not an empty export"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/wordmark.png",
+   "measured": "386x83",
+   "note": "expected 386x83"
+  },
+  {
+   "id": "png.has_ink",
+   "pass": true,
+   "level": "error",
+   "file": "logo/wordmark.png",
+   "measured": {
+    "min_alpha": 0,
+    "max_alpha": 255
+   },
+   "note": "not an empty export"
+  },
+  {
+   "id": "png.transparent",
+   "pass": true,
+   "level": "error",
+   "file": "logo/wordmark.png",
+   "measured": 0,
+   "note": "transparent background"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/wordmark@2x.png",
+   "measured": "772x166",
+   "note": "expected 772x166"
+  },
+  {
+   "id": "png.has_ink",
+   "pass": true,
+   "level": "error",
+   "file": "logo/wordmark@2x.png",
+   "measured": {
+    "min_alpha": 0,
+    "max_alpha": 255
+   },
+   "note": "not an empty export"
+  },
+  {
+   "id": "png.transparent",
+   "pass": true,
+   "level": "error",
+   "file": "logo/wordmark@2x.png",
+   "measured": 0,
+   "note": "transparent background"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/wordmark-reversed.png",
+   "measured": "386x83",
+   "note": "expected 386x83"
+  },
+  {
+   "id": "png.has_ink",
+   "pass": true,
+   "level": "error",
+   "file": "logo/wordmark-reversed.png",
+   "measured": {
+    "min_alpha": 0,
+    "max_alpha": 255
+   },
+   "note": "not an empty export"
+  },
+  {
+   "id": "png.transparent",
+   "pass": true,
+   "level": "error",
+   "file": "logo/wordmark-reversed.png",
+   "measured": 0,
+   "note": "transparent background"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/wordmark-reversed@2x.png",
+   "measured": "772x166",
+   "note": "expected 772x166"
+  },
+  {
+   "id": "png.has_ink",
+   "pass": true,
+   "level": "error",
+   "file": "logo/wordmark-reversed@2x.png",
+   "measured": {
+    "min_alpha": 0,
+    "max_alpha": 255
+   },
+   "note": "not an empty export"
+  },
+  {
+   "id": "png.transparent",
+   "pass": true,
+   "level": "error",
+   "file": "logo/wordmark-reversed@2x.png",
+   "measured": 0,
+   "note": "transparent background"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-horizontal.png",
+   "measured": "415x96",
+   "note": "expected 415x96"
+  },
+  {
+   "id": "png.has_ink",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-horizontal.png",
+   "measured": {
+    "min_alpha": 0,
+    "max_alpha": 255
+   },
+   "note": "not an empty export"
+  },
+  {
+   "id": "png.transparent",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-horizontal.png",
+   "measured": 0,
+   "note": "transparent background"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-horizontal@2x.png",
+   "measured": "830x192",
+   "note": "expected 830x192"
+  },
+  {
+   "id": "png.has_ink",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-horizontal@2x.png",
+   "measured": {
+    "min_alpha": 0,
+    "max_alpha": 255
+   },
+   "note": "not an empty export"
+  },
+  {
+   "id": "png.transparent",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-horizontal@2x.png",
+   "measured": 0,
+   "note": "transparent background"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-horizontal-reversed.png",
+   "measured": "415x96",
+   "note": "expected 415x96"
+  },
+  {
+   "id": "png.has_ink",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-horizontal-reversed.png",
+   "measured": {
+    "min_alpha": 0,
+    "max_alpha": 255
+   },
+   "note": "not an empty export"
+  },
+  {
+   "id": "png.transparent",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-horizontal-reversed.png",
+   "measured": 0,
+   "note": "transparent background"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-horizontal-reversed@2x.png",
+   "measured": "830x192",
+   "note": "expected 830x192"
+  },
+  {
+   "id": "png.has_ink",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-horizontal-reversed@2x.png",
+   "measured": {
+    "min_alpha": 0,
+    "max_alpha": 255
+   },
+   "note": "not an empty export"
+  },
+  {
+   "id": "png.transparent",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-horizontal-reversed@2x.png",
+   "measured": 0,
+   "note": "transparent background"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-stacked.png",
+   "measured": "248x208",
+   "note": "expected 248x208"
+  },
+  {
+   "id": "png.has_ink",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-stacked.png",
+   "measured": {
+    "min_alpha": 0,
+    "max_alpha": 255
+   },
+   "note": "not an empty export"
+  },
+  {
+   "id": "png.transparent",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-stacked.png",
+   "measured": 0,
+   "note": "transparent background"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-stacked@2x.png",
+   "measured": "496x416",
+   "note": "expected 496x416"
+  },
+  {
+   "id": "png.has_ink",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-stacked@2x.png",
+   "measured": {
+    "min_alpha": 0,
+    "max_alpha": 255
+   },
+   "note": "not an empty export"
+  },
+  {
+   "id": "png.transparent",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-stacked@2x.png",
+   "measured": 0,
+   "note": "transparent background"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-stacked-reversed.png",
+   "measured": "248x208",
+   "note": "expected 248x208"
+  },
+  {
+   "id": "png.has_ink",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-stacked-reversed.png",
+   "measured": {
+    "min_alpha": 0,
+    "max_alpha": 255
+   },
+   "note": "not an empty export"
+  },
+  {
+   "id": "png.transparent",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-stacked-reversed.png",
+   "measured": 0,
+   "note": "transparent background"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-stacked-reversed@2x.png",
+   "measured": "496x416",
+   "note": "expected 496x416"
+  },
+  {
+   "id": "png.has_ink",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-stacked-reversed@2x.png",
+   "measured": {
+    "min_alpha": 0,
+    "max_alpha": 255
+   },
+   "note": "not an empty export"
+  },
+  {
+   "id": "png.transparent",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-stacked-reversed@2x.png",
+   "measured": 0,
+   "note": "transparent background"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-light/lockup-horizontal@2x.png",
+   "measured": "1022x384",
+   "note": "expected 1022x384"
+  },
+  {
+   "id": "png.opaque_rgb",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-light/lockup-horizontal@2x.png",
+   "measured": "RGB",
+   "note": "must be RGB with no alpha channel"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-light/lockup-stacked@2x.png",
+   "measured": "660x580",
+   "note": "expected 660x580"
+  },
+  {
+   "id": "png.opaque_rgb",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-light/lockup-stacked@2x.png",
+   "measured": "RGB",
+   "note": "must be RGB with no alpha channel"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-light/wordmark@2x.png",
+   "measured": "1028x422",
+   "note": "expected 1028x422"
+  },
+  {
+   "id": "png.opaque_rgb",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-light/wordmark@2x.png",
+   "measured": "RGB",
+   "note": "must be RGB with no alpha channel"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-light/mark@2x.png",
+   "measured": "768x768",
+   "note": "expected 768x768"
+  },
+  {
+   "id": "png.opaque_rgb",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-light/mark@2x.png",
+   "measured": "RGB",
+   "note": "must be RGB with no alpha channel"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-dark/lockup-horizontal@2x.png",
+   "measured": "1022x384",
+   "note": "expected 1022x384"
+  },
+  {
+   "id": "png.opaque_rgb",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-dark/lockup-horizontal@2x.png",
+   "measured": "RGB",
+   "note": "must be RGB with no alpha channel"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-dark/lockup-stacked@2x.png",
+   "measured": "660x580",
+   "note": "expected 660x580"
+  },
+  {
+   "id": "png.opaque_rgb",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-dark/lockup-stacked@2x.png",
+   "measured": "RGB",
+   "note": "must be RGB with no alpha channel"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-dark/wordmark@2x.png",
+   "measured": "1028x422",
+   "note": "expected 1028x422"
+  },
+  {
+   "id": "png.opaque_rgb",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-dark/wordmark@2x.png",
+   "measured": "RGB",
+   "note": "must be RGB with no alpha channel"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-dark/mark@2x.png",
+   "measured": "768x768",
+   "note": "expected 768x768"
+  },
+  {
+   "id": "png.opaque_rgb",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-dark/mark@2x.png",
+   "measured": "RGB",
+   "note": "must be RGB with no alpha channel"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "social/avatar-1024.png",
+   "measured": "1024x1024",
+   "note": "expected 1024x1024"
+  },
+  {
+   "id": "png.opaque_rgb",
+   "pass": true,
+   "level": "error",
+   "file": "social/avatar-1024.png",
+   "measured": "RGB",
+   "note": "must be RGB with no alpha channel"
+  },
+  {
+   "id": "png.size",
+   "pass": true,
+   "level": "error",
+   "file": "social/avatar-400.png",
+   "measured": "400x400",
+   "note": "expected 400x400"
+  },
+  {
+   "id": "png.opaque_rgb",
+   "pass": true,
+   "level": "error",
+   "file": "social/avatar-400.png",
+   "measured": "RGB",
+   "note": "must be RGB with no alpha channel"
+  },
+  {
+   "id": "favicon.legible",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon-16.png",
+   "measured": {
+    "ink_pixels": 136,
+    "clean_pixels": 72,
+    "crisp": 0.529
+   },
+   "note": "share of mark pixels (not tile or badge) that are a clean colour rather than a blend (fail < 0.30)"
+  },
+  {
+   "id": "favicon.faithful",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon-16.png",
+   "measured": {
+    "strokes": 4,
+    "lost": 0,
+    "where": []
+   },
+   "note": "every arm, bar and stem of the unhinted cut still has ink in the rendered pixels (hinting may move an edge by under a pixel or close a counter, never delete a stroke); a cut with no stroke to compare proves nothing and fails"
+  },
+  {
+   "id": "favicon.symmetric",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon-16.png",
+   "measured": {
+    "axis": "across",
+    "worst_difference": 0.0
+   },
+   "note": "the unhinted cut is mirror-symmetric across, so the hinted pixels must be too (no pixel differs from its mirror by more than 0.25)"
+  },
+  {
+   "id": "favicon.symmetric",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon-16.png",
+   "measured": {
+    "axis": "down",
+    "worst_difference": 0.0
+   },
+   "note": "the unhinted cut is mirror-symmetric down, so the hinted pixels must be too (no pixel differs from its mirror by more than 0.25)"
+  },
+  {
+   "id": "favicon.no_specks",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon-16.png",
+   "measured": {
+    "specks": []
+   },
+   "note": "no detached smudge: every separate patch of ink holds at least three quarters of a pixel of ink (the planner grows a part that hints smaller to one solid pixel, or leaves it out)"
+  },
+  {
+   "id": "favicon.no_seams",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon-16.png",
+   "measured": {
+    "deep_pixels": 0,
+    "worst_ground_share": 0.0,
+    "cracked": [],
+    "cracked_count": 0
+   },
+   "note": "deep inside the ink (a pixel or more from every unhinted edge) no pixel shows 12% or more of the ground: hinting opened no crack between shapes that meet"
+  },
+  {
+   "id": "favicon.centred",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon-16.png",
+   "measured": {
+    "left": 0,
+    "top": 0,
+    "right": 0,
+    "bottom": 0
+   },
+   "note": "ink box margins differ by at most 1 px"
+  },
+  {
+   "id": "favicon.on_canvas",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon-16.png",
+   "measured": {
+    "ink_on_edges": [],
+    "outline_box": [
+     0.0,
+     0.0,
+     16.0,
+     16.0
+    ]
+   },
+   "note": "the unhinted outline lies on the canvas, and ink touches a canvas edge only where that outline reaches it"
+  },
+  {
+   "id": "favicon.legible",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon-32.png",
+   "measured": {
+    "ink_pixels": 312,
+    "clean_pixels": 156,
+    "crisp": 0.5
+   },
+   "note": "share of mark pixels (not tile or badge) that are a clean colour rather than a blend (fail < 0.30)"
+  },
+  {
+   "id": "favicon.faithful",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon-32.png",
+   "measured": {
+    "strokes": 8,
+    "lost": 0,
+    "where": []
+   },
+   "note": "every arm, bar and stem of the unhinted cut still has ink in the rendered pixels (hinting may move an edge by under a pixel or close a counter, never delete a stroke); a cut with no stroke to compare proves nothing and fails"
+  },
+  {
+   "id": "favicon.symmetric",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon-32.png",
+   "measured": {
+    "axis": "across",
+    "worst_difference": 0.0
+   },
+   "note": "the unhinted cut is mirror-symmetric across, so the hinted pixels must be too (no pixel differs from its mirror by more than 0.25)"
+  },
+  {
+   "id": "favicon.symmetric",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon-32.png",
+   "measured": {
+    "axis": "down",
+    "worst_difference": 0.0
+   },
+   "note": "the unhinted cut is mirror-symmetric down, so the hinted pixels must be too (no pixel differs from its mirror by more than 0.25)"
+  },
+  {
+   "id": "favicon.no_specks",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon-32.png",
+   "measured": {
+    "specks": []
+   },
+   "note": "no detached smudge: every separate patch of ink holds at least three quarters of a pixel of ink (the planner grows a part that hints smaller to one solid pixel, or leaves it out)"
+  },
+  {
+   "id": "favicon.no_seams",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon-32.png",
+   "measured": {
+    "deep_pixels": 4,
+    "worst_ground_share": 0.0,
+    "cracked": [],
+    "cracked_count": 0
+   },
+   "note": "deep inside the ink (a pixel or more from every unhinted edge) no pixel shows 12% or more of the ground: hinting opened no crack between shapes that meet"
+  },
+  {
+   "id": "favicon.centred",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon-32.png",
+   "measured": {
+    "left": 0,
+    "top": 0,
+    "right": 0,
+    "bottom": 0
+   },
+   "note": "ink box margins differ by at most 1 px"
+  },
+  {
+   "id": "favicon.on_canvas",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon-32.png",
+   "measured": {
+    "ink_on_edges": [],
+    "outline_box": [
+     0.0,
+     0.0,
+     32.0,
+     32.0
+    ]
+   },
+   "note": "the unhinted outline lies on the canvas, and ink touches a canvas edge only where that outline reaches it"
+  },
+  {
+   "id": "ico.frames",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon.ico",
+   "measured": [
+    16,
+    32,
+    48
+   ],
+   "note": "expected 16, 32 and 48 px frames"
+  },
+  {
+   "id": "ico.frame_decodes",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon.ico",
+   "measured": "16px"
+  },
+  {
+   "id": "ico.frame_decodes",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon.ico",
+   "measured": "32px"
+  },
+  {
+   "id": "ico.frame_decodes",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon.ico",
+   "measured": "48px"
+  },
+  {
+   "id": "favicon.legible",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon.ico (48 px frame)",
+   "measured": {
+    "ink_pixels": 704,
+    "clean_pixels": 504,
+    "crisp": 0.716
+   },
+   "note": "share of mark pixels (not tile or badge) that are a clean colour rather than a blend (fail < 0.30)"
+  },
+  {
+   "id": "favicon.faithful",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon.ico (48 px frame)",
+   "measured": {
+    "strokes": 8,
+    "lost": 0,
+    "where": []
+   },
+   "note": "every arm, bar and stem of the unhinted cut still has ink in the rendered pixels (hinting may move an edge by under a pixel or close a counter, never delete a stroke); a cut with no stroke to compare proves nothing and fails"
+  },
+  {
+   "id": "favicon.symmetric",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon.ico (48 px frame)",
+   "measured": {
+    "axis": "across",
+    "worst_difference": 0.0
+   },
+   "note": "the unhinted cut is mirror-symmetric across, so the hinted pixels must be too (no pixel differs from its mirror by more than 0.25)"
+  },
+  {
+   "id": "favicon.symmetric",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon.ico (48 px frame)",
+   "measured": {
+    "axis": "down",
+    "worst_difference": 0.0
+   },
+   "note": "the unhinted cut is mirror-symmetric down, so the hinted pixels must be too (no pixel differs from its mirror by more than 0.25)"
+  },
+  {
+   "id": "favicon.no_specks",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon.ico (48 px frame)",
+   "measured": {
+    "specks": []
+   },
+   "note": "no detached smudge: every separate patch of ink holds at least three quarters of a pixel of ink (the planner grows a part that hints smaller to one solid pixel, or leaves it out)"
+  },
+  {
+   "id": "favicon.no_seams",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon.ico (48 px frame)",
+   "measured": {
+    "deep_pixels": 56,
+    "worst_ground_share": 0.0,
+    "cracked": [],
+    "cracked_count": 0
+   },
+   "note": "deep inside the ink (a pixel or more from every unhinted edge) no pixel shows 12% or more of the ground: hinting opened no crack between shapes that meet"
+  },
+  {
+   "id": "favicon.centred",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon.ico (48 px frame)",
+   "measured": {
+    "left": 0,
+    "top": 0,
+    "right": 0,
+    "bottom": 0
+   },
+   "note": "ink box margins differ by at most 1 px"
+  },
+  {
+   "id": "favicon.on_canvas",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon.ico (48 px frame)",
+   "measured": {
+    "ink_on_edges": [],
+    "outline_box": [
+     0.0,
+     0.0,
+     48.0,
+     48.0
+    ]
+   },
+   "note": "the unhinted outline lies on the canvas, and ink touches a canvas edge only where that outline reaches it"
+  },
+  {
+   "id": "ico.matches_png",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon.ico",
+   "measured": "16px"
+  },
+  {
+   "id": "ico.matches_png",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon.ico",
+   "measured": "32px"
+  },
+  {
+   "id": "favicon_svg.size_switch",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon.svg",
+   "note": "the 16 px cut is drawn below 24 px"
+  },
+  {
+   "id": "favicon_svg.in_viewbox",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon.svg",
+   "measured": {
+    "outside": []
+   },
+   "note": "every path (both cuts, and the tile) lies inside the viewBox, so nothing is clipped"
+  },
+  {
+   "id": "favicon_svg.dark_scheme",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon.svg",
+   "note": "no tile: a dark-scheme rule keeps the mark visible on dark tabs (none is needed when every colour already clears 3:1 on #202124)"
+  },
+  {
+   "id": "favicon.tab_contrast",
+   "pass": true,
+   "level": "warn",
+   "measured": {
+    "wcag": 6.15,
+    "delta_e": 0.511,
+    "by": "lightness"
+   },
+   "note": "#A8401C on white (light, active tab)"
+  },
+  {
+   "id": "favicon.tab_contrast",
+   "pass": true,
+   "level": "warn",
+   "measured": {
+    "wcag": 4.69,
+    "delta_e": 0.427,
+    "by": "lightness"
+   },
+   "note": "#A8401C on #DEE1E6 (light, tab strip)"
+  },
+  {
+   "id": "favicon.tab_contrast",
+   "pass": true,
+   "level": "warn",
+   "measured": {
+    "wcag": 7.58,
+    "delta_e": 0.539,
+    "by": "lightness"
+   },
+   "note": "#EBA352 (dark scheme) on #202124 (dark, tab strip)"
+  },
+  {
+   "id": "favicon.tab_contrast",
+   "pass": true,
+   "level": "warn",
+   "measured": {
+    "wcag": 5.69,
+    "delta_e": 0.457,
+    "by": "lightness"
+   },
+   "note": "#EBA352 (dark scheme) on #35363A (dark, active tab)"
+  },
+  {
+   "id": "maskable.safe_zone",
+   "pass": true,
+   "level": "error",
+   "file": "web/icon-maskable-512.png",
+   "measured": 174.2,
+   "note": "every non-background pixel within 0.4 x 512 = 204.8 px of the centre"
+  },
+  {
+   "id": "maskable.full_bleed",
+   "pass": true,
+   "level": "error",
+   "file": "web/icon-maskable-512.png",
+   "measured": "#F7F3EC",
+   "note": "tile colour at the corner"
+  },
+  {
+   "id": "avatar.ground",
+   "pass": true,
+   "level": "error",
+   "file": "social/avatar-1024.png",
+   "measured": [
+    "#F7F3EC",
+    "#F7F3EC",
+    "#F7F3EC",
+    "#F7F3EC"
+   ],
+   "note": "the tile colour #F7F3EC at every corner"
+  },
+  {
+   "id": "avatar.circle_safe",
+   "pass": true,
+   "level": "error",
+   "file": "social/avatar-1024.png",
+   "measured": {
+    "farthest_px": 348.0,
+    "limit_px": 409.6
+   },
+   "note": "every pixel unlike the tile within 0.40 of the side from the centre, so a circle crop keeps the whole mark"
+  },
+  {
+   "id": "avatar.ground",
+   "pass": true,
+   "level": "error",
+   "file": "social/avatar-400.png",
+   "measured": [
+    "#F7F3EC",
+    "#F7F3EC",
+    "#F7F3EC",
+    "#F7F3EC"
+   ],
+   "note": "the tile colour #F7F3EC at every corner"
+  },
+  {
+   "id": "avatar.circle_safe",
+   "pass": true,
+   "level": "error",
+   "file": "social/avatar-400.png",
+   "measured": {
+    "farthest_px": 136.2,
+    "limit_px": 160.0
+   },
+   "note": "every pixel unlike the tile within 0.40 of the side from the centre, so a circle crop keeps the whole mark"
+  },
+  {
+   "id": "logo_on_ground.ground",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-light/lockup-horizontal@2x.png",
+   "measured": [
+    "#F7F3EC",
+    "#F7F3EC",
+    "#F7F3EC",
+    "#F7F3EC"
+   ],
+   "note": "opaque, on the light ground #F7F3EC"
+  },
+  {
+   "id": "logo_on_ground.clear_space",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-light/lockup-horizontal@2x.png",
+   "measured": {
+    "margins": {
+     "left": 96,
+     "top": 96,
+     "right": 97,
+     "bottom": 96
+    },
+    "clear_space": 96
+   },
+   "note": "the logo has ink, and at least its clear space x on every side"
+  },
+  {
+   "id": "logo_on_ground.ground",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-light/lockup-stacked@2x.png",
+   "measured": [
+    "#F7F3EC",
+    "#F7F3EC",
+    "#F7F3EC",
+    "#F7F3EC"
+   ],
+   "note": "opaque, on the light ground #F7F3EC"
+  },
+  {
+   "id": "logo_on_ground.clear_space",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-light/lockup-stacked@2x.png",
+   "measured": {
+    "margins": {
+     "left": 82,
+     "top": 82,
+     "right": 84,
+     "bottom": 82
+    },
+    "clear_space": 82
+   },
+   "note": "the logo has ink, and at least its clear space x on every side"
+  },
+  {
+   "id": "logo_on_ground.ground",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-light/wordmark@2x.png",
+   "measured": [
+    "#F7F3EC",
+    "#F7F3EC",
+    "#F7F3EC",
+    "#F7F3EC"
+   ],
+   "note": "opaque, on the light ground #F7F3EC"
+  },
+  {
+   "id": "logo_on_ground.clear_space",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-light/wordmark@2x.png",
+   "measured": {
+    "margins": {
+     "left": 128,
+     "top": 128,
+     "right": 128,
+     "bottom": 128
+    },
+    "clear_space": 128
+   },
+   "note": "the logo has ink, and at least its clear space x on every side"
+  },
+  {
+   "id": "logo_on_ground.ground",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-light/mark@2x.png",
+   "measured": [
+    "#F7F3EC",
+    "#F7F3EC",
+    "#F7F3EC",
+    "#F7F3EC"
+   ],
+   "note": "opaque, on the light ground #F7F3EC"
+  },
+  {
+   "id": "logo_on_ground.clear_space",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-light/mark@2x.png",
+   "measured": {
+    "margins": {
+     "left": 128,
+     "top": 128,
+     "right": 128,
+     "bottom": 128
+    },
+    "clear_space": 128
+   },
+   "note": "the logo has ink, and at least its clear space x on every side"
+  },
+  {
+   "id": "logo_on_ground.ground",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-dark/lockup-horizontal@2x.png",
+   "measured": [
+    "#141210",
+    "#141210",
+    "#141210",
+    "#141210"
+   ],
+   "note": "opaque, on the dark ground #141210"
+  },
+  {
+   "id": "logo_on_ground.clear_space",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-dark/lockup-horizontal@2x.png",
+   "measured": {
+    "margins": {
+     "left": 96,
+     "top": 96,
+     "right": 97,
+     "bottom": 96
+    },
+    "clear_space": 96
+   },
+   "note": "the logo has ink, and at least its clear space x on every side"
+  },
+  {
+   "id": "logo_on_ground.ground",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-dark/lockup-stacked@2x.png",
+   "measured": [
+    "#141210",
+    "#141210",
+    "#141210",
+    "#141210"
+   ],
+   "note": "opaque, on the dark ground #141210"
+  },
+  {
+   "id": "logo_on_ground.clear_space",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-dark/lockup-stacked@2x.png",
+   "measured": {
+    "margins": {
+     "left": 82,
+     "top": 82,
+     "right": 84,
+     "bottom": 82
+    },
+    "clear_space": 82
+   },
+   "note": "the logo has ink, and at least its clear space x on every side"
+  },
+  {
+   "id": "logo_on_ground.ground",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-dark/wordmark@2x.png",
+   "measured": [
+    "#141210",
+    "#141210",
+    "#141210",
+    "#141210"
+   ],
+   "note": "opaque, on the dark ground #141210"
+  },
+  {
+   "id": "logo_on_ground.clear_space",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-dark/wordmark@2x.png",
+   "measured": {
+    "margins": {
+     "left": 128,
+     "top": 128,
+     "right": 128,
+     "bottom": 128
+    },
+    "clear_space": 128
+   },
+   "note": "the logo has ink, and at least its clear space x on every side"
+  },
+  {
+   "id": "logo_on_ground.ground",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-dark/mark@2x.png",
+   "measured": [
+    "#141210",
+    "#141210",
+    "#141210",
+    "#141210"
+   ],
+   "note": "opaque, on the dark ground #141210"
+  },
+  {
+   "id": "logo_on_ground.clear_space",
+   "pass": true,
+   "level": "error",
+   "file": "logo/on-dark/mark@2x.png",
+   "measured": {
+    "margins": {
+     "left": 128,
+     "top": 128,
+     "right": 128,
+     "bottom": 128
+    },
+    "clear_space": 128
+   },
+   "note": "the logo has ink, and at least its clear space x on every side"
+  },
+  {
+   "id": "icon.mark_extent",
+   "pass": true,
+   "level": "warn",
+   "file": "web/icon-512.png",
+   "measured": 0.703,
+   "note": "longest side of the mark as a share of the tile, aim 0.58-0.72"
+  },
+  {
+   "id": "icon.mark_extent",
+   "pass": true,
+   "level": "warn",
+   "file": "web/favicon-32.png",
+   "measured": 1.0,
+   "note": "longest side of the mark as a share of the tile, aim 0.80-1.00"
+  },
+  {
+   "id": "svg.clean",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark.svg",
+   "measured": {
+    "paths": 2,
+    "bytes": 966,
+    "problems": []
+   },
+   "note": "XML parses; viewBox, <title>; no <text>, <image>, strokes, oklch(); named ids; not empty"
+  },
+  {
+   "id": "svg.clean",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark-mono-black.svg",
+   "measured": {
+    "paths": 2,
+    "bytes": 953,
+    "problems": []
+   },
+   "note": "XML parses; viewBox, <title>; no <text>, <image>, strokes, oklch(); named ids; not empty"
+  },
+  {
+   "id": "svg.clean",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark-mono-white.svg",
+   "measured": {
+    "paths": 2,
+    "bytes": 953,
+    "problems": []
+   },
+   "note": "XML parses; viewBox, <title>; no <text>, <image>, strokes, oklch(); named ids; not empty"
+  },
+  {
+   "id": "svg.clean",
+   "pass": true,
+   "level": "error",
+   "file": "logo/wordmark.svg",
+   "measured": {
+    "paths": 9,
+    "bytes": 8256,
+    "problems": []
+   },
+   "note": "XML parses; viewBox, <title>; no <text>, <image>, strokes, oklch(); named ids; not empty"
+  },
+  {
+   "id": "svg.clean",
+   "pass": true,
+   "level": "error",
+   "file": "logo/wordmark-reversed.svg",
+   "measured": {
+    "paths": 9,
+    "bytes": 8274,
+    "problems": []
+   },
+   "note": "XML parses; viewBox, <title>; no <text>, <image>, strokes, oklch(); named ids; not empty"
+  },
+  {
+   "id": "svg.clean",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-horizontal.svg",
+   "measured": {
+    "paths": 11,
+    "bytes": 8970,
+    "problems": []
+   },
+   "note": "XML parses; viewBox, <title>; no <text>, <image>, strokes, oklch(); named ids; not empty"
+  },
+  {
+   "id": "svg.clean",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-horizontal-reversed.svg",
+   "measured": {
+    "paths": 11,
+    "bytes": 8988,
+    "problems": []
+   },
+   "note": "XML parses; viewBox, <title>; no <text>, <image>, strokes, oklch(); named ids; not empty"
+  },
+  {
+   "id": "svg.clean",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-stacked.svg",
+   "measured": {
+    "paths": 11,
+    "bytes": 9233,
+    "problems": []
+   },
+   "note": "XML parses; viewBox, <title>; no <text>, <image>, strokes, oklch(); named ids; not empty"
+  },
+  {
+   "id": "svg.clean",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-stacked-reversed.svg",
+   "measured": {
+    "paths": 11,
+    "bytes": 9251,
+    "problems": []
+   },
+   "note": "XML parses; viewBox, <title>; no <text>, <image>, strokes, oklch(); named ids; not empty"
+  },
+  {
+   "id": "svg.clean",
+   "pass": true,
+   "level": "error",
+   "file": "web/favicon.svg",
+   "measured": {
+    "paths": 4,
+    "bytes": 1475,
+    "problems": []
+   },
+   "note": "XML parses; viewBox, <title>; no <text>, <image>, strokes, oklch(); named ids; not empty"
+  },
+  {
+   "id": "svg.clean",
+   "pass": true,
+   "level": "error",
+   "file": "colour/colour-sheet.svg",
+   "measured": {
+    "paths": 189,
+    "bytes": 758424,
+    "problems": []
+   },
+   "note": "XML parses; viewBox, <title>; no <text>, <image>, strokes, oklch(); named ids; not empty"
+  },
+  {
+   "id": "colour_sheet.hex_fills",
+   "pass": true,
+   "level": "error",
+   "file": "colour/colour-sheet.svg",
+   "measured": {
+    "missing": []
+   },
+   "note": "every scale step is a hex fill in the SVG"
+  },
+  {
+   "id": "colour.contrast_pairs",
+   "pass": true,
+   "level": "error",
+   "measured": {
+    "pairs": 16,
+    "failing": []
+   },
+   "note": "every required WCAG 2.2 pair from colour.py passes (logo colours are exempt, shown as info)"
+  },
+  {
+   "id": "colour.palette_matches",
+   "pass": true,
+   "level": "error",
+   "file": "colour/palette.json",
+   "note": "palette.json equals a fresh colour.py build of brand.json"
+  },
+  {
+   "id": "colour.dtcg",
+   "pass": true,
+   "level": "error",
+   "file": "colour/tokens.json",
+   "measured": {
+    "colorSpace": "srgb",
+    "components": [
+     1.0,
+     0.9569,
+     0.9451
+    ],
+    "hex": "#fff4f1"
+   },
+   "note": "DTCG 2025.10 colour object values"
+  },
+  {
+   "id": "colour.css_modes",
+   "pass": true,
+   "level": "error",
+   "file": "colour/tokens.css"
+  },
+  {
+   "id": "colour.font_tokens",
+   "pass": true,
+   "level": "error",
+   "file": "colour/tokens.css",
+   "measured": {
+    "stacks": {
+     "font-display": "\"Inter\", system-ui, sans-serif",
+     "font-body": "\"Inter\", system-ui, sans-serif",
+     "font-mono": "\"JetBrains Mono\", ui-monospace, \"Menlo\", monospace"
+    },
+    "wrong": []
+   },
+   "note": "--font-display, --font-body and --font-mono in tokens.css and tailwind.theme.css, fontFamily tokens in tokens.json"
+  },
+  {
+   "id": "colour.tailwind_v4",
+   "pass": true,
+   "level": "error",
+   "file": "colour/tailwind.theme.css",
+   "measured": {
+    "scale_steps": 22,
+    "roles": 10,
+    "wrong": [],
+    "balanced": true
+   },
+   "note": "Tailwind v4 @theme: every scale step and role of palette.json, and the light and dark role values"
+  },
+  {
+   "id": "colour.tailwind_v3",
+   "pass": true,
+   "level": "error",
+   "file": "colour/tailwind.colors.js",
+   "measured": {
+    "parses": true,
+    "keys": 9
+   },
+   "note": "module.exports is an object literal holding every scale step (hex) and role (var(--role)) of palette.json"
+  },
+  {
+   "id": "swatch.ase",
+   "pass": true,
+   "level": "error",
+   "file": "colour/swatches.ase",
+   "measured": {
+    "swatches": 25,
+    "groups": [
+     "agenttool brand",
+     "agenttool ground",
+     "agenttool primary scale",
+     "agenttool neutral scale"
+    ],
+    "missing": []
+   },
+   "note": "parses and holds every swatch by name and hex: the brand colours, the light and dark grounds, and every scale step"
+  },
+  {
+   "id": "swatch.gpl",
+   "pass": true,
+   "level": "error",
+   "file": "colour/swatches.gpl"
+  },
+  {
+   "id": "swatch.css",
+   "pass": true,
+   "level": "error",
+   "file": "colour/swatches.css"
+  },
+  {
+   "id": "mark.contrast_light_ground",
+   "pass": true,
+   "level": "warn",
+   "measured": 5.56,
+   "note": "mark colour #A8401C on the light ground #F7F3EC (logos are exempt; 3:1 keeps shapes legible)"
+  },
+  {
+   "id": "mark.dark_lift",
+   "pass": true,
+   "level": "warn",
+   "measured": {
+    "to": "#EBA352",
+    "step": "mark.dark in brand.json",
+    "ratio": 8.8,
+    "apca": -60.2,
+    "letters": null,
+    "knockout": false,
+    "letter_ink": null,
+    "ui": false,
+    "chosen": true,
+    "from": "#A8401C"
+   },
+   "note": "lockup-horizontal-reversed: a mark colour brand.json chose for dark grounds (mark.dark), held to the dark-mode UI bar (3:1 and APCA Lc 30)"
+  },
+  {
+   "id": "mark.dark_lift",
+   "pass": true,
+   "level": "warn",
+   "measured": {
+    "to": "#EBA352",
+    "step": "mark.dark in brand.json",
+    "ratio": 8.8,
+    "apca": -60.2,
+    "letters": null,
+    "knockout": false,
+    "letter_ink": null,
+    "ui": false,
+    "chosen": true,
+    "from": "#A8401C"
+   },
+   "note": "lockup-stacked-reversed: a mark colour brand.json chose for dark grounds (mark.dark), held to the dark-mode UI bar (3:1 and APCA Lc 30)"
+  },
+  {
+   "id": "mark.mono_form",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark-mono-black.png",
+   "measured": {
+    "checked_pixels": 13908,
+    "lost": 0,
+    "where": []
+   },
+   "note": "every pixel of the full-colour mark is ink in the one-colour mark too, outside knockouts and the thin gap beside overlapping shapes (what shows through a hole stays)"
+  },
+  {
+   "id": "source.vectorcraft",
+   "pass": true,
+   "level": "error",
+   "file": "brand.vectorcraft",
+   "measured": {
+    "title": "AgentTool",
+    "author": "AgentTool",
+    "description": true,
+    "created": null
+   },
+   "note": "native document: File Info title/author/description set, created null (reproducible)"
+  },
+  {
+   "id": "source.artboards",
+   "pass": true,
+   "level": "info",
+   "file": "brand.vectorcraft",
+   "measured": [
+    "mark",
+    "mark-mono-black",
+    "mark-mono-white",
+    "wordmark",
+    "wordmark-reversed",
+    "lockup-horizontal",
+    "lockup-horizontal-reversed",
+    "lockup-stacked",
+    "lockup-stacked-reversed",
+    "on-light-lockup-horizontal",
+    "on-light-lockup-stacked",
+    "on-light-wordmark",
+    "on-light-mark",
+    "on-dark-lockup-horizontal",
+    "on-dark-lockup-stacked",
+    "on-dark-wordmark",
+    "on-dark-mark",
+    "app",
+    "maskable",
+    "favicon-32",
+    "favicon-16",
+    "favicon-48",
+    "favicon",
+    "og",
+    "og-docs",
+    "og-app",
+    "og-app-watch",
+    "colour-sheet"
+   ]
+  },
+  {
+   "id": "index.links",
+   "pass": true,
+   "level": "error",
+   "file": "index.html",
+   "measured": {
+    "links": 79,
+    "inline_images": 4,
+    "missing": [],
+    "external": []
+   },
+   "note": "self-contained: every link is relative and resolves inside the kit (or an inline image)"
+  },
+  {
+   "id": "pdf.distributable",
+   "pass": true,
+   "level": "error",
+   "file": "logo/mark.pdf",
+   "measured": {
+    "pages": 1,
+    "embedded_native": false
+   },
+   "note": "one page, no embedded editing document (preserveEditing:false)"
+  },
+  {
+   "id": "pdf.distributable",
+   "pass": true,
+   "level": "error",
+   "file": "logo/lockup-horizontal.pdf",
+   "measured": {
+    "pages": 1,
+    "embedded_native": false
+   },
+   "note": "one page, no embedded editing document (preserveEditing:false)"
+  },
+  {
+   "id": "og.jpg_size",
+   "pass": true,
+   "level": "error",
+   "file": "web/og.jpg",
+   "measured": "1200x630, 3 components"
+  },
+  {
+   "id": "og.jpg_interleaved",
+   "pass": true,
+   "level": "error",
+   "file": "web/og.jpg",
+   "measured": {
+    "sof": 0,
+    "scans": [
+     [
+      1,
+      2,
+      3
+     ]
+    ]
+   },
+   "note": "baseline (SOF0), one scan carrying every component: the layout every decoder handles"
+  },
+  {
+   "id": "og.jpg_jfif_ids",
+   "pass": true,
+   "level": "warn",
+   "file": "web/og.jpg",
+   "measured": [
+    1,
+    2,
+    3
+   ],
+   "note": "JFIF numbers the components 1, 2, 3"
+  },
+  {
+   "id": "og.jpg_srgb",
+   "pass": true,
+   "level": "error",
+   "file": "web/og.jpg",
+   "measured": "sRGB IEC61966-2.1",
+   "note": "APP2 ICC profile is sRGB"
+  },
+  {
+   "id": "og.jpg_bytes_limit",
+   "pass": true,
+   "level": "error",
+   "file": "web/og.jpg",
+   "measured": 41497,
+   "note": "WhatsApp: should be under 600 KB (600,000 bytes), at least 300 px wide, aspect at most 4:1; larger may get a small preview or none (Facebook allows 8 MB)"
+  },
+  {
+   "id": "og.jpg_bytes_target",
+   "pass": true,
+   "level": "warn",
+   "file": "web/og.jpg",
+   "measured": 41497,
+   "note": "the kit's own target, 300 KB (not WhatsApp's 300 KB rule, which is for the page's <head>)"
+  },
+  {
+   "id": "og.jpg_decodes",
+   "pass": true,
+   "level": "error",
+   "file": "web/og.jpg",
+   "measured": {
+    "decoder": "djpeg",
+    "mean_abs_diff_vs_og_png": 0.65
+   },
+   "note": "decoded by an independent decoder, it matches og.png (mean absolute difference at most 4 of 255)"
+  },
+  {
+   "id": "og.jpg_size",
+   "pass": true,
+   "level": "error",
+   "file": "web/og/docs.jpg",
+   "measured": "1200x630, 3 components"
+  },
+  {
+   "id": "og.jpg_interleaved",
+   "pass": true,
+   "level": "error",
+   "file": "web/og/docs.jpg",
+   "measured": {
+    "sof": 0,
+    "scans": [
+     [
+      1,
+      2,
+      3
+     ]
+    ]
+   },
+   "note": "baseline (SOF0), one scan carrying every component: the layout every decoder handles"
+  },
+  {
+   "id": "og.jpg_jfif_ids",
+   "pass": true,
+   "level": "warn",
+   "file": "web/og/docs.jpg",
+   "measured": [
+    1,
+    2,
+    3
+   ],
+   "note": "JFIF numbers the components 1, 2, 3"
+  },
+  {
+   "id": "og.jpg_srgb",
+   "pass": true,
+   "level": "error",
+   "file": "web/og/docs.jpg",
+   "measured": "sRGB IEC61966-2.1",
+   "note": "APP2 ICC profile is sRGB"
+  },
+  {
+   "id": "og.jpg_bytes_limit",
+   "pass": true,
+   "level": "error",
+   "file": "web/og/docs.jpg",
+   "measured": 56460,
+   "note": "WhatsApp: should be under 600 KB (600,000 bytes), at least 300 px wide, aspect at most 4:1; larger may get a small preview or none (Facebook allows 8 MB)"
+  },
+  {
+   "id": "og.jpg_bytes_target",
+   "pass": true,
+   "level": "warn",
+   "file": "web/og/docs.jpg",
+   "measured": 56460,
+   "note": "the kit's own target, 300 KB (not WhatsApp's 300 KB rule, which is for the page's <head>)"
+  },
+  {
+   "id": "og.jpg_size",
+   "pass": true,
+   "level": "error",
+   "file": "web/og/app.jpg",
+   "measured": "1200x630, 3 components"
+  },
+  {
+   "id": "og.jpg_interleaved",
+   "pass": true,
+   "level": "error",
+   "file": "web/og/app.jpg",
+   "measured": {
+    "sof": 0,
+    "scans": [
+     [
+      1,
+      2,
+      3
+     ]
+    ]
+   },
+   "note": "baseline (SOF0), one scan carrying every component: the layout every decoder handles"
+  },
+  {
+   "id": "og.jpg_jfif_ids",
+   "pass": true,
+   "level": "warn",
+   "file": "web/og/app.jpg",
+   "measured": [
+    1,
+    2,
+    3
+   ],
+   "note": "JFIF numbers the components 1, 2, 3"
+  },
+  {
+   "id": "og.jpg_srgb",
+   "pass": true,
+   "level": "error",
+   "file": "web/og/app.jpg",
+   "measured": "sRGB IEC61966-2.1",
+   "note": "APP2 ICC profile is sRGB"
+  },
+  {
+   "id": "og.jpg_bytes_limit",
+   "pass": true,
+   "level": "error",
+   "file": "web/og/app.jpg",
+   "measured": 52673,
+   "note": "WhatsApp: should be under 600 KB (600,000 bytes), at least 300 px wide, aspect at most 4:1; larger may get a small preview or none (Facebook allows 8 MB)"
+  },
+  {
+   "id": "og.jpg_bytes_target",
+   "pass": true,
+   "level": "warn",
+   "file": "web/og/app.jpg",
+   "measured": 52673,
+   "note": "the kit's own target, 300 KB (not WhatsApp's 300 KB rule, which is for the page's <head>)"
+  },
+  {
+   "id": "og.jpg_size",
+   "pass": true,
+   "level": "error",
+   "file": "web/og/app-watch.jpg",
+   "measured": "1200x630, 3 components"
+  },
+  {
+   "id": "og.jpg_interleaved",
+   "pass": true,
+   "level": "error",
+   "file": "web/og/app-watch.jpg",
+   "measured": {
+    "sof": 0,
+    "scans": [
+     [
+      1,
+      2,
+      3
+     ]
+    ]
+   },
+   "note": "baseline (SOF0), one scan carrying every component: the layout every decoder handles"
+  },
+  {
+   "id": "og.jpg_jfif_ids",
+   "pass": true,
+   "level": "warn",
+   "file": "web/og/app-watch.jpg",
+   "measured": [
+    1,
+    2,
+    3
+   ],
+   "note": "JFIF numbers the components 1, 2, 3"
+  },
+  {
+   "id": "og.jpg_srgb",
+   "pass": true,
+   "level": "error",
+   "file": "web/og/app-watch.jpg",
+   "measured": "sRGB IEC61966-2.1",
+   "note": "APP2 ICC profile is sRGB"
+  },
+  {
+   "id": "og.jpg_bytes_limit",
+   "pass": true,
+   "level": "error",
+   "file": "web/og/app-watch.jpg",
+   "measured": 59241,
+   "note": "WhatsApp: should be under 600 KB (600,000 bytes), at least 300 px wide, aspect at most 4:1; larger may get a small preview or none (Facebook allows 8 MB)"
+  },
+  {
+   "id": "og.jpg_bytes_target",
+   "pass": true,
+   "level": "warn",
+   "file": "web/og/app-watch.jpg",
+   "measured": 59241,
+   "note": "the kit's own target, 300 KB (not WhatsApp's 300 KB rule, which is for the page's <head>)"
+  },
+  {
+   "id": "og.text_fits",
+   "pass": true,
+   "level": "error",
+   "file": "web/og.png",
+   "measured": {
+    "column": [
+     88,
+     612
+    ],
+    "widest": 503.0,
+    "too_wide": [],
+    "on_mark": [],
+    "into_footer": [],
+    "stray_ink": {
+     "pixels": 0,
+     "first": []
+    }
+   },
+   "note": "every OG line fits its column (measured widths), clears the mark and stays above the footer; the card has no ink more than 8 px right of the column in the text's rows, outside the mark"
+  },
+  {
+   "id": "og.text_cut",
+   "pass": true,
+   "level": "warn",
+   "file": "web/og.jpg",
+   "note": "the title and subtitle are shown whole"
+  },
+  {
+   "id": "og.text_fits",
+   "pass": true,
+   "level": "error",
+   "file": "web/og/docs.jpg",
+   "measured": {
+    "column": [
+     88,
+     612
+    ],
+    "widest": 592.3,
+    "too_wide": [],
+    "on_mark": [],
+    "into_footer": [],
+    "stray_ink": {
+     "pixels": 0,
+     "first": []
+    }
+   },
+   "note": "every OG line fits its column (measured widths), clears the mark and stays above the footer; the card has no ink more than 8 px right of the column in the text's rows, outside the mark"
+  },
+  {
+   "id": "og.text_cut",
+   "pass": true,
+   "level": "warn",
+   "file": "web/og/docs.jpg",
+   "note": "the title and subtitle are shown whole"
+  },
+  {
+   "id": "og.text_fits",
+   "pass": true,
+   "level": "error",
+   "file": "web/og/app.jpg",
+   "measured": {
+    "column": [
+     88,
+     612
+    ],
+    "widest": 544.7,
+    "too_wide": [],
+    "on_mark": [],
+    "into_footer": [],
+    "stray_ink": {
+     "pixels": 0,
+     "first": []
+    }
+   },
+   "note": "every OG line fits its column (measured widths), clears the mark and stays above the footer; the card has no ink more than 8 px right of the column in the text's rows, outside the mark"
+  },
+  {
+   "id": "og.text_cut",
+   "pass": true,
+   "level": "warn",
+   "file": "web/og/app.jpg",
+   "note": "the title and subtitle are shown whole"
+  },
+  {
+   "id": "og.text_fits",
+   "pass": true,
+   "level": "error",
+   "file": "web/og/app-watch.jpg",
+   "measured": {
+    "column": [
+     88,
+     612
+    ],
+    "widest": 584.4,
+    "too_wide": [],
+    "on_mark": [],
+    "into_footer": [],
+    "stray_ink": {
+     "pixels": 0,
+     "first": []
+    }
+   },
+   "note": "every OG line fits its column (measured widths), clears the mark and stays above the footer; the card has no ink more than 8 px right of the column in the text's rows, outside the mark"
+  },
+  {
+   "id": "og.text_cut",
+   "pass": true,
+   "level": "warn",
+   "file": "web/og/app-watch.jpg",
+   "note": "the title and subtitle are shown whole"
+  },
+  {
+   "id": "manifest.members",
+   "pass": true,
+   "level": "error",
+   "file": "web/site.webmanifest",
+   "measured": []
+  },
+  {
+   "id": "manifest.icon",
+   "pass": true,
+   "level": "error",
+   "file": "web/site.webmanifest",
+   "measured": {
+    "src": "/icon-192.png",
+    "sizes": "192x192",
+    "file": "192x192"
+   },
+   "note": "src exists in web/ and \"sizes\" matches the file (a missing \"sizes\" fails here)"
+  },
+  {
+   "id": "manifest.icon",
+   "pass": true,
+   "level": "error",
+   "file": "web/site.webmanifest",
+   "measured": {
+    "src": "/icon-512.png",
+    "sizes": "512x512",
+    "file": "512x512"
+   },
+   "note": "src exists in web/ and \"sizes\" matches the file (a missing \"sizes\" fails here)"
+  },
+  {
+   "id": "manifest.icon",
+   "pass": true,
+   "level": "error",
+   "file": "web/site.webmanifest",
+   "measured": {
+    "src": "/icon-maskable-512.png",
+    "sizes": "512x512",
+    "file": "512x512"
+   },
+   "note": "src exists in web/ and \"sizes\" matches the file (a missing \"sizes\" fails here)"
+  },
+  {
+   "id": "manifest.install_icons",
+   "pass": true,
+   "level": "error",
+   "file": "web/site.webmanifest",
+   "measured": {
+    "any": [
+     "192x192",
+     "512x512"
+    ],
+    "maskable": [
+     "512x512"
+    ]
+   },
+   "note": "any 192 + 512 (Chrome install criteria) and a separate maskable 512"
+  },
+  {
+   "id": "manifest.lang",
+   "pass": true,
+   "level": "error",
+   "file": "web/site.webmanifest",
+   "measured": {
+    "lang": "en",
+    "dir": null
+   },
+   "note": "lang en from brand.json"
+  },
+  {
+   "id": "manifest.app",
+   "pass": true,
+   "level": "error",
+   "file": "web/site.webmanifest",
+   "measured": {
+    "display": "browser",
+    "theme_color": "#F7F3EC",
+    "background_color": "#F7F3EC"
+   },
+   "note": "display and colours as brand.json \"app\" asks"
+  },
+  {
+   "id": "head.files_exist",
+   "pass": true,
+   "level": "error",
+   "file": "web/head-snippet.html",
+   "measured": {
+    "missing": []
+   },
+   "note": "every referenced file is in web/"
+  },
+  {
+   "id": "head.tags",
+   "pass": true,
+   "level": "error",
+   "file": "web/head-snippet.html",
+   "measured": []
+  },
+  {
+   "id": "head.no_obsolete",
+   "pass": true,
+   "level": "error",
+   "file": "web/head-snippet.html",
+   "measured": []
+  },
+  {
+   "id": "head.locale",
+   "pass": true,
+   "level": "error",
+   "file": "web/head-snippet.html",
+   "measured": [
+    "en_US"
+   ],
+   "note": "og:locale en_US for lang en"
+  },
+  {
+   "id": "head.color_scheme",
+   "pass": true,
+   "level": "error",
+   "file": "web/head-snippet.html",
+   "measured": [
+    "light dark"
+   ],
+   "note": "exactly one color-scheme meta, \"light dark\" (brand.json app.color_scheme)"
+  },
+  {
+   "id": "head.theme_color",
+   "pass": true,
+   "level": "error",
+   "file": "web/head-snippet.html",
+   "measured": [
+    [
+     "#F7F3EC",
+     "light"
+    ],
+    [
+     "#141210",
+     "dark"
+    ]
+   ],
+   "note": "the pair for a page with both schemes, one colour (no media) for a one-scheme page"
+  },
+  {
+   "id": "head.organization",
+   "pass": true,
+   "level": "error",
+   "file": "web/head-home.html",
+   "measured": {
+    "found": true,
+    "logo": "https://agenttool.dev/icon-512.png",
+    "size": [
+     512,
+     512
+    ],
+    "colour_type": "RGB"
+   },
+   "note": "JSON-LD Organization with the brand's name and url; its logo is an absolute URL of a file in web/, square, at least 112 px and opaque (Google: it must look right on white)"
+  },
+  {
+   "id": "head.website",
+   "pass": true,
+   "level": "error",
+   "file": "web/head-home.html",
+   "measured": {
+    "name": "AgentTool",
+    "url": "https://agenttool.dev/"
+   },
+   "note": "JSON-LD WebSite (Google site name): the brand's name, its short name as alternateName when it differs, and url the home page at the root of the host"
+  },
+  {
+   "id": "head.site_root",
+   "pass": true,
+   "level": "warn",
+   "file": "web/head-home.html",
+   "measured": {
+    "url": "https://agenttool.dev",
+    "website_url": "https://agenttool.dev/"
+   },
+   "note": "Google does not support site names below the host: brand.json url names a path, so the WebSite url is the root of its host; the site name applies there"
+  },
+  {
+   "id": "head.page",
+   "pass": true,
+   "level": "error",
+   "file": "web/og/head-docs.html",
+   "measured": {
+    "og:title": [
+     "AgentTool technical library"
+    ],
+    "og:image": [
+     "https://agenttool.dev/og/docs.jpg"
+    ],
+    "og:url": [
+     "https://agenttool.dev/"
+    ],
+    "missing": []
+   },
+   "note": "the page's own og:title, its card as og:image (a file in web/og/), og:image:alt and twitter:card"
+  },
+  {
+   "id": "head.page",
+   "pass": true,
+   "level": "error",
+   "file": "web/og/head-app.html",
+   "measured": {
+    "og:title": [
+     "Start or reconnect."
+    ],
+    "og:image": [
+     "https://agenttool.dev/og/app.jpg"
+    ],
+    "og:url": [
+     "https://agenttool.dev/"
+    ],
+    "missing": []
+   },
+   "note": "the page's own og:title, its card as og:image (a file in web/og/), og:image:alt and twitter:card"
+  },
+  {
+   "id": "head.page",
+   "pass": true,
+   "level": "error",
+   "file": "web/og/head-app-watch.html",
+   "measured": {
+    "og:title": [
+     "Public API snapshots. Read at your pace."
+    ],
+    "og:image": [
+     "https://agenttool.dev/og/app-watch.jpg"
+    ],
+    "og:url": [
+     "https://agenttool.dev/watch"
+    ],
+    "missing": []
+   },
+   "note": "the page's own og:title, its card as og:image (a file in web/og/), og:image:alt and twitter:card"
+  },
+  {
+   "id": "tools.tested",
+   "pass": true,
+   "level": "warn",
+   "measured": {
+    "tool": "vectorcraft-cli",
+    "built_with": "vectorcraft-cli 0.17.0",
+    "tested": [
+     "0.13.1",
+     "0.14.0",
+     "0.17.0"
+    ]
+   },
+   "note": "built with a version this tool was tested with (a warning means another one); after an update re-run the examples with --rebuild-check and re-check references/apps.md \"Version skew\""
+  },
+  {
+   "id": "rebuild.identical",
+   "pass": true,
+   "level": "error",
+   "measured": {
+    "identical": 76,
+    "different": [],
+    "fingerprint": "41b07b33e7ee41a5f230687a41c75187e764b3a8e5dc3e638b4e62e8832b4db4"
+   },
+   "note": "second build from source/brand.json in a temp folder, compared byte for byte (the PDFs too: both builds gave VectorCraft SOURCE_DATE_EPOCH 1794323888)"
+  }
+ ]
+}

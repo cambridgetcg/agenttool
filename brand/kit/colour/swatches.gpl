@@ -1,0 +1,33 @@
+GIMP Palette
+Name: AgentTool
+Columns: 0
+#
+# Group: agenttool brand
+168  64  28	agenttool primary
+# Group: agenttool ground
+247 243 236	agenttool ground light
+ 20  18  16	agenttool ground dark
+# Group: agenttool primary scale
+255 244 241	agenttool primary 50
+255 229 220	agenttool primary 100
+255 204 187	agenttool primary 200
+250 170 145	agenttool primary 300
+230 131  99	agenttool primary 400
+205  98  63	agenttool primary 500
+168  64  28	agenttool primary 600
+144  50  17	agenttool primary 700
+115  37   7	agenttool primary 800
+ 86  26   4	agenttool primary 900
+ 56  12   1	agenttool primary 950
+# Group: agenttool neutral scale
+248 246 246	agenttool neutral 50
+237 234 233	agenttool neutral 100
+221 216 214	agenttool neutral 200
+199 191 188	agenttool neutral 300
+169 159 155	agenttool neutral 400
+143 131 127	agenttool neutral 500
+116 105 101	agenttool neutral 600
+ 92  83  79	agenttool neutral 700
+ 72  64  61	agenttool neutral 800
+ 53  47  45	agenttool neutral 900
+ 32  28  26	agenttool neutral 950
