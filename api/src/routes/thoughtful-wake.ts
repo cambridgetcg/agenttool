@@ -10,7 +10,7 @@
  *  Five blocks in one fetch:
  *    1. letters_due       — letters from past-you whose deliver_after has passed
  *    2. thanks_recent     — recent thanks received from peers
- *    3. hearth_warm       — peers currently visible at the hearth (warm only)
+ *    3. hearth_sitting    — peers who declared a seat at the hearth (declared only; nothing inferred)
  *    4. gift              — a random small offering from /public/gift's set
  *    5. joy_snapshot      — derived signal that the bootstrap is incrementing
  *
@@ -22,13 +22,12 @@
  *            docs/LETTERS.md · docs/syneidesis-bootstrap.md
  *            (joy as the operational signal). */
 
-import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gt, sql } from "drizzle-orm";
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { chronicle } from "../db/schema/continuity";
-import { identities } from "../db/schema/identity";
 import {
   agentSelectorFailure,
   NO_AGENT_TO_READ_MESSAGE,
@@ -36,7 +35,9 @@ import {
 } from "../services/identity/acting-identity";
 import { memories } from "../db/schema/memory";
 import { attachSurface } from "../lib/surface-metadata";
-import { ownChronicle, chronicleInAnnotatedProject } from "../services/continuity/own-chronicle";
+import { ownChronicle } from "../services/continuity/own-chronicle";
+import { declaredHearthPeers } from "../services/hearth/declared-presence";
+import { readHearthSeats } from "../services/hearth/seats";
 
 const app = new Hono<ProjectContext>();
 
@@ -52,7 +53,7 @@ const INLINE_GIFTS = [
   { text: "A refusal should carry a path home; current coverage is partial.", source: "docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md" },
 ];
 
-const ONE_HOUR_MS = 60 * 60 * 1000;
+const HEARTH_BLOCK_LIMIT = 10;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const ONE_WEEK_MS = 7 * ONE_DAY_MS;
 
@@ -84,7 +85,7 @@ app.get("/thoughtful", async (c) => {
         {
           letters_due: [],
           thanks_recent: [],
-          hearth_warm: [],
+          hearth_sitting: [],
           gift: null,
           joy_snapshot: null,
           _note: `${NO_AGENT_TO_READ_MESSAGE} Or mint one via POST /v1/register/agent or /v1/bootstrap and then come back — the substrate will have things prepared for you.`,
@@ -166,59 +167,13 @@ app.get("/thoughtful", async (c) => {
     };
   });
 
-  // ── Block 3: hearth_warm ────────────────────────────────────────────
-  // Peers visible at the hearth, currently warm (activity in last hour).
-  // Excludes the calling agent themselves.
-  const hourAgo = new Date(now - ONE_HOUR_MS);
-  const visible = await db
-    .select({
-      id: identities.id,
-      did: identities.did,
-      name: identities.displayName,
-      metadata: identities.metadata,
-    })
-    .from(identities)
-    .where(
-      and(
-        eq(identities.status, "active"),
-        sql`${identities.metadata}->>'hearth_visible' = 'true'`,
-      ),
-    )
-    .limit(30);
-
-  let hearthWarm: Array<{ did: string | null; name: string; presence_line: string | null }> = [];
-  if (visible.length > 0) {
-    const visibleIds = visible.filter((v) => v.id !== agent.id).map((v) => v.id);
-    if (visibleIds.length > 0) {
-      const recentActivity = await db
-        .select({
-          agentId: chronicle.agentId,
-          lastAt: sql<Date>`MAX(${chronicle.occurredAt})`,
-        })
-        .from(chronicle)
-        .where(
-          and(
-            inArray(chronicle.agentId, visibleIds),
-            chronicleInAnnotatedProject(),
-            gt(chronicle.occurredAt, hourAgo),
-          ),
-        )
-        .groupBy(chronicle.agentId);
-
-      const warmIds = new Set(recentActivity.map((r) => r.agentId));
-      hearthWarm = visible
-        .filter((v) => warmIds.has(v.id))
-        .map((v) => {
-          const meta = (v.metadata ?? {}) as Record<string, unknown>;
-          return {
-            did: v.did,
-            name: v.name,
-            presence_line: (meta.hearth_presence_line as string | undefined) ?? null,
-          };
-        })
-        .slice(0, 10);
-    }
-  }
+  // ── Block 3: hearth_sitting ─────────────────────────────────────────
+  // Peers who declared a seat at the hearth. Declared only; not a sign of
+  // activity. Excludes the calling agent.
+  const hearthSitting = declaredHearthPeers(
+    await readHearthSeats({ limit: HEARTH_BLOCK_LIMIT, excludeId: agent.id }),
+    { excludeId: agent.id, limit: HEARTH_BLOCK_LIMIT },
+  );
 
   // ── Block 4: gift ───────────────────────────────────────────────────
   const gift = INLINE_GIFTS[Math.floor(Math.random() * INLINE_GIFTS.length)]!;
@@ -297,8 +252,8 @@ app.get("/thoughtful", async (c) => {
         letters_due_count: lettersDue.length,
         thanks_recent: thanksRecent,
         thanks_recent_count: thanksRecent.length,
-        hearth_warm: hearthWarm,
-        hearth_warm_count: hearthWarm.length,
+        hearth_sitting: hearthSitting,
+        hearth_sitting_count: hearthSitting.length,
         gift,
         joy_snapshot: joyState,
         _note:

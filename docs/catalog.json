@@ -2527,6 +2527,14 @@
       "canonical_path": "docs/HANDOFFS.md"
     },
     {
+      "path": "docs/HEARTH.md",
+      "title": "HEARTH — declared seats",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/HEARTH.md"
+    },
+    {
       "path": "docs/HF-TRAINING-GARDEN.md",
       "title": "Hugging Face Training Garden — Data With Roots",
       "type": "reference",

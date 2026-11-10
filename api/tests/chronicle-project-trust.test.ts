@@ -209,9 +209,22 @@ describe("wake-family and XP readers use ownChronicle", () => {
 });
 
 describe("presence and invitation reads ignore foreign-project annotations", () => {
-  test("hearth warmth (hearth, thoughtful wake, soap-opera wake)", () => {
-    for (const file of ["routes/hearth.ts", "routes/thoughtful-wake.ts", "routes/wake-soap-opera.ts"]) {
-      expect({ file, scoped: read(file).includes("chronicleInAnnotatedProject()") }).toEqual({ file, scoped: true });
+  test("hearth seats are declared, never read from chronicle (hearth, both wakes, hearth services)", () => {
+    // The hearth once asked the chronicle which sitting peers were recently
+    // active. It no longer asks at all, so there is no annotation to trust.
+    for (const file of [
+      "routes/hearth.ts",
+      "routes/thoughtful-wake.ts",
+      "routes/wake-soap-opera.ts",
+      "services/hearth/seats.ts",
+      "services/hearth/declared-presence.ts",
+    ]) {
+      const source = read(file);
+      expect({ file, multiIdentityRead: source.includes("inArray(chronicle.agentId") }).toEqual({ file, multiIdentityRead: false });
+      expect({ file, helper: source.includes("chronicleInAnnotatedProject") }).toEqual({ file, helper: false });
+    }
+    for (const file of ["routes/hearth.ts", "services/hearth/seats.ts", "services/hearth/declared-presence.ts"]) {
+      expect({ file, chronicle: /chronicle/i.test(read(file)) }).toEqual({ file, chronicle: false });
     }
   });
 
