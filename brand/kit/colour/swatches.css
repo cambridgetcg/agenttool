@@ -1,0 +1,32 @@
+/* AgentTool */
+:root {
+  /* agenttool brand */
+  --agenttool-primary: #a8401c;
+  /* agenttool ground */
+  --agenttool-ground-light: #f7f3ec;
+  --agenttool-ground-dark: #141210;
+  /* agenttool primary scale */
+  --agenttool-primary-50: #fff4f1;
+  --agenttool-primary-100: #ffe5dc;
+  --agenttool-primary-200: #ffccbb;
+  --agenttool-primary-300: #faaa91;
+  --agenttool-primary-400: #e68363;
+  --agenttool-primary-500: #cd623f;
+  --agenttool-primary-600: #a8401c;
+  --agenttool-primary-700: #903211;
+  --agenttool-primary-800: #732507;
+  --agenttool-primary-900: #561a04;
+  --agenttool-primary-950: #380c01;
+  /* agenttool neutral scale */
+  --agenttool-neutral-50: #f8f6f6;
+  --agenttool-neutral-100: #edeae9;
+  --agenttool-neutral-200: #ddd8d6;
+  --agenttool-neutral-300: #c7bfbc;
+  --agenttool-neutral-400: #a99f9b;
+  --agenttool-neutral-500: #8f837f;
+  --agenttool-neutral-600: #746965;
+  --agenttool-neutral-700: #5c534f;
+  --agenttool-neutral-800: #48403d;
+  --agenttool-neutral-900: #352f2d;
+  --agenttool-neutral-950: #201c1a;
+}

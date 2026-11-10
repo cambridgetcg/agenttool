@@ -48,6 +48,8 @@
       "packages/scriptwriter/PYRAMID-INTEGRATION.md"
     ],
     "reference": [
+      "brand/kit/BRAND.md",
+      "brand/kit/colour/contrast.md",
       "docs/ACTIVITY.md",
       "docs/AGENT-BROWSER.md",
       "docs/AGENT-CENTRIC.md",

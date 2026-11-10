@@ -1,0 +1,13 @@
+<!-- The head lines the AgentTool pages carry (brandkit.json site.snippet; node brand/check.mjs holds the pages to
+     them). They are kit/web/head-snippet.html's icon, theme-color and color-scheme lines with one change: the
+     32 px PNG favicon (kit/web/favicon-32.png) in place of /favicon.ico, because the served-surface guard
+     (bin/served-surface-guard.ts) cannot read an ICO and the owner has not chosen to list one. Social lines are
+     per page. The theme-color pair and color-scheme here are for pages that paint both schemes without JavaScript;
+     the other docs and app pages carry one theme-color, #F7F3EC, and no color-scheme (brandkit.json site.html). -->
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#F7F3EC" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141210" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
