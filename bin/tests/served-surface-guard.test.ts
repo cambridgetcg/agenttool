@@ -253,10 +253,12 @@ function fontOf(tables: ReadonlyArray<readonly [tag: string, data: Buffer]>, mag
 }
 
 describe("served surface relational guard", () => {
+  // It reads every file the sites serve, every tarball member among them: about 2.3 s on a laptop and 2.4 to 4.7 s on CI
+  // runners, close to Bun's 5 s default, so it has its own budget.
   test("the upload set publishes nothing the denylist protects", () => {
     const findings = servedSurfaceFindings(uploadSet(), bytes(DENYLIST_PATH), bytes(POLICY_PATH));
     expect(findings.map(formatServedFinding)).toEqual([]);
-  });
+  }, 20_000);
 
   test("the guard reads the deploy's upload roots and runs after its deletions, before any upload", () => {
     const deploy = text("bin/frontend-deploy.sh");
