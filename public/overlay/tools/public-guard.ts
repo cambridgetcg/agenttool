@@ -27,8 +27,11 @@
  *   commit whose tree matches its own PROJECTION.json, so no private commit,
  *   tree, or message can sit anywhere in the public parent chain.
  *
- * Content layers read UTF-8 text, BOM-marked UTF-16 text, and the printable
- * strings of binary files. Each line is also read with JSON/JavaScript
+ * Content layers read UTF-8 text, BOM-marked UTF-16 text (and its UTF-8
+ * reading), and the printable strings of binary files (UTF-8 runs and ASCII
+ * held in 16- or 32-bit units). Printable strings are read too in BOM-marked
+ * text and in text with a NUL past the first 8000 bytes, so ASCII held in
+ * other units there is not lost. Each line is also read with JSON/JavaScript
  * \u escapes, HTML entities, and percent-encoding decoded, and in NFC and
  * NFKC form; a hit in any reading is reported on the original line.
  *
@@ -178,27 +181,32 @@ const MIN_STRING = 6;
 
 /**
  * Printable strings of a binary file, one per line: runs of at least six
- * printable characters in its UTF-8 reading, and ASCII runs in its UTF-16LE
- * and UTF-16BE readings at either byte alignment.
+ * printable characters in its UTF-8 reading, and ASCII runs in its UTF-16 and
+ * UTF-32 readings, little- and big-endian, at every byte alignment.
  */
 export function printableStrings(bytes: Uint8Array): string {
   const runs = new Set<string>();
   const utf8 = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
   for (const match of utf8.matchAll(/[\t\x20-\x7e\u00a0-\ufffc\u{10000}-\u{10ffff}]{6,}/gu)) runs.add(match[0]);
-  for (const little of [true, false]) {
-    for (const start of [0, 1]) {
-      let run = "";
-      const flush = () => {
-        if (run.length >= MIN_STRING) runs.add(run);
-        run = "";
-      };
-      for (let index = start; index + 1 < bytes.length; index += 2) {
-        const char = (little ? bytes[index] : bytes[index + 1]) as number;
-        const high = little ? bytes[index + 1] : bytes[index];
-        if (high === 0 && (char === 0x09 || (char >= 0x20 && char <= 0x7e))) run += String.fromCharCode(char);
-        else flush();
+  for (const width of [2, 4]) {
+    for (const little of [true, false]) {
+      for (let start = 0; start < width; start += 1) {
+        let run = "";
+        const flush = () => {
+          if (run.length >= MIN_STRING) runs.add(run);
+          run = "";
+        };
+        for (let index = start; index + width <= bytes.length; index += width) {
+          // The character is the unit's low byte; every other byte must be 0.
+          const low = little ? index : index + width - 1;
+          const char = bytes[low] as number;
+          let high = 0;
+          for (let at = index; at < index + width; at += 1) if (at !== low) high |= bytes[at] as number;
+          if (high === 0 && (char === 0x09 || (char >= 0x20 && char <= 0x7e))) run += String.fromCharCode(char);
+          else flush();
+        }
+        flush();
       }
-      flush();
     }
   }
   return [...runs].join("\n");
@@ -565,12 +573,19 @@ export function decodeText(bytes: Uint8Array): string {
   return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
 }
 
-/** The text a content layer scans: decoded text, or a binary file's printable strings. */
+/**
+ * The text a content layer scans: decoded text, a binary file's printable
+ * strings, or BOM-marked UTF-16 text followed by its UTF-8 reading, so UTF-8
+ * text placed after a byte-order mark is read as UTF-8 too. BOM-marked text,
+ * and text with a NUL past the window blobKind looks at, are also read for
+ * their printable strings: ASCII held as UTF-16 in the other byte order or at
+ * an odd offset, or in 32-bit units, would otherwise go unread.
+ */
 export function scannableText(bytes: Uint8Array): string {
   const kind = blobKind(bytes);
-  if (kind === "text") return decodeText(bytes);
+  if (kind === "text") return bytes.includes(0) ? `${decodeText(bytes)}\n${printableStrings(bytes)}` : decodeText(bytes);
   if (kind === "binary") return printableStrings(bytes);
-  return new TextDecoder(kind).decode(bytes);
+  return [new TextDecoder(kind).decode(bytes), decodeText(bytes), printableStrings(bytes)].join("\n");
 }
 
 export function contentFindings(
