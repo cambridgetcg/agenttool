@@ -355,6 +355,17 @@ describe("served surface relational guard", () => {
     }
   });
 
+  test("each chunk's data in an icon's PNG is read on its own, so plain text at its start is found", () => {
+    const icon = "apps/web/favicon.ico";
+    const term = latin1(asciiTerm());
+    // Read only with the whole file, a word at the start of a chunk's data runs into the chunk type just before it.
+    for (const type of ["PLTE", "tRNS", "cHRM", "pHYs", "gAMA", "sRGB"]) {
+      const findings = ownFindings(servedSurfaceFindings([served(icon, icoOf([[16, pngOf(16, { extra: [pngChunk(type, term)] })]]))], bytes(DENYLIST_PATH), bytes(POLICY_PATH)), icon);
+      expect({ type, unreadable: findings.filter((finding) => finding.rule === "served/unreadable-binary").length }).toEqual({ type, unreadable: 0 });
+      expect({ type, found: findings.some((finding) => finding.path === `${icon}!image-0` && finding.rule.startsWith("relational/")) }).toEqual({ type, found: true });
+    }
+  });
+
   test("an ICO that leaves a byte unaccounted for, or holds anything the guard cannot fully read, is refused", () => {
     const icon = "apps/web/favicon.ico";
     const [denylist, policy] = [bytes(DENYLIST_PATH), bytes(POLICY_PATH)];
