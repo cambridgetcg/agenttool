@@ -486,8 +486,9 @@ function inflateWhole(input: Uint8Array, limit: number, fail: (why: string) => n
 }
 
 /**
- * What a PNG must be: its IHDR's row count and bytes per row (a filter byte
- * and the packed pixels), and how its inflated rows are read as text.
+ * What a PNG must be: its IHDR's colour type, row count and bytes per row (a
+ * filter byte and the packed pixels), and how its inflated rows and its IDAT
+ * chunks' data are read as text.
  */
 interface StrictPng {
   fail: (why: string) => never;
@@ -572,8 +573,10 @@ function pngText(bytes: Uint8Array, png: StrictPng): { text: string; end: number
     // and the CRC after it cannot run into a word at its edges. That holds for
     // each IDAT chunk too: a later one can open, and any one can close, inside
     // a stored block, whose bytes reach the rows unchanged between pixel bytes
-    // the author picks.
-    texts.push(textReadings(data));
+    // the author picks. An IDAT chunk is read as the rows are (readRows): in a
+    // PNG file, for its printable strings, since the full readings of
+    // compressed bytes match a rule by chance in real PNG files.
+    texts.push(type === "IDAT" ? png.readRows(data) : textReadings(data));
     const nul = data.indexOf(0);
     if (type === "IDAT") {
       idat.push(data);
@@ -614,8 +617,9 @@ const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] as const;
  * interlacing, at least one pixel a side, and rows the guard may inflate; the
  * PNG must end at its IEND. Inside an icon it is at most 256 pixels a side
  * and its pixel rows are read with textReadings. A PNG file's rows can run to
- * megabytes, so they are read for their printable strings, which keeps the
- * guard's time near what it was. Returns the PNG's size and bits per pixel
+ * megabytes, so they and its IDAT chunks' data are read for their printable
+ * strings, which keeps the guard's time near what it was and keeps chance
+ * matches in compressed bytes out. Returns the PNG's size and bits per pixel
  * too, which an icon's directory entry must match.
  */
 function strictPng(bytes: Uint8Array, fail: (why: string) => never, inIcon = false): { text: string; width: number; height: number; bits: number } {

@@ -693,6 +693,11 @@ describe("served surface relational guard", () => {
     header.set([8, 0, 0, 0, 0], 8);
     const grayscale = Buffer.concat([PNG_SIGNATURE, pngChunk("IHDR", header), pngChunk("IDAT", deflateSync(gray)), pngChunk("IEND", Buffer.alloc(0))]);
     expect(check(grayscale).some((finding) => finding.rule.startsWith("relational/"))).toBe(true);
+    // Each IDAT chunk is read on its own, for its printable strings as the rows are: here the second opens with the term.
+    const stored = deflateSync(rowsHolding(64, Buffer.concat([latin1("x"), latin1(term)])), { level: 0 });
+    const cut = stored.indexOf(latin1(term));
+    const split = pngOf(64, { extra: [pngChunk("IDAT", stored.subarray(0, cut))], idat: stored.subarray(cut) });
+    expect(check(split).some((finding) => finding.path === image && finding.rule.startsWith("relational/"))).toBe(true);
     const cases: Array<readonly [string, Buffer, RegExp]> = [
       ["a second zlib stream after the pixel data", pngOf(16, { idat: Buffer.concat([deflateSync(blankRows), hidden]) }), /bytes after the end of its PNG pixel data/u],
       ["pixel data that is not the rows its IHDR implies", pngOf(16, { idat: hidden }), /PNG pixel data/u],
