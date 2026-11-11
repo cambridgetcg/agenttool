@@ -59,38 +59,43 @@ function tarOf(entries: ReadonlyArray<readonly [string, Uint8Array]>): Buffer {
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
-/** A PNG chunk. The guard does not check CRCs, so they are zero. */
+/** A PNG chunk with its CRC, which the guard checks for a PNG inside an icon. */
 function pngChunk(type: string, data: Uint8Array): Buffer {
   const length = Buffer.alloc(4);
   length.writeUInt32BE(data.length);
-  return Buffer.concat([length, Buffer.from(type, "latin1"), Buffer.from(data), Buffer.alloc(4)]);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(Bun.hash.crc32(Buffer.concat([Buffer.from(type, "latin1"), Buffer.from(data)])) >>> 0);
+  return Buffer.concat([length, Buffer.from(type, "latin1"), Buffer.from(data), crc]);
 }
 
-/** A PNG whose only text is a compressed zTXt chunk. */
+/** A 1x1 RGBA PNG whose only text is a compressed zTXt chunk. */
 function pngWithCompressedText(text: Uint8Array): Buffer {
   return Buffer.concat([
     PNG_SIGNATURE,
-    pngChunk("IHDR", Buffer.from([0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 0, 0, 0])),
+    pngChunk("IHDR", Buffer.from([0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0])),
     pngChunk("zTXt", Buffer.concat([Buffer.from("Comment\0", "latin1"), Buffer.from([0]), deflateSync(text)])),
     pngChunk("IEND", Buffer.alloc(0)),
   ]);
 }
 
-/** A square RGBA PNG with blank pixels and no text. */
-function pngOf(pixels: number): Buffer {
+/**
+ * A square RGBA PNG with blank pixels. Options add chunks after IHDR, give
+ * IEND a body, or replace the chunks between the signature and IDAT.
+ */
+function pngOf(pixels: number, options: { extra?: Buffer[]; iend?: Buffer; head?: Buffer[] } = {}): Buffer {
   const header = Buffer.alloc(13);
   header.writeUInt32BE(pixels, 0);
   header.writeUInt32BE(pixels, 4);
   header.set([8, 6], 8);
   return Buffer.concat([
     PNG_SIGNATURE,
-    pngChunk("IHDR", header),
+    ...(options.head ?? [pngChunk("IHDR", header), ...(options.extra ?? [])]),
     pngChunk("IDAT", deflateSync(Buffer.alloc(pixels * (pixels * 4 + 1)))),
-    pngChunk("IEND", Buffer.alloc(0)),
+    pngChunk("IEND", options.iend ?? Buffer.alloc(0)),
   ]);
 }
 
-/** A square 32-bit bitmap as an ICO stores it: BITMAPINFOHEADER, colour rows, then 1-bit mask rows. */
+/** A square 32-bit bitmap as an ICO stores it: BITMAPINFOHEADER, colour rows, then 1-bit mask rows. The guard refuses it. */
 function bitmapOf(pixels: number): Buffer {
   const header = Buffer.alloc(40);
   header.writeUInt32LE(40, 0);
@@ -217,8 +222,7 @@ describe("served surface relational guard", () => {
     const icon = "apps/web/favicon.ico";
     const clear = (content: Uint8Array) => ownFindings(servedSurfaceFindings([served(icon, content)], bytes(DENYLIST_PATH), bytes(POLICY_PATH)), icon);
     expect(clear(icoOf([[16, pngOf(16)], [32, pngOf(32)]]))).toEqual([]);
-    expect(clear(icoOf([[16, bitmapOf(16)]]))).toEqual([]);
-    expect(clear(icoOf([[16, bitmapOf(16)], [32, pngOf(32)]]))).toEqual([]);
+    expect(clear(icoOf([[16, pngOf(16, { extra: [pngChunk("sRGB", Buffer.from([0])), pngChunk("tEXt", Buffer.from("Software\0a neutral tool", "latin1"))] })]]))).toEqual([]);
 
     // The brand kit's icon, which the three sites serve: three PNG images, each read as a PNG file is.
     const kit = bytes("brand/kit/web/favicon.ico");
@@ -241,7 +245,17 @@ describe("served surface relational guard", () => {
     expect(rules("apps/web/favicon.ico!image-0")).toEqual(rules("apps/web/card.png"));
   });
 
-  test("an ICO that leaves a byte unaccounted for, or holds an image the guard cannot read, is refused", () => {
+  test("private plain text in an icon's PNG text chunk is found, in the image and in the whole file", () => {
+    const icon = "apps/web/favicon.ico";
+    const content = icoOf([[16, pngOf(16, { extra: [pngChunk("tEXt", Buffer.concat([Buffer.from("Comment\0", "latin1"), PRIVATE_TEXT()]))] })]]);
+    const findings = ownFindings(servedSurfaceFindings([served(icon, content)], bytes(DENYLIST_PATH), bytes(POLICY_PATH)), icon);
+    expect(findings.some((finding) => finding.rule === "served/unreadable-binary")).toBe(false);
+    for (const path of [icon, `${icon}!image-0`]) {
+      expect(findings.some((finding) => finding.path === path && finding.rule.startsWith("relational/"))).toBe(true);
+    }
+  });
+
+  test("an ICO that leaves a byte unaccounted for, or holds anything the guard cannot fully read, is refused", () => {
     const icon = "apps/web/favicon.ico";
     const [denylist, policy] = [bytes(DENYLIST_PATH), bytes(POLICY_PATH)];
     const small = pngOf(16);
@@ -249,6 +263,20 @@ describe("served surface relational guard", () => {
     const clean = icoOf([[16, small], [32, large]]);
     const start = 6 + 2 * 16;
     const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0xff, 0xd9]);
+    /** The clean icon with one byte of its first directory entry changed. */
+    const entry = (at: number, value: number) => {
+      const changed = Buffer.from(clean);
+      changed[6 + at] = value;
+      return changed;
+    };
+    const swapped = Buffer.from(clean);
+    clean.copy(swapped, 6, 22, 38);
+    clean.copy(swapped, 22, 6, 22);
+    const tarLike = Buffer.alloc(1024);
+    tarLike.set([0, 0, 1, 0, 1, 0]);
+    tarLike.write("ustar\0", 257);
+    const badCrc = pngOf(16);
+    badCrc[badCrc.length - 1] ^= 0xff;
     const cases: Array<readonly [string, Uint8Array, RegExp]> = [
       ["bytes after the last image", Buffer.concat([clean, Buffer.from([0x00, 0x01, 0x02, 0x03])]), /after its last image/u],
       ["a gap between images", icoOf([[16, small], [32, Buffer.concat([Buffer.alloc(4), large])]], { offsets: [start, start + small.length + 4], sizes: [small.length, large.length] }), /unaccounted bytes before image 1/u],
@@ -264,9 +292,24 @@ describe("served surface relational guard", () => {
       ["an entry pointing into the header", icoOf([[16, small]], { offsets: [2] }), /inside the header or directory/u],
       ["an entry pointing outside the file", icoOf([[16, small]], { offsets: [clean.length * 4] }), /runs past the file/u],
       ["a cursor file", icoOf([[16, small]], { type: 2 }), /cursor/u],
-      ["a bitmap with a byte its header does not declare", icoOf([[16, Buffer.concat([bitmapOf(16), Buffer.from([0x00])])]]), /header does not account for its bytes/u],
-      ["an image that is neither PNG nor bitmap", icoOf([[16, jpeg]]), /neither a PNG nor a classic bitmap/u],
+      ["a bitmap image, which the guard refuses on its own too", icoOf([[16, bitmapOf(16)]]), /image 0 is not a PNG image/u],
+      ["a bitmap beside a PNG", icoOf([[16, small], [16, bitmapOf(16)]]), /image 1 is not a PNG image/u],
+      ["a JPEG image", icoOf([[16, jpeg]]), /image 0 is not a PNG image/u],
       ["a directory size that does not match the image", icoOf([[48, small]]), /size its directory entry does not match/u],
+      ["a directory entry's reserved byte set", entry(3, 1), /image 0 has an invalid directory entry/u],
+      ["a directory entry with two planes", entry(4, 2), /image 0 has an invalid directory entry/u],
+      ["a directory entry with bit count 3", entry(6, 3), /image 0 has an invalid directory entry/u],
+      ["a bit count that is not the PNG's", entry(6, 8), /image 0 has a bit count its directory entry does not match/u],
+      ["a colour count for a PNG image", entry(2, 16), /image 0 has a colour count its directory entry does not match/u],
+      ["a directory out of file order", swapped, /lists image 1 out of file order/u],
+      ["a PNG that does not open with IHDR", icoOf([[16, pngOf(16, { head: [pngChunk("sRGB", Buffer.from([0])), small.subarray(8, 33)] })]]), /does not open with IHDR/u],
+      ["data inside a PNG's IEND chunk", icoOf([[16, pngOf(16, { iend: deflateSync(Buffer.from("hidden")) })]]), /image 0 has data inside its PNG IEND chunk/u],
+      ["a PNG chunk an icon may not hold", icoOf([[16, pngOf(16, { extra: [pngChunk("prVt", deflateSync(Buffer.from("hidden")))] })]]), /image 0 has a PNG chunk an icon may not hold/u],
+      ["a profile chunk, whose binary profile the guard reads only for strings", icoOf([[16, pngOf(16, { extra: [pngChunk("iCCP", Buffer.concat([Buffer.from("icc\0\0", "latin1"), deflateSync(Buffer.alloc(16))]))] })]]), /may not hold/u],
+      ["a repeated chunk that may appear once", icoOf([[16, pngOf(16, { extra: [pngChunk("sRGB", Buffer.from([0])), pngChunk("sRGB", Buffer.from([1]))] })]]), /image 0 repeats its PNG sRGB chunk/u],
+      ["a PNG chunk with a wrong CRC", icoOf([[16, badCrc]]), /image 0 has a PNG IEND chunk whose CRC is wrong/u],
+      ["16- or 32-bit text in a text chunk", icoOf([[16, pngOf(16, { extra: [pngChunk("tEXt", Buffer.from("Comment\0h\0\0\0i\0\0\0", "latin1"))] })]]), /image 0 has a NUL in the text of a PNG text chunk/u],
+      ["a file that is an icon and a tar archive at once", tarLike, /ICO that is also a tar archive/u],
       ["a non-ICO file named .ico", jpeg, /binary format the guard cannot read/u],
     ];
     for (const [name, content, reason] of cases) {

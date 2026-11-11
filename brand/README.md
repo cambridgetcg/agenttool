@@ -39,8 +39,8 @@ with no new mark and no new words:
   `apple-touch-icon.png` (180, on paper `#f7f3ec`), `icon-192.png`, `icon-512.png`, `icon-maskable-512.png` and a
   `site.webmanifest` per site (display `browser`, so nothing new offers to install). agenttool.dev serves the kit's;
   docs and app serve `sites/docs/` and `sites/app/`, the kit's with each home page's own `<title>` as `name` and its
-  meta description as `description`. `favicon.ico` is served since the guard learned to read ICO (see "Deploying");
-  the pages still link `favicon-32.png` and `favicon.svg`.
+  meta description as `description`. `favicon.ico` is in the upload set since the guard learned to read ICO (see
+  "Deploying"), and live after the next frontend release; the pages still link `favicon-32.png` and `favicon.svg`.
 - **The tab icon is drawn bigger and heavier than before.** For an untiled mark the generator fills the favicon
   square (fixed at 98% at 16 px and 94% at 32 px; `icon.padding` sizes only the app icons) and hints the cuts. The
   old data-URI drew the ring across 12 of 16 px and 24 of 32 px (about 74%). At 16 px the new ring spans all 16 px
@@ -115,10 +115,11 @@ one `url` per kit and writes JPEG cards; the docs and app pages carry the same l
 ICO, text, fonts and archives, and refuses any other binary unless `public/private-guard/served-surface.json` names
 that exact file with a reason. It refused the kit's `favicon.ico` and JPEG cards on 2026-11-10, so the sites serve PNG
 cards. By the owner's decision of 2026-11-10 the guard now reads an ICO, failing closed: every byte must be accounted
-for (header, directory and images in order, with no gap, overlap or trailing byte), and each image must read as that
-image type does on its own, a PNG ending at its IEND chunk or a classic bitmap whose header accounts for exactly its
-bytes. A cursor or any other image type is still refused, and JPEG stays unreadable. So the three sites serve the
-kit's `favicon.ico` byte for byte, with no policy entry, and the `/favicon.ico` 404 closes when a release uploads it.
+for (header, directory and images in directory order, with no gap, overlap or trailing byte), and each image must be a
+PNG, read as a PNG file is and held stricter: only the chunks the guard reads or that hold no free text, each chunk's
+CRC right, text with no NUL in it, and an empty IEND that ends the image. Any other image type is refused, a bitmap
+among them, as it is on its own; so is a cursor, and JPEG stays unreadable. So the kit's `favicon.ico` is in the three
+sites' upload set byte for byte, with no policy entry; `/favicon.ico` answers 404 until a frontend release uploads it.
 
 Merging puts nothing on the three sites. The frontends are Cloudflare Pages direct uploads, released from clean
 GitHub `main` with `bin/deploy.sh --no-migrate --no-api` (`docs/DEPLOY-PROCEDURE.md`, Phase 4), and a release needs

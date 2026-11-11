@@ -24,13 +24,14 @@
  *   - PNG text chunks, compressed ones inflated, and the strings of WAV
  *     audio and TrueType/OpenType fonts, which store text uncompressed;
  *   - ICO icons, only when every byte is accounted for: header, directory
- *     and images in order with no gap, overlap or trailing byte. Each image
- *     is a PNG, read as a PNG file is and ending at its IEND chunk, or a
- *     classic bitmap whose header accounts for exactly its bytes, reported as
- *     <icon>!image-<n>; the whole file's strings are read as well;
+ *     and images in directory order with no gap, overlap or trailing byte.
+ *     Each image must be a PNG, read as a PNG file is and held stricter
+ *     (only known chunks, right CRCs, text without NULs, an empty IEND that
+ *     ends it), reported as <icon>!image-<n>; the whole file's strings are
+ *     read as well. Any other image type in an icon is refused;
  *   - the served paths and archive member names themselves.
  *
- * A binary in any other format (JPEG and ICO cursors among them), or a
+ * A binary in any other format (JPEG, bitmaps and ICO cursors among them), or a
  * malformed archive, image or icon, cannot be read, so it is refused. So is a
  * file whose SHA-256 the denylist names (blob_sha256). Any other hit refuses the
  * upload unless public/private-guard/served-surface.json covers it:
@@ -232,11 +233,40 @@ function tarEntries(bytes: Uint8Array): Array<{ name: string; link: string; data
 }
 
 /**
- * Text in a PNG's text and profile chunks, compressed ones inflated, and where
- * its IEND chunk ends (undefined without one); throws if malformed.
+ * The chunks a PNG inside an icon may hold: its image, its colour information
+ * and the text chunks the guard reads. Only IDAT and text chunks may repeat.
+ * iCCP is left out: its profile is binary the guard reads only for strings.
  */
-function pngText(bytes: Uint8Array): { text: string; end: number | undefined } {
+const ICON_PNG_CHUNKS: ReadonlySet<string> = new Set(["IHDR", "PLTE", "tRNS", "sRGB", "gAMA", "cHRM", "pHYs", "IDAT", "IEND", "tEXt", "zTXt", "iTXt"]);
+const ICON_PNG_REPEATABLE: ReadonlySet<string> = new Set(["IDAT", "tEXt", "zTXt", "iTXt"]);
+
+const CRC_TABLE = Array.from({ length: 256 }, (_, byte) => {
+  let crc = byte;
+  for (let bit = 0; bit < 8; bit += 1) crc = crc & 1 ? 0xedb88320 ^ (crc >>> 1) : crc >>> 1;
+  return crc >>> 0;
+});
+/** The CRC-32 a PNG chunk carries over its type and data. */
+function crc32(bytes: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (const byte of bytes) crc = CRC_TABLE[(crc ^ byte) & 0xff]! ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+/**
+ * Text in a PNG's text and profile chunks, compressed ones inflated, and where
+ * its IEND chunk ends (undefined without one); throws if malformed. Inside an
+ * icon (`icon` given) a PNG is held stricter than a PNG file: every chunk's
+ * CRC must be right, only ICON_PNG_CHUNKS may appear, each at most once unless
+ * it may repeat, text chunks hold no NUL in their text (so no 16- or 32-bit
+ * text hides there) and IEND is empty.
+ */
+function pngText(bytes: Uint8Array, icon?: (why: string) => never): { text: string; end: number | undefined } {
   const texts: string[] = [];
+  const seen = new Set<string>();
+  const read = (text: Uint8Array) => {
+    if (icon !== undefined && text.includes(0)) icon("has a NUL in the text of a PNG text chunk");
+    texts.push(scannableText(text));
+  };
   const view = Buffer.from(bytes);
   for (let offset = 8; offset < bytes.length;) {
     if (offset + 12 > bytes.length) throw new Error("truncated PNG chunk");
@@ -244,18 +274,28 @@ function pngText(bytes: Uint8Array): { text: string; end: number | undefined } {
     const type = ascii(bytes.subarray(offset + 4, offset + 8));
     const data = bytes.subarray(offset + 8, offset + 8 + length);
     if (offset + 12 + length > bytes.length) throw new Error("truncated PNG chunk");
+    if (icon !== undefined) {
+      if (!ICON_PNG_CHUNKS.has(type)) icon("has a PNG chunk an icon may not hold");
+      if (seen.has(type) && !ICON_PNG_REPEATABLE.has(type)) icon(`repeats its PNG ${type} chunk`);
+      seen.add(type);
+      if (crc32(bytes.subarray(offset + 4, offset + 8 + length)) !== view.readUInt32BE(offset + 8 + length)) icon(`has a PNG ${type} chunk whose CRC is wrong`);
+      if (type === "IEND" && length !== 0) icon("has data inside its PNG IEND chunk");
+    }
     offset += 12 + length;
     const nul = data.indexOf(0);
     if (type === "zTXt" || type === "iCCP") {
       if (nul < 0) throw new Error(`malformed ${type} chunk`);
-      texts.push(scannableText(inflateSync(data.subarray(nul + 2), { maxOutputLength: MAX_EXPANDED_BYTES })));
+      read(inflateSync(data.subarray(nul + 2), { maxOutputLength: MAX_EXPANDED_BYTES }));
     } else if (type === "iTXt") {
       if (nul < 0) throw new Error("malformed iTXt chunk");
       const language = data.indexOf(0, nul + 3);
       const translated = language < 0 ? -1 : data.indexOf(0, language + 1);
       if (translated < 0) throw new Error("malformed iTXt chunk");
       const text = data.subarray(translated + 1);
-      texts.push(scannableText(data[nul + 1] === 1 ? inflateSync(text, { maxOutputLength: MAX_EXPANDED_BYTES }) : text));
+      read(data[nul + 1] === 1 ? inflateSync(text, { maxOutputLength: MAX_EXPANDED_BYTES }) : text);
+    } else if (type === "tEXt" && icon !== undefined) {
+      if (nul < 1) icon("has a malformed PNG tEXt chunk");
+      read(data.subarray(nul + 1));
     }
     if (type === "IEND") return { text: texts.join("\n"), end: offset };
   }
@@ -265,52 +305,27 @@ function pngText(bytes: Uint8Array): { text: string; end: number | undefined } {
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] as const;
 
 /** What the guard reads in a PNG, on its own or inside an ICO: its printable strings and its chunks' text. */
-function pngReading(bytes: Uint8Array): { text: string; end: number | undefined } {
-  const chunks = pngText(bytes);
+function pngReading(bytes: Uint8Array, icon?: (why: string) => never): { text: string; end: number | undefined } {
+  const chunks = pngText(bytes, icon);
   return { text: `${printableStrings(bytes)}\n${chunks.text}`, end: chunks.end };
 }
 
 /** More images than any icon needs; an ICO that declares more is refused. */
 const MAX_ICO_IMAGES = 64;
 const ICO_BIT_COUNTS: readonly number[] = [0, 1, 4, 8, 16, 24, 32];
-
-/**
- * A classic bitmap as an ICO stores it: a 40-byte BITMAPINFOHEADER, its
- * palette, then uncompressed colour rows and 1-bit mask rows, the header's
- * height counting both. Throws unless the header's declared sizes account for
- * exactly the bytes the directory gives it.
- */
-function icoBitmap(bytes: Uint8Array, fail: (why: string) => never) {
-  const view = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (bytes.length < 40 || view.readUInt32LE(0) !== 40) fail("is neither a PNG nor a classic bitmap");
-  const width = view.readInt32LE(4);
-  const rows = view.readInt32LE(8);
-  const bitCount = view.readUInt16LE(14);
-  const declared = view.readUInt32LE(20);
-  const used = view.readUInt32LE(32);
-  if (width < 1 || width > 256 || rows < 2 || rows > 512 || rows % 2 !== 0) fail("is a bitmap of an invalid size");
-  if (view.readUInt16LE(12) !== 1 || !ICO_BIT_COUNTS.includes(bitCount) || bitCount === 0 || view.readUInt32LE(16) !== 0) {
-    fail("is a bitmap that is not uncompressed");
-  }
-  const height = rows / 2;
-  const depth = bitCount <= 8 ? 2 ** bitCount : 0;
-  if (used > depth || view.readUInt32LE(36) > (used || depth)) fail("is a bitmap that declares more colours than its depth holds");
-  const palette = used || depth;
-  const colourRows = Math.ceil((width * bitCount) / 32) * 4 * height;
-  const maskRows = Math.ceil(width / 32) * 4 * height;
-  if (declared !== 0 && declared !== colourRows && declared !== colourRows + maskRows) fail("is a bitmap whose declared image size its rows do not have");
-  if (40 + 4 * palette + colourRows + maskRows !== bytes.length) fail("is a bitmap whose header does not account for its bytes");
-  return { width, height, bitCount, palette };
-}
+/** Channels per PNG colour type, for the bits per pixel a directory entry may name. */
+const PNG_CHANNELS: Readonly<Record<number, number>> = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 };
 
 /**
  * The images of an ICO icon file; throws unless every byte is accounted for.
  * The 6-byte header and the 16-byte directory entries are followed by the
- * images, in offset order, with no gap, no overlap and nothing after the last.
- * Each image is a PNG, read exactly as a PNG file is and ending at its IEND,
- * or a classic bitmap whose header accounts for exactly its bytes, and each
- * directory entry describes its image. A cursor, any other image type, and
- * anything malformed throw, so the caller refuses the file as unreadable.
+ * images, in directory order, with no gap, no overlap and nothing after the
+ * last. Each image must be a PNG, read as a PNG file is and held stricter
+ * (see pngText), opening with IHDR and ending at its IEND; each directory
+ * entry names the image's size, a colour count of 0, and a bit count of 0 or
+ * the PNG's bits per pixel. A cursor, any other image type (a bitmap among
+ * them, which the guard refuses on its own too), and anything malformed
+ * throw, so the caller refuses the file as unreadable.
  */
 function icoImages(bytes: Uint8Array): Array<{ index: number; bytes: Uint8Array; text: string }> {
   const view = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -335,8 +350,10 @@ function icoImages(bytes: Uint8Array): Array<{ index: number; bytes: Uint8Array;
       offset: view.readUInt32LE(at + 12),
     };
   });
+  const disordered = entries.findIndex((entry) => entry.index > 0 && entry.offset < entries[entry.index - 1]!.offset);
+  if (disordered > 0) throw new Error(`ICO directory lists image ${disordered} out of file order`);
   let next = directoryEnd;
-  for (const entry of [...entries].sort((a, b) => a.offset - b.offset || a.index - b.index)) {
+  for (const entry of entries) {
     if (entry.size === 0) throw new Error(`ICO image ${entry.index} is empty`);
     if (entry.offset < directoryEnd) throw new Error(`ICO image ${entry.index} starts inside the header or directory`);
     if (entry.offset + entry.size > bytes.length) throw new Error(`ICO image ${entry.index} runs past the file`);
@@ -351,26 +368,19 @@ function icoImages(bytes: Uint8Array): Array<{ index: number; bytes: Uint8Array;
       throw new Error(`ICO image ${entry.index} ${why}`);
     };
     if (entry.reserved !== 0 || entry.planes > 1 || !ICO_BIT_COUNTS.includes(entry.bitCount)) fail("has an invalid directory entry");
-    let size: { width: number; height: number; palette: number };
-    let text: string;
-    if (startsWith(image, PNG_SIGNATURE)) {
-      const png = pngReading(image);
-      if (png.end !== image.length) fail(png.end === undefined ? "is a PNG without an IEND chunk" : "has data after its PNG IEND chunk");
-      const header = Buffer.from(image.subarray(8, 24));
-      if (header.readUInt32BE(0) !== 13 || ascii(header.subarray(4, 8)) !== "IHDR") fail("is a PNG that does not open with IHDR");
-      size = { width: header.readUInt32BE(8), height: header.readUInt32BE(12), palette: 0 };
-      text = png.text;
-    } else {
-      const bitmap = icoBitmap(image, fail);
-      if (entry.bitCount !== 0 && entry.bitCount !== bitmap.bitCount) fail("has a bit depth its directory entry does not match");
-      size = bitmap;
-      text = printableStrings(image);
-    }
-    // The directory names 256 pixels and more as 0, and a palette only when it is under 256 colours.
+    if (!startsWith(image, PNG_SIGNATURE)) fail("is not a PNG image");
+    const png = pngReading(image, fail);
+    if (png.end !== image.length) fail(png.end === undefined ? "is a PNG without an IEND chunk" : "has data after its PNG IEND chunk");
+    const header = Buffer.from(image.subarray(8, 26));
+    if (header.length < 18 || header.readUInt32BE(0) !== 13 || ascii(header.subarray(4, 8)) !== "IHDR") fail("is a PNG that does not open with IHDR");
+    const channels = PNG_CHANNELS[header[17]!];
+    if (channels === undefined) fail("is a PNG of an unknown colour type");
+    if (entry.bitCount !== 0 && entry.bitCount !== header[16]! * channels!) fail("has a bit count its directory entry does not match");
+    // The directory names 256 pixels and more as 0. A PNG image lists no palette count.
     const listed = (pixels: number) => (pixels >= 256 ? 0 : pixels);
-    if (entry.width !== listed(size.width) || entry.height !== listed(size.height)) fail("has a size its directory entry does not match");
-    if (entry.colours !== 0 && entry.colours !== size.palette) fail("has a colour count its directory entry does not match");
-    return { index: entry.index, bytes: image, text };
+    if (entry.width !== listed(header.readUInt32BE(8)) || entry.height !== listed(header.readUInt32BE(12))) fail("has a size its directory entry does not match");
+    if (entry.colours !== 0) fail("has a colour count its directory entry does not match");
+    return { index: entry.index, bytes: image, text: png.text };
   });
 }
 
@@ -393,6 +403,18 @@ export function readServed(path: string, bytes: Uint8Array): ServedReading {
     try {
       if (startsWith(content, [0x1f, 0x8b])) {
         visit(at, gunzipSync(content, { maxOutputLength: MAX_EXPANDED_BYTES }), depth + 1);
+      } else if (startsWith(content, [0x00, 0x00, 0x01, 0x00]) || startsWith(content, [0x00, 0x00, 0x02, 0x00])) {
+        // An ICO icon: its whole bytes' strings, then each image as that image
+        // type is read on its own, reported as <icon>!image-<n>. It is tested
+        // before tar, and a file that is both is refused, so a tar reading can
+        // never stand in for the icon's.
+        if (isTar(content)) throw new Error("ICO that is also a tar archive");
+        reading.texts.push({ path: at, text: printableStrings(content) });
+        for (const image of icoImages(content)) {
+          const member = `${at}!image-${image.index}`;
+          reading.members.push({ path: member, bytes: image.bytes });
+          reading.texts.push({ path: member, text: image.text });
+        }
       } else if (isTar(content)) {
         for (const entry of tarEntries(content)) {
           const member = `${at}!${memberName(entry.name)}`;
@@ -403,15 +425,6 @@ export function readServed(path: string, bytes: Uint8Array): ServedReading {
         }
       } else if (startsWith(content, PNG_SIGNATURE)) {
         reading.texts.push({ path: at, text: pngReading(content).text });
-      } else if (startsWith(content, [0x00, 0x00, 0x01, 0x00]) || startsWith(content, [0x00, 0x00, 0x02, 0x00])) {
-        // An ICO icon: its whole bytes' strings, then each image as that image
-        // type is read on its own, reported as <icon>!image-<n>.
-        reading.texts.push({ path: at, text: printableStrings(content) });
-        for (const image of icoImages(content)) {
-          const member = `${at}!image-${image.index}`;
-          reading.members.push({ path: member, bytes: image.bytes });
-          reading.texts.push({ path: member, text: image.text });
-        }
       } else if (
         (ascii(content.subarray(0, 4)) === "RIFF" && ascii(content.subarray(8, 12)) === "WAVE") ||
         startsWith(content, [0x00, 0x01, 0x00, 0x00]) ||
