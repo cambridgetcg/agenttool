@@ -68,31 +68,58 @@ function pngChunk(type: string, data: Uint8Array): Buffer {
   return Buffer.concat([length, Buffer.from(type, "latin1"), Buffer.from(data), crc]);
 }
 
-/** A 1x1 RGBA PNG whose only text is a compressed zTXt chunk. */
+/** A 1x1 RGBA PNG with one blank pixel whose only text is a compressed zTXt chunk. */
 function pngWithCompressedText(text: Uint8Array): Buffer {
   return Buffer.concat([
     PNG_SIGNATURE,
     pngChunk("IHDR", Buffer.from([0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0])),
     pngChunk("zTXt", Buffer.concat([Buffer.from("Comment\0", "latin1"), Buffer.from([0]), deflateSync(text)])),
+    pngChunk("IDAT", deflateSync(Buffer.alloc(5))),
     pngChunk("IEND", Buffer.alloc(0)),
   ]);
 }
 
-/**
- * A square RGBA PNG with blank pixels. Options add chunks after IHDR, give
- * IEND a body, or replace the chunks between the signature and IDAT.
- */
-function pngOf(pixels: number, options: { extra?: Buffer[]; iend?: Buffer; head?: Buffer[] } = {}): Buffer {
+const CHANNELS: Readonly<Record<number, number>> = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 };
+interface PngOptions {
+  /** Chunks after IHDR. */
+  extra?: Buffer[];
+  /** IEND's body. */
+  iend?: Buffer;
+  /** The chunks between the signature and IDAT, in place of IHDR and extra. */
+  head?: Buffer[];
+  /** IHDR's bit depth, colour type (default 8-bit RGBA), and compression, filter and interlace bytes. */
+  depth?: number;
+  colour?: number;
+  methods?: readonly [number, number, number];
+  /** The unfiltered rows (default blank), or IDAT's whole body; null leaves IDAT out. */
+  rows?: Buffer;
+  idat?: Buffer | null;
+}
+
+/** The bytes per row of a square PNG: a filter byte and the packed pixels. */
+const rowBytes = (pixels: number, depth = 8, colour = 6) => 1 + Math.ceil((pixels * depth * CHANNELS[colour]!) / 8);
+
+/** A square PNG, by default 8-bit RGBA with blank pixels. */
+function pngOf(pixels: number, options: PngOptions = {}): Buffer {
+  const [depth, colour] = [options.depth ?? 8, options.colour ?? 6];
   const header = Buffer.alloc(13);
   header.writeUInt32BE(pixels, 0);
   header.writeUInt32BE(pixels, 4);
-  header.set([8, 6], 8);
+  header.set([depth, colour, ...(options.methods ?? [0, 0, 0])], 8);
+  const idat = options.idat === undefined ? deflateSync(options.rows ?? Buffer.alloc(pixels * rowBytes(pixels, depth, colour))) : options.idat;
   return Buffer.concat([
     PNG_SIGNATURE,
     ...(options.head ?? [pngChunk("IHDR", header), ...(options.extra ?? [])]),
-    pngChunk("IDAT", deflateSync(Buffer.alloc(pixels * (pixels * 4 + 1)))),
+    ...(idat === null ? [] : [pngChunk("IDAT", idat)]),
     pngChunk("IEND", options.iend ?? Buffer.alloc(0)),
   ]);
+}
+
+/** Blank rows of a square 8-bit RGBA PNG with `content` at the start of the first row's pixels. */
+function rowsHolding(pixels: number, content: Uint8Array): Buffer {
+  const rows = Buffer.alloc(pixels * rowBytes(pixels));
+  rows.set(content, 1);
+  return rows;
 }
 
 /** A square 32-bit bitmap as an ICO stores it: BITMAPINFOHEADER, colour rows, then 1-bit mask rows. The guard refuses it. */
@@ -112,7 +139,7 @@ function bitmapOf(pixels: number): Buffer {
  */
 function icoOf(
   images: ReadonlyArray<readonly [pixels: number, image: Buffer]>,
-  options: { type?: number; count?: number; offsets?: number[]; sizes?: number[] } = {},
+  options: { type?: number; count?: number; offsets?: number[]; sizes?: number[]; bitCounts?: number[] } = {},
 ): Buffer {
   const header = Buffer.alloc(6);
   header.writeUInt16LE(options.type ?? 1, 2);
@@ -122,7 +149,7 @@ function icoOf(
   images.forEach(([pixels, image], index) => {
     directory.set([pixels % 256, pixels % 256], 16 * index);
     directory.writeUInt16LE(1, 16 * index + 4);
-    directory.writeUInt16LE(32, 16 * index + 6);
+    directory.writeUInt16LE(options.bitCounts?.[index] ?? 32, 16 * index + 6);
     directory.writeUInt32LE(options.sizes?.[index] ?? image.length, 16 * index + 8);
     directory.writeUInt32LE(options.offsets?.[index] ?? offset, 16 * index + 12);
     offset += image.length;
@@ -133,6 +160,33 @@ function icoOf(
 const served = (path: string, content: Uint8Array): ServedFile => ({ served: path, real: path, bytes: Buffer.from(content) });
 const ownFindings = (findings: ReturnType<typeof servedSurfaceFindings>, path: string) =>
   findings.filter((finding) => finding.path === path || finding.path.startsWith(`${path}!`));
+
+/**
+ * A private term a rule finds in docs/THE-SEAT.md and finds again on its own,
+ * from a rule the policy does not make public. Taken at run time, so no term
+ * is written here; never printed.
+ */
+function privateTerm(accept: (term: string) => boolean): string {
+  const rules = parseDenylist(bytes(DENYLIST_PATH)).rules;
+  const publicRules = new Set((JSON.parse(text(POLICY_PATH)).public_rules as Array<{ rule: string }>).map((entry) => entry.rule));
+  const content = PRIVATE_TEXT().toString("utf8");
+  const found = (term: string) => scanText("term", term, rules).some((hit) => !publicRules.has(hit.rule));
+  for (const hit of scanText("seat", content, rules)) {
+    if (publicRules.has(hit.rule)) continue;
+    const rule = rules.find((candidate) => candidate.id === hit.rule)!;
+    const line = content.split("\n")[hit.line! - 1]!;
+    for (const match of line.matchAll(new RegExp(rule.pattern.source, rule.pattern.flags.includes("g") ? rule.pattern.flags : `${rule.pattern.flags}g`))) {
+      if (found(match[0]) && accept(match[0])) return match[0];
+    }
+  }
+  throw new Error("docs/THE-SEAT.md holds no private term this test can use");
+}
+/** An ASCII term of six or more characters that fits a PNG keyword. */
+const asciiTerm = () => privateTerm((term) => /^[\x20-\x7e]{6,79}$/u.test(term));
+/** A term written only in characters above U+00FF, whose UTF-16 holds no NUL byte. */
+const wideTerm = () => privateTerm((term) => [...term].every((char) => char.codePointAt(0)! > 0xff));
+const utf16be = (value: string) => Buffer.from(value, "utf16le").swap16();
+const latin1 = (value: string) => Buffer.from(value, "latin1");
 
 describe("served surface relational guard", () => {
   test("the upload set publishes nothing the denylist protects", () => {
@@ -223,6 +277,14 @@ describe("served surface relational guard", () => {
     const clear = (content: Uint8Array) => ownFindings(servedSurfaceFindings([served(icon, content)], bytes(DENYLIST_PATH), bytes(POLICY_PATH)), icon);
     expect(clear(icoOf([[16, pngOf(16)], [32, pngOf(32)]]))).toEqual([]);
     expect(clear(icoOf([[16, pngOf(16, { extra: [pngChunk("sRGB", Buffer.from([0])), pngChunk("tEXt", Buffer.from("Software\0a neutral tool", "latin1"))] })]]))).toEqual([]);
+    const neutralText = [
+      pngChunk("zTXt", Buffer.concat([latin1("Comment\0\0"), deflateSync(latin1("neutral words"))])),
+      pngChunk("iTXt", Buffer.concat([latin1("Title\0\x01\0en\0Title\0"), deflateSync(latin1("neutral"))])),
+    ];
+    expect(clear(icoOf([[16, pngOf(16, { extra: neutralText })]]))).toEqual([]);
+    // 256 pixels a side is listed as 0; pixels that pack below a byte fill whole bytes per row.
+    expect(clear(icoOf([[256, pngOf(256)]]))).toEqual([]);
+    expect(clear(icoOf([[13, pngOf(13, { depth: 1, colour: 0 })], [16, pngOf(16, { depth: 16, colour: 0 })]], { bitCounts: [0, 16] }))).toEqual([]);
 
     // The brand kit's icon, which the three sites serve: three PNG images, each read as a PNG file is.
     const kit = bytes("brand/kit/web/favicon.ico");
@@ -255,6 +317,44 @@ describe("served surface relational guard", () => {
     }
   });
 
+  test("every field of an icon's PNG text chunks is read on its own, as Latin-1, UTF-8 and UTF-16", () => {
+    const icon = "apps/web/favicon.ico";
+    const term = Buffer.from(asciiTerm(), "utf8");
+    const wide = wideTerm();
+    const cases: Array<readonly [string, Buffer]> = [
+      ["a tEXt keyword", pngChunk("tEXt", Buffer.concat([term, latin1("\0neutral")]))],
+      ["a zTXt keyword", pngChunk("zTXt", Buffer.concat([term, latin1("\0\0"), deflateSync(latin1("neutral"))]))],
+      ["an iTXt keyword", pngChunk("iTXt", Buffer.concat([term, latin1("\0\0\0\0\0neutral")]))],
+      ["an iTXt language tag", pngChunk("iTXt", Buffer.concat([latin1("Title\0\0\0"), term, latin1("\0\0neutral")]))],
+      ["an iTXt translated keyword", pngChunk("iTXt", Buffer.concat([latin1("Title\0\0\0\0"), term, latin1("\0neutral")]))],
+      ["UTF-8 text behind a UTF-16 byte-order mark in zTXt", pngChunk("zTXt", Buffer.concat([latin1("Comment\0\0"), deflateSync(Buffer.concat([Buffer.from([0xff, 0xfe]), term]))]))],
+      ["UTF-8 text behind a UTF-16 byte-order mark in tEXt", pngChunk("tEXt", Buffer.concat([latin1("Comment\0"), Buffer.from([0xfe, 0xff]), term]))],
+      ["UTF-16 text with no NUL byte in tEXt", pngChunk("tEXt", Buffer.concat([latin1("Comment\0"), Buffer.from(wide, "utf16le")]))],
+      ["UTF-16 text with no NUL byte in zTXt", pngChunk("zTXt", Buffer.concat([latin1("Comment\0\0"), deflateSync(utf16be(wide))]))],
+    ];
+    for (const [name, chunk] of cases) {
+      const findings = ownFindings(servedSurfaceFindings([served(icon, icoOf([[16, pngOf(16, { extra: [chunk] })]]))], bytes(DENYLIST_PATH), bytes(POLICY_PATH)), icon);
+      expect({ name, unreadable: findings.filter((finding) => finding.rule === "served/unreadable-binary").length }).toEqual({ name, unreadable: 0 });
+      expect({ name, found: findings.some((finding) => finding.path === `${icon}!image-0` && finding.rule.startsWith("relational/")) }).toEqual({ name, found: true });
+    }
+  });
+
+  test("an icon's PNG pixel rows are inflated and read for text", () => {
+    const icon = "apps/web/favicon.ico";
+    const term = asciiTerm();
+    const cases: Array<readonly [string, Buffer]> = [
+      ["UTF-8", Buffer.from(term, "utf8")],
+      ["UTF-16LE", Buffer.from(term, "utf16le")],
+      ["UTF-16BE", utf16be(term)],
+      ["UTF-16 with no NUL byte", Buffer.from(wideTerm(), "utf16le")],
+    ];
+    for (const [name, content] of cases) {
+      const findings = ownFindings(servedSurfaceFindings([served(icon, icoOf([[64, pngOf(64, { rows: rowsHolding(64, content) })]]))], bytes(DENYLIST_PATH), bytes(POLICY_PATH)), icon);
+      expect({ name, unreadable: findings.filter((finding) => finding.rule === "served/unreadable-binary").length }).toEqual({ name, unreadable: 0 });
+      expect({ name, found: findings.some((finding) => finding.path === `${icon}!image-0` && finding.rule.startsWith("relational/")) }).toEqual({ name, found: true });
+    }
+  });
+
   test("an ICO that leaves a byte unaccounted for, or holds anything the guard cannot fully read, is refused", () => {
     const icon = "apps/web/favicon.ico";
     const [denylist, policy] = [bytes(DENYLIST_PATH), bytes(POLICY_PATH)];
@@ -277,6 +377,11 @@ describe("served surface relational guard", () => {
     tarLike.write("ustar\0", 257);
     const badCrc = pngOf(16);
     badCrc[badCrc.length - 1] ^= 0xff;
+    const blankRows = Buffer.alloc(16 * rowBytes(16));
+    const badFilter = Buffer.from(blankRows);
+    badFilter[rowBytes(16)] = 5;
+    const streams = (first: Uint8Array) => Buffer.concat([deflateSync(first), deflateSync(Buffer.from("hidden"))]);
+    const textChunk = (type: string, head: string, body: Buffer) => icoOf([[16, pngOf(16, { extra: [pngChunk(type, Buffer.concat([latin1(head), body]))] })]]);
     const cases: Array<readonly [string, Uint8Array, RegExp]> = [
       ["bytes after the last image", Buffer.concat([clean, Buffer.from([0x00, 0x01, 0x02, 0x03])]), /after its last image/u],
       ["a gap between images", icoOf([[16, small], [32, Buffer.concat([Buffer.alloc(4), large])]], { offsets: [start, start + small.length + 4], sizes: [small.length, large.length] }), /unaccounted bytes before image 1/u],
@@ -309,6 +414,26 @@ describe("served surface relational guard", () => {
       ["a repeated chunk that may appear once", icoOf([[16, pngOf(16, { extra: [pngChunk("sRGB", Buffer.from([0])), pngChunk("sRGB", Buffer.from([1]))] })]]), /image 0 repeats its PNG sRGB chunk/u],
       ["a PNG chunk with a wrong CRC", icoOf([[16, badCrc]]), /image 0 has a PNG IEND chunk whose CRC is wrong/u],
       ["16- or 32-bit text in a text chunk", icoOf([[16, pngOf(16, { extra: [pngChunk("tEXt", Buffer.from("Comment\0h\0\0\0i\0\0\0", "latin1"))] })]]), /image 0 has a NUL in the text of a PNG text chunk/u],
+      ["a directory entry with no planes", entry(4, 0), /image 0 has an invalid directory entry/u],
+      ["an interlaced PNG", icoOf([[16, pngOf(16, { methods: [0, 0, 1] })]]), /image 0 is an interlaced PNG/u],
+      ["a PNG compression method other than 0", icoOf([[16, pngOf(16, { methods: [1, 0, 0] })]]), /image 0 is a PNG of an unknown compression or filter method/u],
+      ["a PNG filter method other than 0", icoOf([[16, pngOf(16, { methods: [0, 1, 0] })]]), /image 0 is a PNG of an unknown compression or filter method/u],
+      ["a bit depth its colour type does not allow", icoOf([[16, pngOf(16, { depth: 3, colour: 0 })]], { bitCounts: [0] }), /image 0 is a PNG of a bit depth/u],
+      ["a PNG more than 256 pixels a side, listed as 0", icoOf([[256, pngOf(300)]]), /image 0 is a PNG larger than 256 pixels a side/u],
+      ["a PNG without IDAT", icoOf([[16, pngOf(16, { idat: null })]]), /image 0 has no PNG IDAT chunk/u],
+      ["a second zlib stream after the pixel data", icoOf([[16, pngOf(16, { idat: streams(blankRows) })]]), /image 0 has bytes after the end of its PNG pixel data/u],
+      ["a byte after the pixel data's zlib stream", icoOf([[16, pngOf(16, { idat: Buffer.concat([deflateSync(blankRows), Buffer.from([7])]) })]]), /image 0 has bytes after the end of its PNG pixel data/u],
+      ["pixel data shorter than its rows", icoOf([[16, pngOf(16, { rows: blankRows.subarray(1) })]]), /image 0 has PNG pixel data that is not the size its IHDR implies/u],
+      ["pixel data longer than its rows", icoOf([[16, pngOf(16, { rows: Buffer.alloc(blankRows.length + 1) })]]), /image 0 has PNG pixel data that does not inflate, or inflates past/u],
+      ["pixel data that is not a zlib stream", icoOf([[16, pngOf(16, { idat: Buffer.from("not zlib") })]]), /image 0 has PNG pixel data that does not inflate/u],
+      ["a row filter type above 4", icoOf([[16, pngOf(16, { rows: badFilter })]]), /image 0 has a PNG row with an unknown filter type/u],
+      ["a second zlib stream in zTXt", textChunk("zTXt", "Comment\0\0", streams(Buffer.from("neutral"))), /image 0 has bytes after the end of its compressed PNG text/u],
+      ["a second zlib stream in a compressed iTXt", textChunk("iTXt", "Comment\0\x01\0\0\0", streams(Buffer.from("neutral"))), /image 0 has bytes after the end of its compressed PNG text/u],
+      ["a zTXt compression method other than 0", textChunk("zTXt", "Comment\0\x01", deflateSync(Buffer.from("neutral"))), /image 0 has a PNG text chunk with an unknown compression method/u],
+      ["an iTXt compression flag of 2", textChunk("iTXt", "Title\0\x02\0\0\0", deflateSync(Buffer.from("neutral"))), /image 0 has a PNG iTXt chunk with an unknown compression flag or method/u],
+      ["an iTXt compression method other than 0", textChunk("iTXt", "Title\0\x01\x01\0\0", deflateSync(Buffer.from("neutral"))), /image 0 has a PNG iTXt chunk with an unknown compression flag or method/u],
+      ["an empty text keyword", textChunk("tEXt", "\0", Buffer.from("neutral")), /image 0 has a PNG text chunk whose keyword is empty or longer than 79 bytes/u],
+      ["a text keyword longer than 79 bytes", textChunk("tEXt", `${"k".repeat(80)}\0`, Buffer.from("neutral")), /image 0 has a PNG text chunk whose keyword is empty or longer than 79 bytes/u],
       ["a file that is an icon and a tar archive at once", tarLike, /ICO that is also a tar archive/u],
       ["a non-ICO file named .ico", jpeg, /binary format the guard cannot read/u],
     ];

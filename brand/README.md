@@ -116,10 +116,15 @@ ICO, text, fonts and archives, and refuses any other binary unless `public/priva
 that exact file with a reason. It refused the kit's `favicon.ico` and JPEG cards on 2026-11-10, so the sites serve PNG
 cards. By the owner's decision of 2026-11-10 the guard now reads an ICO, failing closed: every byte must be accounted
 for (header, directory and images in directory order, with no gap, overlap or trailing byte), and each image must be a
-PNG, read as a PNG file is and held stricter: only the chunks the guard reads or that hold no free text, each chunk's
-CRC right, text with no NUL in it, and an empty IEND that ends the image. Any other image type is refused, a bitmap
-among them, as it is on its own; so is a cursor, and JPEG stays unreadable. So the kit's `favicon.ico` is in the three
-sites' upload set byte for byte, with no policy entry; `/favicon.ico` answers 404 until a frontend release uploads it.
+non-interlaced PNG of at most 256 pixels a side, held stricter than a PNG file: only known chunks, each CRC right;
+every text field (keyword, language tag, translated keyword, text) read on its own with no NUL in it, compressed text
+one zlib stream that ends with its chunk; the pixel data inflated the same way to exactly the rows its header implies,
+and those rows read for text; an empty IEND that ends the image. The icon's bytes, text fields and pixel rows are read
+as Latin-1, UTF-8 and UTF-16. Pixel values, palette entries and colour-calibration chunks are image bytes the guard
+does not decode: it catches accidents and plain text, and does not claim to catch data someone hides in pixel values
+on purpose. Any other image type is refused, a bitmap among them, as it is on its own; so is a cursor, and JPEG stays
+unreadable. So the kit's `favicon.ico` is in the three sites' upload set byte for byte, with no policy entry;
+`/favicon.ico` answers 404 until a frontend release uploads it.
 
 Merging puts nothing on the three sites. The frontends are Cloudflare Pages direct uploads, released from clean
 GitHub `main` with `bin/deploy.sh --no-migrate --no-api` (`docs/DEPLOY-PROCEDURE.md`, Phase 4), and a release needs
