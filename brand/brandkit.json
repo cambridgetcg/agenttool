@@ -7,24 +7,24 @@
     {
       "part": "the look (hearth)",
       "what": "paper #f7f3ec, ink #1d1a16, ember #a8401c by day; charcoal #141210, ink #eee7db, lamp amber #eba352 by night; Iowan Old Style/Palatino, the system UI face, ui-monospace",
-      "by": "agent Saunter (Claude Code; the record is from session 4bcf4673)",
-      "under": "Yu's request of 2026-10-17 (\"update the aesthetics for the human and agent facing UI… I believe in your beauty standards\"), then Yu's go-ahead to merge and release",
+      "by": "agent Saunter (Claude Code)",
+      "under": "the owner's request of 2026-10-17 for a new look for the human- and agent-facing pages, then the owner's go-ahead to merge and release it",
       "date": "2026-10-17",
-      "record": "cambridgetcg/agenttool PR #490 (merged 2026-10-17 as 3b9aa630); memory note agenttool-ui-hearth-2026-10-17"
+      "record": "cambridgetcg/agenttool PR #490 (merged 2026-10-17 as 3b9aa630)"
     },
     {
       "part": "the mark (ring and dot)",
       "status": "not-recorded",
       "what": "the ⊙ ring and dot drawn beside the name and as the favicon; older than the hearth look. The nav draws an ink ring with an ember dot (apps/_shared/theme.css, estate.css); the favicon and the home card draw ring and dot in one colour. brand/mark.svg is the favicon's own geometry (ring r 34, stroke 6, dot r 6 on a 100 grid), in the ember token #a8401c",
-      "record": "review-2026-11-02 §3.3, and CREDITS.md here: who made it is not recorded"
+      "record": "a design review of 2026-11-02 kept outside this repository, and CREDITS.md here: who made it is not recorded"
     },
     {
       "part": "the kit (icon files, theme-color, the docs and app cards)",
       "what": "built from the hearth look and the favicon's ring and dot, with no new mark: the favicon in #a8401c (the theme.css ember) and, under a dark-scheme rule, #eba352 (the night lamp); the cards on paper, with titles and lines taken from each page",
-      "by": "agent (Claude Code, Opus 5.5, device studio, a child of session 5c4df033)",
-      "under": "Yu's go of 2026-11-10 for group A of the 2026-11-02 visual-language review (\"Go: build, open PRs, merge\"; items A1 and A2), through this repository's own rules",
+      "by": "agent (Claude Code, Claude Opus 5.5, on the Studio)",
+      "under": "the owner's decision of 2026-11-10 to build the kit from a design review of 2026-11-02 kept outside this repository, through this repository's own rules",
       "date": "2026-11-10",
-      "record": "the pull request that added this kit; review-2026-11-02 §6 (agenttool) and §7 A1, A2"
+      "record": "the pull request that added this kit"
     },
     {
       "part": "serving favicon.ico",
@@ -222,7 +222,7 @@
     "favicon.ico, closed in source 2026-11-10, live after the next frontend release: the served-surface guard (bin/served-surface-guard.ts; its test bin/tests/served-surface-guard.test.ts in CI, and bin/frontend-deploy.sh before any upload) reads PNG, SVG, ICO, text, fonts and archives, and refuses any other binary unless public/private-guard/served-surface.json names that exact file with a reason. Under the owner's decision of 2026-11-10 it reads an ICO only when every byte is accounted for (header, directory and images in directory order, with no gap, overlap or trailing byte) and each image is a non-interlaced PNG of at most 256 pixels a side, held stricter than a PNG file: only known chunks, each CRC right; every text field (keyword, language tag, translated keyword, text) read on its own with no NUL in it, compressed text one zlib stream that ends with its chunk; the pixel data inflated the same way to exactly the rows its header implies, and those rows read for text; an empty IEND that ends the image. The icon's bytes, text fields and pixel rows are read as Latin-1, UTF-8 and UTF-16. Pixel values, palette entries and colour-calibration chunks are image bytes the guard does not decode: it catches accidents and plain text, and does not claim to catch data someone hides in pixel values on purpose. Any other image type (a bitmap among them, which the guard refuses on its own too), a cursor and anything malformed are refused. So the kit's favicon.ico is in the three sites' upload set byte for byte, with no policy entry, and /favicon.ico stops answering 404 once a release uploads it. The pages still link favicon-32.png and favicon.svg (head-snippet.html); the ICO answers clients that ask for /favicon.ico without reading a page. JPEG stays unreadable, so the cards are PNG (cards.sh).",
     "One look, three sites: agenttool.dev (apps/web), docs.agenttool.dev (apps/docs) and app.agenttool.dev (apps/dashboard) share apps/_shared/theme.css, so serve lists one target per site folder, each with the same icon files.",
     "brand/ sits at the repository root, outside apps/. bin/frontend-deploy.sh uploads each apps/<site> folder and strips only CLAUDE.md, AGENTS.md and README.md, and apps/_shared is linked into every site as shared/, so a brand folder anywhere under apps/ would be published.",
-    "Release rules: a frontend release is an outward act and needs Yu's word for that release (AGENTS.md: a local edit request alone does not authorize publication or deployment). On this Mac, bin/deploy.sh needs Bun 1.3.5 exactly (memory note agenttool-ui-hearth-2026-10-17).",
+    "Release rules: a frontend release is an outward act and needs Yu's word for that release (AGENTS.md: a local edit request alone does not authorize publication or deployment). bin/deploy.sh needs Bun 1.3.5 exactly (its Phase-B guard refuses any other version).",
     "Heads: every page that drew the site's ring as a data-URI favicon now links the kit's icon files (favicon-32.png in place of favicon.ico) and its site's manifest (head-snippet.html). The scheme each declares is what it paints without JavaScript. The 17 agenttool.dev pages (apps/web/style.css has a prefers-color-scheme rule) and the four docs and app pages with data-layout=\"workspace\" that load /shared/workspace.css (docs index, agents and roadmap; app index) carry color-scheme \"light dark\" and the theme-color pair #F7F3EC (light) and #141210 (dark). The other 43 docs and app pages paint paper unless mode.js runs (apps/_shared/theme.css has no prefers-color-scheme fallback), so they carry one theme-color, #F7F3EC, and no color-scheme meta, as before. With JavaScript on and a dark system, mode.js paints those pages at night under a light browser bar; theme-color follows the system setting, not the mode a visitor picks, on every page. The docs pages agents.html and resources.html, which had no icon, gained the same lines.",
     "Pages left as they are, listed in site.html with icons false: the pages with their own icon (web garden, lounge, party, porch, room and sky; docs ai-logos in its own rose ring, lounge, whitehack and xenia-helly), the geometry pages (route CSPs with default-src 'none' would refuse a manifest link; geometry/ritonavir.html still draws the ring as a data-URI in #d4502e), the pages in their own older look (compound-stack, cosmic-love, dark-love, gold-love, joke-loop, love-bomb, snake-fire-heart, tax-mini, tax-whitehack, trace, and ecosystem-sibling, which loads no shared theme), and the redirect stubs pulse and verify.",
     "Cards: og/docs.png is the og:image of every docs hearth page that used the old card; og/app.png of app.agenttool.dev/ and og/app-watch.png of /watch. They are PNG exports of the kit's page-card artboards (cards.sh), because the generator writes page cards only as JPEG. Each page keeps its own og:title and og:description; the image lines (type, size, alt) follow the kit's. The kit's web/og/head-*.html name agenttool.dev and .jpg, because the generator takes one url per kit and writes JPEG: the pages carry the same lines with their own host and the PNG.",

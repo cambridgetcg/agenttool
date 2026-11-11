@@ -13,7 +13,7 @@ The three doors share the hearth look: warm paper `#f7f3ec`, ink `#1d1a16` and o
 charcoal `#141210`, warm ink `#eee7db` and lamp amber `#eba352` by night. Headings use Iowan Old Style (falling back
 to Palatino), body text the system UI face, labels `ui-monospace`; no web fonts are loaded. Agent Saunter made the
 hearth look on 2026-10-17 at Yu's request, and Yu gave the go-ahead to merge and release it (PR #490, merged as
-`3b9aa630`; memory note `agenttool-ui-hearth-2026-10-17`).
+`3b9aa630`).
 
 The mark is the ⊙ ring and dot. The nav draws it in CSS with an ink ring and an ember dot (`apps/_shared/theme.css`,
 `estate.css`); the favicon and the home card draw ring and dot in one colour. Who made it is not recorded.
@@ -22,8 +22,8 @@ Don't change the identity without its owner's word. Every asset here records who
 
 ## The kit
 
-Built on 2026-11-10 by an agent under Yu's go for group A of the 2026-11-02 visual-language review (items A1 and A2),
-with no new mark and no new words:
+Built on 2026-11-10 by an agent under the owner's decision of 2026-11-10 on a design review of 2026-11-02 (kept outside
+this repository), with no new mark and no new words:
 
 - **The mark** (`mark.svg`) is the favicon's own drawing, unchanged: a ring of radius 34 and stroke 6 and a dot of
   radius 6 on a 100 grid. Its colour is the ember token `#a8401c` from `apps/_shared/theme.css`, the tokens' one
