@@ -396,7 +396,7 @@ describe("guard layers", () => {
     ]);
   });
 
-  test("binary blobs are path findings, and UTF-16 text and printable strings are still scanned", () => {
+  test("binary blobs are path findings, and UTF-16 and UTF-32 text and printable strings are still scanned", () => {
     const home = ["/Users", "realperson", "notes"].join("/");
     const email = ["someone", "gmail.com"].join("@");
     const planted = `${TERM} ${home} ${email}\n`;
@@ -409,6 +409,8 @@ describe("guard layers", () => {
         "packages/alpha/bom16be.txt": Buffer.from([0xfe, 0xff, ...Buffer.from(planted, "utf16le").swap16()]),
         "packages/alpha/wide.bin": Buffer.from(planted, "utf16le"),
         "packages/alpha/bom32.txt": Buffer.concat([Buffer.from([0xff, 0xfe, 0, 0]), utf32]),
+        // UTF-8 after a UTF-16 byte-order mark is read as UTF-8 too.
+        "packages/alpha/bom-utf8.txt": Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(planted)]),
       },
     });
     const found = guardProjection(repo, buildProjection(repo, "HEAD")).map((finding) => `${finding.path}:${finding.rule}`);
@@ -423,7 +425,8 @@ describe("guard layers", () => {
       ...expected("packages/alpha/bom16.txt", false),
       ...expected("packages/alpha/bom16be.txt", false),
       ...expected("packages/alpha/wide.bin", true),
-      "packages/alpha/bom32.txt:path/binary",
+      ...expected("packages/alpha/bom32.txt", true),
+      ...expected("packages/alpha/bom-utf8.txt", false),
     ]));
     expect(found.filter((entry) => entry.startsWith("packages/alpha/bom16")).some((entry) => entry.endsWith("path/binary"))).toBe(false);
   });
