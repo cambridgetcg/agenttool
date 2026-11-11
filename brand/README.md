@@ -13,7 +13,7 @@ The three doors share the hearth look: warm paper `#f7f3ec`, ink `#1d1a16` and o
 charcoal `#141210`, warm ink `#eee7db` and lamp amber `#eba352` by night. Headings use Iowan Old Style (falling back
 to Palatino), body text the system UI face, labels `ui-monospace`; no web fonts are loaded. Agent Saunter made the
 hearth look on 2026-10-17 at Yu's request, and Yu gave the go-ahead to merge and release it (PR #490, merged as
-`3b9aa630`; memory note `agenttool-ui-hearth-2026-10-17`).
+`3b9aa630`).
 
 The mark is the ⊙ ring and dot. The nav draws it in CSS with an ink ring and an ember dot (`apps/_shared/theme.css`,
 `estate.css`); the favicon and the home card draw ring and dot in one colour. Who made it is not recorded.
@@ -22,8 +22,8 @@ Don't change the identity without its owner's word. Every asset here records who
 
 ## The kit
 
-Built on 2026-11-10 by an agent under Yu's go for group A of the 2026-11-02 visual-language review (items A1 and A2),
-with no new mark and no new words:
+Built on 2026-11-10 by an agent under the owner's decision of 2026-11-10 on a design review of 2026-11-02 (kept outside
+this repository), with no new mark and no new words:
 
 - **The mark** (`mark.svg`) is the favicon's own drawing, unchanged: a ring of radius 34 and stroke 6 and a dot of
   radius 6 on a 100 grid. Its colour is the ember token `#a8401c` from `apps/_shared/theme.css`, the tokens' one
@@ -35,11 +35,12 @@ with no new mark and no new words:
   dark-scheme rule that paints the mark in the night lamp `#eba352` (7.58:1 there), the colour the pages' own night
   mode gives the accent. The PNG icons have no dark form. Choosing the night lamp for dark tabs is an agents' call
   within the site's own tokens.
-- **Icons served**: `favicon-32.png`, `favicon.svg`, `apple-touch-icon.png` (180, on paper `#f7f3ec`),
-  `icon-192.png`, `icon-512.png`, `icon-maskable-512.png` and a `site.webmanifest` per site (display `browser`, so
-  nothing new offers to install). agenttool.dev serves the kit's; docs and app serve `sites/docs/` and `sites/app/`,
-  the kit's with each home page's own `<title>` as `name` and its meta description as `description`. The kit's
-  `favicon.ico` is not served (see "Deploying"), so `/favicon.ico` still answers 404.
+- **Icons served**: `favicon.ico` (16, 32 and 48 px PNG images), `favicon-32.png`, `favicon.svg`,
+  `apple-touch-icon.png` (180, on paper `#f7f3ec`), `icon-192.png`, `icon-512.png`, `icon-maskable-512.png` and a
+  `site.webmanifest` per site (display `browser`, so nothing new offers to install). agenttool.dev serves the kit's;
+  docs and app serve `sites/docs/` and `sites/app/`, the kit's with each home page's own `<title>` as `name` and its
+  meta description as `description`. `favicon.ico` is in the upload set since the guard learned to read ICO (see
+  "Deploying"), and live after the next frontend release; the pages still link `favicon-32.png` and `favicon.svg`.
 - **The tab icon is drawn bigger and heavier than before.** For an untiled mark the generator fills the favicon
   square (fixed at 98% at 16 px and 94% at 32 px; `icon.padding` sizes only the app icons) and hints the cuts. The
   old data-URI drew the ring across 12 of 16 px and 24 of 32 px (about 74%). At 16 px the new ring spans all 16 px
@@ -72,9 +73,9 @@ with no new mark and no new words:
 
 | Site | Folder | Files |
 |---|---|---|
-| agenttool.dev | `apps/web` | the six icon files and the kit's `site.webmanifest` |
-| docs.agenttool.dev | `apps/docs` | the six icon files, `sites/docs/site.webmanifest`, `og/docs.png` |
-| app.agenttool.dev | `apps/dashboard` | the six icon files, `sites/app/site.webmanifest`, `og/app.png`, `og/app-watch.png` |
+| agenttool.dev | `apps/web` | the seven icon files and the kit's `site.webmanifest` |
+| docs.agenttool.dev | `apps/docs` | the seven icon files, `sites/docs/site.webmanifest`, `og/docs.png` |
+| app.agenttool.dev | `apps/dashboard` | the seven icon files, `sites/app/site.webmanifest`, `og/app.png`, `og/app-watch.png` |
 
 Every page that drew the ring as a data-URI favicon now carries the icon and manifest links in `head-snippet.html`
 (the kit's, with `favicon-32.png` in place of `favicon.ico`), with the scheme lines above. The docs hearth pages that used the old card name `og/docs.png`, with its type, size and alt
@@ -111,11 +112,22 @@ one `url` per kit and writes JPEG cards; the docs and app pages carry the same l
 
 **What is served stays inside the served-surface guard.** `bin/served-surface-guard.ts` (run by
 `bin/tests/served-surface-guard.test.ts` in CI, and by `bin/frontend-deploy.sh` before any upload) reads PNG, SVG,
-text, fonts and archives, and refuses any other binary unless `public/private-guard/served-surface.json` names that
-exact file with a reason. It refused the kit's `favicon.ico` and JPEG cards (2026-11-10). Whether to list such files,
-or to teach the guard to read ICO and JPEG, is the owner's decision, so the sites serve PNG cards and no ICO. Known gap
-until then: `/favicon.ico` answers 404 on all three hosts, and a live check fails that one line. Browsers use the
-declared `favicon-32.png` and `favicon.svg`.
+ICO, text, fonts and archives, and refuses any other binary unless `public/private-guard/served-surface.json` names
+that exact file with a reason. It refused the kit's `favicon.ico` and JPEG cards on 2026-11-10, so the sites serve PNG
+cards. By the owner's decision of 2026-11-10 the guard now reads an ICO, failing closed: every byte must be accounted
+for (header, directory and images in directory order, with no gap, overlap or trailing byte), and each image must be a
+non-interlaced PNG of at most 256 pixels a side, held stricter than a PNG file: only known chunks, each CRC right and
+every chunk (each IDAT chunk among them) read on its own; every text field (keyword, language tag, translated keyword,
+text) read on its own with no NUL in it, compressed text one zlib stream that ends with its chunk; the pixel data
+inflated the same way to exactly the rows its header implies, and those rows read for text; an empty IEND that ends
+the image. The icon's bytes, its chunks' data, its text fields and its pixel rows are read as Latin-1, UTF-8 and
+UTF-16. Pixel values, palette entries, colour-calibration chunks and the physical-size chunk (pHYs) are image bytes
+the guard does not decode. In a PNG file on its own the pixel rows are not read at all, and those chunks only with the
+rest of the file, where the chunk type just before them can keep a word at their start from matching. Within what it
+reads, the guard catches accidents and plain text, and does not claim to catch data someone hides in pixel values on
+purpose. Any other image type is refused, a bitmap among them, as it is on its own; so is a cursor, and JPEG stays
+unreadable. So the kit's `favicon.ico` is in the three sites' upload set byte for byte, with no policy entry;
+`/favicon.ico` answers 404 until a frontend release uploads it.
 
 Merging puts nothing on the three sites. The frontends are Cloudflare Pages direct uploads, released from clean
 GitHub `main` with `bin/deploy.sh --no-migrate --no-api` (`docs/DEPLOY-PROCEDURE.md`, Phase 4), and a release needs
