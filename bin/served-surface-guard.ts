@@ -244,9 +244,12 @@ function isTar(bytes: Uint8Array): boolean {
 }
 
 /**
- * The entries of a ustar archive (pax and GNU long names applied) and the
+ * The entries of a ustar archive (pax and GNU long names applied), the
  * fields of its headers with any GNU long-name data, which the caller reads as
- * text, each field on its own (user and group names among them); throws if
+ * text, each field on its own (user and group names among them), and the text
+ * fields' bytes before their NUL with that long-name data, the only bytes in a
+ * header that UTF-16 text can occupy, which the caller also reads as UTF-16;
+ * throws if
  * malformed, or if a byte of a member's padding or after the end marker is not
  * zero. A header must hold nothing a reader skips: each text field ends at its
  * first NUL with only zero bytes after it, each number field holds only octal
@@ -255,16 +258,17 @@ function isTar(bytes: Uint8Array): boolean {
  * zero. A prefix of at most 130 bytes may keep an access and a change time,
  * octal, in its last 24 bytes, as star and node-tar (older npm) write them.
  */
-function tarEntries(bytes: Uint8Array): { entries: Array<{ name: string; link: string; data: Uint8Array }>; fields: Uint8Array[] } {
+function tarEntries(bytes: Uint8Array): { entries: Array<{ name: string; link: string; data: Uint8Array }>; fields: Uint8Array[]; texts: Uint8Array[] } {
   const entries: Array<{ name: string; link: string; data: Uint8Array }> = [];
   const fields: Uint8Array[] = [];
+  const texts: Uint8Array[] = [];
   let offset = 0;
   let longName: string | undefined;
   while (offset + 512 <= bytes.length) {
     const header = bytes.subarray(offset, offset + 512);
     if (zero(header)) {
       if (!zero(bytes.subarray(offset))) throw new Error("tar archive has bytes after its end marker");
-      return { entries, fields };
+      return { entries, fields, texts };
     }
     if (ascii(header.subarray(257, 262)) !== "ustar") throw new Error("tar entry without a ustar header");
     let sum = 0;
@@ -283,6 +287,11 @@ function tarEntries(bytes: Uint8Array): { entries: Array<{ name: string; link: s
     }
     if (!zero(header.subarray(500, 512))) throw new Error("tar header has bytes after its prefix");
     for (const [from, to] of TAR_FIELDS) fields.push(header.subarray(from, to));
+    for (const [from, to] of [...TAR_TEXT_FIELDS, [345, 500] as const]) {
+      const value = header.subarray(from, to);
+      const nul = value.indexOf(0);
+      texts.push(nul < 0 ? value : value.subarray(0, nul));
+    }
     const size = octal(header.subarray(124, 136));
     const type = String.fromCharCode(header[156]!);
     if (header[157] !== 0 && type !== "1" && type !== "2") throw new Error("tar entry that is not a link has a link name");
@@ -293,6 +302,7 @@ function tarEntries(bytes: Uint8Array): { entries: Array<{ name: string; link: s
     if (!zero(bytes.subarray(start + size, offset))) throw new Error("tar entry has bytes in its padding");
     if (type === "L") {
       fields.push(data);
+      texts.push(data);
       longName = field(data);
       continue;
     }
@@ -312,14 +322,17 @@ function tarEntries(bytes: Uint8Array): { entries: Array<{ name: string; link: s
 }
 
 /**
- * The original file name and comment of a gzip header, which gunzip skips; the
- * caller reads them as text. Throws unless the file is one gzip member and
- * nothing else: no extra field (binary the guard does not read) or reserved
- * flag, and a deflate stream that ends 8 bytes (the CRC and size gunzip
- * checks) before the end of the file, so no second member, whose header
- * gunzip would also skip, and no other bytes follow it.
+ * A gzip file's data, and the original file name and comment of its header,
+ * which gunzip skips; the caller reads them as text. Throws unless the file is
+ * one gzip member and nothing else: no extra field (binary the guard does not
+ * read) or reserved flag, and a deflate stream that ends 8 bytes (the CRC and
+ * size gunzip checks) before the end of the file, so no second member, whose
+ * header gunzip would also skip, and no other bytes follow it. The deflate
+ * stream is inflated without those 8 bytes and its own last byte: a stream
+ * that ends there no longer inflates, and one that ended sooner, with bytes
+ * after it, still does. gunzip then checks the first member whole.
  */
-function gzipHeaderFields(bytes: Uint8Array): Uint8Array {
+function gunzipOne(bytes: Uint8Array): { fields: Uint8Array; data: Buffer } {
   const flags = bytes[3] ?? 0;
   if (flags & 0x04) throw new Error("gzip header with an extra field, which the guard does not read");
   if (flags & 0xe0) throw new Error("gzip header with a reserved flag set");
@@ -333,11 +346,14 @@ function gzipHeaderFields(bytes: Uint8Array): Uint8Array {
   const fields = bytes.subarray(10, end);
   if (flags & 0x02) end += 2;
   if (end + 8 > bytes.length) throw new Error("truncated gzip file");
-  const fail = (why: string): never => {
-    throw new Error(`gzip file ${why}`);
-  };
-  inflateWhole(bytes.subarray(end, bytes.length - 8), MAX_EXPANDED_BYTES, fail, "first member's compressed data", inflateRawSync);
-  return fields;
+  let ended = false;
+  try {
+    inflateRawSync(bytes.subarray(end, bytes.length - 9), { maxOutputLength: MAX_EXPANDED_BYTES });
+  } catch {
+    ended = true;
+  }
+  if (!ended) throw new Error("gzip file has bytes after the end of its first member's compressed data");
+  return { fields, data: gunzipSync(bytes, { maxOutputLength: MAX_EXPANDED_BYTES }) };
 }
 
 /**
@@ -454,30 +470,30 @@ const PNG_DEPTHS: Readonly<Record<number, readonly number[]>> = { 0: [1, 2, 4, 8
  * shared reader take the bytes as UTF-16.
  */
 function textReadings(bytes: Uint8Array): string {
-  const readings = new Set([scannableText(bytes), printableStrings(bytes), ascii(bytes), decodeText(bytes)]);
-  for (const encoding of ["utf-16le", "utf-16be"]) {
-    for (const start of [0, 1]) readings.add(new TextDecoder(encoding).decode(bytes.subarray(start)));
-  }
-  return [...readings].join("\n");
+  return [...new Set([scannableText(bytes), printableStrings(bytes), ascii(bytes), decodeText(bytes), ...utf16Readings(bytes)])].join("\n");
+}
+
+/** The bytes read as UTF-16LE and UTF-16BE, each from either alignment. */
+function utf16Readings(bytes: Uint8Array): string[] {
+  return ["utf-16le", "utf-16be"].flatMap((encoding) => [0, 1].map((start) => new TextDecoder(encoding).decode(bytes.subarray(start))));
 }
 
 /**
- * Inflate one zlib stream (or, with inflateRawSync, one raw deflate stream)
- * that must end at the input's last byte, to at most `limit` bytes. zlib stops
- * at a stream's end and ignores what follows, so the input is inflated again
- * without its last byte: a stream that ends there no longer inflates, and one
- * that ended sooner, with bytes after it, still does.
+ * Inflate one zlib stream that must end at the input's last byte, to at most
+ * `limit` bytes. zlib stops at a stream's end and ignores what follows, so the
+ * input is inflated again without its last byte: a stream that ends there no
+ * longer inflates, and one that ended sooner, with bytes after it, still does.
  */
-function inflateWhole(input: Uint8Array, limit: number, fail: (why: string) => never, what: string, inflate = inflateSync): Buffer {
+function inflateWhole(input: Uint8Array, limit: number, fail: (why: string) => never, what: string): Buffer {
   let output: Buffer;
   try {
-    output = inflate(input, { maxOutputLength: limit });
+    output = inflateSync(input, { maxOutputLength: limit });
   } catch {
     return fail(`has ${what} that does not inflate, or inflates past ${limit} bytes`);
   }
   let ended = false;
   try {
-    inflate(input.subarray(0, input.length - 1), { maxOutputLength: limit });
+    inflateSync(input.subarray(0, input.length - 1), { maxOutputLength: limit });
   } catch {
     ended = true;
   }
@@ -728,9 +744,9 @@ export function readServed(path: string, bytes: Uint8Array): ServedReading {
     }
     try {
       if (startsWith(content, [0x1f, 0x8b])) {
-        const fields = gzipHeaderFields(content);
-        if (fields.length > 0) reading.texts.push({ path: at, text: textReadings(fields) });
-        visit(at, gunzipSync(content, { maxOutputLength: MAX_EXPANDED_BYTES }), depth + 1);
+        const gzip = gunzipOne(content);
+        if (gzip.fields.length > 0) reading.texts.push({ path: at, text: textReadings(gzip.fields) });
+        visit(at, gzip.data, depth + 1);
       } else if (startsWith(content, [0x00, 0x00, 0x01, 0x00]) || startsWith(content, [0x00, 0x00, 0x02, 0x00])) {
         // An ICO icon: its whole bytes' strings, then each image as that image
         // type is read on its own, reported as <icon>!image-<n>. It is tested
@@ -746,9 +762,12 @@ export function readServed(path: string, bytes: Uint8Array): ServedReading {
       } else if (isTar(content)) {
         const archive = tarEntries(content);
         // Every header field, each on its own line so none runs into the next,
-        // read as Latin-1, UTF-8, UTF-16 and for its strings.
+        // read as Latin-1, as UTF-8 and for its strings, and the text fields'
+        // bytes before their NUL as UTF-16 too (the zero bytes after them
+        // would only cost time).
         const fields = Buffer.concat(archive.fields.flatMap((field) => [field, NEWLINE]));
-        reading.texts.push({ path: at, text: textReadings(fields) });
+        const texts = Buffer.concat(archive.texts.flatMap((field) => [field, NEWLINE]));
+        reading.texts.push({ path: at, text: [...new Set([ascii(fields), decodeText(fields), printableStrings(fields), ...utf16Readings(texts)])].join("\n") });
         for (const entry of archive.entries) {
           const member = `${at}!${memberName(entry.name)}`;
           reading.names.push(member);
