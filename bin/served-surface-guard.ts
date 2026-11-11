@@ -22,19 +22,23 @@
  *     (UTF-8 behind a UTF-16 byte-order mark among them);
  *   - gzip and tar archives (npm tarballs), member by member, reported as
  *     <archive>!<member>; a gzip header's name and comment and every tar
- *     header's fields (user and group names among them) are read as text,
- *     and a tar whose member padding, or whose bytes after its end marker,
- *     are not all zero is refused;
+ *     header's fields (user and group names among them) are read as text.
+ *     A gzip file must be one member with no extra field and nothing after
+ *     it; a tar header's text fields must hold nothing after their NUL, its
+ *     numbers only octal, its link name nothing unless it is a link, and a
+ *     tar whose member padding, or whose bytes after its end marker, are not
+ *     all zero is refused;
  *   - PNG files and ICO icons, only when every byte is accounted for. An
  *     icon's header, directory and images run in directory order with no
  *     gap, overlap or trailing byte; each image must be a PNG of at most 256
  *     pixels a side, reported as <icon>!image-<n>. Every PNG, a file or an
  *     icon's image, is non-interlaced and holds only known chunks, each CRC
- *     right, each chunk's data (every IDAT chunk's among them) read on its
- *     own; every text field (keyword, language tag, translated keyword, text)
- *     free of NULs, compressed text one zlib stream that ends at its chunk's
- *     end; its IDAT data joined and inflated the same way to exactly the rows
- *     its IHDR implies; an empty IEND that ends it. The icon's bytes, the
+ *     right, each colour chunk the length PNG gives it, each chunk's data
+ *     (every IDAT chunk's among them) read on its own; every text field
+ *     (keyword, language tag, translated keyword, text) free of NULs,
+ *     compressed text one zlib stream that ends at its chunk's end; its
+ *     IDAT data joined and inflated the same way to exactly the rows its
+ *     IHDR implies; an empty IEND that ends it. The icon's bytes, the
  *     chunks' data, their text fields and the inflated pixel rows are read as
  *     Latin-1, UTF-8 and UTF-16 as well as for their strings. Any other image
  *     type in an icon is refused;
@@ -42,7 +46,9 @@
  *     uncompressed, once every byte is accounted for: a WAV holds one plain
  *     PCM or float fmt chunk and one data chunk and nothing else; a font's
  *     tables, each of a kind that holds outlines, metrics, layout or names,
- *     tile the file after its table directory;
+ *     tile the file after its table directory, and its name table is read
+ *     as Latin-1, UTF-8 and UTF-16 too. A refusal names the chunk or table
+ *     it met;
  *   - the served paths and archive member names themselves.
  *
  * What the guard does not read as text: pixel values, palette entries and
@@ -74,7 +80,7 @@
 import { spawnSync } from "node:child_process";
 import { lstatSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, join, relative, resolve } from "node:path";
-import { gunzipSync, inflateSync } from "node:zlib";
+import { gunzipSync, inflateRawSync, inflateSync } from "node:zlib";
 
 import { DENYLIST_PATH, parseDenylist } from "./project-public.ts";
 import { blobKind, decodeText, printableStrings, scannableText, scanText, sha256Hex } from "../public/overlay/tools/public-guard.ts";
@@ -208,6 +214,8 @@ const field = (bytes: Uint8Array) => {
   const end = bytes.indexOf(0);
   return Buffer.from(end < 0 ? bytes : bytes.subarray(0, end)).toString("utf8");
 };
+/** A 4-byte chunk or table tag as one output token: a byte outside A-Z, a-z, 0-9 and / is written %XX. */
+const tagName = (tag: string) => tag.replace(/[^A-Za-z0-9/]/gu, (char) => `%${char.charCodeAt(0).toString(16).padStart(2, "0")}`);
 /** A member name as one output token: whitespace, parentheses and % are escaped. */
 const memberName = (name: string) =>
   name.replace(/[\s()%]/gu, (char) => `%${char.codePointAt(0)!.toString(16).padStart(2, "0")}`);
@@ -219,6 +227,17 @@ const octal = (bytes: Uint8Array) => {
 
 /** Where each field of a ustar header block starts and ends, name to prefix and the padding after it. */
 const TAR_FIELDS = [[0, 100], [100, 108], [108, 116], [116, 124], [124, 136], [136, 148], [148, 156], [156, 157], [157, 257], [257, 263], [263, 265], [265, 297], [297, 329], [329, 337], [337, 345], [345, 500], [500, 512]] as const;
+/** The text fields of a ustar header before its prefix: name, link name, user and group names. */
+const TAR_TEXT_FIELDS = [[0, 100], [157, 257], [265, 297], [297, 329]] as const;
+/** The number fields of a ustar header: mode, ids, size, time, checksum and device numbers. */
+const TAR_NUMBER_FIELDS = [[100, 108], [108, 116], [116, 124], [124, 136], [136, 148], [148, 156], [329, 337], [337, 345]] as const;
+/** A text field that ends at its first NUL with only zero bytes after it, or fills the field. */
+const endsAtNul = (value: Uint8Array) => {
+  const nul = value.indexOf(0);
+  return nul < 0 || zero(value.subarray(nul));
+};
+/** A number field: octal digits, spaces and NULs, or (user and group ids only, as GNU tar and node-tar write large ids) base-256. */
+const tarNumber = (value: Uint8Array, from: number) => /^[0-7 \0]*$/u.test(ascii(value)) || ((from === 108 || from === 116) && value[0] === 0x80);
 
 function isTar(bytes: Uint8Array): boolean {
   return bytes.length >= 512 && ascii(bytes.subarray(257, 262)) === "ustar";
@@ -229,7 +248,12 @@ function isTar(bytes: Uint8Array): boolean {
  * fields of its headers with any GNU long-name data, which the caller reads as
  * text, each field on its own (user and group names among them); throws if
  * malformed, or if a byte of a member's padding or after the end marker is not
- * zero.
+ * zero. A header must hold nothing a reader skips: each text field ends at its
+ * first NUL with only zero bytes after it, each number field holds only octal
+ * digits, spaces and NULs (or a base-256 user or group id), the link name is
+ * empty unless the entry is a link, and the 12 bytes after the prefix are
+ * zero. A prefix of at most 130 bytes may keep an access and a change time,
+ * octal, in its last 24 bytes, as star and node-tar (older npm) write them.
  */
 function tarEntries(bytes: Uint8Array): { entries: Array<{ name: string; link: string; data: Uint8Array }>; fields: Uint8Array[] } {
   const entries: Array<{ name: string; link: string; data: Uint8Array }> = [];
@@ -246,9 +270,22 @@ function tarEntries(bytes: Uint8Array): { entries: Array<{ name: string; link: s
     let sum = 0;
     for (let index = 0; index < 512; index += 1) sum += index >= 148 && index < 156 ? 0x20 : header[index]!;
     if (sum !== octal(header.subarray(148, 156))) throw new Error("tar header checksum mismatch");
+    for (const [from, to] of TAR_TEXT_FIELDS) {
+      if (!endsAtNul(header.subarray(from, to))) throw new Error(`tar header field at byte ${from} has bytes after its NUL`);
+    }
+    const shortPrefix = header.subarray(345, 476);
+    const times = (from: number) => /^[0-7 \0]*$/u.test(ascii(header.subarray(from, from + 12)));
+    if (!endsAtNul(header.subarray(345, 500)) && !(shortPrefix.includes(0) && endsAtNul(shortPrefix) && times(476) && times(488))) {
+      throw new Error("tar header field at byte 345 has bytes after its NUL");
+    }
+    for (const [from, to] of TAR_NUMBER_FIELDS) {
+      if (!tarNumber(header.subarray(from, to), from)) throw new Error(`tar header number at byte ${from} is not octal`);
+    }
+    if (!zero(header.subarray(500, 512))) throw new Error("tar header has bytes after its prefix");
     for (const [from, to] of TAR_FIELDS) fields.push(header.subarray(from, to));
     const size = octal(header.subarray(124, 136));
     const type = String.fromCharCode(header[156]!);
+    if (header[157] !== 0 && type !== "1" && type !== "2") throw new Error("tar entry that is not a link has a link name");
     const start = offset + 512;
     if (start + size > bytes.length) throw new Error("tar entry runs past the archive");
     const data = bytes.subarray(start, start + size);
@@ -275,20 +312,32 @@ function tarEntries(bytes: Uint8Array): { entries: Array<{ name: string; link: s
 }
 
 /**
- * The optional fields of a gzip header (extra field, original file name and
- * comment), which gunzip skips; the caller reads them as text. Only the first
- * member's header is read.
+ * The original file name and comment of a gzip header, which gunzip skips; the
+ * caller reads them as text. Throws unless the file is one gzip member and
+ * nothing else: no extra field (binary the guard does not read) or reserved
+ * flag, and a deflate stream that ends 8 bytes (the CRC and size gunzip
+ * checks) before the end of the file, so no second member, whose header
+ * gunzip would also skip, and no other bytes follow it.
  */
 function gzipHeaderFields(bytes: Uint8Array): Uint8Array {
   const flags = bytes[3] ?? 0;
+  if (flags & 0x04) throw new Error("gzip header with an extra field, which the guard does not read");
+  if (flags & 0xe0) throw new Error("gzip header with a reserved flag set");
   let end = 10;
-  if (flags & 0x04) end += 2 + (bytes[10] ?? 0) + ((bytes[11] ?? 0) << 8);
   for (const flag of [0x08, 0x10]) {
     if (!(flags & flag)) continue;
     const nul = bytes.indexOf(0, end);
-    end = nul < 0 ? bytes.length : nul + 1;
+    if (nul < 0) throw new Error("truncated gzip header");
+    end = nul + 1;
   }
-  return bytes.subarray(10, end);
+  const fields = bytes.subarray(10, end);
+  if (flags & 0x02) end += 2;
+  if (end + 8 > bytes.length) throw new Error("truncated gzip file");
+  const fail = (why: string): never => {
+    throw new Error(`gzip file ${why}`);
+  };
+  inflateWhole(bytes.subarray(end, bytes.length - 8), MAX_EXPANDED_BYTES, fail, "first member's compressed data", inflateRawSync);
+  return fields;
 }
 
 /**
@@ -308,7 +357,7 @@ function checkWav(bytes: Uint8Array): void {
     const id = ascii(bytes.subarray(offset, offset + 4));
     const size = view.readUInt32LE(offset + 4);
     const end = offset + 8 + size + (size % 2);
-    if (id !== order[chunks]) throw new Error("WAV holds a chunk the guard does not read, or its chunks out of order");
+    if (id !== order[chunks]) throw new Error(`WAV holds a ${tagName(id)} chunk where the guard reads only one fmt chunk, then one data chunk`);
     if (end > bytes.length) throw new Error("WAV chunk runs past the file");
     if (size % 2 === 1 && bytes[end - 1] !== 0) throw new Error("WAV chunk padding that is not zero");
     if (id === "fmt ") {
@@ -342,8 +391,10 @@ const FONT_TABLES: ReadonlySet<string> = new Set([
  * byte by byte: its table directory, then its tables, each a FONT_TABLES tag
  * named once, at a 4-byte boundary, tiling the rest of the file in offset
  * order with at most 3 zero bytes of padding after each. Throws otherwise.
+ * Returns the name table's bytes (empty without one), where a font keeps its
+ * text, names outside ASCII stored as UTF-16BE among it.
  */
-function checkFont(bytes: Uint8Array): void {
+function checkFont(bytes: Uint8Array): Uint8Array {
   if (ascii(bytes.subarray(0, 4)) === "ttcf") throw new Error("font collection, which the guard does not read");
   const view = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const count = bytes.length >= 12 ? view.readUInt16BE(4) : 0;
@@ -356,7 +407,7 @@ function checkFont(bytes: Uint8Array): void {
   if (new Set(tables.map((table) => table.tag)).size !== count) throw new Error("font names a table twice");
   let next = directoryEnd;
   for (const table of tables.sort((a, b) => a.offset - b.offset)) {
-    if (!FONT_TABLES.has(table.tag)) throw new Error("font holds a table the guard does not read");
+    if (!FONT_TABLES.has(table.tag)) throw new Error(`font holds a ${tagName(table.tag)} table, which the guard does not read`);
     if (table.offset % 4 !== 0 || table.offset < next || table.offset - next > 3 || !zero(bytes.subarray(next, table.offset))) {
       throw new Error("font table that overlaps another or leaves bytes unaccounted for");
     }
@@ -364,6 +415,8 @@ function checkFont(bytes: Uint8Array): void {
     next = table.offset + table.length;
   }
   if (bytes.length - next > 3 || !zero(bytes.subarray(next))) throw new Error("font has bytes after its last table");
+  const name = tables.find((table) => table.tag === "name");
+  return name === undefined ? new Uint8Array() : bytes.subarray(name.offset, name.offset + name.length);
 }
 
 /**
@@ -374,6 +427,20 @@ function checkFont(bytes: Uint8Array): void {
  */
 const PNG_CHUNKS: ReadonlySet<string> = new Set(["IHDR", "PLTE", "tRNS", "sRGB", "gAMA", "cHRM", "pHYs", "bKGD", "IDAT", "IEND", "tEXt", "zTXt", "iTXt"]);
 const PNG_REPEATABLE: ReadonlySet<string> = new Set(["IDAT", "tEXt", "zTXt", "iTXt"]);
+/**
+ * The data lengths the PNG specification gives its colour chunks, by IHDR
+ * colour type, so none can carry bytes beyond its values: no PLTE in a
+ * greyscale image, and no tRNS in one with an alpha channel.
+ */
+const PNG_LENGTHS: Readonly<Record<string, (length: number, colour: number) => boolean>> = {
+  gAMA: (length) => length === 4,
+  cHRM: (length) => length === 32,
+  sRGB: (length) => length === 1,
+  pHYs: (length) => length === 9,
+  bKGD: (length, colour) => length === (colour === 3 ? 1 : colour === 0 || colour === 4 ? 2 : 6),
+  PLTE: (length, colour) => colour !== 0 && colour !== 4 && length > 0 && length <= 768 && length % 3 === 0,
+  tRNS: (length, colour) => (colour === 3 ? length <= 256 : length === (colour === 0 ? 2 : colour === 2 ? 6 : -1)),
+};
 /** The bit depths PNG allows for each colour type. */
 const PNG_DEPTHS: Readonly<Record<number, readonly number[]>> = { 0: [1, 2, 4, 8, 16], 2: [8, 16], 3: [1, 2, 4, 8], 4: [8, 16], 6: [8, 16] };
 
@@ -395,21 +462,22 @@ function textReadings(bytes: Uint8Array): string {
 }
 
 /**
- * Inflate one zlib stream that must end at the input's last byte, to at most
- * `limit` bytes. zlib stops at a stream's end and ignores what follows, so the
- * input is inflated again without its last byte: a stream that ends there no
- * longer inflates, and one that ended sooner, with bytes after it, still does.
+ * Inflate one zlib stream (or, with inflateRawSync, one raw deflate stream)
+ * that must end at the input's last byte, to at most `limit` bytes. zlib stops
+ * at a stream's end and ignores what follows, so the input is inflated again
+ * without its last byte: a stream that ends there no longer inflates, and one
+ * that ended sooner, with bytes after it, still does.
  */
-function inflateWhole(input: Uint8Array, limit: number, fail: (why: string) => never, what: string): Buffer {
+function inflateWhole(input: Uint8Array, limit: number, fail: (why: string) => never, what: string, inflate = inflateSync): Buffer {
   let output: Buffer;
   try {
-    output = inflateSync(input, { maxOutputLength: limit });
+    output = inflate(input, { maxOutputLength: limit });
   } catch {
     return fail(`has ${what} that does not inflate, or inflates past ${limit} bytes`);
   }
   let ended = false;
   try {
-    inflateSync(input.subarray(0, input.length - 1), { maxOutputLength: limit });
+    inflate(input.subarray(0, input.length - 1), { maxOutputLength: limit });
   } catch {
     ended = true;
   }
@@ -423,6 +491,7 @@ function inflateWhole(input: Uint8Array, limit: number, fail: (why: string) => n
  */
 interface StrictPng {
   fail: (why: string) => never;
+  colour: number;
   rows: number;
   rowBytes: number;
   readRows: (rows: Uint8Array) => string;
@@ -465,8 +534,8 @@ function crc32(bytes: Uint8Array): number {
  * each chunk's data is read on its own; a keyword is 1 to 79 bytes, no field
  * holds a NUL (so no 16- or 32-bit text hides there), compressed text is one
  * zlib stream (method 0) that ends at the chunk's end, and an iTXt
- * compression flag is 0 or 1; the IDAT data is inflated and read
- * (pixelRows); and IEND is empty.
+ * compression flag is 0 or 1; each colour chunk is the length PNG_LENGTHS
+ * gives it; the IDAT data is inflated and read (pixelRows); and IEND is empty.
  */
 function pngText(bytes: Uint8Array, png: StrictPng): { text: string; end: number | undefined } {
   const texts: string[] = [];
@@ -492,11 +561,12 @@ function pngText(bytes: Uint8Array, png: StrictPng): { text: string; end: number
     const type = ascii(bytes.subarray(offset + 4, offset + 8));
     const data = bytes.subarray(offset + 8, offset + 8 + length);
     if (offset + 12 + length > bytes.length) throw new Error("truncated PNG chunk");
-    if (!PNG_CHUNKS.has(type)) fail("has a PNG chunk the guard does not read");
+    if (!PNG_CHUNKS.has(type)) fail(`has a PNG ${tagName(type)} chunk, which the guard does not read`);
     if (seen.has(type) && !PNG_REPEATABLE.has(type)) fail(`repeats its PNG ${type} chunk`);
     seen.add(type);
     if (crc32(bytes.subarray(offset + 4, offset + 8 + length)) !== view.readUInt32BE(offset + 8 + length)) fail(`has a PNG ${type} chunk whose CRC is wrong`);
     if (type === "IEND" && length !== 0) fail("has data inside its PNG IEND chunk");
+    if (PNG_LENGTHS[type]?.(length, png.colour) === false) fail(`has a PNG ${type} chunk of a length PNG does not allow for its colour type`);
     offset += 12 + length;
     // Every chunk's data is also read on its own, so the chunk type before it
     // and the CRC after it cannot run into a word at its edges. That holds for
@@ -562,7 +632,7 @@ function strictPng(bytes: Uint8Array, fail: (why: string) => never, inIcon = fal
   if (inIcon && (width > 256 || height > 256)) fail("is a PNG larger than 256 pixels a side");
   const rowBytes = 1 + Math.ceil((width * depth! * channels!) / 8);
   if (height * rowBytes > MAX_EXPANDED_BYTES) fail(`is a PNG whose pixel rows would inflate past ${MAX_EXPANDED_BYTES} bytes`);
-  const chunks = pngText(bytes, { fail, rows: height, rowBytes, readRows: inIcon ? textReadings : printableStrings });
+  const chunks = pngText(bytes, { fail, colour: colour!, rows: height, rowBytes, readRows: inIcon ? textReadings : printableStrings });
   if (chunks.end !== bytes.length) fail(chunks.end === undefined ? "is a PNG without an IEND chunk" : "has data after its PNG IEND chunk");
   return { text: `${printableStrings(bytes)}\n${chunks.text}`, width, height, bits: depth! * channels! };
 }
@@ -672,9 +742,9 @@ export function readServed(path: string, bytes: Uint8Array): ServedReading {
       } else if (isTar(content)) {
         const archive = tarEntries(content);
         // Every header field, each on its own line so none runs into the next,
-        // read as Latin-1, as UTF-8 and for its strings.
+        // read as Latin-1, UTF-8, UTF-16 and for its strings.
         const fields = Buffer.concat(archive.fields.flatMap((field) => [field, NEWLINE]));
-        reading.texts.push({ path: at, text: [...new Set([ascii(fields), decodeText(fields), printableStrings(fields)])].join("\n") });
+        reading.texts.push({ path: at, text: textReadings(fields) });
         for (const entry of archive.entries) {
           const member = `${at}!${memberName(entry.name)}`;
           reading.names.push(member);
@@ -689,12 +759,19 @@ export function readServed(path: string, bytes: Uint8Array): ServedReading {
         startsWith(content, [0x00, 0x01, 0x00, 0x00]) ||
         ["OTTO", "true", "ttcf"].includes(ascii(content.subarray(0, 4)))
       ) {
-        // WAV audio and TrueType/OpenType fonts store their text uncompressed
-        // (font names as UTF-16BE), so their printable strings are all of it,
-        // once every byte is accounted for.
-        if (ascii(content.subarray(0, 4)) === "RIFF") checkWav(content);
-        else checkFont(content);
-        reading.texts.push({ path: at, text: printableStrings(content) });
+        // WAV audio and TrueType/OpenType fonts store their text uncompressed,
+        // so once every byte is accounted for, they are read for their
+        // printable strings, and a font's name table with every reading
+        // textReadings makes, which keeps names outside ASCII (UTF-16BE). The
+        // rest of a font is glyph and metric bytes, whose full readings would
+        // match by chance.
+        if (ascii(content.subarray(0, 4)) === "RIFF") {
+          checkWav(content);
+          reading.texts.push({ path: at, text: printableStrings(content) });
+        } else {
+          const names = checkFont(content);
+          reading.texts.push({ path: at, text: `${printableStrings(content)}\n${textReadings(names)}` });
+        }
       } else {
         reading.unreadable.push({ path: at, detail: "binary format the guard cannot read" });
       }

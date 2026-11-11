@@ -411,6 +411,9 @@ describe("guard layers", () => {
         "packages/alpha/bom32.txt": Buffer.concat([Buffer.from([0xff, 0xfe, 0, 0]), utf32]),
         // UTF-8 after a UTF-16 byte-order mark is read as UTF-8 too.
         "packages/alpha/bom-utf8.txt": Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(planted)]),
+        // UTF-16 in the order the mark does not name, and UTF-16 past the 8000-byte NUL window, are read for their strings.
+        "packages/alpha/bom-swapped.txt": Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from(planted, "utf16le")]),
+        "packages/alpha/late-wide.txt": Buffer.concat([Buffer.from("neutral text\n".repeat(700)), Buffer.from(planted, "utf16le")]),
       },
     });
     const found = guardProjection(repo, buildProjection(repo, "HEAD")).map((finding) => `${finding.path}:${finding.rule}`);
@@ -427,7 +430,10 @@ describe("guard layers", () => {
       ...expected("packages/alpha/wide.bin", true),
       ...expected("packages/alpha/bom32.txt", true),
       ...expected("packages/alpha/bom-utf8.txt", false),
+      ...expected("packages/alpha/bom-swapped.txt", false),
+      ...expected("packages/alpha/late-wide.txt", false),
     ]));
+    expect(found.filter((entry) => /packages\/alpha\/(?:bom-swapped|late-wide)\.txt:path\/binary/u.test(entry))).toEqual([]);
     expect(found.filter((entry) => entry.startsWith("packages/alpha/bom16")).some((entry) => entry.endsWith("path/binary"))).toBe(false);
   });
 

@@ -421,10 +421,12 @@ describe("served surface relational guard", () => {
 
   test("each chunk's data in an icon's PNG is read on its own, so plain text at its start is found", () => {
     const icon = "apps/web/favicon.ico";
-    const term = latin1(asciiTerm());
+    const term = latin1(privateTerm((value) => /^[\x20-\x7e]{6,32}$/u.test(value)));
+    const padded = (length: number) => Buffer.concat([term, Buffer.alloc(length - term.length, 0x20)]);
     // Read only with the whole file, a word at the start of a chunk's data runs into the chunk type just before it.
-    for (const type of ["PLTE", "tRNS", "cHRM", "pHYs", "gAMA", "sRGB"]) {
-      const findings = ownFindings(servedSurfaceFindings([served(icon, icoOf([[16, pngOf(16, { extra: [pngChunk(type, term)] })]]))], bytes(DENYLIST_PATH), bytes(POLICY_PATH)), icon);
+    // Each colour chunk has the length PNG gives it, so only a palette and the chromaticities can hold a word.
+    for (const [type, data] of [["PLTE", padded(3 * Math.ceil(term.length / 3))], ["cHRM", padded(32)]] as const) {
+      const findings = ownFindings(servedSurfaceFindings([served(icon, icoOf([[16, pngOf(16, { extra: [pngChunk(type, data)] })]]))], bytes(DENYLIST_PATH), bytes(POLICY_PATH)), icon);
       expect({ type, unreadable: findings.filter((finding) => finding.rule === "served/unreadable-binary").length }).toEqual({ type, unreadable: 0 });
       expect({ type, found: findings.some((finding) => finding.path === `${icon}!image-0` && finding.rule.startsWith("relational/")) }).toEqual({ type, found: true });
     }
@@ -510,7 +512,8 @@ describe("served surface relational guard", () => {
       ["a directory out of file order", swapped, /lists image 1 out of file order/u],
       ["a PNG that does not open with IHDR", icoOf([[16, pngOf(16, { head: [pngChunk("sRGB", Buffer.from([0])), small.subarray(8, 33)] })]]), /does not open with IHDR/u],
       ["data inside a PNG's IEND chunk", icoOf([[16, pngOf(16, { iend: deflateSync(Buffer.from("hidden")) })]]), /image 0 has data inside its PNG IEND chunk/u],
-      ["a PNG chunk the guard does not read", icoOf([[16, pngOf(16, { extra: [pngChunk("prVt", deflateSync(Buffer.from("hidden")))] })]]), /image 0 has a PNG chunk the guard does not read/u],
+      ["a PNG chunk the guard does not read", icoOf([[16, pngOf(16, { extra: [pngChunk("prVt", deflateSync(Buffer.from("hidden")))] })]]), /image 0 has a PNG prVt chunk, which the guard does not read/u],
+      ["a colour chunk longer than PNG gives it", icoOf([[16, pngOf(16, { extra: [pngChunk("gAMA", deflateSync(Buffer.from("hidden")))] })]]), /image 0 has a PNG gAMA chunk of a length PNG does not allow/u],
       ["a profile chunk, whose binary profile the guard reads only for strings", icoOf([[16, pngOf(16, { extra: [pngChunk("iCCP", Buffer.concat([Buffer.from("icc\0\0", "latin1"), deflateSync(Buffer.alloc(16))]))] })]]), /the guard does not read/u],
       ["a repeated chunk that may appear once", icoOf([[16, pngOf(16, { extra: [pngChunk("sRGB", Buffer.from([0])), pngChunk("sRGB", Buffer.from([1]))] })]]), /image 0 repeats its PNG sRGB chunk/u],
       ["a PNG chunk with a wrong CRC", icoOf([[16, badCrc]]), /image 0 has a PNG IEND chunk whose CRC is wrong/u],
@@ -554,17 +557,40 @@ describe("served surface relational guard", () => {
     }
   });
 
+  test("text behind a byte-order mark that names another reading, or past the NUL window, is read for its strings", () => {
+    const path = "apps/web/notes.txt";
+    const term = asciiTerm();
+    const seat = PRIVATE_TEXT().toString("utf8");
+    const lines = (length: number) => "a neutral line of text.\n".repeat(Math.ceil(length / 24)).slice(0, length);
+    const cases: Array<readonly [string, Buffer]> = [
+      ["FE FF, then UTF-16LE", Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from(seat, "utf16le")])],
+      ["FF FE, then UTF-16BE", Buffer.concat([Buffer.from([0xff, 0xfe]), utf16be(seat)])],
+      ["FF FE and one byte, then UTF-16LE at an odd offset", Buffer.concat([Buffer.from([0xff, 0xfe, 0x41]), Buffer.from(seat, "utf16le")])],
+      ["FF FE, then UTF-32 past the 16000-byte window", Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(lines(9000), "utf16le"), utf32(` ${term} `, true)])],
+      ["no mark, then UTF-16LE past the 8000-byte window", Buffer.concat([latin1(lines(8200)), Buffer.from(seat, "utf16le")])],
+    ];
+    for (const [name, content] of cases) {
+      const findings = ownFindings(servedSurfaceFindings([served(path, content)], bytes(DENYLIST_PATH), bytes(POLICY_PATH)), path);
+      expect({ name, found: findings.some((finding) => finding.rule.startsWith("relational/")) }).toEqual({ name, found: true });
+    }
+  });
+
   test("an archive's header fields are read, and bytes a tar leaves after its end or in its padding are refused", () => {
     const archive = "apps/docs/packages/demo.tgz";
     const term = latin1(privateTerm((value) => /^[\x20-\x7e]{6,31}$/u.test(value)));
     const tar = tarOf([["package/README.md", Buffer.from("A neutral readme.\n")]]);
     const check = (content: Buffer) => ownFindings(servedSurfaceFindings([served(archive, content)], bytes(DENYLIST_PATH), bytes(POLICY_PATH)), archive);
     expect(check(gzipSync(tar))).toEqual([]);
+    expect(check(gzipSync(withHeaderField(withHeaderField(tar, 156, latin1("2")), 157, latin1("neutral-target"))))).toEqual([]);
+    // What real npm tarballs hold: access and change times in a short prefix's last 24 bytes (star, node-tar), and a base-256 user id.
+    expect(check(gzipSync(withHeaderField(tar, 476, latin1("14715561552\x0014715561552\x00"))))).toEqual([]);
+    expect(check(gzipSync(withHeaderField(tar, 108, Buffer.from([0x80, 0, 0, 0, 0, 0x01, 0, 0]))))).toEqual([]);
     const found: Array<readonly [string, Buffer]> = [
       ["the user name", gzipSync(withHeaderField(tar, 265, term))],
       ["the group name", gzipSync(withHeaderField(tar, 297, term))],
       ["the gzip file name", gzipWithHeaderField(tar, 0x08, term)],
       ["the gzip comment", gzipWithHeaderField(tar, 0x10, term)],
+      ["a user name outside ASCII, as UTF-16", gzipSync(withHeaderField(tar, 265, Buffer.from(wideTerm(), "utf16le")))],
     ];
     for (const [name, content] of found) {
       const findings = check(content);
@@ -573,10 +599,25 @@ describe("served surface relational guard", () => {
     const after = Buffer.concat([tar, PRIVATE_TEXT()]);
     const padded = Buffer.from(tar);
     padded.write("neutral", 512 + 18, "latin1");
+    const hidden = deflateSync(PRIVATE_TEXT());
+    const extra = Buffer.from(gzipSync(tar));
+    extra[3] = 0x04;
+    const extraLength = Buffer.alloc(2);
+    extraLength.writeUInt16LE(hidden.length);
     const refused: Array<readonly [string, Buffer, RegExp]> = [
       ["text after the end blocks of a .tar", after, /after its end marker/u],
       ["text after the end blocks of a .tgz", gzipSync(after), /after its end marker/u],
       ["text in a member's padding", gzipSync(padded), /in its padding/u],
+      ["text after a .tgz's gzip member", Buffer.concat([gzipSync(tar), PRIVATE_TEXT()]), /gzip file has bytes after the end of its first member/u],
+      ["zero bytes after a .tgz's gzip member", Buffer.concat([gzipSync(tar), Buffer.alloc(512)]), /gzip file has bytes after the end of its first member/u],
+      ["a second gzip member, whose file name gunzip skips", Buffer.concat([gzipSync(tar), gzipWithHeaderField(Buffer.alloc(0), 0x08, term)]), /gzip file has bytes after the end of its first member/u],
+      ["a gzip extra field", Buffer.concat([extra.subarray(0, 10), extraLength, hidden, extra.subarray(10)]), /gzip header with an extra field/u],
+      ["a link name on a regular file", gzipSync(withHeaderField(tar, 157, latin1("neutral-target"))), /tar entry that is not a link has a link name/u],
+      ["bytes after a user name's NUL", gzipSync(withHeaderField(tar, 265, latin1("user\0hidden"))), /tar header field at byte 265 has bytes after its NUL/u],
+      ["a number that is not octal", gzipSync(withHeaderField(tar, 136, latin1("0000000009\0"))), /tar header number at byte 136 is not octal/u],
+      ["bytes after a header's prefix", gzipSync(withHeaderField(tar, 500, latin1("hidden"))), /tar header has bytes after its prefix/u],
+      ["text where a short prefix keeps its times", gzipSync(withHeaderField(tar, 476, latin1("hidden"))), /tar header field at byte 345 has bytes after its NUL/u],
+      ["a base-256 number outside the ids", gzipSync(withHeaderField(tar, 136, Buffer.from([0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]))), /tar header number at byte 136 is not octal/u],
     ];
     for (const [name, content, reason] of refused) {
       const findings = check(content).filter((finding) => finding.rule === "served/unreadable-binary");
@@ -590,6 +631,9 @@ describe("served surface relational guard", () => {
     const font = fontOf([["head", Buffer.alloc(54)], ["name", Buffer.from("a neutral font name", "utf16le").swap16()]]);
     const samples = Buffer.alloc(800);
     expect(check(font)).toEqual([]);
+    // A font stores its names as UTF-16BE, so a name outside ASCII is read too.
+    const named = check(fontOf([["head", Buffer.alloc(54)], ["name", utf16be(wideTerm())]]));
+    expect(named.some((finding) => finding.rule.startsWith("relational/"))).toBe(true);
     expect(check(fontOf([["head", Buffer.alloc(54)]], latin1("OTTO")))).toEqual([]);
     expect(check(wavOf(samples))).toEqual([]);
     const hidden = deflateSync(PRIVATE_TEXT());
@@ -597,15 +641,17 @@ describe("served surface relational guard", () => {
     gap.writeUInt32BE(gap.readUInt32BE(12 + 16 + 8) + 4, 12 + 16 + 8);
     const format = wavOf(samples).subarray(12, 36);
     const cases: Array<readonly [string, Buffer, RegExp]> = [
-      ["TrueType magic then compressed text", Buffer.concat([Buffer.from([0, 1, 0, 0]), hidden]), /table directory|table the guard does not read|overlaps/u],
-      ["OpenType magic then compressed text", Buffer.concat([latin1("OTTO"), hidden]), /table directory|table the guard does not read|overlaps/u],
+      ["TrueType magic then compressed text", Buffer.concat([Buffer.from([0, 1, 0, 0]), hidden]), /table directory|the guard does not read|overlaps/u],
+      ["OpenType magic then compressed text", Buffer.concat([latin1("OTTO"), hidden]), /table directory|the guard does not read|overlaps/u],
       ["a font collection", Buffer.concat([latin1("ttcf"), hidden]), /font collection/u],
       ["a font with bytes after its last table", Buffer.concat([font, hidden]), /after its last table/u],
-      ["a font with a table the guard does not read", fontOf([["head", Buffer.alloc(54)], ["zzzz", hidden]]), /table the guard does not read/u],
+      ["a font with a table the guard does not read", fontOf([["head", Buffer.alloc(54)], ["zzzz", hidden]]), /a zzzz table, which the guard does not read/u],
+      ["a signature table, named in the refusal", fontOf([["head", Buffer.alloc(54)], ["DSIG", Buffer.alloc(8)]]), /a DSIG table, which the guard does not read/u],
       ["a font table moved past a gap", gap, /overlaps another or leaves bytes unaccounted for|runs past/u],
       ["RIFF WAVE magic then compressed text", Buffer.concat([latin1("RIFF"), Buffer.alloc(4), latin1("WAVE"), hidden]), /RIFF size/u],
       ["a WAV with bytes after its RIFF", Buffer.concat([wavOf(samples), hidden]), /RIFF size/u],
-      ["a WAV with a chunk the guard does not read", wavOf(samples, [format, riffChunk("LIST", hidden), riffChunk("data", samples)]), /chunk the guard does not read/u],
+      ["a WAV with a chunk the guard does not read", wavOf(samples, [format, riffChunk("LIST", hidden), riffChunk("data", samples)]), /a LIST chunk where the guard reads only one fmt chunk, then one data chunk/u],
+      ["a WAV filler chunk, named in the refusal", wavOf(samples, [riffChunk("JUNK", Buffer.alloc(28)), format, riffChunk("data", samples)]), /a JUNK chunk where/u],
       ["a WAV that is not PCM", wavOf(samples, [riffChunk("fmt ", Buffer.alloc(16)), riffChunk("data", samples)]), /not plain PCM/u],
     ];
     for (const [name, content, reason] of cases) {
@@ -634,6 +680,11 @@ describe("served surface relational guard", () => {
     const hidden = deflateSync(PRIVATE_TEXT());
     // No side limit in a file, and a background colour is allowed.
     expect(check(pngOf(300, { extra: [pngChunk("bKGD", Buffer.from([0, 0, 0, 0, 0, 0])), pngChunk("tEXt", latin1("Software\0a neutral tool"))] }))).toEqual([]);
+    // Each colour chunk at the length PNG gives it for the image's colour type.
+    const colour = [pngChunk("gAMA", Buffer.alloc(4)), pngChunk("cHRM", Buffer.alloc(32)), pngChunk("sRGB", Buffer.alloc(1)), pngChunk("pHYs", Buffer.alloc(9))];
+    expect(check(pngOf(16, { colour: 3, extra: [...colour, pngChunk("PLTE", Buffer.alloc(6)), pngChunk("tRNS", Buffer.alloc(2)), pngChunk("bKGD", Buffer.alloc(1))] }))).toEqual([]);
+    expect(check(pngOf(16, { colour: 0, extra: [...colour, pngChunk("tRNS", Buffer.alloc(2)), pngChunk("bKGD", Buffer.alloc(2))] }))).toEqual([]);
+    expect(check(pngOf(16, { colour: 2, extra: [...colour, pngChunk("PLTE", Buffer.alloc(3)), pngChunk("tRNS", Buffer.alloc(6)), pngChunk("bKGD", Buffer.alloc(6))] }))).toEqual([]);
     const term = asciiTerm();
     const gray = Buffer.concat([Buffer.from([0]), latin1(term)]);
     const header = Buffer.alloc(13);
@@ -646,7 +697,14 @@ describe("served surface relational guard", () => {
       ["a second zlib stream after the pixel data", pngOf(16, { idat: Buffer.concat([deflateSync(blankRows), hidden]) }), /bytes after the end of its PNG pixel data/u],
       ["pixel data that is not the rows its IHDR implies", pngOf(16, { idat: hidden }), /PNG pixel data/u],
       ["a second zlib stream in zTXt", pngOf(16, { extra: [pngChunk("zTXt", Buffer.concat([latin1("Comment\0\0"), deflateSync(latin1("neutral")), hidden]))] }), /bytes after the end of its compressed PNG text/u],
-      ["a chunk the guard does not read", pngOf(16, { extra: [pngChunk("prVt", hidden)] }), /PNG chunk the guard does not read/u],
+      ["a chunk the guard does not read", pngOf(16, { extra: [pngChunk("prVt", hidden)] }), /PNG prVt chunk, which the guard does not read/u],
+      ["a chunk tag outside letters, escaped in the refusal", pngOf(16, { extra: [pngChunk("p\x01(t", hidden)] }), /PNG p%01%28t chunk, which/u],
+      ["a colour chunk longer than PNG gives it", pngOf(16, { extra: [pngChunk("gAMA", hidden)] }), /PNG gAMA chunk of a length PNG does not allow for its colour type/u],
+      ["chromaticities longer than PNG gives them", pngOf(16, { extra: [pngChunk("cHRM", Buffer.concat([Buffer.alloc(32), hidden]))] }), /PNG cHRM chunk of a length/u],
+      ["a background colour of a palette image's length in an RGBA image", pngOf(16, { extra: [pngChunk("bKGD", Buffer.from([0]))] }), /PNG bKGD chunk of a length/u],
+      ["a palette in a greyscale image", pngOf(16, { colour: 0, extra: [pngChunk("PLTE", Buffer.alloc(3))] }), /PNG PLTE chunk of a length/u],
+      ["a palette longer than 256 entries", pngOf(16, { colour: 3, extra: [pngChunk("PLTE", Buffer.alloc(771))] }), /PNG PLTE chunk of a length/u],
+      ["transparency in an image with an alpha channel", pngOf(16, { extra: [pngChunk("tRNS", Buffer.alloc(2))] }), /PNG tRNS chunk of a length/u],
       ["data inside IEND", pngOf(16, { iend: hidden }), /data inside its PNG IEND chunk/u],
       ["data after IEND", Buffer.concat([pngOf(16), hidden]), /data after its PNG IEND chunk/u],
       ["an interlaced PNG", pngOf(16, { methods: [0, 0, 1] }), /interlaced/u],
