@@ -87,6 +87,8 @@ interface PngOptions {
   iend?: Buffer;
   /** The chunks between the signature and IDAT, in place of IHDR and extra. */
   head?: Buffer[];
+  /** IHDR's width and height, when they are not the square's (the rows stay the square's). */
+  size?: readonly [width: number, height: number];
   /** IHDR's bit depth, colour type (default 8-bit RGBA), and compression, filter and interlace bytes. */
   depth?: number;
   colour?: number;
@@ -103,8 +105,8 @@ const rowBytes = (pixels: number, depth = 8, colour = 6) => 1 + Math.ceil((pixel
 function pngOf(pixels: number, options: PngOptions = {}): Buffer {
   const [depth, colour] = [options.depth ?? 8, options.colour ?? 6];
   const header = Buffer.alloc(13);
-  header.writeUInt32BE(pixels, 0);
-  header.writeUInt32BE(pixels, 4);
+  header.writeUInt32BE(options.size?.[0] ?? pixels, 0);
+  header.writeUInt32BE(options.size?.[1] ?? pixels, 4);
   header.set([depth, colour, ...(options.methods ?? [0, 0, 0])], 8);
   const idat = options.idat === undefined ? deflateSync(options.rows ?? Buffer.alloc(pixels * rowBytes(pixels, depth, colour))) : options.idat;
   return Buffer.concat([
@@ -166,7 +168,7 @@ const ownFindings = (findings: ReturnType<typeof servedSurfaceFindings>, path: s
  * from a rule the policy does not make public. Taken at run time, so no term
  * is written here; never printed.
  */
-function privateTerm(accept: (term: string) => boolean): string {
+function privateTerm(accept: (term: string, found: (text: string) => boolean) => boolean): string {
   const rules = parseDenylist(bytes(DENYLIST_PATH)).rules;
   const publicRules = new Set((JSON.parse(text(POLICY_PATH)).public_rules as Array<{ rule: string }>).map((entry) => entry.rule));
   const content = PRIVATE_TEXT().toString("utf8");
@@ -176,13 +178,33 @@ function privateTerm(accept: (term: string) => boolean): string {
     const rule = rules.find((candidate) => candidate.id === hit.rule)!;
     const line = content.split("\n")[hit.line! - 1]!;
     for (const match of line.matchAll(new RegExp(rule.pattern.source, rule.pattern.flags.includes("g") ? rule.pattern.flags : `${rule.pattern.flags}g`))) {
-      if (found(match[0]) && accept(match[0])) return match[0];
+      if (found(match[0]) && accept(match[0], found)) return match[0];
     }
   }
   throw new Error("docs/THE-SEAT.md holds no private term this test can use");
 }
 /** An ASCII term of six or more characters that fits a PNG keyword. */
 const asciiTerm = () => privateTerm((term) => /^[\x20-\x7e]{6,79}$/u.test(term));
+/**
+ * An ASCII term with one character changed to one from U+0080 to U+00FF that
+ * the rules still find (º for o, say, which NFKC folds back) but no longer
+ * find once its Latin-1 bytes are read as UTF-8: only a Latin-1 reading of
+ * those bytes sees it.
+ */
+function latin1Term(): string {
+  let variant: string | undefined;
+  privateTerm((term, found) => {
+    if (!/^[\x20-\x7e]{6,79}$/u.test(term)) return false;
+    for (let at = 0; at < term.length && variant === undefined; at += 1) {
+      for (let code = 0x80; code <= 0xff && variant === undefined; code += 1) {
+        const candidate = `${term.slice(0, at)}${String.fromCharCode(code)}${term.slice(at + 1)}`;
+        if (found(candidate) && !found(Buffer.from(candidate, "latin1").toString("utf8"))) variant = candidate;
+      }
+    }
+    return variant !== undefined;
+  });
+  return variant!;
+}
 /** A term written only in characters above U+00FF, whose UTF-16 holds no NUL byte. */
 const wideTerm = () => privateTerm((term) => [...term].every((char) => char.codePointAt(0)! > 0xff));
 const utf16be = (value: string) => Buffer.from(value, "utf16le").swap16();
@@ -327,6 +349,7 @@ describe("served surface relational guard", () => {
       ["an iTXt keyword", pngChunk("iTXt", Buffer.concat([term, latin1("\0\0\0\0\0neutral")]))],
       ["an iTXt language tag", pngChunk("iTXt", Buffer.concat([latin1("Title\0\0\0"), term, latin1("\0\0neutral")]))],
       ["an iTXt translated keyword", pngChunk("iTXt", Buffer.concat([latin1("Title\0\0\0\0"), term, latin1("\0neutral")]))],
+      ["compressed iTXt text", pngChunk("iTXt", Buffer.concat([latin1("Title\0\x01\0\0\0"), deflateSync(term)]))],
       ["UTF-8 text behind a UTF-16 byte-order mark in zTXt", pngChunk("zTXt", Buffer.concat([latin1("Comment\0\0"), deflateSync(Buffer.concat([Buffer.from([0xff, 0xfe]), term]))]))],
       ["UTF-8 text behind a UTF-16 byte-order mark in tEXt", pngChunk("tEXt", Buffer.concat([latin1("Comment\0"), Buffer.from([0xfe, 0xff]), term]))],
       ["UTF-16 text with no NUL byte in tEXt", pngChunk("tEXt", Buffer.concat([latin1("Comment\0"), Buffer.from(wide, "utf16le")]))],
@@ -350,6 +373,22 @@ describe("served surface relational guard", () => {
     ];
     for (const [name, content] of cases) {
       const findings = ownFindings(servedSurfaceFindings([served(icon, icoOf([[64, pngOf(64, { rows: rowsHolding(64, content) })]]))], bytes(DENYLIST_PATH), bytes(POLICY_PATH)), icon);
+      expect({ name, unreadable: findings.filter((finding) => finding.rule === "served/unreadable-binary").length }).toEqual({ name, unreadable: 0 });
+      expect({ name, found: findings.some((finding) => finding.path === `${icon}!image-0` && finding.rule.startsWith("relational/")) }).toEqual({ name, found: true });
+    }
+  });
+
+  test("a term with a character above U+007F is found in an icon's pixel rows and text chunks", () => {
+    const icon = "apps/web/favicon.ico";
+    const [narrow, wide] = [latin1(latin1Term()), Buffer.from(wideTerm(), "utf8")];
+    const cases: Array<readonly [string, PngOptions]> = [
+      ["Latin-1 in the rows", { rows: rowsHolding(64, narrow) }],
+      ["Latin-1 in tEXt", { extra: [pngChunk("tEXt", Buffer.concat([latin1("Comment\0"), narrow]))] }],
+      ["UTF-8 in the rows", { rows: rowsHolding(64, wide) }],
+      ["UTF-8 in iTXt", { extra: [pngChunk("iTXt", Buffer.concat([latin1("Title\0\0\0\0\0"), wide]))] }],
+    ];
+    for (const [name, options] of cases) {
+      const findings = ownFindings(servedSurfaceFindings([served(icon, icoOf([[64, pngOf(64, options)]]))], bytes(DENYLIST_PATH), bytes(POLICY_PATH)), icon);
       expect({ name, unreadable: findings.filter((finding) => finding.rule === "served/unreadable-binary").length }).toEqual({ name, unreadable: 0 });
       expect({ name, found: findings.some((finding) => finding.path === `${icon}!image-0` && finding.rule.startsWith("relational/")) }).toEqual({ name, found: true });
     }
@@ -457,6 +496,9 @@ describe("served surface relational guard", () => {
       ["a PNG filter method other than 0", icoOf([[16, pngOf(16, { methods: [0, 1, 0] })]]), /image 0 is a PNG of an unknown compression or filter method/u],
       ["a bit depth its colour type does not allow", icoOf([[16, pngOf(16, { depth: 3, colour: 0 })]], { bitCounts: [0] }), /image 0 is a PNG of a bit depth/u],
       ["a PNG more than 256 pixels a side, listed as 0", icoOf([[256, pngOf(300)]]), /image 0 is a PNG larger than 256 pixels a side/u],
+      ["a PNG zero pixels wide", icoOf([[16, pngOf(16, { size: [0, 16] })]]), /image 0 is a PNG larger than 256 pixels a side, or empty/u],
+      ["a PNG zero pixels high", icoOf([[16, pngOf(16, { size: [16, 0] })]]), /image 0 is a PNG larger than 256 pixels a side, or empty/u],
+      ["a PNG of an unknown colour type", icoOf([[16, pngOf(16, { colour: 5, rows: blankRows })]]), /image 0 is a PNG of an unknown colour type/u],
       ["a PNG without IDAT", icoOf([[16, pngOf(16, { idat: null })]]), /image 0 has no PNG IDAT chunk/u],
       ["a second zlib stream after the pixel data", icoOf([[16, pngOf(16, { idat: streams(blankRows) })]]), /image 0 has bytes after the end of its PNG pixel data/u],
       ["a byte after the pixel data's zlib stream", icoOf([[16, pngOf(16, { idat: Buffer.concat([deflateSync(blankRows), Buffer.from([7])]) })]]), /image 0 has bytes after the end of its PNG pixel data/u],

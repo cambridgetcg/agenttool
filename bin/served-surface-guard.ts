@@ -30,25 +30,26 @@
  *     Each image must be a PNG, reported as <icon>!image-<n> and held
  *     stricter than a PNG file: non-interlaced, at most 256 pixels a side,
  *     only known chunks, each CRC right, each chunk's data (every IDAT
- *     chunk's among them) read on its own; every text field (keyword, language tag, translated
- *     keyword, text) free of NULs, compressed text one zlib stream that ends
- *     at its chunk's end; its IDAT data joined and inflated the same way to
- *     exactly the rows its IHDR implies; an empty IEND that ends it. The icon's bytes,
- *     its chunks' data, its text fields and its inflated pixel rows are
- *     read as Latin-1, UTF-8 and UTF-16 as well as for their strings. Any
- *     other image type in an icon is refused;
+ *     chunk's among them) read on its own; every text field (keyword,
+ *     language tag, translated keyword, text) free of NULs, compressed text
+ *     one zlib stream that ends at its chunk's end; its IDAT data joined and
+ *     inflated the same way to exactly the rows its IHDR implies; an empty
+ *     IEND that ends it. The icon's bytes, its chunks' data, its text fields
+ *     and its inflated pixel rows are read as Latin-1, UTF-8 and UTF-16 as
+ *     well as for their strings. Any other image type in an icon is refused;
  *   - the served paths and archive member names themselves.
  *
- * What the guard does not read as text: pixel values, palette entries and
- * colour-calibration chunks (PLTE, tRNS, gAMA, cHRM, sRGB, pHYs) are image
- * bytes. In a PNG file the pixel rows are not read at all, and the colour
- * chunks' bytes only with the rest of the file, where the chunk type just
- * before them can keep a word at their start from matching. In an icon the
- * inflated pixel rows and every chunk's data are read on their own,
- * but the guard does not decode them, so text held as numbers, spread across
- * pixels or palette entries, or hidden by PNG row filtering, is not seen. Within
- * what it reads, the guard catches accidents and plain text; it does not
- * claim to catch someone deliberately hiding data in pixel values.
+ * What the guard does not read as text: pixel values and the palette and
+ * transparency (PLTE, tRNS), colour-calibration (gAMA, cHRM, sRGB) and
+ * physical-size (pHYs) chunks are image bytes. In a PNG file the pixel rows
+ * are not read at all, and those chunks' bytes only with the rest of the
+ * file, where the chunk type just before them can keep a word at their start
+ * from matching. In an icon the inflated pixel rows and every chunk's data
+ * are read on their own, but the guard does not decode them, so text held as
+ * numbers, spread across pixels or palette entries, or hidden by PNG row
+ * filtering, is not seen. Within what it reads, the guard catches accidents
+ * and plain text; it does not claim to catch someone deliberately hiding
+ * data in pixel values.
  *
  * A binary in any other format (JPEG, bitmaps and ICO cursors among them), or a
  * malformed archive, image or icon, cannot be read, so it is refused. So is a
@@ -252,9 +253,10 @@ function tarEntries(bytes: Uint8Array): Array<{ name: string; link: string; data
 }
 
 /**
- * The chunks a PNG inside an icon may hold: its image, its colour information
- * and the text chunks the guard reads. Only IDAT and text chunks may repeat.
- * iCCP is left out: its profile is binary the guard reads only for strings.
+ * The chunks a PNG inside an icon may hold: its image, its colour information,
+ * its physical pixel size and the text chunks the guard reads. Only IDAT and
+ * text chunks may repeat. iCCP is left out: its profile is binary the guard
+ * reads only for strings.
  */
 const ICON_PNG_CHUNKS: ReadonlySet<string> = new Set(["IHDR", "PLTE", "tRNS", "sRGB", "gAMA", "cHRM", "pHYs", "IDAT", "IEND", "tEXt", "zTXt", "iTXt"]);
 const ICON_PNG_REPEATABLE: ReadonlySet<string> = new Set(["IDAT", "tEXt", "zTXt", "iTXt"]);
