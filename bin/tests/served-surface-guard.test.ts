@@ -366,6 +366,32 @@ describe("served surface relational guard", () => {
     }
   });
 
+  test("each IDAT chunk's data in an icon's PNG is read on its own, so plain text at a chunk's edge is found", () => {
+    const icon = "apps/web/favicon.ico";
+    const term = latin1(asciiTerm());
+    // Stored deflate blocks pass the rows' bytes through unchanged, so IDAT can be split anywhere among them.
+    const splitAt = (rows: Buffer, at: (stream: Buffer) => number) => {
+      const stream = deflateSync(rows, { level: 0 });
+      return [stream.subarray(0, at(stream)), stream.subarray(at(stream))] as const;
+    };
+    // The second chunk opens with the term: "IDAT" is just before it in the file, a letter in the rows.
+    const opening = splitAt(rowsHolding(64, Buffer.concat([latin1("x"), term])), (stream) => stream.indexOf(term));
+    // The first chunk closes with the term: a letter is just after it in the rows, its CRC in the file, made here to open with a word character.
+    const closingRows = (pixel: number) => rowsHolding(64, Buffer.concat([Buffer.from([pixel, 0]), term, latin1("x")]));
+    const closeAt = (stream: Buffer) => stream.indexOf(term) + term.length;
+    const pixel = Array.from({ length: 256 }, (_, value) => value).find((value) => {
+      const [first] = splitAt(closingRows(value), closeAt);
+      return /\w/u.test(String.fromCharCode(Bun.hash.crc32(Buffer.concat([latin1("IDAT"), first])) >>> 24));
+    })!;
+    const closing = splitAt(closingRows(pixel), closeAt);
+    for (const [name, [first, second]] of [["opening", opening], ["closing", closing]] as const) {
+      const png = pngOf(64, { extra: [pngChunk("IDAT", first)], idat: second });
+      const findings = ownFindings(servedSurfaceFindings([served(icon, icoOf([[64, png]]))], bytes(DENYLIST_PATH), bytes(POLICY_PATH)), icon);
+      expect({ name, unreadable: findings.filter((finding) => finding.rule === "served/unreadable-binary").length }).toEqual({ name, unreadable: 0 });
+      expect({ name, found: findings.some((finding) => finding.path === `${icon}!image-0` && finding.rule.startsWith("relational/")) }).toEqual({ name, found: true });
+    }
+  });
+
   test("an ICO that leaves a byte unaccounted for, or holds anything the guard cannot fully read, is refused", () => {
     const icon = "apps/web/favicon.ico";
     const [denylist, policy] = [bytes(DENYLIST_PATH), bytes(POLICY_PATH)];

@@ -29,8 +29,8 @@
  *     and images in directory order with no gap, overlap or trailing byte.
  *     Each image must be a PNG, reported as <icon>!image-<n> and held
  *     stricter than a PNG file: non-interlaced, at most 256 pixels a side,
- *     only known chunks, each CRC right, each chunk's data but IDAT's read
- *     on its own; every text field (keyword, language tag, translated
+ *     only known chunks, each CRC right, each chunk's data (every IDAT
+ *     chunk's among them) read on its own; every text field (keyword, language tag, translated
  *     keyword, text) free of NULs, compressed text one zlib stream that ends
  *     at its chunk's end; its IDAT data joined and inflated the same way to
  *     exactly the rows its IHDR implies; an empty IEND that ends it. The icon's bytes,
@@ -44,7 +44,7 @@
  * bytes. In a PNG file the pixel rows are not read at all, and the colour
  * chunks' bytes only with the rest of the file, where the chunk type just
  * before them can keep a word at their start from matching. In an icon the
- * inflated pixel rows and every other chunk's data are read on their own,
+ * inflated pixel rows and every chunk's data are read on their own,
  * but the guard does not decode them, so text held as numbers, spread across
  * pixels or palette entries, or hidden by PNG row filtering, is not seen. Within
  * what it reads, the guard catches accidents and plain text; it does not
@@ -343,7 +343,7 @@ function crc32(bytes: Uint8Array): number {
  * inflated) is read on its own, with textReadings. Inside an icon (`icon`
  * given) a PNG is held stricter than a PNG file: every chunk's CRC must be
  * right, only ICON_PNG_CHUNKS may appear, each at most once unless it may
- * repeat, and each chunk's data but IDAT's is read on its own; a keyword is 1 to 79 bytes, no field holds a NUL (so no 16- or
+ * repeat, and each chunk's data is read on its own; a keyword is 1 to 79 bytes, no field holds a NUL (so no 16- or
  * 32-bit text hides there), compressed text is one zlib stream (method 0)
  * that ends at the chunk's end, and an iTXt compression flag is 0 or 1; the
  * IDAT data is inflated and read (iconPixelRows); and IEND is empty.
@@ -382,9 +382,11 @@ function pngText(bytes: Uint8Array, icon?: IconPng): { text: string; end: number
     }
     offset += 12 + length;
     // Inside an icon every chunk's data is also read on its own, so the chunk
-    // type before it and the CRC after it cannot run into a word at its edges;
-    // IDAT's is read as the pixel rows it inflates to (iconPixelRows).
-    if (fail !== undefined && type !== "IDAT") texts.push(textReadings(data));
+    // type before it and the CRC after it cannot run into a word at its edges.
+    // That holds for each IDAT chunk too: a later one can open, and any one can
+    // close, inside a stored block, whose bytes reach the rows unchanged
+    // between pixel bytes the author picks.
+    if (fail !== undefined) texts.push(textReadings(data));
     const nul = data.indexOf(0);
     if (type === "IDAT") {
       idat.push(data);

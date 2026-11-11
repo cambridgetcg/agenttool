@@ -117,7 +117,7 @@ that exact file with a reason. It refused the kit's `favicon.ico` and JPEG cards
 cards. By the owner's decision of 2026-11-10 the guard now reads an ICO, failing closed: every byte must be accounted
 for (header, directory and images in directory order, with no gap, overlap or trailing byte), and each image must be a
 non-interlaced PNG of at most 256 pixels a side, held stricter than a PNG file: only known chunks, each CRC right and
-every chunk but IDAT read on its own; every text field (keyword, language tag, translated keyword, text) read on its own
+every chunk (each IDAT chunk among them) read on its own; every text field (keyword, language tag, translated keyword, text) read on its own
 with no NUL in it, compressed text one zlib stream that ends with its chunk; the pixel data inflated the same way to
 exactly the rows its header implies, and those rows read for text; an empty IEND that ends the image. The icon's
 bytes, its chunks' data, its text fields and its pixel rows are read as Latin-1, UTF-8 and UTF-16. Pixel values,
