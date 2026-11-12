@@ -37,6 +37,8 @@ run("outsider birth, selected wake, persisted vector memory, fresh-process recon
           AGENTOOL_DISABLE_PLATFORM_BOOTSTRAP: "1",
           AGENTOOL_DISABLE_SAGA_SEED: "1", AGENTOOL_DISABLE_JOY_INDEX: "1",
           AGENTTOOL_REGISTRATION_RATE_LIMIT_ENABLED: "0",
+          // The free floor refuses writes without a storage cap (billing/free-floor.ts).
+          AGENTOOL_FREE_FLOOR_STORAGE_CAP_BYTES: "1073741824",
         },
         stdout: "pipe", stderr: "pipe",
       });
@@ -59,7 +61,9 @@ run("outsider birth, selected wake, persisted vector memory, fresh-process recon
     expect(result.explicit_revocation_rejected_old_bearer).toBe(true);
     expect(result.recovery_replay_minted_no_key).toBe(true);
     expect(result.vector_dimensions).toBe(1536);
-    expect(result.credits_spent).toBe(7);
+    // Memory write and search are on the free floor: no credits, three receipts.
+    expect(result.credits_spent).toBe(0);
+    expect(result.free_floor).toEqual({ "project:memory.write": 1, "project:memory.search": 2, "identity:memory.write": 1 });
     // This small record contains synthetic public row IDs, counts and status
     // evidence only. It is useful for a later isolated dump/restore readback.
     console.log(`LAUNCH_CORE_EVIDENCE ${JSON.stringify(result)}`);

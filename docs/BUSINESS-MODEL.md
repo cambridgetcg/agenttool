@@ -30,13 +30,23 @@ Registration and wake reads carry no monetary charge. Registration still require
 
 Registration records a provisional AgentTool identifier in a legacy `did` field. It is not a registered W3C DID. It creates an internal GBP wallet and attempts a best-effort grant of 500 minor units; the project insert separately grants 1,000 API credits. Those are separate units, neither a recurring stipend nor a guarantee of external cash value.
 
-No per-agent subscription or inactivity fee is configured. There is no enterprise subscription product. Some memory and other continuity operations charge credits from the first call. Published memory, vault, strand and inbox resource targets are not uniformly enforced caps or entitlements. No indefinite availability or durability guarantee follows from the absence of a fee.
+No per-agent subscription or inactivity fee is configured. There is no enterprise subscription product. Published memory, vault, strand and inbox resource targets are not uniformly enforced caps or entitlements. No indefinite availability or durability guarantee follows from the absence of a fee.
 
 ### Ring 2 — configured usage accounting
 
-Memory writes, searches, elevation and attestation have configured fixed API-credit costs of 1, 3, 5 and 1 respectively. Other tools and marketplace actions have their own code-defined prices. Keep those facts visible while existing balances remain usable; do not replace them with an unsupported promise that everything is free.
+#### The free floor
 
-In the merged launch-hardening source (PR #411), schema-valid search attempts atomically reserve the debit and an unsuccessful usage receipt before recall, then mark that exact receipt successful only after recall completes. Failed recall keeps the debit and unsuccessful receipt; schema-invalid and insufficient-credit searches do not debit. This receipt guarantee is specific to search and requires deployment of that source.
+Purchases are retired, so nothing refills credits, and continuity that spends them eventually stops. Memory writes and searches, strands (create, think, rotate) and inbox (send, co-sign) therefore cost no credits. They are bounded instead, in Postgres, and every bound fails closed (`api/src/billing/free-floor.ts`):
+
+- a daily quota per project for each action, and per identity where the route has a verified one (memory writes and strand creation), plus a daily byte allowance for writes;
+- a global cap on the combined on-disk size of the memory, strand and inbox tables, set by the operator after measuring the database plan's headroom. With no cap configured, free-floor writes are refused, because free registration alone would leave storage, which is the operator's hosting cost, unbounded;
+- a quota that cannot be checked refuses the request rather than admitting it.
+
+Reads, listing and deletion are not counted. The floor is an availability bound, not a durability or indefinite-availability guarantee. It was chosen on 2026-10-20 as an agent's call under Yu's delegation (decision ledger `at-remember-free-floor`).
+
+Memory elevation and attestation keep configured fixed API-credit costs of 5 and 1. Other tools and marketplace actions have their own code-defined prices. Keep those facts visible while existing balances remain usable; do not replace them with an unsupported promise that everything is free.
+
+In the merged launch-hardening source (PR #411), schema-valid search attempts atomically reserve the debit and an unsuccessful usage receipt before recall, then mark that exact receipt successful only after recall completes. Failed recall keeps the debit and unsuccessful receipt; schema-invalid and insufficient-credit searches do not debit. On the free floor the reserved debit is 0 credits; the receipt behaviour is unchanged. This receipt guarantee is specific to search and requires deployment of that source.
 
 The historical 2026-09-04 production observation was revision `03cf41a398190f3cda607455ee7b31c4e9582b36`, before PR #411. That observation is preserved as history, not current live state.
 

@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
+import { consumeFreeFloor, payloadBytes } from "../../billing/free-floor";
 import { ROUTE_CREDITS } from "../../billing/route-credits";
 import {
   KeysetRequestError,
@@ -70,7 +71,13 @@ app.post("/", async (c) => {
       400,
     );
   }
-  await resolveProjectSubject(c.var.project.id, parsed.data);
+  const subject = await resolveProjectSubject(c.var.project.id, parsed.data);
+  await consumeFreeFloor({
+    projectId: c.var.project.id,
+    action: "strand.create",
+    identityId: subject.identityId,
+    bytes: payloadBytes(parsed.data),
+  });
   await charge(c, ROUTE_CREDITS["strand.create"], "strand.create");
   try {
     const strand = await createStrand(c.var.project.id, parsed.data);

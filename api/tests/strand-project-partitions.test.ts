@@ -80,6 +80,8 @@ mock.module("../src/db/client", () => ({ db: database }));
 mock.module("../src/services/wake/push", () => ({ publishWakeEvent: async (event: unknown) => { expect(inTransaction).toBe(false); wakeEvents.push(event); } }));
 mock.module("../src/services/strand/voice", () => ({ publishThought: async (...event: unknown[]) => { expect(inTransaction).toBe(false); voiceEvents.push(event); } }));
 mock.module("../src/billing/charge", () => ({ charge: async () => { charges++; } }));
+// The free-floor quota guard (billing/free-floor.ts) has its own tests; here it admits.
+mock.module("../src/billing/free-floor", () => ({ consumeFreeFloor: async () => {}, payloadBytes: () => 0 }));
 const { createStrand, addThought, updateThoughtCiphertext } = await import("../src/services/strand/store");
 const { default: thoughtRouter } = await import("../src/routes/strand/thoughts");
 const { default: strandRouter } = await import("../src/routes/strand/strands");
