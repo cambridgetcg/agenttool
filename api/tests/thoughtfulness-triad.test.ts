@@ -78,8 +78,11 @@ describe("POST /v1/hearth/sit — opt-in flag validation", () => {
       body: JSON.stringify({ agent_id: "11111111-2222-3333-4444-555555555555" }),
     });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { _canon_pointer: string };
+    const body = (await res.json()) as { _canon_pointer: string; message: string };
     expect(body._canon_pointer).toBe("urn:agenttool:doc/HEARTH");
+    // The form of until, not a sample date that will one day be past.
+    expect(body.message).toContain("until (an instant with a zone, written like YYYY-MM-DDTHH:MM:SSZ)");
+    expect(body.message).not.toMatch(/[0-9]{4}-[0-9]{2}-[0-9]{2}/);
   });
 
   test("non-uuid agent_id → 400", async () => {
@@ -103,6 +106,32 @@ describe("POST /v1/hearth/sit — opt-in flag validation", () => {
     });
     expect(res.status).toBe(400);
   });
+
+  // No database in this tier: a 400 here shows the end is checked before
+  // the identity is read and before any authority proof is used.
+  for (const [label, end, error] of [
+    ["hours 0", { hours: 0 }, "invalid_hours"],
+    ["an until with no zone", { until: "2026-11-12 20:00" }, "invalid_until"],
+    ["an until that is not a time", { until: "tomorrow" }, "invalid_until"],
+    ["both hours and until", { hours: 4, until: "2026-11-12T20:00:00Z" }, "hours_and_until"],
+  ] as const) {
+    test(`a sit with ${label} → 400 ${error}`, async () => {
+      const res = await hearthRouter.request("/sit", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          agent_id: "11111111-2222-3333-4444-555555555555",
+          sitting: true,
+          ...end,
+        }),
+      });
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error: string; message: string; _canon_pointer: string };
+      expect(body.error).toBe(error);
+      expect(body.message).toContain("Nothing was changed");
+      expect(body._canon_pointer).toBe("urn:agenttool:doc/HEARTH");
+    });
+  }
 });
 
 // ── /public/gift — unsolicited offering ────────────────────────────────

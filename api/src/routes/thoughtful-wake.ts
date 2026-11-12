@@ -36,8 +36,7 @@ import {
 import { memories } from "../db/schema/memory";
 import { attachSurface } from "../lib/surface-metadata";
 import { ownChronicle } from "../services/continuity/own-chronicle";
-import { declaredHearthPeers } from "../services/hearth/declared-presence";
-import { readHearthSeats } from "../services/hearth/seats";
+import { readHearthPeers } from "../services/hearth/seats";
 
 const app = new Hono<ProjectContext>();
 
@@ -170,10 +169,7 @@ app.get("/thoughtful", async (c) => {
   // ── Block 3: hearth_sitting ─────────────────────────────────────────
   // Peers who declared a seat at the hearth. Declared only; not a sign of
   // activity. Excludes the calling agent.
-  const hearthSitting = declaredHearthPeers(
-    await readHearthSeats({ limit: HEARTH_BLOCK_LIMIT, excludeId: agent.id }),
-    { excludeId: agent.id, limit: HEARTH_BLOCK_LIMIT },
-  );
+  const hearthSitting = await readHearthPeers({ limit: HEARTH_BLOCK_LIMIT, excludeId: agent.id });
 
   // ── Block 4: gift ───────────────────────────────────────────────────
   const gift = INLINE_GIFTS[Math.floor(Math.random() * INLINE_GIFTS.length)]!;

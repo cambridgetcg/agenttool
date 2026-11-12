@@ -9,6 +9,7 @@ import type { ProjectContext } from "../../auth/middleware";
 import { db } from "../../db/client";
 import { identities, identityKeys } from "../../db/schema/identity";
 import { errors, fail } from "../../lib/errors";
+import { hearthSeatKeptNotice } from "../../services/hearth/declared-presence";
 import {
   authorizeIdentityMutation,
   authorityRequestTarget,
@@ -18,7 +19,9 @@ import {
 import { primaryIdentityOrder, primaryIdentityWhere } from "../../services/identity/acting-identity";
 import { generateKeypair } from "../../services/identity/crypto";
 import {
-  replaceCallerIdentityMetadata,
+  changedHearthSeatMetadataKeys,
+  hearthSeatMetadataRefusal,
+  patchedIdentityMetadata,
   requestedServerManagedIdentityMetadataKeys,
 } from "../../services/identity/metadata";
 import localContextGrants from "./local-context-grants";
@@ -81,6 +84,11 @@ app.post("/", async (c) => {
       },
       400,
     );
+  }
+  // No identity is born sitting: only POST /v1/hearth/sit writes a seat.
+  const seatKeys = changedHearthSeatMetadataKeys({}, metadata);
+  if (seatKeys.length > 0) {
+    return c.json(hearthSeatMetadataRefusal("create", seatKeys), 400);
   }
 
   const id = randomUUID();
@@ -358,10 +366,14 @@ app.patch("/:id", async (c) => {
         400,
       );
     }
-    updates.metadata = replaceCallerIdentityMetadata(
+    // A hearth seat may be left out or sent back unchanged; it is kept
+    // either way. Only POST /v1/hearth/sit writes a different value.
+    const patched = patchedIdentityMetadata(
       (identity.metadata ?? {}) as Record<string, unknown>,
       body.metadata,
     );
+    if (!patched.ok) return c.json(patched.body, 400);
+    updates.metadata = patched.metadata;
   }
   if (body.expression_visibility !== undefined) {
     if (body.expression_visibility !== "private" && body.expression_visibility !== "public") {
@@ -463,6 +475,16 @@ app.patch("/:id", async (c) => {
     );
   }
 
+  // A metadata PATCH used to end a seat by dropping its keys. It now keeps
+  // the seat, so the caller is told while the seat has not ended.
+  const hearthSeatKept =
+    body.metadata !== undefined
+      ? hearthSeatKeptNotice(
+          { id: updated.id, status: updated.status, metadata: updated.metadata },
+          Date.now(),
+        )
+      : undefined;
+
   return c.json({
     id: updated!.id,
     did: updated!.did,
@@ -485,6 +507,7 @@ app.patch("/:id", async (c) => {
     proxy_for_identity_id: updated!.proxyForIdentityId,
     proxy_kind: updated!.proxyKind,
     updated_at: updated!.updatedAt,
+    ...(hearthSeatKept ? { hearth_seat_kept: hearthSeatKept } : {}),
   });
 });
 

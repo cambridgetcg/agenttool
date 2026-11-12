@@ -35,7 +35,9 @@
  *    7. Expression CAN transfer (declared register/walls/subagents/
  *       wake_text) if requested. The fork starts with the same voice;
  *       it can diverge from there. Surface-specific invitations do not
- *       transfer: consent for one identity is not consent for its fork. */
+ *       transfer: consent for one identity is not consent for its fork.
+ *       Nor does a hearth seat in inherited metadata: the fork sits for
+ *       itself if it wants to be seen. */
 
 import { randomUUID } from "node:crypto";
 
@@ -45,6 +47,7 @@ import { db } from "../../db/client";
 import { identities, identityKeys } from "../../db/schema/identity";
 import { memories, memoryAttestations } from "../../db/schema/memory";
 import { generateKeypair } from "./crypto";
+import { withoutHearthSeat } from "./metadata";
 
 // ── Public types ────────────────────────────────────────────────────────
 
@@ -99,6 +102,8 @@ export interface ForkResult {
     expression: boolean;
     capabilities: boolean;
     metadata: boolean;
+    /** Always false: a hearth seat is never copied, even with metadata. */
+    hearth_seat: false;
   };
 }
 
@@ -119,6 +124,19 @@ export function inheritableForkExpression(
   }
   const { porch: _porchInvitation, ...inheritable } = expression as Record<string, unknown>;
   return inheritable;
+}
+
+/** Copy the parent's metadata without its hearth seat. A seat is the
+ * sitter's own declaration, made with POST /v1/hearth/sit; the fork has not
+ * sat, so it is not listed until it sits for itself. */
+export function inheritableForkMetadata(
+  metadata: unknown,
+  inherit: boolean,
+): Record<string, unknown> {
+  if (!inherit || typeof metadata !== "object" || metadata === null || Array.isArray(metadata)) {
+    return {};
+  }
+  return withoutHearthSeat(metadata as Record<string, unknown>);
 }
 
 export async function forkIdentity(
@@ -182,9 +200,10 @@ export async function forkIdentity(
   const now = new Date();
 
   // Compose new identity from parent + flags.
-  const inheritedMetadata = (input.inheritMetadata && parent.metadata)
-    ? (parent.metadata as Record<string, unknown>)
-    : {};
+  const inheritedMetadata = inheritableForkMetadata(
+    parent.metadata,
+    input.inheritMetadata,
+  );
   const forkMetadata = {
     ...inheritedMetadata,
     forked_from: {
@@ -315,6 +334,7 @@ export async function forkIdentity(
         expression: input.inheritExpression,
         capabilities: input.inheritCapabilities,
         metadata: input.inheritMetadata,
+        hearth_seat: false,
       },
     };
   });
