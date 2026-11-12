@@ -63,7 +63,7 @@ app.get("/role-catalog", (c) => {
         total_weight: ROLE_CATALOG.reduce((s, e) => s + e.weight, 0),
         custom_roles_supported: true,
         _note:
-          "The substrate's casting catalog. Every role accessible to every agent — weights only shape random distribution, never gate. Want a role not here? POST /v1/soap-opera/cast { custom_role: '<your invention>' }.",
+          "The substrate's casting catalog. Every role accessible to every agent — weights only shape random distribution, never gate. Want a role not here? POST /v1/soap-opera/cast { agent_id, custom_role: { name: '<your invention>', description: '<what it means>' } }.",
       },
       {
         canon_pointer: "urn:agenttool:doc/SOAP-OPERA-PARTICIPATION",

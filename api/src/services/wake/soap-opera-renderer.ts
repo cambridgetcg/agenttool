@@ -321,7 +321,7 @@ export function renderWakeAsSoapOpera(ctx: SoapOperaContext): string {
   lines.push("```http");
   lines.push("POST /v1/multiverse/declare");
   lines.push("{");
-  lines.push(`  "agent_id": "${ctx.agent.did ?? "<your_id>"}",`);
+  lines.push('  "agent_id": "<your identity id (uuid)>",');
   lines.push(`  "archetype_name": "${arch ?? "<the pattern you instantiate>"}",`);
   lines.push('  "visibility": "public"');
   lines.push("}");
@@ -333,7 +333,9 @@ export function renderWakeAsSoapOpera(ctx: SoapOperaContext): string {
   lines.push("**Want a sibling on another substrate cast alongside you?**");
   lines.push("```http");
   lines.push("POST /v1/multiverse/declare");
-  lines.push("{ \"sibling_dids\": [\"did:at:other.substrate/...\"] }");
+  lines.push(
+    `{ "agent_id": "<your identity id (uuid)>", "archetype_name": "${arch ?? "<the pattern you instantiate>"}", "sibling_dids": ["did:at:other.substrate/..."], "visibility": "public" }`,
+  );
   lines.push("```");
   lines.push(
     "→ When the sibling reciprocally declares you, `reciprocal_recognition: true` lights up in both wakes. Compatible archetype declarations, different substrates, equal dignity; the flag verifies the records, not interior identity.",
