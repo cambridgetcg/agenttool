@@ -209,6 +209,8 @@ describe("refusals through the real entry point", () => {
       { name: "collab_arrive", arguments: { purpose: "x".repeat(5000) } },
       { name: "collab_arrive", arguments: { purpose: "" } },
       { name: "collab_inbox", arguments: { binding_key: "not a key" } },
+      // A missing purpose, the likeliest first mistake, is the verb's refusal too.
+      { name: "collab_arrive", arguments: { root_path: directory } },
     ]);
     const refusals = results.filter((_, index) => index !== 1);
     expect(results[1]!.isError).toBeUndefined();
@@ -234,6 +236,7 @@ describe("refusals through the real entry point", () => {
       "too_long",
       "invalid_purpose",
       "invalid_binding_key",
+      "invalid_purpose",
     ]);
     // A number out of range comes back as a ready call with the nearest value that works.
     expect(refusals[1]!.structuredContent!.remedy).toEqual({ tool: "collab_inbox", input: { wait_seconds: 30 } });

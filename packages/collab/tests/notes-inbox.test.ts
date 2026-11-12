@@ -753,4 +753,68 @@ describe("collab_inbox about, format note", () => {
     expect(view.advice.join(" ")).toContain("cannot be carried");
     expect(view.advice.join(" ")).toContain(posted.id);
   });
+
+  test("a first line cut at 200 characters never splits an emoji, in items or in the carried note", async () => {
+    const j = journal();
+    const me = j.start("me");
+    const peer = j.start("peer");
+    const server = j.serve(me);
+    await ok(server, "collab_inbox");
+    const body = `${"x".repeat(198)}\u{1F600}${"y".repeat(20)}\nsecond line`;
+    const posted = report(j.store, peer, "emoji", body, { to_session_id: me.session.id });
+    const lone = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+    const inbox = await ok(server, "collab_inbox");
+    expect(inbox.items[0].statement).toBe(`${"x".repeat(198)}…`);
+    const view = await ok(server, "collab_inbox", { about: posted.id, format: "note" });
+    expect(lone.test(view.root.statement)).toBe(false);
+    expect(view.note).toStartWith(`note: ${"x".repeat(198)}…`);
+    // A legacy carriage return is not part of the statement.
+    const crlf = report(j.store, peer, "crlf", "Line one\r\nline two", { to_session_id: me.session.id });
+    expect((await ok(server, "collab_inbox", { about: crlf.id })).root.statement).toBe("Line one");
+    // The summaries of what waits on you are cut the same way.
+    j.store.openProposalForSession({ ...peer.credential, idempotency_key: "p", question: body, criteria: "c", extent: "e" });
+    const waiting = (await ok(server, "collab_inbox")).waiting_on_you;
+    // JSON escapes a lone surrogate, so the cut shows here as \ud83d before the ellipsis.
+    const summaries = waiting.map((entry: any) => JSON.stringify(entry));
+    expect(summaries.some((text: string) => text.includes(`${"x".repeat(198)}…`))).toBe(true);
+  });
+
+  test("a failure after the thread's housekeeping never says nothing was written", async () => {
+    const j = journal();
+    const me = j.start("me");
+    const peer = j.start("peer");
+    const posted = report(j.store, peer, "r", "A plain report.", { to_session_id: me.session.id });
+    const thread = j.store.noteThreadForSession.bind(j.store);
+    (j.store as any).noteThreadForSession = (input: any) => {
+      const data = thread(input);
+      Object.defineProperty(data, "truncated", { get: () => { throw new CollabError("event_not_found", "No event at sequence 9"); } });
+      return data;
+    };
+    const failed = await call(j.serve(me), "collab_inbox", { about: posted.id, format: "note" });
+    expect(failed.structuredContent).toMatchObject({ code: "event_not_found", after_housekeeping: true });
+    expect(failed.structuredContent.remedy.say).toContain("had already recorded its housekeeping");
+    expect(failed.structuredContent.remedy.say).not.toContain("Nothing was written");
+  });
+});
+
+describe("ready calls keep the way the caller reads", () => {
+  test("more keeps include and limit, and a wait with about says it did not wait", async () => {
+    const j = journal();
+    const me = j.start("me");
+    const peer = j.start("peer");
+    const server = j.serve(me);
+    await ok(server, "collab_inbox");
+    for (let index = 0; index < 4; index += 1) report(j.store, peer, `n${index}`, `Noise ${index}.`);
+    const cut = await ok(server, "collab_inbox", { include: "all", limit: 2 });
+    expect(cut.more).toBe(true);
+    expect(cut.next).toEqual({ tool: "collab_inbox", input: { include: "all", limit: 2 } });
+    const rest = await ok(server, "collab_inbox", cut.next.input);
+    expect(rest.items.map((item: any) => item.statement)).toEqual(["Noise 2.", "Noise 3."]);
+    expect(rest.next).toEqual({ tool: "collab_inbox", input: { wait_seconds: 30, include: "all", limit: 2 } });
+    const posted = report(j.store, peer, "r", "A thread.");
+    const started = performance.now();
+    const view = await ok(server, "collab_inbox", { about: posted.id, wait_seconds: 3 });
+    expect(performance.now() - started).toBeLessThan(2_000);
+    expect(view.advice.join(" ")).toContain("did not wait");
+  });
 });

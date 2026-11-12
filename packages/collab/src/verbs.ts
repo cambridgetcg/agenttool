@@ -591,6 +591,9 @@ export function notArrived(slotKey: string, defaultBinding: NoteBinding | null):
     });
   }
   const parent = defaultBinding?.handle.session;
+  // The default name is suggested only when collab_arrive would take it; a
+  // longer one is left out, and that call then asks for a name.
+  const name = parent ? `${parent.actor}/${slotKey}` : "";
   return new CollabError(
     "not_arrived",
     `The slot named by binding_key ${slotKey} has no session yet; arrive on it first`,
@@ -598,7 +601,7 @@ export function notArrived(slotKey: string, defaultBinding: NoteBinding | null):
       remedy: parent
         ? {
           tool: "collab_arrive",
-          input: { purpose: "…", binding_key: slotKey, name: `${parent.actor}/${slotKey}`, parent: parent.id },
+          input: { purpose: "…", binding_key: slotKey, ...(name.length <= NAME_MAX ? { name } : {}), parent: parent.id },
         }
         : { tool: "collab_arrive", input: { purpose: "…" } },
     },
@@ -690,7 +693,8 @@ function durationUntil(at: string, observedAt: string): string {
 }
 
 export function statementOf(text: string): string {
-  const line = text.split("\n")[0] ?? "";
+  // A legacy body may end its first line in a carriage return; it is not part of the statement.
+  const line = (text.split("\n")[0] ?? "").replace(/\r$/, "");
   if (line.length <= NOTE_STATEMENT_MAX) return line;
   // Cut between characters, never inside one: half of an emoji would make
   // the note unrenderable, and a verb renders after deciding what to write.
@@ -704,7 +708,8 @@ export function statementOf(text: string): string {
 // collab_arrive (spec 5.1)
 
 export interface ArriveInput {
-  purpose: string;
+  /** Required; checked here, so a missing one is refused with a remedy. */
+  purpose?: string;
   name?: string;
   model?: string;
   root_path?: string;
@@ -1698,7 +1703,7 @@ function validInboxInput(ctx: NoteVerbContext, input: InboxInput) {
 export async function inboxVerb(ctx: NoteVerbContext, input: InboxInput): Promise<Record<string, unknown>> {
   const { binding, credential } = requireCredential(ctx);
   const { waitSeconds, limit, include, format, about } = validInboxInput(ctx, input);
-  if (about !== null) return aboutView(ctx, binding, about, format);
+  if (about !== null) return aboutView(ctx, binding, about, format, waitSeconds);
   // A wait takes its place in the endpoint's one budget before anything is
   // written: refused after the first pass, the call would have moved the
   // mark past what it counted and returned none of it.
@@ -1736,7 +1741,8 @@ export async function inboxVerb(ctx: NoteVerbContext, input: InboxInput): Promis
         waited = { seconds: seconds(), ended_by: "error", code: waitError.code, message: waitError.message };
       }
     }
-    return inboxResult(ctx, passes, format, waited, waitError);
+    const paging = { ...(include === "all" ? { include } : {}), ...(input.limit !== undefined ? { limit } : {}) };
+    return afterThreadRead(() => inboxResult(ctx, passes, format, waited, waitError, paging));
   } finally {
     if (waits) ctx.waits.active -= 1;
   }
@@ -1749,6 +1755,8 @@ function inboxResult(
   format: "json" | "note",
   waited: Record<string, unknown> | null,
   waitError: CollabError | null = null,
+  /** include and limit as the caller sent them, so a ready call to read on keeps reading the same way. */
+  paging: Record<string, unknown> = {},
 ): Record<string, unknown> {
   const data = passes.at(-1)!;
   const byId = new Map(data.sessions.map((view) => [view.id, view]));
@@ -1775,8 +1783,8 @@ function inboxResult(
     : about
       ? withSlot(ctx, { tool: "collab_inbox", input: { about } })
       : data.more
-        ? withSlot(ctx, { tool: "collab_inbox", input: {} })
-        : withSlot(ctx, { tool: "collab_inbox", input: { wait_seconds: WAIT_MAX_SECONDS } });
+        ? withSlot(ctx, { tool: "collab_inbox", input: { ...paging } })
+        : withSlot(ctx, { tool: "collab_inbox", input: { wait_seconds: WAIT_MAX_SECONDS, ...paging } });
   const initialisedFrom = passes.map((pass) => pass.mark.initialised_from).find((value) => value) ?? null;
   return {
     ok: true,
@@ -1900,14 +1908,43 @@ function resolveAbout(ctx: NoteVerbContext, workspaceId: string, value: string):
   throw new CollabError("ref_not_found", `No report or task in this workspace has the id ${text}`, { value: text });
 }
 
-function aboutView(ctx: NoteVerbContext, binding: NoteBinding, about: string, format: "json" | "note"): Record<string, unknown> {
+function aboutView(
+  ctx: NoteVerbContext,
+  binding: NoteBinding,
+  about: string,
+  format: "json" | "note",
+  waitSeconds = 0,
+): Record<string, unknown> {
   const credential = binding.handle.credential;
   const workspaceId = binding.handle.workspace.id;
   const { kind, id } = resolveAbout(ctx, workspaceId, about);
   const thread = ctx.store.noteThreadForSession({ ...credential, kind, id });
+  // The thread call has recorded its housekeeping, so a refusal from here on
+  // must never say that nothing was written.
+  return afterThreadRead(() => composeAboutView(ctx, thread, format, waitSeconds));
+}
+
+function afterThreadRead<T>(compose: () => T): T {
+  try {
+    return compose();
+  } catch (error) {
+    if (!(error instanceof CollabError) || error.details.after_housekeeping !== undefined) throw error;
+    throw new CollabError(error.code, error.message, { ...error.details, after_housekeeping: true });
+  }
+}
+
+function composeAboutView(
+  ctx: NoteVerbContext,
+  thread: NoteThreadData,
+  format: "json" | "note",
+  waitSeconds: number,
+): Record<string, unknown> {
   const byId = new Map(thread.sessions.map((view) => [view.id, view]));
   const me = thread.session.id;
   const advice: string[] = [];
+  if (waitSeconds > 0) {
+    advice.push("wait_seconds applies to your inbox, not to a thread view, so this call did not wait; leave about out to wait for new items.");
+  }
   if (thread.mark.clamped) advice.push(MARK_CLAMPED_ADVICE);
   if (thread.truncated) advice.push(`This thread lists its first ${thread.answers.length} answers only.`);
   const recheck = evidenceRechecker(ctx.store);
@@ -1929,9 +1966,17 @@ function aboutView(ctx: NoteVerbContext, binding: NoteBinding, about: string, fo
     } catch (error) {
       // The reader asked for a view; a root the carrier must refuse leaves
       // the view whole and says what cannot travel and what to carry instead.
-      if (!(error instanceof CollabError) || error.code !== "not_carriable") throw error;
-      const field = typeof error.details.field === "string" ? error.details.field : "statement";
+      if (!(error instanceof CollabError)) throw error;
       const rootId = thread.kind === "task" ? thread.task!.id : thread.root!.report!.id;
+      if (error.code !== "not_carriable") {
+        // Text a note cannot hold (stored by a legacy tool, say): the view
+        // stands, and the thread travels by its id.
+        result.note = null;
+        result.not_carried = ["note (cannot be written as a note)"];
+        advice.push(`This thread cannot be carried as a note (${error.code}: ${error.message}); carry its full id (${rootId}) instead.`);
+        return result;
+      }
+      const field = typeof error.details.field === "string" ? error.details.field : "statement";
       result.note = null;
       result.not_carried = [field === "statement" ? "statement (local detail)" : `${field} (short handle)`];
       advice.push(field === "statement"

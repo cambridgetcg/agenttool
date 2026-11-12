@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import { CollabStore } from "../src/store.js";
+import { writeSessionCredentialFile } from "../src/session-file.js";
 import { exactRef, handleOf, NOTE_AUTHORISES, NOTE_CARD, NOTE_CAPABILITIES } from "../src/verbs.js";
 import { COLLAB_PACKAGE_VERSION } from "../src/version.js";
 
@@ -498,7 +499,116 @@ describe("collab_arrive on a named slot", () => {
   });
 });
 
+describe("collab_arrive names a parent as any id is named", () => {
+  test("by display name or session# handle; an ambiguous name is refused with its candidates", async () => {
+    const j = journal();
+    const server = j.server();
+    const lead = await ok(server, "collab_arrive", { purpose: "lead", root_path: j.root, name: "lead" });
+    const leadId = lead.you.session as string;
+    const byName = await ok(server, "collab_arrive", { purpose: "c1", binding_key: "k1", parent: "lead" });
+    expect(byName.you.voice).toBe(leadId);
+    expect(j.store.consentVoiceOf(byName.you.session)).toBe(leadId);
+    expect(lead.ids.session_handle).toBe(handleOf("session", leadId));
+    const byHandle = await ok(server, "collab_arrive", { purpose: "c2", binding_key: "k2", parent: lead.ids.session_handle, name: "lead" });
+    expect(byHandle.you.voice).toBe(leadId);
+    // Two sessions held here are now named lead: nothing is routed by guess.
+    const before = j.events().length;
+    const ambiguous = await call(server, "collab_arrive", { purpose: "c3", binding_key: "k3", parent: "lead" });
+    expect(ambiguous.isError).toBe(true);
+    expect(ambiguous.structuredContent.code).toBe("ambiguous_session");
+    expect(ambiguous.structuredContent.candidates.map((candidate: any) => candidate.session).sort())
+      .toEqual([leadId, byHandle.you.session].sort());
+    expect(j.events().length).toBe(before);
+  });
+});
+
+describe("the arrive brief's values", () => {
+  test("open proposals, challenges, reviews and a shared seat are stated, not only counted", async () => {
+    const j = journal();
+    const me = j.store.startSession({ root_path: j.root, actor: "me", seat_ref: "claude-code:seat-1" });
+    const twin = j.store.startSession({ root_path: j.root, actor: "twin", seat_ref: "claude-code:seat-1" });
+    const peer = j.store.startSession({ root_path: j.root, actor: "peer" });
+    const proposal = j.store.openProposalForSession({
+      ...peer.credential, idempotency_key: "p", question: "Proceed with the refactor?\nmore", criteria: "c", extent: "e",
+    });
+    const claim = j.store.appendReportForSession({ ...me.credential, idempotency_key: "m", kind: "observation", body: "My claim." });
+    const onClaim = j.store.appendReportForSession({
+      ...peer.credential, idempotency_key: "ch", kind: "inference", relation: "challenges", target_report_id: claim.id, body: "No.",
+    });
+    const onProposal = j.store.appendReportForSession({
+      ...peer.credential, idempotency_key: "chp", kind: "inference", relation: "challenges", target_report_id: proposal.proposal.id, body: "Not yet.",
+    });
+    const task = j.store.createTaskForSession({
+      ...me.credential, idempotency_key: "t", title: "Mine", work_mode: "edit", completion_policy: "accepted", path_scopes: ["a"],
+    });
+    const claimed = j.store.claimTaskForSession({ ...me.credential, idempotency_key: "c", task_id: task.id, expected_version: task.version });
+    const completed = j.store.completeTaskForSession({
+      ...me.credential, idempotency_key: "d", task_id: claimed.id, lease_id: claimed.lease_id!, expected_version: claimed.version, summary: "Done.",
+    });
+    j.advance(5 * 60_000);
+    const serve = (handle: typeof me) => buildCollabMcpServer(j.store, {
+      environment: {},
+      resumed_session: { handle, credential_file: writeSessionCredentialFile(j.store.defaultSessionCredentialPath(handle.session.id), handle.credential) },
+    }) as any;
+    const brief = await ok(serve(me), "collab_arrive", { purpose: "look" });
+    expect(brief.here.find((entry: any) => entry.session === twin.session.id)).toMatchObject({ name: "twin", same_seat_as_you: true, last_seen_minutes: 5 });
+    expect(brief.here.find((entry: any) => entry.session === peer.session.id)).toMatchObject({ name: "peer", same_seat_as_you: false });
+    expect(brief.open.proposals).toEqual([{
+      id: proposal.proposal.id,
+      handle: handleOf("proposal", proposal.proposal.id),
+      question: "Proceed with the refactor?",
+      position: "challenged",
+      closes_in: "5h 55m",
+      your_voice_awaited: true,
+      person: "awaiting",
+    }]);
+    expect(brief.open.challenges).toContainEqual({
+      id: onProposal.id,
+      handle: handleOf("report", onProposal.id),
+      on: handleOf("proposal", proposal.proposal.id),
+      on_id: proposal.proposal.id,
+      by: "peer",
+      standing: true,
+    });
+    expect(brief.open.challenges).toContainEqual({
+      id: onClaim.id,
+      handle: handleOf("report", onClaim.id),
+      on: handleOf("report", claim.id),
+      on_id: claim.id,
+      by: "peer",
+      standing: true,
+    });
+    const review = {
+      task: handleOf("task", task.id),
+      id: task.id,
+      title: "Mine",
+      by: "me",
+      completion: { id: completed.completion_report_id, handle: handleOf("report", completed.completion_report_id!) },
+    };
+    // Your own completion is not yours to review; another session may review it.
+    expect(brief.open.reviews_wanted).toEqual([{ ...review, you_may_review: false }]);
+    const peerBrief = await ok(serve(peer), "collab_arrive", { purpose: "look" });
+    expect(peerBrief.open.reviews_wanted).toEqual([{ ...review, you_may_review: true }]);
+    expect(peerBrief.open.proposals[0].your_voice_awaited).toBe(false);
+  });
+});
+
 describe("not_arrived", () => {
+  test("on a named slot whose default name would be too long, the ready call leaves the name out", async () => {
+    const j = journal();
+    const server = j.server();
+    const lead = await ok(server, "collab_arrive", { purpose: "lead", root_path: j.root, name: "n".repeat(199) });
+    const named = await call(server, "collab_inbox", { binding_key: "kk" });
+    expect(named.structuredContent.code).toBe("not_arrived");
+    expect(named.structuredContent.remedy).toEqual({
+      tool: "collab_arrive",
+      input: { purpose: "…", binding_key: "kk", parent: lead.you.session },
+    });
+    // Sent as given, that call asks for the one field it needs.
+    const followed = await call(server, "collab_arrive", named.structuredContent.remedy.input);
+    expect(followed.structuredContent).toMatchObject({ code: "too_long", field: "name" });
+  });
+
   test("other verbs on an unbound slot say how to arrive; legacy tools keep their refusal", async () => {
     const j = journal();
     const server = j.server();

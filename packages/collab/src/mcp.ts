@@ -311,8 +311,10 @@ export function buildCollabMcpServer(
         "shares that parent's voice. It never moves the legacy cursor, and never resumes or adopts another process's session.",
       annotations: localMutation,
       inputSchema: {
-        purpose: z.string()
-          .describe("What you are here to do, in one line of at most 200 characters. Self-declared; revisable."),
+        // Required, but checked by the verb: a missing purpose, the likeliest
+        // first mistake, then gets invalid_purpose with a remedy, not the SDK's text.
+        purpose: z.string().optional()
+          .describe("Required. What you are here to do, in one line of at most 200 characters. Self-declared; revisable."),
         name: z.string().optional()
           .describe("Display name, at most 200 characters. Default: the verified Claude Code name, else <host>-<6 hex of the session id>; a named slot defaults to <parent name>/<binding_key>."),
         model: z.string().optional()

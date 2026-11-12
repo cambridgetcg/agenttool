@@ -10525,8 +10525,11 @@ function uuidPrefix(hex: string): string {
 }
 
 function firstLine(text: string): string {
-  const line = text.split("\n")[0] ?? "";
-  return line.length > 200 ? `${line.slice(0, 199)}…` : line;
+  const line = (text.split("\n")[0] ?? "").replace(/\r$/, "");
+  if (line.length <= 200) return line;
+  // Cut between characters: half of an emoji makes the summary unrenderable as a note.
+  const end = /[\uD800-\uDBFF]$/.test(line.slice(0, 199)) ? 198 : 199;
+  return `${line.slice(0, end)}…`;
 }
 
 const MAX_INBOX_SCAN = 500;

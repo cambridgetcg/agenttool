@@ -37843,9 +37843,12 @@ function uuidPrefix(hex3) {
   return out;
 }
 function firstLine(text) {
-  const line = text.split(`
-`)[0] ?? "";
-  return line.length > 200 ? `${line.slice(0, 199)}\u2026` : line;
+  const line = (text.split(`
+`)[0] ?? "").replace(/\r$/, "");
+  if (line.length <= 200)
+    return line;
+  const end = /[\uD800-\uDBFF]$/.test(line.slice(0, 199)) ? 198 : 199;
+  return `${line.slice(0, end)}\u2026`;
 }
 var MAX_INBOX_SCAN = 500;
 var MAX_INBOX_PROPOSALS = 50;
@@ -38432,10 +38435,11 @@ function notArrived(slotKey, defaultBinding) {
     });
   }
   const parent = defaultBinding?.handle.session;
+  const name = parent ? `${parent.actor}/${slotKey}` : "";
   return new CollabError("not_arrived", `The slot named by binding_key ${slotKey} has no session yet; arrive on it first`, {
     remedy: parent ? {
       tool: "collab_arrive",
-      input: { purpose: "\u2026", binding_key: slotKey, name: `${parent.actor}/${slotKey}`, parent: parent.id }
+      input: { purpose: "\u2026", binding_key: slotKey, ...name.length <= NAME_MAX ? { name } : {}, parent: parent.id }
     } : { tool: "collab_arrive", input: { purpose: "\u2026" } }
   });
 }
@@ -38509,8 +38513,8 @@ function durationUntil(at, observedAt) {
   return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
 }
 function statementOf(text) {
-  const line = text.split(`
-`)[0] ?? "";
+  const line = (text.split(`
+`)[0] ?? "").replace(/\r$/, "");
   if (line.length <= NOTE_STATEMENT_MAX)
     return line;
   let end = NOTE_STATEMENT_MAX - 1;
@@ -39289,7 +39293,7 @@ async function inboxVerb(ctx, input) {
   const { binding, credential } = requireCredential(ctx);
   const { waitSeconds, limit, include, format, about } = validInboxInput(ctx, input);
   if (about !== null)
-    return aboutView(ctx, binding, about, format);
+    return aboutView(ctx, binding, about, format, waitSeconds);
   const waits = waitSeconds > 0;
   if (waits && ctx.waits.active >= ctx.waits.max) {
     throw new CollabError("too_many_waits", `At most ${ctx.waits.max} waits may run per endpoint`);
@@ -39319,13 +39323,14 @@ async function inboxVerb(ctx, input) {
         waited = { seconds: seconds(), ended_by: "error", code: waitError.code, message: waitError.message };
       }
     }
-    return inboxResult(ctx, passes, format, waited, waitError);
+    const paging = { ...include === "all" ? { include } : {}, ...input.limit !== undefined ? { limit } : {} };
+    return afterThreadRead(() => inboxResult(ctx, passes, format, waited, waitError, paging));
   } finally {
     if (waits)
       ctx.waits.active -= 1;
   }
 }
-function inboxResult(ctx, passes, format, waited, waitError = null) {
+function inboxResult(ctx, passes, format, waited, waitError = null, paging = {}) {
   const data = passes.at(-1);
   const byId = new Map(data.sessions.map((view) => [view.id, view]));
   const me = data.session.id;
@@ -39342,7 +39347,7 @@ function inboxResult(ctx, passes, format, waited, waitError = null) {
   }
   const firstForMe = entries.find((entry) => entry.for_me);
   const about = firstForMe ? entryRef(firstForMe) : null;
-  const next = waitError ? withSlot(ctx, noteRemedyOf(waitError)) : about ? withSlot(ctx, { tool: "collab_inbox", input: { about } }) : data.more ? withSlot(ctx, { tool: "collab_inbox", input: {} }) : withSlot(ctx, { tool: "collab_inbox", input: { wait_seconds: WAIT_MAX_SECONDS } });
+  const next = waitError ? withSlot(ctx, noteRemedyOf(waitError)) : about ? withSlot(ctx, { tool: "collab_inbox", input: { about } }) : data.more ? withSlot(ctx, { tool: "collab_inbox", input: { ...paging } }) : withSlot(ctx, { tool: "collab_inbox", input: { wait_seconds: WAIT_MAX_SECONDS, ...paging } });
   const initialisedFrom = passes.map((pass) => pass.mark.initialised_from).find((value) => value) ?? null;
   return {
     ok: true,
@@ -39449,14 +39454,29 @@ function resolveAbout(ctx, workspaceId, value) {
   }
   throw new CollabError("ref_not_found", `No report or task in this workspace has the id ${text}`, { value: text });
 }
-function aboutView(ctx, binding, about, format) {
+function aboutView(ctx, binding, about, format, waitSeconds = 0) {
   const credential = binding.handle.credential;
   const workspaceId = binding.handle.workspace.id;
   const { kind, id } = resolveAbout(ctx, workspaceId, about);
   const thread = ctx.store.noteThreadForSession({ ...credential, kind, id });
+  return afterThreadRead(() => composeAboutView(ctx, thread, format, waitSeconds));
+}
+function afterThreadRead(compose) {
+  try {
+    return compose();
+  } catch (error51) {
+    if (!(error51 instanceof CollabError) || error51.details.after_housekeeping !== undefined)
+      throw error51;
+    throw new CollabError(error51.code, error51.message, { ...error51.details, after_housekeeping: true });
+  }
+}
+function composeAboutView(ctx, thread, format, waitSeconds) {
   const byId = new Map(thread.sessions.map((view2) => [view2.id, view2]));
   const me = thread.session.id;
   const advice = [];
+  if (waitSeconds > 0) {
+    advice.push("wait_seconds applies to your inbox, not to a thread view, so this call did not wait; leave about out to wait for new items.");
+  }
   if (thread.mark.clamped)
     advice.push(MARK_CLAMPED_ADVICE);
   if (thread.truncated)
@@ -39477,10 +39497,16 @@ function aboutView(ctx, binding, about, format) {
       result.note = carried.text;
       result.not_carried = carried.not_carried;
     } catch (error51) {
-      if (!(error51 instanceof CollabError) || error51.code !== "not_carriable")
+      if (!(error51 instanceof CollabError))
         throw error51;
-      const field = typeof error51.details.field === "string" ? error51.details.field : "statement";
       const rootId = thread.kind === "task" ? thread.task.id : thread.root.report.id;
+      if (error51.code !== "not_carriable") {
+        result.note = null;
+        result.not_carried = ["note (cannot be written as a note)"];
+        advice.push(`This thread cannot be carried as a note (${error51.code}: ${error51.message}); carry its full id (${rootId}) instead.`);
+        return result;
+      }
+      const field = typeof error51.details.field === "string" ? error51.details.field : "statement";
       result.note = null;
       result.not_carried = [field === "statement" ? "statement (local detail)" : `${field} (short handle)`];
       advice.push(field === "statement" ? `This thread's statement names a local detail, so it cannot be carried as a note; carry its full id (${rootId}) instead, or ask its author to restate it.` : `This thread's ${field} is a short handle, so it cannot be carried as a note; carry its full id (${rootId}) instead.`);
@@ -42668,7 +42694,7 @@ Legacy session tools: ${legacyInstructions}`
     description: "Start your coordination session on this slot, or, when it already has one, see who you are, who is here, " + "what is open and what waits on you. On a slot that already has a session it writes nothing unless " + "revise_purpose is true. With binding_key it starts a named child of a session this MCP process holds, which " + "shares that parent's voice. It never moves the legacy cursor, and never resumes or adopts another process's session.",
     annotations: localMutation,
     inputSchema: {
-      purpose: exports_external.string().describe("What you are here to do, in one line of at most 200 characters. Self-declared; revisable."),
+      purpose: exports_external.string().optional().describe("Required. What you are here to do, in one line of at most 200 characters. Self-declared; revisable."),
       name: exports_external.string().optional().describe("Display name, at most 200 characters. Default: the verified Claude Code name, else <host>-<6 hex of the session id>; a named slot defaults to <parent name>/<binding_key>."),
       model: exports_external.string().optional().describe("Your model lineage, at most 200 characters, for example claude-opus-5.5. Self-declared; shown, never counted."),
       root_path: exports_external.string().optional().describe("Your repository root. Default: this MCP server's working directory when it is in a git worktree outside the collab package (otherwise the call is refused and asks for root_path); a named slot defaults to the parent's worktree."),

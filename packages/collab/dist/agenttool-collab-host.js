@@ -8236,9 +8236,12 @@ function uuidPrefix(hex) {
   return out;
 }
 function firstLine(text) {
-  const line = text.split(`
-`)[0] ?? "";
-  return line.length > 200 ? `${line.slice(0, 199)}\u2026` : line;
+  const line = (text.split(`
+`)[0] ?? "").replace(/\r$/, "");
+  if (line.length <= 200)
+    return line;
+  const end = /[\uD800-\uDBFF]$/.test(line.slice(0, 199)) ? 198 : 199;
+  return `${line.slice(0, end)}\u2026`;
 }
 var MAX_INBOX_SCAN = 500;
 var MAX_INBOX_PROPOSALS = 50;
