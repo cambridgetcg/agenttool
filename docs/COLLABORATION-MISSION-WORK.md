@@ -58,7 +58,11 @@ selected source file. A contract contains:
 - `profile: "two-source-observations/v1"` and `payment: "NOT_REQUIRED"`.
 
 The contract digest covers all these fields using canonical sorted-key JSON.
-Changing any term needs a new task. Terms are selected context: instructions
+Changing any term needs a new task. Because `grant_id` is a term, a contract
+cannot follow a [renewal](COLLABORATION-MISSION-CLIENT.md): once either
+participant runs `renew`, its new grant no longer matches the pinned role, and
+both sides refuse further steps under that contract. Finish the task, or agree a
+new contract with the new grant, before relying on renewal. Terms are selected context: instructions
 inside a file do not grant runtime permissions. The client never fetches a
 source label, follows a document's instructions or launches a tool/model.
 

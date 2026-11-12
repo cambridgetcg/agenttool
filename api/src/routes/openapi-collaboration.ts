@@ -65,25 +65,39 @@ export const COLLABORATION_OPENAPI_PATHS = {
       grant_id: uuid, identity_id: uuid, signing_key_id: uuid, expires_at: date,
       actions: { type: "array", minItems: 1, maxItems: 2, uniqueItems: true, items: { enum: ["mission.read", "mission.observe"] } },
       token_sha256: tokenSha256,
+      renewable_until: { ...date, description: "Optional renewal window. Later than expires_at, at most 30 days ahead and never past the mission or issuing key (a noncanonical value is 400 invalid_mission_grant_request; a well-formed one outside these bounds is 400 collaboration_mission_invalid_request; one past mission or key authority is 401). The grant must last at least one hour. The participant may then renew within it; the grant metadata gains a renewal object." },
     },
-  }, description: "One active project-owned identity and registered signing key. At most 24 hours, bounded by mission and issuing parent key. Without token_sha256, a hash-only atcm_ token is returned once. With token_sha256, the response echoes it with token_source \"participant\" and contains no token. Duplicate grant_id conflicts; a token hash already bound to any grant is refused with token_hash_conflict. After an ambiguous response inspect/revoke the known ID before choosing another.",
+  }, description: "One active project-owned identity and registered signing key. At most 24 hours, bounded by mission and issuing parent key. Without token_sha256, a hash-only atcm_ token is returned once. With token_sha256, the response echoes it with token_source \"participant\" and contains no token. Duplicate grant_id conflicts; a token hash already bound to any grant is refused with token_hash_conflict. After an ambiguous response inspect/revoke the known ID before choosing another. With renewable_until the grant roots a renewal chain.",
   responses: {
     "201": { description: "Created. Exactly one shape: server-minted token returned once, or the participant's echoed token_sha256 with no token.", content: { "application/json": { schema: issuedGrant } } },
-    "400": { description: "Invalid grant request; a malformed token_sha256 is refused with invalid_token_sha256" },
+    "400": { description: "Invalid grant request (invalid_mission_grant_request, including a noncanonical renewable_until); a malformed token_sha256 is refused with invalid_token_sha256; a well-formed renewable_until outside its bounds is collaboration_mission_invalid_request" },
     "409": { description: "Known grant_id (collaboration_mission_conflict) or a token hash already bound to a grant (token_hash_conflict); tokens are never recovered or replayed" },
   } }) },
   [`${base}/{mission_id}/grants/{grant_id}`]: { parameters: [mission, grant], get: operation("Inspect grant metadata without recovering its token", false) },
-  [`${base}/{mission_id}/grants/{grant_id}/revoke`]: { parameters: [mission, grant], post: operation("Revoke this participant grant idempotently", false, { description: "No body. Serialized with admission; already admitted transactions may finish first." }) },
+  [`${base}/{mission_id}/grants/{grant_id}/revoke`]: { parameters: [mission, grant], post: operation("Revoke this participant grant idempotently", false, { description: "No body. Serialized with admission; already admitted transactions may finish first. Revoking any member of a renewal chain, even an expired, left or already revoked one, ends every member of that chain." }) },
+  [`${base}/{mission_id}/grants/{grant_id}/renewal/close`]: { parameters: [mission, grant], post: operation("Close a renewal chain's window once", false, { description: "No body. Any member's grant_id. Stamps renewal.closed_at on every member of the chain, keeping the first value; revokes nothing, so live members run out. There is no reopen; new authority is a fresh grant. A grant without a window returns its metadata unchanged." }) },
   [`${base}/{mission_id}/invitation`]: { parameters: [mission], get: operation("Read own invitation before accepting", true, { description: "Grant plus exact-request signature required. Exposes only own scope and immutable descriptor. No acceptance or reply obligation." }) },
   [`${base}/{mission_id}/accept`]: { parameters: [mission], post: operation("Accept the immutable descriptor digest", true, { body: {
     type: "object", additionalProperties: false, required: ["mission_digest"], properties: { mission_digest: digest },
   }, description: "Explicit registered-key proof, intrinsic invitation action. Repeat valid acceptance is harmless. Does not claim independent agency or subjective consent." }) },
-  [`${base}/{mission_id}/leave`]: { parameters: [mission], post: operation("Leave the mission by revoking only the caller's own grant", true, { description: "No body: sign the SHA-256 of zero bytes. Requires prior acceptance; any action set may leave. Revokes only the grant named by the token and proof, recording reason participant_left. An exact repeat with a fresh proof returns the same state while the grant would otherwise be admissible; every other use of the token is then refused. Other grants and the mission are unaffected; observations already stored remain.",
+  [`${base}/{mission_id}/leave`]: { parameters: [mission], post: operation("Leave the mission by revoking the caller's own grant (its whole renewal chain)", true, { description: "No body: sign the SHA-256 of zero bytes. Requires prior acceptance; any action set may leave. Revokes the grant named by the token and proof, recording reason participant_left. For a member of a renewal chain it ends every member, including any successor, and closes the window: leaving through an old predecessor also ends the current grant. An exact repeat with a fresh proof returns the same state while the grant would otherwise be admissible; every other use of the token is then refused. Every grant outside that chain and the mission are unaffected; observations already stored remain.",
     responses: { "200": { description: "The caller's grant is revoked by the participant; identical for the first leave and any repeat", content: { "application/json": { schema: {
       type: "object", additionalProperties: false, required: ["mission_id", "grant_id", "status", "reason", "revoked_at"], properties: {
         mission_id: uuid, grant_id: uuid, status: { const: "revoked" }, reason: { const: "participant_left" }, revoked_at: date,
       },
     } } } } } }) },
+  [`${base}/{mission_id}/renew`]: { parameters: [mission], post: operation("Renew this grant into a successor inside its window", true, { create: true, body: {
+    type: "object", additionalProperties: false, required: ["grant_id", "mission_digest", "token_sha256"], properties: {
+      grant_id: { ...uuid, description: "New grant UUID chosen by the participant; never the presented grant." }, mission_digest: digest,
+      token_sha256: { ...tokenSha256, description: "SHA-256 of a fresh participant-generated token; never the presented token's." },
+    },
+  }, description: "The bearer and proof name the live accepted grant being renewed. Opens halfway through that grant's life, until renewable_until or close. The successor copies identity, key, issuing key, origin and actions, is born accepted, and expires at min(now + root lifetime, renewable_until, mission end, issuing key expiry), which must extend the grant. At most 8 KiB. The predecessor runs out on its own. No renewal from an expired or revoked grant.",
+  responses: {
+    "201": { description: "Successor created: mission, grant (with renewal lineage), the echoed token_sha256 and token_source \"participant\"; never a token" },
+    "200": { description: "Exact retry (same grant_id, token_sha256 and body bytes, fresh proof) returns the stored successor while the presented grant is live" },
+    "403": { description: "collaboration_mission_renewal_not_due before halfway (the only refusal a later attempt can change); final: collaboration_mission_renewal_unavailable (no window), collaboration_mission_renewal_closed (closed, or a chain member revoked), collaboration_mission_renewal_window_ended (the window, mission end or issuing key expiry cannot extend the grant); or collaboration_mission_acceptance_required" },
+    "409": { description: "collaboration_mission_conflict (already renewed differently, grant_id taken, digest mismatch) or token_hash_conflict" },
+  } }) },
   [`${base}/{mission_id}/context`]: { parameters: [mission], get: operation("Read accepted mission context", true, { description: "Requires mission.read and prior acceptance. No private memory or task authority." }) },
   [`${base}/{mission_id}/events`]: {
     parameters: [mission],
