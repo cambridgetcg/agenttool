@@ -2164,6 +2164,7 @@ export function proposalFacts(
       handle: handleOf("report", entry.challenge_id),
       by: { session: entry.by_session_id, name: entry.by },
       voice: entry.voice_id,
+      raised_on: entry.raised_on,
       carried_in_terms: entry.carried_in_terms,
       standing_on_replaced: entry.standing_on_replaced,
       re_raised_here: entry.re_raised_here,
@@ -2181,6 +2182,18 @@ export function proposalFacts(
   fields.for_the_person = forThePerson(ctx, status);
   fields.status = status;
   return { fields, advice };
+}
+
+/**
+ * Whether a decision's stated scope is the extent the person agreed to on
+ * its proposal; null where that is not the question (no proposal, or an
+ * outcome that authorises nothing). A marked proceed always matches; a
+ * legacy decision may state anything.
+ */
+function scopeMatchesAgreedExtent(data: NoteDecisionData): boolean | null {
+  const status = data.proposal?.status;
+  if (!status || (data.outcome !== "proceed" && data.outcome !== "unstated")) return null;
+  return data.authority.scope === status.terms.extent;
 }
 
 function actView(act: { id: string; act: string; basis: string; created_at?: string; at?: string; reason?: string | null; event_id?: string }) {
@@ -2214,14 +2227,24 @@ export function decisionRecord(data: NoteDecisionData): { fields: Record<string,
       person_act: data.rests_on ? actView(data.rests_on) : null,
     }
     : { proposal: null, person_act: null, note: NOTE_SELF_DECISION_BASIS };
+  const scopeMatches = scopeMatchesAgreedExtent(data);
   if (data.agreement_current === false) {
-    advice.push(
-      `agreement_current is false: the person's latest act on ${status!.proposal.id} is ${data.later_act ? `${data.later_act.act} by ${data.later_act.basis}` : "not the agreement this decision cites"}. ` +
-        "Stop work that rests on this decision.",
-    );
+    const id = status!.proposal.id;
+    const cause = data.later_act
+      ? `the person's latest act on ${id} is ${data.later_act.act} by ${data.later_act.basis}`
+      : retiredPosition(status!)
+        ? `${id} was ${status!.ai.position === "withdrawn" ? "withdrawn" : "superseded"} by ${status!.ai.obsoleted_by_report_id} after the agreement`
+        : `the person's latest act on ${id} is not the agreement this decision cites`;
+    advice.push(`agreement_current is false: ${cause}. Stop work that rests on this decision.`);
   }
   if (!data.marked) {
     advice.push("This decision was written by a legacy tool: its authority fields are shown as written and were not derived by the server; what it rests on is read from its evidence refs.");
+  }
+  if (scopeMatches === false) {
+    advice.push(
+      `This decision's authority_scope is not the extent the person agreed to on ${status!.proposal.id}: ` +
+        "the agreement covers only that extent (rests_on.proposal.extent), and nothing checked the scope this decision states.",
+    );
   }
   if (data.proposal_unreadable) {
     advice.push(`The proposal this decision names could not be read (${data.proposal_unreadable}), so no proposal is shown.`);
@@ -2243,9 +2266,12 @@ export function decisionRecord(data: NoteDecisionData): { fields: Record<string,
         derived_by: data.authority.derived_by_server
           ? "the server, from the journal, when it was written"
           : "a legacy tool, as its caller wrote it; not checked",
+        ...(scopeMatches !== null ? { scope_matches_agreed_extent: scopeMatches } : {}),
       },
       rests_on: restsOn,
-      rests_on_basis: "read from the journal (the proposal and the person act this decision cites), never from its own words",
+      rests_on_basis: data.marked
+        ? "derived from the journal (the proposal the server recorded this decision on, and the person's latest act on it then), never from its own words or evidence"
+        : "read from the evidence refs a legacy caller chose: the proposal and the act are in the journal, but nothing checked that this decision was made on them",
       agreement_current: data.agreement_current,
       ...(data.later_act ? { later_act: actView(data.later_act) } : {}),
       ...(status
@@ -2333,6 +2359,19 @@ function carryThread(thread: NoteThreadData): { text: string; not_carried: strin
     };
   } else if (thread.proposal) {
     input = carriedProposal(thread.proposal);
+    try {
+      return renderCarriedNote(input, { maxChars: 800, localTerms: localTerms() });
+    } catch (error) {
+      if (!(error instanceof CollabError) || error.code !== "not_carriable" || error.details.field !== "statement") throw error;
+      // A proposal's question is the bytes the person signs and cannot be
+      // restated, so a first line naming a local detail gives way to a
+      // stand-in: the full id, the hash and the position still travel.
+      const carried = renderCarriedNote(
+        { ...input, statement: PROPOSAL_STAND_IN_STATEMENT },
+        { maxChars: 800, localTerms: localTerms(), withheldStatement: true },
+      );
+      return { text: carried.text, not_carried: carried.not_carried };
+    }
   } else if (thread.decision) {
     input = carriedDecision(thread.decision, thread.root!.marked);
   } else {
@@ -2381,6 +2420,9 @@ function statementAndBody(text: string): { statement: string; body: string | nul
   };
 }
 
+/** Carried in place of a proposal's first line when that line names a local detail. */
+const PROPOSAL_STAND_IN_STATEMENT = "A proposal; read it by its full id.";
+
 /**
  * A proposal for carrying: its question, extent, limits and criteria as
  * written, the hash the person would sign, and where it stands. The position
@@ -2409,7 +2451,12 @@ function carriedProposal(data: NoteProposalData): NoteInput {
   };
 }
 
-/** A decision for carrying: its words, its derived scope, and whether what it rests on still holds. */
+/**
+ * A decision for carrying: its words, its scope, and whether what it rests
+ * on still holds. The carried text is what travels to other devices, so a
+ * legacy decision's scope and proposal, which its caller wrote and nothing
+ * checked, are labelled so on the lines themselves.
+ */
 function carriedDecision(data: NoteDecisionData, marked: boolean): NoteInput {
   const report = data.report;
   const parsed = marked ? parseNote(report.body) : null;
@@ -2417,16 +2464,25 @@ function carriedDecision(data: NoteDecisionData, marked: boolean): NoteInput {
     ? { statement: parsed.statement, body: parsed.body }
     : statementAndBody(report.body);
   const status = data.proposal?.status ?? null;
+  const legacy = !data.authority.derived_by_server;
+  const on = !status
+    ? "not the person's agreement"
+    : legacy
+      ? `cites proposal:${status.proposal.id}`
+      : data.outcome === "proceed" ? `rests on proposal:${status.proposal.id}` : `on proposal:${status.proposal.id}`;
   const position = [
     `outcome ${data.outcome}`,
-    ...(status ? [`rests on proposal:${status.proposal.id}`] : ["not the person's agreement"]),
+    ...(legacy ? ["legacy", "authority not checked"] : []),
+    on,
     ...(data.agreement_current !== null ? [`agreement_current ${data.agreement_current}`] : []),
+    ...(scopeMatchesAgreedExtent(data) === false ? ["scope is not the agreed extent"] : []),
   ].join("; ");
+  const scope = report.authority_scope;
   return {
     act: "decide",
     ...words,
     re: `report:${report.id}`,
-    ...(report.authority_scope ? { extent: report.authority_scope } : {}),
+    ...(scope ? { extent: legacy ? `as written by a legacy tool; not checked: ${scope}` : scope } : {}),
     trailers: [
       ...(status ? [{ key: "Sha256", value: status.proposal_sha256 }] : []),
       { key: "Position", value: position },

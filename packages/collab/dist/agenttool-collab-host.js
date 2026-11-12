@@ -7084,10 +7084,27 @@ class CollabStore {
       }
     }
     const challenges = this.noteChallenges(workspaceId);
-    const decided = new Set(this.db.query(`
-      SELECT r.from_session_id, ref.value AS ref FROM reports r, json_each(r.evidence_refs_json) ref
-      WHERE r.workspace_id = ? AND r.kind = 'decision' AND ref.value LIKE 'report:%'
-    `).all(workspaceId).filter((row) => sameVoice(row.from_session_id)).map((row) => row.ref.slice("report:".length)));
+    const decided = new Set;
+    const decidedOn = new Set;
+    for (const row of this.db.query(`
+      SELECT r.from_session_id, r.evidence_refs_json, e.payload_json FROM reports r
+      JOIN events e ON e.workspace_id = r.workspace_id AND e.sequence = r.event_sequence
+      WHERE r.workspace_id = ? AND r.kind = 'decision'
+    `).all(workspaceId)) {
+      if (!sameVoice(row.from_session_id))
+        continue;
+      const cited = JSON.parse(row.evidence_refs_json).filter((ref) => ref.startsWith("report:")).map((ref) => ref.slice("report:".length));
+      for (const id of cited)
+        decided.add(id);
+      const payload = JSON.parse(row.payload_json);
+      if (payload.note === NOTE_FORMAT) {
+        if (typeof payload.about_proposal_id === "string")
+          decidedOn.add(payload.about_proposal_id);
+      } else {
+        for (const id of cited)
+          decidedOn.add(id);
+      }
+    }
     const now = Date.parse(this.timestamp());
     const statuses = this.noteProposalStatuses(workspaceId, this.noteProposalRows(workspaceId).filter((row) => !row.retired && now < Date.parse(row.closes_at) && row.voice_ids.includes(myVoice) || row.acted && (sameVoice(row.from_session_id) || decided.has(row.report_id))));
     for (const status of statuses) {
@@ -7170,7 +7187,7 @@ class CollabStore {
         what = "stop";
       else if (latest.act === "reject" && mine && !retired)
         what = "rejected";
-      else if (latest.act === "agree" && mine && status.may_proceed && !decided.has(status.proposal.id)) {
+      else if (latest.act === "agree" && mine && status.may_proceed && !decidedOn.has(status.proposal.id)) {
         what = "record_decision";
       }
       if (!what)
@@ -7405,10 +7422,12 @@ class CollabStore {
     if (status.proposal.relation === "supersedes" && status.proposal.target_report_id) {
       const replacedId = status.proposal.target_report_id;
       const conflicts = status.terms.known_conflicts ?? "";
-      const carried = [...challengeViews.values()].filter((challenge) => challenge.target_report_id === replacedId).map((challenge) => {
+      const lineage = this.replacedLineage(workspaceId, replacedId);
+      const carried = [...challengeViews.values()].filter((challenge) => lineage.has(challenge.target_report_id)).map((challenge) => {
         const voice = challenge.from_session_id ? this.consentVoice(challenge.from_session_id, context) : null;
         return {
           challenge_id: challenge.id,
+          raised_on: challenge.target_report_id,
           by_session_id: challenge.from_session_id,
           by: challenge.from_actor,
           voice_id: voice,
@@ -7416,7 +7435,7 @@ class CollabStore {
           standing_on_replaced: challenge.standing,
           re_raised_here: voice !== null && challenges.some((stance) => stance.standing && stance.voice_id === voice)
         };
-      }).filter((entry) => entry.carried_in_terms || entry.standing_on_replaced);
+      }).filter((entry) => entry.carried_in_terms || entry.raised_on === replacedId && entry.standing_on_replaced).map((entry) => ({ ...entry, statement: this.noteStanceStatement(workspaceId, this.requireReport(entry.challenge_id)) }));
       replaced = { proposal_id: replacedId, carried };
     }
     return {
@@ -7429,6 +7448,24 @@ class CollabStore {
       replaced,
       observed_at: this.timestamp()
     };
+  }
+  replacedLineage(workspaceId, replacedId) {
+    const lineage = new Set;
+    let current = replacedId;
+    while (current !== null && !lineage.has(current)) {
+      lineage.add(current);
+      const row = this.db.query(`SELECT relation, target_report_id FROM reports WHERE workspace_id = ? AND id = ?`).get(workspaceId, current);
+      current = row?.relation === "supersedes" ? row.target_report_id : null;
+    }
+    return lineage;
+  }
+  noteStanceStatement(workspaceId, report) {
+    const first = report.body.split(`
+`)[0] ?? "";
+    if (!this.reportIsMarked(workspaceId, report))
+      return first;
+    const parsed = parseNote(report.body);
+    return parsed.act !== null ? parsed.statement : first;
   }
   noteStanceView(workspaceId, report, session, author, context, facts) {
     const marked = this.reportIsMarked(workspaceId, report);
@@ -7486,7 +7523,7 @@ class CollabStore {
     const payload = this.reportPayload(workspaceId, report);
     const termed = (id) => this.db.query(`SELECT 1 FROM proposal_terms WHERE workspace_id = ? AND report_id = ?`).get(workspaceId, id) !== null;
     let proposalId = typeof payload.about_proposal_id === "string" && termed(payload.about_proposal_id) ? payload.about_proposal_id : null;
-    if (!proposalId) {
+    if (!proposalId && !marked) {
       proposalId = report.evidence_refs.filter((ref) => ref.startsWith("report:")).map((ref) => ref.slice("report:".length)).find(termed) ?? null;
     }
     let proposal = null;
@@ -7501,14 +7538,16 @@ class CollabStore {
       }
     }
     let restsOn = null;
-    if (proposal) {
+    if (proposal && marked) {
+      restsOn = proposal.status.person.acts.filter((act) => act.event_sequence < report.event_sequence).at(-1) ?? null;
+    } else if (proposal) {
       const sequences = report.evidence_refs.filter((ref) => ref.startsWith("event:")).map((ref) => this.db.query(`SELECT sequence, type, entity_id FROM events WHERE workspace_id = ? AND id = ?`).get(workspaceId, ref.slice("event:".length))).filter((row) => row !== null && (row.type === "proposal.agreed" || row.type === "proposal.rejected") && row.entity_id === proposalId).map((row) => row.sequence);
       const cited = Math.max(-1, ...sequences);
       restsOn = proposal.status.person.acts.find((act) => act.event_sequence === cited) ?? null;
     }
     const latest = proposal?.status.person.acts.at(-1) ?? null;
     const outcome = !marked ? "unstated" : report.authority_basis?.startsWith("do_not_proceed: ") ? "do_not_proceed" : report.authority_basis?.startsWith("no_decision: ") ? "no_decision" : "proceed";
-    const agreementCurrent = restsOn?.act === "agree" ? proposal.status.may_proceed && proposal.status.agreement?.id === restsOn.id : null;
+    const agreementCurrent = restsOn?.act === "agree" && (outcome === "proceed" || outcome === "unstated") ? proposal.status.may_proceed && proposal.status.agreement?.id === restsOn.id : null;
     const byId = new Map(sessions.map((view) => [view.id, view]));
     const context = this.proposalReadContext(workspaceId);
     const activeVoices = new Set(sessions.filter((view) => view.status === "active").map((view) => view.voice_id));

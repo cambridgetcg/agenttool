@@ -737,18 +737,20 @@ describe("the read mark, more", () => {
 });
 
 describe("collab_inbox about, format note", () => {
+  // A report's author can restate it; a proposal cannot be restated, so it
+  // travels under a stand-in statement instead (tests/notes-propose.test.ts).
   test("a statement naming a local detail returns the view with note: null and says why", async () => {
     const j = journal();
     const me = j.start("me");
     const peer = j.start("peer");
-    const opened = j.store.openProposalForSession({
-      ...peer.credential, idempotency_key: "p", question: "Ship /Users/example/secret/path?", criteria: "c", extent: "e",
+    const posted = j.store.appendReportForSession({
+      ...peer.credential, idempotency_key: "r", kind: "observation", body: "Ship /Users/example/secret/path?",
     });
-    const view = await ok(j.serve(me), "collab_inbox", { about: opened.proposal.id, format: "note" });
-    expect(view.root.id).toBe(opened.proposal.id);
+    const view = await ok(j.serve(me), "collab_inbox", { about: posted.id, format: "note" });
+    expect(view.root.id).toBe(posted.id);
     expect(view.note).toBeNull();
     expect(view.not_carried).toEqual(["statement (local detail)"]);
     expect(view.advice.join(" ")).toContain("cannot be carried");
-    expect(view.advice.join(" ")).toContain(opened.proposal.id);
+    expect(view.advice.join(" ")).toContain(posted.id);
   });
 });

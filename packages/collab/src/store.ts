@@ -8532,12 +8532,28 @@ export class CollabStore {
       }
     }
     const challenges = this.noteChallenges(workspaceId);
-    const decided = new Set((this.db.query(`
-      SELECT r.from_session_id, ref.value AS ref FROM reports r, json_each(r.evidence_refs_json) ref
-      WHERE r.workspace_id = ? AND r.kind = 'decision' AND ref.value LIKE 'report:%'
-    `).all(workspaceId) as Array<{ from_session_id: string | null; ref: string }>)
-      .filter((row) => sameVoice(row.from_session_id))
-      .map((row) => row.ref.slice("report:".length)));
+    // Every proposal a decision of this voice cites is watched for a stop;
+    // only those it was made on (as noteDecisionData reads it) count as
+    // already decided, so a decision that merely cites one asks for none.
+    const decided = new Set<string>();
+    const decidedOn = new Set<string>();
+    for (const row of this.db.query(`
+      SELECT r.from_session_id, r.evidence_refs_json, e.payload_json FROM reports r
+      JOIN events e ON e.workspace_id = r.workspace_id AND e.sequence = r.event_sequence
+      WHERE r.workspace_id = ? AND r.kind = 'decision'
+    `).all(workspaceId) as Array<{ from_session_id: string | null; evidence_refs_json: string; payload_json: string }>) {
+      if (!sameVoice(row.from_session_id)) continue;
+      const cited = (JSON.parse(row.evidence_refs_json) as string[])
+        .filter((ref) => ref.startsWith("report:"))
+        .map((ref) => ref.slice("report:".length));
+      for (const id of cited) decided.add(id);
+      const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
+      if (payload.note === NOTE_FORMAT) {
+        if (typeof payload.about_proposal_id === "string") decidedOn.add(payload.about_proposal_id);
+      } else {
+        for (const id of cited) decidedOn.add(id);
+      }
+    }
     // Only the proposals this session could be waited on for: still open with
     // its voice in the snapshot, or acted on by the person and written or
     // cited by its voice. Their statuses are computed; the rest are not read.
@@ -8624,7 +8640,7 @@ export class CollabStore {
       let what: NoteWaitingEntry["what"] | null = null;
       if (latest.act === "reject" && agreedBefore) what = "stop";
       else if (latest.act === "reject" && mine && !retired) what = "rejected";
-      else if (latest.act === "agree" && mine && status.may_proceed && !decided.has(status.proposal.id)) {
+      else if (latest.act === "agree" && mine && status.may_proceed && !decidedOn.has(status.proposal.id)) {
         what = "record_decision";
       }
       if (!what) continue;
@@ -8959,12 +8975,17 @@ export class CollabStore {
     if (status.proposal.relation === "supersedes" && status.proposal.target_report_id) {
       const replacedId = status.proposal.target_report_id;
       const conflicts = status.terms.known_conflicts ?? "";
+      // An objection an earlier replacement carried as text can be carried
+      // again, so the challenges on every proposal this one descends from are
+      // read; those older than the replaced proposal count only when carried.
+      const lineage = this.replacedLineage(workspaceId, replacedId);
       const carried = [...challengeViews.values()]
-        .filter((challenge) => challenge.target_report_id === replacedId)
+        .filter((challenge) => lineage.has(challenge.target_report_id))
         .map((challenge) => {
           const voice = challenge.from_session_id ? this.consentVoice(challenge.from_session_id, context) : null;
           return {
             challenge_id: challenge.id,
+            raised_on: challenge.target_report_id,
             by_session_id: challenge.from_session_id,
             by: challenge.from_actor,
             voice_id: voice,
@@ -8973,7 +8994,8 @@ export class CollabStore {
             re_raised_here: voice !== null && challenges.some((stance) => stance.standing && stance.voice_id === voice),
           };
         })
-        .filter((entry) => entry.carried_in_terms || entry.standing_on_replaced);
+        .filter((entry) => entry.carried_in_terms || (entry.raised_on === replacedId && entry.standing_on_replaced))
+        .map((entry) => ({ ...entry, statement: this.noteStanceStatement(workspaceId, this.requireReport(entry.challenge_id)) }));
       replaced = { proposal_id: replacedId, carried };
     }
     return {
@@ -8986,6 +9008,31 @@ export class CollabStore {
       replaced,
       observed_at: this.timestamp(),
     };
+  }
+
+  /**
+   * A replaced proposal and every proposal it replaced in turn, by
+   * following `supersedes` targets. Each link points at an earlier report,
+   * so the walk ends; the set also stops a damaged journal from looping.
+   */
+  private replacedLineage(workspaceId: string, replacedId: string): Set<string> {
+    const lineage = new Set<string>();
+    let current: string | null = replacedId;
+    while (current !== null && !lineage.has(current)) {
+      lineage.add(current);
+      const row = this.db.query(`SELECT relation, target_report_id FROM reports WHERE workspace_id = ? AND id = ?`)
+        .get(workspaceId, current) as { relation: string; target_report_id: string | null } | null;
+      current = row?.relation === "supersedes" ? row.target_report_id : null;
+    }
+    return lineage;
+  }
+
+  /** A stance's statement as noteStanceView reads it: a marked note's statement, else the body's first line. */
+  private noteStanceStatement(workspaceId: string, report: CollabReport): string {
+    const first = report.body.split("\n")[0] ?? "";
+    if (!this.reportIsMarked(workspaceId, report)) return first;
+    const parsed = parseNote(report.body);
+    return parsed.act !== null ? parsed.statement : first;
   }
 
   /** One support or challenge with its display-only flags (spec 6). They change no count. */
@@ -9049,9 +9096,13 @@ export class CollabStore {
 
   /**
    * A decision as a composed record (spec 5.2 about): not stored. What it
-   * rests on is read from the journal (the proposal and the person act it
-   * cites), never from its own authority text, which a legacy tool could
-   * have written freely. Read-only, inside the caller's snapshot.
+   * rests on is derived from the journal, never from the sender's words.
+   * A marked decision was written by appendDecisionForSession, which set
+   * about_proposal_id only when it derived the authority from that
+   * proposal; its evidence refs are partly the caller's, so they never name
+   * what it rests on. A legacy decision has only the evidence refs its
+   * caller chose, and the views label it so. Read-only, inside the caller's
+   * snapshot.
    */
   private noteDecisionData(workspaceId: string, report: CollabReport, sessions: NoteSessionView[]): NoteDecisionData {
     const marked = this.reportIsMarked(workspaceId, report);
@@ -9061,7 +9112,7 @@ export class CollabStore {
     let proposalId = typeof payload.about_proposal_id === "string" && termed(payload.about_proposal_id)
       ? payload.about_proposal_id
       : null;
-    if (!proposalId) {
+    if (!proposalId && !marked) {
       proposalId = report.evidence_refs
         .filter((ref) => ref.startsWith("report:"))
         .map((ref) => ref.slice("report:".length))
@@ -9078,7 +9129,11 @@ export class CollabStore {
       }
     }
     let restsOn: ProposalPersonAct | null = null;
-    if (proposal) {
+    if (proposal && marked) {
+      // What decisionAuthority read inside the write: the person's latest act
+      // on the proposal before this decision (for a proceed, the agreement).
+      restsOn = proposal.status.person.acts.filter((act) => act.event_sequence < report.event_sequence).at(-1) ?? null;
+    } else if (proposal) {
       const sequences = report.evidence_refs
         .filter((ref) => ref.startsWith("event:"))
         .map((ref) => this.db.query(`SELECT sequence, type, entity_id FROM events WHERE workspace_id = ? AND id = ?`)
@@ -9094,7 +9149,9 @@ export class CollabStore {
       ? "unstated"
       : report.authority_basis?.startsWith("do_not_proceed: ") ? "do_not_proceed"
         : report.authority_basis?.startsWith("no_decision: ") ? "no_decision" : "proceed";
-    const agreementCurrent = restsOn?.act === "agree"
+    // Only a decision that may rest on an agreement can lose it: one that
+    // authorises nothing rests on none, whatever the person did before it.
+    const agreementCurrent = restsOn?.act === "agree" && (outcome === "proceed" || outcome === "unstated")
       ? proposal!.status.may_proceed && proposal!.status.agreement?.id === restsOn.id
       : null;
     const byId = new Map(sessions.map((view) => [view.id, view]));
@@ -10284,12 +10341,17 @@ export interface NoteConsultedVoice {
 
 export interface NoteCarriedObjection {
   challenge_id: string;
+  /** The proposal the challenge was raised on: the replaced one, or one it replaced in turn. */
+  raised_on: string;
   by_session_id: string | null;
   by: string;
   voice_id: string | null;
   /** Its id is in the new proposal's known_conflicts, which the person signs. */
   carried_in_terms: boolean;
+  /** The challenge still stands where it was raised: its challenger has not lifted or withdrawn it. */
   standing_on_replaced: boolean;
+  /** The challenge's own statement, read from the journal. */
+  statement: string;
   /** The same voice stands against the new proposal too. */
   re_raised_here: boolean;
 }
@@ -10315,7 +10377,11 @@ export interface NoteDecisionData {
   proposal: NoteProposalData | null;
   /** The proposal's stored terms failed to read (their code), so no proposal is shown. */
   proposal_unreadable: string | null;
-  /** The person act the decision cites, read from its evidence refs. */
+  /**
+   * The person act the decision was made on: for a marked decision, the
+   * person's latest act on its proposal before it; for a legacy one, the act
+   * its evidence refs cite.
+   */
   rests_on: (ProposalPersonAct & { event_id: string }) | null;
   /** For an agreement: whether it is still the person's latest act on a proposal still on the table. */
   agreement_current: boolean | null;

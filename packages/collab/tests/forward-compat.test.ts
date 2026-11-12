@@ -503,12 +503,22 @@ describe("forward-compatibility fixture", () => {
       ["open", "awaiting"],
     ]);
     expect(notesProposals[2]!.terms.known_conflicts).toContain("carried objection by fixture-notes-peer (report:");
-    expect(JSON.parse(views.notes_decisions!)).toEqual([expect.objectContaining({
-      id: manifest.decisions[0],
-      outcome: "proceed",
-      proposal: notesProposals[0]!.proposal.id,
-      agreement_current: true,
-    })]);
+    expect(JSON.parse(views.notes_decisions!)).toEqual([
+      expect.objectContaining({
+        id: manifest.decisions[0],
+        outcome: "proceed",
+        proposal: notesProposals[0]!.proposal.id,
+        agreement_current: true,
+      }),
+      // Its evidence cites the agreement, but it was not made on the proposal.
+      expect.objectContaining({
+        id: manifest.decisions[1],
+        outcome: "proceed",
+        proposal: null,
+        rests_on: null,
+        agreement_current: null,
+      }),
+    ]);
   }, TEST_TIMEOUT_MS);
 
   test("dropping the view-state tables loses only view state", async () => {

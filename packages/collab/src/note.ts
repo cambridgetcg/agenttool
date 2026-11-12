@@ -1335,6 +1335,10 @@ export interface CarryOptions {
   /** This machine's own names (a host name, say), withheld wherever they
    * appear, matched without regard to case. */
   localTerms?: readonly string[];
+  /** The statement is a stand-in for one the caller withheld because it
+   * names a local detail and cannot be restated (a proposal's question):
+   * Not-carried names it as "statement (local detail)". */
+  withheldStatement?: boolean;
 }
 
 export interface CarriedNote {
@@ -1532,6 +1536,7 @@ export function renderCarriedNote(input: NoteInput, options: CarryOptions = {}):
   }
 
   const cuts: CarryCut[] = [];
+  if (options.withheldStatement === true) cuts.push({ kind: "local", label: "statement" });
   const state: NoteFields = { ...base, why: [], evidence: [], trailers: [] };
 
   // Withhold what names this device or cannot be read, before measuring.

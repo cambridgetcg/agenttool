@@ -799,8 +799,18 @@ export const FIXTURE_STEPS: FixtureStep[] = [
       });
       if (!status.may_proceed) throw new Error("the fixture's agreement did not let it proceed");
       const decided = await context.tool(notes, "collab_note", { act: "decide", text: "The fixture keeps its agreed proposal.", re: agreedId });
+      // A decision naming no proposal that cites the agreement anyway: it
+      // rests on nothing, whatever an older build writes beside it.
+      const agreedEvent = context.store.db.query(`SELECT id FROM events WHERE type = 'proposal.agreed' AND entity_id = ?`)
+        .get(agreedId) as { id: string };
+      const own = await context.tool(peer, "collab_note", {
+        act: "decide",
+        text: "The fixture peer records a decision of its own.",
+        extent: "The fixture journal only.",
+        evidence: [`report:${agreedId}`, `event:${agreedEvent.id}`],
+      });
       context.manifest.proposals.push(agreedId, replacedId, replacementId);
-      context.manifest.decisions.push((decided.ids as { report: string }).report);
+      context.manifest.decisions.push((decided.ids as { report: string }).report, (own.ids as { report: string }).report);
     },
   },
   // Later slices append their steps here.

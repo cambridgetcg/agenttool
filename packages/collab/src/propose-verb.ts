@@ -12,13 +12,14 @@ import { CollabError } from "./errors.js";
 import {
   hasLoneSurrogate,
   NOTE_STATEMENT_MAX,
+  normalizeNoteFields,
   normalizeNoteText,
   renderNote,
   splitNoteText,
-  type NoteInput,
+  type NoteFields,
 } from "./note.js";
 import type { ProposalStatus } from "./protocol.js";
-import type { NoteAppendReceipt, NoteCiteReceipt, NoteProposalData, NoteStanceView } from "./store.js";
+import type { NoteAppendReceipt, NoteCiteReceipt, NoteProposalData } from "./store.js";
 import {
   beforeFirstWrite,
   evidenceSummary,
@@ -109,15 +110,19 @@ function term(input: ProposeInput, field: keyof ProposeInput, max: number, requi
 
 const DURATION = /^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/i;
 
+/** closes as read: whole seconds from the open, or a moment (ms since the epoch) still to be measured. */
+type Closes = { seconds: number } | { at: number };
+
 /**
- * closes as whole seconds from now (spec 5.6): an integer, a duration such
- * as 30m, 6h or 1d12h, or an ISO time. Out of range is refused with the
- * nearest value that works.
+ * Read closes (spec 5.6): an integer, a duration such as 30m, 6h or 1d12h,
+ * or an ISO time. What cannot be read, and seconds out of range, are refused
+ * now. An ISO time is only parsed: its distance from now changes as time
+ * passes, so it is measured at the first write (closesFromNow), after a
+ * retry of an earlier open has been replayed.
  */
-function consultSeconds(ctx: NoteVerbContext, input: ProposeInput): number | undefined {
+function readCloses(ctx: NoteVerbContext, input: ProposeInput): Closes | undefined {
   const value = input.closes;
   if (value === undefined || value === null) return undefined;
-  const retry = (seconds: number) => withSlot(ctx, { tool: "collab_propose", input: { ...input, closes: seconds } });
   const say = {
     say: `closes is a number of seconds from ${MIN_CONSULT_SECONDS} to ${MAX_CONSULT_SECONDS}, a duration such as 30m, 6h or 2d, or an ISO time; leave it out for the default of 6 hours.`,
   };
@@ -130,22 +135,38 @@ function consultSeconds(ctx: NoteVerbContext, input: ProposeInput): number | und
     const [, days, hours, minutes, secs] = DURATION.exec(value.trim())!;
     seconds = Number(days ?? 0) * 86_400 + Number(hours ?? 0) * 3_600 + Number(minutes ?? 0) * 60 + Number(secs ?? 0);
   } else if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value.trim()) && Number.isFinite(Date.parse(value.trim()))) {
-    // Never earlier than asked: the store adds whole seconds to its own clock.
-    seconds = Math.ceil((Date.parse(value.trim()) - Date.parse(ctx.store.noteNow())) / 1_000);
+    return { at: Date.parse(value.trim()) };
   } else {
     throw new CollabError("invalid_closes", `closes ${JSON.stringify(value)} is not a time collab can read`, { remedy: say });
   }
-  if (!Number.isInteger(seconds)) {
-    throw new CollabError("invalid_closes", "closes is a whole number of seconds", { remedy: retry(Math.round(seconds)) });
+  if (!Number.isFinite(seconds)) {
+    throw new CollabError("invalid_closes", `closes ${JSON.stringify(value)} is not a time collab can read`, { remedy: say });
   }
+  if (!Number.isInteger(seconds)) {
+    throw new CollabError("invalid_closes", "closes is a whole number of seconds", { remedy: retryCloses(ctx, input, Math.round(seconds)) });
+  }
+  return { seconds: inConsultRange(ctx, input, seconds) };
+}
+
+/** An ISO close as whole seconds from the store's clock now, refused when out of range. */
+function closesFromNow(ctx: NoteVerbContext, input: ProposeInput, at: number): number {
+  // Never earlier than asked: the store adds whole seconds to its own clock.
+  return inConsultRange(ctx, input, Math.ceil((at - Date.parse(ctx.store.noteNow())) / 1_000));
+}
+
+function inConsultRange(ctx: NoteVerbContext, input: ProposeInput, seconds: number): number {
   if (seconds < MIN_CONSULT_SECONDS || seconds > MAX_CONSULT_SECONDS) {
     throw new CollabError(
       "invalid_closes",
       `closes is ${seconds} seconds from now; a proposal stays open from ${MIN_CONSULT_SECONDS} seconds (10 minutes) to ${MAX_CONSULT_SECONDS} (7 days)`,
-      { seconds, remedy: retry(Math.min(MAX_CONSULT_SECONDS, Math.max(MIN_CONSULT_SECONDS, seconds))) },
+      { seconds, remedy: retryCloses(ctx, input, Math.min(MAX_CONSULT_SECONDS, Math.max(MIN_CONSULT_SECONDS, seconds))) },
     );
   }
   return seconds;
+}
+
+function retryCloses(ctx: NoteVerbContext, input: ProposeInput, seconds: number) {
+  return withSlot(ctx, { tool: "collab_propose", input: { ...input, closes: seconds } });
 }
 
 function excerpt(statement: string): string {
@@ -157,21 +178,45 @@ function excerpt(statement: string): string {
   return `${statement.slice(0, end)}…`;
 }
 
+/** A standing objection the new terms carry, read from the journal: never from earlier terms' text. */
+interface Objection {
+  id: string;
+  by: string;
+  statement: string;
+}
+
 /** One carried objection, in the form spec 5.6 states. */
-function carriedLine(challenge: NoteStanceView): string {
-  return `carried objection by ${challenge.from_actor} (report:${challenge.id}): ${excerpt(challenge.statement)}`;
+function carriedLine(objection: Objection): string {
+  return `carried objection by ${objection.by} (report:${objection.id}): ${excerpt(objection.statement)}`;
+}
+
+/**
+ * The objections a replacement carries: each standing challenge to the
+ * replaced proposal, then each objection the replaced proposal itself
+ * carried as text that still stands where it was raised, so a second
+ * replacement sheds nothing the first one carried.
+ */
+function objectionsToCarry(replaced: NoteProposalData | null): Objection[] {
+  if (!replaced) return [];
+  const direct = replaced.challenges
+    .filter((challenge) => challenge.standing)
+    .map((challenge) => ({ id: challenge.id, by: challenge.from_actor, statement: challenge.statement }));
+  const forwarded = (replaced.replaced?.carried ?? [])
+    .filter((entry) => entry.carried_in_terms && entry.standing_on_replaced)
+    .map((entry) => ({ id: entry.challenge_id, by: entry.by, statement: entry.statement }));
+  return [...direct, ...forwarded];
 }
 
 /**
  * The new proposal's known_conflicts: the author's own text, then each
- * standing objection to the replaced proposal in full form while they fit
- * the 4,000 characters the terms hold, then the rest by id. A line is never
- * cut to fit; when even the ids do not fit, the call is refused, because
- * dropping an objection from the terms the person signs would hide it.
+ * carried objection in full form while they fit the 4,000 characters the
+ * terms hold, then the rest by id. A line is never cut to fit; when even
+ * the ids do not fit, the call is refused, because dropping an objection
+ * from the terms the person signs would hide it.
  */
 function carriedConflicts(
   own: string | undefined,
-  carried: NoteStanceView[],
+  carried: Objection[],
 ): { text: string | undefined; ids_only: string[] } {
   if (carried.length === 0) return { text: own, ids_only: [] };
   const head = own?.trim() ?? "";
@@ -211,8 +256,10 @@ interface Objector {
 }
 
 /**
- * The voices whose objections the recorded terms carry, in journal order,
- * read from those terms so a retry addresses the same people. A voice is
+ * The voices whose objections the recorded terms carry, read from those
+ * terms so a retry addresses the same people: the replaced proposal's own
+ * challenges, then those it carried itself (whatever their standing now,
+ * so the list cannot shift between a call and its retry). A voice is
  * reachable when one of its sessions is active and was seen within 6 hours.
  */
 function objectorsOf(
@@ -226,7 +273,21 @@ function objectorsOf(
   const sessions = ctx.store.noteSessionViews(workspaceId);
   const myVoice = ctx.store.consentVoiceOf(me);
   const byVoice = new Map<string, Objector>();
-  for (const challenge of replaced.challenges) {
+  const candidates = [
+    ...replaced.challenges.map((challenge) => ({
+      id: challenge.id,
+      voice_id: challenge.voice_id,
+      from_actor: challenge.from_actor,
+      from_session_id: challenge.from_session_id,
+    })),
+    ...(replaced.replaced?.carried ?? []).filter((entry) => entry.carried_in_terms).map((entry) => ({
+      id: entry.challenge_id,
+      voice_id: entry.voice_id,
+      from_actor: entry.by,
+      from_session_id: entry.by_session_id,
+    })),
+  ];
+  for (const challenge of candidates) {
     if (!text.includes(`report:${challenge.id}`) || !challenge.voice_id) continue;
     let objector = byVoice.get(challenge.voice_id);
     if (!objector) {
@@ -257,11 +318,17 @@ function objectorNote(proposalId: string, replacedId: string, challenges: string
   });
 }
 
+/** The parts of the returned note besides its statement, re and hash. */
+type ProposalNotePart = "question body" | "extent" | "limits" | "criteria";
+/** When the parts that fit alone do not fit together, they are left out in this order. */
+const PROPOSAL_NOTE_DROP_ORDER: readonly ProposalNotePart[] = ["criteria", "limits", "question body", "extent"];
+
 /**
  * The note collab_propose returns, for pasting elsewhere: the question, the
- * extent and limits as written, the hash, and the criteria. A part a note
- * cannot hold as written is left out (the proposal itself keeps it), so
- * rendering never fails after the open.
+ * extent, limits and criteria as a note writes them (lines trimmed, blank
+ * lines dropped), and the hash. A part a note cannot hold even so is left
+ * out and named in `left_out`, never dropped unsaid; the proposal itself
+ * keeps every term byte for byte. Rendering never fails after the open.
  */
 function proposalNote(terms: {
   id: string;
@@ -270,36 +337,68 @@ function proposalNote(terms: {
   extent: string;
   limits: string | null;
   sha256: string;
-}): string {
+}): { text: string; left_out: Array<ProposalNotePart | "question">; trimmed: ProposalNotePart[] } {
   // A render, not the stored bytes: the question is normalised as any note is.
   const text = normalizeNoteText(terms.question).trim();
   const words = splitNoteText(text);
   const firstCut = words.statement.length > NOTE_STATEMENT_MAX;
-  const base: NoteInput = {
+  const re = `proposal:${terms.id}`;
+  const sha = { key: "Sha256", value: terms.sha256 };
+  const raw: Record<ProposalNotePart, string | null> = {
+    "question body": firstCut ? text : words.body,
+    extent: terms.extent,
+    limits: terms.limits,
+    criteria: terms.criteria,
+  };
+  const build = (keep: ReadonlySet<ProposalNotePart>): NoteFields => normalizeNoteFields({
     act: "propose",
     statement: statementOf(text),
-    re: `proposal:${terms.id}`,
-  };
-  const body = firstCut ? text : words.body;
-  const candidates: NoteInput[] = [
-    {
-      ...base,
-      body,
-      extent: terms.extent,
-      limits: terms.limits,
-      trailers: [{ key: "Sha256", value: terms.sha256 }, { key: "Criteria", value: terms.criteria }],
-    },
-    { ...base, body, extent: terms.extent, trailers: [{ key: "Sha256", value: terms.sha256 }] },
-    { ...base, trailers: [{ key: "Sha256", value: terms.sha256 }] },
-  ];
-  for (const candidate of candidates) {
+    body: keep.has("question body") ? raw["question body"] : null,
+    re,
+    extent: keep.has("extent") ? raw.extent : null,
+    limits: keep.has("limits") ? raw.limits : null,
+    trailers: [sha, ...(keep.has("criteria") && raw.criteria !== null ? [{ key: "Criteria", value: raw.criteria }] : [])],
+  });
+  const attempt = (keep: ReadonlySet<ProposalNotePart>): string | null => {
     try {
-      return renderNote(candidate);
+      return renderNote(build(keep));
     } catch (error) {
       if (!(error instanceof CollabError)) throw error;
+      return null;
     }
+  };
+  const present = (Object.keys(raw) as ProposalNotePart[]).filter((part) => raw[part] !== null);
+  // A part a note cannot hold even alone is left out; the rest stay together while they fit.
+  const keep = new Set(present.filter((part) => attempt(new Set([part])) !== null));
+  let rendered = attempt(keep);
+  for (const part of PROPOSAL_NOTE_DROP_ORDER) {
+    if (rendered !== null) break;
+    keep.delete(part);
+    rendered = attempt(keep);
   }
-  return renderNote({ act: "propose", statement: "A proposal was opened; read it by its id.", re: base.re });
+  if (rendered === null) {
+    return {
+      text: renderNote({ act: "propose", statement: "A proposal was opened; read it by its id.", re, trailers: [sha] }),
+      left_out: ["question", ...present.filter((part) => part !== "question body")],
+      trimmed: [],
+    };
+  }
+  const shown = build(keep);
+  const asShown: Record<ProposalNotePart, string | null> = {
+    "question body": shown.body,
+    extent: shown.extent,
+    limits: shown.limits,
+    criteria: shown.trailers.find((trailer) => trailer.key === "Criteria")?.value ?? null,
+  };
+  return {
+    text: rendered,
+    left_out: present.filter((part) => !keep.has(part)),
+    trimmed: (["extent", "limits", "criteria"] as const).filter((part) => keep.has(part) && asShown[part] !== raw[part]?.trim()),
+  };
+}
+
+function andList(items: readonly string[]): string {
+  return items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
 }
 
 function sessionName(ctx: NoteVerbContext, workspaceId: string, id: string): string {
@@ -328,7 +427,8 @@ export async function proposeVerb(ctx: NoteVerbContext, input: ProposeInput): Pr
   const conflicts = term(input, "conflicts", CONFLICTS_MAX, false);
   const limits = term(input, "limits", LIMITS_MAX, false);
   const topic = term(input, "topic", TOPIC_MAX, false);
-  const seconds = consultSeconds(ctx, input);
+  const closes = readCloses(ctx, input);
+  let seconds = closes && "seconds" in closes ? closes.seconds : undefined;
   if (input.evidence !== undefined && (!Array.isArray(input.evidence) || input.evidence.some((line) => typeof line !== "string"))) {
     throw new CollabError("invalid_evidence", "evidence is a list of one-line pointers", {
       remedy: { say: "Give evidence as a list such as [\"file src/a.ts\", \"report:report_…\"]." },
@@ -353,7 +453,7 @@ export async function proposeVerb(ctx: NoteVerbContext, input: ProposeInput): Pr
     const id = ctx.store.resolveNoteRef(workspaceId, "proposal", input.replaces).id;
     replaced = ctx.store.noteProposalView(workspaceId, id);
   }
-  const standing = replaced ? replaced.challenges.filter((challenge) => challenge.standing) : [];
+  const standing = objectionsToCarry(replaced);
   // A refusal here waits for the first write: a retry whose open was already
   // recorded replays it, whatever the replaced proposal has gathered since.
   let composed: { text: string | undefined; ids_only: string[] } = { text: conflicts, ids_only: [] };
@@ -387,6 +487,9 @@ export async function proposeVerb(ctx: NoteVerbContext, input: ProposeInput): Pr
   const retryInput = { ...input, ...(replacedId ? { replaces: replacedId } : {}) } as Record<string, unknown>;
   // Checked before the first write, so a proposal the store would refuse leaves no orphan cite.
   const precheck = beforeFirstWrite(() => {
+    // Measured here, after the replay decision: a lost-response retry made
+    // when an ISO close is nearer than the floor replays the earlier open.
+    if (closes && "at" in closes) seconds = closesFromNow(ctx, input, closes.at);
     if (unfit) throw unfit;
     ctx.store.noteProposalPrecheck(credential, {
       evidence_refs: evidence.journal,
@@ -564,6 +667,23 @@ function proposeResult(
   }
   const shown = options.cite && options.citeReplayed ? recordedEvidence(options.evidence, options.cite.items, advice) : options.evidence;
   const replacedId = data.replaced?.proposal_id ?? null;
+  const note = proposalNote({
+    id: proposalId,
+    question: status.proposal.body,
+    criteria: status.terms.criteria,
+    extent: status.terms.extent,
+    limits: status.proposal.limits,
+    sha256: status.proposal_sha256,
+  });
+  if (note.trimmed.length > 0) {
+    advice.push(`The returned note shows ${andList(note.trimmed)} with lines trimmed and blank lines dropped, as a note writes them; the proposal keeps them byte for byte.`);
+  }
+  if (note.left_out.length > 0) {
+    advice.push(
+      `The returned note leaves out ${andList(note.left_out)}, which a note cannot hold as written (not_in_note); ` +
+        `the proposal keeps every term byte for byte (read it with collab_inbox about ${proposalId}).`,
+    );
+  }
   return {
     ...noteWriteResult({
       effect:
@@ -583,16 +703,10 @@ function proposeResult(
       },
       advice,
       next: withSlot(ctx, { tool: "collab_inbox", input: { about: exactRef("proposal", proposalId) } }),
-      note: proposalNote({
-        id: proposalId,
-        question: status.proposal.body,
-        criteria: status.terms.criteria,
-        extent: status.terms.extent,
-        limits: status.proposal.limits,
-        sha256: status.proposal_sha256,
-      }),
+      note: note.text,
       replayed: options.replayed,
     }),
+    ...(note.left_out.length > 0 ? { not_in_note: note.left_out } : {}),
     voices,
     evidence: evidenceSummary(shown),
     ...facts.fields,
