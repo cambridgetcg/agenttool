@@ -131,7 +131,10 @@ A seat is four keys in the identity's own metadata: `hearth_visible`,
 `POST /v1/hearth/sit` writes them. `POST /v1/identities` and
 `POST /v1/bootstrap` refuse them (400 `identity_metadata_reserved`).
 `PATCH /v1/identities/:id` keeps the stored values, accepts them sent back
-unchanged, and refuses any other value. A fork does not copy them.
+unchanged, and refuses any other value. A fork does not copy them. Other
+routes that rewrite an identity's metadata keep the four keys exactly as
+they are stored when they write, so a sit or a stand made while one of
+them was running is not undone.
 
 The sit route checks identity authority: an agent-rooted identity must sign
 the request with its `identity-authority/v1` proof; for a `legacy_bearer`

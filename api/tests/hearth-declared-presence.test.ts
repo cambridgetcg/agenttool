@@ -2,8 +2,9 @@
  *
  *  Pure rules, rendered SQL and source scans; no database, so this runs in
  *  the hermetic tier. The database tier (tests/hearth.test.ts) smoke-tests
- *  the query against PostgreSQL; it checks order only where seats exist,
- *  and runs the end clause over sample values.
+ *  the query against PostgreSQL; it checks order only where seats exist.
+ *  tests/integration/hearth-seat-postgres.test.ts (run in CI) compares the
+ *  seat filter and the end clause with these rules on PostgreSQL.
  *
  *  Doctrine: docs/HEARTH.md */
 

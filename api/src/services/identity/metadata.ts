@@ -33,8 +33,9 @@ export const SERVER_MANAGED_IDENTITY_METADATA_KEYS = [
 ] as const;
 
 /** The keys of a hearth seat. Only the sit route writes them; the same list
- * drives the refusal here, the preservation on PATCH, the sit route's strip
- * and the fork strip, so they cannot drift apart. */
+ * drives the refusal here, the preservation on PATCH, the sit route's strip,
+ * the fork strip and the stored seat other metadata writers keep
+ * (services/hearth/seat-write.ts), so they cannot drift apart. */
 export const HEARTH_SEAT_METADATA_KEYS = [
   "hearth_visible",
   "hearth_sat_at",

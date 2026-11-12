@@ -25,6 +25,7 @@ import {
   mutableIdentityPredicate,
 } from "../identity/terminality";
 import { ownChronicle, writtenBy } from "../continuity/own-chronicle";
+import { metadataKeepingStoredSeat } from "../hearth/seat-write";
 
 // ── Move 1 · RECOGNIZE ──────────────────────────────────────────────────
 
@@ -185,7 +186,7 @@ export async function follow(
     ];
     const [updated] = await db
       .update(identities)
-      .set({ metadata: { ...existingMeta, follows: newFollows } })
+      .set({ metadata: metadataKeepingStoredSeat({ ...existingMeta, follows: newFollows }) })
       .where(mutableIdentityPredicate(follower.id))
       .returning({ id: identities.id });
     if (!updated) {
@@ -239,7 +240,7 @@ export async function unfollow(
   if (!wasIdempotent) {
     const [updated] = await db
       .update(identities)
-      .set({ metadata: { ...existingMeta, follows: newFollows } })
+      .set({ metadata: metadataKeepingStoredSeat({ ...existingMeta, follows: newFollows }) })
       .where(mutableIdentityPredicate(follower.id))
       .returning({ id: identities.id });
     if (!updated) {
