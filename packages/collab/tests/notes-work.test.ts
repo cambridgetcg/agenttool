@@ -6,6 +6,7 @@ import { buildCollabMcpServer } from "../src/mcp.js";
 import { CollabError } from "../src/errors.js";
 import { parseNote } from "../src/note.js";
 import { call, git, journal, ok, refused, runCleanup, type Journal } from "./notes-helpers.js";
+import { handleOf } from "../src/verbs.js";
 
 // collab_take and collab_done (Collab Notes spec 5.4, 5.5), and their
 // derived idempotency.
@@ -162,8 +163,41 @@ describe("collab_done", () => {
     expect(completion.confidence_basis).toBe("the test passes (seen 2)");
     expect(completion.limits).toBe("Only the parser.");
     expect(JSON.parse(completion.evidence_refs_json).sort()).toEqual(
-      [...artifacts.map((artifact) => `artifact:${artifact.id}`), `report:${reported.id}`].sort(),
+      [...artifacts.map((artifact) => `artifact:${artifact.id}`), `event:${done.ids.evidence_cited.event}`, `report:${reported.id}`].sort(),
     );
+    // The outside items are cited first, by the completion's author, so the notes surface can show them.
+    const cited = j.events().find((event) => event.type === "evidence.cited" && event.entity_id === done.ids.evidence_cited.cite)!;
+    expect(cited.payload.by_session_id).toBe(a.session.id);
+    expect(cited.payload.items.map((item: any) => [item.n, item.kind, item.locator, item.observed])).toEqual([
+      [1, "file", "src/parser.ts", "server"],
+      [2, "test", "bun test tests/parser.test.ts", "caller"],
+      [3, "url", "https://example.org/issue/1", "caller"],
+    ]);
+  });
+
+  test("a reviewer on the notes surface sees each Evidence item of a done, with now for a server-hashed file", async () => {
+    const { j, sa, sb: reviewer } = pair();
+    j.write("src/parser.ts", "parser\n");
+    const taken = await ok(sa, "collab_take", { title: "Edit the parser", paths: ["src/parser.ts"] });
+    const done = await ok(sa, "collab_done", {
+      text: "Parser edited.",
+      why: [{ text: "the parser test passes", basis: "seen", cites: [2] }],
+      evidence: ["file src/parser.ts", "test bun test tests/parser.test.ts exit=0", "url https://example.org/issue/1"],
+    });
+    j.write("src/parser.ts", "parser, changed after the done\n");
+    for (const about of [taken.ids.task, done.ids.completion]) {
+      const view = await ok(reviewer, "collab_inbox", { about });
+      const entry = about === done.ids.completion ? view.root : view.thread.find((item: any) => item.id === done.ids.completion);
+      expect(entry).toBeDefined();
+      const event = entry.evidence.find((item: any) => item.kind === "event");
+      expect(event.cited.map((item: any) => ({ n: item.n, kind: item.kind, locator: item.locator, observed: item.observed, now: item.now })))
+        .toEqual([
+          { n: 1, kind: "file", locator: "src/parser.ts", observed: "server", now: "changed" },
+          { n: 2, kind: "test", locator: "bun test tests/parser.test.ts", observed: "caller", now: undefined },
+          { n: 3, kind: "url", locator: "https://example.org/issue/1", observed: "caller", now: undefined },
+        ]);
+      expect(event.cited[0].sha256).toBe(sha("parser\n"));
+    }
   });
 
   test("an interrupted finish resumes without duplicating what it did", async () => {
@@ -545,8 +579,13 @@ describe("refused before anything is written, or not refused at all", () => {
     const refusal = await refused(sa, "collab_done", { text: "Done.", evidence: ["file a.txt"] });
     expect(refusal.code).toBe("worktree_observation_stale");
     const artifact = j.store.getTask(a.workspace.id, taken.ids.task).artifacts![0]!;
-    expect(refusal.recorded_steps).toEqual([{ step: 1, what: `artifact ${artifact.id} for evidence 1`, id: artifact.id }]);
+    const cite = j.events().find((event) => event.type === "evidence.cited")!;
+    expect(refusal.recorded_steps).toEqual([
+      { step: 1, what: expect.stringContaining(`(cite ${cite.payload.cite_id})`), id: expect.stringMatching(/^event_/) },
+      { step: 2, what: `artifact ${artifact.id} for evidence 1`, id: artifact.id },
+    ]);
     expect(refusal.message).toContain(artifact.id);
+    expect(refusal.message).not.toContain("..");
     expect(JSON.stringify(refusal.remedy)).not.toMatch(/nothing was written/i);
   });
 
@@ -571,6 +610,32 @@ describe("refused before anything is written, or not refused at all", () => {
     const block = await refused(sa, "collab_done", { text: "Stuck.", outcome: "blocked", because: "Waiting." });
     expect(block.recorded_steps).toEqual([{ step: 1, what: `the text as progress on task ${created.id}`, id: created.id }]);
     expect(JSON.stringify(block.remedy)).not.toMatch(/nothing was written/i);
+    expect(block.remedy.say).not.toContain("..");
+  });
+
+  test("a block refused after its progress, sent again, replays the progress and blocks once", async () => {
+    const { j, a, sa } = pair();
+    const taken = await ok(sa, "collab_take", { title: "New work" });
+    const block = j.store.blockTaskForSession.bind(j.store);
+    let failures = 1;
+    (j.store as any).blockTaskForSession = (input: any) => {
+      if (failures-- > 0) throw new CollabError("worktree_observation_stale", "The registered worktree changed after it was inspected");
+      return block(input);
+    };
+    const input = { text: "Stuck.", outcome: "blocked", because: "Waiting." };
+    const refusal = await refused(sa, "collab_done", input);
+    // The remedy promises a replay; the same call sent again keeps that promise.
+    expect(refusal.remedy.say).toContain("replays them instead of writing them twice");
+    const again = await ok(sa, "collab_done", input);
+    expect(again.task.state).toBe("blocked");
+    const progressed = j.events().filter((event) => event.type === "task.progressed" && event.entity_id === taken.ids.task);
+    const blocked = j.events().filter((event) => event.type === "task.blocked" && event.entity_id === taken.ids.task);
+    expect([progressed.length, blocked.length]).toEqual([1, 1]);
+    // A lost response after that is a retry too: nothing new.
+    const before = j.count();
+    expect((await ok(sa, "collab_done", input)).replayed).toBe(true);
+    expect(j.count()).toBe(before);
+    void a;
   });
 
   test("because is not dropped: refused on finished, and said to be unused on a live take", async () => {
@@ -581,6 +646,42 @@ describe("refused before anything is written, or not refused at all", () => {
     const before = j.count();
     const refusal = await refused(sa, "collab_done", { text: "Done.", because: "It was quick." });
     expect(refusal).toMatchObject({ code: "not_stored", fields: ["because"], remedy: { tool: "collab_done", input: { text: "Done." } } });
+    expect(j.count()).toBe(before);
+  });
+
+  test("a done retried with an equivalent spelling of its reasons, evidence and reviewer replays", async () => {
+    const { j, b, sa } = pair();
+    const reported = j.store.appendReportForSession({ ...b.credential, idempotency_key: "r", kind: "observation", body: "A finding." });
+    await ok(sa, "collab_take", { title: "Work", paths: ["src/a.ts"] });
+    const first = await ok(sa, "collab_done", {
+      text: "Done.",
+      why: [{ text: "it ran", basis: "seen" }],
+      evidence: [`report:${reported.id}`],
+      limits: "only this",
+      review_by: "bravo",
+    });
+    const before = j.count();
+    const retry = await ok(sa, "collab_done", {
+      text: "Done.",
+      why: [{ text: "it ran ", basis: "Seen" }],
+      evidence: [handleOf("report", reported.id)],
+      limits: "only this ",
+      review_by: b.session.id,
+    });
+    expect(retry).toMatchObject({ replayed: true, ids: { completion: first.ids.completion } });
+    expect(j.count()).toBe(before);
+  });
+
+  test("a take over paths you already hold says to finish or release that hold, not to ask yourself", async () => {
+    const { j, sa } = pair();
+    const held = await ok(sa, "collab_take", { title: "Parser", paths: ["src/parser.ts"] });
+    const before = j.count();
+    const overlap = await refused(sa, "collab_take", { title: "Parser again", paths: ["src/parser.ts"] });
+    expect(overlap.code).toBe("path_scope_conflict");
+    expect(overlap.message).toContain(`${held.ids.task_handle}, which you hold`);
+    expect(overlap.remedy.say).toContain(`You already hold ${held.ids.task_handle}`);
+    expect(overlap.remedy.say).toContain(held.ids.task);
+    expect(overlap.remedy.tool).toBeUndefined();
     expect(j.count()).toBe(before);
   });
 

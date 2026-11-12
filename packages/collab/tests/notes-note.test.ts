@@ -365,6 +365,9 @@ describe("withdraw, accept, request_changes, relay_rejection", () => {
     expect(unseen.code).toBe("changed_under_you");
     expect(unseen.state.completion.id).toBe(task.completion_report_id);
     expect(unseen.remedy).toEqual({ tool: "collab_note", input: { act: "accept", text: "Fine.", re: task.completion_report_id } });
+    // Nothing changed: the completion was never shown, and the message says that.
+    expect(unseen.message).toContain("has not been shown to this session");
+    expect(unseen.message).not.toContain("It changed after this call read it");
     await ok(sb, "collab_inbox", { about: `task:${task.id}` });
     const accepted = await ok(sb, "collab_note", { act: "accept", text: "Fine.", re: `task:${task.id}` });
     expect(accepted.ids.completion).toBe(task.completion_report_id);

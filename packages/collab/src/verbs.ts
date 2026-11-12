@@ -482,18 +482,20 @@ export function noteRemedyOf(error: CollabError): NoteRemedy {
   }
   if (typeof remedy === "string" && remedy) return { say: remedy };
   if (SAY_BY_CODE[error.code]) return { say: SAY_BY_CODE[error.code]! };
+  // The message already ends a sentence when it names what was written.
+  const said = error.message.replace(/\.$/, "");
   if (Array.isArray(error.details.recorded_steps) && error.details.recorded_steps.length > 0) {
     // A later step of a multi-step call was refused: the fallbacks below
     // say nothing was written, which is false for the steps before it.
     return {
-      say: `${error.message}. The steps in recorded_steps were written before this refusal and stay recorded: ` +
+      say: `${said}. The steps in recorded_steps were written before this refusal and stay recorded: ` +
         "the same call sent again replays them instead of writing them twice, and a changed call writes its own.",
     };
   }
   if (error.details.after_housekeeping === true) {
     // The fallbacks below say nothing was written, which is false here.
     return {
-      say: `${error.message}. This call had already recorded its housekeeping (last-seen time, read mark, delivery records) ` +
+      say: `${said}. This call had already recorded its housekeeping (last-seen time, read mark, delivery records) ` +
         "before it failed; call collab_inbox again.",
     };
   }
@@ -503,7 +505,7 @@ export function noteRemedyOf(error: CollabError): NoteRemedy {
   if (error.code.endsWith("_not_found")) {
     return { say: "Check the id or handle: every id a later call needs comes back in an earlier result." };
   }
-  return { say: `${error.message}. Nothing was written; correct the call and send it again.` };
+  return { say: `${said}. Nothing was written; correct the call and send it again.` };
 }
 
 /**
