@@ -25,6 +25,7 @@ import {
 } from "./session-file.js";
 import { CollabStore } from "./store.js";
 import { doneVerb, noteVerb, takeVerb } from "./note-verbs.js";
+import { proposeVerb } from "./propose-verb.js";
 import {
   arriveVerb,
   FULL_PROFILE_BRIDGE,
@@ -368,23 +369,24 @@ export function buildCollabMcpServer(
     {
       title: "Say something on the record",
       description:
-        "Post a note: act note (the default), support, challenge, resolve, withdraw, accept, request_changes or relay_rejection. " +
+        "Post a note: act note (the default), support, challenge, resolve, withdraw, accept, request_changes, relay_rejection or decide. " +
         "text is the statement on its first line, then an optional body; a text that begins with an act word and \": \" " +
         "is read whole as a collab-note/1 note. Reasons say how each is known; outside evidence is recorded once per note. " +
         "Only the challenger can lift a challenge; anyone else's resolve is recorded as an answer to them. A support is a " +
-        "position, not a permission. dry_run checks and shows the note, writing nothing.",
+        "position, not a permission. A decide's authority is derived by the server: on a proposal the person agreed to, its extent; " +
+        "otherwise nothing, or this session's own record, never the person's agreement. dry_run checks and shows the note, writing nothing.",
       annotations: localMutation,
       inputSchema: {
         text: z.string().describe("The statement (first line, at most 200 characters), then a blank line and any body."),
-        act: z.string().optional().describe("note | support | challenge | resolve | withdraw | accept | request_changes | relay_rejection."),
+        act: z.string().optional().describe("note | support | challenge | resolve | withdraw | accept | request_changes | relay_rejection | decide."),
         re: z.string().optional().describe("What this answers: report#…, proposal#…, task#…, a full id, or file:/lobby:/msg: text. Required for every act but note."),
         to: z.string().optional().describe("A session name or id, person, or all. Default: whoever the act answers."),
         via: z.string().optional().describe("host:… | file:… | lobby:… | msg:…: the text came from another channel, so seen and quoted reasons are recorded as told."),
         why: z.array(noteReason).optional().describe("Up to 8 reasons."),
         evidence: noteEvidence,
         limits: z.string().optional().describe("What this does not cover; what was not checked (at most 2,000 characters)."),
-        extent: z.string().optional().describe("Where this stops (at most 1,000 characters)."),
-        outcome: z.string().optional().describe("For decide only, which a later build adds."),
+        extent: z.string().optional().describe("Where this stops (at most 1,000 characters). A decide on a proposal takes the agreed extent and refuses another."),
+        outcome: z.string().optional().describe("For decide only: proceed (the default), do_not_proceed or no_decision."),
         replaces: z.string().optional().describe("With act challenge: your earlier challenge this one replaces; it is withdrawn in the same transaction."),
         dry_run: z.boolean().optional().describe("Parse, check and render; write nothing."),
       },
@@ -434,6 +436,34 @@ export function buildCollabMcpServer(
       },
     },
     async (input) => noteCall(() => doneVerb(noteContext(), input)),
+  );
+
+  server.registerTool(
+    "collab_propose",
+    {
+      title: "Put a direction to the agents and the person",
+      description:
+        "Open a consent/v1 proposal: the agents settle a position by lazy consensus (support and challenge with collab_note), " +
+        "and the person decides at his own desk. The question is stored verbatim, so its bytes and proposal_sha256 are what " +
+        "collab_proposal_open makes from the same terms. evidence and limits enter the bytes the person signs. With replaces, " +
+        "the standing objections to your earlier proposal are carried into its terms as text and each reachable objector is told; " +
+        "under consent/v1 a carried objection does not block. The position authorises nothing; no agent tool records agreement.",
+      annotations: localMutation,
+      inputSchema: {
+        question: z.string().describe("What is being decided, stored verbatim (at most 8,000 characters)."),
+        criteria: z.string().describe("How the parties judge which way to go (at most 4,000 characters)."),
+        extent: z.string().describe("What agreement would authorise, and where it stops (at most 1,000 characters)."),
+        closes: z.union([z.number(), z.string()]).optional()
+          .describe("When the agents' consultation closes: seconds (600 to 604,800), a duration such as 30m, 6h or 2d, or an ISO time. Default 6 hours."),
+        conflicts: z.string().optional()
+          .describe("Context that disagrees, and how this proposal reads it (at most 4,000 characters, carried objections included)."),
+        evidence: noteEvidence,
+        limits: z.string().optional().describe("What this proposal does not cover; what was not checked (at most 2,000 characters)."),
+        topic: z.string().optional().describe("A label for later reading, for example principle:<name> (at most 200 characters)."),
+        replaces: z.string().optional().describe("Your own earlier proposal, still on the table, that this one replaces (id or proposal# handle)."),
+      },
+    },
+    async (input) => noteCall(() => proposeVerb(noteContext(), input)),
   );
 
   server.registerTool(

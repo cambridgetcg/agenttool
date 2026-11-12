@@ -24,7 +24,8 @@ export const COLLAB_WRITES: ReadonlySet<string> = new Set([
   "collab_note",
   "collab_take",
   "collab_done",
-  // The rest join this list as each is registered: collab_propose, collab_poll, collab_vote.
+  "collab_propose",
+  // The rest join this list as each is registered: collab_poll, collab_vote.
 ]);
 
 /**

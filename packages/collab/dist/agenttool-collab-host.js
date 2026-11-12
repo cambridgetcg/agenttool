@@ -174,9 +174,22 @@ var NOTE_ACTS = [
   "poll",
   "vote"
 ];
+var NOTE_ACTS_NEEDING_RE = [
+  "support",
+  "challenge",
+  "resolve",
+  "withdraw",
+  "accept",
+  "request_changes",
+  "relay_rejection"
+];
 var ACT_SET = new Set(NOTE_ACTS);
+function isNoteAct(value) {
+  return typeof value === "string" && ACT_SET.has(value);
+}
 var NOTE_BASES = ["seen", "told", "inferred", "quoted"];
 var BASIS_SET = new Set(NOTE_BASES);
+var NOTE_UNMARKED = "unmarked";
 var NOTE_FIELD_KEYS = {
   to: "To",
   re: "Re",
@@ -203,6 +216,7 @@ var NOTE_RENDER_KEYS = [
 var FIELD_BY_KEY = new Map(Object.entries(NOTE_FIELD_KEYS).map(([field, key]) => [key.toLowerCase(), field]));
 var RENDER_KEY_BY_LOWER = new Map(NOTE_RENDER_KEYS.map((key) => [key.toLowerCase(), key]));
 var RENDER_KEY_SET = new Set(NOTE_RENDER_KEYS);
+var X_KEY = /^X-[A-Za-z0-9-]{1,30}$/i;
 var LISTED_KEYS = [...Object.values(NOTE_FIELD_KEYS), ...NOTE_RENDER_KEYS].join(", ");
 var NOTE_JOURNAL_MAX = 8000;
 var NOTE_REVIEW_MAX = 4000;
@@ -226,13 +240,329 @@ var NOTE_ACT_CEILINGS = Object.freeze({
   poll: JOURNAL_CEILING,
   vote: JOURNAL_CEILING
 });
+var STRIPPED = /[\uFEFF\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u{E0000}-\u{E007F}]/gu;
+function cleanLines(text) {
+  return text.replace(STRIPPED, "").replace(/\r\n?/g, `
+`).split(`
+`).map((line) => line.replace(/[ \t]+$/, ""));
+}
+function normalizeNoteText(text) {
+  return cleanLines(text).join(`
+`).trim();
+}
+function trimBlankEdges(lines) {
+  let start = 0;
+  let end = lines.length;
+  while (start < end && lines[start] === "")
+    start += 1;
+  while (end > start && lines[end - 1] === "")
+    end -= 1;
+  return lines.slice(start, end);
+}
 var NOTE_JOURNAL_EVIDENCE_KINDS = ["report", "event", "artifact", "checkpoint"];
 var NOTE_EVIDENCE_ATTRS = ["sha256", "exit", "out", "lines", "runs", "at"];
+var NOTE_EVIDENCE_FORMS = [
+  "file <repo path>[:a-b]",
+  "commit <sha>",
+  "test <command> exit=<n>",
+  "url <url>",
+  "data <label> sha256=<hex>",
+  "msg <channel> <id>",
+  "report:<id>",
+  "event:<id>",
+  "artifact:<id>",
+  "checkpoint:<id>"
+];
 var ATTR_SET = new Set(NOTE_EVIDENCE_ATTRS);
 var JOURNAL_EVIDENCE_SET = new Set(NOTE_JOURNAL_EVIDENCE_KINDS);
 var ID_TOKEN = String.raw`[A-Za-z0-9][A-Za-z0-9._:#-]*`;
 var JOURNAL_EVIDENCE = new RegExp(String.raw`^(report|event|artifact|checkpoint):(${ID_TOKEN})$`, "i");
+var HANDLE_EVIDENCE = /^(?:report|proposal|ballot)#[0-9a-f]{6,32}$/i;
+var WORD_EVIDENCE = /^(file|commit|test|url|data|msg)[ \t]+(\S[^\n]*)$/i;
+var TRAILING_ATTR = /[ \t]+([A-Za-z0-9]+)=(\S+)$/;
+var ATTR_VALUE = {
+  sha256: /^[0-9a-f]{64}$/i,
+  exit: /^-?\d{1,10}$/,
+  out: /^sha256:[0-9a-f]{64}$/i,
+  lines: /^\d{1,9}(?:-\d{1,9})?$/,
+  runs: /^\d{1,9}$/,
+  at: /^\S+$/
+};
+var FILE_RANGE = /:(\d+)(?:-(\d+))?$/;
+function evidenceError(message, value) {
+  return new CollabError("invalid_evidence", `${message}. Evidence forms: ${NOTE_EVIDENCE_FORMS.join(" | ")}`, value === undefined ? { forms: [...NOTE_EVIDENCE_FORMS] } : { forms: [...NOTE_EVIDENCE_FORMS], evidence: value });
+}
+function parseEvidence(value) {
+  if (typeof value !== "string")
+    throw evidenceError("Evidence must be a string");
+  if (value.includes(`
+`) || value.includes("\r"))
+    throw evidenceError("Evidence is one line", value);
+  const text = value.trim();
+  if (text === "")
+    throw evidenceError("Evidence is empty");
+  const journal = JOURNAL_EVIDENCE.exec(text);
+  if (journal) {
+    return { kind: journal[1].toLowerCase(), locator: journal[2], attrs: {} };
+  }
+  if (HANDLE_EVIDENCE.test(text))
+    return { kind: "report", locator: text, attrs: {} };
+  const word = WORD_EVIDENCE.exec(text);
+  if (!word) {
+    if (/^task[:#_]/i.test(text)) {
+      throw evidenceError("A task is not evidence; cite its completion report (report:<id>)", value);
+    }
+    throw evidenceError("Evidence does not start with a known kind", value);
+  }
+  const kind = word[1].toLowerCase();
+  let locator = word[2];
+  const attrs = {};
+  for (;; ) {
+    const match = TRAILING_ATTR.exec(locator);
+    if (!match)
+      break;
+    const key = match[1].toLowerCase();
+    if (!ATTR_SET.has(key) || key in attrs)
+      break;
+    const attr = key;
+    if (!ATTR_VALUE[attr].test(match[2]))
+      throw evidenceError(`${attr}= has an unreadable value`, value);
+    attrs[attr] = match[2];
+    locator = locator.slice(0, match.index);
+  }
+  if (kind === "commit" && !/^[0-9a-f]{7,64}$/i.test(locator)) {
+    throw evidenceError("A commit is cited by its hex sha (7 to 64 hex digits)", value);
+  }
+  if (kind === "url" && !/^[A-Za-z][A-Za-z0-9+.-]*:\S+$/.test(locator)) {
+    throw evidenceError("A url is one word with a scheme, such as https://\u2026", value);
+  }
+  if (kind === "msg" && !/^\S+[ \t]+\S/.test(locator)) {
+    throw evidenceError("A msg cite names its channel and the message id", value);
+  }
+  if (kind === "file") {
+    const range = FILE_RANGE.exec(locator);
+    if (range) {
+      const from = Number(range[1]);
+      const to = range[2] === undefined ? from : Number(range[2]);
+      if (from < 1 || to < from)
+        throw evidenceError("A file line range is 1-based and runs forwards", value);
+      if (range.index === 0)
+        throw evidenceError("A file cite needs a path before its line range", value);
+    }
+  }
+  return { kind, locator, attrs };
+}
+var HANDLE = /^(report|proposal|ballot|task)#[0-9a-f]{6,32}$/i;
 var PREFIXED_REF = new RegExp(String.raw`^(report|proposal|ballot|task|event):(${ID_TOKEN})$`, "i");
+var BARE_REF = /^(report|task)_[A-Za-z0-9][A-Za-z0-9._:-]*$/;
+var TEXT_REF = /^(?:(file|msg):(\S[^\n]*)|(lobby):(\S+))$/i;
+var VIA = /^(?:host|file|lobby|msg):\S/i;
+function parseNoteRef(value) {
+  const handle = HANDLE.exec(value);
+  if (handle)
+    return { kind: handle[1].toLowerCase(), id: value, handle: true };
+  const prefixed = PREFIXED_REF.exec(value);
+  if (prefixed) {
+    return { kind: prefixed[1].toLowerCase(), id: prefixed[2], handle: HANDLE.test(prefixed[2]) };
+  }
+  const bare = BARE_REF.exec(value);
+  if (bare)
+    return { kind: bare[1], id: value, handle: false };
+  const text = TEXT_REF.exec(value);
+  if (text) {
+    return { kind: (text[1] ?? text[3]).toLowerCase(), id: text[2] ?? text[4], handle: false };
+  }
+  return null;
+}
+var REF_FORMS = "report:<id>, proposal:<id>, ballot:<id>, task:<id>, event:<id>, a handle such as report#3fa91c, file:<path>[#n], lobby:<room>#<n> or msg:<text>";
+var SUBJECT = /^([A-Za-z_]+):(?: ([^\n]*))?$/;
+var TRAILER_LINE = /^([A-Za-z][A-Za-z0-9-]{0,63}):(?: ([^\n]*))?$/;
+var CONTINUATION = /^[ \t]+\S/;
+var KEYISH = /^([A-Za-z][A-Za-z0-9-]{0,63}):(\S?)/;
+var BASIS_MARK = /^([\s\S]*?)\s*\(\s*(seen|told|inferred|quoted|unmarked)\b([^()]*)\)$/i;
+function readBasisMark(value) {
+  const match = BASIS_MARK.exec(value);
+  if (!match)
+    return { text: value, basis: null, cites: [], mark: "none" };
+  const inner = match[3].trim();
+  const tokens = inner === "" ? [] : inner.split(/\s*,\s*|\s+/);
+  if (tokens.some((token) => !/^\d{1,6}$/.test(token))) {
+    return { text: value, basis: null, cites: [], mark: "unreadable" };
+  }
+  const word = match[2].toLowerCase();
+  return {
+    text: match[1].trim(),
+    basis: word === NOTE_UNMARKED ? null : word,
+    cites: tokens.map(Number),
+    mark: "read"
+  };
+}
+function isTrailerBlock(lines) {
+  if (lines.length === 0 || !TRAILER_LINE.test(lines[0]))
+    return false;
+  return lines.every((line) => TRAILER_LINE.test(line) || CONTINUATION.test(line));
+}
+function blockEntries(lines, firstLine) {
+  const entries = [];
+  lines.forEach((line, index) => {
+    const trailer = TRAILER_LINE.exec(line);
+    if (trailer) {
+      entries.push({ key: trailer[1], line: firstLine + index, values: [(trailer[2] ?? "").trim()], raw: [line] });
+    } else {
+      const entry = entries[entries.length - 1];
+      entry.values.push(line.trim());
+      entry.raw.push(line);
+    }
+  });
+  return entries;
+}
+function readBlock(lines, firstLine, advice) {
+  const reading = {
+    single: { to: null, re: null, via: null, limits: null, purpose: null, extent: null, replaces: null },
+    why: [],
+    evidence: [],
+    trailers: [],
+    kept: []
+  };
+  for (const entry of blockEntries(lines, firstLine)) {
+    const lower = entry.key.toLowerCase();
+    const field = FIELD_BY_KEY.get(lower);
+    const renderKey = RENDER_KEY_BY_LOWER.get(lower);
+    if (field === undefined && renderKey === undefined && !X_KEY.test(entry.key)) {
+      reading.kept.push(...entry.raw);
+      advice.push(`Line ${entry.line}: "${entry.key}:" is not a collab-note/1 key, so the line stays in the body. ` + `Trailer keys are ${LISTED_KEYS}, or an X- key.`);
+      continue;
+    }
+    const multiline = field === undefined ? renderKey !== "Sha256" : MULTILINE_FIELDS.has(field);
+    const value = entry.values.filter((part) => part !== "").join(multiline ? `
+` : " ");
+    if (value === "" && field === "evidence") {
+      reading.evidence.push({ text: "", line: entry.line });
+      advice.push(`Line ${entry.line}: Evidence ${reading.evidence.length} is empty. It keeps its place so later cites keep ` + "their numbers; remove it and renumber the cites after it.");
+      continue;
+    }
+    if (value === "") {
+      reading.kept.push(...entry.raw);
+      advice.push(`Line ${entry.line}: "${entry.key}:" has no value, so the line stays in the body.`);
+      continue;
+    }
+    if (field === "why") {
+      const mark = readBasisMark(value);
+      if (mark.mark === "unreadable") {
+        advice.push(`Line ${entry.line}: the reason ends in a parenthesis that is not a basis mark, so it was read as text; ` + `write (seen), (told), (inferred) or (quoted), with any cite numbers, such as (seen 1,2).`);
+      } else if (mark.mark === "read" && mark.text === "") {
+        advice.push(`Line ${entry.line}: this Why: has a basis but no reason before it.`);
+      }
+      reading.why.push({ reason: { text: mark.text, basis: mark.basis, cites: mark.cites }, line: entry.line });
+    } else if (field === "evidence") {
+      reading.evidence.push({ text: value, line: entry.line });
+    } else if (field !== undefined) {
+      if (reading.single[field] !== null) {
+        reading.kept.push(...entry.raw);
+        advice.push(`Line ${entry.line}: a second "${NOTE_FIELD_KEYS[field]}:" stays in the body; only the first one counts.`);
+        continue;
+      }
+      reading.single[field] = value;
+    } else {
+      reading.trailers.push({ key: renderKey ?? entry.key, value });
+    }
+  }
+  return reading;
+}
+function adviseBodyTrailers(lines, firstLine, advice) {
+  lines.forEach((line, index) => {
+    const match = KEYISH.exec(line);
+    if (!match)
+      return;
+    const field = FIELD_BY_KEY.get(match[1].toLowerCase());
+    if (field === undefined)
+      return;
+    const key = NOTE_FIELD_KEYS[field];
+    advice.push(match[2] !== "" ? `Line ${firstLine + index} looks like a ${key}: trailer but has no space after the colon, so it is body text.` : `Line ${firstLine + index} looks like a ${key}: trailer but is in the body; trailers are read only from ` + `the last paragraph, with no blank line between them.`);
+  });
+}
+function parseNote(text) {
+  const lines = normalizeNoteText(text).split(`
+`);
+  const advice = [];
+  const subject = lines[0] ?? "";
+  let act = null;
+  let statement = subject;
+  const head = SUBJECT.exec(subject);
+  const word = head?.[1]?.toLowerCase();
+  if (head && isNoteAct(word)) {
+    act = word;
+    statement = (head[2] ?? "").trim();
+    if (statement === "")
+      advice.push(`Line 1: "${head[1]}:" has no statement after it.`);
+  } else {
+    advice.push(`Line 1 does not begin with a known act and ": " (${NOTE_ACTS.join(", ")}), so no act was read; ` + `the whole line is the statement.`);
+  }
+  const rest = lines.slice(1);
+  const finalStart = rest.lastIndexOf("") + 1;
+  const finalParagraph = rest.slice(finalStart);
+  const hasBlock = isTrailerBlock(finalParagraph);
+  const bodyLines = hasBlock ? rest.slice(0, finalStart) : rest;
+  adviseBodyTrailers(bodyLines, 2, advice);
+  const block = hasBlock ? readBlock(finalParagraph, finalStart + 2, advice) : readBlock([], 0, advice);
+  const ownBody = trimBlankEdges(bodyLines).join(`
+`).trimEnd();
+  const kept = block.kept.join(`
+`);
+  const joined = ownBody === "" ? kept : kept === "" ? ownBody : `${ownBody}
+
+${kept}`;
+  const body = joined === "" ? null : joined;
+  const evidence = block.evidence.map((item) => item.text);
+  block.evidence.forEach((item, index) => {
+    if (item.text === "")
+      return;
+    try {
+      parseEvidence(item.text);
+    } catch (error) {
+      if (!(error instanceof CollabError))
+        throw error;
+      advice.push(`Line ${item.line}: Evidence ${index + 1} is not a known evidence form (${NOTE_EVIDENCE_FORMS.join(" | ")}).`);
+    }
+  });
+  for (const { reason, line } of block.why) {
+    for (const cite of reason.cites) {
+      if (cite < 1)
+        advice.push(`Line ${line}: cite ${cite} is not an Evidence position; cites count from 1.`);
+      else if (cite > evidence.length) {
+        advice.push(`Line ${line}: cites Evidence ${cite}, but the note has ${evidence.length} Evidence line(s).`);
+      }
+    }
+  }
+  for (const field of ["re", "replaces"]) {
+    const value = block.single[field];
+    if (value !== null && parseNoteRef(value) === null) {
+      advice.push(`"${NOTE_FIELD_KEYS[field]}: ${value}" is not a known reference (${REF_FORMS}).`);
+    }
+  }
+  if (block.single.via !== null && !VIA.test(block.single.via)) {
+    advice.push(`"Via: ${block.single.via}" is not a known channel (host:\u2026, file:\u2026, lobby:\u2026 or msg:\u2026).`);
+  }
+  if (act !== null && NOTE_ACTS_NEEDING_RE.includes(act) && block.single.re === null) {
+    advice.push(`"${act}" needs a Re: line naming what it answers.`);
+  }
+  return {
+    act,
+    statement,
+    body,
+    to: block.single.to,
+    re: block.single.re,
+    via: block.single.via,
+    why: block.why.map((item) => item.reason),
+    evidence,
+    limits: block.single.limits,
+    purpose: block.single.purpose,
+    extent: block.single.extent,
+    replaces: block.single.replaces,
+    trailers: block.trailers,
+    advice
+  };
+}
 var LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
 function hasLoneSurrogate(text) {
   return LONE_SURROGATE.test(text);
@@ -6306,6 +6636,8 @@ class CollabStore {
           reviews,
           challenges: challenges.filter((challenge) => reports.some((row) => row.id === challenge.target_report_id)),
           termed: false,
+          proposal: null,
+          decision: null,
           mark: markState,
           observed_at: this.timestamp()
         };
@@ -6351,6 +6683,7 @@ class CollabStore {
         answers.set(row.id, row.event_sequence);
       }
       const ids = new Set([root.id, ...answers.keys()]);
+      const termed = this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(root.id) !== null;
       return {
         kind: "report",
         session: me,
@@ -6361,7 +6694,9 @@ class CollabStore {
         task: null,
         reviews: [],
         challenges: challenges.filter((challenge) => ids.has(challenge.target_report_id)),
-        termed: this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(root.id) !== null,
+        termed,
+        proposal: termed ? this.noteProposalData(root.workspace_id, root.id, sessions) : null,
+        decision: !termed && root.kind === "decision" ? this.noteDecisionData(root.workspace_id, root, sessions) : null,
         mark: markState,
         observed_at: this.timestamp()
       };
@@ -6853,6 +7188,367 @@ class CollabStore {
       });
     }
     return [...waiting.filter((entry) => entry.what === "stop"), ...waiting.filter((entry) => entry.what !== "stop")];
+  }
+  noteNow() {
+    return this.timestamp();
+  }
+  noteProposalPrecheck(credential, input) {
+    this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      for (const reference of normalizeEvidenceRefs(input.evidence_refs)) {
+        this.requireEvidenceRef(session.workspace_id, reference);
+      }
+      if (input.task_id)
+        this.requireTaskRow(session.workspace_id, input.task_id);
+      if (!input.supersedes_report_id)
+        return;
+      const replaced = this.requireReport(validateId(input.supersedes_report_id, "supersedes_report_id"));
+      if (replaced.workspace_id !== session.workspace_id) {
+        throw new CollabError("report_target_mismatch", "Target report is in another workspace");
+      }
+      if (replaced.task_id !== input.task_id) {
+        throw new CollabError("report_task_mismatch", "Related reports must use the same task scope as their target", {
+          target_task_id: replaced.task_id,
+          report_task_id: input.task_id
+        });
+      }
+      if (replaced.from_session_id !== session.id) {
+        throw new CollabError("report_author_mismatch", "Only the original author session may correct, withdraw, or supersede its report; other sessions should challenge it");
+      }
+      this.requireOpenToRevision(session.workspace_id, replaced.id);
+    }).deferred();
+  }
+  appendDecisionForSession(input) {
+    if (!NOTE_DECISION_OUTCOMES.includes(input.outcome)) {
+      throw new CollabError("invalid_outcome", `outcome is ${NOTE_DECISION_OUTCOMES.join(", ")}`);
+    }
+    const proposalId = input.proposal_report_id ? validateId(input.proposal_report_id, "proposal_report_id") : null;
+    if (proposalId && input.extent) {
+      throw new CollabError("extent_from_proposal", "A decision on a proposal covers the proposal's own extent");
+    }
+    const cite = input.cite && input.cite.items.length > 0 ? normalizeNoteCite(input.cite) : null;
+    const normalized = {
+      outcome: input.outcome,
+      proposal_report_id: proposalId,
+      extent: optionalText(input.extent ?? undefined, "extent", 1000),
+      body: cleanText(input.body, "body", MAX_REPORT_BODY),
+      task_id: input.task_id ? validateId(input.task_id, "task_id") : null,
+      to_session_id: input.to_session_id ? validateId(input.to_session_id, "to_session_id") : null,
+      to_person: input.to_person === true,
+      evidence_refs: normalizeEvidenceRefs(input.evidence_refs ?? []),
+      cite
+    };
+    return this.mutateAsSession(input, input.idempotency_key, "notes.decide.v1", normalized, (session) => {
+      const derived = this.decisionAuthority(session.workspace_id, normalized.proposal_report_id, normalized.outcome, normalized.extent);
+      const { scope, basis, proposal, person_act: personAct } = derived;
+      const refs = [...normalized.evidence_refs, ...derived.refs];
+      const cited = normalized.cite ? this.appendNoteCite(session, normalized.cite) : null;
+      if (cited)
+        refs.push(`event:${cited.event_id}`);
+      const report = {
+        task_id: normalized.task_id,
+        to_session_id: normalized.to_session_id,
+        kind: "decision",
+        body: normalized.body,
+        evidence_refs: normalizeEvidenceRefs(refs),
+        confidence: "unknown",
+        confidence_basis: null,
+        limits: null,
+        relation: "informs",
+        target_report_id: null,
+        authority_scope: scope,
+        authority_basis: basis,
+        ...normalized.to_person ? { to_person: true } : {}
+      };
+      this.validateReportInput(session, report);
+      const posted = this.appendReportInternal(session, {
+        ...report,
+        ...proposal ? { about_proposal_id: proposal.id } : {},
+        note: NOTE_FORMAT
+      });
+      return {
+        report: posted,
+        cite: cited,
+        outcome: normalized.outcome,
+        proposal,
+        person_act: personAct,
+        authority_scope: scope,
+        authority_basis: basis
+      };
+    }, input.receipt_plan ? { receipt_plan: input.receipt_plan } : {});
+  }
+  noteDecisionPrecheck(workspaceId, proposalId, outcome) {
+    this.db.transaction(() => {
+      this.decisionAuthority(workspaceId, proposalId, outcome, null);
+    }).deferred();
+  }
+  decisionAuthority(workspaceId, proposalId, outcome, extent) {
+    if (!proposalId) {
+      return {
+        scope: outcome === "proceed" ? extent ?? NOTE_DEFAULT_DECISION_EXTENT : NOTE_NOTHING_AUTHORISED,
+        basis: `${outcome === "proceed" ? "" : `${outcome}: `}${NOTE_SELF_DECISION_BASIS}`,
+        proposal: null,
+        person_act: null,
+        refs: []
+      };
+    }
+    this.requireProposalTerms(workspaceId, proposalId);
+    const status = this.proposalStatusInternal(workspaceId, proposalId);
+    const acts = status.person.acts;
+    const latest = acts.at(-1) ?? null;
+    const retired = status.ai.position === "withdrawn" || status.ai.position === "superseded";
+    const actView = (act) => ({
+      id: act.id,
+      event_id: this.eventIdAt(workspaceId, act.event_sequence),
+      act: act.act,
+      basis: act.basis,
+      at: act.created_at,
+      reason: act.reason
+    });
+    let scope;
+    let basis;
+    let personAct;
+    if (outcome === "proceed") {
+      if (retired) {
+        throw new CollabError("proposal_retired", `This proposal was ${status.ai.position} by ${status.ai.obsoleted_by_report_id}, so nothing can proceed on it`, { position: status.ai.position, obsoleted_by_report_id: status.ai.obsoleted_by_report_id });
+      }
+      if (!status.may_proceed || !status.agreement) {
+        const agreedBefore = [...acts].reverse().find((act) => act.act === "agree") ?? null;
+        if (latest?.act === "reject" && agreedBefore) {
+          throw new CollabError("agreement_withdrawn", `The person agreed (act ${agreedBefore.id}), but a later act rejects these bytes: act ${latest.id}, ` + `${latest.basis === "relayed_by_session" ? "relayed by a session" : `by ${latest.basis}`}`, { agreed_act: actView(agreedBefore), later_act: actView(latest) });
+        }
+        throw new CollabError("not_agreed", latest?.act === "reject" ? "The person's latest act on these bytes is a rejection, and there is no agreement to proceed on" : "The person has not agreed to these bytes", {
+          position: status.ai.position,
+          person: status.person.state,
+          ...latest ? { latest_act: actView(latest) } : {}
+        });
+      }
+      scope = status.terms.extent;
+      basis = `person agreed by ${status.agreement.basis} to proposal_sha256 ${status.proposal_sha256} (act ${status.agreement.id})`;
+      personAct = actView(status.agreement);
+    } else {
+      scope = NOTE_NOTHING_AUTHORISED;
+      basis = `${outcome}: recorded by this session; on proposal_sha256 ${status.proposal_sha256} the agents' position is ` + `${status.ai.position} and the person's latest act is ` + `${latest ? `${latest.act} by ${latest.basis} (act ${latest.id})` : "none"}`;
+      personAct = latest ? actView(latest) : null;
+    }
+    return {
+      scope,
+      basis,
+      proposal: {
+        id: status.proposal.id,
+        proposal_sha256: status.proposal_sha256,
+        position: status.ai.position,
+        person: status.person.state,
+        may_proceed: status.may_proceed,
+        extent: status.terms.extent,
+        author_session_id: status.proposal.from_session_id
+      },
+      person_act: personAct,
+      refs: [`report:${status.proposal.id}`, ...personAct ? [`event:${personAct.event_id}`] : []]
+    };
+  }
+  noteProposalView(workspaceId, proposalId) {
+    return this.db.transaction(() => {
+      this.requireProposalTerms(workspaceId, validateId(proposalId, "proposal_report_id"));
+      return this.noteProposalData(workspaceId, proposalId, this.noteSessionViews(workspaceId));
+    }).deferred();
+  }
+  noteDecisionView(workspaceId, reportId) {
+    return this.db.transaction(() => {
+      const report = this.requireReport(validateId(reportId, "report_id"));
+      if (report.workspace_id !== workspaceId || report.kind !== "decision") {
+        throw new CollabError("report_not_found", `No decision report ${reportId} in this workspace`);
+      }
+      return this.noteDecisionData(workspaceId, report, this.noteSessionViews(workspaceId));
+    }).deferred();
+  }
+  noteProposalData(workspaceId, proposalId, sessions, context = this.proposalReadContext(workspaceId)) {
+    const status = this.proposalStatusInternal(workspaceId, proposalId, context);
+    const byId = new Map(sessions.map((view) => [view.id, view]));
+    const author = status.proposal.from_session_id ? byId.get(status.proposal.from_session_id) ?? null : null;
+    const challengeViews = new Map(this.noteChallenges(workspaceId).map((challenge) => [challenge.id, challenge]));
+    const qualifying = new Set(status.ai.qualifying_support_report_ids);
+    const unresolved = new Set(status.ai.unresolved_challenge_report_ids);
+    const activeVoices = new Set(sessions.filter((view) => view.status === "active").map((view) => view.voice_id));
+    const stances = this.db.query(`
+      SELECT * FROM reports WHERE workspace_id = ? AND target_report_id = ? AND relation IN ('supports', 'challenges')
+      ORDER BY event_sequence
+    `).all(workspaceId, proposalId).map(reportFromRow).map((report) => {
+      const session = report.from_session_id ? byId.get(report.from_session_id) ?? null : null;
+      const view = challengeViews.get(report.id);
+      return this.noteStanceView(workspaceId, report, session, author, context, {
+        counted: report.relation === "supports" ? qualifying.has(report.id) : unresolved.has(report.id),
+        standing: report.relation === "supports" ? !context.obsoleted.has(report.id) : unresolved.has(report.id),
+        answered_by_another_voice: view?.answered_by_another_voice === true,
+        opened_at: status.terms.created_at,
+        active_voices: activeVoices
+      });
+    });
+    const supports = stances.filter((stance) => stance.relation === "supports");
+    const challenges = stances.filter((stance) => stance.relation === "challenges");
+    const consulted = status.terms.voices.filter((voice) => voice.voice_id !== status.terms.author_voice_id).map((voice) => {
+      const members = sessions.filter((view) => view.voice_id === voice.voice_id || voice.live_session_ids.includes(view.id));
+      const root = byId.get(voice.voice_id) ?? members[0] ?? null;
+      const lastSeen = members.map((view) => view.last_seen_at).sort().at(-1) ?? null;
+      return {
+        voice_id: voice.voice_id,
+        name: root?.actor ?? voice.voice_id,
+        session_ids: members.map((view) => view.id),
+        last_seen_at: lastSeen,
+        awaited: status.ai.awaiting_voice_ids.includes(voice.voice_id),
+        supported: supports.some((stance) => stance.counted && stance.voice_id === voice.voice_id),
+        challenged: challenges.some((stance) => stance.standing && stance.voice_id === voice.voice_id),
+        delivery_recorded: members.some((view) => this.noteShownAt(workspaceId, view.id, proposalId) !== null)
+      };
+    });
+    let replaced = null;
+    if (status.proposal.relation === "supersedes" && status.proposal.target_report_id) {
+      const replacedId = status.proposal.target_report_id;
+      const conflicts = status.terms.known_conflicts ?? "";
+      const carried = [...challengeViews.values()].filter((challenge) => challenge.target_report_id === replacedId).map((challenge) => {
+        const voice = challenge.from_session_id ? this.consentVoice(challenge.from_session_id, context) : null;
+        return {
+          challenge_id: challenge.id,
+          by_session_id: challenge.from_session_id,
+          by: challenge.from_actor,
+          voice_id: voice,
+          carried_in_terms: conflicts.includes(`report:${challenge.id}`),
+          standing_on_replaced: challenge.standing,
+          re_raised_here: voice !== null && challenges.some((stance) => stance.standing && stance.voice_id === voice)
+        };
+      }).filter((entry) => entry.carried_in_terms || entry.standing_on_replaced);
+      replaced = { proposal_id: replacedId, carried };
+    }
+    return {
+      status,
+      author,
+      lone: consulted.length === 0,
+      supports,
+      challenges,
+      consulted,
+      replaced,
+      observed_at: this.timestamp()
+    };
+  }
+  noteStanceView(workspaceId, report, session, author, context, facts) {
+    const marked = this.reportIsMarked(workspaceId, report);
+    let statement = report.body.split(`
+`)[0] ?? "";
+    let grounded;
+    if (marked) {
+      const parsed = parseNote(report.body);
+      if (parsed.act !== null)
+        statement = parsed.statement;
+      grounded = parsed.why.length > 0 || parsed.evidence.length > 0;
+    } else {
+      grounded = report.evidence_refs.length > 0 || report.confidence_basis !== null;
+    }
+    const flags = {};
+    const byAuthor = author !== null && report.from_session_id === author.id;
+    if (byAuthor)
+      flags.by_author = true;
+    if (!byAuthor && session && author) {
+      if (author.seat_ref !== null && session.seat_ref === author.seat_ref)
+        flags.same_seat_as_author = true;
+      if (session.actor === author.actor)
+        flags.same_name_as_author = true;
+    }
+    if (report.relation === "supports" && session && facts.opened_at !== null && session.joined_at > facts.opened_at) {
+      flags.started_after_open = true;
+    }
+    if (!grounded)
+      flags.ungrounded = true;
+    if (report.relation === "challenges") {
+      if (session?.status === "ended")
+        flags.challenger_ended = true;
+      if (facts.answered_by_another_voice)
+        flags.answered_by_another_voice = true;
+    }
+    const voice = report.from_session_id ? this.consentVoice(report.from_session_id, context) : null;
+    return {
+      id: report.id,
+      relation: report.relation,
+      from_session_id: report.from_session_id,
+      from_actor: report.from_actor,
+      voice_id: voice,
+      voice_has_active_session: voice !== null && facts.active_voices.has(voice),
+      created_at: report.created_at,
+      statement,
+      marked,
+      grounded_by: marked ? "note" : "fields",
+      counted: facts.counted,
+      standing: facts.standing,
+      flags
+    };
+  }
+  noteDecisionData(workspaceId, report, sessions) {
+    const marked = this.reportIsMarked(workspaceId, report);
+    const payload = this.reportPayload(workspaceId, report);
+    const termed = (id) => this.db.query(`SELECT 1 FROM proposal_terms WHERE workspace_id = ? AND report_id = ?`).get(workspaceId, id) !== null;
+    let proposalId = typeof payload.about_proposal_id === "string" && termed(payload.about_proposal_id) ? payload.about_proposal_id : null;
+    if (!proposalId) {
+      proposalId = report.evidence_refs.filter((ref) => ref.startsWith("report:")).map((ref) => ref.slice("report:".length)).find(termed) ?? null;
+    }
+    let proposal = null;
+    let unreadable = null;
+    if (proposalId) {
+      try {
+        proposal = this.noteProposalData(workspaceId, proposalId, sessions);
+      } catch (error) {
+        if (!(error instanceof CollabError))
+          throw error;
+        unreadable = error.code;
+      }
+    }
+    let restsOn = null;
+    if (proposal) {
+      const sequences = report.evidence_refs.filter((ref) => ref.startsWith("event:")).map((ref) => this.db.query(`SELECT sequence, type, entity_id FROM events WHERE workspace_id = ? AND id = ?`).get(workspaceId, ref.slice("event:".length))).filter((row) => row !== null && (row.type === "proposal.agreed" || row.type === "proposal.rejected") && row.entity_id === proposalId).map((row) => row.sequence);
+      const cited = Math.max(-1, ...sequences);
+      restsOn = proposal.status.person.acts.find((act) => act.event_sequence === cited) ?? null;
+    }
+    const latest = proposal?.status.person.acts.at(-1) ?? null;
+    const outcome = !marked ? "unstated" : report.authority_basis?.startsWith("do_not_proceed: ") ? "do_not_proceed" : report.authority_basis?.startsWith("no_decision: ") ? "no_decision" : "proceed";
+    const agreementCurrent = restsOn?.act === "agree" ? proposal.status.may_proceed && proposal.status.agreement?.id === restsOn.id : null;
+    const byId = new Map(sessions.map((view) => [view.id, view]));
+    const context = this.proposalReadContext(workspaceId);
+    const activeVoices = new Set(sessions.filter((view) => view.status === "active").map((view) => view.voice_id));
+    const challengeViews = this.noteChallenges(workspaceId).filter((challenge) => challenge.target_report_id === report.id);
+    const challenges = challengeViews.map((challenge) => this.noteStanceView(workspaceId, this.requireReport(challenge.id), challenge.from_session_id ? byId.get(challenge.from_session_id) ?? null : null, report.from_session_id ? byId.get(report.from_session_id) ?? null : null, context, {
+      counted: false,
+      standing: challenge.standing,
+      answered_by_another_voice: challenge.answered_by_another_voice,
+      opened_at: null,
+      active_voices: activeVoices
+    }));
+    return {
+      report,
+      marked,
+      outcome,
+      authority: {
+        scope: report.authority_scope,
+        basis: report.authority_basis,
+        derived_by_server: marked
+      },
+      proposal,
+      proposal_unreadable: unreadable,
+      rests_on: restsOn ? { ...restsOn, event_id: this.eventIdAt(workspaceId, restsOn.event_sequence) } : null,
+      agreement_current: agreementCurrent,
+      later_act: latest && restsOn && latest.id !== restsOn.id ? latest : null,
+      challenges
+    };
+  }
+  reportIsMarked(workspaceId, report) {
+    return this.reportPayload(workspaceId, report).note === NOTE_FORMAT;
+  }
+  reportPayload(workspaceId, report) {
+    const row = this.db.query(`SELECT payload_json FROM events WHERE workspace_id = ? AND sequence = ?`).get(workspaceId, report.event_sequence);
+    return row ? JSON.parse(row.payload_json) : {};
+  }
+  eventIdAt(workspaceId, sequence) {
+    const row = this.db.query(`SELECT id FROM events WHERE workspace_id = ? AND sequence = ?`).get(workspaceId, sequence);
+    if (!row)
+      throw new CollabError("event_not_found", `No event at sequence ${sequence}`);
+    return row.id;
   }
   timestamp() {
     return this.now().toISOString();
@@ -7421,6 +8117,10 @@ function normalizeNoteReport(report, index) {
     cite_earlier: [...earlier]
   };
 }
+var NOTE_DECISION_OUTCOMES = ["proceed", "do_not_proceed", "no_decision"];
+var NOTE_NOTHING_AUTHORISED = "nothing is authorised";
+var NOTE_DEFAULT_DECISION_EXTENT = "work this session already holds";
+var NOTE_SELF_DECISION_BASIS = "recorded by this session; not a direction decision and not the person's agreement";
 var NOTE_SCAN_MAX_EVENTS = 2000;
 var NOTE_SCAN_MAX_BYTES = 8 * 1024 * 1024;
 var NOTE_INBOX_MAX_LIMIT = 50;

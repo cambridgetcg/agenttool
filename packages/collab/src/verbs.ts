@@ -14,6 +14,7 @@ import { hostname } from "node:os";
 import { resolve, sep } from "node:path";
 import { defaultActor } from "./actor-default.js";
 import { canonicalJson } from "./canonical.js";
+import { defaultDatabasePath } from "./database-path.js";
 import { CollabError } from "./errors.js";
 import {
   fileLocatorParts,
@@ -29,21 +30,25 @@ import {
   type NoteInput,
   type NoteReason,
 } from "./note.js";
-import type { CollabReport, SessionHandle } from "./protocol.js";
+import type { CollabReport, ProposalStatus, SessionHandle } from "./protocol.js";
 import { hashWorktreeFile, inspectRepository, MAX_CITED_FILE_BYTES } from "./repository.js";
 import { defaultSeatRef } from "./seat-ref.js";
 import { removeSessionCredentialFile, writeSessionCredentialFile } from "./session-file.js";
 import {
   NOTE_INBOX_MAX_LIMIT,
+  NOTE_SELF_DECISION_BASIS,
   noteWaitingShownItems,
   type CollabStore,
   type NoteArrivalData,
   type NoteChallengeView,
   type NoteCitedItem,
+  type NoteDecisionData,
   type NoteEntityKind,
   type NoteEntry,
   type NoteInboxData,
+  type NoteProposalData,
   type NoteSessionView,
+  type NoteStanceView,
   type NoteThreadData,
   type NoteWaitingEntry,
   type ReceiptPlanGuard,
@@ -77,6 +82,7 @@ export const BUILT_NOTE_VERBS: readonly NoteVerb[] = [
   "collab_note",
   "collab_take",
   "collab_done",
+  "collab_propose",
 ];
 
 /** Existing tools the notes profile keeps beside the verbs (spec 9). */
@@ -177,7 +183,7 @@ export const NOTE_CARD = [
   "  Limits: <what this does not cover>   Purpose: <what it serves>   Extent: <where a decision stops>",
   "Acts: say: note; stand: support, challenge, resolve, withdraw; work: take, done, accept, request_changes;",
   "decide: propose, poll, vote, decide.",
-  "This build has collab_arrive, collab_inbox, collab_note, collab_take and collab_done; propose, poll, vote and decide come later.",
+  "This build has collab_arrive, collab_inbox, collab_note (decide included), collab_take, collab_done and collab_propose; poll and vote come later.",
   ...NOTE_PRINCIPLES.map((principle, index) => `${index + 1}. ${principle}`),
 ].join("\n");
 
@@ -1430,9 +1436,13 @@ export function formatEntry(
     const to = report.to_session_id
       ? sessionRef(report.to_session_id, report.to_session_id, byId)
       : entry.to_person ? "person" : "all";
+    // A decision or a note about a proposal targets nothing; the proposal it
+    // is about is in storage too (about_proposal_id), so it is named.
+    const aboutProposal = typeof payload.about_proposal_id === "string" ? payload.about_proposal_id : null;
     const re = report.target_report_id
       ? { id: report.target_report_id, handle: handleOf("report", report.target_report_id) }
-      : report.task_id ? { id: report.task_id, handle: handleOf("task", report.task_id) } : null;
+      : aboutProposal ? { id: aboutProposal, handle: handleOf("proposal", aboutProposal) }
+        : report.task_id ? { id: report.task_id, handle: handleOf("task", report.task_id) } : null;
     return {
       id: report.id,
       handle: reportHandle(report.id, entry.termed),
@@ -1584,7 +1594,12 @@ function formatWaiting(ctx: NoteVerbContext, entry: NoteWaitingEntry): Record<st
     : null;
   const next: NoteRemedy = entry.what === "stop"
     ? { say: `Stop work that rests on ${handle} (${entry.ref_id}): the person's latest act on it is a rejection.` }
-    : withSlot(ctx, {
+    : entry.what === "record_decision"
+      ? withSlot(ctx, {
+        tool: "collab_note",
+        input: { act: "decide", re: exactRef("proposal", entry.ref_id), text: "<what is decided, within the agreed extent>" },
+      })
+      : withSlot(ctx, {
       tool: "collab_inbox",
       input: {
         about: entry.what === "answer" && entry.about_id ? exactRef("report", entry.about_id) : exactRef(entry.ref_kind, entry.ref_id),
@@ -1896,7 +1911,7 @@ function aboutView(ctx: NoteVerbContext, binding: NoteBinding, about: string, fo
   if (thread.mark.clamped) advice.push(MARK_CLAMPED_ADVICE);
   if (thread.truncated) advice.push(`This thread lists its first ${thread.answers.length} answers only.`);
   const recheck = evidenceRechecker(ctx.store);
-  const view = thread.kind === "task" ? taskView(thread, byId, me, recheck) : reportView(thread, byId, me, advice, recheck);
+  const view = thread.kind === "task" ? taskView(thread, byId, me, recheck) : reportView(ctx, thread, byId, me, advice, recheck);
   const result: Record<string, unknown> = {
     ok: true,
     ...view,
@@ -1928,6 +1943,7 @@ function aboutView(ctx: NoteVerbContext, binding: NoteBinding, about: string, fo
 }
 
 function reportView(
+  ctx: NoteVerbContext,
   thread: NoteThreadData,
   byId: Map<string, NoteSessionView>,
   me: string,
@@ -1936,13 +1952,8 @@ function reportView(
 ): Record<string, unknown> {
   const root = thread.root!;
   const report = root.report!;
-  const decision = report.kind === "decision";
-  if (thread.termed) {
-    advice.push("This build shows a proposal as its plain thread; the computed proposal view (position, needs, for_the_person) is not built yet. The position here is not stated, so read none into it.");
-  } else if (decision) {
-    advice.push("This build shows a decision as its plain thread; the composed decision record is not built yet.");
-  }
-  return {
+  const decision = report.kind === "decision" && !thread.termed;
+  const view: Record<string, unknown> = {
     about: {
       kind: thread.termed ? "proposal" : decision ? "decision" : "report",
       id: report.id,
@@ -1952,6 +1963,300 @@ function reportView(
     answers: thread.answers.map((entry) => formatEntry(entry, byId, me, recheck)),
     state: {
       challenges: thread.challenges.map((challenge) => challengeView(challenge, thread.termed && challenge.target_report_id === report.id)),
+    },
+  };
+  if (thread.proposal) {
+    const facts = proposalFacts(ctx, thread.proposal);
+    advice.push(...facts.advice);
+    return { ...view, ...facts.fields };
+  }
+  if (thread.decision) {
+    const record = decisionRecord(thread.decision);
+    advice.push(...record.advice);
+    return { ...view, ...record.fields };
+  }
+  return view;
+}
+
+// ---------------------------------------------------------------------------
+// Proposals and decisions as the notes surface shows them (spec 5.2, 5.6, 6)
+
+/** Said wherever a replaced proposal's objections are shown (spec 5.6). */
+export const CARRIED_OBJECTIONS_SENTENCE =
+  "Carried objections are text in the terms the person signs. Under consent/v1 they do not block this proposal. Each objector may challenge again.";
+
+/** Beside the person's desk commands, every time they are shown (spec 5.2). */
+export const FOR_THE_PERSON_NOTE =
+  "For the person to run himself. An agent that runs these, or drives a terminal to answer them, records an agreement the person did not give.";
+
+/** What a flag on a support or challenge does to the position: nothing (spec 6). */
+export const ANNOTATIONS_NOTE =
+  "Flags on supports, challenges and consulted voices are display only: they change no count. The position is consent/v1's, exactly as collab_proposal_status computes it.";
+
+/** What a composed decision record cannot show (spec 5.2). */
+export const DECISION_DOES_NOT_ESTABLISH = [
+  "who or what model wrote it: a session's name and model are self-declared",
+  "that the voices were independent: sessions of one model or one operator may err together, and a seat_ref is unverified",
+  "that the work stayed inside the extent: collab records what was said, not what was done",
+] as const;
+
+function retiredPosition(status: ProposalStatus): boolean {
+  return status.ai.position === "withdrawn" || status.ai.position === "superseded";
+}
+
+/**
+ * The journal the person's desk must open: named only when it is not the
+ * one a plain shell would find, so the commands act on the proposal shown.
+ */
+function personDeskDb(ctx: Pick<NoteVerbContext, "store" | "environment">): string {
+  const file = ctx.store.db.filename;
+  if (!file || file === ":memory:") return "";
+  return file === defaultDatabasePath(ctx.environment) ? "" : ` --db ${shellQuote(file)}`;
+}
+
+/**
+ * The person's own commands for this proposal, with its full id (spec
+ * 5.2): data for the person, never a call. `now` says whether the desk would
+ * take an agreement as things stand.
+ */
+export function forThePerson(ctx: Pick<NoteVerbContext, "store" | "environment">, status: ProposalStatus): Record<string, unknown> {
+  const id = status.proposal.id;
+  const db = personDeskDb(ctx);
+  const position = status.ai.position;
+  const now = retiredPosition(status)
+    ? `It is ${position}, so the desk no longer takes an agreement on it.`
+    : status.may_proceed
+      ? "The person has agreed to these bytes; nothing more is asked of the person, who may still reject."
+      : position !== "consented"
+        ? `The desk takes an agreement only once the agents' position is consented; it is ${position} now. The person may reject at any time.`
+        : status.person.state === "rejected"
+          ? "The person's latest act is a rejection; the person may agree again on the same bytes, or leave it rejected."
+          : "The agents' position is consented; the person may agree or reject.";
+  return {
+    passkey: `agenttool-collab-host person ceremony --proposal ${id} --act agree${db}`,
+    terminal: `agenttool-collab-host person consent --proposal ${id}${db}`,
+    note: FOR_THE_PERSON_NOTE,
+    now,
+  };
+}
+
+function names(voices: NoteProposalData["consulted"]): string {
+  return voices.map((voice) => voice.name).join(", ");
+}
+
+/** One sentence: what would move the position (spec 5.2 needs). It reads the computed status and decides nothing. */
+export function proposalNeeds(data: NoteProposalData): string {
+  const { status } = data;
+  const closes = status.terms.closes_at;
+  const position = status.ai.position;
+  if (position === "withdrawn") return "Withdrawn by its author; nothing moves it now.";
+  if (position === "superseded") {
+    return `Replaced by ${status.ai.obsoleted_by_report_id}; read that proposal instead, since nothing moves this one now.`;
+  }
+  if (status.may_proceed) {
+    return "The person agreed to these bytes, so work may go ahead within the extent; a later challenge does not undo that, and only the person's rejection (or the author's withdrawal) stops it.";
+  }
+  if (status.person.state === "rejected") {
+    return "The person's latest act rejects these bytes, so nothing proceeds unless the person agrees again on the same bytes; agents' supports do not change that.";
+  }
+  const awaited = data.consulted.filter((voice) => voice.awaited);
+  const standing = status.ai.unresolved_challenge_report_ids;
+  switch (position) {
+    case "open":
+      if (data.lone) {
+        return `The author is the lone voice: an explicit support from the author would make it consented, and with none it lapses at ${closes}.`;
+      }
+      return status.ai.qualifying_support_report_ids.length === 0
+        ? `Support from the awaited voices (${names(awaited)}) would make it consented before ${closes}; at the close, one qualifying support with no standing challenge settles it consented, and none lets it lapse.`
+        : `Support from the voices still awaited (${names(awaited)}) would make it consented now; at ${closes} it settles consented as it stands, unless a challenge stands then.`;
+    case "challenged":
+      return `${standing.length} standing challenge(s) (${standing.join(", ")}) hold it challenged, and only each challenger's voice can lift its own; one still standing at ${closes} closes it split.`;
+    case "consented":
+      return status.ai.closed
+        ? "The agents' position is settled consented; nothing moves without the person's own act at the desk (for_the_person)."
+        : `The agents' position is consented; nothing moves without the person's own act at the desk (for_the_person), and a challenge before ${closes} would make it challenged.`;
+    case "split":
+      return "Closed split: a challenge stood at the close, so the position cannot move; replace the proposal (collab_propose with replaces) if something has changed.";
+    case "lapsed":
+      return "Closed lapsed: no qualifying support by the close, so the position cannot move; replace the proposal if the question still matters.";
+  }
+}
+
+function stanceItem(stance: NoteStanceView): Record<string, unknown> & { standing: boolean } {
+  return {
+    id: stance.id,
+    handle: handleOf("report", stance.id),
+    by: { session: stance.from_session_id, name: stance.from_actor },
+    voice: stance.voice_id,
+    statement: stance.statement,
+    counted: stance.counted,
+    standing: stance.standing,
+    ...stance.flags,
+    ...(stance.flags.ungrounded
+      ? {
+        ungrounded_basis: stance.grounded_by === "note"
+          ? "no Why and no Evidence lines"
+          : "no evidence_refs and no confidence_basis (a legacy report's body is not read for reasons)",
+      }
+      : {}),
+    ...(stance.flags.challenger_ended ? { voice_has_active_session: stance.voice_has_active_session } : {}),
+  };
+}
+
+/**
+ * The fields a proposal view and collab_propose's result share. `status` is
+ * the unchanged consent/v1 status, and position, proposal_sha256 and
+ * may_proceed are read from it alone; everything beside it is display.
+ */
+export function proposalFacts(
+  ctx: Pick<NoteVerbContext, "store" | "environment">,
+  data: NoteProposalData,
+): { fields: Record<string, unknown>; advice: string[] } {
+  const { status } = data;
+  const at = data.observed_at;
+  const advice: string[] = [];
+  const consulted = data.consulted.map((voice) => ({
+    voice: voice.voice_id,
+    name: voice.name,
+    last_seen_minutes: voice.last_seen_at ? minutesSince(voice.last_seen_at, at) : null,
+    delivery_recorded: voice.delivery_recorded,
+    awaited: voice.awaited,
+    supported: voice.supported,
+    challenged: voice.challenged,
+  }));
+  const silent = data.consulted.filter((voice) => voice.awaited && !voice.delivery_recorded);
+  const deliveryNote = `${silent.length} awaited voice(s) have no recorded delivery on the notes surface` +
+    (silent.length > 0
+      ? ` (${names(silent)}): they may never have been shown the question, and consent/v1 still lets their silence settle the position at its close.`
+      : ".");
+  if (silent.length > 0) advice.push(deliveryNote);
+  for (const stance of data.challenges) {
+    if (stance.standing && stance.flags.challenger_ended && !stance.voice_has_active_session) {
+      advice.push(
+        `challenger_ended: ${stance.id} still stands, but its challenger's session has ended and no session of its voice is active. ` +
+          "Replace the proposal carrying the objection (collab_propose with replaces), or tell the person, who can reject.",
+      );
+    }
+  }
+  const flagged = [...data.supports, ...data.challenges].filter((stance) =>
+    stance.flags.same_seat_as_author || stance.flags.same_name_as_author || stance.flags.started_after_open
+    || stance.flags.ungrounded || stance.flags.answered_by_another_voice || stance.flags.challenger_ended);
+  if (flagged.length > 0) advice.push(ANNOTATIONS_NOTE);
+  const fields: Record<string, unknown> = {
+    position: status.ai.position,
+    closed: status.ai.closed,
+    closes_at: status.terms.closes_at,
+    proposal_sha256: status.proposal_sha256,
+    may_proceed: status.may_proceed,
+    person: status.person.state,
+    lone: data.lone,
+    needs: proposalNeeds(data),
+    supports: data.supports.map(stanceItem),
+    challenges: data.challenges.map(stanceItem),
+    consulted,
+    delivery: { awaited_without_delivery: silent.length, note: deliveryNote },
+    annotations: ANNOTATIONS_NOTE,
+  };
+  if (data.replaced) {
+    fields.replaced = { id: data.replaced.proposal_id, handle: handleOf("proposal", data.replaced.proposal_id) };
+    fields.carried_objections = data.replaced.carried.map((entry) => ({
+      challenge: entry.challenge_id,
+      handle: handleOf("report", entry.challenge_id),
+      by: { session: entry.by_session_id, name: entry.by },
+      voice: entry.voice_id,
+      carried_in_terms: entry.carried_in_terms,
+      standing_on_replaced: entry.standing_on_replaced,
+      re_raised_here: entry.re_raised_here,
+      counted_by_consent_v1: false,
+    }));
+    fields.carried_note = CARRIED_OBJECTIONS_SENTENCE;
+    const shed = data.replaced.carried.filter((entry) => !entry.carried_in_terms && entry.standing_on_replaced);
+    if (shed.length > 0) {
+      advice.push(`${shed.length} objection(s) still standing on the replaced proposal are not in these terms: ${shed.map((entry) => entry.challenge_id).join(", ")}.`);
+    }
+  }
+  if (status.ai.position === "superseded" && status.ai.obsoleted_by_report_id) {
+    fields.replaced_by = { id: status.ai.obsoleted_by_report_id, handle: handleOf("proposal", status.ai.obsoleted_by_report_id) };
+  }
+  fields.for_the_person = forThePerson(ctx, status);
+  fields.status = status;
+  return { fields, advice };
+}
+
+function actView(act: { id: string; act: string; basis: string; created_at?: string; at?: string; reason?: string | null; event_id?: string }) {
+  return {
+    id: act.id,
+    act: act.act,
+    basis: act.basis,
+    at: act.created_at ?? act.at ?? null,
+    ...(act.event_id ? { event: act.event_id } : {}),
+    ...(act.reason ? { reason: act.reason } : {}),
+  };
+}
+
+/**
+ * The composed decision record (spec 5.2): what the decision rests on is
+ * read from the journal, never from its own words; whether the agreement
+ * still holds is computed now; and what the record cannot show is said.
+ */
+export function decisionRecord(data: NoteDecisionData): { fields: Record<string, unknown>; advice: string[] } {
+  const advice: string[] = [];
+  const proposal = data.proposal;
+  const status = proposal?.status ?? null;
+  const report = data.report;
+  const challenges = [
+    ...(proposal?.challenges ?? []).map((stance) => ({ ...stanceItem(stance), on: "proposal" })),
+    ...data.challenges.map((stance) => ({ ...stanceItem(stance), on: "decision" })),
+  ];
+  const restsOn = status
+    ? {
+      proposal: { id: status.proposal.id, handle: handleOf("proposal", status.proposal.id), proposal_sha256: status.proposal_sha256, extent: status.terms.extent },
+      person_act: data.rests_on ? actView(data.rests_on) : null,
+    }
+    : { proposal: null, person_act: null, note: NOTE_SELF_DECISION_BASIS };
+  if (data.agreement_current === false) {
+    advice.push(
+      `agreement_current is false: the person's latest act on ${status!.proposal.id} is ${data.later_act ? `${data.later_act.act} by ${data.later_act.basis}` : "not the agreement this decision cites"}. ` +
+        "Stop work that rests on this decision.",
+    );
+  }
+  if (!data.marked) {
+    advice.push("This decision was written by a legacy tool: its authority fields are shown as written and were not derived by the server; what it rests on is read from its evidence refs.");
+  }
+  if (data.proposal_unreadable) {
+    advice.push(`The proposal this decision names could not be read (${data.proposal_unreadable}), so no proposal is shown.`);
+  }
+  return {
+    advice,
+    fields: {
+      decision: {
+        id: report.id,
+        handle: handleOf("report", report.id),
+        by: { session: report.from_session_id, name: report.from_actor },
+        at: report.created_at,
+        outcome: data.outcome,
+      },
+      outcome: data.outcome,
+      authority: {
+        scope: data.authority.scope,
+        basis: data.authority.basis,
+        derived_by: data.authority.derived_by_server
+          ? "the server, from the journal, when it was written"
+          : "a legacy tool, as its caller wrote it; not checked",
+      },
+      rests_on: restsOn,
+      rests_on_basis: "read from the journal (the proposal and the person act this decision cites), never from its own words",
+      agreement_current: data.agreement_current,
+      ...(data.later_act ? { later_act: actView(data.later_act) } : {}),
+      ...(status
+        ? { proposal_position: { position: status.ai.position, person: status.person.state, may_proceed: status.may_proceed } }
+        : {}),
+      challenges,
+      dissent: challenges.filter((challenge) => challenge.standing === true),
+      voices_without_delivery: (proposal?.consulted ?? [])
+        .filter((voice) => !voice.delivery_recorded)
+        .map((voice) => ({ voice: voice.voice_id, name: voice.name })),
+      does_not_establish: [...DECISION_DOES_NOT_ESTABLISH],
     },
   };
 }
@@ -2026,6 +2331,10 @@ function carryThread(thread: NoteThreadData): { text: string; not_carried: strin
           : `${task.effective_status}; review ${task.review_status}`,
       }],
     };
+  } else if (thread.proposal) {
+    input = carriedProposal(thread.proposal);
+  } else if (thread.decision) {
+    input = carriedDecision(thread.decision, thread.root!.marked);
   } else {
     const report = thread.root!.report!;
     const stored = reportAct(report, thread.termed);
@@ -2060,4 +2369,67 @@ function carryThread(thread: NoteThreadData): { text: string; not_carried: strin
   }
   const carried = renderCarriedNote(input, { maxChars: 800, localTerms: localTerms() });
   return { text: carried.text, not_carried: carried.not_carried };
+}
+
+/** A statement and body from stored text: a first line too long for a statement travels whole in the body. */
+function statementAndBody(text: string): { statement: string; body: string | null } {
+  const lines = text.split("\n");
+  const firstCut = (lines[0] ?? "").length > NOTE_STATEMENT_MAX;
+  return {
+    statement: statementOf(text),
+    body: (firstCut ? text : lines.slice(1).join("\n")).trim() || null,
+  };
+}
+
+/**
+ * A proposal for carrying: its question, extent, limits and criteria as
+ * written, the hash the person would sign, and where it stands. The position
+ * is read from the computed status; carried objections are said not to count.
+ */
+function carriedProposal(data: NoteProposalData): NoteInput {
+  const { status } = data;
+  const carried = data.replaced?.carried.filter((entry) => entry.carried_in_terms).length ?? 0;
+  const position = [
+    status.ai.position,
+    `person ${status.person.state}`,
+    `may_proceed ${status.may_proceed}`,
+    ...(carried > 0 ? [`${carried} carried objection(s) are text in the terms, not counted by consent/v1`] : []),
+  ].join("; ");
+  return {
+    act: "propose",
+    ...statementAndBody(status.proposal.body),
+    re: `proposal:${status.proposal.id}`,
+    extent: status.terms.extent,
+    limits: status.proposal.limits,
+    trailers: [
+      { key: "Sha256", value: status.proposal_sha256 },
+      { key: "Position", value: position },
+      { key: "Criteria", value: status.terms.criteria },
+    ],
+  };
+}
+
+/** A decision for carrying: its words, its derived scope, and whether what it rests on still holds. */
+function carriedDecision(data: NoteDecisionData, marked: boolean): NoteInput {
+  const report = data.report;
+  const parsed = marked ? parseNote(report.body) : null;
+  const words = parsed && parsed.act !== null
+    ? { statement: parsed.statement, body: parsed.body }
+    : statementAndBody(report.body);
+  const status = data.proposal?.status ?? null;
+  const position = [
+    `outcome ${data.outcome}`,
+    ...(status ? [`rests on proposal:${status.proposal.id}`] : ["not the person's agreement"]),
+    ...(data.agreement_current !== null ? [`agreement_current ${data.agreement_current}`] : []),
+  ].join("; ");
+  return {
+    act: "decide",
+    ...words,
+    re: `report:${report.id}`,
+    ...(report.authority_scope ? { extent: report.authority_scope } : {}),
+    trailers: [
+      ...(status ? [{ key: "Sha256", value: status.proposal_sha256 }] : []),
+      { key: "Position", value: position },
+    ],
+  };
 }

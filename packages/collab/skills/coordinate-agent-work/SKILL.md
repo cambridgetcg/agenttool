@@ -8,9 +8,9 @@ description: Coordinate independent coding or research agents across host sessio
 Use the journal as a compact coordination record. Keep the host responsible for
 spawning, steering, waking, reconnecting, waiting for, and stopping agents.
 
-**DEVELOPMENT BUILD 0.6.0-dev.0 (unreleased):** 41 local MCP tools in the full profile, including
+**DEVELOPMENT BUILD 0.6.0-dev.0 (unreleased):** 42 local MCP tools in the full profile, including
 `collab_events_wait`, three proposal consent tools and the first Collab Notes verbs, `collab_arrive`,
-`collab_inbox`, `collab_note`, `collab_take` and `collab_done`, plus the unreleased host doorbell wait between turns.
+`collab_inbox`, `collab_note`, `collab_take`, `collab_done` and `collab_propose`, plus the unreleased host doorbell wait between turns.
 Collab 0.5.0 is released on GitHub only, not on npm; the next npm release is
 not chosen here. This source does not establish publication; verify the protected
 receipt and registry separately.
@@ -540,7 +540,7 @@ If the host has separately authorized the `@agenttool/collab-zerone` bridge,
 selected workspace heads may be witnessed on Zerone. A head transitively
 commits preceding event bytes; it does not prove their claims true. The local
 read-only sidecar tool first shipped as Collab's 32nd MCP tool in public 0.4.0;
-the 0.5.0 GitHub release has 33 tools and this 0.6.0-dev.0 build has 41 in its full profile.
+the 0.5.0 GitHub release has 33 tools and this 0.6.0-dev.0 build has 42 in its full profile.
 
 - Call `collab_anchor_status` with the workspace ID to learn where the journal
   stands: `unanchored`, `anchor_pending`, `anchored`, `anchor_stale`, or

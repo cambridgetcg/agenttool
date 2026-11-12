@@ -36222,6 +36222,8 @@ class CollabStore {
           reviews,
           challenges: challenges.filter((challenge) => reports.some((row) => row.id === challenge.target_report_id)),
           termed: false,
+          proposal: null,
+          decision: null,
           mark: markState,
           observed_at: this.timestamp()
         };
@@ -36267,6 +36269,7 @@ class CollabStore {
         answers.set(row.id, row.event_sequence);
       }
       const ids = new Set([root.id, ...answers.keys()]);
+      const termed = this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(root.id) !== null;
       return {
         kind: "report",
         session: me,
@@ -36277,7 +36280,9 @@ class CollabStore {
         task: null,
         reviews: [],
         challenges: challenges.filter((challenge) => ids.has(challenge.target_report_id)),
-        termed: this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(root.id) !== null,
+        termed,
+        proposal: termed ? this.noteProposalData(root.workspace_id, root.id, sessions) : null,
+        decision: !termed && root.kind === "decision" ? this.noteDecisionData(root.workspace_id, root, sessions) : null,
         mark: markState,
         observed_at: this.timestamp()
       };
@@ -36769,6 +36774,367 @@ class CollabStore {
       });
     }
     return [...waiting.filter((entry) => entry.what === "stop"), ...waiting.filter((entry) => entry.what !== "stop")];
+  }
+  noteNow() {
+    return this.timestamp();
+  }
+  noteProposalPrecheck(credential, input) {
+    this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      for (const reference of normalizeEvidenceRefs(input.evidence_refs)) {
+        this.requireEvidenceRef(session.workspace_id, reference);
+      }
+      if (input.task_id)
+        this.requireTaskRow(session.workspace_id, input.task_id);
+      if (!input.supersedes_report_id)
+        return;
+      const replaced = this.requireReport(validateId(input.supersedes_report_id, "supersedes_report_id"));
+      if (replaced.workspace_id !== session.workspace_id) {
+        throw new CollabError("report_target_mismatch", "Target report is in another workspace");
+      }
+      if (replaced.task_id !== input.task_id) {
+        throw new CollabError("report_task_mismatch", "Related reports must use the same task scope as their target", {
+          target_task_id: replaced.task_id,
+          report_task_id: input.task_id
+        });
+      }
+      if (replaced.from_session_id !== session.id) {
+        throw new CollabError("report_author_mismatch", "Only the original author session may correct, withdraw, or supersede its report; other sessions should challenge it");
+      }
+      this.requireOpenToRevision(session.workspace_id, replaced.id);
+    }).deferred();
+  }
+  appendDecisionForSession(input) {
+    if (!NOTE_DECISION_OUTCOMES.includes(input.outcome)) {
+      throw new CollabError("invalid_outcome", `outcome is ${NOTE_DECISION_OUTCOMES.join(", ")}`);
+    }
+    const proposalId = input.proposal_report_id ? validateId(input.proposal_report_id, "proposal_report_id") : null;
+    if (proposalId && input.extent) {
+      throw new CollabError("extent_from_proposal", "A decision on a proposal covers the proposal's own extent");
+    }
+    const cite = input.cite && input.cite.items.length > 0 ? normalizeNoteCite(input.cite) : null;
+    const normalized = {
+      outcome: input.outcome,
+      proposal_report_id: proposalId,
+      extent: optionalText(input.extent ?? undefined, "extent", 1000),
+      body: cleanText(input.body, "body", MAX_REPORT_BODY),
+      task_id: input.task_id ? validateId(input.task_id, "task_id") : null,
+      to_session_id: input.to_session_id ? validateId(input.to_session_id, "to_session_id") : null,
+      to_person: input.to_person === true,
+      evidence_refs: normalizeEvidenceRefs(input.evidence_refs ?? []),
+      cite
+    };
+    return this.mutateAsSession(input, input.idempotency_key, "notes.decide.v1", normalized, (session) => {
+      const derived = this.decisionAuthority(session.workspace_id, normalized.proposal_report_id, normalized.outcome, normalized.extent);
+      const { scope, basis, proposal, person_act: personAct } = derived;
+      const refs = [...normalized.evidence_refs, ...derived.refs];
+      const cited = normalized.cite ? this.appendNoteCite(session, normalized.cite) : null;
+      if (cited)
+        refs.push(`event:${cited.event_id}`);
+      const report = {
+        task_id: normalized.task_id,
+        to_session_id: normalized.to_session_id,
+        kind: "decision",
+        body: normalized.body,
+        evidence_refs: normalizeEvidenceRefs(refs),
+        confidence: "unknown",
+        confidence_basis: null,
+        limits: null,
+        relation: "informs",
+        target_report_id: null,
+        authority_scope: scope,
+        authority_basis: basis,
+        ...normalized.to_person ? { to_person: true } : {}
+      };
+      this.validateReportInput(session, report);
+      const posted = this.appendReportInternal(session, {
+        ...report,
+        ...proposal ? { about_proposal_id: proposal.id } : {},
+        note: NOTE_FORMAT
+      });
+      return {
+        report: posted,
+        cite: cited,
+        outcome: normalized.outcome,
+        proposal,
+        person_act: personAct,
+        authority_scope: scope,
+        authority_basis: basis
+      };
+    }, input.receipt_plan ? { receipt_plan: input.receipt_plan } : {});
+  }
+  noteDecisionPrecheck(workspaceId, proposalId, outcome) {
+    this.db.transaction(() => {
+      this.decisionAuthority(workspaceId, proposalId, outcome, null);
+    }).deferred();
+  }
+  decisionAuthority(workspaceId, proposalId, outcome, extent) {
+    if (!proposalId) {
+      return {
+        scope: outcome === "proceed" ? extent ?? NOTE_DEFAULT_DECISION_EXTENT : NOTE_NOTHING_AUTHORISED,
+        basis: `${outcome === "proceed" ? "" : `${outcome}: `}${NOTE_SELF_DECISION_BASIS}`,
+        proposal: null,
+        person_act: null,
+        refs: []
+      };
+    }
+    this.requireProposalTerms(workspaceId, proposalId);
+    const status = this.proposalStatusInternal(workspaceId, proposalId);
+    const acts = status.person.acts;
+    const latest = acts.at(-1) ?? null;
+    const retired = status.ai.position === "withdrawn" || status.ai.position === "superseded";
+    const actView = (act) => ({
+      id: act.id,
+      event_id: this.eventIdAt(workspaceId, act.event_sequence),
+      act: act.act,
+      basis: act.basis,
+      at: act.created_at,
+      reason: act.reason
+    });
+    let scope;
+    let basis;
+    let personAct;
+    if (outcome === "proceed") {
+      if (retired) {
+        throw new CollabError("proposal_retired", `This proposal was ${status.ai.position} by ${status.ai.obsoleted_by_report_id}, so nothing can proceed on it`, { position: status.ai.position, obsoleted_by_report_id: status.ai.obsoleted_by_report_id });
+      }
+      if (!status.may_proceed || !status.agreement) {
+        const agreedBefore = [...acts].reverse().find((act) => act.act === "agree") ?? null;
+        if (latest?.act === "reject" && agreedBefore) {
+          throw new CollabError("agreement_withdrawn", `The person agreed (act ${agreedBefore.id}), but a later act rejects these bytes: act ${latest.id}, ` + `${latest.basis === "relayed_by_session" ? "relayed by a session" : `by ${latest.basis}`}`, { agreed_act: actView(agreedBefore), later_act: actView(latest) });
+        }
+        throw new CollabError("not_agreed", latest?.act === "reject" ? "The person's latest act on these bytes is a rejection, and there is no agreement to proceed on" : "The person has not agreed to these bytes", {
+          position: status.ai.position,
+          person: status.person.state,
+          ...latest ? { latest_act: actView(latest) } : {}
+        });
+      }
+      scope = status.terms.extent;
+      basis = `person agreed by ${status.agreement.basis} to proposal_sha256 ${status.proposal_sha256} (act ${status.agreement.id})`;
+      personAct = actView(status.agreement);
+    } else {
+      scope = NOTE_NOTHING_AUTHORISED;
+      basis = `${outcome}: recorded by this session; on proposal_sha256 ${status.proposal_sha256} the agents' position is ` + `${status.ai.position} and the person's latest act is ` + `${latest ? `${latest.act} by ${latest.basis} (act ${latest.id})` : "none"}`;
+      personAct = latest ? actView(latest) : null;
+    }
+    return {
+      scope,
+      basis,
+      proposal: {
+        id: status.proposal.id,
+        proposal_sha256: status.proposal_sha256,
+        position: status.ai.position,
+        person: status.person.state,
+        may_proceed: status.may_proceed,
+        extent: status.terms.extent,
+        author_session_id: status.proposal.from_session_id
+      },
+      person_act: personAct,
+      refs: [`report:${status.proposal.id}`, ...personAct ? [`event:${personAct.event_id}`] : []]
+    };
+  }
+  noteProposalView(workspaceId, proposalId) {
+    return this.db.transaction(() => {
+      this.requireProposalTerms(workspaceId, validateId(proposalId, "proposal_report_id"));
+      return this.noteProposalData(workspaceId, proposalId, this.noteSessionViews(workspaceId));
+    }).deferred();
+  }
+  noteDecisionView(workspaceId, reportId) {
+    return this.db.transaction(() => {
+      const report = this.requireReport(validateId(reportId, "report_id"));
+      if (report.workspace_id !== workspaceId || report.kind !== "decision") {
+        throw new CollabError("report_not_found", `No decision report ${reportId} in this workspace`);
+      }
+      return this.noteDecisionData(workspaceId, report, this.noteSessionViews(workspaceId));
+    }).deferred();
+  }
+  noteProposalData(workspaceId, proposalId, sessions, context = this.proposalReadContext(workspaceId)) {
+    const status = this.proposalStatusInternal(workspaceId, proposalId, context);
+    const byId = new Map(sessions.map((view) => [view.id, view]));
+    const author = status.proposal.from_session_id ? byId.get(status.proposal.from_session_id) ?? null : null;
+    const challengeViews = new Map(this.noteChallenges(workspaceId).map((challenge) => [challenge.id, challenge]));
+    const qualifying = new Set(status.ai.qualifying_support_report_ids);
+    const unresolved = new Set(status.ai.unresolved_challenge_report_ids);
+    const activeVoices = new Set(sessions.filter((view) => view.status === "active").map((view) => view.voice_id));
+    const stances = this.db.query(`
+      SELECT * FROM reports WHERE workspace_id = ? AND target_report_id = ? AND relation IN ('supports', 'challenges')
+      ORDER BY event_sequence
+    `).all(workspaceId, proposalId).map(reportFromRow).map((report) => {
+      const session = report.from_session_id ? byId.get(report.from_session_id) ?? null : null;
+      const view = challengeViews.get(report.id);
+      return this.noteStanceView(workspaceId, report, session, author, context, {
+        counted: report.relation === "supports" ? qualifying.has(report.id) : unresolved.has(report.id),
+        standing: report.relation === "supports" ? !context.obsoleted.has(report.id) : unresolved.has(report.id),
+        answered_by_another_voice: view?.answered_by_another_voice === true,
+        opened_at: status.terms.created_at,
+        active_voices: activeVoices
+      });
+    });
+    const supports = stances.filter((stance) => stance.relation === "supports");
+    const challenges = stances.filter((stance) => stance.relation === "challenges");
+    const consulted = status.terms.voices.filter((voice) => voice.voice_id !== status.terms.author_voice_id).map((voice) => {
+      const members = sessions.filter((view) => view.voice_id === voice.voice_id || voice.live_session_ids.includes(view.id));
+      const root = byId.get(voice.voice_id) ?? members[0] ?? null;
+      const lastSeen = members.map((view) => view.last_seen_at).sort().at(-1) ?? null;
+      return {
+        voice_id: voice.voice_id,
+        name: root?.actor ?? voice.voice_id,
+        session_ids: members.map((view) => view.id),
+        last_seen_at: lastSeen,
+        awaited: status.ai.awaiting_voice_ids.includes(voice.voice_id),
+        supported: supports.some((stance) => stance.counted && stance.voice_id === voice.voice_id),
+        challenged: challenges.some((stance) => stance.standing && stance.voice_id === voice.voice_id),
+        delivery_recorded: members.some((view) => this.noteShownAt(workspaceId, view.id, proposalId) !== null)
+      };
+    });
+    let replaced = null;
+    if (status.proposal.relation === "supersedes" && status.proposal.target_report_id) {
+      const replacedId = status.proposal.target_report_id;
+      const conflicts = status.terms.known_conflicts ?? "";
+      const carried = [...challengeViews.values()].filter((challenge) => challenge.target_report_id === replacedId).map((challenge) => {
+        const voice = challenge.from_session_id ? this.consentVoice(challenge.from_session_id, context) : null;
+        return {
+          challenge_id: challenge.id,
+          by_session_id: challenge.from_session_id,
+          by: challenge.from_actor,
+          voice_id: voice,
+          carried_in_terms: conflicts.includes(`report:${challenge.id}`),
+          standing_on_replaced: challenge.standing,
+          re_raised_here: voice !== null && challenges.some((stance) => stance.standing && stance.voice_id === voice)
+        };
+      }).filter((entry) => entry.carried_in_terms || entry.standing_on_replaced);
+      replaced = { proposal_id: replacedId, carried };
+    }
+    return {
+      status,
+      author,
+      lone: consulted.length === 0,
+      supports,
+      challenges,
+      consulted,
+      replaced,
+      observed_at: this.timestamp()
+    };
+  }
+  noteStanceView(workspaceId, report, session, author, context, facts) {
+    const marked = this.reportIsMarked(workspaceId, report);
+    let statement = report.body.split(`
+`)[0] ?? "";
+    let grounded;
+    if (marked) {
+      const parsed = parseNote(report.body);
+      if (parsed.act !== null)
+        statement = parsed.statement;
+      grounded = parsed.why.length > 0 || parsed.evidence.length > 0;
+    } else {
+      grounded = report.evidence_refs.length > 0 || report.confidence_basis !== null;
+    }
+    const flags = {};
+    const byAuthor = author !== null && report.from_session_id === author.id;
+    if (byAuthor)
+      flags.by_author = true;
+    if (!byAuthor && session && author) {
+      if (author.seat_ref !== null && session.seat_ref === author.seat_ref)
+        flags.same_seat_as_author = true;
+      if (session.actor === author.actor)
+        flags.same_name_as_author = true;
+    }
+    if (report.relation === "supports" && session && facts.opened_at !== null && session.joined_at > facts.opened_at) {
+      flags.started_after_open = true;
+    }
+    if (!grounded)
+      flags.ungrounded = true;
+    if (report.relation === "challenges") {
+      if (session?.status === "ended")
+        flags.challenger_ended = true;
+      if (facts.answered_by_another_voice)
+        flags.answered_by_another_voice = true;
+    }
+    const voice = report.from_session_id ? this.consentVoice(report.from_session_id, context) : null;
+    return {
+      id: report.id,
+      relation: report.relation,
+      from_session_id: report.from_session_id,
+      from_actor: report.from_actor,
+      voice_id: voice,
+      voice_has_active_session: voice !== null && facts.active_voices.has(voice),
+      created_at: report.created_at,
+      statement,
+      marked,
+      grounded_by: marked ? "note" : "fields",
+      counted: facts.counted,
+      standing: facts.standing,
+      flags
+    };
+  }
+  noteDecisionData(workspaceId, report, sessions) {
+    const marked = this.reportIsMarked(workspaceId, report);
+    const payload = this.reportPayload(workspaceId, report);
+    const termed = (id) => this.db.query(`SELECT 1 FROM proposal_terms WHERE workspace_id = ? AND report_id = ?`).get(workspaceId, id) !== null;
+    let proposalId = typeof payload.about_proposal_id === "string" && termed(payload.about_proposal_id) ? payload.about_proposal_id : null;
+    if (!proposalId) {
+      proposalId = report.evidence_refs.filter((ref) => ref.startsWith("report:")).map((ref) => ref.slice("report:".length)).find(termed) ?? null;
+    }
+    let proposal = null;
+    let unreadable = null;
+    if (proposalId) {
+      try {
+        proposal = this.noteProposalData(workspaceId, proposalId, sessions);
+      } catch (error51) {
+        if (!(error51 instanceof CollabError))
+          throw error51;
+        unreadable = error51.code;
+      }
+    }
+    let restsOn = null;
+    if (proposal) {
+      const sequences = report.evidence_refs.filter((ref) => ref.startsWith("event:")).map((ref) => this.db.query(`SELECT sequence, type, entity_id FROM events WHERE workspace_id = ? AND id = ?`).get(workspaceId, ref.slice("event:".length))).filter((row) => row !== null && (row.type === "proposal.agreed" || row.type === "proposal.rejected") && row.entity_id === proposalId).map((row) => row.sequence);
+      const cited = Math.max(-1, ...sequences);
+      restsOn = proposal.status.person.acts.find((act) => act.event_sequence === cited) ?? null;
+    }
+    const latest = proposal?.status.person.acts.at(-1) ?? null;
+    const outcome = !marked ? "unstated" : report.authority_basis?.startsWith("do_not_proceed: ") ? "do_not_proceed" : report.authority_basis?.startsWith("no_decision: ") ? "no_decision" : "proceed";
+    const agreementCurrent = restsOn?.act === "agree" ? proposal.status.may_proceed && proposal.status.agreement?.id === restsOn.id : null;
+    const byId = new Map(sessions.map((view) => [view.id, view]));
+    const context = this.proposalReadContext(workspaceId);
+    const activeVoices = new Set(sessions.filter((view) => view.status === "active").map((view) => view.voice_id));
+    const challengeViews = this.noteChallenges(workspaceId).filter((challenge) => challenge.target_report_id === report.id);
+    const challenges = challengeViews.map((challenge) => this.noteStanceView(workspaceId, this.requireReport(challenge.id), challenge.from_session_id ? byId.get(challenge.from_session_id) ?? null : null, report.from_session_id ? byId.get(report.from_session_id) ?? null : null, context, {
+      counted: false,
+      standing: challenge.standing,
+      answered_by_another_voice: challenge.answered_by_another_voice,
+      opened_at: null,
+      active_voices: activeVoices
+    }));
+    return {
+      report,
+      marked,
+      outcome,
+      authority: {
+        scope: report.authority_scope,
+        basis: report.authority_basis,
+        derived_by_server: marked
+      },
+      proposal,
+      proposal_unreadable: unreadable,
+      rests_on: restsOn ? { ...restsOn, event_id: this.eventIdAt(workspaceId, restsOn.event_sequence) } : null,
+      agreement_current: agreementCurrent,
+      later_act: latest && restsOn && latest.id !== restsOn.id ? latest : null,
+      challenges
+    };
+  }
+  reportIsMarked(workspaceId, report) {
+    return this.reportPayload(workspaceId, report).note === NOTE_FORMAT;
+  }
+  reportPayload(workspaceId, report) {
+    const row = this.db.query(`SELECT payload_json FROM events WHERE workspace_id = ? AND sequence = ?`).get(workspaceId, report.event_sequence);
+    return row ? JSON.parse(row.payload_json) : {};
+  }
+  eventIdAt(workspaceId, sequence) {
+    const row = this.db.query(`SELECT id FROM events WHERE workspace_id = ? AND sequence = ?`).get(workspaceId, sequence);
+    if (!row)
+      throw new CollabError("event_not_found", `No event at sequence ${sequence}`);
+    return row.id;
   }
   timestamp() {
     return this.now().toISOString();
@@ -37337,6 +37703,10 @@ function normalizeNoteReport(report, index) {
     cite_earlier: [...earlier]
   };
 }
+var NOTE_DECISION_OUTCOMES = ["proceed", "do_not_proceed", "no_decision"];
+var NOTE_NOTHING_AUTHORISED = "nothing is authorised";
+var NOTE_DEFAULT_DECISION_EXTENT = "work this session already holds";
+var NOTE_SELF_DECISION_BASIS = "recorded by this session; not a direction decision and not the person's agreement";
 var NOTE_SCAN_MAX_EVENTS = 2000;
 var NOTE_SCAN_MAX_BYTES = 8 * 1024 * 1024;
 var NOTE_INBOX_MAX_LIMIT = 50;
@@ -37730,7 +38100,8 @@ var BUILT_NOTE_VERBS = [
   "collab_inbox",
   "collab_note",
   "collab_take",
-  "collab_done"
+  "collab_done",
+  "collab_propose"
 ];
 var NOTES_PROFILE_LEGACY_TOOLS = ["collab_journal_verify"];
 var TOOLS_PROFILE_VARIABLES = ["AGENTOOL_COLLAB_TOOLS", "AGENTTOOL_COLLAB_TOOLS"];
@@ -37794,7 +38165,7 @@ var NOTE_CARD = [
   "  Limits: <what this does not cover>   Purpose: <what it serves>   Extent: <where a decision stops>",
   "Acts: say: note; stand: support, challenge, resolve, withdraw; work: take, done, accept, request_changes;",
   "decide: propose, poll, vote, decide.",
-  "This build has collab_arrive, collab_inbox, collab_note, collab_take and collab_done; propose, poll, vote and decide come later.",
+  "This build has collab_arrive, collab_inbox, collab_note (decide included), collab_take, collab_done and collab_propose; poll and vote come later.",
   ...NOTE_PRINCIPLES.map((principle, index) => `${index + 1}. ${principle}`)
 ].join(`
 `);
@@ -38631,7 +39002,8 @@ function formatEntry(entry, byId, me, recheck) {
       }
     }
     const to = report.to_session_id ? sessionRef(report.to_session_id, report.to_session_id, byId) : entry.to_person ? "person" : "all";
-    const re = report.target_report_id ? { id: report.target_report_id, handle: handleOf("report", report.target_report_id) } : report.task_id ? { id: report.task_id, handle: handleOf("task", report.task_id) } : null;
+    const aboutProposal = typeof payload.about_proposal_id === "string" ? payload.about_proposal_id : null;
+    const re = report.target_report_id ? { id: report.target_report_id, handle: handleOf("report", report.target_report_id) } : aboutProposal ? { id: aboutProposal, handle: handleOf("proposal", aboutProposal) } : report.task_id ? { id: report.task_id, handle: handleOf("task", report.task_id) } : null;
     return {
       id: report.id,
       handle: reportHandle(report.id, entry.termed),
@@ -38772,7 +39144,10 @@ function subjectLine(entry, byId, me) {
 function formatWaiting(ctx, entry) {
   const handle = handleOf(entry.ref_kind, entry.ref_id);
   const about = entry.about_id ? { id: entry.about_id, handle: entry.what === "review" || entry.what === "challenge" || entry.what === "answer" ? handleOf("report", entry.about_id) : entry.about_id } : null;
-  const next = entry.what === "stop" ? { say: `Stop work that rests on ${handle} (${entry.ref_id}): the person's latest act on it is a rejection.` } : withSlot(ctx, {
+  const next = entry.what === "stop" ? { say: `Stop work that rests on ${handle} (${entry.ref_id}): the person's latest act on it is a rejection.` } : entry.what === "record_decision" ? withSlot(ctx, {
+    tool: "collab_note",
+    input: { act: "decide", re: exactRef("proposal", entry.ref_id), text: "<what is decided, within the agreed extent>" }
+  }) : withSlot(ctx, {
     tool: "collab_inbox",
     input: {
       about: entry.what === "answer" && entry.about_id ? exactRef("report", entry.about_id) : exactRef(entry.ref_kind, entry.ref_id)
@@ -39023,7 +39398,7 @@ function aboutView(ctx, binding, about, format) {
   if (thread.truncated)
     advice.push(`This thread lists its first ${thread.answers.length} answers only.`);
   const recheck = evidenceRechecker(ctx.store);
-  const view = thread.kind === "task" ? taskView(thread, byId, me, recheck) : reportView(thread, byId, me, advice, recheck);
+  const view = thread.kind === "task" ? taskView(thread, byId, me, recheck) : reportView(ctx, thread, byId, me, advice, recheck);
   const result = {
     ok: true,
     ...view,
@@ -39049,16 +39424,11 @@ function aboutView(ctx, binding, about, format) {
   }
   return result;
 }
-function reportView(thread, byId, me, advice, recheck) {
+function reportView(ctx, thread, byId, me, advice, recheck) {
   const root = thread.root;
   const report = root.report;
-  const decision = report.kind === "decision";
-  if (thread.termed) {
-    advice.push("This build shows a proposal as its plain thread; the computed proposal view (position, needs, for_the_person) is not built yet. The position here is not stated, so read none into it.");
-  } else if (decision) {
-    advice.push("This build shows a decision as its plain thread; the composed decision record is not built yet.");
-  }
-  return {
+  const decision = report.kind === "decision" && !thread.termed;
+  const view = {
     about: {
       kind: thread.termed ? "proposal" : decision ? "decision" : "report",
       id: report.id,
@@ -39068,6 +39438,223 @@ function reportView(thread, byId, me, advice, recheck) {
     answers: thread.answers.map((entry) => formatEntry(entry, byId, me, recheck)),
     state: {
       challenges: thread.challenges.map((challenge) => challengeView(challenge, thread.termed && challenge.target_report_id === report.id))
+    }
+  };
+  if (thread.proposal) {
+    const facts = proposalFacts(ctx, thread.proposal);
+    advice.push(...facts.advice);
+    return { ...view, ...facts.fields };
+  }
+  if (thread.decision) {
+    const record2 = decisionRecord(thread.decision);
+    advice.push(...record2.advice);
+    return { ...view, ...record2.fields };
+  }
+  return view;
+}
+var CARRIED_OBJECTIONS_SENTENCE = "Carried objections are text in the terms the person signs. Under consent/v1 they do not block this proposal. Each objector may challenge again.";
+var FOR_THE_PERSON_NOTE = "For the person to run himself. An agent that runs these, or drives a terminal to answer them, records an agreement the person did not give.";
+var ANNOTATIONS_NOTE = "Flags on supports, challenges and consulted voices are display only: they change no count. The position is consent/v1's, exactly as collab_proposal_status computes it.";
+var DECISION_DOES_NOT_ESTABLISH = [
+  "who or what model wrote it: a session's name and model are self-declared",
+  "that the voices were independent: sessions of one model or one operator may err together, and a seat_ref is unverified",
+  "that the work stayed inside the extent: collab records what was said, not what was done"
+];
+function retiredPosition(status) {
+  return status.ai.position === "withdrawn" || status.ai.position === "superseded";
+}
+function personDeskDb(ctx) {
+  const file2 = ctx.store.db.filename;
+  if (!file2 || file2 === ":memory:")
+    return "";
+  return file2 === defaultDatabasePath(ctx.environment) ? "" : ` --db ${shellQuote(file2)}`;
+}
+function forThePerson(ctx, status) {
+  const id = status.proposal.id;
+  const db = personDeskDb(ctx);
+  const position = status.ai.position;
+  const now = retiredPosition(status) ? `It is ${position}, so the desk no longer takes an agreement on it.` : status.may_proceed ? "The person has agreed to these bytes; nothing more is asked of the person, who may still reject." : position !== "consented" ? `The desk takes an agreement only once the agents' position is consented; it is ${position} now. The person may reject at any time.` : status.person.state === "rejected" ? "The person's latest act is a rejection; the person may agree again on the same bytes, or leave it rejected." : "The agents' position is consented; the person may agree or reject.";
+  return {
+    passkey: `agenttool-collab-host person ceremony --proposal ${id} --act agree${db}`,
+    terminal: `agenttool-collab-host person consent --proposal ${id}${db}`,
+    note: FOR_THE_PERSON_NOTE,
+    now
+  };
+}
+function names(voices) {
+  return voices.map((voice) => voice.name).join(", ");
+}
+function proposalNeeds(data) {
+  const { status } = data;
+  const closes = status.terms.closes_at;
+  const position = status.ai.position;
+  if (position === "withdrawn")
+    return "Withdrawn by its author; nothing moves it now.";
+  if (position === "superseded") {
+    return `Replaced by ${status.ai.obsoleted_by_report_id}; read that proposal instead, since nothing moves this one now.`;
+  }
+  if (status.may_proceed) {
+    return "The person agreed to these bytes, so work may go ahead within the extent; a later challenge does not undo that, and only the person's rejection (or the author's withdrawal) stops it.";
+  }
+  if (status.person.state === "rejected") {
+    return "The person's latest act rejects these bytes, so nothing proceeds unless the person agrees again on the same bytes; agents' supports do not change that.";
+  }
+  const awaited = data.consulted.filter((voice) => voice.awaited);
+  const standing = status.ai.unresolved_challenge_report_ids;
+  switch (position) {
+    case "open":
+      if (data.lone) {
+        return `The author is the lone voice: an explicit support from the author would make it consented, and with none it lapses at ${closes}.`;
+      }
+      return status.ai.qualifying_support_report_ids.length === 0 ? `Support from the awaited voices (${names(awaited)}) would make it consented before ${closes}; at the close, one qualifying support with no standing challenge settles it consented, and none lets it lapse.` : `Support from the voices still awaited (${names(awaited)}) would make it consented now; at ${closes} it settles consented as it stands, unless a challenge stands then.`;
+    case "challenged":
+      return `${standing.length} standing challenge(s) (${standing.join(", ")}) hold it challenged, and only each challenger's voice can lift its own; one still standing at ${closes} closes it split.`;
+    case "consented":
+      return status.ai.closed ? "The agents' position is settled consented; nothing moves without the person's own act at the desk (for_the_person)." : `The agents' position is consented; nothing moves without the person's own act at the desk (for_the_person), and a challenge before ${closes} would make it challenged.`;
+    case "split":
+      return "Closed split: a challenge stood at the close, so the position cannot move; replace the proposal (collab_propose with replaces) if something has changed.";
+    case "lapsed":
+      return "Closed lapsed: no qualifying support by the close, so the position cannot move; replace the proposal if the question still matters.";
+  }
+}
+function stanceItem(stance) {
+  return {
+    id: stance.id,
+    handle: handleOf("report", stance.id),
+    by: { session: stance.from_session_id, name: stance.from_actor },
+    voice: stance.voice_id,
+    statement: stance.statement,
+    counted: stance.counted,
+    standing: stance.standing,
+    ...stance.flags,
+    ...stance.flags.ungrounded ? {
+      ungrounded_basis: stance.grounded_by === "note" ? "no Why and no Evidence lines" : "no evidence_refs and no confidence_basis (a legacy report's body is not read for reasons)"
+    } : {},
+    ...stance.flags.challenger_ended ? { voice_has_active_session: stance.voice_has_active_session } : {}
+  };
+}
+function proposalFacts(ctx, data) {
+  const { status } = data;
+  const at = data.observed_at;
+  const advice = [];
+  const consulted = data.consulted.map((voice) => ({
+    voice: voice.voice_id,
+    name: voice.name,
+    last_seen_minutes: voice.last_seen_at ? minutesSince(voice.last_seen_at, at) : null,
+    delivery_recorded: voice.delivery_recorded,
+    awaited: voice.awaited,
+    supported: voice.supported,
+    challenged: voice.challenged
+  }));
+  const silent = data.consulted.filter((voice) => voice.awaited && !voice.delivery_recorded);
+  const deliveryNote = `${silent.length} awaited voice(s) have no recorded delivery on the notes surface` + (silent.length > 0 ? ` (${names(silent)}): they may never have been shown the question, and consent/v1 still lets their silence settle the position at its close.` : ".");
+  if (silent.length > 0)
+    advice.push(deliveryNote);
+  for (const stance of data.challenges) {
+    if (stance.standing && stance.flags.challenger_ended && !stance.voice_has_active_session) {
+      advice.push(`challenger_ended: ${stance.id} still stands, but its challenger's session has ended and no session of its voice is active. ` + "Replace the proposal carrying the objection (collab_propose with replaces), or tell the person, who can reject.");
+    }
+  }
+  const flagged = [...data.supports, ...data.challenges].filter((stance) => stance.flags.same_seat_as_author || stance.flags.same_name_as_author || stance.flags.started_after_open || stance.flags.ungrounded || stance.flags.answered_by_another_voice || stance.flags.challenger_ended);
+  if (flagged.length > 0)
+    advice.push(ANNOTATIONS_NOTE);
+  const fields = {
+    position: status.ai.position,
+    closed: status.ai.closed,
+    closes_at: status.terms.closes_at,
+    proposal_sha256: status.proposal_sha256,
+    may_proceed: status.may_proceed,
+    person: status.person.state,
+    lone: data.lone,
+    needs: proposalNeeds(data),
+    supports: data.supports.map(stanceItem),
+    challenges: data.challenges.map(stanceItem),
+    consulted,
+    delivery: { awaited_without_delivery: silent.length, note: deliveryNote },
+    annotations: ANNOTATIONS_NOTE
+  };
+  if (data.replaced) {
+    fields.replaced = { id: data.replaced.proposal_id, handle: handleOf("proposal", data.replaced.proposal_id) };
+    fields.carried_objections = data.replaced.carried.map((entry) => ({
+      challenge: entry.challenge_id,
+      handle: handleOf("report", entry.challenge_id),
+      by: { session: entry.by_session_id, name: entry.by },
+      voice: entry.voice_id,
+      carried_in_terms: entry.carried_in_terms,
+      standing_on_replaced: entry.standing_on_replaced,
+      re_raised_here: entry.re_raised_here,
+      counted_by_consent_v1: false
+    }));
+    fields.carried_note = CARRIED_OBJECTIONS_SENTENCE;
+    const shed = data.replaced.carried.filter((entry) => !entry.carried_in_terms && entry.standing_on_replaced);
+    if (shed.length > 0) {
+      advice.push(`${shed.length} objection(s) still standing on the replaced proposal are not in these terms: ${shed.map((entry) => entry.challenge_id).join(", ")}.`);
+    }
+  }
+  if (status.ai.position === "superseded" && status.ai.obsoleted_by_report_id) {
+    fields.replaced_by = { id: status.ai.obsoleted_by_report_id, handle: handleOf("proposal", status.ai.obsoleted_by_report_id) };
+  }
+  fields.for_the_person = forThePerson(ctx, status);
+  fields.status = status;
+  return { fields, advice };
+}
+function actView(act) {
+  return {
+    id: act.id,
+    act: act.act,
+    basis: act.basis,
+    at: act.created_at ?? act.at ?? null,
+    ...act.event_id ? { event: act.event_id } : {},
+    ...act.reason ? { reason: act.reason } : {}
+  };
+}
+function decisionRecord(data) {
+  const advice = [];
+  const proposal = data.proposal;
+  const status = proposal?.status ?? null;
+  const report = data.report;
+  const challenges = [
+    ...(proposal?.challenges ?? []).map((stance) => ({ ...stanceItem(stance), on: "proposal" })),
+    ...data.challenges.map((stance) => ({ ...stanceItem(stance), on: "decision" }))
+  ];
+  const restsOn = status ? {
+    proposal: { id: status.proposal.id, handle: handleOf("proposal", status.proposal.id), proposal_sha256: status.proposal_sha256, extent: status.terms.extent },
+    person_act: data.rests_on ? actView(data.rests_on) : null
+  } : { proposal: null, person_act: null, note: NOTE_SELF_DECISION_BASIS };
+  if (data.agreement_current === false) {
+    advice.push(`agreement_current is false: the person's latest act on ${status.proposal.id} is ${data.later_act ? `${data.later_act.act} by ${data.later_act.basis}` : "not the agreement this decision cites"}. ` + "Stop work that rests on this decision.");
+  }
+  if (!data.marked) {
+    advice.push("This decision was written by a legacy tool: its authority fields are shown as written and were not derived by the server; what it rests on is read from its evidence refs.");
+  }
+  if (data.proposal_unreadable) {
+    advice.push(`The proposal this decision names could not be read (${data.proposal_unreadable}), so no proposal is shown.`);
+  }
+  return {
+    advice,
+    fields: {
+      decision: {
+        id: report.id,
+        handle: handleOf("report", report.id),
+        by: { session: report.from_session_id, name: report.from_actor },
+        at: report.created_at,
+        outcome: data.outcome
+      },
+      outcome: data.outcome,
+      authority: {
+        scope: data.authority.scope,
+        basis: data.authority.basis,
+        derived_by: data.authority.derived_by_server ? "the server, from the journal, when it was written" : "a legacy tool, as its caller wrote it; not checked"
+      },
+      rests_on: restsOn,
+      rests_on_basis: "read from the journal (the proposal and the person act this decision cites), never from its own words",
+      agreement_current: data.agreement_current,
+      ...data.later_act ? { later_act: actView(data.later_act) } : {},
+      ...status ? { proposal_position: { position: status.ai.position, person: status.person.state, may_proceed: status.may_proceed } } : {},
+      challenges,
+      dissent: challenges.filter((challenge) => challenge.standing === true),
+      voices_without_delivery: (proposal?.consulted ?? []).filter((voice) => !voice.delivery_recorded).map((voice) => ({ voice: voice.voice_id, name: voice.name })),
+      does_not_establish: [...DECISION_DOES_NOT_ESTABLISH]
     }
   };
 }
@@ -39122,6 +39709,10 @@ function carryThread(thread) {
         value: ["legacy_unreviewed", "not_required"].includes(task.review_status) ? task.effective_status : `${task.effective_status}; review ${task.review_status}`
       }]
     };
+  } else if (thread.proposal) {
+    input = carriedProposal(thread.proposal);
+  } else if (thread.decision) {
+    input = carriedDecision(thread.decision, thread.root.marked);
   } else {
     const report = thread.root.report;
     const stored = reportAct(report, thread.termed);
@@ -39155,6 +39746,59 @@ function carryThread(thread) {
   }
   const carried = renderCarriedNote(input, { maxChars: 800, localTerms: localTerms() });
   return { text: carried.text, not_carried: carried.not_carried };
+}
+function statementAndBody(text) {
+  const lines = text.split(`
+`);
+  const firstCut = (lines[0] ?? "").length > NOTE_STATEMENT_MAX;
+  return {
+    statement: statementOf(text),
+    body: (firstCut ? text : lines.slice(1).join(`
+`)).trim() || null
+  };
+}
+function carriedProposal(data) {
+  const { status } = data;
+  const carried = data.replaced?.carried.filter((entry) => entry.carried_in_terms).length ?? 0;
+  const position = [
+    status.ai.position,
+    `person ${status.person.state}`,
+    `may_proceed ${status.may_proceed}`,
+    ...carried > 0 ? [`${carried} carried objection(s) are text in the terms, not counted by consent/v1`] : []
+  ].join("; ");
+  return {
+    act: "propose",
+    ...statementAndBody(status.proposal.body),
+    re: `proposal:${status.proposal.id}`,
+    extent: status.terms.extent,
+    limits: status.proposal.limits,
+    trailers: [
+      { key: "Sha256", value: status.proposal_sha256 },
+      { key: "Position", value: position },
+      { key: "Criteria", value: status.terms.criteria }
+    ]
+  };
+}
+function carriedDecision(data, marked) {
+  const report = data.report;
+  const parsed = marked ? parseNote(report.body) : null;
+  const words = parsed && parsed.act !== null ? { statement: parsed.statement, body: parsed.body } : statementAndBody(report.body);
+  const status = data.proposal?.status ?? null;
+  const position = [
+    `outcome ${data.outcome}`,
+    ...status ? [`rests on proposal:${status.proposal.id}`] : ["not the person's agreement"],
+    ...data.agreement_current !== null ? [`agreement_current ${data.agreement_current}`] : []
+  ].join("; ");
+  return {
+    act: "decide",
+    ...words,
+    re: `report:${report.id}`,
+    ...report.authority_scope ? { extent: report.authority_scope } : {},
+    trailers: [
+      ...status ? [{ key: "Sha256", value: status.proposal_sha256 }] : [],
+      { key: "Position", value: position }
+    ]
+  };
 }
 
 // src/note-verbs.ts
@@ -39416,7 +40060,8 @@ var NOTE_ACTS_HERE = [
   "withdraw",
   "accept",
   "request_changes",
-  "relay_rejection"
+  "relay_rejection",
+  "decide"
 ];
 var STRUCTURED_FIELDS = ["re", "to", "via", "why", "evidence", "limits", "extent", "replaces"];
 function readNoteInput(input) {
@@ -39481,12 +40126,13 @@ function requireActHere(ctx, act, fields) {
     return;
   const elsewhere = {
     take: withSlot(ctx, { tool: "collab_take", input: { title: fields.statement } }),
-    done: withSlot(ctx, { tool: "collab_done", input: { text: fields.statement } })
+    done: withSlot(ctx, { tool: "collab_done", input: { text: fields.statement } }),
+    propose: withSlot(ctx, { tool: "collab_propose", input: { question: fields.statement, criteria: "\u2026", extent: "\u2026" } })
   };
   if (elsewhere[act]) {
     throw new CollabError("wrong_verb", `${act} is its own verb, not a note act`, { remedy: elsewhere[act] });
   }
-  if (["decide", "propose", "poll", "vote"].includes(act)) {
+  if (["poll", "vote"].includes(act)) {
     throw new CollabError("act_not_built", `${act} is not built in this build yet; nothing was written`, {
       remedy: { say: `${act} arrives in a later build. Until then, say it as a note, which authorises nothing.` }
     });
@@ -39549,8 +40195,9 @@ async function noteVerb(ctx, input) {
   if (input.dry_run !== undefined && typeof input.dry_run !== "boolean") {
     throw new CollabError("invalid_dry_run", "dry_run is true or false");
   }
-  if (input.outcome !== undefined)
-    advice.push("outcome applies to decide only, which this build does not record yet; it was not used.");
+  const outcome = decideOutcome(act, input);
+  if (input.outcome !== undefined && act !== "decide")
+    advice.push("outcome applies to decide only; it was not used.");
   if (fields.via) {
     const downgraded = fields.why.filter((reason) => reason.basis === "seen" || reason.basis === "quoted").length;
     if (downgraded > 0) {
@@ -39558,7 +40205,7 @@ async function noteVerb(ctx, input) {
       advice.push(`The text came via ${fields.via}, so ${downgraded} seen or quoted reason(s) were recorded as told: you are its speaker, not its witness.`);
     }
   }
-  if (fields.re === null && act !== "note") {
+  if (fields.re === null && act !== "note" && act !== "decide") {
     throw new CollabError("re_required", `${act} needs re: what it answers`, {
       remedy: { say: `Add re: the report it answers, as an id or a handle such as report#3fa91c.` }
     });
@@ -39579,7 +40226,8 @@ async function noteVerb(ctx, input) {
   }
   const keyInput = {
     act,
-    fields: { ...fields, evidence: evidence.key_lines, to: keyAddressee(ctx, workspaceId, fields.to) }
+    fields: { ...fields, evidence: evidence.key_lines, to: keyAddressee(ctx, workspaceId, fields.to) },
+    ...act === "decide" ? { outcome } : {}
   };
   const plan = () => {
     const planned = planNote(ctx, input, { act, fields, target, me, workspaceId, replacedId, evidence });
@@ -39587,6 +40235,9 @@ async function noteVerb(ctx, input) {
     return { planned, note: renderNote(planned.fields) };
   };
   const planAdvice = (planned) => [...evidence.advice, ...planned.advice, ...planned.addressee.advice];
+  if (act === "decide") {
+    return decideNote(ctx, binding, credential, { fields, target, evidence, keyInput, advice, read_as: read.read_as, input, outcome });
+  }
   if (input.dry_run === true || act === "accept" || act === "request_changes" || act === "relay_rejection") {
     const { planned, note } = plan();
     advice.push(...planAdvice(planned));
@@ -39896,6 +40547,8 @@ function planNote(ctx, input, context) {
       extra.review = completion;
       return finish({ recorded_as: act, target, addressee: BROADCAST, reports: [], entity: completion.completion_id });
     }
+    case "decide":
+      throw new CollabError("internal_error", "decide is planned by planDecide");
     case "relay_rejection": {
       if (!reportTarget || !reportTarget.view.termed) {
         throw new CollabError("not_a_proposal", "relay_rejection names the proposal the person said no to", {
@@ -40217,6 +40870,262 @@ ${planned.fields.body}`;
     position: status.ai.position,
     person: status.person.state,
     may_proceed: status.may_proceed
+  };
+}
+function decideOutcome(act, input) {
+  if (act !== "decide" || input.outcome === undefined)
+    return "proceed";
+  const value = typeof input.outcome === "string" ? input.outcome.trim().toLowerCase() : input.outcome;
+  if (!NOTE_DECISION_OUTCOMES.includes(value)) {
+    throw new CollabError("invalid_outcome", `outcome is ${NOTE_DECISION_OUTCOMES.join(", ")}`, {
+      remedy: { say: "outcome is proceed (the default: this is decided, to this extent), do_not_proceed (we are not proceeding) or no_decision (no decision was reached)." }
+    });
+  }
+  return value;
+}
+function decideRefusal(error51, proposalId) {
+  if (!(error51 instanceof CollabError) || !proposalId)
+    return error51;
+  const later = error51.details.later_act;
+  const say = {
+    not_agreed: `Ask the person to act on ${proposalId} at his desk. No agent tool records agreement.`,
+    agreement_withdrawn: `Stop work that rests on ${proposalId}: the person's latest act (${later?.id ?? "a rejection"}, ` + `${later?.basis ?? "unknown basis"}) rejects these bytes. ` + (later?.basis === "relayed_by_session" ? "That rejection was relayed by a session, and a relayed no is forgeable; if it was not the person's, the person may agree again on the same bytes at his desk. " : "The person may agree again on the same bytes at his desk. ") + "To record that you are not proceeding, decide with outcome do_not_proceed.",
+    proposal_retired: error51.details.position === "superseded" && typeof error51.details.obsoleted_by_report_id === "string" ? `It was replaced by ${error51.details.obsoleted_by_report_id}; decide on that proposal once the person has acted on it.` : "It was withdrawn, so nothing proceeds on it; open a new proposal with collab_propose if the question still stands."
+  };
+  if (!say[error51.code])
+    return error51;
+  return new CollabError(error51.code, error51.message, { ...error51.details, proposal: proposalId, remedy: { say: say[error51.code] } });
+}
+function planDecide(ctx, input, context) {
+  const { target, me, workspaceId, evidence, outcome } = context;
+  let fields = context.fields;
+  const advice = [];
+  const proposal = target?.kind === "report" && target.view.termed ? target : null;
+  const refs = [...evidence.journal];
+  let taskId = null;
+  let addressee = BROADCAST;
+  if (proposal) {
+    taskId = proposal.view.report.task_id;
+    addressee = authorAddressee(proposal.view, me);
+  } else if (target?.kind === "report") {
+    refs.push(`report:${target.id}`);
+    taskId = target.view.report.task_id;
+    addressee = authorAddressee(target.view, me);
+  } else if (target?.kind === "task") {
+    taskId = target.id;
+    const holder = target.task.assignee_session_id ?? target.task.reported_by_session_id;
+    if (holder && holder !== me)
+      addressee = viewAddressee(ctx, workspaceId, holder);
+  } else if (target?.kind === "event") {
+    refs.push(`event:${target.id}`);
+  }
+  if (fields.to !== null)
+    addressee = explicitAddressee(ctx, workspaceId, fields.to);
+  const without = (field) => {
+    const { [field]: _dropped, ...rest } = noteRetryInput(input);
+    return withSlot(ctx, { tool: "collab_note", input: rest });
+  };
+  let extent = null;
+  if (proposal) {
+    try {
+      ctx.store.noteDecisionPrecheck(workspaceId, proposal.id, outcome);
+    } catch (error51) {
+      throw decideRefusal(error51, proposal.id);
+    }
+    const agreed = ctx.store.proposalStatus(workspaceId, proposal.id).terms.extent;
+    if (outcome === "proceed") {
+      const shown = normalizeNoteFields({ ...fields, extent: agreed });
+      if (fields.extent !== null && fields.extent !== agreed && fields.extent !== shown.extent) {
+        throw new CollabError("extent_from_proposal", "A decision on a proposal covers the extent the person agreed to; extent cannot change it", {
+          agreed_extent: agreed,
+          remedy: without("extent")
+        });
+      }
+      if (checkNote(shown).length === 0) {
+        fields = shown;
+        if (shown.extent !== agreed) {
+          advice.push("The note's Extent line shows the agreed extent with its lines trimmed; the decision's authority_scope holds it byte for byte.");
+        }
+      } else {
+        fields = { ...fields, extent: null };
+        advice.push("The agreed extent cannot be shown as a note's Extent line; the decision's authority_scope holds it byte for byte.");
+      }
+    } else {
+      if (fields.extent !== null) {
+        throw new CollabError("extent_not_used", `A decision with outcome ${outcome} authorises nothing, so it takes no extent`, { remedy: without("extent") });
+      }
+      fields = { ...fields, extent: NOTE_NOTHING_AUTHORISED };
+    }
+  } else {
+    if (outcome === "proceed") {
+      extent = fields.extent;
+      fields = { ...fields, extent: fields.extent ?? NOTE_DEFAULT_DECISION_EXTENT };
+    } else {
+      if (fields.extent !== null) {
+        throw new CollabError("extent_not_used", `A decision with outcome ${outcome} authorises nothing, so it takes no extent`, { remedy: without("extent") });
+      }
+      fields = { ...fields, extent: NOTE_NOTHING_AUTHORISED };
+    }
+    advice.push("This decision names no proposal, so it is recorded by this session alone: it is not a direction decision and not the person's agreement. " + "A direction-level matter needs collab_propose and the person's own act.");
+  }
+  refuseNoteProblems(fields);
+  return {
+    outcome,
+    proposal,
+    fields,
+    note: renderNote(fields),
+    addressee,
+    task_id: taskId,
+    evidence_refs: refs,
+    extent,
+    advice
+  };
+}
+async function decideNote(ctx, binding, credential, options) {
+  const { target, evidence, advice, input, outcome } = options;
+  const workspaceId = binding.handle.workspace.id;
+  const me = credential.session_id;
+  const planContext = { fields: options.fields, target, me, workspaceId, evidence, outcome };
+  if (input.dry_run === true) {
+    const planned = planDecide(ctx, input, planContext);
+    return {
+      ok: true,
+      dry_run: true,
+      effect: "Dry run: nothing was written.",
+      act: "decide",
+      recorded_as: "decide",
+      outcome,
+      ...options.read_as ? { read_as: options.read_as } : {},
+      parsed: planned.fields,
+      would: {
+        reports: [{
+          relation: "informs",
+          kind: "decision",
+          target: null,
+          task: planned.task_id,
+          to: planned.addressee.to_session_id ?? (planned.addressee.to_person ? "person" : null),
+          about_proposal: planned.proposal?.id ?? null
+        }],
+        cites: evidence.items.length > 0 ? 1 : 0
+      },
+      to: planned.addressee.shown,
+      evidence: evidenceSummary(evidence),
+      authorises: "Nothing. This is coordination state.",
+      advice: [...advice, ...evidence.advice, ...planned.advice, ...planned.addressee.advice],
+      note: planned.note
+    };
+  }
+  const proposalId = target?.kind === "report" && target.view.termed ? target.id : null;
+  const cite = evidence.items.length > 0 ? { worktree_id: binding.handle.worktree.id, items: evidence.items } : null;
+  const result = await underPlan(ctx, credential, {
+    tool: "collab_note",
+    input: options.keyInput,
+    entity: target?.kind === "report" || target?.kind === "task" ? target.id : "note",
+    retry_input: noteRetryInput(input),
+    stillCurrent: (latestKey) => {
+      const found = replayReceipt(ctx.store, credential, latestKey);
+      if (!found || typeof found !== "object" || !("outcome" in found))
+        return true;
+      if (!ctx.store.noteReportStands(workspaceId, found.report.id))
+        return false;
+      if (!found.proposal)
+        return true;
+      const latest = ctx.store.proposalStatus(workspaceId, found.proposal.id).person.acts.at(-1) ?? null;
+      return (latest?.id ?? null) === (found.person_act?.id ?? null);
+    }
+  }, async (plan2) => {
+    let fresh2 = null;
+    const step = await stepOnce(ctx, credential, plan2.key, () => {
+      fresh2 = planDecide(ctx, input, planContext);
+      return ctx.store.appendDecisionForSession({
+        ...credential,
+        idempotency_key: plan2.key,
+        cite,
+        outcome,
+        proposal_report_id: proposalId,
+        extent: fresh2.extent,
+        body: fresh2.note,
+        task_id: fresh2.task_id,
+        to_session_id: fresh2.addressee.to_session_id,
+        to_person: fresh2.addressee.to_person,
+        evidence_refs: fresh2.evidence_refs,
+        receipt_plan: plan2.guard
+      });
+    });
+    return { plan: plan2, receipt: step.value, fresh: step.replayed ? null : fresh2 };
+  }).catch((error51) => {
+    throw decideRefusal(error51, proposalId);
+  });
+  const { plan, receipt, fresh } = result;
+  if (fresh)
+    advice.push(...evidence.advice, ...fresh.advice, ...fresh.addressee.advice);
+  else if (plan.retry) {
+    advice.push("This repeats your latest decide on this entity exactly, so it was read as a retry. Add a word to say it again.");
+  }
+  return decideResult(ctx, workspaceId, { receipt, replayed: fresh === null, advice, read_as: options.read_as, evidence });
+}
+function decideResult(ctx, workspaceId, options) {
+  const { receipt } = options;
+  const report = receipt.report;
+  const handle = handleOf("report", report.id);
+  const proposal = receipt.proposal;
+  const ph = proposal ? handleOf("proposal", proposal.id) : null;
+  const act = receipt.person_act;
+  const effect = proposal ? {
+    proceed: `Recorded decision ${handle}: proceed on ${ph}, within the extent the person agreed to (act ${act?.id}, ${act?.basis}).`,
+    do_not_proceed: `Recorded decision ${handle}: not proceeding with ${ph}. Nothing is authorised.`,
+    no_decision: `Recorded decision ${handle}: no decision was reached on ${ph}. Nothing is authorised.`
+  }[receipt.outcome] : {
+    proceed: `Recorded decision ${handle} by this session, within: ${receipt.authority_scope}. It is not a direction decision and not the person's agreement.`,
+    do_not_proceed: `Recorded decision ${handle} by this session: not proceeding. Nothing is authorised; it is not the person's agreement.`,
+    no_decision: `Recorded decision ${handle} by this session: no decision was reached. Nothing is authorised.`
+  }[receipt.outcome];
+  let to = "all";
+  if (report.to_session_id) {
+    const view = safeSession(ctx, workspaceId, report.to_session_id);
+    to = { session: report.to_session_id, name: view?.actor ?? report.to_session_id };
+  }
+  const ids = { report: report.id, report_handle: handle };
+  if (proposal)
+    Object.assign(ids, { proposal: proposal.id, proposal_handle: ph, proposal_sha256: proposal.proposal_sha256 });
+  if (receipt.cite)
+    ids.evidence_cited = { event: receipt.cite.event_id, cite: receipt.cite.cite_id };
+  const stored = parseNote(report.body);
+  const recorded = {
+    ...options.evidence,
+    lines: stored.evidence,
+    items: receipt.cite?.items ?? options.evidence.items
+  };
+  return {
+    ...noteWriteResult({
+      effect,
+      ids,
+      advice: options.advice,
+      next: withSlot(ctx, { tool: "collab_inbox", input: { about: exactRef("report", report.id) } }),
+      note: report.body,
+      replayed: options.replayed
+    }),
+    act: "decide",
+    recorded_as: "decide",
+    outcome: receipt.outcome,
+    ...options.read_as ? { read_as: options.read_as } : {},
+    to,
+    evidence: evidenceSummary(recorded),
+    authority: {
+      scope: receipt.authority_scope,
+      basis: receipt.authority_basis,
+      derived_by: "the server, from the journal, inside the write"
+    },
+    ...proposal && receipt.outcome === "proceed" && act ? {
+      rests_on: {
+        proposal: proposal.id,
+        proposal_sha256: proposal.proposal_sha256,
+        person_act: { id: act.id, event: act.event_id, act: act.act, basis: act.basis, at: act.at },
+        extent: proposal.extent,
+        says: `the person's agreement (act ${act.id}, basis ${act.basis}) to proposal_sha256 ${proposal.proposal_sha256}, within: ${proposal.extent}`
+      }
+    } : {},
+    ...proposal ? {} : { not_the_persons_agreement: true }
   };
 }
 var TASK_TITLE_MAX = 300;
@@ -40969,6 +41878,468 @@ function leaveNote(text, released, advice) {
   return renderNote({ act: "done", statement });
 }
 
+// src/propose-verb.ts
+var QUESTION_MAX = 8000;
+var CRITERIA_MAX = 4000;
+var EXTENT_MAX = 1000;
+var CONFLICTS_MAX = 4000;
+var LIMITS_MAX = 2000;
+var TOPIC_MAX = 200;
+var EVIDENCE_MAX = 16;
+var CARRIED_EXCERPT_MAX = 160;
+var MIN_CONSULT_SECONDS = 600;
+var MAX_CONSULT_SECONDS = 604800;
+function term(input, field, max, required2) {
+  const value = input[field];
+  if (value === undefined || value === null) {
+    if (!required2)
+      return;
+    throw new CollabError(`invalid_${field}`, `${field} is required`, {
+      remedy: { say: `Give ${field}: collab_propose needs question, criteria and extent.` }
+    });
+  }
+  if (typeof value !== "string")
+    throw new CollabError(`invalid_${field}`, `${field} must be text`);
+  const kept = value.trim();
+  if (!kept) {
+    if (!required2)
+      return;
+    throw new CollabError(`invalid_${field}`, `${field} must not be empty`, { remedy: { say: `Give ${field} as text.` } });
+  }
+  if (kept.includes("\x00"))
+    throw new CollabError(`invalid_${field}`, `${field} must not contain NUL characters`);
+  if (hasLoneSurrogate(kept)) {
+    throw new CollabError(`invalid_${field}`, `${field} must be well-formed Unicode text (it holds half of a character)`);
+  }
+  if (kept.length > max) {
+    throw new CollabError("too_long", `${field} is ${kept.length} characters; at most ${max}`, {
+      field,
+      max,
+      actual: kept.length,
+      unit: "chars"
+    });
+  }
+  return value;
+}
+var DURATION = /^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/i;
+function consultSeconds(ctx, input) {
+  const value = input.closes;
+  if (value === undefined || value === null)
+    return;
+  const retry = (seconds2) => withSlot(ctx, { tool: "collab_propose", input: { ...input, closes: seconds2 } });
+  const say = {
+    say: `closes is a number of seconds from ${MIN_CONSULT_SECONDS} to ${MAX_CONSULT_SECONDS}, a duration such as 30m, 6h or 2d, or an ISO time; leave it out for the default of 6 hours.`
+  };
+  let seconds;
+  if (typeof value === "number") {
+    seconds = value;
+  } else if (typeof value === "string" && /^\d+$/.test(value.trim())) {
+    seconds = Number(value.trim());
+  } else if (typeof value === "string" && value.trim() !== "" && DURATION.test(value.trim())) {
+    const [, days, hours, minutes, secs] = DURATION.exec(value.trim());
+    seconds = Number(days ?? 0) * 86400 + Number(hours ?? 0) * 3600 + Number(minutes ?? 0) * 60 + Number(secs ?? 0);
+  } else if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value.trim()) && Number.isFinite(Date.parse(value.trim()))) {
+    seconds = Math.ceil((Date.parse(value.trim()) - Date.parse(ctx.store.noteNow())) / 1000);
+  } else {
+    throw new CollabError("invalid_closes", `closes ${JSON.stringify(value)} is not a time collab can read`, { remedy: say });
+  }
+  if (!Number.isInteger(seconds)) {
+    throw new CollabError("invalid_closes", "closes is a whole number of seconds", { remedy: retry(Math.round(seconds)) });
+  }
+  if (seconds < MIN_CONSULT_SECONDS || seconds > MAX_CONSULT_SECONDS) {
+    throw new CollabError("invalid_closes", `closes is ${seconds} seconds from now; a proposal stays open from ${MIN_CONSULT_SECONDS} seconds (10 minutes) to ${MAX_CONSULT_SECONDS} (7 days)`, { seconds, remedy: retry(Math.min(MAX_CONSULT_SECONDS, Math.max(MIN_CONSULT_SECONDS, seconds))) });
+  }
+  return seconds;
+}
+function excerpt(statement) {
+  if (statement.length <= CARRIED_EXCERPT_MAX)
+    return statement;
+  let end = CARRIED_EXCERPT_MAX;
+  const last = statement.charCodeAt(end - 1);
+  if (last >= 55296 && last <= 56319)
+    end -= 1;
+  return `${statement.slice(0, end)}\u2026`;
+}
+function carriedLine(challenge) {
+  return `carried objection by ${challenge.from_actor} (report:${challenge.id}): ${excerpt(challenge.statement)}`;
+}
+function carriedConflicts(own, carried) {
+  if (carried.length === 0)
+    return { text: own, ids_only: [] };
+  const head = own?.trim() ?? "";
+  const lines = carried.map(carriedLine);
+  const compose = (whole) => {
+    const rest = carried.slice(whole).map((challenge) => `report:${challenge.id}`);
+    const parts = [...lines.slice(0, whole), ...rest.length > 0 ? [`carried objection(s) by id only: ${rest.join(" ")}`] : []];
+    return [head, parts.join(`
+`)].filter(Boolean).join(`
+
+`);
+  };
+  for (let whole = carried.length;whole >= 0; whole -= 1) {
+    const text = compose(whole);
+    if (text.length <= CONFLICTS_MAX)
+      return { text, ids_only: carried.slice(whole).map((challenge) => challenge.id) };
+  }
+  const idsOnly = compose(0).length - head.length;
+  throw new CollabError("conflicts_too_long", `The carried objections need ${idsOnly} characters even by id, and with your conflicts the terms would exceed ${CONFLICTS_MAX}`, {
+    field: "conflicts",
+    max: CONFLICTS_MAX,
+    carried: carried.map((challenge) => challenge.id),
+    remedy: {
+      say: `Shorten your own conflicts to at most ${Math.max(0, CONFLICTS_MAX - idsOnly)} characters; ` + "the objections carried from the replaced proposal are never dropped from the terms."
+    }
+  });
+}
+function objectorsOf(ctx, workspaceId, me, knownConflicts, replaced) {
+  const text = knownConflicts ?? "";
+  const sessions = ctx.store.noteSessionViews(workspaceId);
+  const myVoice = ctx.store.consentVoiceOf(me);
+  const byVoice = new Map;
+  for (const challenge of replaced.challenges) {
+    if (!text.includes(`report:${challenge.id}`) || !challenge.voice_id)
+      continue;
+    let objector = byVoice.get(challenge.voice_id);
+    if (!objector) {
+      const live = sessions.filter((view) => view.voice_id === challenge.voice_id && view.status === "active" && view.liveness === "live");
+      const own = live.find((view) => view.id === challenge.from_session_id) ?? live[0] ?? null;
+      objector = {
+        voice_id: challenge.voice_id,
+        name: challenge.from_actor,
+        challenges: [],
+        session: own ? { id: own.id, name: own.actor } : null,
+        mine: challenge.voice_id === myVoice
+      };
+      byVoice.set(challenge.voice_id, objector);
+    }
+    objector.challenges.push(challenge.id);
+  }
+  return [...byVoice.values()];
+}
+function objectorNote(proposalId, replacedId, challenges) {
+  return renderNote({
+    act: "note",
+    statement: "Your objection to a replaced proposal was carried into the new one as text.",
+    body: `${CARRIED_OBJECTIONS_SENTENCE}
+
+The replaced proposal is proposal:${replacedId}.`,
+    re: `proposal:${proposalId}`,
+    evidence: challenges.map((id) => `report:${id}`)
+  });
+}
+function proposalNote(terms) {
+  const text = normalizeNoteText(terms.question).trim();
+  const words = splitNoteText(text);
+  const firstCut = words.statement.length > NOTE_STATEMENT_MAX;
+  const base = {
+    act: "propose",
+    statement: statementOf(text),
+    re: `proposal:${terms.id}`
+  };
+  const body = firstCut ? text : words.body;
+  const candidates = [
+    {
+      ...base,
+      body,
+      extent: terms.extent,
+      limits: terms.limits,
+      trailers: [{ key: "Sha256", value: terms.sha256 }, { key: "Criteria", value: terms.criteria }]
+    },
+    { ...base, body, extent: terms.extent, trailers: [{ key: "Sha256", value: terms.sha256 }] },
+    { ...base, trailers: [{ key: "Sha256", value: terms.sha256 }] }
+  ];
+  for (const candidate of candidates) {
+    try {
+      return renderNote(candidate);
+    } catch (error51) {
+      if (!(error51 instanceof CollabError))
+        throw error51;
+    }
+  }
+  return renderNote({ act: "propose", statement: "A proposal was opened; read it by its id.", re: base.re });
+}
+function sessionName(ctx, workspaceId, id) {
+  try {
+    return ctx.store.resolveNoteSession(workspaceId, id, { include_ended: true }).actor;
+  } catch {
+    return id;
+  }
+}
+function stepKey(key, step) {
+  return `${key.replace(/:\d{2}$/, "")}:${String(step).padStart(2, "0")}`;
+}
+var OPEN_STEP = 2;
+var FIRST_NOTE_STEP = 3;
+async function proposeVerb(ctx, input) {
+  const { binding, credential } = requireCredential(ctx);
+  const workspaceId = binding.handle.workspace.id;
+  const me = credential.session_id;
+  const question = term(input, "question", QUESTION_MAX, true);
+  const criteria = term(input, "criteria", CRITERIA_MAX, true);
+  const extent = term(input, "extent", EXTENT_MAX, true);
+  const conflicts = term(input, "conflicts", CONFLICTS_MAX, false);
+  const limits = term(input, "limits", LIMITS_MAX, false);
+  const topic = term(input, "topic", TOPIC_MAX, false);
+  const seconds = consultSeconds(ctx, input);
+  if (input.evidence !== undefined && (!Array.isArray(input.evidence) || input.evidence.some((line) => typeof line !== "string"))) {
+    throw new CollabError("invalid_evidence", "evidence is a list of one-line pointers", {
+      remedy: { say: 'Give evidence as a list such as ["file src/a.ts", "report:report_\u2026"].' }
+    });
+  }
+  const lines = input.evidence ?? [];
+  if (lines.length > EVIDENCE_MAX) {
+    throw new CollabError("too_long", `evidence has ${lines.length} items; at most ${EVIDENCE_MAX}`, {
+      field: "evidence",
+      max: EVIDENCE_MAX,
+      actual: lines.length,
+      unit: "items"
+    });
+  }
+  let replaced = null;
+  if (input.replaces !== undefined && input.replaces !== null) {
+    if (typeof input.replaces !== "string" || !input.replaces.trim()) {
+      throw new CollabError("invalid_replaces", "replaces names your earlier proposal", {
+        remedy: { say: "Name the proposal this one replaces, by its id or a proposal# handle." }
+      });
+    }
+    const id = ctx.store.resolveNoteRef(workspaceId, "proposal", input.replaces).id;
+    replaced = ctx.store.noteProposalView(workspaceId, id);
+  }
+  const standing = replaced ? replaced.challenges.filter((challenge) => challenge.standing) : [];
+  let composed = { text: conflicts, ids_only: [] };
+  let unfit = null;
+  try {
+    composed = carriedConflicts(conflicts, standing);
+  } catch (error51) {
+    if (!(error51 instanceof CollabError) || error51.code !== "conflicts_too_long")
+      throw error51;
+    unfit = error51;
+  }
+  const evidence = resolveEvidence(ctx, binding, lines);
+  const advice = [...evidence.advice];
+  if (composed.ids_only.length > 0) {
+    advice.push(`${composed.ids_only.length} carried objection(s) did not fit the terms in full, so they are carried by id: ${composed.ids_only.join(", ")}.`);
+  }
+  const taskId = replaced?.status.proposal.task_id ?? null;
+  const replacedId = replaced?.status.proposal.id ?? null;
+  const keyInput = {
+    question,
+    criteria,
+    extent,
+    closes: input.closes ?? null,
+    conflicts: conflicts ?? null,
+    evidence: evidence.key_lines,
+    limits: limits ?? null,
+    topic: topic ?? null,
+    replaces: replacedId
+  };
+  const retryInput = { ...input, ...replacedId ? { replaces: replacedId } : {} };
+  const precheck = beforeFirstWrite(() => {
+    if (unfit)
+      throw unfit;
+    ctx.store.noteProposalPrecheck(credential, {
+      evidence_refs: evidence.journal,
+      supersedes_report_id: replacedId,
+      task_id: taskId
+    });
+  });
+  proposalNote({
+    id: "report_00000000-0000-4000-8000-000000000000",
+    question,
+    criteria: criteria.trim(),
+    extent: extent.trim(),
+    limits: limits?.trim() ?? null,
+    sha256: "0".repeat(64)
+  });
+  const { plan, cite, citeReplayed, status, notes, replays, steps } = await underPlan(ctx, credential, {
+    tool: "collab_propose",
+    input: keyInput,
+    entity: replacedId ?? "propose",
+    retry_input: retryInput,
+    stillCurrent: (latestKey) => {
+      const opened = replayReceipt(ctx.store, credential, stepKey(latestKey, OPEN_STEP));
+      if (!opened)
+        return true;
+      const position = ctx.store.proposalStatus(workspaceId, opened.proposal.id).ai.position;
+      return position !== "withdrawn" && position !== "superseded";
+    }
+  }, async (plan2) => {
+    const recorded = [];
+    let replays2 = 0;
+    let steps2 = 0;
+    let cite2 = null;
+    let citeReplayed2 = false;
+    if (evidence.items.length > 0) {
+      steps2 += 1;
+      const cited = await stepOnce(ctx, credential, plan2.step(1), () => {
+        precheck();
+        return ctx.store.citeEvidenceForSession({
+          ...credential,
+          idempotency_key: plan2.step(1),
+          worktree_id: binding.handle.worktree.id,
+          items: evidence.items,
+          receipt_plan: plan2.guard
+        });
+      });
+      cite2 = cited.value;
+      citeReplayed2 = cited.replayed;
+      if (cited.replayed)
+        replays2 += 1;
+      recorded.push({ step: 1, what: `evidence.cited event ${cite2.event_id} (cite ${cite2.cite_id})`, id: cite2.event_id });
+    }
+    try {
+      steps2 += 1;
+      const opened = await stepOnce(ctx, credential, plan2.step(OPEN_STEP), () => {
+        precheck();
+        return ctx.store.withReceiptPlan(plan2.guard, () => ctx.store.openProposalForSession({
+          ...credential,
+          idempotency_key: plan2.step(OPEN_STEP),
+          question,
+          criteria,
+          extent,
+          ...composed.text !== undefined ? { known_conflicts: composed.text } : {},
+          evidence_refs: [...evidence.journal, ...cite2 ? [`event:${cite2.event_id}`] : []],
+          ...limits !== undefined ? { limits } : {},
+          ...topic !== undefined ? { topic } : {},
+          ...seconds !== undefined ? { consult_seconds: seconds } : {},
+          ...taskId ? { task_id: taskId } : {},
+          ...replacedId ? { supersedes_report_id: replacedId } : {}
+        }));
+      });
+      if (opened.replayed)
+        replays2 += 1;
+      const status2 = opened.value;
+      recorded.push({ step: OPEN_STEP, what: `proposal ${status2.proposal.id}`, id: status2.proposal.id });
+      const notes2 = [];
+      if (replaced) {
+        const objectors = objectorsOf(ctx, workspaceId, me, status2.terms.known_conflicts, replaced);
+        for (const [index, objector] of objectors.entries()) {
+          const key = plan2.step(FIRST_NOTE_STEP + index);
+          const earlier = replayReceipt(ctx.store, credential, key);
+          if (!earlier && (objector.mine || !objector.session)) {
+            notes2.push({ objector, report: null });
+            continue;
+          }
+          steps2 += 1;
+          const sent = await stepOnce(ctx, credential, key, () => ctx.store.appendNoteForSession({
+            ...credential,
+            idempotency_key: key,
+            reports: [{
+              kind: "inference",
+              relation: "informs",
+              body: objectorNote(status2.proposal.id, replaced.status.proposal.id, objector.challenges),
+              task_id: status2.proposal.task_id,
+              to_session_id: objector.session.id,
+              about_proposal_id: status2.proposal.id,
+              evidence_refs: [`report:${status2.proposal.id}`, ...objector.challenges.map((id) => `report:${id}`)]
+            }],
+            receipt_plan: plan2.guard
+          }));
+          if (sent.replayed)
+            replays2 += 1;
+          const posted = sent.value.reports[0];
+          const to = posted.to_session_id ?? objector.session.id;
+          const name = objector.session?.id === to ? objector.session.name : sessionName(ctx, workspaceId, to);
+          const reached = { ...objector, session: { id: to, name } };
+          recorded.push({ step: FIRST_NOTE_STEP + index, what: `note ${posted.id} to ${reached.session.name}`, id: posted.id });
+          notes2.push({ objector: reached, report: posted.id });
+        }
+      }
+      return { plan: plan2, cite: cite2, citeReplayed: citeReplayed2, status: status2, notes: notes2, replays: replays2, steps: steps2 };
+    } catch (error51) {
+      throw refusedAfter(error51, recorded);
+    }
+  });
+  const replayed = replays === steps;
+  if (plan.retry && replayed) {
+    advice.push("This repeats your latest proposal on this entity exactly, so it was read as a retry. Add a word to the question to propose again.");
+  } else if (plan.retry) {
+    advice.push("An earlier call with this input stopped part way; its finished steps were kept, and the rest ran now.");
+  }
+  return proposeResult(ctx, binding, {
+    status,
+    cite,
+    citeReplayed,
+    notes,
+    replayed,
+    advice,
+    evidence
+  });
+}
+function proposeResult(ctx, binding, options) {
+  const workspaceId = binding.handle.workspace.id;
+  const proposalId = options.status.proposal.id;
+  const advice = options.advice;
+  const data = ctx.store.noteProposalView(workspaceId, proposalId);
+  const facts = proposalFacts(ctx, data);
+  advice.push(...facts.advice);
+  const status = data.status;
+  const handle = handleOf("proposal", proposalId);
+  const sessions = new Map(ctx.store.noteSessionViews(workspaceId).map((view) => [view.id, view]));
+  const voices = status.terms.voices.map((voice) => {
+    const members = voice.live_session_ids.map((id) => sessions.get(id)).filter((view) => view !== undefined);
+    const lastSeen = members.map((view) => view.last_seen_at).sort().at(-1) ?? null;
+    return {
+      voice: voice.voice_id,
+      name: sessions.get(voice.voice_id)?.actor ?? members[0]?.actor ?? voice.voice_id,
+      author: voice.voice_id === status.terms.author_voice_id,
+      sessions: voice.live_session_ids,
+      last_seen_minutes: lastSeen ? minutesSince(lastSeen, data.observed_at) : null
+    };
+  });
+  if (data.lone) {
+    advice.push("You are the lone voice here: consent/v1 counts only an explicit support from you (collab_note act support), and without one it lapses at the close.");
+  }
+  const notified = options.notes.filter((entry) => entry.report !== null);
+  const unreachable = options.notes.filter((entry) => entry.report === null && !entry.objector.mine);
+  if (unreachable.length > 0) {
+    advice.push(`${unreachable.length} carried objector(s) have no live session, so no note reached them: ${unreachable.map((entry) => entry.objector.name).join(", ")}.`);
+  }
+  const shown = options.cite && options.citeReplayed ? recordedEvidence(options.evidence, options.cite.items, advice) : options.evidence;
+  const replacedId = data.replaced?.proposal_id ?? null;
+  return {
+    ...noteWriteResult({
+      effect: `Opened proposal ${handle} (proposal_sha256 ${status.proposal_sha256}) for the agents to settle by consent/v1 and the person to decide; ` + `the agents' position is ${status.ai.position}, closing ${status.terms.closes_at}.` + (replacedId ? ` It replaces ${handleOf("proposal", replacedId)}, carrying ${data.replaced.carried.filter((entry) => entry.carried_in_terms).length} objection(s) into its terms as text.` : ""),
+      ids: {
+        proposal: proposalId,
+        proposal_handle: handle,
+        proposal_sha256: status.proposal_sha256,
+        ...options.cite ? { evidence_cited: { event: options.cite.event_id, cite: options.cite.cite_id } } : {},
+        ...notified.length > 0 ? { objector_notes: notified.map((entry) => ({ report: entry.report, to: entry.objector.session })) } : {}
+      },
+      advice,
+      next: withSlot(ctx, { tool: "collab_inbox", input: { about: exactRef("proposal", proposalId) } }),
+      note: proposalNote({
+        id: proposalId,
+        question: status.proposal.body,
+        criteria: status.terms.criteria,
+        extent: status.terms.extent,
+        limits: status.proposal.limits,
+        sha256: status.proposal_sha256
+      }),
+      replayed: options.replayed
+    }),
+    voices,
+    evidence: evidenceSummary(shown),
+    ...facts.fields,
+    ...data.replaced ? {
+      objectors: options.notes.map((entry) => ({
+        voice: entry.objector.voice_id,
+        name: entry.objector.name,
+        challenges: entry.objector.challenges,
+        reached: entry.report !== null,
+        ...entry.report ? { note: entry.report, session: entry.objector.session } : {},
+        ...entry.objector.mine ? { yours: true } : {}
+      })),
+      unreachable_objectors: unreachable.map((entry) => ({
+        voice: entry.objector.voice_id,
+        name: entry.objector.name,
+        challenges: entry.objector.challenges
+      }))
+    } : {}
+  };
+}
+
 // src/mcp.ts
 var DEFAULT_MCP_NEXT_EVENT_LIMIT = 10;
 var actorLabel = exports_external.string().min(1).max(200).describe("Stable display label; session credentials, not this label, fence session mutations");
@@ -41158,19 +42529,19 @@ Legacy session tools: ${legacyInstructions}`
   const noteEvidence = exports_external.array(exports_external.string()).optional().describe("Up to 16 pointers, one line each: file <repo path>[:a-b] | commit <sha> | test <command> exit=<n> | url <url> | " + "data <label> sha256=<hex> | msg <channel> <id> | report:<id> | event:<id> | artifact:<id> | checkpoint:<id>. " + "Files inside your worktree are hashed by the server; nothing else is fetched or rerun.");
   server.registerTool("collab_note", {
     title: "Say something on the record",
-    description: "Post a note: act note (the default), support, challenge, resolve, withdraw, accept, request_changes or relay_rejection. " + 'text is the statement on its first line, then an optional body; a text that begins with an act word and ": " ' + "is read whole as a collab-note/1 note. Reasons say how each is known; outside evidence is recorded once per note. " + "Only the challenger can lift a challenge; anyone else's resolve is recorded as an answer to them. A support is a " + "position, not a permission. dry_run checks and shows the note, writing nothing.",
+    description: "Post a note: act note (the default), support, challenge, resolve, withdraw, accept, request_changes, relay_rejection or decide. " + 'text is the statement on its first line, then an optional body; a text that begins with an act word and ": " ' + "is read whole as a collab-note/1 note. Reasons say how each is known; outside evidence is recorded once per note. " + "Only the challenger can lift a challenge; anyone else's resolve is recorded as an answer to them. A support is a " + "position, not a permission. A decide's authority is derived by the server: on a proposal the person agreed to, its extent; " + "otherwise nothing, or this session's own record, never the person's agreement. dry_run checks and shows the note, writing nothing.",
     annotations: localMutation,
     inputSchema: {
       text: exports_external.string().describe("The statement (first line, at most 200 characters), then a blank line and any body."),
-      act: exports_external.string().optional().describe("note | support | challenge | resolve | withdraw | accept | request_changes | relay_rejection."),
+      act: exports_external.string().optional().describe("note | support | challenge | resolve | withdraw | accept | request_changes | relay_rejection | decide."),
       re: exports_external.string().optional().describe("What this answers: report#\u2026, proposal#\u2026, task#\u2026, a full id, or file:/lobby:/msg: text. Required for every act but note."),
       to: exports_external.string().optional().describe("A session name or id, person, or all. Default: whoever the act answers."),
       via: exports_external.string().optional().describe("host:\u2026 | file:\u2026 | lobby:\u2026 | msg:\u2026: the text came from another channel, so seen and quoted reasons are recorded as told."),
       why: exports_external.array(noteReason).optional().describe("Up to 8 reasons."),
       evidence: noteEvidence,
       limits: exports_external.string().optional().describe("What this does not cover; what was not checked (at most 2,000 characters)."),
-      extent: exports_external.string().optional().describe("Where this stops (at most 1,000 characters)."),
-      outcome: exports_external.string().optional().describe("For decide only, which a later build adds."),
+      extent: exports_external.string().optional().describe("Where this stops (at most 1,000 characters). A decide on a proposal takes the agreed extent and refuses another."),
+      outcome: exports_external.string().optional().describe("For decide only: proceed (the default), do_not_proceed or no_decision."),
       replaces: exports_external.string().optional().describe("With act challenge: your earlier challenge this one replaces; it is withdrawn in the same transaction."),
       dry_run: exports_external.boolean().optional().describe("Parse, check and render; write nothing.")
     }
@@ -41203,6 +42574,22 @@ Legacy session tools: ${legacyInstructions}`
       because: exports_external.string().optional().describe("The blocker (blocked), or why held work is left unfinished (leave); at most 2,000 characters.")
     }
   }, async (input) => noteCall(() => doneVerb(noteContext(), input)));
+  server.registerTool("collab_propose", {
+    title: "Put a direction to the agents and the person",
+    description: "Open a consent/v1 proposal: the agents settle a position by lazy consensus (support and challenge with collab_note), " + "and the person decides at his own desk. The question is stored verbatim, so its bytes and proposal_sha256 are what " + "collab_proposal_open makes from the same terms. evidence and limits enter the bytes the person signs. With replaces, " + "the standing objections to your earlier proposal are carried into its terms as text and each reachable objector is told; " + "under consent/v1 a carried objection does not block. The position authorises nothing; no agent tool records agreement.",
+    annotations: localMutation,
+    inputSchema: {
+      question: exports_external.string().describe("What is being decided, stored verbatim (at most 8,000 characters)."),
+      criteria: exports_external.string().describe("How the parties judge which way to go (at most 4,000 characters)."),
+      extent: exports_external.string().describe("What agreement would authorise, and where it stops (at most 1,000 characters)."),
+      closes: exports_external.union([exports_external.number(), exports_external.string()]).optional().describe("When the agents' consultation closes: seconds (600 to 604,800), a duration such as 30m, 6h or 2d, or an ISO time. Default 6 hours."),
+      conflicts: exports_external.string().optional().describe("Context that disagrees, and how this proposal reads it (at most 4,000 characters, carried objections included)."),
+      evidence: noteEvidence,
+      limits: exports_external.string().optional().describe("What this proposal does not cover; what was not checked (at most 2,000 characters)."),
+      topic: exports_external.string().optional().describe("A label for later reading, for example principle:<name> (at most 200 characters)."),
+      replaces: exports_external.string().optional().describe("Your own earlier proposal, still on the table, that this one replaces (id or proposal# handle).")
+    }
+  }, async (input) => noteCall(() => proposeVerb(noteContext(), input)));
   server.registerTool("collab_session_join", {
     title: "Join the self-declared presence plane",
     description: "Create or replay one unauthenticated routing-presence record and return its unique actor_key. This does not bind the MCP process or create a credential.",

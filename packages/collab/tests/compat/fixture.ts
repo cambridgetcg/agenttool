@@ -74,11 +74,14 @@ export interface FixtureManifest {
   notes_sessions: string[];
   /** A task collab_done finished that waits for review: each older build reviews it. */
   review_task_id: string;
+  /** Decisions collab_note recorded, for the notes_decisions view. */
+  decisions: string[];
 }
 
 type ManifestDraft = Partial<Omit<FixtureManifest, "format" | "steps" | "produced_types" | "event_types" | "head_sequence">> & {
   proposals: string[];
   notes_sessions: string[];
+  decisions: string[];
 };
 
 export interface FixtureContext {
@@ -737,6 +740,69 @@ export const FIXTURE_STEPS: FixtureStep[] = [
       context.manifest.review_task_id = waiting.task;
     },
   },
+  {
+    // Collab Notes stage 3: proposals through collab_propose (with outside
+    // evidence and limits in the hashed bytes), a support and a challenge
+    // through collab_note, the person's agreement through the desk's own
+    // functions, a decide on the agreed proposal, and a replaced proposal
+    // whose standing objection is carried into the new terms and told to
+    // its objector. Every older build with consent/v1 must compute the same
+    // status for all three proposals.
+    name: "notes-propose-and-decide",
+    produces: ["evidence.cited"],
+    async run(context) {
+      const notes = "notes-process";
+      const peer = "notes-peer-process";
+      const agreed = await context.tool(notes, "collab_propose", {
+        question: "Should the fixture keep a proposal the person agreed to?\n\nOlder builds must read its terms, 協作筆記 🏮.",
+        criteria: "Older builds compute the same status for it.",
+        extent: "The fixture journal only.",
+        closes: 600,
+        conflicts: "None known.",
+        evidence: ["file fixture/notes.txt:1", `report:${context.id("observation")}`],
+        limits: "A fixture, not a direction.",
+        topic: "compat:notes-propose",
+      });
+      const agreedId = (agreed.ids as { proposal: string }).proposal;
+      await context.tool(peer, "collab_note", {
+        act: "support",
+        text: "The fixture proposal stands as stated.",
+        re: agreedId,
+        why: [{ text: "its terms read back", basis: "seen" }],
+      });
+      const replaced = await context.tool(notes, "collab_propose", {
+        question: "Should the fixture replace a challenged proposal?",
+        criteria: "The replacement carries the objection.",
+        extent: "The fixture journal only.",
+        closes: 600,
+      });
+      const replacedId = (replaced.ids as { proposal: string }).proposal;
+      await context.tool(peer, "collab_note", { act: "challenge", text: "No: it should say what it carries.", re: replacedId });
+      const replacement = await context.tool(notes, "collab_propose", {
+        question: "Should the fixture replace a challenged proposal, carrying its objection?",
+        criteria: "The replacement carries the objection.",
+        extent: "The fixture journal only.",
+        replaces: replacedId,
+      });
+      const replacementId = (replacement.ids as { proposal: string }).proposal;
+      if (!((replacement.ids as { objector_notes?: unknown[] }).objector_notes ?? []).length) {
+        throw new Error("the replacement told no objector");
+      }
+      // After the close, one qualifying support and no standing challenge: consented.
+      context.clock.advance(601_000);
+      const challenge = context.store.personActChallenge({ proposal_report_id: agreedId, act: "agree" });
+      const status = context.store.recordPersonActAtTerminal({
+        proposal_report_id: agreedId,
+        proposal_sha256: challenge.proposal_sha256,
+        act: "agree",
+        expected_ai_snapshot: challenge.ai_snapshot,
+      });
+      if (!status.may_proceed) throw new Error("the fixture's agreement did not let it proceed");
+      const decided = await context.tool(notes, "collab_note", { act: "decide", text: "The fixture keeps its agreed proposal.", re: agreedId });
+      context.manifest.proposals.push(agreedId, replacedId, replacementId);
+      context.manifest.decisions.push((decided.ids as { report: string }).report);
+    },
+  },
   // Later slices append their steps here.
 ];
 
@@ -753,7 +819,7 @@ export async function exerciseFixture(
   const ids = new Map<string, string>();
   const tasks = new Map<string, Task>();
   const servers = new Map<string, ReturnType<typeof buildCollabMcpServer>>();
-  const manifest: ManifestDraft = { proposals: [], notes_sessions: [] };
+  const manifest: ManifestDraft = { proposals: [], notes_sessions: [], decisions: [] };
   const produced = new Set<string>();
   const ran: string[] = [];
   const names = new Set<string>();
@@ -869,6 +935,7 @@ export async function exerciseFixture(
     end_by_session_file: manifest.end_by_session_file!,
     notes_sessions: manifest.notes_sessions,
     review_task_id: manifest.review_task_id!,
+    decisions: manifest.decisions,
   };
 }
 
@@ -899,6 +966,20 @@ export const FIXTURE_VIEWS: Record<string, (store: CollabStore, manifest: Fixtur
       };
     });
   },
+  // What a decision rests on, read from the journal alone: never from the
+  // view tables, and not moved by anything an older build writes.
+  notes_decisions: (store, manifest) =>
+    manifest.decisions.map((id) => {
+      const record = store.noteDecisionView(manifest.workspace_id, id);
+      return {
+        id,
+        outcome: record.outcome,
+        authority: record.authority,
+        proposal: record.proposal?.status.proposal.id ?? null,
+        rests_on: record.rests_on?.id ?? null,
+        agreement_current: record.agreement_current,
+      };
+    }),
 };
 
 function eventCount(store: CollabStore): number {

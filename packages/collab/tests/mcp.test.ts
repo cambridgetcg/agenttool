@@ -166,6 +166,7 @@ describe("MCP surface", () => {
       "collab_proposal_open",
       "collab_proposal_relay_rejection",
       "collab_proposal_status",
+      "collab_propose",
       "collab_report_append",
       "collab_report_list",
       "collab_session_end",
@@ -292,6 +293,7 @@ describe("MCP surface", () => {
       "collab_inbox",
       "collab_next",
       "collab_note",
+      "collab_propose",
       "collab_session_start",
       "collab_take",
     ];

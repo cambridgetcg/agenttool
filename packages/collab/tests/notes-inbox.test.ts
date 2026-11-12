@@ -539,7 +539,7 @@ describe("collab_inbox about", () => {
     expect(note.note).toContain("Position: open; review changes_requested");
   });
 
-  test("a proposal shows as its plain thread here, and says the proposal view is not built yet", async () => {
+  test("a proposal shows its thread with the position consent/v1 computes (the proposal stage's view)", async () => {
     const j = journal();
     const me = j.start("me");
     const opened = j.store.openProposalForSession({
@@ -548,8 +548,8 @@ describe("collab_inbox about", () => {
     const view = await ok(j.serve(me), "collab_inbox", { about: handleOf("proposal", opened.proposal.id) });
     expect(view.about).toEqual({ kind: "proposal", id: opened.proposal.id, handle: handleOf("proposal", opened.proposal.id) });
     expect(view.root.act).toBe("propose");
-    expect(view.position).toBeUndefined();
-    expect(view.advice.join(" ")).toContain("not built yet");
+    expect(view.position).toBe(j.store.proposalStatus(me.workspace.id, opened.proposal.id).ai.position);
+    expect(view.advice.join(" ")).not.toContain("not built yet");
   });
 });
 

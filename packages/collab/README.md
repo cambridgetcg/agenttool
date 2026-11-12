@@ -7,7 +7,7 @@
 > **Code:** `src/{store,mcp,protocol,proposal,person-desk,ceremony,passkey,tty,version}.ts`.
 > **Tests:** `tests/{events-wait,mcp,package,proposal-consent,person-desk,tty}.test.ts`.
 
-**DEVELOPMENT BUILD: 0.6.0-dev.0, 41 MCP tools in the full profile. Unreleased.** Collab 0.5.0
+**DEVELOPMENT BUILD: 0.6.0-dev.0, 42 MCP tools in the full profile. Unreleased.** Collab 0.5.0
 is released on GitHub only, as the
 [`collab-v0.5.0` release](https://github.com/cambridgetcg/agenttool-collab/releases/tag/collab-v0.5.0)
 of `cambridgetcg/agenttool-collab` (2026-10-10). On npm the recorded release is
@@ -16,12 +16,12 @@ behaviour, this source is 0.5.0 plus the unreleased [host doorbell wait](#host-d
 and its addressed mode with the Claude Code watcher, plus the unreleased
 [session-fit changes](#session-fit-migration-unreleased) and the three unreleased
 [proposal consent tools](#proposals-and-consent-unreleased) that bring 0.5.0's 33
-tools to 36, plus the first five unreleased Collab Notes verbs, `collab_arrive`,
-`collab_inbox`, `collab_note`, `collab_take` and `collab_done` (41 in all; the
-`notes` tools profile registers those five and `collab_journal_verify`). Do not
-enable the `notes` profile (`AGENTOOL_COLLAB_TOOLS=notes`) yet: until
-`collab_propose` is built it gives a session no way to put a direction to the person,
-and that host step is the owner's. The next npm release goes through the
+tools to 36, plus the first six unreleased Collab Notes verbs, `collab_arrive`,
+`collab_inbox`, `collab_note` (with `decide`), `collab_take`, `collab_done` and
+`collab_propose` (42 in all; the `notes` tools profile registers those six and
+`collab_journal_verify`). Do not enable the `notes` profile
+(`AGENTOOL_COLLAB_TOOLS=notes`) yet: the ballot verbs `collab_poll` and `collab_vote`
+are not built, and that host step is the owner's. The next npm release goes through the
 [public staged release path](https://docs.agenttool.dev/NPM-RELEASES.md#public-release-path-from-2026-10-12);
 its version is not chosen here.
 This source is not evidence of publication or native-harness activation;
@@ -1071,7 +1071,7 @@ end, the `agenttool-collab-host` bin, host-commit acceptance, and the bound
 **DEVELOPMENT BUILD: 0.6.0-dev.0.** This main-branch source follows 0.5.0 and is
 unreleased. It keeps journal schema 3, adds three proposal consent tools and the
 Collab Notes verbs `collab_arrive`, `collab_inbox`, `collab_note`, `collab_take` and
-`collab_done` to the 33 MCP tools of 0.5.0 (41 in all under the full profile), and adds the
+`collab_done` and `collab_propose` to the 33 MCP tools of 0.5.0 (42 in all under the full profile), and adds the
 `agenttool-collab-host wait` host doorbell, its `--addressed` mode and the
 Claude Code doorbell watcher. The MCP server reports `0.6.0-dev.0` in
 `serverInfo` and at the start of its instructions, both read from

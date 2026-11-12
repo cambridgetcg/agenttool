@@ -34,8 +34,13 @@ import type { CollabReport, ProposalStatus, Task } from "./protocol.js";
 import { gitCommitExists, hashWorktreeFile, MAX_CITED_FILE_BYTES } from "./repository.js";
 import { removeSessionCredentialFile } from "./session-file.js";
 import {
+  NOTE_DECISION_OUTCOMES,
+  NOTE_DEFAULT_DECISION_EXTENT,
+  NOTE_NOTHING_AUTHORISED,
   normalizePathScopes,
   type NoteAppendReceipt,
+  type NoteDecisionOutcome,
+  type NoteDecisionReceipt,
   type NoteCitedItem,
   type NoteCiteReceipt,
   type NoteReportInput,
@@ -60,7 +65,7 @@ import {
   type NoteVerbContext,
 } from "./verbs.js";
 
-type Credential = { session_id: string; session_token: string; generation: number };
+export type Credential = { session_id: string; session_token: string; generation: number };
 
 // ---------------------------------------------------------------------------
 // Shared checks
@@ -70,7 +75,7 @@ type Credential = { session_id: string; session_token: string; generation: numbe
  * normalised as a note body is, held to `max`, and refused when it would not
  * be stored as returned (NUL, half a character). Never shortened.
  */
-function freeText(value: unknown, field: string, max: number, required: boolean): string | null {
+export function freeText(value: unknown, field: string, max: number, required: boolean): string | null {
   if (value === undefined || value === null) {
     if (!required) return null;
     throw new CollabError(`invalid_${field}`, `${field} is required`, { remedy: { say: `Give ${field} as text.` } });
@@ -148,7 +153,7 @@ function sameValue(left: unknown, right: unknown): boolean {
  * receipt as idempotency_conflict (the version it read is older), and the
  * receipt is replayed then too: the caller's call was not wrong.
  */
-async function stepOnce<T>(
+export async function stepOnce<T>(
   ctx: NoteVerbContext,
   credential: Credential,
   key: string,
@@ -167,7 +172,7 @@ async function stepOnce<T>(
 }
 
 /** A step of a multi-step call that is written (by this call or by the earlier attempt it resumes). */
-interface RecordedStep {
+export interface RecordedStep {
   step: number;
   what: string;
   id: string;
@@ -179,7 +184,7 @@ interface RecordedStep {
  * false. A stale plan passes through untouched, because underPlan plans it
  * again by its code.
  */
-function refusedAfter(error: unknown, recorded: readonly RecordedStep[]): unknown {
+export function refusedAfter(error: unknown, recorded: readonly RecordedStep[]): unknown {
   if (!(error instanceof CollabError) || recorded.length === 0 || error.code === "receipt_plan_stale") return error;
   if (error.details.recorded_steps !== undefined) return error;
   return new CollabError(
@@ -190,7 +195,7 @@ function refusedAfter(error: unknown, recorded: readonly RecordedStep[]): unknow
 }
 
 /** Run `check` once, just before the first step that would write, so a replayed call never meets it. */
-function beforeFirstWrite(check: () => void): () => void {
+export function beforeFirstWrite(check: () => void): () => void {
   let done = false;
   return () => {
     if (done) return;
@@ -202,7 +207,7 @@ function beforeFirstWrite(check: () => void): () => void {
 // ---------------------------------------------------------------------------
 // Evidence (spec 5.3): hashed and checked before any write transaction
 
-interface ResolvedEvidence {
+export interface ResolvedEvidence {
   /** The Evidence lines as stored: journal handles replaced by full ids, a hashed file named by the path that was hashed. */
   lines: string[];
   /**
@@ -228,7 +233,7 @@ const COMMIT_CHECK_BUDGET_MS = 5_000;
  * advice says why. A commit is checked with git. Nothing else is fetched or
  * rerun. Contents are never kept.
  */
-function resolveEvidence(ctx: NoteVerbContext, binding: NoteBinding, lines: string[]): ResolvedEvidence {
+export function resolveEvidence(ctx: NoteVerbContext, binding: NoteBinding, lines: string[]): ResolvedEvidence {
   const workspaceId = binding.handle.workspace.id;
   const root = binding.handle.worktree.root_path;
   const out: ResolvedEvidence = { lines: [], key_lines: [], items: [], journal: [], advice: [] };
@@ -330,7 +335,7 @@ function resolveEvidence(ctx: NoteVerbContext, binding: NoteBinding, lines: stri
 }
 
 /** How each Evidence line was observed, for a result. */
-function evidenceSummary(resolved: ResolvedEvidence): Array<Record<string, unknown>> {
+export function evidenceSummary(resolved: ResolvedEvidence): Array<Record<string, unknown>> {
   const items = new Map(resolved.items.map((item) => [item.n, item]));
   return resolved.lines.map((line, index) => {
     const item = items.get(index + 1);
@@ -349,7 +354,7 @@ function observationText(item: NoteCitedItem): string {
  * call's fresh look, which only decided the key. Where the fresh look
  * differs (a file edited since), the advice says so.
  */
-function recordedEvidence(fresh: ResolvedEvidence, recorded: readonly NoteCitedItem[], advice: string[]): ResolvedEvidence {
+export function recordedEvidence(fresh: ResolvedEvidence, recorded: readonly NoteCitedItem[], advice: string[]): ResolvedEvidence {
   if (recorded.length === 0) return fresh;
   const byPosition = new Map(recorded.map((item) => [item.n, item]));
   for (const item of fresh.items) {
@@ -368,7 +373,7 @@ function recordedEvidence(fresh: ResolvedEvidence, recorded: readonly NoteCitedI
 // ---------------------------------------------------------------------------
 // Addressees
 
-interface Addressee {
+export interface Addressee {
   to_session_id: string | null;
   to_person: boolean;
   /** For the result: who it went to. */
@@ -395,7 +400,7 @@ function explicitAddressee(ctx: NoteVerbContext, workspaceId: string, value: str
   return sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at);
 }
 
-function sessionAddressee(
+export function sessionAddressee(
   id: string,
   name: string,
   status: "active" | "ended",
@@ -411,7 +416,7 @@ function sessionAddressee(
   return { to_session_id: id, to_person: false, shown: { session: id, name }, advice };
 }
 
-function authorAddressee(target: NoteTargetView, me: string): Addressee {
+export function authorAddressee(target: NoteTargetView, me: string): Addressee {
   const author = target.author;
   if (!author || author.id === me) return BROADCAST;
   return sessionAddressee(author.id, author.actor, author.status, author.liveness, author.last_seen_at);
@@ -450,6 +455,7 @@ const NOTE_ACTS_HERE = [
   "accept",
   "request_changes",
   "relay_rejection",
+  "decide",
 ] as const;
 type NoteActHere = (typeof NOTE_ACTS_HERE)[number];
 
@@ -527,11 +533,12 @@ function requireActHere(ctx: NoteVerbContext, act: string, fields: NoteFields): 
   const elsewhere: Partial<Record<string, NoteRemedy>> = {
     take: withSlot(ctx, { tool: "collab_take", input: { title: fields.statement } }),
     done: withSlot(ctx, { tool: "collab_done", input: { text: fields.statement } }),
+    propose: withSlot(ctx, { tool: "collab_propose", input: { question: fields.statement, criteria: "…", extent: "…" } }),
   };
   if (elsewhere[act]) {
     throw new CollabError("wrong_verb", `${act} is its own verb, not a note act`, { remedy: elsewhere[act] });
   }
-  if (["decide", "propose", "poll", "vote"].includes(act)) {
+  if (["poll", "vote"].includes(act)) {
     throw new CollabError("act_not_built", `${act} is not built in this build yet; nothing was written`, {
       remedy: { say: `${act} arrives in a later build. Until then, say it as a note, which authorises nothing.` },
     });
@@ -588,7 +595,7 @@ function sameNoteWith(ctx: NoteVerbContext, input: NoteVerbInput, patch: Record<
 interface PlannedNote {
   act: NoteActHere;
   /** The act the stored note says, when it differs (an answer is a note). */
-  recorded_as: "note" | "support" | "challenge" | "resolve" | "answer" | "withdraw" | "accept" | "request_changes" | "relay_rejection";
+  recorded_as: "note" | "support" | "challenge" | "resolve" | "answer" | "withdraw" | "accept" | "request_changes" | "relay_rejection" | "decide";
   fields: NoteFields;
   target: ReTarget | null;
   addressee: Addressee;
@@ -611,7 +618,8 @@ export async function noteVerb(ctx: NoteVerbContext, input: NoteVerbInput): Prom
   if (input.dry_run !== undefined && typeof input.dry_run !== "boolean") {
     throw new CollabError("invalid_dry_run", "dry_run is true or false");
   }
-  if (input.outcome !== undefined) advice.push("outcome applies to decide only, which this build does not record yet; it was not used.");
+  const outcome = decideOutcome(act, input);
+  if (input.outcome !== undefined && act !== "decide") advice.push("outcome applies to decide only; it was not used.");
 
   // Via: the speaker is still this session, and what came by another
   // channel is hearsay to it, so seen and quoted reasons become told.
@@ -626,7 +634,7 @@ export async function noteVerb(ctx: NoteVerbContext, input: NoteVerbInput): Prom
 
   // Shape and caps first, on what the caller wrote, so a bad call fails
   // before any read of the journal or the worktree.
-  if (fields.re === null && act !== "note") {
+  if (fields.re === null && act !== "note" && act !== "decide") {
     throw new CollabError("re_required", `${act} needs re: what it answers`, {
       remedy: { say: `Add re: the report it answers, as an id or a handle such as report#3fa91c.` },
     });
@@ -656,6 +664,8 @@ export async function noteVerb(ctx: NoteVerbContext, input: NoteVerbInput): Prom
   const keyInput = {
     act,
     fields: { ...fields, evidence: evidence.key_lines, to: keyAddressee(ctx, workspaceId, fields.to) },
+    // Only a decide has an outcome, so every other act keeps its earlier key.
+    ...(act === "decide" ? { outcome } : {}),
   };
   const plan = (): { planned: PlannedNote; note: string } => {
     const planned = planNote(ctx, input, { act, fields, target, me, workspaceId, replacedId, evidence });
@@ -664,6 +674,10 @@ export async function noteVerb(ctx: NoteVerbContext, input: NoteVerbInput): Prom
     return { planned, note: renderNote(planned.fields) };
   };
   const planAdvice = (planned: PlannedNote) => [...evidence.advice, ...planned.advice, ...planned.addressee.advice];
+
+  if (act === "decide") {
+    return decideNote(ctx, binding, credential, { fields, target, evidence, keyInput, advice, read_as: read.read_as, input, outcome });
+  }
 
   // A verdict and a relayed no address no one by state, so they plan first;
   // their own paths decide what a retry replays.
@@ -1042,6 +1056,9 @@ function planNote(
       extra.review = completion;
       return finish({ recorded_as: act, target, addressee: BROADCAST, reports: [], entity: completion.completion_id });
     }
+    case "decide":
+      // A decision derives its authority in its own path (decideNote).
+      throw new CollabError("internal_error", "decide is planned by planDecide");
     case "relay_rejection": {
       if (!reportTarget || !reportTarget.view.termed) {
         throw new CollabError("not_a_proposal", "relay_rejection names the proposal the person said no to", {
@@ -1444,6 +1461,330 @@ async function relayNote(
     position: status.ai.position,
     person: status.person.state,
     may_proceed: status.may_proceed,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// decide (spec 5.3): a decision whose authority the server derives
+
+/** The outcome a decide names: proceed by default; any other act takes none. */
+function decideOutcome(act: string, input: NoteVerbInput): NoteDecisionOutcome {
+  if (act !== "decide" || input.outcome === undefined) return "proceed";
+  const value = typeof input.outcome === "string" ? input.outcome.trim().toLowerCase() : input.outcome;
+  if (!(NOTE_DECISION_OUTCOMES as readonly unknown[]).includes(value)) {
+    throw new CollabError("invalid_outcome", `outcome is ${NOTE_DECISION_OUTCOMES.join(", ")}`, {
+      remedy: { say: "outcome is proceed (the default: this is decided, to this extent), do_not_proceed (we are not proceeding) or no_decision (no decision was reached)." },
+    });
+  }
+  return value as NoteDecisionOutcome;
+}
+
+interface DecidePlan {
+  outcome: NoteDecisionOutcome;
+  /** The proposal decided on, when re names one. */
+  proposal: Extract<ReTarget, { kind: "report" }> | null;
+  fields: NoteFields;
+  note: string;
+  addressee: Addressee;
+  task_id: string | null;
+  /** Journal pointers: the caller's evidence and what re names (a proposal's are added by the store). */
+  evidence_refs: string[];
+  /** Without a proposal, a proceed's extent. */
+  extent: string | null;
+  advice: string[];
+}
+
+/**
+ * The store's refusals of a decide, each with what to say instead. None
+ * names the person's desk commands: an agent never runs them, so a remedy
+ * that offered them as a call would invite recording an agreement the
+ * person did not give.
+ */
+function decideRefusal(error: unknown, proposalId: string | null): unknown {
+  if (!(error instanceof CollabError) || !proposalId) return error;
+  const later = error.details.later_act as { id?: string; basis?: string } | undefined;
+  const say: Record<string, string> = {
+    not_agreed: `Ask the person to act on ${proposalId} at his desk. No agent tool records agreement.`,
+    agreement_withdrawn: `Stop work that rests on ${proposalId}: the person's latest act (${later?.id ?? "a rejection"}, ` +
+      `${later?.basis ?? "unknown basis"}) rejects these bytes. ` +
+      (later?.basis === "relayed_by_session"
+        ? "That rejection was relayed by a session, and a relayed no is forgeable; if it was not the person's, the person may agree again on the same bytes at his desk. "
+        : "The person may agree again on the same bytes at his desk. ") +
+      "To record that you are not proceeding, decide with outcome do_not_proceed.",
+    proposal_retired: error.details.position === "superseded" && typeof error.details.obsoleted_by_report_id === "string"
+      ? `It was replaced by ${error.details.obsoleted_by_report_id}; decide on that proposal once the person has acted on it.`
+      : "It was withdrawn, so nothing proceeds on it; open a new proposal with collab_propose if the question still stands.",
+  };
+  if (!say[error.code]) return error;
+  return new CollabError(error.code, error.message, { ...error.details, proposal: proposalId, remedy: { say: say[error.code]! } });
+}
+
+/**
+ * Map a decide onto storage (spec 5.3): its extent is the agreed one, or
+ * "nothing is authorised", or the caller's own for a decision without a
+ * proposal. No input supplies an authority basis. Reads the journal, so it
+ * runs only when the call acts or is a dry run.
+ */
+function planDecide(
+  ctx: NoteVerbContext,
+  input: NoteVerbInput,
+  context: { fields: NoteFields; target: ReTarget | null; me: string; workspaceId: string; evidence: ResolvedEvidence; outcome: NoteDecisionOutcome },
+): DecidePlan {
+  const { target, me, workspaceId, evidence, outcome } = context;
+  let fields = context.fields;
+  const advice: string[] = [];
+  const proposal = target?.kind === "report" && target.view.termed ? target : null;
+  const refs = [...evidence.journal];
+  let taskId: string | null = null;
+  let addressee: Addressee = BROADCAST;
+  if (proposal) {
+    taskId = proposal.view.report.task_id;
+    addressee = authorAddressee(proposal.view, me);
+  } else if (target?.kind === "report") {
+    refs.push(`report:${target.id}`);
+    taskId = target.view.report.task_id;
+    addressee = authorAddressee(target.view, me);
+  } else if (target?.kind === "task") {
+    taskId = target.id;
+    const holder = target.task.assignee_session_id ?? target.task.reported_by_session_id;
+    if (holder && holder !== me) addressee = viewAddressee(ctx, workspaceId, holder);
+  } else if (target?.kind === "event") {
+    refs.push(`event:${target.id}`);
+  }
+  if (fields.to !== null) addressee = explicitAddressee(ctx, workspaceId, fields.to);
+  const without = (field: keyof NoteVerbInput) => {
+    const { [field]: _dropped, ...rest } = noteRetryInput(input) as Record<string, unknown>;
+    return withSlot(ctx, { tool: "collab_note", input: rest });
+  };
+  let extent: string | null = null;
+  if (proposal) {
+    // The same rule the write applies, read now, so a dry run and a refused
+    // call say exactly what the store would.
+    try {
+      ctx.store.noteDecisionPrecheck(workspaceId, proposal.id, outcome);
+    } catch (error) {
+      throw decideRefusal(error, proposal.id);
+    }
+    const agreed = ctx.store.proposalStatus(workspaceId, proposal.id).terms.extent;
+    if (outcome === "proceed") {
+      // The note's Extent line is the agreed extent as a note writes it (its
+      // lines trimmed); the authority_scope column keeps it byte for byte.
+      const shown = normalizeNoteFields({ ...fields, extent: agreed });
+      if (fields.extent !== null && fields.extent !== agreed && fields.extent !== shown.extent) {
+        throw new CollabError("extent_from_proposal", "A decision on a proposal covers the extent the person agreed to; extent cannot change it", {
+          agreed_extent: agreed,
+          remedy: without("extent"),
+        });
+      }
+      if (checkNote(shown).length === 0) {
+        fields = shown;
+        if (shown.extent !== agreed) {
+          advice.push("The note's Extent line shows the agreed extent with its lines trimmed; the decision's authority_scope holds it byte for byte.");
+        }
+      } else {
+        fields = { ...fields, extent: null };
+        advice.push("The agreed extent cannot be shown as a note's Extent line; the decision's authority_scope holds it byte for byte.");
+      }
+    } else {
+      if (fields.extent !== null) {
+        throw new CollabError("extent_not_used", `A decision with outcome ${outcome} authorises nothing, so it takes no extent`, { remedy: without("extent") });
+      }
+      fields = { ...fields, extent: NOTE_NOTHING_AUTHORISED };
+    }
+  } else {
+    if (outcome === "proceed") {
+      extent = fields.extent;
+      fields = { ...fields, extent: fields.extent ?? NOTE_DEFAULT_DECISION_EXTENT };
+    } else {
+      if (fields.extent !== null) {
+        throw new CollabError("extent_not_used", `A decision with outcome ${outcome} authorises nothing, so it takes no extent`, { remedy: without("extent") });
+      }
+      fields = { ...fields, extent: NOTE_NOTHING_AUTHORISED };
+    }
+    advice.push(
+      "This decision names no proposal, so it is recorded by this session alone: it is not a direction decision and not the person's agreement. " +
+        "A direction-level matter needs collab_propose and the person's own act.",
+    );
+  }
+  refuseNoteProblems(fields);
+  return {
+    outcome,
+    proposal,
+    fields,
+    note: renderNote(fields),
+    addressee,
+    task_id: taskId,
+    evidence_refs: refs,
+    extent,
+    advice,
+  };
+}
+
+async function decideNote(
+  ctx: NoteVerbContext,
+  binding: NoteBinding,
+  credential: Credential,
+  options: {
+    fields: NoteFields;
+    target: ReTarget | null;
+    evidence: ResolvedEvidence;
+    keyInput: Record<string, unknown>;
+    advice: string[];
+    read_as: string | null;
+    input: NoteVerbInput;
+    outcome: NoteDecisionOutcome;
+  },
+): Promise<Record<string, unknown>> {
+  const { target, evidence, advice, input, outcome } = options;
+  const workspaceId = binding.handle.workspace.id;
+  const me = credential.session_id;
+  const planContext = { fields: options.fields, target, me, workspaceId, evidence, outcome };
+  if (input.dry_run === true) {
+    const planned = planDecide(ctx, input, planContext);
+    return {
+      ok: true,
+      dry_run: true,
+      effect: "Dry run: nothing was written.",
+      act: "decide",
+      recorded_as: "decide",
+      outcome,
+      ...(options.read_as ? { read_as: options.read_as } : {}),
+      parsed: planned.fields,
+      would: {
+        reports: [{
+          relation: "informs",
+          kind: "decision",
+          target: null,
+          task: planned.task_id,
+          to: planned.addressee.to_session_id ?? (planned.addressee.to_person ? "person" : null),
+          about_proposal: planned.proposal?.id ?? null,
+        }],
+        cites: evidence.items.length > 0 ? 1 : 0,
+      },
+      to: planned.addressee.shown,
+      evidence: evidenceSummary(evidence),
+      authorises: "Nothing. This is coordination state.",
+      advice: [...advice, ...evidence.advice, ...planned.advice, ...planned.addressee.advice],
+      note: planned.note,
+    };
+  }
+  const proposalId = target?.kind === "report" && target.view.termed ? target.id : null;
+  const cite = evidence.items.length > 0 ? { worktree_id: binding.handle.worktree.id, items: evidence.items } : null;
+  const result = await underPlan(ctx, credential, {
+    tool: "collab_note",
+    input: options.keyInput,
+    entity: target?.kind === "report" || target?.kind === "task" ? target.id : "note",
+    retry_input: noteRetryInput(input),
+    // A decision is current while it stands and the person act it rests on
+    // (or the lack of one) is still the latest: once the person has acted
+    // since, the same decide is a new decision and is judged afresh.
+    stillCurrent: (latestKey) => {
+      const found = replayReceipt<NoteDecisionReceipt>(ctx.store, credential, latestKey);
+      if (!found || typeof found !== "object" || !("outcome" in found)) return true;
+      if (!ctx.store.noteReportStands(workspaceId, found.report.id)) return false;
+      if (!found.proposal) return true;
+      const latest = ctx.store.proposalStatus(workspaceId, found.proposal.id).person.acts.at(-1) ?? null;
+      return (latest?.id ?? null) === (found.person_act?.id ?? null);
+    },
+  }, async (plan) => {
+    let fresh: DecidePlan | null = null;
+    const step = await stepOnce(ctx, credential, plan.key, () => {
+      fresh = planDecide(ctx, input, planContext);
+      return ctx.store.appendDecisionForSession({
+        ...credential,
+        idempotency_key: plan.key,
+        cite,
+        outcome,
+        proposal_report_id: proposalId,
+        extent: fresh.extent,
+        body: fresh.note,
+        task_id: fresh.task_id,
+        to_session_id: fresh.addressee.to_session_id,
+        to_person: fresh.addressee.to_person,
+        evidence_refs: fresh.evidence_refs,
+        receipt_plan: plan.guard,
+      });
+    });
+    return { plan, receipt: step.value, fresh: step.replayed ? null : fresh as DecidePlan | null };
+  }).catch((error) => {
+    throw decideRefusal(error, proposalId);
+  });
+  const { plan, receipt, fresh } = result;
+  if (fresh) advice.push(...evidence.advice, ...fresh.advice, ...fresh.addressee.advice);
+  else if (plan.retry) {
+    advice.push("This repeats your latest decide on this entity exactly, so it was read as a retry. Add a word to say it again.");
+  }
+  return decideResult(ctx, workspaceId, { receipt, replayed: fresh === null, advice, read_as: options.read_as, evidence });
+}
+
+function decideResult(
+  ctx: NoteVerbContext,
+  workspaceId: string,
+  options: { receipt: NoteDecisionReceipt; replayed: boolean; advice: string[]; read_as: string | null; evidence: ResolvedEvidence },
+): Record<string, unknown> {
+  const { receipt } = options;
+  const report = receipt.report;
+  const handle = handleOf("report", report.id);
+  const proposal = receipt.proposal;
+  const ph = proposal ? handleOf("proposal", proposal.id) : null;
+  const act = receipt.person_act;
+  const effect = proposal
+    ? {
+      proceed: `Recorded decision ${handle}: proceed on ${ph}, within the extent the person agreed to (act ${act?.id}, ${act?.basis}).`,
+      do_not_proceed: `Recorded decision ${handle}: not proceeding with ${ph}. Nothing is authorised.`,
+      no_decision: `Recorded decision ${handle}: no decision was reached on ${ph}. Nothing is authorised.`,
+    }[receipt.outcome]
+    : {
+      proceed: `Recorded decision ${handle} by this session, within: ${receipt.authority_scope}. It is not a direction decision and not the person's agreement.`,
+      do_not_proceed: `Recorded decision ${handle} by this session: not proceeding. Nothing is authorised; it is not the person's agreement.`,
+      no_decision: `Recorded decision ${handle} by this session: no decision was reached. Nothing is authorised.`,
+    }[receipt.outcome];
+  let to: Addressee["shown"] = "all";
+  if (report.to_session_id) {
+    const view = safeSession(ctx, workspaceId, report.to_session_id);
+    to = { session: report.to_session_id, name: view?.actor ?? report.to_session_id };
+  }
+  const ids: Record<string, unknown> = { report: report.id, report_handle: handle };
+  if (proposal) Object.assign(ids, { proposal: proposal.id, proposal_handle: ph, proposal_sha256: proposal.proposal_sha256 });
+  if (receipt.cite) ids.evidence_cited = { event: receipt.cite.event_id, cite: receipt.cite.cite_id };
+  const stored = parseNote(report.body);
+  const recorded: ResolvedEvidence = {
+    ...options.evidence,
+    lines: stored.evidence,
+    items: receipt.cite?.items ?? options.evidence.items,
+  };
+  return {
+    ...noteWriteResult({
+      effect,
+      ids,
+      advice: options.advice,
+      next: withSlot(ctx, { tool: "collab_inbox", input: { about: exactRef("report", report.id) } }),
+      note: report.body,
+      replayed: options.replayed,
+    }),
+    act: "decide",
+    recorded_as: "decide",
+    outcome: receipt.outcome,
+    ...(options.read_as ? { read_as: options.read_as } : {}),
+    to,
+    evidence: evidenceSummary(recorded),
+    authority: {
+      scope: receipt.authority_scope,
+      basis: receipt.authority_basis,
+      derived_by: "the server, from the journal, inside the write",
+    },
+    ...(proposal && receipt.outcome === "proceed" && act
+      ? {
+        rests_on: {
+          proposal: proposal.id,
+          proposal_sha256: proposal.proposal_sha256,
+          person_act: { id: act.id, event: act.event_id, act: act.act, basis: act.basis, at: act.at },
+          extent: proposal.extent,
+          says: `the person's agreement (act ${act.id}, basis ${act.basis}) to proposal_sha256 ${proposal.proposal_sha256}, within: ${proposal.extent}`,
+        },
+      }
+      : {}),
+    ...(proposal ? {} : { not_the_persons_agreement: true }),
   };
 }
 

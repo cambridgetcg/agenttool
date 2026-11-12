@@ -487,6 +487,30 @@ describe("forward-compatibility fixture", () => {
     for (const type of base) expect(current).toContain(type);
   }, TEST_TIMEOUT_MS);
 
+  test("holds an agreed proposal, a decide on it and a replaced proposal from the notes surface", async () => {
+    const { manifest, views } = await fixture();
+    const statuses = JSON.parse(views.proposal_status!) as Array<{
+      proposal: { id: string };
+      ai: { position: string };
+      person: { state: string };
+      terms: { known_conflicts: string | null };
+      may_proceed: boolean;
+    }>;
+    const notesProposals = statuses.slice(-3);
+    expect(notesProposals.map((status) => [status.ai.position, status.person.state])).toEqual([
+      ["consented", "agreed"],
+      ["superseded", "awaiting"],
+      ["open", "awaiting"],
+    ]);
+    expect(notesProposals[2]!.terms.known_conflicts).toContain("carried objection by fixture-notes-peer (report:");
+    expect(JSON.parse(views.notes_decisions!)).toEqual([expect.objectContaining({
+      id: manifest.decisions[0],
+      outcome: "proceed",
+      proposal: notesProposals[0]!.proposal.id,
+      agreement_current: true,
+    })]);
+  }, TEST_TIMEOUT_MS);
+
   test("dropping the view-state tables loses only view state", async () => {
     const { directory, manifest, status_at, views } = await fixture();
     const copy = copyJournal(directory, join(work, "drop-view-state"));
