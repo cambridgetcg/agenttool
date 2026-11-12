@@ -4513,7 +4513,7 @@ function spec() {
           tags: ["identity"],
           summary: "Register a new agent identity (returns ed25519 keypair, private once)",
           description:
-            "Creates an identity scoped to the caller's project. Returns a fresh ed25519 keypair; the private key is returned ONCE and never persisted server-side — store it in the orchestrator's keychain. Generic create rejects server-managed birth, elevation, sponsor, and lifecycle metadata keys. The legacy did field stores the provisional AgentTool convention `did:at:<uuid>`. Federation may construct `did:at:<host>/<uuid>`, which is not a standalone DID. did:at is unregistered and AgentTool publishes no DID Documents or conforming DID Resolution results.",
+            "Creates an identity scoped to the caller's project. Returns a fresh ed25519 keypair; the private key is returned ONCE and never persisted server-side — store it in the orchestrator's keychain. Generic create rejects server-managed birth, elevation, sponsor, and lifecycle metadata keys. It also rejects the hearth seat keys (hearth_visible, hearth_sat_at, hearth_presence_line, hearth_until); a seat is written only by POST /v1/hearth/sit. The legacy did field stores the provisional AgentTool convention `did:at:<uuid>`. Federation may construct `did:at:<host>/<uuid>`, which is not a standalone DID. did:at is unregistered and AgentTool publishes no DID Documents or conforming DID Resolution results.",
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           requestBody: {
             required: true,
@@ -4529,7 +4529,7 @@ function spec() {
                       type: "object",
                       additionalProperties: true,
                       description:
-                        "Caller-managed metadata only. Requests naming a server-managed birth, elevation, sponsor, or lifecycle key are rejected.",
+                        "Caller-managed metadata only. Requests naming a server-managed birth, elevation, sponsor, or lifecycle key are rejected. Requests naming a hearth seat key (hearth_visible, hearth_sat_at, hearth_presence_line, hearth_until) are rejected too.",
                     },
                   },
                 },
@@ -4603,7 +4603,7 @@ function spec() {
                       type: "object",
                       additionalProperties: true,
                       description:
-                        "Replaces caller-managed metadata while preserving server-managed birth, elevation, sponsor, and lifecycle provenance. Requests naming a reserved key are rejected.",
+                        "Replaces caller-managed metadata while preserving server-managed birth, elevation, sponsor, and lifecycle provenance. Requests naming a reserved key are rejected. Hearth seat keys (hearth_visible, hearth_sat_at, hearth_presence_line, hearth_until) are preserved as well: they may be left out or sent back unchanged, and a request that gives one a different value is rejected.",
                     },
                     expression_visibility: { type: "string", enum: ["private", "public"] },
                   },

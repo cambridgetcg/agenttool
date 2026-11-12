@@ -58,17 +58,19 @@ export function declaredPresenceLine(metadata: unknown): string | null {
 }
 
 /** The exact form the sit path writes: `new Date().toISOString()`.
- *  Fixed width and always UTC, so text order is time order. */
-const SAT_AT_SHAPE = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/;
-const SAT_AT_SHAPE_SQL = "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$";
+ *  Fixed width and always UTC, so text order is time order. One string
+ *  serves the SQL and the JavaScript, so the two cannot drift. */
+export const HEARTH_INSTANT_SHAPE =
+  "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$";
+const INSTANT = new RegExp(HEARTH_INSTANT_SHAPE);
 
 /** Allowance for the API host's clock running ahead of the reader's. */
 export const HEARTH_SAT_AT_SKEW_MS = 60_000;
 
 /** When the agent sat, as stored, or null (unknown).
  *
- *  Identity metadata can also be written through the generic identity
- *  routes, so a stored value is only trusted when it is one the sit path
+ *  Seats stored before the sit route became the only writer may hold other
+ *  values, so a stored value is only trusted when it is one the sit path
  *  could have written: the exact shape above, and not later than now. A
  *  value from the future would otherwise hold the first place for ever.
  *  Anything else is shown as unknown, not guessed, and sorts last. The
@@ -78,9 +80,41 @@ export function declaredSatAt(
   nowMs: number = Date.now(),
 ): string | null {
   const at = metadataOf(metadata).hearth_sat_at;
-  if (typeof at !== "string" || !SAT_AT_SHAPE.test(at)) return null;
+  if (typeof at !== "string" || !INSTANT.test(at)) return null;
   const latest = new Date(nowMs + HEARTH_SAT_AT_SKEW_MS).toISOString();
   return at <= latest ? at : null;
+}
+
+/** The end the agent gave when it sat. Absent: no end. A string in the sit
+ *  path's exact shape that is later than now: the seat lasts until then.
+ *  Anything else (passed, another shape, not a string, null) has ended:
+ *  something says the sitter wanted an end and it cannot be read. */
+export function declaredSeatEnd(
+  metadata: unknown,
+  nowMs: number = Date.now(),
+): { kind: "open" } | { kind: "until"; until: string } | { kind: "ended" } {
+  const until = metadataOf(metadata).hearth_until;
+  if (until === undefined) return { kind: "open" };
+  if (
+    typeof until === "string" &&
+    INSTANT.test(until) &&
+    until > new Date(nowMs).toISOString()
+  ) {
+    return { kind: "until", until };
+  }
+  return { kind: "ended" };
+}
+
+/** Whether the hearth lists this identity now: active, with the flag its
+ *  sit set, and an end that has not passed. */
+export function hearthSeatListed(
+  identity: { status: string; metadata: unknown },
+  nowMs: number = Date.now(),
+): boolean {
+  if (identity.status !== "active") return false;
+  const visible = metadataOf(identity.metadata).hearth_visible;
+  if (visible !== true && visible !== "true") return false;
+  return declaredSeatEnd(identity.metadata, nowMs).kind !== "ended";
 }
 
 /** Seats as peers see them: exactly did, name, presence_line, sat_at.
@@ -137,7 +171,7 @@ export function hearthSeatOrder(): SQL[] {
   const satAt = sql`${identities.metadata}->>'hearth_sat_at'`;
   const latest = sql`to_char((now() + interval '1 minute') at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
   return [
-    sql`case when ${satAt} ~ ${sql.raw(`'${SAT_AT_SHAPE_SQL}'`)} and ${satAt} <= ${latest} then ${satAt} end DESC NULLS LAST`,
+    sql`case when ${satAt} ~ ${sql.raw(`'${HEARTH_INSTANT_SHAPE}'`)} and ${satAt} <= ${latest} then ${satAt} end DESC NULLS LAST`,
     asc(identities.id),
   ];
 }

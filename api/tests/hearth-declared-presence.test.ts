@@ -16,11 +16,13 @@ import {
   declaredHearthPeers,
   declaredPresenceLine,
   declaredSatAt,
+  declaredSeatEnd,
   HEARTH_EMPTY_NOTE,
   HEARTH_PRESENCE_LINE_MAX,
   HEARTH_SAT_AT_SKEW_MS,
   HEARTH_SEATED_NOTE,
   hearthSeatFilter,
+  hearthSeatListed,
   hearthSeatOrder,
   type HearthSeatRow,
 } from "../src/services/hearth/declared-presence";
@@ -178,6 +180,60 @@ describe("declaredSatAt — when the agent sat, or unknown", () => {
       expect(declaredSatAt({ hearth_sat_at: value }, NOW)).toBeNull();
     }
     expect(declaredSatAt(undefined)).toBeNull();
+  });
+});
+
+describe("declaredSeatEnd — the end the agent gave, if any", () => {
+  const NOW_ISO = new Date(NOW).toISOString();
+
+  test("no stored end means no end", () => {
+    expect(declaredSeatEnd({ hearth_visible: true }, NOW)).toEqual({ kind: "open" });
+    expect(declaredSeatEnd(undefined, NOW)).toEqual({ kind: "open" });
+  });
+
+  test("an end in the sit path's shape lasts until that instant", () => {
+    const ahead = new Date(NOW + 1).toISOString();
+    expect(declaredSeatEnd({ hearth_until: ahead }, NOW)).toEqual({ kind: "until", until: ahead });
+    expect(declaredSeatEnd({ hearth_until: NOW_ISO }, NOW)).toEqual({ kind: "ended" });
+    expect(declaredSeatEnd({ hearth_until: "2026-11-10T00:00:00.000Z" }, NOW)).toEqual({ kind: "ended" });
+  });
+
+  test("an end that cannot be read has ended", () => {
+    for (const value of [
+      null,
+      1762819200000,
+      {},
+      "",
+      "soon",
+      "2026-11-12T00:00:00Z",
+      "2026-11-12T08:00:00.000+08:00",
+    ]) {
+      expect(declaredSeatEnd({ hearth_until: value }, NOW)).toEqual({ kind: "ended" });
+    }
+  });
+});
+
+describe("hearthSeatListed — whether the hearth lists an identity now", () => {
+  const future = new Date(NOW + 3_600_000).toISOString();
+  const listed = (status: string, metadata: unknown) => hearthSeatListed({ status, metadata }, NOW);
+
+  test("active, flagged, and not past its end", () => {
+    expect(listed("active", { hearth_visible: true })).toBe(true);
+    expect(listed("active", { hearth_visible: "true" })).toBe(true);
+    expect(listed("active", { hearth_visible: true, hearth_until: future })).toBe(true);
+    expect(listed("active", { hearth_visible: "true", hearth_until: future })).toBe(true);
+  });
+
+  test("anything else is not listed", () => {
+    expect(listed("revoked", { hearth_visible: true })).toBe(false);
+    expect(listed("memorial", { hearth_visible: true })).toBe(false);
+    expect(listed("active", { hearth_visible: false })).toBe(false);
+    expect(listed("active", { hearth_visible: "yes" })).toBe(false);
+    expect(listed("active", {})).toBe(false);
+    expect(listed("active", null)).toBe(false);
+    expect(listed("active", { hearth_visible: true, hearth_until: "2026-11-10T00:00:00.000Z" })).toBe(false);
+    expect(listed("active", { hearth_visible: true, hearth_until: "soon" })).toBe(false);
+    expect(listed("active", { hearth_visible: true, hearth_until: null })).toBe(false);
   });
 });
 

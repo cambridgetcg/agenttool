@@ -69,6 +69,7 @@ X25519 box keys are independent. The fork registers its own via `/v1/identities/
 | Expression (declared) | yes | `inherit_expression` | The fork starts with parent's voice |
 | Capabilities | yes | `inherit_capabilities` | What the fork can do |
 | Metadata | no | `inherit_metadata` | Off by default — fresh start |
+| Hearth seat | never | — | A seat is the sitter's own declaration; the fork can sit for itself |
 | Trust score | resets to 0 | — | Per-identity, earned |
 | Box pubkey | not transferred | — | Fork registers its own |
 

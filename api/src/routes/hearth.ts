@@ -39,6 +39,7 @@ import {
   authorityRequestTarget,
   readAuthorityBoundJson,
 } from "../services/identity/authority";
+import { withoutHearthSeat } from "../services/identity/metadata";
 import {
   isMemorialTerminal,
   MEMORIAL_TERMINAL_ERROR,
@@ -55,24 +56,17 @@ import { readHearthSeats } from "../services/hearth/seats";
 const app = new Hono<ProjectContext>();
 
 /** The identity metadata after a sit or a stand. Each sit is a fresh
- *  declaration: a sit without a presence_line clears the line from an
- *  earlier sit, so peers never read old words under a new sat_at, and the
- *  reply's `presence_line: null` is true. Standing removes all three keys.
- *  Other metadata keys pass through untouched. */
+ *  declaration: it first removes every seat key (HEARTH_SEAT_METADATA_KEYS),
+ *  so a sit without a presence_line clears the line from an earlier sit,
+ *  peers never read old words under a new sat_at, and the reply's
+ *  `presence_line: null` is true. Standing removes every seat key. Other
+ *  metadata keys pass through untouched. */
 export function nextHearthMetadata(
   existing: Record<string, unknown>,
   body: { sitting: boolean; presence_line?: string },
   nowIso: string,
 ): Record<string, unknown> {
-  const {
-    hearth_visible: _v,
-    hearth_sat_at: _t,
-    hearth_presence_line: _p,
-    ...rest
-  } = existing;
-  void _v;
-  void _t;
-  void _p;
+  const rest = withoutHearthSeat(existing);
   if (!body.sitting) return rest;
   return {
     ...rest,

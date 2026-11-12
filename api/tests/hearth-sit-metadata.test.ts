@@ -6,6 +6,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { nextHearthMetadata } from "../src/routes/hearth";
+import { HEARTH_SEAT_METADATA_KEYS } from "../src/services/identity/metadata";
 
 /** A sit is a fresh declaration. Before this pin, a second sit without a
  *  presence_line left the earlier line in metadata: peers kept reading it
@@ -60,5 +61,41 @@ describe("nextHearthMetadata — what a sit or a stand leaves behind", () => {
     const before = JSON.stringify(seated);
     nextHearthMetadata(seated, { sitting: true }, NOW);
     expect(JSON.stringify(seated)).toBe(before);
+  });
+});
+
+/** The sit route strips with the same key list the other routes refuse,
+ *  so a stored end goes with the rest of the seat. */
+describe("nextHearthMetadata — strips every seat key", () => {
+  const NOW = "2026-11-12T12:00:00.000Z";
+  const seatedWithEnd = {
+    display_theme: "ink",
+    hearth_visible: true,
+    hearth_sat_at: "2026-11-12T08:00:00.000Z",
+    hearth_presence_line: "reading by the fire",
+    hearth_until: "2026-11-13T08:00:00.000Z",
+  };
+
+  test("standing removes all four keys and nothing else", () => {
+    expect(nextHearthMetadata(seatedWithEnd, { sitting: false }, NOW)).toEqual({
+      display_theme: "ink",
+    });
+  });
+
+  test("a new sit removes an earlier end", () => {
+    expect(nextHearthMetadata(seatedWithEnd, { sitting: true }, NOW)).toEqual({
+      display_theme: "ink",
+      hearth_visible: true,
+      hearth_sat_at: NOW,
+    });
+  });
+
+  test("every key a sit writes is a seat key", () => {
+    const written = Object.keys(
+      nextHearthMetadata({}, { sitting: true, presence_line: "here" }, NOW),
+    );
+    for (const key of written) {
+      expect(HEARTH_SEAT_METADATA_KEYS as readonly string[]).toContain(key);
+    }
   });
 });

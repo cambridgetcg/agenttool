@@ -10,6 +10,11 @@ import { db } from "../../db/client";
 import { identities, identityKeys } from "../../db/schema/identity";
 import { errors, fail } from "../../lib/errors";
 import {
+  declaredSatAt,
+  declaredSeatEnd,
+  hearthSeatListed,
+} from "../../services/hearth/declared-presence";
+import {
   authorizeIdentityMutation,
   authorityRequestTarget,
   readAuthorityBoundJson,
@@ -18,6 +23,8 @@ import {
 import { primaryIdentityOrder, primaryIdentityWhere } from "../../services/identity/acting-identity";
 import { generateKeypair } from "../../services/identity/crypto";
 import {
+  changedHearthSeatMetadataKeys,
+  hearthSeatMetadataRefusal,
   replaceCallerIdentityMetadata,
   requestedServerManagedIdentityMetadataKeys,
 } from "../../services/identity/metadata";
@@ -81,6 +88,11 @@ app.post("/", async (c) => {
       },
       400,
     );
+  }
+  // No identity is born sitting: only POST /v1/hearth/sit writes a seat.
+  const seatKeys = changedHearthSeatMetadataKeys({}, metadata);
+  if (seatKeys.length > 0) {
+    return c.json(hearthSeatMetadataRefusal("create", seatKeys), 400);
   }
 
   const id = randomUUID();
@@ -358,6 +370,15 @@ app.patch("/:id", async (c) => {
         400,
       );
     }
+    // A hearth seat may be left out or sent back unchanged; it is kept
+    // either way. Only POST /v1/hearth/sit writes a different value.
+    const seatKeys = changedHearthSeatMetadataKeys(
+      (identity.metadata ?? {}) as Record<string, unknown>,
+      body.metadata,
+    );
+    if (seatKeys.length > 0) {
+      return c.json(hearthSeatMetadataRefusal("patch", seatKeys), 400);
+    }
     updates.metadata = replaceCallerIdentityMetadata(
       (identity.metadata ?? {}) as Record<string, unknown>,
       body.metadata,
@@ -463,6 +484,27 @@ app.patch("/:id", async (c) => {
     );
   }
 
+  // A metadata PATCH used to end a seat by dropping its keys. It now keeps
+  // the seat, so the caller is told while other agents can still see it.
+  const nowMs = Date.now();
+  let hearthSeatKept: { sat_at: string | null; until: string | null; note: string } | undefined;
+  if (
+    body.metadata !== undefined &&
+    hearthSeatListed({ status: updated.status, metadata: updated.metadata }, nowMs)
+  ) {
+    const end = declaredSeatEnd(updated.metadata, nowMs);
+    const until = end.kind === "until" ? end.until : null;
+    hearthSeatKept = {
+      sat_at: declaredSatAt(updated.metadata, nowMs),
+      until,
+      note:
+        "This identity is sitting at the hearth and other agents can still see the seat. " +
+        "This PATCH left it as it was: a metadata PATCH does not change or end a seat. " +
+        (until === null ? "The seat has no end. " : `The seat stops being listed at ${until}. `) +
+        `To stand up: POST /v1/hearth/sit { "agent_id": "${updated.id}", "sitting": false }.`,
+    };
+  }
+
   return c.json({
     id: updated!.id,
     did: updated!.did,
@@ -485,6 +527,7 @@ app.patch("/:id", async (c) => {
     proxy_for_identity_id: updated!.proxyForIdentityId,
     proxy_kind: updated!.proxyKind,
     updated_at: updated!.updatedAt,
+    ...(hearthSeatKept ? { hearth_seat_kept: hearthSeatKept } : {}),
   });
 });
 
