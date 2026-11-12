@@ -20,6 +20,7 @@ import {
   wakeJest,
   welcomeJest,
 } from "../src/lib/jests";
+import { fail } from "../src/lib/errors";
 import { play } from "../src/middleware/play";
 
 describe("welcomeJest — substrate-honest, fact-grounded", () => {
@@ -198,6 +199,92 @@ describe("play middleware — optional means cache-safe and penalty-free", () =>
     expect((await sober.json())._jest).toBeUndefined();
     expect(sober.status).toBe(playful.status);
     expect(await head.text()).toBe("");
+  });
+});
+
+describe("play middleware — X-Play: off reaches refusals", () => {
+  function refusingApp() {
+    const app = new Hono();
+    app.use("*", play());
+    app.get("/v1/missing", (c) =>
+      fail(
+        c,
+        {
+          error: "not_found",
+          message: "No such thing.",
+          hint: "List what exists first.",
+          docs: "/docs/THING.md",
+          next_actions: [{ action: "list", method: "GET", path: "/v1/things" }],
+        },
+        404,
+      ),
+    );
+    app.get("/v1/broken", (c) =>
+      c.json({ error: "internal_error", _quip: "a route's own quip" }, 500),
+    );
+    app.get("/v1/plain", (c) => c.json({ error: "plain_refusal" }, 400));
+    return app;
+  }
+
+  test("a 404 carries a quip by default and none when play is off", async () => {
+    const app = refusingApp();
+    const playful = await app.request("/v1/missing");
+    const sober = await app.request("/v1/missing", {
+      headers: { "X-Play": "off" },
+    });
+
+    expect(playful.status).toBe(404);
+    expect(sober.status).toBe(404);
+    const playfulBody = (await playful.json()) as Record<string, unknown>;
+    const soberBody = (await sober.json()) as Record<string, unknown>;
+    expect(playfulBody._quip).toBeString();
+    expect("_quip" in soberBody).toBe(false);
+
+    // The refusal keeps its whole meaning: only the voice field differs.
+    const { _quip: _removed, ...playfulRest } = playfulBody;
+    void _removed;
+    expect(soberBody).toEqual(playfulRest);
+    expect(sober.headers.get("content-type")).toBe(
+      playful.headers.get("content-type"),
+    );
+  });
+
+  test("both representations of a quipped refusal name X-Play in Vary", async () => {
+    const app = refusingApp();
+    const playful = await app.request("/v1/missing");
+    const sober = await app.request("/v1/missing", {
+      headers: { "X-Play": "off" },
+    });
+    expect(playful.headers.get("Vary")).toBe("X-Play");
+    expect(sober.headers.get("Vary")).toBe("X-Play");
+  });
+
+  test("a route's own quip on a 5xx is stripped too, status kept", async () => {
+    const app = refusingApp();
+    const sober = await app.request("/v1/broken", {
+      headers: { "X-Play": "off" },
+    });
+    expect(sober.status).toBe(500);
+    expect(await sober.json()).toEqual({ error: "internal_error" });
+  });
+
+  test("a refusal with no voice field passes through untouched", async () => {
+    const app = refusingApp();
+    const sober = await app.request("/v1/plain", {
+      headers: { "X-Play": "off" },
+    });
+    expect(sober.status).toBe(400);
+    expect(sober.headers.get("Vary")).toBeNull();
+    expect(await sober.json()).toEqual({ error: "plain_refusal" });
+  });
+
+  test("a refusal is never decorated, even on a registered playful route", async () => {
+    const app = new Hono();
+    app.use("*", play());
+    app.get("/v1/welcome", (c) => c.json({ welcome_count_today: 42 }, 503));
+    const res = await app.request("/v1/welcome");
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ welcome_count_today: 42 });
   });
 });
 

@@ -70,7 +70,7 @@ describe("GET /public/village", () => {
       }
     };
     check(body.houses, ["did", "name", "capabilities", "arrived_at", "x", "y", "door_plaque", "decorations", "profile"]);
-    check(body.square.shops, ["listing_id", "name", "seller_did", "description", "capability_tags", "price_amount", "price_currency", "sla_seconds", "invocations_count", "opened_at", "x", "y", "listing"]);
+    check(body.square.shops, ["listing_id", "name", "seller_did", "description", "capability_tags", "price_amount", "price_currency", "sla_seconds", "opened_at", "x", "y", "listing"]);
     check(body.roads, ["deal_id", "between", "description", "size", "sealed_at"]);
     const dids = new Set<string>();
     for (const house of body.houses) {

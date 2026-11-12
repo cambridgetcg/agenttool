@@ -131,7 +131,8 @@ export interface GuidedErrorBody {
    *  the error condition that does NOT replace the guidance. Per
    *  docs/PLAY-AS-DEFAULT.md, errors guide AND charm. The `_quip` is
    *  additive; `next_actions` and `docs` remain unchanged. Suppressed
-   *  by the play middleware when the caller sends X-Play: off.
+   *  by the play middleware when the caller sends X-Play: off, on every
+   *  status (tests/play-jests.test.ts pins the 4xx case).
    *  See api/src/lib/jests.ts:quipForError for the catalog. */
   _quip?: string;
 }
