@@ -150,9 +150,15 @@ describe("the tools profile", () => {
     expect(inProcess({ AGENTOOL_COLLAB_TOOLS: "full" }).tools.length).toBe(LEGACY_TOOLS + BUILT_NOTE_VERBS.length);
     const listed = await stdio(source, { AGENTOOL_COLLAB_TOOLS: "notes" });
     expect(listed.tools.map((tool) => tool.name).sort()).toEqual(expected);
-    // The verbs write (a session, a purpose, view state), so they are not read-only.
+    // The verbs write (a session, a purpose, view state), so they are not read-only;
+    // collab_done can end the session, so it says it may destroy.
     for (const tool of listed.tools.filter((item) => item.name !== "collab_journal_verify")) {
-      expect(tool.annotations).toEqual({ readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false });
+      expect(tool.annotations).toEqual({
+        readOnlyHint: false,
+        destructiveHint: tool.name === "collab_done",
+        idempotentHint: false,
+        openWorldHint: false,
+      });
     }
   }, 60_000);
 

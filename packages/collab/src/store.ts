@@ -422,6 +422,8 @@ export class CollabStore {
   };
   private eventReader?: Database;
   private closed = false;
+  /** Set only inside withReceiptPlan. */
+  private ambientReceiptPlan: ReceiptPlanGuard | null = null;
 
   constructor(path: string, options: CollabStoreOptions = {}) {
     this.now = options.now ?? (() => new Date());
@@ -5812,7 +5814,8 @@ export class CollabStore {
           .run(this.timestamp(), session.id);
         return JSON.parse(existing.response_json) as T;
       }
-      if (options.receipt_plan) this.requireReceiptPlan(session, options.receipt_plan);
+      const receiptPlan = options.receipt_plan ?? this.ambientPlanFor(idempotencyKey);
+      if (receiptPlan) this.requireReceiptPlan(session, receiptPlan);
 
       // Refresh first so projections built inside apply (assignee_liveness)
       // see the acting session as seen now; a throw rolls this back too.
@@ -6654,6 +6657,8 @@ export class CollabStore {
       // Present only when set, so every other report keeps its earlier event bytes.
       ...(input.to_person ? { to_person: true } : {}),
       ...(input.about_proposal_id ? { about_proposal_id: input.about_proposal_id } : {}),
+      // The collab-note/1 marker (spec 4): reads parse a body only when it is present.
+      ...(input.note ? { note: input.note } : {}),
       task_id: input.task_id,
       to_session_id: input.to_session_id,
       kind: input.kind,
@@ -7361,6 +7366,241 @@ export class CollabStore {
   }
 
   /**
+   * Record outside evidence as one `evidence.cited` event (spec 5.3, 8.2): a
+   * separate step before a review, a completion or a proposal, whose own
+   * transaction the cite cannot join. Hashing and git probes happened before
+   * this call; inside it only the cheap facts are checked again.
+   */
+  citeEvidenceForSession(input: {
+    session_id: string;
+    session_token: string;
+    generation: number;
+    idempotency_key: string;
+    worktree_id: string | null;
+    items: NoteCitedItem[];
+    receipt_plan?: ReceiptPlanGuard;
+  }): NoteCiteReceipt {
+    const cite = normalizeNoteCite({ worktree_id: input.worktree_id, items: input.items });
+    if (cite.items.length === 0) throw new CollabError("invalid_evidence", "A cite needs at least one outside evidence item");
+    return this.mutateAsSession(input, input.idempotency_key, "notes.cite.v1", cite, (session) =>
+      this.appendNoteCite(session, cite), input.receipt_plan ? { receipt_plan: input.receipt_plan } : {});
+  }
+
+  /**
+   * Post a note (spec 5.3): an optional `evidence.cited` event and one or two
+   * marked reports, in one transaction. Two reports are a challenge and the
+   * withdrawal of the challenge it replaces, posted in that order, so the
+   * objection stands at every instant. Every report goes through the same
+   * checks as collab_report_append.
+   */
+  appendNoteForSession(input: {
+    session_id: string;
+    session_token: string;
+    generation: number;
+    idempotency_key: string;
+    cite?: { worktree_id: string | null; items: NoteCitedItem[] } | null;
+    reports: NoteReportInput[];
+    receipt_plan?: ReceiptPlanGuard;
+  }): NoteAppendReceipt {
+    if (!Array.isArray(input.reports) || input.reports.length < 1 || input.reports.length > 2) {
+      throw new CollabError("invalid_note_reports", "A note posts one report, or a challenge and the withdrawal it replaces");
+    }
+    const cite = input.cite && input.cite.items.length > 0 ? normalizeNoteCite(input.cite) : null;
+    const reports = input.reports.map((report, index) => normalizeNoteReport(report, index));
+    if (reports.some((report) => report.cite_event) && !cite) {
+      throw new CollabError("invalid_note_reports", "A report cites this note's evidence, but the note has none");
+    }
+    return this.mutateAsSession(input, input.idempotency_key, "notes.note.v1", { cite, reports }, (session) => {
+      const cited = cite ? this.appendNoteCite(session, cite) : null;
+      const posted: CollabReport[] = [];
+      for (const report of reports) {
+        const evidenceRefs = normalizeEvidenceRefs([
+          ...report.evidence_refs,
+          ...(report.cite_event ? [`event:${cited!.event_id}`] : []),
+          ...report.cite_earlier.map((index) => `report:${posted[index]!.id}`),
+        ]);
+        const normalized = {
+          task_id: report.task_id,
+          to_session_id: report.to_session_id,
+          kind: report.kind,
+          body: report.body,
+          evidence_refs: evidenceRefs,
+          confidence: "unknown" as const,
+          confidence_basis: null,
+          limits: null,
+          relation: report.relation,
+          target_report_id: report.target_report_id,
+          authority_scope: null,
+          authority_basis: null,
+          ...(report.to_person ? { to_person: true } : {}),
+        };
+        this.validateReportInput(session, normalized);
+        this.refuseProposalRewrite(normalized);
+        if (report.about_proposal_id) {
+          const termed = this.db.query(`SELECT workspace_id FROM proposal_terms WHERE report_id = ?`)
+            .get(report.about_proposal_id) as { workspace_id: string } | null;
+          if (!termed || termed.workspace_id !== session.workspace_id) {
+            throw new CollabError("proposal_not_found", "about_proposal_id must name a proposal in this workspace");
+          }
+        }
+        posted.push(this.appendReportInternal(session, {
+          ...normalized,
+          ...(report.about_proposal_id ? { about_proposal_id: report.about_proposal_id } : {}),
+          note: NOTE_FORMAT,
+        }));
+      }
+      return { reports: posted, cite: cited };
+    }, input.receipt_plan ? { receipt_plan: input.receipt_plan } : {});
+  }
+
+  private appendNoteCite(session: CoordinationSessionRow, cite: NormalizedNoteCite): NoteCiteReceipt {
+    // A server-hashed file is only meaningful against the worktree it was
+    // read in, so the cite names the citing session's own worktree.
+    const hasFiles = cite.items.some((item) => item.kind === "file");
+    if (hasFiles && cite.worktree_id !== session.worktree_id) {
+      throw new CollabError("cite_worktree_mismatch", "File evidence is cited against the citing session's own worktree");
+    }
+    const citeId = `cite_${randomUUID()}`;
+    const payload = {
+      cite_id: citeId,
+      by_session_id: session.id,
+      ...(hasFiles ? { worktree_id: session.worktree_id } : {}),
+      items: cite.items,
+    };
+    assertNotePayload(payload);
+    const event = this.appendEvent(session.workspace_id, "evidence.cited", citeId, session.actor, payload, session.id);
+    return {
+      cite_id: citeId,
+      event_id: event.id,
+      sequence: event.sequence,
+      worktree_id: hasFiles ? session.worktree_id : null,
+      items: cite.items,
+    };
+  }
+
+  /**
+   * What a note's target is, for the verbs to map an act onto storage and to
+   * give advice (spec 5.3). Read-only, one snapshot.
+   */
+  noteTarget(workspaceId: string, reportId: string): NoteTargetView {
+    return this.db.transaction(() => {
+      const report = this.requireReport(validateId(reportId, "report_id"));
+      if (report.workspace_id !== workspaceId) {
+        throw new CollabError("report_not_found", `Report '${reportId}' was not found in this workspace`);
+      }
+      const obsoleted = this.activeObsoletionTargets(workspaceId);
+      const termed = this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(report.id) !== null;
+      // A ballot's and a completion's events follow their report in its own
+      // transaction, so each search starts at the report's sequence.
+      const opened = this.db.query(`
+        SELECT payload_json FROM events
+        WHERE workspace_id = ? AND sequence > ? AND type = 'ballot.opened' AND entity_id = ?
+        ORDER BY sequence LIMIT 1
+      `).get(workspaceId, report.event_sequence, report.id) as { payload_json: string } | null;
+      let ballot: NoteTargetView["ballot"] = null;
+      if (opened) {
+        const closed = this.db.query(`
+          SELECT 1 FROM events WHERE workspace_id = ? AND sequence > ? AND type = 'ballot.closed' AND entity_id = ? LIMIT 1
+        `).get(workspaceId, report.event_sequence, report.id) !== null;
+        const closesAt = (JSON.parse(opened.payload_json) as Record<string, unknown>).closes_at;
+        ballot = { open: !closed && (typeof closesAt !== "string" || this.timestamp() < closesAt) };
+      }
+      let completion: NoteTargetView["completion_of"] = null;
+      if (report.task_id) {
+        const event = this.db.query(`
+          SELECT payload_json FROM events
+          WHERE workspace_id = ? AND sequence > ? AND entity_id = ?
+            AND type IN ('task.reported_complete', 'task.completed')
+          ORDER BY sequence LIMIT 1
+        `).get(workspaceId, report.event_sequence, report.task_id) as { payload_json: string } | null;
+        const completed = event
+          && (JSON.parse(event.payload_json) as Record<string, unknown>).completion_report_id === report.id;
+        if (completed) {
+          const task = this.requireTaskRow(workspaceId, report.task_id);
+          const current = task.completion_report_id === report.id;
+          completion = {
+            task_id: task.id,
+            current,
+            pending_review: current && task.status === "completed" && task.review_status === "pending",
+          };
+        }
+      }
+      const authorRow = report.from_session_id
+        ? this.db.query(`SELECT * FROM coordination_sessions WHERE id = ?`).get(report.from_session_id) as CoordinationSessionRow | null
+        : null;
+      return {
+        report,
+        termed,
+        ballot,
+        obsoleted: obsoleted.has(report.id),
+        completion_of: completion,
+        challenges: this.noteChallenges(workspaceId).filter((challenge) => challenge.target_report_id === report.id),
+        author: authorRow
+          ? {
+            id: authorRow.id,
+            actor: authorRow.actor,
+            status: authorRow.status,
+            liveness: sessionLiveness(authorRow, this.timestamp()),
+            last_seen_at: authorRow.last_seen_at,
+            voice_id: this.consentVoice(authorRow.id),
+          }
+          : null,
+      };
+    }).deferred();
+  }
+
+  /** The reports among `ids` that a withdraw, correct or supersede has retired. Read-only. */
+  noteObsoleted(workspaceId: string, ids: string[]): string[] {
+    const obsoleted = this.activeObsoletionTargets(workspaceId);
+    return ids.filter((id) => obsoleted.has(id));
+  }
+
+  /**
+   * The reserved work these paths would overlap (spec 5.4), every conflict
+   * rather than the first one the claim refusal names. Read-only.
+   */
+  notePathConflicts(
+    workspaceId: string,
+    paths: string[],
+    options: { work_mode?: TaskWorkMode; except_task_id?: string } = {},
+  ): TaskConflict["conflicts"] {
+    this.requireWorkspace(workspaceId);
+    return this.taskPathConflicts({
+      workspace_id: workspaceId,
+      id: options.except_task_id ?? "",
+      path_scopes: normalizePathScopes(paths),
+      work_mode: options.work_mode ?? "edit",
+    } as Task);
+  }
+
+  /** The root a registered worktree was last seen at, or null when this device has no such worktree. Read-only. */
+  noteWorktreeRoot(worktreeId: string): string | null {
+    const row = this.db.query(`SELECT root_path FROM worktrees WHERE id = ?`).get(worktreeId) as { root_path: string } | null;
+    return row?.root_path ?? null;
+  }
+
+  /**
+   * This session's most recent derived key with the given base, whatever its
+   * entity (spec 5): how collab_done finds its own retry once the task it
+   * finished is no longer held. Read-only.
+   */
+  latestReceiptKeyForBase(
+    credential: { session_id: string; session_token: string; generation: number },
+    base: string,
+  ): string | null {
+    const session = this.authenticateSession(credential);
+    if (!/^[A-Z2-7]{20}$/.test(base)) throw new CollabError("invalid_receipt_base", "A derived key base is 20 base32 characters");
+    // LIKE ignores case, so each candidate is checked exactly after the scan.
+    const exact = new RegExp(`^n1:[A-Z2-7]{8}:\\d{6}:${base}(?::\\d{2})?$`);
+    const rows = this.db.query(`
+      SELECT idempotency_key FROM mutations
+      WHERE workspace_id = ? AND actor = ? AND idempotency_key LIKE ?
+      ORDER BY rowid DESC LIMIT 20
+    `).all(session.workspace_id, `session:${session.id}`, `n1:________:______:${base}%`) as Array<{ idempotency_key: string }>;
+    return rows.find((row) => exact.test(row.idempotency_key))?.idempotency_key ?? null;
+  }
+
+  /**
    * One of this session's receipts by its exact key, without comparing the
    * request. A derived-key retry replays what was recorded even when a fresh
    * read would build a different request (spec 5, derived idempotency), so a
@@ -7416,6 +7656,31 @@ export class CollabStore {
    * earlier write could sort as latest and swallow a later deliberate repeat
    * as a replay. Nothing is written when it fails.
    */
+  /**
+   * Run an existing session write under a derived key's plan (Collab Notes
+   * spec 5). The existing `*ForSession` methods take no plan of their own and
+   * stay as they are; while `run` is on the stack, the one write whose key is
+   * the plan's key (or one of its steps) re-checks the plan inside its
+   * transaction, exactly as a new method passing `receipt_plan` does. `run` is
+   * synchronous, so no other call can see the plan.
+   */
+  withReceiptPlan<T>(plan: ReceiptPlanGuard | undefined, run: () => T): T {
+    if (!plan) return run();
+    if (this.ambientReceiptPlan) throw new CollabError("receipt_plan_nested", "A receipt plan is already in force");
+    this.ambientReceiptPlan = plan;
+    try {
+      return run();
+    } finally {
+      this.ambientReceiptPlan = null;
+    }
+  }
+
+  private ambientPlanFor(idempotencyKey: string): ReceiptPlanGuard | undefined {
+    const plan = this.ambientReceiptPlan;
+    if (!plan) return undefined;
+    return idempotencyKey === plan.key || idempotencyKey.startsWith(`${plan.key}:`) ? plan : undefined;
+  }
+
   private requireReceiptPlan(session: CoordinationSessionRow, plan: ReceiptPlanGuard): void {
     const latest = this.latestReceiptKey(session, plan.prefix);
     if (latest === plan.latest || latest === plan.key || (latest !== null && latest.startsWith(`${plan.key}:`))) return;
@@ -8020,17 +8285,38 @@ export class CollabStore {
           ? (payload.handoff as Record<string, string>).task_id : null)
         : report?.task_id ?? null;
     const taskRow = taskId ? this.readTaskRow(session.workspace_id, taskId) : null;
+    const marked = event.type === "report.posted" && payload.note === NOTE_FORMAT;
     return {
       event,
       for_me: forMe,
       why_you: forMe ? this.noteWhyYou(event, session.id) : null,
       report,
-      marked: event.type === "report.posted" && payload.note === NOTE_FORMAT,
+      marked,
+      cited: marked && report ? this.noteCiteOf(session.workspace_id, report) : null,
       termed: report !== null
         && this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(report.id) !== null,
       to_person: event.type === "report.posted" && payload.to_person === true,
       task: taskRow ? { id: taskRow.id, title: taskRow.title } : null,
     };
+  }
+
+  /** The evidence.cited event a marked note cites in its evidence refs (one per note), or null. */
+  private noteCiteOf(workspaceId: string, report: CollabReport): NoteEntry["cited"] {
+    for (const ref of report.evidence_refs) {
+      if (!ref.startsWith("event:")) continue;
+      const row = this.db.query(`
+        SELECT payload_json FROM events WHERE workspace_id = ? AND id = ? AND type = 'evidence.cited'
+      `).get(workspaceId, ref.slice("event:".length)) as { payload_json: string } | null;
+      if (!row) continue;
+      const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
+      return {
+        event_id: ref.slice("event:".length),
+        by_session_id: typeof payload.by_session_id === "string" ? payload.by_session_id : null,
+        worktree_id: typeof payload.worktree_id === "string" ? payload.worktree_id : null,
+        items: Array.isArray(payload.items) ? payload.items as NoteCitedItem[] : [],
+      };
+    }
+    return null;
   }
 
   /** Why an addressed event names this session, for an item's why_you. Mirrors eventAddressesSession. */
@@ -8962,6 +9248,8 @@ interface ReportInternalInput {
   to_person?: boolean;
   /** A desk report about a proposal, routed to that proposal's voices. */
   about_proposal_id?: string;
+  /** The body is a rendered collab-note/1 note (spec 4, 8.3). */
+  note?: typeof NOTE_FORMAT;
 }
 
 /** One read of a workspace's obsoletions and consent voices, shared across statuses. */
@@ -9024,6 +9312,13 @@ export interface NoteEntry {
   report: CollabReport | null;
   /** The report.posted payload carries the collab-note/1 marker, so its body is read as a note. */
   marked: boolean;
+  /** For a marked note, the evidence.cited event it cites: how each outside item was observed. */
+  cited: {
+    event_id: string;
+    by_session_id: string | null;
+    worktree_id: string | null;
+    items: NoteCitedItem[];
+  } | null;
   /** The report is a consent/v1 proposal. */
   termed: boolean;
   to_person: boolean;
@@ -9054,6 +9349,181 @@ export interface NoteWaitingEntry {
   due: string | null;
   at: string;
   summary: string;
+}
+
+/** The kinds of outside evidence an evidence.cited event records (spec 5.3); journal refs go into evidence_refs. */
+export const NOTE_OUTSIDE_EVIDENCE_KINDS = ["file", "commit", "test", "url", "data", "msg"] as const;
+export type NoteOutsideEvidenceKind = (typeof NOTE_OUTSIDE_EVIDENCE_KINDS)[number];
+
+/** One item of an evidence.cited event (spec 8.2). Contents are never stored, only pointers and hashes. */
+export interface NoteCitedItem {
+  /** The 1-based position in the citing note's Evidence list, which its Why cites count. */
+  n: number;
+  kind: NoteOutsideEvidenceKind;
+  /** The path (without a line range), sha, command, url, label or "channel id". */
+  locator: string;
+  /** For a file: the server's hash of the whole file. For data: the hash the caller wrote. */
+  sha256?: string;
+  /** For a test: the exit status the caller reported. */
+  exit?: number;
+  /** For a file: the cited line range, a or a-b. */
+  lines?: string;
+  /** server: read or checked by collab; caller: as the caller wrote it, unchecked; not_found: a commit git does not have. */
+  observed: "server" | "caller" | "not_found";
+}
+
+export interface NoteCiteReceipt {
+  cite_id: string;
+  event_id: string;
+  sequence: number;
+  worktree_id: string | null;
+  items: NoteCitedItem[];
+}
+
+/** One report a note posts through appendNoteForSession; every one carries the note marker. */
+export interface NoteReportInput {
+  kind: "observation" | "inference";
+  relation: "informs" | "supports" | "challenges" | "resolves" | "withdraws";
+  body: string;
+  task_id?: string | null;
+  to_session_id?: string | null;
+  to_person?: boolean;
+  target_report_id?: string | null;
+  about_proposal_id?: string | null;
+  evidence_refs?: string[];
+  /** Also cite this call's evidence.cited event. */
+  cite_event?: boolean;
+  /** Also cite the reports this call posted before this one, by index. */
+  cite_earlier?: number[];
+}
+
+export interface NoteAppendReceipt {
+  reports: CollabReport[];
+  cite: NoteCiteReceipt | null;
+}
+
+/** A note's target as the verbs read it before writing (spec 5.3). */
+export interface NoteTargetView {
+  report: CollabReport;
+  termed: boolean;
+  ballot: { open: boolean } | null;
+  /** A withdraw, correct or supersede retired it. */
+  obsoleted: boolean;
+  /** The task it reports complete, when it is a completion report. */
+  completion_of: { task_id: string; current: boolean; pending_review: boolean } | null;
+  /** Every challenge aimed at it, standing or not, in journal order. */
+  challenges: NoteChallengeView[];
+  author: {
+    id: string;
+    actor: string;
+    status: "active" | "ended";
+    liveness: SessionLiveness;
+    last_seen_at: string;
+    voice_id: string;
+  } | null;
+}
+
+interface NormalizedNoteCite {
+  worktree_id: string | null;
+  items: NoteCitedItem[];
+}
+
+interface NormalizedNoteReport {
+  kind: "observation" | "inference";
+  relation: NoteReportInput["relation"];
+  body: string;
+  task_id: string | null;
+  to_session_id: string | null;
+  to_person: boolean;
+  target_report_id: string | null;
+  about_proposal_id: string | null;
+  evidence_refs: string[];
+  cite_event: boolean;
+  cite_earlier: number[];
+}
+
+const NOTE_CITE_LOCATOR_MAX = 1_000;
+
+function normalizeNoteCite(cite: { worktree_id: string | null; items: NoteCitedItem[] }): NormalizedNoteCite {
+  if (!Array.isArray(cite.items) || cite.items.length > 16) {
+    throw new CollabError("invalid_evidence", "A note cites at most 16 evidence items");
+  }
+  const seen = new Set<number>();
+  const items = cite.items.map((item): NoteCitedItem => {
+    if (!item || typeof item !== "object") throw new CollabError("invalid_evidence", "A cited item is an object");
+    if (!Number.isInteger(item.n) || item.n < 1 || item.n > 16 || seen.has(item.n)) {
+      throw new CollabError("invalid_evidence", "A cited item's n is its distinct 1-based Evidence position");
+    }
+    seen.add(item.n);
+    if (!(NOTE_OUTSIDE_EVIDENCE_KINDS as readonly string[]).includes(item.kind)) {
+      throw new CollabError("invalid_evidence", `A cited item's kind is one of ${NOTE_OUTSIDE_EVIDENCE_KINDS.join(", ")}`);
+    }
+    const locator = cleanText(typeof item.locator === "string" ? item.locator : "", "evidence", NOTE_CITE_LOCATOR_MAX);
+    if (/[\u0000-\u001f\u007f]/.test(locator) || hasLoneSurrogate(locator)) {
+      throw new CollabError("invalid_evidence", "A cited locator is one line of well-formed text");
+    }
+    if (!["server", "caller", "not_found"].includes(item.observed)) {
+      throw new CollabError("invalid_evidence", "A cited item is observed by the server or the caller, or not found");
+    }
+    if (item.observed === "not_found" && item.kind !== "commit") {
+      throw new CollabError("invalid_evidence", "Only a commit can be cited as not found");
+    }
+    if (item.observed === "server" && item.kind !== "file" && item.kind !== "commit") {
+      throw new CollabError("invalid_evidence", "The server observes only files and commits");
+    }
+    if (item.sha256 !== undefined && !/^[0-9a-f]{64}$/.test(item.sha256)) {
+      throw new CollabError("invalid_evidence", "A cited sha256 is 64 lower-case hex digits");
+    }
+    if (item.kind === "file" && item.observed === "server" && item.sha256 === undefined) {
+      throw new CollabError("invalid_evidence", "A server-observed file carries the server's hash");
+    }
+    if (item.exit !== undefined && !Number.isSafeInteger(item.exit)) {
+      throw new CollabError("invalid_evidence", "A cited exit status is an integer");
+    }
+    if (item.lines !== undefined && !/^\d{1,9}(?:-\d{1,9})?$/.test(item.lines)) {
+      throw new CollabError("invalid_evidence", "A cited line range is a or a-b");
+    }
+    // Present only when set, so the payload carries no undefined.
+    return {
+      n: item.n,
+      kind: item.kind,
+      locator,
+      ...(item.sha256 !== undefined ? { sha256: item.sha256 } : {}),
+      ...(item.exit !== undefined ? { exit: item.exit } : {}),
+      ...(item.lines !== undefined ? { lines: item.lines } : {}),
+      observed: item.observed,
+    };
+  });
+  return {
+    worktree_id: cite.worktree_id === null ? null : validateId(cite.worktree_id, "worktree_id"),
+    items,
+  };
+}
+
+function normalizeNoteReport(report: NoteReportInput, index: number): NormalizedNoteReport {
+  if (report.kind !== "observation" && report.kind !== "inference") {
+    throw new CollabError("invalid_report_kind", "A note is an observation or an inference");
+  }
+  if (!["informs", "supports", "challenges", "resolves", "withdraws"].includes(report.relation)) {
+    throw new CollabError("invalid_report_relation", "A note never corrects or supersedes");
+  }
+  const earlier = report.cite_earlier ?? [];
+  if (!Array.isArray(earlier) || earlier.some((at) => !Number.isInteger(at) || at < 0 || at >= index)) {
+    throw new CollabError("invalid_note_reports", "cite_earlier names reports this call posted before this one");
+  }
+  return {
+    kind: report.kind,
+    relation: report.relation,
+    body: cleanText(report.body, "body", MAX_REPORT_BODY),
+    task_id: report.task_id ? validateId(report.task_id, "task_id") : null,
+    to_session_id: report.to_session_id ? validateId(report.to_session_id, "to_session_id") : null,
+    to_person: report.to_person === true,
+    target_report_id: report.target_report_id ? validateId(report.target_report_id, "target_report_id") : null,
+    about_proposal_id: report.about_proposal_id ? validateId(report.about_proposal_id, "about_proposal_id") : null,
+    evidence_refs: normalizeEvidenceRefs(report.evidence_refs ?? []),
+    cite_event: report.cite_event === true,
+    cite_earlier: [...earlier],
+  };
 }
 
 /**

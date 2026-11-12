@@ -499,7 +499,8 @@ export type CollabEventType =
   | "handoff.declined"
   | "handoff.expired"
   // Collab Notes (spec 8.2). Older builds route none of these to anyone.
-  | "purpose.declared";
+  | "purpose.declared"
+  | "evidence.cited";
 
 export interface CollabEvent {
   protocol: CollabProtocol;

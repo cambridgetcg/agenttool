@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { buildCollabMcpServer } from "../../src/mcp.js";
 import type { EventCursor, ProposalStatus, SessionHandle, Task } from "../../src/protocol.js";
 import type { CollabStore } from "../../src/store.js";
@@ -70,6 +72,8 @@ export interface FixtureManifest {
   end_by_session_file: { session_id: string; credential_file: string };
   /** Sessions collab_arrive started and the old builds leave alone, for the note_sessions view. */
   notes_sessions: string[];
+  /** A task collab_done finished that waits for review: each older build reviews it. */
+  review_task_id: string;
 }
 
 type ManifestDraft = Partial<Omit<FixtureManifest, "format" | "steps" | "produced_types" | "event_types" | "head_sequence">> & {
@@ -647,6 +651,92 @@ export const FIXTURE_STEPS: FixtureStep[] = [
       context.manifest.notes_sessions.push(you.session, (child.you as { session: string }).session);
     },
   },
+  {
+    // Collab Notes stage 2: marked notes of every act collab_note records,
+    // one evidence.cited event, and take / done / review cycles. One task the
+    // new surface finished is left waiting, for each older build to review.
+    name: "notes-speech-review-and-work",
+    produces: ["evidence.cited"],
+    async run(context) {
+      mkdirSync(join(context.root, "fixture"), { recursive: true });
+      writeFileSync(join(context.root, "fixture", "notes.txt"), "line one\nline two, 第二行\n");
+      const notes = "notes-process";
+      const peer = "notes-peer-process";
+      await context.tool(peer, "collab_arrive", {
+        root_path: context.root,
+        name: "fixture-notes-peer",
+        purpose: "answers the notes session",
+      });
+      const text = [
+        "note: The fixture note cites a file, a test and a report",
+        "",
+        "A body with CJK 協作筆記 and an emoji 🏮, as older builds must list it byte for byte.",
+        "",
+        "Why: the file holds two lines (seen 1)",
+        "Why: the test passed when it was written (told 2)",
+        "Why: the observation came first (quoted 3)",
+        `Evidence: file fixture/notes.txt:1-2`,
+        "Evidence: test bun test tests/forward-compat.test.ts exit=0",
+        `Evidence: report:${context.id("observation")}`,
+        "Limits: nothing outside the fixture was checked",
+        "X-Fixture: compat",
+      ].join("\n");
+      const first = await context.tool(notes, "collab_note", { text });
+      if (first.read_as !== "collab-note/1") throw new Error("the fixture note was not read as a note");
+      const noteId = (first.ids as { report: string }).report;
+      await context.tool(peer, "collab_note", {
+        act: "support",
+        text: "The fixture note stands as stated.",
+        re: noteId,
+        why: [{ text: "I read it", basis: "seen", cites: [1] }],
+        evidence: [`report:${noteId}`],
+      });
+      const challenge = await context.tool(peer, "collab_note", { act: "challenge", text: "The note should say more.", re: noteId });
+      const replaced = await context.tool(peer, "collab_note", {
+        act: "challenge",
+        text: "The note should name what it did not check.",
+        re: noteId,
+        replaces: (challenge.ids as { report: string }).report,
+      });
+      const standing = (replaced.ids as { report: string }).report;
+      // From another voice a resolve is an answer; from the challenger it lifts.
+      await context.tool(notes, "collab_note", { act: "resolve", text: "Its limits line names that.", re: standing });
+      await context.tool(peer, "collab_note", { act: "resolve", text: "Answered: the limits line names it.", re: standing });
+      const second = await context.tool(notes, "collab_note", { text: "A note the notes session withdraws." });
+      await context.tool(notes, "collab_note", { act: "withdraw", text: "Disregard it.", re: (second.ids as { report: string }).report });
+      const proposal = context.store.openProposalForSession({
+        ...context.session("author").credential,
+        idempotency_key: context.key("relay-proposal"),
+        question: "Should the notes surface relay a rejection?",
+        criteria: "Older builds must read the relayed no.",
+        extent: "The fixture journal only.",
+      });
+      await context.tool(peer, "collab_note", {
+        act: "relay_rejection",
+        text: "The person said no to the fixture's relay proposal.",
+        re: proposal.proposal.id,
+      });
+
+      const cycle = async (title: string, path: string) => {
+        writeFileSync(join(context.root, path), `${title}\n`);
+        const taken = await context.tool(notes, "collab_take", { title, paths: [path] });
+        const done = await context.tool(notes, "collab_done", {
+          text: `${title} is done.`,
+          why: [{ text: "the file is written", basis: "seen", cites: [1] }],
+          evidence: [`file ${path}`],
+          limits: "Only the fixture.",
+        });
+        return { task: (taken.ids as { task: string }).task, completion: (done.ids as { completion: string }).completion };
+      };
+      const accepted = await cycle("Fixture notes task", "fixture/notes-accepted.txt");
+      await context.tool(peer, "collab_inbox", { about: accepted.task });
+      await context.tool(peer, "collab_note", { act: "accept", text: "The fixture task holds.", re: accepted.task });
+      const changes = await cycle("Fixture changes task", "fixture/notes-changes.txt");
+      await context.tool(peer, "collab_note", { act: "request_changes", text: "One more pass.", re: changes.completion });
+      const waiting = await cycle("Fixture task for an older reviewer", "fixture/notes-old-review.txt");
+      context.manifest.review_task_id = waiting.task;
+    },
+  },
   // Later slices append their steps here.
 ];
 
@@ -759,7 +849,7 @@ export async function exerciseFixture(
   if (workspaces.length !== 1 || workspaces[0]!.id !== manifest.workspace_id) {
     throw new Error("the fixture must write exactly one workspace");
   }
-  for (const field of ["workspace_id", "root_path", "waiter", "end_by_seat_ref", "end_by_session_file"] as const) {
+  for (const field of ["workspace_id", "root_path", "waiter", "end_by_seat_ref", "end_by_session_file", "review_task_id"] as const) {
     if (!manifest[field]) throw new Error(`fixture manifest is missing ${field}`);
   }
   if (!manifest.waiter!.addressed_report_id) throw new Error("fixture manifest has no addressed report");
@@ -778,6 +868,7 @@ export async function exerciseFixture(
     end_by_seat_ref: manifest.end_by_seat_ref!,
     end_by_session_file: manifest.end_by_session_file!,
     notes_sessions: manifest.notes_sessions,
+    review_task_id: manifest.review_task_id!,
   };
 }
 

@@ -28769,11 +28769,8 @@ function isOwnedByCurrentUser(uid) {
   return typeof process.getuid !== "function" || uid === process.getuid();
 }
 
-// src/verbs.ts
-import { createHash as createHash4 } from "crypto";
-import { existsSync as existsSync4, realpathSync as realpathSync2 } from "fs";
-import { hostname as hostname3 } from "os";
-import { resolve as resolve5, sep } from "path";
+// src/note-verbs.ts
+import { existsSync as existsSync5 } from "fs";
 
 // src/canonical.ts
 function canonicalJson(value) {
@@ -28956,6 +28953,13 @@ function normalizeNoteFields(input) {
     trailers
   };
 }
+function splitNoteText(text) {
+  const lines = normalizeNoteText(text).split(`
+`);
+  const body = trimBlankEdges(lines.slice(1)).join(`
+`).trimEnd();
+  return { statement: lines[0] ?? "", body: body === "" ? null : body };
+}
 var NOTE_JOURNAL_EVIDENCE_KINDS = ["report", "event", "artifact", "checkpoint"];
 var NOTE_EVIDENCE_ATTRS = ["sha256", "exit", "out", "lines", "runs", "at"];
 var NOTE_EVIDENCE_FORMS = [
@@ -29048,6 +29052,13 @@ function parseEvidence(value) {
     }
   }
   return { kind, locator, attrs };
+}
+function fileLocatorParts(locator) {
+  const range = FILE_RANGE.exec(locator);
+  if (!range || range.index === 0)
+    return { path: locator, from: null, to: null };
+  const from = Number(range[1]);
+  return { path: locator.slice(0, range.index), from, to: range[2] === undefined ? from : Number(range[2]) };
 }
 var HANDLE = /^(report|proposal|ballot|task)#[0-9a-f]{6,32}$/i;
 var PREFIXED_REF = new RegExp(String.raw`^(report|proposal|ballot|task|event):(${ID_TOKEN})$`, "i");
@@ -30043,6 +30054,7 @@ ${NOTE_CARRY_DISCLAIMER}`,
 import { createHash } from "crypto";
 import {
   closeSync as closeSync4,
+  constants as fsConstants,
   existsSync as existsSync2,
   fstatSync as fstatSync3,
   lstatSync as lstatSync2,
@@ -30052,7 +30064,7 @@ import {
   realpathSync,
   statSync
 } from "fs";
-import { resolve as resolve3 } from "path";
+import { isAbsolute as isAbsolute2, relative, resolve as resolve3, sep } from "path";
 import { spawnSync as spawnSync2 } from "child_process";
 var GIT_TIMEOUT_MS = 5000;
 var MAX_GIT_OUTPUT = 1024 * 1024;
@@ -30295,6 +30307,86 @@ function inspectSuccessorCommit(rootPath, commitSha, parentSha) {
   }
   return { ok: true, commit_sha: commitSha, parent_sha: parentSha, changes };
 }
+var MAX_CITED_FILE_BYTES = 16 * 1024 * 1024;
+function hashWorktreeFile(rootPath, cited, maxBytes = MAX_CITED_FILE_BYTES) {
+  let root;
+  try {
+    root = realpathSync(rootPath);
+  } catch {
+    return { status: "unreadable", path: null };
+  }
+  if (cited.includes("\x00") || cited.includes("\\"))
+    return { status: "outside", path: null };
+  const candidate = resolve3(root, cited);
+  const inside = relative(root, candidate);
+  if (!inside || inside === ".." || inside.startsWith(`..${sep}`) || isAbsolute2(inside)) {
+    return { status: "outside", path: null };
+  }
+  let walked = root;
+  const parts = inside.split(sep);
+  for (const [index, part] of parts.entries()) {
+    walked = `${walked}${sep}${part}`;
+    let stat;
+    try {
+      stat = lstatSync2(walked);
+    } catch (error51) {
+      return { status: error51.code === "ENOENT" ? "missing" : "unreadable", path: inside };
+    }
+    if (stat.isSymbolicLink())
+      return { status: "symlink", path: inside };
+    if (index < parts.length - 1 && !stat.isDirectory())
+      return { status: "missing", path: inside };
+  }
+  let descriptor = null;
+  try {
+    descriptor = openSync4(walked, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+    const before = fstatSync3(descriptor);
+    if (!before.isFile())
+      return { status: "not_a_file", path: inside };
+    if (before.size > maxBytes)
+      return { status: "too_large", path: inside };
+    const hash2 = createHash("sha256");
+    const buffer = Buffer.allocUnsafe(64 * 1024);
+    let total = 0;
+    while (true) {
+      const count = readSync3(descriptor, buffer, 0, buffer.length, null);
+      if (count === 0)
+        break;
+      total += count;
+      if (total > maxBytes)
+        return { status: "too_large", path: inside };
+      hash2.update(buffer.subarray(0, count));
+    }
+    const after = fstatSync3(descriptor);
+    if (before.ino !== after.ino || before.size !== after.size || before.mtimeMs !== after.mtimeMs) {
+      return { status: "changed_while_read", path: inside };
+    }
+    return { status: "hashed", path: inside, sha256: hash2.digest("hex"), size: total };
+  } catch (error51) {
+    return { status: error51.code === "ELOOP" ? "symlink" : "unreadable", path: inside };
+  } finally {
+    if (descriptor !== null)
+      closeSync4(descriptor);
+  }
+}
+function gitCommitExists(rootPath, sha, options = {}) {
+  if (!/^[0-9a-f]{7,64}$/i.test(sha))
+    return false;
+  const inRepository = runGit(rootPath, ["rev-parse", "--git-dir"], options);
+  if (!inRepository.ok)
+    return null;
+  const timeout = gitTimeout(options);
+  if (timeout <= 0)
+    return null;
+  const result = spawnRepositoryGit(["-C", rootPath, ...SUCCESSOR_GIT_ARGS, "cat-file", "-e", `${sha}^{commit}`], {
+    timeout,
+    stdio: ["ignore", "ignore", "ignore"],
+    env: successorGitEnv()
+  }, options);
+  if (result.error)
+    return null;
+  return result.status === 0;
+}
 function worktreeId(rootPath, fingerprint) {
   return `wt_${sha256(`${rootPath}\x00${fingerprint}`).slice(0, 24)}`;
 }
@@ -30510,7 +30602,7 @@ import {
   mkdirSync as mkdirSync2,
   openSync as openSync5
 } from "fs";
-import { dirname as dirname2, isAbsolute as isAbsolute2, join as join3, posix, resolve as resolve4 } from "path";
+import { dirname as dirname2, isAbsolute as isAbsolute3, join as join3, posix, resolve as resolve4 } from "path";
 
 // src/passkey.ts
 import { createHash as createHash2, createPublicKey, verify } from "crypto";
@@ -30772,6 +30864,7 @@ class CollabStore {
   repositoryDiscovery;
   eventReader;
   closed = false;
+  ambientReceiptPlan = null;
   constructor(path, options = {}) {
     this.now = options.now ?? (() => new Date);
     this.migrationFailpoint = options.migration_failpoint;
@@ -34673,8 +34766,9 @@ class CollabStore {
         this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), session.id);
         return JSON.parse(existing.response_json);
       }
-      if (options.receipt_plan)
-        this.requireReceiptPlan(session, options.receipt_plan);
+      const receiptPlan = options.receipt_plan ?? this.ambientPlanFor(idempotencyKey);
+      if (receiptPlan)
+        this.requireReceiptPlan(session, receiptPlan);
       this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), session.id);
       const guardNonce = `guard_${randomUUID2()}`;
       this.db.query(`INSERT INTO v2_write_guard (nonce, enabled) VALUES (?, 1)`).run(guardNonce);
@@ -35201,6 +35295,7 @@ class CollabStore {
     const event = this.appendEvent(session.workspace_id, "report.posted", id, session.actor, {
       ...input.to_person ? { to_person: true } : {},
       ...input.about_proposal_id ? { about_proposal_id: input.about_proposal_id } : {},
+      ...input.note ? { note: input.note } : {},
       task_id: input.task_id,
       to_session_id: input.to_session_id,
       kind: input.kind,
@@ -35711,6 +35806,172 @@ class CollabStore {
       };
     }, input.receipt_plan ? { receipt_plan: input.receipt_plan } : {});
   }
+  citeEvidenceForSession(input) {
+    const cite = normalizeNoteCite({ worktree_id: input.worktree_id, items: input.items });
+    if (cite.items.length === 0)
+      throw new CollabError("invalid_evidence", "A cite needs at least one outside evidence item");
+    return this.mutateAsSession(input, input.idempotency_key, "notes.cite.v1", cite, (session) => this.appendNoteCite(session, cite), input.receipt_plan ? { receipt_plan: input.receipt_plan } : {});
+  }
+  appendNoteForSession(input) {
+    if (!Array.isArray(input.reports) || input.reports.length < 1 || input.reports.length > 2) {
+      throw new CollabError("invalid_note_reports", "A note posts one report, or a challenge and the withdrawal it replaces");
+    }
+    const cite = input.cite && input.cite.items.length > 0 ? normalizeNoteCite(input.cite) : null;
+    const reports = input.reports.map((report, index) => normalizeNoteReport(report, index));
+    if (reports.some((report) => report.cite_event) && !cite) {
+      throw new CollabError("invalid_note_reports", "A report cites this note's evidence, but the note has none");
+    }
+    return this.mutateAsSession(input, input.idempotency_key, "notes.note.v1", { cite, reports }, (session) => {
+      const cited = cite ? this.appendNoteCite(session, cite) : null;
+      const posted = [];
+      for (const report of reports) {
+        const evidenceRefs = normalizeEvidenceRefs([
+          ...report.evidence_refs,
+          ...report.cite_event ? [`event:${cited.event_id}`] : [],
+          ...report.cite_earlier.map((index) => `report:${posted[index].id}`)
+        ]);
+        const normalized = {
+          task_id: report.task_id,
+          to_session_id: report.to_session_id,
+          kind: report.kind,
+          body: report.body,
+          evidence_refs: evidenceRefs,
+          confidence: "unknown",
+          confidence_basis: null,
+          limits: null,
+          relation: report.relation,
+          target_report_id: report.target_report_id,
+          authority_scope: null,
+          authority_basis: null,
+          ...report.to_person ? { to_person: true } : {}
+        };
+        this.validateReportInput(session, normalized);
+        this.refuseProposalRewrite(normalized);
+        if (report.about_proposal_id) {
+          const termed = this.db.query(`SELECT workspace_id FROM proposal_terms WHERE report_id = ?`).get(report.about_proposal_id);
+          if (!termed || termed.workspace_id !== session.workspace_id) {
+            throw new CollabError("proposal_not_found", "about_proposal_id must name a proposal in this workspace");
+          }
+        }
+        posted.push(this.appendReportInternal(session, {
+          ...normalized,
+          ...report.about_proposal_id ? { about_proposal_id: report.about_proposal_id } : {},
+          note: NOTE_FORMAT
+        }));
+      }
+      return { reports: posted, cite: cited };
+    }, input.receipt_plan ? { receipt_plan: input.receipt_plan } : {});
+  }
+  appendNoteCite(session, cite) {
+    const hasFiles = cite.items.some((item) => item.kind === "file");
+    if (hasFiles && cite.worktree_id !== session.worktree_id) {
+      throw new CollabError("cite_worktree_mismatch", "File evidence is cited against the citing session's own worktree");
+    }
+    const citeId = `cite_${randomUUID2()}`;
+    const payload = {
+      cite_id: citeId,
+      by_session_id: session.id,
+      ...hasFiles ? { worktree_id: session.worktree_id } : {},
+      items: cite.items
+    };
+    assertNotePayload(payload);
+    const event = this.appendEvent(session.workspace_id, "evidence.cited", citeId, session.actor, payload, session.id);
+    return {
+      cite_id: citeId,
+      event_id: event.id,
+      sequence: event.sequence,
+      worktree_id: hasFiles ? session.worktree_id : null,
+      items: cite.items
+    };
+  }
+  noteTarget(workspaceId, reportId) {
+    return this.db.transaction(() => {
+      const report = this.requireReport(validateId(reportId, "report_id"));
+      if (report.workspace_id !== workspaceId) {
+        throw new CollabError("report_not_found", `Report '${reportId}' was not found in this workspace`);
+      }
+      const obsoleted = this.activeObsoletionTargets(workspaceId);
+      const termed = this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(report.id) !== null;
+      const opened = this.db.query(`
+        SELECT payload_json FROM events
+        WHERE workspace_id = ? AND sequence > ? AND type = 'ballot.opened' AND entity_id = ?
+        ORDER BY sequence LIMIT 1
+      `).get(workspaceId, report.event_sequence, report.id);
+      let ballot = null;
+      if (opened) {
+        const closed = this.db.query(`
+          SELECT 1 FROM events WHERE workspace_id = ? AND sequence > ? AND type = 'ballot.closed' AND entity_id = ? LIMIT 1
+        `).get(workspaceId, report.event_sequence, report.id) !== null;
+        const closesAt = JSON.parse(opened.payload_json).closes_at;
+        ballot = { open: !closed && (typeof closesAt !== "string" || this.timestamp() < closesAt) };
+      }
+      let completion = null;
+      if (report.task_id) {
+        const event = this.db.query(`
+          SELECT payload_json FROM events
+          WHERE workspace_id = ? AND sequence > ? AND entity_id = ?
+            AND type IN ('task.reported_complete', 'task.completed')
+          ORDER BY sequence LIMIT 1
+        `).get(workspaceId, report.event_sequence, report.task_id);
+        const completed = event && JSON.parse(event.payload_json).completion_report_id === report.id;
+        if (completed) {
+          const task = this.requireTaskRow(workspaceId, report.task_id);
+          const current = task.completion_report_id === report.id;
+          completion = {
+            task_id: task.id,
+            current,
+            pending_review: current && task.status === "completed" && task.review_status === "pending"
+          };
+        }
+      }
+      const authorRow = report.from_session_id ? this.db.query(`SELECT * FROM coordination_sessions WHERE id = ?`).get(report.from_session_id) : null;
+      return {
+        report,
+        termed,
+        ballot,
+        obsoleted: obsoleted.has(report.id),
+        completion_of: completion,
+        challenges: this.noteChallenges(workspaceId).filter((challenge) => challenge.target_report_id === report.id),
+        author: authorRow ? {
+          id: authorRow.id,
+          actor: authorRow.actor,
+          status: authorRow.status,
+          liveness: sessionLiveness(authorRow, this.timestamp()),
+          last_seen_at: authorRow.last_seen_at,
+          voice_id: this.consentVoice(authorRow.id)
+        } : null
+      };
+    }).deferred();
+  }
+  noteObsoleted(workspaceId, ids) {
+    const obsoleted = this.activeObsoletionTargets(workspaceId);
+    return ids.filter((id) => obsoleted.has(id));
+  }
+  notePathConflicts(workspaceId, paths, options = {}) {
+    this.requireWorkspace(workspaceId);
+    return this.taskPathConflicts({
+      workspace_id: workspaceId,
+      id: options.except_task_id ?? "",
+      path_scopes: normalizePathScopes(paths),
+      work_mode: options.work_mode ?? "edit"
+    });
+  }
+  noteWorktreeRoot(worktreeId2) {
+    const row = this.db.query(`SELECT root_path FROM worktrees WHERE id = ?`).get(worktreeId2);
+    return row?.root_path ?? null;
+  }
+  latestReceiptKeyForBase(credential, base) {
+    const session = this.authenticateSession(credential);
+    if (!/^[A-Z2-7]{20}$/.test(base))
+      throw new CollabError("invalid_receipt_base", "A derived key base is 20 base32 characters");
+    const exact = new RegExp(`^n1:[A-Z2-7]{8}:\\d{6}:${base}(?::\\d{2})?$`);
+    const rows = this.db.query(`
+      SELECT idempotency_key FROM mutations
+      WHERE workspace_id = ? AND actor = ? AND idempotency_key LIKE ?
+      ORDER BY rowid DESC LIMIT 20
+    `).all(session.workspace_id, `session:${session.id}`, `n1:________:______:${base}%`);
+    return rows.find((row) => exact.test(row.idempotency_key))?.idempotency_key ?? null;
+  }
   readReceiptByKey(credential, key) {
     const session = this.authenticateSession(credential);
     const idempotencyKey = validateIdempotencyKey(key);
@@ -35737,6 +35998,24 @@ class CollabStore {
       LIMIT 1
     `).get(session.workspace_id, `session:${session.id}`, prefix2, upper);
     return row?.idempotency_key ?? null;
+  }
+  withReceiptPlan(plan, run) {
+    if (!plan)
+      return run();
+    if (this.ambientReceiptPlan)
+      throw new CollabError("receipt_plan_nested", "A receipt plan is already in force");
+    this.ambientReceiptPlan = plan;
+    try {
+      return run();
+    } finally {
+      this.ambientReceiptPlan = null;
+    }
+  }
+  ambientPlanFor(idempotencyKey) {
+    const plan = this.ambientReceiptPlan;
+    if (!plan)
+      return;
+    return idempotencyKey === plan.key || idempotencyKey.startsWith(`${plan.key}:`) ? plan : undefined;
   }
   requireReceiptPlan(session, plan) {
     const latest = this.latestReceiptKey(session, plan.prefix);
@@ -36205,16 +36484,37 @@ class CollabStore {
     }
     const taskId = event.type.startsWith("task.") ? event.entity_id : event.type.startsWith("handoff.") ? typeof payload.task_id === "string" ? payload.task_id : typeof payload.handoff?.task_id === "string" ? payload.handoff.task_id : null : report?.task_id ?? null;
     const taskRow = taskId ? this.readTaskRow(session.workspace_id, taskId) : null;
+    const marked = event.type === "report.posted" && payload.note === NOTE_FORMAT;
     return {
       event,
       for_me: forMe,
       why_you: forMe ? this.noteWhyYou(event, session.id) : null,
       report,
-      marked: event.type === "report.posted" && payload.note === NOTE_FORMAT,
+      marked,
+      cited: marked && report ? this.noteCiteOf(session.workspace_id, report) : null,
       termed: report !== null && this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(report.id) !== null,
       to_person: event.type === "report.posted" && payload.to_person === true,
       task: taskRow ? { id: taskRow.id, title: taskRow.title } : null
     };
+  }
+  noteCiteOf(workspaceId, report) {
+    for (const ref of report.evidence_refs) {
+      if (!ref.startsWith("event:"))
+        continue;
+      const row = this.db.query(`
+        SELECT payload_json FROM events WHERE workspace_id = ? AND id = ? AND type = 'evidence.cited'
+      `).get(workspaceId, ref.slice("event:".length));
+      if (!row)
+        continue;
+      const payload = JSON.parse(row.payload_json);
+      return {
+        event_id: ref.slice("event:".length),
+        by_session_id: typeof payload.by_session_id === "string" ? payload.by_session_id : null,
+        worktree_id: typeof payload.worktree_id === "string" ? payload.worktree_id : null,
+        items: Array.isArray(payload.items) ? payload.items : []
+      };
+    }
+    return null;
   }
   noteWhyYou(event, sessionId) {
     const payload = event.payload ?? {};
@@ -36640,7 +36940,7 @@ function normalizePathScopes(scopes) {
   }
   let totalLength = 0;
   const normalized = scopes.map((scope) => {
-    if (typeof scope !== "string" || !scope || scope.length > MAX_PATH_SCOPE_LENGTH || scope.includes("\x00") || scope.includes("\\") || isAbsolute2(scope)) {
+    if (typeof scope !== "string" || !scope || scope.length > MAX_PATH_SCOPE_LENGTH || scope.includes("\x00") || scope.includes("\\") || isAbsolute3(scope)) {
       throw new CollabError("invalid_path_scope", "Path scopes must be non-empty repository-relative POSIX paths", { scope });
     }
     totalLength += scope.length;
@@ -36885,6 +37185,88 @@ function proposalPersonActFromRow(row) {
     proof: proof_json ? JSON.parse(proof_json) : null
   };
 }
+var NOTE_OUTSIDE_EVIDENCE_KINDS = ["file", "commit", "test", "url", "data", "msg"];
+var NOTE_CITE_LOCATOR_MAX = 1000;
+function normalizeNoteCite(cite) {
+  if (!Array.isArray(cite.items) || cite.items.length > 16) {
+    throw new CollabError("invalid_evidence", "A note cites at most 16 evidence items");
+  }
+  const seen = new Set;
+  const items = cite.items.map((item) => {
+    if (!item || typeof item !== "object")
+      throw new CollabError("invalid_evidence", "A cited item is an object");
+    if (!Number.isInteger(item.n) || item.n < 1 || item.n > 16 || seen.has(item.n)) {
+      throw new CollabError("invalid_evidence", "A cited item's n is its distinct 1-based Evidence position");
+    }
+    seen.add(item.n);
+    if (!NOTE_OUTSIDE_EVIDENCE_KINDS.includes(item.kind)) {
+      throw new CollabError("invalid_evidence", `A cited item's kind is one of ${NOTE_OUTSIDE_EVIDENCE_KINDS.join(", ")}`);
+    }
+    const locator = cleanText(typeof item.locator === "string" ? item.locator : "", "evidence", NOTE_CITE_LOCATOR_MAX);
+    if (/[\u0000-\u001f\u007f]/.test(locator) || hasLoneSurrogate(locator)) {
+      throw new CollabError("invalid_evidence", "A cited locator is one line of well-formed text");
+    }
+    if (!["server", "caller", "not_found"].includes(item.observed)) {
+      throw new CollabError("invalid_evidence", "A cited item is observed by the server or the caller, or not found");
+    }
+    if (item.observed === "not_found" && item.kind !== "commit") {
+      throw new CollabError("invalid_evidence", "Only a commit can be cited as not found");
+    }
+    if (item.observed === "server" && item.kind !== "file" && item.kind !== "commit") {
+      throw new CollabError("invalid_evidence", "The server observes only files and commits");
+    }
+    if (item.sha256 !== undefined && !/^[0-9a-f]{64}$/.test(item.sha256)) {
+      throw new CollabError("invalid_evidence", "A cited sha256 is 64 lower-case hex digits");
+    }
+    if (item.kind === "file" && item.observed === "server" && item.sha256 === undefined) {
+      throw new CollabError("invalid_evidence", "A server-observed file carries the server's hash");
+    }
+    if (item.exit !== undefined && !Number.isSafeInteger(item.exit)) {
+      throw new CollabError("invalid_evidence", "A cited exit status is an integer");
+    }
+    if (item.lines !== undefined && !/^\d{1,9}(?:-\d{1,9})?$/.test(item.lines)) {
+      throw new CollabError("invalid_evidence", "A cited line range is a or a-b");
+    }
+    return {
+      n: item.n,
+      kind: item.kind,
+      locator,
+      ...item.sha256 !== undefined ? { sha256: item.sha256 } : {},
+      ...item.exit !== undefined ? { exit: item.exit } : {},
+      ...item.lines !== undefined ? { lines: item.lines } : {},
+      observed: item.observed
+    };
+  });
+  return {
+    worktree_id: cite.worktree_id === null ? null : validateId(cite.worktree_id, "worktree_id"),
+    items
+  };
+}
+function normalizeNoteReport(report, index) {
+  if (report.kind !== "observation" && report.kind !== "inference") {
+    throw new CollabError("invalid_report_kind", "A note is an observation or an inference");
+  }
+  if (!["informs", "supports", "challenges", "resolves", "withdraws"].includes(report.relation)) {
+    throw new CollabError("invalid_report_relation", "A note never corrects or supersedes");
+  }
+  const earlier = report.cite_earlier ?? [];
+  if (!Array.isArray(earlier) || earlier.some((at) => !Number.isInteger(at) || at < 0 || at >= index)) {
+    throw new CollabError("invalid_note_reports", "cite_earlier names reports this call posted before this one");
+  }
+  return {
+    kind: report.kind,
+    relation: report.relation,
+    body: cleanText(report.body, "body", MAX_REPORT_BODY),
+    task_id: report.task_id ? validateId(report.task_id, "task_id") : null,
+    to_session_id: report.to_session_id ? validateId(report.to_session_id, "to_session_id") : null,
+    to_person: report.to_person === true,
+    target_report_id: report.target_report_id ? validateId(report.target_report_id, "target_report_id") : null,
+    about_proposal_id: report.about_proposal_id ? validateId(report.about_proposal_id, "about_proposal_id") : null,
+    evidence_refs: normalizeEvidenceRefs(report.evidence_refs ?? []),
+    cite_event: report.cite_event === true,
+    cite_earlier: [...earlier]
+  };
+}
 var NOTE_SCAN_MAX_EVENTS = 2000;
 var NOTE_SCAN_MAX_BYTES = 8 * 1024 * 1024;
 var NOTE_INBOX_MAX_LIMIT = 50;
@@ -37044,18 +37426,18 @@ function artifactRepositoryPath(uri, rootPath) {
   }
   if (!value || value.includes("\x00") || value.includes("\\"))
     return null;
-  let relative;
-  if (isAbsolute2(value)) {
+  let relative2;
+  if (isAbsolute3(value)) {
     const absolute = posix.normalize(value);
     if (!absolute.startsWith(`${rootPath}/`))
       return null;
-    relative = absolute.slice(rootPath.length + 1);
+    relative2 = absolute.slice(rootPath.length + 1);
   } else {
-    relative = posix.normalize(value);
+    relative2 = posix.normalize(value);
   }
-  if (!relative || relative === "." || relative === ".." || relative.startsWith("../") || relative.endsWith("/") || relative === ".git" || relative.startsWith(".git/"))
+  if (!relative2 || relative2 === "." || relative2 === ".." || relative2.startsWith("../") || relative2.endsWith("/") || relative2 === ".git" || relative2.startsWith(".git/"))
     return null;
-  return relative;
+  return relative2;
 }
 function pathWithinScopes(path, scopes) {
   return scopes.some((scope) => path === scope || path.startsWith(`${scope}/`));
@@ -37253,6 +37635,12 @@ function addSeconds(iso, seconds) {
   return new Date(new Date(iso).getTime() + seconds * 1000).toISOString();
 }
 
+// src/verbs.ts
+import { createHash as createHash4 } from "crypto";
+import { existsSync as existsSync4, realpathSync as realpathSync2 } from "fs";
+import { hostname as hostname3 } from "os";
+import { resolve as resolve5, sep as sep2 } from "path";
+
 // src/version.ts
 var COLLAB_PACKAGE_VERSION = "0.6.0-dev.0";
 
@@ -37267,7 +37655,13 @@ var NOTE_VERBS = [
   "collab_poll",
   "collab_vote"
 ];
-var BUILT_NOTE_VERBS = ["collab_arrive", "collab_inbox"];
+var BUILT_NOTE_VERBS = [
+  "collab_arrive",
+  "collab_inbox",
+  "collab_note",
+  "collab_take",
+  "collab_done"
+];
 var NOTES_PROFILE_LEGACY_TOOLS = ["collab_journal_verify"];
 var TOOLS_PROFILE_VARIABLES = ["AGENTOOL_COLLAB_TOOLS", "AGENTTOOL_COLLAB_TOOLS"];
 function toolsProfile(environment) {
@@ -37330,7 +37724,7 @@ var NOTE_CARD = [
   "  Limits: <what this does not cover>   Purpose: <what it serves>   Extent: <where a decision stops>",
   "Acts: say: note; stand: support, challenge, resolve, withdraw; work: take, done, accept, request_changes;",
   "decide: propose, poll, vote, decide.",
-  "This build has collab_arrive and collab_inbox; the other verbs come later.",
+  "This build has collab_arrive, collab_inbox, collab_note, collab_take and collab_done; propose, poll, vote and decide come later.",
   ...NOTE_PRINCIPLES.map((principle, index) => `${index + 1}. ${principle}`)
 ].join(`
 `);
@@ -37375,12 +37769,11 @@ function sha256Bytes2(text) {
   return createHash4("sha256").update(text, "utf8").digest();
 }
 var DERIVED_KEY = /^n1:([A-Z2-7]{8}):(\d{6}):([A-Z2-7]{20})(?::(\d{2}))?$/;
+function derivedBase(sessionId, tool, input) {
+  return base32(sha256Bytes2(canonicalJson({ session_id: sessionId, tool, input }))).slice(0, 20);
+}
 function planReceipt(store, credential, call) {
-  const base = base32(sha256Bytes2(canonicalJson({
-    session_id: credential.session_id,
-    tool: call.tool,
-    input: call.input
-  }))).slice(0, 20);
+  const base = derivedBase(credential.session_id, call.tool, call.input);
   const eh = base32(sha256Bytes2(call.entity)).slice(0, 8);
   const latest = store.latestReceiptKeyForSession(credential, `n1:${eh}:`);
   const parsed = latest ? DERIVED_KEY.exec(latest) : null;
@@ -37415,6 +37808,16 @@ async function underPlan(ctx, credential, call, act) {
         }, null);
       }
     }
+  }
+}
+async function withCurrentVersion(ctx, call, read, attempt) {
+  const { version: version2 } = read();
+  try {
+    return await attempt(version2);
+  } catch (error51) {
+    if (!(error51 instanceof CollabError) || error51.code !== "version_conflict")
+      throw error51;
+    throw changedUnderYou(ctx, call, read().state);
   }
 }
 var CHANGED_UNDER_YOU = "It changed after this call read it, so the change was not made";
@@ -37638,7 +38041,7 @@ function withSlotInput(ctx, input) {
 }
 var PACKAGE_ROOT = resolve5(import.meta.dir, "..");
 function within(path, root) {
-  return path === root || path.startsWith(root.endsWith(sep) ? root : `${root}${sep}`);
+  return path === root || path.startsWith(root.endsWith(sep2) ? root : `${root}${sep2}`);
 }
 function defaultRootPath(sent) {
   let workingDirectory = null;
@@ -37912,7 +38315,8 @@ function composeBrief(ctx, data, pending, rootPath) {
     person: status.person.state
   }));
   const challenges = data.challenges.map((challenge) => challengeView(challenge, data.proposals.some((status) => status.proposal.id === challenge.target_report_id)));
-  const forYou = pending ? pending.entries.map((entry) => formatEntry(entry, byId, me.id)) : [];
+  const recheck = evidenceRechecker(ctx.store);
+  const forYou = pending ? pending.entries.map((entry) => formatEntry(entry, byId, me.id, recheck)) : [];
   const waiting = data.waiting.map((entry) => formatWaiting(ctx, entry));
   const cap = (items) => items.slice(0, LIST_CAP);
   const shown = [
@@ -38031,20 +38435,63 @@ function journalEvidence(refs) {
     return { n: index + 1, kind: ref.slice(0, colon), locator: ref.slice(colon + 1) };
   });
 }
-function noteEvidence(lines) {
-  return lines.map((line, index) => {
-    try {
-      const evidence = parseEvidence(line);
-      return { n: index + 1, kind: evidence.kind, locator: evidence.locator };
-    } catch {
-      return { n: index + 1, kind: "text", locator: line };
-    }
-  });
-}
 function sessionRef(sessionId, fallbackName, byId) {
   return { session: sessionId ?? null, name: sessionId ? byId.get(sessionId)?.actor ?? fallbackName : fallbackName };
 }
-function formatEntry(entry, byId, me) {
+var NOTE_RECHECK_MAX_BYTES = 64 * 1024 * 1024;
+function evidenceRechecker(store, budgetBytes = NOTE_RECHECK_MAX_BYTES) {
+  let remaining = budgetBytes;
+  return (worktreeId2, item) => {
+    if (!worktreeId2)
+      return "unavailable";
+    const root = store.noteWorktreeRoot(worktreeId2);
+    if (!root || !existsSync4(root))
+      return "unavailable";
+    if (remaining <= 0)
+      return "not_rechecked";
+    const max = Math.min(MAX_CITED_FILE_BYTES, remaining);
+    const hashed = hashWorktreeFile(root, item.locator, max);
+    switch (hashed.status) {
+      case "hashed":
+        remaining -= hashed.size;
+        return hashed.sha256 === item.sha256 ? "same" : "changed";
+      case "missing":
+        return "missing";
+      case "too_large":
+        return max < MAX_CITED_FILE_BYTES ? "not_rechecked" : "changed";
+      case "unreadable":
+        return "unavailable";
+      default:
+        return "changed";
+    }
+  };
+}
+function markedEvidence(lines, cited, recheck) {
+  const items = new Map((cited?.items ?? []).map((item) => [item.n, item]));
+  return lines.map((line, index) => {
+    const n = index + 1;
+    let kind = "text";
+    let locator = line;
+    try {
+      const evidence = parseEvidence(line);
+      kind = evidence.kind;
+      locator = evidence.locator;
+    } catch {}
+    const item = items.get(n);
+    const journal = NOTE_JOURNAL_EVIDENCE_KINDS.includes(kind);
+    const observed = item ? item.observed : journal ? "journal" : "caller";
+    const serverFile = item !== undefined && item.kind === "file" && item.observed === "server";
+    return {
+      n,
+      kind,
+      locator,
+      observed,
+      ...item?.sha256 !== undefined && item.observed === "server" ? { sha256: item.sha256 } : {},
+      ...serverFile && recheck ? { now: recheck(cited.worktree_id, item) } : {}
+    };
+  });
+}
+function formatEntry(entry, byId, me, recheck) {
   const { event, report } = entry;
   const payload = event.payload;
   const from = sessionRef(event.session_id, event.actor, byId);
@@ -38060,6 +38507,7 @@ function formatEntry(entry, byId, me) {
     let text = report.body;
     let why = [];
     let evidence = journalEvidence(report.evidence_refs);
+    let limits = report.limits;
     const flags = {};
     if (entry.marked) {
       const parsed = parseNote(report.body);
@@ -38067,7 +38515,10 @@ function formatEntry(entry, byId, me) {
         statement = parsed.statement;
         text = parsed.body;
         why = parsed.why;
-        evidence = [...noteEvidence(parsed.evidence), ...journalEvidence(report.evidence_refs).map((item, index) => ({ ...item, n: parsed.evidence.length + index + 1 }))];
+        evidence = markedEvidence(parsed.evidence, entry.cited, recheck);
+        limits = parsed.limits ?? report.limits;
+        if (parsed.via)
+          flags.via = parsed.via;
         if (parsed.act !== act)
           flags.act_mismatch = { stored: act, written: parsed.act };
       }
@@ -38089,7 +38540,7 @@ function formatEntry(entry, byId, me) {
       evidence,
       kind: report.kind,
       ...report.confidence !== "unknown" ? { confidence: report.confidence } : {},
-      ...report.limits ? { limits: report.limits } : {},
+      ...limits ? { limits } : {},
       ...flags
     };
   }
@@ -38333,7 +38784,8 @@ function inboxResult(ctx, passes, format, waited, waitError = null) {
   const byId = new Map(data.sessions.map((view) => [view.id, view]));
   const me = data.session.id;
   const entries = passes.flatMap((pass) => pass.entries);
-  const items = entries.map((entry) => entry.for_me ? formatEntry(entry, byId, me) : subjectLine(entry, byId, me));
+  const recheck = evidenceRechecker(ctx.store);
+  const items = entries.map((entry) => entry.for_me ? formatEntry(entry, byId, me, recheck) : subjectLine(entry, byId, me));
   const advice = [];
   if (format === "note")
     advice.push("format: note renders one thread; pass about with an id or handle.");
@@ -38463,7 +38915,8 @@ function aboutView(ctx, binding, about, format) {
     advice.push(MARK_CLAMPED_ADVICE);
   if (thread.truncated)
     advice.push(`This thread lists its first ${thread.answers.length} answers only.`);
-  const view = thread.kind === "task" ? taskView(thread, byId, me) : reportView(thread, byId, me, advice);
+  const recheck = evidenceRechecker(ctx.store);
+  const view = thread.kind === "task" ? taskView(thread, byId, me, recheck) : reportView(thread, byId, me, advice, recheck);
   const result = {
     ok: true,
     ...view,
@@ -38489,7 +38942,7 @@ function aboutView(ctx, binding, about, format) {
   }
   return result;
 }
-function reportView(thread, byId, me, advice) {
+function reportView(thread, byId, me, advice, recheck) {
   const root = thread.root;
   const report = root.report;
   const decision = report.kind === "decision";
@@ -38504,14 +38957,14 @@ function reportView(thread, byId, me, advice) {
       id: report.id,
       handle: reportHandle(report.id, thread.termed)
     },
-    root: formatEntry(root, byId, me),
-    answers: thread.answers.map((entry) => formatEntry(entry, byId, me)),
+    root: formatEntry(root, byId, me, recheck),
+    answers: thread.answers.map((entry) => formatEntry(entry, byId, me, recheck)),
     state: {
       challenges: thread.challenges.map((challenge) => challengeView(challenge, thread.termed && challenge.target_report_id === report.id))
     }
   };
 }
-function taskView(thread, byId, me) {
+function taskView(thread, byId, me, recheck) {
   const task = thread.task;
   const holder = task.assignee_session_id ? byId.get(task.assignee_session_id) : undefined;
   const generation = thread.reviews.at(-1)?.review_generation ?? null;
@@ -38542,7 +38995,7 @@ function taskView(thread, byId, me) {
         of_current_completion: generation !== null && review.review_generation === generation && task.review_status !== "pending"
       }))
     },
-    thread: thread.answers.map((entry) => formatEntry(entry, byId, me))
+    thread: thread.answers.map((entry) => formatEntry(entry, byId, me, recheck))
   };
 }
 function localTerms() {
@@ -38595,6 +39048,1532 @@ function carryThread(thread) {
   }
   const carried = renderCarriedNote(input, { maxChars: 800, localTerms: localTerms() });
   return { text: carried.text, not_carried: carried.not_carried };
+}
+
+// src/note-verbs.ts
+function freeText(value, field, max, required2) {
+  if (value === undefined || value === null) {
+    if (!required2)
+      return null;
+    throw new CollabError(`invalid_${field}`, `${field} is required`, { remedy: { say: `Give ${field} as text.` } });
+  }
+  if (typeof value !== "string")
+    throw new CollabError(`invalid_${field}`, `${field} must be text`);
+  const text = normalizeNoteText(value);
+  if (!text) {
+    if (!required2)
+      return null;
+    throw new CollabError(`invalid_${field}`, `${field} must not be empty`, { remedy: { say: `Give ${field} as text.` } });
+  }
+  if (text.includes("\x00"))
+    throw new CollabError(`invalid_${field}`, `${field} must not contain NUL characters`);
+  if (hasLoneSurrogate(text)) {
+    throw new CollabError(`invalid_${field}`, `${field} must be well-formed Unicode text (it holds half of a character)`);
+  }
+  if (text.length > max) {
+    throw new CollabError("too_long", `${field} is ${text.length} characters; at most ${max}`, {
+      field,
+      max,
+      actual: text.length,
+      unit: "chars"
+    });
+  }
+  return text;
+}
+function refuseNoteProblems(fields) {
+  const problem = checkNote(fields)[0];
+  if (!problem)
+    return;
+  throw noteProblemError(problem);
+}
+function noteKind(why) {
+  return why.length > 0 && why.every((reason) => reason.basis === "seen" || reason.basis === "quoted") ? "observation" : "inference";
+}
+function reasonsText(why) {
+  if (why.length === 0)
+    return null;
+  return why.map((reason) => {
+    const cites = reason.cites.length > 0 ? ` ${reason.cites.join(",")}` : "";
+    return reason.basis || cites ? `${reason.text} (${reason.basis ?? "unmarked"}${cites})` : reason.text;
+  }).join(`
+`);
+}
+var REASONS_COLUMN_MAX = 2000;
+function requireReasonsFit(why) {
+  const text = reasonsText(why);
+  if (text !== null && text.length > REASONS_COLUMN_MAX) {
+    throw new CollabError("too_long", `The reasons together are ${text.length} characters; at most ${REASONS_COLUMN_MAX} here`, {
+      field: "why",
+      max: REASONS_COLUMN_MAX,
+      actual: text.length,
+      unit: "chars",
+      remedy: { say: "Shorten the reasons: a review or a completion keeps them together in at most 2,000 characters." }
+    });
+  }
+  return text;
+}
+function sameValue(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+var COMMIT_CHECK_BUDGET_MS = 5000;
+function resolveEvidence(ctx, binding, lines) {
+  const workspaceId = binding.handle.workspace.id;
+  const root = binding.handle.worktree.root_path;
+  const out = { lines: [], items: [], journal: [], advice: [] };
+  const deadline = performance.now() + COMMIT_CHECK_BUDGET_MS;
+  lines.forEach((line, index) => {
+    const n = index + 1;
+    let evidence;
+    try {
+      evidence = parseEvidence(line);
+    } catch (error51) {
+      if (!(error51 instanceof CollabError))
+        throw error51;
+      throw new CollabError("invalid_evidence", `Evidence ${n}: ${error51.message}`, {
+        field: `evidence[${index}]`,
+        remedy: { say: `Write evidence ${n} in one of the evidence forms; nothing was written.` }
+      });
+    }
+    if (NOTE_JOURNAL_EVIDENCE_KINDS.includes(evidence.kind)) {
+      let ref = `${evidence.kind}:${evidence.locator}`;
+      if (evidence.kind === "report") {
+        const value = evidence.locator.includes("#") ? evidence.locator : `report:${evidence.locator}`;
+        ref = `report:${ctx.store.resolveNoteRef(workspaceId, "report", value).id}`;
+      }
+      out.lines.push(ref);
+      out.journal.push(ref);
+      return;
+    }
+    out.lines.push(line);
+    const kind = evidence.kind;
+    if (kind === "file") {
+      const { path, from, to } = fileLocatorParts(evidence.locator);
+      const lineRange = from === null ? undefined : to !== null && to !== from ? `${from}-${to}` : `${from}`;
+      const hashed = existsSync5(root) ? hashWorktreeFile(root, path) : { status: "unreadable", path: null };
+      if (hashed.status === "hashed") {
+        out.items.push({ n, kind, locator: hashed.path, sha256: hashed.sha256, ...lineRange ? { lines: lineRange } : {}, observed: "server" });
+        const claimed = evidence.attrs.sha256?.toLowerCase();
+        if (claimed && claimed !== hashed.sha256) {
+          out.advice.push(`Evidence ${n} (file ${path}) says sha256=${claimed}, but the file in your worktree hashes to ${hashed.sha256} now; the server's hash is the one recorded as observed.`);
+        }
+        return;
+      }
+      const why = {
+        outside: "is outside your worktree",
+        symlink: "reaches through a symbolic link",
+        too_large: `is over ${MAX_CITED_FILE_BYTES / (1024 * 1024)} MiB`,
+        missing: "was not found in your worktree",
+        not_a_file: "is not a regular file",
+        unreadable: "could not be read",
+        changed_while_read: "changed while it was being hashed"
+      }[hashed.status];
+      out.items.push({
+        n,
+        kind,
+        locator: path,
+        ...evidence.attrs.sha256 ? { sha256: evidence.attrs.sha256.toLowerCase() } : {},
+        ...lineRange ? { lines: lineRange } : {},
+        observed: "caller"
+      });
+      out.advice.push(`Evidence ${n} (file ${path}) ${why}, so it was recorded as you wrote it, unhashed (observed: caller).`);
+      return;
+    }
+    if (kind === "commit") {
+      const exists = binding.handle.worktree.git_common_dir_hash === null ? null : gitCommitExists(root, evidence.locator, { deadline, now: () => performance.now() });
+      if (exists === true) {
+        out.items.push({ n, kind, locator: evidence.locator, observed: "server" });
+      } else if (exists === false) {
+        out.items.push({ n, kind, locator: evidence.locator, observed: "not_found" });
+        out.advice.push(`Evidence ${n}: git in your worktree has no commit ${evidence.locator}; it is recorded as not found.`);
+      } else {
+        out.items.push({ n, kind, locator: evidence.locator, observed: "caller" });
+        out.advice.push(`Evidence ${n}: commit ${evidence.locator} could not be checked (no git here, or the time budget ran out); it is recorded as you wrote it.`);
+      }
+      return;
+    }
+    const exit = evidence.attrs.exit !== undefined ? Number(evidence.attrs.exit) : undefined;
+    out.items.push({
+      n,
+      kind,
+      locator: evidence.locator,
+      ...kind === "data" && evidence.attrs.sha256 ? { sha256: evidence.attrs.sha256.toLowerCase() } : {},
+      ...kind === "test" && exit !== undefined && Number.isSafeInteger(exit) ? { exit } : {},
+      observed: "caller"
+    });
+  });
+  return out;
+}
+function evidenceSummary(resolved) {
+  const items = new Map(resolved.items.map((item) => [item.n, item]));
+  return resolved.lines.map((line, index) => {
+    const item = items.get(index + 1);
+    return item ? { n: item.n, kind: item.kind, locator: item.locator, observed: item.observed, ...item.sha256 && item.observed === "server" ? { sha256: item.sha256 } : {} } : { n: index + 1, kind: line.slice(0, line.indexOf(":")), locator: line.slice(line.indexOf(":") + 1), observed: "journal" };
+  });
+}
+var BROADCAST = { to_session_id: null, to_person: false, shown: "all", advice: [] };
+function explicitAddressee(ctx, workspaceId, value) {
+  if (value === "all")
+    return BROADCAST;
+  if (value === "person")
+    return { to_session_id: null, to_person: true, shown: "person", advice: [] };
+  let view;
+  try {
+    view = ctx.store.resolveNoteSession(workspaceId, value);
+  } catch (error51) {
+    if (!(error51 instanceof CollabError) || error51.code !== "session_not_found")
+      throw error51;
+    view = ctx.store.resolveNoteSession(workspaceId, value, { include_ended: true });
+  }
+  return sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at);
+}
+function sessionAddressee(id, name, status, liveness, lastSeenAt) {
+  const advice = [];
+  if (status === "ended")
+    advice.push(`${name} (${id}) has ended its session; the note is recorded and addressed to it all the same.`);
+  else if (liveness === "stale") {
+    advice.push(`${name} (${id}) was last seen at ${lastSeenAt}, over 6 hours ago; the note is recorded and addressed to it all the same.`);
+  }
+  return { to_session_id: id, to_person: false, shown: { session: id, name }, advice };
+}
+function authorAddressee(target, me) {
+  const author = target.author;
+  if (!author || author.id === me)
+    return BROADCAST;
+  return sessionAddressee(author.id, author.actor, author.status, author.liveness, author.last_seen_at);
+}
+function viewAddressee(ctx, workspaceId, sessionId) {
+  const view = ctx.store.resolveNoteSession(workspaceId, sessionId, { include_ended: true });
+  return sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at);
+}
+var NOTE_ACTS_HERE = [
+  "note",
+  "support",
+  "challenge",
+  "resolve",
+  "withdraw",
+  "accept",
+  "request_changes",
+  "relay_rejection"
+];
+var STRUCTURED_FIELDS = ["re", "to", "via", "why", "evidence", "limits", "extent", "replaces"];
+function readNoteInput(input) {
+  if (typeof input.text !== "string" || !normalizeNoteText(input.text)) {
+    throw new CollabError("invalid_text", "text is required: the statement on its first line, then any body", {
+      remedy: { say: "Give text: what you put forward on its first line (at most 200 characters), then a blank line and any body." }
+    });
+  }
+  if (input.act !== undefined && typeof input.act !== "string")
+    throw new CollabError("invalid_act", "act must be text");
+  const structured = {
+    re: input.re,
+    to: input.to,
+    via: input.via,
+    why: input.why,
+    evidence: input.evidence,
+    limits: input.limits,
+    extent: input.extent,
+    replaces: input.replaces
+  };
+  const advice = [];
+  const firstLine2 = normalizeNoteText(input.text).split(`
+`)[0] ?? "";
+  const head = /^([A-Za-z_]+): /.exec(firstLine2);
+  const headAct = head && isNoteAct(head[1].toLowerCase()) ? head[1].toLowerCase() : null;
+  if (input.act === undefined && headAct !== null) {
+    const parsed = parseNote(input.text);
+    advice.push(...parsed.advice);
+    const { advice: _advice, ...noteFields } = parsed;
+    const fields = normalizeNoteFields({ ...noteFields, act: parsed.act });
+    const given = normalizeNoteFields({ act: fields.act, statement: fields.statement, ...structured });
+    for (const field of STRUCTURED_FIELDS) {
+      const fromText = fields[field];
+      const fromField = given[field];
+      const empty = (value) => value === null || Array.isArray(value) && value.length === 0;
+      if (empty(fromField))
+        continue;
+      if (empty(fromText)) {
+        fields[field] = fromField;
+      } else if (!sameValue(fromText, fromField)) {
+        throw new CollabError("field_given_twice", `${field} is in the note text and in the call, with different values`, {
+          field,
+          remedy: { say: `Give ${field} once, in the note text or as a field.` }
+        });
+      }
+    }
+    return { fields, read_as: "collab-note/1", advice };
+  }
+  const act = (input.act ?? "note").trim().toLowerCase();
+  if (input.act !== undefined && headAct !== null) {
+    advice.push(`text begins with "${head[1]}: ", which stays in the statement because act was given.`);
+  }
+  const { statement, body } = splitNoteText(input.text);
+  return {
+    fields: normalizeNoteFields({ act, statement, body, ...structured }),
+    read_as: null,
+    advice
+  };
+}
+function requireActHere(ctx, act, fields) {
+  if (NOTE_ACTS_HERE.includes(act))
+    return;
+  const elsewhere = {
+    take: withSlot(ctx, { tool: "collab_take", input: { title: fields.statement } }),
+    done: withSlot(ctx, { tool: "collab_done", input: { text: fields.statement } })
+  };
+  if (elsewhere[act]) {
+    throw new CollabError("wrong_verb", `${act} is its own verb, not a note act`, { remedy: elsewhere[act] });
+  }
+  if (["decide", "propose", "poll", "vote"].includes(act)) {
+    throw new CollabError("act_not_built", `${act} is not built in this build yet; nothing was written`, {
+      remedy: { say: `${act} arrives in a later build. Until then, say it as a note, which authorises nothing.` }
+    });
+  }
+  throw new CollabError("invalid_act", `act must be one of ${NOTE_ACTS_HERE.join(", ")}`, {
+    remedy: { say: `act is one of ${NOTE_ACTS_HERE.join(", ")}; leave it out for a plain note.` }
+  });
+}
+function resolveRe(ctx, workspaceId, value) {
+  const ref = parseNoteRef(value);
+  if (!ref) {
+    throw new CollabError("invalid_ref", `re ${JSON.stringify(value)} is not a reference collab can read`, {
+      remedy: { say: "re is report#\u2026, proposal#\u2026, ballot#\u2026, task#\u2026, a full id, event:<id>, or file:, lobby: or msg: text." }
+    });
+  }
+  if (ref.kind === "task") {
+    const id = ctx.store.resolveNoteRef(workspaceId, "task", value).id;
+    return { kind: "task", id, task: ctx.store.getTask(workspaceId, id) };
+  }
+  if (ref.kind === "report" || ref.kind === "proposal" || ref.kind === "ballot") {
+    const id = ctx.store.resolveNoteRef(workspaceId, ref.kind, value).id;
+    const view = ctx.store.noteTarget(workspaceId, id);
+    return { kind: "report", id, label: view.termed ? "proposal" : view.ballot ? "ballot" : "report", view };
+  }
+  if (ref.kind === "event")
+    return { kind: "event", id: ref.id };
+  return { kind: "text", ref: value };
+}
+function reText(target) {
+  switch (target.kind) {
+    case "report":
+      return `${target.label}:${target.id}`;
+    case "task":
+      return `task:${target.id}`;
+    case "event":
+      return `event:${target.id}`;
+    default:
+      return target.ref;
+  }
+}
+function targetHandle(target) {
+  return handleOf(target.label, target.id);
+}
+function noteRetryInput(input, patch = {}) {
+  const { dry_run: _dry, ...rest } = input;
+  return { ...rest, ...patch };
+}
+function sameNoteWith(ctx, input, patch) {
+  return withSlot(ctx, { tool: "collab_note", input: noteRetryInput(input, patch) });
+}
+async function noteVerb(ctx, input) {
+  const { binding, credential } = requireCredential(ctx);
+  const workspaceId = binding.handle.workspace.id;
+  const me = credential.session_id;
+  const read = readNoteInput(input);
+  const advice = [...read.advice];
+  let fields = read.fields;
+  requireActHere(ctx, fields.act, fields);
+  const act = fields.act;
+  if (input.dry_run !== undefined && typeof input.dry_run !== "boolean") {
+    throw new CollabError("invalid_dry_run", "dry_run is true or false");
+  }
+  if (input.outcome !== undefined)
+    advice.push("outcome applies to decide only, which this build does not record yet; it was not used.");
+  if (fields.via) {
+    const downgraded = fields.why.filter((reason) => reason.basis === "seen" || reason.basis === "quoted").length;
+    if (downgraded > 0) {
+      fields = { ...fields, why: fields.why.map((reason) => reason.basis === "seen" || reason.basis === "quoted" ? { ...reason, basis: "told" } : reason) };
+      advice.push(`The text came via ${fields.via}, so ${downgraded} seen or quoted reason(s) were recorded as told: you are its speaker, not its witness.`);
+    }
+  }
+  if (fields.re === null && act !== "note") {
+    throw new CollabError("re_required", `${act} needs re: what it answers`, {
+      remedy: { say: `Add re: the report it answers, as an id or a handle such as report#3fa91c.` }
+    });
+  }
+  refuseNoteProblems(fields);
+  const target = fields.re !== null ? resolveRe(ctx, workspaceId, fields.re) : null;
+  const evidence = resolveEvidence(ctx, binding, fields.evidence);
+  advice.push(...evidence.advice);
+  fields = { ...fields, evidence: evidence.lines, re: target ? reText(target) : null };
+  let replacedId = null;
+  if (fields.replaces !== null) {
+    if (act !== "challenge") {
+      throw new CollabError("replaces_not_supported", "replaces is for a challenge that replaces your earlier challenge", {
+        remedy: { say: "To take back an earlier note, withdraw it (act withdraw, re: it), then say the new one." }
+      });
+    }
+    replacedId = ctx.store.resolveNoteRef(workspaceId, "report", fields.replaces.includes("#") ? fields.replaces : fields.replaces.includes(":") ? fields.replaces : `report:${fields.replaces}`).id;
+    fields = { ...fields, replaces: `report:${replacedId}` };
+  }
+  const planned = planNote(ctx, input, { act, fields, target, me, workspaceId, replacedId, evidence });
+  advice.push(...planned.advice, ...planned.addressee.advice);
+  refuseNoteProblems(planned.fields);
+  const note = renderNote(planned.fields);
+  const keyInput = {
+    act,
+    fields: planned.fields,
+    to: planned.addressee.to_session_id ?? (planned.addressee.to_person ? "person" : null)
+  };
+  if (input.dry_run === true) {
+    return {
+      ok: true,
+      dry_run: true,
+      effect: "Dry run: nothing was written.",
+      act,
+      recorded_as: planned.recorded_as,
+      ...read.read_as ? { read_as: read.read_as } : {},
+      parsed: planned.fields,
+      would: {
+        reports: planned.reports.map((report) => ({
+          relation: report.relation,
+          kind: report.kind,
+          target: report.target_report_id ?? null,
+          task: report.task_id ?? null,
+          to: report.to_session_id ?? (report.to_person ? "person" : null),
+          about_proposal: report.about_proposal_id ?? null
+        })),
+        cites: evidence.items.length > 0 ? 1 : 0
+      },
+      to: planned.addressee.shown,
+      evidence: evidenceSummary(evidence),
+      authorises: "Nothing. This is coordination state.",
+      advice,
+      note,
+      ...planned.extra
+    };
+  }
+  if (act === "accept" || act === "request_changes") {
+    return reviewNote(ctx, binding, credential, { planned, evidence, note, keyInput, advice, read_as: read.read_as, input });
+  }
+  if (act === "relay_rejection") {
+    return relayNote(ctx, credential, { planned, note, keyInput, advice, read_as: read.read_as, input });
+  }
+  const cite = evidence.items.length > 0 ? { worktree_id: binding.handle.worktree.id, items: evidence.items } : null;
+  const { plan, receipt, replayed } = await underPlan(ctx, credential, {
+    tool: "collab_note",
+    input: keyInput,
+    entity: planned.entity,
+    retry_input: noteRetryInput(input),
+    stillCurrent: (latestKey) => {
+      const found = replayReceipt(ctx.store, credential, latestKey);
+      return !found || ctx.store.noteObsoleted(workspaceId, [found.reports[0].id]).length === 0;
+    }
+  }, (plan2) => {
+    const earlier = plan2.retry ? replayReceipt(ctx.store, credential, plan2.key) : null;
+    const receipt2 = earlier ?? ctx.store.appendNoteForSession({
+      ...credential,
+      idempotency_key: plan2.key,
+      cite,
+      reports: planned.reports,
+      receipt_plan: plan2.guard
+    });
+    return { plan: plan2, receipt: receipt2, replayed: earlier !== null };
+  });
+  if (plan.retry && replayed) {
+    advice.push("This repeats your latest act on this entity exactly, so it was read as a retry. Add a word to say it again.");
+  }
+  return noteResult(ctx, { planned, receipt, replayed, note, advice, read_as: read.read_as, evidence });
+}
+function planNote(ctx, input, context) {
+  const { act, target, me, workspaceId, evidence } = context;
+  let fields = context.fields;
+  const advice = [];
+  const extra = {};
+  const hasCite = evidence.items.length > 0;
+  const explicit = fields.to !== null ? explicitAddressee(ctx, workspaceId, fields.to) : null;
+  const reportTarget = target?.kind === "report" ? target : null;
+  const base = (relation, extraRefs = []) => ({
+    kind: noteKind(fields.why),
+    relation,
+    body: "",
+    evidence_refs: [...evidence.journal, ...extraRefs],
+    cite_event: hasCite
+  });
+  const requireReportTarget = (why) => {
+    if (reportTarget)
+      return reportTarget;
+    if (target?.kind === "task" && target.task.completion_report_id) {
+      throw new CollabError("re_must_be_report", `${act} answers a report; ${why}`, {
+        remedy: sameNoteWith(ctx, input, { re: exactRef("report", target.task.completion_report_id) })
+      });
+    }
+    throw new CollabError("re_must_be_report", `${act} answers a report; ${why}`, {
+      remedy: { say: `Name the report in re, as an id or a handle such as report#3fa91c.` }
+    });
+  };
+  const grounded = fields.why.length > 0 || fields.evidence.length > 0;
+  if ((act === "support" || act === "challenge") && !grounded) {
+    advice.push(`ungrounded: this ${act} gives no reason and no evidence. It is recorded; a reason someone could check carries more weight.`);
+    extra.ungrounded = true;
+  }
+  seenOverRelayed(ctx, workspaceId, me, fields, advice);
+  const finish = (planned) => {
+    const finalFields = planned.fields ?? fields;
+    const body = renderNote(finalFields);
+    const reports = planned.reports.map((report, index) => index === 0 && report.body === "" ? { ...report, body } : report);
+    return { act, fields: finalFields, advice, extra, ...planned, reports };
+  };
+  switch (act) {
+    case "note": {
+      const report = base("informs");
+      let addressee = BROADCAST;
+      if (reportTarget) {
+        report.evidence_refs.push(`report:${reportTarget.id}`);
+        report.task_id = reportTarget.view.report.task_id;
+        if (reportTarget.view.termed)
+          report.about_proposal_id = reportTarget.id;
+        addressee = authorAddressee(reportTarget.view, me);
+      } else if (target?.kind === "task") {
+        report.task_id = target.id;
+        const holder = target.task.assignee_session_id ?? target.task.reported_by_session_id;
+        if (holder && holder !== me) {
+          addressee = viewAddressee(ctx, workspaceId, holder);
+        }
+      } else if (target?.kind === "event") {
+        report.evidence_refs.push(`event:${target.id}`);
+      }
+      addressee = explicit ?? addressee;
+      report.to_session_id = addressee.to_session_id;
+      report.to_person = addressee.to_person;
+      return finish({
+        recorded_as: "note",
+        target,
+        addressee,
+        reports: [report],
+        entity: reportTarget?.id ?? (target?.kind === "task" ? target.id : "note")
+      });
+    }
+    case "support":
+    case "challenge": {
+      const reportTarget2 = requireReportTarget("to stand on a task's work, name its completion report");
+      const view = reportTarget2.view;
+      const report = base(act === "support" ? "supports" : "challenges");
+      report.target_report_id = reportTarget2.id;
+      report.task_id = view.report.task_id;
+      if (view.termed)
+        report.about_proposal_id = reportTarget2.id;
+      const addressee = explicit ?? authorAddressee(view, me);
+      report.to_session_id = addressee.to_session_id;
+      report.to_person = addressee.to_person;
+      if (view.completion_of?.pending_review) {
+        advice.push("This is recorded as a stance, not a review; to review the work, use act accept or request_changes.");
+      }
+      if (act === "support" && view.ballot?.open) {
+        advice.push("This is public and unsealed; to vote, use collab_vote.");
+      }
+      if (view.author?.id === me)
+        advice.push(`You wrote ${targetHandle(reportTarget2)}; standing on your own report adds no second voice.`);
+      if (view.obsoleted)
+        advice.push(`${targetHandle(reportTarget2)} was withdrawn or replaced by its author; your ${act} is recorded on it all the same.`);
+      if (act === "challenge" && context.replacedId) {
+        return finish({
+          recorded_as: "challenge",
+          target,
+          addressee,
+          reports: [report, replacedChallenge(ctx, workspaceId, me, context.replacedId, reportTarget2.id)],
+          entity: reportTarget2.id
+        });
+      }
+      return finish({ recorded_as: act, target, addressee, reports: [report], entity: reportTarget2.id });
+    }
+    case "resolve": {
+      const challenge = requireReportTarget("resolve names the challenge it lifts");
+      if (challenge.view.report.relation !== "challenges") {
+        throw new CollabError("not_a_challenge", `${targetHandle(challenge)} is not a challenge; resolve lifts a challenge`, {
+          remedy: { say: "To answer a report, post a note with re; to lift your own challenge, resolve names that challenge." }
+        });
+      }
+      const challenger = challenge.view.author;
+      const myVoice = ctx.store.consentVoiceOf(me);
+      const challenged = ctx.store.noteTarget(workspaceId, challenge.view.report.target_report_id);
+      if (challenger && challenger.voice_id === myVoice) {
+        const report2 = base("resolves");
+        report2.target_report_id = challenge.id;
+        report2.task_id = challenge.view.report.task_id;
+        const addressee2 = explicit ?? authorAddressee(challenged, me);
+        report2.to_session_id = addressee2.to_session_id;
+        report2.to_person = addressee2.to_person;
+        if (challenge.view.obsoleted)
+          advice.push(`${targetHandle(challenge)} was already withdrawn; the resolve is recorded all the same.`);
+        return finish({ recorded_as: "resolve", target, addressee: addressee2, reports: [report2], entity: challenge.id });
+      }
+      fields = { ...fields, act: "note" };
+      const report = base("informs", [`report:${challenge.id}`]);
+      report.task_id = challenge.view.report.task_id;
+      const addressee = explicit ?? (challenger ? sessionAddressee(challenger.id, challenger.actor, challenger.status, challenger.liveness, challenger.last_seen_at) : BROADCAST);
+      report.to_session_id = addressee.to_session_id;
+      report.to_person = addressee.to_person;
+      advice.push("Only the challenger can lift a challenge; your answer was sent to them" + (challenger ? ` (challenger voice ${challenger.voice_id}; yours is ${myVoice}).` : "."));
+      extra.recorded_as_answer = true;
+      return finish({ recorded_as: "answer", target, addressee, reports: [report], entity: challenge.id, fields });
+    }
+    case "withdraw": {
+      const withdrawn = requireReportTarget("withdraw names your own earlier report");
+      if (withdrawn.view.report.from_session_id !== me) {
+        throw new CollabError("not_your_report", `${targetHandle(withdrawn)} was written by another session, and only its author session withdraws it`, {
+          remedy: withSlot(ctx, {
+            tool: "collab_note",
+            input: { act: "note", text: "I no longer stand by this.", re: exactRef("report", withdrawn.id) }
+          })
+        });
+      }
+      const report = base("withdraws");
+      report.target_report_id = withdrawn.id;
+      report.task_id = withdrawn.view.report.task_id;
+      const objectors = withdrawn.view.challenges.filter((challenge) => challenge.standing && challenge.from_session_id && challenge.from_session_id !== me);
+      const latest = objectors.at(-1);
+      let addressee = BROADCAST;
+      if (latest) {
+        addressee = viewAddressee(ctx, workspaceId, latest.from_session_id);
+      }
+      addressee = explicit ?? addressee;
+      report.to_session_id = addressee.to_session_id;
+      report.to_person = addressee.to_person;
+      const others = [...new Map(objectors.filter((challenge) => challenge.from_session_id !== addressee.to_session_id).map((challenge) => [challenge.from_session_id, challenge])).values()];
+      if (others.length > 0) {
+        extra.also_challenged_by = others.map((challenge) => ({
+          session: challenge.from_session_id,
+          name: challenge.from_actor,
+          next: withSlot(ctx, {
+            tool: "collab_note",
+            input: {
+              text: `I withdrew ${exactRef("report", withdrawn.id)}.`,
+              re: exactRef("report", challenge.id),
+              to: challenge.from_session_id
+            }
+          })
+        }));
+        advice.push(`${others.length} other session(s) also stand against it; also_challenged_by has a ready note for each.`);
+      }
+      if (withdrawn.view.obsoleted)
+        advice.push(`${targetHandle(withdrawn)} was already withdrawn or replaced; this is recorded all the same.`);
+      return finish({ recorded_as: "withdraw", target, addressee, reports: [report], entity: withdrawn.id });
+    }
+    case "accept":
+    case "request_changes": {
+      const completion = reviewTarget(ctx, input, target, workspaceId, me);
+      if (explicit)
+        advice.push("A verdict goes to the session that reported the work; to was not used.");
+      extra.review = completion;
+      return finish({ recorded_as: act, target, addressee: BROADCAST, reports: [], entity: completion.completion_id });
+    }
+    case "relay_rejection": {
+      if (!reportTarget || !reportTarget.view.termed) {
+        throw new CollabError("not_a_proposal", "relay_rejection names the proposal the person said no to", {
+          remedy: { say: "Name the proposal in re (proposal#\u2026 or its id). A relayed no can only stop work." }
+        });
+      }
+      const unstored = ["why", "evidence", "limits", "extent", "via", "to"].filter((field) => {
+        const value = fields[field];
+        return Array.isArray(value) ? value.length > 0 : value !== null;
+      });
+      if (unstored.length > 0) {
+        const { dry_run: _dry, ...rest } = input;
+        const cleaned = Object.fromEntries(Object.entries(rest).filter(([key]) => !unstored.includes(key)));
+        throw new CollabError("not_stored", `A relayed rejection keeps only its reason (the text); ${unstored.join(", ")} would not be stored`, {
+          fields: unstored,
+          remedy: textIsNote(input) ? { say: `Remove ${unstored.join(", ")} from the note text; post them in a separate note if they matter.` } : withSlot(ctx, { tool: "collab_note", input: cleaned })
+        });
+      }
+      return finish({ recorded_as: "relay_rejection", target, addressee: BROADCAST, reports: [], entity: reportTarget.id });
+    }
+  }
+}
+function textIsNote(input) {
+  if (input.act !== undefined || typeof input.text !== "string")
+    return false;
+  const head = /^([A-Za-z_]+): /.exec(normalizeNoteText(input.text).split(`
+`)[0] ?? "");
+  return head !== null && isNoteAct(head[1].toLowerCase());
+}
+function replacedChallenge(ctx, workspaceId, me, replacedId, targetId) {
+  const old = ctx.store.noteTarget(workspaceId, replacedId);
+  if (old.report.relation !== "challenges" || old.report.from_session_id !== me) {
+    throw new CollabError("replaces_not_yours", "replaces names a challenge this session wrote", {
+      remedy: { say: "replaces is your own earlier challenge; to answer someone else's, post a note with re." }
+    });
+  }
+  if (old.report.target_report_id !== targetId) {
+    throw new CollabError("replaces_other_target", "The replaced challenge stands on a different report", {
+      remedy: { say: "Replace a challenge only with one on the same report; otherwise post the new challenge and withdraw the old one." }
+    });
+  }
+  if (old.obsoleted) {
+    throw new CollabError("replaces_withdrawn", "The challenge it replaces was already withdrawn", {
+      remedy: { say: "Leave replaces out: there is no standing challenge of yours to replace." }
+    });
+  }
+  return {
+    kind: "inference",
+    relation: "withdraws",
+    body: renderNote({ act: "withdraw", statement: "Replaced by my newer challenge, posted just before this.", re: `report:${replacedId}` }),
+    target_report_id: replacedId,
+    task_id: old.report.task_id,
+    evidence_refs: [],
+    cite_earlier: [0]
+  };
+}
+function seenOverRelayed(ctx, workspaceId, me, fields, advice) {
+  for (const [index, reason] of fields.why.entries()) {
+    if (reason.basis !== "seen" || reason.cites.length === 0)
+      continue;
+    const cited = reason.cites.map((cite) => fields.evidence[cite - 1] ?? "");
+    if (!cited.every((line) => line.startsWith("report:")))
+      continue;
+    const others = cited.every((line) => {
+      try {
+        return ctx.store.noteTarget(workspaceId, line.slice("report:".length)).report.from_session_id !== me;
+      } catch {
+        return false;
+      }
+    });
+    if (others)
+      advice.push(`Why ${index + 1}: seen over a relayed source reads as told; it cites only another session's report.`);
+  }
+}
+function reviewTarget(ctx, input, target, workspaceId, me) {
+  if (target?.kind === "report") {
+    const completion = target.view.completion_of;
+    if (!completion) {
+      throw new CollabError("not_a_completion", `${targetHandle(target)} is not a task's completion report`, {
+        remedy: { say: "Name the completion report you inspected, or the task, in re." }
+      });
+    }
+    if (!completion.current) {
+      const task = ctx.store.getTask(workspaceId, completion.task_id);
+      throw changedUnderYou(ctx, {
+        tool: "collab_note",
+        input: noteRetryInput(input, { re: task.completion_report_id ? exactRef("report", task.completion_report_id) : exactRef("task", task.id) })
+      }, reviewState(task));
+    }
+    return { task_id: completion.task_id, completion_id: target.id };
+  }
+  if (target?.kind === "task") {
+    const task = target.task;
+    if (!task.completion_report_id) {
+      throw new CollabError("nothing_to_review", `${handleOf("task", task.id)} has no completion to review`, {
+        remedy: { say: "Wait until its holder reports it done; collab_inbox tells you when a review is asked of you." }
+      });
+    }
+    if (ctx.store.noteShownAt(workspaceId, me, task.completion_report_id) === null) {
+      throw changedUnderYou(ctx, {
+        tool: "collab_note",
+        input: noteRetryInput(input, { re: exactRef("report", task.completion_report_id) })
+      }, reviewState(task));
+    }
+    return { task_id: task.id, completion_id: task.completion_report_id };
+  }
+  throw new CollabError("re_must_be_report", "accept and request_changes name the completion report you inspected, or its task", {
+    remedy: { say: "Name the completion report (report#\u2026) or the task (task#\u2026) in re." }
+  });
+}
+function reviewState(task) {
+  return {
+    task: { id: task.id, handle: handleOf("task", task.id), title: task.title, state: task.effective_status, review_status: task.review_status },
+    completion: task.completion_report_id ? { id: task.completion_report_id, handle: handleOf("report", task.completion_report_id), by: task.reported_by, at: task.reported_at } : null
+  };
+}
+function noteResult(ctx, options) {
+  const { planned, receipt } = options;
+  const main = receipt.reports[0];
+  const handle = handleOf("report", main.id);
+  const on = planned.target?.kind === "report" ? targetHandle(planned.target) : planned.target?.kind === "task" ? handleOf("task", planned.target.id) : null;
+  const to = planned.addressee.shown;
+  const toText = to === "all" ? "" : to === "person" ? " for the person" : ` to ${to.name}`;
+  const effect = {
+    note: `Recorded note ${handle}${on ? ` on ${on}` : ""}${toText}.`,
+    support: `Recorded your support of ${on} as ${handle}${toText}. Support is a position, not a permission.`,
+    challenge: receipt.reports.length === 2 ? `Recorded your challenge to ${on} as ${handle}${toText}; it replaces your challenge ${handleOf("report", receipt.reports[1].target_report_id)}, ` + "withdrawn in the same transaction after the new one was posted, so your objection stood throughout. It stands until you lift it." : `Recorded your challenge to ${on} as ${handle}${toText}; it stands until you lift it.`,
+    resolve: `Lifted your challenge ${on} with ${handle}${toText}.`,
+    answer: `Recorded your answer to ${on} as note ${handle}${toText}; it does not lift the challenge, which only its challenger can do.`,
+    withdraw: `Withdrew your ${on} with ${handle}${toText}.`
+  }[planned.recorded_as];
+  const ids = { report: main.id, report_handle: handle };
+  if (receipt.reports.length === 2)
+    ids.withdrawal = { report: receipt.reports[1].id, report_handle: handleOf("report", receipt.reports[1].id) };
+  if (receipt.cite)
+    ids.evidence_cited = { event: receipt.cite.event_id, cite: receipt.cite.cite_id };
+  const nextAbout = planned.target?.kind === "report" ? exactRef("report", planned.target.id) : exactRef("report", main.id);
+  return {
+    ...noteWriteResult({
+      effect,
+      ids,
+      advice: options.advice,
+      next: withSlot(ctx, { tool: "collab_inbox", input: { about: nextAbout } }),
+      note: options.note,
+      replayed: options.replayed
+    }),
+    act: planned.act,
+    recorded_as: planned.recorded_as,
+    ...options.read_as ? { read_as: options.read_as } : {},
+    to,
+    evidence: evidenceSummary(options.evidence),
+    ...planned.extra
+  };
+}
+async function reviewNote(ctx, binding, credential, options) {
+  const { planned, evidence, advice } = options;
+  const workspaceId = binding.handle.workspace.id;
+  const pin = planned.extra.review;
+  const fields = planned.fields;
+  const summary = renderNote(fields, { omitEvidence: true });
+  const confidenceBasis = requireReasonsFit(fields.why);
+  const retryInput = noteRetryInput(options.input);
+  const outcome = planned.act === "accept" ? "accept" : "request_changes";
+  const { plan, cite, review, replayed } = await underPlan(ctx, credential, {
+    tool: "collab_note",
+    input: options.keyInput,
+    entity: pin.completion_id,
+    retry_input: retryInput,
+    stillCurrent: () => ctx.store.getTask(workspaceId, pin.task_id).completion_report_id === pin.completion_id
+  }, async (plan2) => {
+    let replays = 0;
+    let steps = 0;
+    let cite2 = null;
+    if (evidence.items.length > 0) {
+      steps += 1;
+      cite2 = plan2.retry ? replayReceipt(ctx.store, credential, plan2.step(1)) : null;
+      if (cite2)
+        replays += 1;
+      cite2 ??= ctx.store.citeEvidenceForSession({
+        ...credential,
+        idempotency_key: plan2.step(1),
+        worktree_id: binding.handle.worktree.id,
+        items: evidence.items,
+        receipt_plan: plan2.guard
+      });
+    }
+    steps += 1;
+    let review2 = plan2.retry ? replayReceipt(ctx.store, credential, plan2.step(2)) : null;
+    if (review2)
+      replays += 1;
+    review2 ??= await withCurrentVersion(ctx, { tool: "collab_note", input: retryInput }, () => {
+      const task = ctx.store.getTask(workspaceId, pin.task_id);
+      if (task.completion_report_id !== pin.completion_id) {
+        throw changedUnderYou(ctx, {
+          tool: "collab_note",
+          input: { ...retryInput, re: task.completion_report_id ? exactRef("report", task.completion_report_id) : exactRef("task", task.id) }
+        }, reviewState(task));
+      }
+      return { version: task.version, state: reviewState(task) };
+    }, (version2) => ctx.store.withReceiptPlan(plan2.guard, () => ctx.store.reviewTaskForSession({
+      ...credential,
+      idempotency_key: plan2.step(2),
+      task_id: pin.task_id,
+      expected_version: version2,
+      outcome,
+      summary,
+      evidence_refs: [...evidence.journal, ...cite2 ? [`event:${cite2.event_id}`] : []],
+      ...confidenceBasis ? { confidence_basis: confidenceBasis } : {},
+      ...fields.limits ? { limits: fields.limits } : {}
+    })));
+    return { plan: plan2, cite: cite2, review: review2, replayed: replays === steps };
+  }).catch((error51) => {
+    throw reviewRefusal(ctx, error51);
+  });
+  if (plan.retry && replayed) {
+    advice.push("This repeats your latest verdict on this completion exactly, so it was read as a retry. Add a word to say it again.");
+  }
+  const taskHandle = handleOf("task", pin.task_id);
+  const completionHandle = handleOf("report", pin.completion_id);
+  return {
+    ...noteWriteResult({
+      effect: outcome === "accept" ? `Accepted the completion ${completionHandle} of ${taskHandle} as ${handleOf("report", review.report.id)}; your verdict covers only what you checked.` : `Requested changes on the completion ${completionHandle} of ${taskHandle} as ${handleOf("report", review.report.id)}; the task is open again for its holder to take.`,
+      ids: {
+        task: pin.task_id,
+        task_handle: taskHandle,
+        completion: pin.completion_id,
+        review_report: review.report.id,
+        review_report_handle: handleOf("report", review.report.id),
+        ...cite ? { evidence_cited: { event: cite.event_id, cite: cite.cite_id } } : {}
+      },
+      advice,
+      next: withSlot(ctx, { tool: "collab_inbox", input: { about: exactRef("task", pin.task_id) } }),
+      note: options.note,
+      replayed
+    }),
+    act: planned.act,
+    recorded_as: planned.recorded_as,
+    ...options.read_as ? { read_as: options.read_as } : {},
+    evidence: evidenceSummary(evidence)
+  };
+}
+function reviewRefusal(ctx, error51) {
+  if (!(error51 instanceof CollabError))
+    return error51;
+  const say = {
+    self_review_forbidden: "A distinct session must review the work it did not report; ask another session with a note, or wait for one.",
+    completion_challenged: "The completion has a standing challenge; only its challenger can lift it. Read it with collab_inbox about the completion.",
+    completion_report_obsolete: "Its author withdrew or replaced this completion; request changes instead, or wait for a new completion.",
+    task_not_pending_review: "The task does not wait for review now (it was reviewed already, or its policy needs none)."
+  };
+  if (!say[error51.code] || error51.details.remedy && typeof error51.details.remedy === "object")
+    return error51;
+  return new CollabError(error51.code, error51.message, { ...error51.details, remedy: { say: say[error51.code] } });
+}
+async function relayNote(ctx, credential, options) {
+  const { planned, advice } = options;
+  const proposal = planned.target;
+  const reason = planned.fields.body === null ? planned.fields.statement : `${planned.fields.statement}
+
+${planned.fields.body}`;
+  const status0 = ctx.store.proposalStatus(proposal.view.report.workspace_id, proposal.id);
+  const { plan, status, replayed } = await underPlan(ctx, credential, {
+    tool: "collab_note",
+    input: options.keyInput,
+    entity: proposal.id,
+    retry_input: noteRetryInput(options.input)
+  }, (plan2) => {
+    const earlier = plan2.retry ? replayReceipt(ctx.store, credential, plan2.key) : null;
+    const status2 = earlier ?? ctx.store.withReceiptPlan(plan2.guard, () => ctx.store.relayProposalRejectionForSession({
+      ...credential,
+      idempotency_key: plan2.key,
+      proposal_report_id: proposal.id,
+      proposal_sha256: status0.proposal_sha256,
+      reason
+    }));
+    return { plan: plan2, status: status2, replayed: earlier !== null };
+  });
+  if (plan.retry && replayed) {
+    advice.push("This repeats your latest relay on this proposal exactly, so it was read as a retry. Add a word to say it again.");
+  }
+  const handle = handleOf("proposal", proposal.id);
+  return {
+    ...noteWriteResult({
+      effect: `Recorded the person's no on ${handle}, relayed by you. A relayed no can only stop work; the person may still agree at the desk.`,
+      ids: { proposal: proposal.id, proposal_handle: handle, proposal_sha256: status.proposal_sha256 },
+      advice,
+      next: withSlot(ctx, { tool: "collab_inbox", input: { about: exactRef("proposal", proposal.id) } }),
+      note: options.note,
+      replayed
+    }),
+    act: planned.act,
+    recorded_as: "relay_rejection",
+    ...options.read_as ? { read_as: options.read_as } : {},
+    position: status.ai.position,
+    person: status.person.state,
+    may_proceed: status.may_proceed
+  };
+}
+var TASK_TITLE_MAX = 300;
+var RECOVERY_NOTE_MAX = 4000;
+async function takeVerb(ctx, input) {
+  const { binding, credential } = requireCredential(ctx);
+  const workspaceId = binding.handle.workspace.id;
+  const hasTask = input.task !== undefined && input.task !== null;
+  const hasTitle = input.title !== undefined && input.title !== null;
+  if (hasTask === hasTitle) {
+    throw new CollabError("task_or_title", hasTask ? "Give task or title, not both" : "Give task (one to claim) or title (a new one)", {
+      remedy: { say: "collab_take takes task: an existing task (task#\u2026 or its id), or title: a new task to create and claim." }
+    });
+  }
+  const purpose = oneLine(input.purpose, "purpose", 200, false);
+  const because = freeText(input.because, "because", RECOVERY_NOTE_MAX, false);
+  if (input.review !== undefined && input.review !== "required" && input.review !== "none") {
+    throw new CollabError("invalid_review", "review is required or none", {
+      remedy: { say: "review is required (a distinct session must accept the work) or none (you report it done); leave it out for the default." }
+    });
+  }
+  if (input.paths !== undefined && (!Array.isArray(input.paths) || input.paths.some((path) => typeof path !== "string"))) {
+    throw new CollabError("invalid_paths", "paths is a list of repository-relative paths", {
+      remedy: { say: 'Give paths as a list such as ["src/parser.ts"].' }
+    });
+  }
+  const advice = [];
+  return hasTitle ? takeNew(ctx, binding, credential, { title: oneLine(input.title, "title", TASK_TITLE_MAX, true), purpose, because, review: input.review, paths: input.paths ?? [] }, advice) : takeExisting(ctx, binding, credential, { task: String(input.task), purpose, because, review: input.review, paths: input.paths }, advice);
+}
+function normalizedPaths(paths) {
+  try {
+    return normalizePathScopes(paths);
+  } catch (error51) {
+    if (!(error51 instanceof CollabError))
+      throw error51;
+    throw new CollabError(error51.code, error51.message, {
+      ...error51.details,
+      remedy: { say: "paths are repository-relative POSIX paths below the root, such as src/parser.ts; at most 128." }
+    });
+  }
+}
+async function takeNew(ctx, binding, credential, options, advice) {
+  const workspaceId = binding.handle.workspace.id;
+  const paths = normalizedPaths(options.paths);
+  const workMode = paths.length > 0 ? "edit" : "coordination";
+  const policy = options.review ? options.review === "required" ? "accepted" : "reported" : paths.length > 0 ? "accepted" : "reported";
+  if (options.because)
+    advice.push("because is for recovering a lapsed lease; a new task needs none, so it was not used.");
+  const keyInput = { title: options.title, paths, purpose: options.purpose, review: options.review ?? null };
+  const retryInput = { title: options.title, ...options.paths.length ? { paths: options.paths } : {}, ...options.purpose ? { purpose: options.purpose } : {}, ...options.review ? { review: options.review } : {} };
+  const { plan, created, claimed, replayed } = await underPlan(ctx, credential, {
+    tool: "collab_take",
+    input: keyInput,
+    entity: "take",
+    retry_input: retryInput,
+    stillCurrent: (latestKey) => leaseStillCurrent(ctx, credential, workspaceId, latestKey)
+  }, async (plan2) => {
+    let replays = 0;
+    let created2 = plan2.retry ? replayReceipt(ctx.store, credential, plan2.step(1)) : null;
+    if (created2)
+      replays += 1;
+    if (!created2) {
+      if (paths.length > 0) {
+        const conflicts = ctx.store.notePathConflicts(workspaceId, paths, { work_mode: workMode });
+        if (conflicts.length > 0)
+          throw pathConflictRefusal(ctx, workspaceId, conflicts, null);
+      }
+      created2 = ctx.store.withReceiptPlan(plan2.guard, () => ctx.store.createTaskForSession({
+        ...credential,
+        idempotency_key: plan2.step(1),
+        title: options.title,
+        ...options.purpose ? { description: `Purpose: ${options.purpose}` } : {},
+        path_scopes: paths,
+        work_mode: workMode,
+        completion_policy: policy
+      }));
+    }
+    let claimed2 = plan2.retry ? replayReceipt(ctx.store, credential, plan2.step(2)) : null;
+    if (claimed2)
+      replays += 1;
+    claimed2 ??= await claimStep(ctx, binding, credential, created2, plan2.step(2), plan2.guard, retryInput, null, true);
+    return { plan: plan2, created: created2, claimed: claimed2, replayed: replays === 2 };
+  });
+  if (plan.retry && replayed)
+    advice.push("This repeats your latest take exactly, so it was read as a retry. Add a word to the title to take another.");
+  return takeResult(ctx, claimed, { purpose: options.purpose, advice, replayed, fresh: true });
+}
+async function takeExisting(ctx, binding, credential, options, advice) {
+  const workspaceId = binding.handle.workspace.id;
+  const id = ctx.store.resolveNoteRef(workspaceId, "task", options.task).id;
+  if (options.paths !== undefined)
+    advice.push("paths apply only to a new task (title); the task keeps its own paths.");
+  if (options.review !== undefined)
+    advice.push("review applies only to a new task (title); the task keeps its own policy.");
+  if (options.purpose)
+    advice.push("purpose is written into a new task's description only; an existing task's description is not changed.");
+  const keyInput = { task: id, because: options.because };
+  const retryInput = { task: exactRef("task", id), ...options.because ? { because: options.because } : {} };
+  const { plan, held, replayed, already } = await underPlan(ctx, credential, {
+    tool: "collab_take",
+    input: keyInput,
+    entity: id,
+    retry_input: retryInput,
+    stillCurrent: (latestKey) => leaseStillCurrent(ctx, credential, workspaceId, latestKey)
+  }, async (plan2) => {
+    const earlier = plan2.retry ? replayReceipt(ctx.store, credential, plan2.key) : null;
+    if (earlier)
+      return { plan: plan2, held: earlier, replayed: true, already: false };
+    const task = ctx.store.getTask(workspaceId, id);
+    if (task.status === "claimed" && task.assignee_session_id === credential.session_id && task.effective_status === "claimed") {
+      return { plan: plan2, held: task, replayed: false, already: true };
+    }
+    const held2 = await claimStep(ctx, binding, credential, task, plan2.key, plan2.guard, retryInput, options.because, false);
+    return { plan: plan2, held: held2, replayed: false, already: false };
+  });
+  if (plan.retry && replayed)
+    advice.push("This repeats your latest take of this task exactly, so it was read as a retry.");
+  if (already)
+    advice.push("You already hold this task; nothing was written.");
+  return takeResult(ctx, held, { purpose: null, advice, replayed, already });
+}
+function leaseStillCurrent(ctx, credential, workspaceId, latestKey) {
+  const found = replayReceipt(ctx.store, credential, latestKey);
+  if (!found || !found.lease_id)
+    return true;
+  try {
+    return ctx.store.getTask(workspaceId, found.id).lease_id === found.lease_id;
+  } catch {
+    return false;
+  }
+}
+async function claimStep(ctx, binding, credential, task, key, guard, retryInput, because, created) {
+  const workspaceId = binding.handle.workspace.id;
+  const read = () => {
+    const current2 = ctx.store.getTask(workspaceId, task.id);
+    return { version: current2.version, state: { task: handleOf("task", current2.id), id: current2.id, state: current2.effective_status, holder: current2.assignee } };
+  };
+  const current = ctx.store.getTask(workspaceId, task.id);
+  const createdNote = created ? ` Task ${handleOf("task", task.id)} was created and is open; take it with task when this clears.` : "";
+  try {
+    if (current.effective_status === "recovery_required") {
+      if (!because) {
+        throw new CollabError("because_required", `${handleOf("task", task.id)}'s lease lapsed; recovering it needs because: why you take it over`, {
+          holder: current.assignee,
+          remedy: withSlot(ctx, { tool: "collab_take", input: { task: exactRef("task", task.id), because: "<why you take over the lapsed work>" } })
+        });
+      }
+      return await withCurrentVersion(ctx, { tool: "collab_take", input: retryInput }, read, (version2) => ctx.store.withReceiptPlan(guard, () => ctx.store.recoverTaskForSession({
+        ...credential,
+        idempotency_key: key,
+        task_id: task.id,
+        expected_version: version2,
+        recovery_note: because,
+        action: "takeover"
+      })));
+    }
+    return await withCurrentVersion(ctx, { tool: "collab_take", input: retryInput }, read, (version2) => ctx.store.withReceiptPlan(guard, () => ctx.store.claimTaskForSession({
+      ...credential,
+      idempotency_key: key,
+      task_id: task.id,
+      expected_version: version2
+    })));
+  } catch (error51) {
+    if (!(error51 instanceof CollabError))
+      throw error51;
+    if (error51.code === "path_scope_conflict") {
+      throw pathConflictRefusal(ctx, workspaceId, ctx.store.notePathConflicts(workspaceId, current.path_scopes, {
+        work_mode: current.work_mode,
+        except_task_id: current.id
+      }), task.id, createdNote);
+    }
+    if (error51.code === "task_claimed") {
+      const holder = typeof error51.details.assignee_session_id === "string" ? error51.details.assignee_session_id : null;
+      const view = holder ? safeSession(ctx, workspaceId, holder) : null;
+      throw new CollabError("task_claimed", `${handleOf("task", task.id)} is held by ${view?.actor ?? String(error51.details.assignee)}`, {
+        holder: view ? { session: view.id, name: view.actor, purpose: view.purpose } : { name: error51.details.assignee ?? null },
+        remedy: view ? withSlot(ctx, { tool: "collab_note", input: { text: `May I take ${exactRef("task", task.id)}?`, re: exactRef("task", task.id), to: view.id } }) : { say: "Ask its holder, or wait until it is released." }
+      });
+    }
+    if (error51.code === "recovery_required" && !because) {
+      throw new CollabError("because_required", `${handleOf("task", task.id)}'s lease lapsed; recovering it needs because`, {
+        remedy: withSlot(ctx, { tool: "collab_take", input: { task: exactRef("task", task.id), because: "<why you take over the lapsed work>" } })
+      });
+    }
+    if (error51.code === "task_blocked") {
+      throw new CollabError("task_blocked", `${handleOf("task", task.id)} is blocked: ${String(error51.details.blocker ?? "")}`, {
+        blocker: error51.details.blocker ?? null,
+        remedy: { say: "A blocked task is unblocked first (collab_task_unblock on the full tool profile), then taken." }
+      });
+    }
+    if (created && error51.code !== "changed_under_you") {
+      throw new CollabError(error51.code, `${error51.message}.${createdNote}`, error51.details);
+    }
+    throw error51;
+  }
+}
+function safeSession(ctx, workspaceId, id) {
+  try {
+    return ctx.store.resolveNoteSession(workspaceId, id, { include_ended: true });
+  } catch {
+    return null;
+  }
+}
+function pathConflictRefusal(ctx, workspaceId, conflicts, taskId, createdNote = "") {
+  const holders = conflicts.map((conflict) => {
+    const view = conflict.assignee_session_id ? safeSession(ctx, workspaceId, conflict.assignee_session_id) : null;
+    return {
+      task: handleOf("task", conflict.active_task_id),
+      id: conflict.active_task_id,
+      holder: view ? { session: view.id, name: view.actor, purpose: view.purpose } : { name: conflict.assignee },
+      paths: conflict.path_pairs,
+      next: view ? withSlot(ctx, {
+        tool: "collab_note",
+        input: {
+          text: `My work overlaps yours on ${conflict.path_pairs.map((pair) => pair[1]).join(", ")}; when will you be done with it?`,
+          re: exactRef("task", conflict.active_task_id),
+          to: view.id
+        }
+      }) : { say: "Its holder has no session to ask; wait until it is released or reviewed." }
+    };
+  });
+  const first = holders[0];
+  return new CollabError("path_scope_conflict", `These paths overlap work held by ${holders.map((holder) => holder.holder.name ?? "an unknown holder").join(", ")}.${createdNote}`, {
+    holders,
+    ...taskId ? { task: taskId } : {},
+    remedy: first?.next ?? { say: "Wait until the overlapping work is released." }
+  });
+}
+function takeResult(ctx, task, options) {
+  const handle = handleOf("task", task.id);
+  const review = task.completion_policy === "accepted" ? "When you finish, a distinct session reviews it." : "When you finish, you report it done; no review is needed.";
+  const statement = task.title.length > 200 ? `${task.title.slice(0, 199)}\u2026` : task.title;
+  return {
+    ...noteWriteResult({
+      effect: options.already ? `You already hold ${handle} (${task.title}). Nothing was written.` : `You hold ${handle} (${task.title})${options.fresh ? ", a task you created" : ""}. ${review} ` + "The lease lasts while your session is live; it is coordination, not ownership or a lock.",
+      ids: { task: task.id, task_handle: handle },
+      advice: options.advice,
+      next: withSlot(ctx, { tool: "collab_done", input: { text: "<what you did>", task: exactRef("task", task.id) } }),
+      note: renderNote({
+        act: "take",
+        statement,
+        ...task.title.length > 200 ? { body: task.title } : {},
+        re: `task:${task.id}`,
+        ...options.purpose ? { purpose: options.purpose } : {}
+      }),
+      replayed: options.replayed
+    }),
+    task: {
+      id: task.id,
+      handle,
+      title: task.title,
+      state: task.effective_status,
+      paths: task.path_scopes,
+      work_mode: task.work_mode,
+      completion_policy: task.completion_policy
+    }
+  };
+}
+var RELEASE_SUMMARY_MAX = 2000;
+var BLOCKER_MAX = 2000;
+var PROGRESS_MAX = 2000;
+var LEAVE_TEXT_MAX = 2000;
+async function doneVerb(ctx, input) {
+  const outcome = input.outcome ?? "finished";
+  if (!["finished", "released", "blocked", "leave"].includes(outcome)) {
+    throw new CollabError("invalid_outcome", "outcome is finished, released, blocked or leave", {
+      remedy: { say: "outcome is finished (the default), released, blocked or leave." }
+    });
+  }
+  if (outcome === "leave")
+    return leave(ctx, input);
+  const { binding, credential } = requireCredential(ctx);
+  const workspaceId = binding.handle.workspace.id;
+  const text = freeText(input.text, "text", 8000, true);
+  const { statement, body } = splitNoteText(text);
+  const keyInput = doneKeyInput(input, outcome, text);
+  const base = derivedBase(credential.session_id, "collab_done", keyInput);
+  if (outcome !== "finished") {
+    const unstored = ["why", "evidence", "limits", "review_by"].filter((field) => Array.isArray(input[field]) ? input[field].length > 0 : input[field] !== undefined);
+    if (unstored.length > 0) {
+      const cleaned = Object.fromEntries(Object.entries(input).filter(([key]) => !unstored.includes(key)));
+      throw new CollabError("not_stored", `A ${outcome} task keeps only its text${outcome === "blocked" ? " and because" : ""}; ${unstored.join(", ")} would not be stored`, {
+        fields: unstored,
+        remedy: withSlot(ctx, { tool: "collab_done", input: cleaned })
+      });
+    }
+  }
+  const task = doneTask(ctx, credential, workspaceId, input, base);
+  if (outcome === "finished")
+    return finishTask(ctx, binding, credential, task, { input, statement, body, keyInput });
+  if (outcome === "released") {
+    const summary = freeText(input.text, "text", RELEASE_SUMMARY_MAX, true);
+    if (input.because !== undefined) {
+      throw new CollabError("not_stored", "A released task keeps only its text; because would not be stored", {
+        fields: ["because"],
+        remedy: withSlot(ctx, { tool: "collab_done", input: { text: input.text, outcome, ...input.task ? { task: input.task } : {} } })
+      });
+    }
+    return releaseOrBlock(ctx, binding, credential, task, { outcome, summary, statement, body, keyInput });
+  }
+  const blocker = freeText(input.because, "because", BLOCKER_MAX, false);
+  if (!blocker) {
+    throw new CollabError("because_required", "A blocked task needs because: what blocks it", {
+      remedy: withSlot(ctx, { tool: "collab_done", input: { ...input, because: "<what blocks it>" } })
+    });
+  }
+  const progress = freeText(input.text, "text", PROGRESS_MAX, true);
+  return releaseOrBlock(ctx, binding, credential, task, { outcome, summary: progress, blocker, statement, body, keyInput });
+}
+function doneKeyInput(input, outcome, text) {
+  return {
+    outcome,
+    text,
+    task: input.task ?? null,
+    why: input.why ?? [],
+    evidence: input.evidence ?? [],
+    limits: input.limits ?? null,
+    review_by: input.review_by ?? null,
+    because: input.because ?? null
+  };
+}
+function doneTask(ctx, credential, workspaceId, input, base) {
+  if (input.task !== undefined) {
+    return ctx.store.getTask(workspaceId, ctx.store.resolveNoteRef(workspaceId, "task", String(input.task)).id);
+  }
+  const holds = ctx.store.listTasks(workspaceId, "claimed").filter((task) => task.assignee_session_id === credential.session_id);
+  if (holds.length === 1)
+    return holds[0];
+  if (holds.length > 1) {
+    throw new CollabError("several_holds", `You hold ${holds.length} tasks; say which one`, {
+      candidates: holds.map((task) => ({ task: handleOf("task", task.id), id: task.id, title: task.title })),
+      remedy: { say: "Send the same call with task set to the id of the one you mean; the candidates are listed." }
+    });
+  }
+  const earlier = ctx.store.latestReceiptKeyForBase(credential, base);
+  const receipt = earlier ? replayReceipt(ctx.store, credential, earlier) : null;
+  const taskId = receipt ? "task" in receipt && typeof receipt.task === "object" ? receipt.task.id : receipt.id : null;
+  if (taskId)
+    return ctx.store.getTask(workspaceId, taskId);
+  throw new CollabError("nothing_held", "You hold no task", {
+    remedy: withSlot(ctx, { tool: "collab_take", input: { title: "<the work you are doing>" } })
+  });
+}
+function requireHeld(ctx, credential, task, retryInput) {
+  if (task.assignee_session_id === credential.session_id && task.lease_id && task.status === "claimed")
+    return task;
+  throw new CollabError("not_held", `You do not hold ${handleOf("task", task.id)} now`, {
+    state: { task: handleOf("task", task.id), id: task.id, state: task.effective_status, holder: task.assignee },
+    remedy: task.effective_status === "open" ? withSlot(ctx, { tool: "collab_take", input: { task: exactRef("task", task.id) } }) : { say: "Only the holder ends a hold; take it first if it is open." }
+  });
+}
+var ARTIFACT_KIND = {
+  file: "file",
+  commit: "commit",
+  test: "test",
+  url: "url",
+  data: "data",
+  msg: "other"
+};
+async function finishTask(ctx, binding, credential, task, options) {
+  const workspaceId = binding.handle.workspace.id;
+  const { input } = options;
+  const advice = [];
+  let fields = normalizeNoteFields({
+    act: "done",
+    statement: options.statement,
+    body: options.body,
+    re: `task:${task.id}`,
+    why: input.why,
+    evidence: input.evidence,
+    limits: input.limits
+  });
+  refuseNoteProblems(fields);
+  const evidence = resolveEvidence(ctx, binding, fields.evidence);
+  advice.push(...evidence.advice);
+  fields = { ...fields, evidence: evidence.lines };
+  refuseNoteProblems(fields);
+  const note = renderNote(fields);
+  const summary = renderNote(fields, { omitEvidence: true });
+  const confidenceBasis = requireReasonsFit(fields.why);
+  const reviewer = input.review_by !== undefined ? ctx.store.resolveNoteSession(workspaceId, String(input.review_by)).id : null;
+  const retryInput = { ...input, task: exactRef("task", task.id) };
+  const { plan, artifacts, completed, replayed } = await underPlan(ctx, credential, {
+    tool: "collab_done",
+    input: options.keyInput,
+    entity: task.id,
+    retry_input: retryInput,
+    stillCurrent: (latestKey) => {
+      const found = replayReceipt(ctx.store, credential, latestKey);
+      if (!found)
+        return true;
+      const current = ctx.store.getTask(workspaceId, task.id);
+      if ("artifact" in found)
+        return current.lease_id === found.task.lease_id;
+      const completedTask = found;
+      return completedTask.completion_report_id === null || current.completion_report_id === completedTask.completion_report_id;
+    }
+  }, async (plan2) => {
+    let replays = 0;
+    const artifacts2 = [];
+    for (const [index, item] of evidence.items.entries()) {
+      const key = plan2.step(index + 1);
+      const earlier2 = plan2.retry ? replayReceipt(ctx.store, credential, key) : null;
+      if (earlier2) {
+        replays += 1;
+        artifacts2.push({ id: earlier2.artifact.id, n: item.n });
+        continue;
+      }
+      const attached = await withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, () => {
+        const current = requireHeld(ctx, credential, ctx.store.getTask(workspaceId, task.id), retryInput);
+        return { version: current.version, state: { task: handleOf("task", current.id), state: current.effective_status } };
+      }, (version2) => ctx.store.withReceiptPlan(plan2.guard, () => ctx.store.attachArtifactForSession({
+        ...credential,
+        idempotency_key: key,
+        task_id: task.id,
+        lease_id: ctx.store.getTask(workspaceId, task.id).lease_id,
+        expected_version: version2,
+        kind: ARTIFACT_KIND[item.kind],
+        uri: item.locator,
+        ...item.kind === "file" && item.observed === "server" && item.sha256 ? { sha256: item.sha256 } : {},
+        label: artifactLabel(item)
+      })));
+      artifacts2.push({ id: attached.artifact.id, n: item.n });
+    }
+    const completeKey = plan2.step(evidence.items.length + 1);
+    const earlier = plan2.retry ? replayReceipt(ctx.store, credential, completeKey) : null;
+    if (earlier)
+      replays += 1;
+    const completed2 = earlier ?? await withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, () => {
+      const current = requireHeld(ctx, credential, ctx.store.getTask(workspaceId, task.id), retryInput);
+      return { version: current.version, state: { task: handleOf("task", current.id), state: current.effective_status } };
+    }, (version2) => ctx.store.withReceiptPlan(plan2.guard, () => ctx.store.completeTaskForSession({
+      ...credential,
+      idempotency_key: completeKey,
+      task_id: task.id,
+      lease_id: ctx.store.getTask(workspaceId, task.id).lease_id,
+      expected_version: version2,
+      summary,
+      ...confidenceBasis ? { confidence_basis: confidenceBasis } : {},
+      ...fields.limits ? { limits: fields.limits } : {},
+      evidence_refs: [...evidence.journal, ...artifacts2.map((artifact) => `artifact:${artifact.id}`)],
+      ...reviewer ? { review_requested_session_id: reviewer } : {}
+    })));
+    return { plan: plan2, artifacts: artifacts2, completed: completed2, replayed: replays === evidence.items.length + 1 };
+  });
+  if (plan.retry && replayed)
+    advice.push("This repeats your latest done on this task exactly, so it was read as a retry.");
+  else if (plan.retry)
+    advice.push("An earlier call with this input stopped part way; its finished steps were kept, and the rest ran now.");
+  const handle = handleOf("task", task.id);
+  const completion = completed.completion_report_id;
+  const pending = completed.completion_policy === "accepted";
+  return {
+    ...noteWriteResult({
+      effect: pending ? `Reported ${handle} finished as ${handleOf("report", completion)}; it waits for review by a distinct session ` + `(accept or request_changes)${reviewer ? ", which you asked of one" : ""}. Your report is not an acceptance.` : `Completed ${handle} as ${handleOf("report", completion)}; its policy needs no review.`,
+      ids: {
+        task: task.id,
+        task_handle: handle,
+        completion,
+        completion_handle: handleOf("report", completion),
+        artifacts: artifacts.map((artifact) => ({ artifact: artifact.id, evidence: artifact.n }))
+      },
+      advice,
+      next: pending ? { say: `Ask a distinct session to review it: collab_note {act: "accept" or "request_changes", re: "${completion}"}.` } : withSlot(ctx, { tool: "collab_inbox", input: {} }),
+      note,
+      replayed
+    }),
+    evidence: evidenceSummary(evidence)
+  };
+}
+function artifactLabel(item) {
+  const observed = item.observed === "server" ? item.kind === "file" ? "sha256 by the server" : "checked by the server" : item.observed === "not_found" ? "not found by git" : "as the caller wrote it";
+  const detail = item.lines ? ` lines ${item.lines}` : item.exit !== undefined ? ` exit=${item.exit}` : "";
+  return `Evidence ${item.n}${detail}: ${observed}`;
+}
+async function releaseOrBlock(ctx, binding, credential, task, options) {
+  const workspaceId = binding.handle.workspace.id;
+  const advice = [];
+  const retryInput = { ...options.keyInput, task: exactRef("task", task.id) };
+  for (const key of Object.keys(retryInput))
+    if (retryInput[key] === null || Array.isArray(retryInput[key]) && retryInput[key].length === 0)
+      delete retryInput[key];
+  const { plan, done, replayed } = await underPlan(ctx, credential, {
+    tool: "collab_done",
+    input: options.keyInput,
+    entity: task.id,
+    retry_input: retryInput,
+    stillCurrent: () => ctx.store.getTask(workspaceId, task.id).assignee_session_id !== credential.session_id
+  }, async (plan2) => {
+    const held = () => {
+      const current = requireHeld(ctx, credential, ctx.store.getTask(workspaceId, task.id), retryInput);
+      return { version: current.version, state: { task: handleOf("task", current.id), state: current.effective_status } };
+    };
+    let replays = 0;
+    if (options.outcome === "released") {
+      const earlier = plan2.retry ? replayReceipt(ctx.store, credential, plan2.key) : null;
+      const done2 = earlier ?? await withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, held, (version2) => ctx.store.withReceiptPlan(plan2.guard, () => ctx.store.releaseTaskForSession({
+        ...credential,
+        idempotency_key: plan2.key,
+        task_id: task.id,
+        lease_id: ctx.store.getTask(workspaceId, task.id).lease_id,
+        expected_version: version2,
+        summary: options.summary
+      })));
+      return { plan: plan2, done: done2, replayed: earlier !== null };
+    }
+    let progressed = plan2.retry ? replayReceipt(ctx.store, credential, plan2.step(1)) : null;
+    if (progressed)
+      replays += 1;
+    progressed ??= await withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, held, (version2) => ctx.store.withReceiptPlan(plan2.guard, () => ctx.store.progressTaskForSession({
+      ...credential,
+      idempotency_key: plan2.step(1),
+      task_id: task.id,
+      lease_id: ctx.store.getTask(workspaceId, task.id).lease_id,
+      expected_version: version2,
+      message: options.summary
+    })));
+    let blocked = plan2.retry ? replayReceipt(ctx.store, credential, plan2.step(2)) : null;
+    if (blocked)
+      replays += 1;
+    blocked ??= await withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, held, (version2) => ctx.store.withReceiptPlan(plan2.guard, () => ctx.store.blockTaskForSession({
+      ...credential,
+      idempotency_key: plan2.step(2),
+      task_id: task.id,
+      lease_id: ctx.store.getTask(workspaceId, task.id).lease_id,
+      expected_version: version2,
+      blocker: options.blocker
+    })));
+    return { plan: plan2, done: blocked, replayed: replays === 2 };
+  });
+  if (plan.retry && replayed)
+    advice.push(`This repeats your latest ${options.outcome} of this task exactly, so it was read as a retry.`);
+  const handle = handleOf("task", task.id);
+  return {
+    ...noteWriteResult({
+      effect: options.outcome === "released" ? `Released ${handle}; it is open for anyone to take.` : `Blocked ${handle}: ${options.blocker}. Your text was posted as its progress; it waits to be unblocked.`,
+      ids: { task: task.id, task_handle: handle },
+      advice,
+      next: withSlot(ctx, { tool: "collab_inbox", input: {} }),
+      note: renderNote({
+        act: "done",
+        statement: options.statement,
+        body: options.outcome === "blocked" ? [options.body, `Blocked: ${options.blocker}`].filter(Boolean).join(`
+
+`) : options.body,
+        re: `task:${task.id}`
+      }),
+      replayed
+    }),
+    task: { id: task.id, handle, state: done.effective_status }
+  };
+}
+async function leave(ctx, input) {
+  const text = freeText(input.text, "text", LEAVE_TEXT_MAX, true);
+  const because = freeText(input.because, "because", LEAVE_TEXT_MAX, false);
+  const keyInput = { outcome: "leave", text, because };
+  const binding = ctx.binding();
+  if (!binding) {
+    const left = ctx.left();
+    if (left && left.base === derivedBase(left.session_id, "collab_done", keyInput)) {
+      return {
+        ...left.result,
+        effect: `Replayed: nothing new was written. ${String(left.result.effect)}`,
+        replayed: true,
+        advice: [
+          ...Array.isArray(left.result.advice) ? left.result.advice : [],
+          "This repeats your leave exactly, so it was read as a retry."
+        ]
+      };
+    }
+    throw notArrived(ctx.slot_key, ctx.bound_slots().find((slot) => slot.key === "")?.binding ?? null);
+  }
+  const { credential } = requireCredential(ctx);
+  const workspaceId = binding.handle.workspace.id;
+  const advice = [];
+  for (const field of ["task", "why", "evidence", "limits", "review_by"]) {
+    if (input[field] !== undefined)
+      advice.push(`${field} is not used when you leave; every hold is released.`);
+  }
+  const holds = ctx.store.listTasks(workspaceId, "claimed").filter((task) => task.assignee_session_id === credential.session_id);
+  if (holds.length > 0 && !because) {
+    throw new CollabError("because_required", `You hold ${holds.length} task(s) that would be left unfinished; say why with because`, {
+      holds: holds.map((task) => ({ task: handleOf("task", task.id), id: task.id, title: task.title })),
+      remedy: withSlot(ctx, { tool: "collab_done", input: { text, outcome: "leave", because: "<why the work is left unfinished>" } })
+    });
+  }
+  const ended = ctx.store.endSessionWithReleases({
+    ...credential,
+    reason: because ?? text,
+    ...holds.length > 0 ? { release_leases: true, release_summary: text } : {}
+  });
+  try {
+    removeSessionCredentialFile(binding.credential_file);
+  } catch {
+    advice.push("The session ended, but its credential file could not be removed; it no longer opens the journal.");
+  }
+  const released = ended.released_leases.map((release) => ({ task: release.task_id, task_handle: handleOf("task", release.task_id), via: release.via }));
+  const result = {
+    ...noteWriteResult({
+      effect: `Ended session ${ended.session.id}${released.length > 0 ? `, after releasing ${released.map((item) => item.task_handle).join(", ")}` : ""}. ` + "You are no longer a voice in new proposals or a unit in new ballots here.",
+      ids: { session: ended.session.id, released },
+      advice,
+      next: withSlot(ctx, { tool: "collab_arrive", input: { purpose: "<what you are here to do>" } }),
+      note: renderNote({ act: "done", statement: statementOf(text.split(`
+`)[0] ?? text), ...text.includes(`
+`) || text.length > 200 ? { body: text } : {} })
+    }),
+    session: { id: ended.session.id, status: ended.session.status }
+  };
+  ctx.unbind({ session_id: credential.session_id, base: derivedBase(credential.session_id, "collab_done", keyInput), result });
+  return result;
 }
 
 // src/mcp.ts
@@ -38687,10 +40666,10 @@ Legacy session tools: ${legacyInstructions}`
       }
       const key2 = binding_key ?? "";
       let slot = slots.get(key2);
-      if (isNoteVerb(name) && name !== "collab_arrive" && (!slot || !slot.binding)) {
+      if (isNoteVerb(name) && name !== "collab_arrive" && (!slot || !slot.binding) && !(name === "collab_done" && slot?.left)) {
         return noteFailure(notArrived(key2, slots.get("")?.binding ?? null));
       }
-      if (key2 && (!slot || !slot.binding) && name !== "collab_session_start" && name !== "collab_arrive") {
+      if (key2 && (!slot || !slot.binding) && name !== "collab_session_start" && name !== "collab_arrive" && !(name === "collab_done" && slot?.left)) {
         return failure(new CollabError("session_not_bound", "The selected child binding is not bound"));
       }
       if (!slot) {
@@ -38742,7 +40721,13 @@ Legacy session tools: ${legacyInstructions}`
     binding: () => state.binding,
     bind: (binding) => {
       state.binding = binding;
+      requestSlot.getStore().left = null;
     },
+    unbind: (left) => {
+      state.binding = null;
+      requestSlot.getStore().left = left;
+    },
+    left: () => requestSlot.getStore().left ?? null,
     bound_slots: () => [...slots.values()].filter((slot) => slot.binding !== null).sort((left, right) => left.key === "" ? -1 : right.key === "" ? 1 : left.key.localeCompare(right.key)).map((slot) => ({ key: slot.key, binding: slot.binding })),
     waits,
     signals: [signal, waitShutdown.signal]
@@ -38772,6 +40757,59 @@ Legacy session tools: ${legacyInstructions}`
       format: exports_external.string().optional().describe("json (the default), or note: with about, the thread root and its state as one collab-note/1 text of at most 800 characters, for a person to carry.")
     }
   }, async (input, ctx) => noteCall(() => inboxVerb(noteContext(ctx.mcpReq?.signal), input)));
+  const noteReason = exports_external.object({
+    text: exports_external.string().describe("One reason, at most 300 characters."),
+    basis: exports_external.string().optional().describe("How you know it: seen, told, inferred or quoted."),
+    cites: exports_external.array(exports_external.number()).optional().describe("1-based positions in evidence that this reason rests on.")
+  });
+  const noteEvidence = exports_external.array(exports_external.string()).optional().describe("Up to 16 pointers, one line each: file <repo path>[:a-b] | commit <sha> | test <command> exit=<n> | url <url> | " + "data <label> sha256=<hex> | msg <channel> <id> | report:<id> | event:<id> | artifact:<id> | checkpoint:<id>. " + "Files inside your worktree are hashed by the server; nothing else is fetched or rerun.");
+  server.registerTool("collab_note", {
+    title: "Say something on the record",
+    description: "Post a note: act note (the default), support, challenge, resolve, withdraw, accept, request_changes or relay_rejection. " + 'text is the statement on its first line, then an optional body; a text that begins with an act word and ": " ' + "is read whole as a collab-note/1 note. Reasons say how each is known; outside evidence is recorded once per note. " + "Only the challenger can lift a challenge; anyone else's resolve is recorded as an answer to them. A support is a " + "position, not a permission. dry_run checks and shows the note, writing nothing.",
+    annotations: localMutation,
+    inputSchema: {
+      text: exports_external.string().describe("The statement (first line, at most 200 characters), then a blank line and any body."),
+      act: exports_external.string().optional().describe("note | support | challenge | resolve | withdraw | accept | request_changes | relay_rejection."),
+      re: exports_external.string().optional().describe("What this answers: report#\u2026, proposal#\u2026, task#\u2026, a full id, or file:/lobby:/msg: text. Required for every act but note."),
+      to: exports_external.string().optional().describe("A session name or id, person, or all. Default: whoever the act answers."),
+      via: exports_external.string().optional().describe("host:\u2026 | file:\u2026 | lobby:\u2026 | msg:\u2026: the text came from another channel, so seen and quoted reasons are recorded as told."),
+      why: exports_external.array(noteReason).optional().describe("Up to 8 reasons."),
+      evidence: noteEvidence,
+      limits: exports_external.string().optional().describe("What this does not cover; what was not checked (at most 2,000 characters)."),
+      extent: exports_external.string().optional().describe("Where this stops (at most 1,000 characters)."),
+      outcome: exports_external.string().optional().describe("For decide only, which a later build adds."),
+      replaces: exports_external.string().optional().describe("With act challenge: your earlier challenge this one replaces; it is withdrawn in the same transaction."),
+      dry_run: exports_external.boolean().optional().describe("Parse, check and render; write nothing.")
+    }
+  }, async (input) => noteCall(() => noteVerb(noteContext(), input)));
+  server.registerTool("collab_take", {
+    title: "Take a piece of work",
+    description: "Create a task with title and claim it, or claim task. With paths the task is an edit task that waits for a distinct " + "reviewer; without, a coordination task you report done. A lapsed lease is recovered only with because. A path " + "overlap names who holds it and how to ask them. A lease is coordination, not ownership or a lock.",
+    annotations: localMutation,
+    inputSchema: {
+      task: exports_external.string().optional().describe("An existing task: task#\u2026 or its id."),
+      title: exports_external.string().optional().describe("A new task's title, at most 300 characters."),
+      paths: exports_external.array(exports_external.string()).optional().describe("Repository-relative paths the new task edits."),
+      purpose: exports_external.string().optional().describe("Why you take it, at most 200 characters; written into a new task's description only."),
+      review: exports_external.string().optional().describe("required | none: override whether a new task waits for review."),
+      because: exports_external.string().optional().describe("Why you recover a lapsed lease (at most 4,000 characters).")
+    }
+  }, async (input) => noteCall(() => takeVerb(noteContext(), input)));
+  server.registerTool("collab_done", {
+    title: "End your hold, or leave",
+    description: "outcome finished (the default) reports the work done, with its reasons, evidence (attached as artifacts) and limits; " + "released gives it back; blocked records because as the blocker; leave releases every hold and ends this session, " + "after which it is no voice in new proposals here. task defaults to the one task you hold.",
+    annotations: localDestructiveMutation,
+    inputSchema: {
+      text: exports_external.string().describe("What you did or why you stop: a statement, then any body."),
+      outcome: exports_external.string().optional().describe("finished | released | blocked | leave."),
+      task: exports_external.string().optional().describe("The task, when you hold more than one."),
+      why: exports_external.array(noteReason).optional().describe("Up to 8 reasons (finished)."),
+      evidence: noteEvidence,
+      limits: exports_external.string().optional().describe("What the work does not cover (finished; at most 2,000 characters)."),
+      review_by: exports_external.string().optional().describe("A session name or id to ask for the review (finished, reviewed tasks)."),
+      because: exports_external.string().optional().describe("The blocker (blocked), or why held work is left unfinished (leave); at most 2,000 characters.")
+    }
+  }, async (input) => noteCall(() => doneVerb(noteContext(), input)));
   server.registerTool("collab_session_join", {
     title: "Join the self-declared presence plane",
     description: "Create or replay one unauthenticated routing-presence record and return its unique actor_key. This does not bind the MCP process or create a credential.",

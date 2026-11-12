@@ -20,8 +20,11 @@ export const COLLAB_WRITES: ReadonlySet<string> = new Set([
   "collab_handoff_respond",
   "collab_proposal_open",
   "collab_proposal_relay_rejection",
-  // Collab Notes verbs that leave a cited record join this list as each is registered:
-  // collab_note, collab_take, collab_done, collab_propose, collab_poll, collab_vote.
+  // Collab Notes verbs that leave a cited record.
+  "collab_note",
+  "collab_take",
+  "collab_done",
+  // The rest join this list as each is registered: collab_propose, collab_poll, collab_vote.
 ]);
 
 /**

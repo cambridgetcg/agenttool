@@ -154,6 +154,7 @@ describe("MCP surface", () => {
       "collab_cursor_ack",
       "collab_cursor_reset",
       "collab_decision_record",
+      "collab_done",
       "collab_events_since",
       "collab_events_wait",
       "collab_handoff_offer",
@@ -161,6 +162,7 @@ describe("MCP surface", () => {
       "collab_inbox",
       "collab_journal_verify",
       "collab_next",
+      "collab_note",
       "collab_proposal_open",
       "collab_proposal_relay_rejection",
       "collab_proposal_status",
@@ -172,6 +174,7 @@ describe("MCP surface", () => {
       "collab_session_leave",
       "collab_session_list",
       "collab_session_start",
+      "collab_take",
       "collab_task_block",
       "collab_task_claim",
       "collab_task_complete",
@@ -288,9 +291,12 @@ describe("MCP surface", () => {
       "collab_arrive",
       "collab_inbox",
       "collab_next",
+      "collab_note",
       "collab_session_start",
+      "collab_take",
     ];
-    const destructiveMutations = ["collab_session_end"];
+    // collab_done can end the session (outcome leave), as collab_session_end does.
+    const destructiveMutations = ["collab_done", "collab_session_end"];
 
     for (const name of readOnly) {
       expect(tools[name].annotations).toEqual({

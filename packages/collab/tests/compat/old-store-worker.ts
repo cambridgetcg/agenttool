@@ -25,6 +25,8 @@ interface InspectRequest {
   status_at: string;
   proposals: string[];
   waiter: { session_id: string; after_sequence: number; addressed_report_id: string };
+  /** A task the newer build's collab_done finished, waiting for review. */
+  review_task_id: string;
 }
 
 const [mode, sourceDirectory, databasePath, extra] = Bun.argv.slice(2);
@@ -171,6 +173,7 @@ async function inspect(request: InspectRequest): Promise<Record<string, unknown>
     }
 
     let task: Record<string, unknown> | null = null;
+    let reviewedNew: Record<string, unknown> | null = null;
     const written: Array<{ id: string; body: string }> = [];
     const reviewer = check("start_reviewer", () => store.startSession({
       root_path: request.root_path,
@@ -216,6 +219,20 @@ async function inspect(request: InspectRequest): Promise<Record<string, unknown>
           review_status: reviewed.task.review_status ?? null,
         };
       });
+      // The newer surface's completion is an ordinary completion to this build.
+      check("review_new_surface_task", () => {
+        const pending = store.getTask(request.workspace_id, request.review_task_id);
+        const reviewed = store.reviewTaskForSession({
+          ...reviewer.credential,
+          idempotency_key: "old-build-review-new-surface",
+          task_id: pending.id,
+          expected_version: pending.version,
+          outcome: "accept",
+          summary: "An older build accepted work the notes surface finished.",
+        });
+        written.push({ id: reviewed.report.id, body: reviewed.report.body });
+        reviewedNew = { task_id: reviewed.task.id, status: reviewed.task.status, review_status: reviewed.task.review_status ?? null };
+      });
       check("append_report", () => {
         const report = store.appendReportForSession({
           ...implementer.credential,
@@ -226,7 +243,7 @@ async function inspect(request: InspectRequest): Promise<Record<string, unknown>
         written.push({ id: report.id, body: report.body });
       });
     }
-    return { capabilities, verified, reports, proposals, addressing, paging, task, written };
+    return { capabilities, verified, reports, proposals, addressing, paging, task, reviewed_new: reviewedNew, written };
   } finally {
     store.close();
   }

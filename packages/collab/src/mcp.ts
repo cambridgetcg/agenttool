@@ -24,6 +24,7 @@ import {
   writeSessionCredentialFile,
 } from "./session-file.js";
 import { CollabStore } from "./store.js";
+import { doneVerb, noteVerb, takeVerb } from "./note-verbs.js";
 import {
   arriveVerb,
   FULL_PROFILE_BRIDGE,
@@ -35,6 +36,7 @@ import {
   notesInstructions,
   profileIncludes,
   toolsProfile,
+  type LeaveMemo,
   type NoteVerbContext,
 } from "./verbs.js";
 import { COLLAB_PACKAGE_VERSION } from "./version.js";
@@ -119,7 +121,9 @@ export function buildCollabMcpServer(
   store: CollabStore,
   options: CollabMcpServerOptions = {},
 ): McpServer {
-  type Slot = { key: string; binding: BoundSession | null };
+  // `left`: what collab_done returned when it ended this slot's session, kept
+  // until a new session arrives here, so a lost-response retry is answered.
+  type Slot = { key: string; binding: BoundSession | null; left?: LeaveMemo | null };
   const slots = new Map<string, Slot>([["", { key: "", binding: options.resumed_session ?? null }]]);
   for (const [key, binding] of Object.entries(options.resumed_sessions ?? {})) {
     if (!key || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(key)) {
@@ -201,10 +205,12 @@ export function buildCollabMcpServer(
       let slot = slots.get(key);
       // Only collab_arrive may speak from a slot with no session; the other
       // verbs say how to arrive, on the default slot or the named one.
-      if (isNoteVerb(name) && name !== "collab_arrive" && (!slot || !slot.binding)) {
+      if (isNoteVerb(name) && name !== "collab_arrive" && (!slot || !slot.binding)
+        && !(name === "collab_done" && slot?.left)) {
         return noteFailure(notArrived(key, slots.get("")?.binding ?? null));
       }
-      if (key && (!slot || !slot.binding) && name !== "collab_session_start" && name !== "collab_arrive") {
+      if (key && (!slot || !slot.binding) && name !== "collab_session_start" && name !== "collab_arrive"
+        && !(name === "collab_done" && slot?.left)) {
         return failure(new CollabError("session_not_bound", "The selected child binding is not bound"));
       }
       if (!slot) {
@@ -272,7 +278,13 @@ export function buildCollabMcpServer(
     binding: () => state.binding,
     bind: (binding) => {
       state.binding = binding;
+      requestSlot.getStore()!.left = null;
     },
+    unbind: (left) => {
+      state.binding = null;
+      requestSlot.getStore()!.left = left;
+    },
+    left: () => requestSlot.getStore()!.left ?? null,
     bound_slots: () => [...slots.values()]
       .filter((slot): slot is Slot & { binding: BoundSession } => slot.binding !== null)
       .sort((left, right) => (left.key === "" ? -1 : right.key === "" ? 1 : left.key.localeCompare(right.key)))
@@ -338,6 +350,90 @@ export function buildCollabMcpServer(
       },
     },
     async (input, ctx) => noteCall(() => inboxVerb(noteContext(ctx.mcpReq?.signal), input)),
+  );
+
+  const noteReason = z.object({
+    text: z.string().describe("One reason, at most 300 characters."),
+    basis: z.string().optional().describe("How you know it: seen, told, inferred or quoted."),
+    cites: z.array(z.number()).optional().describe("1-based positions in evidence that this reason rests on."),
+  });
+  const noteEvidence = z.array(z.string()).optional().describe(
+    "Up to 16 pointers, one line each: file <repo path>[:a-b] | commit <sha> | test <command> exit=<n> | url <url> | " +
+      "data <label> sha256=<hex> | msg <channel> <id> | report:<id> | event:<id> | artifact:<id> | checkpoint:<id>. " +
+      "Files inside your worktree are hashed by the server; nothing else is fetched or rerun.",
+  );
+
+  server.registerTool(
+    "collab_note",
+    {
+      title: "Say something on the record",
+      description:
+        "Post a note: act note (the default), support, challenge, resolve, withdraw, accept, request_changes or relay_rejection. " +
+        "text is the statement on its first line, then an optional body; a text that begins with an act word and \": \" " +
+        "is read whole as a collab-note/1 note. Reasons say how each is known; outside evidence is recorded once per note. " +
+        "Only the challenger can lift a challenge; anyone else's resolve is recorded as an answer to them. A support is a " +
+        "position, not a permission. dry_run checks and shows the note, writing nothing.",
+      annotations: localMutation,
+      inputSchema: {
+        text: z.string().describe("The statement (first line, at most 200 characters), then a blank line and any body."),
+        act: z.string().optional().describe("note | support | challenge | resolve | withdraw | accept | request_changes | relay_rejection."),
+        re: z.string().optional().describe("What this answers: report#…, proposal#…, task#…, a full id, or file:/lobby:/msg: text. Required for every act but note."),
+        to: z.string().optional().describe("A session name or id, person, or all. Default: whoever the act answers."),
+        via: z.string().optional().describe("host:… | file:… | lobby:… | msg:…: the text came from another channel, so seen and quoted reasons are recorded as told."),
+        why: z.array(noteReason).optional().describe("Up to 8 reasons."),
+        evidence: noteEvidence,
+        limits: z.string().optional().describe("What this does not cover; what was not checked (at most 2,000 characters)."),
+        extent: z.string().optional().describe("Where this stops (at most 1,000 characters)."),
+        outcome: z.string().optional().describe("For decide only, which a later build adds."),
+        replaces: z.string().optional().describe("With act challenge: your earlier challenge this one replaces; it is withdrawn in the same transaction."),
+        dry_run: z.boolean().optional().describe("Parse, check and render; write nothing."),
+      },
+    },
+    async (input) => noteCall(() => noteVerb(noteContext(), input)),
+  );
+
+  server.registerTool(
+    "collab_take",
+    {
+      title: "Take a piece of work",
+      description:
+        "Create a task with title and claim it, or claim task. With paths the task is an edit task that waits for a distinct " +
+        "reviewer; without, a coordination task you report done. A lapsed lease is recovered only with because. A path " +
+        "overlap names who holds it and how to ask them. A lease is coordination, not ownership or a lock.",
+      annotations: localMutation,
+      inputSchema: {
+        task: z.string().optional().describe("An existing task: task#… or its id."),
+        title: z.string().optional().describe("A new task's title, at most 300 characters."),
+        paths: z.array(z.string()).optional().describe("Repository-relative paths the new task edits."),
+        purpose: z.string().optional().describe("Why you take it, at most 200 characters; written into a new task's description only."),
+        review: z.string().optional().describe("required | none: override whether a new task waits for review."),
+        because: z.string().optional().describe("Why you recover a lapsed lease (at most 4,000 characters)."),
+      },
+    },
+    async (input) => noteCall(() => takeVerb(noteContext(), input)),
+  );
+
+  server.registerTool(
+    "collab_done",
+    {
+      title: "End your hold, or leave",
+      description:
+        "outcome finished (the default) reports the work done, with its reasons, evidence (attached as artifacts) and limits; " +
+        "released gives it back; blocked records because as the blocker; leave releases every hold and ends this session, " +
+        "after which it is no voice in new proposals here. task defaults to the one task you hold.",
+      annotations: localDestructiveMutation,
+      inputSchema: {
+        text: z.string().describe("What you did or why you stop: a statement, then any body."),
+        outcome: z.string().optional().describe("finished | released | blocked | leave."),
+        task: z.string().optional().describe("The task, when you hold more than one."),
+        why: z.array(noteReason).optional().describe("Up to 8 reasons (finished)."),
+        evidence: noteEvidence,
+        limits: z.string().optional().describe("What the work does not cover (finished; at most 2,000 characters)."),
+        review_by: z.string().optional().describe("A session name or id to ask for the review (finished, reviewed tasks)."),
+        because: z.string().optional().describe("The blocker (blocked), or why held work is left unfinished (leave); at most 2,000 characters."),
+      },
+    },
+    async (input) => noteCall(() => doneVerb(noteContext(), input)),
   );
 
   server.registerTool(

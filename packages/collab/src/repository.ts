@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   closeSync,
+  constants as fsConstants,
   existsSync,
   fstatSync,
   lstatSync,
@@ -10,7 +11,7 @@ import {
   realpathSync,
   statSync,
 } from "node:fs";
-import { resolve } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import { spawnSync, type SpawnSyncOptions, type SpawnSyncReturns } from "node:child_process";
 import { CollabError } from "./errors.js";
 import type { RepoCheckpoint } from "./protocol.js";
@@ -346,6 +347,95 @@ export function inspectSuccessorCommit(
     changes.push({ path, blob_sha256: sha256Bytes(content.stdout) });
   }
   return { ok: true, commit_sha: commitSha, parent_sha: parentSha, changes };
+}
+
+/** The largest file a note's evidence is hashed for (Collab Notes spec 5.3). */
+export const MAX_CITED_FILE_BYTES = 16 * 1024 * 1024;
+
+export type WorktreeFileHash =
+  | { status: "hashed"; path: string; sha256: string; size: number }
+  | { status: "outside" | "symlink" | "missing" | "not_a_file" | "too_large" | "unreadable" | "changed_while_read"; path: string | null };
+
+/**
+ * Hash one file a note cites, inside a worktree (Collab Notes spec 5.3). The
+ * path must stay inside the root without passing through a symbolic link at
+ * any step, and the file is opened without following one, so a hash always
+ * names bytes that live in the worktree itself. Contents are read only to
+ * hash them; nothing is kept. Each refusal says why, for the caller's advice.
+ */
+export function hashWorktreeFile(rootPath: string, cited: string, maxBytes = MAX_CITED_FILE_BYTES): WorktreeFileHash {
+  let root: string;
+  try {
+    root = realpathSync(rootPath);
+  } catch {
+    return { status: "unreadable", path: null };
+  }
+  if (cited.includes("\0") || cited.includes("\\")) return { status: "outside", path: null };
+  const candidate = resolve(root, cited);
+  const inside = relative(root, candidate);
+  if (!inside || inside === ".." || inside.startsWith(`..${sep}`) || isAbsolute(inside)) {
+    return { status: "outside", path: null };
+  }
+  // Every step from the root down is looked at without following it.
+  let walked = root;
+  const parts = inside.split(sep);
+  for (const [index, part] of parts.entries()) {
+    walked = `${walked}${sep}${part}`;
+    let stat;
+    try {
+      stat = lstatSync(walked);
+    } catch (error) {
+      return { status: (error as NodeJS.ErrnoException).code === "ENOENT" ? "missing" : "unreadable", path: inside };
+    }
+    if (stat.isSymbolicLink()) return { status: "symlink", path: inside };
+    if (index < parts.length - 1 && !stat.isDirectory()) return { status: "missing", path: inside };
+  }
+  let descriptor: number | null = null;
+  try {
+    descriptor = openSync(walked, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+    const before = fstatSync(descriptor);
+    if (!before.isFile()) return { status: "not_a_file", path: inside };
+    if (before.size > maxBytes) return { status: "too_large", path: inside };
+    const hash = createHash("sha256");
+    const buffer = Buffer.allocUnsafe(64 * 1024);
+    let total = 0;
+    while (true) {
+      const count = readSync(descriptor, buffer, 0, buffer.length, null);
+      if (count === 0) break;
+      total += count;
+      if (total > maxBytes) return { status: "too_large", path: inside };
+      hash.update(buffer.subarray(0, count));
+    }
+    const after = fstatSync(descriptor);
+    if (before.ino !== after.ino || before.size !== after.size || before.mtimeMs !== after.mtimeMs) {
+      return { status: "changed_while_read", path: inside };
+    }
+    return { status: "hashed", path: inside, sha256: hash.digest("hex"), size: total };
+  } catch (error) {
+    return { status: (error as NodeJS.ErrnoException).code === "ELOOP" ? "symlink" : "unreadable", path: inside };
+  } finally {
+    if (descriptor !== null) closeSync(descriptor);
+  }
+}
+
+/**
+ * Whether a worktree's git has this commit (Collab Notes spec 5.3), within
+ * the usual git time budget: true, false, or null when git could not answer
+ * (no repository, a timeout, git missing).
+ */
+export function gitCommitExists(rootPath: string, sha: string, options: RepositoryProbeOptions = {}): boolean | null {
+  if (!/^[0-9a-f]{7,64}$/i.test(sha)) return false;
+  const inRepository = runGit(rootPath, ["rev-parse", "--git-dir"], options);
+  if (!inRepository.ok) return null;
+  const timeout = gitTimeout(options);
+  if (timeout <= 0) return null;
+  const result = spawnRepositoryGit(["-C", rootPath, ...SUCCESSOR_GIT_ARGS, "cat-file", "-e", `${sha}^{commit}`], {
+    timeout,
+    stdio: ["ignore", "ignore", "ignore"],
+    env: successorGitEnv(),
+  }, options);
+  if (result.error) return null;
+  return result.status === 0;
 }
 
 function worktreeId(rootPath: string, fingerprint: string): string {

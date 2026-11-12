@@ -562,6 +562,7 @@ interface Inspected {
     head_sequence: number;
   } | null;
   task: { task_id: string; status: string; review_status: string | null } | null;
+  reviewed_new: { task_id: string; status: string; review_status: string | null } | null;
   written: Array<{ id: string; body: string }>;
   errors: Record<string, string>;
 }
@@ -592,6 +593,7 @@ for (const revision of revisions) {
           after_sequence: manifest.waiter.after_anchor.sequence,
           addressed_report_id: manifest.waiter.addressed_report_id,
         },
+        review_task_id: manifest.review_task_id,
       }));
       return await runWorker(["inspect", join(source, "src"), databasePath, request]) as unknown as Inspected;
     });
@@ -659,7 +661,14 @@ for (const revision of revisions) {
       const result = await inspected();
       expect(result.errors).toEqual({});
       expect(result.task).toEqual({ task_id: expect.any(String), status: "completed", review_status: "accepted" });
-      expect(result.written.length).toBe(2);
+      expect(result.written.length).toBe(3);
+    }, TEST_TIMEOUT_MS);
+
+    test("reviews a task the notes surface finished", async () => {
+      const result = await inspected();
+      const { manifest } = await fixture();
+      expect(result.errors).toEqual({});
+      expect(result.reviewed_new).toEqual({ task_id: manifest.review_task_id, status: "completed", review_status: "accepted" });
     }, TEST_TIMEOUT_MS);
 
     const host = (source: string) => join(source, "dist", "agenttool-collab-host.js");

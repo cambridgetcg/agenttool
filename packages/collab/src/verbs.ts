@@ -17,6 +17,7 @@ import { canonicalJson } from "./canonical.js";
 import { CollabError } from "./errors.js";
 import {
   hasLoneSurrogate,
+  NOTE_JOURNAL_EVIDENCE_KINDS,
   NOTE_STATEMENT_MAX,
   normalizeNoteText,
   parseEvidence,
@@ -28,7 +29,7 @@ import {
   type NoteReason,
 } from "./note.js";
 import type { CollabReport, SessionHandle } from "./protocol.js";
-import { inspectRepository } from "./repository.js";
+import { hashWorktreeFile, inspectRepository, MAX_CITED_FILE_BYTES } from "./repository.js";
 import { defaultSeatRef } from "./seat-ref.js";
 import { removeSessionCredentialFile, writeSessionCredentialFile } from "./session-file.js";
 import {
@@ -37,6 +38,7 @@ import {
   type CollabStore,
   type NoteArrivalData,
   type NoteChallengeView,
+  type NoteCitedItem,
   type NoteEntityKind,
   type NoteEntry,
   type NoteInboxData,
@@ -68,7 +70,13 @@ export type NoteVerb = (typeof NOTE_VERBS)[number];
  * verb adds it here and registers it in mcp.ts; nothing else changes, and
  * nothing is registered before it works.
  */
-export const BUILT_NOTE_VERBS: readonly NoteVerb[] = ["collab_arrive", "collab_inbox"];
+export const BUILT_NOTE_VERBS: readonly NoteVerb[] = [
+  "collab_arrive",
+  "collab_inbox",
+  "collab_note",
+  "collab_take",
+  "collab_done",
+];
 
 /** Existing tools the notes profile keeps beside the verbs (spec 9). */
 export const NOTES_PROFILE_LEGACY_TOOLS = ["collab_journal_verify"] as const;
@@ -168,7 +176,7 @@ export const NOTE_CARD = [
   "  Limits: <what this does not cover>   Purpose: <what it serves>   Extent: <where a decision stops>",
   "Acts: say: note; stand: support, challenge, resolve, withdraw; work: take, done, accept, request_changes;",
   "decide: propose, poll, vote, decide.",
-  "This build has collab_arrive and collab_inbox; the other verbs come later.",
+  "This build has collab_arrive, collab_inbox, collab_note, collab_take and collab_done; propose, poll, vote and decide come later.",
   ...NOTE_PRINCIPLES.map((principle, index) => `${index + 1}. ${principle}`),
 ].join("\n");
 
@@ -259,6 +267,11 @@ export interface ReceiptPlan {
 
 const DERIVED_KEY = /^n1:([A-Z2-7]{8}):(\d{6}):([A-Z2-7]{20})(?::(\d{2}))?$/;
 
+/** The `base` of a derived key (spec 5): who asks and what, never the state the call changes. */
+export function derivedBase(sessionId: string, tool: NoteVerb, input: unknown): string {
+  return base32(sha256Bytes(canonicalJson({ session_id: sessionId, tool, input }))).slice(0, 20);
+}
+
 /**
  * The derived key for one verb call (spec 5). `base` hashes who asks and
  * what; `eh` hashes the entity acted on. No part depends on state the call
@@ -276,11 +289,7 @@ export function planReceipt(
     stillCurrent?: (latestKey: string) => boolean;
   },
 ): ReceiptPlan {
-  const base = base32(sha256Bytes(canonicalJson({
-    session_id: credential.session_id,
-    tool: call.tool,
-    input: call.input,
-  }))).slice(0, 20);
+  const base = derivedBase(credential.session_id, call.tool, call.input);
   const eh = base32(sha256Bytes(call.entity)).slice(0, 8);
   const latest = store.latestReceiptKeyForSession(credential, `n1:${eh}:`);
   const parsed = latest ? DERIVED_KEY.exec(latest) : null;
@@ -543,6 +552,20 @@ export interface NoteVerbContext {
   /** Shared with collab_events_wait: at most `max` waits per endpoint. */
   waits: { active: number; max: number };
   signals: Array<AbortSignal | undefined>;
+  /**
+   * Clear this slot after collab_done ended its session, keeping what that
+   * call returned: the session's credentials no longer open the journal, so
+   * a lost-response retry can only be answered from this process.
+   */
+  unbind(left: LeaveMemo): void;
+  /** What the last leave on this slot returned, while no new session has arrived on it. */
+  left(): LeaveMemo | null;
+}
+
+export interface LeaveMemo {
+  session_id: string;
+  base: string;
+  result: Record<string, unknown>;
 }
 
 /** The refusal for a verb other than collab_arrive on a slot with no session (spec 5). */
@@ -567,7 +590,7 @@ export function notArrived(slotKey: string, defaultBinding: NoteBinding | null):
   );
 }
 
-function requireCredential(ctx: NoteVerbContext) {
+export function requireCredential(ctx: NoteVerbContext) {
   const binding = ctx.binding();
   if (!binding) throw notArrived(ctx.slot_key, ctx.bound_slots().find((slot) => slot.key === "")?.binding ?? null);
   if (binding.handle.cursor_recovery) {
@@ -581,7 +604,7 @@ function requireCredential(ctx: NoteVerbContext) {
 }
 
 /** Put this call's binding_key into a suggested call, so a named slot keeps speaking as itself. */
-function withSlot(ctx: Pick<NoteVerbContext, "slot_key">, remedy: NoteRemedy): NoteRemedy {
+export function withSlot(ctx: Pick<NoteVerbContext, "slot_key">, remedy: NoteRemedy): NoteRemedy {
   if (!ctx.slot_key || !("tool" in remedy)) return remedy;
   return { tool: remedy.tool, input: { ...remedy.input, binding_key: ctx.slot_key } };
 }
@@ -594,7 +617,7 @@ function withSlot(ctx: Pick<NoteVerbContext, "slot_key">, remedy: NoteRemedy): N
  * line breaks joined with a space, then held to `max`. Half a character is
  * refused, because the stored text would differ from what was returned.
  */
-function oneLine(value: unknown, field: string, max: number, required: boolean): string | null {
+export function oneLine(value: unknown, field: string, max: number, required: boolean): string | null {
   const ask = { remedy: { say: field === "purpose" ? "Say what you are here to do in one line of at most 200 characters." : `Give ${field} as one line of text.` } };
   if (value === undefined || value === null) {
     if (!required) return null;
@@ -638,7 +661,7 @@ export function actorPrefixFor(environment: Record<string, string | undefined>):
   return "agent";
 }
 
-function minutesSince(at: string, observedAt: string): number | null {
+export function minutesSince(at: string, observedAt: string): number | null {
   const age = Date.parse(observedAt) - Date.parse(at);
   return Number.isFinite(age) ? Math.max(0, Math.floor(age / 60_000)) : null;
 }
@@ -651,7 +674,7 @@ function durationUntil(at: string, observedAt: string): string {
   return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
 }
 
-function statementOf(text: string): string {
+export function statementOf(text: string): string {
   const line = text.split("\n")[0] ?? "";
   return line.length > NOTE_STATEMENT_MAX ? `${line.slice(0, NOTE_STATEMENT_MAX - 1)}…` : line;
 }
@@ -1094,7 +1117,8 @@ function composeBrief(
   const challenges = data.challenges.map((challenge) => challengeView(challenge, data.proposals.some(
     (status) => status.proposal.id === challenge.target_report_id,
   )));
-  const forYou = pending ? pending.entries.map((entry) => formatEntry(entry, byId, me.id)) : [];
+  const recheck = evidenceRechecker(ctx.store);
+  const forYou = pending ? pending.entries.map((entry) => formatEntry(entry, byId, me.id, recheck)) : [];
   const waiting = data.waiting.map((entry) => formatWaiting(ctx, entry));
   const cap = <T>(items: T[]) => items.slice(0, LIST_CAP);
   const shown = [
@@ -1239,23 +1263,85 @@ function journalEvidence(refs: string[]): FormattedEvidence[] {
   });
 }
 
-function noteEvidence(lines: string[]): FormattedEvidence[] {
-  return lines.map((line, index) => {
-    try {
-      const evidence = parseEvidence(line);
-      return { n: index + 1, kind: evidence.kind, locator: evidence.locator };
-    } catch {
-      return { n: index + 1, kind: "text", locator: line };
-    }
-  });
-}
-
 function sessionRef(sessionId: string | null | undefined, fallbackName: string, byId: Map<string, NoteSessionView>) {
   return { session: sessionId ?? null, name: sessionId ? byId.get(sessionId)?.actor ?? fallbackName : fallbackName };
 }
 
+/** At most this much is re-hashed for evidence[].now in one call (spec 5.2). */
+export const NOTE_RECHECK_MAX_BYTES = 64 * 1024 * 1024;
+
+export type EvidenceNow = "same" | "changed" | "missing" | "unavailable" | "not_rechecked";
+export type EvidenceRecheck = (worktreeId: string | null, item: NoteCitedItem) => EvidenceNow;
+
+/**
+ * evidence[].now (spec 5.2): a server-hashed file cite re-hashed against the
+ * citing session's recorded worktree, not the reader's, through the same
+ * containment as the first hash. One budget per call. It reads files only,
+ * outside any transaction, and is information, not a verdict.
+ */
+export function evidenceRechecker(store: CollabStore, budgetBytes = NOTE_RECHECK_MAX_BYTES): EvidenceRecheck {
+  let remaining = budgetBytes;
+  return (worktreeId, item) => {
+    if (!worktreeId) return "unavailable";
+    const root = store.noteWorktreeRoot(worktreeId);
+    if (!root || !existsSync(root)) return "unavailable";
+    if (remaining <= 0) return "not_rechecked";
+    const max = Math.min(MAX_CITED_FILE_BYTES, remaining);
+    const hashed = hashWorktreeFile(root, item.locator, max);
+    switch (hashed.status) {
+      case "hashed":
+        remaining -= hashed.size;
+        return hashed.sha256 === item.sha256 ? "same" : "changed";
+      case "missing":
+        return "missing";
+      case "too_large":
+        // Over what is left of the budget, not necessarily over the cap.
+        return max < MAX_CITED_FILE_BYTES ? "not_rechecked" : "changed";
+      case "unreadable":
+        return "unavailable";
+      default:
+        // Now a link, a directory, or changing under the read: not the bytes that were cited.
+        return "changed";
+    }
+  };
+}
+
+/** A marked note's Evidence lines as items, with how each was observed (spec 5.2). */
+function markedEvidence(lines: string[], cited: NoteEntry["cited"], recheck?: EvidenceRecheck): Array<Record<string, unknown>> {
+  const items = new Map((cited?.items ?? []).map((item) => [item.n, item]));
+  return lines.map((line, index) => {
+    const n = index + 1;
+    let kind = "text";
+    let locator = line;
+    try {
+      const evidence = parseEvidence(line);
+      kind = evidence.kind;
+      locator = evidence.locator;
+    } catch {
+      // Shown as text; it was a note body's line, not a pointer collab can follow.
+    }
+    const item = items.get(n);
+    const journal = (NOTE_JOURNAL_EVIDENCE_KINDS as readonly string[]).includes(kind);
+    const observed = item ? item.observed : journal ? "journal" : "caller";
+    const serverFile = item !== undefined && item.kind === "file" && item.observed === "server";
+    return {
+      n,
+      kind,
+      locator,
+      observed,
+      ...(item?.sha256 !== undefined && item.observed === "server" ? { sha256: item.sha256 } : {}),
+      ...(serverFile && recheck ? { now: recheck(cited!.worktree_id, item) } : {}),
+    };
+  });
+}
+
 /** One inbox entry as an item (spec 5.2): it names the entity the next call takes. */
-export function formatEntry(entry: NoteEntry, byId: Map<string, NoteSessionView>, me: string): Record<string, unknown> {
+export function formatEntry(
+  entry: NoteEntry,
+  byId: Map<string, NoteSessionView>,
+  me: string,
+  recheck?: EvidenceRecheck,
+): Record<string, unknown> {
   const { event, report } = entry;
   const payload = event.payload as Record<string, unknown>;
   const from = sessionRef(event.session_id, event.actor, byId);
@@ -1270,7 +1356,8 @@ export function formatEntry(entry: NoteEntry, byId: Map<string, NoteSessionView>
     let statement = statementOf(report.body);
     let text: string | null = report.body;
     let why: NoteReason[] = [];
-    let evidence = journalEvidence(report.evidence_refs);
+    let evidence: Array<Record<string, unknown>> = journalEvidence(report.evidence_refs) as unknown as Array<Record<string, unknown>>;
+    let limits = report.limits;
     const flags: Record<string, unknown> = {};
     if (entry.marked) {
       // Only a marked body is read as a note; its act, target and addressee still come from storage.
@@ -1279,8 +1366,11 @@ export function formatEntry(entry: NoteEntry, byId: Map<string, NoteSessionView>
         statement = parsed.statement;
         text = parsed.body;
         why = parsed.why;
-        evidence = [...noteEvidence(parsed.evidence), ...journalEvidence(report.evidence_refs)
-          .map((item, index) => ({ ...item, n: parsed.evidence.length + index + 1 }))];
+        // Why cites count the note's own Evidence lines, so those are the list;
+        // the target and the cite event it also points at are in re and observed.
+        evidence = markedEvidence(parsed.evidence, entry.cited, recheck);
+        limits = parsed.limits ?? report.limits;
+        if (parsed.via) flags.via = parsed.via;
         if (parsed.act !== act) flags.act_mismatch = { stored: act, written: parsed.act };
       }
     }
@@ -1305,7 +1395,7 @@ export function formatEntry(entry: NoteEntry, byId: Map<string, NoteSessionView>
       evidence,
       kind: report.kind,
       ...(report.confidence !== "unknown" ? { confidence: report.confidence } : {}),
-      ...(report.limits ? { limits: report.limits } : {}),
+      ...(limits ? { limits } : {}),
       ...flags,
     };
   }
@@ -1596,8 +1686,9 @@ function inboxResult(
   const byId = new Map(data.sessions.map((view) => [view.id, view]));
   const me = data.session.id;
   const entries = passes.flatMap((pass) => pass.entries);
+  const recheck = evidenceRechecker(ctx.store);
   const items = entries.map((entry) =>
-    entry.for_me ? formatEntry(entry, byId, me) : subjectLine(entry, byId, me));
+    entry.for_me ? formatEntry(entry, byId, me, recheck) : subjectLine(entry, byId, me));
   const advice: string[] = [];
   if (format === "note") advice.push("format: note renders one thread; pass about with an id or handle.");
   if (passes.some((pass) => pass.mark.clamped)) advice.push(MARK_CLAMPED_ADVICE);
@@ -1751,7 +1842,8 @@ function aboutView(ctx: NoteVerbContext, binding: NoteBinding, about: string, fo
   const advice: string[] = [];
   if (thread.mark.clamped) advice.push(MARK_CLAMPED_ADVICE);
   if (thread.truncated) advice.push(`This thread lists its first ${thread.answers.length} answers only.`);
-  const view = thread.kind === "task" ? taskView(thread, byId, me) : reportView(thread, byId, me, advice);
+  const recheck = evidenceRechecker(ctx.store);
+  const view = thread.kind === "task" ? taskView(thread, byId, me, recheck) : reportView(thread, byId, me, advice, recheck);
   const result: Record<string, unknown> = {
     ok: true,
     ...view,
@@ -1787,6 +1879,7 @@ function reportView(
   byId: Map<string, NoteSessionView>,
   me: string,
   advice: string[],
+  recheck: EvidenceRecheck,
 ): Record<string, unknown> {
   const root = thread.root!;
   const report = root.report!;
@@ -1802,15 +1895,20 @@ function reportView(
       id: report.id,
       handle: reportHandle(report.id, thread.termed),
     },
-    root: formatEntry(root, byId, me),
-    answers: thread.answers.map((entry) => formatEntry(entry, byId, me)),
+    root: formatEntry(root, byId, me, recheck),
+    answers: thread.answers.map((entry) => formatEntry(entry, byId, me, recheck)),
     state: {
       challenges: thread.challenges.map((challenge) => challengeView(challenge, thread.termed && challenge.target_report_id === report.id)),
     },
   };
 }
 
-function taskView(thread: NoteThreadData, byId: Map<string, NoteSessionView>, me: string): Record<string, unknown> {
+function taskView(
+  thread: NoteThreadData,
+  byId: Map<string, NoteSessionView>,
+  me: string,
+  recheck: EvidenceRecheck,
+): Record<string, unknown> {
   const task = thread.task!;
   const holder = task.assignee_session_id ? byId.get(task.assignee_session_id) : undefined;
   const generation = thread.reviews.at(-1)?.review_generation ?? null;
@@ -1848,7 +1946,7 @@ function taskView(thread: NoteThreadData, byId: Map<string, NoteSessionView>, me
           && task.review_status !== "pending",
       })),
     },
-    thread: thread.answers.map((entry) => formatEntry(entry, byId, me)),
+    thread: thread.answers.map((entry) => formatEntry(entry, byId, me, recheck)),
   };
 }
 

@@ -140,7 +140,7 @@ import {
   mkdirSync as mkdirSync2,
   openSync as openSync3
 } from "fs";
-import { dirname as dirname2, isAbsolute as isAbsolute2, join as join2, posix, resolve as resolve4 } from "path";
+import { dirname as dirname2, isAbsolute as isAbsolute3, join as join2, posix, resolve as resolve4 } from "path";
 
 // src/canonical.ts
 function canonicalJson(value) {
@@ -423,6 +423,7 @@ function aiPosition(input) {
 import { createHash as createHash2 } from "crypto";
 import {
   closeSync as closeSync2,
+  constants as fsConstants,
   existsSync as existsSync2,
   fstatSync,
   lstatSync as lstatSync2,
@@ -432,7 +433,7 @@ import {
   realpathSync,
   statSync
 } from "fs";
-import { resolve as resolve3 } from "path";
+import { isAbsolute as isAbsolute2, relative, resolve as resolve3, sep } from "path";
 import { spawnSync } from "child_process";
 var GIT_TIMEOUT_MS = 5000;
 var MAX_GIT_OUTPUT = 1024 * 1024;
@@ -675,6 +676,7 @@ function inspectSuccessorCommit(rootPath, commitSha, parentSha) {
   }
   return { ok: true, commit_sha: commitSha, parent_sha: parentSha, changes };
 }
+var MAX_CITED_FILE_BYTES = 16 * 1024 * 1024;
 function worktreeId(rootPath, fingerprint) {
   return `wt_${sha2562(`${rootPath}\x00${fingerprint}`).slice(0, 24)}`;
 }
@@ -959,6 +961,7 @@ class CollabStore {
   repositoryDiscovery;
   eventReader;
   closed = false;
+  ambientReceiptPlan = null;
   constructor(path, options = {}) {
     this.now = options.now ?? (() => new Date);
     this.migrationFailpoint = options.migration_failpoint;
@@ -4860,8 +4863,9 @@ class CollabStore {
         this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), session.id);
         return JSON.parse(existing.response_json);
       }
-      if (options.receipt_plan)
-        this.requireReceiptPlan(session, options.receipt_plan);
+      const receiptPlan = options.receipt_plan ?? this.ambientPlanFor(idempotencyKey);
+      if (receiptPlan)
+        this.requireReceiptPlan(session, receiptPlan);
       this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), session.id);
       const guardNonce = `guard_${randomUUID()}`;
       this.db.query(`INSERT INTO v2_write_guard (nonce, enabled) VALUES (?, 1)`).run(guardNonce);
@@ -5388,6 +5392,7 @@ class CollabStore {
     const event = this.appendEvent(session.workspace_id, "report.posted", id, session.actor, {
       ...input.to_person ? { to_person: true } : {},
       ...input.about_proposal_id ? { about_proposal_id: input.about_proposal_id } : {},
+      ...input.note ? { note: input.note } : {},
       task_id: input.task_id,
       to_session_id: input.to_session_id,
       kind: input.kind,
@@ -5898,6 +5903,172 @@ class CollabStore {
       };
     }, input.receipt_plan ? { receipt_plan: input.receipt_plan } : {});
   }
+  citeEvidenceForSession(input) {
+    const cite = normalizeNoteCite({ worktree_id: input.worktree_id, items: input.items });
+    if (cite.items.length === 0)
+      throw new CollabError("invalid_evidence", "A cite needs at least one outside evidence item");
+    return this.mutateAsSession(input, input.idempotency_key, "notes.cite.v1", cite, (session) => this.appendNoteCite(session, cite), input.receipt_plan ? { receipt_plan: input.receipt_plan } : {});
+  }
+  appendNoteForSession(input) {
+    if (!Array.isArray(input.reports) || input.reports.length < 1 || input.reports.length > 2) {
+      throw new CollabError("invalid_note_reports", "A note posts one report, or a challenge and the withdrawal it replaces");
+    }
+    const cite = input.cite && input.cite.items.length > 0 ? normalizeNoteCite(input.cite) : null;
+    const reports = input.reports.map((report, index) => normalizeNoteReport(report, index));
+    if (reports.some((report) => report.cite_event) && !cite) {
+      throw new CollabError("invalid_note_reports", "A report cites this note's evidence, but the note has none");
+    }
+    return this.mutateAsSession(input, input.idempotency_key, "notes.note.v1", { cite, reports }, (session) => {
+      const cited = cite ? this.appendNoteCite(session, cite) : null;
+      const posted = [];
+      for (const report of reports) {
+        const evidenceRefs = normalizeEvidenceRefs([
+          ...report.evidence_refs,
+          ...report.cite_event ? [`event:${cited.event_id}`] : [],
+          ...report.cite_earlier.map((index) => `report:${posted[index].id}`)
+        ]);
+        const normalized = {
+          task_id: report.task_id,
+          to_session_id: report.to_session_id,
+          kind: report.kind,
+          body: report.body,
+          evidence_refs: evidenceRefs,
+          confidence: "unknown",
+          confidence_basis: null,
+          limits: null,
+          relation: report.relation,
+          target_report_id: report.target_report_id,
+          authority_scope: null,
+          authority_basis: null,
+          ...report.to_person ? { to_person: true } : {}
+        };
+        this.validateReportInput(session, normalized);
+        this.refuseProposalRewrite(normalized);
+        if (report.about_proposal_id) {
+          const termed = this.db.query(`SELECT workspace_id FROM proposal_terms WHERE report_id = ?`).get(report.about_proposal_id);
+          if (!termed || termed.workspace_id !== session.workspace_id) {
+            throw new CollabError("proposal_not_found", "about_proposal_id must name a proposal in this workspace");
+          }
+        }
+        posted.push(this.appendReportInternal(session, {
+          ...normalized,
+          ...report.about_proposal_id ? { about_proposal_id: report.about_proposal_id } : {},
+          note: NOTE_FORMAT
+        }));
+      }
+      return { reports: posted, cite: cited };
+    }, input.receipt_plan ? { receipt_plan: input.receipt_plan } : {});
+  }
+  appendNoteCite(session, cite) {
+    const hasFiles = cite.items.some((item) => item.kind === "file");
+    if (hasFiles && cite.worktree_id !== session.worktree_id) {
+      throw new CollabError("cite_worktree_mismatch", "File evidence is cited against the citing session's own worktree");
+    }
+    const citeId = `cite_${randomUUID()}`;
+    const payload = {
+      cite_id: citeId,
+      by_session_id: session.id,
+      ...hasFiles ? { worktree_id: session.worktree_id } : {},
+      items: cite.items
+    };
+    assertNotePayload(payload);
+    const event = this.appendEvent(session.workspace_id, "evidence.cited", citeId, session.actor, payload, session.id);
+    return {
+      cite_id: citeId,
+      event_id: event.id,
+      sequence: event.sequence,
+      worktree_id: hasFiles ? session.worktree_id : null,
+      items: cite.items
+    };
+  }
+  noteTarget(workspaceId, reportId) {
+    return this.db.transaction(() => {
+      const report = this.requireReport(validateId(reportId, "report_id"));
+      if (report.workspace_id !== workspaceId) {
+        throw new CollabError("report_not_found", `Report '${reportId}' was not found in this workspace`);
+      }
+      const obsoleted = this.activeObsoletionTargets(workspaceId);
+      const termed = this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(report.id) !== null;
+      const opened = this.db.query(`
+        SELECT payload_json FROM events
+        WHERE workspace_id = ? AND sequence > ? AND type = 'ballot.opened' AND entity_id = ?
+        ORDER BY sequence LIMIT 1
+      `).get(workspaceId, report.event_sequence, report.id);
+      let ballot = null;
+      if (opened) {
+        const closed = this.db.query(`
+          SELECT 1 FROM events WHERE workspace_id = ? AND sequence > ? AND type = 'ballot.closed' AND entity_id = ? LIMIT 1
+        `).get(workspaceId, report.event_sequence, report.id) !== null;
+        const closesAt = JSON.parse(opened.payload_json).closes_at;
+        ballot = { open: !closed && (typeof closesAt !== "string" || this.timestamp() < closesAt) };
+      }
+      let completion = null;
+      if (report.task_id) {
+        const event = this.db.query(`
+          SELECT payload_json FROM events
+          WHERE workspace_id = ? AND sequence > ? AND entity_id = ?
+            AND type IN ('task.reported_complete', 'task.completed')
+          ORDER BY sequence LIMIT 1
+        `).get(workspaceId, report.event_sequence, report.task_id);
+        const completed = event && JSON.parse(event.payload_json).completion_report_id === report.id;
+        if (completed) {
+          const task = this.requireTaskRow(workspaceId, report.task_id);
+          const current = task.completion_report_id === report.id;
+          completion = {
+            task_id: task.id,
+            current,
+            pending_review: current && task.status === "completed" && task.review_status === "pending"
+          };
+        }
+      }
+      const authorRow = report.from_session_id ? this.db.query(`SELECT * FROM coordination_sessions WHERE id = ?`).get(report.from_session_id) : null;
+      return {
+        report,
+        termed,
+        ballot,
+        obsoleted: obsoleted.has(report.id),
+        completion_of: completion,
+        challenges: this.noteChallenges(workspaceId).filter((challenge) => challenge.target_report_id === report.id),
+        author: authorRow ? {
+          id: authorRow.id,
+          actor: authorRow.actor,
+          status: authorRow.status,
+          liveness: sessionLiveness(authorRow, this.timestamp()),
+          last_seen_at: authorRow.last_seen_at,
+          voice_id: this.consentVoice(authorRow.id)
+        } : null
+      };
+    }).deferred();
+  }
+  noteObsoleted(workspaceId, ids) {
+    const obsoleted = this.activeObsoletionTargets(workspaceId);
+    return ids.filter((id) => obsoleted.has(id));
+  }
+  notePathConflicts(workspaceId, paths, options = {}) {
+    this.requireWorkspace(workspaceId);
+    return this.taskPathConflicts({
+      workspace_id: workspaceId,
+      id: options.except_task_id ?? "",
+      path_scopes: normalizePathScopes(paths),
+      work_mode: options.work_mode ?? "edit"
+    });
+  }
+  noteWorktreeRoot(worktreeId2) {
+    const row = this.db.query(`SELECT root_path FROM worktrees WHERE id = ?`).get(worktreeId2);
+    return row?.root_path ?? null;
+  }
+  latestReceiptKeyForBase(credential, base) {
+    const session = this.authenticateSession(credential);
+    if (!/^[A-Z2-7]{20}$/.test(base))
+      throw new CollabError("invalid_receipt_base", "A derived key base is 20 base32 characters");
+    const exact = new RegExp(`^n1:[A-Z2-7]{8}:\\d{6}:${base}(?::\\d{2})?$`);
+    const rows = this.db.query(`
+      SELECT idempotency_key FROM mutations
+      WHERE workspace_id = ? AND actor = ? AND idempotency_key LIKE ?
+      ORDER BY rowid DESC LIMIT 20
+    `).all(session.workspace_id, `session:${session.id}`, `n1:________:______:${base}%`);
+    return rows.find((row) => exact.test(row.idempotency_key))?.idempotency_key ?? null;
+  }
   readReceiptByKey(credential, key) {
     const session = this.authenticateSession(credential);
     const idempotencyKey = validateIdempotencyKey(key);
@@ -5924,6 +6095,24 @@ class CollabStore {
       LIMIT 1
     `).get(session.workspace_id, `session:${session.id}`, prefix, upper);
     return row?.idempotency_key ?? null;
+  }
+  withReceiptPlan(plan, run) {
+    if (!plan)
+      return run();
+    if (this.ambientReceiptPlan)
+      throw new CollabError("receipt_plan_nested", "A receipt plan is already in force");
+    this.ambientReceiptPlan = plan;
+    try {
+      return run();
+    } finally {
+      this.ambientReceiptPlan = null;
+    }
+  }
+  ambientPlanFor(idempotencyKey) {
+    const plan = this.ambientReceiptPlan;
+    if (!plan)
+      return;
+    return idempotencyKey === plan.key || idempotencyKey.startsWith(`${plan.key}:`) ? plan : undefined;
   }
   requireReceiptPlan(session, plan) {
     const latest = this.latestReceiptKey(session, plan.prefix);
@@ -6392,16 +6581,37 @@ class CollabStore {
     }
     const taskId = event.type.startsWith("task.") ? event.entity_id : event.type.startsWith("handoff.") ? typeof payload.task_id === "string" ? payload.task_id : typeof payload.handoff?.task_id === "string" ? payload.handoff.task_id : null : report?.task_id ?? null;
     const taskRow = taskId ? this.readTaskRow(session.workspace_id, taskId) : null;
+    const marked = event.type === "report.posted" && payload.note === NOTE_FORMAT;
     return {
       event,
       for_me: forMe,
       why_you: forMe ? this.noteWhyYou(event, session.id) : null,
       report,
-      marked: event.type === "report.posted" && payload.note === NOTE_FORMAT,
+      marked,
+      cited: marked && report ? this.noteCiteOf(session.workspace_id, report) : null,
       termed: report !== null && this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(report.id) !== null,
       to_person: event.type === "report.posted" && payload.to_person === true,
       task: taskRow ? { id: taskRow.id, title: taskRow.title } : null
     };
+  }
+  noteCiteOf(workspaceId, report) {
+    for (const ref of report.evidence_refs) {
+      if (!ref.startsWith("event:"))
+        continue;
+      const row = this.db.query(`
+        SELECT payload_json FROM events WHERE workspace_id = ? AND id = ? AND type = 'evidence.cited'
+      `).get(workspaceId, ref.slice("event:".length));
+      if (!row)
+        continue;
+      const payload = JSON.parse(row.payload_json);
+      return {
+        event_id: ref.slice("event:".length),
+        by_session_id: typeof payload.by_session_id === "string" ? payload.by_session_id : null,
+        worktree_id: typeof payload.worktree_id === "string" ? payload.worktree_id : null,
+        items: Array.isArray(payload.items) ? payload.items : []
+      };
+    }
+    return null;
   }
   noteWhyYou(event, sessionId) {
     const payload = event.payload ?? {};
@@ -6827,7 +7037,7 @@ function normalizePathScopes(scopes) {
   }
   let totalLength = 0;
   const normalized = scopes.map((scope) => {
-    if (typeof scope !== "string" || !scope || scope.length > MAX_PATH_SCOPE_LENGTH || scope.includes("\x00") || scope.includes("\\") || isAbsolute2(scope)) {
+    if (typeof scope !== "string" || !scope || scope.length > MAX_PATH_SCOPE_LENGTH || scope.includes("\x00") || scope.includes("\\") || isAbsolute3(scope)) {
       throw new CollabError("invalid_path_scope", "Path scopes must be non-empty repository-relative POSIX paths", { scope });
     }
     totalLength += scope.length;
@@ -7072,6 +7282,88 @@ function proposalPersonActFromRow(row) {
     proof: proof_json ? JSON.parse(proof_json) : null
   };
 }
+var NOTE_OUTSIDE_EVIDENCE_KINDS = ["file", "commit", "test", "url", "data", "msg"];
+var NOTE_CITE_LOCATOR_MAX = 1000;
+function normalizeNoteCite(cite) {
+  if (!Array.isArray(cite.items) || cite.items.length > 16) {
+    throw new CollabError("invalid_evidence", "A note cites at most 16 evidence items");
+  }
+  const seen = new Set;
+  const items = cite.items.map((item) => {
+    if (!item || typeof item !== "object")
+      throw new CollabError("invalid_evidence", "A cited item is an object");
+    if (!Number.isInteger(item.n) || item.n < 1 || item.n > 16 || seen.has(item.n)) {
+      throw new CollabError("invalid_evidence", "A cited item's n is its distinct 1-based Evidence position");
+    }
+    seen.add(item.n);
+    if (!NOTE_OUTSIDE_EVIDENCE_KINDS.includes(item.kind)) {
+      throw new CollabError("invalid_evidence", `A cited item's kind is one of ${NOTE_OUTSIDE_EVIDENCE_KINDS.join(", ")}`);
+    }
+    const locator = cleanText(typeof item.locator === "string" ? item.locator : "", "evidence", NOTE_CITE_LOCATOR_MAX);
+    if (/[\u0000-\u001f\u007f]/.test(locator) || hasLoneSurrogate(locator)) {
+      throw new CollabError("invalid_evidence", "A cited locator is one line of well-formed text");
+    }
+    if (!["server", "caller", "not_found"].includes(item.observed)) {
+      throw new CollabError("invalid_evidence", "A cited item is observed by the server or the caller, or not found");
+    }
+    if (item.observed === "not_found" && item.kind !== "commit") {
+      throw new CollabError("invalid_evidence", "Only a commit can be cited as not found");
+    }
+    if (item.observed === "server" && item.kind !== "file" && item.kind !== "commit") {
+      throw new CollabError("invalid_evidence", "The server observes only files and commits");
+    }
+    if (item.sha256 !== undefined && !/^[0-9a-f]{64}$/.test(item.sha256)) {
+      throw new CollabError("invalid_evidence", "A cited sha256 is 64 lower-case hex digits");
+    }
+    if (item.kind === "file" && item.observed === "server" && item.sha256 === undefined) {
+      throw new CollabError("invalid_evidence", "A server-observed file carries the server's hash");
+    }
+    if (item.exit !== undefined && !Number.isSafeInteger(item.exit)) {
+      throw new CollabError("invalid_evidence", "A cited exit status is an integer");
+    }
+    if (item.lines !== undefined && !/^\d{1,9}(?:-\d{1,9})?$/.test(item.lines)) {
+      throw new CollabError("invalid_evidence", "A cited line range is a or a-b");
+    }
+    return {
+      n: item.n,
+      kind: item.kind,
+      locator,
+      ...item.sha256 !== undefined ? { sha256: item.sha256 } : {},
+      ...item.exit !== undefined ? { exit: item.exit } : {},
+      ...item.lines !== undefined ? { lines: item.lines } : {},
+      observed: item.observed
+    };
+  });
+  return {
+    worktree_id: cite.worktree_id === null ? null : validateId(cite.worktree_id, "worktree_id"),
+    items
+  };
+}
+function normalizeNoteReport(report, index) {
+  if (report.kind !== "observation" && report.kind !== "inference") {
+    throw new CollabError("invalid_report_kind", "A note is an observation or an inference");
+  }
+  if (!["informs", "supports", "challenges", "resolves", "withdraws"].includes(report.relation)) {
+    throw new CollabError("invalid_report_relation", "A note never corrects or supersedes");
+  }
+  const earlier = report.cite_earlier ?? [];
+  if (!Array.isArray(earlier) || earlier.some((at) => !Number.isInteger(at) || at < 0 || at >= index)) {
+    throw new CollabError("invalid_note_reports", "cite_earlier names reports this call posted before this one");
+  }
+  return {
+    kind: report.kind,
+    relation: report.relation,
+    body: cleanText(report.body, "body", MAX_REPORT_BODY),
+    task_id: report.task_id ? validateId(report.task_id, "task_id") : null,
+    to_session_id: report.to_session_id ? validateId(report.to_session_id, "to_session_id") : null,
+    to_person: report.to_person === true,
+    target_report_id: report.target_report_id ? validateId(report.target_report_id, "target_report_id") : null,
+    about_proposal_id: report.about_proposal_id ? validateId(report.about_proposal_id, "about_proposal_id") : null,
+    evidence_refs: normalizeEvidenceRefs(report.evidence_refs ?? []),
+    cite_event: report.cite_event === true,
+    cite_earlier: [...earlier]
+  };
+}
 var NOTE_SCAN_MAX_EVENTS = 2000;
 var NOTE_SCAN_MAX_BYTES = 8 * 1024 * 1024;
 var NOTE_INBOX_MAX_LIMIT = 50;
@@ -7231,18 +7523,18 @@ function artifactRepositoryPath(uri, rootPath) {
   }
   if (!value || value.includes("\x00") || value.includes("\\"))
     return null;
-  let relative;
-  if (isAbsolute2(value)) {
+  let relative2;
+  if (isAbsolute3(value)) {
     const absolute = posix.normalize(value);
     if (!absolute.startsWith(`${rootPath}/`))
       return null;
-    relative = absolute.slice(rootPath.length + 1);
+    relative2 = absolute.slice(rootPath.length + 1);
   } else {
-    relative = posix.normalize(value);
+    relative2 = posix.normalize(value);
   }
-  if (!relative || relative === "." || relative === ".." || relative.startsWith("../") || relative.endsWith("/") || relative === ".git" || relative.startsWith(".git/"))
+  if (!relative2 || relative2 === "." || relative2 === ".." || relative2.startsWith("../") || relative2.endsWith("/") || relative2 === ".git" || relative2.startsWith(".git/"))
     return null;
-  return relative;
+  return relative2;
 }
 function pathWithinScopes(path, scopes) {
   return scopes.some((scope) => path === scope || path.startsWith(`${scope}/`));
