@@ -710,8 +710,9 @@ function prepareReader(db: Database): Database {
  * The knock for the host nearest `startPid`: walk the ancestry (start
  * inclusive) to the nearest process recorded as a binding's host with the
  * same start time. Exactly one active session must be bound there; none or
- * several (one Desktop app-server hosting several threads) is silence (null),
- * never a guess. With mark_tapped, the returned `new` items are recorded in
+ * several (one Desktop app-server hosting several threads, or two collab MCP
+ * processes under one host) is silence (null), never a guess. Named child
+ * slots never make it several: only a default-slot session writes a binding. With mark_tapped, the returned `new` items are recorded in
  * the private knock ledger before they are returned, so they never repeat;
  * a session at held rest is reported but never marked.
  */

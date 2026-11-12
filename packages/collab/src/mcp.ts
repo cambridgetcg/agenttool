@@ -90,9 +90,10 @@ export interface CollabMcpServerOptions {
   /** Host-held credentials only, never a model-facing resume argument. */
   resumed_sessions?: Record<string, BoundSession>;
   /**
-   * Records which host process runs each session this server binds, in
-   * `dirname(db)/collab-sessions/<id>.host.json`. The bin supplies it; when
-   * omitted (tests, in-memory stores) no binding file is written.
+   * Records which host process runs this server's default-slot session, in
+   * `dirname(db)/collab-sessions/<id>.host.json`. Named child slots write
+   * none. The bin supplies it; when omitted (tests, in-memory stores) no
+   * binding file is written.
    */
   host_binding?: HostBindingRecorder;
 }
@@ -104,17 +105,31 @@ interface BoundSession {
 
 export function buildCollabMcpServer(
   store: CollabStore,
-  options: CollabMcpServerOptions = {},
+  given: CollabMcpServerOptions = {},
 ): McpServer {
   type Slot = { key: string; binding: BoundSession | null };
-  const slots = new Map<string, Slot>([["", { key: "", binding: options.resumed_session ?? null }]]);
-  for (const [key, binding] of Object.entries(options.resumed_sessions ?? {})) {
+  const slots = new Map<string, Slot>([["", { key: "", binding: given.resumed_session ?? null }]]);
+  for (const [key, binding] of Object.entries(given.resumed_sessions ?? {})) {
     if (!key || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(key)) {
       throw new CollabError("invalid_binding_key", "A named binding requires a valid non-empty key");
     }
     slots.set(key, { key, binding });
   }
   const requestSlot = new AsyncLocalStorage<Slot>();
+  // One rule, one place: a host binding names the session this host's own
+  // conversation holds, and only the default slot is that session. Every
+  // `options.host_binding` use below passes through this guard, so a named
+  // child can never write one. That absence is also what holds a child's wake:
+  // the tap, the doorbell and the channel all read a missing binding as "no
+  // host can deliver here".
+  const options: CollabMcpServerOptions = {
+    ...given,
+    host_binding: given.host_binding && {
+      record: (sessionId, credentialFile) =>
+        requestSlot.getStore()?.key === "" ? given.host_binding!.record(sessionId, credentialFile) : false,
+      forget: (sessionId) => given.host_binding!.forget(sessionId),
+    },
+  };
   const state = {
     get binding() { return requestSlot.getStore()!.binding; },
     set binding(value: BoundSession | null) { requestSlot.getStore()!.binding = value; },

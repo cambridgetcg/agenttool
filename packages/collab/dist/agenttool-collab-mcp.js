@@ -29019,15 +29019,22 @@ var localDestructiveMutation = {
   idempotentHint: false,
   openWorldHint: false
 };
-function buildCollabMcpServer(store, options = {}) {
-  const slots = new Map([["", { key: "", binding: options.resumed_session ?? null }]]);
-  for (const [key2, binding] of Object.entries(options.resumed_sessions ?? {})) {
+function buildCollabMcpServer(store, given = {}) {
+  const slots = new Map([["", { key: "", binding: given.resumed_session ?? null }]]);
+  for (const [key2, binding] of Object.entries(given.resumed_sessions ?? {})) {
     if (!key2 || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(key2)) {
       throw new CollabError("invalid_binding_key", "A named binding requires a valid non-empty key");
     }
     slots.set(key2, { key: key2, binding });
   }
   const requestSlot = new AsyncLocalStorage;
+  const options = {
+    ...given,
+    host_binding: given.host_binding && {
+      record: (sessionId2, credentialFile) => requestSlot.getStore()?.key === "" ? given.host_binding.record(sessionId2, credentialFile) : false,
+      forget: (sessionId2) => given.host_binding.forget(sessionId2)
+    }
+  };
   const state = {
     get binding() {
       return requestSlot.getStore().binding;

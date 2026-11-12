@@ -22,7 +22,8 @@ export const HOST_BINDING_FORMAT = "agenttool.collab-host-binding/1" as const;
 /**
  * Which host process runs a bound session, written by that session's own MCP
  * process from the process tree. Non-secret: it names the credential file but
- * never holds the bearer.
+ * never holds the bearer. One file names the default-slot session of one MCP
+ * process; named child slots write none.
  */
 export interface HostBinding {
   format: typeof HOST_BINDING_FORMAT;

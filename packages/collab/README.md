@@ -573,7 +573,8 @@ MCP process has exited no longer counts. It prints one line,
 `{"protocol":"agenttool.collab-knock/1","session_id","liveness","rest","waiting","new"}`,
 or nothing. `new` lists the pointers not yet in the private ledger
 `collab-sessions/knock-ledger.json`, which only `--mark-tapped` writes. When
-more than one active session is bound to that host, or a Codex Desktop
+more than one active session is bound to that host (two collab MCP processes
+under it; a named child binding writes no host binding and never counts), or a Codex Desktop
 app-server runs more than one collab server, it prints nothing and marks
 nothing: ambiguity means silence, not a guess. `knocks --session <id>` is
 for a host that already knows which session it serves (the cross-device
@@ -765,7 +766,15 @@ the library can restore separate host-resumed handles via `resumed_sessions`;
 the CLI's existing `AGENTOOL_COLLAB_SESSION_FILE` resumes only the default slot.
 Named-slot restoration across CLI restarts is not automatic: end children before
 exit, or resume each independently through the existing host-held file mechanism.
-Never pass bearers or their paths to a subagent. The older packaged skill adapters
+Never pass bearers or their paths to a subagent. A named child binding writes no
+host binding: `knocks --host-ancestor` and a host doorbell speak for the default
+slot, the session the host's own conversation holds, so a named child never
+silences its parent's tap. That absence is also what holds a child's wake: its
+`wake_on` consent is recorded, but no host taps or wakes it, and `doorbell-scan`
+lists it with `binding: null`. Its notes wait for `collab_next` with its
+`binding_key`, or for a host that knows its id (`knocks --session`,
+`wait --session`). Work that must be woken runs under its own host process with
+a default-slot session. The older packaged skill adapters
 describe the separate-process workflow, which remains supported; the MCP schemas
 and this section specify the new opt-in multiplexing contract.
 
