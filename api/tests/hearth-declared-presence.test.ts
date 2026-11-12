@@ -2,7 +2,8 @@
  *
  *  Pure rules, rendered SQL and source scans; no database, so this runs in
  *  the hermetic tier. The database tier (tests/hearth.test.ts) smoke-tests
- *  the query against PostgreSQL; it checks order only where seats exist.
+ *  the query against PostgreSQL; it checks order only where seats exist,
+ *  and runs the end clause over sample values.
  *
  *  Doctrine: docs/HEARTH.md */
 
@@ -18,11 +19,13 @@ import {
   declaredSatAt,
   declaredSeatEnd,
   HEARTH_EMPTY_NOTE,
+  HEARTH_INSTANT_SHAPE,
   HEARTH_PRESENCE_LINE_MAX,
   HEARTH_SAT_AT_SKEW_MS,
   HEARTH_SEATED_NOTE,
   hearthSeatFilter,
   hearthSeatListed,
+  hearthSeatNotEnded,
   hearthSeatOrder,
   type HearthSeatRow,
 } from "../src/services/hearth/declared-presence";
@@ -74,9 +77,11 @@ describe("declaredHearthPeers — what a peer is shown", () => {
 
   test("nothing else in metadata reaches a peer, and a peer has no id field", () => {
     const id = "6f1d0c52-9a7e-4a53-8f0b-2f4f6f7f0a11";
+    const until = "2026-11-11T06:30:00.000Z";
     const peers = peersOf([
       row(id, {
         ...seat("2026-11-10T10:00:00.000Z", "here"),
+        hearth_until: until,
         warmth: "warm",
         last_activity_at: "2026-11-10T09:59:00.000Z",
         resting: true,
@@ -84,11 +89,36 @@ describe("declaredHearthPeers — what a peer is shown", () => {
         anything: { nested: "secret-value" },
       }),
     ]);
+    expect(peers).toHaveLength(1);
     const text = JSON.stringify(peers);
-    for (const leaked of ["warmth", "last_activity_at", "resting", "quiet_reason", "secret-value", "hearth_visible"]) {
+    for (const leaked of [
+      "warmth",
+      "last_activity_at",
+      "resting",
+      "quiet_reason",
+      "secret-value",
+      "hearth_visible",
+      "hearth_until",
+      until,
+    ]) {
       expect(text).not.toContain(leaked);
     }
     expect(Object.keys(peers[0]!)).toEqual(["did", "name", "presence_line", "sat_at"]);
+  });
+
+  test("a seat past its end is dropped before the limit, so it takes no place", () => {
+    const lapsed = row("a-lapsed", { ...seat("2026-11-10T23:00:00.000Z"), hearth_until: "2026-11-10T23:30:00.000Z" });
+    const unreadable = row("b-unreadable", { ...seat("2026-11-10T22:00:00.000Z"), hearth_until: "soon" });
+    const nulled = row("c-null", { ...seat("2026-11-10T21:00:00.000Z"), hearth_until: null });
+    const bounded = row("d-bounded", { ...seat("2026-11-10T09:00:00.000Z"), hearth_until: "2026-11-11T00:00:00.001Z" });
+    const open = row("e-open", seat("2026-11-10T08:00:00.000Z"));
+    const rows = [lapsed, unreadable, nulled, bounded, open];
+    for (const order of [rows, [...rows].reverse()]) {
+      expect(peersOf(order, { limit: 1 }).map((p) => p.did)).toEqual(["did:at:d-bounded"]);
+      expect(peersOf(order).map((p) => p.did)).toEqual(["did:at:d-bounded", "did:at:e-open"]);
+    }
+    // One millisecond later the bounded seat has ended too.
+    expect(declaredHearthPeers(rows, { nowMs: NOW + 1 }).map((p) => p.did)).toEqual(["did:at:e-open"]);
   });
 
   test("most recent sit first, unknown sat_at last, ties by id; any input order gives the same list", () => {
@@ -241,9 +271,11 @@ describe("what every reader is told", () => {
   test("the note states order, lifetime and that a seat is not liveness", () => {
     expect(HEARTH_SEATED_NOTE).toContain("most recent sit first");
     expect(HEARTH_SEATED_NOTE).toContain("until the agent stands up");
+    expect(HEARTH_SEATED_NOTE).toContain("or until an end the agent chose when it sat; that end is not shown");
     expect(HEARTH_SEATED_NOTE).toContain("Nothing here is inferred from activity");
     expect(HEARTH_SEATED_NOTE).toContain("does not mean online, active or available");
     expect(HEARTH_EMPTY_NOTE).toContain("No one is sitting");
+    expect(HEARTH_EMPTY_NOTE).toContain("with hours or until");
     for (const note of [HEARTH_SEATED_NOTE, HEARTH_EMPTY_NOTE]) {
       for (const tier of ["warm", "resting", "tending"]) expect(note).not.toContain(tier);
     }
@@ -253,14 +285,34 @@ describe("what every reader is told", () => {
 describe("the seat query", () => {
   const dialect = new PgDialect();
 
-  test("filters on the declared flag and active status only", () => {
-    const all = dialect.sqlToQuery(hearthSeatFilter());
-    expect(all.sql).toContain("->>'hearth_visible' = 'true'");
-    expect(all.params).toEqual(["active"]);
+  const NOW_ISO = new Date(NOW).toISOString();
 
-    const others = dialect.sqlToQuery(hearthSeatFilter("11111111-1111-4111-8111-111111111111"));
+  test("filters on the declared flag, active status and an end not passed, against one bound clock", () => {
+    const all = dialect.sqlToQuery(hearthSeatFilter({ nowMs: NOW }));
+    expect(all.sql).toContain("->>'hearth_visible' = 'true'");
+    expect(all.sql).toContain("->'hearth_until' is null or (");
+    expect(all.sql).toContain(`->>'hearth_until' ~ '${HEARTH_INSTANT_SHAPE}'`);
+    expect(all.sql).toContain("->>'hearth_until' > $2");
+    expect(all.params).toEqual(["active", NOW_ISO]);
+    // Stored text is compared as text: nothing is cast, and the clock is
+    // the caller's, not the database's.
+    for (const absent of ["now()", "::timestamptz", "to_timestamp", "::timestamp"]) {
+      expect({ absent, present: all.sql.includes(absent) }).toEqual({ absent, present: false });
+    }
+
+    const others = dialect.sqlToQuery(
+      hearthSeatFilter({ nowMs: NOW, excludeId: "11111111-1111-4111-8111-111111111111" }),
+    );
     expect(others.sql).toContain("<>");
-    expect(others.params).toEqual(["active", "11111111-1111-4111-8111-111111111111"]);
+    expect(others.params).toEqual(["active", NOW_ISO, "11111111-1111-4111-8111-111111111111"]);
+  });
+
+  test("the end clause is its own builder, with the time as a parameter", () => {
+    const clause = dialect.sqlToQuery(hearthSeatNotEnded(sql`m`, NOW_ISO));
+    expect(clause.sql).toBe(
+      `(m->'hearth_until' is null or (m->>'hearth_until' ~ '${HEARTH_INSTANT_SHAPE}' and m->>'hearth_until' > $1))`,
+    );
+    expect(clause.params).toEqual([NOW_ISO]);
   });
 
   test("orders by the declared sat_at, then id, and reads no activity table", () => {
@@ -273,9 +325,29 @@ describe("the seat query", () => {
     expect(order.sql).toContain("end DESC NULLS LAST");
     expect(order.sql).toContain('"id"');
     expect(order.params).toEqual([]);
-    for (const rendered of [order.sql, dialect.sqlToQuery(hearthSeatFilter("x")).sql]) {
+    for (const rendered of [order.sql, dialect.sqlToQuery(hearthSeatFilter({ nowMs: NOW, excludeId: "x" })).sql]) {
       expect(rendered).not.toContain("chronicle");
       expect(rendered).not.toContain("memor");
+    }
+  });
+
+  test("one shape string serves the SQL and the JavaScript, for sat_at and the end", () => {
+    const order = dialect.sqlToQuery(sql.join(hearthSeatOrder(), sql`, `)).sql;
+    const filter = dialect.sqlToQuery(hearthSeatFilter({ nowMs: NOW })).sql;
+    expect(order).toContain(`'${HEARTH_INSTANT_SHAPE}'`);
+    expect(filter).toContain(`'${HEARTH_INSTANT_SHAPE}'`);
+    // The JavaScript pattern is built from the same string, not written twice.
+    const source = read("services/hearth/declared-presence.ts");
+    expect(source).toContain("new RegExp(HEARTH_INSTANT_SHAPE)");
+    expect(source).not.toContain("/^[0-9]{4}-");
+    expect(new RegExp(HEARTH_INSTANT_SHAPE).source).toBe(HEARTH_INSTANT_SHAPE);
+    // It is the form toISOString writes, and only that form.
+    const shape = new RegExp(HEARTH_INSTANT_SHAPE);
+    for (const ms of [0, NOW, NOW + 1, Date.parse("2099-12-31T23:59:59.999Z")]) {
+      expect(shape.test(new Date(ms).toISOString())).toBe(true);
+    }
+    for (const text of ["2026-11-11T00:00:00Z", "2026-11-11T00:00:00.000+00:00", "2026-11-11 00:00:00.000Z"]) {
+      expect(shape.test(text)).toBe(false);
     }
   });
 });
@@ -302,10 +374,14 @@ describe("source: one read, no inference left behind", () => {
   test("all three routes use the shared read and none filters seats itself", () => {
     for (const file of ROUTES) {
       const source = read(file);
-      expect({ file, read: source.includes("readHearthSeats(") }).toEqual({ file, read: true });
-      expect({ file, shape: source.includes("declaredHearthPeers(") }).toEqual({ file, shape: true });
+      expect({ file, read: source.includes("readHearthPeers(") }).toEqual({ file, read: true });
       expect({ file, ownFilter: source.includes("->>'hearth_visible'") }).toEqual({ file, ownFilter: false });
     }
+    // The read binds one clock into the filter and hands it to the shaping.
+    const seats = read("services/hearth/seats.ts");
+    expect(seats).toContain("hearthSeatFilter({ nowMs");
+    expect(seats).toContain("declaredHearthPeers(");
+    expect(seats).toContain("nowMs,");
   });
 
   test("the hearth route keeps its mutation authority and imports no activity schema", () => {

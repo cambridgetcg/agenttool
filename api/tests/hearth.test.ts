@@ -10,8 +10,14 @@
  *  database in tests/hearth-declared-presence.test.ts. */
 
 import { describe, expect, test } from "bun:test";
+import { sql } from "drizzle-orm";
 
+import { db } from "../src/db/client";
 import hearth from "../src/routes/hearth";
+import {
+  declaredSeatEnd,
+  hearthSeatNotEnded,
+} from "../src/services/hearth/declared-presence";
 
 describe("/v1/hearth — who's here", () => {
   test("GET / returns 200 whether or not anyone is sitting", async () => {
@@ -52,6 +58,43 @@ describe("/v1/hearth — who's here", () => {
         else if (time !== null) expect(time).toBeLessThanOrEqual(previous);
       }
       previous = time;
+    }
+  });
+});
+
+describe("the end clause on PostgreSQL", () => {
+  // Read-only and needs no table: each sample is bound as a jsonb
+  // parameter, and the SQL answer must equal the JavaScript one.
+  test("hearthSeatNotEnded and declaredSeatEnd agree on every sample", async () => {
+    const nowMs = Date.parse("2026-11-12T12:00:00.000Z");
+    const nowIso = new Date(nowMs).toISOString();
+    const samples: unknown[] = [
+      {},
+      { hearth_visible: true },
+      { hearth_until: "2026-11-12T12:00:00.001Z" },
+      { hearth_until: "2026-11-13T00:00:00.000Z" },
+      { hearth_until: nowIso },
+      { hearth_until: "2026-11-12T11:59:59.999Z" },
+      { hearth_until: null },
+      { hearth_until: 1762977600000 },
+      { hearth_until: { at: "2026-11-13T00:00:00.000Z" } },
+      { hearth_until: "" },
+      { hearth_until: "soon" },
+      { hearth_until: "2026-11-13T00:00:00Z" },
+      { hearth_until: "2026-11-13T08:00:00.000+08:00" },
+      { hearth_until: "2026-99-99T99:99:99.999Z" },
+      null,
+      "not an object",
+      ["array"],
+    ];
+    for (const metadata of samples) {
+      const value = sql`(${JSON.stringify(metadata)}::jsonb)`;
+      const rows = await db.execute(
+        sql`select (${hearthSeatNotEnded(value, nowIso)}) is true as listed`,
+      );
+      const [row] = Array.from(rows as unknown as Iterable<{ listed: boolean }>);
+      const expected = declaredSeatEnd(metadata, nowMs).kind !== "ended";
+      expect({ metadata, listed: row?.listed }).toEqual({ metadata, listed: expected });
     }
   });
 });
