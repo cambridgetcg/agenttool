@@ -36696,9 +36696,10 @@ class CollabStore {
     }
     const challenges = this.noteChallenges(workspaceId);
     const decided = new Set;
-    const decidedOn = new Set;
+    const decidedOn = new Map;
+    const decidedAt = (id, sequence) => decidedOn.set(id, Math.max(decidedOn.get(id) ?? 0, sequence));
     for (const row of this.db.query(`
-      SELECT r.from_session_id, r.evidence_refs_json, e.payload_json FROM reports r
+      SELECT r.from_session_id, r.evidence_refs_json, r.event_sequence, e.payload_json FROM reports r
       JOIN events e ON e.workspace_id = r.workspace_id AND e.sequence = r.event_sequence
       WHERE r.workspace_id = ? AND r.kind = 'decision'
     `).all(workspaceId)) {
@@ -36710,10 +36711,10 @@ class CollabStore {
       const payload = JSON.parse(row.payload_json);
       if (payload.note === NOTE_FORMAT) {
         if (typeof payload.about_proposal_id === "string")
-          decidedOn.add(payload.about_proposal_id);
+          decidedAt(payload.about_proposal_id, row.event_sequence);
       } else {
         for (const id of cited)
-          decidedOn.add(id);
+          decidedAt(id, row.event_sequence);
       }
     }
     const now = Date.parse(this.timestamp());
@@ -36798,7 +36799,7 @@ class CollabStore {
         what = "stop";
       else if (latest.act === "reject" && mine && !retired)
         what = "rejected";
-      else if (latest.act === "agree" && mine && status.may_proceed && !decidedOn.has(status.proposal.id)) {
+      else if (latest.act === "agree" && mine && status.may_proceed && (decidedOn.get(status.proposal.id) ?? 0) < latest.event_sequence) {
         what = "record_decision";
       }
       if (!what)
@@ -37046,7 +37047,7 @@ class CollabStore {
           standing_on_replaced: challenge.standing,
           re_raised_here: voice !== null && challenges.some((stance) => stance.standing && stance.voice_id === voice)
         };
-      }).filter((entry) => entry.carried_in_terms || entry.raised_on === replacedId && entry.standing_on_replaced).map((entry) => ({ ...entry, statement: this.noteStanceStatement(workspaceId, this.requireReport(entry.challenge_id)) }));
+      }).filter((entry) => entry.carried_in_terms || entry.standing_on_replaced).map((entry) => ({ ...entry, statement: this.noteStanceStatement(workspaceId, this.requireReport(entry.challenge_id)) }));
       replaced = { proposal_id: replacedId, carried };
     }
     return {
@@ -37157,6 +37158,8 @@ class CollabStore {
       restsOn = proposal.status.person.acts.find((act) => act.event_sequence === cited) ?? null;
     }
     const latest = proposal?.status.person.acts.at(-1) ?? null;
+    const after = restsOn && proposal ? proposal.status.person.acts.filter((act) => act.event_sequence > restsOn.event_sequence) : [];
+    const laterAct = after.find((act) => act.act === "reject") ?? after.at(-1) ?? null;
     const outcome = !marked ? "unstated" : report.authority_basis?.startsWith("do_not_proceed: ") ? "do_not_proceed" : report.authority_basis?.startsWith("no_decision: ") ? "no_decision" : "proceed";
     const agreementCurrent = restsOn?.act === "agree" && (outcome === "proceed" || outcome === "unstated") ? proposal.status.may_proceed && proposal.status.agreement?.id === restsOn.id : null;
     const byId = new Map(sessions.map((view) => [view.id, view]));
@@ -37177,13 +37180,15 @@ class CollabStore {
       authority: {
         scope: report.authority_scope,
         basis: report.authority_basis,
-        derived_by_server: marked
+        derived_by_server: marked,
+        on_proposal: proposalId !== null
       },
       proposal,
       proposal_unreadable: unreadable,
       rests_on: restsOn ? { ...restsOn, event_id: this.eventIdAt(workspaceId, restsOn.event_sequence) } : null,
       agreement_current: agreementCurrent,
-      later_act: latest && restsOn && latest.id !== restsOn.id ? latest : null,
+      later_act: laterAct,
+      latest_act: latest && restsOn && latest.id !== restsOn.id && latest.id !== laterAct?.id ? latest : null,
       challenges
     };
   }
@@ -39213,10 +39218,9 @@ function subjectLine(entry, byId, me) {
 function formatWaiting(ctx, entry) {
   const handle = handleOf(entry.ref_kind, entry.ref_id);
   const about = entry.about_id ? { id: entry.about_id, handle: entry.what === "review" || entry.what === "challenge" || entry.what === "answer" ? handleOf("report", entry.about_id) : entry.about_id } : null;
-  const next = entry.what === "stop" ? { say: `Stop work that rests on ${handle} (${entry.ref_id}): the person's latest act on it is a rejection.` } : entry.what === "record_decision" ? withSlot(ctx, {
-    tool: "collab_note",
-    input: { act: "decide", re: exactRef("proposal", entry.ref_id), text: "<what is decided, within the agreed extent>" }
-  }) : withSlot(ctx, {
+  const next = entry.what === "stop" ? { say: `Stop work that rests on ${handle} (${entry.ref_id}): the person's latest act on it is a rejection.` } : entry.what === "record_decision" ? {
+    say: `The person agreed to ${handle}. Record what is decided, within the agreed extent: ` + `collab_note {act: "decide", re: "${exactRef("proposal", entry.ref_id)}", text: "<what is decided>"}` + (ctx.slot_key ? `, with binding_key "${ctx.slot_key}".` : ".")
+  } : withSlot(ctx, {
     tool: "collab_inbox",
     input: {
       about: entry.what === "answer" && entry.about_id ? exactRef("report", entry.about_id) : exactRef(entry.ref_kind, entry.ref_id)
@@ -39680,7 +39684,7 @@ function proposalFacts(ctx, data) {
     fields.carried_note = CARRIED_OBJECTIONS_SENTENCE;
     const shed = data.replaced.carried.filter((entry) => !entry.carried_in_terms && entry.standing_on_replaced);
     if (shed.length > 0) {
-      advice.push(`${shed.length} objection(s) still standing on the replaced proposal are not in these terms: ${shed.map((entry) => entry.challenge_id).join(", ")}.`);
+      advice.push(`${shed.length} objection(s) still standing where they were raised, on the replaced proposal or one it replaced, are not in these terms: ` + `${shed.map((entry) => entry.challenge_id).join(", ")}. A replacement through collab_propose carries them.`);
     }
   }
   if (status.ai.position === "superseded" && status.ai.obsoleted_by_report_id) {
@@ -39722,8 +39726,14 @@ function decisionRecord(data) {
   const scopeMatches = scopeMatchesAgreedExtent(data);
   if (data.agreement_current === false) {
     const id = status.proposal.id;
-    const cause = data.later_act ? `the person's latest act on ${id} is ${data.later_act.act} by ${data.later_act.basis}` : retiredPosition(status) ? `${id} was ${status.ai.position === "withdrawn" ? "withdrawn" : "superseded"} by ${status.ai.obsoleted_by_report_id} after the agreement` : `the person's latest act on ${id} is not the agreement this decision cites`;
-    advice.push(`agreement_current is false: ${cause}. Stop work that rests on this decision.`);
+    const later = data.later_act;
+    const latest = data.latest_act ?? later;
+    const cause = later ? `after the agreement this decision rests on, the person's act ${later.id} on ${id} is ${later.act === "reject" ? "a rejection" : later.act} ` + `by ${later.basis}` : retiredPosition(status) ? `${id} was ${status.ai.position === "withdrawn" ? "withdrawn" : "superseded"} by ${status.ai.obsoleted_by_report_id} after the agreement` : `the person's latest act on ${id} is not the agreement this decision cites`;
+    if (latest?.act === "agree" && status.may_proceed && status.agreement?.id === latest.id) {
+      advice.push(`agreement_current is false: ${cause}, and since then the person agreed again on the same bytes (act ${latest.id} by ${latest.basis}). ` + `This decision rests on the earlier agreement; record a new decide on ${id} for work to rest on the agreement that stands now.`);
+    } else {
+      advice.push(`agreement_current is false: ${cause}. Stop work that rests on this decision.`);
+    }
   }
   if (!data.marked) {
     advice.push("This decision was written by a legacy tool: its authority fields are shown as written and were not derived by the server; what it rests on is read from its evidence refs.");
@@ -39748,13 +39758,14 @@ function decisionRecord(data) {
       authority: {
         scope: data.authority.scope,
         basis: data.authority.basis,
-        derived_by: data.authority.derived_by_server ? "the server, from the journal, when it was written" : "a legacy tool, as its caller wrote it; not checked",
+        derived_by: !data.authority.derived_by_server ? "a legacy tool, as its caller wrote it; not checked" : data.authority.on_proposal ? "the server, from the journal, when it was written" : "no proposal: the scope is this session's own extent (or the default), recorded as written; the server fixed only the basis",
         ...scopeMatches !== null ? { scope_matches_agreed_extent: scopeMatches } : {}
       },
       rests_on: restsOn,
-      rests_on_basis: data.marked ? "derived from the journal (the proposal the server recorded this decision on, and the person's latest act on it then), never from its own words or evidence" : "read from the evidence refs a legacy caller chose: the proposal and the act are in the journal, but nothing checked that this decision was made on them",
+      rests_on_basis: !data.marked ? "read from the evidence refs a legacy caller chose: the proposal and the act are in the journal, but nothing checked that this decision was made on them" : data.authority.on_proposal ? "derived from the journal (the proposal the server recorded this decision on, and the person's latest act on it then), never from its own words or evidence" : "no proposal: this decision rests only on this session's word",
       agreement_current: data.agreement_current,
       ...data.later_act ? { later_act: actView(data.later_act) } : {},
+      ...data.latest_act ? { latest_act: actView(data.latest_act) } : {},
       ...status ? { proposal_position: { position: status.ai.position, person: status.person.state, may_proceed: status.may_proceed } } : {},
       challenges,
       dissent: challenges.filter((challenge) => challenge.standing === true),
@@ -40246,7 +40257,7 @@ function requireActHere(ctx, act, fields) {
   const elsewhere = {
     take: withSlot(ctx, { tool: "collab_take", input: { title: fields.statement } }),
     done: withSlot(ctx, { tool: "collab_done", input: { text: fields.statement } }),
-    propose: withSlot(ctx, { tool: "collab_propose", input: { question: fields.statement, criteria: "\u2026", extent: "\u2026" } })
+    propose: withSlot(ctx, { tool: "collab_propose", input: { question: fields.statement } })
   };
   if (elsewhere[act]) {
     throw new CollabError("wrong_verb", `${act} is its own verb, not a note act`, { remedy: elsewhere[act] });
@@ -41040,8 +41051,20 @@ function planDecide(ctx, input, context) {
   }
   if (fields.to !== null)
     addressee = explicitAddressee(ctx, workspaceId, fields.to);
-  const without = (field) => {
-    const { [field]: _dropped, ...rest } = noteRetryInput(input);
+  const withoutExtent = () => {
+    const { extent: _dropped, ...rest } = noteRetryInput(input);
+    if (textIsNote(input)) {
+      const { advice: _advice, ...parsed } = parseNote(input.text);
+      if (parsed.extent !== null && parsed.act !== null) {
+        try {
+          return withSlot(ctx, { tool: "collab_note", input: { ...rest, text: renderNote({ ...parsed, act: parsed.act, extent: null }) } });
+        } catch (error51) {
+          if (!(error51 instanceof CollabError))
+            throw error51;
+          return { say: "Remove the Extent: line from the text and send it again; a decision on a proposal takes its agreed extent, and one that authorises nothing takes none." };
+        }
+      }
+    }
     return withSlot(ctx, { tool: "collab_note", input: rest });
   };
   let extent = null;
@@ -41057,7 +41080,7 @@ function planDecide(ctx, input, context) {
       if (fields.extent !== null && fields.extent !== agreed && fields.extent !== shown.extent) {
         throw new CollabError("extent_from_proposal", "A decision on a proposal covers the extent the person agreed to; extent cannot change it", {
           agreed_extent: agreed,
-          remedy: without("extent")
+          remedy: withoutExtent()
         });
       }
       if (checkNote(shown).length === 0) {
@@ -41071,7 +41094,7 @@ function planDecide(ctx, input, context) {
       }
     } else {
       if (fields.extent !== null) {
-        throw new CollabError("extent_not_used", `A decision with outcome ${outcome} authorises nothing, so it takes no extent`, { remedy: without("extent") });
+        throw new CollabError("extent_not_used", `A decision with outcome ${outcome} authorises nothing, so it takes no extent`, { remedy: withoutExtent() });
       }
       fields = { ...fields, extent: NOTE_NOTHING_AUTHORISED };
     }
@@ -41081,7 +41104,7 @@ function planDecide(ctx, input, context) {
       fields = { ...fields, extent: fields.extent ?? NOTE_DEFAULT_DECISION_EXTENT };
     } else {
       if (fields.extent !== null) {
-        throw new CollabError("extent_not_used", `A decision with outcome ${outcome} authorises nothing, so it takes no extent`, { remedy: without("extent") });
+        throw new CollabError("extent_not_used", `A decision with outcome ${outcome} authorises nothing, so it takes no extent`, { remedy: withoutExtent() });
       }
       fields = { ...fields, extent: NOTE_NOTHING_AUTHORISED };
     }
@@ -41183,6 +41206,8 @@ async function decideNote(ctx, binding, credential, options) {
   }
   return decideResult(ctx, workspaceId, { receipt, replayed: fresh === null, advice, read_as: options.read_as, evidence });
 }
+var DECISION_DERIVED_ON_PROPOSAL = "the server, from the journal, inside the write";
+var DECISION_DERIVED_WITHOUT_PROPOSAL = "no proposal: the scope is this session's own extent (or the default), recorded as written; the server fixed only the basis";
 function decideResult(ctx, workspaceId, options) {
   const { receipt } = options;
   const report = receipt.report;
@@ -41233,7 +41258,7 @@ function decideResult(ctx, workspaceId, options) {
     authority: {
       scope: receipt.authority_scope,
       basis: receipt.authority_basis,
-      derived_by: "the server, from the journal, inside the write"
+      derived_by: proposal ? DECISION_DERIVED_ON_PROPOSAL : DECISION_DERIVED_WITHOUT_PROPOSAL
     },
     ...proposal && receipt.outcome === "proceed" && act ? {
       rests_on: {
@@ -42149,7 +42174,8 @@ function objectionsToCarry(replaced) {
   if (!replaced)
     return [];
   const direct = replaced.challenges.filter((challenge) => challenge.standing).map((challenge) => ({ id: challenge.id, by: challenge.from_actor, statement: challenge.statement }));
-  const forwarded = (replaced.replaced?.carried ?? []).filter((entry) => entry.carried_in_terms && entry.standing_on_replaced).map((entry) => ({ id: entry.challenge_id, by: entry.by, statement: entry.statement }));
+  const seen = new Set(direct.map((objection) => objection.id));
+  const forwarded = (replaced.replaced?.carried ?? []).filter((entry) => entry.standing_on_replaced && !seen.has(entry.challenge_id)).map((entry) => ({ id: entry.challenge_id, by: entry.by, statement: entry.statement }));
   return [...direct, ...forwarded];
 }
 function carriedConflicts(own, carried) {
@@ -42192,16 +42218,18 @@ function objectorsOf(ctx, workspaceId, me, knownConflicts, replaced) {
       from_actor: challenge.from_actor,
       from_session_id: challenge.from_session_id
     })),
-    ...(replaced.replaced?.carried ?? []).filter((entry) => entry.carried_in_terms).map((entry) => ({
+    ...(replaced.replaced?.carried ?? []).map((entry) => ({
       id: entry.challenge_id,
       voice_id: entry.voice_id,
       from_actor: entry.by,
       from_session_id: entry.by_session_id
     }))
   ];
+  const listed = new Set;
   for (const challenge of candidates) {
-    if (!text.includes(`report:${challenge.id}`) || !challenge.voice_id)
+    if (listed.has(challenge.id) || !text.includes(`report:${challenge.id}`) || !challenge.voice_id)
       continue;
+    listed.add(challenge.id);
     let objector = byVoice.get(challenge.voice_id);
     if (!objector) {
       const live = sessions.filter((view) => view.voice_id === challenge.voice_id && view.status === "active" && view.liveness === "live");
@@ -42219,16 +42247,27 @@ function objectorsOf(ctx, workspaceId, me, knownConflicts, replaced) {
   }
   return [...byVoice.values()];
 }
+var OBJECTOR_EVIDENCE_CHALLENGES = NOTE_EVIDENCE_MAX - 1;
+var REPORT_REFS_MAX = 128;
 function objectorNote(proposalId, replacedId, challenges) {
-  return renderNote({
+  const shown = challenges.slice(0, OBJECTOR_EVIDENCE_CHALLENGES);
+  const rest = challenges.slice(OBJECTOR_EVIDENCE_CHALLENGES);
+  const many = challenges.length > 1;
+  const body = renderNote({
     act: "note",
-    statement: "Your objection to a replaced proposal was carried into the new one as text.",
-    body: `${CARRIED_OBJECTIONS_SENTENCE}
+    statement: many ? `Your ${challenges.length} objections to a replaced proposal were carried into the new one as text.` : "Your objection to a replaced proposal was carried into the new one as text.",
+    body: [
+      CARRIED_OBJECTIONS_SENTENCE,
+      `The replaced proposal is proposal:${replacedId}.`,
+      ...rest.length > 0 ? [`Also carried, beyond the ${shown.length} in Evidence: ${rest.map((id) => `report:${id}`).join(" ")}`] : []
+    ].join(`
 
-The replaced proposal is proposal:${replacedId}.`,
+`),
     re: `proposal:${proposalId}`,
-    evidence: challenges.map((id) => `report:${id}`)
+    evidence: [`report:${proposalId}`, ...shown.map((id) => `report:${id}`)]
   });
+  const refs = [`report:${proposalId}`, ...challenges.map((id) => `report:${id}`)].slice(0, REPORT_REFS_MAX);
+  return { body, evidence_refs: refs };
 }
 var PROPOSAL_NOTE_DROP_ORDER = ["criteria", "limits", "question body", "extent"];
 function proposalNote(terms) {
@@ -42381,14 +42420,20 @@ async function proposeVerb(ctx, input) {
       task_id: taskId
     });
   });
+  const standIn = "report_00000000-0000-4000-8000-000000000000";
   proposalNote({
-    id: "report_00000000-0000-4000-8000-000000000000",
+    id: standIn,
     question,
     criteria: criteria.trim(),
     extent: extent.trim(),
     limits: limits?.trim() ?? null,
     sha256: "0".repeat(64)
   });
+  if (replaced && !unfit) {
+    for (const objector of objectorsOf(ctx, workspaceId, me, composed.text ?? null, replaced)) {
+      objectorNote(standIn, replaced.status.proposal.id, objector.challenges);
+    }
+  }
   const { plan, cite, citeReplayed, status, notes, replays, steps } = await underPlan(ctx, credential, {
     tool: "collab_propose",
     input: keyInput,
@@ -42459,17 +42504,18 @@ async function proposeVerb(ctx, input) {
             continue;
           }
           steps2 += 1;
+          const told = objectorNote(status2.proposal.id, replaced.status.proposal.id, objector.challenges);
           const sent = await stepOnce(ctx, credential, key, () => ctx.store.appendNoteForSession({
             ...credential,
             idempotency_key: key,
             reports: [{
               kind: "inference",
               relation: "informs",
-              body: objectorNote(status2.proposal.id, replaced.status.proposal.id, objector.challenges),
+              body: told.body,
               task_id: status2.proposal.task_id,
               to_session_id: objector.session.id,
               about_proposal_id: status2.proposal.id,
-              evidence_refs: [`report:${status2.proposal.id}`, ...objector.challenges.map((id) => `report:${id}`)]
+              evidence_refs: told.evidence_refs
             }],
             receipt_plan: plan2.guard
           }));

@@ -8535,13 +8535,17 @@ export class CollabStore {
     // Every proposal a decision of this voice cites is watched for a stop;
     // only those it was made on (as noteDecisionData reads it) count as
     // already decided, so a decision that merely cites one asks for none.
+    // decidedOn keeps the latest such decision's sequence: a decision counts
+    // only when it was made after the person's latest act on the proposal,
+    // that is, on the act that stands now.
     const decided = new Set<string>();
-    const decidedOn = new Set<string>();
+    const decidedOn = new Map<string, number>();
+    const decidedAt = (id: string, sequence: number) => decidedOn.set(id, Math.max(decidedOn.get(id) ?? 0, sequence));
     for (const row of this.db.query(`
-      SELECT r.from_session_id, r.evidence_refs_json, e.payload_json FROM reports r
+      SELECT r.from_session_id, r.evidence_refs_json, r.event_sequence, e.payload_json FROM reports r
       JOIN events e ON e.workspace_id = r.workspace_id AND e.sequence = r.event_sequence
       WHERE r.workspace_id = ? AND r.kind = 'decision'
-    `).all(workspaceId) as Array<{ from_session_id: string | null; evidence_refs_json: string; payload_json: string }>) {
+    `).all(workspaceId) as Array<{ from_session_id: string | null; evidence_refs_json: string; event_sequence: number; payload_json: string }>) {
       if (!sameVoice(row.from_session_id)) continue;
       const cited = (JSON.parse(row.evidence_refs_json) as string[])
         .filter((ref) => ref.startsWith("report:"))
@@ -8549,9 +8553,9 @@ export class CollabStore {
       for (const id of cited) decided.add(id);
       const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
       if (payload.note === NOTE_FORMAT) {
-        if (typeof payload.about_proposal_id === "string") decidedOn.add(payload.about_proposal_id);
+        if (typeof payload.about_proposal_id === "string") decidedAt(payload.about_proposal_id, row.event_sequence);
       } else {
-        for (const id of cited) decidedOn.add(id);
+        for (const id of cited) decidedAt(id, row.event_sequence);
       }
     }
     // Only the proposals this session could be waited on for: still open with
@@ -8640,7 +8644,8 @@ export class CollabStore {
       let what: NoteWaitingEntry["what"] | null = null;
       if (latest.act === "reject" && agreedBefore) what = "stop";
       else if (latest.act === "reject" && mine && !retired) what = "rejected";
-      else if (latest.act === "agree" && mine && status.may_proceed && !decidedOn.has(status.proposal.id)) {
+      else if (latest.act === "agree" && mine && status.may_proceed
+        && (decidedOn.get(status.proposal.id) ?? 0) < latest.event_sequence) {
         what = "record_decision";
       }
       if (!what) continue;
@@ -8976,8 +8981,9 @@ export class CollabStore {
       const replacedId = status.proposal.target_report_id;
       const conflicts = status.terms.known_conflicts ?? "";
       // An objection an earlier replacement carried as text can be carried
-      // again, so the challenges on every proposal this one descends from are
-      // read; those older than the replaced proposal count only when carried.
+      // again, and one a replacement shed still stands where it was raised,
+      // so the challenges on every proposal this one descends from are read:
+      // each is listed when these terms carry it or it still stands.
       const lineage = this.replacedLineage(workspaceId, replacedId);
       const carried = [...challengeViews.values()]
         .filter((challenge) => lineage.has(challenge.target_report_id))
@@ -8994,7 +9000,7 @@ export class CollabStore {
             re_raised_here: voice !== null && challenges.some((stance) => stance.standing && stance.voice_id === voice),
           };
         })
-        .filter((entry) => entry.carried_in_terms || (entry.raised_on === replacedId && entry.standing_on_replaced))
+        .filter((entry) => entry.carried_in_terms || entry.standing_on_replaced)
         .map((entry) => ({ ...entry, statement: this.noteStanceStatement(workspaceId, this.requireReport(entry.challenge_id)) }));
       replaced = { proposal_id: replacedId, carried };
     }
@@ -9145,6 +9151,8 @@ export class CollabStore {
       restsOn = proposal.status.person.acts.find((act) => act.event_sequence === cited) ?? null;
     }
     const latest = proposal?.status.person.acts.at(-1) ?? null;
+    const after = restsOn && proposal ? proposal.status.person.acts.filter((act) => act.event_sequence > restsOn!.event_sequence) : [];
+    const laterAct = after.find((act) => act.act === "reject") ?? after.at(-1) ?? null;
     const outcome: NoteDecisionData["outcome"] = !marked
       ? "unstated"
       : report.authority_basis?.startsWith("do_not_proceed: ") ? "do_not_proceed"
@@ -9180,12 +9188,16 @@ export class CollabStore {
         scope: report.authority_scope,
         basis: report.authority_basis,
         derived_by_server: marked,
+        on_proposal: proposalId !== null,
       },
       proposal,
       proposal_unreadable: unreadable,
       rests_on: restsOn ? { ...restsOn, event_id: this.eventIdAt(workspaceId, restsOn.event_sequence) } : null,
       agreement_current: agreementCurrent,
-      later_act: latest && restsOn && latest.id !== restsOn.id ? latest : null,
+      // The act that undid what this decision rests on is the first rejection
+      // after it; the person may have acted again since (latest_act).
+      later_act: laterAct,
+      latest_act: latest && restsOn && latest.id !== restsOn.id && latest.id !== laterAct?.id ? latest : null,
       challenges,
     };
   }
@@ -10373,7 +10385,12 @@ export interface NoteDecisionData {
   marked: boolean;
   /** As this surface recorded it; "unstated" for a decision a legacy tool wrote. */
   outcome: NoteDecisionOutcome | "unstated";
-  authority: { scope: string | null; basis: string | null; derived_by_server: boolean };
+  /**
+   * derived_by_server: written by this surface, which fixed the basis.
+   * on_proposal: made on a proposal, so the scope too was derived from the
+   * journal; without one the scope is the session's own words.
+   */
+  authority: { scope: string | null; basis: string | null; derived_by_server: boolean; on_proposal: boolean };
   proposal: NoteProposalData | null;
   /** The proposal's stored terms failed to read (their code), so no proposal is shown. */
   proposal_unreadable: string | null;
@@ -10385,8 +10402,13 @@ export interface NoteDecisionData {
   rests_on: (ProposalPersonAct & { event_id: string }) | null;
   /** For an agreement: whether it is still the person's latest act on a proposal still on the table. */
   agreement_current: boolean | null;
-  /** The person's latest act, when it came after the one the decision cites. */
+  /**
+   * The act after the one the decision rests on that undid it: the first
+   * rejection after it, else the latest act after it.
+   */
   later_act: ProposalPersonAct | null;
+  /** The person's latest act, when it is neither the one rested on nor later_act (an agreement given again, say). */
+  latest_act: ProposalPersonAct | null;
   /** Challenges to the decision itself. */
   challenges: NoteStanceView[];
 }

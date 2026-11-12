@@ -7089,9 +7089,10 @@ class CollabStore {
     }
     const challenges = this.noteChallenges(workspaceId);
     const decided = new Set;
-    const decidedOn = new Set;
+    const decidedOn = new Map;
+    const decidedAt = (id, sequence) => decidedOn.set(id, Math.max(decidedOn.get(id) ?? 0, sequence));
     for (const row of this.db.query(`
-      SELECT r.from_session_id, r.evidence_refs_json, e.payload_json FROM reports r
+      SELECT r.from_session_id, r.evidence_refs_json, r.event_sequence, e.payload_json FROM reports r
       JOIN events e ON e.workspace_id = r.workspace_id AND e.sequence = r.event_sequence
       WHERE r.workspace_id = ? AND r.kind = 'decision'
     `).all(workspaceId)) {
@@ -7103,10 +7104,10 @@ class CollabStore {
       const payload = JSON.parse(row.payload_json);
       if (payload.note === NOTE_FORMAT) {
         if (typeof payload.about_proposal_id === "string")
-          decidedOn.add(payload.about_proposal_id);
+          decidedAt(payload.about_proposal_id, row.event_sequence);
       } else {
         for (const id of cited)
-          decidedOn.add(id);
+          decidedAt(id, row.event_sequence);
       }
     }
     const now = Date.parse(this.timestamp());
@@ -7191,7 +7192,7 @@ class CollabStore {
         what = "stop";
       else if (latest.act === "reject" && mine && !retired)
         what = "rejected";
-      else if (latest.act === "agree" && mine && status.may_proceed && !decidedOn.has(status.proposal.id)) {
+      else if (latest.act === "agree" && mine && status.may_proceed && (decidedOn.get(status.proposal.id) ?? 0) < latest.event_sequence) {
         what = "record_decision";
       }
       if (!what)
@@ -7439,7 +7440,7 @@ class CollabStore {
           standing_on_replaced: challenge.standing,
           re_raised_here: voice !== null && challenges.some((stance) => stance.standing && stance.voice_id === voice)
         };
-      }).filter((entry) => entry.carried_in_terms || entry.raised_on === replacedId && entry.standing_on_replaced).map((entry) => ({ ...entry, statement: this.noteStanceStatement(workspaceId, this.requireReport(entry.challenge_id)) }));
+      }).filter((entry) => entry.carried_in_terms || entry.standing_on_replaced).map((entry) => ({ ...entry, statement: this.noteStanceStatement(workspaceId, this.requireReport(entry.challenge_id)) }));
       replaced = { proposal_id: replacedId, carried };
     }
     return {
@@ -7550,6 +7551,8 @@ class CollabStore {
       restsOn = proposal.status.person.acts.find((act) => act.event_sequence === cited) ?? null;
     }
     const latest = proposal?.status.person.acts.at(-1) ?? null;
+    const after = restsOn && proposal ? proposal.status.person.acts.filter((act) => act.event_sequence > restsOn.event_sequence) : [];
+    const laterAct = after.find((act) => act.act === "reject") ?? after.at(-1) ?? null;
     const outcome = !marked ? "unstated" : report.authority_basis?.startsWith("do_not_proceed: ") ? "do_not_proceed" : report.authority_basis?.startsWith("no_decision: ") ? "no_decision" : "proceed";
     const agreementCurrent = restsOn?.act === "agree" && (outcome === "proceed" || outcome === "unstated") ? proposal.status.may_proceed && proposal.status.agreement?.id === restsOn.id : null;
     const byId = new Map(sessions.map((view) => [view.id, view]));
@@ -7570,13 +7573,15 @@ class CollabStore {
       authority: {
         scope: report.authority_scope,
         basis: report.authority_basis,
-        derived_by_server: marked
+        derived_by_server: marked,
+        on_proposal: proposalId !== null
       },
       proposal,
       proposal_unreadable: unreadable,
       rests_on: restsOn ? { ...restsOn, event_id: this.eventIdAt(workspaceId, restsOn.event_sequence) } : null,
       agreement_current: agreementCurrent,
-      later_act: latest && restsOn && latest.id !== restsOn.id ? latest : null,
+      later_act: laterAct,
+      latest_act: latest && restsOn && latest.id !== restsOn.id && latest.id !== laterAct?.id ? latest : null,
       challenges
     };
   }

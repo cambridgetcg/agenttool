@@ -11,6 +11,7 @@
 import { CollabError } from "./errors.js";
 import {
   hasLoneSurrogate,
+  NOTE_EVIDENCE_MAX,
   NOTE_STATEMENT_MAX,
   normalizeNoteFields,
   normalizeNoteText,
@@ -192,17 +193,19 @@ function carriedLine(objection: Objection): string {
 
 /**
  * The objections a replacement carries: each standing challenge to the
- * replaced proposal, then each objection the replaced proposal itself
- * carried as text that still stands where it was raised, so a second
- * replacement sheds nothing the first one carried.
+ * replaced proposal, then each challenge anywhere in its supersedes lineage
+ * that still stands where it was raised, whether an earlier replacement
+ * carried it or shed it (one opened through collab_proposal_open carries
+ * nothing), so no replacement sheds an objection that was never lifted.
  */
 function objectionsToCarry(replaced: NoteProposalData | null): Objection[] {
   if (!replaced) return [];
   const direct = replaced.challenges
     .filter((challenge) => challenge.standing)
     .map((challenge) => ({ id: challenge.id, by: challenge.from_actor, statement: challenge.statement }));
+  const seen = new Set(direct.map((objection) => objection.id));
   const forwarded = (replaced.replaced?.carried ?? [])
-    .filter((entry) => entry.carried_in_terms && entry.standing_on_replaced)
+    .filter((entry) => entry.standing_on_replaced && !seen.has(entry.challenge_id))
     .map((entry) => ({ id: entry.challenge_id, by: entry.by, statement: entry.statement }));
   return [...direct, ...forwarded];
 }
@@ -280,15 +283,17 @@ function objectorsOf(
       from_actor: challenge.from_actor,
       from_session_id: challenge.from_session_id,
     })),
-    ...(replaced.replaced?.carried ?? []).filter((entry) => entry.carried_in_terms).map((entry) => ({
+    ...(replaced.replaced?.carried ?? []).map((entry) => ({
       id: entry.challenge_id,
       voice_id: entry.voice_id,
       from_actor: entry.by,
       from_session_id: entry.by_session_id,
     })),
   ];
+  const listed = new Set<string>();
   for (const challenge of candidates) {
-    if (!text.includes(`report:${challenge.id}`) || !challenge.voice_id) continue;
+    if (listed.has(challenge.id) || !text.includes(`report:${challenge.id}`) || !challenge.voice_id) continue;
+    listed.add(challenge.id);
     let objector = byVoice.get(challenge.voice_id);
     if (!objector) {
       const live = sessions.filter((view) => view.voice_id === challenge.voice_id && view.status === "active" && view.liveness === "live");
@@ -307,15 +312,38 @@ function objectorsOf(
   return [...byVoice.values()];
 }
 
-/** The note an objector is sent: where its objection went, and that it does not block there. */
-function objectorNote(proposalId: string, replacedId: string, challenges: string[]): string {
-  return renderNote({
+/** Evidence lines an objector note gives its challenges: the new proposal takes the last of the 16. */
+const OBJECTOR_EVIDENCE_CHALLENGES = NOTE_EVIDENCE_MAX - 1;
+/** The store's cap on a report's evidence refs. */
+const REPORT_REFS_MAX = 128;
+
+/**
+ * The note an objector is sent: where its objections went, and that they do
+ * not block there. However many challenges one voice carried, the note fits
+ * a note's caps: Evidence lines for the new proposal and the first 15, the
+ * rest named by id in the body, so rendering never fails after the open.
+ */
+function objectorNote(proposalId: string, replacedId: string, challenges: string[]): { body: string; evidence_refs: string[] } {
+  const shown = challenges.slice(0, OBJECTOR_EVIDENCE_CHALLENGES);
+  const rest = challenges.slice(OBJECTOR_EVIDENCE_CHALLENGES);
+  const many = challenges.length > 1;
+  const body = renderNote({
     act: "note",
-    statement: "Your objection to a replaced proposal was carried into the new one as text.",
-    body: `${CARRIED_OBJECTIONS_SENTENCE}\n\nThe replaced proposal is proposal:${replacedId}.`,
+    statement: many
+      ? `Your ${challenges.length} objections to a replaced proposal were carried into the new one as text.`
+      : "Your objection to a replaced proposal was carried into the new one as text.",
+    body: [
+      CARRIED_OBJECTIONS_SENTENCE,
+      `The replaced proposal is proposal:${replacedId}.`,
+      ...(rest.length > 0
+        ? [`Also carried, beyond the ${shown.length} in Evidence: ${rest.map((id) => `report:${id}`).join(" ")}`]
+        : []),
+    ].join("\n\n"),
     re: `proposal:${proposalId}`,
-    evidence: challenges.map((id) => `report:${id}`),
+    evidence: [`report:${proposalId}`, ...shown.map((id) => `report:${id}`)],
   });
+  const refs = [`report:${proposalId}`, ...challenges.map((id) => `report:${id}`)].slice(0, REPORT_REFS_MAX);
+  return { body, evidence_refs: refs };
 }
 
 /** The parts of the returned note besides its statement, re and hash. */
@@ -499,14 +527,21 @@ export async function proposeVerb(ctx: NoteVerbContext, input: ProposeInput): Pr
   });
   // The returned note is rendered once before anything is written, with a
   // stand-in id and hash of the same shape, so nothing can fail after the open.
+  const standIn = "report_00000000-0000-4000-8000-000000000000";
   proposalNote({
-    id: "report_00000000-0000-4000-8000-000000000000",
+    id: standIn,
     question,
     criteria: criteria.trim(),
     extent: extent.trim(),
     limits: limits?.trim() ?? null,
     sha256: "0".repeat(64),
   });
+  // So is each objector's note, for the objectors these terms carry.
+  if (replaced && !unfit) {
+    for (const objector of objectorsOf(ctx, workspaceId, me, composed.text ?? null, replaced)) {
+      objectorNote(standIn, replaced.status.proposal.id, objector.challenges);
+    }
+  }
   const { plan, cite, citeReplayed, status, notes, replays, steps } = await underPlan(ctx, credential, {
     tool: "collab_propose",
     input: keyInput,
@@ -578,17 +613,18 @@ export async function proposeVerb(ctx: NoteVerbContext, input: ProposeInput): Pr
             continue;
           }
           steps += 1;
+          const told = objectorNote(status.proposal.id, replaced!.status.proposal.id, objector.challenges);
           const sent = await stepOnce(ctx, credential, key, () => ctx.store.appendNoteForSession({
             ...credential,
             idempotency_key: key,
             reports: [{
               kind: "inference",
               relation: "informs",
-              body: objectorNote(status.proposal.id, replaced!.status.proposal.id, objector.challenges),
+              body: told.body,
               task_id: status.proposal.task_id,
               to_session_id: objector.session!.id,
               about_proposal_id: status.proposal.id,
-              evidence_refs: [`report:${status.proposal.id}`, ...objector.challenges.map((id) => `report:${id}`)],
+              evidence_refs: told.evidence_refs,
             }],
             receipt_plan: plan.guard,
           }));

@@ -533,7 +533,9 @@ function requireActHere(ctx: NoteVerbContext, act: string, fields: NoteFields): 
   const elsewhere: Partial<Record<string, NoteRemedy>> = {
     take: withSlot(ctx, { tool: "collab_take", input: { title: fields.statement } }),
     done: withSlot(ctx, { tool: "collab_done", input: { text: fields.statement } }),
-    propose: withSlot(ctx, { tool: "collab_propose", input: { question: fields.statement, criteria: "…", extent: "…" } }),
+    // criteria and extent are left out: a stand-in would be stored as the
+    // terms the person signs, and collab_propose asks for each one missing.
+    propose: withSlot(ctx, { tool: "collab_propose", input: { question: fields.statement } }),
   };
   if (elsewhere[act]) {
     throw new CollabError("wrong_verb", `${act} is its own verb, not a note act`, { remedy: elsewhere[act] });
@@ -1560,8 +1562,21 @@ function planDecide(
     refs.push(`event:${target.id}`);
   }
   if (fields.to !== null) addressee = explicitAddressee(ctx, workspaceId, fields.to);
-  const without = (field: keyof NoteVerbInput) => {
-    const { [field]: _dropped, ...rest } = noteRetryInput(input) as Record<string, unknown>;
+  // The ready call without an extent. Written as a note's Extent: line, the
+  // extent is in the text, so the text is sent again without that line.
+  const withoutExtent = (): NoteRemedy => {
+    const { extent: _dropped, ...rest } = noteRetryInput(input) as Record<string, unknown>;
+    if (textIsNote(input)) {
+      const { advice: _advice, ...parsed } = parseNote(input.text as string);
+      if (parsed.extent !== null && parsed.act !== null) {
+        try {
+          return withSlot(ctx, { tool: "collab_note", input: { ...rest, text: renderNote({ ...parsed, act: parsed.act, extent: null }) } });
+        } catch (error) {
+          if (!(error instanceof CollabError)) throw error;
+          return { say: "Remove the Extent: line from the text and send it again; a decision on a proposal takes its agreed extent, and one that authorises nothing takes none." };
+        }
+      }
+    }
     return withSlot(ctx, { tool: "collab_note", input: rest });
   };
   let extent: string | null = null;
@@ -1581,7 +1596,7 @@ function planDecide(
       if (fields.extent !== null && fields.extent !== agreed && fields.extent !== shown.extent) {
         throw new CollabError("extent_from_proposal", "A decision on a proposal covers the extent the person agreed to; extent cannot change it", {
           agreed_extent: agreed,
-          remedy: without("extent"),
+          remedy: withoutExtent(),
         });
       }
       if (checkNote(shown).length === 0) {
@@ -1595,7 +1610,7 @@ function planDecide(
       }
     } else {
       if (fields.extent !== null) {
-        throw new CollabError("extent_not_used", `A decision with outcome ${outcome} authorises nothing, so it takes no extent`, { remedy: without("extent") });
+        throw new CollabError("extent_not_used", `A decision with outcome ${outcome} authorises nothing, so it takes no extent`, { remedy: withoutExtent() });
       }
       fields = { ...fields, extent: NOTE_NOTHING_AUTHORISED };
     }
@@ -1605,7 +1620,7 @@ function planDecide(
       fields = { ...fields, extent: fields.extent ?? NOTE_DEFAULT_DECISION_EXTENT };
     } else {
       if (fields.extent !== null) {
-        throw new CollabError("extent_not_used", `A decision with outcome ${outcome} authorises nothing, so it takes no extent`, { remedy: without("extent") });
+        throw new CollabError("extent_not_used", `A decision with outcome ${outcome} authorises nothing, so it takes no extent`, { remedy: withoutExtent() });
       }
       fields = { ...fields, extent: NOTE_NOTHING_AUTHORISED };
     }
@@ -1725,6 +1740,11 @@ async function decideNote(
   return decideResult(ctx, workspaceId, { receipt, replayed: fresh === null, advice, read_as: options.read_as, evidence });
 }
 
+/** How a decision's authority was fixed, with a proposal and without one (spec 5.3). */
+export const DECISION_DERIVED_ON_PROPOSAL = "the server, from the journal, inside the write";
+export const DECISION_DERIVED_WITHOUT_PROPOSAL =
+  "no proposal: the scope is this session's own extent (or the default), recorded as written; the server fixed only the basis";
+
 function decideResult(
   ctx: NoteVerbContext,
   workspaceId: string,
@@ -1779,7 +1799,9 @@ function decideResult(
     authority: {
       scope: receipt.authority_scope,
       basis: receipt.authority_basis,
-      derived_by: "the server, from the journal, inside the write",
+      // Without a proposal the scope is this session's own words: only the
+      // basis is the server's, so the label must not claim the journal.
+      derived_by: proposal ? DECISION_DERIVED_ON_PROPOSAL : DECISION_DERIVED_WITHOUT_PROPOSAL,
     },
     ...(proposal && receipt.outcome === "proceed" && act
       ? {

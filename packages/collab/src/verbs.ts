@@ -1602,10 +1602,13 @@ function formatWaiting(ctx: NoteVerbContext, entry: NoteWaitingEntry): Record<st
   const next: NoteRemedy = entry.what === "stop"
     ? { say: `Stop work that rests on ${handle} (${entry.ref_id}): the person's latest act on it is a rejection.` }
     : entry.what === "record_decision"
-      ? withSlot(ctx, {
-        tool: "collab_note",
-        input: { act: "decide", re: exactRef("proposal", entry.ref_id), text: "<what is decided, within the agreed extent>" },
-      })
+      // A template, not a ready call: sent as given, a stand-in text would be
+      // recorded as the decision itself.
+      ? {
+        say: `The person agreed to ${handle}. Record what is decided, within the agreed extent: ` +
+          `collab_note {act: "decide", re: "${exactRef("proposal", entry.ref_id)}", text: "<what is decided>"}` +
+          (ctx.slot_key ? `, with binding_key "${ctx.slot_key}".` : "."),
+      }
       : withSlot(ctx, {
       tool: "collab_inbox",
       input: {
@@ -2220,7 +2223,10 @@ export function proposalFacts(
     fields.carried_note = CARRIED_OBJECTIONS_SENTENCE;
     const shed = data.replaced.carried.filter((entry) => !entry.carried_in_terms && entry.standing_on_replaced);
     if (shed.length > 0) {
-      advice.push(`${shed.length} objection(s) still standing on the replaced proposal are not in these terms: ${shed.map((entry) => entry.challenge_id).join(", ")}.`);
+      advice.push(
+        `${shed.length} objection(s) still standing where they were raised, on the replaced proposal or one it replaced, are not in these terms: ` +
+          `${shed.map((entry) => entry.challenge_id).join(", ")}. A replacement through collab_propose carries them.`,
+      );
     }
   }
   if (status.ai.position === "superseded" && status.ai.obsoleted_by_report_id) {
@@ -2277,12 +2283,24 @@ export function decisionRecord(data: NoteDecisionData): { fields: Record<string,
   const scopeMatches = scopeMatchesAgreedExtent(data);
   if (data.agreement_current === false) {
     const id = status!.proposal.id;
-    const cause = data.later_act
-      ? `the person's latest act on ${id} is ${data.later_act.act} by ${data.later_act.basis}`
+    const later = data.later_act;
+    const latest = data.latest_act ?? later;
+    const cause = later
+      ? `after the agreement this decision rests on, the person's act ${later.id} on ${id} is ${later.act === "reject" ? "a rejection" : later.act} ` +
+        `by ${later.basis}`
       : retiredPosition(status!)
         ? `${id} was ${status!.ai.position === "withdrawn" ? "withdrawn" : "superseded"} by ${status!.ai.obsoleted_by_report_id} after the agreement`
         : `the person's latest act on ${id} is not the agreement this decision cites`;
-    advice.push(`agreement_current is false: ${cause}. Stop work that rests on this decision.`);
+    if (latest?.act === "agree" && status!.may_proceed && status!.agreement?.id === latest.id) {
+      // The person agreed again on the same bytes: what is needed is a new
+      // decision on that agreement, not a stop.
+      advice.push(
+        `agreement_current is false: ${cause}, and since then the person agreed again on the same bytes (act ${latest.id} by ${latest.basis}). ` +
+          `This decision rests on the earlier agreement; record a new decide on ${id} for work to rest on the agreement that stands now.`,
+      );
+    } else {
+      advice.push(`agreement_current is false: ${cause}. Stop work that rests on this decision.`);
+    }
   }
   if (!data.marked) {
     advice.push("This decision was written by a legacy tool: its authority fields are shown as written and were not derived by the server; what it rests on is read from its evidence refs.");
@@ -2310,17 +2328,22 @@ export function decisionRecord(data: NoteDecisionData): { fields: Record<string,
       authority: {
         scope: data.authority.scope,
         basis: data.authority.basis,
-        derived_by: data.authority.derived_by_server
-          ? "the server, from the journal, when it was written"
-          : "a legacy tool, as its caller wrote it; not checked",
+        derived_by: !data.authority.derived_by_server
+          ? "a legacy tool, as its caller wrote it; not checked"
+          : data.authority.on_proposal
+            ? "the server, from the journal, when it was written"
+            : "no proposal: the scope is this session's own extent (or the default), recorded as written; the server fixed only the basis",
         ...(scopeMatches !== null ? { scope_matches_agreed_extent: scopeMatches } : {}),
       },
       rests_on: restsOn,
-      rests_on_basis: data.marked
-        ? "derived from the journal (the proposal the server recorded this decision on, and the person's latest act on it then), never from its own words or evidence"
-        : "read from the evidence refs a legacy caller chose: the proposal and the act are in the journal, but nothing checked that this decision was made on them",
+      rests_on_basis: !data.marked
+        ? "read from the evidence refs a legacy caller chose: the proposal and the act are in the journal, but nothing checked that this decision was made on them"
+        : data.authority.on_proposal
+          ? "derived from the journal (the proposal the server recorded this decision on, and the person's latest act on it then), never from its own words or evidence"
+          : "no proposal: this decision rests only on this session's word",
       agreement_current: data.agreement_current,
       ...(data.later_act ? { later_act: actView(data.later_act) } : {}),
+      ...(data.latest_act ? { latest_act: actView(data.latest_act) } : {}),
       ...(status
         ? { proposal_position: { position: status.ai.position, person: status.person.state, may_proceed: status.may_proceed } }
         : {}),

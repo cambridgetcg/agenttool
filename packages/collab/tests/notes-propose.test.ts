@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { hostname } from "node:os";
+import { CollabError } from "../src/errors.js";
 import { NOTE_FORMAT, parseNote } from "../src/note.js";
 import { proposalBytes, type ProposalContent } from "../src/proposal.js";
 import type { ProposalStatus, SessionHandle } from "../src/protocol.js";
@@ -797,7 +798,11 @@ describe("waiting_on_you: stop", () => {
     await ok(sc, "collab_note", { act: "support", text: "Yes.", re: id });
     agree(j, id);
     const recordDecision = (await ok(sa, "collab_inbox", {})).waiting_on_you.find((entry: any) => entry.what === "record_decision");
-    expect(recordDecision.next).toEqual({ tool: "collab_note", input: { act: "decide", re: id, text: "<what is decided, within the agreed extent>" } });
+    // A template to say, not a ready call: sent as given, a stand-in text would be the decision.
+    expect(recordDecision.next).toEqual({
+      say: `The person agreed to ${handleOf("proposal", id)}. Record what is decided, within the agreed extent: ` +
+        `collab_note {act: "decide", re: "${id}", text: "<what is decided>"}.`,
+    });
     await ok(sc, "collab_note", { act: "decide", text: "Charlie proceeds.", re: id });
     await ok(sb, "collab_note", { act: "relay_rejection", text: "The person said stop.", re: id });
     const stopFor = async (server: unknown) => (await ok(server, "collab_inbox", {})).waiting_on_you.find((entry: any) => entry.what === "stop");
@@ -1079,5 +1084,210 @@ describe("the carrying render of a proposal whose question names a local detail"
     expect(parsed.trailers.some((trailer) => trailer.key === "Position")).toBe(true);
     expect(carried.not_carried).toEqual(expect.arrayContaining(["statement (local detail)", "extent (local detail)"]));
     expect(note).toContain("Not-carried: statement (local detail)");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Settled after the stage 3 verification
+
+describe("carried objections at any count, and along the whole lineage", () => {
+  test("one voice with 17 carried challenges is told in one note within the caps, and a lost-response retry replays", async () => {
+    const { j, b, sa, sb } = trio();
+    const p1 = await ok(sa, "collab_propose", TERMS);
+    const raised: string[] = [];
+    for (let index = 0; index < 17; index += 1) {
+      raised.push((await ok(sb, "collab_note", { act: "challenge", text: `No, reason ${index}.`, re: p1.ids.proposal })).ids.report);
+    }
+    const input = { ...TERMS, question: "Revised?", replaces: p1.ids.proposal };
+    const replaced = await ok(sa, "collab_propose", input);
+    expect(j.events().filter((event) => event.type === "proposal.opened")).toHaveLength(2);
+    expect(replaced.ids.objector_notes).toEqual([{ report: expect.any(String), to: { id: b.session.id, name: "bravo" } }]);
+    const told = j.report(replaced.ids.objector_notes[0].report);
+    const parsed = parseNote(told.body);
+    expect(parsed.evidence).toHaveLength(16);
+    expect(parsed.evidence[0]).toBe(`report:${replaced.ids.proposal}`);
+    expect(parsed.statement).toContain("17 objections");
+    // The two past the Evidence lines are named in the body; the refs hold every one.
+    for (const id of raised.slice(15)) expect(parsed.body).toContain(`report:${id}`);
+    expect(JSON.parse(told.evidence_refs_json).sort())
+      .toEqual([`report:${replaced.ids.proposal}`, ...raised.map((id) => `report:${id}`)].sort());
+    const before = j.count();
+    const retry = await ok(sa, "collab_propose", input);
+    expect(retry).toMatchObject({ replayed: true, ids: { proposal: replaced.ids.proposal, objector_notes: replaced.ids.objector_notes } });
+    expect(j.count()).toBe(before);
+  });
+
+  test("an objector who objects again on every revision is told on every one", async () => {
+    const { j, sa, sb } = trio();
+    let current = (await ok(sa, "collab_propose", TERMS)).ids.proposal as string;
+    for (let round = 1; round <= 18; round += 1) {
+      await ok(sb, "collab_note", { act: "challenge", text: `Still no (${round}).`, re: current });
+      const next = await ok(sa, "collab_propose", { ...TERMS, question: `Revision ${round}?`, replaces: current });
+      expect(next.ids.objector_notes).toHaveLength(1);
+      expect(next.objectors[0].challenges).toHaveLength(round);
+      current = next.ids.proposal;
+    }
+    expect(j.events().filter((event) => event.type === "proposal.opened")).toHaveLength(19);
+  });
+
+  test("a stop after the open, then the same call: the open is replayed and each objector is told once", async () => {
+    const { j, sa, sb } = trio();
+    const p1 = await ok(sa, "collab_propose", TERMS);
+    await ok(sb, "collab_note", { act: "challenge", text: "No: tabs are data.", re: p1.ids.proposal });
+    const append = j.store.appendNoteForSession.bind(j.store);
+    let failures = 1;
+    (j.store as any).appendNoteForSession = (input: any) => {
+      if (failures-- > 0) throw new CollabError("worktree_observation_stale", "The registered worktree changed after it was inspected");
+      return append(input);
+    };
+    const input = { ...TERMS, question: "Revised?", replaces: p1.ids.proposal };
+    const stopped = await refused(sa, "collab_propose", input);
+    const opened = j.events().filter((event) => event.type === "proposal.opened");
+    expect(opened).toHaveLength(2);
+    expect(stopped.recorded_steps).toEqual([expect.objectContaining({ step: 2, id: opened[1]!.entity_id })]);
+    const resumed = await ok(sa, "collab_propose", input);
+    expect(resumed.ids.proposal).toBe(opened[1]!.entity_id);
+    expect(j.events().filter((event) => event.type === "proposal.opened")).toHaveLength(2);
+    const notes = j.events().filter((event) => event.type === "report.posted" && event.payload.about_proposal_id === resumed.ids.proposal);
+    expect(notes).toHaveLength(1);
+    expect(resumed.ids.objector_notes).toEqual([{ report: notes[0]!.entity_id, to: expect.objectContaining({ name: "bravo" }) }]);
+  });
+
+  test("an objection a legacy replacement shed is listed as shed, and the next replacement carries it", async () => {
+    const { j, a, b, sa, sb } = trio();
+    const p1 = await ok(sa, "collab_propose", TERMS);
+    const objection = await ok(sb, "collab_note", { act: "challenge", text: "No: tabs are data.", re: p1.ids.proposal });
+    const legacy = (key: string, question: string, supersedes: string) => ok(sa, "collab_proposal_open", {
+      workspace_id: a.workspace.id, idempotency_key: key, question, criteria: TERMS.criteria, extent: TERMS.extent, supersedes_report_id: supersedes,
+    });
+    const p2 = (await legacy("legacy-2", "Revised?", p1.ids.proposal)).proposal.proposal.id as string;
+    const p3 = (await legacy("legacy-3", "Revised again?", p2)).proposal.proposal.id as string;
+    // Two legacy replacements on, the objection still stands where it was raised, and the view says so.
+    const shedView = await ok(sb, "collab_inbox", { about: p3 });
+    expect(shedView.carried_objections).toEqual([
+      expect.objectContaining({ challenge: objection.ids.report, raised_on: p1.ids.proposal, carried_in_terms: false, standing_on_replaced: true }),
+    ]);
+    expect(shedView.advice.join(" ")).toContain(objection.ids.report);
+    const p4 = await ok(sa, "collab_propose", { ...TERMS, question: "Fourth?", replaces: p3 });
+    expect(p4.status.terms.known_conflicts).toContain(`report:${objection.ids.report}`);
+    expect(p4.objectors).toEqual([expect.objectContaining({ voice: b.session.id, challenges: [objection.ids.report], reached: true })]);
+    const view = await ok(sb, "collab_inbox", { about: p4.ids.proposal });
+    expect(view.carried_objections).toEqual([
+      expect.objectContaining({ challenge: objection.ids.report, carried_in_terms: true, counted_by_consent_v1: false }),
+    ]);
+    void j;
+  });
+});
+
+describe("what waits on the author after a decision", () => {
+  test("a do_not_proceed recorded before the agreement does not hide record_decision", async () => {
+    const { j, sa, sb, sc } = trio();
+    const id = (await ok(sa, "collab_propose", TERMS)).ids.proposal as string;
+    await ok(sb, "collab_note", { act: "support", text: "Yes.", re: id });
+    await ok(sc, "collab_note", { act: "support", text: "Yes.", re: id });
+    await ok(sa, "collab_note", { act: "decide", outcome: "do_not_proceed", text: "Not yet.", re: id });
+    agree(j, id);
+    for (let call = 0; call < 2; call += 1) {
+      const waiting = (await ok(sa, "collab_inbox", {})).waiting_on_you;
+      expect(waiting.map((entry: any) => [entry.what, entry.id])).toContainEqual(["record_decision", id]);
+    }
+    await ok(sa, "collab_note", { act: "decide", text: "We keep tabs.", re: id });
+    expect((await ok(sa, "collab_inbox", {})).waiting_on_you.find((entry: any) => entry.what === "record_decision")).toBeUndefined();
+  });
+
+  test("agree, decide, reject, agree again: record_decision returns, and the record says a new decide is needed", async () => {
+    const { j, sa, sb, sc } = trio();
+    const id = (await ok(sa, "collab_propose", TERMS)).ids.proposal as string;
+    await ok(sb, "collab_note", { act: "support", text: "Yes.", re: id });
+    await ok(sc, "collab_note", { act: "support", text: "Yes.", re: id });
+    const first = agree(j, id);
+    const decided = await ok(sa, "collab_note", { act: "decide", text: "We keep tabs.", re: id });
+    const rejected = rejectAtTerminal(j, id, "Wait.");
+    const again = agree(j, id);
+    const waiting = (await ok(sa, "collab_inbox", {})).waiting_on_you;
+    expect(waiting.map((entry: any) => entry.what)).toEqual(["record_decision"]);
+    const record = await ok(sb, "collab_inbox", { about: decided.ids.report });
+    expect(record.agreement_current).toBe(false);
+    expect(record.rests_on.person_act.id).toBe(first.agreement!.id);
+    // later_act is the rejection that undid it; the agreement given since is shown apart.
+    expect(record.later_act).toMatchObject({ id: rejected.person.acts.at(-1)!.id, act: "reject" });
+    expect(record.latest_act).toMatchObject({ id: again.agreement!.id, act: "agree" });
+    const said = record.advice.join(" ");
+    expect(said).toContain("agreed again on the same bytes");
+    expect(said).toContain(`record a new decide on ${id}`);
+    expect(said).not.toContain("Stop work");
+  });
+
+  test("agree, decide, reject: the record names the rejection and says stop", async () => {
+    const { j, sa, sb, sc } = trio();
+    const id = (await ok(sa, "collab_propose", TERMS)).ids.proposal as string;
+    await ok(sb, "collab_note", { act: "support", text: "Yes.", re: id });
+    await ok(sc, "collab_note", { act: "support", text: "Yes.", re: id });
+    agree(j, id);
+    const decided = await ok(sa, "collab_note", { act: "decide", text: "We keep tabs.", re: id });
+    const rejected = rejectAtTerminal(j, id, "Wait.");
+    const record = await ok(sb, "collab_inbox", { about: decided.ids.report });
+    expect(record.later_act).toMatchObject({ id: rejected.person.acts.at(-1)!.id, act: "reject" });
+    expect(record.latest_act).toBeUndefined();
+    expect(record.advice.join(" ")).toContain("a rejection");
+    expect(record.advice.join(" ")).toContain("Stop work that rests on this decision.");
+  });
+});
+
+describe("a decision's authority says who fixed what", () => {
+  test("without a proposal, the scope is the session's own words and is never labelled as the journal's", async () => {
+    const { sa } = trio();
+    const decided = await ok(sa, "collab_note", { act: "decide", text: "We go ahead.", extent: "the whole repository, as the person said" });
+    expect(decided.authority.scope).toBe("the whole repository, as the person said");
+    expect(decided.authority.derived_by).not.toContain("from the journal");
+    expect(decided.authority.derived_by).toContain("this session's own extent");
+    const record = await ok(sa, "collab_inbox", { about: decided.ids.report });
+    expect(record.authority.derived_by).not.toContain("from the journal");
+    expect(record.authority.derived_by).toContain("the server fixed only the basis");
+    expect(record.rests_on_basis).toBe("no proposal: this decision rests only on this session's word");
+  });
+
+  test("on an agreed proposal, the scope is the journal's", async () => {
+    const { j, sa, sb, sc } = trio();
+    const id = (await ok(sa, "collab_propose", TERMS)).ids.proposal as string;
+    await ok(sb, "collab_note", { act: "support", text: "Yes.", re: id });
+    await ok(sc, "collab_note", { act: "support", text: "Yes.", re: id });
+    agree(j, id);
+    const decided = await ok(sa, "collab_note", { act: "decide", text: "We keep tabs.", re: id });
+    expect(decided.authority.derived_by).toBe("the server, from the journal, inside the write");
+    const record = await ok(sb, "collab_inbox", { about: decided.ids.report });
+    expect(record.authority.derived_by).toBe("the server, from the journal, when it was written");
+    expect(record.rests_on_basis).toContain("derived from the journal");
+  });
+});
+
+describe("ready calls a decide or a propose refusal gives", () => {
+  test("an Extent: line in a decide note is answered with the note without it, and that call works", async () => {
+    const { j, sa, sb, sc } = trio();
+    const id = (await ok(sa, "collab_propose", TERMS)).ids.proposal as string;
+    await ok(sb, "collab_note", { act: "support", text: "Yes.", re: id });
+    await ok(sc, "collab_note", { act: "support", text: "Yes.", re: id });
+    agree(j, id);
+    const proceed = await refused(sb, "collab_note", { text: `decide: Go.\n\nRe: proposal:${id}\nExtent: everything` });
+    expect(proceed.code).toBe("extent_from_proposal");
+    expect(proceed.remedy.input.text).not.toContain("Extent:");
+    const decided = await ok(sb, "collab_note", proceed.remedy.input);
+    expect(j.report(decided.ids.report).authority_scope).toBe(TERMS.extent);
+    const stop = await refused(sc, "collab_note", { text: `decide: No.\n\nRe: proposal:${id}\nExtent: everything`, outcome: "do_not_proceed" });
+    expect(stop.code).toBe("extent_not_used");
+    expect(stop.remedy.input).toMatchObject({ outcome: "do_not_proceed" });
+    expect((await ok(sc, "collab_note", stop.remedy.input)).outcome).toBe("do_not_proceed");
+  });
+
+  test("act propose in collab_note points at collab_propose without stand-in terms", async () => {
+    const { j, sa } = trio();
+    const wrong = await refused(sa, "collab_note", { act: "propose", text: "Should we ship?" });
+    expect(wrong.code).toBe("wrong_verb");
+    expect(wrong.remedy).toEqual({ tool: "collab_propose", input: { question: "Should we ship?" } });
+    const before = j.count();
+    // Sent as given, it asks for the terms instead of opening a proposal on placeholders.
+    const sent = await refused(sa, wrong.remedy.tool, wrong.remedy.input);
+    expect(sent.code).toBe("invalid_criteria");
+    expect(j.count()).toBe(before);
   });
 });
