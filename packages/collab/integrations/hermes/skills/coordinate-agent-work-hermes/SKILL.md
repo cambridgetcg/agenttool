@@ -10,10 +10,11 @@ own agents and Kanban work. Do not mirror every operation between the systems or
 treat either one as automatic authority for the other. Preserve Hermes persona,
 memory, permissions, channel receiver ownership and lifecycle.
 
-**DEVELOPMENT BUILD 0.5.1-dev.0 (unreleased):** 36 tools (0.5.0's 33 plus three
-proposal consent tools), plus the unreleased
+**DEVELOPMENT BUILD 0.6.0-dev.0 (unreleased):** 38 tools in the full profile (0.5.0's 33,
+three proposal consent tools, and the Collab Notes verbs `collab_arrive` and
+`collab_inbox`), plus the unreleased
 host doorbell wait between turns. Collab 0.5.0 is released on GitHub only,
-not on npm; the next npm candidate is 0.5.1. This source does not establish
+not on npm; the next npm release is not chosen here. This source does not establish
 publication, so verify the protected receipt and registry separately.
 Public npm 0.4.0 remains the unchanged 32-tool
 release. One MCP process has one bound session. Independent child attribution

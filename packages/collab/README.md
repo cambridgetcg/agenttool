@@ -7,7 +7,7 @@
 > **Code:** `src/{store,mcp,protocol,proposal,person-desk,ceremony,passkey,tty,version}.ts`.
 > **Tests:** `tests/{events-wait,mcp,package,proposal-consent,person-desk,tty}.test.ts`.
 
-**DEVELOPMENT BUILD: 0.5.1-dev.0, 36 MCP tools. Unreleased.** Collab 0.5.0
+**DEVELOPMENT BUILD: 0.6.0-dev.0, 38 MCP tools in the full profile. Unreleased.** Collab 0.5.0
 is released on GitHub only, as the
 [`collab-v0.5.0` release](https://github.com/cambridgetcg/agenttool-collab/releases/tag/collab-v0.5.0)
 of `cambridgetcg/agenttool-collab` (2026-10-10). On npm the recorded release is
@@ -16,9 +16,12 @@ behaviour, this source is 0.5.0 plus the unreleased [host doorbell wait](#host-d
 and its addressed mode with the Claude Code watcher, plus the unreleased
 [session-fit changes](#session-fit-migration-unreleased) and the three unreleased
 [proposal consent tools](#proposals-and-consent-unreleased) that bring 0.5.0's 33
-tools to 36. The next npm candidate is
-0.5.1 through the [public staged release path](https://docs.agenttool.dev/NPM-RELEASES.md#public-release-path-from-2026-10-12).
-This source is not evidence of 0.5.1 publication or native-harness activation;
+tools to 36, plus the first two unreleased Collab Notes verbs, `collab_arrive` and
+`collab_inbox` (38 in all; the `notes` tools profile registers those two and
+`collab_journal_verify`). The next npm release goes through the
+[public staged release path](https://docs.agenttool.dev/NPM-RELEASES.md#public-release-path-from-2026-10-12);
+its version is not chosen here.
+This source is not evidence of publication or native-harness activation;
 verify exact release receipts separately.
 
 Local-first coordination for independent coding-agent sessions. It gives
@@ -411,7 +414,7 @@ the same Claude Code session resumed in two terminals) both match it.
 
 ### Host doorbell wait (unreleased)
 
-This arrived after 0.5.0 and is in the 0.5.1-dev.0 development build only; no
+This arrived after 0.5.0 and is in the unreleased development builds only (0.5.1-dev.0 and later); no
 released Collab archive contains it.
 
 `agenttool-collab-host wait` lets a host wait between model turns, for
@@ -961,7 +964,7 @@ enforce their own repository, account, and publication boundaries.
 ## Codex, Claude Code, Hermes Agent, and OpenClaw
 
 The npm package root is the plugin root for Codex and Claude, so the same
-`skills/coordinate-agent-work/SKILL.md` and 36-tool standalone MCP server ship
+`skills/coordinate-agent-work/SKILL.md` and 38-tool standalone MCP server ship
 once:
 
 - Codex reads `.codex-plugin/plugin.json`. Its MCP declaration uses `cwd: "."`
@@ -1062,14 +1065,16 @@ and adds bounded anchored observation as the 33rd tool, review routing
 end, the `agenttool-collab-host` bin, host-commit acceptance, and the bound
 `collab_next` refusal of a differing `after_sequence`.
 
-**DEVELOPMENT BUILD: 0.5.1-dev.0.** This main-branch source follows 0.5.0 and is
-unreleased. It keeps journal schema 3, adds three proposal consent tools to
-the 33 MCP tools of 0.5.0 (36 in all), and adds the
+**DEVELOPMENT BUILD: 0.6.0-dev.0.** This main-branch source follows 0.5.0 and is
+unreleased. It keeps journal schema 3, adds three proposal consent tools and the
+Collab Notes verbs `collab_arrive` and `collab_inbox` to the 33 MCP tools of 0.5.0
+(38 in all under the full profile), and adds the
 `agenttool-collab-host wait` host doorbell, its `--addressed` mode and the
-Claude Code doorbell watcher. The MCP server reports `0.5.1-dev.0` in
+Claude Code doorbell watcher. The MCP server reports `0.6.0-dev.0` in
 `serverInfo` and at the start of its instructions, both read from
 `src/version.ts`, so this build cannot announce itself as the 0.5.0 release.
-The next npm candidate is 0.5.1 through the public staged release path. A
+The next npm release goes through the public staged release path; its version is
+not chosen here. A
 development version is not a release, and these source changes do not
 themselves publish, upload, deploy, configure a native harness, activate a
 Telegram channel or second device, or contact a chain.

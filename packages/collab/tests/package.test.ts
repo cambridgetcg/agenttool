@@ -153,7 +153,7 @@ describe("cross-host package", () => {
     const codex = await json(".codex-plugin/plugin.json");
     const claude = await json(".claude-plugin/plugin.json");
 
-    expect(COLLAB_PACKAGE_VERSION).toBe("0.5.1-dev.0");
+    expect(COLLAB_PACKAGE_VERSION).toBe("0.6.0-dev.0");
     expect(packageManifest.version).toBe(COLLAB_PACKAGE_VERSION);
     expect(codex.version).toBe(packageManifest.version);
     expect(claude.version).toBe(packageManifest.version);

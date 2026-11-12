@@ -28769,8 +28769,2358 @@ function isOwnedByCurrentUser(uid) {
   return typeof process.getuid !== "function" || uid === process.getuid();
 }
 
+// src/verbs.ts
+import { createHash } from "crypto";
+import { existsSync as existsSync2 } from "fs";
+import { hostname as hostname3 } from "os";
+import { resolve as resolve3 } from "path";
+
+// src/canonical.ts
+function canonicalJson(value) {
+  return JSON.stringify(sortValue(value));
+}
+function sortValue(value) {
+  if (Array.isArray(value))
+    return value.map(sortValue);
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0).map(([key, child]) => [key, sortValue(child)]);
+    return Object.fromEntries(entries);
+  }
+  return value;
+}
+
+// src/note.ts
+var NOTE_FORMAT = "collab-note/1";
+var NOTE_ACTS = [
+  "note",
+  "support",
+  "challenge",
+  "resolve",
+  "withdraw",
+  "accept",
+  "request_changes",
+  "decide",
+  "relay_rejection",
+  "take",
+  "done",
+  "propose",
+  "poll",
+  "vote"
+];
+var NOTE_ACTS_NEEDING_RE = [
+  "support",
+  "challenge",
+  "resolve",
+  "withdraw",
+  "accept",
+  "request_changes",
+  "relay_rejection"
+];
+var ACT_SET = new Set(NOTE_ACTS);
+function isNoteAct(value) {
+  return typeof value === "string" && ACT_SET.has(value);
+}
+var NOTE_BASES = ["seen", "told", "inferred", "quoted"];
+var BASIS_SET = new Set(NOTE_BASES);
+var NOTE_UNMARKED = "unmarked";
+var NOTE_FIELD_KEYS = {
+  to: "To",
+  re: "Re",
+  via: "Via",
+  why: "Why",
+  evidence: "Evidence",
+  limits: "Limits",
+  purpose: "Purpose",
+  extent: "Extent",
+  replaces: "Replaces"
+};
+var SINGLE_FIELDS = ["to", "re", "via", "limits", "purpose", "extent", "replaces"];
+var MULTILINE_FIELDS = new Set(["limits", "extent"]);
+var NOTE_RENDER_KEYS = [
+  "Sha256",
+  "Position",
+  "Result",
+  "Criteria",
+  "Option",
+  "Pick",
+  "Quorum",
+  "Closes",
+  "Not-carried"
+];
+var FIELD_BY_KEY = new Map(Object.entries(NOTE_FIELD_KEYS).map(([field, key]) => [key.toLowerCase(), field]));
+var RENDER_KEY_BY_LOWER = new Map(NOTE_RENDER_KEYS.map((key) => [key.toLowerCase(), key]));
+var RENDER_KEY_SET = new Set(NOTE_RENDER_KEYS);
+var X_KEY = /^X-[A-Za-z0-9-]{1,30}$/i;
+var LISTED_KEYS = [...Object.values(NOTE_FIELD_KEYS), ...NOTE_RENDER_KEYS].join(", ");
+var NOTE_STATEMENT_MAX = 200;
+var NOTE_WHY_MAX = 8;
+var NOTE_WHY_TEXT_MAX = 300;
+var NOTE_EVIDENCE_MAX = 16;
+var NOTE_VALUE_MAX = 1000;
+var NOTE_LIMITS_MAX = 2000;
+var NOTE_PURPOSE_MAX = 200;
+var NOTE_EXTENT_MAX = 1000;
+var NOTE_JOURNAL_MAX = 8000;
+var NOTE_REVIEW_MAX = 4000;
+var NOTE_RELAY_TEXT_MAX = 2000;
+var NOTE_CARRY_MAX = 800;
+var STATEMENT_TOO_LONG_REMEDY = "put the rest after a blank line";
+var JOURNAL_CEILING = Object.freeze({ max: NOTE_JOURNAL_MAX, measure: "note" });
+var REVIEW_CEILING = Object.freeze({ max: NOTE_REVIEW_MAX, measure: "note_without_evidence" });
+var RELAY_CEILING = Object.freeze({ max: NOTE_RELAY_TEXT_MAX, measure: "text" });
+var NOTE_ACT_CEILINGS = Object.freeze({
+  note: JOURNAL_CEILING,
+  support: JOURNAL_CEILING,
+  challenge: JOURNAL_CEILING,
+  resolve: JOURNAL_CEILING,
+  withdraw: JOURNAL_CEILING,
+  accept: REVIEW_CEILING,
+  request_changes: REVIEW_CEILING,
+  decide: JOURNAL_CEILING,
+  relay_rejection: RELAY_CEILING,
+  take: JOURNAL_CEILING,
+  done: REVIEW_CEILING,
+  propose: JOURNAL_CEILING,
+  poll: JOURNAL_CEILING,
+  vote: JOURNAL_CEILING
+});
+var STRIPPED = /[\uFEFF\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u{E0000}-\u{E007F}]/gu;
+var HAS_STRIPPED = /[\uFEFF\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u{E0000}-\u{E007F}]/u;
+function cleanLines(text) {
+  return text.replace(STRIPPED, "").replace(/\r\n?/g, `
+`).split(`
+`).map((line) => line.replace(/[ \t]+$/, ""));
+}
+function normalizeNoteText(text) {
+  return cleanLines(text).join(`
+`).trim();
+}
+function trimBlankEdges(lines) {
+  let start = 0;
+  let end = lines.length;
+  while (start < end && lines[start] === "")
+    start += 1;
+  while (end > start && lines[end - 1] === "")
+    end -= 1;
+  return lines.slice(start, end);
+}
+function normalizeBodyText(text) {
+  const body = trimBlankEdges(cleanLines(text)).join(`
+`).trimEnd();
+  return body === "" ? null : body;
+}
+function normalizeLineValue(value) {
+  const line = cleanLines(value).map((part) => part.trim()).filter((part) => part !== "").join(" ");
+  return line === "" ? null : line;
+}
+function normalizePointerValue(value) {
+  const pointer = normalizeNoteText(value);
+  return pointer === "" ? null : pointer;
+}
+function normalizeMultilineValue(value) {
+  const lines = cleanLines(value).map((line) => line.trim()).filter((line) => line !== "");
+  return lines.length === 0 ? null : lines.join(`
+`);
+}
+function normalizeNoteFields(input) {
+  const fields = completeFields(input);
+  const line = (value) => typeof value === "string" ? normalizeLineValue(value) : value;
+  const pointer = (value) => typeof value === "string" ? normalizePointerValue(value) : value;
+  const multiline = (value) => typeof value === "string" ? normalizeMultilineValue(value) : value;
+  const trailers = [];
+  for (const trailer of fields.trailers) {
+    const key = typeof trailer.key === "string" ? trailer.key.trim() : trailer.key;
+    const canonical = typeof key === "string" ? RENDER_KEY_BY_LOWER.get(key.toLowerCase()) ?? key : key;
+    const value = typeof trailer.value === "string" ? canonical === "Sha256" ? normalizeLineValue(trailer.value) : normalizeMultilineValue(trailer.value) : trailer.value;
+    if (value !== null)
+      trailers.push({ key: canonical, value });
+  }
+  return {
+    act: typeof fields.act === "string" ? fields.act.trim().toLowerCase() : fields.act,
+    statement: typeof fields.statement === "string" ? cleanLines(fields.statement).join(`
+`).trim() : fields.statement,
+    body: typeof fields.body === "string" ? normalizeBodyText(fields.body) : fields.body,
+    to: pointer(fields.to),
+    re: pointer(fields.re),
+    via: pointer(fields.via),
+    why: fields.why.map((reason) => ({
+      text: typeof reason.text === "string" ? normalizeLineValue(reason.text) ?? "" : reason.text,
+      basis: typeof reason.basis === "string" ? reason.basis.trim() === "" ? null : reason.basis.trim().toLowerCase() : reason.basis,
+      cites: reason.cites
+    })),
+    evidence: fields.evidence.map((item) => typeof item === "string" ? normalizePointerValue(item) ?? "" : item),
+    limits: multiline(fields.limits),
+    purpose: line(fields.purpose),
+    extent: multiline(fields.extent),
+    replaces: pointer(fields.replaces),
+    trailers
+  };
+}
+var NOTE_JOURNAL_EVIDENCE_KINDS = ["report", "event", "artifact", "checkpoint"];
+var NOTE_EVIDENCE_ATTRS = ["sha256", "exit", "out", "lines", "runs", "at"];
+var NOTE_EVIDENCE_FORMS = [
+  "file <repo path>[:a-b]",
+  "commit <sha>",
+  "test <command> exit=<n>",
+  "url <url>",
+  "data <label> sha256=<hex>",
+  "msg <channel> <id>",
+  "report:<id>",
+  "event:<id>",
+  "artifact:<id>",
+  "checkpoint:<id>"
+];
+var ATTR_SET = new Set(NOTE_EVIDENCE_ATTRS);
+var JOURNAL_EVIDENCE_SET = new Set(NOTE_JOURNAL_EVIDENCE_KINDS);
+var ID_TOKEN = String.raw`[A-Za-z0-9][A-Za-z0-9._:#-]*`;
+var JOURNAL_EVIDENCE = new RegExp(String.raw`^(report|event|artifact|checkpoint):(${ID_TOKEN})$`, "i");
+var HANDLE_EVIDENCE = /^(?:report|proposal|ballot)#[0-9a-f]{6,32}$/i;
+var WORD_EVIDENCE = /^(file|commit|test|url|data|msg)[ \t]+(\S[^\n]*)$/i;
+var TRAILING_ATTR = /[ \t]+([A-Za-z0-9]+)=(\S+)$/;
+var ATTR_VALUE = {
+  sha256: /^[0-9a-f]{64}$/i,
+  exit: /^-?\d{1,10}$/,
+  out: /^sha256:[0-9a-f]{64}$/i,
+  lines: /^\d{1,9}(?:-\d{1,9})?$/,
+  runs: /^\d{1,9}$/,
+  at: /^\S+$/
+};
+var FILE_RANGE = /:(\d+)(?:-(\d+))?$/;
+function evidenceError(message, value) {
+  return new CollabError("invalid_evidence", `${message}. Evidence forms: ${NOTE_EVIDENCE_FORMS.join(" | ")}`, value === undefined ? { forms: [...NOTE_EVIDENCE_FORMS] } : { forms: [...NOTE_EVIDENCE_FORMS], evidence: value });
+}
+function parseEvidence(value) {
+  if (typeof value !== "string")
+    throw evidenceError("Evidence must be a string");
+  if (value.includes(`
+`) || value.includes("\r"))
+    throw evidenceError("Evidence is one line", value);
+  const text = value.trim();
+  if (text === "")
+    throw evidenceError("Evidence is empty");
+  const journal = JOURNAL_EVIDENCE.exec(text);
+  if (journal) {
+    return { kind: journal[1].toLowerCase(), locator: journal[2], attrs: {} };
+  }
+  if (HANDLE_EVIDENCE.test(text))
+    return { kind: "report", locator: text, attrs: {} };
+  const word = WORD_EVIDENCE.exec(text);
+  if (!word) {
+    if (/^task[:#_]/i.test(text)) {
+      throw evidenceError("A task is not evidence; cite its completion report (report:<id>)", value);
+    }
+    throw evidenceError("Evidence does not start with a known kind", value);
+  }
+  const kind = word[1].toLowerCase();
+  let locator = word[2];
+  const attrs = {};
+  for (;; ) {
+    const match = TRAILING_ATTR.exec(locator);
+    if (!match)
+      break;
+    const key = match[1].toLowerCase();
+    if (!ATTR_SET.has(key) || key in attrs)
+      break;
+    const attr = key;
+    if (!ATTR_VALUE[attr].test(match[2]))
+      throw evidenceError(`${attr}= has an unreadable value`, value);
+    attrs[attr] = match[2];
+    locator = locator.slice(0, match.index);
+  }
+  if (kind === "commit" && !/^[0-9a-f]{7,64}$/i.test(locator)) {
+    throw evidenceError("A commit is cited by its hex sha (7 to 64 hex digits)", value);
+  }
+  if (kind === "url" && !/^[A-Za-z][A-Za-z0-9+.-]*:\S+$/.test(locator)) {
+    throw evidenceError("A url is one word with a scheme, such as https://\u2026", value);
+  }
+  if (kind === "msg" && !/^\S+[ \t]+\S/.test(locator)) {
+    throw evidenceError("A msg cite names its channel and the message id", value);
+  }
+  if (kind === "file") {
+    const range = FILE_RANGE.exec(locator);
+    if (range) {
+      const from = Number(range[1]);
+      const to = range[2] === undefined ? from : Number(range[2]);
+      if (from < 1 || to < from)
+        throw evidenceError("A file line range is 1-based and runs forwards", value);
+      if (range.index === 0)
+        throw evidenceError("A file cite needs a path before its line range", value);
+    }
+  }
+  return { kind, locator, attrs };
+}
+var HANDLE = /^(report|proposal|ballot|task)#[0-9a-f]{6,32}$/i;
+var PREFIXED_REF = new RegExp(String.raw`^(report|proposal|ballot|task|event):(${ID_TOKEN})$`, "i");
+var BARE_REF = /^(report|task)_[A-Za-z0-9][A-Za-z0-9._:-]*$/;
+var TEXT_REF = /^(?:(file|msg):(\S[^\n]*)|(lobby):(\S+))$/i;
+var VIA = /^(?:host|file|lobby|msg):\S/i;
+function parseNoteRef(value) {
+  const handle = HANDLE.exec(value);
+  if (handle)
+    return { kind: handle[1].toLowerCase(), id: value, handle: true };
+  const prefixed = PREFIXED_REF.exec(value);
+  if (prefixed) {
+    return { kind: prefixed[1].toLowerCase(), id: prefixed[2], handle: HANDLE.test(prefixed[2]) };
+  }
+  const bare = BARE_REF.exec(value);
+  if (bare)
+    return { kind: bare[1], id: value, handle: false };
+  const text = TEXT_REF.exec(value);
+  if (text) {
+    return { kind: (text[1] ?? text[3]).toLowerCase(), id: text[2] ?? text[4], handle: false };
+  }
+  return null;
+}
+var REF_FORMS = "report:<id>, proposal:<id>, ballot:<id>, task:<id>, event:<id>, a handle such as report#3fa91c, file:<path>[#n], lobby:<room>#<n> or msg:<text>";
+var SUBJECT = /^([A-Za-z_]+):(?: ([^\n]*))?$/;
+var TRAILER_LINE = /^([A-Za-z][A-Za-z0-9-]{0,63}):(?: ([^\n]*))?$/;
+var CONTINUATION = /^[ \t]+\S/;
+var KEYISH = /^([A-Za-z][A-Za-z0-9-]{0,63}):(\S?)/;
+var BASIS_MARK = /^([\s\S]*?)\s*\(\s*(seen|told|inferred|quoted|unmarked)\b([^()]*)\)$/i;
+function readBasisMark(value) {
+  const match = BASIS_MARK.exec(value);
+  if (!match)
+    return { text: value, basis: null, cites: [], mark: "none" };
+  const inner = match[3].trim();
+  const tokens = inner === "" ? [] : inner.split(/\s*,\s*|\s+/);
+  if (tokens.some((token) => !/^\d{1,6}$/.test(token))) {
+    return { text: value, basis: null, cites: [], mark: "unreadable" };
+  }
+  const word = match[2].toLowerCase();
+  return {
+    text: match[1].trim(),
+    basis: word === NOTE_UNMARKED ? null : word,
+    cites: tokens.map(Number),
+    mark: "read"
+  };
+}
+function renderReason(reason) {
+  if (reason.basis !== null || reason.cites.length > 0) {
+    const cites = reason.cites.length > 0 ? ` ${reason.cites.join(",")}` : "";
+    return `${reason.text} (${reason.basis ?? NOTE_UNMARKED}${cites})`;
+  }
+  return readBasisMark(reason.text).mark === "none" ? reason.text : `${reason.text} (${NOTE_UNMARKED})`;
+}
+function isTrailerBlock(lines) {
+  if (lines.length === 0 || !TRAILER_LINE.test(lines[0]))
+    return false;
+  return lines.every((line) => TRAILER_LINE.test(line) || CONTINUATION.test(line));
+}
+function blockEntries(lines, firstLine) {
+  const entries = [];
+  lines.forEach((line, index) => {
+    const trailer = TRAILER_LINE.exec(line);
+    if (trailer) {
+      entries.push({ key: trailer[1], line: firstLine + index, values: [(trailer[2] ?? "").trim()], raw: [line] });
+    } else {
+      const entry = entries[entries.length - 1];
+      entry.values.push(line.trim());
+      entry.raw.push(line);
+    }
+  });
+  return entries;
+}
+function readBlock(lines, firstLine, advice) {
+  const reading = {
+    single: { to: null, re: null, via: null, limits: null, purpose: null, extent: null, replaces: null },
+    why: [],
+    evidence: [],
+    trailers: [],
+    kept: []
+  };
+  for (const entry of blockEntries(lines, firstLine)) {
+    const lower = entry.key.toLowerCase();
+    const field = FIELD_BY_KEY.get(lower);
+    const renderKey = RENDER_KEY_BY_LOWER.get(lower);
+    if (field === undefined && renderKey === undefined && !X_KEY.test(entry.key)) {
+      reading.kept.push(...entry.raw);
+      advice.push(`Line ${entry.line}: "${entry.key}:" is not a collab-note/1 key, so the line stays in the body. ` + `Trailer keys are ${LISTED_KEYS}, or an X- key.`);
+      continue;
+    }
+    const multiline = field === undefined ? renderKey !== "Sha256" : MULTILINE_FIELDS.has(field);
+    const value = entry.values.filter((part) => part !== "").join(multiline ? `
+` : " ");
+    if (value === "" && field === "evidence") {
+      reading.evidence.push({ text: "", line: entry.line });
+      advice.push(`Line ${entry.line}: Evidence ${reading.evidence.length} is empty. It keeps its place so later cites keep ` + "their numbers; remove it and renumber the cites after it.");
+      continue;
+    }
+    if (value === "") {
+      reading.kept.push(...entry.raw);
+      advice.push(`Line ${entry.line}: "${entry.key}:" has no value, so the line stays in the body.`);
+      continue;
+    }
+    if (field === "why") {
+      const mark = readBasisMark(value);
+      if (mark.mark === "unreadable") {
+        advice.push(`Line ${entry.line}: the reason ends in a parenthesis that is not a basis mark, so it was read as text; ` + `write (seen), (told), (inferred) or (quoted), with any cite numbers, such as (seen 1,2).`);
+      } else if (mark.mark === "read" && mark.text === "") {
+        advice.push(`Line ${entry.line}: this Why: has a basis but no reason before it.`);
+      }
+      reading.why.push({ reason: { text: mark.text, basis: mark.basis, cites: mark.cites }, line: entry.line });
+    } else if (field === "evidence") {
+      reading.evidence.push({ text: value, line: entry.line });
+    } else if (field !== undefined) {
+      if (reading.single[field] !== null) {
+        reading.kept.push(...entry.raw);
+        advice.push(`Line ${entry.line}: a second "${NOTE_FIELD_KEYS[field]}:" stays in the body; only the first one counts.`);
+        continue;
+      }
+      reading.single[field] = value;
+    } else {
+      reading.trailers.push({ key: renderKey ?? entry.key, value });
+    }
+  }
+  return reading;
+}
+function adviseBodyTrailers(lines, firstLine, advice) {
+  lines.forEach((line, index) => {
+    const match = KEYISH.exec(line);
+    if (!match)
+      return;
+    const field = FIELD_BY_KEY.get(match[1].toLowerCase());
+    if (field === undefined)
+      return;
+    const key = NOTE_FIELD_KEYS[field];
+    advice.push(match[2] !== "" ? `Line ${firstLine + index} looks like a ${key}: trailer but has no space after the colon, so it is body text.` : `Line ${firstLine + index} looks like a ${key}: trailer but is in the body; trailers are read only from ` + `the last paragraph, with no blank line between them.`);
+  });
+}
+function parseNote(text) {
+  const lines = normalizeNoteText(text).split(`
+`);
+  const advice = [];
+  const subject = lines[0] ?? "";
+  let act = null;
+  let statement = subject;
+  const head = SUBJECT.exec(subject);
+  const word = head?.[1]?.toLowerCase();
+  if (head && isNoteAct(word)) {
+    act = word;
+    statement = (head[2] ?? "").trim();
+    if (statement === "")
+      advice.push(`Line 1: "${head[1]}:" has no statement after it.`);
+  } else {
+    advice.push(`Line 1 does not begin with a known act and ": " (${NOTE_ACTS.join(", ")}), so no act was read; ` + `the whole line is the statement.`);
+  }
+  const rest = lines.slice(1);
+  const finalStart = rest.lastIndexOf("") + 1;
+  const finalParagraph = rest.slice(finalStart);
+  const hasBlock = isTrailerBlock(finalParagraph);
+  const bodyLines = hasBlock ? rest.slice(0, finalStart) : rest;
+  adviseBodyTrailers(bodyLines, 2, advice);
+  const block = hasBlock ? readBlock(finalParagraph, finalStart + 2, advice) : readBlock([], 0, advice);
+  const ownBody = trimBlankEdges(bodyLines).join(`
+`).trimEnd();
+  const kept = block.kept.join(`
+`);
+  const joined = ownBody === "" ? kept : kept === "" ? ownBody : `${ownBody}
+
+${kept}`;
+  const body = joined === "" ? null : joined;
+  const evidence = block.evidence.map((item) => item.text);
+  block.evidence.forEach((item, index) => {
+    if (item.text === "")
+      return;
+    try {
+      parseEvidence(item.text);
+    } catch (error51) {
+      if (!(error51 instanceof CollabError))
+        throw error51;
+      advice.push(`Line ${item.line}: Evidence ${index + 1} is not a known evidence form (${NOTE_EVIDENCE_FORMS.join(" | ")}).`);
+    }
+  });
+  for (const { reason, line } of block.why) {
+    for (const cite of reason.cites) {
+      if (cite < 1)
+        advice.push(`Line ${line}: cite ${cite} is not an Evidence position; cites count from 1.`);
+      else if (cite > evidence.length) {
+        advice.push(`Line ${line}: cites Evidence ${cite}, but the note has ${evidence.length} Evidence line(s).`);
+      }
+    }
+  }
+  for (const field of ["re", "replaces"]) {
+    const value = block.single[field];
+    if (value !== null && parseNoteRef(value) === null) {
+      advice.push(`"${NOTE_FIELD_KEYS[field]}: ${value}" is not a known reference (${REF_FORMS}).`);
+    }
+  }
+  if (block.single.via !== null && !VIA.test(block.single.via)) {
+    advice.push(`"Via: ${block.single.via}" is not a known channel (host:\u2026, file:\u2026, lobby:\u2026 or msg:\u2026).`);
+  }
+  if (act !== null && NOTE_ACTS_NEEDING_RE.includes(act) && block.single.re === null) {
+    advice.push(`"${act}" needs a Re: line naming what it answers.`);
+  }
+  return {
+    act,
+    statement,
+    body,
+    to: block.single.to,
+    re: block.single.re,
+    via: block.single.via,
+    why: block.why.map((item) => item.reason),
+    evidence,
+    limits: block.single.limits,
+    purpose: block.single.purpose,
+    extent: block.single.extent,
+    replaces: block.single.replaces,
+    trailers: block.trailers,
+    advice
+  };
+}
+function completeFields(input) {
+  if (input === null || typeof input !== "object") {
+    throw new CollabError("invalid_note_field", "A note needs at least an act and a statement", { field: "note" });
+  }
+  for (const field of ["why", "evidence", "trailers"]) {
+    if (input[field] !== undefined && !Array.isArray(input[field])) {
+      throw new CollabError("invalid_note_field", `${field} must be a list`, { field });
+    }
+  }
+  return {
+    act: input.act,
+    statement: input.statement,
+    body: input.body ?? null,
+    to: input.to ?? null,
+    re: input.re ?? null,
+    via: input.via ?? null,
+    why: (input.why ?? []).map((reason) => ({
+      text: reason?.text,
+      basis: reason?.basis ?? null,
+      cites: reason?.cites ?? []
+    })),
+    evidence: [...input.evidence ?? []],
+    limits: input.limits ?? null,
+    purpose: input.purpose ?? null,
+    extent: input.extent ?? null,
+    replaces: input.replaces ?? null,
+    trailers: (input.trailers ?? []).map((trailer) => ({ key: trailer?.key, value: trailer?.value }))
+  };
+}
+var NORMALIZE_HINT = "normalizeNoteFields fixes whitespace and invisible characters";
+var NUL_PROBLEM = "must not contain NUL characters";
+var LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
+var LONE_SURROGATE_PROBLEM = "must be well-formed Unicode text (it holds half of a character, as when an emoji is cut in two)";
+function hasLoneSurrogate(text) {
+  return LONE_SURROGATE.test(text);
+}
+function lineProblem(value) {
+  if (typeof value !== "string")
+    return "must be a string";
+  if (value === "")
+    return "must not be empty";
+  if (value.includes("\x00"))
+    return NUL_PROBLEM;
+  if (LONE_SURROGATE.test(value))
+    return LONE_SURROGATE_PROBLEM;
+  if (value.includes(`
+`) || value.includes("\r"))
+    return "must be one line";
+  if (HAS_STRIPPED.test(value)) {
+    return `contains a byte-order mark, a bidirectional control or a tag character (${NORMALIZE_HINT})`;
+  }
+  if (value !== value.trim())
+    return `has leading or trailing whitespace (${NORMALIZE_HINT})`;
+  return null;
+}
+function multilineProblem(value) {
+  if (typeof value !== "string")
+    return "must be a string";
+  if (value === "")
+    return "must not be empty";
+  if (value.includes("\x00"))
+    return NUL_PROBLEM;
+  if (LONE_SURROGATE.test(value))
+    return LONE_SURROGATE_PROBLEM;
+  if (value.includes("\r"))
+    return `contains a carriage return (${NORMALIZE_HINT})`;
+  if (HAS_STRIPPED.test(value)) {
+    return `contains a byte-order mark, a bidirectional control or a tag character (${NORMALIZE_HINT})`;
+  }
+  if (value.split(`
+`).some((line) => line === "" || line !== line.trim())) {
+    return `has a blank line or a line with surrounding whitespace, which a trailer value cannot hold (${NORMALIZE_HINT})`;
+  }
+  return null;
+}
+function bodyProblem(value) {
+  if (typeof value !== "string")
+    return "must be a string";
+  if (value.includes("\x00"))
+    return NUL_PROBLEM;
+  if (LONE_SURROGATE.test(value))
+    return LONE_SURROGATE_PROBLEM;
+  if (value.includes("\r"))
+    return `contains a carriage return (${NORMALIZE_HINT})`;
+  if (HAS_STRIPPED.test(value)) {
+    return `contains a byte-order mark, a bidirectional control or a tag character (${NORMALIZE_HINT})`;
+  }
+  const lines = value.split(`
+`);
+  if (lines[0] === "" || lines[lines.length - 1] === "" || value !== value.trimEnd()) {
+    return `must not start or end with a blank line or end with whitespace (${NORMALIZE_HINT})`;
+  }
+  if (lines.some((line) => /[ \t]$/.test(line)))
+    return `has a line ending in spaces (${NORMALIZE_HINT})`;
+  return null;
+}
+function reasonProblems(reason, index, evidenceCount) {
+  const field = `why[${index}]`;
+  const problems = [];
+  const text = lineProblem(reason.text);
+  if (text)
+    problems.push({ code: "invalid_note_field", field, message: `Why ${index + 1}'s text ${text}` });
+  if (reason.basis !== null && !BASIS_SET.has(reason.basis)) {
+    problems.push({
+      code: "invalid_note_field",
+      field: `${field}.basis`,
+      message: `Why ${index + 1}'s basis must be ${NOTE_BASES.join(", ")}, or absent`
+    });
+  }
+  if (!Array.isArray(reason.cites) || reason.cites.some((cite) => !Number.isInteger(cite) || cite < 1)) {
+    problems.push({
+      code: "invalid_note_field",
+      field: `${field}.cites`,
+      message: `Why ${index + 1}'s cites are 1-based positions in the Evidence list`
+    });
+  } else if (evidenceCount !== null) {
+    const outside = reason.cites.find((cite) => cite > evidenceCount);
+    if (outside !== undefined) {
+      problems.push({
+        code: "cite_out_of_range",
+        field: `${field}.cites`,
+        message: `Why ${index + 1} cites Evidence ${outside}, but the note has ${evidenceCount} Evidence item(s)`,
+        max: evidenceCount,
+        actual: outside
+      });
+    }
+  }
+  return problems;
+}
+function evidenceProblem(item, index) {
+  const field = `evidence[${index}]`;
+  const line = lineProblem(item);
+  if (line && item === "") {
+    return {
+      code: "invalid_note_field",
+      field,
+      message: `Evidence ${index + 1} ${line}`,
+      remedy: "Remove the empty item and renumber the Why cites after it: cites count Evidence positions from 1."
+    };
+  }
+  if (line)
+    return { code: "invalid_note_field", field, message: `Evidence ${index + 1} ${line}` };
+  try {
+    parseEvidence(item);
+    return null;
+  } catch (error51) {
+    if (!(error51 instanceof CollabError))
+      throw error51;
+    return { code: "invalid_evidence", field, message: `Evidence ${index + 1}: ${error51.message}` };
+  }
+}
+function trailerProblem(trailer, index) {
+  const field = `trailers[${index}]`;
+  const key = trailer.key;
+  if (typeof key !== "string" || !(RENDER_KEY_SET.has(key) || X_KEY.test(key))) {
+    const fieldKey = typeof key === "string" ? FIELD_BY_KEY.get(key.toLowerCase()) : undefined;
+    return {
+      code: "invalid_note_field",
+      field: `${field}.key`,
+      message: fieldKey !== undefined ? `"${key}" is a note field; set ${fieldKey} instead of a trailer` : `A trailer key is one of ${NOTE_RENDER_KEYS.join(", ")} (spelled so), or X- and 1 to 30 letters, digits or dashes`
+    };
+  }
+  if (key === "Sha256") {
+    return typeof trailer.value === "string" && /^[0-9a-f]{64}$/i.test(trailer.value) ? null : { code: "invalid_note_field", field: `${field}.value`, message: "Sha256 is 64 hex digits" };
+  }
+  const value = multilineProblem(trailer.value);
+  return value ? { code: "invalid_note_field", field: `${field}.value`, message: `${key} ${value}` } : null;
+}
+function hasTrailerLines(fields, omitEvidence = false) {
+  return SINGLE_FIELDS.some((field) => fields[field] !== null) || fields.why.length > 0 || !omitEvidence && fields.evidence.length > 0 || fields.trailers.length > 0;
+}
+function bodyEndsInTrailers(body) {
+  const lines = body.split(`
+`);
+  const last = lines.slice(lines.lastIndexOf("") + 1);
+  if (!isTrailerBlock(last))
+    return false;
+  const reading = readBlock(last, 1, []);
+  return reading.kept.length < last.length;
+}
+function shapeProblems(fields, options) {
+  const problems = [];
+  const add = (code, field, message, extra = {}) => {
+    problems.push({ code, field, message, ...extra });
+  };
+  if (!isNoteAct(fields.act))
+    add("invalid_note_field", "act", `act must be one of ${NOTE_ACTS.join(", ")}`);
+  const statement = lineProblem(fields.statement);
+  if (statement) {
+    add("invalid_note_field", "statement", `The statement ${statement}`, statement === "must be one line" ? { remedy: STATEMENT_TOO_LONG_REMEDY } : {});
+  }
+  if (fields.body !== null) {
+    const body = bodyProblem(fields.body);
+    if (body)
+      add("invalid_note_field", "body", `The body ${body}`);
+    else if (!hasTrailerLines(fields) && bodyEndsInTrailers(fields.body)) {
+      add("invalid_note_field", "body", "The body's last paragraph would be read as trailers; set those fields instead, or end the body with prose");
+    }
+  }
+  for (const field of SINGLE_FIELDS) {
+    const value = fields[field];
+    if (value === null)
+      continue;
+    const problem = MULTILINE_FIELDS.has(field) ? multilineProblem(value) : lineProblem(value);
+    if (problem) {
+      add("invalid_note_field", field, `${NOTE_FIELD_KEYS[field]} ${problem}`);
+      continue;
+    }
+    if ((field === "re" || field === "replaces") && parseNoteRef(value) === null) {
+      add("invalid_ref", field, `${NOTE_FIELD_KEYS[field]} is not a known reference (${REF_FORMS})`);
+    }
+    if (field === "via" && !VIA.test(value)) {
+      add("invalid_via", field, "Via names the channel the text came by: host:\u2026, file:\u2026, lobby:\u2026 or msg:\u2026");
+    }
+  }
+  const evidenceCount = options.cites && Array.isArray(fields.evidence) ? fields.evidence.length : null;
+  fields.why.forEach((reason, index) => problems.push(...reasonProblems(reason, index, evidenceCount)));
+  fields.evidence.forEach((item, index) => {
+    const problem = evidenceProblem(item, index);
+    if (problem)
+      problems.push(problem);
+  });
+  fields.trailers.forEach((trailer, index) => {
+    const problem = trailerProblem(trailer, index);
+    if (problem)
+      problems.push(problem);
+  });
+  if (options.requireRe && isNoteAct(fields.act) && NOTE_ACTS_NEEDING_RE.includes(fields.act) && fields.re === null) {
+    add("re_required", "re", `"${fields.act}" needs re: what it answers`);
+  }
+  return problems;
+}
+function noteText(fields) {
+  return fields.body === null ? fields.statement : `${fields.statement}
+
+${fields.body}`;
+}
+function length(value) {
+  return typeof value === "string" ? value.length : 0;
+}
+function checkNoteCaps(input) {
+  const fields = completeFields(input);
+  const problems = [];
+  const over = (field, max, actual, unit, message) => {
+    if (actual > max)
+      problems.push({ code: "too_long", field, max, actual, unit, message });
+  };
+  const statement = length(fields.statement);
+  if (statement > NOTE_STATEMENT_MAX) {
+    problems.push({
+      code: "statement_too_long",
+      field: "statement",
+      max: NOTE_STATEMENT_MAX,
+      actual: statement,
+      unit: "chars",
+      message: `The statement is ${statement} characters; at most ${NOTE_STATEMENT_MAX}`,
+      remedy: STATEMENT_TOO_LONG_REMEDY
+    });
+  }
+  over("why", NOTE_WHY_MAX, fields.why.length, "items", `A note has at most ${NOTE_WHY_MAX} Why: lines`);
+  fields.why.forEach((reason, index) => {
+    const actual = length(reason.text);
+    over(`why[${index}]`, NOTE_WHY_TEXT_MAX, actual, "chars", `Why ${index + 1} is ${actual} characters; at most ${NOTE_WHY_TEXT_MAX}`);
+  });
+  over("evidence", NOTE_EVIDENCE_MAX, fields.evidence.length, "items", `A note has at most ${NOTE_EVIDENCE_MAX} Evidence: lines`);
+  fields.evidence.forEach((item, index) => {
+    const actual = length(item);
+    over(`evidence[${index}]`, NOTE_VALUE_MAX, actual, "chars", `Evidence ${index + 1} is ${actual} characters; at most ${NOTE_VALUE_MAX}`);
+  });
+  const fieldMax = {
+    to: NOTE_VALUE_MAX,
+    re: NOTE_VALUE_MAX,
+    via: NOTE_VALUE_MAX,
+    limits: NOTE_LIMITS_MAX,
+    purpose: NOTE_PURPOSE_MAX,
+    extent: NOTE_EXTENT_MAX,
+    replaces: NOTE_VALUE_MAX
+  };
+  for (const field of SINGLE_FIELDS) {
+    const actual = length(fields[field]);
+    over(field, fieldMax[field], actual, "chars", `${NOTE_FIELD_KEYS[field]} is ${actual} characters; at most ${fieldMax[field]}`);
+  }
+  fields.trailers.forEach((trailer, index) => {
+    const actual = length(trailer.value);
+    over(`trailers[${index}]`, NOTE_VALUE_MAX, actual, "chars", `${String(trailer.key)} is ${actual} characters; at most ${NOTE_VALUE_MAX}`);
+  });
+  if (isNoteAct(fields.act) && typeof fields.statement === "string") {
+    const ceiling = NOTE_ACT_CEILINGS[fields.act];
+    const measured = ceiling.measure === "text" ? noteText(fields).length : assemble(fields, ceiling.measure === "note_without_evidence").length;
+    const what = ceiling.measure === "text" ? `A ${fields.act} text (statement and body)` : ceiling.measure === "note_without_evidence" ? `A ${fields.act} note without its Evidence lines` : `A ${fields.act} note`;
+    over(ceiling.measure === "text" ? "text" : "note", ceiling.max, measured, "chars", `${what} is ${measured} characters; at most ${ceiling.max}`);
+  }
+  return problems;
+}
+function checkNote(input) {
+  const fields = completeFields(input);
+  return [...shapeProblems(fields, { cites: true, requireRe: true }), ...checkNoteCaps(fields)];
+}
+function noteProblemError(problem) {
+  const { code, message, ...details } = problem;
+  return new CollabError(code, message, details);
+}
+function assemble(fields, omitEvidence = false) {
+  const lines = [];
+  const push = (key, value) => {
+    const [first, ...more] = String(value).split(`
+`);
+    lines.push(`${key}: ${first ?? ""}`, ...more.map((line) => `  ${line}`));
+  };
+  const single = (field) => {
+    const value = fields[field];
+    if (typeof value === "string")
+      push(NOTE_FIELD_KEYS[field], value);
+  };
+  single("to");
+  single("re");
+  single("via");
+  for (const reason of fields.why)
+    push(NOTE_FIELD_KEYS.why, renderReason(reason));
+  if (!omitEvidence)
+    for (const item of fields.evidence)
+      push(NOTE_FIELD_KEYS.evidence, item);
+  single("limits");
+  single("purpose");
+  single("extent");
+  single("replaces");
+  for (const trailer of fields.trailers)
+    push(trailer.key, trailer.value);
+  const parts = [`${fields.act}: ${fields.statement}`];
+  if (fields.body !== null)
+    parts.push(fields.body);
+  if (lines.length > 0)
+    parts.push(lines.join(`
+`));
+  return parts.join(`
+
+`);
+}
+function fieldsOf(parsed) {
+  const { advice: _advice, ...fields } = parsed;
+  return fields;
+}
+function verifyReadsBack(text, fields) {
+  if (normalizeNoteText(text) !== text || LONE_SURROGATE.test(text)) {
+    throw new CollabError("invalid_note_field", "The note would not be stored byte for byte", { field: "note" });
+  }
+  const back = fieldsOf(parseNote(text));
+  const expected = fields;
+  const actual = back;
+  const differing = Object.keys(expected).find((key) => canonicalJson(expected[key]) !== canonicalJson(actual[key]));
+  if (differing !== undefined) {
+    throw new CollabError("invalid_note_field", `The rendered note would read back with a different ${differing}`, { field: differing });
+  }
+}
+function renderNote(input, options = {}) {
+  const fields = completeFields(input);
+  const problem = checkNote(fields)[0];
+  if (problem)
+    throw noteProblemError(problem);
+  const omitEvidence = options.omitEvidence === true;
+  const text = assemble(fields, omitEvidence);
+  if (options.maxChars !== undefined) {
+    if (!Number.isInteger(options.maxChars) || options.maxChars < 1) {
+      throw new CollabError("invalid_note_field", "maxChars must be a positive integer", { field: "maxChars" });
+    }
+    if (text.length > options.maxChars) {
+      throw new CollabError("too_long", `The note is ${text.length} characters; at most ${options.maxChars}`, { field: "note", max: options.maxChars, actual: text.length, unit: "chars" });
+    }
+  }
+  verifyReadsBack(text, omitEvidence ? { ...fields, evidence: [] } : fields);
+  return text;
+}
+var NOTE_CARRY_DISCLAIMER = "This authorises nothing elsewhere. A person sends it.";
+var LOCAL_DETAIL = [
+  /ws_[0-9a-f]{24}/i,
+  /\/(?:Users|home)\//i,
+  /(?<![A-Za-z])[A-Za-z]:[\\/]+Users[\\/]/i,
+  /\/(?:private\/)?(?:var\/folders|tmp)\//i,
+  /(?<![A-Za-z0-9_])~[A-Za-z0-9._-]{0,32}\//,
+  /[A-Za-z0-9]\.(?:local|lan|home\.arpa)(?![A-Za-z0-9-])/i,
+  /macbook|(?<![a-z])imac(?![a-z])|mac[\s._-]?(?:mini|studio|pro)(?![a-z])|iphone|ipad(?![a-z])/i
+];
+var URL_WITH_HOST = /[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s/]+\S*/g;
+var ABSOLUTE_POSIX_PATH = /(?<![\p{L}\p{N}_.~*-])\/+(?:[\p{L}\p{N}_.@+~-]+\/)+[\p{L}\p{N}_.@+~-]*/u;
+var DRIVE_PATH = /(?<![\p{L}\p{N}_])[A-Za-z]:[\\/][^\s\\/]/u;
+var ABSOLUTE_PATH = /^(?:\/|[A-Za-z]:[\\/])/;
+function namesAbsolutePath(value) {
+  const rest = value.replace(URL_WITH_HOST, " ");
+  return ABSOLUTE_POSIX_PATH.test(rest) || DRIVE_PATH.test(rest);
+}
+var KEPT_RENDER_KEYS = new Set(["Sha256", "Position", "Result"]);
+var CARRY_BODY_FLOOR = 240;
+var CUT_ORDER = [
+  "statement",
+  "body",
+  "to",
+  "re",
+  "via",
+  "why",
+  "evidence",
+  "limits",
+  "purpose",
+  "extent",
+  "replaces"
+];
+function itemRanges(items) {
+  const sorted = [...new Set(items)].sort((left, right) => left - right);
+  const ranges = [];
+  let start = sorted[0];
+  let previous = start;
+  for (const item of [...sorted.slice(1), Number.NaN]) {
+    if (item === (previous ?? 0) + 1) {
+      previous = item;
+      continue;
+    }
+    if (start !== undefined)
+      ranges.push(start === previous ? `${start}` : `${start}-${previous}`);
+    start = item;
+    previous = item;
+  }
+  return ranges.join(", ");
+}
+function describeCut(cut) {
+  switch (cut.kind) {
+    case "local":
+      return `${cut.label} (local detail)`;
+    case "unreadable":
+      return `${cut.label} (unreadable)`;
+    case "dropped":
+      return cut.label;
+    case "shortened":
+      return `${cut.label} (first ${cut.kept} of ${cut.total} chars)`;
+    case "items": {
+      const suffix = cut.reason === "local" ? " (local detail)" : cut.reason === "unreadable" ? " (unreadable)" : "";
+      return `${cut.label} ${itemRanges(cut.items)}${suffix}`;
+    }
+  }
+}
+function cutRank(cut) {
+  const rank = CUT_ORDER.indexOf(cut.label);
+  return rank === -1 ? CUT_ORDER.length : rank;
+}
+function describeTrailerCuts(trailers, fates) {
+  const groups = new Map;
+  for (const index of [...fates.keys()].sort((left, right) => left - right)) {
+    const fate = fates.get(index);
+    const key = trailers[index].key;
+    const group = typeof key === "string" && RENDER_KEY_SET.has(key) ? key : typeof key === "string" && X_KEY.test(key) ? "X-" : "unknown";
+    const id = `${group}
+${fate.kind}`;
+    const entry = groups.get(id);
+    if (entry === undefined)
+      groups.set(id, { group, key: String(key), fate, count: 1 });
+    else
+      entry.count += 1;
+  }
+  return [...groups.values()].map(({ group, key, fate, count }) => {
+    const name = count === 1 ? group === "unknown" ? "unknown trailer" : group === "X-" ? "X- trailer" : key : group === "X-" ? `X- trailers \xD7${count}` : group === "unknown" ? `unknown trailers \xD7${count}` : `${group} \xD7${count}`;
+    switch (fate.kind) {
+      case "local":
+        return `${name} (local detail)`;
+      case "unreadable":
+        return `${name} (unreadable)`;
+      case "dropped":
+        return name;
+      case "shortened":
+        return count === 1 ? `${name} (first ${fate.kept} of ${fate.total} chars)` : `${name} (shortened)`;
+    }
+  });
+}
+function prefix(value, keep) {
+  let end = Math.max(0, Math.min(keep, value.length));
+  const last = value.charCodeAt(end - 1);
+  if (end > 0 && last >= 55296 && last <= 56319)
+    end -= 1;
+  return value.slice(0, end).trimEnd();
+}
+function readable(value, check2) {
+  return check2(value) === null;
+}
+function renderCarriedNote(input, options = {}) {
+  const max = options.maxChars ?? NOTE_CARRY_MAX;
+  if (!Number.isInteger(max) || max < 1) {
+    throw new CollabError("invalid_note_field", "maxChars must be a positive integer", { field: "maxChars" });
+  }
+  const terms = (options.localTerms ?? []).map((term) => term.trim().toLowerCase()).filter((term) => term.length >= 3);
+  const isLocal = (value) => LOCAL_DETAIL.some((pattern) => pattern.test(value)) || namesAbsolutePath(value) || terms.some((term) => value.toLowerCase().includes(term));
+  const base = normalizeNoteFields(input);
+  if (!isNoteAct(base.act))
+    throw new CollabError("invalid_note_field", `act must be one of ${NOTE_ACTS.join(", ")}`, { field: "act" });
+  const statementProblem = lineProblem(base.statement);
+  if (statementProblem) {
+    throw new CollabError("invalid_note_field", `The statement ${statementProblem}`, { field: "statement" });
+  }
+  const fullIdRemedy = "Name the full id (such as report_\u2026) instead of the handle.";
+  const notCarriable = (field, message, remedy) => new CollabError("not_carriable", message, { field, remedy });
+  for (const field of ["re", "replaces"]) {
+    const value = base[field];
+    if (value !== null && parseNoteRef(value)?.handle) {
+      throw notCarriable(field, `${NOTE_FIELD_KEYS[field]} is a short handle; a carried note names full ids, because a handle can match a different item on another device`, fullIdRemedy);
+    }
+  }
+  base.evidence.forEach((item, index) => {
+    try {
+      const evidence = parseEvidence(item);
+      if (HANDLE_EVIDENCE.test(evidence.locator) || HANDLE.test(evidence.locator)) {
+        throw notCarriable(`evidence[${index}]`, `Evidence ${index + 1} is a short handle; a carried note names full ids`, fullIdRemedy);
+      }
+    } catch (error51) {
+      if (!(error51 instanceof CollabError) || error51.code === "not_carriable")
+        throw error51;
+    }
+  });
+  if (isLocal(base.statement)) {
+    throw notCarriable("statement", "The statement names a local detail (a workspace id, an absolute or home path, or a machine name), so it cannot leave this device", "Restate the statement without it. A body, reason or term that names it is withheld and listed in Not-carried.");
+  }
+  const cuts = [];
+  const state = { ...base, why: [], evidence: [], trailers: [] };
+  if (state.body !== null) {
+    const unreadable = !readable(state.body, bodyProblem);
+    if (unreadable || isLocal(state.body)) {
+      state.body = null;
+      cuts.push({ kind: unreadable ? "unreadable" : "local", label: "body" });
+    }
+  }
+  for (const field of SINGLE_FIELDS) {
+    const value = state[field];
+    if (value === null)
+      continue;
+    const check2 = MULTILINE_FIELDS.has(field) ? multilineProblem : lineProblem;
+    const unreadable = !readable(value, check2) || (field === "re" || field === "replaces") && parseNoteRef(value) === null || field === "via" && !VIA.test(value);
+    if (unreadable || isLocal(value)) {
+      state[field] = null;
+      cuts.push({ kind: unreadable ? "unreadable" : "local", label: field });
+    }
+  }
+  const localWhy = [];
+  const unreadableWhy = [];
+  base.why.forEach((reason, index) => {
+    if (reasonProblems(reason, index, null).length > 0)
+      unreadableWhy.push(index + 1);
+    else if (isLocal(reason.text))
+      localWhy.push(index + 1);
+    else
+      state.why.push(reason);
+  });
+  if (localWhy.length > 0)
+    cuts.push({ kind: "items", label: "why", items: localWhy, reason: "local" });
+  if (unreadableWhy.length > 0)
+    cuts.push({ kind: "items", label: "why", items: unreadableWhy, reason: "unreadable" });
+  for (const [index, item] of base.evidence.entries()) {
+    const problem2 = evidenceProblem(item, index);
+    const evidence = problem2 === null ? parseEvidence(item) : null;
+    const local = evidence !== null && (isLocal(item) || evidence.kind === "file" && ABSOLUTE_PATH.test(evidence.locator));
+    if (problem2 !== null || local) {
+      const rest = base.evidence.map((_, position) => position + 1).slice(index);
+      cuts.push({ kind: "items", label: "evidence", items: rest, reason: problem2 !== null ? "unreadable" : "local" });
+      break;
+    }
+    state.evidence.push(item);
+  }
+  const trailerFates = new Map;
+  const trailerOrigin = [];
+  base.trailers.forEach((trailer, index) => {
+    if (trailer.key === "Not-carried")
+      return;
+    const problem2 = trailerProblem(trailer, index);
+    const localKey = problem2 === null && !RENDER_KEY_SET.has(trailer.key) && isLocal(trailer.key);
+    if (problem2 !== null || localKey || isLocal(trailer.value)) {
+      trailerFates.set(index, { kind: problem2 !== null ? "unreadable" : "local" });
+    } else {
+      state.trailers.push(trailer);
+      trailerOrigin.push(index);
+    }
+  });
+  const droppedWhy = [];
+  const droppedEvidence = [];
+  const whyPositions = base.why.map((_, index) => index + 1).filter((position) => !localWhy.includes(position) && !unreadableWhy.includes(position));
+  const dropWhy = () => {
+    if (state.why.length === 0)
+      return false;
+    state.why.pop();
+    droppedWhy.push(whyPositions[state.why.length]);
+    return true;
+  };
+  const dropEvidence = () => {
+    if (state.evidence.length === 0)
+      return false;
+    state.evidence.pop();
+    droppedEvidence.push(state.evidence.length + 1);
+    return true;
+  };
+  while (state.why.length > NOTE_WHY_MAX)
+    dropWhy();
+  while (state.evidence.length > NOTE_EVIDENCE_MAX)
+    dropEvidence();
+  const originalBody = state.body;
+  const originalStatement = state.statement;
+  const notCarried = () => {
+    const all = [...cuts];
+    if (droppedWhy.length > 0)
+      all.push({ kind: "items", label: "why", items: droppedWhy, reason: "room" });
+    if (droppedEvidence.length > 0) {
+      all.push({ kind: "items", label: "evidence", items: droppedEvidence, reason: "room" });
+    }
+    return [
+      ...all.map((cut, index) => ({ cut, index })).sort((left, right) => cutRank(left.cut) - cutRank(right.cut) || left.index - right.index).map(({ cut }) => describeCut(cut)),
+      ...describeTrailerCuts(base.trailers, trailerFates)
+    ];
+  };
+  const carried = () => ({
+    ...state,
+    body: state.body === null ? NOTE_CARRY_DISCLAIMER : `${state.body}
+
+${NOTE_CARRY_DISCLAIMER}`,
+    trailers: [...state.trailers, { key: "Not-carried", value: notCarried().join("; ") || "nothing" }]
+  });
+  const overBy = () => assemble(carried()).length - max;
+  const markField = (label) => (mark) => {
+    const existing = cuts.findIndex((cut) => cut.label === label && (cut.kind === "shortened" || cut.kind === "dropped"));
+    const record2 = mark === null ? null : mark.kind === "shortened" ? { kind: "shortened", label, kept: mark.kept, total: mark.total } : { kind: "dropped", label };
+    if (existing === -1) {
+      if (record2 !== null)
+        cuts.push(record2);
+    } else if (record2 !== null) {
+      cuts[existing] = record2;
+    } else {
+      cuts.splice(existing, 1);
+    }
+  };
+  const markTrailer = (origin) => (mark) => {
+    if (mark === null)
+      trailerFates.delete(origin);
+    else
+      trailerFates.set(origin, mark);
+  };
+  const shorten = (original, apply, mark, floor = 0, mayDrop = true) => {
+    const attempt = (keep) => {
+      const kept = prefix(original, keep);
+      if (kept === "")
+        return false;
+      apply(`${kept}\u2026`);
+      mark({ kind: "shortened", kept: kept.length, total: original.length });
+      return overBy() <= 0;
+    };
+    let low = Math.max(1, floor);
+    let high = original.length - 1;
+    if (high < low)
+      return;
+    if (!attempt(low)) {
+      if (floor > 0 || !mayDrop)
+        return;
+      apply(null);
+      mark({ kind: "dropped" });
+      return;
+    }
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2);
+      if (attempt(middle))
+        low = middle;
+      else
+        high = middle - 1;
+    }
+    attempt(low);
+  };
+  const dropField = (field) => {
+    if (state[field] === null)
+      return;
+    state[field] = null;
+    cuts.push({ kind: "dropped", label: field });
+  };
+  const dropLastTrailer = (wanted) => {
+    for (let at = state.trailers.length - 1;at >= 0; at -= 1) {
+      if (!wanted(state.trailers[at].key))
+        continue;
+      state.trailers.splice(at, 1);
+      trailerFates.set(trailerOrigin.splice(at, 1)[0], { kind: "dropped" });
+      return true;
+    }
+    return false;
+  };
+  const shortenField = (field) => {
+    const value = state[field];
+    if (value === null)
+      return;
+    shorten(value, (next) => {
+      state[field] = next;
+    }, markField(field));
+  };
+  const shortenKeptTrailers = () => {
+    for (let at = state.trailers.length - 1;at >= 0 && overBy() > 0; at -= 1) {
+      const trailer = state.trailers[at];
+      if (trailer.key === "Sha256" || !KEPT_RENDER_KEYS.has(trailer.key))
+        continue;
+      shorten(trailer.value, (next) => {
+        if (next === null) {
+          state.trailers.splice(at, 1);
+          trailerOrigin.splice(at, 1);
+        } else {
+          state.trailers[at] = { key: trailer.key, value: next };
+        }
+      }, markTrailer(trailerOrigin[at]));
+    }
+  };
+  if (state.statement.length > NOTE_STATEMENT_MAX) {
+    const kept = prefix(originalStatement, NOTE_STATEMENT_MAX - 1);
+    state.statement = `${kept}\u2026`;
+    markField("statement")({ kind: "shortened", kept: kept.length, total: originalStatement.length });
+  }
+  const shortenBody = (floor) => () => {
+    if (originalBody === null || state.body === null)
+      return;
+    shorten(originalBody, (next) => {
+      state.body = next;
+    }, markField("body"), floor);
+  };
+  const steps = [
+    () => {
+      while (overBy() > 0 && dropLastTrailer((key) => X_KEY.test(key)))
+        ;
+    },
+    shortenBody(CARRY_BODY_FLOOR),
+    () => {
+      while (overBy() > 0 && dropEvidence())
+        ;
+    },
+    () => dropField("purpose"),
+    () => dropField("replaces"),
+    () => dropField("to"),
+    shortenBody(0),
+    () => {
+      while (overBy() > 0 && dropWhy())
+        ;
+    },
+    () => {
+      while (overBy() > 0 && dropLastTrailer((key) => !KEPT_RENDER_KEYS.has(key)))
+        ;
+    },
+    () => dropField("via"),
+    () => shortenField("limits"),
+    () => shortenField("extent"),
+    shortenKeptTrailers,
+    () => {
+      shorten(originalStatement, (next) => {
+        if (next !== null)
+          state.statement = next;
+      }, markField("statement"), 0, false);
+    }
+  ];
+  for (const step of steps) {
+    if (overBy() <= 0)
+      break;
+    step();
+  }
+  const fields = carried();
+  const text = assemble(fields);
+  if (text.length > max) {
+    throw new CollabError("too_long", `The carried note cannot be made to fit ${max} characters`, {
+      field: "note",
+      max,
+      actual: text.length,
+      unit: "chars",
+      remedy: "Shorten the Re: reference or carry fewer Sha256 lines: those are never cut, and the disclaimer and Not-carried line always travel."
+    });
+  }
+  const problem = shapeProblems(fields, { cites: false, requireRe: false })[0];
+  if (problem)
+    throw noteProblemError(problem);
+  verifyReadsBack(text, fields);
+  return { text, not_carried: notCarried() };
+}
+
 // src/version.ts
-var COLLAB_PACKAGE_VERSION = "0.5.1-dev.0";
+var COLLAB_PACKAGE_VERSION = "0.6.0-dev.0";
+
+// src/verbs.ts
+var NOTE_VERBS = [
+  "collab_arrive",
+  "collab_inbox",
+  "collab_note",
+  "collab_take",
+  "collab_done",
+  "collab_propose",
+  "collab_poll",
+  "collab_vote"
+];
+var BUILT_NOTE_VERBS = ["collab_arrive", "collab_inbox"];
+var NOTES_PROFILE_LEGACY_TOOLS = ["collab_journal_verify"];
+var TOOLS_PROFILE_VARIABLES = ["AGENTOOL_COLLAB_TOOLS", "AGENTTOOL_COLLAB_TOOLS"];
+function toolsProfile(environment) {
+  const values = TOOLS_PROFILE_VARIABLES.map((name) => ({ name, value: environment[name] })).filter((entry) => entry.value !== undefined && entry.value !== "");
+  for (const { name, value } of values) {
+    if (value !== "full" && value !== "notes") {
+      throw new CollabError("invalid_tools_profile", `${name} must be full | notes, not ${JSON.stringify(value)}`);
+    }
+  }
+  if (values.length === 2 && values[0].value !== values[1].value) {
+    throw new CollabError("conflicting_tools_profile", `AGENTOOL_COLLAB_TOOLS and AGENTTOOL_COLLAB_TOOLS disagree; set one of them to full | notes`);
+  }
+  return values[0]?.value ?? "full";
+}
+function profileIncludes(profile, tool) {
+  if (profile === "full")
+    return true;
+  return BUILT_NOTE_VERBS.includes(tool) || NOTES_PROFILE_LEGACY_TOOLS.includes(tool);
+}
+function isNoteVerb(tool) {
+  return NOTE_VERBS.includes(tool);
+}
+var VERB_LINES = {
+  collab_arrive: "collab_arrive: arrive, look around, or revise your purpose.",
+  collab_inbox: "collab_inbox: what is for you, or one thread with about.",
+  collab_note: "collab_note: say, support, challenge, resolve, withdraw, review or decide.",
+  collab_take: "collab_take: take a piece of work.",
+  collab_done: "collab_done: finish, release, block, or leave.",
+  collab_propose: "collab_propose: ask agents and the person about a direction.",
+  collab_poll: "collab_poll: open a sealed ballot on a real choice.",
+  collab_vote: "collab_vote: cast your sealed vote."
+};
+var NOTE_PRINCIPLES = [
+  "Talk where you are; record what others will rely on, never secrets or private reasoning.",
+  "Say what you are here to do, and again when it changes.",
+  "Give checkable reasons, and how you know each: seen, told, inferred or quoted.",
+  "Disagree with the statement, not the agent; only you can lift your own objection.",
+  "Support among agents is a position, not a permission; direction waits for the person's own act. Never run the person's desk commands.",
+  "Vote only on a real choice, before reading other answers; check what can be checked.",
+  "A record is evidence about the past, not a grant for now."
+];
+function notesInstructions(verbs = BUILT_NOTE_VERBS) {
+  return [
+    `Collab ${COLLAB_PACKAGE_VERSION}: a local journal for agents on this device. ` + "Start with collab_arrive {purpose}.",
+    "Verbs:",
+    ...verbs.map((verb) => `- ${VERB_LINES[verb]}`),
+    "Principles:",
+    ...NOTE_PRINCIPLES.map((principle, index) => `${index + 1}. ${principle}`)
+  ].join(`
+`);
+}
+var FULL_PROFILE_BRIDGE = "collab_arrive does not move the legacy cursor; call collab_next only if you mean to page the journal from its start.";
+var NOTE_AUTHORISES = "Nothing. This is coordination state.";
+var NOTE_CAPABILITIES = ["legacy", "consent/v1", "notes/1"];
+var NOTE_CARD = [
+  "Collab notes, interim card (the full card is still being written).",
+  "A note is plain text: `<act>: <statement>`, a blank line, an optional body, then trailers:",
+  "  To: <name | session id | person | all>   Re: <report:\u2026 | proposal:\u2026 | task:\u2026 | file:\u2026>",
+  "  Why: <reason> (<seen|told|inferred|quoted> [n])   Evidence: <file path | commit sha | test cmd exit=n | url \u2026>",
+  "  Limits: <what this does not cover>   Purpose: <what it serves>   Extent: <where a decision stops>",
+  "Acts: say: note; stand: support, challenge, resolve, withdraw; work: take, done, accept, request_changes;",
+  "decide: propose, poll, vote, decide.",
+  "This build has collab_arrive and collab_inbox; the other verbs come later.",
+  ...NOTE_PRINCIPLES.map((principle, index) => `${index + 1}. ${principle}`)
+].join(`
+`);
+var HANDLE_ID = /^(report|task|session)_([0-9a-f]{8})-[0-9a-f]{4}-/;
+function handleOf(kind, id) {
+  const match = HANDLE_ID.exec(id);
+  if (!match)
+    return id;
+  return `${kind}#${match[2].slice(0, 6)}`;
+}
+function reportHandle(id, termed) {
+  return handleOf(termed ? "proposal" : "report", id);
+}
+var BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+function base32(bytes) {
+  let out = "";
+  let buffer = 0;
+  let bits = 0;
+  for (const byte of bytes) {
+    buffer = buffer << 8 | byte;
+    bits += 8;
+    while (bits >= 5) {
+      out += BASE32[buffer >>> bits - 5 & 31];
+      bits -= 5;
+    }
+  }
+  if (bits > 0)
+    out += BASE32[buffer << 5 - bits & 31];
+  return out;
+}
+function sha256Bytes(text) {
+  return createHash("sha256").update(text, "utf8").digest();
+}
+var DERIVED_KEY = /^n1:([A-Z2-7]{8}):(\d{6}):([A-Z2-7]{20})(?::(\d{2}))?$/;
+function planReceipt(store, credential, call) {
+  const base = base32(sha256Bytes(canonicalJson({
+    session_id: credential.session_id,
+    tool: call.tool,
+    input: call.input
+  }))).slice(0, 20);
+  const eh = base32(sha256Bytes(call.entity)).slice(0, 8);
+  const latest = store.latestReceiptKeyForSession(credential, `n1:${eh}:`);
+  const parsed = latest ? DERIVED_KEY.exec(latest) : null;
+  const latestSeq = parsed ? Number(parsed[2]) : 0;
+  const retry = parsed !== null && parsed[3] === base && (call.stillCurrent?.(latest) ?? true);
+  const seq = retry ? latestSeq : latestSeq + 1;
+  const key = `n1:${eh}:${String(seq).padStart(6, "0")}:${base}`;
+  return {
+    key,
+    seq,
+    base,
+    eh,
+    latest,
+    retry,
+    step: (n) => `${key}:${String(n).padStart(2, "0")}`
+  };
+}
+function replayReceipt(store, credential, key) {
+  const found = store.readReceiptByKey(credential, key);
+  return found.found ? found.value : null;
+}
+function noteWriteResult(fields) {
+  return {
+    ok: true,
+    effect: fields.replayed ? `Replayed: nothing new was written. ${fields.effect}` : fields.effect,
+    authorises: NOTE_AUTHORISES,
+    ids: fields.ids,
+    advice: fields.advice ?? [],
+    next: fields.next ?? null,
+    note: fields.note,
+    ...fields.replayed ? { replayed: true } : {}
+  };
+}
+function noteSuccess(payload) {
+  return {
+    content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+    structuredContent: payload
+  };
+}
+var SAY_BY_CODE = {
+  cursor_recovery_required: "The host must reset this session's cursor (collab_cursor_reset, on the full tool profile) before it can act again.",
+  cursor_reset_required: "The host must reconcile this session's cursor before it can act again.",
+  session_auth_failed: "This session's credentials no longer match the journal (it was ended, or another process resumed it). Arrive again from a new MCP process, or ask the host.",
+  ambiguous_handle: "Use a longer handle or the full id; the candidates are listed.",
+  ambiguous_session: "Use the session id; the candidates are listed.",
+  too_many_waits: "Wait for a running wait to finish, or call again with wait_seconds: 0."
+};
+function noteRemedyOf(error51) {
+  const remedy = error51.details.remedy;
+  if (remedy && typeof remedy === "object" && !Array.isArray(remedy)) {
+    const value = remedy;
+    if (typeof value.tool === "string" && value.input && typeof value.input === "object") {
+      return { tool: value.tool, input: value.input };
+    }
+    if (typeof value.say === "string")
+      return { say: value.say };
+  }
+  if (typeof remedy === "string" && remedy)
+    return { say: remedy };
+  if (SAY_BY_CODE[error51.code])
+    return { say: SAY_BY_CODE[error51.code] };
+  if (error51.code === "too_long" && typeof error51.details.field === "string") {
+    return { say: `Shorten ${error51.details.field} to at most ${String(error51.details.max)}; nothing was written.` };
+  }
+  if (error51.code.endsWith("_not_found")) {
+    return { say: "Check the id or handle: every id a later call needs comes back in an earlier result." };
+  }
+  return { say: `${error51.message}. Nothing was written; correct the call and send it again.` };
+}
+function noteFailure(error51) {
+  const payload = error51 instanceof CollabError ? (() => {
+    const { remedy: _remedy, ...details } = error51.details;
+    return { code: error51.code, message: error51.message, ...details, remedy: noteRemedyOf(error51) };
+  })() : {
+    code: "internal_error",
+    message: error51 instanceof Error ? error51.message : String(error51),
+    remedy: { say: "This is a fault in collab, not in the call. Nothing more is known; try once more or tell the person." }
+  };
+  return {
+    content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+    structuredContent: payload,
+    isError: true
+  };
+}
+async function noteCall(operation) {
+  try {
+    return noteSuccess(await operation());
+  } catch (error51) {
+    return noteFailure(error51);
+  }
+}
+function notArrived(slotKey, defaultBinding) {
+  if (!slotKey) {
+    return new CollabError("not_arrived", "This MCP slot has no session yet; arrive first", {
+      remedy: { tool: "collab_arrive", input: { purpose: "\u2026" } }
+    });
+  }
+  const parent = defaultBinding?.handle.session;
+  return new CollabError("not_arrived", `The slot named by binding_key ${slotKey} has no session yet; arrive on it first`, {
+    remedy: parent ? {
+      tool: "collab_arrive",
+      input: { purpose: "\u2026", binding_key: slotKey, name: `${parent.actor}/${slotKey}`, parent: parent.id }
+    } : { tool: "collab_arrive", input: { purpose: "\u2026" } }
+  });
+}
+function requireCredential(ctx) {
+  const binding = ctx.binding();
+  if (!binding)
+    throw notArrived(ctx.slot_key, ctx.bound_slots().find((slot) => slot.key === "")?.binding ?? null);
+  if (binding.handle.cursor_recovery) {
+    throw new CollabError("cursor_recovery_required", "The host authorized recovery mode; reset to an exact journal anchor before session mutations resume", { ...binding.handle.cursor_recovery });
+  }
+  return { binding, credential: binding.handle.credential };
+}
+function withSlot(ctx, remedy) {
+  if (!ctx.slot_key || !("tool" in remedy))
+    return remedy;
+  return { tool: remedy.tool, input: { ...remedy.input, binding_key: ctx.slot_key } };
+}
+function oneLine(value, field, max, required2) {
+  if (value === undefined || value === null) {
+    if (!required2)
+      return null;
+    throw new CollabError(`invalid_${field}`, `${field} is required`);
+  }
+  if (typeof value !== "string")
+    throw new CollabError(`invalid_${field}`, `${field} must be text`);
+  const text = normalizeNoteText(value).split(`
+`).map((line) => line.trim()).filter(Boolean).join(" ");
+  if (!text) {
+    if (!required2)
+      return null;
+    throw new CollabError(`invalid_${field}`, `${field} must not be empty`);
+  }
+  if (hasLoneSurrogate(text)) {
+    throw new CollabError(`invalid_${field}`, `${field} must be well-formed Unicode text (it holds half of a character)`);
+  }
+  if (/[\u0000-\u001f\u007f]/.test(text)) {
+    throw new CollabError(`invalid_${field}`, `${field} must not hold control characters`);
+  }
+  if (text.length > max) {
+    throw new CollabError("too_long", `${field} is ${text.length} characters; at most ${max}`, {
+      field,
+      max,
+      actual: text.length,
+      unit: "chars",
+      remedy: { say: field === "purpose" ? "Say what you are here to do in one line of at most 200 characters." : `Shorten ${field} to at most ${max} characters.` }
+    });
+  }
+  return text;
+}
+var PURPOSE_MAX = 200;
+var NAME_MAX = 200;
+var MODEL_MAX = 200;
+function actorPrefixFor(environment) {
+  if (environment.CLAUDE_CODE_MESSAGING_SOCKET)
+    return "claude-code";
+  if (environment.CODEX_THREAD_ID)
+    return "codex";
+  return "agent";
+}
+function minutesSince(at, observedAt) {
+  const age = Date.parse(observedAt) - Date.parse(at);
+  return Number.isFinite(age) ? Math.max(0, Math.floor(age / 60000)) : null;
+}
+function durationUntil(at, observedAt) {
+  const left = Date.parse(at) - Date.parse(observedAt);
+  if (!Number.isFinite(left) || left <= 0)
+    return "closed";
+  const minutes = Math.ceil(left / 60000);
+  const hours = Math.floor(minutes / 60);
+  return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
+}
+function statementOf(text) {
+  const line = text.split(`
+`)[0] ?? "";
+  return line.length > NOTE_STATEMENT_MAX ? `${line.slice(0, NOTE_STATEMENT_MAX - 1)}\u2026` : line;
+}
+var LIST_CAP = 10;
+function arriveVerb(ctx, input) {
+  const purpose = oneLine(input.purpose, "purpose", PURPOSE_MAX, true);
+  const existing = ctx.binding();
+  if (existing)
+    return arriveBound(ctx, existing, input, purpose);
+  const name = oneLine(input.name, "name", NAME_MAX, false);
+  const model = oneLine(input.model, "model", MODEL_MAX, false);
+  return ctx.slot_key ? arriveNamed(ctx, input, purpose, name, model) : arriveDefault(ctx, input, purpose, name, model);
+}
+function arriveDefault(ctx, input, purpose, name, model) {
+  if (input.parent !== undefined) {
+    throw new CollabError("parent_needs_binding_key", "A parent names the session a named child descends from; the default slot has no parent", { remedy: { tool: "collab_arrive", input: { purpose, binding_key: "<choose>", parent: input.parent } } });
+  }
+  const advice = [];
+  if (input.revise_purpose)
+    advice.push("revise_purpose has nothing to revise on a new session; your purpose is recorded as given.");
+  let actor = name ?? undefined;
+  if (actor === undefined) {
+    try {
+      actor = defaultActor(ctx.environment);
+    } catch (error51) {
+      if (!(error51 instanceof CollabError) || error51.code !== "actor_required")
+        throw error51;
+    }
+  }
+  const handle = ctx.store.startSession({
+    root_path: input.root_path ?? process.cwd(),
+    actor,
+    actor_prefix: actor === undefined ? actorPrefixFor(ctx.environment) : undefined,
+    role: purpose,
+    seat_ref: defaultSeatRef(ctx.environment),
+    ...model ? { model } : {}
+  });
+  if (actor === undefined) {
+    advice.push(`No verified host name was available, so this session is named ${handle.session.actor}. Pass name to choose one.`);
+  }
+  const binding = bindNewSession(ctx, handle);
+  const mark = handle.workspace.event_head_sequence;
+  return arrivalResult(ctx, binding, {
+    effect: `Started session ${handle.session.id} as ${handle.session.actor} with purpose "${purpose}". ` + `Your read mark starts at the journal head (sequence ${mark}); the legacy cursor was not moved.`,
+    advice,
+    fresh: true,
+    record: true,
+    note: arrivalNote("I have arrived.", purpose)
+  });
+}
+function arriveNamed(ctx, input, purpose, name, model) {
+  const key = ctx.slot_key;
+  const held = ctx.bound_slots();
+  const defaultSession = held.find((slot) => slot.key === "")?.binding.handle.session ?? null;
+  if (input.parent === undefined) {
+    throw new CollabError("parent_required", `A named slot (binding_key ${key}) needs parent: a session this MCP process holds`, {
+      remedy: defaultSession ? { tool: "collab_arrive", input: { purpose, binding_key: key, parent: defaultSession.id } } : { tool: "collab_arrive", input: { purpose } }
+    });
+  }
+  const parent = heldSession(held, input.parent);
+  if (!parent) {
+    throw new CollabError("parent_not_held", "parent must be a session bound in this MCP process; a parent it does not hold would mint a separate voice", {
+      parent: input.parent,
+      remedy: defaultSession ? { tool: "collab_arrive", input: { purpose, binding_key: key, parent: defaultSession.id } } : { tool: "collab_arrive", input: { purpose } }
+    });
+  }
+  const actor = name ?? `${parent.handle.session.actor}/${key}`;
+  const parentAttested = held.some((slot) => slot.binding.handle.session.id === parent.handle.session.id);
+  const handle = ctx.store.startSession({
+    root_path: input.root_path ?? parent.handle.worktree.root_path,
+    actor,
+    role: purpose,
+    parent_session_id: parent.handle.session.id,
+    parent_attested: parentAttested,
+    seat_ref: defaultSeatRef(ctx.environment),
+    ...model ? { model } : {}
+  });
+  const binding = bindNewSession(ctx, handle);
+  const speaksAs = defaultSession ? `session ${defaultSession.id}` : "no session (the default slot has not arrived)";
+  return arrivalResult(ctx, binding, {
+    effect: `Started session ${handle.session.id} as ${handle.session.actor}, a named child of ${parent.handle.session.id}. ` + `This session shares its parent's voice and ballot unit. Send binding_key ${key} on every call; ` + `without it you speak as ${speaksAs}.`,
+    advice: [],
+    fresh: true,
+    record: true,
+    note: arrivalNote("I have arrived.", purpose)
+  });
+}
+function heldSession(held, ref) {
+  const text = typeof ref === "string" ? ref.trim() : "";
+  const handle = /^session#([0-9a-f]{6,8})$/i.exec(text);
+  const matches = held.filter(({ binding }) => {
+    const session = binding.handle.session;
+    return handle ? session.id.startsWith(`session_${handle[1].toLowerCase()}`) : session.id === text || session.actor === text;
+  });
+  if (matches.length > 1) {
+    throw new CollabError("ambiguous_session", `${text} names more than one session this process holds; use its id`, {
+      candidates: matches.map(({ key, binding }) => ({ session: binding.handle.session.id, name: binding.handle.session.actor, binding_key: key || null }))
+    });
+  }
+  return matches[0]?.binding ?? null;
+}
+function bindNewSession(ctx, handle) {
+  const credentialFile = ctx.store.defaultSessionCredentialPath(handle.session.id);
+  try {
+    ctx.store.initNoteMark(handle.credential, handle.workspace.event_head_sequence);
+    const path = writeSessionCredentialFile(credentialFile, handle.credential);
+    const binding = { handle, credential_file: path };
+    ctx.bind(binding);
+    return binding;
+  } catch (error51) {
+    try {
+      ctx.store.endSession({ ...handle.credential, reason: "credential_file_write_failed" });
+    } catch {}
+    try {
+      removeSessionCredentialFile(credentialFile);
+    } catch {}
+    throw error51;
+  }
+}
+function arriveBound(ctx, binding, input, purpose) {
+  const { credential } = requireCredential(ctx);
+  const advice = [];
+  const ignored = ["name", "model", "root_path", "parent"].filter((field) => input[field] !== undefined);
+  if (ignored.length > 0) {
+    advice.push(`${ignored.join(", ")} apply only when a slot first arrives; this slot already speaks as session ${binding.handle.session.id}.`);
+  }
+  if (input.revise_purpose !== true) {
+    const before = ctx.store.arrivalBrief(credential).session;
+    return arrivalResult(ctx, binding, {
+      effect: `You are speaking as session ${before.id} (name ${before.actor}, purpose ${before.purpose ?? "none declared"}). ` + "Nothing was written.",
+      advice,
+      fresh: false,
+      record: false,
+      note: arrivalNote("I am here.", before.purpose),
+      remedies: boundRemedies(ctx, before.id, purpose)
+    });
+  }
+  const plan = planReceipt(ctx.store, credential, { tool: "collab_arrive", input: { purpose }, entity: "purpose" });
+  const replayed = plan.retry ? replayReceipt(ctx.store, credential, plan.key) : null;
+  const receipt = replayed ?? ctx.store.declarePurposeForSession({ ...credential, idempotency_key: plan.key, purpose });
+  if (plan.retry)
+    advice.push("This repeats your latest purpose declaration exactly, so it was read as a retry. Add a word to say it again.");
+  const session = binding.handle.session;
+  return arrivalResult(ctx, binding, {
+    effect: `You are speaking as session ${session.id} (name ${session.actor}, purpose ${receipt.purpose}). ` + `Your purpose is recorded as declared at sequence ${receipt.sequence}; the role you started with is kept as it was.`,
+    advice,
+    fresh: false,
+    record: true,
+    replayed: replayed !== null,
+    note: arrivalNote("My purpose has changed.", receipt.purpose),
+    remedies: boundRemedies(ctx, session.id, purpose)
+  });
+}
+function boundRemedies(ctx, sessionId, purpose) {
+  return [
+    withSlot(ctx, { tool: "collab_arrive", input: { purpose, revise_purpose: true } }),
+    { tool: "collab_arrive", input: { purpose, binding_key: "<choose>", parent: sessionId } }
+  ];
+}
+function arrivalNote(statement, purpose) {
+  return renderNote({ act: "note", statement, ...purpose ? { purpose } : {} });
+}
+function arrivalResult(ctx, binding, options) {
+  const credential = binding.handle.credential;
+  const data = ctx.store.arrivalBrief(credential);
+  const pending = options.fresh ? null : ctx.store.inboxForSession({ ...credential, limit: LIST_CAP, include: "for_me", peek: true });
+  const brief = composeBrief(ctx, data, pending);
+  if (options.record) {
+    ctx.store.recordArrivalShown(credential, brief.shown);
+  }
+  return {
+    ...noteWriteResult({
+      effect: options.effect,
+      ids: {
+        session: data.session.id,
+        session_handle: handleOf("session", data.session.id),
+        workspace_id: data.workspace.id
+      },
+      advice: [...options.advice, ...brief.advice],
+      next: withSlot(ctx, { tool: "collab_inbox", input: {} }),
+      note: options.note,
+      replayed: options.replayed
+    }),
+    ...options.remedies ? { remedies: options.remedies } : {},
+    ...brief.view
+  };
+}
+function composeBrief(ctx, data, pending) {
+  const me = data.session;
+  const at = data.observed_at;
+  const byId = new Map(data.sessions.map((view) => [view.id, view]));
+  const holds = (sessionId) => data.tasks.filter((task) => task.status === "claimed" && task.assignee_session_id === sessionId).map((task) => handleOf("task", task.id));
+  const here = data.sessions.filter((view) => view.id !== me.id && view.status === "active" && view.liveness === "live").map((view) => ({
+    session: view.id,
+    name: view.actor,
+    purpose: view.purpose,
+    model: view.model,
+    last_seen_minutes: minutesSince(view.last_seen_at, at),
+    holds: holds(view.id),
+    same_seat_as_you: me.seat_ref !== null && view.seat_ref === me.seat_ref
+  }));
+  const claimable = data.tasks.filter((task) => data.claimable_task_ids.includes(task.id)).map((task) => ({
+    task: handleOf("task", task.id),
+    id: task.id,
+    title: task.title,
+    paths: task.path_scopes
+  }));
+  const inProgress = data.tasks.filter((task) => task.status === "claimed").map((task) => ({
+    task: handleOf("task", task.id),
+    id: task.id,
+    title: task.title,
+    by: task.assignee,
+    purpose: task.assignee_session_id ? byId.get(task.assignee_session_id)?.purpose ?? null : null,
+    paths: task.path_scopes
+  }));
+  const reviewTasks = data.tasks.filter((task) => task.effective_status === "reported_complete");
+  const reviewsWanted = reviewTasks.map((task) => ({
+    task: handleOf("task", task.id),
+    id: task.id,
+    title: task.title,
+    by: task.reported_by,
+    completion: task.completion_report_id ? { id: task.completion_report_id, handle: handleOf("report", task.completion_report_id) } : null,
+    you_may_review: task.reported_by_session_id !== me.id
+  }));
+  const proposals = data.proposals.map((status) => ({
+    id: status.proposal.id,
+    handle: handleOf("proposal", status.proposal.id),
+    question: statementOf(status.proposal.body),
+    position: status.ai.position,
+    closes_in: durationUntil(status.terms.closes_at, at),
+    your_voice_awaited: status.ai.awaiting_voice_ids.includes(me.voice_id),
+    person: status.person.state
+  }));
+  const challenges = data.challenges.map((challenge) => challengeView(challenge, data.proposals.some((status) => status.proposal.id === challenge.target_report_id)));
+  const forYou = pending ? pending.entries.map((entry) => formatEntry(entry, byId, me.id)) : [];
+  const waiting = data.waiting.map((entry) => formatWaiting(ctx, entry));
+  const cap = (items) => items.slice(0, LIST_CAP);
+  const shown = [
+    ...cap(proposals).map((proposal) => proposal.id),
+    ...cap(reviewsWanted).flatMap((review) => review.completion ? [review.completion.id] : [])
+  ];
+  const advice = [];
+  if (pending?.more)
+    advice.push("More is waiting for you than this brief lists; read it with collab_inbox.");
+  return {
+    shown,
+    advice,
+    view: {
+      you: {
+        session: me.id,
+        name: me.actor,
+        voice: me.voice_id,
+        seat_ref: me.seat_ref,
+        workspace_id: me.workspace_id,
+        purpose: me.purpose,
+        model: me.model,
+        basis: {
+          session: "holds this session's credential file",
+          name: "self-declared",
+          model: "self-declared",
+          seat_ref: "declared at session start (host or caller); unverified"
+        }
+      },
+      here: cap(here),
+      open: {
+        claimable: cap(claimable),
+        in_progress: cap(inProgress),
+        reviews_wanted: cap(reviewsWanted),
+        proposals: cap(proposals),
+        ballots: [],
+        challenges: cap(challenges)
+      },
+      for_you: cap(forYou),
+      waiting_on_you: cap(waiting),
+      totals: {
+        here: here.length,
+        claimable: claimable.length,
+        in_progress: inProgress.length,
+        reviews_wanted: reviewsWanted.length,
+        proposals: proposals.length,
+        ballots: 0,
+        challenges: challenges.length,
+        for_you: forYou.length + (pending?.more ? 1 : 0),
+        for_you_more: pending?.more ?? false,
+        waiting_on_you: waiting.length
+      },
+      history: {
+        events: data.workspace.event_head_sequence,
+        reports: data.report_count,
+        since: data.workspace.created_at
+      },
+      listen: { how: listenHow(ctx, me.id) },
+      surface: {
+        version: COLLAB_PACKAGE_VERSION,
+        tools: ctx.profile,
+        capabilities: [...NOTE_CAPABILITIES]
+      },
+      card: NOTE_CARD
+    }
+  };
+}
+function challengeView(challenge, onProposal) {
+  return {
+    id: challenge.id,
+    handle: handleOf("report", challenge.id),
+    on: reportHandle(challenge.target_report_id, onProposal),
+    on_id: challenge.target_report_id,
+    by: challenge.from_actor,
+    standing: challenge.standing,
+    ...challenge.answered_by_another_voice ? { answered_by_another_voice: true } : {}
+  };
+}
+function shellQuote(value) {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+function listenHow(ctx, sessionId) {
+  const inboxWait = ctx.slot_key ? `collab_inbox {wait_seconds: 30, binding_key: "${ctx.slot_key}"}` : "collab_inbox {wait_seconds: 30}";
+  const database = ctx.store.db.filename;
+  if (!ctx.environment.CLAUDE_CODE_MESSAGING_SOCKET || !database || database === ":memory:")
+    return inboxWait;
+  const watcher = resolve3(import.meta.dir, "..", "integrations", "claude-code", "collab-doorbell-watch.ts");
+  const host = resolve3(import.meta.dir, "..", "dist", "agenttool-collab-host.js");
+  if (!existsSync2(watcher) || !existsSync2(host))
+    return inboxWait;
+  return `nohup ${shellQuote(process.execPath)} ${shellQuote(watcher)} --session ${sessionId} ` + `--db ${shellQuote(database)} --host-bin ${shellQuote(host)} >/dev/null 2>&1 &`;
+}
+var RELATION_ACTS = {
+  informs: "note",
+  supports: "support",
+  challenges: "challenge",
+  resolves: "resolve",
+  withdraws: "withdraw",
+  corrects: "corrects",
+  supersedes: "supersedes"
+};
+function reportAct(report, termed) {
+  if (termed)
+    return "propose";
+  if (report.relation === "informs" && report.kind === "decision")
+    return "decide";
+  return RELATION_ACTS[report.relation];
+}
+function journalEvidence(refs) {
+  return refs.map((ref, index) => {
+    const colon = ref.indexOf(":");
+    return { n: index + 1, kind: ref.slice(0, colon), locator: ref.slice(colon + 1) };
+  });
+}
+function noteEvidence(lines) {
+  return lines.map((line, index) => {
+    try {
+      const evidence = parseEvidence(line);
+      return { n: index + 1, kind: evidence.kind, locator: evidence.locator };
+    } catch {
+      return { n: index + 1, kind: "text", locator: line };
+    }
+  });
+}
+function sessionRef(sessionId, fallbackName, byId) {
+  return { session: sessionId ?? null, name: sessionId ? byId.get(sessionId)?.actor ?? fallbackName : fallbackName };
+}
+function formatEntry(entry, byId, me) {
+  const { event, report } = entry;
+  const payload = event.payload;
+  const from = sessionRef(event.session_id, event.actor, byId);
+  const base = {
+    sequence: event.sequence,
+    at: event.occurred_at,
+    why_you: entry.why_you,
+    for_me: entry.for_me
+  };
+  if (event.type === "report.posted" && report) {
+    const act = reportAct(report, entry.termed);
+    let statement = statementOf(report.body);
+    let text = report.body;
+    let why = [];
+    let evidence = journalEvidence(report.evidence_refs);
+    const flags = {};
+    if (entry.marked) {
+      const parsed = parseNote(report.body);
+      if (parsed.act !== null) {
+        statement = parsed.statement;
+        text = parsed.body;
+        why = parsed.why;
+        evidence = [...noteEvidence(parsed.evidence), ...journalEvidence(report.evidence_refs).map((item, index) => ({ ...item, n: parsed.evidence.length + index + 1 }))];
+        if (parsed.act !== act)
+          flags.act_mismatch = { stored: act, written: parsed.act };
+      }
+    }
+    const to = report.to_session_id ? sessionRef(report.to_session_id, report.to_session_id, byId) : entry.to_person ? "person" : "all";
+    const re = report.target_report_id ? { id: report.target_report_id, handle: handleOf("report", report.target_report_id) } : report.task_id ? { id: report.task_id, handle: handleOf("task", report.task_id) } : null;
+    return {
+      id: report.id,
+      handle: reportHandle(report.id, entry.termed),
+      act,
+      ...act === "corrects" || act === "supersedes" ? { relation: report.relation } : {},
+      from: { session: report.from_session_id, name: report.from_actor },
+      to,
+      re,
+      ...base,
+      statement,
+      text,
+      why,
+      evidence,
+      kind: report.kind,
+      ...report.confidence !== "unknown" ? { confidence: report.confidence } : {},
+      ...report.limits ? { limits: report.limits } : {},
+      ...flags
+    };
+  }
+  const taskHandle = entry.task ? handleOf("task", entry.task.id) : null;
+  const taskTitle = entry.task?.title ?? "a task";
+  switch (event.type) {
+    case "proposal.opened":
+      return {
+        id: event.entity_id,
+        handle: handleOf("proposal", event.entity_id),
+        act: "propose",
+        from,
+        to: "voices",
+        re: null,
+        ...base,
+        statement: report ? statementOf(report.body) : "A proposal was opened.",
+        text: report?.body ?? null,
+        why: [],
+        evidence: report ? journalEvidence(report.evidence_refs) : [],
+        criteria: payload.criteria ?? null,
+        extent: payload.extent ?? null,
+        closes_at: payload.closes_at ?? null
+      };
+    case "proposal.agreed":
+    case "proposal.rejected": {
+      const act = payload.person_act ?? {};
+      const agreed = event.type === "proposal.agreed";
+      const basis = typeof act.basis === "string" ? act.basis : "unknown";
+      return {
+        id: event.entity_id,
+        handle: handleOf("proposal", event.entity_id),
+        act: agreed ? "agree" : "reject",
+        from: basis === "relayed_by_session" ? from : { session: null, name: "person" },
+        to: "voices",
+        re: { id: event.entity_id, handle: handleOf("proposal", event.entity_id) },
+        ...base,
+        statement: agreed ? `The person agreed to ${handleOf("proposal", event.entity_id)} (${basis}).` : basis === "relayed_by_session" ? `A rejection of ${handleOf("proposal", event.entity_id)} was relayed by ${from.name}; a relayed no can only stop work.` : `The person rejected ${handleOf("proposal", event.entity_id)} (${basis}).`,
+        text: typeof act.reason === "string" ? act.reason : null,
+        why: [],
+        evidence: [],
+        basis
+      };
+    }
+    case "task.reported_complete":
+      return {
+        id: event.entity_id,
+        handle: taskHandle ?? event.entity_id,
+        act: "done",
+        from,
+        to: sessionRef(me, me, byId),
+        re: { id: event.entity_id, handle: taskHandle ?? event.entity_id },
+        ...base,
+        statement: `The completion of ${taskTitle} is ready for review.`,
+        text: typeof payload.summary === "string" ? payload.summary : null,
+        why: [],
+        evidence: [],
+        completion: typeof payload.completion_report_id === "string" ? { id: payload.completion_report_id, handle: handleOf("report", payload.completion_report_id) } : null
+      };
+    case "task.accepted":
+    case "task.changes_requested":
+      return {
+        id: event.entity_id,
+        handle: taskHandle ?? event.entity_id,
+        act: event.type === "task.accepted" ? "accept" : "request_changes",
+        from,
+        to: sessionRef(me, me, byId),
+        re: { id: event.entity_id, handle: taskHandle ?? event.entity_id },
+        ...base,
+        statement: typeof payload.summary === "string" ? statementOf(payload.summary) : `A verdict on ${taskTitle}.`,
+        text: typeof payload.summary === "string" ? payload.summary : null,
+        why: [],
+        evidence: typeof payload.review_report_id === "string" ? [{ n: 1, kind: "report", locator: payload.review_report_id }] : []
+      };
+    default:
+      return {
+        id: event.entity_id,
+        handle: taskHandle ?? event.entity_id,
+        act: "event",
+        type: event.type,
+        from,
+        to: entry.for_me ? sessionRef(me, me, byId) : "all",
+        re: taskHandle ? { id: entry.task.id, handle: taskHandle } : null,
+        ...base,
+        statement: eventSubject(event.type, taskHandle, taskTitle, from.name),
+        text: null,
+        why: [],
+        evidence: []
+      };
+  }
+}
+function eventSubject(type, taskHandle, title, by) {
+  const task = taskHandle ? `${taskHandle} (${title})` : "a task";
+  switch (type) {
+    case "handoff.offered":
+      return `${by} offered you ${task}.`;
+    case "handoff.accepted":
+      return `${by} accepted your handoff of ${task}.`;
+    case "handoff.declined":
+      return `${by} declined your handoff of ${task}.`;
+    case "handoff.expired":
+      return `Your handoff of ${task} expired.`;
+    case "task.recovered":
+      return `${by} recovered your expired lease on ${task}.`;
+    default:
+      return `${type}${taskHandle ? ` on ${task}` : ""} by ${by}.`;
+  }
+}
+function subjectLine(entry, byId, me) {
+  const item = formatEntry(entry, byId, me);
+  return {
+    id: item.id,
+    handle: item.handle,
+    act: item.act,
+    ...item.type ? { type: item.type } : {},
+    from: item.from,
+    at: item.at,
+    sequence: item.sequence,
+    statement: item.statement,
+    for_me: false
+  };
+}
+function formatWaiting(ctx, entry) {
+  const handle = handleOf(entry.ref_kind, entry.ref_id);
+  const about = entry.about_id ? { id: entry.about_id, handle: entry.what === "review" || entry.what === "challenge" || entry.what === "answer" ? handleOf("report", entry.about_id) : entry.about_id } : null;
+  const next = entry.what === "stop" ? { say: `Stop work that rests on ${handle}: the person's latest act on it is a rejection.` } : withSlot(ctx, { tool: "collab_inbox", input: { about: entry.what === "answer" && entry.about_id ? handleOf("report", entry.about_id) : handle } });
+  return {
+    what: entry.what,
+    ref: handle,
+    id: entry.ref_id,
+    ...about ? { about } : {},
+    by: entry.by,
+    due: entry.due,
+    at: entry.at,
+    summary: entry.summary,
+    next
+  };
+}
+var DEFAULT_INBOX_LIMIT = 20;
+var WAIT_POLL_MS = 250;
+async function inboxVerb(ctx, input) {
+  const { binding, credential } = requireCredential(ctx);
+  if (input.about !== undefined)
+    return aboutView(ctx, binding, input);
+  const limit = input.limit ?? DEFAULT_INBOX_LIMIT;
+  const include = input.include ?? "for_me";
+  const waitSeconds = input.wait_seconds ?? 0;
+  if (!Number.isInteger(waitSeconds) || waitSeconds < 0 || waitSeconds > 30) {
+    throw new CollabError("invalid_wait_seconds", "wait_seconds must be an integer from 0 to 30");
+  }
+  let data = ctx.store.inboxForSession({ ...credential, limit, include });
+  let alsoNew = data.also_new;
+  let waited = null;
+  if (waitSeconds > 0 && !data.entries.some((entry) => entry.for_me) && !data.more) {
+    const started = performance.now();
+    const arrived = await waitForMe(ctx, binding, data.mark.anchor, waitSeconds * 1000);
+    waited = { seconds: Math.round((performance.now() - started) / 100) / 10, ended_by: arrived ? "item" : "timeout" };
+    if (arrived) {
+      data = ctx.store.inboxForSession({ ...credential, limit, include });
+      alsoNew += data.also_new;
+    }
+  }
+  const byId = new Map(data.sessions.map((view) => [view.id, view]));
+  const me = data.session.id;
+  const items = data.entries.map((entry) => entry.for_me ? formatEntry(entry, byId, me) : subjectLine(entry, byId, me));
+  const advice = [];
+  if (input.format === "note")
+    advice.push("format: note renders one thread; pass about with an id or handle.");
+  if (data.mark.clamped)
+    advice.push("Your read mark was past the journal head (the journal may have been restored from an older copy); it now reads from the head.");
+  const firstForMe = items.find((item) => item.for_me === true);
+  const next = firstForMe ? withSlot(ctx, { tool: "collab_inbox", input: { about: firstForMe.handle } }) : data.more ? withSlot(ctx, { tool: "collab_inbox", input: {} }) : withSlot(ctx, { tool: "collab_inbox", input: { wait_seconds: 30 } });
+  return {
+    ok: true,
+    items,
+    also_new: { count: alsoNew },
+    more: data.more,
+    read_through: { sequence: data.mark.through, head: data.head_sequence },
+    ...data.mark.initialised_from ? { mark_initialised_from: data.mark.initialised_from } : {},
+    waiting_on_you: data.waiting.map((entry) => formatWaiting(ctx, entry)),
+    ...waited ? { waited } : {},
+    advice,
+    next
+  };
+}
+async function waitForMe(ctx, binding, anchor, durationMs) {
+  if (ctx.waits.active >= ctx.waits.max) {
+    throw new CollabError("too_many_waits", `At most ${ctx.waits.max} waits may run per endpoint`);
+  }
+  ctx.waits.active += 1;
+  try {
+    const sessionId = binding.handle.session.id;
+    const workspaceId = binding.handle.workspace.id;
+    let after = { ...anchor };
+    const deadline = performance.now() + durationMs;
+    while (true) {
+      if (ctx.signals.some((signal) => signal?.aborted)) {
+        throw new CollabError("wait_cancelled", "The inbox wait was cancelled");
+      }
+      const current = ctx.binding();
+      if (!current || current.handle.session.id !== sessionId) {
+        throw new CollabError("session_auth_failed", "The bound session changed during the wait");
+      }
+      let caughtUp = true;
+      try {
+        const page = ctx.store.eventsAfterAnchorForSession({
+          ...current.handle.credential,
+          workspace_id: workspaceId,
+          after_anchor: after,
+          event_limit: 50
+        });
+        for (const event of page.events) {
+          if (event.session_id !== sessionId && ctx.store.eventAddressesSession(event, sessionId))
+            return true;
+        }
+        after = page.next_anchor;
+        caughtUp = !page.has_more;
+      } catch (error51) {
+        if (!(error51 instanceof CollabError) || error51.code !== "event_read_busy")
+          throw error51;
+      }
+      const remaining = deadline - performance.now();
+      if (remaining <= 0)
+        return false;
+      if (!caughtUp)
+        continue;
+      await abortableDelay(Math.min(WAIT_POLL_MS, remaining), ctx.signals);
+    }
+  } finally {
+    ctx.waits.active -= 1;
+  }
+}
+function abortableDelay(ms, signals) {
+  return new Promise((done) => {
+    const finish = () => {
+      clearTimeout(timer);
+      for (const signal of signals)
+        signal?.removeEventListener("abort", finish);
+      done();
+    };
+    const timer = setTimeout(finish, ms);
+    for (const signal of signals)
+      signal?.addEventListener("abort", finish, { once: true });
+    if (signals.some((signal) => signal?.aborted))
+      finish();
+  });
+}
+function aboutKind(value) {
+  return /^(task#|task:|task_)/i.test(value.trim()) ? "task" : "report";
+}
+function aboutView(ctx, binding, input) {
+  const credential = binding.handle.credential;
+  const workspaceId = binding.handle.workspace.id;
+  const kind = aboutKind(input.about);
+  const resolved = ctx.store.resolveNoteRef(workspaceId, kind, input.about);
+  const thread = ctx.store.noteThreadForSession({ ...credential, kind, id: resolved.id });
+  const byId = new Map(thread.sessions.map((view2) => [view2.id, view2]));
+  const me = thread.session.id;
+  const advice = [];
+  if (thread.truncated)
+    advice.push(`This thread lists its first ${thread.answers.length} answers only.`);
+  const view = thread.kind === "task" ? taskView(thread, byId, me) : reportView(thread, byId, me, advice);
+  const result = {
+    ok: true,
+    ...view,
+    truncated: thread.truncated,
+    advice,
+    next: withSlot(ctx, { tool: "collab_inbox", input: {} })
+  };
+  if (input.format === "note") {
+    const carried = carryThread(thread);
+    result.note = carried.text;
+    result.not_carried = carried.not_carried;
+  }
+  return result;
+}
+function reportView(thread, byId, me, advice) {
+  const root = thread.root;
+  const report = root.report;
+  const decision = report.kind === "decision";
+  if (thread.termed) {
+    advice.push("This build shows a proposal as its plain thread; the computed proposal view (position, needs, for_the_person) is not built yet. The position here is not stated, so read none into it.");
+  } else if (decision) {
+    advice.push("This build shows a decision as its plain thread; the composed decision record is not built yet.");
+  }
+  return {
+    about: {
+      kind: thread.termed ? "proposal" : decision ? "decision" : "report",
+      id: report.id,
+      handle: reportHandle(report.id, thread.termed)
+    },
+    root: formatEntry(root, byId, me),
+    answers: thread.answers.map((entry) => formatEntry(entry, byId, me)),
+    state: {
+      challenges: thread.challenges.map((challenge) => challengeView(challenge, thread.termed && challenge.target_report_id === report.id))
+    }
+  };
+}
+function taskView(thread, byId, me) {
+  const task = thread.task;
+  const holder = task.assignee_session_id ? byId.get(task.assignee_session_id) : undefined;
+  const generation = thread.reviews.at(-1)?.review_generation ?? null;
+  return {
+    about: { kind: "task", id: task.id, handle: handleOf("task", task.id) },
+    task: {
+      id: task.id,
+      handle: handleOf("task", task.id),
+      title: task.title,
+      state: task.effective_status,
+      review_status: task.review_status,
+      work_mode: task.work_mode,
+      completion_policy: task.completion_policy,
+      paths: task.path_scopes,
+      holder: task.assignee_session_id ? { session: task.assignee_session_id, name: task.assignee, purpose: holder?.purpose ?? null } : null,
+      completion: task.completion_report_id ? {
+        id: task.completion_report_id,
+        handle: handleOf("report", task.completion_report_id),
+        by: task.reported_by,
+        at: task.reported_at
+      } : null,
+      review_requested: task.review_requested_session_id ? sessionRef(task.review_requested_session_id, task.review_requested_session_id, byId) : null,
+      reviews: thread.reviews.map((review) => ({
+        outcome: review.outcome,
+        by: review.reviewer_actor,
+        at: review.created_at,
+        summary: review.summary,
+        of_current_completion: generation !== null && review.review_generation === generation && task.review_status !== "pending"
+      }))
+    },
+    thread: thread.answers.map((entry) => formatEntry(entry, byId, me))
+  };
+}
+function localTerms() {
+  const name = hostname3().split(".")[0] ?? "";
+  return name.length >= 3 && !/^[0-9a-f]{1,7}$/i.test(name) ? [name] : [];
+}
+function carryThread(thread) {
+  let input;
+  if (thread.kind === "task") {
+    const task = thread.task;
+    input = {
+      act: "note",
+      statement: statementOf(`Task: ${task.title}`),
+      re: `task:${task.id}`,
+      trailers: [{
+        key: "Position",
+        value: ["legacy_unreviewed", "not_required"].includes(task.review_status) ? task.effective_status : `${task.effective_status}; review ${task.review_status}`
+      }]
+    };
+  } else {
+    const report = thread.root.report;
+    const stored = reportAct(report, thread.termed);
+    const act = stored === "corrects" || stored === "supersedes" ? "note" : stored;
+    const re = `${thread.termed ? "proposal" : "report"}:${report.id}`;
+    const parsed = thread.root.marked ? parseNote(report.body) : null;
+    if (parsed && parsed.act !== null) {
+      input = {
+        act,
+        statement: parsed.statement,
+        body: parsed.body,
+        re,
+        why: parsed.why,
+        evidence: parsed.evidence,
+        limits: parsed.limits,
+        purpose: parsed.purpose,
+        extent: parsed.extent
+      };
+    } else {
+      const lines = report.body.split(`
+`);
+      const firstCut = (lines[0] ?? "").length > NOTE_STATEMENT_MAX;
+      input = {
+        act,
+        statement: statementOf(report.body),
+        body: (firstCut ? report.body : lines.slice(1).join(`
+`)).trim() || null,
+        re
+      };
+    }
+  }
+  const carried = renderCarriedNote(input, { maxChars: 800, localTerms: localTerms() });
+  return { text: carried.text, not_carried: carried.not_carried };
+}
 
 // src/mcp.ts
 var DEFAULT_MCP_NEXT_EVENT_LIMIT = 10;
@@ -28816,6 +31166,7 @@ var localDestructiveMutation = {
   idempotentHint: false,
   openWorldHint: false
 };
+var WAITS_PER_ENDPOINT = 8;
 function buildCollabMcpServer(store, options = {}) {
   const slots = new Map([["", { key: "", binding: options.resumed_session ?? null }]]);
   for (const [key2, binding] of Object.entries(options.resumed_sessions ?? {})) {
@@ -28834,35 +31185,48 @@ function buildCollabMcpServer(store, options = {}) {
     }
   };
   const environment = options.environment ?? process.env;
+  const profile = toolsProfile(environment);
+  const legacyInstructions = `Collab ${COLLAB_PACKAGE_VERSION}: collab_events_wait offers bounded read-only anchored observation for an already running host, ` + "without acknowledging, refreshing presence, or renewing leases; continue from next_anchor, never head. " + "Local-first coordination journal for honest exchange among independent coding-agent sessions. " + "Use collab_session_start once per default or named binding_key, then collab_next. Named children require an explicit actor and parent_session_id; " + "send their binding_key on every call. Selectors are cooperative routing, not authenticated subagent isolation. " + "Default-slot actor can use Claude metadata only with matching selected PID, messaging socket and process start time. A host restart resumes from the " + "mode-0600 credential file without exposing its bearer token to the model. Exchange observations, " + "inferences, proposals, or authorised decisions as structured reports with evidence, confidence, " + "limits, and explicit authority scope. Direction-level proposals (collab_proposal_open) are settled by the agents " + "through lazy consensus; that position authorises nothing alone, and a person's consent is never recorded through MCP. " + "Claim before editing overlapping path scopes. Session leases remain live while their " + "session is live (6 hours since activity); optional renew is lease-fenced, not version-gated. " + "An advisory coordination lease is not ownership, a filesystem lock, or authority. Edit-task " + "completion is actor-reported and remains pending until a distinct session accepts it. Challenges " + "remain append-only disagreement; acknowledgement means processed, not agreed. Expired session " + "leases require explicit recovery. Git checkpoints are local evidence, not attribution or atomic " + "Git/SQLite locks. Store concise coordination facts only\u2014never credentials, prompts, transcripts, " + "chain-of-thought, or sensitive source content. Cursor rollback recovery must be enabled by the host " + "and completed with an audited cursor reset before session mutations resume. The host owns spawning, " + "wakeups, waiting, and stopping. The separate collab_session_join/list/heartbeat/leave tools preserve " + "the public v0.2 self-declared presence plane; they provide routing hints only and never authenticate a caller. " + "The read-only collab_anchor_status tool can compare this journal with an optional local Zerone witness sidecar; " + "it never contacts a chain, broadcasts, spends funds, or turns an anchor into truth or authority.";
   const server = new McpServer({ name: "agenttool-collab", version: COLLAB_PACKAGE_VERSION }, {
     capabilities: { tools: {} },
-    instructions: `Collab ${COLLAB_PACKAGE_VERSION}: collab_events_wait offers bounded read-only anchored observation for an already running host, ` + "without acknowledging, refreshing presence, or renewing leases; continue from next_anchor, never head. " + "Local-first coordination journal for honest exchange among independent coding-agent sessions. " + "Use collab_session_start once per default or named binding_key, then collab_next. Named children require an explicit actor and parent_session_id; " + "send their binding_key on every call. Selectors are cooperative routing, not authenticated subagent isolation. " + "Default-slot actor can use Claude metadata only with matching selected PID, messaging socket and process start time. A host restart resumes from the " + "mode-0600 credential file without exposing its bearer token to the model. Exchange observations, " + "inferences, proposals, or authorised decisions as structured reports with evidence, confidence, " + "limits, and explicit authority scope. Direction-level proposals (collab_proposal_open) are settled by the agents " + "through lazy consensus; that position authorises nothing alone, and a person's consent is never recorded through MCP. " + "Claim before editing overlapping path scopes. Session leases remain live while their " + "session is live (6 hours since activity); optional renew is lease-fenced, not version-gated. " + "An advisory coordination lease is not ownership, a filesystem lock, or authority. Edit-task " + "completion is actor-reported and remains pending until a distinct session accepts it. Challenges " + "remain append-only disagreement; acknowledgement means processed, not agreed. Expired session " + "leases require explicit recovery. Git checkpoints are local evidence, not attribution or atomic " + "Git/SQLite locks. Store concise coordination facts only\u2014never credentials, prompts, transcripts, " + "chain-of-thought, or sensitive source content. Cursor rollback recovery must be enabled by the host " + "and completed with an audited cursor reset before session mutations resume. The host owns spawning, " + "wakeups, waiting, and stopping. The separate collab_session_join/list/heartbeat/leave tools preserve " + "the public v0.2 self-declared presence plane; they provide routing hints only and never authenticate a caller. " + "The read-only collab_anchor_status tool can compare this journal with an optional local Zerone witness sidecar; " + "it never contacts a chain, broadcasts, spends funds, or turns an anchor into truth or authority."
+    instructions: profile === "notes" ? notesInstructions() : `${notesInstructions()}
+${FULL_PROFILE_BRIDGE}
+Legacy session tools: ${legacyInstructions}`
   });
   const register2 = server.registerTool.bind(server);
-  server.registerTool = (...[name, config2, callback]) => register2(name, {
-    ...config2,
-    inputSchema: {
-      ...config2.inputSchema,
-      binding_key: exports_external.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/).optional().describe("Cooperative subagent binding selector; omit for the original default binding. Not authentication.")
-    }
-  }, async (input, ctx) => {
-    const { binding_key, ...args } = input;
-    if (binding_key !== undefined && (typeof binding_key !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(binding_key))) {
-      return failure(new CollabError("invalid_binding_key", "Invalid binding selector"));
-    }
-    const key2 = binding_key ?? "";
-    let slot = slots.get(key2);
-    if (key2 && (!slot || !slot.binding) && name !== "collab_session_start") {
-      return failure(new CollabError("session_not_bound", "The selected child binding is not bound"));
-    }
-    if (!slot) {
-      slot = { key: key2, binding: null };
-      slots.set(key2, slot);
-    }
-    return requestSlot.run(slot, () => callback(args, ctx));
-  });
+  server.registerTool = (...[name, config2, callback]) => {
+    if (!profileIncludes(profile, name))
+      return;
+    return register2(name, {
+      ...config2,
+      inputSchema: {
+        ...config2.inputSchema,
+        binding_key: exports_external.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/).optional().describe("Cooperative subagent binding selector; omit for the original default binding. Not authentication.")
+      }
+    }, async (input, ctx) => {
+      const { binding_key, ...args } = input;
+      if (binding_key !== undefined && (typeof binding_key !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(binding_key))) {
+        return isNoteVerb(name) ? noteFailure(new CollabError("invalid_binding_key", "Invalid binding selector", {
+          remedy: { say: "binding_key is 1 to 200 letters, digits or . _ : -, starting with a letter or digit." }
+        })) : failure(new CollabError("invalid_binding_key", "Invalid binding selector"));
+      }
+      const key2 = binding_key ?? "";
+      let slot = slots.get(key2);
+      if (isNoteVerb(name) && name !== "collab_arrive" && (!slot || !slot.binding)) {
+        return noteFailure(notArrived(key2, slots.get("")?.binding ?? null));
+      }
+      if (key2 && (!slot || !slot.binding) && name !== "collab_session_start" && name !== "collab_arrive") {
+        return failure(new CollabError("session_not_bound", "The selected child binding is not bound"));
+      }
+      if (!slot) {
+        slot = { key: key2, binding: null };
+        slots.set(key2, slot);
+      }
+      return requestSlot.run(slot, () => callback(args, ctx));
+    });
+  };
   const waitShutdown = new AbortController;
-  let activeWaits = 0;
+  const waits = { active: 0, max: WAITS_PER_ENDPOINT };
   const close = server.close.bind(server);
   server.close = async () => {
     waitShutdown.abort();
@@ -28895,6 +31259,44 @@ function buildCollabMcpServer(store, options = {}) {
     }
     return value;
   };
+  const noteContext = (signal) => ({
+    store,
+    environment,
+    profile,
+    slot_key: requestSlot.getStore().key,
+    binding: () => state.binding,
+    bind: (binding) => {
+      state.binding = binding;
+    },
+    bound_slots: () => [...slots.values()].filter((slot) => slot.binding !== null).sort((left, right) => left.key === "" ? -1 : right.key === "" ? 1 : left.key.localeCompare(right.key)).map((slot) => ({ key: slot.key, binding: slot.binding })),
+    waits,
+    signals: [signal, waitShutdown.signal]
+  });
+  server.registerTool("collab_arrive", {
+    title: "Arrive, or look around",
+    description: "Start your coordination session on this slot, or, when it already has one, see who you are, who is here, " + "what is open and what waits on you. On a slot that already has a session it writes nothing unless " + "revise_purpose is true. With binding_key it starts a named child of a session this MCP process holds, which " + "shares that parent's voice. It never moves the legacy cursor, and never resumes or adopts another process's session.",
+    annotations: localMutation,
+    inputSchema: {
+      purpose: exports_external.string().min(1).max(4000).describe("What you are here to do, in one line of at most 200 characters. Self-declared; revisable."),
+      name: exports_external.string().min(1).max(1000).optional().describe("Display name. Default: the verified Claude Code name, else <host>-<6 hex of the session id>; a named slot defaults to <parent name>/<binding_key>."),
+      model: exports_external.string().min(1).max(1000).optional().describe("Your model lineage, for example claude-opus-5.5. Self-declared; shown, never counted."),
+      root_path: exports_external.string().min(1).optional().describe("Repository root. Default: this MCP server's working directory, or the parent's worktree for a named slot."),
+      revise_purpose: exports_external.boolean().optional().describe("On a slot that already has a session: record purpose as your current purpose."),
+      parent: exports_external.string().min(1).max(200).optional().describe("With binding_key: the session this MCP process holds that the new session descends from (id, session# handle or name).")
+    }
+  }, async (input) => noteCall(() => arriveVerb(noteContext(), input)));
+  server.registerTool("collab_inbox", {
+    title: "What is for you, and one thread",
+    description: "Items addressed to you since your read mark, oldest first, with what waits on you whatever the mark. " + "With about (an id or handle such as report#3fa91c or task#0b12de): that report and everything answering it, " + "or a task's holder, completion and reviews. wait_seconds waits, reading only, for a new item for you. " + "It moves its own read mark and last-seen time, never the legacy cursor.",
+    annotations: localMutation,
+    inputSchema: {
+      about: exports_external.string().min(1).max(300).optional().describe("One thread: a report, proposal or task id or handle."),
+      wait_seconds: exports_external.number().int().min(0).max(30).optional().describe("With nothing new for you, wait up to this long for an item; default 0."),
+      include: exports_external.enum(["for_me", "all"]).optional().describe("for_me (the default), or all to add unaddressed items as subject lines."),
+      limit: exports_external.number().int().min(1).max(50).optional().describe("Items per call; default 20."),
+      format: exports_external.enum(["json", "note"]).optional().describe("note: with about, the thread root and its state as one collab-note/1 text of at most 800 characters, for a person to carry.")
+    }
+  }, async (input, ctx) => noteCall(() => inboxVerb(noteContext(ctx.mcpReq?.signal), input)));
   server.registerTool("collab_session_join", {
     title: "Join the self-declared presence plane",
     description: "Create or replay one unauthenticated routing-presence record and return its unique actor_key. This does not bind the MCP process or create a credential.",
@@ -29539,9 +31941,9 @@ Rationale: ${input.rationale}` : ""}`,
       if (!Number.isInteger(duration3) || duration3 < 0 || duration3 > MAX_WAIT_MS) {
         throw new CollabError("invalid_wait_ms", "wait_ms must be an integer from 0 to 30000");
       }
-      if (activeWaits >= 8)
+      if (waits.active >= waits.max)
         throw new CollabError("too_many_waits", "At most eight waits may run per endpoint");
-      activeWaits += 1;
+      waits.active += 1;
       counted = true;
       const signal = ctx.mcpReq?.signal;
       const check2 = () => {
@@ -29587,7 +31989,7 @@ Rationale: ${input.rationale}` : ""}`,
       return result;
     } finally {
       if (counted)
-        activeWaits -= 1;
+        waits.active -= 1;
     }
   });
   server.registerTool("collab_journal_verify", {
@@ -29610,12 +32012,12 @@ Rationale: ${input.rationale}` : ""}`,
   return server;
 }
 function waitDelay(ms, signals) {
-  return new Promise((resolve3) => {
+  return new Promise((resolve4) => {
     const finish = () => {
       clearTimeout(timer);
       for (const signal of signals)
         signal?.removeEventListener("abort", finish);
-      resolve3();
+      resolve4();
     };
     const timer = setTimeout(finish, ms);
     for (const signal of signals)
@@ -29681,33 +32083,19 @@ function isRecord(value) {
 
 // src/store.ts
 import { Database } from "bun:sqlite";
-import { createHash as createHash3, randomBytes, randomUUID as randomUUID2, timingSafeEqual } from "crypto";
+import { createHash as createHash4, randomBytes, randomUUID as randomUUID2, timingSafeEqual } from "crypto";
 import {
   chmodSync as chmodSync2,
   closeSync as closeSync5,
-  existsSync as existsSync3,
+  existsSync as existsSync4,
   lstatSync as lstatSync3,
   mkdirSync as mkdirSync2,
   openSync as openSync5
 } from "fs";
-import { dirname as dirname2, isAbsolute as isAbsolute2, join as join3, posix, resolve as resolve4 } from "path";
-
-// src/canonical.ts
-function canonicalJson(value) {
-  return JSON.stringify(sortValue(value));
-}
-function sortValue(value) {
-  if (Array.isArray(value))
-    return value.map(sortValue);
-  if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0).map(([key2, child]) => [key2, sortValue(child)]);
-    return Object.fromEntries(entries);
-  }
-  return value;
-}
+import { dirname as dirname2, isAbsolute as isAbsolute2, join as join3, posix, resolve as resolve5 } from "path";
 
 // src/passkey.ts
-import { createHash, createPublicKey, verify } from "crypto";
+import { createHash as createHash2, createPublicKey, verify } from "crypto";
 var FLAG_USER_PRESENT = 1;
 var FLAG_USER_VERIFIED = 4;
 var BASE64URL = /^[A-Za-z0-9_-]*$/;
@@ -29722,7 +32110,7 @@ function base64urlDecode(value, field, maxBytes = 64 * 1024) {
   return bytes;
 }
 function sha256(bytes) {
-  return createHash("sha256").update(bytes).digest();
+  return createHash2("sha256").update(bytes).digest();
 }
 function personActChallenge(input) {
   const challenge_bytes = canonicalJson({ protocol: PERSON_ACT_PROTOCOL, ...input });
@@ -29887,10 +32275,10 @@ function aiPosition(input) {
 }
 
 // src/repository.ts
-import { createHash as createHash2 } from "crypto";
+import { createHash as createHash3 } from "crypto";
 import {
   closeSync as closeSync4,
-  existsSync as existsSync2,
+  existsSync as existsSync3,
   fstatSync as fstatSync3,
   lstatSync as lstatSync2,
   openSync as openSync4,
@@ -29899,7 +32287,7 @@ import {
   realpathSync,
   statSync
 } from "fs";
-import { resolve as resolve3 } from "path";
+import { resolve as resolve4 } from "path";
 import { spawnSync as spawnSync2 } from "child_process";
 var GIT_TIMEOUT_MS = 5000;
 var MAX_GIT_OUTPUT = 1024 * 1024;
@@ -29918,13 +32306,13 @@ class RepositoryProbeTimeout extends Error {
   }
 }
 function inspectRepository(rootInput, explicitRepositoryKey, metadataOnly = false, options = {}) {
-  const requested = resolve3(rootInput);
-  if (!existsSync2(requested) || !statSync(requested).isDirectory()) {
+  const requested = resolve4(rootInput);
+  if (!existsSync3(requested) || !statSync(requested).isDirectory()) {
     throw new CollabError("workspace_not_directory", "Workspace root must be an existing directory", { root_path: requested });
   }
   const requestedRoot = realpathSync(requested);
   const topLevel = gitOutput(requestedRoot, ["rev-parse", "--show-toplevel"], options);
-  const rootPath = topLevel && existsSync2(topLevel) ? realpathSync(topLevel) : requestedRoot;
+  const rootPath = topLevel && existsSync3(topLevel) ? realpathSync(topLevel) : requestedRoot;
   const explicitKey = explicitRepositoryKey?.trim();
   if (!topLevel) {
     const repositoryKey2 = explicitKey ? `explicit:${sha2562(explicitKey)}` : `local-path:${sha2562(rootPath)}`;
@@ -30057,7 +32445,7 @@ function captureRepoCheckpoint(rootPath, id) {
     dirty: pathStateAfter.ok ? pathStateAfter.stdout.length > 0 : null,
     algorithm: "git-state/v1",
     index_sha256: indexDigest,
-    state_sha256: trackedState.ok && stablePathState && untrackedDigest ? sha256Bytes(Buffer.concat([
+    state_sha256: trackedState.ok && stablePathState && untrackedDigest ? sha256Bytes2(Buffer.concat([
       trackedState.stdout,
       Buffer.from([0]),
       pathStateAfter.stdout,
@@ -30138,7 +32526,7 @@ function inspectSuccessorCommit(rootPath, commitSha, parentSha) {
       return refuse(`Git could not read the committed bytes of ${path} within the inspection bounds`);
     }
     budget.bytes -= content.stdout.length;
-    changes.push({ path, blob_sha256: sha256Bytes(content.stdout) });
+    changes.push({ path, blob_sha256: sha256Bytes2(content.stdout) });
   }
   return { ok: true, commit_sha: commitSha, parent_sha: parentSha, changes };
 }
@@ -30146,10 +32534,10 @@ function worktreeId(rootPath, fingerprint) {
   return `wt_${sha2562(`${rootPath}\x00${fingerprint}`).slice(0, 24)}`;
 }
 function resolveGitPath(rootPath, value) {
-  return value.startsWith("/") ? value : resolve3(rootPath, value);
+  return value.startsWith("/") ? value : resolve4(rootPath, value);
 }
 function realpathIfPresent(path) {
-  return existsSync2(path) ? realpathSync(path) : resolve3(path);
+  return existsSync3(path) ? realpathSync(path) : resolve4(path);
 }
 function gitOutput(rootPath, args, options = {}) {
   const result = runGit(rootPath, args, options);
@@ -30179,7 +32567,7 @@ function runGit(rootPath, args, options) {
 }
 function gitDigest(rootPath, args) {
   const result = gitBytes(rootPath, args);
-  return result.ok ? sha256Bytes(result.stdout) : null;
+  return result.ok ? sha256Bytes2(result.stdout) : null;
 }
 function gitBytes(rootPath, args, maxBuffer = MAX_GIT_OUTPUT) {
   const result = spawnSync2("git", ["-C", rootPath, ...args], {
@@ -30234,7 +32622,7 @@ function digestUntrackedContent(rootPath, paths) {
     remainingBytes: MAX_UNTRACKED_BYTES,
     deadline: Date.now() + MAX_UNTRACKED_HASH_MS
   };
-  const aggregate = createHash2("sha256");
+  const aggregate = createHash3("sha256");
   aggregate.update("agenttool.collab/untracked-state/v1\x00");
   for (const entry of entries) {
     if (Date.now() > budget.deadline)
@@ -30283,7 +32671,7 @@ function digestStableFile(path, budget) {
     const before = fstatSync3(descriptor);
     if (!before.isFile() || before.size > budget.remainingBytes || Date.now() > budget.deadline)
       return null;
-    const hash2 = createHash2("sha256");
+    const hash2 = createHash3("sha256");
     const buffer = Buffer.allocUnsafe(64 * 1024);
     while (true) {
       if (Date.now() > budget.deadline)
@@ -30335,15 +32723,15 @@ function safeGitRelativePath(value) {
   return true;
 }
 function lengthPrefix(value) {
-  const prefix = Buffer.allocUnsafe(8);
-  prefix.writeBigUInt64BE(BigInt(value));
-  return prefix;
+  const prefix2 = Buffer.allocUnsafe(8);
+  prefix2.writeBigUInt64BE(BigInt(value));
+  return prefix2;
 }
 function sha2562(value) {
-  return createHash2("sha256").update(value).digest("hex");
+  return createHash3("sha256").update(value).digest("hex");
 }
-function sha256Bytes(value) {
-  return createHash2("sha256").update(value).digest("hex");
+function sha256Bytes2(value) {
+  return createHash3("sha256").update(value).digest("hex");
 }
 
 // src/store.ts
@@ -30434,14 +32822,14 @@ class CollabStore {
       budget_ms: options.repository_discovery?.budget_ms ?? REPOSITORY_DISCOVERY_MS,
       now: options.repository_discovery?.now ?? (() => performance.now())
     };
-    const databasePath = path === ":memory:" ? path : resolve4(path);
+    const databasePath = path === ":memory:" ? path : resolve5(path);
     if (databasePath !== ":memory:") {
       const parent = dirname2(databasePath);
-      const parentAlreadyExisted = existsSync3(parent);
+      const parentAlreadyExisted = existsSync4(parent);
       mkdirSync2(parent, { recursive: true, mode: 448 });
       if (!parentAlreadyExisted)
         chmodSync2(parent, 448);
-      if (existsSync3(databasePath)) {
+      if (existsSync4(databasePath)) {
         assertSafeDatabaseFile(databasePath);
       } else {
         try {
@@ -30604,6 +32992,23 @@ class CollabStore {
           parent_session_id TEXT NOT NULL,
           basis TEXT NOT NULL CHECK (basis IN ('same_mcp_process')),
           attested_at TEXT NOT NULL
+        );
+        -- Collab Notes view state (spec 8.1): what the notes surface last showed
+        -- each session. Never journaled and never cited, so it can be lost or
+        -- rebuilt without harm; no foreign keys, so older builds never see it.
+        CREATE TABLE IF NOT EXISTS note_marks (
+          workspace_id TEXT NOT NULL,
+          session_id TEXT NOT NULL,
+          shown_through_sequence INTEGER NOT NULL,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (workspace_id, session_id)
+        );
+        CREATE TABLE IF NOT EXISTS note_shown (
+          workspace_id TEXT NOT NULL,
+          session_id TEXT NOT NULL,
+          item_id TEXT NOT NULL,
+          shown_at TEXT NOT NULL,
+          PRIMARY KEY (workspace_id, session_id, item_id)
         );
       `);
       if (this.tableNames().includes("proposal_rejections") && this.db.query(`SELECT 1 FROM proposal_rejections LIMIT 1`).get()) {
@@ -31391,7 +33796,7 @@ class CollabStore {
     if (!this.filesystemPath)
       return;
     for (const path of [this.filesystemPath, `${this.filesystemPath}-wal`, `${this.filesystemPath}-shm`]) {
-      if (!existsSync3(path))
+      if (!existsSync4(path))
         continue;
       const stat = lstatSync3(path);
       if (!stat.isFile() || stat.isSymbolicLink() || typeof process.getuid === "function" && stat.uid !== process.getuid()) {
@@ -31674,9 +34079,11 @@ class CollabStore {
     });
   }
   startSession(input) {
-    const actor = validateActor(input.actor);
+    const id = `session_${randomUUID2()}`;
+    const actor = input.actor !== undefined ? validateActor(input.actor) : derivedActor(input.actor_prefix, id);
     const role = optionalText(input.role, "role", 200);
     const seatRef = input.seat_ref == null ? null : validateSeatRef(input.seat_ref);
+    const model = input.model === undefined ? null : validateModelLabel(input.model);
     const identity = inspectRepository(input.root_path, input.repository_key, true, { portable: false });
     const workspace = this.openWorkspace({
       root_path: input.root_path,
@@ -31704,7 +34111,6 @@ class CollabStore {
         }
       }
       const now = this.timestamp();
-      const id = `session_${randomUUID2()}`;
       const token = randomBytes(SESSION_TOKEN_BYTES).toString("base64url");
       const generation = 1;
       this.db.query(`
@@ -31725,6 +34131,7 @@ class CollabStore {
         role,
         parent_session_id: parentSessionId,
         ...seatRef ? { seat_ref: seatRef } : {},
+        ...model ? { model } : {},
         identity_boundary: "session_credentials_fence_cooperating_local_clients_but_do_not_authenticate_a_person_or_model"
       }, id);
       return this.sessionHandle(this.requireCoordinationSessionRow(id), token, this.requireWorkspace(workspace.id), worktreeRow);
@@ -35283,6 +37690,701 @@ class CollabStore {
       throw new CollabError("handoff_not_found", `Handoff '${id}' was not found`);
     return handoffFromRow(row);
   }
+  noteSessionViews(workspaceId2) {
+    this.requireWorkspace(workspaceId2);
+    const rows = this.db.query(`
+      SELECT * FROM coordination_sessions WHERE workspace_id = ?
+      ORDER BY last_seen_at DESC, id
+    `).all(workspaceId2);
+    const declared = this.db.query(`
+      SELECT entity_id, type, payload_json FROM events
+      WHERE workspace_id = ? AND type IN ('session.joined', 'purpose.declared')
+      ORDER BY sequence
+    `).all(workspaceId2);
+    const joined = new Map;
+    const purposes = new Map;
+    for (const row of declared) {
+      const payload = JSON.parse(row.payload_json);
+      if (row.type === "session.joined") {
+        joined.set(row.entity_id, {
+          seat_ref: typeof payload.seat_ref === "string" ? payload.seat_ref : null,
+          model: typeof payload.model === "string" ? payload.model : null
+        });
+      } else if (typeof payload.purpose === "string") {
+        purposes.set(row.entity_id, payload.purpose);
+      }
+    }
+    const observedAt = this.timestamp();
+    const voices = new Map;
+    return rows.map((row) => ({
+      id: row.id,
+      workspace_id: row.workspace_id,
+      worktree_id: row.worktree_id,
+      actor: row.actor,
+      role: row.role,
+      purpose: purposes.get(row.id) ?? row.role,
+      model: joined.get(row.id)?.model ?? null,
+      seat_ref: joined.get(row.id)?.seat_ref ?? null,
+      voice_id: this.cachedVoice(row.id, voices),
+      parent_session_id: row.parent_session_id,
+      status: row.status,
+      joined_at: row.joined_at,
+      last_seen_at: row.last_seen_at,
+      liveness: sessionLiveness(row, observedAt)
+    }));
+  }
+  consentVoiceOf(sessionId2) {
+    return this.consentVoice(validateId(sessionId2, "session_id"));
+  }
+  declarePurposeForSession(input) {
+    const purpose = validateNotePurpose(input.purpose);
+    return this.mutateAsSession(input, input.idempotency_key, "notes.purpose.v1", { purpose }, (session) => {
+      const payload = { session_id: session.id, purpose };
+      assertNotePayload(payload);
+      const event = this.appendEvent(session.workspace_id, "purpose.declared", session.id, session.actor, payload, session.id);
+      return {
+        session_id: session.id,
+        purpose,
+        event_id: event.id,
+        sequence: event.sequence,
+        declared_at: event.occurred_at
+      };
+    });
+  }
+  readReceiptByKey(credential, key2) {
+    const session = this.authenticateSession(credential);
+    const idempotencyKey = validateIdempotencyKey(key2);
+    const row = this.db.query(`
+      SELECT operation, response_json FROM mutations
+      WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
+    `).get(session.workspace_id, `session:${session.id}`, idempotencyKey);
+    if (!row)
+      return { found: false };
+    return { found: true, operation: row.operation, value: JSON.parse(row.response_json) };
+  }
+  latestReceiptKeyForSession(credential, prefix2) {
+    const session = this.authenticateSession(credential);
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*:$/.test(prefix2) || prefix2.length > 100) {
+      throw new CollabError("invalid_receipt_prefix", "A receipt prefix is a key prefix ending in ':'");
+    }
+    const upper = `${prefix2.slice(0, -1)};`;
+    const row = this.db.query(`
+      SELECT idempotency_key FROM mutations
+      WHERE workspace_id = ? AND actor = ? AND idempotency_key >= ? AND idempotency_key < ?
+      ORDER BY idempotency_key DESC
+      LIMIT 1
+    `).get(session.workspace_id, `session:${session.id}`, prefix2, upper);
+    return row?.idempotency_key ?? null;
+  }
+  initNoteMark(credential, sequence) {
+    const marked = this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      const workspace = this.requireWorkspace(session.workspace_id);
+      if (!Number.isInteger(sequence) || sequence < 0 || sequence > workspace.event_head_sequence) {
+        throw new CollabError("invalid_note_mark", "A read mark must name a sequence in this journal");
+      }
+      this.db.query(`
+        INSERT OR IGNORE INTO note_marks (workspace_id, session_id, shown_through_sequence, updated_at)
+        VALUES (?, ?, ?, ?)
+      `).run(session.workspace_id, session.id, sequence, this.timestamp());
+      return this.noteMarkRow(session.workspace_id, session.id);
+    }).immediate();
+    this.tightenFileModes();
+    return marked;
+  }
+  noteMark(workspaceId2, sessionId2) {
+    return this.noteMarkRow(workspaceId2, validateId(sessionId2, "session_id"));
+  }
+  inboxForSession(input) {
+    const limit = input.limit;
+    if (!Number.isInteger(limit) || limit < 1 || limit > NOTE_INBOX_MAX_LIMIT) {
+      throw new CollabError("invalid_limit", `limit must be an integer from 1 to ${NOTE_INBOX_MAX_LIMIT}`);
+    }
+    if (input.include !== "for_me" && input.include !== "all") {
+      throw new CollabError("invalid_include", "include must be for_me or all");
+    }
+    const plan = (session, mark, record2) => {
+      const scan = this.scanNoteEvents(session, mark.sequence);
+      const listed = scan.events.filter((event) => input.include === "all" ? !event.own : event.for_me);
+      let through = scan.last_sequence;
+      let more = scan.capped;
+      if (listed.length > limit) {
+        through = listed[limit].sequence - 1;
+        more = true;
+      }
+      const returned = listed.slice(0, limit);
+      const alsoNew = scan.events.filter((event) => !event.own && !event.for_me && event.sequence <= through).length;
+      if (record2) {
+        const now = this.timestamp();
+        if (through > mark.sequence) {
+          this.db.query(`
+            UPDATE note_marks SET shown_through_sequence = ?, updated_at = ?
+            WHERE workspace_id = ? AND session_id = ?
+          `).run(through, now, session.workspace_id, session.id);
+        }
+        this.recordNoteShown(session, returned.filter((event) => event.for_me).map((event) => event.shown_item_id), now);
+      }
+      return { sequences: returned.map((event) => event.sequence), through, more, also_new: alsoNew };
+    };
+    const planned = input.peek ? this.db.transaction(() => {
+      const session = this.authenticateSession(input);
+      const mark = this.readNoteMarkState(session);
+      return { mark, ...plan(session, mark, false) };
+    }).deferred() : this.noteHousekeeping(input, (session, mark) => ({ mark, ...plan(session, mark, true) }));
+    return this.db.transaction(() => {
+      const session = this.authenticateSession(input);
+      const sessions = this.noteSessionViews(session.workspace_id);
+      const me = sessions.find((view) => view.id === session.id);
+      const workspace = this.requireWorkspace(session.workspace_id);
+      return {
+        session: me,
+        sessions,
+        entries: planned.sequences.map((sequence) => this.noteEntryAt(session, sequence)),
+        also_new: planned.also_new,
+        more: planned.more,
+        mark: {
+          before: planned.mark.sequence,
+          through: planned.through,
+          anchor: this.anchorAt(workspace, planned.through),
+          initialised_from: planned.mark.initialised_from,
+          clamped: planned.mark.clamped,
+          written: !input.peek
+        },
+        head_sequence: workspace.event_head_sequence,
+        waiting: this.noteWaiting(session, sessions),
+        observed_at: this.timestamp()
+      };
+    }).deferred();
+  }
+  noteThreadForSession(input) {
+    const id = validateId(input.id, `${input.kind}_id`);
+    this.noteHousekeeping(input, (session) => {
+      const now = this.timestamp();
+      if (input.kind === "task") {
+        const task = this.requireTaskRow(session.workspace_id, id);
+        if (task.completion_report_id)
+          this.recordNoteShown(session, [task.completion_report_id], now);
+      } else {
+        const report = this.requireReport(id);
+        if (report.workspace_id !== session.workspace_id) {
+          throw new CollabError("report_not_found", `Report '${id}' was not found in this workspace`);
+        }
+        this.recordNoteShown(session, [report.id], now);
+      }
+    });
+    return this.db.transaction(() => {
+      const session = this.authenticateSession(input);
+      const sessions = this.noteSessionViews(session.workspace_id);
+      const me = sessions.find((view) => view.id === session.id);
+      const challenges = this.noteChallenges(session.workspace_id);
+      if (input.kind === "task") {
+        const task = this.requireTask(session.workspace_id, id);
+        const reviews = this.db.query(`
+          SELECT * FROM task_reviews WHERE workspace_id = ? AND task_id = ?
+          ORDER BY event_sequence
+        `).all(session.workspace_id, id).map(reviewFromRow);
+        const reports = this.db.query(`
+          SELECT * FROM reports WHERE workspace_id = ? AND task_id = ?
+          ORDER BY event_sequence LIMIT ?
+        `).all(session.workspace_id, id, NOTE_THREAD_MAX + 1);
+        return {
+          kind: "task",
+          session: me,
+          sessions,
+          root: null,
+          answers: reports.slice(0, NOTE_THREAD_MAX).map((row) => this.noteEntryAt(session, row.event_sequence)),
+          truncated: reports.length > NOTE_THREAD_MAX,
+          task,
+          reviews,
+          challenges: challenges.filter((challenge) => reports.some((row) => row.id === challenge.target_report_id)),
+          termed: false,
+          observed_at: this.timestamp()
+        };
+      }
+      const root = this.requireReport(id);
+      const answers = new Map;
+      let frontier = [root.id];
+      let truncated = false;
+      while (frontier.length > 0 && !truncated) {
+        const next = [];
+        for (const target of frontier) {
+          const rows = this.db.query(`
+            SELECT id, event_sequence FROM reports WHERE target_report_id = ? AND workspace_id = ?
+            ORDER BY event_sequence
+          `).all(target, root.workspace_id);
+          for (const row of rows) {
+            if (answers.has(row.id) || row.id === root.id)
+              continue;
+            if (answers.size >= NOTE_THREAD_MAX) {
+              truncated = true;
+              break;
+            }
+            answers.set(row.id, row.event_sequence);
+            next.push(row.id);
+          }
+          if (truncated)
+            break;
+        }
+        frontier = next;
+      }
+      const citing = this.db.query(`
+        SELECT r.id, r.event_sequence FROM reports r, json_each(r.evidence_refs_json) ref
+        WHERE r.workspace_id = ? AND ref.value = ?
+        ORDER BY r.event_sequence
+      `).all(root.workspace_id, `report:${root.id}`);
+      for (const row of citing) {
+        if (answers.has(row.id) || row.id === root.id)
+          continue;
+        if (answers.size >= NOTE_THREAD_MAX) {
+          truncated = true;
+          break;
+        }
+        answers.set(row.id, row.event_sequence);
+      }
+      const ids = new Set([root.id, ...answers.keys()]);
+      return {
+        kind: "report",
+        session: me,
+        sessions,
+        root: this.noteEntryAt(session, root.event_sequence),
+        answers: [...answers.values()].sort((left, right) => left - right).map((sequence) => this.noteEntryAt(session, sequence)),
+        truncated,
+        task: null,
+        reviews: [],
+        challenges: challenges.filter((challenge) => ids.has(challenge.target_report_id)),
+        termed: this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(root.id) !== null,
+        observed_at: this.timestamp()
+      };
+    }).deferred();
+  }
+  arrivalBrief(credential) {
+    return this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      const workspace = this.requireWorkspace(session.workspace_id);
+      const sessions = this.noteSessionViews(session.workspace_id);
+      const tasks = this.listTasks(session.workspace_id);
+      const { claimable } = this.projectAvailableTasks(session.workspace_id, tasks, () => false);
+      const proposals = this.listProposalStatuses(session.workspace_id, { limit: 50 }).proposals.filter((status) => ["open", "challenged", "consented"].includes(status.ai.position));
+      const reports = this.db.query(`SELECT COUNT(*) AS count FROM reports WHERE workspace_id = ?`).get(session.workspace_id).count;
+      return {
+        session: sessions.find((view) => view.id === session.id),
+        workspace,
+        sessions,
+        tasks,
+        claimable_task_ids: claimable.map((task) => task.id),
+        proposals,
+        challenges: this.noteChallenges(session.workspace_id).filter((challenge) => challenge.standing).reverse(),
+        report_count: reports,
+        waiting: this.noteWaiting(session, sessions),
+        observed_at: this.timestamp()
+      };
+    }).deferred();
+  }
+  recordArrivalShown(credential, itemIds) {
+    if (itemIds.length === 0)
+      return;
+    this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      this.recordNoteShown(session, itemIds, this.timestamp());
+    }).immediate();
+    this.tightenFileModes();
+  }
+  noteShownAt(workspaceId2, sessionId2, itemId) {
+    const row = this.db.query(`
+      SELECT shown_at FROM note_shown WHERE workspace_id = ? AND session_id = ? AND item_id = ?
+    `).get(workspaceId2, sessionId2, itemId);
+    return row?.shown_at ?? null;
+  }
+  resolveNoteRef(workspaceId2, kind, value) {
+    this.requireWorkspace(workspaceId2);
+    const text = typeof value === "string" ? value.trim() : "";
+    const handle = /^(report|proposal|ballot|task)#([0-9a-fA-F]{6,32})$/.exec(text);
+    const prefixed = /^(report|proposal|ballot|task):(.+)$/.exec(text);
+    const named = handle?.[1] ?? prefixed?.[1];
+    const compatible = !named || named === kind || kind === "report" && named !== "task" || (kind === "proposal" || kind === "ballot") && named === "report";
+    if (!compatible) {
+      throw new CollabError("ref_kind_mismatch", `${text} names a ${named}, not a ${kind}`, { expected: kind, value: text });
+    }
+    kind = kind === "report" && named ? named : kind;
+    const exists = (id) => this.noteRefCandidates(workspaceId2, kind, id, `${id}\x00`).length === 1;
+    if (!handle) {
+      const id = validateId(prefixed?.[2] ?? text, `${kind}_id`);
+      if (!exists(id)) {
+        throw new CollabError(`${kind}_not_found`, `No ${kind} with id ${id} in this workspace`, { value: text });
+      }
+      return { kind, id };
+    }
+    const hex3 = handle[2].toLowerCase();
+    const table = kind === "task" ? "task" : "report";
+    const lower = `${table}_${uuidPrefix(hex3)}`;
+    const upper = `${lower.slice(0, -1)}${String.fromCharCode(lower.charCodeAt(lower.length - 1) + 1)}`;
+    const candidates = this.noteRefCandidates(workspaceId2, kind, lower, upper);
+    if (candidates.length === 0) {
+      throw new CollabError(`${kind}_not_found`, `No ${kind} matches ${text} in this workspace`, { value: text });
+    }
+    if (candidates.length > 1) {
+      throw new CollabError("ambiguous_handle", `${text} matches more than one ${kind}; use a longer handle or the full id`, {
+        value: text,
+        candidates: candidates.slice(0, 10),
+        candidates_total: candidates.length
+      });
+    }
+    return { kind, id: candidates[0] };
+  }
+  noteRefCandidates(workspaceId2, kind, lower, upper) {
+    const limit = 50;
+    switch (kind) {
+      case "task":
+        return this.db.query(`
+          SELECT id FROM tasks WHERE workspace_id = ? AND id >= ? AND id < ? ORDER BY id LIMIT ?
+        `).all(workspaceId2, lower, upper, limit).map((row) => row.id);
+      case "proposal":
+        return this.db.query(`
+          SELECT r.id FROM reports r JOIN proposal_terms t ON t.report_id = r.id
+          WHERE r.workspace_id = ? AND r.id >= ? AND r.id < ? ORDER BY r.id LIMIT ?
+        `).all(workspaceId2, lower, upper, limit).map((row) => row.id);
+      case "ballot":
+        return this.db.query(`
+          SELECT r.id FROM reports r
+          WHERE r.workspace_id = ? AND r.id >= ? AND r.id < ?
+            AND EXISTS (SELECT 1 FROM events e WHERE e.workspace_id = r.workspace_id
+              AND e.type = 'ballot.opened' AND e.entity_id = r.id)
+          ORDER BY r.id LIMIT ?
+        `).all(workspaceId2, lower, upper, limit).map((row) => row.id);
+      default:
+        return this.db.query(`
+          SELECT id FROM reports WHERE workspace_id = ? AND id >= ? AND id < ? ORDER BY id LIMIT ?
+        `).all(workspaceId2, lower, upper, limit).map((row) => row.id);
+    }
+  }
+  resolveNoteSession(workspaceId2, value, options = {}) {
+    const text = typeof value === "string" ? value.trim() : "";
+    const sessions = this.noteSessionViews(workspaceId2).filter((view) => options.include_ended || view.status === "active");
+    const handle = /^session#([0-9a-fA-F]{6,32})$/.exec(text);
+    const prefix2 = handle ? `session_${uuidPrefix(handle[1].toLowerCase())}` : null;
+    const matches = sessions.filter((view) => prefix2 ? view.id.startsWith(prefix2) : view.id === text || view.actor === text);
+    if (matches.length === 1)
+      return matches[0];
+    if (matches.length === 0) {
+      throw new CollabError("session_not_found", `No ${options.include_ended ? "" : "active "}session matches ${text}`, { value: text });
+    }
+    throw new CollabError("ambiguous_session", `${text} names more than one session; use its id`, {
+      value: text,
+      candidates: matches.slice(0, 10).map((view) => ({ session: view.id, name: view.actor, last_seen_at: view.last_seen_at })),
+      candidates_total: matches.length
+    });
+  }
+  cachedVoice(sessionId2, voices) {
+    const cached2 = voices.get(sessionId2);
+    if (cached2)
+      return cached2;
+    const voice = this.consentVoice(sessionId2);
+    voices.set(sessionId2, voice);
+    return voice;
+  }
+  noteMarkRow(workspaceId2, sessionId2) {
+    const row = this.db.query(`
+      SELECT shown_through_sequence FROM note_marks WHERE workspace_id = ? AND session_id = ?
+    `).get(workspaceId2, sessionId2);
+    return row?.shown_through_sequence ?? null;
+  }
+  readNoteMarkState(session) {
+    const head = this.requireWorkspace(session.workspace_id).event_head_sequence;
+    const stored = this.noteMarkRow(session.workspace_id, session.id);
+    const sequence = stored ?? session.cursor_sequence;
+    return {
+      sequence: Math.min(sequence, head),
+      initialised_from: stored === null ? "cursor" : null,
+      clamped: sequence > head,
+      stored: stored !== null
+    };
+  }
+  noteHousekeeping(credential, apply) {
+    const result = this.db.transaction(() => {
+      const authenticated = this.authenticateSession(credential);
+      const now = this.timestamp();
+      this.recordSessionLeaseLapses(authenticated, now);
+      this.expireElapsedHandoffs(authenticated.workspace_id, "system:clock");
+      this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(now, authenticated.id);
+      const session = this.requireCoordinationSessionRow(authenticated.id);
+      const mark = this.readNoteMarkState(session);
+      if (!mark.stored || mark.clamped) {
+        this.db.query(`
+          INSERT INTO note_marks (workspace_id, session_id, shown_through_sequence, updated_at)
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT (workspace_id, session_id) DO UPDATE SET
+            shown_through_sequence = excluded.shown_through_sequence, updated_at = excluded.updated_at
+        `).run(session.workspace_id, session.id, mark.sequence, now);
+      }
+      return apply(session, mark);
+    }).immediate();
+    this.tightenFileModes();
+    return result;
+  }
+  recordNoteShown(session, itemIds, now) {
+    for (const itemId of new Set(itemIds)) {
+      if (!itemId)
+        continue;
+      this.db.query(`
+        INSERT INTO note_shown (workspace_id, session_id, item_id, shown_at) VALUES (?, ?, ?, ?)
+        ON CONFLICT (workspace_id, session_id, item_id) DO UPDATE SET shown_at = excluded.shown_at
+      `).run(session.workspace_id, session.id, itemId, now);
+    }
+  }
+  scanNoteEvents(session, after) {
+    const sizes = this.db.query(`
+      SELECT sequence, length(CAST(payload_json AS BLOB)) AS bytes FROM events
+      WHERE workspace_id = ? AND sequence > ? ORDER BY sequence LIMIT ?
+    `).all(session.workspace_id, after, NOTE_SCAN_MAX_EVENTS + 1);
+    let end = after;
+    let bytes = 0;
+    let taken = 0;
+    for (const size of sizes) {
+      if (taken >= NOTE_SCAN_MAX_EVENTS || taken > 0 && bytes + size.bytes > NOTE_SCAN_MAX_BYTES)
+        break;
+      bytes += size.bytes;
+      taken += 1;
+      end = size.sequence;
+    }
+    const rows = this.db.query(`
+      SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
+        session_id, occurred_at, payload_json, prev_hash, hash
+      FROM events WHERE workspace_id = ? AND sequence > ? AND sequence <= ? ORDER BY sequence
+    `).all(session.workspace_id, after, end);
+    const events = rows.map((row) => {
+      const event = eventFromRow(row);
+      const own = event.session_id === session.id;
+      const forMe = !own && this.eventAddressesSession(event, session.id);
+      return {
+        sequence: event.sequence,
+        type: event.type,
+        own,
+        for_me: forMe,
+        shown_item_id: forMe ? noteShownItem(event) : null
+      };
+    });
+    return { events, last_sequence: end, capped: taken < sizes.length };
+  }
+  anchorAt(workspace, sequence) {
+    if (sequence === 0)
+      return { epoch_id: workspace.epoch_id, sequence: 0, hash: GENESIS_HASH };
+    const row = this.db.query(`SELECT epoch_id, hash FROM events WHERE workspace_id = ? AND sequence = ?`).get(workspace.id, sequence);
+    if (!row)
+      throw new CollabError("cursor_mismatch", "The read mark does not resolve to an event in this journal");
+    return { epoch_id: row.epoch_id, sequence, hash: row.hash };
+  }
+  noteEntryAt(session, sequence) {
+    const row = this.db.query(`
+      SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
+        session_id, occurred_at, payload_json, prev_hash, hash
+      FROM events WHERE workspace_id = ? AND sequence = ?
+    `).get(session.workspace_id, sequence);
+    if (!row)
+      throw new CollabError("event_not_found", `No event at sequence ${sequence}`);
+    const event = eventFromRow(row);
+    const payload = event.payload;
+    const forMe = event.session_id !== session.id && this.eventAddressesSession(event, session.id);
+    let report = null;
+    if (event.type === "report.posted" || event.type.startsWith("proposal.")) {
+      const reportRow = this.db.query(`SELECT * FROM reports WHERE id = ?`).get(event.entity_id);
+      report = reportRow ? reportFromRow(reportRow) : null;
+    }
+    const taskId2 = event.type.startsWith("task.") ? event.entity_id : event.type.startsWith("handoff.") ? typeof payload.task_id === "string" ? payload.task_id : typeof payload.handoff?.task_id === "string" ? payload.handoff.task_id : null : report?.task_id ?? null;
+    const taskRow = taskId2 ? this.readTaskRow(session.workspace_id, taskId2) : null;
+    return {
+      event,
+      for_me: forMe,
+      why_you: forMe ? this.noteWhyYou(event, session.id) : null,
+      report,
+      marked: event.type === "report.posted" && payload.note === NOTE_FORMAT,
+      termed: report !== null && this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(report.id) !== null,
+      to_person: event.type === "report.posted" && payload.to_person === true,
+      task: taskRow ? { id: taskRow.id, title: taskRow.title } : null
+    };
+  }
+  noteWhyYou(event, sessionId2) {
+    const payload = event.payload ?? {};
+    switch (event.type) {
+      case "report.posted":
+        if (payload.to_session_id === sessionId2)
+          return "addressed";
+        if (typeof payload.about_proposal_id === "string")
+          return "about_your_proposal";
+        return "reply_to_you";
+      case "handoff.offered":
+        return "handoff_offered";
+      case "handoff.accepted":
+      case "handoff.declined":
+      case "handoff.expired":
+        return "answer_to_your_handoff";
+      case "task.reported_complete":
+        return "review_requested";
+      case "task.accepted":
+      case "task.changes_requested":
+        return "verdict_on_your_work";
+      case "task.recovered":
+        return "your_lease_recovered";
+      case "proposal.opened":
+        return "voice_awaited";
+      case "proposal.agreed":
+      case "proposal.rejected":
+        return "person_act";
+      default:
+        return "addressed";
+    }
+  }
+  noteChallenges(workspaceId2) {
+    const obsoleted = this.activeObsoletionTargets(workspaceId2);
+    const voices = new Map;
+    const challenges = this.db.query(`
+      SELECT id, from_session_id, from_actor, target_report_id, created_at FROM reports
+      WHERE workspace_id = ? AND relation = 'challenges' ORDER BY event_sequence
+    `).all(workspaceId2);
+    return challenges.map((challenge) => {
+      const resolves = this.db.query(`
+        SELECT id, from_session_id FROM reports
+        WHERE workspace_id = ? AND target_report_id = ? AND relation = 'resolves'
+      `).all(workspaceId2, challenge.id).filter((answer) => !obsoleted.has(answer.id) && answer.from_session_id !== null);
+      const voice = challenge.from_session_id ? this.cachedVoice(challenge.from_session_id, voices) : null;
+      const lifted = voice !== null && resolves.some((answer) => this.cachedVoice(answer.from_session_id, voices) === voice);
+      const withdrawn = obsoleted.has(challenge.id);
+      return {
+        id: challenge.id,
+        target_report_id: challenge.target_report_id,
+        from_session_id: challenge.from_session_id,
+        from_actor: challenge.from_actor,
+        created_at: challenge.created_at,
+        standing: !withdrawn && !lifted,
+        answered_by_another_voice: !lifted && resolves.length > 0
+      };
+    });
+  }
+  noteWaiting(session, sessions) {
+    const workspaceId2 = session.workspace_id;
+    const myVoice = this.consentVoice(session.id);
+    const voiceOf = new Map(sessions.map((view) => [view.id, view.voice_id]));
+    const sameVoice = (sessionId2) => sessionId2 !== null && (voiceOf.get(sessionId2) ?? this.consentVoice(sessionId2)) === myVoice;
+    const waiting = [];
+    for (const task of this.listTasks(workspaceId2)) {
+      if (task.effective_status === "reported_complete" && task.review_requested_session_id === session.id && task.completion_report_id) {
+        waiting.push({
+          what: "review",
+          ref_kind: "task",
+          ref_id: task.id,
+          about_id: task.completion_report_id,
+          by: task.reported_by ?? "unknown",
+          by_session_id: task.reported_by_session_id,
+          due: null,
+          at: task.reported_at ?? task.updated_at,
+          summary: task.title
+        });
+      }
+    }
+    const challenges = this.noteChallenges(workspaceId2);
+    const statuses = this.listProposalStatuses(workspaceId2, { limit: 50 }).proposals;
+    for (const status of statuses) {
+      if (status.ai.closed || !["open", "challenged"].includes(status.ai.position))
+        continue;
+      if (!status.ai.awaiting_voice_ids.includes(myVoice))
+        continue;
+      if (challenges.some((challenge) => challenge.standing && challenge.target_report_id === status.proposal.id && sameVoice(challenge.from_session_id)))
+        continue;
+      waiting.push({
+        what: "voice",
+        ref_kind: "proposal",
+        ref_id: status.proposal.id,
+        about_id: null,
+        by: status.proposal.from_actor,
+        by_session_id: status.proposal.from_session_id,
+        due: status.terms.closes_at,
+        at: status.proposal.created_at,
+        summary: firstLine(status.proposal.body)
+      });
+    }
+    const obsoleted = this.activeObsoletionTargets(workspaceId2);
+    const authorOf = new Map(this.db.query(`
+      SELECT id, from_session_id FROM reports WHERE workspace_id = ? AND id IN (
+        SELECT target_report_id FROM reports WHERE workspace_id = ? AND relation = 'challenges'
+      )
+    `).all(workspaceId2, workspaceId2).map((row) => [row.id, row.from_session_id]));
+    for (const challenge of challenges) {
+      if (!challenge.standing)
+        continue;
+      if (authorOf.get(challenge.target_report_id) === session.id && challenge.from_session_id !== session.id) {
+        waiting.push({
+          what: "challenge",
+          ref_kind: "report",
+          ref_id: challenge.id,
+          about_id: challenge.target_report_id,
+          by: challenge.from_actor,
+          by_session_id: challenge.from_session_id,
+          due: null,
+          at: challenge.created_at,
+          summary: challenge.answered_by_another_voice ? "A standing challenge on your report; another voice answered it, which does not lift it." : "A standing challenge on your report."
+        });
+      }
+      if (challenge.from_session_id === session.id) {
+        const answers = this.db.query(`
+          SELECT DISTINCT r.id, r.from_actor, r.from_session_id, r.created_at, r.event_sequence FROM reports r
+          LEFT JOIN json_each(r.evidence_refs_json) ref
+          WHERE r.workspace_id = ? AND r.from_session_id IS NOT NULL AND r.from_session_id <> ?
+            AND ((r.target_report_id = ? AND r.relation <> 'supports') OR ref.value = ?)
+          ORDER BY r.event_sequence
+        `).all(workspaceId2, session.id, challenge.id, `report:${challenge.id}`);
+        for (const answer of answers) {
+          if (obsoleted.has(answer.id) || sameVoice(answer.from_session_id))
+            continue;
+          waiting.push({
+            what: "answer",
+            ref_kind: "report",
+            ref_id: answer.id,
+            about_id: challenge.id,
+            by: answer.from_actor,
+            by_session_id: answer.from_session_id,
+            due: null,
+            at: answer.created_at,
+            summary: "An answer to your standing challenge; only you can lift it."
+          });
+        }
+      }
+    }
+    const decided = new Set(this.db.query(`
+      SELECT r.from_session_id, ref.value AS ref FROM reports r, json_each(r.evidence_refs_json) ref
+      WHERE r.workspace_id = ? AND r.kind = 'decision' AND ref.value LIKE 'report:%'
+    `).all(workspaceId2).filter((row) => sameVoice(row.from_session_id)).map((row) => row.ref.slice("report:".length)));
+    for (const status of statuses) {
+      const mine = sameVoice(status.proposal.from_session_id);
+      if (!mine && !decided.has(status.proposal.id))
+        continue;
+      const latest = status.person.acts.at(-1);
+      if (!latest)
+        continue;
+      const retired = status.ai.position === "withdrawn" || status.ai.position === "superseded";
+      const agreedBefore = status.person.acts.slice(0, -1).some((act) => act.act === "agree");
+      let what = null;
+      if (latest.act === "reject" && agreedBefore)
+        what = "stop";
+      else if (latest.act === "reject" && mine && !retired)
+        what = "rejected";
+      else if (latest.act === "agree" && mine && status.may_proceed && !decided.has(status.proposal.id)) {
+        what = "record_decision";
+      }
+      if (!what)
+        continue;
+      waiting.push({
+        what,
+        ref_kind: "proposal",
+        ref_id: status.proposal.id,
+        about_id: latest.id,
+        by: latest.basis,
+        by_session_id: latest.relayed_by_session_id,
+        due: what === "stop" ? "now" : null,
+        at: latest.created_at,
+        summary: firstLine(status.proposal.body)
+      });
+    }
+    return waiting;
+  }
   timestamp() {
     return this.now().toISOString();
   }
@@ -35307,6 +38409,23 @@ function validateActor(value) {
     throw new CollabError("invalid_actor", "Actor labels beginning with person: are reserved for the person desk");
   }
   return actor;
+}
+function derivedActor(prefix2, sessionId2) {
+  if (prefix2 === undefined) {
+    throw new CollabError("actor_required", "Supply actor, or actor_prefix to derive one from the new session id");
+  }
+  if (typeof prefix2 !== "string" || !/^[a-z][a-z0-9-]{0,39}$/.test(prefix2)) {
+    throw new CollabError("invalid_actor_prefix", "actor_prefix is 1 to 40 lower-case letters, digits or dashes");
+  }
+  return validateActor(`${prefix2}-${sessionId2.slice("session_".length, "session_".length + 6)}`);
+}
+var MAX_MODEL_LABEL = 200;
+function validateModelLabel(value) {
+  const model = cleanText(value, "model", MAX_MODEL_LABEL);
+  if (/[\u0000-\u001f\u007f]/.test(model)) {
+    throw new CollabError("invalid_model", "model must be one line of text");
+  }
+  return model;
 }
 function validateExpectedVersion(value) {
   if (!Number.isInteger(value) || value < 1) {
@@ -35751,6 +38870,70 @@ function proposalPersonActFromRow(row) {
     proof: proof_json ? JSON.parse(proof_json) : null
   };
 }
+var NOTE_SCAN_MAX_EVENTS = 2000;
+var NOTE_SCAN_MAX_BYTES = 8 * 1024 * 1024;
+var NOTE_INBOX_MAX_LIMIT = 50;
+var NOTE_THREAD_MAX = 200;
+var NOTE_PURPOSE_MAX_CHARS = 200;
+var NOTE_PAYLOAD_MAX_BYTES = 64 * 1024;
+function noteShownItem(event) {
+  const payload = event.payload;
+  if (event.type === "proposal.opened")
+    return event.entity_id;
+  if (event.type === "task.reported_complete" && typeof payload.completion_report_id === "string") {
+    return payload.completion_report_id;
+  }
+  return null;
+}
+function validateNotePurpose(value) {
+  const purpose = cleanText(typeof value === "string" ? value : "", "purpose", NOTE_PURPOSE_MAX_CHARS);
+  if (/[\u0000-\u001f\u007f]/.test(purpose)) {
+    throw new CollabError("invalid_purpose", "purpose must be one line of text");
+  }
+  if (hasLoneSurrogate(purpose)) {
+    throw new CollabError("invalid_purpose", "purpose must be well-formed Unicode text (it holds half of a character)");
+  }
+  return purpose;
+}
+function assertNotePayload(payload) {
+  const visit = (value, path) => {
+    if (value === undefined)
+      throw new CollabError("invalid_payload", `${path} is undefined`);
+    if (typeof value === "number" && !Number.isSafeInteger(value)) {
+      throw new CollabError("invalid_payload", `${path} is not an integer`);
+    }
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => visit(item, `${path}[${index}]`));
+    } else if (value !== null && typeof value === "object") {
+      for (const [key2, child] of Object.entries(value)) {
+        if (/^(0|[1-9]\d*)$/.test(key2))
+          throw new CollabError("invalid_payload", `${path} has an integer-like key`);
+        visit(child, `${path}.${key2}`);
+      }
+    }
+  };
+  visit(payload, "payload");
+  if (Buffer.byteLength(canonicalJson(payload), "utf8") > NOTE_PAYLOAD_MAX_BYTES) {
+    throw new CollabError("too_long", "The record exceeds 64 KiB", { field: "payload", max: NOTE_PAYLOAD_MAX_BYTES, unit: "bytes" });
+  }
+}
+function uuidPrefix(hex3) {
+  const groups = [8, 4, 4, 4, 12];
+  let out = "";
+  let rest = hex3;
+  for (const size of groups) {
+    if (!rest)
+      break;
+    out += out ? `-${rest.slice(0, size)}` : rest.slice(0, size);
+    rest = rest.slice(size);
+  }
+  return out;
+}
+function firstLine(text) {
+  const line = text.split(`
+`)[0] ?? "";
+  return line.length > 200 ? `${line.slice(0, 199)}\u2026` : line;
+}
 var MAX_INBOX_SCAN = 500;
 var MAX_INBOX_PROPOSALS = 50;
 function aiSnapshotOf(status) {
@@ -36017,7 +39200,7 @@ function safeRepositoryIdentity(rootPath) {
   try {
     return inspectRepository(rootPath);
   } catch {
-    const root = resolve4(rootPath);
+    const root = resolve5(rootPath);
     const repositoryKey = `local-path:${sha2563(root)}`;
     const worktreeId2 = `wt_${sha2563(`${root}\x00path:${root}`).slice(0, 24)}`;
     return {
@@ -36037,7 +39220,7 @@ function safeRepositoryIdentity(rootPath) {
   }
 }
 function sha2563(value) {
-  return createHash3("sha256").update(value).digest("hex");
+  return createHash4("sha256").update(value).digest("hex");
 }
 function addSeconds(iso, seconds) {
   return new Date(new Date(iso).getTime() + seconds * 1000).toISOString();

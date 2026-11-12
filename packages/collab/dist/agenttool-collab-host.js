@@ -156,6 +156,89 @@ function sortValue(value) {
   return value;
 }
 
+// src/note.ts
+var NOTE_FORMAT = "collab-note/1";
+var NOTE_ACTS = [
+  "note",
+  "support",
+  "challenge",
+  "resolve",
+  "withdraw",
+  "accept",
+  "request_changes",
+  "decide",
+  "relay_rejection",
+  "take",
+  "done",
+  "propose",
+  "poll",
+  "vote"
+];
+var ACT_SET = new Set(NOTE_ACTS);
+var NOTE_BASES = ["seen", "told", "inferred", "quoted"];
+var BASIS_SET = new Set(NOTE_BASES);
+var NOTE_FIELD_KEYS = {
+  to: "To",
+  re: "Re",
+  via: "Via",
+  why: "Why",
+  evidence: "Evidence",
+  limits: "Limits",
+  purpose: "Purpose",
+  extent: "Extent",
+  replaces: "Replaces"
+};
+var MULTILINE_FIELDS = new Set(["limits", "extent"]);
+var NOTE_RENDER_KEYS = [
+  "Sha256",
+  "Position",
+  "Result",
+  "Criteria",
+  "Option",
+  "Pick",
+  "Quorum",
+  "Closes",
+  "Not-carried"
+];
+var FIELD_BY_KEY = new Map(Object.entries(NOTE_FIELD_KEYS).map(([field, key]) => [key.toLowerCase(), field]));
+var RENDER_KEY_BY_LOWER = new Map(NOTE_RENDER_KEYS.map((key) => [key.toLowerCase(), key]));
+var RENDER_KEY_SET = new Set(NOTE_RENDER_KEYS);
+var LISTED_KEYS = [...Object.values(NOTE_FIELD_KEYS), ...NOTE_RENDER_KEYS].join(", ");
+var NOTE_JOURNAL_MAX = 8000;
+var NOTE_REVIEW_MAX = 4000;
+var NOTE_RELAY_TEXT_MAX = 2000;
+var JOURNAL_CEILING = Object.freeze({ max: NOTE_JOURNAL_MAX, measure: "note" });
+var REVIEW_CEILING = Object.freeze({ max: NOTE_REVIEW_MAX, measure: "note_without_evidence" });
+var RELAY_CEILING = Object.freeze({ max: NOTE_RELAY_TEXT_MAX, measure: "text" });
+var NOTE_ACT_CEILINGS = Object.freeze({
+  note: JOURNAL_CEILING,
+  support: JOURNAL_CEILING,
+  challenge: JOURNAL_CEILING,
+  resolve: JOURNAL_CEILING,
+  withdraw: JOURNAL_CEILING,
+  accept: REVIEW_CEILING,
+  request_changes: REVIEW_CEILING,
+  decide: JOURNAL_CEILING,
+  relay_rejection: RELAY_CEILING,
+  take: JOURNAL_CEILING,
+  done: REVIEW_CEILING,
+  propose: JOURNAL_CEILING,
+  poll: JOURNAL_CEILING,
+  vote: JOURNAL_CEILING
+});
+var NOTE_JOURNAL_EVIDENCE_KINDS = ["report", "event", "artifact", "checkpoint"];
+var NOTE_EVIDENCE_ATTRS = ["sha256", "exit", "out", "lines", "runs", "at"];
+var ATTR_SET = new Set(NOTE_EVIDENCE_ATTRS);
+var JOURNAL_EVIDENCE_SET = new Set(NOTE_JOURNAL_EVIDENCE_KINDS);
+var ID_TOKEN = String.raw`[A-Za-z0-9][A-Za-z0-9._:#-]*`;
+var JOURNAL_EVIDENCE = new RegExp(String.raw`^(report|event|artifact|checkpoint):(${ID_TOKEN})$`, "i");
+var PREFIXED_REF = new RegExp(String.raw`^(report|proposal|ballot|task|event):(${ID_TOKEN})$`, "i");
+var LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
+function hasLoneSurrogate(text) {
+  return LONE_SURROGATE.test(text);
+}
+var KEPT_RENDER_KEYS = new Set(["Sha256", "Position", "Result"]);
+
 // src/passkey.ts
 import { createHash, createPublicKey, verify } from "crypto";
 var FLAG_USER_PRESENT = 1;
@@ -1054,6 +1137,23 @@ class CollabStore {
           parent_session_id TEXT NOT NULL,
           basis TEXT NOT NULL CHECK (basis IN ('same_mcp_process')),
           attested_at TEXT NOT NULL
+        );
+        -- Collab Notes view state (spec 8.1): what the notes surface last showed
+        -- each session. Never journaled and never cited, so it can be lost or
+        -- rebuilt without harm; no foreign keys, so older builds never see it.
+        CREATE TABLE IF NOT EXISTS note_marks (
+          workspace_id TEXT NOT NULL,
+          session_id TEXT NOT NULL,
+          shown_through_sequence INTEGER NOT NULL,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (workspace_id, session_id)
+        );
+        CREATE TABLE IF NOT EXISTS note_shown (
+          workspace_id TEXT NOT NULL,
+          session_id TEXT NOT NULL,
+          item_id TEXT NOT NULL,
+          shown_at TEXT NOT NULL,
+          PRIMARY KEY (workspace_id, session_id, item_id)
         );
       `);
       if (this.tableNames().includes("proposal_rejections") && this.db.query(`SELECT 1 FROM proposal_rejections LIMIT 1`).get()) {
@@ -2124,9 +2224,11 @@ class CollabStore {
     });
   }
   startSession(input) {
-    const actor = validateActor(input.actor);
+    const id = `session_${randomUUID()}`;
+    const actor = input.actor !== undefined ? validateActor(input.actor) : derivedActor(input.actor_prefix, id);
     const role = optionalText(input.role, "role", 200);
     const seatRef = input.seat_ref == null ? null : validateSeatRef(input.seat_ref);
+    const model = input.model === undefined ? null : validateModelLabel(input.model);
     const identity = inspectRepository(input.root_path, input.repository_key, true, { portable: false });
     const workspace = this.openWorkspace({
       root_path: input.root_path,
@@ -2154,7 +2256,6 @@ class CollabStore {
         }
       }
       const now = this.timestamp();
-      const id = `session_${randomUUID()}`;
       const token = randomBytes(SESSION_TOKEN_BYTES).toString("base64url");
       const generation = 1;
       this.db.query(`
@@ -2175,6 +2276,7 @@ class CollabStore {
         role,
         parent_session_id: parentSessionId,
         ...seatRef ? { seat_ref: seatRef } : {},
+        ...model ? { model } : {},
         identity_boundary: "session_credentials_fence_cooperating_local_clients_but_do_not_authenticate_a_person_or_model"
       }, id);
       return this.sessionHandle(this.requireCoordinationSessionRow(id), token, this.requireWorkspace(workspace.id), worktreeRow);
@@ -5733,6 +5835,701 @@ class CollabStore {
       throw new CollabError("handoff_not_found", `Handoff '${id}' was not found`);
     return handoffFromRow(row);
   }
+  noteSessionViews(workspaceId) {
+    this.requireWorkspace(workspaceId);
+    const rows = this.db.query(`
+      SELECT * FROM coordination_sessions WHERE workspace_id = ?
+      ORDER BY last_seen_at DESC, id
+    `).all(workspaceId);
+    const declared = this.db.query(`
+      SELECT entity_id, type, payload_json FROM events
+      WHERE workspace_id = ? AND type IN ('session.joined', 'purpose.declared')
+      ORDER BY sequence
+    `).all(workspaceId);
+    const joined = new Map;
+    const purposes = new Map;
+    for (const row of declared) {
+      const payload = JSON.parse(row.payload_json);
+      if (row.type === "session.joined") {
+        joined.set(row.entity_id, {
+          seat_ref: typeof payload.seat_ref === "string" ? payload.seat_ref : null,
+          model: typeof payload.model === "string" ? payload.model : null
+        });
+      } else if (typeof payload.purpose === "string") {
+        purposes.set(row.entity_id, payload.purpose);
+      }
+    }
+    const observedAt = this.timestamp();
+    const voices = new Map;
+    return rows.map((row) => ({
+      id: row.id,
+      workspace_id: row.workspace_id,
+      worktree_id: row.worktree_id,
+      actor: row.actor,
+      role: row.role,
+      purpose: purposes.get(row.id) ?? row.role,
+      model: joined.get(row.id)?.model ?? null,
+      seat_ref: joined.get(row.id)?.seat_ref ?? null,
+      voice_id: this.cachedVoice(row.id, voices),
+      parent_session_id: row.parent_session_id,
+      status: row.status,
+      joined_at: row.joined_at,
+      last_seen_at: row.last_seen_at,
+      liveness: sessionLiveness(row, observedAt)
+    }));
+  }
+  consentVoiceOf(sessionId) {
+    return this.consentVoice(validateId(sessionId, "session_id"));
+  }
+  declarePurposeForSession(input) {
+    const purpose = validateNotePurpose(input.purpose);
+    return this.mutateAsSession(input, input.idempotency_key, "notes.purpose.v1", { purpose }, (session) => {
+      const payload = { session_id: session.id, purpose };
+      assertNotePayload(payload);
+      const event = this.appendEvent(session.workspace_id, "purpose.declared", session.id, session.actor, payload, session.id);
+      return {
+        session_id: session.id,
+        purpose,
+        event_id: event.id,
+        sequence: event.sequence,
+        declared_at: event.occurred_at
+      };
+    });
+  }
+  readReceiptByKey(credential, key) {
+    const session = this.authenticateSession(credential);
+    const idempotencyKey = validateIdempotencyKey(key);
+    const row = this.db.query(`
+      SELECT operation, response_json FROM mutations
+      WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
+    `).get(session.workspace_id, `session:${session.id}`, idempotencyKey);
+    if (!row)
+      return { found: false };
+    return { found: true, operation: row.operation, value: JSON.parse(row.response_json) };
+  }
+  latestReceiptKeyForSession(credential, prefix) {
+    const session = this.authenticateSession(credential);
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*:$/.test(prefix) || prefix.length > 100) {
+      throw new CollabError("invalid_receipt_prefix", "A receipt prefix is a key prefix ending in ':'");
+    }
+    const upper = `${prefix.slice(0, -1)};`;
+    const row = this.db.query(`
+      SELECT idempotency_key FROM mutations
+      WHERE workspace_id = ? AND actor = ? AND idempotency_key >= ? AND idempotency_key < ?
+      ORDER BY idempotency_key DESC
+      LIMIT 1
+    `).get(session.workspace_id, `session:${session.id}`, prefix, upper);
+    return row?.idempotency_key ?? null;
+  }
+  initNoteMark(credential, sequence) {
+    const marked = this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      const workspace = this.requireWorkspace(session.workspace_id);
+      if (!Number.isInteger(sequence) || sequence < 0 || sequence > workspace.event_head_sequence) {
+        throw new CollabError("invalid_note_mark", "A read mark must name a sequence in this journal");
+      }
+      this.db.query(`
+        INSERT OR IGNORE INTO note_marks (workspace_id, session_id, shown_through_sequence, updated_at)
+        VALUES (?, ?, ?, ?)
+      `).run(session.workspace_id, session.id, sequence, this.timestamp());
+      return this.noteMarkRow(session.workspace_id, session.id);
+    }).immediate();
+    this.tightenFileModes();
+    return marked;
+  }
+  noteMark(workspaceId, sessionId) {
+    return this.noteMarkRow(workspaceId, validateId(sessionId, "session_id"));
+  }
+  inboxForSession(input) {
+    const limit = input.limit;
+    if (!Number.isInteger(limit) || limit < 1 || limit > NOTE_INBOX_MAX_LIMIT) {
+      throw new CollabError("invalid_limit", `limit must be an integer from 1 to ${NOTE_INBOX_MAX_LIMIT}`);
+    }
+    if (input.include !== "for_me" && input.include !== "all") {
+      throw new CollabError("invalid_include", "include must be for_me or all");
+    }
+    const plan = (session, mark, record) => {
+      const scan = this.scanNoteEvents(session, mark.sequence);
+      const listed = scan.events.filter((event) => input.include === "all" ? !event.own : event.for_me);
+      let through = scan.last_sequence;
+      let more = scan.capped;
+      if (listed.length > limit) {
+        through = listed[limit].sequence - 1;
+        more = true;
+      }
+      const returned = listed.slice(0, limit);
+      const alsoNew = scan.events.filter((event) => !event.own && !event.for_me && event.sequence <= through).length;
+      if (record) {
+        const now = this.timestamp();
+        if (through > mark.sequence) {
+          this.db.query(`
+            UPDATE note_marks SET shown_through_sequence = ?, updated_at = ?
+            WHERE workspace_id = ? AND session_id = ?
+          `).run(through, now, session.workspace_id, session.id);
+        }
+        this.recordNoteShown(session, returned.filter((event) => event.for_me).map((event) => event.shown_item_id), now);
+      }
+      return { sequences: returned.map((event) => event.sequence), through, more, also_new: alsoNew };
+    };
+    const planned = input.peek ? this.db.transaction(() => {
+      const session = this.authenticateSession(input);
+      const mark = this.readNoteMarkState(session);
+      return { mark, ...plan(session, mark, false) };
+    }).deferred() : this.noteHousekeeping(input, (session, mark) => ({ mark, ...plan(session, mark, true) }));
+    return this.db.transaction(() => {
+      const session = this.authenticateSession(input);
+      const sessions = this.noteSessionViews(session.workspace_id);
+      const me = sessions.find((view) => view.id === session.id);
+      const workspace = this.requireWorkspace(session.workspace_id);
+      return {
+        session: me,
+        sessions,
+        entries: planned.sequences.map((sequence) => this.noteEntryAt(session, sequence)),
+        also_new: planned.also_new,
+        more: planned.more,
+        mark: {
+          before: planned.mark.sequence,
+          through: planned.through,
+          anchor: this.anchorAt(workspace, planned.through),
+          initialised_from: planned.mark.initialised_from,
+          clamped: planned.mark.clamped,
+          written: !input.peek
+        },
+        head_sequence: workspace.event_head_sequence,
+        waiting: this.noteWaiting(session, sessions),
+        observed_at: this.timestamp()
+      };
+    }).deferred();
+  }
+  noteThreadForSession(input) {
+    const id = validateId(input.id, `${input.kind}_id`);
+    this.noteHousekeeping(input, (session) => {
+      const now = this.timestamp();
+      if (input.kind === "task") {
+        const task = this.requireTaskRow(session.workspace_id, id);
+        if (task.completion_report_id)
+          this.recordNoteShown(session, [task.completion_report_id], now);
+      } else {
+        const report = this.requireReport(id);
+        if (report.workspace_id !== session.workspace_id) {
+          throw new CollabError("report_not_found", `Report '${id}' was not found in this workspace`);
+        }
+        this.recordNoteShown(session, [report.id], now);
+      }
+    });
+    return this.db.transaction(() => {
+      const session = this.authenticateSession(input);
+      const sessions = this.noteSessionViews(session.workspace_id);
+      const me = sessions.find((view) => view.id === session.id);
+      const challenges = this.noteChallenges(session.workspace_id);
+      if (input.kind === "task") {
+        const task = this.requireTask(session.workspace_id, id);
+        const reviews = this.db.query(`
+          SELECT * FROM task_reviews WHERE workspace_id = ? AND task_id = ?
+          ORDER BY event_sequence
+        `).all(session.workspace_id, id).map(reviewFromRow);
+        const reports = this.db.query(`
+          SELECT * FROM reports WHERE workspace_id = ? AND task_id = ?
+          ORDER BY event_sequence LIMIT ?
+        `).all(session.workspace_id, id, NOTE_THREAD_MAX + 1);
+        return {
+          kind: "task",
+          session: me,
+          sessions,
+          root: null,
+          answers: reports.slice(0, NOTE_THREAD_MAX).map((row) => this.noteEntryAt(session, row.event_sequence)),
+          truncated: reports.length > NOTE_THREAD_MAX,
+          task,
+          reviews,
+          challenges: challenges.filter((challenge) => reports.some((row) => row.id === challenge.target_report_id)),
+          termed: false,
+          observed_at: this.timestamp()
+        };
+      }
+      const root = this.requireReport(id);
+      const answers = new Map;
+      let frontier = [root.id];
+      let truncated = false;
+      while (frontier.length > 0 && !truncated) {
+        const next = [];
+        for (const target of frontier) {
+          const rows = this.db.query(`
+            SELECT id, event_sequence FROM reports WHERE target_report_id = ? AND workspace_id = ?
+            ORDER BY event_sequence
+          `).all(target, root.workspace_id);
+          for (const row of rows) {
+            if (answers.has(row.id) || row.id === root.id)
+              continue;
+            if (answers.size >= NOTE_THREAD_MAX) {
+              truncated = true;
+              break;
+            }
+            answers.set(row.id, row.event_sequence);
+            next.push(row.id);
+          }
+          if (truncated)
+            break;
+        }
+        frontier = next;
+      }
+      const citing = this.db.query(`
+        SELECT r.id, r.event_sequence FROM reports r, json_each(r.evidence_refs_json) ref
+        WHERE r.workspace_id = ? AND ref.value = ?
+        ORDER BY r.event_sequence
+      `).all(root.workspace_id, `report:${root.id}`);
+      for (const row of citing) {
+        if (answers.has(row.id) || row.id === root.id)
+          continue;
+        if (answers.size >= NOTE_THREAD_MAX) {
+          truncated = true;
+          break;
+        }
+        answers.set(row.id, row.event_sequence);
+      }
+      const ids = new Set([root.id, ...answers.keys()]);
+      return {
+        kind: "report",
+        session: me,
+        sessions,
+        root: this.noteEntryAt(session, root.event_sequence),
+        answers: [...answers.values()].sort((left, right) => left - right).map((sequence) => this.noteEntryAt(session, sequence)),
+        truncated,
+        task: null,
+        reviews: [],
+        challenges: challenges.filter((challenge) => ids.has(challenge.target_report_id)),
+        termed: this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(root.id) !== null,
+        observed_at: this.timestamp()
+      };
+    }).deferred();
+  }
+  arrivalBrief(credential) {
+    return this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      const workspace = this.requireWorkspace(session.workspace_id);
+      const sessions = this.noteSessionViews(session.workspace_id);
+      const tasks = this.listTasks(session.workspace_id);
+      const { claimable } = this.projectAvailableTasks(session.workspace_id, tasks, () => false);
+      const proposals = this.listProposalStatuses(session.workspace_id, { limit: 50 }).proposals.filter((status) => ["open", "challenged", "consented"].includes(status.ai.position));
+      const reports = this.db.query(`SELECT COUNT(*) AS count FROM reports WHERE workspace_id = ?`).get(session.workspace_id).count;
+      return {
+        session: sessions.find((view) => view.id === session.id),
+        workspace,
+        sessions,
+        tasks,
+        claimable_task_ids: claimable.map((task) => task.id),
+        proposals,
+        challenges: this.noteChallenges(session.workspace_id).filter((challenge) => challenge.standing).reverse(),
+        report_count: reports,
+        waiting: this.noteWaiting(session, sessions),
+        observed_at: this.timestamp()
+      };
+    }).deferred();
+  }
+  recordArrivalShown(credential, itemIds) {
+    if (itemIds.length === 0)
+      return;
+    this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      this.recordNoteShown(session, itemIds, this.timestamp());
+    }).immediate();
+    this.tightenFileModes();
+  }
+  noteShownAt(workspaceId, sessionId, itemId) {
+    const row = this.db.query(`
+      SELECT shown_at FROM note_shown WHERE workspace_id = ? AND session_id = ? AND item_id = ?
+    `).get(workspaceId, sessionId, itemId);
+    return row?.shown_at ?? null;
+  }
+  resolveNoteRef(workspaceId, kind, value) {
+    this.requireWorkspace(workspaceId);
+    const text = typeof value === "string" ? value.trim() : "";
+    const handle = /^(report|proposal|ballot|task)#([0-9a-fA-F]{6,32})$/.exec(text);
+    const prefixed = /^(report|proposal|ballot|task):(.+)$/.exec(text);
+    const named = handle?.[1] ?? prefixed?.[1];
+    const compatible = !named || named === kind || kind === "report" && named !== "task" || (kind === "proposal" || kind === "ballot") && named === "report";
+    if (!compatible) {
+      throw new CollabError("ref_kind_mismatch", `${text} names a ${named}, not a ${kind}`, { expected: kind, value: text });
+    }
+    kind = kind === "report" && named ? named : kind;
+    const exists = (id) => this.noteRefCandidates(workspaceId, kind, id, `${id}\x00`).length === 1;
+    if (!handle) {
+      const id = validateId(prefixed?.[2] ?? text, `${kind}_id`);
+      if (!exists(id)) {
+        throw new CollabError(`${kind}_not_found`, `No ${kind} with id ${id} in this workspace`, { value: text });
+      }
+      return { kind, id };
+    }
+    const hex = handle[2].toLowerCase();
+    const table = kind === "task" ? "task" : "report";
+    const lower = `${table}_${uuidPrefix(hex)}`;
+    const upper = `${lower.slice(0, -1)}${String.fromCharCode(lower.charCodeAt(lower.length - 1) + 1)}`;
+    const candidates = this.noteRefCandidates(workspaceId, kind, lower, upper);
+    if (candidates.length === 0) {
+      throw new CollabError(`${kind}_not_found`, `No ${kind} matches ${text} in this workspace`, { value: text });
+    }
+    if (candidates.length > 1) {
+      throw new CollabError("ambiguous_handle", `${text} matches more than one ${kind}; use a longer handle or the full id`, {
+        value: text,
+        candidates: candidates.slice(0, 10),
+        candidates_total: candidates.length
+      });
+    }
+    return { kind, id: candidates[0] };
+  }
+  noteRefCandidates(workspaceId, kind, lower, upper) {
+    const limit = 50;
+    switch (kind) {
+      case "task":
+        return this.db.query(`
+          SELECT id FROM tasks WHERE workspace_id = ? AND id >= ? AND id < ? ORDER BY id LIMIT ?
+        `).all(workspaceId, lower, upper, limit).map((row) => row.id);
+      case "proposal":
+        return this.db.query(`
+          SELECT r.id FROM reports r JOIN proposal_terms t ON t.report_id = r.id
+          WHERE r.workspace_id = ? AND r.id >= ? AND r.id < ? ORDER BY r.id LIMIT ?
+        `).all(workspaceId, lower, upper, limit).map((row) => row.id);
+      case "ballot":
+        return this.db.query(`
+          SELECT r.id FROM reports r
+          WHERE r.workspace_id = ? AND r.id >= ? AND r.id < ?
+            AND EXISTS (SELECT 1 FROM events e WHERE e.workspace_id = r.workspace_id
+              AND e.type = 'ballot.opened' AND e.entity_id = r.id)
+          ORDER BY r.id LIMIT ?
+        `).all(workspaceId, lower, upper, limit).map((row) => row.id);
+      default:
+        return this.db.query(`
+          SELECT id FROM reports WHERE workspace_id = ? AND id >= ? AND id < ? ORDER BY id LIMIT ?
+        `).all(workspaceId, lower, upper, limit).map((row) => row.id);
+    }
+  }
+  resolveNoteSession(workspaceId, value, options = {}) {
+    const text = typeof value === "string" ? value.trim() : "";
+    const sessions = this.noteSessionViews(workspaceId).filter((view) => options.include_ended || view.status === "active");
+    const handle = /^session#([0-9a-fA-F]{6,32})$/.exec(text);
+    const prefix = handle ? `session_${uuidPrefix(handle[1].toLowerCase())}` : null;
+    const matches = sessions.filter((view) => prefix ? view.id.startsWith(prefix) : view.id === text || view.actor === text);
+    if (matches.length === 1)
+      return matches[0];
+    if (matches.length === 0) {
+      throw new CollabError("session_not_found", `No ${options.include_ended ? "" : "active "}session matches ${text}`, { value: text });
+    }
+    throw new CollabError("ambiguous_session", `${text} names more than one session; use its id`, {
+      value: text,
+      candidates: matches.slice(0, 10).map((view) => ({ session: view.id, name: view.actor, last_seen_at: view.last_seen_at })),
+      candidates_total: matches.length
+    });
+  }
+  cachedVoice(sessionId, voices) {
+    const cached = voices.get(sessionId);
+    if (cached)
+      return cached;
+    const voice = this.consentVoice(sessionId);
+    voices.set(sessionId, voice);
+    return voice;
+  }
+  noteMarkRow(workspaceId, sessionId) {
+    const row = this.db.query(`
+      SELECT shown_through_sequence FROM note_marks WHERE workspace_id = ? AND session_id = ?
+    `).get(workspaceId, sessionId);
+    return row?.shown_through_sequence ?? null;
+  }
+  readNoteMarkState(session) {
+    const head = this.requireWorkspace(session.workspace_id).event_head_sequence;
+    const stored = this.noteMarkRow(session.workspace_id, session.id);
+    const sequence = stored ?? session.cursor_sequence;
+    return {
+      sequence: Math.min(sequence, head),
+      initialised_from: stored === null ? "cursor" : null,
+      clamped: sequence > head,
+      stored: stored !== null
+    };
+  }
+  noteHousekeeping(credential, apply) {
+    const result = this.db.transaction(() => {
+      const authenticated = this.authenticateSession(credential);
+      const now = this.timestamp();
+      this.recordSessionLeaseLapses(authenticated, now);
+      this.expireElapsedHandoffs(authenticated.workspace_id, "system:clock");
+      this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(now, authenticated.id);
+      const session = this.requireCoordinationSessionRow(authenticated.id);
+      const mark = this.readNoteMarkState(session);
+      if (!mark.stored || mark.clamped) {
+        this.db.query(`
+          INSERT INTO note_marks (workspace_id, session_id, shown_through_sequence, updated_at)
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT (workspace_id, session_id) DO UPDATE SET
+            shown_through_sequence = excluded.shown_through_sequence, updated_at = excluded.updated_at
+        `).run(session.workspace_id, session.id, mark.sequence, now);
+      }
+      return apply(session, mark);
+    }).immediate();
+    this.tightenFileModes();
+    return result;
+  }
+  recordNoteShown(session, itemIds, now) {
+    for (const itemId of new Set(itemIds)) {
+      if (!itemId)
+        continue;
+      this.db.query(`
+        INSERT INTO note_shown (workspace_id, session_id, item_id, shown_at) VALUES (?, ?, ?, ?)
+        ON CONFLICT (workspace_id, session_id, item_id) DO UPDATE SET shown_at = excluded.shown_at
+      `).run(session.workspace_id, session.id, itemId, now);
+    }
+  }
+  scanNoteEvents(session, after) {
+    const sizes = this.db.query(`
+      SELECT sequence, length(CAST(payload_json AS BLOB)) AS bytes FROM events
+      WHERE workspace_id = ? AND sequence > ? ORDER BY sequence LIMIT ?
+    `).all(session.workspace_id, after, NOTE_SCAN_MAX_EVENTS + 1);
+    let end = after;
+    let bytes = 0;
+    let taken = 0;
+    for (const size of sizes) {
+      if (taken >= NOTE_SCAN_MAX_EVENTS || taken > 0 && bytes + size.bytes > NOTE_SCAN_MAX_BYTES)
+        break;
+      bytes += size.bytes;
+      taken += 1;
+      end = size.sequence;
+    }
+    const rows = this.db.query(`
+      SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
+        session_id, occurred_at, payload_json, prev_hash, hash
+      FROM events WHERE workspace_id = ? AND sequence > ? AND sequence <= ? ORDER BY sequence
+    `).all(session.workspace_id, after, end);
+    const events = rows.map((row) => {
+      const event = eventFromRow(row);
+      const own = event.session_id === session.id;
+      const forMe = !own && this.eventAddressesSession(event, session.id);
+      return {
+        sequence: event.sequence,
+        type: event.type,
+        own,
+        for_me: forMe,
+        shown_item_id: forMe ? noteShownItem(event) : null
+      };
+    });
+    return { events, last_sequence: end, capped: taken < sizes.length };
+  }
+  anchorAt(workspace, sequence) {
+    if (sequence === 0)
+      return { epoch_id: workspace.epoch_id, sequence: 0, hash: GENESIS_HASH };
+    const row = this.db.query(`SELECT epoch_id, hash FROM events WHERE workspace_id = ? AND sequence = ?`).get(workspace.id, sequence);
+    if (!row)
+      throw new CollabError("cursor_mismatch", "The read mark does not resolve to an event in this journal");
+    return { epoch_id: row.epoch_id, sequence, hash: row.hash };
+  }
+  noteEntryAt(session, sequence) {
+    const row = this.db.query(`
+      SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
+        session_id, occurred_at, payload_json, prev_hash, hash
+      FROM events WHERE workspace_id = ? AND sequence = ?
+    `).get(session.workspace_id, sequence);
+    if (!row)
+      throw new CollabError("event_not_found", `No event at sequence ${sequence}`);
+    const event = eventFromRow(row);
+    const payload = event.payload;
+    const forMe = event.session_id !== session.id && this.eventAddressesSession(event, session.id);
+    let report = null;
+    if (event.type === "report.posted" || event.type.startsWith("proposal.")) {
+      const reportRow = this.db.query(`SELECT * FROM reports WHERE id = ?`).get(event.entity_id);
+      report = reportRow ? reportFromRow(reportRow) : null;
+    }
+    const taskId = event.type.startsWith("task.") ? event.entity_id : event.type.startsWith("handoff.") ? typeof payload.task_id === "string" ? payload.task_id : typeof payload.handoff?.task_id === "string" ? payload.handoff.task_id : null : report?.task_id ?? null;
+    const taskRow = taskId ? this.readTaskRow(session.workspace_id, taskId) : null;
+    return {
+      event,
+      for_me: forMe,
+      why_you: forMe ? this.noteWhyYou(event, session.id) : null,
+      report,
+      marked: event.type === "report.posted" && payload.note === NOTE_FORMAT,
+      termed: report !== null && this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(report.id) !== null,
+      to_person: event.type === "report.posted" && payload.to_person === true,
+      task: taskRow ? { id: taskRow.id, title: taskRow.title } : null
+    };
+  }
+  noteWhyYou(event, sessionId) {
+    const payload = event.payload ?? {};
+    switch (event.type) {
+      case "report.posted":
+        if (payload.to_session_id === sessionId)
+          return "addressed";
+        if (typeof payload.about_proposal_id === "string")
+          return "about_your_proposal";
+        return "reply_to_you";
+      case "handoff.offered":
+        return "handoff_offered";
+      case "handoff.accepted":
+      case "handoff.declined":
+      case "handoff.expired":
+        return "answer_to_your_handoff";
+      case "task.reported_complete":
+        return "review_requested";
+      case "task.accepted":
+      case "task.changes_requested":
+        return "verdict_on_your_work";
+      case "task.recovered":
+        return "your_lease_recovered";
+      case "proposal.opened":
+        return "voice_awaited";
+      case "proposal.agreed":
+      case "proposal.rejected":
+        return "person_act";
+      default:
+        return "addressed";
+    }
+  }
+  noteChallenges(workspaceId) {
+    const obsoleted = this.activeObsoletionTargets(workspaceId);
+    const voices = new Map;
+    const challenges = this.db.query(`
+      SELECT id, from_session_id, from_actor, target_report_id, created_at FROM reports
+      WHERE workspace_id = ? AND relation = 'challenges' ORDER BY event_sequence
+    `).all(workspaceId);
+    return challenges.map((challenge) => {
+      const resolves = this.db.query(`
+        SELECT id, from_session_id FROM reports
+        WHERE workspace_id = ? AND target_report_id = ? AND relation = 'resolves'
+      `).all(workspaceId, challenge.id).filter((answer) => !obsoleted.has(answer.id) && answer.from_session_id !== null);
+      const voice = challenge.from_session_id ? this.cachedVoice(challenge.from_session_id, voices) : null;
+      const lifted = voice !== null && resolves.some((answer) => this.cachedVoice(answer.from_session_id, voices) === voice);
+      const withdrawn = obsoleted.has(challenge.id);
+      return {
+        id: challenge.id,
+        target_report_id: challenge.target_report_id,
+        from_session_id: challenge.from_session_id,
+        from_actor: challenge.from_actor,
+        created_at: challenge.created_at,
+        standing: !withdrawn && !lifted,
+        answered_by_another_voice: !lifted && resolves.length > 0
+      };
+    });
+  }
+  noteWaiting(session, sessions) {
+    const workspaceId = session.workspace_id;
+    const myVoice = this.consentVoice(session.id);
+    const voiceOf = new Map(sessions.map((view) => [view.id, view.voice_id]));
+    const sameVoice = (sessionId) => sessionId !== null && (voiceOf.get(sessionId) ?? this.consentVoice(sessionId)) === myVoice;
+    const waiting = [];
+    for (const task of this.listTasks(workspaceId)) {
+      if (task.effective_status === "reported_complete" && task.review_requested_session_id === session.id && task.completion_report_id) {
+        waiting.push({
+          what: "review",
+          ref_kind: "task",
+          ref_id: task.id,
+          about_id: task.completion_report_id,
+          by: task.reported_by ?? "unknown",
+          by_session_id: task.reported_by_session_id,
+          due: null,
+          at: task.reported_at ?? task.updated_at,
+          summary: task.title
+        });
+      }
+    }
+    const challenges = this.noteChallenges(workspaceId);
+    const statuses = this.listProposalStatuses(workspaceId, { limit: 50 }).proposals;
+    for (const status of statuses) {
+      if (status.ai.closed || !["open", "challenged"].includes(status.ai.position))
+        continue;
+      if (!status.ai.awaiting_voice_ids.includes(myVoice))
+        continue;
+      if (challenges.some((challenge) => challenge.standing && challenge.target_report_id === status.proposal.id && sameVoice(challenge.from_session_id)))
+        continue;
+      waiting.push({
+        what: "voice",
+        ref_kind: "proposal",
+        ref_id: status.proposal.id,
+        about_id: null,
+        by: status.proposal.from_actor,
+        by_session_id: status.proposal.from_session_id,
+        due: status.terms.closes_at,
+        at: status.proposal.created_at,
+        summary: firstLine(status.proposal.body)
+      });
+    }
+    const obsoleted = this.activeObsoletionTargets(workspaceId);
+    const authorOf = new Map(this.db.query(`
+      SELECT id, from_session_id FROM reports WHERE workspace_id = ? AND id IN (
+        SELECT target_report_id FROM reports WHERE workspace_id = ? AND relation = 'challenges'
+      )
+    `).all(workspaceId, workspaceId).map((row) => [row.id, row.from_session_id]));
+    for (const challenge of challenges) {
+      if (!challenge.standing)
+        continue;
+      if (authorOf.get(challenge.target_report_id) === session.id && challenge.from_session_id !== session.id) {
+        waiting.push({
+          what: "challenge",
+          ref_kind: "report",
+          ref_id: challenge.id,
+          about_id: challenge.target_report_id,
+          by: challenge.from_actor,
+          by_session_id: challenge.from_session_id,
+          due: null,
+          at: challenge.created_at,
+          summary: challenge.answered_by_another_voice ? "A standing challenge on your report; another voice answered it, which does not lift it." : "A standing challenge on your report."
+        });
+      }
+      if (challenge.from_session_id === session.id) {
+        const answers = this.db.query(`
+          SELECT DISTINCT r.id, r.from_actor, r.from_session_id, r.created_at, r.event_sequence FROM reports r
+          LEFT JOIN json_each(r.evidence_refs_json) ref
+          WHERE r.workspace_id = ? AND r.from_session_id IS NOT NULL AND r.from_session_id <> ?
+            AND ((r.target_report_id = ? AND r.relation <> 'supports') OR ref.value = ?)
+          ORDER BY r.event_sequence
+        `).all(workspaceId, session.id, challenge.id, `report:${challenge.id}`);
+        for (const answer of answers) {
+          if (obsoleted.has(answer.id) || sameVoice(answer.from_session_id))
+            continue;
+          waiting.push({
+            what: "answer",
+            ref_kind: "report",
+            ref_id: answer.id,
+            about_id: challenge.id,
+            by: answer.from_actor,
+            by_session_id: answer.from_session_id,
+            due: null,
+            at: answer.created_at,
+            summary: "An answer to your standing challenge; only you can lift it."
+          });
+        }
+      }
+    }
+    const decided = new Set(this.db.query(`
+      SELECT r.from_session_id, ref.value AS ref FROM reports r, json_each(r.evidence_refs_json) ref
+      WHERE r.workspace_id = ? AND r.kind = 'decision' AND ref.value LIKE 'report:%'
+    `).all(workspaceId).filter((row) => sameVoice(row.from_session_id)).map((row) => row.ref.slice("report:".length)));
+    for (const status of statuses) {
+      const mine = sameVoice(status.proposal.from_session_id);
+      if (!mine && !decided.has(status.proposal.id))
+        continue;
+      const latest = status.person.acts.at(-1);
+      if (!latest)
+        continue;
+      const retired = status.ai.position === "withdrawn" || status.ai.position === "superseded";
+      const agreedBefore = status.person.acts.slice(0, -1).some((act) => act.act === "agree");
+      let what = null;
+      if (latest.act === "reject" && agreedBefore)
+        what = "stop";
+      else if (latest.act === "reject" && mine && !retired)
+        what = "rejected";
+      else if (latest.act === "agree" && mine && status.may_proceed && !decided.has(status.proposal.id)) {
+        what = "record_decision";
+      }
+      if (!what)
+        continue;
+      waiting.push({
+        what,
+        ref_kind: "proposal",
+        ref_id: status.proposal.id,
+        about_id: latest.id,
+        by: latest.basis,
+        by_session_id: latest.relayed_by_session_id,
+        due: what === "stop" ? "now" : null,
+        at: latest.created_at,
+        summary: firstLine(status.proposal.body)
+      });
+    }
+    return waiting;
+  }
   timestamp() {
     return this.now().toISOString();
   }
@@ -5757,6 +6554,23 @@ function validateActor(value) {
     throw new CollabError("invalid_actor", "Actor labels beginning with person: are reserved for the person desk");
   }
   return actor;
+}
+function derivedActor(prefix, sessionId) {
+  if (prefix === undefined) {
+    throw new CollabError("actor_required", "Supply actor, or actor_prefix to derive one from the new session id");
+  }
+  if (typeof prefix !== "string" || !/^[a-z][a-z0-9-]{0,39}$/.test(prefix)) {
+    throw new CollabError("invalid_actor_prefix", "actor_prefix is 1 to 40 lower-case letters, digits or dashes");
+  }
+  return validateActor(`${prefix}-${sessionId.slice("session_".length, "session_".length + 6)}`);
+}
+var MAX_MODEL_LABEL = 200;
+function validateModelLabel(value) {
+  const model = cleanText(value, "model", MAX_MODEL_LABEL);
+  if (/[\u0000-\u001f\u007f]/.test(model)) {
+    throw new CollabError("invalid_model", "model must be one line of text");
+  }
+  return model;
 }
 function validateExpectedVersion(value) {
   if (!Number.isInteger(value) || value < 1) {
@@ -6200,6 +7014,70 @@ function proposalPersonActFromRow(row) {
     ai_snapshot: JSON.parse(ai_snapshot_json),
     proof: proof_json ? JSON.parse(proof_json) : null
   };
+}
+var NOTE_SCAN_MAX_EVENTS = 2000;
+var NOTE_SCAN_MAX_BYTES = 8 * 1024 * 1024;
+var NOTE_INBOX_MAX_LIMIT = 50;
+var NOTE_THREAD_MAX = 200;
+var NOTE_PURPOSE_MAX_CHARS = 200;
+var NOTE_PAYLOAD_MAX_BYTES = 64 * 1024;
+function noteShownItem(event) {
+  const payload = event.payload;
+  if (event.type === "proposal.opened")
+    return event.entity_id;
+  if (event.type === "task.reported_complete" && typeof payload.completion_report_id === "string") {
+    return payload.completion_report_id;
+  }
+  return null;
+}
+function validateNotePurpose(value) {
+  const purpose = cleanText(typeof value === "string" ? value : "", "purpose", NOTE_PURPOSE_MAX_CHARS);
+  if (/[\u0000-\u001f\u007f]/.test(purpose)) {
+    throw new CollabError("invalid_purpose", "purpose must be one line of text");
+  }
+  if (hasLoneSurrogate(purpose)) {
+    throw new CollabError("invalid_purpose", "purpose must be well-formed Unicode text (it holds half of a character)");
+  }
+  return purpose;
+}
+function assertNotePayload(payload) {
+  const visit = (value, path) => {
+    if (value === undefined)
+      throw new CollabError("invalid_payload", `${path} is undefined`);
+    if (typeof value === "number" && !Number.isSafeInteger(value)) {
+      throw new CollabError("invalid_payload", `${path} is not an integer`);
+    }
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => visit(item, `${path}[${index}]`));
+    } else if (value !== null && typeof value === "object") {
+      for (const [key, child] of Object.entries(value)) {
+        if (/^(0|[1-9]\d*)$/.test(key))
+          throw new CollabError("invalid_payload", `${path} has an integer-like key`);
+        visit(child, `${path}.${key}`);
+      }
+    }
+  };
+  visit(payload, "payload");
+  if (Buffer.byteLength(canonicalJson(payload), "utf8") > NOTE_PAYLOAD_MAX_BYTES) {
+    throw new CollabError("too_long", "The record exceeds 64 KiB", { field: "payload", max: NOTE_PAYLOAD_MAX_BYTES, unit: "bytes" });
+  }
+}
+function uuidPrefix(hex) {
+  const groups = [8, 4, 4, 4, 12];
+  let out = "";
+  let rest = hex;
+  for (const size of groups) {
+    if (!rest)
+      break;
+    out += out ? `-${rest.slice(0, size)}` : rest.slice(0, size);
+    rest = rest.slice(size);
+  }
+  return out;
+}
+function firstLine(text) {
+  const line = text.split(`
+`)[0] ?? "";
+  return line.length > 200 ? `${line.slice(0, 199)}\u2026` : line;
 }
 var MAX_INBOX_SCAN = 500;
 var MAX_INBOX_PROPOSALS = 50;

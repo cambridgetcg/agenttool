@@ -238,7 +238,9 @@ describe("a subagent's collab write", () => {
       "collab_session_join", "collab_session_list", "collab_session_heartbeat", "collab_session_leave", "collab_session_start",
       "collab_session_end", "collab_workspace_open", "collab_workspace_status", "collab_next", "collab_cursor_ack",
       "collab_cursor_reset", "collab_task_list", "collab_task_get", "collab_report_list", "collab_events_since",
-      "collab_events_wait", "collab_journal_verify", "collab_anchor_status",
+      "collab_events_wait", "collab_journal_verify", "collab_anchor_status", "collab_proposal_status",
+      // A purpose revision is self-declared state; the inbox writes view state and clock housekeeping only.
+      "collab_arrive", "collab_inbox",
     ];
     expect(tools.length).toBeGreaterThan(30);
     expect([...tools].sort()).toEqual([...COLLAB_WRITES, ...notCited].sort());

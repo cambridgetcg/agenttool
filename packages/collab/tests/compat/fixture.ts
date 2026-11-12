@@ -24,7 +24,7 @@ export const COLLAB_NOTES_EVENT_TYPES = [
  * them must lose nothing the journal records. A slice that creates one of
  * these lists it here; the harness refuses any other new table.
  */
-export const VIEW_STATE_TABLES: string[] = [];
+export const VIEW_STATE_TABLES: string[] = ["note_marks", "note_shown"];
 
 /** A clock the store reads; steps advance it so every run has the same shape. */
 export class FixtureClock {
@@ -68,10 +68,13 @@ export interface FixtureManifest {
   end_by_seat_ref: { session_id: string; seat_ref: string; credential_file: string };
   /** Ended by the old host's `end --session-file`. */
   end_by_session_file: { session_id: string; credential_file: string };
+  /** Sessions collab_arrive started and the old builds leave alone, for the note_sessions view. */
+  notes_sessions: string[];
 }
 
 type ManifestDraft = Partial<Omit<FixtureManifest, "format" | "steps" | "produced_types" | "event_types" | "head_sequence">> & {
   proposals: string[];
+  notes_sessions: string[];
 };
 
 export interface FixtureContext {
@@ -123,10 +126,8 @@ const END_SEAT_REF = "compat-fixture:end-by-seat";
  *
  * Later slices: append one step per storage addition at the marked place
  * below, naming in `produces` every new event type it writes, and list any new
- * table in VIEW_STATE_TABLES. When `collab_arrive` exists, the
- * `end-by-seat-session` step should create its session through it, as spec
- * 8.5 asks (arrive takes no seat_ref, so pass the server the environment
- * `{ AGENTOOL_COLLAB_SEAT_REF: END_SEAT_REF }`). Keep the proposals' voices
+ * table in VIEW_STATE_TABLES. The `end-by-seat-session` step creates its
+ * session through collab_arrive, as spec 8.5 asks. Keep the proposals' voices
  * away from the sessions the old host ends, so ending them cannot move a
  * proposal view.
  */
@@ -574,13 +575,17 @@ export const FIXTURE_STEPS: FixtureStep[] = [
   {
     name: "end-by-seat-session",
     async run(context) {
-      const started = await context.tool("seat-process", "collab_session_start", {
+      // Started by collab_arrive (spec 8.5), which takes no seat_ref: the host
+      // declares it in the server's environment, as a real host would.
+      const arrived = await context.tool("seat-process", "collab_arrive", {
         root_path: context.root,
-        actor: "fixture-seat",
-        role: "ended by the old host through its seat ref",
-        seat_ref: END_SEAT_REF,
-      });
-      const id = (started.session as { id: string }).id;
+        name: "fixture-seat",
+        purpose: "ended by the old host through its seat ref",
+      }, { AGENTOOL_COLLAB_SEAT_REF: END_SEAT_REF });
+      const id = (arrived.you as { session: string; seat_ref: string | null }).session;
+      if ((arrived.you as { seat_ref: string | null }).seat_ref !== END_SEAT_REF) {
+        throw new Error("collab_arrive did not take the host's seat ref");
+      }
       context.manifest.end_by_seat_ref = {
         session_id: id,
         seat_ref: END_SEAT_REF,
@@ -600,6 +605,48 @@ export const FIXTURE_STEPS: FixtureStep[] = [
       context.manifest.end_by_session_file = { session_id: id, credential_file: `collab-sessions/${id}.json` };
     },
   },
+  {
+    // Collab Notes stage 1: a session collab_arrive started, with a model; a
+    // named child it attests; a purpose revision; and the inbox's view state.
+    name: "notes-arrive-and-inbox",
+    produces: ["purpose.declared"],
+    async run(context) {
+      const arrived = await context.tool("notes-process", "collab_arrive", {
+        root_path: context.root,
+        name: "fixture-notes",
+        model: "fixture-model-1",
+        purpose: "arrives through the notes surface",
+      });
+      const you = arrived.you as { session: string };
+      const child = await context.tool("notes-process", "collab_arrive", {
+        binding_key: "fixture-child",
+        parent: you.session,
+        purpose: "a named child the notes surface attests",
+      });
+      const revised = await context.tool("notes-process", "collab_arrive", {
+        purpose: "revises its purpose on the record",
+        revise_purpose: true,
+      });
+      if ((revised.you as { purpose: string }).purpose !== "revises its purpose on the record") {
+        throw new Error("the purpose revision did not read back");
+      }
+      context.store.appendReportForSession({
+        ...context.session("author").credential,
+        idempotency_key: context.key("to-notes"),
+        kind: "observation",
+        body: "Addressed to the notes session, so its inbox has an item.",
+        to_session_id: you.session,
+      });
+      const inbox = await context.tool("notes-process", "collab_inbox", {});
+      if ((inbox.items as unknown[]).length !== 1) throw new Error("the notes session's inbox did not list its item");
+      // Both view tables hold rows, so dropping them is a real test.
+      for (const table of VIEW_STATE_TABLES) {
+        const rows = (context.store.db.query(`SELECT COUNT(*) AS count FROM "${table}"`).get() as { count: number }).count;
+        if (rows === 0) throw new Error(`fixture view table ${table} is empty`);
+      }
+      context.manifest.notes_sessions.push(you.session, (child.you as { session: string }).session);
+    },
+  },
   // Later slices append their steps here.
 ];
 
@@ -616,7 +663,7 @@ export async function exerciseFixture(
   const ids = new Map<string, string>();
   const tasks = new Map<string, Task>();
   const servers = new Map<string, ReturnType<typeof buildCollabMcpServer>>();
-  const manifest: ManifestDraft = { proposals: [] };
+  const manifest: ManifestDraft = { proposals: [], notes_sessions: [] };
   const produced = new Set<string>();
   const ran: string[] = [];
   const names = new Set<string>();
@@ -730,6 +777,7 @@ export async function exerciseFixture(
     waiter: manifest.waiter!,
     end_by_seat_ref: manifest.end_by_seat_ref!,
     end_by_session_file: manifest.end_by_session_file!,
+    notes_sessions: manifest.notes_sessions,
   };
 }
 
@@ -742,6 +790,24 @@ export async function exerciseFixture(
 export const FIXTURE_VIEWS: Record<string, (store: CollabStore, manifest: FixtureManifest) => unknown> = {
   proposal_status: (store, manifest) =>
     manifest.proposals.map((id) => store.proposalStatus(manifest.workspace_id, id)),
+  // Purpose, model and voice come from the journal (purpose.declared,
+  // session.joined.model, attestations), never from the view tables.
+  note_sessions: (store, manifest) => {
+    const views = new Map(store.noteSessionViews(manifest.workspace_id).map((view) => [view.id, view]));
+    return manifest.notes_sessions.map((id) => {
+      const view = views.get(id)!;
+      return {
+        id: view.id,
+        actor: view.actor,
+        role: view.role,
+        purpose: view.purpose,
+        model: view.model,
+        seat_ref: view.seat_ref,
+        voice_id: view.voice_id,
+        parent_session_id: view.parent_session_id,
+      };
+    });
+  },
 };
 
 function eventCount(store: CollabStore): number {

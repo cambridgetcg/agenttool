@@ -149,6 +149,7 @@ describe("MCP surface", () => {
     const { server } = node();
     expect(Object.keys((server as any)._registeredTools).sort()).toEqual([
       "collab_anchor_status",
+      "collab_arrive",
       "collab_artifact_attach",
       "collab_cursor_ack",
       "collab_cursor_reset",
@@ -157,6 +158,7 @@ describe("MCP surface", () => {
       "collab_events_wait",
       "collab_handoff_offer",
       "collab_handoff_respond",
+      "collab_inbox",
       "collab_journal_verify",
       "collab_next",
       "collab_proposal_open",
@@ -283,6 +285,8 @@ describe("MCP surface", () => {
       "collab_workspace_open",
     ];
     const nonIdempotentMutations = [
+      "collab_arrive",
+      "collab_inbox",
       "collab_next",
       "collab_session_start",
     ];

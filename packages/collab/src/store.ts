@@ -11,6 +11,7 @@ import {
 import { dirname, isAbsolute, join, posix, resolve } from "node:path";
 import { canonicalJson } from "./canonical.js";
 import { CollabError } from "./errors.js";
+import { hasLoneSurrogate, NOTE_FORMAT } from "./note.js";
 import { validateSeatRef } from "./seat-ref.js";
 import {
   COLLAB_COORDINATION_PROTOCOL,
@@ -624,6 +625,23 @@ export class CollabStore {
           parent_session_id TEXT NOT NULL,
           basis TEXT NOT NULL CHECK (basis IN ('same_mcp_process')),
           attested_at TEXT NOT NULL
+        );
+        -- Collab Notes view state (spec 8.1): what the notes surface last showed
+        -- each session. Never journaled and never cited, so it can be lost or
+        -- rebuilt without harm; no foreign keys, so older builds never see it.
+        CREATE TABLE IF NOT EXISTS note_marks (
+          workspace_id TEXT NOT NULL,
+          session_id TEXT NOT NULL,
+          shown_through_sequence INTEGER NOT NULL,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (workspace_id, session_id)
+        );
+        CREATE TABLE IF NOT EXISTS note_shown (
+          workspace_id TEXT NOT NULL,
+          session_id TEXT NOT NULL,
+          item_id TEXT NOT NULL,
+          shown_at TEXT NOT NULL,
+          PRIMARY KEY (workspace_id, session_id, item_id)
         );
       `);
       // The unreleased S1 preview kept relayed rejections in its own table.
@@ -1897,7 +1915,8 @@ export class CollabStore {
 
   startSession(input: {
     root_path: string;
-    actor: string;
+    /** Required unless actor_prefix is given. */
+    actor?: string;
     role?: string;
     parent_session_id?: string;
     repository_key?: string;
@@ -1908,10 +1927,23 @@ export class CollabStore {
      */
     parent_attested?: boolean;
     seat_ref?: string | null;
+    /** Self-declared model lineage, kept in session.joined only when given. */
+    model?: string;
+    /**
+     * With no actor: the actor becomes `<actor_prefix>-<first 6 hex of the new
+     * session id>`, a label that names no one and so cannot misattribute work.
+     */
+    actor_prefix?: string;
   }): SessionHandle {
-    const actor = validateActor(input.actor);
+    // Minted before the workspace is opened so a derived actor can name it;
+    // the id is random, so where it is minted changes nothing else.
+    const id = `session_${randomUUID()}`;
+    const actor = input.actor !== undefined
+      ? validateActor(input.actor)
+      : derivedActor(input.actor_prefix, id);
     const role = optionalText(input.role, "role", 200);
     const seatRef = input.seat_ref == null ? null : validateSeatRef(input.seat_ref);
+    const model = input.model === undefined ? null : validateModelLabel(input.model);
     const identity = inspectRepository(input.root_path, input.repository_key, true, { portable: false });
 
     const workspace = this.openWorkspace({
@@ -1946,7 +1978,6 @@ export class CollabStore {
         }
       }
       const now = this.timestamp();
-      const id = `session_${randomUUID()}`;
       const token = randomBytes(SESSION_TOKEN_BYTES).toString("base64url");
       const generation = 1;
       this.db.query(`
@@ -1981,6 +2012,7 @@ export class CollabStore {
         parent_session_id: parentSessionId,
         // Only when declared, so a session without one keeps the old payload shape.
         ...(seatRef ? { seat_ref: seatRef } : {}),
+        ...(model ? { model } : {}),
         identity_boundary:
           "session_credentials_fence_cooperating_local_clients_but_do_not_authenticate_a_person_or_model",
       }, id);
@@ -7240,6 +7272,881 @@ export class CollabStore {
     return handoffFromRow(row);
   }
 
+  // ---------------------------------------------------------------------------
+  // Collab Notes (spec sections 5 and 8.4): the reads and view state behind the
+  // verbs in verbs.ts. They add events of new types and rows in the view-state
+  // tables only; no existing record, relation or rule is changed.
+
+  /** Every coordination session of a workspace as the notes surface shows it, most recently seen first. Read-only. */
+  noteSessionViews(workspaceId: string): NoteSessionView[] {
+    this.requireWorkspace(workspaceId);
+    const rows = this.db.query(`
+      SELECT * FROM coordination_sessions WHERE workspace_id = ?
+      ORDER BY last_seen_at DESC, id
+    `).all(workspaceId) as CoordinationSessionRow[];
+    // One pass over the two event types that carry self-declared facts; the
+    // events table has no index on type, so this is cheaper than one per session.
+    const declared = this.db.query(`
+      SELECT entity_id, type, payload_json FROM events
+      WHERE workspace_id = ? AND type IN ('session.joined', 'purpose.declared')
+      ORDER BY sequence
+    `).all(workspaceId) as Array<{ entity_id: string; type: string; payload_json: string }>;
+    const joined = new Map<string, { seat_ref: string | null; model: string | null }>();
+    const purposes = new Map<string, string>();
+    for (const row of declared) {
+      const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
+      if (row.type === "session.joined") {
+        joined.set(row.entity_id, {
+          seat_ref: typeof payload.seat_ref === "string" ? payload.seat_ref : null,
+          model: typeof payload.model === "string" ? payload.model : null,
+        });
+      } else if (typeof payload.purpose === "string") {
+        // Journal order, so the latest declaration wins.
+        purposes.set(row.entity_id, payload.purpose);
+      }
+    }
+    const observedAt = this.timestamp();
+    const voices = new Map<string, string>();
+    return rows.map((row) => ({
+      id: row.id,
+      workspace_id: row.workspace_id,
+      worktree_id: row.worktree_id,
+      actor: row.actor,
+      role: row.role,
+      purpose: purposes.get(row.id) ?? row.role,
+      model: joined.get(row.id)?.model ?? null,
+      seat_ref: joined.get(row.id)?.seat_ref ?? null,
+      voice_id: this.cachedVoice(row.id, voices),
+      parent_session_id: row.parent_session_id,
+      status: row.status,
+      joined_at: row.joined_at,
+      last_seen_at: row.last_seen_at,
+      liveness: sessionLiveness(row, observedAt),
+    }));
+  }
+
+  /** A session's consent voice: the root of its attested lineage (spec 7 "voice"). Read-only. */
+  consentVoiceOf(sessionId: string): string {
+    return this.consentVoice(validateId(sessionId, "session_id"));
+  }
+
+  /**
+   * Append `purpose.declared` for this session (spec 5.1, revise_purpose). The
+   * role column is never rewritten; the current purpose is read from the
+   * latest declaration. A self-declared statement, never a grant.
+   */
+  declarePurposeForSession(input: {
+    session_id: string;
+    session_token: string;
+    generation: number;
+    idempotency_key: string;
+    purpose: string;
+  }): NotePurposeReceipt {
+    const purpose = validateNotePurpose(input.purpose);
+    return this.mutateAsSession(input, input.idempotency_key, "notes.purpose.v1", { purpose }, (session) => {
+      const payload = { session_id: session.id, purpose };
+      assertNotePayload(payload);
+      const event = this.appendEvent(session.workspace_id, "purpose.declared", session.id, session.actor, payload, session.id);
+      return {
+        session_id: session.id,
+        purpose,
+        event_id: event.id,
+        sequence: event.sequence,
+        declared_at: event.occurred_at,
+      };
+    });
+  }
+
+  /**
+   * One of this session's receipts by its exact key, without comparing the
+   * request. A derived-key retry replays what was recorded even when a fresh
+   * read would build a different request (spec 5, derived idempotency), so a
+   * changed version cannot turn a retry into idempotency_conflict. Read-only.
+   */
+  readReceiptByKey<T = unknown>(
+    credential: { session_id: string; session_token: string; generation: number },
+    key: string,
+  ): { found: false } | { found: true; operation: string; value: T } {
+    const session = this.authenticateSession(credential);
+    const idempotencyKey = validateIdempotencyKey(key);
+    const row = this.db.query(`
+      SELECT operation, response_json FROM mutations
+      WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
+    `).get(session.workspace_id, `session:${session.id}`, idempotencyKey) as
+      { operation: string; response_json: string } | null;
+    if (!row) return { found: false };
+    return { found: true, operation: row.operation, value: JSON.parse(row.response_json) as T };
+  }
+
+  /**
+   * This session's lexically greatest receipt key that starts with `prefix`,
+   * or null. Key order, not insertion order, so the zero-padded sequence in a
+   * derived key decides which is latest. Read-only.
+   */
+  latestReceiptKeyForSession(
+    credential: { session_id: string; session_token: string; generation: number },
+    prefix: string,
+  ): string | null {
+    const session = this.authenticateSession(credential);
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*:$/.test(prefix) || prefix.length > 100) {
+      throw new CollabError("invalid_receipt_prefix", "A receipt prefix is a key prefix ending in ':'");
+    }
+    // Every key with the prefix sorts in [prefix, prefix with its last ':' raised to ';').
+    const upper = `${prefix.slice(0, -1)};`;
+    const row = this.db.query(`
+      SELECT idempotency_key FROM mutations
+      WHERE workspace_id = ? AND actor = ? AND idempotency_key >= ? AND idempotency_key < ?
+      ORDER BY idempotency_key DESC
+      LIMIT 1
+    `).get(session.workspace_id, `session:${session.id}`, prefix, upper) as { idempotency_key: string } | null;
+    return row?.idempotency_key ?? null;
+  }
+
+  /**
+   * Create this session's read mark at `sequence` unless it already has one
+   * (spec 8.1). collab_arrive starts a new session's mark at the journal head
+   * it joined at. View state only: no event, and the legacy cursor is untouched.
+   */
+  initNoteMark(
+    credential: { session_id: string; session_token: string; generation: number },
+    sequence: number,
+  ): number {
+    const marked = this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      const workspace = this.requireWorkspace(session.workspace_id);
+      if (!Number.isInteger(sequence) || sequence < 0 || sequence > workspace.event_head_sequence) {
+        throw new CollabError("invalid_note_mark", "A read mark must name a sequence in this journal");
+      }
+      this.db.query(`
+        INSERT OR IGNORE INTO note_marks (workspace_id, session_id, shown_through_sequence, updated_at)
+        VALUES (?, ?, ?, ?)
+      `).run(session.workspace_id, session.id, sequence, this.timestamp());
+      return this.noteMarkRow(session.workspace_id, session.id)!;
+    }).immediate();
+    this.tightenFileModes();
+    return marked;
+  }
+
+  /** This session's read mark, or null when it has none yet. Read-only. */
+  noteMark(workspaceId: string, sessionId: string): number | null {
+    return this.noteMarkRow(workspaceId, validateId(sessionId, "session_id"));
+  }
+
+  /**
+   * What collab_inbox lists for one session (spec 5.2), after one IMMEDIATE
+   * housekeeping transaction (clock work, last-seen, the read mark and the
+   * delivery records) and then a deferred read of what it returns. With
+   * `peek`, nothing is written: no housekeeping, no mark, no delivery
+   * record (collab_arrive on a slot that is already bound).
+   */
+  inboxForSession(input: {
+    session_id: string;
+    session_token: string;
+    generation: number;
+    limit: number;
+    include: "for_me" | "all";
+    peek?: boolean;
+  }): NoteInboxData {
+    const limit = input.limit;
+    if (!Number.isInteger(limit) || limit < 1 || limit > NOTE_INBOX_MAX_LIMIT) {
+      throw new CollabError("invalid_limit", `limit must be an integer from 1 to ${NOTE_INBOX_MAX_LIMIT}`);
+    }
+    if (input.include !== "for_me" && input.include !== "all") {
+      throw new CollabError("invalid_include", "include must be for_me or all");
+    }
+    const plan = (session: CoordinationSessionRow, mark: NoteMarkState, record: boolean) => {
+      const scan = this.scanNoteEvents(session, mark.sequence);
+      const listed = scan.events.filter((event) =>
+        input.include === "all" ? !event.own : event.for_me);
+      let through = scan.last_sequence;
+      let more = scan.capped;
+      if (listed.length > limit) {
+        // Stop just before the first listed item not returned, so the next
+        // call starts with it; every unaddressed event before it is passed.
+        through = listed[limit]!.sequence - 1;
+        more = true;
+      }
+      const returned = listed.slice(0, limit);
+      const alsoNew = scan.events.filter((event) =>
+        !event.own && !event.for_me && event.sequence <= through).length;
+      if (record) {
+        const now = this.timestamp();
+        if (through > mark.sequence) {
+          this.db.query(`
+            UPDATE note_marks SET shown_through_sequence = ?, updated_at = ?
+            WHERE workspace_id = ? AND session_id = ?
+          `).run(through, now, session.workspace_id, session.id);
+        }
+        this.recordNoteShown(session, returned.filter((event) => event.for_me)
+          .map((event) => event.shown_item_id), now);
+      }
+      return { sequences: returned.map((event) => event.sequence), through, more, also_new: alsoNew };
+    };
+    const planned = input.peek
+      ? this.db.transaction(() => {
+        const session = this.authenticateSession(input);
+        const mark = this.readNoteMarkState(session);
+        return { mark, ...plan(session, mark, false) };
+      }).deferred()
+      : this.noteHousekeeping(input, (session, mark) => ({ mark, ...plan(session, mark, true) }));
+    return this.db.transaction(() => {
+      const session = this.authenticateSession(input);
+      const sessions = this.noteSessionViews(session.workspace_id);
+      const me = sessions.find((view) => view.id === session.id)!;
+      const workspace = this.requireWorkspace(session.workspace_id);
+      return {
+        session: me,
+        sessions,
+        entries: planned.sequences.map((sequence) => this.noteEntryAt(session, sequence)),
+        also_new: planned.also_new,
+        more: planned.more,
+        mark: {
+          before: planned.mark.sequence,
+          through: planned.through,
+          anchor: this.anchorAt(workspace, planned.through),
+          initialised_from: planned.mark.initialised_from,
+          clamped: planned.mark.clamped,
+          written: !input.peek,
+        },
+        head_sequence: workspace.event_head_sequence,
+        waiting: this.noteWaiting(session, sessions),
+        observed_at: this.timestamp(),
+      };
+    }).deferred();
+  }
+
+  /**
+   * One thread for collab_inbox {about} (spec 5.2): a report and everything
+   * that answers it, or a task with its holder, completion and reviews. The
+   * housekeeping transaction runs first and records the root (and a task's
+   * current completion) as returned to this session; the read mark does not
+   * move.
+   */
+  noteThreadForSession(input: {
+    session_id: string;
+    session_token: string;
+    generation: number;
+    kind: "report" | "task";
+    id: string;
+  }): NoteThreadData {
+    const id = validateId(input.id, `${input.kind}_id`);
+    this.noteHousekeeping(input, (session) => {
+      const now = this.timestamp();
+      if (input.kind === "task") {
+        const task = this.requireTaskRow(session.workspace_id, id);
+        if (task.completion_report_id) this.recordNoteShown(session, [task.completion_report_id], now);
+      } else {
+        const report = this.requireReport(id);
+        if (report.workspace_id !== session.workspace_id) {
+          throw new CollabError("report_not_found", `Report '${id}' was not found in this workspace`);
+        }
+        this.recordNoteShown(session, [report.id], now);
+      }
+    });
+    return this.db.transaction(() => {
+      const session = this.authenticateSession(input);
+      const sessions = this.noteSessionViews(session.workspace_id);
+      const me = sessions.find((view) => view.id === session.id)!;
+      const challenges = this.noteChallenges(session.workspace_id);
+      if (input.kind === "task") {
+        const task = this.requireTask(session.workspace_id, id);
+        const reviews = (this.db.query(`
+          SELECT * FROM task_reviews WHERE workspace_id = ? AND task_id = ?
+          ORDER BY event_sequence
+        `).all(session.workspace_id, id) as ReviewRow[]).map(reviewFromRow);
+        const reports = this.db.query(`
+          SELECT * FROM reports WHERE workspace_id = ? AND task_id = ?
+          ORDER BY event_sequence LIMIT ?
+        `).all(session.workspace_id, id, NOTE_THREAD_MAX + 1) as ReportRow[];
+        return {
+          kind: "task" as const,
+          session: me,
+          sessions,
+          root: null,
+          answers: reports.slice(0, NOTE_THREAD_MAX)
+            .map((row) => this.noteEntryAt(session, row.event_sequence)),
+          truncated: reports.length > NOTE_THREAD_MAX,
+          task,
+          reviews,
+          challenges: challenges.filter((challenge) => reports.some((row) => row.id === challenge.target_report_id)),
+          termed: false,
+          observed_at: this.timestamp(),
+        };
+      }
+      const root = this.requireReport(id);
+      // Everything that answers the root: relations aimed at it or at an
+      // answer (breadth first), and notes citing it as evidence.
+      const answers = new Map<string, number>();
+      let frontier = [root.id];
+      let truncated = false;
+      while (frontier.length > 0 && !truncated) {
+        const next: string[] = [];
+        for (const target of frontier) {
+          const rows = this.db.query(`
+            SELECT id, event_sequence FROM reports WHERE target_report_id = ? AND workspace_id = ?
+            ORDER BY event_sequence
+          `).all(target, root.workspace_id) as Array<{ id: string; event_sequence: number }>;
+          for (const row of rows) {
+            if (answers.has(row.id) || row.id === root.id) continue;
+            if (answers.size >= NOTE_THREAD_MAX) {
+              truncated = true;
+              break;
+            }
+            answers.set(row.id, row.event_sequence);
+            next.push(row.id);
+          }
+          if (truncated) break;
+        }
+        frontier = next;
+      }
+      const citing = this.db.query(`
+        SELECT r.id, r.event_sequence FROM reports r, json_each(r.evidence_refs_json) ref
+        WHERE r.workspace_id = ? AND ref.value = ?
+        ORDER BY r.event_sequence
+      `).all(root.workspace_id, `report:${root.id}`) as Array<{ id: string; event_sequence: number }>;
+      for (const row of citing) {
+        if (answers.has(row.id) || row.id === root.id) continue;
+        if (answers.size >= NOTE_THREAD_MAX) {
+          truncated = true;
+          break;
+        }
+        answers.set(row.id, row.event_sequence);
+      }
+      const ids = new Set([root.id, ...answers.keys()]);
+      return {
+        kind: "report" as const,
+        session: me,
+        sessions,
+        root: this.noteEntryAt(session, root.event_sequence),
+        answers: [...answers.values()].sort((left, right) => left - right)
+          .map((sequence) => this.noteEntryAt(session, sequence)),
+        truncated,
+        task: null,
+        reviews: [],
+        challenges: challenges.filter((challenge) => ids.has(challenge.target_report_id)),
+        termed: this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(root.id) !== null,
+        observed_at: this.timestamp(),
+      };
+    }).deferred();
+  }
+
+  /**
+   * What the arrival brief shows (spec 5.1), in one deferred read snapshot.
+   * Read-only: it writes nothing, not even last-seen.
+   */
+  arrivalBrief(credential: { session_id: string; session_token: string; generation: number }): NoteArrivalData {
+    return this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      const workspace = this.requireWorkspace(session.workspace_id);
+      const sessions = this.noteSessionViews(session.workspace_id);
+      const tasks = this.listTasks(session.workspace_id);
+      const { claimable } = this.projectAvailableTasks(session.workspace_id, tasks, () => false);
+      const proposals = this.listProposalStatuses(session.workspace_id, { limit: 50 }).proposals
+        .filter((status) => ["open", "challenged", "consented"].includes(status.ai.position));
+      const reports = (this.db.query(`SELECT COUNT(*) AS count FROM reports WHERE workspace_id = ?`)
+        .get(session.workspace_id) as { count: number }).count;
+      return {
+        session: sessions.find((view) => view.id === session.id)!,
+        workspace,
+        sessions,
+        tasks,
+        claimable_task_ids: claimable.map((task) => task.id),
+        proposals,
+        challenges: this.noteChallenges(session.workspace_id).filter((challenge) => challenge.standing).reverse(),
+        report_count: reports,
+        waiting: this.noteWaiting(session, sessions),
+        observed_at: this.timestamp(),
+      };
+    }).deferred();
+  }
+
+  /** Record that arrive or inbox returned these items to a session (spec 8.1 note_shown). */
+  recordArrivalShown(
+    credential: { session_id: string; session_token: string; generation: number },
+    itemIds: string[],
+  ): void {
+    if (itemIds.length === 0) return;
+    this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      this.recordNoteShown(session, itemIds, this.timestamp());
+    }).immediate();
+    this.tightenFileModes();
+  }
+
+  /** Whether this notes surface has recorded returning an item to a session. Read-only view state. */
+  noteShownAt(workspaceId: string, sessionId: string, itemId: string): string | null {
+    const row = this.db.query(`
+      SELECT shown_at FROM note_shown WHERE workspace_id = ? AND session_id = ? AND item_id = ?
+    `).get(workspaceId, sessionId, itemId) as { shown_at: string } | null;
+    return row?.shown_at ?? null;
+  }
+
+  /**
+   * Resolve an id, a `kind:<id>` reference or a short handle (`report#3fa91c`)
+   * to one full id (spec 5, handles). A handle is matched by primary-key
+   * range, never by LIKE; an ambiguous one is refused with the candidates, so
+   * nothing is routed by guess. Read-only.
+   */
+  resolveNoteRef(workspaceId: string, kind: NoteEntityKind, value: string): { kind: NoteEntityKind; id: string } {
+    this.requireWorkspace(workspaceId);
+    const text = typeof value === "string" ? value.trim() : "";
+    const handle = /^(report|proposal|ballot|task)#([0-9a-fA-F]{6,32})$/.exec(text);
+    const prefixed = /^(report|proposal|ballot|task):(.+)$/.exec(text);
+    const named = (handle?.[1] ?? prefixed?.[1]) as NoteEntityKind | undefined;
+    // Proposals and ballots are reports, so either may stand where a report
+    // is asked for, and a report ref may name a proposal or a ballot.
+    const compatible = !named || named === kind
+      || (kind === "report" && named !== "task")
+      || ((kind === "proposal" || kind === "ballot") && named === "report");
+    if (!compatible) {
+      throw new CollabError("ref_kind_mismatch", `${text} names a ${named}, not a ${kind}`, { expected: kind, value: text });
+    }
+    // Match the narrower kind: proposal#… looks only among proposals.
+    kind = kind === "report" && named ? named : kind;
+    const exists = (id: string) => this.noteRefCandidates(workspaceId, kind, id, `${id}\u0000`).length === 1;
+    if (!handle) {
+      const id = validateId(prefixed?.[2] ?? text, `${kind}_id`);
+      if (!exists(id)) {
+        throw new CollabError(`${kind}_not_found`, `No ${kind} with id ${id} in this workspace`, { value: text });
+      }
+      return { kind, id };
+    }
+    const hex = handle[2]!.toLowerCase();
+    const table = kind === "task" ? "task" : "report";
+    const lower = `${table}_${uuidPrefix(hex)}`;
+    const upper = `${lower.slice(0, -1)}${String.fromCharCode(lower.charCodeAt(lower.length - 1) + 1)}`;
+    const candidates = this.noteRefCandidates(workspaceId, kind, lower, upper);
+    if (candidates.length === 0) {
+      throw new CollabError(`${kind}_not_found`, `No ${kind} matches ${text} in this workspace`, { value: text });
+    }
+    if (candidates.length > 1) {
+      throw new CollabError("ambiguous_handle", `${text} matches more than one ${kind}; use a longer handle or the full id`, {
+        value: text,
+        candidates: candidates.slice(0, 10),
+        candidates_total: candidates.length,
+      });
+    }
+    return { kind, id: candidates[0]! };
+  }
+
+  private noteRefCandidates(workspaceId: string, kind: NoteEntityKind, lower: string, upper: string): string[] {
+    const limit = 50;
+    switch (kind) {
+      case "task":
+        return (this.db.query(`
+          SELECT id FROM tasks WHERE workspace_id = ? AND id >= ? AND id < ? ORDER BY id LIMIT ?
+        `).all(workspaceId, lower, upper, limit) as Array<{ id: string }>).map((row) => row.id);
+      case "proposal":
+        return (this.db.query(`
+          SELECT r.id FROM reports r JOIN proposal_terms t ON t.report_id = r.id
+          WHERE r.workspace_id = ? AND r.id >= ? AND r.id < ? ORDER BY r.id LIMIT ?
+        `).all(workspaceId, lower, upper, limit) as Array<{ id: string }>).map((row) => row.id);
+      case "ballot":
+        // A ballot is the report collab_poll posts, opened by a ballot.opened event (spec 8.2).
+        return (this.db.query(`
+          SELECT r.id FROM reports r
+          WHERE r.workspace_id = ? AND r.id >= ? AND r.id < ?
+            AND EXISTS (SELECT 1 FROM events e WHERE e.workspace_id = r.workspace_id
+              AND e.type = 'ballot.opened' AND e.entity_id = r.id)
+          ORDER BY r.id LIMIT ?
+        `).all(workspaceId, lower, upper, limit) as Array<{ id: string }>).map((row) => row.id);
+      default:
+        return (this.db.query(`
+          SELECT id FROM reports WHERE workspace_id = ? AND id >= ? AND id < ? ORDER BY id LIMIT ?
+        `).all(workspaceId, lower, upper, limit) as Array<{ id: string }>).map((row) => row.id);
+    }
+  }
+
+  /**
+   * Resolve a session by id, `session#<hex>` handle or display name among a
+   * workspace's sessions (active ones only unless `include_ended`). An
+   * ambiguous name is refused with the candidates. Read-only.
+   */
+  resolveNoteSession(workspaceId: string, value: string, options: { include_ended?: boolean } = {}): NoteSessionView {
+    const text = typeof value === "string" ? value.trim() : "";
+    const sessions = this.noteSessionViews(workspaceId)
+      .filter((view) => options.include_ended || view.status === "active");
+    const handle = /^session#([0-9a-fA-F]{6,32})$/.exec(text);
+    const prefix = handle ? `session_${uuidPrefix(handle[1]!.toLowerCase())}` : null;
+    const matches = sessions.filter((view) =>
+      prefix ? view.id.startsWith(prefix) : view.id === text || view.actor === text);
+    if (matches.length === 1) return matches[0]!;
+    if (matches.length === 0) {
+      throw new CollabError("session_not_found", `No ${options.include_ended ? "" : "active "}session matches ${text}`, { value: text });
+    }
+    throw new CollabError("ambiguous_session", `${text} names more than one session; use its id`, {
+      value: text,
+      candidates: matches.slice(0, 10).map((view) => ({ session: view.id, name: view.actor, last_seen_at: view.last_seen_at })),
+      candidates_total: matches.length,
+    });
+  }
+
+  private cachedVoice(sessionId: string, voices: Map<string, string>): string {
+    const cached = voices.get(sessionId);
+    if (cached) return cached;
+    const voice = this.consentVoice(sessionId);
+    voices.set(sessionId, voice);
+    return voice;
+  }
+
+  private noteMarkRow(workspaceId: string, sessionId: string): number | null {
+    const row = this.db.query(`
+      SELECT shown_through_sequence FROM note_marks WHERE workspace_id = ? AND session_id = ?
+    `).get(workspaceId, sessionId) as { shown_through_sequence: number } | null;
+    return row?.shown_through_sequence ?? null;
+  }
+
+  /**
+   * The read mark as it stands. A session with no row reads from its legacy
+   * cursor, which means "processed", so a session started before this
+   * surface neither replays its history nor loses what is pending. A mark
+   * past the head (a journal restored from an older copy) reads as the head.
+   */
+  private readNoteMarkState(session: CoordinationSessionRow): NoteMarkState {
+    const head = this.requireWorkspace(session.workspace_id).event_head_sequence;
+    const stored = this.noteMarkRow(session.workspace_id, session.id);
+    const sequence = stored ?? session.cursor_sequence;
+    return {
+      sequence: Math.min(sequence, head),
+      initialised_from: stored === null ? "cursor" : null,
+      clamped: sequence > head,
+      stored: stored !== null,
+    };
+  }
+
+  /**
+   * The housekeeping transaction every notes read begins with (spec 5.2,
+   * write placement): the session is authenticated, its lapsed leases and
+   * last-seen time are recorded as collab_next records them, elapsed handoffs
+   * expire as system:clock, and a missing read mark is created from the
+   * legacy cursor. `apply` runs inside the same IMMEDIATE transaction.
+   */
+  private noteHousekeeping<T>(
+    credential: { session_id: string; session_token: string; generation: number },
+    apply: (session: CoordinationSessionRow, mark: NoteMarkState) => T,
+  ): T {
+    const result = this.db.transaction(() => {
+      const authenticated = this.authenticateSession(credential);
+      const now = this.timestamp();
+      this.recordSessionLeaseLapses(authenticated, now);
+      // Nested, so it runs as a savepoint inside this one transaction.
+      this.expireElapsedHandoffs(authenticated.workspace_id, "system:clock");
+      this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(now, authenticated.id);
+      const session = this.requireCoordinationSessionRow(authenticated.id);
+      const mark = this.readNoteMarkState(session);
+      if (!mark.stored || mark.clamped) {
+        this.db.query(`
+          INSERT INTO note_marks (workspace_id, session_id, shown_through_sequence, updated_at)
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT (workspace_id, session_id) DO UPDATE SET
+            shown_through_sequence = excluded.shown_through_sequence, updated_at = excluded.updated_at
+        `).run(session.workspace_id, session.id, mark.sequence, now);
+      }
+      return apply(session, mark);
+    }).immediate();
+    this.tightenFileModes();
+    return result;
+  }
+
+  private recordNoteShown(session: CoordinationSessionRow, itemIds: Array<string | null>, now: string): void {
+    for (const itemId of new Set(itemIds)) {
+      if (!itemId) continue;
+      this.db.query(`
+        INSERT INTO note_shown (workspace_id, session_id, item_id, shown_at) VALUES (?, ?, ?, ?)
+        ON CONFLICT (workspace_id, session_id, item_id) DO UPDATE SET shown_at = excluded.shown_at
+      `).run(session.workspace_id, session.id, itemId, now);
+    }
+  }
+
+  /**
+   * The events after `after`, at most NOTE_SCAN_MAX_EVENTS of them or
+   * NOTE_SCAN_MAX_BYTES of payload (always at least one), each judged with
+   * eventAddressesSession so the inbox and the doorbell agree.
+   */
+  private scanNoteEvents(session: CoordinationSessionRow, after: number): {
+    events: NoteScannedEvent[];
+    last_sequence: number;
+    capped: boolean;
+  } {
+    const sizes = this.db.query(`
+      SELECT sequence, length(CAST(payload_json AS BLOB)) AS bytes FROM events
+      WHERE workspace_id = ? AND sequence > ? ORDER BY sequence LIMIT ?
+    `).all(session.workspace_id, after, NOTE_SCAN_MAX_EVENTS + 1) as Array<{ sequence: number; bytes: number }>;
+    let end = after;
+    let bytes = 0;
+    let taken = 0;
+    for (const size of sizes) {
+      if (taken >= NOTE_SCAN_MAX_EVENTS || (taken > 0 && bytes + size.bytes > NOTE_SCAN_MAX_BYTES)) break;
+      bytes += size.bytes;
+      taken += 1;
+      end = size.sequence;
+    }
+    const rows = this.db.query(`
+      SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
+        session_id, occurred_at, payload_json, prev_hash, hash
+      FROM events WHERE workspace_id = ? AND sequence > ? AND sequence <= ? ORDER BY sequence
+    `).all(session.workspace_id, after, end) as EventRow[];
+    const events = rows.map((row) => {
+      const event = eventFromRow(row);
+      const own = event.session_id === session.id;
+      const forMe = !own && this.eventAddressesSession(event, session.id);
+      return {
+        sequence: event.sequence,
+        type: event.type,
+        own,
+        for_me: forMe,
+        shown_item_id: forMe ? noteShownItem(event) : null,
+      };
+    });
+    return { events, last_sequence: end, capped: taken < sizes.length };
+  }
+
+  private anchorAt(workspace: Workspace, sequence: number): EventCursor {
+    if (sequence === 0) return { epoch_id: workspace.epoch_id, sequence: 0, hash: GENESIS_HASH };
+    const row = this.db.query(`SELECT epoch_id, hash FROM events WHERE workspace_id = ? AND sequence = ?`)
+      .get(workspace.id, sequence) as { epoch_id: string; hash: string } | null;
+    if (!row) throw new CollabError("cursor_mismatch", "The read mark does not resolve to an event in this journal");
+    return { epoch_id: row.epoch_id, sequence, hash: row.hash };
+  }
+
+  /** One event as an inbox entry, with the report, proposal or task it concerns. */
+  private noteEntryAt(session: CoordinationSessionRow, sequence: number): NoteEntry {
+    const row = this.db.query(`
+      SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
+        session_id, occurred_at, payload_json, prev_hash, hash
+      FROM events WHERE workspace_id = ? AND sequence = ?
+    `).get(session.workspace_id, sequence) as EventRow | null;
+    if (!row) throw new CollabError("event_not_found", `No event at sequence ${sequence}`);
+    const event = eventFromRow(row);
+    const payload = event.payload as Record<string, unknown>;
+    const forMe = event.session_id !== session.id && this.eventAddressesSession(event, session.id);
+    let report: CollabReport | null = null;
+    if (event.type === "report.posted" || event.type.startsWith("proposal.")) {
+      const reportRow = this.db.query(`SELECT * FROM reports WHERE id = ?`).get(event.entity_id) as ReportRow | null;
+      report = reportRow ? reportFromRow(reportRow) : null;
+    }
+    const taskId = event.type.startsWith("task.") ? event.entity_id
+      : event.type.startsWith("handoff.") ? (typeof payload.task_id === "string" ? payload.task_id
+        : typeof (payload.handoff as Record<string, unknown> | undefined)?.task_id === "string"
+          ? (payload.handoff as Record<string, string>).task_id : null)
+        : report?.task_id ?? null;
+    const taskRow = taskId ? this.readTaskRow(session.workspace_id, taskId) : null;
+    return {
+      event,
+      for_me: forMe,
+      why_you: forMe ? this.noteWhyYou(event, session.id) : null,
+      report,
+      marked: event.type === "report.posted" && payload.note === NOTE_FORMAT,
+      termed: report !== null
+        && this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(report.id) !== null,
+      to_person: event.type === "report.posted" && payload.to_person === true,
+      task: taskRow ? { id: taskRow.id, title: taskRow.title } : null,
+    };
+  }
+
+  /** Why an addressed event names this session, for an item's why_you. Mirrors eventAddressesSession. */
+  private noteWhyYou(event: CollabEvent, sessionId: string): NoteWhyYou {
+    const payload = (event.payload ?? {}) as Record<string, unknown>;
+    switch (event.type) {
+      case "report.posted":
+        if (payload.to_session_id === sessionId) return "addressed";
+        if (typeof payload.about_proposal_id === "string") return "about_your_proposal";
+        return "reply_to_you";
+      case "handoff.offered":
+        return "handoff_offered";
+      case "handoff.accepted":
+      case "handoff.declined":
+      case "handoff.expired":
+        return "answer_to_your_handoff";
+      case "task.reported_complete":
+        return "review_requested";
+      case "task.accepted":
+      case "task.changes_requested":
+        return "verdict_on_your_work";
+      case "task.recovered":
+        return "your_lease_recovered";
+      case "proposal.opened":
+        return "voice_awaited";
+      case "proposal.agreed":
+      case "proposal.rejected":
+        return "person_act";
+      default:
+        return "addressed";
+    }
+  }
+
+  /**
+   * Every challenge in a workspace with whether it still stands. As in
+   * consent/v1, a challenge stands until it is withdrawn or lifted by its own
+   * voice; a `resolves` from any other voice is shown as an answer and lifts
+   * nothing on this view. Journal order.
+   */
+  private noteChallenges(workspaceId: string): NoteChallengeView[] {
+    const obsoleted = this.activeObsoletionTargets(workspaceId);
+    const voices = new Map<string, string>();
+    const challenges = this.db.query(`
+      SELECT id, from_session_id, from_actor, target_report_id, created_at FROM reports
+      WHERE workspace_id = ? AND relation = 'challenges' ORDER BY event_sequence
+    `).all(workspaceId) as Array<{
+      id: string; from_session_id: string | null; from_actor: string; target_report_id: string; created_at: string;
+    }>;
+    return challenges.map((challenge) => {
+      const resolves = (this.db.query(`
+        SELECT id, from_session_id FROM reports
+        WHERE workspace_id = ? AND target_report_id = ? AND relation = 'resolves'
+      `).all(workspaceId, challenge.id) as Array<{ id: string; from_session_id: string | null }>)
+        .filter((answer) => !obsoleted.has(answer.id) && answer.from_session_id !== null);
+      const voice = challenge.from_session_id ? this.cachedVoice(challenge.from_session_id, voices) : null;
+      const lifted = voice !== null
+        && resolves.some((answer) => this.cachedVoice(answer.from_session_id!, voices) === voice);
+      const withdrawn = obsoleted.has(challenge.id);
+      return {
+        id: challenge.id,
+        target_report_id: challenge.target_report_id,
+        from_session_id: challenge.from_session_id,
+        from_actor: challenge.from_actor,
+        created_at: challenge.created_at,
+        standing: !withdrawn && !lifted,
+        answered_by_another_voice: !lifted && resolves.length > 0,
+      };
+    });
+  }
+
+  /**
+   * What waits on this session, whatever its read mark (spec 5.2): reviews
+   * requested of it, proposals awaiting its voice, standing challenges on its
+   * reports, answers to its own standing challenges, and person acts on
+   * proposals its voice wrote or a decision of its voice cited.
+   */
+  private noteWaiting(session: CoordinationSessionRow, sessions: NoteSessionView[]): NoteWaitingEntry[] {
+    const workspaceId = session.workspace_id;
+    const myVoice = this.consentVoice(session.id);
+    const voiceOf = new Map(sessions.map((view) => [view.id, view.voice_id]));
+    const sameVoice = (sessionId: string | null) => sessionId !== null
+      && (voiceOf.get(sessionId) ?? this.consentVoice(sessionId)) === myVoice;
+    const waiting: NoteWaitingEntry[] = [];
+    for (const task of this.listTasks(workspaceId)) {
+      if (task.effective_status === "reported_complete" && task.review_requested_session_id === session.id
+        && task.completion_report_id) {
+        waiting.push({
+          what: "review",
+          ref_kind: "task",
+          ref_id: task.id,
+          about_id: task.completion_report_id,
+          by: task.reported_by ?? "unknown",
+          by_session_id: task.reported_by_session_id,
+          due: null,
+          at: task.reported_at ?? task.updated_at,
+          summary: task.title,
+        });
+      }
+    }
+    const challenges = this.noteChallenges(workspaceId);
+    const statuses = this.listProposalStatuses(workspaceId, { limit: 50 }).proposals;
+    for (const status of statuses) {
+      if (status.ai.closed || !["open", "challenged"].includes(status.ai.position)) continue;
+      if (!status.ai.awaiting_voice_ids.includes(myVoice)) continue;
+      // A standing challenge from this voice is already its answer.
+      if (challenges.some((challenge) => challenge.standing && challenge.target_report_id === status.proposal.id
+        && sameVoice(challenge.from_session_id))) continue;
+      waiting.push({
+        what: "voice",
+        ref_kind: "proposal",
+        ref_id: status.proposal.id,
+        about_id: null,
+        by: status.proposal.from_actor,
+        by_session_id: status.proposal.from_session_id,
+        due: status.terms.closes_at,
+        at: status.proposal.created_at,
+        summary: firstLine(status.proposal.body),
+      });
+    }
+    const obsoleted = this.activeObsoletionTargets(workspaceId);
+    const authorOf = new Map((this.db.query(`
+      SELECT id, from_session_id FROM reports WHERE workspace_id = ? AND id IN (
+        SELECT target_report_id FROM reports WHERE workspace_id = ? AND relation = 'challenges'
+      )
+    `).all(workspaceId, workspaceId) as Array<{ id: string; from_session_id: string | null }>)
+      .map((row) => [row.id, row.from_session_id]));
+    for (const challenge of challenges) {
+      if (!challenge.standing) continue;
+      if (authorOf.get(challenge.target_report_id) === session.id && challenge.from_session_id !== session.id) {
+        waiting.push({
+          what: "challenge",
+          ref_kind: "report",
+          ref_id: challenge.id,
+          about_id: challenge.target_report_id,
+          by: challenge.from_actor,
+          by_session_id: challenge.from_session_id,
+          due: null,
+          at: challenge.created_at,
+          summary: challenge.answered_by_another_voice
+            ? "A standing challenge on your report; another voice answered it, which does not lift it."
+            : "A standing challenge on your report.",
+        });
+      }
+      if (challenge.from_session_id === session.id) {
+        // A support of my challenge agrees with it; anything else aimed at it, or citing it, answers it.
+        const answers = this.db.query(`
+          SELECT DISTINCT r.id, r.from_actor, r.from_session_id, r.created_at, r.event_sequence FROM reports r
+          LEFT JOIN json_each(r.evidence_refs_json) ref
+          WHERE r.workspace_id = ? AND r.from_session_id IS NOT NULL AND r.from_session_id <> ?
+            AND ((r.target_report_id = ? AND r.relation <> 'supports') OR ref.value = ?)
+          ORDER BY r.event_sequence
+        `).all(workspaceId, session.id, challenge.id, `report:${challenge.id}`) as Array<{
+          id: string; from_actor: string; from_session_id: string; created_at: string;
+        }>;
+        for (const answer of answers) {
+          if (obsoleted.has(answer.id) || sameVoice(answer.from_session_id)) continue;
+          waiting.push({
+            what: "answer",
+            ref_kind: "report",
+            ref_id: answer.id,
+            about_id: challenge.id,
+            by: answer.from_actor,
+            by_session_id: answer.from_session_id,
+            due: null,
+            at: answer.created_at,
+            summary: "An answer to your standing challenge; only you can lift it.",
+          });
+        }
+      }
+    }
+    const decided = new Set((this.db.query(`
+      SELECT r.from_session_id, ref.value AS ref FROM reports r, json_each(r.evidence_refs_json) ref
+      WHERE r.workspace_id = ? AND r.kind = 'decision' AND ref.value LIKE 'report:%'
+    `).all(workspaceId) as Array<{ from_session_id: string | null; ref: string }>)
+      .filter((row) => sameVoice(row.from_session_id))
+      .map((row) => row.ref.slice("report:".length)));
+    for (const status of statuses) {
+      const mine = sameVoice(status.proposal.from_session_id);
+      if (!mine && !decided.has(status.proposal.id)) continue;
+      const latest = status.person.acts.at(-1);
+      if (!latest) continue;
+      const retired = status.ai.position === "withdrawn" || status.ai.position === "superseded";
+      const agreedBefore = status.person.acts.slice(0, -1).some((act) => act.act === "agree");
+      let what: NoteWaitingEntry["what"] | null = null;
+      if (latest.act === "reject" && agreedBefore) what = "stop";
+      else if (latest.act === "reject" && mine && !retired) what = "rejected";
+      else if (latest.act === "agree" && mine && status.may_proceed && !decided.has(status.proposal.id)) {
+        what = "record_decision";
+      }
+      if (!what) continue;
+      waiting.push({
+        what,
+        ref_kind: "proposal",
+        ref_id: status.proposal.id,
+        about_id: latest.id,
+        by: latest.basis,
+        by_session_id: latest.relayed_by_session_id,
+        due: what === "stop" ? "now" : null,
+        at: latest.created_at,
+        summary: firstLine(status.proposal.body),
+      });
+    }
+    return waiting;
+  }
+
   private timestamp(): string {
     return this.now().toISOString();
   }
@@ -7269,6 +8176,27 @@ function validateActor(value: string): string {
     throw new CollabError("invalid_actor", "Actor labels beginning with person: are reserved for the person desk");
   }
   return actor;
+}
+
+function derivedActor(prefix: string | undefined, sessionId: string): string {
+  if (prefix === undefined) {
+    throw new CollabError("actor_required", "Supply actor, or actor_prefix to derive one from the new session id");
+  }
+  if (typeof prefix !== "string" || !/^[a-z][a-z0-9-]{0,39}$/.test(prefix)) {
+    throw new CollabError("invalid_actor_prefix", "actor_prefix is 1 to 40 lower-case letters, digits or dashes");
+  }
+  // session_<uuid>: the first 6 hex digits of the uuid, as a handle shows them.
+  return validateActor(`${prefix}-${sessionId.slice("session_".length, "session_".length + 6)}`);
+}
+
+const MAX_MODEL_LABEL = 200;
+
+function validateModelLabel(value: string): string {
+  const model = cleanText(value, "model", MAX_MODEL_LABEL);
+  if (/[\u0000-\u001f\u007f]/.test(model)) {
+    throw new CollabError("invalid_model", "model must be one line of text");
+  }
+  return model;
 }
 
 function validateExpectedVersion(value: number): number {
@@ -7943,6 +8871,230 @@ interface ProposalReadContext {
   workspaceId: string;
   obsoleted: Set<string>;
   voices: Map<string, string>;
+}
+
+// ---------------------------------------------------------------------------
+// Collab Notes types and helpers (spec sections 5 and 8)
+
+/** The kinds a short handle names (spec 5): proposals and ballots are reports. */
+export type NoteEntityKind = "report" | "proposal" | "ballot" | "task";
+
+/** A coordination session as the notes surface shows it; every field but the id is self-declared or derived. */
+export interface NoteSessionView {
+  id: string;
+  workspace_id: string;
+  worktree_id: string;
+  actor: string;
+  role: string | null;
+  /** The latest purpose.declared, else the role. */
+  purpose: string | null;
+  model: string | null;
+  seat_ref: string | null;
+  voice_id: string;
+  parent_session_id: string | null;
+  status: "active" | "ended";
+  joined_at: string;
+  last_seen_at: string;
+  liveness: SessionLiveness;
+}
+
+export interface NotePurposeReceipt {
+  session_id: string;
+  purpose: string;
+  event_id: string;
+  sequence: number;
+  declared_at: string;
+}
+
+export type NoteWhyYou =
+  | "addressed"
+  | "reply_to_you"
+  | "about_your_proposal"
+  | "handoff_offered"
+  | "answer_to_your_handoff"
+  | "review_requested"
+  | "verdict_on_your_work"
+  | "your_lease_recovered"
+  | "voice_awaited"
+  | "person_act";
+
+/** One event as collab_inbox returns it, with the report, proposal or task it concerns. */
+export interface NoteEntry {
+  event: CollabEvent;
+  for_me: boolean;
+  why_you: NoteWhyYou | null;
+  report: CollabReport | null;
+  /** The report.posted payload carries the collab-note/1 marker, so its body is read as a note. */
+  marked: boolean;
+  /** The report is a consent/v1 proposal. */
+  termed: boolean;
+  to_person: boolean;
+  task: { id: string; title: string } | null;
+}
+
+export interface NoteChallengeView {
+  id: string;
+  target_report_id: string;
+  from_session_id: string | null;
+  from_actor: string;
+  created_at: string;
+  standing: boolean;
+  /** A `resolves` from another voice exists; on this view it lifts nothing. */
+  answered_by_another_voice: boolean;
+}
+
+export interface NoteWaitingEntry {
+  what: "review" | "voice" | "challenge" | "answer" | "stop" | "rejected" | "record_decision";
+  /** The entity the next call takes. */
+  ref_kind: "task" | "proposal" | "report";
+  ref_id: string;
+  /** The completion to review, the challenged report, your challenge, or the person act. */
+  about_id: string | null;
+  /** A session's name, or for a person act how it reached the journal. */
+  by: string;
+  by_session_id: string | null;
+  due: string | null;
+  at: string;
+  summary: string;
+}
+
+export interface NoteInboxData {
+  session: NoteSessionView;
+  sessions: NoteSessionView[];
+  entries: NoteEntry[];
+  also_new: number;
+  more: boolean;
+  mark: {
+    before: number;
+    through: number;
+    anchor: EventCursor;
+    initialised_from: "cursor" | null;
+    clamped: boolean;
+    written: boolean;
+  };
+  head_sequence: number;
+  waiting: NoteWaitingEntry[];
+  /** The store's clock when this was read. */
+  observed_at: string;
+}
+
+export interface NoteThreadData {
+  kind: "report" | "task";
+  session: NoteSessionView;
+  sessions: NoteSessionView[];
+  root: NoteEntry | null;
+  answers: NoteEntry[];
+  truncated: boolean;
+  task: Task | null;
+  reviews: TaskReview[];
+  challenges: NoteChallengeView[];
+  termed: boolean;
+  observed_at: string;
+}
+
+export interface NoteArrivalData {
+  session: NoteSessionView;
+  workspace: Workspace;
+  sessions: NoteSessionView[];
+  tasks: Task[];
+  claimable_task_ids: string[];
+  proposals: ProposalStatus[];
+  challenges: NoteChallengeView[];
+  report_count: number;
+  waiting: NoteWaitingEntry[];
+  observed_at: string;
+}
+
+interface NoteMarkState {
+  sequence: number;
+  initialised_from: "cursor" | null;
+  clamped: boolean;
+  stored: boolean;
+}
+
+interface NoteScannedEvent {
+  sequence: number;
+  type: CollabEventType;
+  own: boolean;
+  for_me: boolean;
+  shown_item_id: string | null;
+}
+
+/** spec 5.2: one inbox scan covers at most 2,000 events or 8 MiB. */
+export const NOTE_SCAN_MAX_EVENTS = 2_000;
+export const NOTE_SCAN_MAX_BYTES = 8 * 1024 * 1024;
+export const NOTE_INBOX_MAX_LIMIT = 50;
+/** A thread view lists at most this many answers, and says when it stopped. */
+export const NOTE_THREAD_MAX = 200;
+const NOTE_PURPOSE_MAX_CHARS = 200;
+/** spec 8.3: every new payload stays within 64 KiB of canonical UTF-8. */
+const NOTE_PAYLOAD_MAX_BYTES = 64 * 1024;
+
+/** The item an inbox delivery records (spec 8.1 note_shown): a proposal or a completion. */
+function noteShownItem(event: CollabEvent): string | null {
+  const payload = event.payload as Record<string, unknown>;
+  if (event.type === "proposal.opened") return event.entity_id;
+  if (event.type === "task.reported_complete" && typeof payload.completion_report_id === "string") {
+    return payload.completion_report_id;
+  }
+  return null;
+}
+
+function validateNotePurpose(value: string): string {
+  const purpose = cleanText(typeof value === "string" ? value : "", "purpose", NOTE_PURPOSE_MAX_CHARS);
+  if (/[\u0000-\u001f\u007f]/.test(purpose)) {
+    throw new CollabError("invalid_purpose", "purpose must be one line of text");
+  }
+  // bun:sqlite would not keep half a character as given, so the stored
+  // purpose and the returned one would differ.
+  if (hasLoneSurrogate(purpose)) {
+    throw new CollabError("invalid_purpose", "purpose must be well-formed Unicode text (it holds half of a character)");
+  }
+  return purpose;
+}
+
+/**
+ * spec 8.3: a new payload is at most 64 KiB of canonical UTF-8, holds no
+ * integer-like object key (JSON object order would differ between
+ * builds), no non-integer number and no undefined.
+ */
+function assertNotePayload(payload: Record<string, unknown>): void {
+  const visit = (value: unknown, path: string): void => {
+    if (value === undefined) throw new CollabError("invalid_payload", `${path} is undefined`);
+    if (typeof value === "number" && !Number.isSafeInteger(value)) {
+      throw new CollabError("invalid_payload", `${path} is not an integer`);
+    }
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => visit(item, `${path}[${index}]`));
+    } else if (value !== null && typeof value === "object") {
+      for (const [key, child] of Object.entries(value)) {
+        if (/^(0|[1-9]\d*)$/.test(key)) throw new CollabError("invalid_payload", `${path} has an integer-like key`);
+        visit(child, `${path}.${key}`);
+      }
+    }
+  };
+  visit(payload, "payload");
+  if (Buffer.byteLength(canonicalJson(payload), "utf8") > NOTE_PAYLOAD_MAX_BYTES) {
+    throw new CollabError("too_long", "The record exceeds 64 KiB", { field: "payload", max: NOTE_PAYLOAD_MAX_BYTES, unit: "bytes" });
+  }
+}
+
+/** A handle's hex as the start of a uuid (8-4-4-4-12), so it can bound a key range. */
+function uuidPrefix(hex: string): string {
+  const groups = [8, 4, 4, 4, 12];
+  let out = "";
+  let rest = hex;
+  for (const size of groups) {
+    if (!rest) break;
+    out += out ? `-${rest.slice(0, size)}` : rest.slice(0, size);
+    rest = rest.slice(size);
+  }
+  return out;
+}
+
+function firstLine(text: string): string {
+  const line = text.split("\n")[0] ?? "";
+  return line.length > 200 ? `${line.slice(0, 199)}…` : line;
 }
 
 const MAX_INBOX_SCAN = 500;

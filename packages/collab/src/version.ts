@@ -10,4 +10,4 @@
  * a bump here also needs a deliberate widening of that enum; its
  * boundaries.test.ts names the cause when they drift apart.
  */
-export const COLLAB_PACKAGE_VERSION = "0.5.1-dev.0" as const;
+export const COLLAB_PACKAGE_VERSION = "0.6.0-dev.0" as const;

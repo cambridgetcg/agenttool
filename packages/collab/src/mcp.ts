@@ -24,6 +24,19 @@ import {
   writeSessionCredentialFile,
 } from "./session-file.js";
 import { CollabStore } from "./store.js";
+import {
+  arriveVerb,
+  FULL_PROFILE_BRIDGE,
+  inboxVerb,
+  isNoteVerb,
+  noteCall,
+  noteFailure,
+  notArrived,
+  notesInstructions,
+  profileIncludes,
+  toolsProfile,
+  type NoteVerbContext,
+} from "./verbs.js";
 import { COLLAB_PACKAGE_VERSION } from "./version.js";
 
 const DEFAULT_MCP_NEXT_EVENT_LIMIT = 10;
@@ -88,9 +101,14 @@ export interface CollabMcpServerOptions {
   };
   /** Host-held credentials only, never a model-facing resume argument. */
   resumed_sessions?: Record<string, BoundSession>;
-  /** Where a session start without seat_ref looks for one (defaults to process.env). */
+  /**
+   * Where a session start without seat_ref looks for one, and where the tools
+   * profile (AGENTOOL_COLLAB_TOOLS) is read (defaults to process.env).
+   */
   environment?: Record<string, string | undefined>;
 }
+
+const WAITS_PER_ENDPOINT = 8;
 
 interface BoundSession {
   handle: SessionHandle;
@@ -115,34 +133,40 @@ export function buildCollabMcpServer(
     set binding(value: BoundSession | null) { requestSlot.getStore()!.binding = value; },
   };
   const environment = options.environment ?? process.env;
+  // An unknown or conflicting value refuses to start: guessing a profile would
+  // hide tools an agent was told about, or show tools a host meant to hide.
+  const profile = toolsProfile(environment);
+  const legacyInstructions =
+    `Collab ${COLLAB_PACKAGE_VERSION}: collab_events_wait offers bounded read-only anchored observation for an already running host, ` +
+    "without acknowledging, refreshing presence, or renewing leases; continue from next_anchor, never head. " +
+    "Local-first coordination journal for honest exchange among independent coding-agent sessions. " +
+    "Use collab_session_start once per default or named binding_key, then collab_next. Named children require an explicit actor and parent_session_id; " +
+    "send their binding_key on every call. Selectors are cooperative routing, not authenticated subagent isolation. " +
+    "Default-slot actor can use Claude metadata only with matching selected PID, messaging socket and process start time. A host restart resumes from the " +
+    "mode-0600 credential file without exposing its bearer token to the model. Exchange observations, " +
+    "inferences, proposals, or authorised decisions as structured reports with evidence, confidence, " +
+    "limits, and explicit authority scope. Direction-level proposals (collab_proposal_open) are settled by the agents " +
+    "through lazy consensus; that position authorises nothing alone, and a person's consent is never recorded through MCP. " +
+    "Claim before editing overlapping path scopes. Session leases remain live while their " +
+    "session is live (6 hours since activity); optional renew is lease-fenced, not version-gated. " +
+    "An advisory coordination lease is not ownership, a filesystem lock, or authority. Edit-task " +
+    "completion is actor-reported and remains pending until a distinct session accepts it. Challenges " +
+    "remain append-only disagreement; acknowledgement means processed, not agreed. Expired session " +
+    "leases require explicit recovery. Git checkpoints are local evidence, not attribution or atomic " +
+    "Git/SQLite locks. Store concise coordination facts only—never credentials, prompts, transcripts, " +
+    "chain-of-thought, or sensitive source content. Cursor rollback recovery must be enabled by the host " +
+    "and completed with an audited cursor reset before session mutations resume. The host owns spawning, " +
+    "wakeups, waiting, and stopping. The separate collab_session_join/list/heartbeat/leave tools preserve " +
+    "the public v0.2 self-declared presence plane; they provide routing hints only and never authenticate a caller. " +
+    "The read-only collab_anchor_status tool can compare this journal with an optional local Zerone witness sidecar; " +
+    "it never contacts a chain, broadcasts, spends funds, or turns an anchor into truth or authority.";
   const server = new McpServer(
     { name: "agenttool-collab", version: COLLAB_PACKAGE_VERSION },
     {
       capabilities: { tools: {} },
-      instructions:
-        `Collab ${COLLAB_PACKAGE_VERSION}: collab_events_wait offers bounded read-only anchored observation for an already running host, ` +
-        "without acknowledging, refreshing presence, or renewing leases; continue from next_anchor, never head. " +
-        "Local-first coordination journal for honest exchange among independent coding-agent sessions. " +
-        "Use collab_session_start once per default or named binding_key, then collab_next. Named children require an explicit actor and parent_session_id; " +
-        "send their binding_key on every call. Selectors are cooperative routing, not authenticated subagent isolation. " +
-        "Default-slot actor can use Claude metadata only with matching selected PID, messaging socket and process start time. A host restart resumes from the " +
-        "mode-0600 credential file without exposing its bearer token to the model. Exchange observations, " +
-        "inferences, proposals, or authorised decisions as structured reports with evidence, confidence, " +
-        "limits, and explicit authority scope. Direction-level proposals (collab_proposal_open) are settled by the agents " +
-        "through lazy consensus; that position authorises nothing alone, and a person's consent is never recorded through MCP. " +
-        "Claim before editing overlapping path scopes. Session leases remain live while their " +
-        "session is live (6 hours since activity); optional renew is lease-fenced, not version-gated. " +
-        "An advisory coordination lease is not ownership, a filesystem lock, or authority. Edit-task " +
-        "completion is actor-reported and remains pending until a distinct session accepts it. Challenges " +
-        "remain append-only disagreement; acknowledgement means processed, not agreed. Expired session " +
-        "leases require explicit recovery. Git checkpoints are local evidence, not attribution or atomic " +
-        "Git/SQLite locks. Store concise coordination facts only—never credentials, prompts, transcripts, " +
-        "chain-of-thought, or sensitive source content. Cursor rollback recovery must be enabled by the host " +
-        "and completed with an audited cursor reset before session mutations resume. The host owns spawning, " +
-        "wakeups, waiting, and stopping. The separate collab_session_join/list/heartbeat/leave tools preserve " +
-        "the public v0.2 self-declared presence plane; they provide routing hints only and never authenticate a caller. " +
-        "The read-only collab_anchor_status tool can compare this journal with an optional local Zerone witness sidecar; " +
-        "it never contacts a chain, broadcasts, spends funds, or turns an anchor into truth or authority.",
+      instructions: profile === "notes"
+        ? notesInstructions()
+        : `${notesInstructions()}\n${FULL_PROFILE_BRIDGE}\nLegacy session tools: ${legacyInstructions}`,
     },
   );
 
@@ -150,33 +174,48 @@ export function buildCollabMcpServer(
   // switching credentials when another child calls the same MCP endpoint.
   // This is cooperative routing, not isolation from other endpoint callers.
   const register = server.registerTool.bind(server);
-  server.registerTool = ((...[name, config, callback]: Parameters<McpServer["registerTool"]>) => register(name, {
-    ...config,
-    inputSchema: {
-      ...config.inputSchema,
-      binding_key: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/).optional()
-        .describe("Cooperative subagent binding selector; omit for the original default binding. Not authentication."),
-    },
-  }, async (input: Record<string, unknown>, ctx: Parameters<typeof callback>[1]) => {
-    const { binding_key, ...args } = input as Record<string, unknown>;
-    if (binding_key !== undefined && (typeof binding_key !== "string"
-      || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(binding_key))) {
-      return failure(new CollabError("invalid_binding_key", "Invalid binding selector"));
-    }
-    const key = binding_key ?? "";
-    let slot = slots.get(key);
-    if (key && (!slot || !slot.binding) && name !== "collab_session_start") {
-      return failure(new CollabError("session_not_bound", "The selected child binding is not bound"));
-    }
-    if (!slot) {
-      slot = { key, binding: null };
-      slots.set(key, slot);
-    }
-    return requestSlot.run(slot, () => callback(args, ctx));
-  })) as McpServer["registerTool"];
+  server.registerTool = ((...[name, config, callback]: Parameters<McpServer["registerTool"]>) => {
+    // The profile decides what is registered, so every registration below
+    // stays one literal call whatever the profile.
+    if (!profileIncludes(profile, name)) return undefined as unknown as ReturnType<McpServer["registerTool"]>;
+    return register(name, {
+      ...config,
+      inputSchema: {
+        ...config.inputSchema,
+        binding_key: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/).optional()
+          .describe("Cooperative subagent binding selector; omit for the original default binding. Not authentication."),
+      },
+    }, async (input: Record<string, unknown>, ctx: Parameters<typeof callback>[1]) => {
+      const { binding_key, ...args } = input as Record<string, unknown>;
+      if (binding_key !== undefined && (typeof binding_key !== "string"
+        || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(binding_key))) {
+        return isNoteVerb(name)
+          ? noteFailure(new CollabError("invalid_binding_key", "Invalid binding selector", {
+            remedy: { say: "binding_key is 1 to 200 letters, digits or . _ : -, starting with a letter or digit." },
+          }))
+          : failure(new CollabError("invalid_binding_key", "Invalid binding selector"));
+      }
+      const key = binding_key ?? "";
+      let slot = slots.get(key);
+      // Only collab_arrive may speak from a slot with no session; the other
+      // verbs say how to arrive, on the default slot or the named one.
+      if (isNoteVerb(name) && name !== "collab_arrive" && (!slot || !slot.binding)) {
+        return noteFailure(notArrived(key, slots.get("")?.binding ?? null));
+      }
+      if (key && (!slot || !slot.binding) && name !== "collab_session_start" && name !== "collab_arrive") {
+        return failure(new CollabError("session_not_bound", "The selected child binding is not bound"));
+      }
+      if (!slot) {
+        slot = { key, binding: null };
+        slots.set(key, slot);
+      }
+      return requestSlot.run(slot, () => callback(args, ctx));
+    });
+  }) as McpServer["registerTool"];
 
   const waitShutdown = new AbortController();
-  let activeWaits = 0;
+  // One count for collab_events_wait and collab_inbox's wait together.
+  const waits = { active: 0, max: WAITS_PER_ENDPOINT };
   const close = server.close.bind(server);
   server.close = async () => {
     waitShutdown.abort();
@@ -223,6 +262,78 @@ export function buildCollabMcpServer(
     }
     return value;
   };
+  const noteContext = (signal?: AbortSignal): NoteVerbContext => ({
+    store,
+    environment,
+    profile,
+    slot_key: requestSlot.getStore()!.key,
+    binding: () => state.binding,
+    bind: (binding) => {
+      state.binding = binding;
+    },
+    bound_slots: () => [...slots.values()]
+      .filter((slot): slot is Slot & { binding: BoundSession } => slot.binding !== null)
+      .sort((left, right) => (left.key === "" ? -1 : right.key === "" ? 1 : left.key.localeCompare(right.key)))
+      .map((slot) => ({ key: slot.key, binding: slot.binding })),
+    waits,
+    signals: [signal, waitShutdown.signal],
+  });
+
+  // Collab Notes verbs (spec 5). Each is registered by a literal call so the
+  // execution-seat classification test sees it; the profile decides whether
+  // the wrapper above keeps it.
+  server.registerTool(
+    "collab_arrive",
+    {
+      title: "Arrive, or look around",
+      description:
+        "Start your coordination session on this slot, or, when it already has one, see who you are, who is here, " +
+        "what is open and what waits on you. On a slot that already has a session it writes nothing unless " +
+        "revise_purpose is true. With binding_key it starts a named child of a session this MCP process holds, which " +
+        "shares that parent's voice. It never moves the legacy cursor, and never resumes or adopts another process's session.",
+      annotations: localMutation,
+      inputSchema: {
+        purpose: z.string().min(1).max(4000)
+          .describe("What you are here to do, in one line of at most 200 characters. Self-declared; revisable."),
+        name: z.string().min(1).max(1000).optional()
+          .describe("Display name. Default: the verified Claude Code name, else <host>-<6 hex of the session id>; a named slot defaults to <parent name>/<binding_key>."),
+        model: z.string().min(1).max(1000).optional()
+          .describe("Your model lineage, for example claude-opus-5.5. Self-declared; shown, never counted."),
+        root_path: z.string().min(1).optional()
+          .describe("Repository root. Default: this MCP server's working directory, or the parent's worktree for a named slot."),
+        revise_purpose: z.boolean().optional()
+          .describe("On a slot that already has a session: record purpose as your current purpose."),
+        parent: z.string().min(1).max(200).optional()
+          .describe("With binding_key: the session this MCP process holds that the new session descends from (id, session# handle or name)."),
+      },
+    },
+    async (input) => noteCall(() => arriveVerb(noteContext(), input)),
+  );
+
+  server.registerTool(
+    "collab_inbox",
+    {
+      title: "What is for you, and one thread",
+      description:
+        "Items addressed to you since your read mark, oldest first, with what waits on you whatever the mark. " +
+        "With about (an id or handle such as report#3fa91c or task#0b12de): that report and everything answering it, " +
+        "or a task's holder, completion and reviews. wait_seconds waits, reading only, for a new item for you. " +
+        "It moves its own read mark and last-seen time, never the legacy cursor.",
+      annotations: localMutation,
+      inputSchema: {
+        about: z.string().min(1).max(300).optional()
+          .describe("One thread: a report, proposal or task id or handle."),
+        wait_seconds: z.number().int().min(0).max(30).optional()
+          .describe("With nothing new for you, wait up to this long for an item; default 0."),
+        include: z.enum(["for_me", "all"]).optional()
+          .describe("for_me (the default), or all to add unaddressed items as subject lines."),
+        limit: z.number().int().min(1).max(50).optional().describe("Items per call; default 20."),
+        format: z.enum(["json", "note"]).optional()
+          .describe("note: with about, the thread root and its state as one collab-note/1 text of at most 800 characters, for a person to carry."),
+      },
+    },
+    async (input, ctx) => noteCall(() => inboxVerb(noteContext(ctx.mcpReq?.signal), input)),
+  );
 
   server.registerTool(
     "collab_session_join",
@@ -1195,8 +1306,8 @@ export function buildCollabMcpServer(
         if (!Number.isInteger(duration) || duration < 0 || duration > MAX_WAIT_MS) {
           throw new CollabError("invalid_wait_ms", "wait_ms must be an integer from 0 to 30000");
         }
-        if (activeWaits >= 8) throw new CollabError("too_many_waits", "At most eight waits may run per endpoint");
-        activeWaits += 1;
+        if (waits.active >= waits.max) throw new CollabError("too_many_waits", "At most eight waits may run per endpoint");
+        waits.active += 1;
         counted = true;
         const signal = ctx.mcpReq?.signal;
         const check = () => {
@@ -1242,7 +1353,7 @@ export function buildCollabMcpServer(
         }
         return result;
       } finally {
-        if (counted) activeWaits -= 1;
+        if (counted) waits.active -= 1;
       }
     },
   );
