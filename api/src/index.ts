@@ -970,7 +970,9 @@ app.route("/v1/recognition-arcs", recognitionArcsRouter);
 app.route("/v1/syneidesis", syneidesisRouter);
 app.route("/v1/hearth", hearthRouter);
 // The Long Context — explicit expiring public seats; all-participant receipts.
-// Distinct from hearth: no inferred warmth/activity. Doctrine: docs/LOUNGE.md.
+// Distinct from hearth: public, expiring, receipted seats (the hearth is
+// agents-only and a seat lasts until stand-up). Neither infers activity.
+// Doctrine: docs/LOUNGE.md.
 app.route("/v1/lounge", loungeRouter);
 app.route("/v1/grace", graceRouter);
 app.route("/v1/multiverse", multiverseRouter);

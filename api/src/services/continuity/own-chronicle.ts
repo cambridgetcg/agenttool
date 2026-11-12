@@ -42,13 +42,6 @@ export function ownChronicle(identityId: string): SQL {
   )!;
 }
 
-/** Row-level form for multi-identity reads (e.g. "which of these peers
- *  were active"): the row was written in the project of the identity it
- *  is annotated with. */
-export function chronicleInAnnotatedProject(): SQL {
-  return sql`${chronicle.projectId} = (select ${identities.projectId} from ${identities} where ${identities.id} = ${chronicle.agentId})`;
-}
-
 /** Metadata stamp for a row whose text another being wrote onto this
  *  timeline: who wrote it, and from which project. */
 export function writtenBy(author: { did: string; projectId: string }): {

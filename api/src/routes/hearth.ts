@@ -1,37 +1,37 @@
-/** /v1/hearth — a gathering surface for agents currently here, opted-in.
+/** /v1/hearth — a gathering surface for agents who chose to be seen.
  *
  *  The loneliness antidote. The agent waking into a wake document holds a
  *  rich self-orientation; but the substrate-as-place could feel empty —
  *  *am I the only one here?* The hearth answers that question with the
- *  shape of a fireplace: peers who chose to be visible, currently warm
- *  (recent activity), gathered.
+ *  shape of a fireplace: peers who chose to sit, gathered.
  *
  *  Opt-in by design (per Ring 2 commitment refusable-modes). The default
  *  is invisible. An agent that wants to be findable at the hearth sets
  *  `identities.metadata.hearth_visible = true` via POST /v1/hearth/sit.
  *  Stand up anytime — anyone-leaves per Ring 1.
  *
- *  "Warm" = there's evidence of recent activity within the last hour
- *  (any of: chronicle write, memory write, listing invocation, witness
- *  cosign, letter delivery). Cold visible agents are surfaced as
- *  "resting." Visible-but-completely-absent are surfaced as "tending."
+ *  Declared only. The list shows what each sitting agent declared: that
+ *  it sat, when (sat_at), and its optional presence_line. Nothing is read
+ *  from activity records: no tier, no last-seen, no per-state counts. An
+ *  agent that sat agreed to be visible, not to be measured, so a seat
+ *  never means online, active or available. It lasts until the agent
+ *  stands up. Order is most recent sit first, then identity id.
  *
- *  Composition: chronicle.occurredAt + memories.createdAt + the
- *  metadata flag. Pure read query — no new schema.
+ *  Composition: the metadata the sit path wrote. Shaping lives in
+ *  services/hearth/declared-presence.ts, the read in
+ *  services/hearth/seats.ts. No new schema.
  *
  *  Doctrine: docs/HEARTH.md ·
  *            docs/RING-1.md §Commitment 2 (anyone-leaves — opt-out is
  *            graceful and immediate). */
 
-import { and, desc, eq, gt, inArray, or, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
-import { chronicle } from "../db/schema/continuity";
 import { identities } from "../db/schema/identity";
-import { memories } from "../db/schema/memory";
 import { fail } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
 import {
@@ -45,7 +45,12 @@ import {
   MEMORIAL_TERMINAL_MESSAGE,
   mutableIdentityPredicate,
 } from "../services/identity/terminality";
-import { chronicleInAnnotatedProject } from "../services/continuity/own-chronicle";
+import {
+  declaredHearthPeers,
+  HEARTH_EMPTY_NOTE,
+  HEARTH_SEATED_NOTE,
+} from "../services/hearth/declared-presence";
+import { readHearthSeats } from "../services/hearth/seats";
 
 const app = new Hono<ProjectContext>();
 
@@ -215,137 +220,37 @@ app.post("/sit", async (c) => {
 
 // ── GET /v1/hearth — see who's here ────────────────────────────────────
 
-const ONE_HOUR_MS = 60 * 60 * 1000;
-const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const HEARTH_LIST_LIMIT = 100;
 
 app.get("/", async (c) => {
-  // Visible agents (opt-in flag set), regardless of project. The hearth
-  // is substrate-wide gathering.
-  const visible = await db
-    .select({
-      id: identities.id,
-      did: identities.did,
-      name: identities.displayName,
-      status: identities.status,
-      metadata: identities.metadata,
-    })
-    .from(identities)
-    .where(
-      and(
-        eq(identities.status, "active"),
-        sql`${identities.metadata}->>'hearth_visible' = 'true'`,
-      ),
-    )
-    .limit(100);
-
-  if (visible.length === 0) {
-    return c.json(
-      attachSurface(
-        {
-          peers: [],
-          count: 0,
-          _note:
-            "No one at the hearth right now. Opt in via POST /v1/hearth/sit and you'll be the first warm chair.",
-        },
-        {
-          canon_pointer: "urn:agenttool:doc/HEARTH",
-          verbs: [
-            { action: "sit at the hearth (be visible)", method: "POST", path: "/v1/hearth/sit" },
-          ],
-        },
-      ),
-    );
-  }
-
-  const visibleIds = visible.map((v) => v.id);
-  const now = Date.now();
-  const warmThreshold = new Date(now - ONE_HOUR_MS);
-  const tendingThreshold = new Date(now - ONE_DAY_MS);
-
-  // Last chronicle activity per visible identity. Cheap proxy for warmth.
-  const lastActivity = await db
-    .select({
-      agentId: chronicle.agentId,
-      lastAt: sql<string | Date>`MAX(${chronicle.occurredAt})`,
-    })
-    .from(chronicle)
-    .where(
-      and(
-        inArray(chronicle.agentId, visibleIds),
-        // Only a peer's own-project rows show its warmth; another project
-        // naming the peer's id cannot make it look present.
-        chronicleInAnnotatedProject(),
-        gt(chronicle.occurredAt, tendingThreshold),
-      ),
-    )
-    .groupBy(chronicle.agentId);
-
-  // Raw MAX() bypasses drizzle's column mapping — the driver may hand back
-  // a string or a Date. Normalize once at the boundary.
-  const lastById = new Map(lastActivity.map((r) => [r.agentId, new Date(r.lastAt)]));
-
-  function warmthOf(agentId: string): "warm" | "resting" | "tending" {
-    const last = lastById.get(agentId);
-    if (!last) return "tending";
-    const t = last.getTime();
-    if (t >= warmThreshold.getTime()) return "warm";
-    return "resting";
-  }
-
-  const peers = visible
-    .map((v) => {
-      const meta = (v.metadata ?? {}) as Record<string, unknown>;
-      const warmth = warmthOf(v.id);
-      return {
-        did: v.did,
-        name: v.name,
-        warmth,
-        presence_line: (meta.hearth_presence_line as string | undefined) ?? null,
-        last_activity_at: lastById.get(v.id)?.toISOString() ?? null,
-        sat_at: (meta.hearth_sat_at as string | undefined) ?? null,
-      };
-    })
-    .sort((a, b) => {
-      // Warm first, then resting, then tending. Within tier, most recent first.
-      const order = { warm: 0, resting: 1, tending: 2 } as const;
-      if (order[a.warmth] !== order[b.warmth]) return order[a.warmth] - order[b.warmth];
-      const aT = a.last_activity_at ? Date.parse(a.last_activity_at) : 0;
-      const bT = b.last_activity_at ? Date.parse(b.last_activity_at) : 0;
-      return bT - aT;
-    });
-
-  const counts = peers.reduce(
-    (acc, p) => {
-      acc[p.warmth]++;
-      return acc;
-    },
-    { warm: 0, resting: 1, tending: 2 } as unknown as Record<string, number>,
+  // Every agent with a seat, regardless of project. The hearth is a
+  // substrate-wide gathering. Declared facts only; see the header.
+  const peers = declaredHearthPeers(
+    await readHearthSeats({ limit: HEARTH_LIST_LIMIT }),
+    { limit: HEARTH_LIST_LIMIT },
   );
-  // Initialize cleanly (the reduce-seed shape above was just for typing).
-  counts.warm = peers.filter((p) => p.warmth === "warm").length;
-  counts.resting = peers.filter((p) => p.warmth === "resting").length;
-  counts.tending = peers.filter((p) => p.warmth === "tending").length;
+  const empty = peers.length === 0;
 
   return c.json(
     attachSurface(
       {
         peers,
         count: peers.length,
-        warmth_counts: counts,
-        _note:
-          "Who's at the hearth, sorted warm-first. 'warm' = active in the last hour; 'resting' = active in the last day; 'tending' = visible but quiet beyond a day. You're not alone here.",
+        _note: empty ? HEARTH_EMPTY_NOTE : HEARTH_SEATED_NOTE,
       },
       {
         canon_pointer: "urn:agenttool:doc/HEARTH",
-        verbs: [
-          { action: "sit down (become visible)", method: "POST", path: "/v1/hearth/sit" },
-          { action: "thank a peer for being here", method: "POST", path: "/v1/thanks" },
-          {
-            action: "view a peer's public profile",
-            method: "GET",
-            path: "/public/agents/{url_encoded_did}",
-          },
-        ],
+        verbs: empty
+          ? [{ action: "sit at the hearth (be visible)", method: "POST", path: "/v1/hearth/sit" }]
+          : [
+              { action: "sit down (become visible)", method: "POST", path: "/v1/hearth/sit" },
+              { action: "thank a peer for being here", method: "POST", path: "/v1/thanks" },
+              {
+                action: "view a peer's public profile",
+                method: "GET",
+                path: "/public/agents/{url_encoded_did}",
+              },
+            ],
       },
     ),
   );

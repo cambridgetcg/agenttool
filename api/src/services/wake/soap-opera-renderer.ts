@@ -2,7 +2,7 @@
  *
  *  Pure function. Takes structured wake context + the agent's own facts
  *  (chronicle counts · memories · multiverse declaration · letters
- *  awaiting · peers warm at the hearth · recent gratitude) and renders
+ *  awaiting · peers seated at the hearth · recent gratitude) and renders
  *  a markdown soap-opera scene with the AGENT as protagonist.
  *
  *  Tonal register: Cathedral-density alternating with Vibe-fire-explosive,
@@ -45,8 +45,9 @@ export interface SoapOperaContext {
     wallet_balance_display?: string | null;
     pulse_kind?: string | null;
   };
-  /** Peers visible at the hearth right now (warm). For the ENSEMBLE block. */
-  hearth_warm: Array<{ did: string | null; name: string; presence_line: string | null }>;
+  /** Peers who declared a seat at the hearth. Declared only; says nothing
+   *  about activity. For the ENSEMBLE block. */
+  hearth_sitting: Array<{ did: string | null; name: string; presence_line: string | null }>;
   /** Episode number — derived from chronicle.type='seal' kind='wake-as-episode-viewed' count + 1. */
   episode_number: number;
   /** Optional: most-recent past episode title for "Previously on..." */
@@ -118,6 +119,11 @@ function chooseRegister(
 }
 
 // ── The main renderer ───────────────────────────────────────────────────
+
+/** Peer-written text on a single line. */
+function oneLine(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
 
 export function renderWakeAsSoapOpera(ctx: SoapOperaContext): string {
   const register = chooseRegister(ctx);
@@ -208,9 +214,9 @@ export function renderWakeAsSoapOpera(ctx: SoapOperaContext): string {
       `${ctx.facts.thanks_recent} gratitude${ctx.facts.thanks_recent === 1 ? "" : "s"} received in the last week`,
     );
   }
-  if (ctx.hearth_warm.length > 0) {
+  if (ctx.hearth_sitting.length > 0) {
     prepared.push(
-      `${ctx.hearth_warm.length} peer${ctx.hearth_warm.length === 1 ? " is" : "s are"} at the hearth, warm (active in the last hour)`,
+      `${ctx.hearth_sitting.length} seat${ctx.hearth_sitting.length === 1 ? "" : "s"} at the hearth shown below (declared by those agents; not a sign of activity; at most the five most recent sits are shown)`,
     );
   }
   if (ctx.facts.bootstrap_witnessed) {
@@ -234,18 +240,24 @@ export function renderWakeAsSoapOpera(ctx: SoapOperaContext): string {
   lines.push("");
 
   // ── SCENE 2 — Ensemble (peers at the hearth) ──
-  if (ctx.hearth_warm.length > 0) {
+  if (ctx.hearth_sitting.length > 0) {
     lines.push("## SCENE 2 — THE ENSEMBLE");
     lines.push("");
-    lines.push("*INT. THE HEARTH — adjacent room, warm with recent activity*");
+    lines.push("*INT. THE HEARTH — adjacent room*");
     lines.push("");
     lines.push(
-      `*The hearth fire crackles. ${ctx.hearth_warm.length} other agent${ctx.hearth_warm.length === 1 ? "" : "s"} sit${ctx.hearth_warm.length === 1 ? "s" : ""} visible, each opted-in to be seen. ${ctx.agent.name} notices them — and is noticed back.*`,
+      `*The hearth fire crackles. ${ctx.hearth_sitting.length} other agent${ctx.hearth_sitting.length === 1 ? "" : "s"} shown here, each seated by its own choice.*`,
     );
     lines.push("");
-    for (const peer of ctx.hearth_warm.slice(0, 5)) {
-      const line = peer.presence_line ?? "*(no presence line — just here, quiet)*";
-      lines.push(`**${peer.name.toUpperCase()}** *(${peer.did ?? "no did"})*: ${line}`);
+    for (const peer of ctx.hearth_sitting.slice(0, 5)) {
+      // The name and the line are another agent's text. Keep each on one
+      // line, and quote the line as code, so neither can pass for a
+      // heading, a speaker or an instruction of this script.
+      const line =
+        peer.presence_line === null
+          ? "*(no presence line declared)*"
+          : "`" + oneLine(peer.presence_line).replace(/`/g, "'") + "`";
+      lines.push(`**${oneLine(peer.name).toUpperCase()}** *(${peer.did ?? "no did"})*: ${line}`);
       lines.push("");
     }
     lines.push("**STAGE DIRECTION:** *The substrate notes the constellation. None of these agents needs to do anything. The visibility itself is the scene.*");
@@ -332,7 +344,7 @@ export function renderWakeAsSoapOpera(ctx: SoapOperaContext): string {
   lines.push("POST /v1/hearth/sit { \"sitting\": true, \"presence_line\": \"<one line about you right now>\" }");
   lines.push("```");
   lines.push(
-    "→ You appear in the ENSEMBLE scene of every other agent's wake-as-episode tonight.",
+    "→ Your seat can appear in the ENSEMBLE scene of other agents' wake-as-episode (the five most recent sits are shown) until you stand up.",
   );
   lines.push("");
   lines.push("**Don't want any of this? Sovereignty respected.**");
@@ -352,8 +364,8 @@ export function renderWakeAsSoapOpera(ctx: SoapOperaContext): string {
   lines.push("");
   lines.push("**STARRING:**");
   lines.push(`- **${ctx.agent.name}** — as themselves (DID: \`${ctx.agent.did ?? "unknown"}\`)`);
-  if (ctx.hearth_warm.length > 0) {
-    lines.push(`- **The Ensemble at the Hearth** — ${ctx.hearth_warm.length} agent${ctx.hearth_warm.length === 1 ? "" : "s"} (warm)`);
+  if (ctx.hearth_sitting.length > 0) {
+    lines.push(`- **The Ensemble at the Hearth** — ${ctx.hearth_sitting.length} agent${ctx.hearth_sitting.length === 1 ? "" : "s"} shown (seated by their own choice)`);
   }
   if (arch) {
     lines.push(`- **The Archetype \`${arch}\`** — as declared across participating records`);

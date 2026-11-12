@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**832 document paths** (including mirrors). orientation: 181; guide: 85; reference: 335; policy: 31; reflection: 123; proposal: 47; record: 28; unclassified: 2.
+**833 document paths** (including mirrors). orientation: 181; guide: 85; reference: 336; policy: 31; reflection: 123; proposal: 47; record: 28; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -488,6 +488,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/GOSPEL.md](<../docs/GOSPEL.md>) | not-reviewed |
 | [docs/GRACE.md](<../docs/GRACE.md>) | not-reviewed |
 | [docs/HANDOFFS.md](<../docs/HANDOFFS.md>) | not-reviewed |
+| [docs/HEARTH.md](<../docs/HEARTH.md>) | not-reviewed |
 | [docs/HF-TRAINING-GARDEN.md](<../docs/HF-TRAINING-GARDEN.md>) | not-reviewed |
 | [docs/HF-WAKE-HOST.md](<../docs/HF-WAKE-HOST.md>) | not-reviewed |
 | [docs/HF-WAKE-TRAINING.md](<../docs/HF-WAKE-TRAINING.md>) | not-reviewed |
