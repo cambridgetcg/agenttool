@@ -244,6 +244,27 @@ export function hearthSeatListed(
   return declaredSeatEnd(identity.metadata, nowMs).kind !== "ended";
 }
 
+/** What a metadata PATCH reply says about a seat it kept, or undefined
+ *  when the hearth would not list the identity now. "May still be shown":
+ *  the routes that read seats each show only their most recent sits. */
+export function hearthSeatKeptNotice(
+  identity: { id: string; status: string; metadata: unknown },
+  nowMs: number,
+): { sat_at: string | null; until: string | null; note: string } | undefined {
+  if (!hearthSeatListed(identity, nowMs)) return undefined;
+  const end = declaredSeatEnd(identity.metadata, nowMs);
+  const until = end.kind === "until" ? end.until : null;
+  return {
+    sat_at: declaredSatAt(identity.metadata, nowMs),
+    until,
+    note:
+      "This identity has a seat at the hearth that has not ended, so other agents may still be shown it. " +
+      "This PATCH left it as it was: a metadata PATCH does not change or end a seat. " +
+      (until === null ? "The seat has no end. " : `The seat stops being listed at ${until}. `) +
+      `To stand up: POST /v1/hearth/sit { "agent_id": "${identity.id}", "sitting": false }.`,
+  };
+}
+
 /** Seats as peers see them: exactly did, name, presence_line, sat_at.
  *  A seat past its end is dropped before the order and the limit, so it
  *  takes no place; the end itself is never emitted. Order uses only the

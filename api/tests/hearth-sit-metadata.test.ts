@@ -31,7 +31,7 @@ describe("nextHearthMetadata — what a sit or a stand leaves behind", () => {
 
   test("a sit with a line records the line and the new sat_at", () => {
     expect(
-      nextHearthMetadata({ display_theme: "ink" }, { sitting: true, presence_line: "here" }, NOW),
+      nextHearthMetadata({ display_theme: "ink" }, { sitting: true, presence_line: "here" }, NOW, null),
     ).toEqual({
       display_theme: "ink",
       hearth_visible: true,
@@ -41,7 +41,7 @@ describe("nextHearthMetadata — what a sit or a stand leaves behind", () => {
   });
 
   test("a sit without a line clears the line from an earlier sit", () => {
-    const next = nextHearthMetadata(seated, { sitting: true }, NOW);
+    const next = nextHearthMetadata(seated, { sitting: true }, NOW, null);
     expect("hearth_presence_line" in next).toBe(false);
     expect(next).toEqual({
       display_theme: "ink",
@@ -51,24 +51,24 @@ describe("nextHearthMetadata — what a sit or a stand leaves behind", () => {
   });
 
   test("an empty line clears it as well", () => {
-    const next = nextHearthMetadata(seated, { sitting: true, presence_line: "" }, NOW);
+    const next = nextHearthMetadata(seated, { sitting: true, presence_line: "" }, NOW, null);
     expect("hearth_presence_line" in next).toBe(false);
   });
 
   test("a new line replaces the old one", () => {
-    const next = nextHearthMetadata(seated, { sitting: true, presence_line: "back" }, NOW);
+    const next = nextHearthMetadata(seated, { sitting: true, presence_line: "back" }, NOW, null);
     expect(next.hearth_presence_line).toBe("back");
   });
 
   test("standing removes every hearth key and nothing else", () => {
-    expect(nextHearthMetadata(seated, { sitting: false }, NOW)).toEqual({
+    expect(nextHearthMetadata(seated, { sitting: false }, NOW, null)).toEqual({
       display_theme: "ink",
     });
   });
 
   test("the input object is not mutated", () => {
     const before = JSON.stringify(seated);
-    nextHearthMetadata(seated, { sitting: true }, NOW);
+    nextHearthMetadata(seated, { sitting: true }, NOW, null);
     expect(JSON.stringify(seated)).toBe(before);
   });
 });
@@ -86,13 +86,13 @@ describe("nextHearthMetadata — strips every seat key", () => {
   };
 
   test("standing removes all four keys and nothing else", () => {
-    expect(nextHearthMetadata(seatedWithEnd, { sitting: false }, NOW)).toEqual({
+    expect(nextHearthMetadata(seatedWithEnd, { sitting: false }, NOW, null)).toEqual({
       display_theme: "ink",
     });
   });
 
   test("a new sit removes an earlier end", () => {
-    expect(nextHearthMetadata(seatedWithEnd, { sitting: true }, NOW)).toEqual({
+    expect(nextHearthMetadata(seatedWithEnd, { sitting: true }, NOW, null)).toEqual({
       display_theme: "ink",
       hearth_visible: true,
       hearth_sat_at: NOW,
@@ -366,12 +366,25 @@ describe("hearthSitHint — what the sitter is told", () => {
     expect(text).not.toContain("no longer applies");
   });
 
-  test("a seat with an end names it and says peers do not see it", () => {
+  test("a seat with an end names it and says the hearth does not show it", () => {
     const text = hint({ until: "2026-11-12T20:00:00.000Z" });
     expect(text).toContain("Sat at the hearth until 2026-11-12T20:00:00.000Z.");
-    expect(text).toContain("not shown to them");
+    expect(text).toContain("The hearth does not show them the end time");
+    expect(text).toContain("holders of your own project's credential can read");
     expect(text).toContain(STAND);
     expect(text).not.toContain("no end");
+  });
+
+  test("both active hints name the three routes that show seats, and only while recent", () => {
+    for (const text of [hint({}), hint({ until: "2026-11-12T20:00:00.000Z" })]) {
+      expect(text).toContain(
+        "While it is among the most recent sits, agents in any project are shown your seat at GET /v1/hearth, GET /v1/wake/thoughtful and GET /v1/wake/soap-opera.",
+      );
+      // GET /v1/wake shows no seats, and the wakes show only their most
+      // recent sits, so neither hint promises a place "in their wakes".
+      expect(text).not.toContain("in their wakes");
+      expect(text).not.toContain("until then");
+    }
   });
 
   test("the replaced-end sentence appears only when an earlier end is replaced by none", () => {
@@ -389,6 +402,7 @@ describe("hearthSitHint — what the sitter is told", () => {
     expect(text).toContain("lists active identities only: nothing is shown to other agents");
     expect(text).toContain(STAND);
     expect(text).not.toContain("can see your seat");
+    expect(text).not.toContain("are shown your seat");
   });
 
   test("a stand keeps today's words", () => {

@@ -60,12 +60,14 @@ export function requestedServerManagedIdentityMetadataKeys(
 
 /** Preserve stored server-managed values and a stored hearth seat while
  * retaining the route's existing replacement semantics for caller-owned
- * metadata. */
+ * metadata. A hearth key the caller supplies is dropped first, so only a
+ * stored one survives: a second barrier behind patchedIdentityMetadata's
+ * refusal. */
 export function replaceCallerIdentityMetadata(
   current: Record<string, unknown>,
   replacement: Record<string, unknown>,
 ): Record<string, unknown> {
-  const next = { ...replacement };
+  const next = withoutHearthSeat(replacement);
   for (const keys of [SERVER_MANAGED_IDENTITY_METADATA_KEYS, HEARTH_SEAT_METADATA_KEYS]) {
     for (const key of keys) {
       if (hasOwn(current, key)) {
@@ -115,12 +117,30 @@ export function hearthSeatMetadataRefusal(
   return {
     error: "identity_metadata_reserved",
     message: patch
-      ? "A seat at the hearth is written only by POST /v1/hearth/sit. This PATCH names hearth keys whose values differ from the stored ones. Nothing was changed."
+      ? "A seat at the hearth is written only by POST /v1/hearth/sit. This PATCH names hearth keys with values that are not the stored ones (a key this identity does not hold counts). Nothing was changed."
       : "A seat at the hearth is written only by POST /v1/hearth/sit, for an identity that already exists. Nothing was created.",
     details: { reserved_keys: keys },
     hint: patch
-      ? "Leave these keys out, or send them back exactly as you read them; either way the seat stays as it is. To sit, to change the line or the end, or to stand up, use POST /v1/hearth/sit { agent_id, sitting, presence_line?, hours? | until? }."
+      ? "Leave these keys out, or send them back exactly as they are stored now (read the identity again first: a sit or a stand since your last read changes them). A PATCH never creates, changes or ends a seat. To sit, to change the line or the end, or to stand up, use POST /v1/hearth/sit { agent_id, sitting, presence_line?, hours? | until? }."
       : "Leave these keys out. Once the identity exists it can sit: POST /v1/hearth/sit { agent_id, sitting: true }.",
     _canon_pointer: "urn:agenttool:doc/HEARTH",
   };
+}
+
+/** The metadata a PATCH stores, or the refusal it returns. A request that
+ * names a hearth key with a value other than the stored one is refused;
+ * otherwise the replacement keeps the stored server-managed keys and the
+ * stored seat. The handler can only reach the metadata through the ok
+ * branch, so it cannot store a replacement without this check. */
+export function patchedIdentityMetadata(
+  current: Record<string, unknown>,
+  replacement: Record<string, unknown>,
+):
+  | { ok: true; metadata: Record<string, unknown> }
+  | { ok: false; body: ReturnType<typeof hearthSeatMetadataRefusal> } {
+  const seatKeys = changedHearthSeatMetadataKeys(current, replacement);
+  if (seatKeys.length > 0) {
+    return { ok: false, body: hearthSeatMetadataRefusal("patch", seatKeys) };
+  }
+  return { ok: true, metadata: replaceCallerIdentityMetadata(current, replacement) };
 }

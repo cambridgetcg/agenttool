@@ -24,6 +24,7 @@ import {
   HEARTH_SAT_AT_SKEW_MS,
   HEARTH_SEATED_NOTE,
   hearthSeatFilter,
+  hearthSeatKeptNotice,
   hearthSeatListed,
   hearthSeatNotEnded,
   hearthSeatOrder,
@@ -267,6 +268,61 @@ describe("hearthSeatListed — whether the hearth lists an identity now", () => 
   });
 });
 
+describe("hearthSeatKeptNotice — what a metadata PATCH reply says about a kept seat", () => {
+  const ID = "6f1d0c52-9a7e-4a53-8f0b-2f4f6f7f0a11";
+  const SAT_AT = "2026-11-10T08:00:00.000Z";
+  const STAND = `To stand up: POST /v1/hearth/sit { "agent_id": "${ID}", "sitting": false }.`;
+  const notice = (metadata: unknown, status = "active") =>
+    hearthSeatKeptNotice({ id: ID, status, metadata }, NOW);
+
+  test("an open seat: no end, and the stand call with this identity's id", () => {
+    const kept = notice({ display_theme: "ink", hearth_visible: true, hearth_sat_at: SAT_AT });
+    expect(kept).toEqual({
+      sat_at: SAT_AT,
+      until: null,
+      note:
+        "This identity has a seat at the hearth that has not ended, so other agents may still be shown it. " +
+        "This PATCH left it as it was: a metadata PATCH does not change or end a seat. " +
+        "The seat has no end. " +
+        STAND,
+    });
+  });
+
+  test("a bounded seat: until is the stored end, and the note names it", () => {
+    const end = new Date(NOW + 3_600_000).toISOString();
+    const kept = notice({ hearth_visible: true, hearth_sat_at: SAT_AT, hearth_until: end });
+    expect(kept?.until).toBe(end);
+    expect(kept?.sat_at).toBe(SAT_AT);
+    expect(kept?.note).toContain(`The seat stops being listed at ${end}. `);
+    expect(kept?.note).not.toContain("The seat has no end.");
+    expect(kept?.note).toEndWith(STAND);
+  });
+
+  test("no notice when the hearth would not list the identity now", () => {
+    const seat = { hearth_visible: true, hearth_sat_at: SAT_AT };
+    for (const [label, metadata, status] of [
+      ["lapsed end", { ...seat, hearth_until: new Date(NOW).toISOString() }, "active"],
+      ["malformed end", { ...seat, hearth_until: "soon" }, "active"],
+      ["JSON null end", { ...seat, hearth_until: null }, "active"],
+      ["revoked status", seat, "revoked"],
+      ["memorial status", seat, "memorial"],
+      ["no flag", { hearth_sat_at: SAT_AT }, "active"],
+      ["flag false", { ...seat, hearth_visible: false }, "active"],
+      ["no metadata", null, "active"],
+    ] as const) {
+      expect({ label, kept: notice(metadata, status) }).toEqual({ label, kept: undefined });
+    }
+  });
+
+  test("a sat_at the sit route could not have written is null, and the notice is still sent", () => {
+    const kept = notice({ hearth_visible: true, hearth_sat_at: "yesterday" });
+    expect(kept).toBeDefined();
+    expect(kept?.sat_at).toBeNull();
+    expect(kept?.until).toBeNull();
+    expect(kept?.note).toContain("The seat has no end.");
+  });
+});
+
 describe("what every reader is told", () => {
   test("the note states order, lifetime and that a seat is not liveness", () => {
     expect(HEARTH_SEATED_NOTE).toContain("most recent sit first");
@@ -288,11 +344,13 @@ describe("the seat query", () => {
   const NOW_ISO = new Date(NOW).toISOString();
 
   test("filters on the declared flag, active status and an end not passed, against one bound clock", () => {
+    // The whole predicate, so a changed join (an `or` for an `and`) fails.
+    const M = `"identity"."identities"."metadata"`;
+    const notEnded = `(${M}->'hearth_until' is null or (${M}->>'hearth_until' ~ '${HEARTH_INSTANT_SHAPE}' and ${M}->>'hearth_until' > $2))`;
     const all = dialect.sqlToQuery(hearthSeatFilter({ nowMs: NOW }));
-    expect(all.sql).toContain("->>'hearth_visible' = 'true'");
-    expect(all.sql).toContain("->'hearth_until' is null or (");
-    expect(all.sql).toContain(`->>'hearth_until' ~ '${HEARTH_INSTANT_SHAPE}'`);
-    expect(all.sql).toContain("->>'hearth_until' > $2");
+    expect(all.sql).toBe(
+      `("identity"."identities"."status" = $1 and ${M}->>'hearth_visible' = 'true' and ${notEnded})`,
+    );
     expect(all.params).toEqual(["active", NOW_ISO]);
     // Stored text is compared as text: nothing is cast, and the clock is
     // the caller's, not the database's.
@@ -303,7 +361,9 @@ describe("the seat query", () => {
     const others = dialect.sqlToQuery(
       hearthSeatFilter({ nowMs: NOW, excludeId: "11111111-1111-4111-8111-111111111111" }),
     );
-    expect(others.sql).toContain("<>");
+    expect(others.sql).toBe(
+      `("identity"."identities"."status" = $1 and ${M}->>'hearth_visible' = 'true' and ${notEnded} and "identity"."identities"."id" <> $3)`,
+    );
     expect(others.params).toEqual(["active", NOW_ISO, "11111111-1111-4111-8111-111111111111"]);
   });
 
@@ -372,16 +432,25 @@ describe("source: one read, no inference left behind", () => {
   });
 
   test("all three routes use the shared read and none filters seats itself", () => {
+    // Each route takes its list from the shared read and replies with it.
+    const uses: Record<string, [string, string]> = {
+      "routes/hearth.ts": ["const peers = await readHearthPeers(", "count: peers.length"],
+      "routes/thoughtful-wake.ts": ["const hearthSitting = await readHearthPeers(", "hearth_sitting: hearthSitting,"],
+      "routes/wake-soap-opera.ts": ["const hearthSitting = await readHearthPeers(", "hearth_sitting: hearthSitting,"],
+    };
+    expect(Object.keys(uses).sort()).toEqual([...ROUTES].sort());
     for (const file of ROUTES) {
       const source = read(file);
-      expect({ file, read: source.includes("readHearthPeers(") }).toEqual({ file, read: true });
+      const [assigned, replied] = uses[file]!;
+      expect({ file, assigned: source.includes(assigned) }).toEqual({ file, assigned: true });
+      expect({ file, replied: source.includes(replied) }).toEqual({ file, replied: true });
       expect({ file, ownFilter: source.includes("->>'hearth_visible'") }).toEqual({ file, ownFilter: false });
     }
-    // The read binds one clock into the filter and hands it to the shaping.
+    // The read binds one clock into the filter and hands the same reading
+    // to the shaping.
     const seats = read("services/hearth/seats.ts");
     expect(seats).toContain("hearthSeatFilter({ nowMs");
-    expect(seats).toContain("declaredHearthPeers(");
-    expect(seats).toContain("nowMs,");
+    expect(seats).toMatch(/declaredHearthPeers\(rows, \{[^}]*\bnowMs,/);
   });
 
   test("the hearth route keeps its mutation authority and imports no activity schema", () => {

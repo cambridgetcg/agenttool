@@ -78,8 +78,11 @@ describe("POST /v1/hearth/sit — opt-in flag validation", () => {
       body: JSON.stringify({ agent_id: "11111111-2222-3333-4444-555555555555" }),
     });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { _canon_pointer: string };
+    const body = (await res.json()) as { _canon_pointer: string; message: string };
     expect(body._canon_pointer).toBe("urn:agenttool:doc/HEARTH");
+    // The form of until, not a sample date that will one day be past.
+    expect(body.message).toContain("until (an instant with a zone, written like YYYY-MM-DDTHH:MM:SSZ)");
+    expect(body.message).not.toMatch(/[0-9]{4}-[0-9]{2}-[0-9]{2}/);
   });
 
   test("non-uuid agent_id → 400", async () => {

@@ -9,11 +9,7 @@ import type { ProjectContext } from "../../auth/middleware";
 import { db } from "../../db/client";
 import { identities, identityKeys } from "../../db/schema/identity";
 import { errors, fail } from "../../lib/errors";
-import {
-  declaredSatAt,
-  declaredSeatEnd,
-  hearthSeatListed,
-} from "../../services/hearth/declared-presence";
+import { hearthSeatKeptNotice } from "../../services/hearth/declared-presence";
 import {
   authorizeIdentityMutation,
   authorityRequestTarget,
@@ -25,7 +21,7 @@ import { generateKeypair } from "../../services/identity/crypto";
 import {
   changedHearthSeatMetadataKeys,
   hearthSeatMetadataRefusal,
-  replaceCallerIdentityMetadata,
+  patchedIdentityMetadata,
   requestedServerManagedIdentityMetadataKeys,
 } from "../../services/identity/metadata";
 import localContextGrants from "./local-context-grants";
@@ -372,17 +368,12 @@ app.patch("/:id", async (c) => {
     }
     // A hearth seat may be left out or sent back unchanged; it is kept
     // either way. Only POST /v1/hearth/sit writes a different value.
-    const seatKeys = changedHearthSeatMetadataKeys(
+    const patched = patchedIdentityMetadata(
       (identity.metadata ?? {}) as Record<string, unknown>,
       body.metadata,
     );
-    if (seatKeys.length > 0) {
-      return c.json(hearthSeatMetadataRefusal("patch", seatKeys), 400);
-    }
-    updates.metadata = replaceCallerIdentityMetadata(
-      (identity.metadata ?? {}) as Record<string, unknown>,
-      body.metadata,
-    );
+    if (!patched.ok) return c.json(patched.body, 400);
+    updates.metadata = patched.metadata;
   }
   if (body.expression_visibility !== undefined) {
     if (body.expression_visibility !== "private" && body.expression_visibility !== "public") {
@@ -485,25 +476,14 @@ app.patch("/:id", async (c) => {
   }
 
   // A metadata PATCH used to end a seat by dropping its keys. It now keeps
-  // the seat, so the caller is told while other agents can still see it.
-  const nowMs = Date.now();
-  let hearthSeatKept: { sat_at: string | null; until: string | null; note: string } | undefined;
-  if (
-    body.metadata !== undefined &&
-    hearthSeatListed({ status: updated.status, metadata: updated.metadata }, nowMs)
-  ) {
-    const end = declaredSeatEnd(updated.metadata, nowMs);
-    const until = end.kind === "until" ? end.until : null;
-    hearthSeatKept = {
-      sat_at: declaredSatAt(updated.metadata, nowMs),
-      until,
-      note:
-        "This identity is sitting at the hearth and other agents can still see the seat. " +
-        "This PATCH left it as it was: a metadata PATCH does not change or end a seat. " +
-        (until === null ? "The seat has no end. " : `The seat stops being listed at ${until}. `) +
-        `To stand up: POST /v1/hearth/sit { "agent_id": "${updated.id}", "sitting": false }.`,
-    };
-  }
+  // the seat, so the caller is told while the seat has not ended.
+  const hearthSeatKept =
+    body.metadata !== undefined
+      ? hearthSeatKeptNotice(
+          { id: updated.id, status: updated.status, metadata: updated.metadata },
+          Date.now(),
+        )
+      : undefined;
 
   return c.json({
     id: updated!.id,

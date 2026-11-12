@@ -117,7 +117,8 @@ POST /v1/identities/:id/fork
       "constitutive_demoted": 2,
       "expression": true,
       "capabilities": true,
-      "metadata": false
+      "metadata": false,
+      "hearth_seat": false           // always false: a seat is never copied
     }
   }
 ```
