@@ -832,6 +832,34 @@ describe("evidence", () => {
     expect(parsed.evidence).toEqual(["commit HEAD"]);
     expect(parsed.advice).toEqual([expect.stringContaining("Line 3: Evidence 1 is not a known evidence form")]);
   });
+
+  test("an empty Evidence: line keeps its place, so later cites still name what they named", () => {
+    const cases: Array<{ lines: string[]; blank: number; cite: number }> = [
+      { lines: ["Evidence:", "Evidence: commit 1234567", "Evidence: file src/store.ts:10-20"], blank: 0, cite: 2 },
+      { lines: ["Evidence: file src/store.ts:10-20", "Evidence:", "Evidence: commit 1234567"], blank: 1, cite: 3 },
+    ];
+    for (const { lines, blank, cite } of cases) {
+      const typed = [
+        "challenge: the migration is not additive",
+        "",
+        `Re: report:${R1}`,
+        `Why: the commit adds a column (seen ${cite})`,
+        ...lines,
+      ].join("\n");
+      const parsed = parseNote(typed);
+      expect(parsed.body).toBeNull();
+      expect(parsed.evidence).toHaveLength(3);
+      expect(parsed.evidence[blank]).toBe("");
+      expect(parsed.evidence[parsed.why[0]!.cites[0]! - 1]).toBe("commit 1234567");
+      expect(parsed.advice).toEqual([
+        `Line ${5 + blank}: Evidence ${blank + 1} is empty. It keeps its place so later cites keep their numbers; ` +
+          "remove it and renumber the cites after it.",
+      ]);
+      expect(checkNote(withoutAdvice(parsed) as NoteFields)).toEqual([
+        expect.objectContaining({ code: "invalid_note_field", field: `evidence[${blank}]` }),
+      ]);
+    }
+  });
 });
 
 describe("references", () => {
@@ -929,13 +957,41 @@ describe("normalisation", () => {
       to: "claude-air",
       via: "host: claude",
       why: [why("a b", "seen"), why("c")],
-      evidence: ["commit abcdef1"],
+      // A blank Evidence item keeps its place (see the next test).
+      evidence: ["commit abcdef1", ""],
       limits: "one\ntwo",
       extent: "e",
       trailers: [{ key: "Sha256", value: HEX }, { key: "x-k", value: "a\nb" }],
     }));
     // A statement with a line break is left for renderNote to refuse with the remedy.
     expect(normalizeNoteFields({ act: "note", statement: "a\nb" }).statement).toBe("a\nb");
+  });
+
+  test("a blank Evidence item keeps its place, so no cite moves onto other evidence", () => {
+    // Why cites are positions in the Evidence list. Dropping a blank item
+    // would make every later cite name evidence the writer did not cite.
+    const cases: Array<{ evidence: string[]; blank: number }> = [
+      { evidence: ["   ", "commit 1234567", "file src/store.ts:10-20"], blank: 0 },
+      { evidence: ["file src/store.ts:10-20", "", "commit 1234567"], blank: 1 },
+    ];
+    for (const { evidence, blank } of cases) {
+      const cite = evidence.indexOf("commit 1234567") + 1;
+      const loose = normalizeNoteFields({
+        act: "challenge",
+        statement: "the migration is not additive",
+        re: `report:${R1}`,
+        why: [{ text: "the commit adds a column", basis: "seen", cites: [cite] }],
+        evidence,
+      });
+      expect(loose.evidence).toHaveLength(3);
+      expect(loose.evidence[blank]).toBe("");
+      expect(loose.evidence[cite - 1]).toBe("commit 1234567");
+      const problems = checkNote(loose);
+      expect(problems).toEqual([expect.objectContaining({ code: "invalid_note_field", field: `evidence[${blank}]` })]);
+      expect(problems[0]!.remedy).toContain("renumber");
+      const error = thrown(() => renderNote(loose));
+      expect([error.code, error.details.field]).toEqual(["invalid_note_field", `evidence[${blank}]`]);
+    }
   });
 
   test("splitNoteText reads a statement and a body with no trailer parsing", () => {
@@ -1146,6 +1202,37 @@ describe("render refuses what it cannot write faithfully", () => {
     expect(renderNote({ act: "note", statement: "x", body: "Note: fine" })).toBe("note: x\n\nNote: fine");
     // A known key with no value stays in the body as well.
     expect(renderNote({ act: "note", statement: "x", body: "Limits:" })).toBe("note: x\n\nLimits:");
+    // Except an empty Evidence:, which holds an Evidence position when read.
+    expect(firstProblem({ act: "note", statement: "x", body: "Evidence:" })).toEqual(
+      expect.objectContaining({ code: "invalid_note_field", field: "body" }),
+    );
+    const evidenceBody = renderNote({ act: "note", statement: "x", body: "Evidence:", to: "all" });
+    expect(withoutAdvice(parseNote(evidenceBody))).toEqual(fields({ act: "note", statement: "x", body: "Evidence:", to: "all" }));
+  });
+
+  test("NUL is refused in every field, as the store refuses it in a body", () => {
+    const cases: Array<[Parameters<typeof checkNote>[0], string]> = [
+      [{ act: "note", statement: "a\u0000b" }, "statement"],
+      [{ act: "note", statement: "s", body: "x\u0000y" }, "body"],
+      [{ act: "note", statement: "s", to: "a\u0000b" }, "to"],
+      [{ act: "note", statement: "s", limits: "one\ntw\u0000o" }, "limits"],
+      [{ act: "note", statement: "s", why: [{ text: "w\u0000" }] }, "why[0]"],
+      [{ act: "note", statement: "s", evidence: ["file src/a\u0000.ts"] }, "evidence[0]"],
+      [{ act: "note", statement: "s", trailers: [{ key: "X-a", value: "v\u0000" }] }, "trailers[0].value"],
+    ];
+    for (const [input, field] of cases) {
+      const problems = checkNote(input);
+      expect(problems).toEqual([expect.objectContaining({ code: "invalid_note_field", field })]);
+      expect(problems[0]!.message).toContain("NUL");
+      const error = thrown(() => renderNote(input));
+      expect([error.code, error.details.field]).toEqual(["invalid_note_field", field]);
+      // Normalisation leaves NUL in place for the check to refuse.
+      expect(checkNote(normalizeNoteFields(input))[0]?.field).toBe(field);
+    }
+    // Parsing never refuses; the check that follows it does.
+    const parsed = parseNote("note: a\u0000b");
+    expect(parsed.statement).toBe("a\u0000b");
+    expect(checkNote(withoutAdvice(parsed) as NoteFields)[0]?.field).toBe("statement");
   });
 
   test("omitEvidence leaves Evidence lines out but still checks cites against them", () => {
@@ -1503,7 +1590,8 @@ describe("the carrying render", () => {
   test("local details are withheld and named, never rewritten", () => {
     const carried = renderCarriedNote({
       ...base,
-      body: "the log is in /Users/someone/collab/log.txt",
+      // "nobody" is a placeholder home the public projection guard permits.
+      body: "the log is in /Users/nobody/collab/log.txt",
       limits: "measured in ws_0123456789abcdef01234567",
       purpose: "check the MacAir-Two journal",
       why: [why("seen on dev.local", "seen"), why("kept reason", "told")],
@@ -1530,6 +1618,86 @@ describe("the carrying render", () => {
     expect(device.not_carried).toEqual(["limits (local detail)"]);
   });
 
+  test("absolute paths are local detail in every field; URLs with a host are not", () => {
+    const carried = renderCarriedNote({
+      ...base,
+      body: "built at /opt/homebrew/lib/x and /Volumes/Work/repo",
+      limits: "did not read /etc/hosts",
+      purpose: "check D:\\work\\repo",
+      why: [why("copied to /Volumes/Backup/collab", "seen"), why("kept reason", "told")],
+      evidence: ["file src/a.ts", "url file:///opt/app/index.html", "commit abcdef1"],
+    });
+    expect(carried.not_carried).toEqual([
+      "body (local detail)",
+      "why 1 (local detail)",
+      "evidence 2-3 (local detail)",
+      "limits (local detail)",
+      "purpose (local detail)",
+    ]);
+    expect(carried.text).not.toMatch(/\/opt|\/Volumes|\/etc|D:\\/);
+    expect(renderCarriedNote({ ...base, re: "file:/srv/app/notes.md" }).not_carried).toEqual(["re (local detail)"]);
+    expect(renderCarriedNote({ ...base, extent: "the C:/build/out tree only" }).not_carried).toEqual(["extent (local detail)"]);
+    expect(thrown(() => renderCarriedNote({ ...base, statement: "clean /var/lib/collab first" })).code).toBe("not_carriable");
+
+    // Relative paths, ranges, dates and URLs with a host travel.
+    const kept = renderCarriedNote({
+      ...base,
+      body: "see https://example.org/a/b/c?d=/e/f, docs/x/y.md, ./bin/run, 11/12/2026 and and/or",
+      limits: "only packages/collab/src/note.ts; not https://github.com/o/r/pull/1",
+      evidence: [...base.evidence, "url https://example.org/a/b"],
+    });
+    expect(kept.not_carried).toEqual([]);
+    expect(parseNote(kept.text).evidence).toEqual([...base.evidence, "url https://example.org/a/b"]);
+  });
+
+  test("a blank or NUL-bearing value is withheld as unreadable, and evidence keeps its numbers", () => {
+    const carried = renderCarriedNote({
+      ...base,
+      body: "x\u0000y",
+      limits: "a\u0000b",
+      why: [why("first", "seen", [1]), why("third", "seen", [3])],
+      evidence: ["commit abcdef1", "  ", "commit abcdef3"],
+    });
+    expect(carried.not_carried).toEqual(["body (unreadable)", "evidence 2-3 (unreadable)", "limits (unreadable)"]);
+    const parsed = parseNote(carried.text);
+    expect(parsed.evidence).toEqual(["commit abcdef1"]);
+    expect(parsed.why).toEqual([why("first", "seen", [1]), why("third", "seen", [3])]);
+    expect(carried.text).not.toContain("\u0000");
+    expect(thrown(() => renderCarriedNote({ ...base, statement: "a\u0000b" })).code).toBe("invalid_note_field");
+  });
+
+  test("trailers cut in numbers are named by group, so Not-carried stays short", () => {
+    const extensions = Array.from({ length: 300 }, (_, index) => ({ key: `X-k${index}`, value: "v" }));
+    const journal = renderNote({ act: "note", statement: "many extension trailers", trailers: extensions });
+    expect(journal.length).toBeLessThanOrEqual(NOTE_JOURNAL_MAX);
+    const carried = renderCarriedNote(withoutAdvice(parseNote(journal)) as NoteFields);
+    expect(carried.text.length).toBeLessThanOrEqual(NOTE_CARRY_MAX);
+    const parsed = parseNote(carried.text);
+    const keptExtensions = parsed.trailers.filter((trailer) => trailer.key.startsWith("X-"));
+    expect(keptExtensions).toEqual(extensions.slice(0, keptExtensions.length));
+    expect(carried.not_carried).toEqual([`X- trailers ×${300 - keptExtensions.length}`]);
+
+    const options = Array.from({ length: 60 }, (_, index) => ({ key: "Option", value: `k${index}: label ${index}` }));
+    const poll = renderCarriedNote({ act: "poll", statement: "pick one", trailers: options });
+    const keptOptions = parseNote(poll.text).trailers.filter((trailer) => trailer.key === "Option");
+    expect(keptOptions).toEqual(options.slice(0, keptOptions.length));
+    expect(poll.not_carried).toEqual([`Option ×${60 - keptOptions.length}`]);
+
+    // Withheld ones are grouped the same way, and a key that is not a note
+    // key is never echoed: it is unchecked input and may itself be local.
+    const withheld = renderCarriedNote({
+      ...base,
+      trailers: [
+        ...base.trailers,
+        ...Array.from({ length: 120 }, (_, index) => ({ key: `X-w${index}`, value: `~/collab/${index}` })),
+        { key: "/Users/nobody/secret", value: "v" },
+        { key: "X-one", value: "/opt/x/y" },
+      ],
+    });
+    expect(withheld.not_carried).toEqual(["X- trailers ×121 (local detail)", "unknown trailer (unreadable)"]);
+    expect(withheld.text).not.toContain("/Users");
+  });
+
   test("an over-long statement is shortened to the cap and named", () => {
     const statement = "q".repeat(500);
     const carried = renderCarriedNote({ ...base, statement });
@@ -1549,6 +1717,41 @@ describe("the carrying render", () => {
     expect(thrown(() => renderCarriedNote(base, { maxChars: 120 })).code).toBe("too_long");
   });
 
+  // A cut is named by its label, or, for several X- trailers, by their group.
+  const namedIn = (notCarried: readonly string[], label: string): boolean =>
+    notCarried.some((entry) => entry === label
+      || entry.startsWith(`${label} `)
+      || (/^X-/i.test(label) && entry.startsWith("X- trailers ×")));
+
+  test("over generated notes with more than 100 trailers: at most 800, every lost trailer named by group", () => {
+    const gen = new Gen(0x5eed_0006);
+    for (let index = 0; index < 120; index += 1) {
+      const note = genNote(gen, { tricky: index % 2 === 1, carry: true });
+      const extra: NoteTrailer[] = Array.from({ length: gen.int(101, 400) }, () =>
+        gen.pick([
+          () => ({ key: `X-${gen.pick(["Topic", "Trace", "k"])}${gen.int(0, 999)}`, value: genWords(gen, CLEAN_WORDS, 1, 4) }),
+          () => ({ key: "Option", value: `${gen.hex(2)}: ${genWords(gen, CLEAN_WORDS, 1, 4)}` }),
+          () => ({ key: "Position", value: genWords(gen, CLEAN_WORDS, 1, 6) }),
+          () => ({ key: "Criteria", value: genMultiline(gen, CLEAN_WORDS, 200) }),
+          () => ({ key: "Closes", value: "2026-11-12T18:00:00Z" }),
+        ])(),
+      );
+      const input = { ...note, trailers: [...note.trailers.filter((trailer) => trailer.key !== "Sha256"), ...extra] };
+      const carried = renderCarriedNote(input);
+      expect(carried.text.length).toBeLessThanOrEqual(NOTE_CARRY_MAX);
+      const parsed = parseNote(carried.text);
+      const notCarried = parsed.trailers.at(-1)!;
+      expect(notCarried).toEqual({ key: "Not-carried", value: carried.not_carried.join("; ") || "nothing" });
+      // One entry per group and reason, whatever the number of trailers cut.
+      expect(carried.not_carried.length).toBeLessThanOrEqual(20);
+      for (const trailer of input.trailers) {
+        const before = input.trailers.filter((item) => item.key === trailer.key && item.value === trailer.value).length;
+        const after = parsed.trailers.filter((item) => item.key === trailer.key && item.value === trailer.value).length;
+        if (after < before) expect(namedIn(carried.not_carried, trailer.key)).toBe(true);
+      }
+    }
+  });
+
   test("over generated notes: at most 800, nothing cut without being named", () => {
     const gen = new Gen(0x5eed_0005);
     let cut = 0;
@@ -1557,7 +1760,7 @@ describe("the carrying render", () => {
       const carried = renderCarriedNote(note);
       expect(carried.text.length).toBeLessThanOrEqual(NOTE_CARRY_MAX);
       const parsed = parseNote(carried.text);
-      const named = (label: string) => carried.not_carried.some((entry) => entry === label || entry.startsWith(`${label} `));
+      const named = (label: string) => namedIn(carried.not_carried, label);
       expect(parsed.act).toBe(note.act);
       expect(parsed.statement).toBe(note.statement);
       expect(parsed.re).toBe(note.re);

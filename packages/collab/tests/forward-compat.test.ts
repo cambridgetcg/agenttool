@@ -107,18 +107,24 @@ interface Revision {
   ships: Ships;
 }
 
-function missingMessage(name: string, detail: string): string {
+function missingMessage(name: string, detail: string, role: "older build" | "golden"): string {
+  // The golden scenario and the event-type union check always compare with
+  // a8799aad (spec 8.5), so naming COLLAB_COMPAT_REVS as the way out there
+  // would send a reader to a setting that changes nothing.
+  const choice = role === "golden"
+    ? `The golden scenario and the event-type union check always compare with ${name}; COLLAB_COMPAT_REVS does not change that.`
+    : "COLLAB_COMPAT_REVS chooses the older builds.";
   return `Compatibility revision "${name}" is not in this clone (${detail.trim() || "git rev-parse failed"}). `
     + "The forward-compatibility harness needs full git history: set fetch-depth: 0 on the actions/checkout step, "
-    + `or fetch ${name}. It does not skip a missing revision; COLLAB_COMPAT_REVS chooses the revisions.`;
+    + `or fetch ${name}. It does not skip a missing revision. ${choice}`;
 }
 
-function resolveRevision(name: string): Revision {
+function resolveRevision(name: string, role: "older build" | "golden" = "older build"): Revision {
   const none: Ships = { mcp: false, host: false, host_wait: false, host_seat_ref: false };
   const parsed = git(["rev-parse", "--verify", "--quiet", `${name}^{commit}`]);
   const sha = parsed.stdout.trim();
   if (!parsed.ok || !/^[0-9a-f]{40}$/.test(sha)) {
-    return { name, sha: null, missing: missingMessage(name, parsed.stderr), ships: none };
+    return { name, sha: null, missing: missingMessage(name, parsed.stderr, role), ships: none };
   }
   const has = (path: string) => git(["cat-file", "-e", `${sha}:packages/collab/${path}`]).ok;
   const host = has("dist/agenttool-collab-host.js");
@@ -139,8 +145,8 @@ function resolveRevision(name: string): Revision {
 
 // A blank value means the default list: an empty run would be a skip in disguise.
 const requestedRevisions = (process.env.COLLAB_COMPAT_REVS ?? "").trim().split(/\s+/).filter(Boolean);
-const revisions = (requestedRevisions.length ? requestedRevisions : DEFAULT_REVISIONS).map(resolveRevision);
-const golden = resolveRevision(GOLDEN_REVISION);
+const revisions = (requestedRevisions.length ? requestedRevisions : DEFAULT_REVISIONS).map((name) => resolveRevision(name));
+const golden = resolveRevision(GOLDEN_REVISION, "golden");
 
 function lazy<T>(make: () => Promise<T>): () => Promise<T> {
   let promise: Promise<T> | undefined;

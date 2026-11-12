@@ -334,7 +334,10 @@ function normalizeMultilineValue(value: string): string | null {
  * dropped, a one-line field's line breaks joined with spaces, a trailer
  * value's blank lines dropped, basis words and act lower-cased, render keys
  * spelled as listed. It never shortens anything. A statement with a line
- * break is left as it is, so renderNote refuses it with the remedy.
+ * break is left as it is, so renderNote refuses it with the remedy. A blank
+ * Why or Evidence item stays in its place as "", so checkNote refuses it:
+ * Why cites count Evidence positions, and dropping an item would move every
+ * later cite onto evidence the writer did not cite.
  */
 export function normalizeNoteFields(input: NoteInput): NoteFields {
   const fields = completeFields(input);
@@ -367,9 +370,7 @@ export function normalizeNoteFields(input: NoteInput): NoteFields {
         : reason.basis,
       cites: reason.cites,
     })),
-    evidence: fields.evidence
-      .map((item) => (typeof item === "string" ? normalizeLineValue(item) : item))
-      .filter((item): item is string => item !== null),
+    evidence: fields.evidence.map((item) => (typeof item === "string" ? normalizeLineValue(item) ?? "" : item)),
     limits: multiline(fields.limits),
     purpose: line(fields.purpose),
     extent: multiline(fields.extent),
@@ -694,6 +695,16 @@ function readBlock(lines: readonly string[], firstLine: number, advice: string[]
     }
     const multiline = field === undefined ? renderKey !== "Sha256" : MULTILINE_FIELDS.has(field);
     const value = entry.values.filter((part) => part !== "").join(multiline ? "\n" : " ");
+    if (value === "" && field === "evidence") {
+      // Why cites count Evidence positions, so an empty line keeps its place
+      // (and checkNote refuses it) rather than moving later cites.
+      reading.evidence.push({ text: "", line: entry.line });
+      advice.push(
+        `Line ${entry.line}: Evidence ${reading.evidence.length} is empty. It keeps its place so later cites keep ` +
+          "their numbers; remove it and renumber the cites after it.",
+      );
+      continue;
+    }
     if (value === "") {
       reading.kept.push(...entry.raw);
       advice.push(`Line ${entry.line}: "${entry.key}:" has no value, so the line stays in the body.`);
@@ -783,6 +794,7 @@ export function parseNote(text: string): ParsedNote {
 
   const evidence = block.evidence.map((item) => item.text);
   block.evidence.forEach((item, index) => {
+    if (item.text === "") return; // already advised by readBlock
     try {
       parseEvidence(item.text);
     } catch (error) {
@@ -862,10 +874,14 @@ function completeFields(input: NoteInput): NoteFields {
 }
 
 const NORMALIZE_HINT = "normalizeNoteFields fixes whitespace and invisible characters";
+// The store refuses NUL in a report body (cleanText), and ballot.ts in poll
+// terms and votes; a note refuses it here, before any write.
+const NUL_PROBLEM = "must not contain NUL characters";
 
 function lineProblem(value: unknown): string | null {
   if (typeof value !== "string") return "must be a string";
   if (value === "") return "must not be empty";
+  if (value.includes("\0")) return NUL_PROBLEM;
   if (value.includes("\n") || value.includes("\r")) return "must be one line";
   if (HAS_STRIPPED.test(value)) {
     return `contains a byte-order mark, a bidirectional control or a tag character (${NORMALIZE_HINT})`;
@@ -877,6 +893,7 @@ function lineProblem(value: unknown): string | null {
 function multilineProblem(value: unknown): string | null {
   if (typeof value !== "string") return "must be a string";
   if (value === "") return "must not be empty";
+  if (value.includes("\0")) return NUL_PROBLEM;
   if (value.includes("\r")) return `contains a carriage return (${NORMALIZE_HINT})`;
   if (HAS_STRIPPED.test(value)) {
     return `contains a byte-order mark, a bidirectional control or a tag character (${NORMALIZE_HINT})`;
@@ -889,6 +906,7 @@ function multilineProblem(value: unknown): string | null {
 
 function bodyProblem(value: string): string | null {
   if (typeof value !== "string") return "must be a string";
+  if (value.includes("\0")) return NUL_PROBLEM;
   if (value.includes("\r")) return `contains a carriage return (${NORMALIZE_HINT})`;
   if (HAS_STRIPPED.test(value)) {
     return `contains a byte-order mark, a bidirectional control or a tag character (${NORMALIZE_HINT})`;
@@ -937,6 +955,14 @@ function reasonProblems(reason: NoteReason, index: number, evidenceCount: number
 function evidenceProblem(item: unknown, index: number): NoteProblem | null {
   const field = `evidence[${index}]`;
   const line = lineProblem(item);
+  if (line && item === "") {
+    return {
+      code: "invalid_note_field",
+      field,
+      message: `Evidence ${index + 1} ${line}`,
+      remedy: "Remove the empty item and renumber the Why cites after it: cites count Evidence positions from 1.",
+    };
+  }
   if (line) return { code: "invalid_note_field", field, message: `Evidence ${index + 1} ${line}` };
   try {
     parseEvidence(item as string);
@@ -1252,7 +1278,20 @@ const LOCAL_DETAIL: readonly RegExp[] = [
   // as the Lobby's egress gate reads them.
   /macbook|(?<![a-z])imac(?![a-z])|mac[\s._-]?(?:mini|studio|pro)(?![a-z])|iphone|ipad(?![a-z])/i,
 ];
+// Any other absolute path names this machine's files too (/opt/…, /Volumes/…,
+// D:\…). A URL with a host is set aside first, so the path in
+// https://example.org/a/b travels; file:///… has no host and does not.
+const URL_WITH_HOST = /[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s/]+\S*/g;
+// A slash that starts a token (not after a word, a dot or ~, so relative
+// paths, ./x, ~/x and a/b do not match), then at least one directory.
+const ABSOLUTE_POSIX_PATH = /(?<![\p{L}\p{N}_.~*-])\/+(?:[\p{L}\p{N}_.@+~-]+\/)+[\p{L}\p{N}_.@+~-]*/u;
+const DRIVE_PATH = /(?<![\p{L}\p{N}_])[A-Za-z]:[\\/][^\s\\/]/u;
 const ABSOLUTE_PATH = /^(?:\/|[A-Za-z]:[\\/])/;
+
+function namesAbsolutePath(value: string): boolean {
+  const rest = value.replace(URL_WITH_HOST, " ");
+  return ABSOLUTE_POSIX_PATH.test(rest) || DRIVE_PATH.test(rest);
+}
 // Kept longest when a carried note must be shortened: what it is about and
 // where the agents stand.
 const KEPT_RENDER_KEYS: ReadonlySet<string> = new Set(["Sha256", "Position", "Result"]);
@@ -1281,6 +1320,14 @@ type CarryCut =
   | { kind: "local" | "unreadable" | "dropped"; label: string }
   | { kind: "shortened"; label: string; kept: number; total: number }
   | { kind: "items"; label: "why" | "evidence"; items: number[]; reason: "local" | "unreadable" | "room" };
+
+/** What happened to a trailer that was not carried as written. */
+type TrailerFate =
+  | { kind: "local" | "unreadable" | "dropped" }
+  | { kind: "shortened"; kept: number; total: number };
+
+/** A shortening step's record of a value: a prefix kept, dropped, or as written. */
+type ShortenMark = { kind: "shortened"; kept: number; total: number } | { kind: "dropped" } | null;
 
 const CUT_ORDER = [
   "statement",
@@ -1335,6 +1382,41 @@ function cutRank(cut: CarryCut): number {
   return rank === -1 ? CUT_ORDER.length : rank;
 }
 
+// A journal note may hold hundreds of trailers, so naming each one cut could
+// make the Not-carried line alone outgrow the carried note. Cuts are named
+// once per group and reason instead: a render key, the X- keys together, or
+// any other key. That last key is never echoed: it is unchecked input and may
+// itself name a local detail.
+function describeTrailerCuts(trailers: readonly NoteTrailer[], fates: ReadonlyMap<number, TrailerFate>): string[] {
+  const groups = new Map<string, { group: string; key: string; fate: TrailerFate; count: number }>();
+  for (const index of [...fates.keys()].sort((left, right) => left - right)) {
+    const fate = fates.get(index)!;
+    const key = trailers[index]!.key;
+    const group = typeof key === "string" && RENDER_KEY_SET.has(key)
+      ? key
+      : typeof key === "string" && X_KEY.test(key) ? "X-" : "unknown";
+    const id = `${group}\n${fate.kind}`;
+    const entry = groups.get(id);
+    if (entry === undefined) groups.set(id, { group, key: String(key), fate, count: 1 });
+    else entry.count += 1;
+  }
+  return [...groups.values()].map(({ group, key, fate, count }) => {
+    const name = count === 1
+      ? group === "unknown" ? "unknown trailer" : key
+      : group === "X-" ? `X- trailers ×${count}` : group === "unknown" ? `unknown trailers ×${count}` : `${group} ×${count}`;
+    switch (fate.kind) {
+      case "local":
+        return `${name} (local detail)`;
+      case "unreadable":
+        return `${name} (unreadable)`;
+      case "dropped":
+        return name;
+      case "shortened":
+        return count === 1 ? `${name} (first ${fate.kept} of ${fate.total} chars)` : `${name} (shortened)`;
+    }
+  });
+}
+
 // The longest prefix of at most `keep` units that ends on a code point and
 // carries no trailing whitespace.
 function prefix(value: string, keep: number): string {
@@ -1354,8 +1436,11 @@ function readable(value: string, check: (value: string) => string | null): boole
  * nothing elsewhere. A person sends it." as the body's last paragraph, and a
  * final `Not-carried:` line naming everything withheld or shortened
  * ("nothing" when it is all there). Values naming a local detail (a
- * workspace id, a home or temporary path, a LAN host name, a localTerms
- * entry) are withheld, never rewritten. When the note is still too long it
+ * workspace id, an absolute, home or temporary path, a LAN host name, a
+ * localTerms entry) are withheld, never rewritten, and so are values that
+ * could not be written in a note (an empty Evidence item, a NUL). Trailers
+ * cut are named once per group (a render key, or the X- keys together), so
+ * the Not-carried line stays short however many there were. When the note is still too long it
  * is cut in this order until it fits: X- trailers; the body down to 240
  * characters; Evidence from the end; purpose, replaces, to; the rest of the
  * body; Why from the end; render trailers other than Sha256, Position and
@@ -1374,7 +1459,9 @@ export function renderCarriedNote(input: NoteInput, options: CarryOptions = {}):
     .map((term) => term.trim().toLowerCase())
     .filter((term) => term.length >= 3);
   const isLocal = (value: string): boolean =>
-    LOCAL_DETAIL.some((pattern) => pattern.test(value)) || terms.some((term) => value.toLowerCase().includes(term));
+    LOCAL_DETAIL.some((pattern) => pattern.test(value))
+    || namesAbsolutePath(value)
+    || terms.some((term) => value.toLowerCase().includes(term));
 
   const base = normalizeNoteFields(input);
   if (!isNoteAct(base.act)) throw new CollabError("invalid_note_field", `act must be one of ${NOTE_ACTS.join(", ")}`, { field: "act" });
@@ -1382,35 +1469,47 @@ export function renderCarriedNote(input: NoteInput, options: CarryOptions = {}):
   if (statementProblem) {
     throw new CollabError("invalid_note_field", `The statement ${statementProblem}`, { field: "statement" });
   }
-  const notCarriable = (field: string, message: string): CollabError =>
-    new CollabError("not_carriable", message, { field });
+  const fullIdRemedy = "Name the full id (such as report_…) instead of the handle.";
+  const notCarriable = (field: string, message: string, remedy: string): CollabError =>
+    new CollabError("not_carriable", message, { field, remedy });
   for (const field of ["re", "replaces"] as const) {
     const value = base[field];
     if (value !== null && parseNoteRef(value)?.handle) {
-      throw notCarriable(field, `${NOTE_FIELD_KEYS[field]} is a short handle; a carried note names full ids, because a handle can match a different item on another device`);
+      throw notCarriable(
+        field,
+        `${NOTE_FIELD_KEYS[field]} is a short handle; a carried note names full ids, because a handle can match a different item on another device`,
+        fullIdRemedy,
+      );
     }
   }
   base.evidence.forEach((item, index) => {
     try {
       const evidence = parseEvidence(item);
       if (HANDLE_EVIDENCE.test(evidence.locator) || HANDLE.test(evidence.locator)) {
-        throw notCarriable(`evidence[${index}]`, `Evidence ${index + 1} is a short handle; a carried note names full ids`);
+        throw notCarriable(`evidence[${index}]`, `Evidence ${index + 1} is a short handle; a carried note names full ids`, fullIdRemedy);
       }
     } catch (error) {
       if (!(error instanceof CollabError) || error.code === "not_carriable") throw error;
     }
   });
   if (isLocal(base.statement)) {
-    throw notCarriable("statement", "The statement names a local detail (a workspace id, a local path or a machine name), so it cannot leave this device");
+    throw notCarriable(
+      "statement",
+      "The statement names a local detail (a workspace id, an absolute or home path, or a machine name), so it cannot leave this device",
+      "Restate the statement without it. A body, reason or term that names it is withheld and listed in Not-carried.",
+    );
   }
 
   const cuts: CarryCut[] = [];
   const state: NoteFields = { ...base, why: [], evidence: [], trailers: [] };
 
   // Withhold what names this device or cannot be read, before measuring.
-  if (state.body !== null && isLocal(state.body)) {
-    state.body = null;
-    cuts.push({ kind: "local", label: "body" });
+  if (state.body !== null) {
+    const unreadable = !readable(state.body, bodyProblem);
+    if (unreadable || isLocal(state.body)) {
+      state.body = null;
+      cuts.push({ kind: unreadable ? "unreadable" : "local", label: "body" });
+    }
   }
   for (const field of SINGLE_FIELDS) {
     const value = state[field];
@@ -1445,13 +1544,18 @@ export function renderCarriedNote(input: NoteInput, options: CarryOptions = {}):
     }
     state.evidence.push(item);
   }
+  // Keyed by position in base.trailers; trailerOrigin gives that position for
+  // each trailer in state.trailers, so a cut is recorded against the right one.
+  const trailerFates = new Map<number, TrailerFate>();
+  const trailerOrigin: number[] = [];
   base.trailers.forEach((trailer, index) => {
     if (trailer.key === "Not-carried") return; // a carried note names its own cuts
     const problem = trailerProblem(trailer, index);
     if (problem !== null || isLocal(trailer.value)) {
-      cuts.push({ kind: problem !== null ? "unreadable" : "local", label: String(trailer.key) });
+      trailerFates.set(index, { kind: problem !== null ? "unreadable" : "local" });
     } else {
       state.trailers.push(trailer);
+      trailerOrigin.push(index);
     }
   });
 
@@ -1484,10 +1588,13 @@ export function renderCarriedNote(input: NoteInput, options: CarryOptions = {}):
     if (droppedEvidence.length > 0) {
       all.push({ kind: "items", label: "evidence", items: droppedEvidence, reason: "room" });
     }
-    return all
-      .map((cut, index) => ({ cut, index }))
-      .sort((left, right) => cutRank(left.cut) - cutRank(right.cut) || left.index - right.index)
-      .map(({ cut }) => describeCut(cut));
+    return [
+      ...all
+        .map((cut, index) => ({ cut, index }))
+        .sort((left, right) => cutRank(left.cut) - cutRank(right.cut) || left.index - right.index)
+        .map(({ cut }) => describeCut(cut)),
+      ...describeTrailerCuts(base.trailers, trailerFates),
+    ];
   };
   const carried = (): NoteFields => ({
     ...state,
@@ -1496,15 +1603,24 @@ export function renderCarriedNote(input: NoteInput, options: CarryOptions = {}):
   });
   const overBy = (): number => assemble(carried()).length - max;
 
-  const setShortened = (label: string, kept: number, total: number): void => {
-    const existing = cuts.findIndex((cut) => cut.label === label && cut.kind === "shortened");
-    const cut: CarryCut = { kind: "shortened", label, kept, total };
-    if (existing === -1) cuts.push(cut);
-    else cuts[existing] = cut;
+  // A field keeps one shortened-or-dropped record, replaced as prefixes are
+  // tried: the record's own digits count toward the length being fitted.
+  const markField = (label: string) => (mark: ShortenMark): void => {
+    const existing = cuts.findIndex((cut) => cut.label === label && (cut.kind === "shortened" || cut.kind === "dropped"));
+    const record: CarryCut | null = mark === null
+      ? null
+      : mark.kind === "shortened" ? { kind: "shortened", label, kept: mark.kept, total: mark.total } : { kind: "dropped", label };
+    if (existing === -1) {
+      if (record !== null) cuts.push(record);
+    } else if (record !== null) {
+      cuts[existing] = record;
+    } else {
+      cuts.splice(existing, 1);
+    }
   };
-  const clearShortened = (label: string): void => {
-    const existing = cuts.findIndex((cut) => cut.label === label && cut.kind === "shortened");
-    if (existing !== -1) cuts.splice(existing, 1);
+  const markTrailer = (origin: number) => (mark: ShortenMark): void => {
+    if (mark === null) trailerFates.delete(origin);
+    else trailerFates.set(origin, mark);
   };
   // Keep the longest prefix of a value (at least `floor` characters) with
   // which the note fits. When even the floor does not fit, the value stays
@@ -1512,9 +1628,9 @@ export function renderCarriedNote(input: NoteInput, options: CarryOptions = {}):
   // dropped, unless it must stay. A longer prefix never makes the note
   // shorter, so a binary search finds the longest that fits.
   const shorten = (
-    label: string,
     original: string,
     apply: (value: string | null) => void,
+    mark: (mark: ShortenMark) => void,
     floor = 0,
     mayDrop = true,
   ): void => {
@@ -1522,7 +1638,7 @@ export function renderCarriedNote(input: NoteInput, options: CarryOptions = {}):
       const kept = prefix(original, keep);
       if (kept === "") return false;
       apply(`${kept}…`);
-      setShortened(label, kept.length, original.length);
+      mark({ kind: "shortened", kept: kept.length, total: original.length });
       return overBy() <= 0;
     };
     let low = Math.max(1, floor);
@@ -1531,8 +1647,7 @@ export function renderCarriedNote(input: NoteInput, options: CarryOptions = {}):
     if (!attempt(low)) {
       if (floor > 0 || !mayDrop) return;
       apply(null);
-      clearShortened(label);
-      cuts.push({ kind: "dropped", label });
+      mark({ kind: "dropped" });
       return;
     }
     while (low < high) {
@@ -1548,11 +1663,10 @@ export function renderCarriedNote(input: NoteInput, options: CarryOptions = {}):
     cuts.push({ kind: "dropped", label: field });
   };
   const dropLastTrailer = (wanted: (key: string) => boolean): boolean => {
-    for (let index = state.trailers.length - 1; index >= 0; index -= 1) {
-      const trailer = state.trailers[index]!;
-      if (!wanted(trailer.key)) continue;
-      state.trailers.splice(index, 1);
-      cuts.push({ kind: "dropped", label: trailer.key });
+    for (let at = state.trailers.length - 1; at >= 0; at -= 1) {
+      if (!wanted(state.trailers[at]!.key)) continue;
+      state.trailers.splice(at, 1);
+      trailerFates.set(trailerOrigin.splice(at, 1)[0]!, { kind: "dropped" });
       return true;
     }
     return false;
@@ -1560,33 +1674,36 @@ export function renderCarriedNote(input: NoteInput, options: CarryOptions = {}):
   const shortenField = (field: SingleField): void => {
     const value = state[field];
     if (value === null) return;
-    shorten(field, value, (next) => {
+    shorten(value, (next) => {
       state[field] = next;
-    });
+    }, markField(field));
   };
   const shortenKeptTrailers = (): void => {
-    for (let index = state.trailers.length - 1; index >= 0 && overBy() > 0; index -= 1) {
-      const trailer = state.trailers[index]!;
+    for (let at = state.trailers.length - 1; at >= 0 && overBy() > 0; at -= 1) {
+      const trailer = state.trailers[at]!;
       if (trailer.key === "Sha256" || !KEPT_RENDER_KEYS.has(trailer.key)) continue;
-      const original = trailer.value;
-      shorten(trailer.key, original, (next) => {
-        if (next === null) state.trailers.splice(index, 1);
-        else state.trailers[index] = { key: trailer.key, value: next };
-      });
+      shorten(trailer.value, (next) => {
+        if (next === null) {
+          state.trailers.splice(at, 1);
+          trailerOrigin.splice(at, 1);
+        } else {
+          state.trailers[at] = { key: trailer.key, value: next };
+        }
+      }, markTrailer(trailerOrigin[at]!));
     }
   };
 
   if (state.statement.length > NOTE_STATEMENT_MAX) {
     const kept = prefix(originalStatement, NOTE_STATEMENT_MAX - 1);
     state.statement = `${kept}…`;
-    setShortened("statement", kept.length, originalStatement.length);
+    markField("statement")({ kind: "shortened", kept: kept.length, total: originalStatement.length });
   }
 
   const shortenBody = (floor: number) => (): void => {
     if (originalBody === null || state.body === null) return;
-    shorten("body", originalBody, (next) => {
+    shorten(originalBody, (next) => {
       state.body = next;
-    }, floor);
+    }, markField("body"), floor);
   };
   const steps: Array<() => void> = [
     () => {
@@ -1611,9 +1728,9 @@ export function renderCarriedNote(input: NoteInput, options: CarryOptions = {}):
     () => shortenField("extent"),
     shortenKeptTrailers,
     () => {
-      shorten("statement", originalStatement, (next) => {
+      shorten(originalStatement, (next) => {
         if (next !== null) state.statement = next;
-      }, 0, false);
+      }, markField("statement"), 0, false);
     },
   ];
   for (const step of steps) {
@@ -1626,7 +1743,13 @@ export function renderCarriedNote(input: NoteInput, options: CarryOptions = {}):
     throw new CollabError(
       "too_long",
       `The carried note cannot be made to fit ${max} characters`,
-      { field: "note", max, actual: text.length, unit: "chars" },
+      {
+        field: "note",
+        max,
+        actual: text.length,
+        unit: "chars",
+        remedy: "Shorten the Re: reference or carry fewer Sha256 lines: those are never cut, and the disclaimer and Not-carried line always travel.",
+      },
     );
   }
   const problem = shapeProblems(fields, { cites: false, requireRe: false })[0];
