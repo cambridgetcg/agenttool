@@ -82,6 +82,9 @@ on `cambridgetcg/agenttool-collab`. It is not on npm, where `latest` remains 0.4
 event waiting, plus the host doorbell wait. A development version is not a
 release; the next npm candidate is 0.5.1 through the
 [public release path](NPM-RELEASES.md).
+**Update, 2026-11-12.** The same development line also carries declared rest:
+`collab_session_rest` as a 34th tool, with the read-only `knocks` and
+`doorbell-scan` host commands.
 Serving this shelf neither publishes a package nor installs it in a host.
 
 ### Release readback

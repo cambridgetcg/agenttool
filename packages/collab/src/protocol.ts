@@ -117,13 +117,38 @@ export interface Worktree {
 export type SessionStatus = "active" | "ended";
 
 /**
- * Derived view, never stored: an active session whose last_seen_at is older
- * than SESSION_STALE_AFTER_MS reads as stale; an ended session never reads as
- * live. Staleness changes no session status and grants nothing; a session lease
- * whose TTL has also passed becomes recoverable (README "Session-fit migration").
+ * Derived view, never stored, in this precedence: an ended session reads
+ * "ended"; an active session with a declared, unexpired rest reads "resting";
+ * an active session whose last_seen_at is older than SESSION_STALE_AFTER_MS
+ * reads "stale"; any other reads "live". Rest is declared, never inferred, so
+ * a quiet session without a declaration reads stale, never resting. Liveness
+ * changes no session status and grants nothing. Lease expiry does not read a
+ * declared rest: a session lease whose TTL has passed becomes recoverable once
+ * its holder has ended or gone unseen for SESSION_STALE_AFTER_MS, resting or
+ * not (README "Session-fit migration").
  */
-export type SessionLiveness = "live" | "stale";
+export type SessionLiveness = "live" | "resting" | "stale" | "ended";
 export const SESSION_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
+
+/** v1 accepts only "addressed": consent to a wake for notes explicitly addressed to this session. */
+export type RestWakeOn = "addressed";
+export const MAX_REST_REASON_LENGTH = 200;
+
+/**
+ * A session's own declared rest: its latest session.rested event that no
+ * session.returned has followed. Expiry is computed on read, so once `until`
+ * has passed the rest reads as null and starts nothing. Rest is declared,
+ * never inferred, changes no status, and never releases, extends or
+ * reassigns leases, handoffs or accepted obligations.
+ */
+export interface SessionRest {
+  mode: "resting";
+  /** occurred_at of the session.rested event that declared this rest. */
+  since: string;
+  until: string | null;
+  reason: string | null;
+  wake_on: RestWakeOn[];
+}
 
 export interface CoordinationSession {
   id: string;
@@ -142,6 +167,29 @@ export interface CoordinationSession {
   reset_generation: number;
   cursor_recovery_required: boolean;
   liveness: SessionLiveness;
+  /** The declared, unexpired rest; always null once the session has ended. */
+  rest: SessionRest | null;
+}
+
+/** How a note would reach its addressee now; computed per call, never stored. */
+export type KnockDelivery = "tap" | "wake" | "held" | "none";
+
+/**
+ * Sender hint beside an addressed mutation: the addressee's state when this
+ * call ran, so an idempotent replay shows the current state, never a stored
+ * one. It reports what the addressee declared, never its host: tap: live,
+ * it reads the note at its next turn. wake: it declared rest with wake_on
+ * addressed, so the household doorbell may wake it; whether its host can be
+ * woken is recorded by the doorbell's ledger (host_cannot_wake), not here.
+ * held: resting without that, or stale; the note waits for its return.
+ * none: ended, departure is complete and nothing knocks. A hint only: it
+ * blocks nothing and promises no delivery.
+ */
+export interface AddresseeHint {
+  session_id: string;
+  liveness: SessionLiveness;
+  rest: SessionRest | null;
+  delivery: KnockDelivery;
 }
 
 export interface SessionJoinResult {
@@ -325,6 +373,8 @@ export type CollabEventType =
   | "session.resumed"
   | "session.ended"
   | "session.cursor_reset"
+  | "session.rested"
+  | "session.returned"
   | "task.created"
   | "task.claimed"
   | "task.recovered"
@@ -469,7 +519,12 @@ export interface HandoffOffer {
 
 export interface NextCollabState {
   actor: string;
-  session: CoordinationSession | null;
+  /**
+   * The bound session (null in legacy actor mode). addressed_waiting counts
+   * notes addressed to it past its acknowledged cursor: report.posted with its
+   * to_session_id and session-path handoff.offered naming it, never its own.
+   */
+  session: (CoordinationSession & { addressed_waiting: number }) | null;
   own_claims: Task[];
   ready_tasks: Task[];
   claimable_tasks: Task[];

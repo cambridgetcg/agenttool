@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { resolveDatabasePath } from "../src/database-path.js";
+import { hostBindingRecorder } from "../src/host-binding.js";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import {
   readSessionCredentialFile,
@@ -11,6 +12,8 @@ import { CollabStore } from "../src/store.js";
 async function main(): Promise<void> {
   const databasePath = resolveDatabasePath(process.env);
   const store = new CollabStore(databasePath);
+  // An in-memory journal has no collab-sessions directory to bind into.
+  const hostBinding = databasePath === ":memory:" ? undefined : hostBindingRecorder(databasePath);
   const sessionFile = process.env.AGENTOOL_COLLAB_SESSION_FILE;
   const resumed = sessionFile
     ? (() => {
@@ -24,10 +27,14 @@ async function main(): Promise<void> {
           handle.credential,
           { replace: true },
         );
+        hostBinding?.record(handle.session.id, credentialFile);
         return { handle, credential_file: credentialFile };
       })()
     : undefined;
-  const server = buildCollabMcpServer(store, { resumed_session: resumed });
+  const server = buildCollabMcpServer(store, {
+    resumed_session: resumed,
+    host_binding: hostBinding,
+  });
   const transport = new StdioServerTransport();
 
   let shuttingDown = false;

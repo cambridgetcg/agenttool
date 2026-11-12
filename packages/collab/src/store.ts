@@ -20,8 +20,10 @@ import {
   EVIDENCE_REFS_DESCRIPTION,
   MAX_WAIT_ANCHOR_BYTES,
   MAX_WAIT_PAGE_BYTES,
+  MAX_REST_REASON_LENGTH,
   SESSION_STALE_AFTER_MS,
   type SessionEventPageInput,
+  type AddresseeHint,
   type ArtifactRef,
   type ClaimTaskInput,
   type CollabEvent,
@@ -38,12 +40,14 @@ import {
   type HeartbeatSessionInput,
   type JoinSessionInput,
   type JournalPage,
+  type KnockDelivery,
   type LeaseTaskInput,
   type MutationContext,
   type RepoCheckpoint,
   type ReportConfidence,
   type ReportKind,
   type ReportRelation,
+  type RestWakeOn,
   type ReviewStatus,
   type SessionEndRelease,
   type SessionEndResult,
@@ -51,6 +55,7 @@ import {
   type SessionLiveness,
   type SessionMutationInput,
   type SessionPresence,
+  type SessionRest,
   type TaskConflict,
   type TaskReview,
   type TaskWorkMode,
@@ -2139,6 +2144,88 @@ export class CollabStore {
   }
 
   /**
+   * The sender hint for one addressed session, read now. It appends nothing
+   * and does not mark the addressee seen.
+   */
+  addresseeHint(workspaceId: string, sessionId: string): AddresseeHint {
+    const id = validateId(sessionId, "session_id");
+    const read = this.db.transaction(() => {
+      const row = this.requireCoordinationSessionRow(id);
+      if (row.workspace_id !== workspaceId) {
+        throw new CollabError(
+          "session_workspace_mismatch",
+          "The addressed session belongs to another workspace",
+          { session_id: id },
+        );
+      }
+      const session = this.sessionProjection(row);
+      return {
+        session_id: session.id,
+        liveness: session.liveness,
+        rest: session.rest,
+        delivery: knockDelivery(session.liveness, session.rest),
+      };
+    });
+    return read.deferred();
+  }
+
+  /**
+   * Declare (mode "resting") or end (mode "ready") the caller's own rest.
+   * Appends session.rested or session.returned through mutateAsSession; it
+   * changes no status or generation and never touches leases, handoffs or
+   * accepted obligations. An expired rest reads as not resting on its own.
+   */
+  restSessionForSession(input: {
+    session_id: string;
+    session_token: string;
+    generation: number;
+    idempotency_key: string;
+    mode: "resting" | "ready";
+    until?: string;
+    reason?: string;
+    wake_on?: RestWakeOn[];
+  }): CoordinationSession {
+    const mode = validateRestMode(input.mode);
+    if (mode === "ready") {
+      // Judge the raw input, as release_summary does: a rest field sent with
+      // mode "ready" is refused, never silently dropped.
+      for (const field of ["until", "reason", "wake_on"] as const) {
+        if (input[field] !== undefined) {
+          throw new CollabError(`invalid_${field}`, `${field} applies only to mode "resting"`);
+        }
+      }
+    }
+    const until = input.until === undefined ? null : validateRestUntil(input.until);
+    const reason = optionalText(input.reason, "reason", MAX_REST_REASON_LENGTH);
+    const wakeOn = validateRestWakeOn(input.wake_on);
+    const request = mode === "resting"
+      ? { mode, until, reason, wake_on: wakeOn }
+      : { mode };
+    return this.mutateAsSession(input, input.idempotency_key, "session.rest.v2", request, (session) => {
+      if (mode === "resting") {
+        // Checked here, not before the receipt lookup, so an identical replay
+        // still returns its stored receipt after until has passed.
+        if (until !== null && Date.parse(until) <= Date.parse(this.timestamp())) {
+          throw new CollabError("invalid_until", "until must be a future instant");
+        }
+        this.appendEvent(session.workspace_id, "session.rested", session.id, session.actor, {
+          mode: "resting",
+          until,
+          reason,
+          wake_on: wakeOn,
+        }, session.id);
+      } else {
+        const open = this.latestRestDeclaration(session.id);
+        this.appendEvent(session.workspace_id, "session.returned", session.id, session.actor, {
+          mode: "ready",
+          prior_rest_sequence: open?.type === "session.rested" ? open.sequence : null,
+        }, session.id);
+      }
+      return this.sessionProjection(this.requireCoordinationSessionRow(session.id));
+    });
+  }
+
+  /**
    * Read-only check before a host-side end without lease release. It checks
    * the resume token (as resumeSession does, never the generation) and throws
    * the same session_has_active_leases refusal endSession would, while the
@@ -4098,7 +4185,7 @@ export class CollabStore {
     after_sequence?: number;
   }): {
     actor: string;
-    session: CoordinationSession;
+    session: CoordinationSession & { addressed_waiting: number };
     own_claims: Task[];
     ready_tasks: Task[];
     claimable_tasks: Task[];
@@ -4193,7 +4280,10 @@ export class CollabStore {
       ) as ReportRow[];
       return {
         actor: current.actor,
-        session: this.sessionProjection(current),
+        session: {
+          ...this.sessionProjection(current),
+          addressed_waiting: this.addressedWaiting(current),
+        },
         own_claims: tasks.filter(
           (task) =>
             task.effective_status === "claimed"
@@ -5924,7 +6014,7 @@ export class CollabStore {
     // Remember expiry before refreshing activity, without releasing or taking
     // over anything. Poll/ack/resume/unrelated mutations must not revive leases.
     // See README "Session-fit migration"; recovery remains an explicit event.
-    if (sessionLiveness(session, now) === "live") return;
+    if (leaseHolderPresent(session, now)) return;
     const staleAt = new Date(Date.parse(session.last_seen_at) + SESSION_STALE_AFTER_MS + 1).toISOString();
     this.db.query(`INSERT OR IGNORE INTO session_lease_lapses (lease_id, effective_at)
       SELECT lease_id, MAX(lease_expires_at, ?) FROM tasks
@@ -5938,9 +6028,8 @@ export class CollabStore {
     if (row.status !== "claimed" || row.lease_expires_at === null || observedAt < row.lease_expires_at) return false;
     if (!row.assignee_session_id) return true;
     if (this.db.query(`SELECT 1 FROM session_lease_lapses WHERE lease_id = ?`).get(row.lease_id!)) return true;
-    return (priorHolder
-      ? sessionLiveness(priorHolder, observedAt)
-      : this.assigneeLiveness(row.assignee_session_id, observedAt)) !== "live";
+    const holder = priorHolder ?? this.leaseHolderRow(row.assignee_session_id);
+    return !holder || !leaseHolderPresent(holder, observedAt);
   }
 
   private taskFromRow(row: TaskRow): Task {
@@ -5998,15 +6087,60 @@ export class CollabStore {
     row: CoordinationSessionRow,
     observedAt = this.timestamp(),
   ): CoordinationSession {
-    return coordinationSessionFromRow(row, observedAt);
+    const rest = row.status === "active" ? this.latestRest(row.id, observedAt) : null;
+    return coordinationSessionFromRow(row, observedAt, rest);
   }
 
   private assigneeLiveness(sessionId: string | null, observedAt = this.timestamp()): SessionLiveness | null {
     if (!sessionId) return null;
-    const holder = this.db.query(`
+    const holder = this.leaseHolderRow(sessionId);
+    if (!holder) return null;
+    const rest = holder.status === "active" ? this.latestRest(sessionId, observedAt) : null;
+    return sessionLiveness(holder, observedAt, rest);
+  }
+
+  private leaseHolderRow(sessionId: string): Pick<CoordinationSessionRow, "status" | "last_seen_at"> | null {
+    return this.db.query(`
       SELECT status, last_seen_at FROM coordination_sessions WHERE id = ?
     `).get(sessionId) as Pick<CoordinationSessionRow, "status" | "last_seen_at"> | null;
-    return holder ? sessionLiveness(holder, observedAt) : null;
+  }
+
+  /**
+   * The latest session.rested or session.returned this session appended, an
+   * events scan like reviewRequestedSessionId's. An ended or unknown session
+   * has none: the subquery yields NULL and matches no event.
+   */
+  private latestRestDeclaration(sessionId: string): RestDeclarationRow | null {
+    return this.db.query(`
+      SELECT type, sequence, occurred_at, payload_json FROM events
+      WHERE workspace_id = (
+          SELECT workspace_id FROM coordination_sessions WHERE id = ?1 AND status = 'active'
+        )
+        AND entity_id = ?1
+        AND type IN ('session.rested', 'session.returned')
+      ORDER BY sequence DESC
+      LIMIT 1
+    `).get(sessionId) as RestDeclarationRow | null;
+  }
+
+  /** The declared rest in force at observedAt; null when returned, expired, ended or never declared. */
+  private latestRest(sessionId: string, observedAt: string): SessionRest | null {
+    const declaration = this.latestRestDeclaration(sessionId);
+    return declaration ? restFromDeclaration(declaration, observedAt) : null;
+  }
+
+  /**
+   * Notes addressed to this session past its acknowledged cursor (the whole
+   * backlog, not one event page). See isAddressedTo for what counts.
+   */
+  private addressedWaiting(session: CoordinationSessionRow): number {
+    const rows = this.db.query(`
+      SELECT type, session_id, payload_json FROM events
+      WHERE workspace_id = ? AND sequence > ?
+        AND type IN ('report.posted', 'handoff.offered')
+      ORDER BY sequence
+    `).all(session.workspace_id, session.cursor_sequence) as AddressedEventRow[];
+    return rows.filter((row) => isAddressedTo(row, session.id)).length;
   }
 
   private requireWorkspace(workspaceId: string, db = this.db): Workspace {
@@ -6303,6 +6437,62 @@ function optionalText(value: string | undefined, field: string, max: number): st
   return cleanText(value, field, max);
 }
 
+const REST_UNTIL_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/;
+
+function validateRestMode(value: unknown): "resting" | "ready" {
+  if (value !== "resting" && value !== "ready") {
+    throw new CollabError("invalid_mode", 'mode must be "resting" or "ready"');
+  }
+  return value;
+}
+
+/** A calendar-exact ISO-8601 instant with seconds and a zone, stored as UTC toISOString. */
+function validateRestUntil(value: unknown): string {
+  const text = typeof value === "string" ? value.trim() : "";
+  const match = REST_UNTIL_PATTERN.exec(text);
+  if (match) {
+    const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number) as [
+      number, number, number, number, number, number,
+    ];
+    const offsetHours = Number(match[7] ?? 0);
+    const offsetMinutes = Number(match[8] ?? 0);
+    // Date.parse rolls 2026-02-30 over to March and accepts 24:00; this does not.
+    const calendar = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+    const parsed = Date.parse(text);
+    if (
+      year >= 1970
+      && calendar.getUTCFullYear() === year
+      && calendar.getUTCMonth() === month - 1
+      && calendar.getUTCDate() === day
+      && calendar.getUTCHours() === hour
+      && calendar.getUTCMinutes() === minute
+      && calendar.getUTCSeconds() === second
+      && offsetHours <= 23
+      && offsetMinutes <= 59
+      && Number.isFinite(parsed)
+    ) {
+      return new Date(parsed).toISOString();
+    }
+  }
+  throw new CollabError(
+    "invalid_until",
+    "until must be an ISO-8601 instant with seconds and a time zone, for example 2026-10-09T18:00:00Z",
+  );
+}
+
+function validateRestWakeOn(value: unknown): RestWakeOn[] {
+  if (value === undefined) return [];
+  if (
+    !Array.isArray(value)
+    || value.length > 1
+    || (value.length === 1 && value[0] !== "addressed")
+  ) {
+    throw new CollabError("invalid_wake_on", 'wake_on accepts [] or ["addressed"] in this version');
+  }
+  return value.length === 1 ? ["addressed"] : [];
+}
+
 function validateTtl(value: number | undefined): number {
   const ttl = value ?? DEFAULT_LEASE_SECONDS;
   if (!Number.isInteger(ttl) || ttl < 30 || ttl > MAX_LEASE_SECONDS) {
@@ -6594,14 +6784,103 @@ function requireMatchingPresenceSessionJoin(
   }
 }
 
+export interface RestDeclarationRow {
+  type: "session.rested" | "session.returned";
+  sequence: number;
+  occurred_at: string;
+  payload_json: string;
+}
+
+/** Expiry is computed on read; a returned, expired or damaged declaration reads as no rest. */
+export function restFromDeclaration(row: RestDeclarationRow, observedAt: string): SessionRest | null {
+  if (row.type !== "session.rested") return null;
+  let payload: unknown;
+  try {
+    payload = JSON.parse(row.payload_json);
+  } catch {
+    return null;
+  }
+  if (!isRecordValue(payload) || payload.mode !== "resting") return null;
+  const until = typeof payload.until === "string" ? payload.until : payload.until === null ? null : undefined;
+  const reason = typeof payload.reason === "string" ? payload.reason : payload.reason === null ? null : undefined;
+  const wakeOn = payload.wake_on;
+  if (until === undefined || reason === undefined) return null;
+  if (!Array.isArray(wakeOn) || wakeOn.length > 1 || !wakeOn.every((item) => item === "addressed")) {
+    return null;
+  }
+  // NaN (an unparseable until or clock) fails this comparison and reads as expired.
+  if (until !== null && !(Date.parse(observedAt) < Date.parse(until))) return null;
+  return {
+    mode: "resting",
+    since: row.occurred_at,
+    until,
+    reason,
+    wake_on: wakeOn.length === 1 ? ["addressed"] : [],
+  };
+}
+
+/**
+ * Lease expiry reads presence only, never a declared rest: the holder counts
+ * as present while it is active and was seen within SESSION_STALE_AFTER_MS,
+ * resting or not. Rest "never releases, extends, or reassigns leases", so it
+ * can neither shorten nor lengthen one (README "Session-fit migration").
+ */
+function leaseHolderPresent(
+  row: Pick<CoordinationSessionRow, "status" | "last_seen_at">,
+  observedAt: string,
+): boolean {
+  return sessionLiveness(row, observedAt, null) === "live";
+}
+
 function sessionLiveness(
   row: Pick<CoordinationSessionRow, "status" | "last_seen_at">,
   observedAt: string,
+  rest: SessionRest | null,
 ): SessionLiveness {
-  if (row.status !== "active") return "stale";
+  if (row.status !== "active") return "ended";
+  if (rest) return "resting";
   const age = Date.parse(observedAt) - Date.parse(row.last_seen_at);
   // NaN (an unparseable timestamp) fails this comparison and reads as stale.
   return age <= SESSION_STALE_AFTER_MS ? "live" : "stale";
+}
+
+/** The events-table columns isAddressedTo reads. */
+export interface AddressedEventRow {
+  type: string;
+  session_id: string | null;
+  payload_json: string;
+}
+
+/**
+ * True when a journal event explicitly addresses sessionId from another
+ * session: a report.posted whose to_session_id is sessionId (ordinary
+ * addressed reports, review requests, review results), or a session-path
+ * handoff.offered whose handoff.to_session_id is sessionId. Nothing else
+ * matches: not task.reported_complete (its paired review-request report
+ * already counts), not handoff.accepted (its to_session_id is the acceptor
+ * itself), not an actor-path offer, never an event this session authored.
+ * A payload that does not parse reads as not addressed; this never throws.
+ */
+export function isAddressedTo(event: AddressedEventRow, sessionId: string): boolean {
+  if (event.session_id === sessionId) return false;
+  if (event.type !== "report.posted" && event.type !== "handoff.offered") return false;
+  let payload: unknown;
+  try {
+    payload = JSON.parse(event.payload_json);
+  } catch {
+    return false;
+  }
+  if (!isRecordValue(payload)) return false;
+  if (event.type === "report.posted") return payload.to_session_id === sessionId;
+  return isRecordValue(payload.handoff) && payload.handoff.to_session_id === sessionId;
+}
+
+/** live: tap; resting with wake_on addressed: wake; resting otherwise or stale: held; ended: none. */
+function knockDelivery(liveness: SessionLiveness, rest: SessionRest | null): KnockDelivery {
+  if (liveness === "live") return "tap";
+  if (liveness === "ended") return "none";
+  if (liveness === "resting" && rest?.wake_on.includes("addressed")) return "wake";
+  return "held";
 }
 
 function recoveryRequiredFirst(tasks: Task[], isOwn: (task: Task) => boolean): Task[] {
@@ -6618,6 +6897,7 @@ function recoveryRequiredFirst(tasks: Task[], isOwn: (task: Task) => boolean): T
 function coordinationSessionFromRow(
   row: CoordinationSessionRow,
   observedAt: string,
+  rest: SessionRest | null,
 ): CoordinationSession {
   return {
     id: row.id,
@@ -6639,7 +6919,8 @@ function coordinationSessionFromRow(
     cursor_version: row.cursor_version,
     reset_generation: row.reset_generation,
     cursor_recovery_required: row.cursor_recovery_required !== 0,
-    liveness: sessionLiveness(row, observedAt),
+    liveness: sessionLiveness(row, observedAt, rest),
+    rest,
   };
 }
 

@@ -4,9 +4,11 @@ import { z } from "zod";
 import { defaultActor } from "./actor-default.js";
 import { anchorStatusForWorkspace } from "./anchor-status.js";
 import { CollabError } from "./errors.js";
+import type { HostBindingRecorder } from "./host-binding.js";
 import {
   DEFAULT_WAIT_EVENT_LIMIT,
   EVIDENCE_REFS_DESCRIPTION,
+  MAX_REST_REASON_LENGTH,
   MAX_WAIT_EVENT_LIMIT,
   MAX_WAIT_MS,
   MAX_WAIT_RESPONSE_BYTES,
@@ -45,6 +47,10 @@ const eventAnchor = z.object({
 });
 const evidenceRefs = z.array(z.string().min(1).max(2000)).max(128).optional()
   .describe(EVIDENCE_REFS_DESCRIPTION);
+const addresseeNote =
+  "The result's addressee is the addressed session's state at this call, replays included: delivery tap (live), " +
+  "wake (resting with wake_on addressed), held (resting otherwise, or stale) or none (ended). " +
+  "A hint: it blocks nothing and promises no delivery.";
 const nextEventLimit = z.number().int().min(1).max(50).optional()
   .describe(`Maximum events in this page; defaults to ${DEFAULT_MCP_NEXT_EVENT_LIMIT} for MCP polling`);
 
@@ -83,6 +89,12 @@ export interface CollabMcpServerOptions {
   };
   /** Host-held credentials only, never a model-facing resume argument. */
   resumed_sessions?: Record<string, BoundSession>;
+  /**
+   * Records which host process runs each session this server binds, in
+   * `dirname(db)/collab-sessions/<id>.host.json`. The bin supplies it; when
+   * omitted (tests, in-memory stores) no binding file is written.
+   */
+  host_binding?: HostBindingRecorder;
 }
 
 interface BoundSession {
@@ -204,6 +216,21 @@ export function buildCollabMcpServer(
       );
     }
   };
+  /** Adds the addressee's current state, computed on every call (replays too) and never stored. */
+  const withAddressee = <T extends object>(
+    result: T,
+    workspace: string,
+    addressedSessionId: string | null | undefined,
+  ) => {
+    if (!addressedSessionId) return result;
+    try {
+      return { ...result, addressee: store.addresseeHint(workspace, addressedSessionId) };
+    } catch {
+      // The mutation already committed; a hint that cannot be read is omitted,
+      // never turned into an error that invites a duplicate send.
+      return result;
+    }
+  };
   const requireLegacyActor = (value: string | undefined): string => {
     if (!value) {
       throw new CollabError(
@@ -321,10 +348,9 @@ export function buildCollabMcpServer(
       }
       const handle = store.startSession({ ...input, actor: input.actor ?? defaultActor() });
       const credentialFile = store.defaultSessionCredentialPath(handle.session.id);
+      let path: string;
       try {
-        const path = writeSessionCredentialFile(credentialFile, handle.credential);
-        state.binding = { handle, credential_file: path };
-        return publicSessionBinding(state.binding);
+        path = writeSessionCredentialFile(credentialFile, handle.credential);
       } catch (error) {
         try {
           store.endSession({ ...handle.credential, reason: "credential_file_write_failed" });
@@ -334,6 +360,12 @@ export function buildCollabMcpServer(
         }
         throw error;
       }
+      const bound: BoundSession = { handle, credential_file: path };
+      state.binding = bound;
+      // Best effort and never throws: a session whose host cannot be read is
+      // still bound; it simply cannot be knocked or woken.
+      options.host_binding?.record(handle.session.id, path);
+      return publicSessionBinding(bound);
     }),
   );
 
@@ -370,6 +402,7 @@ export function buildCollabMcpServer(
         release_summary,
       });
       state.binding = null;
+      options.host_binding?.forget(ended.session.id);
       removeSessionCredentialFile(current.credential_file);
       return {
         session: ended.session,
@@ -377,6 +410,38 @@ export function buildCollabMcpServer(
         credential_file_removed: true,
         session_file_name: `${ended.session.id}.json`,
       };
+    }),
+  );
+
+  server.registerTool(
+    "collab_session_rest",
+    {
+      title: "Declare rest or return for the bound session",
+      description:
+        "Declare that the bound session is resting, or return with mode ready. Rest is declared, never inferred: " +
+        "until (a future ISO-8601 instant with a time zone) bounds it and is checked on read, and wake_on " +
+        "[\"addressed\"] consents to a host wake for notes explicitly addressed to this session; with the default [] " +
+        "they wait until you return. Rest changes no status and never releases, extends, or reassigns leases, " +
+        "handoffs, or accepted obligations.",
+      annotations: localRetrySafeMutation,
+      inputSchema: {
+        workspace_id: workspaceId.optional(),
+        idempotency_key: key,
+        mode: z.enum(["resting", "ready"]),
+        until: z.string().min(1).max(64).optional()
+          .describe("Mode resting only: a future ISO-8601 instant with a time zone; omit to rest until you return"),
+        reason: z.string().max(MAX_REST_REASON_LENGTH).optional()
+          .describe(`Mode resting only: a short reason, at most ${MAX_REST_REASON_LENGTH} characters`),
+        wake_on: z.array(z.enum(["addressed"])).max(1).optional()
+          .describe('Mode resting only: [] (default) or ["addressed"] to consent to a wake for addressed notes'),
+      },
+    },
+    async ({ workspace_id, ...input }) => call(() => {
+      if (workspace_id !== undefined) requireWorkspace(workspace_id);
+      const session = store.restSessionForSession({ ...boundCredential(), ...input });
+      const current = state.binding;
+      if (current) current.handle = { ...current.handle, session };
+      return { session };
     }),
   );
 
@@ -425,7 +490,10 @@ export function buildCollabMcpServer(
       description:
         "Poll without acknowledging, with 1–50 events per page and a default of 10. Routed reports are bounded to the exact event page; task, conflict, and handoff projections describe the same snapshot head. A bound session always pages from its acknowledged cursor: advance with collab_cursor_ack, or read elsewhere with collab_events_since. " +
         "recovery_required lists expired session leases awaiting collab_task_recover, the caller's own first. " +
-        "Session liveness and task assignee_liveness are a derived view (stale after 6 hours unseen), never a status change.",
+        "A bound session's addressed_waiting counts notes addressed to it past its acknowledged cursor (addressed reports, " +
+        "review requests and results, session handoff offers; never its own); it falls as collab_cursor_ack advances. " +
+        "Session liveness and task assignee_liveness are a derived view, never a status change: ended, else resting " +
+        "while a declared rest is unexpired, else stale after 6 hours unseen, else live.",
       annotations: localMutation,
       inputSchema: {
         workspace_id: workspaceId,
@@ -785,7 +853,8 @@ export function buildCollabMcpServer(
     {
       title: "Report a claimed task complete",
       description:
-        "Legacy mode is actor-reported and not review or acceptance. Bound edit tasks produce a structured completion report and remain pending until distinct-session review. Optional review_requested_session_id routes a separate review request to one active session; any distinct session may still review.",
+        "Legacy mode is actor-reported and not review or acceptance. Bound edit tasks produce a structured completion report and remain pending until distinct-session review. Optional review_requested_session_id routes a separate review request to one active session; any distinct session may still review. " +
+        `With review_requested_session_id: ${addresseeNote}`,
       annotations: localRetrySafeMutation,
       inputSchema: leaseMutationSchema({
         summary: z.string().min(1).max(4000),
@@ -818,7 +887,8 @@ export function buildCollabMcpServer(
             expected_version: input.expected_version,
             summary: input.summary,
           });
-      return { task };
+      // Unbound calls with review_requested_session_id were refused above.
+      return withAddressee({ task }, task.workspace_id, input.review_requested_session_id);
     }),
   );
 
@@ -827,7 +897,8 @@ export function buildCollabMcpServer(
     {
       title: "Review reported task completion",
       description:
-        "A distinct active session accepts or requests changes. Acceptance is local coordination review—not merge, deploy, truth, or external authority.",
+        "A distinct active session accepts or requests changes. Acceptance is local coordination review—not merge, deploy, truth, or external authority. " +
+        `The review result is addressed to the reporter: ${addresseeNote}`,
       annotations: localRetrySafeMutation,
       inputSchema: {
         workspace_id: workspaceId,
@@ -844,7 +915,8 @@ export function buildCollabMcpServer(
     },
     async ({ workspace_id, ...input }) => call(() => {
       requireWorkspace(workspace_id);
-      return store.reviewTaskForSession({ ...boundCredential(), ...input });
+      const reviewed = store.reviewTaskForSession({ ...boundCredential(), ...input });
+      return withAddressee(reviewed, reviewed.report.workspace_id, reviewed.report.to_session_id);
     }),
   );
 
@@ -853,7 +925,8 @@ export function buildCollabMcpServer(
     {
       title: "Append a structured collaboration report",
       description:
-        "Append an observation, inference, proposal, or scoped decision. Reports can challenge claims without holding the task lease.",
+        "Append an observation, inference, proposal, or scoped decision. Reports can challenge claims without holding the task lease. " +
+        `With to_session_id: ${addresseeNote}`,
       annotations: localRetrySafeMutation,
       inputSchema: {
         workspace_id: workspaceId,
@@ -888,9 +961,8 @@ export function buildCollabMcpServer(
     },
     async ({ workspace_id, ...input }) => call(() => {
       requireWorkspace(workspace_id);
-      return {
-        report: store.appendReportForSession({ ...boundCredential(), ...input }),
-      };
+      const report = store.appendReportForSession({ ...boundCredential(), ...input });
+      return withAddressee({ report }, report.workspace_id, report.to_session_id);
     }),
   );
 
@@ -962,7 +1034,8 @@ export function buildCollabMcpServer(
     {
       title: "Offer a task handoff",
       description:
-        "Invite another actor/session. The current holder keeps the coordination lease until explicit acceptance.",
+        "Invite another actor/session. The current holder keeps the coordination lease until explicit acceptance. " +
+        `A bound session's offer names to_session_id: ${addresseeNote}`,
       annotations: localRetrySafeMutation,
       inputSchema: leaseMutationSchema({
         to_actor: z.string().min(1).max(200).optional(),
@@ -973,18 +1046,20 @@ export function buildCollabMcpServer(
     },
     async ({ workspace_id, actor, to_actor, to_session_id, ...input }) => call(() => {
       requireWorkspace(workspace_id);
-      return state.binding
-        ? store.offerHandoffForSession({
-            ...boundCredential(),
-            ...input,
-            to_session_id: requiredString(to_session_id, "to_session_id"),
-          })
-        : store.offerHandoff({
-            workspace_id,
-            actor: requireLegacyActor(actor),
-            ...input,
-            to_actor: requiredString(to_actor, "to_actor"),
-          });
+      if (state.binding) {
+        const offered = store.offerHandoffForSession({
+          ...boundCredential(),
+          ...input,
+          to_session_id: requiredString(to_session_id, "to_session_id"),
+        });
+        return withAddressee(offered, offered.handoff.workspace_id, offered.handoff.to_session_id);
+      }
+      return store.offerHandoff({
+        workspace_id,
+        actor: requireLegacyActor(actor),
+        ...input,
+        to_actor: requiredString(to_actor, "to_actor"),
+      });
     }),
   );
 

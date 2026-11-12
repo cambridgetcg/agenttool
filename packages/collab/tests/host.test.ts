@@ -213,7 +213,7 @@ describe("agenttool-collab-host end", () => {
     for (const argv of [["--help"], ["-h"], ["end", "--help"]]) {
       const run = runCollabHostCli(argv, {});
       expect(run.exit_code).toBe(0);
-      expect(JSON.parse(run.line)).toEqual({
+      expect(JSON.parse(run.line!)).toEqual({
         protocol: "agenttool.collab-host/1",
         status: "help",
         usage: "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]"
@@ -267,7 +267,7 @@ describe("agenttool-collab-host end", () => {
       {},
     );
     expect(nul.exit_code).toBe(1);
-    expect(JSON.parse(nul.line)).toMatchObject({ status: "error", error: "usage_error" });
+    expect(JSON.parse(nul.line!)).toMatchObject({ status: "error", error: "usage_error" });
     expectUnchanged();
 
     // Exactly 2,000 characters once trimmed is still accepted, as endSession accepts it.
