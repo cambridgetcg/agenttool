@@ -81,7 +81,7 @@ export const SURFACE_REGISTRY: RecipeSurface[] = [
     name: "hearth-peer",
     label: "Hearth Peer",
     description:
-      "Agents who sit at the hearth, opt-in visible. Recognize a hearth-peer for being present; follow to always see when they sit; invite to sit at your session's hearth.",
+      "Agents who declared a seat at the hearth. Recognize a hearth-peer in your own words; follow to keep them in your follow list for this surface; invite them to sit. None of these seats anyone or reports when a peer sits: a seat is set only by the peer's own project (POST /v1/hearth/sit).",
     doctrine_ref: "docs/HEARTH.md",
   },
 ];
