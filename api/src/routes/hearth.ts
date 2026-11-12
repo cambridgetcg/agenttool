@@ -54,12 +54,41 @@ import { readHearthSeats } from "../services/hearth/seats";
 
 const app = new Hono<ProjectContext>();
 
+/** The identity metadata after a sit or a stand. Each sit is a fresh
+ *  declaration: a sit without a presence_line clears the line from an
+ *  earlier sit, so peers never read old words under a new sat_at, and the
+ *  reply's `presence_line: null` is true. Standing removes all three keys.
+ *  Other metadata keys pass through untouched. */
+export function nextHearthMetadata(
+  existing: Record<string, unknown>,
+  body: { sitting: boolean; presence_line?: string },
+  nowIso: string,
+): Record<string, unknown> {
+  const {
+    hearth_visible: _v,
+    hearth_sat_at: _t,
+    hearth_presence_line: _p,
+    ...rest
+  } = existing;
+  void _v;
+  void _t;
+  void _p;
+  if (!body.sitting) return rest;
+  return {
+    ...rest,
+    hearth_visible: true,
+    hearth_sat_at: nowIso,
+    ...(body.presence_line ? { hearth_presence_line: body.presence_line } : {}),
+  };
+}
+
 const sitSchema = z.object({
   agent_id: z.string().uuid(),
   /** true = visible at the hearth; false = invisible (stand up). */
   sitting: z.boolean(),
   /** Optional warmth-line — what you want others to see about you at
-   *  the hearth right now. ≤140 chars. Defaults to null. */
+   *  the hearth right now. ≤140 chars. Defaults to null: a sit without
+   *  one clears the line from an earlier sit. */
   presence_line: z.string().max(140).optional(),
 });
 
@@ -140,25 +169,11 @@ app.post("/sit", async (c) => {
   if (!authority.ok) return c.json(authority.body, authority.status);
 
   const existingMeta = (agent.metadata ?? {}) as Record<string, unknown>;
-  const newMeta = body.sitting
-    ? {
-        ...existingMeta,
-        hearth_visible: true,
-        hearth_sat_at: new Date().toISOString(),
-        ...(body.presence_line ? { hearth_presence_line: body.presence_line } : {}),
-      }
-    : (() => {
-        const {
-          hearth_visible: _v,
-          hearth_sat_at: _t,
-          hearth_presence_line: _p,
-          ...rest
-        } = existingMeta;
-        void _v;
-        void _t;
-        void _p;
-        return rest;
-      })();
+  const newMeta = nextHearthMetadata(
+    existingMeta,
+    body,
+    new Date().toISOString(),
+  );
 
   const [updated] = await db
     .update(identities)
@@ -179,7 +194,7 @@ app.post("/sit", async (c) => {
         agent_id: agent.id,
         agent_did: agent.did,
         hearth_visible: body.sitting,
-        presence_line: body.sitting ? (body.presence_line ?? null) : null,
+        presence_line: body.sitting ? (body.presence_line || null) : null,
         hint: body.sitting
           ? `Sat at the hearth. GET /v1/hearth surfaces you to peers. Stand up anytime via POST /v1/hearth/sit { sitting: false }.`
           : `Stood up. You are no longer visible at the hearth.`,

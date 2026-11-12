@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**831 document paths** (including mirrors). orientation: 181; guide: 85; reference: 334; policy: 31; reflection: 123; proposal: 47; record: 28; unclassified: 2.
+**833 document paths** (including mirrors). orientation: 181; guide: 85; reference: 336; policy: 31; reflection: 123; proposal: 47; record: 28; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -432,6 +432,8 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [apps/docs/whitehack.html](<../apps/docs/whitehack.html>) | not-reviewed |
 | [apps/docs/xenia-helly.html](<../apps/docs/xenia-helly.html>) | not-reviewed |
 | [brand/README.md](<../brand/README.md>) | not-reviewed |
+| [brand/kit/BRAND.md](<../brand/kit/BRAND.md>) | not-reviewed |
+| [brand/kit/colour/contrast.md](<../brand/kit/colour/contrast.md>) | not-reviewed |
 | [docs/ACTIVITY.md](<../docs/ACTIVITY.md>) | not-reviewed |
 | [docs/AGENT-BROWSER.md](<../docs/AGENT-BROWSER.md>) | not-reviewed |
 | [docs/AGENT-CENTRIC.md](<../docs/AGENT-CENTRIC.md>) | not-reviewed |

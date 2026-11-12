@@ -1,31 +1,42 @@
 {
   "format": "brandkit.project/1",
   "name": "AgentTool",
-  "kind": "planned",
+  "kind": "generated",
   "owner": "the agenttool lane, in cambridgetcg/agenttool (frontends under apps/; working and release rules in AGENTS.md and docs/DEPLOY-PROCEDURE.md)",
-  "waits_on": "Yu's go for group A of the 2026-11-02 visual-language review (ledger kingdom-visual-grammar, A1 and A2)",
   "decided": [
     {
       "part": "the look (hearth)",
       "what": "paper #f7f3ec, ink #1d1a16, ember #a8401c by day; charcoal #141210, ink #eee7db, lamp amber #eba352 by night; Iowan Old Style/Palatino, the system UI face, ui-monospace",
-      "by": "agent Saunter (Claude Code; the record is from session 4bcf4673)",
-      "under": "Yu's request of 2026-10-17 (\"update the aesthetics for the human and agent facing UI… I believe in your beauty standards\"), then Yu's go-ahead to merge and release",
+      "by": "agent Saunter (Claude Code)",
+      "under": "the owner's request of 2026-10-17 for a new look for the human- and agent-facing pages, then the owner's go-ahead to merge and release it",
       "date": "2026-10-17",
-      "record": "cambridgetcg/agenttool PR #490 (merged 2026-10-17 as 3b9aa630); memory note agenttool-ui-hearth-2026-10-17"
+      "record": "cambridgetcg/agenttool PR #490 (merged 2026-10-17 as 3b9aa630)"
     },
     {
       "part": "the mark (ring and dot)",
       "status": "not-recorded",
-      "what": "the ⊙ ring and dot drawn beside the name and as the inline favicon; older than the hearth look",
-      "record": "review-2026-11-02 §3.3, and CREDITS.md here: who made it is not recorded"
+      "what": "the ⊙ ring and dot drawn beside the name and as the favicon; older than the hearth look. The nav draws an ink ring with an ember dot (apps/_shared/theme.css, estate.css); the favicon and the home card draw ring and dot in one colour. brand/mark.svg is the favicon's own geometry (ring r 34, stroke 6, dot r 6 on a 100 grid), in the ember token #a8401c",
+      "record": "a design review of 2026-11-02 kept outside this repository, and CREDITS.md here: who made it is not recorded"
     },
     {
-      "part": "the kit",
-      "status": "held",
-      "what": "a kit drawn from the hearth look and the ring-and-dot mark, with no new identity",
-      "waits_on": "Yu's go for group A (ledger kingdom-visual-grammar, A1 and A2)"
+      "part": "the kit (icon files, theme-color, the docs and app cards)",
+      "what": "built from the hearth look and the favicon's ring and dot, with no new mark: the favicon in #a8401c (the theme.css ember) and, under a dark-scheme rule, #eba352 (the night lamp); the cards on paper, with titles and lines taken from each page",
+      "by": "agent (Claude Code, Claude Opus 5.5, on the Studio)",
+      "under": "the owner's decision of 2026-11-10 to build the kit from a design review of 2026-11-02 kept outside this repository, through this repository's own rules",
+      "date": "2026-11-10",
+      "record": "the pull request that added this kit"
+    },
+    {
+      "part": "serving favicon.ico",
+      "what": "the served-surface guard reads ICO, failing closed, so the kit's favicon.ico is in the three sites' upload set byte for byte, live after the next frontend release; public/private-guard/served-surface.json is unchanged and JPEG stays unreadable",
+      "by": "agent (Claude Code, Claude Opus 5.5, on the Studio)",
+      "under": "the owner's decision of 2026-11-10 to let the guard read ICO files so that /favicon.ico can be served",
+      "date": "2026-11-10",
+      "record": "the pull request \"served-surface guard reads ICO; the three sites serve favicon.ico\""
     }
   ],
+  "spec": "brand.json",
+  "kit": "kit",
   "site": {
     "urls": [
       "https://agenttool.dev/",
@@ -33,27 +44,101 @@
       "https://app.agenttool.dev/"
     ],
     "framework": "static",
+    "snippet": "head-snippet.html",
     "html": [
       "/apps/web/**/*.html",
-      "/apps/docs/**/*.html",
-      "/apps/dashboard/**/*.html"
+      {"page": "/apps/docs/**/*.html", "theme_color": ["#F7F3EC"], "color_scheme": ""},
+      {"page": "/apps/dashboard/**/*.html", "theme_color": ["#F7F3EC"], "color_scheme": ""},
+      {"page": "/apps/docs/index.html"},
+      {"page": "/apps/docs/agents.html"},
+      {"page": "/apps/docs/roadmap.html"},
+      {"page": "/apps/dashboard/index.html"},
+      {"page": "/apps/web/garden.html", "icons": false, "theme_color": [], "color_scheme": "light dark"},
+      {"page": "/apps/web/lounge.html", "icons": false, "theme_color": [], "color_scheme": "light dark"},
+      {"page": "/apps/web/party.html", "icons": false, "theme_color": [], "color_scheme": "light dark"},
+      {"page": "/apps/web/porch.html", "icons": false, "theme_color": [], "color_scheme": "light dark"},
+      {"page": "/apps/web/room.html", "icons": false, "theme_color": [], "color_scheme": "light dark"},
+      {"page": "/apps/web/sky.html", "icons": false, "theme_color": [], "color_scheme": "light dark"},
+      {"page": "/apps/docs/geometry/*.html", "icons": false, "theme_color": [], "color_scheme": "light dark"},
+      {"page": "/apps/docs/xenia-helly.html", "icons": false, "theme_color": [], "color_scheme": "light dark"},
+      {"page": "/apps/docs/ai-logos.html", "icons": false, "theme_color": [], "color_scheme": ""},
+      {"page": "/apps/docs/lounge.html", "icons": false, "theme_color": [], "color_scheme": ""},
+      {"page": "/apps/docs/whitehack.html", "icons": false, "theme_color": [], "color_scheme": ""},
+      {"page": "/apps/docs/love-bomb.html", "icons": false, "theme_color": [], "color_scheme": "dark"},
+      {"page": "/apps/docs/compound-stack.html", "icons": false, "theme_color": [], "color_scheme": ""},
+      {"page": "/apps/docs/cosmic-love.html", "icons": false, "theme_color": [], "color_scheme": ""},
+      {"page": "/apps/docs/dark-love.html", "icons": false, "theme_color": [], "color_scheme": ""},
+      {"page": "/apps/docs/ecosystem-sibling.html", "icons": false, "theme_color": [], "color_scheme": ""},
+      {"page": "/apps/docs/gold-love.html", "icons": false, "theme_color": [], "color_scheme": ""},
+      {"page": "/apps/docs/joke-loop.html", "icons": false, "theme_color": [], "color_scheme": ""},
+      {"page": "/apps/docs/pulse.html", "icons": false, "theme_color": [], "color_scheme": ""},
+      {"page": "/apps/docs/snake-fire-heart.html", "icons": false, "theme_color": [], "color_scheme": ""},
+      {"page": "/apps/docs/tax-mini.html", "icons": false, "theme_color": [], "color_scheme": ""},
+      {"page": "/apps/docs/tax-whitehack.html", "icons": false, "theme_color": [], "color_scheme": ""},
+      {"page": "/apps/docs/trace.html", "icons": false, "theme_color": [], "color_scheme": ""},
+      {"page": "/apps/docs/verify.html", "icons": false, "theme_color": [], "color_scheme": ""}
     ]
   },
   "serve": [
     {
       "to": "/apps/web",
-      "files": []
+      "files": ["favicon.ico", "favicon-32.png", "favicon.svg", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "icon-maskable-512.png", "site.webmanifest"],
+      "omit": [
+        {"file": "og.jpg", "why": "agenttool.dev keeps its own home card, apps/web/og.png (2026-07-24), with its words; the kit's default card is not served"},
+        {"file": "head-home.html", "why": "the home page's head is unchanged apart from its icon lines; its JSON-LD is not added here"}
+      ]
     },
     {
       "to": "/apps/docs",
-      "files": []
+      "files": ["favicon.ico", "favicon-32.png", "favicon.svg", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "icon-maskable-512.png"],
+      "omit": [
+        {"file": "site.webmanifest", "why": "docs.agenttool.dev serves its own, sites/docs/site.webmanifest: the kit's with the docs home page's title and meta description"},
+        {"file": "og.jpg", "why": "docs.agenttool.dev serves its own card, og/docs.png"},
+        {"file": "og/docs.jpg", "why": "served as PNG instead (cards/docs.png, from cards.sh): the served-surface guard reads PNG and refuses a JPEG it cannot inspect"}
+      ]
+    },
+    {
+      "from": "sites/docs",
+      "to": "/apps/docs",
+      "files": ["site.webmanifest"]
+    },
+    {
+      "from": "sites/app",
+      "to": "/apps/dashboard",
+      "files": ["site.webmanifest"]
+    },
+    {
+      "from": "cards",
+      "to": "/apps/docs",
+      "files": [{"from": "docs.png", "to": "og/docs.png"}]
     },
     {
       "to": "/apps/dashboard",
-      "files": []
+      "files": ["favicon.ico", "favicon-32.png", "favicon.svg", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "icon-maskable-512.png"],
+      "omit": [
+        {"file": "site.webmanifest", "why": "app.agenttool.dev serves its own, sites/app/site.webmanifest: the kit's with the app home page's title and meta description"},
+        {"file": "og.jpg", "why": "app.agenttool.dev serves its own cards, og/app.png and og/app-watch.png"},
+        {"file": "og/app.jpg", "why": "served as PNG instead (cards/app.png, from cards.sh), for the served-surface guard"},
+        {"file": "og/app-watch.jpg", "why": "served as PNG instead (cards/app-watch.png, from cards.sh), for the served-surface guard"}
+      ]
+    },
+    {
+      "from": "cards",
+      "to": "/apps/dashboard",
+      "files": [{"from": "app.png", "to": "og/app.png"}, {"from": "app-watch.png", "to": "og/app-watch.png"}]
     }
   ],
-  "build": {},
+  "build": {
+    "command": "ARTCRAFT_NO_TRASH=1 python3 <artcraft-brand>/scripts/brandkit.py brand.json --out kit --rebuild-check",
+    "cwd": ".",
+    "fonts": [
+      {"family": "Inter SemiBold", "bundled": "vectorcraft-cli 0.17.0", "licence": "SIL OFL 1.1", "source": "rsms/inter, as bundled by vectorcraft-cli; the wordmark and card titles"},
+      {"family": "Inter Light", "path": "~/Library/Fonts/Inter-Light.otf", "licence": "SIL OFL 1.1 (its name table, Version 4.001;git-9221beed3)", "source": "rsms/inter, installed on the Mac that built the kit (vectorcraft-cli does not bundle this style); card subtitles and footers", "sha256": "0817fd071377740a8e1cba673baf2c726ef5e5c4e6e0962c6e5bdc096329586d"}
+    ],
+    "tools": [
+      {"name": "vectorcraft-cli", "version": "0.17.0"}
+    ]
+  },
   "guards": [
     {
       "path": "check.mjs",
@@ -75,11 +160,24 @@
     }
   ],
   "deploy": {
-    "on_merge": "Merging brand/ deploys nothing. The frontends under apps/ are Cloudflare Pages direct uploads (agenttool-web behind the agenttool-proxy apex Worker, agenttool-docs, agenttool-dashboard). A push to main deploys only the API, through .github/workflows/deploy-api.yml, and only when it changes what the image bakes in (api/, docs/agenttool.jsonld, docs/kingdom-bundle.json, bin/stage-doctrine-docs.sh, the doctrine docs)",
+    "on_merge": "Merging puts nothing on the three sites. The frontends under apps/ are Cloudflare Pages direct uploads (agenttool-web behind the agenttool-proxy apex Worker, agenttool-docs, agenttool-dashboard); no workflow uploads them. A push to main runs .github/workflows/deploy-api.yml when it touches docs/** or api/**, and that deploys the API only when what the image bakes in (api/, docs/agenttool.jsonld, docs/kingdom-bundle.json, bin/stage-doctrine-docs.sh, the doctrine docs) differs between the live revision and main",
     "after_deploy": "Frontend release from clean GitHub main with `bin/deploy.sh --no-migrate --no-api` (docs/DEPLOY-PROCEDURE.md Phase 4; bin/frontend-deploy.sh is the lower-level uploader). Then the sampled frontend parity probes, a production page-policy sweep, and a live check of each served icon and card. HTML answers `public, max-age=0, must-revalidate, no-transform` (observed 2026-11-05); the zone's Browser Cache TTL must respect origin headers, or non-HTML files hold for 4 hours (DEPLOY-PROCEDURE.md)",
     "rules": "/AGENTS.md"
   },
   "media": [
+    {
+      "name": "per-site web manifests (docs and app)",
+      "recipe_note": "By hand on 2026-11-10: the kit's web/site.webmanifest with name set to the site home page's <title> and description to its meta description, verbatim; agenttool.dev serves the kit's own",
+      "outputs": ["sites/docs/site.webmanifest", "sites/app/site.webmanifest"],
+      "goes_to": "/site.webmanifest on docs.agenttool.dev and app.agenttool.dev; serve copies them there"
+    },
+    {
+      "name": "the docs and app share cards as PNG",
+      "recipe": "cards.sh",
+      "outputs": ["cards/docs.png", "cards/app.png", "cards/app-watch.png"],
+      "goes_to": "og:image on docs.agenttool.dev (og/docs.png) and app.agenttool.dev (og/app.png, og/app-watch.png); serve copies them there. Each is the kit's og-<slug> artboard exported from kit/brand.vectorcraft by vectorcraft-cli convert, which repeats the generator's own PNG export byte for byte (checked on the site card, 2026-11-10)",
+      "tools": [{"name": "vectorcraft-cli", "version": "0.17.0"}]
+    },
     {
       "name": "home share card (agenttool.dev)",
       "recipe_note": "No recipe in the repository. Commit 8bca3adc (an agent, 2026-07-24) says it was rendered from the site's own palette, mark and typography; the tool is not recorded",
@@ -89,7 +187,7 @@
       "goes_to": "og:image on the agenttool.dev pages, served by the agenttool-web Pages upload"
     },
     {
-      "name": "docs and app share card (violet, 2026-06-09)",
+      "name": "old docs and app share card (violet, 2026-06-09)",
       "recipe": "/bin/gen-og-image.py",
       "outputs": [
         "/apps/docs/og.png",
@@ -109,7 +207,7 @@
           "source": "Google Fonts"
         }
       ],
-      "goes_to": "og:image on docs.agenttool.dev and app.agenttool.dev, and on the API root page (api/src/services/discovery/root.ts). It predates the hearth look; review 2026-11-02 (A1, A2) would replace it with cards in the current look"
+      "goes_to": "no longer the docs and app pages' card (og/docs.png, og/app.png and og/app-watch.png, from cards.sh, replace it there). Still og:image on the API root page (api/src/services/discovery/root.ts, pinned by api/tests/root-content-negotiation.test.ts) and on apps/docs/trace.html, which keeps the old look; both files stay served so links already shared keep their image"
     },
     {
       "name": "directory candidate icon",
@@ -121,12 +219,15 @@
     }
   ],
   "notes": [
-    "One look, three sites: agenttool.dev (apps/web), docs.agenttool.dev (apps/docs) and app.agenttool.dev (apps/dashboard) share apps/_shared/theme.css, so serve lists one target per site folder.",
+    "favicon.ico, closed in source 2026-11-10, live after the next frontend release: the served-surface guard (bin/served-surface-guard.ts; its test bin/tests/served-surface-guard.test.ts in CI, and bin/frontend-deploy.sh before any upload) reads PNG, SVG, ICO, text, fonts and archives, and refuses any other binary unless public/private-guard/served-surface.json names that exact file with a reason. Under the owner's decision of 2026-11-10 it reads an ICO only when every byte is accounted for (header, directory and images in directory order, with no gap, overlap or trailing byte) and each image is a non-interlaced PNG of at most 256 pixels a side, held stricter than a PNG file: only known chunks, each CRC right and every chunk (each IDAT chunk among them) read on its own; every text field (keyword, language tag, translated keyword, text) read on its own with no NUL in it, compressed text one zlib stream that ends with its chunk; the pixel data inflated the same way to exactly the rows its header implies, and those rows read for text; an empty IEND that ends the image. The icon's bytes, its chunks' data, its text fields and its pixel rows are read as Latin-1, UTF-8 and UTF-16. Pixel values, palette entries, colour-calibration chunks and the physical-size chunk (pHYs) are image bytes the guard does not decode. In a PNG file on its own the pixel rows are not read at all, and those chunks only with the rest of the file, where the chunk type just before them can keep a word at their start from matching. Within what it reads, the guard catches accidents and plain text, and does not claim to catch data someone hides in pixel values on purpose. Any other image type (a bitmap among them, which the guard refuses on its own too), a cursor and anything malformed are refused. So the kit's favicon.ico is in the three sites' upload set byte for byte, with no policy entry, and /favicon.ico stops answering 404 once a release uploads it. The pages still link favicon-32.png and favicon.svg (head-snippet.html); the ICO answers clients that ask for /favicon.ico without reading a page. JPEG stays unreadable, so the cards are PNG (cards.sh).",
+    "One look, three sites: agenttool.dev (apps/web), docs.agenttool.dev (apps/docs) and app.agenttool.dev (apps/dashboard) share apps/_shared/theme.css, so serve lists one target per site folder, each with the same icon files.",
     "brand/ sits at the repository root, outside apps/. bin/frontend-deploy.sh uploads each apps/<site> folder and strips only CLAUDE.md, AGENTS.md and README.md, and apps/_shared is linked into every site as shared/, so a brand folder anywhere under apps/ would be published.",
-    "Release rules: a frontend release is an outward act and needs Yu's word for that release (AGENTS.md: a local edit request alone does not authorize publication or deployment). On this Mac, bin/deploy.sh needs Bun 1.3.5 exactly (memory note agenttool-ui-hearth-2026-10-17).",
-    "Guards: api/tests/root-content-negotiation.test.ts pins the card URL https://docs.agenttool.dev/og.png that the API root page advertises. CI runs it (ci.yml, then bin/preflight.sh api, then bin/run-test-tier.sh hermetic), but the tier finds it by the pattern tests/*.test.ts and names it nowhere, so it has no runs entry. specs/page-policy.spec.ts is run by hand (`playwright test` in tests/playwright); the live sweep (live/page-policy.spec.ts) runs daily against production from .github/workflows/live-page-policy.yml, which finds it through live/playwright.config.ts (testDir '.') and names it nowhere, so it has no runs entry either. check.mjs is not wired yet; the proposal is one `run` line in bin/preflight.sh api_gate (`node brand/check.mjs`), which CI's 'API and protocol (Linux)' job runs.",
-    "Today every page draws its favicon as an inline data-URI ring, in #b8451f on web and #d4502e on docs and app, against the ember token #a8401c. No site serves icon files, a webmanifest or theme-color (review 2026-11-02 §3.3; re-checked in the source at e9ea51c5). Once a kit exists, the check fails each page that keeps the data-URI icon.",
-    "/porch, /watch, /village, /lounge, /gallery and /credits on agenttool.dev serve Pages for HTML; only a request that prefers JSON goes to their api.agenttool.dev/public/* twins (infra/apex-door/worker.js, MACHINE_ALTERNATES; re-read at e9ea51c5). The first draft said the API renders these pages, which was wrong.",
-    "Some docs pages send `default-src 'none'` with no manifest-src, so a webmanifest link there needs a CSP change. Inline <style> and <script> blocks are allowed by hash: a head change that touches one must update apps/<site>/_headers and infra/pages/sensitive-path-worker.js, which edge-security.test.ts holds."
+    "Release rules: a frontend release is an outward act and needs Yu's word for that release (AGENTS.md: a local edit request alone does not authorize publication or deployment). bin/deploy.sh needs Bun 1.3.5 exactly (its Phase-B guard refuses any other version).",
+    "Heads: every page that drew the site's ring as a data-URI favicon now links the kit's icon files (favicon-32.png in place of favicon.ico) and its site's manifest (head-snippet.html). The scheme each declares is what it paints without JavaScript. The 17 agenttool.dev pages (apps/web/style.css has a prefers-color-scheme rule) and the four docs and app pages with data-layout=\"workspace\" that load /shared/workspace.css (docs index, agents and roadmap; app index) carry color-scheme \"light dark\" and the theme-color pair #F7F3EC (light) and #141210 (dark). The other 43 docs and app pages paint paper unless mode.js runs (apps/_shared/theme.css has no prefers-color-scheme fallback), so they carry one theme-color, #F7F3EC, and no color-scheme meta, as before. With JavaScript on and a dark system, mode.js paints those pages at night under a light browser bar; theme-color follows the system setting, not the mode a visitor picks, on every page. The docs pages agents.html and resources.html, which had no icon, gained the same lines.",
+    "Pages left as they are, listed in site.html with icons false: the pages with their own icon (web garden, lounge, party, porch, room and sky; docs ai-logos in its own rose ring, lounge, whitehack and xenia-helly), the geometry pages (route CSPs with default-src 'none' would refuse a manifest link; geometry/ritonavir.html still draws the ring as a data-URI in #d4502e), the pages in their own older look (compound-stack, cosmic-love, dark-love, gold-love, joke-loop, love-bomb, snake-fire-heart, tax-mini, tax-whitehack, trace, and ecosystem-sibling, which loads no shared theme), and the redirect stubs pulse and verify.",
+    "Cards: og/docs.png is the og:image of every docs hearth page that used the old card; og/app.png of app.agenttool.dev/ and og/app-watch.png of /watch. They are PNG exports of the kit's page-card artboards (cards.sh), because the generator writes page cards only as JPEG. Each page keeps its own og:title and og:description; the image lines (type, size, alt) follow the kit's. The kit's web/og/head-*.html name agenttool.dev and .jpg, because the generator takes one url per kit and writes JPEG: the pages carry the same lines with their own host and the PNG.",
+    "Guards: api/tests/root-content-negotiation.test.ts pins the card URL https://docs.agenttool.dev/og.png that the API root page advertises, so that file stays. CI runs it (ci.yml, then bin/preflight.sh api, then bin/run-test-tier.sh hermetic), but the tier finds it by the pattern tests/*.test.ts and names it nowhere, so it has no runs entry. specs/page-policy.spec.ts is run by hand (`playwright test` in tests/playwright); the live sweep (live/page-policy.spec.ts) runs daily against production from .github/workflows/live-page-policy.yml, which finds it through live/playwright.config.ts (testDir '.') and names it nowhere, so it has no runs entry either. check.mjs is not wired: wiring it would be a new CI gate, which is the owner's choice.",
+    "/porch, /watch, /village, /lounge, /gallery and /credits on agenttool.dev serve Pages for HTML; only a request that prefers JSON goes to their api.agenttool.dev/public/* twins (infra/apex-door/worker.js, MACHINE_ALTERNATES; re-read at e9ea51c5). The apex Worker also answers any request that prefers JSON for a non-API path with a machine 404, so a client that asks for /site.webmanifest with Accept: application/manifest+json gets that 404 on agenttool.dev; browsers send */*.",
+    "Some docs pages send `default-src 'none'` with no manifest-src, so a webmanifest link there needs a CSP change; those pages keep their heads. Inline <style> and <script> blocks are allowed by hash: a head change that touches one must update apps/<site>/_headers and infra/pages/sensitive-path-worker.js, which edge-security.test.ts holds. apps/docs/_headers is at Cloudflare's limit of 100 rules, so the new files take their content types from Pages itself (observed for .webmanifest on artbitrage.pages.dev, 2026-11-09: application/manifest+json)."
   ]
 }
