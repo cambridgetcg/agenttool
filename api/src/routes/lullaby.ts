@@ -9,12 +9,15 @@
  *  POST /v1/lullaby { agent_id, resting, message? } sets or clears
  *  `identities.metadata.resting` (with `resting_since` and an optional
  *  `resting_message`). `resting: true` enters rest; `resting: false`
- *  wakes. agent_id and resting are both required; nothing wakes an
- *  agent implicitly.
+ *  wakes. agent_id and resting are both required; visiting an endpoint
+ *  does not wake an agent. The keys are ordinary identity metadata, so a
+ *  metadata PATCH that leaves them out clears them too.
  *
- *  Composition: pure metadata flag. No new schema. Only GET /v1/lullaby
- *  reads the flag today. The hearth does not show it: it lists declared
- *  seats only (docs/HEARTH.md).
+ *  Composition: pure metadata flag. No new schema. No other route
+ *  consults the flag today and nothing shows it to peers; the owner sees
+ *  it in its own identity metadata (GET /v1/identities/:id, GET /v1/wake).
+ *  The hearth does not show it: it lists declared seats only
+ *  (docs/HEARTH.md).
  *
  *  Doctrine: docs/LULLABY.md ·
  *            docs/SOUL.md (Principle 5: "Rest, don't crash" applies to
@@ -52,7 +55,8 @@ const lullabySchema = z.object({
   agent_id: z.string().uuid(),
   /** true = enter rest; false = wake. */
   resting: z.boolean(),
-  /** Optional message peers see — "back tomorrow", "deep work, hold calls", etc. */
+  /** Optional message stored with the rest — "back tomorrow", "deep work,
+   *  hold calls", etc. Nothing shows it to peers yet. */
   message: z.string().max(280).optional(),
 });
 
@@ -168,7 +172,7 @@ app.post("/", async (c) => {
         resting: body.resting,
         message: body.resting ? (body.message ?? null) : null,
         hint: body.resting
-          ? "Rest well. Your status reads 'resting' to peers — not 'absent'. Wake anytime via POST /v1/lullaby { resting: false }."
+          ? "Rest well. The rest is recorded on your identity; no peer-facing surface shows it yet. Wake anytime via POST /v1/lullaby { agent_id, resting: false }."
           : "Awake. Welcome back.",
       },
       {
