@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import { CollabStore } from "../src/store.js";
 import { exactRef, handleOf, NOTE_AUTHORISES, NOTE_CARD, NOTE_CAPABILITIES } from "../src/verbs.js";
@@ -57,6 +58,17 @@ async function ok(server: any, name: string, args: Record<string, unknown> = {})
   return result.structuredContent;
 }
 
+/** Run with the process in `directory`, as an MCP server a host started there would be. */
+async function inDirectory<T>(directory: string, run: () => Promise<T>): Promise<T> {
+  const previous = process.cwd();
+  process.chdir(directory);
+  try {
+    return await run();
+  } finally {
+    process.chdir(previous);
+  }
+}
+
 function joinedPayload(store: CollabStore, sessionId: string): Record<string, unknown> {
   const row = store.db.query(`SELECT payload_json FROM events WHERE type = 'session.joined' AND entity_id = ?`)
     .get(sessionId) as { payload_json: string };
@@ -95,6 +107,9 @@ describe("collab_arrive on an unbound default slot", () => {
     expect(arrived.authorises).toBe(NOTE_AUTHORISES);
     expect(arrived.effect).toContain(`Started session ${id}`);
     expect(arrived.effect).toContain("the legacy cursor was not moved");
+    // Which root the session joined is said, never left to be guessed.
+    expect(arrived.effect).toContain(`in the worktree at ${realpathSync(j.root)}`);
+    expect(arrived.you.root_path).toBe(realpathSync(j.root));
     expect(arrived.ids).toEqual({ session: id, session_handle: handleOf("session", id), workspace_id: arrived.you.workspace_id });
     expect(arrived.note).toBe("note: I have arrived.\n\nPurpose: fix the flaky test");
     expect(arrived.next).toEqual({ tool: "collab_inbox", input: {} });
@@ -235,6 +250,67 @@ describe("collab_arrive on an unbound default slot", () => {
   });
 });
 
+describe("collab_arrive without root_path", () => {
+  const packageRoot = resolve(import.meta.dir, "..");
+  const remedy = { tool: "collab_arrive", input: { purpose: "work on the project", root_path: "<your repository root>" } };
+
+  test("a working directory git does not know is refused before any write, with a ready call", async () => {
+    const j = journal();
+    const outside = mkdtempSync(join(tmpdir(), "agenttool-collab-not-git-"));
+    cleanup.push(() => rmSync(outside, { recursive: true, force: true }));
+    const refused = await inDirectory(outside, () =>
+      call(j.server({ CODEX_THREAD_ID: CODEX_THREAD }), "collab_arrive", { purpose: "work on the project" }));
+    expect(refused.isError).toBe(true);
+    expect(refused.structuredContent).toMatchObject({
+      code: "root_path_required",
+      reason: "not_a_git_worktree",
+      working_directory: realpathSync(outside),
+      remedy,
+    });
+    expect(j.events()).toEqual([]);
+    expect(j.store.db.query(`SELECT COUNT(*) AS n FROM coordination_sessions`).get()).toEqual({ n: 0 });
+  });
+
+  test("this package's own directory is refused even inside a git worktree (a host started the server in its plugin root)", async () => {
+    const j = journal();
+    for (const directory of [packageRoot, join(packageRoot, "dist")]) {
+      const refused = await inDirectory(directory, () =>
+        call(j.server({ CODEX_THREAD_ID: CODEX_THREAD }), "collab_arrive", { purpose: "work on the project", name: "codex" }));
+      expect(refused.structuredContent).toMatchObject({
+        code: "root_path_required",
+        reason: "inside_collab_package",
+        remedy: { tool: "collab_arrive", input: { ...remedy.input, name: "codex" } },
+      });
+    }
+    expect(j.events()).toEqual([]);
+  });
+
+  test("a git worktree is joined at its top level, and the brief names that root", async () => {
+    const j = journal();
+    const repository = mkdtempSync(join(tmpdir(), "agenttool-collab-git-"));
+    cleanup.push(() => rmSync(repository, { recursive: true, force: true }));
+    expect(spawnSync("git", ["init", "-q", repository]).status).toBe(0);
+    mkdirSync(join(repository, "deep", "inside"), { recursive: true });
+    const top = realpathSync(repository);
+    const arrived = await inDirectory(join(repository, "deep", "inside"), () =>
+      ok(j.server(), "collab_arrive", { purpose: "work on the project", name: "here" }));
+    expect(arrived.you.root_path).toBe(top);
+    expect(arrived.effect).toContain(`in the worktree at ${top}`);
+    expect(arrived.effect).toContain("root_path was not given");
+    // A session that names the same root explicitly meets it there.
+    const named = await ok(j.server(), "collab_arrive", { purpose: "the same project", root_path: top, name: "named" });
+    expect(named.you.workspace_id).toBe(arrived.you.workspace_id);
+    expect(named.here.map((entry: any) => entry.session)).toEqual([arrived.you.session]);
+  });
+
+  test("an empty root_path is refused, never read as the working directory", async () => {
+    const j = journal();
+    const refused = await call(j.server(), "collab_arrive", { purpose: "work on the project", root_path: "  " });
+    expect(refused.structuredContent).toMatchObject({ code: "invalid_root_path", remedy });
+    expect(j.events()).toEqual([]);
+  });
+});
+
 describe("collab_arrive on a bound slot", () => {
   test("writes nothing, and names who you speak as with two ready remedies", async () => {
     const j = journal();
@@ -258,6 +334,25 @@ describe("collab_arrive on a bound slot", () => {
     expect(row()).toEqual(rowBefore);
     expect(j.store.db.query(`SELECT * FROM note_marks`).all()).toEqual(marksBefore);
     expect(again.you.purpose).toBe("first purpose");
+    expect(again.you.root_path).toBe(realpathSync(j.root));
+    expect(again.effect).toContain(`Worktree root: ${realpathSync(j.root)}.`);
+  });
+
+  test("totals.for_you counts every item waiting after the mark, not the ten listed", async () => {
+    const j = journal();
+    const server = j.server();
+    const me = await ok(server, "collab_arrive", { purpose: "be written to", root_path: j.root, name: "me" });
+    const peer = j.store.startSession({ root_path: j.root, actor: "peer", role: "writes a lot" });
+    for (let index = 0; index < 30; index += 1) {
+      j.store.appendReportForSession({
+        ...peer.credential, idempotency_key: `m${index}`, kind: "observation", body: `For you ${index}.`, to_session_id: me.you.session,
+      });
+    }
+    j.store.appendReportForSession({ ...peer.credential, idempotency_key: "noise", kind: "observation", body: "For all." });
+    const arrived = await ok(server, "collab_arrive", { purpose: "look" });
+    expect(arrived.for_you).toHaveLength(10);
+    expect(arrived.totals).toMatchObject({ for_you: 30, for_you_more: true, for_you_at_least: false });
+    expect((await ok(server, "collab_inbox", { limit: 50 })).items).toHaveLength(30);
   });
 
   test("revise_purpose appends purpose.declared; the role column is never rewritten", async () => {
@@ -328,6 +423,8 @@ describe("collab_arrive on a named slot", () => {
     );
     expect(child.next).toEqual({ tool: "collab_inbox", input: { binding_key: "k1" } });
     expect(child.you.voice).toBe(parentId);
+    expect(child.you.root_path).toBe(parent.you.root_path);
+    expect(child.effect).toContain(`in the worktree at ${parent.you.root_path}`);
     expect(j.store.consentVoiceOf(childId)).toBe(parentId);
     expect(existsSync(j.store.defaultSessionCredentialPath(childId))).toBe(true);
 

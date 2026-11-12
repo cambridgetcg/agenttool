@@ -5788,7 +5788,7 @@ export class CollabStore {
     operation: string,
     request: unknown,
     apply: (session: CoordinationSessionRow) => T,
-    options: { allow_cursor_recovery?: boolean } = {},
+    options: { allow_cursor_recovery?: boolean; receipt_plan?: ReceiptPlanGuard } = {},
   ): T {
     const idempotencyKey = validateIdempotencyKey(idempotencyKeyInput);
     const transaction = this.db.transaction(() => {
@@ -5812,6 +5812,7 @@ export class CollabStore {
           .run(this.timestamp(), session.id);
         return JSON.parse(existing.response_json) as T;
       }
+      if (options.receipt_plan) this.requireReceiptPlan(session, options.receipt_plan);
 
       // Refresh first so projections built inside apply (assignee_liveness)
       // see the acting session as seen now; a throw rolls this back too.
@@ -7341,6 +7342,8 @@ export class CollabStore {
     generation: number;
     idempotency_key: string;
     purpose: string;
+    /** A derived key's plan, re-checked inside the write's transaction (see ReceiptPlanGuard). */
+    receipt_plan?: ReceiptPlanGuard;
   }): NotePurposeReceipt {
     const purpose = validateNotePurpose(input.purpose);
     return this.mutateAsSession(input, input.idempotency_key, "notes.purpose.v1", { purpose }, (session) => {
@@ -7354,7 +7357,7 @@ export class CollabStore {
         sequence: event.sequence,
         declared_at: event.occurred_at,
       };
-    });
+    }, input.receipt_plan ? { receipt_plan: input.receipt_plan } : {});
   }
 
   /**
@@ -7387,7 +7390,10 @@ export class CollabStore {
     credential: { session_id: string; session_token: string; generation: number },
     prefix: string,
   ): string | null {
-    const session = this.authenticateSession(credential);
+    return this.latestReceiptKey(this.authenticateSession(credential), prefix);
+  }
+
+  private latestReceiptKey(session: CoordinationSessionRow, prefix: string): string | null {
     if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*:$/.test(prefix) || prefix.length > 100) {
       throw new CollabError("invalid_receipt_prefix", "A receipt prefix is a key prefix ending in ':'");
     }
@@ -7400,6 +7406,23 @@ export class CollabStore {
       LIMIT 1
     `).get(session.workspace_id, `session:${session.id}`, prefix, upper) as { idempotency_key: string } | null;
     return row?.idempotency_key ?? null;
+  }
+
+  /**
+   * Inside a write's transaction: the latest key with the plan's prefix must
+   * still be the one the plan was made on, or this call's own key or step.
+   * Choosing a derived key happens outside the transaction, so two calls by
+   * one session on one entity can plan the same seq; without this check the
+   * earlier write could sort as latest and swallow a later deliberate repeat
+   * as a replay. Nothing is written when it fails.
+   */
+  private requireReceiptPlan(session: CoordinationSessionRow, plan: ReceiptPlanGuard): void {
+    const latest = this.latestReceiptKey(session, plan.prefix);
+    if (latest === plan.latest || latest === plan.key || (latest !== null && latest.startsWith(`${plan.key}:`))) return;
+    throw new CollabError(
+      "receipt_plan_stale",
+      "Another call by this session acted on the same entity after this call chose its key; nothing was written",
+    );
   }
 
   /**
@@ -7486,7 +7509,15 @@ export class CollabStore {
           ...noteWaitingShownItems(waiting),
         ], now);
       }
-      return { sequences: returned.map((event) => event.sequence), through, more, also_new: alsoNew, waiting };
+      return {
+        sequences: returned.map((event) => event.sequence),
+        through,
+        more,
+        also_new: alsoNew,
+        for_me_total: scan.events.filter((event) => event.for_me).length,
+        for_me_total_capped: scan.capped,
+        waiting,
+      };
     };
     const planned = input.peek
       ? this.db.transaction(() => {
@@ -7495,7 +7526,7 @@ export class CollabStore {
         return { mark, ...plan(session, mark, false) };
       }).deferred()
       : this.noteHousekeeping(input, (session, mark) => ({ mark, ...plan(session, mark, true) }));
-    return this.db.transaction(() => {
+    return afterHousekeeping(!input.peek, () => this.db.transaction(() => {
       const session = this.authenticateSession(input);
       const sessions = this.noteSessionViews(session.workspace_id);
       const me = sessions.find((view) => view.id === session.id)!;
@@ -7506,6 +7537,8 @@ export class CollabStore {
         entries: planned.sequences.map((sequence) => this.noteEntryAt(session, sequence)),
         also_new: planned.also_new,
         more: planned.more,
+        for_me_total: planned.for_me_total,
+        for_me_total_capped: planned.for_me_total_capped,
         mark: {
           before: planned.mark.sequence,
           through: planned.through,
@@ -7518,7 +7551,7 @@ export class CollabStore {
         waiting: planned.waiting ?? this.noteWaiting(session),
         observed_at: this.timestamp(),
       };
-    }).deferred();
+    }).deferred());
   }
 
   /**
@@ -7551,7 +7584,7 @@ export class CollabStore {
       }
       return { initialised_from: mark.initialised_from, clamped: mark.clamped };
     });
-    return this.db.transaction(() => {
+    return afterHousekeeping(true, () => this.db.transaction(() => {
       const session = this.authenticateSession(input);
       const sessions = this.noteSessionViews(session.workspace_id);
       const me = sessions.find((view) => view.id === session.id)!;
@@ -7637,7 +7670,7 @@ export class CollabStore {
         mark: markState,
         observed_at: this.timestamp(),
       };
-    }).deferred();
+    }).deferred());
   }
 
   /**
@@ -9023,12 +9056,30 @@ export interface NoteWaitingEntry {
   summary: string;
 }
 
+/**
+ * What a derived-key write re-checks in its transaction (Collab Notes spec 5):
+ * `prefix` is the `n1:<eh>:` entity prefix, `latest` the key the plan was
+ * made on (null when there was none), and `key` this call's key, whose
+ * `:<step>` keys also count as this call's own.
+ */
+export interface ReceiptPlanGuard {
+  prefix: string;
+  latest: string | null;
+  key: string;
+}
+
 export interface NoteInboxData {
   session: NoteSessionView;
   sessions: NoteSessionView[];
   entries: NoteEntry[];
   also_new: number;
   more: boolean;
+  /**
+   * Every for-me event after the mark within the scan bound, listed or not;
+   * a lower bound when `for_me_total_capped` (the scan stopped at its bound).
+   */
+  for_me_total: number;
+  for_me_total_capped: boolean;
   mark: {
     before: number;
     through: number;
@@ -9123,6 +9174,21 @@ function noteShownItem(event: CollabEvent): string | null {
 export function noteWaitingShownItems(waiting: readonly NoteWaitingEntry[]): string[] {
   return waiting.flatMap((entry) =>
     entry.what === "voice" ? [entry.ref_id] : entry.what === "review" && entry.about_id ? [entry.about_id] : []);
+}
+
+/**
+ * Run a notes read that follows a committed housekeeping transaction. A
+ * refusal raised here comes after the mark, last-seen time and delivery
+ * records were written, so it is marked `after_housekeeping` and its remedy
+ * never says that nothing was written.
+ */
+function afterHousekeeping<T>(committed: boolean, read: () => T): T {
+  try {
+    return read();
+  } catch (error) {
+    if (!committed || !(error instanceof CollabError) || error.details.after_housekeeping !== undefined) throw error;
+    throw new CollabError(error.code, error.message, { ...error.details, after_housekeeping: true });
+  }
 }
 
 function validateNotePurpose(value: string): string {

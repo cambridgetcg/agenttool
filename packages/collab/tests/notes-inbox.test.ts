@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { CollabError } from "../src/errors.js";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import type { CollabEvent, SessionHandle } from "../src/protocol.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
@@ -51,10 +52,10 @@ function journal() {
   };
 }
 
-async function call(server: any, name: string, args: Record<string, unknown> = {}) {
+async function call(server: any, name: string, args: Record<string, unknown> = {}, signal?: AbortSignal) {
   const registration = server._registeredTools[name];
   if (!registration) throw new Error(`tool not registered: ${name}`);
-  return await (registration.handler ?? registration.callback)(args, {}) as {
+  return await (registration.handler ?? registration.callback)(args, signal ? { mcpReq: { signal } } : {}) as {
     isError?: boolean;
     structuredContent: Record<string, any>;
   };
@@ -391,6 +392,71 @@ describe("wait_seconds", () => {
     expect(result.items.map((item: any) => item.statement)).toEqual(["For you."]);
     expect(result.also_new).toEqual({ count: 2 });
   });
+
+  test("a wait that fails after the first pass still returns that pass, which already moved the mark", async () => {
+    const j = journal();
+    const me = j.start("me");
+    const peer = j.start("peer");
+    const server = j.serve(me);
+    await ok(server, "collab_inbox");
+    report(j.store, peer, "before", "Not for you.");
+    const waiting = call(server, "collab_inbox", { wait_seconds: 5, include: "all" });
+    await new Promise((done) => setTimeout(done, 300));
+    // The host ends the session while it waits.
+    j.store.endSession({ ...me.credential, reason: "ended by the host mid-wait" });
+    const result = await waiting;
+    expect(result.isError).toBeUndefined();
+    const content = result.structuredContent;
+    expect(content.waited).toMatchObject({ ended_by: "error", code: "session_auth_failed" });
+    expect(content.also_new).toEqual({ count: 1 });
+    expect(content.items.map((item: any) => item.statement)).toEqual(["Not for you."]);
+    expect(content.read_through.sequence).toBe(j.store.noteMark(me.workspace.id, me.session.id));
+    expect(content.next.say).toBeString();
+  });
+
+  test("a read that fails after the housekeeping commit never says nothing was written", async () => {
+    const j = journal();
+    const me = j.start("me");
+    const peer = j.start("peer");
+    const server = j.serve(me);
+    await ok(server, "collab_inbox");
+    report(j.store, peer, "for-me", "For you.", { to_session_id: me.session.id });
+    const markBefore = j.store.noteMark(me.workspace.id, me.session.id);
+    // The deferred read, which runs after the housekeeping committed, fails once.
+    const views = j.store.noteSessionViews.bind(j.store);
+    let failures = 1;
+    (j.store as any).noteSessionViews = (workspaceId: string) => {
+      if (failures-- > 0) throw new CollabError("event_not_found", "No event at sequence 9");
+      return views(workspaceId);
+    };
+    const failed = await call(server, "collab_inbox");
+    expect(failed.isError).toBe(true);
+    expect(failed.structuredContent).toMatchObject({ code: "event_not_found", after_housekeeping: true });
+    expect(failed.structuredContent.remedy.say).toContain("had already recorded its housekeeping");
+    expect(failed.structuredContent.remedy.say).not.toContain("Nothing was written");
+    expect(j.store.noteMark(me.workspace.id, me.session.id)).toBeGreaterThan(markBefore!);
+  });
+
+  test("a cancelled wait says what its first pass did, and never that nothing was written", async () => {
+    const j = journal();
+    const me = j.start("me");
+    const peer = j.start("peer");
+    const server = j.serve(me);
+    await ok(server, "collab_inbox");
+    report(j.store, peer, "before", "Not for you.");
+    const controller = new AbortController();
+    const waiting = call(server, "collab_inbox", { wait_seconds: 5, include: "all" }, controller.signal);
+    await new Promise((done) => setTimeout(done, 300));
+    controller.abort();
+    const result = await waiting;
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent.code).toBe("wait_cancelled");
+    expect(result.structuredContent.remedy.say).not.toContain("Nothing was written");
+    expect(result.structuredContent.remedy.say).toContain("read mark");
+    // What the first pass counted travels with the refusal, so it is not lost silently.
+    expect(result.structuredContent.first_pass.also_new).toEqual({ count: 1 });
+    expect(result.structuredContent.first_pass.items.map((item: any) => item.statement)).toEqual(["Not for you."]);
+  });
 });
 
 describe("collab_inbox about", () => {
@@ -676,7 +742,7 @@ describe("collab_inbox about, format note", () => {
     const me = j.start("me");
     const peer = j.start("peer");
     const opened = j.store.openProposalForSession({
-      ...peer.credential, idempotency_key: "p", question: "Ship /Users/someone/secret/path?", criteria: "c", extent: "e",
+      ...peer.credential, idempotency_key: "p", question: "Ship /Users/example/secret/path?", criteria: "c", extent: "e",
     });
     const view = await ok(j.serve(me), "collab_inbox", { about: opened.proposal.id, format: "note" });
     expect(view.root.id).toBe(opened.proposal.id);

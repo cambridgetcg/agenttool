@@ -4860,6 +4860,8 @@ class CollabStore {
         this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), session.id);
         return JSON.parse(existing.response_json);
       }
+      if (options.receipt_plan)
+        this.requireReceiptPlan(session, options.receipt_plan);
       this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), session.id);
       const guardNonce = `guard_${randomUUID()}`;
       this.db.query(`INSERT INTO v2_write_guard (nonce, enabled) VALUES (?, 1)`).run(guardNonce);
@@ -5894,7 +5896,7 @@ class CollabStore {
         sequence: event.sequence,
         declared_at: event.occurred_at
       };
-    });
+    }, input.receipt_plan ? { receipt_plan: input.receipt_plan } : {});
   }
   readReceiptByKey(credential, key) {
     const session = this.authenticateSession(credential);
@@ -5908,7 +5910,9 @@ class CollabStore {
     return { found: true, operation: row.operation, value: JSON.parse(row.response_json) };
   }
   latestReceiptKeyForSession(credential, prefix) {
-    const session = this.authenticateSession(credential);
+    return this.latestReceiptKey(this.authenticateSession(credential), prefix);
+  }
+  latestReceiptKey(session, prefix) {
     if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*:$/.test(prefix) || prefix.length > 100) {
       throw new CollabError("invalid_receipt_prefix", "A receipt prefix is a key prefix ending in ':'");
     }
@@ -5920,6 +5924,12 @@ class CollabStore {
       LIMIT 1
     `).get(session.workspace_id, `session:${session.id}`, prefix, upper);
     return row?.idempotency_key ?? null;
+  }
+  requireReceiptPlan(session, plan) {
+    const latest = this.latestReceiptKey(session, plan.prefix);
+    if (latest === plan.latest || latest === plan.key || latest !== null && latest.startsWith(`${plan.key}:`))
+      return;
+    throw new CollabError("receipt_plan_stale", "Another call by this session acted on the same entity after this call chose its key; nothing was written");
   }
   initNoteMark(credential, sequence) {
     const marked = this.db.transaction(() => {
@@ -5974,14 +5984,22 @@ class CollabStore {
           ...noteWaitingShownItems(waiting)
         ], now);
       }
-      return { sequences: returned.map((event) => event.sequence), through, more, also_new: alsoNew, waiting };
+      return {
+        sequences: returned.map((event) => event.sequence),
+        through,
+        more,
+        also_new: alsoNew,
+        for_me_total: scan.events.filter((event) => event.for_me).length,
+        for_me_total_capped: scan.capped,
+        waiting
+      };
     };
     const planned = input.peek ? this.db.transaction(() => {
       const session = this.authenticateSession(input);
       const mark = this.readNoteMarkState(session);
       return { mark, ...plan(session, mark, false) };
     }).deferred() : this.noteHousekeeping(input, (session, mark) => ({ mark, ...plan(session, mark, true) }));
-    return this.db.transaction(() => {
+    return afterHousekeeping(!input.peek, () => this.db.transaction(() => {
       const session = this.authenticateSession(input);
       const sessions = this.noteSessionViews(session.workspace_id);
       const me = sessions.find((view) => view.id === session.id);
@@ -5992,6 +6010,8 @@ class CollabStore {
         entries: planned.sequences.map((sequence) => this.noteEntryAt(session, sequence)),
         also_new: planned.also_new,
         more: planned.more,
+        for_me_total: planned.for_me_total,
+        for_me_total_capped: planned.for_me_total_capped,
         mark: {
           before: planned.mark.sequence,
           through: planned.through,
@@ -6004,7 +6024,7 @@ class CollabStore {
         waiting: planned.waiting ?? this.noteWaiting(session),
         observed_at: this.timestamp()
       };
-    }).deferred();
+    }).deferred());
   }
   noteThreadForSession(input) {
     const id = validateId(input.id, `${input.kind}_id`);
@@ -6023,7 +6043,7 @@ class CollabStore {
       }
       return { initialised_from: mark.initialised_from, clamped: mark.clamped };
     });
-    return this.db.transaction(() => {
+    return afterHousekeeping(true, () => this.db.transaction(() => {
       const session = this.authenticateSession(input);
       const sessions = this.noteSessionViews(session.workspace_id);
       const me = sessions.find((view) => view.id === session.id);
@@ -6108,7 +6128,7 @@ class CollabStore {
         mark: markState,
         observed_at: this.timestamp()
       };
-    }).deferred();
+    }).deferred());
   }
   arrivalBrief(credential) {
     return this.db.transaction(() => {
@@ -7069,6 +7089,15 @@ function noteShownItem(event) {
 }
 function noteWaitingShownItems(waiting) {
   return waiting.flatMap((entry) => entry.what === "voice" ? [entry.ref_id] : entry.what === "review" && entry.about_id ? [entry.about_id] : []);
+}
+function afterHousekeeping(committed, read) {
+  try {
+    return read();
+  } catch (error) {
+    if (!committed || !(error instanceof CollabError) || error.details.after_housekeeping !== undefined)
+      throw error;
+    throw new CollabError(error.code, error.message, { ...error.details, after_housekeeping: true });
+  }
 }
 function validateNotePurpose(value) {
   const purpose = cleanText(typeof value === "string" ? value : "", "purpose", NOTE_PURPOSE_MAX_CHARS);

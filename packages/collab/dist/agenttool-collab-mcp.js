@@ -28771,9 +28771,9 @@ function isOwnedByCurrentUser(uid) {
 
 // src/verbs.ts
 import { createHash as createHash4 } from "crypto";
-import { existsSync as existsSync4 } from "fs";
+import { existsSync as existsSync4, realpathSync as realpathSync2 } from "fs";
 import { hostname as hostname3 } from "os";
-import { resolve as resolve5 } from "path";
+import { resolve as resolve5, sep } from "path";
 
 // src/canonical.ts
 function canonicalJson(value) {
@@ -30039,201 +30039,8 @@ ${NOTE_CARRY_DISCLAIMER}`,
   return { text, not_carried: notCarried() };
 }
 
-// src/store.ts
-import { Database } from "bun:sqlite";
-import { createHash as createHash3, randomBytes, randomUUID as randomUUID2, timingSafeEqual } from "crypto";
-import {
-  chmodSync as chmodSync2,
-  closeSync as closeSync5,
-  existsSync as existsSync3,
-  lstatSync as lstatSync3,
-  mkdirSync as mkdirSync2,
-  openSync as openSync5
-} from "fs";
-import { dirname as dirname2, isAbsolute as isAbsolute2, join as join3, posix, resolve as resolve4 } from "path";
-
-// src/passkey.ts
-import { createHash, createPublicKey, verify } from "crypto";
-var FLAG_USER_PRESENT = 1;
-var FLAG_USER_VERIFIED = 4;
-var BASE64URL = /^[A-Za-z0-9_-]*$/;
-function base64urlDecode(value, field, maxBytes = 64 * 1024) {
-  if (typeof value !== "string" || !BASE64URL.test(value) || value.length === 0) {
-    throw new CollabError("passkey_assertion_invalid", `${field} must be non-empty base64url`);
-  }
-  const bytes = Buffer.from(value, "base64url");
-  if (bytes.length > maxBytes) {
-    throw new CollabError("passkey_assertion_invalid", `${field} exceeds ${maxBytes} bytes`);
-  }
-  return bytes;
-}
-function sha256(bytes) {
-  return createHash("sha256").update(bytes).digest();
-}
-function personActChallenge(input) {
-  const challenge_bytes = canonicalJson({ protocol: PERSON_ACT_PROTOCOL, ...input });
-  return { challenge_bytes, challenge: sha256(challenge_bytes).toString("base64url") };
-}
-var ASSERTION_FIELDS = new Set(["credential_id", "authenticator_data", "client_data_json", "signature", "user_handle"]);
-function normalizePasskeyAssertion(value) {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new CollabError("passkey_assertion_invalid", "The assertion must be a JSON object");
-  }
-  const input = value;
-  const unknown2 = Object.keys(input).filter((key) => !ASSERTION_FIELDS.has(key));
-  if (unknown2.length > 0) {
-    throw new CollabError("passkey_assertion_invalid", "The assertion has fields WebAuthn does not define", { fields: unknown2 });
-  }
-  const field = (name, maxBytes) => {
-    base64urlDecode(input[name], name, maxBytes);
-    return input[name];
-  };
-  const userHandle = input.user_handle === undefined || input.user_handle === null ? null : field("user_handle", 64);
-  return {
-    credential_id: field("credential_id", 1023),
-    authenticator_data: field("authenticator_data", 4096),
-    client_data_json: field("client_data_json", 4096),
-    signature: field("signature", 256),
-    user_handle: userHandle
-  };
-}
-function normalizePasskeyEnrollment(input) {
-  base64urlDecode(input.credential_id, "credential_id", 1023);
-  if (typeof input.public_key_spki !== "string") {
-    throw new CollabError("passkey_key_invalid", "public_key_spki must be base64url DER");
-  }
-  parsePasskeyPublicKey(input.public_key_spki);
-  if (input.algorithm !== -7) {
-    throw new CollabError("passkey_key_invalid", "Only ES256 (COSE algorithm -7) passkeys are supported");
-  }
-  const scope = validatePasskeyScope(input.rp_id, input.origin);
-  let label = null;
-  if (input.label !== undefined && input.label !== null) {
-    if (typeof input.label !== "string" || input.label.trim().length > 80 || /[\u0000-\u001f\u007f]/.test(input.label)) {
-      throw new CollabError("passkey_label_invalid", "label must be at most 80 characters without control characters");
-    }
-    label = input.label.trim() || null;
-  }
-  return {
-    credential_id: input.credential_id,
-    public_key_spki: input.public_key_spki,
-    algorithm: -7,
-    ...scope,
-    label
-  };
-}
-function parsePasskeyPublicKey(spki) {
-  const der = base64urlDecode(spki, "public_key_spki", 1024);
-  let key;
-  try {
-    key = createPublicKey({ key: der, format: "der", type: "spki" });
-  } catch {
-    throw new CollabError("passkey_key_invalid", "public_key_spki is not a DER SubjectPublicKeyInfo");
-  }
-  if (key.asymmetricKeyType !== "ec" || key.asymmetricKeyDetails?.namedCurve !== "prime256v1") {
-    throw new CollabError("passkey_key_invalid", "Only ES256 (P-256) passkeys are supported");
-  }
-  return key;
-}
-function passkeyFingerprint(spki) {
-  return sha256(base64urlDecode(spki, "public_key_spki", 1024)).toString("hex");
-}
-function validatePasskeyScope(rpId, origin) {
-  if (typeof rpId !== "string" || !/^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/.test(rpId)) {
-    throw new CollabError("passkey_scope_invalid", "rp_id must be a lowercase host name");
-  }
-  let url2;
-  try {
-    url2 = new URL(String(origin));
-  } catch {
-    throw new CollabError("passkey_scope_invalid", "origin must be a URL origin");
-  }
-  const secure = url2.protocol === "https:" || url2.protocol === "http:" && url2.hostname === "localhost";
-  const hostMatches = url2.hostname === rpId || url2.hostname.endsWith(`.${rpId}`);
-  if (!secure || !hostMatches || url2.origin !== origin) {
-    throw new CollabError("passkey_scope_invalid", "origin must be an https origin (or http://localhost) whose host is rp_id or one of its subdomains");
-  }
-  return { rp_id: rpId, origin: url2.origin };
-}
-function verifyPasskeyAssertion(input) {
-  const { passkey, assertion } = input;
-  if (assertion.credential_id !== passkey.credential_id) {
-    throw new CollabError("passkey_not_enrolled", "The assertion names a different credential");
-  }
-  const clientDataBytes = base64urlDecode(assertion.client_data_json, "client_data_json");
-  const authenticatorData = base64urlDecode(assertion.authenticator_data, "authenticator_data");
-  const signature = base64urlDecode(assertion.signature, "signature", 256);
-  let clientData;
-  try {
-    const parsed = JSON.parse(clientDataBytes.toString("utf8"));
-    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
-      throw new Error("not an object");
-    clientData = parsed;
-  } catch {
-    throw new CollabError("passkey_assertion_invalid", "client_data_json is not a JSON object");
-  }
-  if (clientData.type !== "webauthn.get") {
-    throw new CollabError("passkey_assertion_invalid", "client data type must be webauthn.get");
-  }
-  if (clientData.challenge !== input.expected_challenge) {
-    throw new CollabError("passkey_challenge_mismatch", "The assertion signs a different act; request a fresh challenge for the current state");
-  }
-  if (clientData.origin !== passkey.origin || clientData.crossOrigin === true) {
-    throw new CollabError("passkey_origin_mismatch", "The assertion came from another origin");
-  }
-  if (authenticatorData.length < 37) {
-    throw new CollabError("passkey_assertion_invalid", "authenticator_data is too short");
-  }
-  if (!authenticatorData.subarray(0, 32).equals(sha256(passkey.rp_id))) {
-    throw new CollabError("passkey_rp_mismatch", "The assertion is for another relying party");
-  }
-  const flags = authenticatorData[32];
-  if ((flags & FLAG_USER_PRESENT) === 0 || (flags & FLAG_USER_VERIFIED) === 0) {
-    throw new CollabError("passkey_user_not_verified", "The authenticator did not report user presence and user verification");
-  }
-  const signCount = authenticatorData.readUInt32BE(33);
-  if ((signCount !== 0 || passkey.sign_count !== 0) && signCount <= passkey.sign_count) {
-    throw new CollabError("passkey_counter_regressed", "The signature counter did not increase");
-  }
-  const signed = Buffer.concat([authenticatorData, sha256(clientDataBytes)]);
-  const valid = verify("sha256", signed, { key: parsePasskeyPublicKey(passkey.public_key_spki), dsaEncoding: "der" }, signature);
-  if (!valid)
-    throw new CollabError("passkey_signature_invalid", "The passkey signature does not verify");
-  return { sign_count: signCount };
-}
-
-// src/proposal.ts
-function proposalBytes(content) {
-  return canonicalJson({ protocol: PROPOSAL_BYTES_PROTOCOL, rule: CONSENT_RULE, ...content });
-}
-function aiPosition(input) {
-  const closed = Date.parse(input.now) >= Date.parse(input.closes_at);
-  const others = [...new Set(input.snapshot_voice_ids)].filter((voice) => voice !== input.author_voice_id).sort();
-  const lone = others.length === 0;
-  const qualifying_support_indexes = input.support_voice_ids.flatMap((voice, index) => lone || voice !== input.author_voice_id ? [index] : []);
-  const supported = new Set(qualifying_support_indexes.map((index) => input.support_voice_ids[index]));
-  const awaiting_voice_ids = others.filter((voice) => !supported.has(voice));
-  const result = (position) => ({
-    position,
-    closed,
-    qualifying_support_indexes,
-    awaiting_voice_ids
-  });
-  if (input.obsoleted)
-    return result(input.obsoleted);
-  const hasSupport = qualifying_support_indexes.length > 0;
-  if (!closed) {
-    if (input.unresolved_challenge)
-      return result("challenged");
-    return result(hasSupport && awaiting_voice_ids.length === 0 ? "consented" : "open");
-  }
-  if (input.unresolved_challenge)
-    return result("split");
-  return result(hasSupport ? "consented" : "lapsed");
-}
-
 // src/repository.ts
-import { createHash as createHash2 } from "crypto";
+import { createHash } from "crypto";
 import {
   closeSync as closeSync4,
   existsSync as existsSync2,
@@ -30273,13 +30080,13 @@ function inspectRepository(rootInput, explicitRepositoryKey, metadataOnly = fals
   const rootPath = topLevel && existsSync2(topLevel) ? realpathSync(topLevel) : requestedRoot;
   const explicitKey = explicitRepositoryKey?.trim();
   if (!topLevel) {
-    const repositoryKey2 = explicitKey ? `explicit:${sha2562(explicitKey)}` : `local-path:${sha2562(rootPath)}`;
+    const repositoryKey2 = explicitKey ? `explicit:${sha256(explicitKey)}` : `local-path:${sha256(rootPath)}`;
     return {
       requested_root_path: requestedRoot,
       root_path: rootPath,
       repository_key: repositoryKey2,
       git_common_dir_hash: null,
-      worktree_fingerprint: `path:${sha2562(rootPath)}`,
+      worktree_fingerprint: `path:${sha256(rootPath)}`,
       checkpoint: {
         worktree_id: worktreeId(rootPath, `path:${rootPath}`),
         head_sha: null,
@@ -30296,9 +30103,9 @@ function inspectRepository(rootInput, explicitRepositoryKey, metadataOnly = fals
   }
   const commonDir = realpathIfPresent(resolveGitPath(rootPath, commonDirOutput));
   const gitDir = realpathIfPresent(resolveGitPath(rootPath, gitDirOutput));
-  const commonDirHash = sha2562(commonDir);
-  const repositoryKey = explicitKey ? `explicit:${sha2562(explicitKey)}` : `local-git:${commonDirHash}`;
-  const fingerprint = `git:${sha2562(`${commonDir}\x00${gitDir}`)}`;
+  const commonDirHash = sha256(commonDir);
+  const repositoryKey = explicitKey ? `explicit:${sha256(explicitKey)}` : `local-git:${commonDirHash}`;
+  const fingerprint = `git:${sha256(`${commonDir}\x00${gitDir}`)}`;
   const id = worktreeId(rootPath, fingerprint);
   return {
     requested_root_path: requestedRoot,
@@ -30325,7 +30132,7 @@ function portableRepositoryKey(rootPath, optionsOrDeadline = {}) {
   const root = roots.stdout.toString("utf8").trim();
   if (!GIT_OBJECT_ID.test(root))
     return null;
-  return `git-root-remote:v1:${sha2562(`${root}\x00${canonical}`)}`;
+  return `git-root-remote:v1:${sha256(`${root}\x00${canonical}`)}`;
 }
 function canonicalRepositoryRemote(value) {
   if (/[\s\x00-\x1f\x7f]/.test(value) || value.includes("::") || value.includes("://") && !/^(https?|ssh|git):\/\//i.test(value))
@@ -30489,7 +30296,7 @@ function inspectSuccessorCommit(rootPath, commitSha, parentSha) {
   return { ok: true, commit_sha: commitSha, parent_sha: parentSha, changes };
 }
 function worktreeId(rootPath, fingerprint) {
-  return `wt_${sha2562(`${rootPath}\x00${fingerprint}`).slice(0, 24)}`;
+  return `wt_${sha256(`${rootPath}\x00${fingerprint}`).slice(0, 24)}`;
 }
 function resolveGitPath(rootPath, value) {
   return value.startsWith("/") ? value : resolve3(rootPath, value);
@@ -30580,7 +30387,7 @@ function digestUntrackedContent(rootPath, paths) {
     remainingBytes: MAX_UNTRACKED_BYTES,
     deadline: Date.now() + MAX_UNTRACKED_HASH_MS
   };
-  const aggregate = createHash2("sha256");
+  const aggregate = createHash("sha256");
   aggregate.update("agenttool.collab/untracked-state/v1\x00");
   for (const entry of entries) {
     if (Date.now() > budget.deadline)
@@ -30629,7 +30436,7 @@ function digestStableFile(path, budget) {
     const before = fstatSync3(descriptor);
     if (!before.isFile() || before.size > budget.remainingBytes || Date.now() > budget.deadline)
       return null;
-    const hash2 = createHash2("sha256");
+    const hash2 = createHash("sha256");
     const buffer = Buffer.allocUnsafe(64 * 1024);
     while (true) {
       if (Date.now() > budget.deadline)
@@ -30685,11 +30492,204 @@ function lengthPrefix(value) {
   prefix2.writeBigUInt64BE(BigInt(value));
   return prefix2;
 }
-function sha2562(value) {
-  return createHash2("sha256").update(value).digest("hex");
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
 }
 function sha256Bytes(value) {
-  return createHash2("sha256").update(value).digest("hex");
+  return createHash("sha256").update(value).digest("hex");
+}
+
+// src/store.ts
+import { Database } from "bun:sqlite";
+import { createHash as createHash3, randomBytes, randomUUID as randomUUID2, timingSafeEqual } from "crypto";
+import {
+  chmodSync as chmodSync2,
+  closeSync as closeSync5,
+  existsSync as existsSync3,
+  lstatSync as lstatSync3,
+  mkdirSync as mkdirSync2,
+  openSync as openSync5
+} from "fs";
+import { dirname as dirname2, isAbsolute as isAbsolute2, join as join3, posix, resolve as resolve4 } from "path";
+
+// src/passkey.ts
+import { createHash as createHash2, createPublicKey, verify } from "crypto";
+var FLAG_USER_PRESENT = 1;
+var FLAG_USER_VERIFIED = 4;
+var BASE64URL = /^[A-Za-z0-9_-]*$/;
+function base64urlDecode(value, field, maxBytes = 64 * 1024) {
+  if (typeof value !== "string" || !BASE64URL.test(value) || value.length === 0) {
+    throw new CollabError("passkey_assertion_invalid", `${field} must be non-empty base64url`);
+  }
+  const bytes = Buffer.from(value, "base64url");
+  if (bytes.length > maxBytes) {
+    throw new CollabError("passkey_assertion_invalid", `${field} exceeds ${maxBytes} bytes`);
+  }
+  return bytes;
+}
+function sha2562(bytes) {
+  return createHash2("sha256").update(bytes).digest();
+}
+function personActChallenge(input) {
+  const challenge_bytes = canonicalJson({ protocol: PERSON_ACT_PROTOCOL, ...input });
+  return { challenge_bytes, challenge: sha2562(challenge_bytes).toString("base64url") };
+}
+var ASSERTION_FIELDS = new Set(["credential_id", "authenticator_data", "client_data_json", "signature", "user_handle"]);
+function normalizePasskeyAssertion(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new CollabError("passkey_assertion_invalid", "The assertion must be a JSON object");
+  }
+  const input = value;
+  const unknown2 = Object.keys(input).filter((key) => !ASSERTION_FIELDS.has(key));
+  if (unknown2.length > 0) {
+    throw new CollabError("passkey_assertion_invalid", "The assertion has fields WebAuthn does not define", { fields: unknown2 });
+  }
+  const field = (name, maxBytes) => {
+    base64urlDecode(input[name], name, maxBytes);
+    return input[name];
+  };
+  const userHandle = input.user_handle === undefined || input.user_handle === null ? null : field("user_handle", 64);
+  return {
+    credential_id: field("credential_id", 1023),
+    authenticator_data: field("authenticator_data", 4096),
+    client_data_json: field("client_data_json", 4096),
+    signature: field("signature", 256),
+    user_handle: userHandle
+  };
+}
+function normalizePasskeyEnrollment(input) {
+  base64urlDecode(input.credential_id, "credential_id", 1023);
+  if (typeof input.public_key_spki !== "string") {
+    throw new CollabError("passkey_key_invalid", "public_key_spki must be base64url DER");
+  }
+  parsePasskeyPublicKey(input.public_key_spki);
+  if (input.algorithm !== -7) {
+    throw new CollabError("passkey_key_invalid", "Only ES256 (COSE algorithm -7) passkeys are supported");
+  }
+  const scope = validatePasskeyScope(input.rp_id, input.origin);
+  let label = null;
+  if (input.label !== undefined && input.label !== null) {
+    if (typeof input.label !== "string" || input.label.trim().length > 80 || /[\u0000-\u001f\u007f]/.test(input.label)) {
+      throw new CollabError("passkey_label_invalid", "label must be at most 80 characters without control characters");
+    }
+    label = input.label.trim() || null;
+  }
+  return {
+    credential_id: input.credential_id,
+    public_key_spki: input.public_key_spki,
+    algorithm: -7,
+    ...scope,
+    label
+  };
+}
+function parsePasskeyPublicKey(spki) {
+  const der = base64urlDecode(spki, "public_key_spki", 1024);
+  let key;
+  try {
+    key = createPublicKey({ key: der, format: "der", type: "spki" });
+  } catch {
+    throw new CollabError("passkey_key_invalid", "public_key_spki is not a DER SubjectPublicKeyInfo");
+  }
+  if (key.asymmetricKeyType !== "ec" || key.asymmetricKeyDetails?.namedCurve !== "prime256v1") {
+    throw new CollabError("passkey_key_invalid", "Only ES256 (P-256) passkeys are supported");
+  }
+  return key;
+}
+function passkeyFingerprint(spki) {
+  return sha2562(base64urlDecode(spki, "public_key_spki", 1024)).toString("hex");
+}
+function validatePasskeyScope(rpId, origin) {
+  if (typeof rpId !== "string" || !/^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/.test(rpId)) {
+    throw new CollabError("passkey_scope_invalid", "rp_id must be a lowercase host name");
+  }
+  let url2;
+  try {
+    url2 = new URL(String(origin));
+  } catch {
+    throw new CollabError("passkey_scope_invalid", "origin must be a URL origin");
+  }
+  const secure = url2.protocol === "https:" || url2.protocol === "http:" && url2.hostname === "localhost";
+  const hostMatches = url2.hostname === rpId || url2.hostname.endsWith(`.${rpId}`);
+  if (!secure || !hostMatches || url2.origin !== origin) {
+    throw new CollabError("passkey_scope_invalid", "origin must be an https origin (or http://localhost) whose host is rp_id or one of its subdomains");
+  }
+  return { rp_id: rpId, origin: url2.origin };
+}
+function verifyPasskeyAssertion(input) {
+  const { passkey, assertion } = input;
+  if (assertion.credential_id !== passkey.credential_id) {
+    throw new CollabError("passkey_not_enrolled", "The assertion names a different credential");
+  }
+  const clientDataBytes = base64urlDecode(assertion.client_data_json, "client_data_json");
+  const authenticatorData = base64urlDecode(assertion.authenticator_data, "authenticator_data");
+  const signature = base64urlDecode(assertion.signature, "signature", 256);
+  let clientData;
+  try {
+    const parsed = JSON.parse(clientDataBytes.toString("utf8"));
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
+      throw new Error("not an object");
+    clientData = parsed;
+  } catch {
+    throw new CollabError("passkey_assertion_invalid", "client_data_json is not a JSON object");
+  }
+  if (clientData.type !== "webauthn.get") {
+    throw new CollabError("passkey_assertion_invalid", "client data type must be webauthn.get");
+  }
+  if (clientData.challenge !== input.expected_challenge) {
+    throw new CollabError("passkey_challenge_mismatch", "The assertion signs a different act; request a fresh challenge for the current state");
+  }
+  if (clientData.origin !== passkey.origin || clientData.crossOrigin === true) {
+    throw new CollabError("passkey_origin_mismatch", "The assertion came from another origin");
+  }
+  if (authenticatorData.length < 37) {
+    throw new CollabError("passkey_assertion_invalid", "authenticator_data is too short");
+  }
+  if (!authenticatorData.subarray(0, 32).equals(sha2562(passkey.rp_id))) {
+    throw new CollabError("passkey_rp_mismatch", "The assertion is for another relying party");
+  }
+  const flags = authenticatorData[32];
+  if ((flags & FLAG_USER_PRESENT) === 0 || (flags & FLAG_USER_VERIFIED) === 0) {
+    throw new CollabError("passkey_user_not_verified", "The authenticator did not report user presence and user verification");
+  }
+  const signCount = authenticatorData.readUInt32BE(33);
+  if ((signCount !== 0 || passkey.sign_count !== 0) && signCount <= passkey.sign_count) {
+    throw new CollabError("passkey_counter_regressed", "The signature counter did not increase");
+  }
+  const signed = Buffer.concat([authenticatorData, sha2562(clientDataBytes)]);
+  const valid = verify("sha256", signed, { key: parsePasskeyPublicKey(passkey.public_key_spki), dsaEncoding: "der" }, signature);
+  if (!valid)
+    throw new CollabError("passkey_signature_invalid", "The passkey signature does not verify");
+  return { sign_count: signCount };
+}
+
+// src/proposal.ts
+function proposalBytes(content) {
+  return canonicalJson({ protocol: PROPOSAL_BYTES_PROTOCOL, rule: CONSENT_RULE, ...content });
+}
+function aiPosition(input) {
+  const closed = Date.parse(input.now) >= Date.parse(input.closes_at);
+  const others = [...new Set(input.snapshot_voice_ids)].filter((voice) => voice !== input.author_voice_id).sort();
+  const lone = others.length === 0;
+  const qualifying_support_indexes = input.support_voice_ids.flatMap((voice, index) => lone || voice !== input.author_voice_id ? [index] : []);
+  const supported = new Set(qualifying_support_indexes.map((index) => input.support_voice_ids[index]));
+  const awaiting_voice_ids = others.filter((voice) => !supported.has(voice));
+  const result = (position) => ({
+    position,
+    closed,
+    qualifying_support_indexes,
+    awaiting_voice_ids
+  });
+  if (input.obsoleted)
+    return result(input.obsoleted);
+  const hasSupport = qualifying_support_indexes.length > 0;
+  if (!closed) {
+    if (input.unresolved_challenge)
+      return result("challenged");
+    return result(hasSupport && awaiting_voice_ids.length === 0 ? "consented" : "open");
+  }
+  if (input.unresolved_challenge)
+    return result("split");
+  return result(hasSupport ? "consented" : "lapsed");
 }
 
 // src/store.ts
@@ -34673,6 +34673,8 @@ class CollabStore {
         this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), session.id);
         return JSON.parse(existing.response_json);
       }
+      if (options.receipt_plan)
+        this.requireReceiptPlan(session, options.receipt_plan);
       this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), session.id);
       const guardNonce = `guard_${randomUUID2()}`;
       this.db.query(`INSERT INTO v2_write_guard (nonce, enabled) VALUES (?, 1)`).run(guardNonce);
@@ -35707,7 +35709,7 @@ class CollabStore {
         sequence: event.sequence,
         declared_at: event.occurred_at
       };
-    });
+    }, input.receipt_plan ? { receipt_plan: input.receipt_plan } : {});
   }
   readReceiptByKey(credential, key) {
     const session = this.authenticateSession(credential);
@@ -35721,7 +35723,9 @@ class CollabStore {
     return { found: true, operation: row.operation, value: JSON.parse(row.response_json) };
   }
   latestReceiptKeyForSession(credential, prefix2) {
-    const session = this.authenticateSession(credential);
+    return this.latestReceiptKey(this.authenticateSession(credential), prefix2);
+  }
+  latestReceiptKey(session, prefix2) {
     if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*:$/.test(prefix2) || prefix2.length > 100) {
       throw new CollabError("invalid_receipt_prefix", "A receipt prefix is a key prefix ending in ':'");
     }
@@ -35733,6 +35737,12 @@ class CollabStore {
       LIMIT 1
     `).get(session.workspace_id, `session:${session.id}`, prefix2, upper);
     return row?.idempotency_key ?? null;
+  }
+  requireReceiptPlan(session, plan) {
+    const latest = this.latestReceiptKey(session, plan.prefix);
+    if (latest === plan.latest || latest === plan.key || latest !== null && latest.startsWith(`${plan.key}:`))
+      return;
+    throw new CollabError("receipt_plan_stale", "Another call by this session acted on the same entity after this call chose its key; nothing was written");
   }
   initNoteMark(credential, sequence) {
     const marked = this.db.transaction(() => {
@@ -35787,14 +35797,22 @@ class CollabStore {
           ...noteWaitingShownItems(waiting)
         ], now);
       }
-      return { sequences: returned.map((event) => event.sequence), through, more, also_new: alsoNew, waiting };
+      return {
+        sequences: returned.map((event) => event.sequence),
+        through,
+        more,
+        also_new: alsoNew,
+        for_me_total: scan.events.filter((event) => event.for_me).length,
+        for_me_total_capped: scan.capped,
+        waiting
+      };
     };
     const planned = input.peek ? this.db.transaction(() => {
       const session = this.authenticateSession(input);
       const mark = this.readNoteMarkState(session);
       return { mark, ...plan(session, mark, false) };
     }).deferred() : this.noteHousekeeping(input, (session, mark) => ({ mark, ...plan(session, mark, true) }));
-    return this.db.transaction(() => {
+    return afterHousekeeping(!input.peek, () => this.db.transaction(() => {
       const session = this.authenticateSession(input);
       const sessions = this.noteSessionViews(session.workspace_id);
       const me = sessions.find((view) => view.id === session.id);
@@ -35805,6 +35823,8 @@ class CollabStore {
         entries: planned.sequences.map((sequence) => this.noteEntryAt(session, sequence)),
         also_new: planned.also_new,
         more: planned.more,
+        for_me_total: planned.for_me_total,
+        for_me_total_capped: planned.for_me_total_capped,
         mark: {
           before: planned.mark.sequence,
           through: planned.through,
@@ -35817,7 +35837,7 @@ class CollabStore {
         waiting: planned.waiting ?? this.noteWaiting(session),
         observed_at: this.timestamp()
       };
-    }).deferred();
+    }).deferred());
   }
   noteThreadForSession(input) {
     const id = validateId(input.id, `${input.kind}_id`);
@@ -35836,7 +35856,7 @@ class CollabStore {
       }
       return { initialised_from: mark.initialised_from, clamped: mark.clamped };
     });
-    return this.db.transaction(() => {
+    return afterHousekeeping(true, () => this.db.transaction(() => {
       const session = this.authenticateSession(input);
       const sessions = this.noteSessionViews(session.workspace_id);
       const me = sessions.find((view) => view.id === session.id);
@@ -35921,7 +35941,7 @@ class CollabStore {
         mark: markState,
         observed_at: this.timestamp()
       };
-    }).deferred();
+    }).deferred());
   }
   arrivalBrief(credential) {
     return this.db.transaction(() => {
@@ -36883,6 +36903,15 @@ function noteShownItem(event) {
 function noteWaitingShownItems(waiting) {
   return waiting.flatMap((entry) => entry.what === "voice" ? [entry.ref_id] : entry.what === "review" && entry.about_id ? [entry.about_id] : []);
 }
+function afterHousekeeping(committed, read) {
+  try {
+    return read();
+  } catch (error51) {
+    if (!committed || !(error51 instanceof CollabError) || error51.details.after_housekeeping !== undefined)
+      throw error51;
+    throw new CollabError(error51.code, error51.message, { ...error51.details, after_housekeeping: true });
+  }
+}
 function validateNotePurpose(value) {
   const purpose = cleanText(typeof value === "string" ? value : "", "purpose", NOTE_PURPOSE_MAX_CHARS);
   if (/[\u0000-\u001f\u007f]/.test(purpose)) {
@@ -37282,7 +37311,7 @@ var NOTE_PRINCIPLES = [
 ];
 function notesInstructions(verbs = BUILT_NOTE_VERBS) {
   return [
-    `Collab ${COLLAB_PACKAGE_VERSION}: a local journal for agents on this device. ` + "Start with collab_arrive {purpose}.",
+    `Collab ${COLLAB_PACKAGE_VERSION}: a local journal for agents on this device. ` + "Start with collab_arrive {purpose, root_path}.",
     "Verbs:",
     ...verbs.map((verb) => `- ${VERB_LINES[verb]}`),
     "Principles:",
@@ -37366,8 +37395,34 @@ function planReceipt(store, credential, call) {
     eh,
     latest,
     retry,
-    step: (n) => `${key}:${String(n).padStart(2, "0")}`
+    step: (n) => `${key}:${String(n).padStart(2, "0")}`,
+    guard: { prefix: `n1:${eh}:`, latest, key }
   };
+}
+var RECEIPT_PLAN_STALE = "receipt_plan_stale";
+async function underPlan(ctx, credential, call, act) {
+  for (let attempt = 1;; attempt += 1) {
+    const plan = planReceipt(ctx.store, credential, call);
+    try {
+      return await act(plan);
+    } catch (error51) {
+      if (!(error51 instanceof CollabError) || error51.code !== RECEIPT_PLAN_STALE)
+        throw error51;
+      if (attempt >= 2) {
+        throw changedUnderYou(ctx, {
+          tool: call.tool,
+          input: call.retry_input ?? call.input
+        }, null);
+      }
+    }
+  }
+}
+var CHANGED_UNDER_YOU = "It changed after this call read it, so the change was not made";
+function changedUnderYou(ctx, call, state) {
+  return new CollabError("changed_under_you", `${CHANGED_UNDER_YOU}. ${state ? "The fresh state is in state; if" : "If"} your call still holds, send it again.`, {
+    ...state ? { state } : {},
+    remedy: withSlot(ctx, { tool: call.tool, input: call.input })
+  });
 }
 function replayReceipt(store, credential, key) {
   const found = store.readReceiptByKey(credential, key);
@@ -37397,7 +37452,9 @@ var SAY_BY_CODE = {
   session_auth_failed: "This session's credentials no longer match the journal (it was ended, or another process resumed it). Arrive again from a new MCP process, or ask the host.",
   ambiguous_handle: "Use a longer handle or the full id; the candidates are listed.",
   ambiguous_session: "Use the session id; the candidates are listed.",
-  too_many_waits: "Wait for a running wait to finish, or call again with wait_seconds: 0."
+  too_many_waits: "Wait for a running wait to finish, or call again with wait_seconds: 0.",
+  wait_cancelled: "The wait was cancelled after its first pass, which had already moved your read mark and last-seen time " + "past what it counted (in first_pass). Nothing addressed to you was passed over; call collab_inbox to go on.",
+  changed_under_you: "Read it again (collab_inbox with about), then send your call again if it still holds."
 };
 function noteRemedyOf(error51) {
   const remedy = error51.details.remedy;
@@ -37413,6 +37470,11 @@ function noteRemedyOf(error51) {
     return { say: remedy };
   if (SAY_BY_CODE[error51.code])
     return { say: SAY_BY_CODE[error51.code] };
+  if (error51.details.after_housekeeping === true) {
+    return {
+      say: `${error51.message}. This call had already recorded its housekeeping (last-seen time, read mark, delivery records) ` + "before it failed; call collab_inbox again."
+    };
+  }
   if (error51.code === "too_long" && typeof error51.details.field === "string") {
     return { say: `Shorten ${error51.details.field} to at most ${String(error51.details.max)}; nothing was written.` };
   }
@@ -37421,10 +37483,17 @@ function noteRemedyOf(error51) {
   }
   return { say: `${error51.message}. Nothing was written; correct the call and send it again.` };
 }
+function verbFacing(error51) {
+  if (error51.code !== "version_conflict")
+    return error51;
+  const { expected_version: _expected, current_version: _current, ...details } = error51.details;
+  return new CollabError("changed_under_you", `${CHANGED_UNDER_YOU}.`, details);
+}
 function noteFailure(error51) {
   const payload = error51 instanceof CollabError ? (() => {
-    const { remedy: _remedy, ...details } = error51.details;
-    return { code: error51.code, message: error51.message, ...details, remedy: noteRemedyOf(error51) };
+    const shown = verbFacing(error51);
+    const { remedy: _remedy, ...details } = shown.details;
+    return { code: shown.code, message: shown.message, ...details, remedy: noteRemedyOf(shown) };
   })() : {
     code: "internal_error",
     message: error51 instanceof Error ? error51.message : String(error51),
@@ -37472,19 +37541,20 @@ function withSlot(ctx, remedy) {
   return { tool: remedy.tool, input: { ...remedy.input, binding_key: ctx.slot_key } };
 }
 function oneLine(value, field, max, required2) {
+  const ask = { remedy: { say: field === "purpose" ? "Say what you are here to do in one line of at most 200 characters." : `Give ${field} as one line of text.` } };
   if (value === undefined || value === null) {
     if (!required2)
       return null;
-    throw new CollabError(`invalid_${field}`, `${field} is required`);
+    throw new CollabError(`invalid_${field}`, `${field} is required`, ask);
   }
   if (typeof value !== "string")
-    throw new CollabError(`invalid_${field}`, `${field} must be text`);
+    throw new CollabError(`invalid_${field}`, `${field} must be text`, ask);
   const text = normalizeNoteText(value).split(`
 `).map((line) => line.trim()).filter(Boolean).join(" ");
   if (!text) {
     if (!required2)
       return null;
-    throw new CollabError(`invalid_${field}`, `${field} must not be empty`);
+    throw new CollabError(`invalid_${field}`, `${field} must not be empty`, ask);
   }
   if (hasLoneSurrogate(text)) {
     throw new CollabError(`invalid_${field}`, `${field} must be well-formed Unicode text (it holds half of a character)`);
@@ -37531,22 +37601,82 @@ function statementOf(text) {
   return line.length > NOTE_STATEMENT_MAX ? `${line.slice(0, NOTE_STATEMENT_MAX - 1)}\u2026` : line;
 }
 var LIST_CAP = 10;
-function arriveVerb(ctx, input) {
+async function arriveVerb(ctx, input) {
   const purpose = oneLine(input.purpose, "purpose", PURPOSE_MAX, true);
   const existing = ctx.binding();
   if (existing)
     return arriveBound(ctx, existing, input, purpose);
   const name = oneLine(input.name, "name", NAME_MAX, false);
   const model = oneLine(input.model, "model", MODEL_MAX, false);
-  return ctx.slot_key ? arriveNamed(ctx, input, purpose, name, model) : arriveDefault(ctx, input, purpose, name, model);
+  const sent = { purpose, ...name ? { name } : {}, ...model ? { model } : {} };
+  if (input.root_path !== undefined && (typeof input.root_path !== "string" || !input.root_path.trim())) {
+    throw new CollabError("invalid_root_path", "root_path must name a directory", {
+      remedy: {
+        tool: "collab_arrive",
+        input: withSlotInput(ctx, {
+          ...sent,
+          ...typeof input.parent === "string" ? { parent: input.parent } : {},
+          root_path: ROOT_PATH_PLACEHOLDER
+        })
+      }
+    });
+  }
+  if (input.parent !== undefined && (typeof input.parent !== "string" || input.parent.length > PARENT_MAX)) {
+    throw new CollabError("too_long", `parent is at most ${PARENT_MAX} characters: a session id, session# handle or name`, {
+      field: "parent",
+      max: PARENT_MAX,
+      unit: "chars",
+      remedy: { say: "Name the parent by its session id, as collab_arrive returned it." }
+    });
+  }
+  return ctx.slot_key ? arriveNamed(ctx, input, purpose, name, model) : arriveDefault(ctx, input, sent, name, model);
 }
-function arriveDefault(ctx, input, purpose, name, model) {
+var ROOT_PATH_PLACEHOLDER = "<your repository root>";
+var PARENT_MAX = 200;
+function withSlotInput(ctx, input) {
+  return ctx.slot_key ? { ...input, binding_key: ctx.slot_key } : input;
+}
+var PACKAGE_ROOT = resolve5(import.meta.dir, "..");
+function within(path, root) {
+  return path === root || path.startsWith(root.endsWith(sep) ? root : `${root}${sep}`);
+}
+function defaultRootPath(sent) {
+  let workingDirectory = null;
+  let reason = null;
+  try {
+    workingDirectory = realpathSync2(process.cwd());
+    const identity = inspectRepository(workingDirectory, undefined, true, { portable: false });
+    const packageRoot = existsSync4(PACKAGE_ROOT) ? realpathSync2(PACKAGE_ROOT) : PACKAGE_ROOT;
+    if (identity.git_common_dir_hash === null)
+      reason = "not_a_git_worktree";
+    else if (within(workingDirectory, packageRoot))
+      reason = "inside_collab_package";
+  } catch {
+    reason = "working_directory_unreadable";
+  }
+  if (reason === null)
+    return workingDirectory;
+  const why = {
+    working_directory_unreadable: "this MCP server's working directory cannot be read",
+    not_a_git_worktree: `this MCP server's working directory (${workingDirectory}) is not inside a git worktree`,
+    inside_collab_package: `this MCP server's working directory (${workingDirectory}) is inside the collab package itself, ` + "as when a host starts the server in its plugin directory"
+  }[reason];
+  throw new CollabError("root_path_required", `root_path was not given, and ${why}; a session started there would join a workspace apart from your project's agents`, {
+    reason,
+    ...workingDirectory ? { working_directory: workingDirectory } : {},
+    remedy: { tool: "collab_arrive", input: { ...sent, root_path: ROOT_PATH_PLACEHOLDER } }
+  });
+}
+async function arriveDefault(ctx, input, sent, name, model) {
+  const purpose = sent.purpose;
   if (input.parent !== undefined) {
     throw new CollabError("parent_needs_binding_key", "A parent names the session a named child descends from; the default slot has no parent", { remedy: { tool: "collab_arrive", input: { purpose, binding_key: "<choose>", parent: input.parent } } });
   }
   const advice = [];
   if (input.revise_purpose)
     advice.push("revise_purpose has nothing to revise on a new session; your purpose is recorded as given.");
+  const defaulted = input.root_path === undefined;
+  const rootPath = defaulted ? defaultRootPath(sent) : input.root_path;
   let actor = name ?? undefined;
   if (actor === undefined) {
     try {
@@ -37557,7 +37687,7 @@ function arriveDefault(ctx, input, purpose, name, model) {
     }
   }
   const handle = ctx.store.startSession({
-    root_path: input.root_path ?? process.cwd(),
+    root_path: rootPath,
     actor,
     actor_prefix: actor === undefined ? actorPrefixFor(ctx.environment) : undefined,
     role: purpose,
@@ -37569,8 +37699,9 @@ function arriveDefault(ctx, input, purpose, name, model) {
   }
   const binding = bindNewSession(ctx, handle);
   const mark = handle.workspace.event_head_sequence;
+  const root = handle.worktree.root_path;
   return arrivalResult(ctx, binding, {
-    effect: `Started session ${handle.session.id} as ${handle.session.actor} with purpose "${purpose}". ` + `Your read mark starts at the journal head (sequence ${mark}); the legacy cursor was not moved.`,
+    effect: `Started session ${handle.session.id} as ${handle.session.actor} with purpose "${purpose}", in the worktree at ${root}` + `${defaulted ? " (root_path was not given, so this is the git worktree of this MCP server's working directory)" : ""}. ` + `Your read mark starts at the journal head (sequence ${mark}); the legacy cursor was not moved.`,
     advice,
     fresh: true,
     record: true,
@@ -37619,7 +37750,7 @@ function arriveNamed(ctx, input, purpose, name, model) {
   const binding = bindNewSession(ctx, handle);
   const speaksAs = defaultSession ? `session ${defaultSession.id}` : "no session (the default slot has not arrived)";
   return arrivalResult(ctx, binding, {
-    effect: `Started session ${handle.session.id} as ${handle.session.actor}, a named child of ${parent.handle.session.id}. ` + `This session shares its parent's voice and ballot unit. Send binding_key ${key} on every call; ` + `without it you speak as ${speaksAs}.`,
+    effect: `Started session ${handle.session.id} as ${handle.session.actor}, a named child of ${parent.handle.session.id}, ` + `in the worktree at ${handle.worktree.root_path}. ` + `This session shares its parent's voice and ballot unit. Send binding_key ${key} on every call; ` + `without it you speak as ${speaksAs}.`,
     advice: [],
     fresh: true,
     record: true,
@@ -37658,17 +37789,18 @@ function bindNewSession(ctx, handle) {
     throw error51;
   }
 }
-function arriveBound(ctx, binding, input, purpose) {
+async function arriveBound(ctx, binding, input, purpose) {
   const { credential } = requireCredential(ctx);
   const advice = [];
   const ignored = ["name", "model", "root_path", "parent"].filter((field) => input[field] !== undefined);
   if (ignored.length > 0) {
     advice.push(`${ignored.join(", ")} apply only when a slot first arrives; this slot already speaks as session ${binding.handle.session.id}.`);
   }
+  const root = `Worktree root: ${binding.handle.worktree.root_path}.`;
   if (input.revise_purpose !== true) {
     const before = ctx.store.arrivalBrief(credential).session;
     return arrivalResult(ctx, binding, {
-      effect: `You are speaking as session ${before.id} (name ${before.actor}, purpose ${before.purpose ?? "none declared"}). ` + "Nothing was written.",
+      effect: `You are speaking as session ${before.id} (name ${before.actor}, purpose ${before.purpose ?? "none declared"}). ` + `${root} Nothing was written.`,
       advice,
       fresh: false,
       record: false,
@@ -37676,14 +37808,21 @@ function arriveBound(ctx, binding, input, purpose) {
       remedies: boundRemedies(ctx, before.id, purpose)
     });
   }
-  const plan = planReceipt(ctx.store, credential, { tool: "collab_arrive", input: { purpose }, entity: "purpose" });
-  const replayed = plan.retry ? replayReceipt(ctx.store, credential, plan.key) : null;
-  const receipt = replayed ?? ctx.store.declarePurposeForSession({ ...credential, idempotency_key: plan.key, purpose });
+  const { plan, replayed, receipt } = await underPlan(ctx, credential, {
+    tool: "collab_arrive",
+    input: { purpose },
+    entity: "purpose",
+    retry_input: { purpose, revise_purpose: true }
+  }, (plan2) => {
+    const replayed2 = plan2.retry ? replayReceipt(ctx.store, credential, plan2.key) : null;
+    const receipt2 = replayed2 ?? ctx.store.declarePurposeForSession({ ...credential, idempotency_key: plan2.key, purpose, receipt_plan: plan2.guard });
+    return { plan: plan2, replayed: replayed2, receipt: receipt2 };
+  });
   if (plan.retry)
     advice.push("This repeats your latest purpose declaration exactly, so it was read as a retry. Add a word to say it again.");
   const session = binding.handle.session;
   return arrivalResult(ctx, binding, {
-    effect: `You are speaking as session ${session.id} (name ${session.actor}, purpose ${receipt.purpose}). ` + `Your purpose is recorded as declared at sequence ${receipt.sequence}; the role you started with is kept as it was.`,
+    effect: `You are speaking as session ${session.id} (name ${session.actor}, purpose ${receipt.purpose}). ${root} ` + `Your purpose is recorded as declared at sequence ${receipt.sequence}; the role you started with is kept as it was.`,
     advice,
     fresh: false,
     record: true,
@@ -37705,7 +37844,7 @@ function arrivalResult(ctx, binding, options) {
   const credential = binding.handle.credential;
   const data = ctx.store.arrivalBrief(credential);
   const pending = options.fresh ? null : ctx.store.inboxForSession({ ...credential, limit: LIST_CAP, include: "for_me", peek: true });
-  const brief = composeBrief(ctx, data, pending);
+  const brief = composeBrief(ctx, data, pending, binding.handle.worktree.root_path);
   if (options.record) {
     ctx.store.recordArrivalShown(credential, brief.shown);
   }
@@ -37726,7 +37865,7 @@ function arrivalResult(ctx, binding, options) {
     ...brief.view
   };
 }
-function composeBrief(ctx, data, pending) {
+function composeBrief(ctx, data, pending, rootPath) {
   const me = data.session;
   const at = data.observed_at;
   const byId = new Map(data.sessions.map((view) => [view.id, view]));
@@ -37794,6 +37933,7 @@ function composeBrief(ctx, data, pending) {
         voice: me.voice_id,
         seat_ref: me.seat_ref,
         workspace_id: me.workspace_id,
+        root_path: rootPath,
         purpose: me.purpose,
         model: me.model,
         basis: {
@@ -37822,8 +37962,9 @@ function composeBrief(ctx, data, pending) {
         proposals: proposals.length,
         ballots: 0,
         challenges: challenges.length,
-        for_you: forYou.length + (pending?.more ? 1 : 0),
+        for_you: pending?.for_me_total ?? 0,
         for_you_more: pending?.more ?? false,
+        for_you_at_least: pending?.for_me_total_capped ?? false,
         waiting_on_you: waiting.length
       },
       history: {
@@ -38093,16 +38234,65 @@ function formatWaiting(ctx, entry) {
 }
 var DEFAULT_INBOX_LIMIT = 20;
 var WAIT_POLL_MS = 250;
+var WAIT_MAX_SECONDS = 30;
+var ABOUT_MAX = 300;
+function inboxRetry(ctx, input, field, value) {
+  const { [field]: _dropped, ...rest } = input;
+  return withSlot(ctx, { tool: "collab_inbox", input: { ...rest, [field]: value } });
+}
+function nearest(value, min, max) {
+  return Number.isFinite(value) ? Math.min(max, Math.max(min, Math.round(value))) : min;
+}
+function validInboxInput(ctx, input) {
+  const waitSeconds = input.wait_seconds ?? 0;
+  if (typeof waitSeconds !== "number" || !Number.isInteger(waitSeconds) || waitSeconds < 0 || waitSeconds > WAIT_MAX_SECONDS) {
+    throw new CollabError("invalid_wait_seconds", `wait_seconds must be a whole number from 0 to ${WAIT_MAX_SECONDS}`, {
+      remedy: inboxRetry(ctx, input, "wait_seconds", typeof waitSeconds === "number" ? nearest(waitSeconds, 0, WAIT_MAX_SECONDS) : 0)
+    });
+  }
+  const limit = input.limit ?? DEFAULT_INBOX_LIMIT;
+  if (typeof limit !== "number" || !Number.isInteger(limit) || limit < 1 || limit > NOTE_INBOX_MAX_LIMIT) {
+    throw new CollabError("invalid_limit", `limit must be a whole number from 1 to ${NOTE_INBOX_MAX_LIMIT}`, {
+      remedy: inboxRetry(ctx, input, "limit", typeof limit === "number" ? nearest(limit, 1, NOTE_INBOX_MAX_LIMIT) : DEFAULT_INBOX_LIMIT)
+    });
+  }
+  const include = input.include ?? "for_me";
+  if (include !== "for_me" && include !== "all") {
+    throw new CollabError("invalid_include", "include must be for_me or all", {
+      remedy: { say: "include is for_me (the default: items for you) or all (also every other new item, as subject lines)." }
+    });
+  }
+  const format = input.format ?? "json";
+  if (format !== "json" && format !== "note") {
+    throw new CollabError("invalid_format", "format must be json or note", {
+      remedy: { say: "format is json (the default) or note (with about: the thread as one collab-note/1 text)." }
+    });
+  }
+  let about = null;
+  if (input.about !== undefined) {
+    about = typeof input.about === "string" ? input.about.trim() : "";
+    if (!about) {
+      throw new CollabError("invalid_about", "about must name a report, proposal or task", {
+        remedy: { say: "Pass an id or handle such as report#3fa91c or task#0b12de, or leave about out to read your inbox." }
+      });
+    }
+    if (about.length > ABOUT_MAX) {
+      throw new CollabError("too_long", `about is ${about.length} characters; at most ${ABOUT_MAX}`, {
+        field: "about",
+        max: ABOUT_MAX,
+        actual: about.length,
+        unit: "chars",
+        remedy: { say: "Pass the id or handle exactly as an earlier result gave it." }
+      });
+    }
+  }
+  return { waitSeconds, limit, include, format, about };
+}
 async function inboxVerb(ctx, input) {
   const { binding, credential } = requireCredential(ctx);
-  if (input.about !== undefined)
-    return aboutView(ctx, binding, input);
-  const limit = input.limit ?? DEFAULT_INBOX_LIMIT;
-  const include = input.include ?? "for_me";
-  const waitSeconds = input.wait_seconds ?? 0;
-  if (!Number.isInteger(waitSeconds) || waitSeconds < 0 || waitSeconds > 30) {
-    throw new CollabError("invalid_wait_seconds", "wait_seconds must be an integer from 0 to 30");
-  }
+  const { waitSeconds, limit, include, format, about } = validInboxInput(ctx, input);
+  if (about !== null)
+    return aboutView(ctx, binding, about, format);
   const waits = waitSeconds > 0;
   if (waits && ctx.waits.active >= ctx.waits.max) {
     throw new CollabError("too_many_waits", `At most ${ctx.waits.max} waits may run per endpoint`);
@@ -38111,49 +38301,63 @@ async function inboxVerb(ctx, input) {
     ctx.waits.active += 1;
   try {
     const first = ctx.store.inboxForSession({ ...credential, limit, include });
-    let data = first;
-    let earlier = [];
-    let alsoNew = first.also_new;
+    const passes = [first];
     let waited = null;
+    let waitError = null;
     if (waits && !first.entries.some((entry) => entry.for_me) && !first.more) {
       const started = performance.now();
-      const arrived = await waitForMe(ctx, binding, first.mark.anchor, waitSeconds * 1000);
-      waited = { seconds: Math.round((performance.now() - started) / 100) / 10, ended_by: arrived ? "item" : "timeout" };
-      if (arrived) {
-        data = ctx.store.inboxForSession({ ...credential, limit, include });
-        earlier = first.entries;
-        alsoNew += data.also_new;
+      const seconds = () => Math.round((performance.now() - started) / 100) / 10;
+      try {
+        const arrived = await waitForMe(ctx, binding, first.mark.anchor, waitSeconds * 1000);
+        waited = { seconds: seconds(), ended_by: arrived ? "item" : "timeout" };
+        if (arrived)
+          passes.push(ctx.store.inboxForSession({ ...credential, limit, include }));
+      } catch (error51) {
+        if (error51 instanceof CollabError && error51.code === "wait_cancelled") {
+          throw new CollabError(error51.code, error51.message, {
+            first_pass: inboxResult(ctx, passes, format, null)
+          });
+        }
+        waitError = error51 instanceof CollabError ? error51 : new CollabError("internal_error", error51 instanceof Error ? error51.message : String(error51));
+        waited = { seconds: seconds(), ended_by: "error", code: waitError.code, message: waitError.message };
       }
     }
-    const byId = new Map(data.sessions.map((view) => [view.id, view]));
-    const me = data.session.id;
-    const entries = [...earlier, ...data.entries];
-    const items = entries.map((entry) => entry.for_me ? formatEntry(entry, byId, me) : subjectLine(entry, byId, me));
-    const advice = [];
-    if (input.format === "note")
-      advice.push("format: note renders one thread; pass about with an id or handle.");
-    if (first.mark.clamped || data.mark.clamped)
-      advice.push(MARK_CLAMPED_ADVICE);
-    const firstForMe = entries.find((entry) => entry.for_me);
-    const about = firstForMe ? entryRef(firstForMe) : null;
-    const next = about ? withSlot(ctx, { tool: "collab_inbox", input: { about } }) : data.more ? withSlot(ctx, { tool: "collab_inbox", input: {} }) : withSlot(ctx, { tool: "collab_inbox", input: { wait_seconds: 30 } });
-    const initialisedFrom = first.mark.initialised_from ?? data.mark.initialised_from;
-    return {
-      ok: true,
-      items,
-      also_new: { count: alsoNew },
-      more: data.more,
-      read_through: { sequence: data.mark.through, head: data.head_sequence },
-      ...initialisedFrom ? { mark_initialised_from: initialisedFrom } : {},
-      waiting_on_you: data.waiting.map((entry) => formatWaiting(ctx, entry)),
-      ...waited ? { waited } : {},
-      advice,
-      next
-    };
+    return inboxResult(ctx, passes, format, waited, waitError);
   } finally {
     if (waits)
       ctx.waits.active -= 1;
   }
+}
+function inboxResult(ctx, passes, format, waited, waitError = null) {
+  const data = passes.at(-1);
+  const byId = new Map(data.sessions.map((view) => [view.id, view]));
+  const me = data.session.id;
+  const entries = passes.flatMap((pass) => pass.entries);
+  const items = entries.map((entry) => entry.for_me ? formatEntry(entry, byId, me) : subjectLine(entry, byId, me));
+  const advice = [];
+  if (format === "note")
+    advice.push("format: note renders one thread; pass about with an id or handle.");
+  if (passes.some((pass) => pass.mark.clamped))
+    advice.push(MARK_CLAMPED_ADVICE);
+  if (waitError) {
+    advice.push(`The wait ended with ${waitError.code}: ${waitError.message}. What this call's first pass found is returned; your read mark is past it.` + (waitError.details.after_housekeeping === true ? " A second pass had moved the mark further before it failed, and its items are not in this result." : ""));
+  }
+  const firstForMe = entries.find((entry) => entry.for_me);
+  const about = firstForMe ? entryRef(firstForMe) : null;
+  const next = waitError ? withSlot(ctx, noteRemedyOf(waitError)) : about ? withSlot(ctx, { tool: "collab_inbox", input: { about } }) : data.more ? withSlot(ctx, { tool: "collab_inbox", input: {} }) : withSlot(ctx, { tool: "collab_inbox", input: { wait_seconds: WAIT_MAX_SECONDS } });
+  const initialisedFrom = passes.map((pass) => pass.mark.initialised_from).find((value) => value) ?? null;
+  return {
+    ok: true,
+    items,
+    also_new: { count: passes.reduce((sum, pass) => sum + pass.also_new, 0) },
+    more: data.more,
+    read_through: { sequence: data.mark.through, head: data.head_sequence },
+    ...initialisedFrom ? { mark_initialised_from: initialisedFrom } : {},
+    waiting_on_you: data.waiting.map((entry) => formatWaiting(ctx, entry)),
+    ...waited ? { waited } : {},
+    advice,
+    next
+  };
 }
 var MARK_CLAMPED_ADVICE = "Your read mark was past the journal head (the journal may have been restored from an older copy); it now reads from the head.";
 function entryRef(entry) {
@@ -38247,10 +38451,10 @@ function resolveAbout(ctx, workspaceId, value) {
   }
   throw new CollabError("ref_not_found", `No report or task in this workspace has the id ${text}`, { value: text });
 }
-function aboutView(ctx, binding, input) {
+function aboutView(ctx, binding, about, format) {
   const credential = binding.handle.credential;
   const workspaceId = binding.handle.workspace.id;
-  const { kind, id } = resolveAbout(ctx, workspaceId, input.about);
+  const { kind, id } = resolveAbout(ctx, workspaceId, about);
   const thread = ctx.store.noteThreadForSession({ ...credential, kind, id });
   const byId = new Map(thread.sessions.map((view2) => [view2.id, view2]));
   const me = thread.session.id;
@@ -38268,7 +38472,7 @@ function aboutView(ctx, binding, input) {
     advice,
     next: withSlot(ctx, { tool: "collab_inbox", input: {} })
   };
-  if (input.format === "note") {
+  if (format === "note") {
     try {
       const carried = carryThread(thread);
       result.note = carried.text;
@@ -38472,7 +38676,7 @@ Legacy session tools: ${legacyInstructions}`
       ...config2,
       inputSchema: {
         ...config2.inputSchema,
-        binding_key: exports_external.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/).optional().describe("Cooperative subagent binding selector; omit for the original default binding. Not authentication.")
+        binding_key: (isNoteVerb(name) ? exports_external.string() : exports_external.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/)).optional().describe("Cooperative subagent binding selector; omit for the original default binding. Not authentication.")
       }
     }, async (input, ctx) => {
       const { binding_key, ...args } = input;
@@ -38548,12 +38752,12 @@ Legacy session tools: ${legacyInstructions}`
     description: "Start your coordination session on this slot, or, when it already has one, see who you are, who is here, " + "what is open and what waits on you. On a slot that already has a session it writes nothing unless " + "revise_purpose is true. With binding_key it starts a named child of a session this MCP process holds, which " + "shares that parent's voice. It never moves the legacy cursor, and never resumes or adopts another process's session.",
     annotations: localMutation,
     inputSchema: {
-      purpose: exports_external.string().min(1).max(4000).describe("What you are here to do, in one line of at most 200 characters. Self-declared; revisable."),
-      name: exports_external.string().min(1).max(1000).optional().describe("Display name. Default: the verified Claude Code name, else <host>-<6 hex of the session id>; a named slot defaults to <parent name>/<binding_key>."),
-      model: exports_external.string().min(1).max(1000).optional().describe("Your model lineage, for example claude-opus-5.5. Self-declared; shown, never counted."),
-      root_path: exports_external.string().min(1).optional().describe("Repository root. Default: this MCP server's working directory, or the parent's worktree for a named slot."),
+      purpose: exports_external.string().describe("What you are here to do, in one line of at most 200 characters. Self-declared; revisable."),
+      name: exports_external.string().optional().describe("Display name, at most 200 characters. Default: the verified Claude Code name, else <host>-<6 hex of the session id>; a named slot defaults to <parent name>/<binding_key>."),
+      model: exports_external.string().optional().describe("Your model lineage, at most 200 characters, for example claude-opus-5.5. Self-declared; shown, never counted."),
+      root_path: exports_external.string().optional().describe("Your repository root. Default: this MCP server's working directory when it is in a git worktree outside the collab package (otherwise the call is refused and asks for root_path); a named slot defaults to the parent's worktree."),
       revise_purpose: exports_external.boolean().optional().describe("On a slot that already has a session: record purpose as your current purpose."),
-      parent: exports_external.string().min(1).max(200).optional().describe("With binding_key: the session this MCP process holds that the new session descends from (id, session# handle or name).")
+      parent: exports_external.string().optional().describe("With binding_key: the session this MCP process holds that the new session descends from (id, session# handle or name; at most 200 characters).")
     }
   }, async (input) => noteCall(() => arriveVerb(noteContext(), input)));
   server.registerTool("collab_inbox", {
@@ -38561,11 +38765,11 @@ Legacy session tools: ${legacyInstructions}`
     description: "Items addressed to you since your read mark, oldest first, with what waits on you whatever the mark. " + "With about (an id or handle such as report#3fa91c or task#0b12de): that report and everything answering it, " + "or a task's holder, completion and reviews. wait_seconds waits, reading only, for a new item for you. " + "It moves its own read mark and last-seen time, never the legacy cursor.",
     annotations: localMutation,
     inputSchema: {
-      about: exports_external.string().min(1).max(300).optional().describe("One thread: a report, proposal or task id or handle."),
-      wait_seconds: exports_external.number().int().min(0).max(30).optional().describe("With nothing new for you, wait up to this long for an item; default 0."),
-      include: exports_external.enum(["for_me", "all"]).optional().describe("for_me (the default), or all to add unaddressed items as subject lines."),
-      limit: exports_external.number().int().min(1).max(50).optional().describe("Items per call; default 20."),
-      format: exports_external.enum(["json", "note"]).optional().describe("note: with about, the thread root and its state as one collab-note/1 text of at most 800 characters, for a person to carry.")
+      about: exports_external.string().optional().describe("One thread: a report, proposal or task id or handle (at most 300 characters)."),
+      wait_seconds: exports_external.number().optional().describe("A whole number from 0 to 30: with nothing new for you, wait up to this long for an item; default 0."),
+      include: exports_external.string().optional().describe("for_me (the default), or all to add unaddressed items as subject lines."),
+      limit: exports_external.number().optional().describe("Items per call, a whole number from 1 to 50; default 20."),
+      format: exports_external.string().optional().describe("json (the default), or note: with about, the thread root and its state as one collab-note/1 text of at most 800 characters, for a person to carry.")
     }
   }, async (input, ctx) => noteCall(() => inboxVerb(noteContext(ctx.mcpReq?.signal), input)));
   server.registerTool("collab_session_join", {

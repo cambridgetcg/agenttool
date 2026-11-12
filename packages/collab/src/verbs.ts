@@ -9,9 +9,9 @@
  * execution-seat test reads); this module holds what those handlers do.
  */
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { hostname } from "node:os";
-import { resolve } from "node:path";
+import { resolve, sep } from "node:path";
 import { defaultActor } from "./actor-default.js";
 import { canonicalJson } from "./canonical.js";
 import { CollabError } from "./errors.js";
@@ -28,9 +28,11 @@ import {
   type NoteReason,
 } from "./note.js";
 import type { CollabReport, SessionHandle } from "./protocol.js";
+import { inspectRepository } from "./repository.js";
 import { defaultSeatRef } from "./seat-ref.js";
 import { removeSessionCredentialFile, writeSessionCredentialFile } from "./session-file.js";
 import {
+  NOTE_INBOX_MAX_LIMIT,
   noteWaitingShownItems,
   type CollabStore,
   type NoteArrivalData,
@@ -41,6 +43,7 @@ import {
   type NoteSessionView,
   type NoteThreadData,
   type NoteWaitingEntry,
+  type ReceiptPlanGuard,
 } from "./store.js";
 import { COLLAB_PACKAGE_VERSION } from "./version.js";
 
@@ -135,7 +138,7 @@ export const NOTE_PRINCIPLES = [
 export function notesInstructions(verbs: readonly NoteVerb[] = BUILT_NOTE_VERBS): string {
   return [
     `Collab ${COLLAB_PACKAGE_VERSION}: a local journal for agents on this device. ` +
-      "Start with collab_arrive {purpose}.",
+      "Start with collab_arrive {purpose, root_path}.",
     "Verbs:",
     ...verbs.map((verb) => `- ${VERB_LINES[verb]}`),
     "Principles:",
@@ -250,6 +253,8 @@ export interface ReceiptPlan {
   retry: boolean;
   /** The key of internal step n of this call. */
   step(n: number): string;
+  /** Pass to the store write as `receipt_plan`, which re-checks the plan inside its transaction. */
+  guard: ReceiptPlanGuard;
 }
 
 const DERIVED_KEY = /^n1:([A-Z2-7]{8}):(\d{6}):([A-Z2-7]{20})(?::(\d{2}))?$/;
@@ -291,7 +296,95 @@ export function planReceipt(
     latest,
     retry,
     step: (n: number) => `${key}:${String(n).padStart(2, "0")}`,
+    guard: { prefix: `n1:${eh}:`, latest, key },
   };
+}
+
+/** The store's refusal of a write whose plan another write overtook. */
+const RECEIPT_PLAN_STALE = "receipt_plan_stale";
+
+/**
+ * Plan a call's key and act under it (spec 5). Choosing the key happens
+ * outside the write's transaction, so two calls by one session on one entity
+ * that both plan before either writes would share a seq, and the earlier
+ * write could then read as latest and swallow a later deliberate repeat as a
+ * replay. The store re-checks the plan inside the transaction (`plan.guard`
+ * passed as `receipt_plan`) and refuses an overtaken one before writing;
+ * this plans once more on the fresh latest key, so each act gets its own seq
+ * in the order it was written. A plan overtaken twice is refused as
+ * changed_under_you with the same call as remedy.
+ */
+export async function underPlan<T>(
+  ctx: Pick<NoteVerbContext, "store" | "slot_key">,
+  credential: { session_id: string; session_token: string; generation: number },
+  call: {
+    tool: NoteVerb;
+    /** What the key hashes: the normalised input. */
+    input: unknown;
+    entity: string;
+    stillCurrent?: (latestKey: string) => boolean;
+    /** The caller's input for the remedy, when it differs from what the key hashes. */
+    retry_input?: Record<string, unknown>;
+  },
+  act: (plan: ReceiptPlan) => T | Promise<T>,
+): Promise<T> {
+  for (let attempt = 1; ; attempt += 1) {
+    const plan = planReceipt(ctx.store, credential, call);
+    try {
+      return await act(plan);
+    } catch (error) {
+      if (!(error instanceof CollabError) || error.code !== RECEIPT_PLAN_STALE) throw error;
+      if (attempt >= 2) {
+        throw changedUnderYou(ctx, {
+          tool: call.tool,
+          input: call.retry_input ?? (call.input as Record<string, unknown>),
+        }, null);
+      }
+    }
+  }
+}
+
+/**
+ * Version conflicts handled inside the call (spec 5). The verb reads the
+ * current version itself and tries once. A change between that read and the
+ * write is no fault of the caller's, so it is refused as changed_under_you
+ * with the fresh state and the same call as the remedy, and no version ever
+ * reaches the caller. It does not try again by itself: the caller chose on
+ * the state it was shown, and the fresh state may change that choice.
+ * `read` returns the version and the state as the caller should see it.
+ */
+export async function withCurrentVersion<T>(
+  ctx: Pick<NoteVerbContext, "slot_key">,
+  call: { tool: NoteVerb; input: Record<string, unknown> },
+  read: () => { version: number; state: Record<string, unknown> },
+  attempt: (version: number) => T | Promise<T>,
+): Promise<T> {
+  const { version } = read();
+  try {
+    return await attempt(version);
+  } catch (error) {
+    if (!(error instanceof CollabError) || error.code !== "version_conflict") throw error;
+    throw changedUnderYou(ctx, call, read().state);
+  }
+}
+
+const CHANGED_UNDER_YOU =
+  "It changed after this call read it, so the change was not made";
+
+/** The refusal for a write overtaken by a concurrent change: the fresh state, and the same call to send again. */
+export function changedUnderYou(
+  ctx: Pick<NoteVerbContext, "slot_key">,
+  call: { tool: NoteVerb; input: Record<string, unknown> },
+  state: Record<string, unknown> | null,
+): CollabError {
+  return new CollabError(
+    "changed_under_you",
+    `${CHANGED_UNDER_YOU}. ${state ? "The fresh state is in state; if" : "If"} your call still holds, send it again.`,
+    {
+      ...(state ? { state } : {}),
+      remedy: withSlot(ctx, { tool: call.tool, input: call.input }),
+    },
+  );
 }
 
 /**
@@ -353,6 +446,12 @@ const SAY_BY_CODE: Record<string, string> = {
   ambiguous_handle: "Use a longer handle or the full id; the candidates are listed.",
   ambiguous_session: "Use the session id; the candidates are listed.",
   too_many_waits: "Wait for a running wait to finish, or call again with wait_seconds: 0.",
+  // The wait starts only after a first pass that found nothing for you, and
+  // that pass has already written; first_pass holds what it found.
+  wait_cancelled:
+    "The wait was cancelled after its first pass, which had already moved your read mark and last-seen time " +
+    "past what it counted (in first_pass). Nothing addressed to you was passed over; call collab_inbox to go on.",
+  changed_under_you: "Read it again (collab_inbox with about), then send your call again if it still holds.",
 };
 
 /** A legacy string remedy becomes `{say}`; a missing one becomes the clearest thing to say (spec 5). */
@@ -367,6 +466,13 @@ export function noteRemedyOf(error: CollabError): NoteRemedy {
   }
   if (typeof remedy === "string" && remedy) return { say: remedy };
   if (SAY_BY_CODE[error.code]) return { say: SAY_BY_CODE[error.code]! };
+  if (error.details.after_housekeeping === true) {
+    // The fallbacks below say nothing was written, which is false here.
+    return {
+      say: `${error.message}. This call had already recorded its housekeeping (last-seen time, read mark, delivery records) ` +
+        "before it failed; call collab_inbox again.",
+    };
+  }
   if (error.code === "too_long" && typeof error.details.field === "string") {
     return { say: `Shorten ${error.details.field} to at most ${String(error.details.max)}; nothing was written.` };
   }
@@ -376,12 +482,24 @@ export function noteRemedyOf(error: CollabError): NoteRemedy {
   return { say: `${error.message}. Nothing was written; correct the call and send it again.` };
 }
 
+/**
+ * The store's version_conflict, wherever a verb meets it outside
+ * withCurrentVersion, is the caller's state going stale, not a wrong call:
+ * it becomes changed_under_you, and the versions it names stay hidden.
+ */
+function verbFacing(error: CollabError): CollabError {
+  if (error.code !== "version_conflict") return error;
+  const { expected_version: _expected, current_version: _current, ...details } = error.details;
+  return new CollabError("changed_under_you", `${CHANGED_UNDER_YOU}.`, details);
+}
+
 /** The verbs' error shape: `{code, message, remedy}` plus the error's details (spec 5). */
 export function noteFailure(error: unknown) {
   const payload = error instanceof CollabError
     ? (() => {
-      const { remedy: _remedy, ...details } = error.details;
-      return { code: error.code, message: error.message, ...details, remedy: noteRemedyOf(error) };
+      const shown = verbFacing(error);
+      const { remedy: _remedy, ...details } = shown.details;
+      return { code: shown.code, message: shown.message, ...details, remedy: noteRemedyOf(shown) };
     })()
     : {
       code: "internal_error",
@@ -463,7 +581,7 @@ function requireCredential(ctx: NoteVerbContext) {
 }
 
 /** Put this call's binding_key into a suggested call, so a named slot keeps speaking as itself. */
-function withSlot(ctx: NoteVerbContext, remedy: NoteRemedy): NoteRemedy {
+function withSlot(ctx: Pick<NoteVerbContext, "slot_key">, remedy: NoteRemedy): NoteRemedy {
   if (!ctx.slot_key || !("tool" in remedy)) return remedy;
   return { tool: remedy.tool, input: { ...remedy.input, binding_key: ctx.slot_key } };
 }
@@ -477,15 +595,16 @@ function withSlot(ctx: NoteVerbContext, remedy: NoteRemedy): NoteRemedy {
  * refused, because the stored text would differ from what was returned.
  */
 function oneLine(value: unknown, field: string, max: number, required: boolean): string | null {
+  const ask = { remedy: { say: field === "purpose" ? "Say what you are here to do in one line of at most 200 characters." : `Give ${field} as one line of text.` } };
   if (value === undefined || value === null) {
     if (!required) return null;
-    throw new CollabError(`invalid_${field}`, `${field} is required`);
+    throw new CollabError(`invalid_${field}`, `${field} is required`, ask);
   }
-  if (typeof value !== "string") throw new CollabError(`invalid_${field}`, `${field} must be text`);
+  if (typeof value !== "string") throw new CollabError(`invalid_${field}`, `${field} must be text`, ask);
   const text = normalizeNoteText(value).split("\n").map((line) => line.trim()).filter(Boolean).join(" ");
   if (!text) {
     if (!required) return null;
-    throw new CollabError(`invalid_${field}`, `${field} must not be empty`);
+    throw new CollabError(`invalid_${field}`, `${field} must not be empty`, ask);
   }
   if (hasLoneSurrogate(text)) {
     throw new CollabError(`invalid_${field}`, `${field} must be well-formed Unicode text (it holds half of a character)`);
@@ -551,24 +670,100 @@ export interface ArriveInput {
 
 const LIST_CAP = 10;
 
-export function arriveVerb(ctx: NoteVerbContext, input: ArriveInput): Record<string, unknown> {
+export async function arriveVerb(ctx: NoteVerbContext, input: ArriveInput): Promise<Record<string, unknown>> {
   const purpose = oneLine(input.purpose, "purpose", PURPOSE_MAX, true)!;
   const existing = ctx.binding();
   if (existing) return arriveBound(ctx, existing, input, purpose);
   const name = oneLine(input.name, "name", NAME_MAX, false);
   const model = oneLine(input.model, "model", MODEL_MAX, false);
+  const sent = { purpose, ...(name ? { name } : {}), ...(model ? { model } : {}) };
+  if (input.root_path !== undefined && (typeof input.root_path !== "string" || !input.root_path.trim())) {
+    throw new CollabError("invalid_root_path", "root_path must name a directory", {
+      remedy: {
+        tool: "collab_arrive",
+        input: withSlotInput(ctx, {
+          ...sent,
+          ...(typeof input.parent === "string" ? { parent: input.parent } : {}),
+          root_path: ROOT_PATH_PLACEHOLDER,
+        }),
+      },
+    });
+  }
+  if (input.parent !== undefined && (typeof input.parent !== "string" || input.parent.length > PARENT_MAX)) {
+    throw new CollabError("too_long", `parent is at most ${PARENT_MAX} characters: a session id, session# handle or name`, {
+      field: "parent",
+      max: PARENT_MAX,
+      unit: "chars",
+      remedy: { say: "Name the parent by its session id, as collab_arrive returned it." },
+    });
+  }
   return ctx.slot_key
     ? arriveNamed(ctx, input, purpose, name, model)
-    : arriveDefault(ctx, input, purpose, name, model);
+    : arriveDefault(ctx, input, sent, name, model);
 }
 
-function arriveDefault(
+const ROOT_PATH_PLACEHOLDER = "<your repository root>";
+const PARENT_MAX = 200;
+
+/** A suggested input that keeps the call's binding_key, as withSlot does for a whole remedy. */
+function withSlotInput(ctx: Pick<NoteVerbContext, "slot_key">, input: Record<string, unknown>): Record<string, unknown> {
+  return ctx.slot_key ? { ...input, binding_key: ctx.slot_key } : input;
+}
+
+/** This package's own directory: one level above src/ and dist/ alike. */
+const PACKAGE_ROOT = resolve(import.meta.dir, "..");
+
+function within(path: string, root: string): boolean {
+  return path === root || path.startsWith(root.endsWith(sep) ? root : `${root}${sep}`);
+}
+
+/**
+ * The root an unbound default slot joins when the caller names none (spec
+ * 5.1): this server's working directory, but only when git knows it and it
+ * lies outside this package. A host may start the server in its plugin
+ * directory (Codex starts it with cwd "." in the installed plugin root), and
+ * a session started there would sit in a workspace of its own, apart from the
+ * project's agents, with nothing to show it. Those cases are refused before
+ * any write, with a ready call that names the root.
+ */
+function defaultRootPath(sent: Record<string, unknown>): string {
+  let workingDirectory: string | null = null;
+  let reason: "working_directory_unreadable" | "not_a_git_worktree" | "inside_collab_package" | null = null;
+  try {
+    workingDirectory = realpathSync(process.cwd());
+    const identity = inspectRepository(workingDirectory, undefined, true, { portable: false });
+    const packageRoot = existsSync(PACKAGE_ROOT) ? realpathSync(PACKAGE_ROOT) : PACKAGE_ROOT;
+    if (identity.git_common_dir_hash === null) reason = "not_a_git_worktree";
+    else if (within(workingDirectory, packageRoot)) reason = "inside_collab_package";
+  } catch {
+    reason = "working_directory_unreadable";
+  }
+  if (reason === null) return workingDirectory!;
+  const why = {
+    working_directory_unreadable: "this MCP server's working directory cannot be read",
+    not_a_git_worktree: `this MCP server's working directory (${workingDirectory}) is not inside a git worktree`,
+    inside_collab_package: `this MCP server's working directory (${workingDirectory}) is inside the collab package itself, ` +
+      "as when a host starts the server in its plugin directory",
+  }[reason];
+  throw new CollabError(
+    "root_path_required",
+    `root_path was not given, and ${why}; a session started there would join a workspace apart from your project's agents`,
+    {
+      reason,
+      ...(workingDirectory ? { working_directory: workingDirectory } : {}),
+      remedy: { tool: "collab_arrive", input: { ...sent, root_path: ROOT_PATH_PLACEHOLDER } },
+    },
+  );
+}
+
+async function arriveDefault(
   ctx: NoteVerbContext,
   input: ArriveInput,
-  purpose: string,
+  sent: { purpose: string; name?: string; model?: string },
   name: string | null,
   model: string | null,
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
+  const purpose = sent.purpose;
   if (input.parent !== undefined) {
     throw new CollabError(
       "parent_needs_binding_key",
@@ -578,6 +773,8 @@ function arriveDefault(
   }
   const advice: string[] = [];
   if (input.revise_purpose) advice.push("revise_purpose has nothing to revise on a new session; your purpose is recorded as given.");
+  const defaulted = input.root_path === undefined;
+  const rootPath = defaulted ? defaultRootPath(sent) : input.root_path!;
   let actor: string | undefined = name ?? undefined;
   if (actor === undefined) {
     try {
@@ -587,7 +784,7 @@ function arriveDefault(
     }
   }
   const handle = ctx.store.startSession({
-    root_path: input.root_path ?? process.cwd(),
+    root_path: rootPath,
     actor,
     actor_prefix: actor === undefined ? actorPrefixFor(ctx.environment) : undefined,
     role: purpose,
@@ -599,9 +796,11 @@ function arriveDefault(
   }
   const binding = bindNewSession(ctx, handle);
   const mark = handle.workspace.event_head_sequence;
+  const root = handle.worktree.root_path;
   return arrivalResult(ctx, binding, {
     effect:
-      `Started session ${handle.session.id} as ${handle.session.actor} with purpose "${purpose}". ` +
+      `Started session ${handle.session.id} as ${handle.session.actor} with purpose "${purpose}", in the worktree at ${root}` +
+      `${defaulted ? " (root_path was not given, so this is the git worktree of this MCP server's working directory)" : ""}. ` +
       `Your read mark starts at the journal head (sequence ${mark}); the legacy cursor was not moved.`,
     advice,
     fresh: true,
@@ -671,7 +870,8 @@ function arriveNamed(
   const speaksAs = defaultSession ? `session ${defaultSession.id}` : "no session (the default slot has not arrived)";
   return arrivalResult(ctx, binding, {
     effect:
-      `Started session ${handle.session.id} as ${handle.session.actor}, a named child of ${parent.handle.session.id}. ` +
+      `Started session ${handle.session.id} as ${handle.session.actor}, a named child of ${parent.handle.session.id}, ` +
+      `in the worktree at ${handle.worktree.root_path}. ` +
       `This session shares its parent's voice and ballot unit. Send binding_key ${key} on every call; ` +
       `without it you speak as ${speaksAs}.`,
     advice: [],
@@ -729,24 +929,25 @@ function bindNewSession(ctx: NoteVerbContext, handle: SessionHandle): NoteBindin
   }
 }
 
-function arriveBound(
+async function arriveBound(
   ctx: NoteVerbContext,
   binding: NoteBinding,
   input: ArriveInput,
   purpose: string,
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
   const { credential } = requireCredential(ctx);
   const advice: string[] = [];
   const ignored = (["name", "model", "root_path", "parent"] as const).filter((field) => input[field] !== undefined);
   if (ignored.length > 0) {
     advice.push(`${ignored.join(", ")} apply only when a slot first arrives; this slot already speaks as session ${binding.handle.session.id}.`);
   }
+  const root = `Worktree root: ${binding.handle.worktree.root_path}.`;
   if (input.revise_purpose !== true) {
     const before = ctx.store.arrivalBrief(credential).session;
     return arrivalResult(ctx, binding, {
       effect:
         `You are speaking as session ${before.id} (name ${before.actor}, purpose ${before.purpose ?? "none declared"}). ` +
-        "Nothing was written.",
+        `${root} Nothing was written.`,
       advice,
       fresh: false,
       record: false,
@@ -754,14 +955,22 @@ function arriveBound(
       remedies: boundRemedies(ctx, before.id, purpose),
     });
   }
-  const plan = planReceipt(ctx.store, credential, { tool: "collab_arrive", input: { purpose }, entity: "purpose" });
-  const replayed = plan.retry ? replayReceipt<{ purpose: string; sequence: number }>(ctx.store, credential, plan.key) : null;
-  const receipt = replayed ?? ctx.store.declarePurposeForSession({ ...credential, idempotency_key: plan.key, purpose });
+  const { plan, replayed, receipt } = await underPlan(ctx, credential, {
+    tool: "collab_arrive",
+    input: { purpose },
+    entity: "purpose",
+    retry_input: { purpose, revise_purpose: true },
+  }, (plan) => {
+    const replayed = plan.retry ? replayReceipt<{ purpose: string; sequence: number }>(ctx.store, credential, plan.key) : null;
+    const receipt = replayed
+      ?? ctx.store.declarePurposeForSession({ ...credential, idempotency_key: plan.key, purpose, receipt_plan: plan.guard });
+    return { plan, replayed, receipt };
+  });
   if (plan.retry) advice.push("This repeats your latest purpose declaration exactly, so it was read as a retry. Add a word to say it again.");
   const session = binding.handle.session;
   return arrivalResult(ctx, binding, {
     effect:
-      `You are speaking as session ${session.id} (name ${session.actor}, purpose ${receipt.purpose}). ` +
+      `You are speaking as session ${session.id} (name ${session.actor}, purpose ${receipt.purpose}). ${root} ` +
       `Your purpose is recorded as declared at sequence ${receipt.sequence}; the role you started with is kept as it was.`,
     advice,
     fresh: false,
@@ -803,7 +1012,7 @@ function arrivalResult(
   const pending = options.fresh
     ? null
     : ctx.store.inboxForSession({ ...credential, limit: LIST_CAP, include: "for_me", peek: true });
-  const brief = composeBrief(ctx, data, pending);
+  const brief = composeBrief(ctx, data, pending, binding.handle.worktree.root_path);
   if (options.record) {
     ctx.store.recordArrivalShown(credential, brief.shown);
   }
@@ -829,6 +1038,7 @@ function composeBrief(
   ctx: NoteVerbContext,
   data: NoteArrivalData,
   pending: NoteInboxData | null,
+  rootPath: string,
 ): { view: Record<string, unknown>; shown: string[]; advice: string[] } {
   const me = data.session;
   const at = data.observed_at;
@@ -904,6 +1114,8 @@ function composeBrief(
         voice: me.voice_id,
         seat_ref: me.seat_ref,
         workspace_id: me.workspace_id,
+        // The worktree this session joined, so a wrong root is visible at once.
+        root_path: rootPath,
         purpose: me.purpose,
         model: me.model,
         basis: {
@@ -932,8 +1144,11 @@ function composeBrief(
         proposals: proposals.length,
         ballots: 0,
         challenges: challenges.length,
-        for_you: forYou.length + (pending?.more ? 1 : 0),
+        // Every for-me item after the mark within one scan's bound; a lower
+        // bound when the scan stopped there.
+        for_you: pending?.for_me_total ?? 0,
         for_you_more: pending?.more ?? false,
+        for_you_at_least: pending?.for_me_total_capped ?? false,
         waiting_on_you: waiting.length,
       },
       history: {
@@ -1251,23 +1466,81 @@ function formatWaiting(ctx: NoteVerbContext, entry: NoteWaitingEntry): Record<st
 export interface InboxInput {
   about?: string;
   wait_seconds?: number;
-  include?: "for_me" | "all";
+  include?: string;
   limit?: number;
-  format?: "json" | "note";
+  format?: string;
 }
 
 const DEFAULT_INBOX_LIMIT = 20;
 const WAIT_POLL_MS = 250;
+const WAIT_MAX_SECONDS = 30;
+const ABOUT_MAX = 300;
+
+/** The caller's input with one field set to a value that works, as a ready call. */
+function inboxRetry(ctx: NoteVerbContext, input: InboxInput, field: keyof InboxInput, value: unknown): NoteRemedy {
+  const { [field]: _dropped, ...rest } = input;
+  return withSlot(ctx, { tool: "collab_inbox", input: { ...rest, [field]: value } });
+}
+
+/** A number the caller sent, brought to the nearest whole value in [min, max]. */
+function nearest(value: number, min: number, max: number): number {
+  return Number.isFinite(value) ? Math.min(max, Math.max(min, Math.round(value))) : min;
+}
+
+/**
+ * The inbox input, checked here rather than in the MCP schema, so every
+ * refusal carries the verbs' {code, message, remedy} (spec 5).
+ */
+function validInboxInput(ctx: NoteVerbContext, input: InboxInput) {
+  const waitSeconds = input.wait_seconds ?? 0;
+  if (typeof waitSeconds !== "number" || !Number.isInteger(waitSeconds) || waitSeconds < 0 || waitSeconds > WAIT_MAX_SECONDS) {
+    throw new CollabError("invalid_wait_seconds", `wait_seconds must be a whole number from 0 to ${WAIT_MAX_SECONDS}`, {
+      remedy: inboxRetry(ctx, input, "wait_seconds", typeof waitSeconds === "number" ? nearest(waitSeconds, 0, WAIT_MAX_SECONDS) : 0),
+    });
+  }
+  const limit = input.limit ?? DEFAULT_INBOX_LIMIT;
+  if (typeof limit !== "number" || !Number.isInteger(limit) || limit < 1 || limit > NOTE_INBOX_MAX_LIMIT) {
+    throw new CollabError("invalid_limit", `limit must be a whole number from 1 to ${NOTE_INBOX_MAX_LIMIT}`, {
+      remedy: inboxRetry(ctx, input, "limit", typeof limit === "number" ? nearest(limit, 1, NOTE_INBOX_MAX_LIMIT) : DEFAULT_INBOX_LIMIT),
+    });
+  }
+  const include = input.include ?? "for_me";
+  if (include !== "for_me" && include !== "all") {
+    throw new CollabError("invalid_include", "include must be for_me or all", {
+      remedy: { say: "include is for_me (the default: items for you) or all (also every other new item, as subject lines)." },
+    });
+  }
+  const format = input.format ?? "json";
+  if (format !== "json" && format !== "note") {
+    throw new CollabError("invalid_format", "format must be json or note", {
+      remedy: { say: "format is json (the default) or note (with about: the thread as one collab-note/1 text)." },
+    });
+  }
+  let about: string | null = null;
+  if (input.about !== undefined) {
+    about = typeof input.about === "string" ? input.about.trim() : "";
+    if (!about) {
+      throw new CollabError("invalid_about", "about must name a report, proposal or task", {
+        remedy: { say: "Pass an id or handle such as report#3fa91c or task#0b12de, or leave about out to read your inbox." },
+      });
+    }
+    if (about.length > ABOUT_MAX) {
+      throw new CollabError("too_long", `about is ${about.length} characters; at most ${ABOUT_MAX}`, {
+        field: "about",
+        max: ABOUT_MAX,
+        actual: about.length,
+        unit: "chars",
+        remedy: { say: "Pass the id or handle exactly as an earlier result gave it." },
+      });
+    }
+  }
+  return { waitSeconds, limit, include: include as "for_me" | "all", format: format as "json" | "note", about };
+}
 
 export async function inboxVerb(ctx: NoteVerbContext, input: InboxInput): Promise<Record<string, unknown>> {
   const { binding, credential } = requireCredential(ctx);
-  if (input.about !== undefined) return aboutView(ctx, binding, input);
-  const limit = input.limit ?? DEFAULT_INBOX_LIMIT;
-  const include = input.include ?? "for_me";
-  const waitSeconds = input.wait_seconds ?? 0;
-  if (!Number.isInteger(waitSeconds) || waitSeconds < 0 || waitSeconds > 30) {
-    throw new CollabError("invalid_wait_seconds", "wait_seconds must be an integer from 0 to 30");
-  }
+  const { waitSeconds, limit, include, format, about } = validInboxInput(ctx, input);
+  if (about !== null) return aboutView(ctx, binding, about, format);
   // A wait takes its place in the endpoint's one budget before anything is
   // written: refused after the first pass, the call would have moved the
   // mark past what it counted and returned none of it.
@@ -1278,54 +1551,86 @@ export async function inboxVerb(ctx: NoteVerbContext, input: InboxInput): Promis
   if (waits) ctx.waits.active += 1;
   try {
     const first = ctx.store.inboxForSession({ ...credential, limit, include });
-    let data = first;
-    let earlier: NoteEntry[] = [];
-    let alsoNew = first.also_new;
+    const passes: NoteInboxData[] = [first];
     let waited: Record<string, unknown> | null = null;
+    let waitError: CollabError | null = null;
     if (waits && !first.entries.some((entry) => entry.for_me) && !first.more) {
       const started = performance.now();
-      const arrived = await waitForMe(ctx, binding, first.mark.anchor, waitSeconds * 1_000);
-      waited = { seconds: Math.round((performance.now() - started) / 100) / 10, ended_by: arrived ? "item" : "timeout" };
-      if (arrived) {
+      const seconds = () => Math.round((performance.now() - started) / 100) / 10;
+      // From here on the first pass has written (mark, last-seen, delivery
+      // records), so a failure must not discard what it found.
+      try {
+        const arrived = await waitForMe(ctx, binding, first.mark.anchor, waitSeconds * 1_000);
+        waited = { seconds: seconds(), ended_by: arrived ? "item" : "timeout" };
         // The first pass already moved the mark past what it listed and
         // counted, so its subject lines, its count and what it said about
         // the mark are kept, ahead of the second pass's items.
-        data = ctx.store.inboxForSession({ ...credential, limit, include });
-        earlier = first.entries;
-        alsoNew += data.also_new;
+        if (arrived) passes.push(ctx.store.inboxForSession({ ...credential, limit, include }));
+      } catch (error) {
+        if (error instanceof CollabError && error.code === "wait_cancelled") {
+          throw new CollabError(error.code, error.message, {
+            first_pass: inboxResult(ctx, passes, format, null),
+          });
+        }
+        waitError = error instanceof CollabError
+          ? error
+          : new CollabError("internal_error", error instanceof Error ? error.message : String(error));
+        waited = { seconds: seconds(), ended_by: "error", code: waitError.code, message: waitError.message };
       }
     }
-    const byId = new Map(data.sessions.map((view) => [view.id, view]));
-    const me = data.session.id;
-    const entries = [...earlier, ...data.entries];
-    const items = entries.map((entry) =>
-      entry.for_me ? formatEntry(entry, byId, me) : subjectLine(entry, byId, me));
-    const advice: string[] = [];
-    if (input.format === "note") advice.push("format: note renders one thread; pass about with an id or handle.");
-    if (first.mark.clamped || data.mark.clamped) advice.push(MARK_CLAMPED_ADVICE);
-    const firstForMe = entries.find((entry) => entry.for_me);
-    const about = firstForMe ? entryRef(firstForMe) : null;
-    const next: NoteRemedy = about
-      ? withSlot(ctx, { tool: "collab_inbox", input: { about } })
-      : data.more
-        ? withSlot(ctx, { tool: "collab_inbox", input: {} })
-        : withSlot(ctx, { tool: "collab_inbox", input: { wait_seconds: 30 } });
-    const initialisedFrom = first.mark.initialised_from ?? data.mark.initialised_from;
-    return {
-      ok: true,
-      items,
-      also_new: { count: alsoNew },
-      more: data.more,
-      read_through: { sequence: data.mark.through, head: data.head_sequence },
-      ...(initialisedFrom ? { mark_initialised_from: initialisedFrom } : {}),
-      waiting_on_you: data.waiting.map((entry) => formatWaiting(ctx, entry)),
-      ...(waited ? { waited } : {}),
-      advice,
-      next,
-    };
+    return inboxResult(ctx, passes, format, waited, waitError);
   } finally {
     if (waits) ctx.waits.active -= 1;
   }
+}
+
+/** One inbox result from its passes (one, or the first and the one after a wait). */
+function inboxResult(
+  ctx: NoteVerbContext,
+  passes: NoteInboxData[],
+  format: "json" | "note",
+  waited: Record<string, unknown> | null,
+  waitError: CollabError | null = null,
+): Record<string, unknown> {
+  const data = passes.at(-1)!;
+  const byId = new Map(data.sessions.map((view) => [view.id, view]));
+  const me = data.session.id;
+  const entries = passes.flatMap((pass) => pass.entries);
+  const items = entries.map((entry) =>
+    entry.for_me ? formatEntry(entry, byId, me) : subjectLine(entry, byId, me));
+  const advice: string[] = [];
+  if (format === "note") advice.push("format: note renders one thread; pass about with an id or handle.");
+  if (passes.some((pass) => pass.mark.clamped)) advice.push(MARK_CLAMPED_ADVICE);
+  if (waitError) {
+    advice.push(
+      `The wait ended with ${waitError.code}: ${waitError.message}. What this call's first pass found is returned; your read mark is past it.` +
+        (waitError.details.after_housekeeping === true
+          ? " A second pass had moved the mark further before it failed, and its items are not in this result."
+          : ""),
+    );
+  }
+  const firstForMe = entries.find((entry) => entry.for_me);
+  const about = firstForMe ? entryRef(firstForMe) : null;
+  const next: NoteRemedy = waitError
+    ? withSlot(ctx, noteRemedyOf(waitError))
+    : about
+      ? withSlot(ctx, { tool: "collab_inbox", input: { about } })
+      : data.more
+        ? withSlot(ctx, { tool: "collab_inbox", input: {} })
+        : withSlot(ctx, { tool: "collab_inbox", input: { wait_seconds: WAIT_MAX_SECONDS } });
+  const initialisedFrom = passes.map((pass) => pass.mark.initialised_from).find((value) => value) ?? null;
+  return {
+    ok: true,
+    items,
+    also_new: { count: passes.reduce((sum, pass) => sum + pass.also_new, 0) },
+    more: data.more,
+    read_through: { sequence: data.mark.through, head: data.head_sequence },
+    ...(initialisedFrom ? { mark_initialised_from: initialisedFrom } : {}),
+    waiting_on_you: data.waiting.map((entry) => formatWaiting(ctx, entry)),
+    ...(waited ? { waited } : {}),
+    advice,
+    next,
+  };
 }
 
 const MARK_CLAMPED_ADVICE =
@@ -1436,10 +1741,10 @@ function resolveAbout(ctx: NoteVerbContext, workspaceId: string, value: string):
   throw new CollabError("ref_not_found", `No report or task in this workspace has the id ${text}`, { value: text });
 }
 
-function aboutView(ctx: NoteVerbContext, binding: NoteBinding, input: InboxInput): Record<string, unknown> {
+function aboutView(ctx: NoteVerbContext, binding: NoteBinding, about: string, format: "json" | "note"): Record<string, unknown> {
   const credential = binding.handle.credential;
   const workspaceId = binding.handle.workspace.id;
-  const { kind, id } = resolveAbout(ctx, workspaceId, input.about!);
+  const { kind, id } = resolveAbout(ctx, workspaceId, about);
   const thread = ctx.store.noteThreadForSession({ ...credential, kind, id });
   const byId = new Map(thread.sessions.map((view) => [view.id, view]));
   const me = thread.session.id;
@@ -1456,7 +1761,7 @@ function aboutView(ctx: NoteVerbContext, binding: NoteBinding, input: InboxInput
     advice,
     next: withSlot(ctx, { tool: "collab_inbox", input: {} }),
   };
-  if (input.format === "note") {
+  if (format === "note") {
     try {
       const carried = carryThread(thread);
       result.note = carried.text;

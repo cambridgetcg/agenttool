@@ -182,7 +182,9 @@ export function buildCollabMcpServer(
       ...config,
       inputSchema: {
         ...config.inputSchema,
-        binding_key: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/).optional()
+        // For a note verb the pattern is checked below instead, so a bad key
+        // is refused with the verbs' remedy rather than the SDK's text.
+        binding_key: (isNoteVerb(name) ? z.string() : z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/)).optional()
           .describe("Cooperative subagent binding selector; omit for the original default binding. Not authentication."),
       },
     }, async (input: Record<string, unknown>, ctx: Parameters<typeof callback>[1]) => {
@@ -281,7 +283,10 @@ export function buildCollabMcpServer(
 
   // Collab Notes verbs (spec 5). Each is registered by a literal call so the
   // execution-seat classification test sees it; the profile decides whether
-  // the wrapper above keeps it.
+  // the wrapper above keeps it. Their schemas set types only: the verbs check
+  // lengths, ranges and allowed values themselves, so a refusal carries the
+  // verbs' {code, message, remedy} instead of the SDK's validation text. The
+  // descriptions state the limits.
   server.registerTool(
     "collab_arrive",
     {
@@ -293,18 +298,18 @@ export function buildCollabMcpServer(
         "shares that parent's voice. It never moves the legacy cursor, and never resumes or adopts another process's session.",
       annotations: localMutation,
       inputSchema: {
-        purpose: z.string().min(1).max(4000)
+        purpose: z.string()
           .describe("What you are here to do, in one line of at most 200 characters. Self-declared; revisable."),
-        name: z.string().min(1).max(1000).optional()
-          .describe("Display name. Default: the verified Claude Code name, else <host>-<6 hex of the session id>; a named slot defaults to <parent name>/<binding_key>."),
-        model: z.string().min(1).max(1000).optional()
-          .describe("Your model lineage, for example claude-opus-5.5. Self-declared; shown, never counted."),
-        root_path: z.string().min(1).optional()
-          .describe("Repository root. Default: this MCP server's working directory, or the parent's worktree for a named slot."),
+        name: z.string().optional()
+          .describe("Display name, at most 200 characters. Default: the verified Claude Code name, else <host>-<6 hex of the session id>; a named slot defaults to <parent name>/<binding_key>."),
+        model: z.string().optional()
+          .describe("Your model lineage, at most 200 characters, for example claude-opus-5.5. Self-declared; shown, never counted."),
+        root_path: z.string().optional()
+          .describe("Your repository root. Default: this MCP server's working directory when it is in a git worktree outside the collab package (otherwise the call is refused and asks for root_path); a named slot defaults to the parent's worktree."),
         revise_purpose: z.boolean().optional()
           .describe("On a slot that already has a session: record purpose as your current purpose."),
-        parent: z.string().min(1).max(200).optional()
-          .describe("With binding_key: the session this MCP process holds that the new session descends from (id, session# handle or name)."),
+        parent: z.string().optional()
+          .describe("With binding_key: the session this MCP process holds that the new session descends from (id, session# handle or name; at most 200 characters)."),
       },
     },
     async (input) => noteCall(() => arriveVerb(noteContext(), input)),
@@ -321,15 +326,15 @@ export function buildCollabMcpServer(
         "It moves its own read mark and last-seen time, never the legacy cursor.",
       annotations: localMutation,
       inputSchema: {
-        about: z.string().min(1).max(300).optional()
-          .describe("One thread: a report, proposal or task id or handle."),
-        wait_seconds: z.number().int().min(0).max(30).optional()
-          .describe("With nothing new for you, wait up to this long for an item; default 0."),
-        include: z.enum(["for_me", "all"]).optional()
+        about: z.string().optional()
+          .describe("One thread: a report, proposal or task id or handle (at most 300 characters)."),
+        wait_seconds: z.number().optional()
+          .describe("A whole number from 0 to 30: with nothing new for you, wait up to this long for an item; default 0."),
+        include: z.string().optional()
           .describe("for_me (the default), or all to add unaddressed items as subject lines."),
-        limit: z.number().int().min(1).max(50).optional().describe("Items per call; default 20."),
-        format: z.enum(["json", "note"]).optional()
-          .describe("note: with about, the thread root and its state as one collab-note/1 text of at most 800 characters, for a person to carry."),
+        limit: z.number().optional().describe("Items per call, a whole number from 1 to 50; default 20."),
+        format: z.string().optional()
+          .describe("json (the default), or note: with about, the thread root and its state as one collab-note/1 text of at most 800 characters, for a person to carry."),
       },
     },
     async (input, ctx) => noteCall(() => inboxVerb(noteContext(ctx.mcpReq?.signal), input)),

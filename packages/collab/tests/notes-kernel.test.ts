@@ -7,7 +7,15 @@ import { buildCollabMcpServer } from "../src/mcp.js";
 import type { EventCursor, SessionHandle } from "../src/protocol.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
 import { assertNotePayload, CollabStore, NOTE_SCAN_MAX_BYTES, NOTE_SCAN_MAX_EVENTS } from "../src/store.js";
-import { base32, planReceipt, replayReceipt } from "../src/verbs.js";
+import {
+  base32,
+  noteCall,
+  noteFailure,
+  planReceipt,
+  replayReceipt,
+  underPlan,
+  withCurrentVersion,
+} from "../src/verbs.js";
 
 // The verb kernel's common rules (Collab Notes spec 5) and the storage guards
 // of spec 8.3, pinned below the verbs: key derivation, receipt replay, the
@@ -140,6 +148,134 @@ describe("derived receipt keys", () => {
   });
 });
 
+describe("two calls that plan before either writes", () => {
+  /** Two purposes whose bases sort first > second, so a shared seq would make the earlier write look latest. */
+  function inverted(j: ReturnType<typeof journal>, me: SessionHandle): [string, string] {
+    for (let index = 0; index < 200; index += 1) {
+      const [x, y] = [`purpose ${index}`, `other ${index}`];
+      const px = planReceipt(j.store, me.credential, { tool: "collab_arrive", input: { purpose: x }, entity: "purpose" });
+      const py = planReceipt(j.store, me.credential, { tool: "collab_arrive", input: { purpose: y }, entity: "purpose" });
+      if (px.base > py.base) return [x, y];
+    }
+    throw new Error("no inverted pair found");
+  }
+
+  test("the write's transaction refuses a plan another write overtook, and nothing is written", () => {
+    const j = journal();
+    const me = j.start("me");
+    const [x, y] = inverted(j, me);
+    const px = planReceipt(j.store, me.credential, { tool: "collab_arrive", input: { purpose: x }, entity: "purpose" });
+    const py = planReceipt(j.store, me.credential, { tool: "collab_arrive", input: { purpose: y }, entity: "purpose" });
+    expect([px.seq, py.seq]).toEqual([1, 1]);
+    j.store.declarePurposeForSession({ ...me.credential, idempotency_key: px.key, purpose: x, receipt_plan: px.guard });
+    const before = j.count("events");
+    expect(codeOf(() => j.store.declarePurposeForSession({ ...me.credential, idempotency_key: py.key, purpose: y, receipt_plan: py.guard })))
+      .toBe("receipt_plan_stale");
+    expect(j.count("events")).toBe(before);
+    // The same key written again (a lost response, replayed by the store) still passes its own guard.
+    expect(j.store.declarePurposeForSession({ ...me.credential, idempotency_key: px.key, purpose: x, receipt_plan: px.guard }).purpose)
+      .toBe(x);
+  });
+
+  test("underPlan plans once more, so the later write is latest and a deliberate repeat writes again", async () => {
+    const j = journal();
+    const me = j.start("me");
+    const [x, y] = inverted(j, me);
+    const ctx = { store: j.store, slot_key: "" };
+    const declare = (purpose: string, interleave?: () => void) =>
+      underPlan(ctx, me.credential, { tool: "collab_arrive", input: { purpose }, entity: "purpose" }, (plan) => {
+        // Another call by this session that planned with this one writes first.
+        interleave?.();
+        return { plan, receipt: j.store.declarePurposeForSession({ ...me.credential, idempotency_key: plan.key, purpose, receipt_plan: plan.guard }) };
+      });
+    let overtaken = false;
+    const second = await declare(y, () => {
+      if (overtaken) return;
+      overtaken = true;
+      const px = planReceipt(j.store, me.credential, { tool: "collab_arrive", input: { purpose: x }, entity: "purpose" });
+      j.store.declarePurposeForSession({ ...me.credential, idempotency_key: px.key, purpose: x, receipt_plan: px.guard });
+    });
+    expect(second.plan.seq).toBe(2);
+    expect(second.plan.retry).toBe(false);
+    // x again is a deliberate repeat after y, not a retry of the first write.
+    const again = planReceipt(j.store, me.credential, { tool: "collab_arrive", input: { purpose: x }, entity: "purpose" });
+    expect(again).toMatchObject({ retry: false, seq: 3 });
+    expect((await declare(x)).receipt.purpose).toBe(x);
+    expect(j.store.noteSessionViews(me.workspace.id).find((view) => view.id === me.session.id)!.purpose).toBe(x);
+    expect(j.store.db.query(`SELECT COUNT(*) AS n FROM events WHERE type = 'purpose.declared'`).get()).toEqual({ n: 3 });
+  });
+
+  test("a plan overtaken twice is refused as changed_under_you with the same call as remedy", async () => {
+    const j = journal();
+    const me = j.start("me");
+    let overtakes = 0;
+    const result = await noteCall(() => underPlan(
+      { store: j.store, slot_key: "k1" },
+      me.credential,
+      { tool: "collab_arrive", input: { purpose: "mine" }, entity: "purpose", retry_input: { purpose: "mine", revise_purpose: true } },
+      (plan) => {
+        overtakes += 1;
+        j.store.declarePurposeForSession({ ...me.credential, idempotency_key: `n1:${plan.eh}:00000${overtakes + 4}:${"A".repeat(20)}`, purpose: "theirs" });
+        return j.store.declarePurposeForSession({ ...me.credential, idempotency_key: plan.key, purpose: "mine", receipt_plan: plan.guard }) as unknown as Record<string, unknown>;
+      },
+    ));
+    expect(overtakes).toBe(2);
+    expect(result.structuredContent).toMatchObject({
+      code: "changed_under_you",
+      remedy: { tool: "collab_arrive", input: { purpose: "mine", revise_purpose: true, binding_key: "k1" } },
+    });
+  });
+});
+
+describe("version conflicts are handled inside the call (spec 5)", () => {
+  test("a concurrent change between the read and the write returns changed_under_you with the fresh state", async () => {
+    const j = journal();
+    const me = j.start("me");
+    const peer = j.start("peer");
+    const task = j.store.createTaskForSession({ ...me.credential, idempotency_key: "t", title: "Shared", work_mode: "coordination" });
+    const input = { task: task.id };
+    const read = () => {
+      const current = j.store.getTask(me.workspace.id, task.id)!;
+      return { version: current.version, state: { task: current.id, status: current.status, holder: current.assignee } };
+    };
+    let raced = false;
+    const result = await noteCall(() => withCurrentVersion({ slot_key: "" }, { tool: "collab_take", input }, read, (version) => {
+      if (!raced) {
+        // Another session claims and releases the task after this call read it: still claimable, but changed.
+        raced = true;
+        const claimed = j.store.claimTaskForSession({ ...peer.credential, idempotency_key: "pc", task_id: task.id, expected_version: version });
+        j.store.releaseTaskForSession({
+          ...peer.credential, idempotency_key: "pr", task_id: task.id, lease_id: claimed.lease_id!, expected_version: claimed.version, summary: "Not mine.",
+        });
+      }
+      return j.store.claimTaskForSession({ ...me.credential, idempotency_key: "mc", task_id: task.id, expected_version: version }) as unknown as Record<string, unknown>;
+    }));
+    expect((result as { isError?: boolean }).isError).toBe(true);
+    expect(result.structuredContent).toEqual({
+      code: "changed_under_you",
+      message: expect.stringContaining("changed after this call read it"),
+      state: { task: task.id, status: "open", holder: null },
+      remedy: { tool: "collab_take", input },
+    });
+    // Bookkeeping stays hidden: no version reaches the caller.
+    expect(JSON.stringify(result.structuredContent)).not.toContain("version");
+    expect(j.store.getTask(me.workspace.id, task.id)!.assignee).toBeNull();
+    // Without a race the same call acts.
+    const taken = await noteCall(() => withCurrentVersion({ slot_key: "" }, { tool: "collab_take", input }, read, (version) =>
+      j.store.claimTaskForSession({ ...me.credential, idempotency_key: "mc2", task_id: task.id, expected_version: version }) as unknown as Record<string, unknown>));
+    expect((taken as { isError?: boolean }).isError).toBeUndefined();
+  });
+
+  test("a stray version_conflict from the store becomes changed_under_you, with no version in it", () => {
+    const stray = noteFailure(new CollabError("version_conflict", "Task changed since it was read", { expected_version: 3, current_version: 4 }));
+    expect(stray.structuredContent.code).toBe("changed_under_you");
+    expect(JSON.stringify(stray.structuredContent)).not.toContain("version");
+    const say = (stray.structuredContent.remedy as { say: string }).say;
+    expect(say).not.toContain("correct the call");
+    expect(say).not.toContain("Nothing was written");
+  });
+});
+
 describe("readReceiptByKey", () => {
   test("replays the recorded response by exact key without comparing the request", () => {
     const j = journal();
@@ -208,6 +344,9 @@ describe("the inbox scan bounds", () => {
     j.store.appendReportForSession({
       ...peer.credential, idempotency_key: "m", kind: "observation", body: "For me.", to_session_id: me.session.id,
     });
+    // Arrive's count stops where the scan stops, and says it is a lower bound.
+    const arrived = await ok(server, "collab_arrive", { purpose: "look" });
+    expect(arrived.totals).toMatchObject({ for_you: 0, for_you_at_least: true });
     const first = await ok(server, "collab_inbox");
     expect(first.items).toEqual([]);
     expect(first.more).toBe(true);

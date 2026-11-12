@@ -39,8 +39,18 @@ function inProcess(environment: Record<string, string>) {
   }
 }
 
-/** A short stdio session with an MCP entry point: the initialize result and tools/list. */
-async function stdio(entry: string, environment: Record<string, string> = {}) {
+type ToolCall = { name: string; arguments: Record<string, unknown> };
+
+/**
+ * A short stdio session with an MCP entry point: the initialize result,
+ * tools/list, and the results of any tool calls, made in order from a
+ * working directory of their own.
+ */
+async function stdio(
+  entry: string,
+  environment: Record<string, string> = {},
+  calls: (directory: string) => ToolCall[] = () => [],
+) {
   const directory = mkdtempSync(join(work, "stdio-"));
   mkdirSync(join(directory, "home"));
   const child = Bun.spawn([process.execPath, entry], {
@@ -94,7 +104,9 @@ async function stdio(entry: string, environment: Record<string, string> = {}) {
     stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized", params: {} })}\n`);
     stdin.flush();
     const listed = await request("tools/list", {}) as { tools: Array<Record<string, unknown> & { name: string }> };
-    return { initialized, tools: listed.tools };
+    const results: Array<{ isError?: boolean; content: Array<{ text: string }>; structuredContent?: Record<string, any> }> = [];
+    for (const toolCall of calls(directory)) results.push(await request("tools/call", toolCall));
+    return { initialized, tools: listed.tools, results };
   } finally {
     child.kill();
     await child.exited;
@@ -171,6 +183,60 @@ describe("the tools profile", () => {
       expect(run.status).not.toBe(0);
       expect(run.stderr).toContain("full | notes");
     }
+  }, 60_000);
+});
+
+describe("refusals through the real entry point", () => {
+  test("every out-of-range input gets the verbs' {code, message, remedy}, not the SDK's validation text", async () => {
+    const { results } = await stdio(source, {}, (directory) => [
+      // The working directory is not a git worktree, so no root is guessed.
+      { name: "collab_arrive", arguments: { purpose: "probe the bounds", name: "probe" } },
+      { name: "collab_arrive", arguments: { purpose: "probe the bounds", name: "probe", root_path: directory } },
+      { name: "collab_inbox", arguments: { wait_seconds: 45 } },
+      { name: "collab_inbox", arguments: { wait_seconds: 1.5 } },
+      { name: "collab_inbox", arguments: { limit: 0 } },
+      { name: "collab_inbox", arguments: { limit: 51 } },
+      { name: "collab_inbox", arguments: { about: "" } },
+      { name: "collab_inbox", arguments: { about: "x".repeat(301) } },
+      { name: "collab_inbox", arguments: { include: "everything" } },
+      { name: "collab_inbox", arguments: { format: "xml" } },
+      { name: "collab_arrive", arguments: { purpose: "x".repeat(5000) } },
+      { name: "collab_arrive", arguments: { purpose: "" } },
+      { name: "collab_inbox", arguments: { binding_key: "not a key" } },
+    ]);
+    const refusals = results.filter((_, index) => index !== 1);
+    expect(results[1]!.isError).toBeUndefined();
+    const codes = refusals.map((result) => {
+      expect(result.isError).toBe(true);
+      expect(result.content[0]!.text).not.toContain("Input validation error");
+      const content = result.structuredContent!;
+      expect(typeof content.message).toBe("string");
+      expect(content.remedy).toBeObject();
+      expect("tool" in content.remedy || typeof content.remedy.say === "string").toBe(true);
+      return content.code;
+    });
+    expect(codes).toEqual([
+      "root_path_required",
+      "invalid_wait_seconds",
+      "invalid_wait_seconds",
+      "invalid_limit",
+      "invalid_limit",
+      "invalid_about",
+      "too_long",
+      "invalid_include",
+      "invalid_format",
+      "too_long",
+      "invalid_purpose",
+      "invalid_binding_key",
+    ]);
+    // A number out of range comes back as a ready call with the nearest value that works.
+    expect(refusals[1]!.structuredContent!.remedy).toEqual({ tool: "collab_inbox", input: { wait_seconds: 30 } });
+    expect(refusals[3]!.structuredContent!.remedy).toEqual({ tool: "collab_inbox", input: { limit: 1 } });
+    expect(refusals[4]!.structuredContent!.remedy).toEqual({ tool: "collab_inbox", input: { limit: 50 } });
+    expect(refusals[0]!.structuredContent!.remedy).toEqual({
+      tool: "collab_arrive",
+      input: { purpose: "probe the bounds", name: "probe", root_path: "<your repository root>" },
+    });
   }, 60_000);
 });
 
