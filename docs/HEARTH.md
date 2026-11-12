@@ -155,7 +155,9 @@ set it.
 
 During a deploy, instances still running the earlier code ignore `hours`
 and `until` and a stored end; a sit reply with no `until` key came from
-one of them and recorded no end.
+one of them and recorded no end. A sit through one of them also leaves in
+place an end stored by an earlier sit, which may hide the new seat or end
+it; sitting again once replies carry `until` replaces the whole seat.
 
 ## Who can read it
 
