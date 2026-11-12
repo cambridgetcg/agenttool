@@ -796,9 +796,15 @@ export function parseNote(text: string): ParsedNote {
   const finalStart = rest.lastIndexOf("") + 1;
   const finalParagraph = rest.slice(finalStart);
   const hasBlock = isTrailerBlock(finalParagraph);
-  const bodyLines = hasBlock ? rest.slice(0, finalStart) : rest;
-  adviseBodyTrailers(bodyLines, 2, advice);
+  const beforeBlock = hasBlock ? rest.slice(0, finalStart) : rest;
+  adviseBodyTrailers(beforeBlock, 2, advice);
   const block = hasBlock ? readBlock(finalParagraph, finalStart + 2, advice) : readBlock([], 0, advice);
+  // A last paragraph the block uses none of is body as written: rebuilding it
+  // would shrink the blank lines before it, and renderNote, checkNote and this
+  // reader would then disagree about the same note (bodyEndsInTrailers allows it).
+  const unused = hasBlock && block.kept.length === finalParagraph.length;
+  const bodyLines = unused ? rest : beforeBlock;
+  if (unused) block.kept = [];
 
   const ownBody = trimBlankEdges(bodyLines).join("\n").trimEnd();
   const kept = block.kept.join("\n");
@@ -1485,6 +1491,29 @@ function readable(value: string, check: (value: string) => string | null): boole
  * original number. Throws not_carriable for a short handle or a local
  * detail in the statement.
  */
+const HEX_CHAR = /[0-9a-f]/;
+
+/**
+ * Whether a lowercased value names a local term. A term made only of hex
+ * digits and hyphens (a host called "cafe") is not named by a longer run of
+ * hex digits it sits inside that holds a decimal digit (a hash, a uuid
+ * group, a commit), or the hash and the id would be withheld as local
+ * detail. Anywhere else a term is matched as a substring.
+ */
+function namesTerm(value: string, term: string): boolean {
+  const hexTerm = /^[0-9a-f-]+$/.test(term);
+  for (let at = value.indexOf(term); at !== -1; at = value.indexOf(term, at + 1)) {
+    if (!hexTerm) return true;
+    let start = at;
+    let end = at + term.length;
+    while (start > 0 && HEX_CHAR.test(value[start - 1]!)) start -= 1;
+    while (end < value.length && HEX_CHAR.test(value[end]!)) end += 1;
+    const run = value.slice(start, end);
+    if (run.length === term.length || !/\d/.test(run)) return true;
+  }
+  return false;
+}
+
 export function renderCarriedNote(input: NoteInput, options: CarryOptions = {}): CarriedNote {
   const max = options.maxChars ?? NOTE_CARRY_MAX;
   if (!Number.isInteger(max) || max < 1) {
@@ -1496,7 +1525,7 @@ export function renderCarriedNote(input: NoteInput, options: CarryOptions = {}):
   const isLocal = (value: string): boolean =>
     LOCAL_DETAIL.some((pattern) => pattern.test(value))
     || namesAbsolutePath(value)
-    || terms.some((term) => value.toLowerCase().includes(term));
+    || terms.some((term) => namesTerm(value.toLowerCase(), term));
 
   const base = normalizeNoteFields(input);
   if (!isNoteAct(base.act)) throw new CollabError("invalid_note_field", `act must be one of ${NOTE_ACTS.join(", ")}`, { field: "act" });
@@ -1592,7 +1621,9 @@ export function renderCarriedNote(input: NoteInput, options: CarryOptions = {}):
     // so a local term that happens to match one (a host called "sha") is no
     // reason to withhold a hash.
     const localKey = problem === null && !RENDER_KEY_SET.has(trailer.key) && isLocal(trailer.key);
-    if (problem !== null || localKey || isLocal(trailer.value)) {
+    // A valid Sha256 value is 64 hex digits, which can name no machine.
+    const localValue = !(problem === null && trailer.key === "Sha256") && isLocal(trailer.value);
+    if (problem !== null || localKey || localValue) {
       trailerFates.set(index, { kind: problem !== null ? "unreadable" : "local" });
     } else {
       state.trailers.push(trailer);

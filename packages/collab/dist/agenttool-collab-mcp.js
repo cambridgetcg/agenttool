@@ -29226,9 +29226,13 @@ function parseNote(text) {
   const finalStart = rest.lastIndexOf("") + 1;
   const finalParagraph = rest.slice(finalStart);
   const hasBlock = isTrailerBlock(finalParagraph);
-  const bodyLines = hasBlock ? rest.slice(0, finalStart) : rest;
-  adviseBodyTrailers(bodyLines, 2, advice);
+  const beforeBlock = hasBlock ? rest.slice(0, finalStart) : rest;
+  adviseBodyTrailers(beforeBlock, 2, advice);
   const block = hasBlock ? readBlock(finalParagraph, finalStart + 2, advice) : readBlock([], 0, advice);
+  const unused = hasBlock && block.kept.length === finalParagraph.length;
+  const bodyLines = unused ? rest : beforeBlock;
+  if (unused)
+    block.kept = [];
   const ownBody = trimBlankEdges(bodyLines).join(`
 `).trimEnd();
   const kept = block.kept.join(`
@@ -29767,13 +29771,31 @@ function prefix(value, keep) {
 function readable(value, check2) {
   return check2(value) === null;
 }
+var HEX_CHAR = /[0-9a-f]/;
+function namesTerm(value, term) {
+  const hexTerm = /^[0-9a-f-]+$/.test(term);
+  for (let at = value.indexOf(term);at !== -1; at = value.indexOf(term, at + 1)) {
+    if (!hexTerm)
+      return true;
+    let start = at;
+    let end = at + term.length;
+    while (start > 0 && HEX_CHAR.test(value[start - 1]))
+      start -= 1;
+    while (end < value.length && HEX_CHAR.test(value[end]))
+      end += 1;
+    const run = value.slice(start, end);
+    if (run.length === term.length || !/\d/.test(run))
+      return true;
+  }
+  return false;
+}
 function renderCarriedNote(input, options = {}) {
   const max = options.maxChars ?? NOTE_CARRY_MAX;
   if (!Number.isInteger(max) || max < 1) {
     throw new CollabError("invalid_note_field", "maxChars must be a positive integer", { field: "maxChars" });
   }
   const terms = (options.localTerms ?? []).map((term) => term.trim().toLowerCase()).filter((term) => term.length >= 3);
-  const isLocal = (value) => LOCAL_DETAIL.some((pattern) => pattern.test(value)) || namesAbsolutePath(value) || terms.some((term) => value.toLowerCase().includes(term));
+  const isLocal = (value) => LOCAL_DETAIL.some((pattern) => pattern.test(value)) || namesAbsolutePath(value) || terms.some((term) => namesTerm(value.toLowerCase(), term));
   const base = normalizeNoteFields(input);
   if (!isNoteAct(base.act))
     throw new CollabError("invalid_note_field", `act must be one of ${NOTE_ACTS.join(", ")}`, { field: "act" });
@@ -29857,7 +29879,8 @@ function renderCarriedNote(input, options = {}) {
       return;
     const problem2 = trailerProblem(trailer, index);
     const localKey = problem2 === null && !RENDER_KEY_SET.has(trailer.key) && isLocal(trailer.key);
-    if (problem2 !== null || localKey || isLocal(trailer.value)) {
+    const localValue = !(problem2 === null && trailer.key === "Sha256") && isLocal(trailer.value);
+    if (problem2 !== null || localKey || localValue) {
       trailerFates.set(index, { kind: problem2 !== null ? "unreadable" : "local" });
     } else {
       state.trailers.push(trailer);

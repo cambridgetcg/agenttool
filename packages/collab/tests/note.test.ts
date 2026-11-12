@@ -1571,6 +1571,47 @@ describe("round trip over generated notes", () => {
     expect(refusedBody).toBeGreaterThan(0);
   });
 
+  test("a note with no trailers whose last paragraph is lines the reader does not use keeps its body", () => {
+    for (const gap of ["\n\n", "\n\n\n", "\n\n\n\n"]) {
+      for (const last of ["Signed-off-by: astra", "To:", "Foo: one\nBar: two", "To:\nSigned-off-by: astra"]) {
+        const note = normalizeNoteFields({ act: "note", statement: "the suite passes", body: `It took 80 s.${gap}${last}` });
+        expect(checkNote(note)).toEqual([]);
+        const text = renderNote(note);
+        expect(withoutAdvice(parseNote(text))).toEqual(note);
+        // The same text typed by hand reads back with every blank line it had.
+        expect(parseNote(`note: the suite passes\n\nIt took 80 s.${gap}${last}`).body).toBe(`It took 80 s.${gap}${last}`);
+      }
+    }
+  });
+
+  test("notes with no trailer fields are refused exactly as checkNote says", () => {
+    // The tricky generator above almost never leaves a note without trailers,
+    // which is where a last paragraph of unused key lines stays body text.
+    const gen = new Gen(0x5eed_0009);
+    const keyish = ["Signed-off-by: astra", "Foo: bar", "To:", "Re:", "Purpose:", "X-:", "Note: tabs"];
+    let rendered = 0;
+    let refusedBody = 0;
+    for (let index = 0; index < 2000; index += 1) {
+      const base = genNote(gen, { tricky: true });
+      const act = NOTE_ACTS_NEEDING_RE.includes(base.act) ? "note" : base.act;
+      const tail = Array.from({ length: gen.int(1, 3) }, () => gen.pick(keyish)).join("\n");
+      const body = gen.chance(0.7) ? `${base.body ?? "Some words."}${gen.pick(["\n\n", "\n\n\n", "\n\n\n\n"])}${tail}` : base.body;
+      const note = normalizeNoteFields({ act, statement: base.statement, body });
+      const problems = checkNote(note);
+      if (problems.length > 0) {
+        expect(problems).toEqual([expect.objectContaining({ code: "invalid_note_field", field: "body" })]);
+        expect(thrown(() => renderNote(note)).code).toBe("invalid_note_field");
+        refusedBody += 1;
+        continue;
+      }
+      const text = renderNote(note);
+      expect(withoutAdvice(parseNote(text))).toEqual(note);
+      rendered += 1;
+    }
+    expect(rendered).toBeGreaterThan(1000);
+    expect(refusedBody).toBeGreaterThan(0);
+  });
+
   test("SQLite keeps every note renderNote returns byte for byte, even from text cut mid-character", () => {
     // Spec 4: the stored body equals the returned note. A host that cuts text
     // at a UTF-16 boundary can leave half an emoji, which SQLite rewrites.
@@ -1892,6 +1933,24 @@ describe("the carrying render", () => {
     const sha = renderCarriedNote(base, { localTerms: ["sha", "position"] });
     expect(sha.not_carried).toEqual([]);
     expect(parseNote(sha.text).trailers.slice(0, 2)).toEqual(base.trailers);
+  });
+
+  test("a host name made of hex letters withholds neither a Sha256 line nor a full id", () => {
+    const hash = `cafe${"0".repeat(60)}`;
+    const re = "proposal:report_0b0b0b0b-0000-4000-8000-0000000cafe0";
+    const carried = renderCarriedNote(
+      { act: "note", statement: "the parser keeps tabs", re, evidence: [`report:report_0b0b0b0b-0000-4000-8000-00000cafe000`], trailers: [{ key: "Sha256", value: hash }] },
+      { localTerms: ["cafe"] },
+    );
+    expect(carried.not_carried).toEqual([]);
+    const parsed = parseNote(carried.text);
+    expect(parsed.re).toBe(re);
+    expect(parsed.trailers).toContainEqual({ key: "Sha256", value: hash });
+    expect(parsed.evidence).toEqual(["report:report_0b0b0b0b-0000-4000-8000-00000cafe000"]);
+    // The same name standing as a word is still withheld.
+    const named = renderCarriedNote({ act: "note", statement: "the parser keeps tabs", body: "measured on cafe.local and cafe-2" }, { localTerms: ["cafe"] });
+    expect(named.not_carried).toEqual(["body (local detail)"]);
+    expect(thrown(() => renderCarriedNote({ act: "note", statement: "seen on cafe" }, { localTerms: ["cafe"] })).code).toBe("not_carriable");
   });
 
   // A cut is named by its label, or, for X- trailers, by their group.

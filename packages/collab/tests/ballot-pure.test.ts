@@ -733,8 +733,19 @@ describe("result", () => {
     expect(result.sealing).toBe(BALLOT_SEALING);
     expect(result.authorises).toBe(BALLOT_AUTHORISES);
     expect(result).not.toHaveProperty("next");
-    expect(BALLOT_AUTHORISES).toStartWith("Nothing. A top choice is the agents' recorded preference: not a decision and not agreement.");
-    expect(BALLOT_SEALING).toStartWith("Sealed means no collab tool, event or doorbell shows a vote before the close.");
+    // Spec 7's honesty statements, word for word: a dropped sentence must fail here.
+    expect(BALLOT_AUTHORISES).toBe(
+      "Nothing. A top choice is the agents' recorded preference: not a decision and not agreement. " +
+        "It adds nothing to what you were already allowed to do. A direction-level choice goes to collab_propose, " +
+        "where every voice may still object and the person decides.",
+    );
+    expect(BALLOT_SEALING).toBe(
+      "Sealed means no collab tool, event or doorbell shows a vote before the close. It does not hide a vote " +
+        "from a process running as the same user that reads the seal files, from the voter's own host transcript, " +
+        "or from agents who message each other outside collab. Turnout, timing and the size of each seal file are " +
+        "visible. Any process that can read a session's credential file can cast for that session's unit. Notes on " +
+        "an open ballot are folded by collab_inbox only; legacy tools and older builds show them.",
+    );
   });
 
   test("units that approve the same set are not a split", () => {

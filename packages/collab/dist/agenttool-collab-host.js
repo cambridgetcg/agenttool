@@ -502,9 +502,13 @@ function parseNote(text) {
   const finalStart = rest.lastIndexOf("") + 1;
   const finalParagraph = rest.slice(finalStart);
   const hasBlock = isTrailerBlock(finalParagraph);
-  const bodyLines = hasBlock ? rest.slice(0, finalStart) : rest;
-  adviseBodyTrailers(bodyLines, 2, advice);
+  const beforeBlock = hasBlock ? rest.slice(0, finalStart) : rest;
+  adviseBodyTrailers(beforeBlock, 2, advice);
   const block = hasBlock ? readBlock(finalParagraph, finalStart + 2, advice) : readBlock([], 0, advice);
+  const unused = hasBlock && block.kept.length === finalParagraph.length;
+  const bodyLines = unused ? rest : beforeBlock;
+  if (unused)
+    block.kept = [];
   const ownBody = trimBlankEdges(bodyLines).join(`
 `).trimEnd();
   const kept = block.kept.join(`
