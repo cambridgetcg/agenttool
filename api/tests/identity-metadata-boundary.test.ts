@@ -268,8 +268,11 @@ describe("hearth seat keys — only the sit route writes them", () => {
       identitiesSource.indexOf("updates.metadata = patched.metadata;"),
     );
     // The kept-seat notice is built by the tested function, only for a
-    // request that carried metadata.
-    expect(identitiesSource).toMatch(/body\.metadata !== undefined\s*\?\s*hearthSeatKeptNotice\(/);
+    // request that carried metadata, from the row the UPDATE returned: its
+    // id, its status (not a literal) and its metadata.
+    expect(identitiesSource).toMatch(
+      /body\.metadata !== undefined\s*\?\s*hearthSeatKeptNotice\(\s*\{ id: updated\.id, status: updated\.status, metadata: updated\.metadata \},\s*Date\.now\(\),\s*\)/,
+    );
     expect(identitiesSource).toContain("hearth_seat_kept: hearthSeatKept");
 
     const bootstrapSource = read("../src/routes/bootstrap.ts");

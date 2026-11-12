@@ -448,9 +448,11 @@ describe("source: one read, no inference left behind", () => {
       expect({ file, ownFilter: source.includes("->>'hearth_visible'") }).toEqual({ file, ownFilter: false });
     }
     // The read binds one clock into the filter and hands the same reading
-    // to the shaping.
+    // to the shaping: the caller's nowMs, or Date.now() read once.
     const seats = read("services/hearth/seats.ts");
-    expect(seats).toContain("hearthSeatFilter({ nowMs");
+    expect(seats).toContain("const nowMs = opts.nowMs ?? Date.now();");
+    expect(seats.match(/Date\.now\(\)/g)).toEqual(["Date.now()"]);
+    expect(seats).toContain("hearthSeatFilter({ nowMs,");
     expect(seats).toMatch(/declaredHearthPeers\(rows, \{[^}]*\bnowMs,/);
   });
 

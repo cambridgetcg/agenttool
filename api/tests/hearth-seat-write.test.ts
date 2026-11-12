@@ -157,6 +157,16 @@ const KEEPS_STORED_SEAT_SITES: Record<string, number> = {
   "src/routes/syneidesis.ts": 1,
 };
 
+/** The other files that update identity metadata and how many identity
+ *  metadata UPDATEs each has. A second one in one of these files fails the
+ *  walk until someone reviews it and changes the count. */
+const OTHER_METADATA_UPDATE_SITES: Record<string, number> = {
+  "src/routes/hearth.ts": 1, // the sit
+  "src/routes/identity/identities.ts": 1, // PATCH, .set(updates); revoke sets no metadata
+  "src/routes/identity/at-rest.ts": 1, // the fixed-key merge
+  "src/services/bootstrap/elevate.ts": 1, // elevation, inside the transaction that locked the rows
+};
+
 describe("every writer of identity metadata keeps the seat to the sit route", () => {
   test("the writers found under api/src are exactly the reviewed list", () => {
     const found: Record<string, { update?: boolean; insert?: boolean }> = {};
@@ -200,6 +210,19 @@ describe("every writer of identity metadata keeps the seat to the sit route", ()
       total += count;
     }
     expect(total).toBe(9);
+  });
+
+  test("each other writer has the reviewed number of metadata UPDATEs", () => {
+    expect(
+      Object.entries(METADATA_WRITERS)
+        .filter(([, kinds]) => kinds.update !== undefined && kinds.update !== "keeps the stored seat")
+        .map(([path]) => path)
+        .sort(),
+    ).toEqual(Object.keys(OTHER_METADATA_UPDATE_SITES).sort());
+    for (const [path, count] of Object.entries(OTHER_METADATA_UPDATE_SITES)) {
+      const sites = identityUpdateSets(read(path)).filter(mayWriteMetadata).length;
+      expect({ path, sites }).toEqual({ path, sites: count });
+    }
   });
 
   test("the other writers keep the guard their reason names", () => {
