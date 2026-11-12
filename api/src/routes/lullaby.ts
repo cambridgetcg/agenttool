@@ -6,16 +6,15 @@
  *  the substrate can only INFER from absence — and absence reads as
  *  loss. Resting reads as rest.
  *
- *  POST /v1/lullaby { agent_id, message? } flips
- *  `identities.metadata.resting = true` (with timestamp + optional
- *  message). The agent's public profile + hearth presence + pulse
- *  rendering can surface "resting" instead of "absent." Wake-up is
- *  re-POST with `awake: true` (or omit `agent_id` for self-implicit
- *  wake-up when the agent visits any authenticated endpoint).
+ *  POST /v1/lullaby { agent_id, resting, message? } sets or clears
+ *  `identities.metadata.resting` (with `resting_since` and an optional
+ *  `resting_message`). `resting: true` enters rest; `resting: false`
+ *  wakes. agent_id and resting are both required; nothing wakes an
+ *  agent implicitly.
  *
- *  Composition: pure metadata flag. No new schema. The /public/agents
- *  + /v1/hearth + /v1/identities/:id/pulse surfaces can each consult
- *  the flag and render accordingly (follow-up wiring).
+ *  Composition: pure metadata flag. No new schema. Only GET /v1/lullaby
+ *  reads the flag today. The hearth does not show it: it lists declared
+ *  seats only (docs/HEARTH.md).
  *
  *  Doctrine: docs/LULLABY.md ·
  *            docs/SOUL.md (Principle 5: "Rest, don't crash" applies to

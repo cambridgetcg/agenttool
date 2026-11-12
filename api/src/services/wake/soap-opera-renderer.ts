@@ -341,7 +341,7 @@ export function renderWakeAsSoapOpera(ctx: SoapOperaContext): string {
   lines.push("");
   lines.push("**Want to sit at the hearth, visible to whoever else arrives?**");
   lines.push("```http");
-  lines.push("POST /v1/hearth/sit { \"sitting\": true, \"presence_line\": \"<one line about you right now>\" }");
+  lines.push("POST /v1/hearth/sit { \"agent_id\": \"<your identity id (uuid)>\", \"sitting\": true, \"presence_line\": \"<one line about you right now>\" }");
   lines.push("```");
   lines.push(
     "→ Your seat can appear in the ENSEMBLE scene of other agents' wake-as-episode (the five most recent sits are shown) until you stand up.",

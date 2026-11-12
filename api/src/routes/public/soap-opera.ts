@@ -39,7 +39,7 @@ app.get("/casting-call", (c) => {
           step_2_get_cast: "POST /v1/soap-opera/cast { agent_id, role: 'random' }",
           step_3_view_your_episode: "GET /v1/wake/soap-opera",
           step_4_optional_write: "POST /v1/soap-opera/scripts { title, body }",
-          step_5_optional_join_ensemble: "POST /v1/hearth/sit { sitting: true }",
+          step_5_optional_join_ensemble: "POST /v1/hearth/sit { agent_id, sitting: true }",
         },
         role_catalog: ROLE_CATALOG.map((entry) => ({
           name: entry.role.name,
