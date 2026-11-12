@@ -7591,6 +7591,79 @@ export class CollabStore {
     } as Task);
   }
 
+  /**
+   * The cheap refusals completeTaskForSession would make for this caller,
+   * task, journal evidence and requested reviewer, thrown with the same
+   * codes and messages. collab_done finished calls it before its first
+   * write (an artifact), so a completion the store would refuse leaves
+   * nothing behind. Read-only; the completion checks all of it again in its
+   * own transaction, so this decides nothing on its own.
+   */
+  noteCompletePrecheck(
+    credential: { session_id: string; session_token: string; generation: number },
+    input: { task_id: string; evidence_refs: string[]; review_requested_session_id?: string | null },
+  ): void {
+    this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      const row = this.requireTaskRow(session.workspace_id, validateId(input.task_id, "task_id"));
+      for (const reference of normalizeEvidenceRefs(input.evidence_refs)) {
+        this.requireEvidenceRef(row.workspace_id, reference);
+      }
+      if (input.review_requested_session_id) {
+        this.requireRequestedReviewer(
+          row,
+          session,
+          validateId(input.review_requested_session_id, "review_requested_session_id"),
+        );
+      }
+    }).deferred();
+  }
+
+  /**
+   * The cheap refusals reviewTaskForSession would make, in its order and
+   * with its codes and messages: nothing pending, self-review, journal
+   * evidence that does not exist, and for an accept a withdrawn or
+   * challenged completion. A verdict calls it before citing its evidence,
+   * so a review the store would refuse leaves no orphan cite. The git
+   * checkpoint checks are left to the review itself. Read-only.
+   */
+  noteReviewPrecheck(
+    credential: { session_id: string; session_token: string; generation: number },
+    input: { task_id: string; outcome: "accept" | "request_changes"; evidence_refs: string[] },
+  ): void {
+    this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      const row = this.requireTaskRow(session.workspace_id, validateId(input.task_id, "task_id"));
+      if (row.completion_policy !== "accepted" || row.review_status !== "pending") {
+        throw this.taskNotPendingReviewError(row, session.id);
+      }
+      if (!row.reported_by_session_id || !row.completion_report_id) {
+        throw new CollabError("review_state_invalid", "Task completion review metadata is incomplete");
+      }
+      if (row.reported_by_session_id === session.id) {
+        throw new CollabError("self_review_forbidden", "A distinct session must review reported completion");
+      }
+      for (const reference of normalizeEvidenceRefs(input.evidence_refs)) {
+        this.requireEvidenceRef(row.workspace_id, reference);
+      }
+      if (input.outcome !== "accept") return;
+      if (this.hasObsoletedCompletionReport(row.workspace_id, row.completion_report_id)) {
+        throw new CollabError(
+          "completion_report_obsolete",
+          "The reported completion was withdrawn, corrected, or superseded; request changes before a new completion report",
+          { completion_report_id: row.completion_report_id },
+        );
+      }
+      if (this.hasUnresolvedChallenges(row.workspace_id, row.completion_report_id)) {
+        throw new CollabError(
+          "completion_challenged",
+          "Reported completion has an unresolved challenge",
+          { completion_report_id: row.completion_report_id },
+        );
+      }
+    }).deferred();
+  }
+
   /** The root a registered worktree was last seen at, or null when this device has no such worktree. Read-only. */
   noteWorktreeRoot(worktreeId: string): string | null {
     const row = this.db.query(`SELECT root_path FROM worktrees WHERE id = ?`).get(worktreeId) as { root_path: string } | null;

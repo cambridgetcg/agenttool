@@ -476,6 +476,14 @@ export function noteRemedyOf(error: CollabError): NoteRemedy {
   }
   if (typeof remedy === "string" && remedy) return { say: remedy };
   if (SAY_BY_CODE[error.code]) return { say: SAY_BY_CODE[error.code]! };
+  if (Array.isArray(error.details.recorded_steps) && error.details.recorded_steps.length > 0) {
+    // A later step of a multi-step call was refused: the fallbacks below
+    // say nothing was written, which is false for the steps before it.
+    return {
+      say: `${error.message}. The steps in recorded_steps were written before this refusal and stay recorded: ` +
+        "the same call sent again replays them instead of writing them twice, and a changed call writes its own.",
+    };
+  }
   if (error.details.after_housekeeping === true) {
     // The fallbacks below say nothing was written, which is false here.
     return {
@@ -677,7 +685,13 @@ function durationUntil(at: string, observedAt: string): string {
 
 export function statementOf(text: string): string {
   const line = text.split("\n")[0] ?? "";
-  return line.length > NOTE_STATEMENT_MAX ? `${line.slice(0, NOTE_STATEMENT_MAX - 1)}…` : line;
+  if (line.length <= NOTE_STATEMENT_MAX) return line;
+  // Cut between characters, never inside one: half of an emoji would make
+  // the note unrenderable, and a verb renders after deciding what to write.
+  let end = NOTE_STATEMENT_MAX - 1;
+  const last = line.charCodeAt(end - 1);
+  if (last >= 0xd800 && last <= 0xdbff) end -= 1;
+  return `${line.slice(0, end)}…`;
 }
 
 // ---------------------------------------------------------------------------

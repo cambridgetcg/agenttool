@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, realpathSync, renameSync, rmSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { CollabError } from "../src/errors.js";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import { NOTE_FORMAT, parseNote, renderNote } from "../src/note.js";
 import { evidenceRechecker } from "../src/verbs.js";
@@ -843,5 +845,105 @@ describe("derived idempotency for collab_note", () => {
       j.store.endSession({ ...b.credential, reason: "restart" });
       j.start("bravo");
     });
+  });
+});
+
+describe("a verdict is refused before its evidence is cited", () => {
+  const types = (j: Journal, after: number) => j.events().filter((event) => event.sequence > after).map((event) => event.type);
+
+  test("self-review, a challenged or withdrawn completion, and work not waiting for review write no cite", async () => {
+    const j = journal();
+    const a = j.start("alpha");
+    const b = j.start("bravo");
+    const c = j.start("charlie");
+    const [sa, sb, sc] = [j.serve(a), j.serve(b), j.serve(c)];
+    j.write("t.txt", "t\n");
+    const task = completedTask(j, a);
+    const verdict = (act: string) => ({ act, text: "Looks right.", re: task.completion_report_id, evidence: ["file t.txt"] });
+    let before = j.count();
+    expect((await refused(sa, "collab_note", verdict("accept"))).code).toBe("self_review_forbidden");
+    expect((await refused(sa, "collab_note", verdict("request_changes"))).code).toBe("self_review_forbidden");
+    expect(types(j, before)).toEqual([]);
+
+    const challenge = await ok(sb, "collab_note", { act: "challenge", text: "Untested.", re: task.completion_report_id });
+    before = j.count();
+    expect((await refused(sc, "collab_note", verdict("accept"))).code).toBe("completion_challenged");
+    expect(types(j, before)).toEqual([]);
+    await ok(sb, "collab_note", { act: "resolve", text: "Tested now.", re: challenge.ids.report });
+    before = j.count();
+    await ok(sc, "collab_note", verdict("accept"));
+    expect(types(j, before)[0]).toBe("evidence.cited");
+    // Accepted: a second verdict, from anyone, finds nothing waiting.
+    before = j.count();
+    expect((await refused(sb, "collab_note", verdict("accept"))).code).toBe("task_not_pending_review");
+    expect(types(j, before)).toEqual([]);
+
+    const withdrawn = completedTask(j, a, { key: "w", paths: ["src/other.ts"] });
+    await ok(sa, "collab_note", { act: "withdraw", text: "Not finished after all.", re: withdrawn.completion_report_id });
+    before = j.count();
+    const obsolete = await refused(sb, "collab_note", { ...verdict("accept"), re: withdrawn.completion_report_id });
+    expect(obsolete.code).toBe("completion_report_obsolete");
+    expect(types(j, before)).toEqual([]);
+  });
+
+  test("a journal pointer that does not exist is refused before the cite", async () => {
+    const { j, a, sb } = pair();
+    j.write("t.txt", "t\n");
+    const task = completedTask(j, a);
+    const before = j.count();
+    const refusal = await refused(sb, "collab_note", {
+      act: "accept", text: "Fine.", re: task.completion_report_id, evidence: ["file t.txt", "event:event_00000000-0000-4000-8000-000000000000"],
+    });
+    expect(refusal.code).toBe("evidence_not_found");
+    expect(j.count()).toBe(before);
+  });
+
+  test("a verdict refused after its cite names the cite it recorded", async () => {
+    const { j, a, sb } = pair();
+    j.write("t.txt", "t\n");
+    const task = completedTask(j, a);
+    (j.store as any).reviewTaskForSession = () => {
+      throw new CollabError("worktree_observation_stale", "The completion checkpoint changed after review preparation");
+    };
+    const refusal = await refused(sb, "collab_note", { act: "accept", text: "Fine.", re: task.completion_report_id, evidence: ["file t.txt"] });
+    expect(refusal.code).toBe("worktree_observation_stale");
+    const cited = j.events().filter((event) => event.type === "evidence.cited");
+    expect(cited).toHaveLength(1);
+    const event = (j.store.db.query(`SELECT id FROM events WHERE sequence = ?`).get(cited[0]!.sequence) as { id: string }).id;
+    expect(refusal.recorded_steps).toEqual([
+      { step: 1, what: `evidence.cited event ${event} (cite ${cited[0]!.payload.cite_id})`, id: event },
+    ]);
+    expect(refusal.message).toContain(event);
+    expect(JSON.stringify(refusal.remedy)).not.toMatch(/nothing was written/i);
+  });
+
+  test("a replayed verdict reports the evidence its cite recorded; a file changed since is advice", async () => {
+    const { j, a, sb } = pair();
+    j.write("t.txt", "first\n");
+    const task = completedTask(j, a);
+    const input = { act: "accept", text: "Holds.", re: task.completion_report_id, evidence: ["file t.txt"] };
+    const first = await ok(sb, "collab_note", input);
+    expect(first.evidence[0]).toMatchObject({ observed: "server", sha256: sha("first\n") });
+    j.write("t.txt", "second\n");
+    const retry = await ok(sb, "collab_note", input);
+    expect(retry.replayed).toBe(true);
+    expect(retry.evidence[0]).toMatchObject({ observed: "server", sha256: sha("first\n") });
+    expect(retry.advice.join(" ")).toContain(sha("second\n"));
+  });
+});
+
+describe("a FIFO at a cited path", () => {
+  test("is recorded as the caller's, and a cited file later replaced by one reads as changed, without blocking", () => {
+    const run = spawnSync(process.execPath, [join(import.meta.dir, "fifo-evidence-worker.ts")], {
+      encoding: "utf8",
+      timeout: 30_000,
+    });
+    expect(run.signal).toBeNull();
+    expect(run.status).toBe(0);
+    const out = JSON.parse(run.stdout.trim().split("\n").at(-1)!);
+    expect(out.hash).toEqual({ status: "not_a_file", path: "src/pipe" });
+    expect(out.cited.evidence[0]).toMatchObject({ kind: "file", locator: "src/pipe", observed: "caller" });
+    expect(out.cited.advice.join(" ")).toContain("is not a regular file");
+    expect(out.now).toMatchObject({ kind: "file", observed: "server", now: "changed" });
   });
 });

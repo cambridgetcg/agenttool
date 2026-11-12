@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildCollabMcpServer } from "../src/mcp.js";
+import { CollabError } from "../src/errors.js";
 import { parseNote } from "../src/note.js";
 import { call, git, journal, ok, refused, runCleanup, type Journal } from "./notes-helpers.js";
 
@@ -449,5 +450,195 @@ describe("collab_done finished: what is stored", () => {
     const fits = await ok(sa, "collab_done", { text: `Done.\n\n${"y".repeat(3_900)}`, evidence });
     expect(fits.note.length).toBeGreaterThan(4_000);
     expect(j.report(fits.ids.completion).body.length).toBeLessThanOrEqual(4_000);
+  });
+});
+
+describe("refused before anything is written, or not refused at all", () => {
+  test("released or blocked with a first line over 200 characters is refused, and the task is still held", async () => {
+    const { j, a, sa } = pair();
+    const taken = await ok(sa, "collab_take", { title: "Work" });
+    const before = j.count();
+    for (const input of [
+      { text: "r".repeat(201), outcome: "released" },
+      { text: "b".repeat(201), outcome: "blocked", because: "Waiting." },
+    ]) {
+      const refusal = await refused(sa, "collab_done", input);
+      expect(refusal).toMatchObject({ code: "statement_too_long", field: "statement", max: 200 });
+      expect(j.count()).toBe(before);
+      expect(j.store.getTask(a.workspace.id, taken.ids.task)).toMatchObject({ status: "claimed", assignee_session_id: a.session.id });
+    }
+    // Put on a line of its own, the same text is given back.
+    const released = await ok(sa, "collab_done", { text: `Giving it back.\n\n${"r".repeat(201)}`, outcome: "released" });
+    expect(parseNote(released.note)).toMatchObject({ act: "done", statement: "Giving it back.", body: "r".repeat(201) });
+  });
+
+  test("a leave whose text ends in a trailer-like paragraph ends the session, and the slot can arrive again", async () => {
+    const j = journal();
+    const server = buildCollabMcpServer(j.store, {}) as any;
+    const first = await ok(server, "collab_arrive", { purpose: "visit", name: "visitor", root_path: j.root });
+    const left = await ok(server, "collab_done", { text: "Bye.\n\nTo: person", outcome: "leave" });
+    expect(j.store.getCoordinationSession(first.you.session)!.status).toBe("ended");
+    // The returned note cannot carry that paragraph as body text, so it carries the statement; the stored reason keeps it all.
+    expect(parseNote(left.note)).toMatchObject({ act: "done", statement: "Bye.", body: null, to: null });
+    expect(left.advice.join(" ")).toContain("would be read as trailers");
+    const ended = j.events().find((event) => event.type === "session.ended" && event.entity_id === first.you.session)!;
+    expect(ended.payload.reason).toBe("Bye.\n\nTo: person");
+    expect((await ok(server, "collab_done", { text: "Bye.\n\nTo: person", outcome: "leave" })).replayed).toBe(true);
+    const again = await ok(server, "collab_arrive", { purpose: "visit again", name: "visitor", root_path: j.root });
+    expect(again.you.session).not.toBe(first.you.session);
+    expect((await ok(server, "collab_note", { text: "Back again." })).ok).toBe(true);
+  });
+
+  test("an emoji across the statement's cut neither fails a take after it wrote nor a leave after it ended", async () => {
+    const { j, a, sa } = pair();
+    const title = `${"t".repeat(198)}😀${"u".repeat(20)}`;
+    const taken = await ok(sa, "collab_take", { title });
+    const parsed = parseNote(taken.note);
+    expect(parsed).toMatchObject({ act: "take", body: title });
+    expect(parsed.statement.length).toBeLessThanOrEqual(200);
+    const left = await ok(sa, "collab_done", { text: title, outcome: "leave", because: "Out of time." });
+    expect(parseNote(left.note)).toMatchObject({ act: "done", body: title });
+    expect(j.store.getCoordinationSession(a.session.id)!.status).toBe("ended");
+  });
+
+  test("finished with a review_by the completion would refuse attaches nothing, and the corrected call attaches once", async () => {
+    const { j, a, sa } = pair();
+    j.write("a.txt", "a\n");
+    const coordination = await ok(sa, "collab_take", { title: "Coordination work" });
+    const input = { text: "Done.", evidence: ["file a.txt", "test make exit=0"] };
+    const before = j.count();
+    const notApplicable = await refused(sa, "collab_done", { ...input, review_by: "bravo" });
+    expect(notApplicable.code).toBe("review_request_not_applicable");
+    expect(notApplicable.remedy).toEqual({ tool: "collab_done", input: { ...input, task: coordination.ids.task } });
+    expect(j.count()).toBe(before);
+    expect(j.store.getTask(a.workspace.id, coordination.ids.task).artifacts).toHaveLength(0);
+    await ok(sa, "collab_done", input);
+    expect(j.store.getTask(a.workspace.id, coordination.ids.task).artifacts).toHaveLength(2);
+
+    const edit = await ok(sa, "collab_take", { title: "Edit", paths: ["a.txt"] });
+    const mark = j.count();
+    const self = await refused(sa, "collab_done", { ...input, review_by: "alpha" });
+    expect(self.code).toBe("review_request_self");
+    expect(self.remedy).toEqual({ tool: "collab_done", input: { ...input, task: edit.ids.task } });
+    expect(j.count()).toBe(mark);
+    expect(j.store.getTask(a.workspace.id, edit.ids.task).artifacts).toHaveLength(0);
+  });
+
+  test("finished with a journal pointer that does not exist attaches nothing", async () => {
+    const { j, a, sa } = pair();
+    j.write("a.txt", "a\n");
+    const taken = await ok(sa, "collab_take", { title: "Work" });
+    const before = j.count();
+    const refusal = await refused(sa, "collab_done", { text: "Done.", evidence: ["file a.txt", "event:event_00000000-0000-4000-8000-000000000000"] });
+    expect(refusal.code).toBe("evidence_not_found");
+    expect(j.count()).toBe(before);
+    expect(j.store.getTask(a.workspace.id, taken.ids.task).artifacts).toHaveLength(0);
+  });
+
+  test("a refusal after an earlier step names the steps it recorded, never that nothing was written", async () => {
+    const { j, a, sa } = pair();
+    j.write("a.txt", "a\n");
+    const taken = await ok(sa, "collab_take", { title: "Work" });
+    (j.store as any).completeTaskForSession = () => {
+      throw new CollabError("worktree_observation_stale", "The registered worktree changed after it was inspected");
+    };
+    const refusal = await refused(sa, "collab_done", { text: "Done.", evidence: ["file a.txt"] });
+    expect(refusal.code).toBe("worktree_observation_stale");
+    const artifact = j.store.getTask(a.workspace.id, taken.ids.task).artifacts![0]!;
+    expect(refusal.recorded_steps).toEqual([{ step: 1, what: `artifact ${artifact.id} for evidence 1`, id: artifact.id }]);
+    expect(refusal.message).toContain(artifact.id);
+    expect(JSON.stringify(refusal.remedy)).not.toMatch(/nothing was written/i);
+  });
+
+  test("a take refused after creating its task, and a block refused after its progress, name what they recorded", async () => {
+    const { j, a, sa } = pair();
+    const claim = j.store.claimTaskForSession.bind(j.store);
+    (j.store as any).claimTaskForSession = () => {
+      throw new CollabError("worktree_observation_stale", "The registered worktree changed after it was inspected");
+    };
+    const take = await refused(sa, "collab_take", { title: "New work" });
+    const created = j.store.listTasks(a.workspace.id)[0]!;
+    expect(take.recorded_steps).toEqual([{ step: 1, what: `task ${created.id}, created and open`, id: created.id }]);
+    expect(JSON.stringify(take.remedy)).not.toMatch(/nothing was written/i);
+    (j.store as any).claimTaskForSession = claim;
+    // The same take again replays the create and claims.
+    const resumed = await ok(sa, "collab_take", { title: "New work" });
+    expect(resumed.ids.task).toBe(created.id);
+    expect(j.store.listTasks(a.workspace.id)).toHaveLength(1);
+    (j.store as any).blockTaskForSession = () => {
+      throw new CollabError("worktree_observation_stale", "The registered worktree changed after it was inspected");
+    };
+    const block = await refused(sa, "collab_done", { text: "Stuck.", outcome: "blocked", because: "Waiting." });
+    expect(block.recorded_steps).toEqual([{ step: 1, what: `the text as progress on task ${created.id}`, id: created.id }]);
+    expect(JSON.stringify(block.remedy)).not.toMatch(/nothing was written/i);
+  });
+
+  test("because is not dropped: refused on finished, and said to be unused on a live take", async () => {
+    const { j, a, sa } = pair();
+    const created = j.store.createTaskForSession({ ...a.credential, idempotency_key: "c", title: "Open", work_mode: "coordination" });
+    const taken = await ok(sa, "collab_take", { task: created.id, because: "I want it" });
+    expect(taken.advice.join(" ")).toContain("because is for recovering a lapsed lease");
+    const before = j.count();
+    const refusal = await refused(sa, "collab_done", { text: "Done.", because: "It was quick." });
+    expect(refusal).toMatchObject({ code: "not_stored", fields: ["because"], remedy: { tool: "collab_done", input: { text: "Done." } } });
+    expect(j.count()).toBe(before);
+  });
+
+  test("a done names its task by handle or id alike, so a retry with the other spelling replays", async () => {
+    const { j, sa } = pair();
+    const taken = await ok(sa, "collab_take", { title: "Work" });
+    const first = await ok(sa, "collab_done", { text: "Done.", task: taken.ids.task_handle });
+    const before = j.count();
+    const retry = await ok(sa, "collab_done", { text: "Done.", task: taken.ids.task });
+    expect(retry).toMatchObject({ replayed: true, ids: { completion: first.ids.completion } });
+    expect(j.count()).toBe(before);
+  });
+
+  test("a replayed done reports the evidence it recorded; a file changed since is advice", async () => {
+    const { j, a, sa } = pair();
+    j.write("a.txt", "first\n");
+    const taken = await ok(sa, "collab_take", { title: "Work" });
+    const first = await ok(sa, "collab_done", { text: "Done.", evidence: ["file a.txt"] });
+    expect(first.evidence[0]).toMatchObject({ observed: "server", sha256: sha("first\n") });
+    j.write("a.txt", "second\n");
+    const retry = await ok(sa, "collab_done", { text: "Done.", evidence: ["file a.txt"] });
+    expect(retry.replayed).toBe(true);
+    expect(retry.evidence[0]).toMatchObject({ observed: "server", sha256: sha("first\n") });
+    expect(retry.advice.join(" ")).toContain(sha("second\n"));
+    expect(j.store.getTask(a.workspace.id, taken.ids.task).artifacts![0]!.sha256).toBe(sha("first\n"));
+  });
+});
+
+describe("a path conflict with finished work waiting for review", () => {
+  test("names the reporter and the completion it waits on; for your own work, says a distinct session must review it", async () => {
+    const { j, a, sa } = pair();
+    const taken = await ok(sa, "collab_take", { title: "Edit", paths: ["x.ts"] });
+    const done = await ok(sa, "collab_done", { text: "Done." });
+    const before = j.count();
+    const refusal = await refused(sa, "collab_take", { title: "Edit more", paths: ["x.ts"] });
+    expect(refusal.code).toBe("path_scope_conflict");
+    expect(refusal.message).not.toContain("unknown holder");
+    expect(refusal.holders[0]).toMatchObject({
+      id: taken.ids.task,
+      holder: { session: a.session.id, name: "alpha", purpose: "alpha's work" },
+      state: `waits for review of ${done.ids.completion}`,
+    });
+    expect(refusal.remedy.say).toContain("distinct session");
+    expect(refusal.remedy.say).toContain(done.ids.completion);
+    expect(j.count()).toBe(before);
+  });
+
+  test("for another session's finished work, offers a ready note to its reporter", async () => {
+    const { j, a, sa, sb } = pair();
+    const taken = await ok(sa, "collab_take", { title: "Edit", paths: ["x.ts"] });
+    const done = await ok(sa, "collab_done", { text: "Done." });
+    const refusal = await refused(sb, "collab_take", { title: "Edit more", paths: ["x.ts"] });
+    expect(refusal.holders[0]).toMatchObject({
+      holder: { session: a.session.id, name: "alpha" },
+      state: `waits for review of ${done.ids.completion}`,
+    });
+    expect(refusal.remedy).toMatchObject({ tool: "collab_note", input: { re: taken.ids.task, to: a.session.id } });
+    expect(refusal.remedy.input.text).toContain(done.ids.completion);
+    void j;
   });
 });

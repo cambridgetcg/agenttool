@@ -14,6 +14,7 @@ import {
   isNoteAct,
   NOTE_JOURNAL_EVIDENCE_KINDS,
   NOTE_EVIDENCE_ATTRS,
+  NOTE_STATEMENT_MAX,
   noteProblemError,
   normalizeNoteFields,
   normalizeNoteText,
@@ -165,6 +166,39 @@ async function stepOnce<T>(
   }
 }
 
+/** A step of a multi-step call that is written (by this call or by the earlier attempt it resumes). */
+interface RecordedStep {
+  step: number;
+  what: string;
+  id: string;
+}
+
+/**
+ * A refusal after earlier steps of the same call were written names them:
+ * those steps stay recorded, so the usual "nothing was written" would be
+ * false. A stale plan passes through untouched, because underPlan plans it
+ * again by its code.
+ */
+function refusedAfter(error: unknown, recorded: readonly RecordedStep[]): unknown {
+  if (!(error instanceof CollabError) || recorded.length === 0 || error.code === "receipt_plan_stale") return error;
+  if (error.details.recorded_steps !== undefined) return error;
+  return new CollabError(
+    error.code,
+    `${error.message.replace(/\.$/, "")}. Written before this refusal, and kept: ${recorded.map((step) => step.what).join("; ")}.`,
+    { ...error.details, recorded_steps: [...recorded] },
+  );
+}
+
+/** Run `check` once, just before the first step that would write, so a replayed call never meets it. */
+function beforeFirstWrite(check: () => void): () => void {
+  let done = false;
+  return () => {
+    if (done) return;
+    check();
+    done = true;
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Evidence (spec 5.3): hashed and checked before any write transaction
 
@@ -304,6 +338,31 @@ function evidenceSummary(resolved: ResolvedEvidence): Array<Record<string, unkno
       ? { n: item.n, kind: item.kind, locator: item.locator, observed: item.observed, ...(item.sha256 && item.observed === "server" ? { sha256: item.sha256 } : {}) }
       : { n: index + 1, kind: line.slice(0, line.indexOf(":")), locator: line.slice(line.indexOf(":") + 1), observed: "journal" };
   });
+}
+
+function observationText(item: NoteCitedItem): string {
+  return item.observed === "server" && item.sha256 ? `sha256 ${item.sha256}` : `observed: ${item.observed}`;
+}
+
+/**
+ * The evidence a replay reports: what the replayed steps recorded, not this
+ * call's fresh look, which only decided the key. Where the fresh look
+ * differs (a file edited since), the advice says so.
+ */
+function recordedEvidence(fresh: ResolvedEvidence, recorded: readonly NoteCitedItem[], advice: string[]): ResolvedEvidence {
+  if (recorded.length === 0) return fresh;
+  const byPosition = new Map(recorded.map((item) => [item.n, item]));
+  for (const item of fresh.items) {
+    const then = byPosition.get(item.n);
+    if (!then) continue;
+    const same = then.observed === item.observed && (then.observed !== "server" || (then.sha256 ?? null) === (item.sha256 ?? null));
+    if (!same) {
+      advice.push(
+        `Evidence ${item.n} (${item.kind} ${item.locator}) reads ${observationText(item)} now; this replay reports what was recorded (${observationText(then)}).`,
+      );
+    }
+  }
+  return { ...fresh, items: fresh.items.map((item) => byPosition.get(item.n) ?? item) };
 }
 
 // ---------------------------------------------------------------------------
@@ -1209,7 +1268,7 @@ async function reviewNote(
   const confidenceBasis = requireReasonsFit(fields.why);
   const retryInput = noteRetryInput(options.input);
   const outcome = planned.act === "accept" ? "accept" : "request_changes";
-  const { plan, cite, review, replayed } = await underPlan(ctx, credential, {
+  const { plan, cite, citeReplayed, review, replayed } = await underPlan(ctx, credential, {
     tool: "collab_note",
     input: options.keyInput,
     entity: pin.completion_id,
@@ -1219,48 +1278,70 @@ async function reviewNote(
     let replays = 0;
     let steps = 0;
     let cite: NoteCiteReceipt | null = null;
-    if (evidence.items.length > 0) {
-      steps += 1;
-      const cited = await stepOnce(ctx, credential, plan.step(1), () => ctx.store.citeEvidenceForSession({
-        ...credential,
-        idempotency_key: plan.step(1),
-        worktree_id: binding.handle.worktree.id,
-        items: evidence.items,
-        receipt_plan: plan.guard,
-      }));
-      if (cited.replayed) replays += 1;
-      cite = cited.value;
-    }
-    steps += 1;
-    const reviewed = await stepOnce(ctx, credential, plan.step(2), () => withCurrentVersion(ctx, { tool: "collab_note", input: retryInput }, () => {
-      const task = ctx.store.getTask(workspaceId, pin.task_id);
-      // The verdict lands only on the completion the reviewer named.
-      if (task.completion_report_id !== pin.completion_id) {
-        throw changedUnderYou(ctx, {
-          tool: "collab_note",
-          input: { ...retryInput, re: task.completion_report_id ? exactRef("report", task.completion_report_id) : exactRef("task", task.id) },
-        }, reviewState(task));
-      }
-      return { version: task.version, state: reviewState(task) };
-    }, (version) => ctx.store.withReceiptPlan(plan.guard, () => ctx.store.reviewTaskForSession({
-      ...credential,
-      idempotency_key: plan.step(2),
+    let citeReplayed = false;
+    const recorded: RecordedStep[] = [];
+    // The review's cheap refusals come before the cite, so a verdict the
+    // store would refuse leaves no orphan cite in the permanent journal.
+    const precheck = beforeFirstWrite(() => ctx.store.noteReviewPrecheck(credential, {
       task_id: pin.task_id,
-      expected_version: version,
       outcome,
-      summary,
-      evidence_refs: [...evidence.journal, ...(cite ? [`event:${cite.event_id}`] : [])],
-      ...(confidenceBasis ? { confidence_basis: confidenceBasis } : {}),
-      ...(fields.limits ? { limits: fields.limits } : {}),
-    })) as { task: Task; review: unknown; report: CollabReport }));
-    if (reviewed.replayed) replays += 1;
-    return { plan, cite, review: reviewed.value, replayed: replays === steps };
+      evidence_refs: evidence.journal,
+    }));
+    try {
+      if (evidence.items.length > 0) {
+        steps += 1;
+        const cited = await stepOnce(ctx, credential, plan.step(1), () => {
+          precheck();
+          return ctx.store.citeEvidenceForSession({
+            ...credential,
+            idempotency_key: plan.step(1),
+            worktree_id: binding.handle.worktree.id,
+            items: evidence.items,
+            receipt_plan: plan.guard,
+          });
+        });
+        if (cited.replayed) replays += 1;
+        cite = cited.value;
+        citeReplayed = cited.replayed;
+        recorded.push({ step: 1, what: `evidence.cited event ${cite.event_id} (cite ${cite.cite_id})`, id: cite.event_id });
+      }
+      steps += 1;
+      const reviewed = await stepOnce(ctx, credential, plan.step(2), () => withCurrentVersion(ctx, { tool: "collab_note", input: retryInput }, () => {
+        const task = ctx.store.getTask(workspaceId, pin.task_id);
+        // The verdict lands only on the completion the reviewer named.
+        if (task.completion_report_id !== pin.completion_id) {
+          throw changedUnderYou(ctx, {
+            tool: "collab_note",
+            input: { ...retryInput, re: task.completion_report_id ? exactRef("report", task.completion_report_id) : exactRef("task", task.id) },
+          }, reviewState(task));
+        }
+        return { version: task.version, state: reviewState(task) };
+      }, (version) => {
+        precheck();
+        return ctx.store.withReceiptPlan(plan.guard, () => ctx.store.reviewTaskForSession({
+          ...credential,
+          idempotency_key: plan.step(2),
+          task_id: pin.task_id,
+          expected_version: version,
+          outcome,
+          summary,
+          evidence_refs: [...evidence.journal, ...(cite ? [`event:${cite.event_id}`] : [])],
+          ...(confidenceBasis ? { confidence_basis: confidenceBasis } : {}),
+          ...(fields.limits ? { limits: fields.limits } : {}),
+        })) as { task: Task; review: unknown; report: CollabReport };
+      }));
+      if (reviewed.replayed) replays += 1;
+      return { plan, cite, citeReplayed, review: reviewed.value, replayed: replays === steps };
+    } catch (error) {
+      throw refusedAfter(error, recorded);
+    }
   }).catch((error) => {
     throw reviewRefusal(ctx, error);
   });
   if (plan.retry && replayed) {
     advice.push("This repeats your latest verdict on this completion exactly, so it was read as a retry. Add a word to say it again.");
   }
+  const shown = cite && citeReplayed ? recordedEvidence(evidence, cite.items, advice) : evidence;
   const taskHandle = handleOf("task", pin.task_id);
   const completionHandle = handleOf("report", pin.completion_id);
   return {
@@ -1284,7 +1365,7 @@ async function reviewNote(
     act: planned.act,
     recorded_as: planned.recorded_as,
     ...(options.read_as ? { read_as: options.read_as } : {}),
-    evidence: evidenceSummary(evidence),
+    evidence: evidenceSummary(shown),
   };
 }
 
@@ -1458,9 +1539,14 @@ async function takeNew(
         completion_policy: policy,
       }));
     });
-    const claimed = await stepOnce(ctx, credential, plan.step(2), () =>
-      claimStep(ctx, binding, credential, created.value, plan.step(2), plan.guard, retryInput, null, true));
-    return { plan, created: created.value, claimed: claimed.value, replayed: created.replayed && claimed.replayed };
+    const recorded: RecordedStep[] = [{ step: 1, what: `task ${created.value.id}, created and open`, id: created.value.id }];
+    try {
+      const claimed = await stepOnce(ctx, credential, plan.step(2), () =>
+        claimStep(ctx, binding, credential, created.value, plan.step(2), plan.guard, retryInput, null, true));
+      return { plan, created: created.value, claimed: claimed.value, replayed: created.replayed && claimed.replayed };
+    } catch (error) {
+      throw refusedAfter(error, recorded);
+    }
   });
   if (plan.retry && replayed) advice.push("This repeats your latest take exactly, so it was read as a retry. Add a word to the title to take another.");
   return takeResult(ctx, claimed, { purpose: options.purpose, advice, replayed, fresh: true });
@@ -1480,7 +1566,7 @@ async function takeExisting(
   if (options.purpose) advice.push("purpose is written into a new task's description only; an existing task's description is not changed.");
   const keyInput = { task: id, because: options.because };
   const retryInput = { task: exactRef("task", id), ...(options.because ? { because: options.because } : {}) };
-  const { plan, held, replayed, already } = await underPlan(ctx, credential, {
+  const { plan, held, replayed, already, unused_because: unusedBecause } = await underPlan(ctx, credential, {
     tool: "collab_take",
     input: keyInput,
     entity: id,
@@ -1488,17 +1574,20 @@ async function takeExisting(
     stillCurrent: (latestKey) => leaseStillCurrent(ctx, credential, workspaceId, latestKey),
   }, async (plan) => {
     const earlier = replayReceipt<Task>(ctx.store, credential, plan.key);
-    if (earlier) return { plan, held: earlier, replayed: true, already: false };
+    if (earlier) return { plan, held: earlier, replayed: true, already: false, unused_because: false };
     const task = ctx.store.getTask(workspaceId, id);
     if (task.status === "claimed" && task.assignee_session_id === credential.session_id && task.effective_status === "claimed") {
-      return { plan, held: task, replayed: false, already: true };
+      return { plan, held: task, replayed: false, already: true, unused_because: options.because !== null };
     }
+    // Only a lapsed lease is recovered, and only a recovery keeps because.
+    const unusedBecause = options.because !== null && task.effective_status !== "recovery_required";
     const held = await stepOnce(ctx, credential, plan.key, () =>
       claimStep(ctx, binding, credential, task, plan.key, plan.guard, retryInput, options.because, false));
-    return { plan, held: held.value, replayed: held.replayed, already: false };
+    return { plan, held: held.value, replayed: held.replayed, already: false, unused_because: unusedBecause && !held.replayed };
   });
   if (plan.retry && replayed) advice.push("This repeats your latest take of this task exactly, so it was read as a retry.");
   if (already) advice.push("You already hold this task; nothing was written.");
+  if (unusedBecause) advice.push("because is for recovering a lapsed lease; this task's lease had not lapsed, so it was not used.");
   return takeResult(ctx, held, { purpose: null, advice, replayed, already });
 }
 
@@ -1604,22 +1693,64 @@ function safeSession(ctx: NoteVerbContext, workspaceId: string, id: string) {
 function pathConflictRefusal(
   ctx: NoteVerbContext,
   workspaceId: string,
-  conflicts: Array<{ active_task_id: string; assignee: string | null; assignee_session_id: string | null; path_pairs: Array<[string, string]> }>,
+  conflicts: Array<{
+    active_task_id: string;
+    active_workspace_id?: string;
+    assignee: string | null;
+    assignee_session_id: string | null;
+    path_pairs: Array<[string, string]>;
+  }>,
   taskId: string | null,
   createdNote = "",
 ): CollabError {
+  const me = ctx.binding()?.handle.session.id ?? null;
   const holders = conflicts.map((conflict) => {
+    const handle = handleOf("task", conflict.active_task_id);
+    const paths = conflict.path_pairs.map((pair) => pair[1]).join(", ");
+    const task = safeTask(ctx, conflict.active_workspace_id ?? workspaceId, conflict.active_task_id);
+    // Finished edit work keeps its paths until a distinct session reviews
+    // it. It has no holder any more: the one who can say more is the
+    // session that reported it, and what frees the paths is a review.
+    if (task && task.status === "completed" && task.review_status === "pending" && task.completion_report_id) {
+      const completion = task.completion_report_id;
+      const reporter = task.reported_by_session_id;
+      const view = reporter ? safeSession(ctx, workspaceId, reporter) : null;
+      const next: NoteRemedy = reporter !== null && reporter === me
+        ? {
+          say: `${handle} is your own finished work, waiting for review of ${completion}. A distinct session must review that ` +
+            "completion (accept or request_changes) before these paths are free; ask one with collab_note, or take work on other paths.",
+        }
+        : view
+          ? withSlot(ctx, {
+            tool: "collab_note",
+            input: {
+              text: `My work overlaps your finished ${exactRef("task", conflict.active_task_id)} on ${paths}; it waits for review of ${completion}. Who is reviewing it?`,
+              re: exactRef("task", conflict.active_task_id),
+              to: view.id,
+            },
+          })
+          : { say: `Its reporter has no session here to ask; the paths are free once a distinct session reviews ${completion}.` };
+      return {
+        task: handle,
+        id: conflict.active_task_id,
+        holder: view ? { session: view.id, name: view.actor, purpose: view.purpose } : { name: task.reported_by },
+        state: `waits for review of ${completion}`,
+        paths: conflict.path_pairs,
+        next,
+      };
+    }
     const view = conflict.assignee_session_id ? safeSession(ctx, workspaceId, conflict.assignee_session_id) : null;
     return {
-      task: handleOf("task", conflict.active_task_id),
+      task: handle,
       id: conflict.active_task_id,
       holder: view ? { session: view.id, name: view.actor, purpose: view.purpose } : { name: conflict.assignee },
+      state: "held",
       paths: conflict.path_pairs,
       next: view
         ? withSlot(ctx, {
           tool: "collab_note",
           input: {
-            text: `My work overlaps yours on ${conflict.path_pairs.map((pair) => pair[1]).join(", ")}; when will you be done with it?`,
+            text: `My work overlaps yours on ${paths}; when will you be done with it?`,
             re: exactRef("task", conflict.active_task_id),
             to: view.id,
           },
@@ -1628,15 +1759,27 @@ function pathConflictRefusal(
     };
   });
   const first = holders[0];
+  const described = holders.map((holder) => {
+    const name = holder.holder.name ?? "an unknown holder";
+    return holder.state === "held" ? `work held by ${name}` : `${name}'s finished ${holder.task}, which ${holder.state}`;
+  });
   return new CollabError(
     "path_scope_conflict",
-    `These paths overlap work held by ${holders.map((holder) => holder.holder.name ?? "an unknown holder").join(", ")}.${createdNote}`,
+    `These paths overlap ${described.join("; ")}.${createdNote}`,
     {
       holders,
       ...(taskId ? { task: taskId } : {}),
       remedy: first?.next ?? { say: "Wait until the overlapping work is released." },
     },
   );
+}
+
+function safeTask(ctx: NoteVerbContext, workspaceId: string, id: string): Task | null {
+  try {
+    return ctx.store.getTask(workspaceId, id);
+  } catch {
+    return null;
+  }
 }
 
 function takeResult(
@@ -1648,7 +1791,7 @@ function takeResult(
   const review = task.completion_policy === "accepted"
     ? "When you finish, a distinct session reviews it."
     : "When you finish, you report it done; no review is needed.";
-  const statement = task.title.length > 200 ? `${task.title.slice(0, 199)}…` : task.title;
+  const note = takeNote(task, options.purpose, options.advice);
   return {
     ...noteWriteResult({
       effect: options.already
@@ -1658,13 +1801,7 @@ function takeResult(
       ids: { task: task.id, task_handle: handle },
       advice: options.advice,
       next: withSlot(ctx, { tool: "collab_done", input: { text: "<what you did>", task: exactRef("task", task.id) } }),
-      note: renderNote({
-        act: "take",
-        statement,
-        ...(task.title.length > 200 ? { body: task.title } : {}),
-        re: `task:${task.id}`,
-        ...(options.purpose ? { purpose: options.purpose } : {}),
-      }),
+      note,
       replayed: options.replayed,
     }),
     task: {
@@ -1677,6 +1814,30 @@ function takeResult(
       completion_policy: task.completion_policy,
     },
   };
+}
+
+/**
+ * A take's note. It is rendered after the claim, so it must not fail: a
+ * title over 200 characters gives a statement cut at a character boundary
+ * and the whole title as the body, and a title that cannot be rendered at
+ * all (one written through the legacy tools, say) gives a note that names
+ * the task, with advice.
+ */
+function takeNote(task: Task, purpose: string | null, advice: string[]): string {
+  const long = task.title.length > NOTE_STATEMENT_MAX;
+  try {
+    return renderNote({
+      act: "take",
+      statement: statementOf(task.title),
+      ...(long ? { body: task.title } : {}),
+      re: `task:${task.id}`,
+      ...(purpose ? { purpose } : {}),
+    });
+  } catch (error) {
+    if (!(error instanceof CollabError)) throw error;
+    advice.push(`The returned note names the task rather than its title, which cannot be rendered in a note (${error.message.replace(/\.$/, "")}).`);
+    return renderNote({ act: "take", statement: `Took ${handleOf("task", task.id)}.`, re: `task:${task.id}` });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1712,30 +1873,44 @@ export async function doneVerb(ctx: NoteVerbContext, input: DoneInput): Promise<
   const workspaceId = binding.handle.workspace.id;
   const text = freeText(input.text, "text", 8_000, true)!;
   const { statement, body } = splitNoteText(text);
-  const keyInput = doneKeyInput(input, outcome, text);
-  const base = derivedBase(credential.session_id, "collab_done", keyInput);
-  if (outcome !== "finished") {
-    const unstored = (["why", "evidence", "limits", "review_by"] as const).filter((field) =>
-      Array.isArray(input[field]) ? (input[field] as unknown[]).length > 0 : input[field] !== undefined);
-    if (unstored.length > 0) {
-      const cleaned = Object.fromEntries(Object.entries(input).filter(([key]) => !(unstored as readonly string[]).includes(key)));
-      throw new CollabError("not_stored", `A ${outcome} task keeps only its text${outcome === "blocked" ? " and because" : ""}; ${unstored.join(", ")} would not be stored`, {
-        fields: unstored,
-        remedy: withSlot(ctx, { tool: "collab_done", input: cleaned }),
-      });
-    }
+  // Every field an outcome cannot store is refused with a ready call
+  // without it, before anything else, rather than silently dropped.
+  const unstorable = {
+    finished: ["because"],
+    released: ["why", "evidence", "limits", "review_by", "because"],
+    blocked: ["why", "evidence", "limits", "review_by"],
+  }[outcome] as Array<keyof DoneInput>;
+  const unstored = unstorable.filter((field) =>
+    Array.isArray(input[field]) ? (input[field] as unknown[]).length > 0 : input[field] !== undefined && input[field] !== null);
+  if (unstored.length > 0) {
+    const cleaned = Object.fromEntries(Object.entries(input).filter(([key]) => !(unstored as readonly string[]).includes(key)));
+    const keeps = {
+      finished: "its text, why, evidence, limits and review_by (because is for a blocked task)",
+      released: "only its text",
+      blocked: "only its text and because",
+    }[outcome];
+    throw new CollabError("not_stored", `A ${outcome} task keeps ${keeps}; ${unstored.join(", ")} would not be stored`, {
+      fields: unstored,
+      remedy: withSlot(ctx, { tool: "collab_done", input: cleaned }),
+    });
   }
-  const task = doneTask(ctx, credential, workspaceId, input, base);
+  // A handle and an id name the same task, so either spelling is the same
+  // call (spec 5: the base hashes the input normalised). A task left out
+  // stays null: which one is held depends on state.
+  const taskId = input.task !== undefined && input.task !== null
+    ? ctx.store.resolveNoteRef(workspaceId, "task", String(input.task)).id
+    : null;
+  const keyInput = doneKeyInput(input, outcome, text, taskId);
+  const base = derivedBase(credential.session_id, "collab_done", keyInput);
+  const task = doneTask(ctx, credential, workspaceId, taskId, base);
   if (outcome === "finished") return finishTask(ctx, binding, credential, task, { input, statement, body, keyInput });
   if (outcome === "released") {
     const summary = freeText(input.text, "text", RELEASE_SUMMARY_MAX, true)!;
-    if (input.because !== undefined) {
-      throw new CollabError("not_stored", "A released task keeps only its text; because would not be stored", {
-        fields: ["because"],
-        remedy: withSlot(ctx, { tool: "collab_done", input: { text: input.text, outcome, ...(input.task ? { task: input.task } : {}) } }),
-      });
-    }
-    return releaseOrBlock(ctx, binding, credential, task, { outcome, summary, statement, body, keyInput });
+    // The returned note is rendered before the release, so a text it cannot
+    // carry (a first line over 200 characters) is refused while the task is
+    // still held, never after the release happened.
+    const note = renderNote({ act: "done", statement, body, re: `task:${task.id}` });
+    return releaseOrBlock(ctx, binding, credential, task, { outcome, summary, keyInput, note });
   }
   const blocker = freeText(input.because, "because", BLOCKER_MAX, false);
   if (!blocker) {
@@ -1744,14 +1919,20 @@ export async function doneVerb(ctx: NoteVerbContext, input: DoneInput): Promise<
     });
   }
   const progress = freeText(input.text, "text", PROGRESS_MAX, true)!;
-  return releaseOrBlock(ctx, binding, credential, task, { outcome, summary: progress, blocker, statement, body, keyInput });
+  const note = renderNote({
+    act: "done",
+    statement,
+    body: [body, `Blocked: ${blocker}`].filter(Boolean).join("\n\n"),
+    re: `task:${task.id}`,
+  });
+  return releaseOrBlock(ctx, binding, credential, task, { outcome, summary: progress, blocker, keyInput, note });
 }
 
-function doneKeyInput(input: DoneInput, outcome: DoneOutcome, text: string): Record<string, unknown> {
+function doneKeyInput(input: DoneInput, outcome: DoneOutcome, text: string, taskId: string | null): Record<string, unknown> {
   return {
     outcome,
     text,
-    task: input.task ?? null,
+    task: taskId,
     why: input.why ?? [],
     evidence: input.evidence ?? [],
     limits: input.limits ?? null,
@@ -1766,10 +1947,8 @@ function doneKeyInput(input: DoneInput, outcome: DoneOutcome, text: string): Rec
  * task through the receipt with the same base, so a lost response replays
  * rather than failing on the effect it already had.
  */
-function doneTask(ctx: NoteVerbContext, credential: Credential, workspaceId: string, input: DoneInput, base: string): Task {
-  if (input.task !== undefined) {
-    return ctx.store.getTask(workspaceId, ctx.store.resolveNoteRef(workspaceId, "task", String(input.task)).id);
-  }
+function doneTask(ctx: NoteVerbContext, credential: Credential, workspaceId: string, taskId: string | null, base: string): Task {
+  if (taskId !== null) return ctx.store.getTask(workspaceId, taskId);
   const holds = ctx.store.listTasks(workspaceId, "claimed").filter((task) => task.assignee_session_id === credential.session_id);
   if (holds.length === 1) return holds[0]!;
   if (holds.length > 1) {
@@ -1781,11 +1960,20 @@ function doneTask(ctx: NoteVerbContext, credential: Credential, workspaceId: str
   }
   const earlier = ctx.store.latestReceiptKeyForBase(credential, base);
   const receipt = earlier ? replayReceipt<Task | { task: Task }>(ctx.store, credential, earlier) : null;
-  const taskId = receipt ? ("task" in receipt && typeof receipt.task === "object" ? receipt.task.id : (receipt as Task).id) : null;
-  if (taskId) return ctx.store.getTask(workspaceId, taskId);
+  const earlierTask = receipt ? ("task" in receipt && typeof receipt.task === "object" ? receipt.task.id : (receipt as Task).id) : null;
+  if (earlierTask) return ctx.store.getTask(workspaceId, earlierTask);
   throw new CollabError("nothing_held", "You hold no task", {
     remedy: withSlot(ctx, { tool: "collab_take", input: { title: "<the work you are doing>" } }),
   });
+}
+
+function reviewerSession(ctx: NoteVerbContext, workspaceId: string, value: string): string {
+  try {
+    return ctx.store.resolveNoteSession(workspaceId, value).id;
+  } catch (error) {
+    if (!(error instanceof CollabError) || error.code !== "session_not_found") throw error;
+    return ctx.store.resolveNoteSession(workspaceId, value, { include_ended: true }).id;
+  }
 }
 
 function requireHeld(ctx: NoteVerbContext, credential: Credential, task: Task, retryInput: Record<string, unknown>): Task {
@@ -1836,7 +2024,12 @@ async function finishTask(
   // travel as artifacts (outside pointers) and evidence refs (journal ones).
   const summary = renderNote(fields, { omitEvidence: true });
   const confidenceBasis = requireReasonsFit(fields.why);
-  const reviewer = input.review_by !== undefined ? ctx.store.resolveNoteSession(workspaceId, String(input.review_by)).id : null;
+  // An active session first; an ended one is found too, so the retry of a
+  // done whose reviewer has left since still replays. On a fresh call the
+  // store's own check refuses an ended reviewer before anything is written.
+  const reviewer = input.review_by !== undefined && input.review_by !== null
+    ? reviewerSession(ctx, workspaceId, String(input.review_by))
+    : null;
   // Each label is checked before anything is written: it is where a caller's
   // own hash or exit status is kept, so it is never cut to fit.
   const labels = evidence.items.map((item) => artifactLabel(item, evidence.lines[item.n - 1]!));
@@ -1852,11 +2045,37 @@ async function finishTask(
     });
   });
   const retryInput = { ...input, task: exactRef("task", task.id) } as Record<string, unknown>;
+  if (reviewer !== null) {
+    // What the completion would refuse about review_by is known now, from
+    // the task's fixed policy and the caller, so it is refused before the
+    // first artifact rather than after them.
+    const { review_by: _reviewBy, ...withoutReviewer } = retryInput;
+    const ready = withSlot(ctx, { tool: "collab_done", input: withoutReviewer });
+    if (task.completion_policy !== "accepted") {
+      throw new CollabError(
+        "review_request_not_applicable",
+        `${handleOf("task", task.id)} needs no review (its completion policy is ${task.completion_policy}), so a reviewer cannot be asked for it`,
+        { completion_policy: task.completion_policy, remedy: ready },
+      );
+    }
+    if (reviewer === credential.session_id) {
+      throw new CollabError("review_request_self", "review_by names you; a requested reviewer is a session distinct from the reporter", {
+        remedy: ready,
+      });
+    }
+  }
   const held = () => {
     const current = requireHeld(ctx, credential, ctx.store.getTask(workspaceId, task.id), retryInput);
     return { version: current.version, state: { task: handleOf("task", current.id), state: current.effective_status } };
   };
-  const { plan, artifacts, completed, replayed } = await underPlan(ctx, credential, {
+  // The rest of what the completion checks cheaply (journal pointers that
+  // exist, a reviewer still active here) is checked before the first write.
+  const precheck = beforeFirstWrite(() => ctx.store.noteCompletePrecheck(credential, {
+    task_id: task.id,
+    evidence_refs: evidence.journal,
+    review_requested_session_id: reviewer,
+  }));
+  const { plan, artifacts, completed, replayed, recordedItems } = await underPlan(ctx, credential, {
     tool: "collab_done",
     input: options.keyInput,
     entity: task.id,
@@ -1877,42 +2096,61 @@ async function finishTask(
   }, async (plan) => {
     let replays = 0;
     const artifacts: Array<{ id: string; n: number }> = [];
-    for (const [index, item] of evidence.items.entries()) {
-      const key = plan.step(index + 1);
-      const attached = await stepOnce(ctx, credential, key, () => withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, held,
-        (version) => ctx.store.withReceiptPlan(plan.guard, () => ctx.store.attachArtifactForSession({
-          ...credential,
-          idempotency_key: key,
-          task_id: task.id,
-          lease_id: ctx.store.getTask(workspaceId, task.id).lease_id!,
-          expected_version: version,
-          kind: ARTIFACT_KIND[item.kind],
-          uri: item.locator,
-          ...(item.kind === "file" && item.observed === "server" && item.sha256 ? { sha256: item.sha256 } : {}),
-          label: labels[index]!,
-        }))));
-      if (attached.replayed) replays += 1;
-      artifacts.push({ id: attached.value.artifact.id, n: item.n });
+    const recorded: RecordedStep[] = [];
+    // What a replayed attach recorded, so the result reports that and not this call's fresh hash.
+    const recordedItems: NoteCitedItem[] = [];
+    try {
+      for (const [index, item] of evidence.items.entries()) {
+        const key = plan.step(index + 1);
+        const attached = await stepOnce(ctx, credential, key, () => withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, held,
+          (version) => {
+            precheck();
+            return ctx.store.withReceiptPlan(plan.guard, () => ctx.store.attachArtifactForSession({
+              ...credential,
+              idempotency_key: key,
+              task_id: task.id,
+              lease_id: ctx.store.getTask(workspaceId, task.id).lease_id!,
+              expected_version: version,
+              kind: ARTIFACT_KIND[item.kind],
+              uri: item.locator,
+              ...(item.kind === "file" && item.observed === "server" && item.sha256 ? { sha256: item.sha256 } : {}),
+              label: labels[index]!,
+            }));
+          }));
+        if (attached.replayed) {
+          replays += 1;
+          recordedItems.push(artifactItem(item, attached.value.artifact));
+        }
+        const artifact = attached.value.artifact;
+        artifacts.push({ id: artifact.id, n: item.n });
+        recorded.push({ step: index + 1, what: `artifact ${artifact.id} for evidence ${item.n}`, id: artifact.id });
+      }
+      const completeKey = plan.step(evidence.items.length + 1);
+      const completed = await stepOnce(ctx, credential, completeKey, () => withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, held,
+        (version) => {
+          precheck();
+          return ctx.store.withReceiptPlan(plan.guard, () => ctx.store.completeTaskForSession({
+            ...credential,
+            idempotency_key: completeKey,
+            task_id: task.id,
+            lease_id: ctx.store.getTask(workspaceId, task.id).lease_id!,
+            expected_version: version,
+            summary,
+            ...(confidenceBasis ? { confidence_basis: confidenceBasis } : {}),
+            ...(fields.limits ? { limits: fields.limits } : {}),
+            evidence_refs: [...evidence.journal, ...artifacts.map((artifact) => `artifact:${artifact.id}`)],
+            ...(reviewer ? { review_requested_session_id: reviewer } : {}),
+          }));
+        }));
+      if (completed.replayed) replays += 1;
+      return { plan, artifacts, completed: completed.value, replayed: replays === evidence.items.length + 1, recordedItems };
+    } catch (error) {
+      throw refusedAfter(error, recorded);
     }
-    const completeKey = plan.step(evidence.items.length + 1);
-    const completed = await stepOnce(ctx, credential, completeKey, () => withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, held,
-      (version) => ctx.store.withReceiptPlan(plan.guard, () => ctx.store.completeTaskForSession({
-        ...credential,
-        idempotency_key: completeKey,
-        task_id: task.id,
-        lease_id: ctx.store.getTask(workspaceId, task.id).lease_id!,
-        expected_version: version,
-        summary,
-        ...(confidenceBasis ? { confidence_basis: confidenceBasis } : {}),
-        ...(fields.limits ? { limits: fields.limits } : {}),
-        evidence_refs: [...evidence.journal, ...artifacts.map((artifact) => `artifact:${artifact.id}`)],
-        ...(reviewer ? { review_requested_session_id: reviewer } : {}),
-      }))));
-    if (completed.replayed) replays += 1;
-    return { plan, artifacts, completed: completed.value, replayed: replays === evidence.items.length + 1 };
   });
   if (plan.retry && replayed) advice.push("This repeats your latest done on this task exactly, so it was read as a retry.");
   else if (plan.retry) advice.push("An earlier call with this input stopped part way; its finished steps were kept, and the rest ran now.");
+  const shown = recordedEvidence(evidence, recordedItems, advice);
   const handle = handleOf("task", task.id);
   const completion = completed.completion_report_id!;
   const reviewed = completed.completion_policy === "accepted";
@@ -1941,7 +2179,28 @@ async function finishTask(
       note,
       replayed,
     }),
-    evidence: evidenceSummary(evidence),
+    evidence: evidenceSummary(shown),
+  };
+}
+
+/**
+ * An evidence item as a recorded artifact holds it: the sha256 column has
+ * only the server's own hashes, and how the item was observed is the end of
+ * the label artifactLabel wrote for it (its k=v values hold no spaces, so
+ * those phrases cannot come from the caller).
+ */
+function artifactItem(item: NoteCitedItem, artifact: { uri: string; sha256: string | null; label: string | null }): NoteCitedItem {
+  const label = artifact.label ?? "";
+  const observed: NoteCitedItem["observed"] = label.includes(": sha256 by the server") || label.endsWith(": checked by the server")
+    ? "server"
+    : label.endsWith(": not found by git") ? "not_found" : "caller";
+  return {
+    n: item.n,
+    kind: item.kind,
+    locator: artifact.uri,
+    ...(observed === "server" && artifact.sha256 ? { sha256: artifact.sha256 } : item.observed !== "server" && item.sha256 ? { sha256: item.sha256 } : {}),
+    ...(item.lines ? { lines: item.lines } : {}),
+    observed,
   };
 }
 
@@ -1976,9 +2235,9 @@ async function releaseOrBlock(
     outcome: "released" | "blocked";
     summary: string;
     blocker?: string;
-    statement: string;
-    body: string | null;
     keyInput: Record<string, unknown>;
+    /** The returned note, rendered before anything is written. */
+    note: string;
   },
 ): Promise<Record<string, unknown>> {
   const workspaceId = binding.handle.workspace.id;
@@ -2019,16 +2278,21 @@ async function releaseOrBlock(
         expected_version: version,
         message: options.summary,
       }))));
-    const blocked = await stepOnce(ctx, credential, plan.step(2), () => withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, held, (version) =>
-      ctx.store.withReceiptPlan(plan.guard, () => ctx.store.blockTaskForSession({
-        ...credential,
-        idempotency_key: plan.step(2),
-        task_id: task.id,
-        lease_id: ctx.store.getTask(workspaceId, task.id).lease_id!,
-        expected_version: version,
-        blocker: options.blocker!,
-      }))));
-    return { plan, done: blocked.value, replayed: progressed.replayed && blocked.replayed };
+    const recorded: RecordedStep[] = [{ step: 1, what: `the text as progress on task ${task.id}`, id: task.id }];
+    try {
+      const blocked = await stepOnce(ctx, credential, plan.step(2), () => withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, held, (version) =>
+        ctx.store.withReceiptPlan(plan.guard, () => ctx.store.blockTaskForSession({
+          ...credential,
+          idempotency_key: plan.step(2),
+          task_id: task.id,
+          lease_id: ctx.store.getTask(workspaceId, task.id).lease_id!,
+          expected_version: version,
+          blocker: options.blocker!,
+        }))));
+      return { plan, done: blocked.value, replayed: progressed.replayed && blocked.replayed };
+    } catch (error) {
+      throw refusedAfter(error, recorded);
+    }
   });
   if (plan.retry && replayed) advice.push(`This repeats your latest ${options.outcome} of this task exactly, so it was read as a retry.`);
   const handle = handleOf("task", task.id);
@@ -2040,14 +2304,7 @@ async function releaseOrBlock(
       ids: { task: task.id, task_handle: handle },
       advice,
       next: withSlot(ctx, { tool: "collab_inbox", input: {} }),
-      note: renderNote({
-        act: "done",
-        statement: options.statement,
-        body: options.outcome === "blocked"
-          ? [options.body, `Blocked: ${options.blocker}`].filter(Boolean).join("\n\n")
-          : options.body,
-        re: `task:${task.id}`,
-      }),
+      note: options.note,
       replayed,
     }),
     task: { id: task.id, handle, state: done.effective_status },
@@ -2086,16 +2343,16 @@ async function leave(ctx: NoteVerbContext, input: DoneInput): Promise<Record<str
       remedy: withSlot(ctx, { tool: "collab_done", input: { text, outcome: "leave", because: "<why the work is left unfinished>" } }),
     });
   }
+  // Everything the result needs is settled before the session ends: once
+  // it has ended, its credentials no longer open the journal, so a failure
+  // after that point could neither be retried nor leave the slot usable.
+  const note = leaveNote(text, holds.length > 0, advice);
+  const base = derivedBase(credential.session_id, "collab_done", keyInput);
   const ended = ctx.store.endSessionWithReleases({
     ...credential,
     reason: because ?? text,
     ...(holds.length > 0 ? { release_leases: true, release_summary: text } : {}),
   });
-  try {
-    removeSessionCredentialFile(binding.credential_file);
-  } catch {
-    advice.push("The session ended, but its credential file could not be removed; it no longer opens the journal.");
-  }
   const released = ended.released_leases.map((release) => ({ task: release.task_id, task_handle: handleOf("task", release.task_id), via: release.via }));
   const result = {
     ...noteWriteResult({
@@ -2105,10 +2362,44 @@ async function leave(ctx: NoteVerbContext, input: DoneInput): Promise<Record<str
       ids: { session: ended.session.id, released },
       advice,
       next: withSlot(ctx, { tool: "collab_arrive", input: { purpose: "<what you are here to do>" } }),
-      note: renderNote({ act: "done", statement: statementOf(text.split("\n")[0] ?? text), ...(text.includes("\n") || text.length > 200 ? { body: text } : {}) }),
+      note,
     }),
     session: { id: ended.session.id, status: ended.session.status },
   };
-  ctx.unbind({ session_id: credential.session_id, base: derivedBase(credential.session_id, "collab_done", keyInput), result });
+  // The slot is cleared first, so it is never left bound to the ended session.
+  ctx.unbind({ session_id: credential.session_id, base, result });
+  try {
+    removeSessionCredentialFile(binding.credential_file);
+  } catch {
+    // The same list the result (and the slot's memo of it) carries.
+    advice.push("The session ended, but its credential file could not be removed; it no longer opens the journal.");
+  }
   return result;
+}
+
+/**
+ * The note a leave returns, rendered before the session ends. A first line
+ * over 200 characters is shortened at a character boundary, with the whole
+ * text as the body; when the rest of the text cannot be a note body (its
+ * last paragraph would read as trailers), the note carries the statement
+ * alone and says so. Leaving is never refused for how the text reads: the
+ * whole text is stored as the end reason either way.
+ */
+function leaveNote(text: string, released: boolean, advice: string[]): string {
+  const firstLine = text.split("\n")[0]!;
+  const fits = firstLine.length <= NOTE_STATEMENT_MAX;
+  const statement = statementOf(firstLine);
+  const body = fits ? splitNoteText(text).body : text;
+  if (body !== null) {
+    try {
+      return renderNote({ act: "done", statement, body });
+    } catch (error) {
+      if (!(error instanceof CollabError)) throw error;
+      advice.push(
+        `The returned note carries only your first line, because the rest cannot be a note's body (${error.message.replace(/\.$/, "")}). ` +
+          `Your whole text was stored as the reason the session ended${released ? " and as the release summary" : ""}.`,
+      );
+    }
+  }
+  return renderNote({ act: "done", statement });
 }

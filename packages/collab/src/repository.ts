@@ -378,6 +378,7 @@ export function hashWorktreeFile(rootPath: string, cited: string, maxBytes = MAX
   }
   // Every step from the root down is looked at without following it.
   let walked = root;
+  let isFile = false;
   const parts = inside.split(sep);
   for (const [index, part] of parts.entries()) {
     walked = `${walked}${sep}${part}`;
@@ -389,10 +390,17 @@ export function hashWorktreeFile(rootPath: string, cited: string, maxBytes = MAX
     }
     if (stat.isSymbolicLink()) return { status: "symlink", path: inside };
     if (index < parts.length - 1 && !stat.isDirectory()) return { status: "missing", path: inside };
+    isFile = stat.isFile();
   }
+  // Only a regular file is opened. Opening a FIFO for reading waits for a
+  // writer, and this runs synchronously, so one FIFO at a cited path would
+  // freeze the whole MCP process, including every reader's inbox re-check.
+  if (!isFile) return { status: "not_a_file", path: inside };
   let descriptor: number | null = null;
   try {
-    descriptor = openSync(walked, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+    // O_NONBLOCK covers a FIFO swapped in after the lstat: its open returns
+    // at once, and the fstat below refuses it. A regular file reads the same.
+    descriptor = openSync(walked, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
     const before = fstatSync(descriptor);
     if (!before.isFile()) return { status: "not_a_file", path: inside };
     if (before.size > maxBytes) return { status: "too_large", path: inside };

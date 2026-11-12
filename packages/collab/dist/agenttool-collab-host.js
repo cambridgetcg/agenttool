@@ -6063,6 +6063,44 @@ class CollabStore {
       work_mode: options.work_mode ?? "edit"
     });
   }
+  noteCompletePrecheck(credential, input) {
+    this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      const row = this.requireTaskRow(session.workspace_id, validateId(input.task_id, "task_id"));
+      for (const reference of normalizeEvidenceRefs(input.evidence_refs)) {
+        this.requireEvidenceRef(row.workspace_id, reference);
+      }
+      if (input.review_requested_session_id) {
+        this.requireRequestedReviewer(row, session, validateId(input.review_requested_session_id, "review_requested_session_id"));
+      }
+    }).deferred();
+  }
+  noteReviewPrecheck(credential, input) {
+    this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      const row = this.requireTaskRow(session.workspace_id, validateId(input.task_id, "task_id"));
+      if (row.completion_policy !== "accepted" || row.review_status !== "pending") {
+        throw this.taskNotPendingReviewError(row, session.id);
+      }
+      if (!row.reported_by_session_id || !row.completion_report_id) {
+        throw new CollabError("review_state_invalid", "Task completion review metadata is incomplete");
+      }
+      if (row.reported_by_session_id === session.id) {
+        throw new CollabError("self_review_forbidden", "A distinct session must review reported completion");
+      }
+      for (const reference of normalizeEvidenceRefs(input.evidence_refs)) {
+        this.requireEvidenceRef(row.workspace_id, reference);
+      }
+      if (input.outcome !== "accept")
+        return;
+      if (this.hasObsoletedCompletionReport(row.workspace_id, row.completion_report_id)) {
+        throw new CollabError("completion_report_obsolete", "The reported completion was withdrawn, corrected, or superseded; request changes before a new completion report", { completion_report_id: row.completion_report_id });
+      }
+      if (this.hasUnresolvedChallenges(row.workspace_id, row.completion_report_id)) {
+        throw new CollabError("completion_challenged", "Reported completion has an unresolved challenge", { completion_report_id: row.completion_report_id });
+      }
+    }).deferred();
+  }
   noteWorktreeRoot(worktreeId2) {
     const row = this.db.query(`SELECT root_path FROM worktrees WHERE id = ?`).get(worktreeId2);
     return row?.root_path ?? null;
