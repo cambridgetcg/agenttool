@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { checkEgress, EGRESS_REASONS, MAX_EGRESS_CHARS, type EgressRoom } from "../src/egress.js";
+import { checkEgress, EGRESS_REASONS, MAX_EGRESS_CHARS, type EgressReason, type EgressRoom } from "../src/egress.js";
 import * as lobby from "../src/index.js";
+import { directoryDescriptor } from "../src/hub.js";
 
 interface EgressCase {
   name: string;
@@ -43,6 +44,73 @@ describe("egress gate fixtures", () => {
 });
 
 describe("egress gate behaviour", () => {
+  test("a desk hostname allows the hub's fixed directory text", () => {
+    const descriptor = directoryDescriptor({ public_key: Buffer.alloc(32).toString("base64"), fingerprint: "0".repeat(16) });
+    expect(checkEgress(JSON.stringify(descriptor), { room: { residency: "fleet" }, deviceTerms: ["desk"] }))
+      .toEqual({ ok: true, reasons: [] });
+  });
+
+  test("device terms match whole Unicode words, including at text edges", () => {
+    for (const term of ["desk", "café"]) {
+      const options = { room: { residency: "fleet" }, deviceTerms: [term] };
+      for (const text of [term, `${term}!`, `(${term})`, `_${term}_`, `hello ${term}`, `🌟${term}🌟`]) {
+        expect(checkEgress(text, options).reasons).toEqual(["local_device_name"]);
+      }
+      for (const adjacent of ["a", "é", "中", "7", "٧", "\u{10400}", "\u0301"]) {
+        for (const text of [`${adjacent}${term}`, `${term}${adjacent}`]) {
+          expect(checkEgress(text, options)).toEqual({ ok: true, reasons: [] });
+        }
+      }
+    }
+  });
+
+  test("no-space-script device terms stay refused inside running text", () => {
+    for (const term of ["星河書房", "ゆめのへや", "カタカナ", "ภาษาไทย", "ພາສາລາວ", "ភាសាខ្មែរ", "မြန်မာ", "ーへやー", "\u{20000}書房\u{20001}"]) {
+      const options = { room: { residency: "fleet" }, deviceTerms: [term] };
+      for (const adjacent of ["a", "é", "中", "7", "٧", "\u{10400}", "\u0301"]) {
+        for (const text of [term, `${adjacent}${term}`, `${term}${adjacent}`, `${adjacent}${term}${adjacent}`]) {
+          expect(checkEgress(text, options).reasons).toEqual(["local_device_name"]);
+        }
+      }
+    }
+    for (const [term, text] of [["星河書房", "我喺星河書房度"], ["ゆめのへや", "わたしのゆめのへやです"]]) {
+      for (const variant of [text!, JSON.stringify({ note: text })]) {
+        expect(checkEgress(variant, { room: { residency: "fleet" }, deviceTerms: [term!] }).reasons)
+          .toEqual(["local_device_name"]);
+      }
+    }
+  });
+
+  test("mixed-script device terms choose each edge independently after folding", () => {
+    for (const [term, refused, allowed] of [
+      ["星河desk", "中星河desk", "星河desktop"],
+      ["desk書房", "desk書房中", "mydesk書房"],
+      ["Yu的desk", "Yu的desk", "myYu的desk"],
+      ["Yu的desk", "Yu的desk", "Yu的desktop"],
+      ["ｰdesk", "中ーdesk", "ーdesktop"],
+      ["deskｰ", "deskー中", "mydeskー"],
+    ] as const) {
+      const options = { room: { residency: "fleet" }, deviceTerms: [term] };
+      expect(checkEgress(refused, options).reasons).toEqual(["local_device_name"]);
+      expect(checkEgress(allowed, options)).toEqual({ ok: true, reasons: [] });
+    }
+  });
+
+  test("device word sequences retain separator tolerance and folding in text and JSON", () => {
+    for (const words of [["example", "lab", "desk"], ["alexs", "MacBook", "Air"]]) {
+      const options = { room: { residency: "fleet" }, deviceTerms: [words.join("-")] };
+      const reasons: EgressReason[] = words[0] === "alexs" ? ["device_name", "local_device_name"] : ["local_device_name"];
+      for (const separator of ["", " ", ".", "_", "-", "\n", "\t", " ._", "---"]) {
+        const name = words.join(separator);
+        for (const text of [name, `from (${name}) tonight`, JSON.stringify({ note: name })]) {
+          expect(checkEgress(text, options).reasons).toEqual(reasons);
+        }
+      }
+    }
+    expect(checkEgress("(ＤＥ\u200bＳＫ)", { room: { residency: "fleet" }, deviceTerms: ["Desk"] }).reasons)
+      .toEqual(["local_device_name"]);
+  });
+
   test("a device room can never send anything, and content reasons still report", () => {
     for (const fixture of fixtures.allowed) {
       expect(checkEgress(fixture.text, { room: { residency: "device" } }).reasons).toEqual(["room_residency_device"]);
