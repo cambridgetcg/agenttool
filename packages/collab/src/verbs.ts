@@ -16,6 +16,7 @@ import { defaultActor } from "./actor-default.js";
 import { canonicalJson } from "./canonical.js";
 import { CollabError } from "./errors.js";
 import {
+  fileLocatorParts,
   hasLoneSurrogate,
   NOTE_JOURNAL_EVIDENCE_KINDS,
   NOTE_STATEMENT_MAX,
@@ -1306,8 +1307,48 @@ export function evidenceRechecker(store: CollabStore, budgetBytes = NOTE_RECHECK
   };
 }
 
+type NoteCite = NonNullable<NoteEntry["cited"]>;
+
+/**
+ * Whether a cited item is the observation of this Evidence line: same
+ * position is not enough, the kind and what it points at must agree too.
+ * The verbs store a hashed file's line by the path that was hashed, so an
+ * honest note always matches.
+ */
+function itemMatchesLine(item: NoteCitedItem, kind: string, locator: string): boolean {
+  if (item.kind !== kind) return false;
+  if (kind !== "file") return item.locator === locator;
+  const { path, from, to } = fileLocatorParts(locator);
+  const lines = from === null ? undefined : to !== null && to !== from ? `${from}-${to}` : `${from}`;
+  return item.locator === path && item.lines === lines;
+}
+
+/** One cited item as a reader sees it, re-checked when the server hashed it (spec 5.2). */
+function citedItemView(item: NoteCitedItem, cite: NoteCite, recheck: EvidenceRecheck | undefined, detail: boolean): Record<string, unknown> {
+  const serverFile = item.kind === "file" && item.observed === "server";
+  return {
+    n: item.n,
+    kind: item.kind,
+    locator: item.locator,
+    observed: item.observed,
+    ...(item.sha256 !== undefined && item.observed === "server" ? { sha256: item.sha256 } : {}),
+    // Without a line of its own to read them from, the range and exit status are shown here.
+    ...(detail && item.lines !== undefined ? { lines: item.lines } : {}),
+    ...(detail && item.exit !== undefined ? { exit: item.exit } : {}),
+    ...(serverFile && recheck ? { now: recheck(cite.worktree_id, item) } : {}),
+  };
+}
+
+/** An `event:` pointer to a cite its own author recorded carries that cite's items, as observed. */
+function authorCiteOf(kind: string, locator: string, cites: NoteCite[], recheck?: EvidenceRecheck): Record<string, unknown> {
+  if (kind !== "event") return {};
+  const cite = cites.find((candidate) => candidate.event_id === locator);
+  return cite ? { cited: cite.items.map((item) => citedItemView(item, cite, recheck, true)) } : {};
+}
+
 /** A marked note's Evidence lines as items, with how each was observed (spec 5.2). */
-function markedEvidence(lines: string[], cited: NoteEntry["cited"], recheck?: EvidenceRecheck): Array<Record<string, unknown>> {
+function markedEvidence(lines: string[], entry: NoteEntry, recheck?: EvidenceRecheck): Array<Record<string, unknown>> {
+  const cited = entry.cited;
   const items = new Map((cited?.items ?? []).map((item) => [item.n, item]));
   return lines.map((line, index) => {
     const n = index + 1;
@@ -1320,19 +1361,17 @@ function markedEvidence(lines: string[], cited: NoteEntry["cited"], recheck?: Ev
     } catch {
       // Shown as text; it was a note body's line, not a pointer collab can follow.
     }
-    const item = items.get(n);
+    const found = items.get(n);
+    const item = found !== undefined && itemMatchesLine(found, kind, locator) ? found : undefined;
     const journal = (NOTE_JOURNAL_EVIDENCE_KINDS as readonly string[]).includes(kind);
-    const observed = item ? item.observed : journal ? "journal" : "caller";
-    const serverFile = item !== undefined && item.kind === "file" && item.observed === "server";
-    return {
-      n,
-      kind,
-      locator,
-      observed,
-      ...(item?.sha256 !== undefined && item.observed === "server" ? { sha256: item.sha256 } : {}),
-      ...(serverFile && recheck ? { now: recheck(cited!.worktree_id, item) } : {}),
-    };
+    if (item && cited) return { ...citedItemView(item, cited, recheck, false), n, kind, locator };
+    return { n, kind, locator, observed: journal ? "journal" : "caller", ...authorCiteOf(kind, locator, entry.author_cites, recheck) };
   });
+}
+
+/** Evidence refs as items; a pointer to a cite the report's author recorded lists that cite's items. */
+function refEvidence(refs: string[], entry: NoteEntry, recheck?: EvidenceRecheck): Array<Record<string, unknown>> {
+  return journalEvidence(refs).map((item) => ({ ...item, ...authorCiteOf(item.kind, item.locator, entry.author_cites, recheck) }));
 }
 
 /** One inbox entry as an item (spec 5.2): it names the entity the next call takes. */
@@ -1356,7 +1395,7 @@ export function formatEntry(
     let statement = statementOf(report.body);
     let text: string | null = report.body;
     let why: NoteReason[] = [];
-    let evidence: Array<Record<string, unknown>> = journalEvidence(report.evidence_refs) as unknown as Array<Record<string, unknown>>;
+    let evidence: Array<Record<string, unknown>> = refEvidence(report.evidence_refs, entry, recheck);
     let limits = report.limits;
     const flags: Record<string, unknown> = {};
     if (entry.marked) {
@@ -1368,7 +1407,7 @@ export function formatEntry(
         why = parsed.why;
         // Why cites count the note's own Evidence lines, so those are the list;
         // the target and the cite event it also points at are in re and observed.
-        evidence = markedEvidence(parsed.evidence, entry.cited, recheck);
+        evidence = markedEvidence(parsed.evidence, entry, recheck);
         limits = parsed.limits ?? report.limits;
         if (parsed.via) flags.via = parsed.via;
         if (parsed.act !== act) flags.act_mismatch = { stored: act, written: parsed.act };
@@ -1414,7 +1453,7 @@ export function formatEntry(
         statement: report ? statementOf(report.body) : "A proposal was opened.",
         text: report?.body ?? null,
         why: [],
-        evidence: report ? journalEvidence(report.evidence_refs) : [],
+        evidence: report ? refEvidence(report.evidence_refs, entry, recheck) : [],
         criteria: payload.criteria ?? null,
         extent: payload.extent ?? null,
         closes_at: payload.closes_at ?? null,

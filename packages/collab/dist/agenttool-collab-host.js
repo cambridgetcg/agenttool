@@ -6044,6 +6044,16 @@ class CollabStore {
     const obsoleted = this.activeObsoletionTargets(workspaceId);
     return ids.filter((id) => obsoleted.has(id));
   }
+  noteReportStands(workspaceId, reportId) {
+    return this.db.transaction(() => {
+      const report = this.requireReport(validateId(reportId, "report_id"));
+      if (report.workspace_id !== workspaceId)
+        return false;
+      if (this.activeObsoletionTargets(workspaceId).has(report.id))
+        return false;
+      return report.relation !== "challenges" || !this.hasActiveReportRelation(workspaceId, report.id, new Set(["resolves"]));
+    }).deferred();
+  }
   notePathConflicts(workspaceId, paths, options = {}) {
     this.requireWorkspace(workspaceId);
     return this.taskPathConflicts({
@@ -6582,36 +6592,45 @@ class CollabStore {
     const taskId = event.type.startsWith("task.") ? event.entity_id : event.type.startsWith("handoff.") ? typeof payload.task_id === "string" ? payload.task_id : typeof payload.handoff?.task_id === "string" ? payload.handoff.task_id : null : report?.task_id ?? null;
     const taskRow = taskId ? this.readTaskRow(session.workspace_id, taskId) : null;
     const marked = event.type === "report.posted" && payload.note === NOTE_FORMAT;
+    const cites = report ? this.noteAuthorCites(session.workspace_id, report) : [];
+    const own = marked && report ? cites.find((cite) => cite.sequence === report.event_sequence - 1) ?? null : null;
     return {
       event,
       for_me: forMe,
       why_you: forMe ? this.noteWhyYou(event, session.id) : null,
       report,
       marked,
-      cited: marked && report ? this.noteCiteOf(session.workspace_id, report) : null,
+      cited: own ? { event_id: own.event_id, by_session_id: own.by_session_id, worktree_id: own.worktree_id, items: own.items } : null,
+      author_cites: cites.map(({ sequence: _sequence, ...cite }) => cite),
       termed: report !== null && this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(report.id) !== null,
       to_person: event.type === "report.posted" && payload.to_person === true,
       task: taskRow ? { id: taskRow.id, title: taskRow.title } : null
     };
   }
-  noteCiteOf(workspaceId, report) {
+  noteAuthorCites(workspaceId, report) {
+    if (!report.from_session_id)
+      return [];
+    const cites = [];
     for (const ref of report.evidence_refs) {
       if (!ref.startsWith("event:"))
         continue;
       const row = this.db.query(`
-        SELECT payload_json FROM events WHERE workspace_id = ? AND id = ? AND type = 'evidence.cited'
+        SELECT sequence, payload_json FROM events WHERE workspace_id = ? AND id = ? AND type = 'evidence.cited'
       `).get(workspaceId, ref.slice("event:".length));
       if (!row)
         continue;
       const payload = JSON.parse(row.payload_json);
-      return {
+      if (payload.by_session_id !== report.from_session_id)
+        continue;
+      cites.push({
         event_id: ref.slice("event:".length),
-        by_session_id: typeof payload.by_session_id === "string" ? payload.by_session_id : null,
+        sequence: row.sequence,
+        by_session_id: report.from_session_id,
         worktree_id: typeof payload.worktree_id === "string" ? payload.worktree_id : null,
         items: Array.isArray(payload.items) ? payload.items : []
-      };
+      });
     }
-    return null;
+    return cites;
   }
   noteWhyYou(event, sessionId) {
     const payload = event.payload ?? {};

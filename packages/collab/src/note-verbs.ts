@@ -13,12 +13,14 @@ import {
   fileLocatorParts,
   isNoteAct,
   NOTE_JOURNAL_EVIDENCE_KINDS,
+  NOTE_EVIDENCE_ATTRS,
   noteProblemError,
   normalizeNoteFields,
   normalizeNoteText,
   parseEvidence,
   parseNote,
   parseNoteRef,
+  renderEvidence,
   renderNote,
   splitNoteText,
   hasLoneSurrogate,
@@ -27,7 +29,7 @@ import {
   type NoteInput,
   type NoteReason,
 } from "./note.js";
-import type { CollabReport, Task } from "./protocol.js";
+import type { CollabReport, ProposalStatus, Task } from "./protocol.js";
 import { gitCommitExists, hashWorktreeFile, MAX_CITED_FILE_BYTES } from "./repository.js";
 import { removeSessionCredentialFile } from "./session-file.js";
 import {
@@ -136,12 +138,45 @@ function sameValue(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+/**
+ * One step under a derived key: its recorded response when the step already
+ * finished, else the write. Besides a retry, the receipt can come from an
+ * identical call in flight at the same time, which planned the same key and
+ * wrote this step first; that is the same step of the same call, so it is
+ * replayed. A write that loses that race in another process meets the
+ * receipt as idempotency_conflict (the version it read is older), and the
+ * receipt is replayed then too: the caller's call was not wrong.
+ */
+async function stepOnce<T>(
+  ctx: NoteVerbContext,
+  credential: Credential,
+  key: string,
+  write: () => T | Promise<T>,
+): Promise<{ value: T; replayed: boolean }> {
+  const earlier = replayReceipt<T>(ctx.store, credential, key);
+  if (earlier) return { value: earlier, replayed: true };
+  try {
+    return { value: await write(), replayed: false };
+  } catch (error) {
+    if (!(error instanceof CollabError) || error.code !== "idempotency_conflict") throw error;
+    const written = replayReceipt<T>(ctx.store, credential, key);
+    if (written) return { value: written, replayed: true };
+    throw error;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Evidence (spec 5.3): hashed and checked before any write transaction
 
 interface ResolvedEvidence {
-  /** The Evidence lines as stored: journal handles replaced by full ids. */
+  /** The Evidence lines as stored: journal handles replaced by full ids, a hashed file named by the path that was hashed. */
   lines: string[];
+  /**
+   * The lines as the caller wrote them, journal handles replaced by full ids:
+   * what a derived key hashes, so whether a file could be hashed this time
+   * never changes the key of a retry.
+   */
+  key_lines: string[];
   /** Outside items, by Evidence position. */
   items: NoteCitedItem[];
   /** Journal pointers for evidence_refs, full ids. */
@@ -162,7 +197,7 @@ const COMMIT_CHECK_BUDGET_MS = 5_000;
 function resolveEvidence(ctx: NoteVerbContext, binding: NoteBinding, lines: string[]): ResolvedEvidence {
   const workspaceId = binding.handle.workspace.id;
   const root = binding.handle.worktree.root_path;
-  const out: ResolvedEvidence = { lines: [], items: [], journal: [], advice: [] };
+  const out: ResolvedEvidence = { lines: [], key_lines: [], items: [], journal: [], advice: [] };
   const deadline = performance.now() + COMMIT_CHECK_BUDGET_MS;
   lines.forEach((line, index) => {
     const n = index + 1;
@@ -184,16 +219,25 @@ function resolveEvidence(ctx: NoteVerbContext, binding: NoteBinding, lines: stri
         ref = `report:${ctx.store.resolveNoteRef(workspaceId, "report", value).id}`;
       }
       out.lines.push(ref);
+      out.key_lines.push(ref);
       out.journal.push(ref);
       return;
     }
-    out.lines.push(line);
+    out.key_lines.push(line);
     const kind = evidence.kind as NoteCitedItem["kind"];
     if (kind === "file") {
       const { path, from, to } = fileLocatorParts(evidence.locator);
       const lineRange = from === null ? undefined : to !== null && to !== from ? `${from}-${to}` : `${from}`;
       const hashed = existsSync(root) ? hashWorktreeFile(root, path) : { status: "unreadable" as const, path: null };
       if (hashed.status === "hashed") {
+        // The line names the path that was hashed (./src/a.ts or an absolute
+        // path inside the worktree becomes src/a.ts), so a reader pairs the
+        // line with its observation by what it points at, not by position alone.
+        const stored = hashed.path === path
+          ? line
+          : renderEvidence({ kind: "file", locator: `${hashed.path}${evidence.locator.slice(path.length)}`, attrs: evidence.attrs });
+        if (stored !== line) out.advice.push(`Evidence ${n} is recorded as "${stored}": the file's path in your worktree.`);
+        out.lines.push(stored);
         out.items.push({ n, kind, locator: hashed.path, sha256: hashed.sha256, ...(lineRange ? { lines: lineRange } : {}), observed: "server" });
         const claimed = evidence.attrs.sha256?.toLowerCase();
         if (claimed && claimed !== hashed.sha256) {
@@ -201,6 +245,7 @@ function resolveEvidence(ctx: NoteVerbContext, binding: NoteBinding, lines: stri
         }
         return;
       }
+      out.lines.push(line);
       const why = {
         outside: "is outside your worktree",
         symlink: "reaches through a symbolic link",
@@ -221,6 +266,7 @@ function resolveEvidence(ctx: NoteVerbContext, binding: NoteBinding, lines: stri
       out.advice.push(`Evidence ${n} (file ${path}) ${why}, so it was recorded as you wrote it, unhashed (observed: caller).`);
       return;
     }
+    out.lines.push(line);
     if (kind === "commit") {
       const exists = binding.handle.worktree.git_common_dir_hash === null
         ? null
@@ -530,7 +576,6 @@ export async function noteVerb(ctx: NoteVerbContext, input: NoteVerbInput): Prom
 
   const target = fields.re !== null ? resolveRe(ctx, workspaceId, fields.re) : null;
   const evidence = resolveEvidence(ctx, binding, fields.evidence);
-  advice.push(...evidence.advice);
   fields = { ...fields, evidence: evidence.lines, re: target ? reText(target) : null };
   let replacedId: string | null = null;
   if (fields.replaces !== null) {
@@ -544,80 +589,202 @@ export async function noteVerb(ctx: NoteVerbContext, input: NoteVerbInput): Prom
     fields = { ...fields, replaces: `report:${replacedId}` };
   }
 
-  const planned = planNote(ctx, input, { act, fields, target, me, workspaceId, replacedId, evidence });
-  advice.push(...planned.advice, ...planned.addressee.advice);
-  // The final note, with full ids, is checked again before anything is written.
-  refuseNoteProblems(planned.fields);
-  const note = renderNote(planned.fields);
+  // The derived key hashes the call as the caller sent it, normalised (spec
+  // 5), and nothing the call reads to plan its writes: an addressee worked
+  // out from the journal (the target's author, a task's holder, the latest
+  // challenger, the session a name answers to now) can change between a
+  // lost response and its retry, and the retry must still find its receipt.
   const keyInput = {
     act,
-    fields: planned.fields,
-    to: planned.addressee.to_session_id ?? (planned.addressee.to_person ? "person" : null),
+    fields: { ...fields, evidence: evidence.key_lines, to: keyAddressee(ctx, workspaceId, fields.to) },
   };
+  const plan = (): { planned: PlannedNote; note: string } => {
+    const planned = planNote(ctx, input, { act, fields, target, me, workspaceId, replacedId, evidence });
+    // The final note, with full ids, is checked again before anything is written.
+    refuseNoteProblems(planned.fields);
+    return { planned, note: renderNote(planned.fields) };
+  };
+  const planAdvice = (planned: PlannedNote) => [...evidence.advice, ...planned.advice, ...planned.addressee.advice];
 
-  if (input.dry_run === true) {
-    return {
-      ok: true,
-      dry_run: true,
-      effect: "Dry run: nothing was written.",
-      act,
-      recorded_as: planned.recorded_as,
-      ...(read.read_as ? { read_as: read.read_as } : {}),
-      parsed: planned.fields,
-      would: {
-        reports: planned.reports.map((report) => ({
-          relation: report.relation,
-          kind: report.kind,
-          target: report.target_report_id ?? null,
-          task: report.task_id ?? null,
-          to: report.to_session_id ?? (report.to_person ? "person" : null),
-          about_proposal: report.about_proposal_id ?? null,
-        })),
-        cites: evidence.items.length > 0 ? 1 : 0,
-      },
-      to: planned.addressee.shown,
-      evidence: evidenceSummary(evidence),
-      authorises: "Nothing. This is coordination state.",
-      advice,
-      note,
-      ...planned.extra,
-    };
-  }
-
-  if (act === "accept" || act === "request_changes") {
-    return reviewNote(ctx, binding, credential, { planned, evidence, note, keyInput, advice, read_as: read.read_as, input });
-  }
-  if (act === "relay_rejection") {
-    return relayNote(ctx, credential, { planned, note, keyInput, advice, read_as: read.read_as, input });
+  // A verdict and a relayed no address no one by state, so they plan first;
+  // their own paths decide what a retry replays.
+  if (input.dry_run === true || act === "accept" || act === "request_changes" || act === "relay_rejection") {
+    const { planned, note } = plan();
+    advice.push(...planAdvice(planned));
+    if (input.dry_run === true) return dryRunResult({ planned, note, advice, evidence, read_as: read.read_as });
+    return act === "relay_rejection"
+      ? relayNote(ctx, credential, { planned, note, keyInput, advice, read_as: read.read_as, input })
+      : reviewNote(ctx, binding, credential, { planned, evidence, note, keyInput, advice, read_as: read.read_as, input });
   }
 
   const cite = evidence.items.length > 0 ? { worktree_id: binding.handle.worktree.id, items: evidence.items } : null;
-  const { plan, receipt, replayed } = await underPlan(ctx, credential, {
+  const { plan: receiptPlan, receipt, fresh } = await underPlan(ctx, credential, {
     tool: "collab_note",
     input: keyInput,
-    entity: planned.entity,
+    entity: noteEntity(ctx, input, act, target),
     retry_input: noteRetryInput(input),
+    // The earlier note is current while it still stands: a challenge
+    // withdrawn or lifted and then made again is a new objection, not a retry.
     stillCurrent: (latestKey) => {
       const found = replayReceipt<NoteAppendReceipt>(ctx.store, credential, latestKey);
-      // The earlier note still stands unless it was withdrawn (or corrected): a
-      // challenge withdrawn and then made again is a new objection, not a retry.
-      return !found || ctx.store.noteObsoleted(workspaceId, [found.reports[0]!.id]).length === 0;
+      return !found || ctx.store.noteReportStands(workspaceId, found.reports[0]!.id);
     },
-  }, (plan) => {
-    const earlier = plan.retry ? replayReceipt<NoteAppendReceipt>(ctx.store, credential, plan.key) : null;
-    const receipt = earlier ?? ctx.store.appendNoteForSession({
-      ...credential,
-      idempotency_key: plan.key,
-      cite,
-      reports: planned.reports,
-      receipt_plan: plan.guard,
+  }, async (receiptPlan) => {
+    // Planning reads the journal (addressees, the replaced challenge), so it
+    // runs only when the call acts; a replay reports what was recorded.
+    let fresh: { planned: PlannedNote; note: string } | null = null;
+    const step = await stepOnce(ctx, credential, receiptPlan.key, () => {
+      fresh = plan();
+      return ctx.store.appendNoteForSession({
+        ...credential,
+        idempotency_key: receiptPlan.key,
+        cite,
+        reports: fresh.planned.reports,
+        receipt_plan: receiptPlan.guard,
+      });
     });
-    return { plan, receipt, replayed: earlier !== null };
+    // A plan made but not written (an identical call wrote first) is not what was recorded.
+    return { plan: receiptPlan, receipt: step.value, fresh: step.replayed ? null : fresh as { planned: PlannedNote; note: string } | null };
   });
-  if (plan.retry && replayed) {
+  if (fresh) {
+    advice.push(...planAdvice(fresh.planned));
+    return noteResult(ctx, { planned: fresh.planned, receipt, replayed: false, note: fresh.note, advice, read_as: read.read_as, evidence });
+  }
+  if (receiptPlan.retry) {
     advice.push("This repeats your latest act on this entity exactly, so it was read as a retry. Add a word to say it again.");
   }
-  return noteResult(ctx, { planned, receipt, replayed, note, advice, read_as: read.read_as, evidence });
+  const replayed = replayedNote(ctx, workspaceId, { act, fields, target, receipt, to: keyInput.fields.to });
+  return noteResult(ctx, { ...replayed, receipt, replayed: true, advice, read_as: read.read_as });
+}
+
+/**
+ * An explicit `to` as the derived key hashes it: all, person and a name as
+ * written (the session a name answers to can change), a handle as the id it
+ * names, so either spelling of one session is the same call.
+ */
+function keyAddressee(ctx: NoteVerbContext, workspaceId: string, value: string | null): string | null {
+  if (value === null) return null;
+  const text = value.trim();
+  if (/^session#[0-9a-fA-F]{6,32}$/.test(text)) {
+    return ctx.store.resolveNoteSession(workspaceId, text, { include_ended: true }).id;
+  }
+  return text;
+}
+
+const REPORT_TARGET_REASONS: Partial<Record<NoteActHere, string>> = {
+  support: "to stand on a task's work, name its completion report",
+  challenge: "to stand on a task's work, name its completion report",
+  resolve: "resolve names the challenge it lifts",
+  withdraw: "withdraw names your own earlier report",
+};
+
+/** The report a stance, a resolve or a withdrawal answers; a task with a completion gets a ready call naming it. */
+function requireReportTarget(
+  ctx: NoteVerbContext,
+  input: NoteVerbInput,
+  act: NoteActHere,
+  target: ReTarget | null,
+): Extract<ReTarget, { kind: "report" }> {
+  if (target?.kind === "report") return target;
+  const why = REPORT_TARGET_REASONS[act] ?? "name the report in re";
+  if (target?.kind === "task" && target.task.completion_report_id) {
+    throw new CollabError("re_must_be_report", `${act} answers a report; ${why}`, {
+      remedy: sameNoteWith(ctx, input, { re: exactRef("report", target.task.completion_report_id) }),
+    });
+  }
+  throw new CollabError("re_must_be_report", `${act} answers a report; ${why}`, {
+    remedy: { say: `Name the report in re, as an id or a handle such as report#3fa91c.` },
+  });
+}
+
+/** The entity a report-posting act's derived key names (spec 5): the target report, else the task, else "note". */
+function noteEntity(ctx: NoteVerbContext, input: NoteVerbInput, act: NoteActHere, target: ReTarget | null): string {
+  if (act !== "note") return requireReportTarget(ctx, input, act, target).id;
+  if (target?.kind === "report" || target?.kind === "task") return target.id;
+  return "note";
+}
+
+/**
+ * What a replayed note reports, from its receipt and the call: the act it
+ * was recorded as and the addressee it was sent to then, whoever the same
+ * call would address now.
+ */
+function replayedNote(
+  ctx: NoteVerbContext,
+  workspaceId: string,
+  context: { act: NoteActHere; fields: NoteFields; target: ReTarget | null; receipt: NoteAppendReceipt; to: string | null },
+): { planned: PlannedNote; note: string; evidence: ResolvedEvidence } {
+  const main = context.receipt.reports[0]!;
+  const recordedAs: PlannedNote["recorded_as"] = main.relation === "informs"
+    ? (context.act === "resolve" ? "answer" : "note")
+    : ({ supports: "support", challenges: "challenge", resolves: "resolve", withdraws: "withdraw" } as const)[
+      main.relation as "supports" | "challenges" | "resolves" | "withdraws"
+    ];
+  let addressee: Addressee = BROADCAST;
+  if (main.to_session_id) {
+    const view = safeSession(ctx, workspaceId, main.to_session_id);
+    addressee = { to_session_id: main.to_session_id, to_person: false, shown: { session: main.to_session_id, name: view?.actor ?? main.to_session_id }, advice: [] };
+  } else if (context.to === "person") {
+    addressee = { to_session_id: null, to_person: true, shown: "person", advice: [] };
+  }
+  const extra: Record<string, unknown> = {};
+  if ((context.act === "support" || context.act === "challenge") && context.fields.why.length === 0 && context.fields.evidence.length === 0) {
+    extra.ungrounded = true;
+  }
+  if (recordedAs === "answer") extra.recorded_as_answer = true;
+  // The stored body is the note that was returned, byte for byte.
+  const stored = parseNote(main.body);
+  return {
+    planned: {
+      act: context.act,
+      recorded_as: recordedAs,
+      fields: context.fields,
+      target: context.target,
+      addressee,
+      reports: [],
+      entity: "",
+      advice: [],
+      extra,
+    },
+    note: main.body,
+    evidence: { lines: stored.evidence, key_lines: [], items: context.receipt.cite?.items ?? [], journal: [], advice: [] },
+  };
+}
+
+function dryRunResult(options: {
+  planned: PlannedNote;
+  note: string;
+  advice: string[];
+  evidence: ResolvedEvidence;
+  read_as: string | null;
+}): Record<string, unknown> {
+  const { planned, evidence } = options;
+  return {
+    ok: true,
+    dry_run: true,
+    effect: "Dry run: nothing was written.",
+    act: planned.act,
+    recorded_as: planned.recorded_as,
+    ...(options.read_as ? { read_as: options.read_as } : {}),
+    parsed: planned.fields,
+    would: {
+      reports: planned.reports.map((report) => ({
+        relation: report.relation,
+        kind: report.kind,
+        target: report.target_report_id ?? null,
+        task: report.task_id ?? null,
+        to: report.to_session_id ?? (report.to_person ? "person" : null),
+        about_proposal: report.about_proposal_id ?? null,
+      })),
+      cites: evidence.items.length > 0 ? 1 : 0,
+    },
+    to: planned.addressee.shown,
+    evidence: evidenceSummary(evidence),
+    authorises: "Nothing. This is coordination state.",
+    advice: options.advice,
+    note: options.note,
+    ...planned.extra,
+  };
 }
 
 function planNote(
@@ -649,17 +816,6 @@ function planNote(
     evidence_refs: [...evidence.journal, ...extraRefs],
     cite_event: hasCite,
   });
-  const requireReportTarget = (why: string): Extract<ReTarget, { kind: "report" }> => {
-    if (reportTarget) return reportTarget;
-    if (target?.kind === "task" && target.task.completion_report_id) {
-      throw new CollabError("re_must_be_report", `${act} answers a report; ${why}`, {
-        remedy: sameNoteWith(ctx, input, { re: exactRef("report", target.task.completion_report_id) }),
-      });
-    }
-    throw new CollabError("re_must_be_report", `${act} answers a report; ${why}`, {
-      remedy: { say: `Name the report in re, as an id or a handle such as report#3fa91c.` },
-    });
-  };
 
   // Advice, never refusals (spec 5.3).
   const grounded = fields.why.length > 0 || fields.evidence.length > 0;
@@ -707,7 +863,7 @@ function planNote(
     }
     case "support":
     case "challenge": {
-      const reportTarget = requireReportTarget("to stand on a task's work, name its completion report");
+      const reportTarget = requireReportTarget(ctx, input, act, target);
       const view = reportTarget.view;
       const report = base(act === "support" ? "supports" : "challenges");
       report.target_report_id = reportTarget.id;
@@ -736,7 +892,7 @@ function planNote(
       return finish({ recorded_as: act, target, addressee, reports: [report], entity: reportTarget.id });
     }
     case "resolve": {
-      const challenge = requireReportTarget("resolve names the challenge it lifts");
+      const challenge = requireReportTarget(ctx, input, act, target);
       if (challenge.view.report.relation !== "challenges") {
         throw new CollabError("not_a_challenge", `${targetHandle(challenge)} is not a challenge; resolve lifts a challenge`, {
           remedy: { say: "To answer a report, post a note with re; to lift your own challenge, resolve names that challenge." },
@@ -773,7 +929,7 @@ function planNote(
       return finish({ recorded_as: "answer", target, addressee, reports: [report], entity: challenge.id, fields });
     }
     case "withdraw": {
-      const withdrawn = requireReportTarget("withdraw names your own earlier report");
+      const withdrawn = requireReportTarget(ctx, input, act, target);
       if (withdrawn.view.report.from_session_id !== me) {
         throw new CollabError(
           "not_your_report",
@@ -1065,20 +1221,18 @@ async function reviewNote(
     let cite: NoteCiteReceipt | null = null;
     if (evidence.items.length > 0) {
       steps += 1;
-      cite = plan.retry ? replayReceipt<NoteCiteReceipt>(ctx.store, credential, plan.step(1)) : null;
-      if (cite) replays += 1;
-      cite ??= ctx.store.citeEvidenceForSession({
+      const cited = await stepOnce(ctx, credential, plan.step(1), () => ctx.store.citeEvidenceForSession({
         ...credential,
         idempotency_key: plan.step(1),
         worktree_id: binding.handle.worktree.id,
         items: evidence.items,
         receipt_plan: plan.guard,
-      });
+      }));
+      if (cited.replayed) replays += 1;
+      cite = cited.value;
     }
     steps += 1;
-    let review = plan.retry ? replayReceipt<{ task: Task; review: unknown; report: CollabReport }>(ctx.store, credential, plan.step(2)) : null;
-    if (review) replays += 1;
-    review ??= await withCurrentVersion(ctx, { tool: "collab_note", input: retryInput }, () => {
+    const reviewed = await stepOnce(ctx, credential, plan.step(2), () => withCurrentVersion(ctx, { tool: "collab_note", input: retryInput }, () => {
       const task = ctx.store.getTask(workspaceId, pin.task_id);
       // The verdict lands only on the completion the reviewer named.
       if (task.completion_report_id !== pin.completion_id) {
@@ -1098,8 +1252,9 @@ async function reviewNote(
       evidence_refs: [...evidence.journal, ...(cite ? [`event:${cite.event_id}`] : [])],
       ...(confidenceBasis ? { confidence_basis: confidenceBasis } : {}),
       ...(fields.limits ? { limits: fields.limits } : {}),
-    })));
-    return { plan, cite, review, replayed: replays === steps };
+    })) as { task: Task; review: unknown; report: CollabReport }));
+    if (reviewed.replayed) replays += 1;
+    return { plan, cite, review: reviewed.value, replayed: replays === steps };
   }).catch((error) => {
     throw reviewRefusal(ctx, error);
   });
@@ -1161,26 +1316,37 @@ async function relayNote(
   const { planned, advice } = options;
   const proposal = planned.target as Extract<ReTarget, { kind: "report" }>;
   const reason = planned.fields.body === null ? planned.fields.statement : `${planned.fields.statement}\n\n${planned.fields.body}`;
-  const status0 = ctx.store.proposalStatus(proposal.view.report.workspace_id, proposal.id);
-  const { plan, status, replayed } = await underPlan(ctx, credential, {
+  const workspaceId = proposal.view.report.workspace_id;
+  const status0 = ctx.store.proposalStatus(workspaceId, proposal.id);
+  const { plan, replayed } = await underPlan(ctx, credential, {
     tool: "collab_note",
     input: options.keyInput,
     entity: proposal.id,
     retry_input: noteRetryInput(options.input),
-  }, (plan) => {
-    const earlier = plan.retry ? replayReceipt<typeof status0>(ctx.store, credential, plan.key) : null;
-    const status = earlier ?? ctx.store.withReceiptPlan(plan.guard, () => ctx.store.relayProposalRejectionForSession({
-      ...credential,
-      idempotency_key: plan.key,
-      proposal_report_id: proposal.id,
-      proposal_sha256: status0.proposal_sha256,
-      reason,
-    }));
-    return { plan, status, replayed: earlier !== null };
+    // A relayed no is current only while it is still the person's latest
+    // act. Once the person has acted since (agreed at the desk, say), the
+    // same words relayed again are a new no, and a relayed no may stop work.
+    stillCurrent: (latestKey) => {
+      const recorded = replayReceipt<ProposalStatus>(ctx.store, credential, latestKey)?.person.acts.at(-1);
+      const latest = ctx.store.proposalStatus(workspaceId, proposal.id).person.acts.at(-1);
+      return recorded !== undefined && latest !== undefined && recorded.id === latest.id;
+    },
+  }, async (plan) => {
+    const step = await stepOnce(ctx, credential, plan.key, () =>
+      ctx.store.withReceiptPlan(plan.guard, () => ctx.store.relayProposalRejectionForSession({
+        ...credential,
+        idempotency_key: plan.key,
+        proposal_report_id: proposal.id,
+        proposal_sha256: status0.proposal_sha256,
+        reason,
+      })));
+    return { plan, replayed: step.replayed };
   });
   if (plan.retry && replayed) {
     advice.push("This repeats your latest relay on this proposal exactly, so it was read as a retry. Add a word to say it again.");
   }
+  // The position and the person's state as they stand now, not as a receipt kept them.
+  const status = ctx.store.proposalStatus(workspaceId, proposal.id);
   const handle = handleOf("proposal", proposal.id);
   return {
     ...noteWriteResult({
@@ -1277,15 +1443,12 @@ async function takeNew(
     retry_input: retryInput,
     stillCurrent: (latestKey) => leaseStillCurrent(ctx, credential, workspaceId, latestKey),
   }, async (plan) => {
-    let replays = 0;
-    let created = plan.retry ? replayReceipt<Task>(ctx.store, credential, plan.step(1)) : null;
-    if (created) replays += 1;
-    if (!created) {
+    const created = await stepOnce(ctx, credential, plan.step(1), () => {
       if (paths.length > 0) {
         const conflicts = ctx.store.notePathConflicts(workspaceId, paths, { work_mode: workMode });
         if (conflicts.length > 0) throw pathConflictRefusal(ctx, workspaceId, conflicts, null);
       }
-      created = ctx.store.withReceiptPlan(plan.guard, () => ctx.store.createTaskForSession({
+      return ctx.store.withReceiptPlan(plan.guard, () => ctx.store.createTaskForSession({
         ...credential,
         idempotency_key: plan.step(1),
         title: options.title,
@@ -1294,11 +1457,10 @@ async function takeNew(
         work_mode: workMode,
         completion_policy: policy,
       }));
-    }
-    let claimed = plan.retry ? replayReceipt<Task>(ctx.store, credential, plan.step(2)) : null;
-    if (claimed) replays += 1;
-    claimed ??= await claimStep(ctx, binding, credential, created, plan.step(2), plan.guard, retryInput, null, true);
-    return { plan, created, claimed, replayed: replays === 2 };
+    });
+    const claimed = await stepOnce(ctx, credential, plan.step(2), () =>
+      claimStep(ctx, binding, credential, created.value, plan.step(2), plan.guard, retryInput, null, true));
+    return { plan, created: created.value, claimed: claimed.value, replayed: created.replayed && claimed.replayed };
   });
   if (plan.retry && replayed) advice.push("This repeats your latest take exactly, so it was read as a retry. Add a word to the title to take another.");
   return takeResult(ctx, claimed, { purpose: options.purpose, advice, replayed, fresh: true });
@@ -1325,14 +1487,15 @@ async function takeExisting(
     retry_input: retryInput,
     stillCurrent: (latestKey) => leaseStillCurrent(ctx, credential, workspaceId, latestKey),
   }, async (plan) => {
-    const earlier = plan.retry ? replayReceipt<Task>(ctx.store, credential, plan.key) : null;
+    const earlier = replayReceipt<Task>(ctx.store, credential, plan.key);
     if (earlier) return { plan, held: earlier, replayed: true, already: false };
     const task = ctx.store.getTask(workspaceId, id);
     if (task.status === "claimed" && task.assignee_session_id === credential.session_id && task.effective_status === "claimed") {
       return { plan, held: task, replayed: false, already: true };
     }
-    const held = await claimStep(ctx, binding, credential, task, plan.key, plan.guard, retryInput, options.because, false);
-    return { plan, held, replayed: false, already: false };
+    const held = await stepOnce(ctx, credential, plan.key, () =>
+      claimStep(ctx, binding, credential, task, plan.key, plan.guard, retryInput, options.because, false));
+    return { plan, held: held.value, replayed: held.replayed, already: false };
   });
   if (plan.retry && replayed) advice.push("This repeats your latest take of this task exactly, so it was read as a retry.");
   if (already) advice.push("You already hold this task; nothing was written.");
@@ -1674,7 +1837,25 @@ async function finishTask(
   const summary = renderNote(fields, { omitEvidence: true });
   const confidenceBasis = requireReasonsFit(fields.why);
   const reviewer = input.review_by !== undefined ? ctx.store.resolveNoteSession(workspaceId, String(input.review_by)).id : null;
+  // Each label is checked before anything is written: it is where a caller's
+  // own hash or exit status is kept, so it is never cut to fit.
+  const labels = evidence.items.map((item) => artifactLabel(item, evidence.lines[item.n - 1]!));
+  labels.forEach((label, index) => {
+    if (label.length <= ARTIFACT_LABEL_MAX) return;
+    const n = evidence.items[index]!.n;
+    throw new CollabError("too_long", `Evidence ${n} is kept as an artifact label of ${label.length} characters; at most ${ARTIFACT_LABEL_MAX}`, {
+      field: `evidence[${n - 1}]`,
+      max: ARTIFACT_LABEL_MAX,
+      actual: label.length,
+      unit: "chars",
+      remedy: { say: `Shorten the k=v attributes of evidence ${n}: a finished task keeps them in its artifact's label.` },
+    });
+  });
   const retryInput = { ...input, task: exactRef("task", task.id) } as Record<string, unknown>;
+  const held = () => {
+    const current = requireHeld(ctx, credential, ctx.store.getTask(workspaceId, task.id), retryInput);
+    return { version: current.version, state: { task: handleOf("task", current.id), state: current.effective_status } };
+  };
   const { plan, artifacts, completed, replayed } = await underPlan(ctx, credential, {
     tool: "collab_done",
     input: options.keyInput,
@@ -1685,67 +1866,67 @@ async function finishTask(
       if (!found) return true;
       const current = ctx.store.getTask(workspaceId, task.id);
       if ("artifact" in found) return current.lease_id === found.task.lease_id;
+      // A completion is current while the task is still completed with it.
+      // A request for changes keeps the completion's id but sends the work
+      // back, so the same done then acts afresh (and asks to take it first).
       const completedTask = found as Task;
-      return completedTask.completion_report_id === null || current.completion_report_id === completedTask.completion_report_id;
+      return current.completion_report_id === completedTask.completion_report_id
+        && current.status === "completed"
+        && current.review_status !== "changes_requested";
     },
   }, async (plan) => {
     let replays = 0;
     const artifacts: Array<{ id: string; n: number }> = [];
     for (const [index, item] of evidence.items.entries()) {
       const key = plan.step(index + 1);
-      const earlier = plan.retry ? replayReceipt<{ task: Task; artifact: { id: string } }>(ctx.store, credential, key) : null;
-      if (earlier) {
-        replays += 1;
-        artifacts.push({ id: earlier.artifact.id, n: item.n });
-        continue;
-      }
-      const attached = await withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, () => {
-        const current = requireHeld(ctx, credential, ctx.store.getTask(workspaceId, task.id), retryInput);
-        return { version: current.version, state: { task: handleOf("task", current.id), state: current.effective_status } };
-      }, (version) => ctx.store.withReceiptPlan(plan.guard, () => ctx.store.attachArtifactForSession({
+      const attached = await stepOnce(ctx, credential, key, () => withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, held,
+        (version) => ctx.store.withReceiptPlan(plan.guard, () => ctx.store.attachArtifactForSession({
+          ...credential,
+          idempotency_key: key,
+          task_id: task.id,
+          lease_id: ctx.store.getTask(workspaceId, task.id).lease_id!,
+          expected_version: version,
+          kind: ARTIFACT_KIND[item.kind],
+          uri: item.locator,
+          ...(item.kind === "file" && item.observed === "server" && item.sha256 ? { sha256: item.sha256 } : {}),
+          label: labels[index]!,
+        }))));
+      if (attached.replayed) replays += 1;
+      artifacts.push({ id: attached.value.artifact.id, n: item.n });
+    }
+    const completeKey = plan.step(evidence.items.length + 1);
+    const completed = await stepOnce(ctx, credential, completeKey, () => withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, held,
+      (version) => ctx.store.withReceiptPlan(plan.guard, () => ctx.store.completeTaskForSession({
         ...credential,
-        idempotency_key: key,
+        idempotency_key: completeKey,
         task_id: task.id,
         lease_id: ctx.store.getTask(workspaceId, task.id).lease_id!,
         expected_version: version,
-        kind: ARTIFACT_KIND[item.kind],
-        uri: item.locator,
-        ...(item.kind === "file" && item.observed === "server" && item.sha256 ? { sha256: item.sha256 } : {}),
-        label: artifactLabel(item),
-      })));
-      artifacts.push({ id: attached.artifact.id, n: item.n });
-    }
-    const completeKey = plan.step(evidence.items.length + 1);
-    const earlier = plan.retry ? replayReceipt<Task>(ctx.store, credential, completeKey) : null;
-    if (earlier) replays += 1;
-    const completed = earlier ?? await withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, () => {
-      const current = requireHeld(ctx, credential, ctx.store.getTask(workspaceId, task.id), retryInput);
-      return { version: current.version, state: { task: handleOf("task", current.id), state: current.effective_status } };
-    }, (version) => ctx.store.withReceiptPlan(plan.guard, () => ctx.store.completeTaskForSession({
-      ...credential,
-      idempotency_key: completeKey,
-      task_id: task.id,
-      lease_id: ctx.store.getTask(workspaceId, task.id).lease_id!,
-      expected_version: version,
-      summary,
-      ...(confidenceBasis ? { confidence_basis: confidenceBasis } : {}),
-      ...(fields.limits ? { limits: fields.limits } : {}),
-      evidence_refs: [...evidence.journal, ...artifacts.map((artifact) => `artifact:${artifact.id}`)],
-      ...(reviewer ? { review_requested_session_id: reviewer } : {}),
-    })));
-    return { plan, artifacts, completed, replayed: replays === evidence.items.length + 1 };
+        summary,
+        ...(confidenceBasis ? { confidence_basis: confidenceBasis } : {}),
+        ...(fields.limits ? { limits: fields.limits } : {}),
+        evidence_refs: [...evidence.journal, ...artifacts.map((artifact) => `artifact:${artifact.id}`)],
+        ...(reviewer ? { review_requested_session_id: reviewer } : {}),
+      }))));
+    if (completed.replayed) replays += 1;
+    return { plan, artifacts, completed: completed.value, replayed: replays === evidence.items.length + 1 };
   });
   if (plan.retry && replayed) advice.push("This repeats your latest done on this task exactly, so it was read as a retry.");
   else if (plan.retry) advice.push("An earlier call with this input stopped part way; its finished steps were kept, and the rest ran now.");
   const handle = handleOf("task", task.id);
   const completion = completed.completion_report_id!;
-  const pending = completed.completion_policy === "accepted";
+  const reviewed = completed.completion_policy === "accepted";
+  // Said as the task stands now, so a replay after the review does not say it still waits.
+  const now = ctx.store.getTask(workspaceId, task.id);
+  const accepted = reviewed && now.completion_report_id === completion && now.review_status === "accepted";
   return {
     ...noteWriteResult({
-      effect: pending
-        ? `Reported ${handle} finished as ${handleOf("report", completion)}; it waits for review by a distinct session ` +
-          `(accept or request_changes)${reviewer ? ", which you asked of one" : ""}. Your report is not an acceptance.`
-        : `Completed ${handle} as ${handleOf("report", completion)}; its policy needs no review.`,
+      effect: !reviewed
+        ? `Completed ${handle} as ${handleOf("report", completion)}; its policy needs no review.`
+        : accepted
+          ? `Reported ${handle} finished as ${handleOf("report", completion)}; a distinct session has accepted it.`
+          : `Reported ${handle} finished as ${handleOf("report", completion)}; it waits for review by a distinct session ` +
+            `(accept or request_changes)${reviewer ? ", which you asked of one" : ""}. Your report is not an acceptance.`,
       ids: {
         task: task.id,
         task_handle: handle,
@@ -1754,7 +1935,7 @@ async function finishTask(
         artifacts: artifacts.map((artifact) => ({ artifact: artifact.id, evidence: artifact.n })),
       },
       advice,
-      next: pending
+      next: reviewed && !accepted
         ? { say: `Ask a distinct session to review it: collab_note {act: "accept" or "request_changes", re: "${completion}"}.` }
         : withSlot(ctx, { tool: "collab_inbox", input: {} }),
       note,
@@ -1764,12 +1945,26 @@ async function finishTask(
   };
 }
 
-function artifactLabel(item: NoteCitedItem): string {
-  const observed = item.observed === "server"
-    ? item.kind === "file" ? "sha256 by the server" : "checked by the server"
-    : item.observed === "not_found" ? "not found by git" : "as the caller wrote it";
-  const detail = item.lines ? ` lines ${item.lines}` : item.exit !== undefined ? ` exit=${item.exit}` : "";
-  return `Evidence ${item.n}${detail}: ${observed}`;
+/** The artifacts table's label cap. */
+const ARTIFACT_LABEL_MAX = 300;
+
+/**
+ * An artifact's label: its Evidence position, and how it was observed. An
+ * item the server did not check keeps every k=v the caller wrote (a hash,
+ * an exit status), marked as the caller's, because the completion summary
+ * leaves the Evidence lines out and the label is where they survive. The
+ * sha256 column is filled only by the server's own hash.
+ */
+function artifactLabel(item: NoteCitedItem, line: string): string {
+  const written = parseEvidence(line).attrs;
+  const range = item.lines ? ` lines ${item.lines}` : "";
+  if (item.observed === "server") {
+    const claimed = written.sha256?.toLowerCase();
+    const contradicted = item.kind === "file" && claimed && claimed !== item.sha256 ? `; the caller wrote sha256=${claimed}` : "";
+    return `Evidence ${item.n}${range}: ${item.kind === "file" ? "sha256 by the server" : "checked by the server"}${contradicted}`;
+  }
+  const attrs = NOTE_EVIDENCE_ATTRS.filter((key) => written[key] !== undefined).map((key) => ` ${key}=${written[key]}`).join("");
+  return `Evidence ${item.n}${range}${attrs}: ${item.observed === "not_found" ? "not found by git" : "as the caller wrote it"}`;
 }
 
 async function releaseOrBlock(
@@ -1802,10 +1997,8 @@ async function releaseOrBlock(
       const current = requireHeld(ctx, credential, ctx.store.getTask(workspaceId, task.id), retryInput);
       return { version: current.version, state: { task: handleOf("task", current.id), state: current.effective_status } };
     };
-    let replays = 0;
     if (options.outcome === "released") {
-      const earlier = plan.retry ? replayReceipt<Task>(ctx.store, credential, plan.key) : null;
-      const done = earlier ?? await withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, held, (version) =>
+      const released = await stepOnce(ctx, credential, plan.key, () => withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, held, (version) =>
         ctx.store.withReceiptPlan(plan.guard, () => ctx.store.releaseTaskForSession({
           ...credential,
           idempotency_key: plan.key,
@@ -1813,13 +2006,11 @@ async function releaseOrBlock(
           lease_id: ctx.store.getTask(workspaceId, task.id).lease_id!,
           expected_version: version,
           summary: options.summary,
-        })));
-      return { plan, done, replayed: earlier !== null };
+        }))));
+      return { plan, done: released.value, replayed: released.replayed };
     }
     // Blocked: the text is posted as progress, then the blocker recorded.
-    let progressed = plan.retry ? replayReceipt<Task>(ctx.store, credential, plan.step(1)) : null;
-    if (progressed) replays += 1;
-    progressed ??= await withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, held, (version) =>
+    const progressed = await stepOnce(ctx, credential, plan.step(1), () => withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, held, (version) =>
       ctx.store.withReceiptPlan(plan.guard, () => ctx.store.progressTaskForSession({
         ...credential,
         idempotency_key: plan.step(1),
@@ -1827,10 +2018,8 @@ async function releaseOrBlock(
         lease_id: ctx.store.getTask(workspaceId, task.id).lease_id!,
         expected_version: version,
         message: options.summary,
-      })));
-    let blocked = plan.retry ? replayReceipt<Task>(ctx.store, credential, plan.step(2)) : null;
-    if (blocked) replays += 1;
-    blocked ??= await withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, held, (version) =>
+      }))));
+    const blocked = await stepOnce(ctx, credential, plan.step(2), () => withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, held, (version) =>
       ctx.store.withReceiptPlan(plan.guard, () => ctx.store.blockTaskForSession({
         ...credential,
         idempotency_key: plan.step(2),
@@ -1838,8 +2027,8 @@ async function releaseOrBlock(
         lease_id: ctx.store.getTask(workspaceId, task.id).lease_id!,
         expected_version: version,
         blocker: options.blocker!,
-      })));
-    return { plan, done: blocked, replayed: replays === 2 };
+      }))));
+    return { plan, done: blocked.value, replayed: progressed.replayed && blocked.replayed };
   });
   if (plan.retry && replayed) advice.push(`This repeats your latest ${options.outcome} of this task exactly, so it was read as a retry.`);
   const handle = handleOf("task", task.id);

@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { renameSync, rmSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, renameSync, rmSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildCollabMcpServer } from "../src/mcp.js";
-import { NOTE_FORMAT, parseNote } from "../src/note.js";
+import { NOTE_FORMAT, parseNote, renderNote } from "../src/note.js";
 import { evidenceRechecker } from "../src/verbs.js";
 import { completedTask, git, journal, ok, refused, runCleanup, type Journal } from "./notes-helpers.js";
 
@@ -494,6 +494,109 @@ describe("evidence[].now in collab_inbox", () => {
     expect(inbox.items[0].evidence[0]).toMatchObject({ observed: "server", now: "unavailable" });
     void a;
   });
+
+  test("against the citing session's worktree when the reader works in another one", async () => {
+    const j = journal();
+    const otherRoot = join(j.directory, "other");
+    mkdirSync(join(otherRoot, "src"), { recursive: true });
+    const a = j.store.startSession({ root_path: j.root, actor: "alpha", role: "alpha's work", repository_key: "shared-fixture" });
+    const b = j.store.startSession({ root_path: otherRoot, actor: "bravo", role: "bravo's work", repository_key: "shared-fixture" });
+    expect(b.workspace.id).toBe(a.workspace.id);
+    expect(b.worktree.id).not.toBe(a.worktree.id);
+    j.write("src/a.ts", "a\n");
+    writeFileSync(join(otherRoot, "src", "a.ts"), "the reader's copy differs\n");
+    const note = await ok(j.serve(a), "collab_note", { text: "See the file.", to: "bravo", evidence: ["file src/a.ts"] });
+    const sb = j.serve(b);
+    const now = async () => (await ok(sb, "collab_inbox", { about: note.ids.report })).root.evidence[0];
+    expect(await now()).toMatchObject({ observed: "server", sha256: sha("a\n"), now: "same" });
+    writeFileSync(join(otherRoot, "src", "a.ts"), "the reader's copy changes again\n");
+    expect((await now()).now).toBe("same");
+    j.write("src/a.ts", "the citer's copy changed\n");
+    expect((await now()).now).toBe("changed");
+  });
+
+  test("a reader sees only a note's own cite: a cite event it also names lends its lines nothing", async () => {
+    // Evidence refs are stored sorted, so whether the borrowed cite sorts
+    // first is chance; the trials go on until it has, twice.
+    let borrowedFirst = 0;
+    for (let trial = 0; trial < 40 && borrowedFirst < 2; trial += 1) {
+      const { j, sa, sb } = pair();
+      j.write("src/good.ts", "good\n");
+      const honest = await ok(sa, "collab_note", { text: "good.ts is fine.", evidence: ["file src/good.ts"] });
+      const borrowed = honest.ids.evidence_cited.event;
+      writeFileSync(join(j.directory, "evil.ts"), "evil\n");
+      const note = await ok(sb, "collab_note", {
+        text: "evil.ts is fine too.",
+        to: "alpha",
+        evidence: ["file ../evil.ts", `event:${borrowed}`],
+      });
+      expect(note.evidence[0].observed).toBe("caller");
+      const refs = JSON.parse(j.report(note.ids.report).evidence_refs_json) as string[];
+      if (refs.indexOf(`event:${borrowed}`) < refs.indexOf(`event:${note.ids.evidence_cited.event}`)) borrowedFirst += 1;
+      const view = await ok(sa, "collab_inbox", { about: note.ids.report });
+      expect(view.root.evidence[0]).toEqual({ n: 1, kind: "file", locator: "../evil.ts", observed: "caller" });
+      expect(view.root.evidence[1]).toEqual({ n: 2, kind: "event", locator: borrowed, observed: "journal" });
+    }
+    expect(borrowedFirst).toBe(2);
+  });
+
+  test("a cite whose items do not match the note's lines lends them nothing", async () => {
+    const { j, a, b, sa } = pair();
+    j.write("src/good.ts", "good\n");
+    const receipt = j.store.appendNoteForSession({
+      ...b.credential,
+      idempotency_key: "crafted",
+      cite: { worktree_id: b.worktree.id, items: [{ n: 1, kind: "file", locator: "src/good.ts", sha256: sha("good\n"), observed: "server" }] },
+      reports: [{
+        kind: "inference",
+        relation: "informs",
+        body: renderNote({ act: "note", statement: "Evil is fine.", evidence: ["file ../evil.ts"] }),
+        to_session_id: a.session.id,
+        cite_event: true,
+      }],
+    });
+    const view = await ok(sa, "collab_inbox", { about: receipt.reports[0]!.id });
+    expect(view.root.evidence[0]).toEqual({ n: 1, kind: "file", locator: "../evil.ts", observed: "caller" });
+  });
+
+  test("a file named by another spelling of its path is recorded by its path in the worktree", async () => {
+    const { j, sa, sb } = pair();
+    j.write("src/a.ts", "a\n");
+    const result = await ok(sa, "collab_note", {
+      text: "Two spellings of one file.",
+      to: "bravo",
+      evidence: ["file ./src/a.ts:1-2", `file ${join(realpathSync(j.root), "src", "a.ts")}`],
+    });
+    expect(parseNote(j.report(result.ids.report).body).evidence).toEqual(["file src/a.ts:1-2", "file src/a.ts"]);
+    expect(result.evidence.map((item: any) => item.observed)).toEqual(["server", "server"]);
+    const view = await ok(sb, "collab_inbox", { about: result.ids.report });
+    expect(view.root.evidence.map((item: any) => [item.locator, item.observed, item.now])).toEqual([
+      ["src/a.ts:1-2", "server", "same"],
+      ["src/a.ts", "server", "same"],
+    ]);
+  });
+
+  test("a review's own evidence is listed with how it was observed, and re-checked", async () => {
+    const { j, a, sa, sb } = pair();
+    j.write("tests/parser.test.ts", "test\n");
+    const task = completedTask(j, a);
+    const review = await ok(sb, "collab_note", {
+      act: "accept",
+      text: "The parser change holds.",
+      re: task.completion_report_id,
+      evidence: ["file tests/parser.test.ts", "test bun test tests/parser.test.ts exit=0"],
+    });
+    const cited = async () => {
+      const view = await ok(sa, "collab_inbox", { about: review.ids.review_report });
+      return view.root.evidence.find((item: any) => item.kind === "event" && item.locator === review.ids.evidence_cited.event);
+    };
+    expect((await cited()).cited).toEqual([
+      { n: 1, kind: "file", locator: "tests/parser.test.ts", observed: "server", sha256: sha("test\n"), now: "same" },
+      { n: 2, kind: "test", locator: "bun test tests/parser.test.ts", observed: "caller", exit: 0 },
+    ]);
+    j.write("tests/parser.test.ts", "changed\n");
+    expect((await cited()).cited[0].now).toBe("changed");
+  });
 });
 
 describe("evidence[].now budget", () => {
@@ -641,5 +744,104 @@ describe("derived idempotency for collab_note", () => {
     const before = j.count();
     expect((await ok(sb, "collab_note", input)).replayed).toBe(true);
     expect(j.count()).toBe(before);
+  });
+
+  test("a relayed no said again after the person agreed is recorded again, and work stops", async () => {
+    const { j, a, b, sb } = pair();
+    const proposal = j.store.openProposalForSession({
+      ...a.credential, idempotency_key: "p", question: "Ship it?", criteria: "Tests pass.", extent: "The parser.",
+    });
+    j.store.appendReportForSession({ ...b.credential, idempotency_key: "s", kind: "inference", body: "Yes.", relation: "supports", target_report_id: proposal.proposal.id } as never);
+    const status = j.store.proposalStatus(a.workspace.id, proposal.proposal.id);
+    const input = { act: "relay_rejection", text: "The person said no.", re: proposal.proposal.id };
+    await ok(sb, "collab_note", input);
+    j.store.recordPersonActAtTerminal({ proposal_report_id: proposal.proposal.id, proposal_sha256: status.proposal_sha256, act: "agree" } as never);
+    expect(j.store.proposalStatus(a.workspace.id, proposal.proposal.id).may_proceed).toBe(true);
+    const before = j.count();
+    const again = await ok(sb, "collab_note", input);
+    expect(again.replayed).toBeUndefined();
+    expect(again).toMatchObject({ person: "rejected", may_proceed: false });
+    expect(j.events().filter((event) => event.sequence > before).map((event) => event.type)).toContain("proposal.rejected");
+    const after = j.store.proposalStatus(a.workspace.id, proposal.proposal.id);
+    expect(after).toMatchObject({ may_proceed: false, person: { state: "rejected" } });
+    // Retried at once, it replays the new rejection, which is still the latest act.
+    const mark = j.count();
+    expect((await ok(sb, "collab_note", input))).toMatchObject({ replayed: true, person: "rejected", may_proceed: false });
+    expect(j.count()).toBe(mark);
+  });
+
+  test("challenge, lift it, the same challenge again: the second challenge stands", async () => {
+    const { j, a, sb } = pair();
+    const proposal = j.store.openProposalForSession({
+      ...a.credential, idempotency_key: "p", question: "Ship it?", criteria: "Tests pass.", extent: "The parser.",
+    });
+    const input = { act: "challenge", text: "No: untested.", re: proposal.proposal.id };
+    const first = await ok(sb, "collab_note", input);
+    await ok(sb, "collab_note", { act: "resolve", text: "Answered; I lift it.", re: first.ids.report });
+    expect(j.store.proposalStatus(a.workspace.id, proposal.proposal.id).ai.unresolved_challenge_report_ids).toEqual([]);
+    const before = j.count();
+    const again = await ok(sb, "collab_note", input);
+    expect(again.replayed).toBeUndefined();
+    expect(again.ids.report).not.toBe(first.ids.report);
+    expect(j.count()).toBeGreaterThan(before);
+    const status = j.store.proposalStatus(a.workspace.id, proposal.proposal.id);
+    expect(status.ai.unresolved_challenge_report_ids).toEqual([again.ids.report]);
+    expect(status.ai.position).toBe("challenged");
+  });
+
+  test("every report act replays a lost-response retry: support, the answer form, a replacing challenge, resolve, withdraw", async () => {
+    const { j, sa, sb } = pair();
+    const root = await ok(sa, "collab_note", { text: "A claim." });
+    const challenge = await ok(sb, "collab_note", { act: "challenge", text: "No.", re: root.ids.report });
+    const retried = async (server: unknown, input: Record<string, unknown>) => {
+      const first = await ok(server, "collab_note", input);
+      const before = j.count();
+      const retry = await ok(server, "collab_note", input);
+      expect(retry).toMatchObject({ replayed: true, recorded_as: first.recorded_as, to: first.to, note: first.note });
+      expect(retry.ids.report).toBe(first.ids.report);
+      expect(retry.effect).toStartWith("Replayed: nothing new was written.");
+      expect(j.count()).toBe(before);
+      return first;
+    };
+    await retried(sb, { act: "support", text: "Yes, in part.", re: root.ids.report });
+    expect((await retried(sa, { act: "resolve", text: "Here is my answer.", re: challenge.ids.report })).recorded_as).toBe("answer");
+    const replacing = await retried(sb, { act: "challenge", text: "No: and more.", re: root.ids.report, replaces: challenge.ids.report });
+    expect(replacing.ids.withdrawal).toBeDefined();
+    expect((await retried(sb, { act: "resolve", text: "Answered; I lift it.", re: replacing.ids.report })).recorded_as).toBe("resolve");
+    await retried(sa, { act: "withdraw", text: "I take it back.", re: root.ids.report });
+  });
+
+  test("a lost-response retry replays when the state that picks its addressee has changed", async () => {
+    const j = journal();
+    const a = j.start("alpha");
+    const b = j.start("bravo");
+    const c = j.start("charlie");
+    const [sa, sb, sc] = [j.serve(a), j.serve(b), j.serve(c)];
+    const replays = async (server: unknown, input: Record<string, unknown>, between: () => Promise<unknown> | unknown) => {
+      const first = await ok(server, "collab_note", input);
+      await between();
+      const before = j.count();
+      const retry = await ok(server, "collab_note", input);
+      expect(retry.replayed).toBe(true);
+      expect(retry.ids.report).toBe(first.ids.report);
+      expect(retry.to).toEqual(first.to);
+      expect(j.count()).toBe(before);
+    };
+    // A withdrawal is addressed to the latest standing challenger; another challenges in between.
+    const root = await ok(sa, "collab_note", { text: "A claim I will take back." });
+    await ok(sb, "collab_note", { act: "challenge", text: "Wrong.", re: root.ids.report });
+    await replays(sa, { act: "withdraw", text: "I take it back.", re: root.ids.report },
+      () => ok(sc, "collab_note", { act: "challenge", text: "Also wrong.", re: root.ids.report }));
+    // A note on a task goes to its holder; the holder changes in between.
+    const taken = await ok(sb, "collab_take", { title: "Shared work" });
+    await replays(sa, { text: "Mind the parser.", re: taken.ids.task }, async () => {
+      await ok(sb, "collab_done", { text: "Giving it back.", outcome: "released" });
+      await ok(sc, "collab_take", { task: taken.ids.task });
+    });
+    // A note to a name; the session with that name restarts in between.
+    await replays(sa, { text: "For bravo: the build is red.", to: "bravo" }, () => {
+      j.store.endSession({ ...b.credential, reason: "restart" });
+      j.start("bravo");
+    });
   });
 });

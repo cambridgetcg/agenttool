@@ -7556,6 +7556,24 @@ export class CollabStore {
   }
 
   /**
+   * Whether a report still stands (spec 5, "still current"): not withdrawn,
+   * corrected or superseded, and for a challenge, not lifted by any active
+   * resolve. A derived-key retry replays only while this holds, so an
+   * objection lifted and then raised again in the same words is written
+   * again. Any active resolve counts, because the store's acceptance check
+   * already treats a completion's challenge as lifted by one. Read-only.
+   */
+  noteReportStands(workspaceId: string, reportId: string): boolean {
+    return this.db.transaction(() => {
+      const report = this.requireReport(validateId(reportId, "report_id"));
+      if (report.workspace_id !== workspaceId) return false;
+      if (this.activeObsoletionTargets(workspaceId).has(report.id)) return false;
+      return report.relation !== "challenges"
+        || !this.hasActiveReportRelation(workspaceId, report.id, new Set(["resolves"]));
+    }).deferred();
+  }
+
+  /**
    * The reserved work these paths would overlap (spec 5.4), every conflict
    * rather than the first one the claim refusal names. Read-only.
    */
@@ -7649,14 +7667,6 @@ export class CollabStore {
   }
 
   /**
-   * Inside a write's transaction: the latest key with the plan's prefix must
-   * still be the one the plan was made on, or this call's own key or step.
-   * Choosing a derived key happens outside the transaction, so two calls by
-   * one session on one entity can plan the same seq; without this check the
-   * earlier write could sort as latest and swallow a later deliberate repeat
-   * as a replay. Nothing is written when it fails.
-   */
-  /**
    * Run an existing session write under a derived key's plan (Collab Notes
    * spec 5). The existing `*ForSession` methods take no plan of their own and
    * stay as they are; while `run` is on the stack, the one write whose key is
@@ -7681,6 +7691,14 @@ export class CollabStore {
     return idempotencyKey === plan.key || idempotencyKey.startsWith(`${plan.key}:`) ? plan : undefined;
   }
 
+  /**
+   * Inside a write's transaction: the latest key with the plan's prefix must
+   * still be the one the plan was made on, or this call's own key or step.
+   * Choosing a derived key happens outside the transaction, so two calls by
+   * one session on one entity can plan the same seq; without this check the
+   * earlier write could sort as latest and swallow a later deliberate repeat
+   * as a replay. Nothing is written when it fails.
+   */
   private requireReceiptPlan(session: CoordinationSessionRow, plan: ReceiptPlanGuard): void {
     const latest = this.latestReceiptKey(session, plan.prefix);
     if (latest === plan.latest || latest === plan.key || (latest !== null && latest.startsWith(`${plan.key}:`))) return;
@@ -8286,13 +8304,19 @@ export class CollabStore {
         : report?.task_id ?? null;
     const taskRow = taskId ? this.readTaskRow(session.workspace_id, taskId) : null;
     const marked = event.type === "report.posted" && payload.note === NOTE_FORMAT;
+    const cites = report ? this.noteAuthorCites(session.workspace_id, report) : [];
+    // A marked note's own cite is the one its author appended in the same
+    // transaction, just before the note's first report. Any other cite event
+    // it names is evidence it points at, never the observation of its lines.
+    const own = marked && report ? cites.find((cite) => cite.sequence === report.event_sequence - 1) ?? null : null;
     return {
       event,
       for_me: forMe,
       why_you: forMe ? this.noteWhyYou(event, session.id) : null,
       report,
       marked,
-      cited: marked && report ? this.noteCiteOf(session.workspace_id, report) : null,
+      cited: own ? { event_id: own.event_id, by_session_id: own.by_session_id, worktree_id: own.worktree_id, items: own.items } : null,
+      author_cites: cites.map(({ sequence: _sequence, ...cite }) => cite),
       termed: report !== null
         && this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(report.id) !== null,
       to_person: event.type === "report.posted" && payload.to_person === true,
@@ -8300,23 +8324,31 @@ export class CollabStore {
     };
   }
 
-  /** The evidence.cited event a marked note cites in its evidence refs (one per note), or null. */
-  private noteCiteOf(workspaceId: string, report: CollabReport): NoteEntry["cited"] {
+  /**
+   * The evidence.cited events among a report's evidence refs that the
+   * report's own author recorded, in ref order. Another session's cite is
+   * its observation, not this author's, so it is left as a plain pointer.
+   */
+  private noteAuthorCites(workspaceId: string, report: CollabReport): Array<NonNullable<NoteEntry["cited"]> & { sequence: number }> {
+    if (!report.from_session_id) return [];
+    const cites: Array<NonNullable<NoteEntry["cited"]> & { sequence: number }> = [];
     for (const ref of report.evidence_refs) {
       if (!ref.startsWith("event:")) continue;
       const row = this.db.query(`
-        SELECT payload_json FROM events WHERE workspace_id = ? AND id = ? AND type = 'evidence.cited'
-      `).get(workspaceId, ref.slice("event:".length)) as { payload_json: string } | null;
+        SELECT sequence, payload_json FROM events WHERE workspace_id = ? AND id = ? AND type = 'evidence.cited'
+      `).get(workspaceId, ref.slice("event:".length)) as { sequence: number; payload_json: string } | null;
       if (!row) continue;
       const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
-      return {
+      if (payload.by_session_id !== report.from_session_id) continue;
+      cites.push({
         event_id: ref.slice("event:".length),
-        by_session_id: typeof payload.by_session_id === "string" ? payload.by_session_id : null,
+        sequence: row.sequence,
+        by_session_id: report.from_session_id,
         worktree_id: typeof payload.worktree_id === "string" ? payload.worktree_id : null,
         items: Array.isArray(payload.items) ? payload.items as NoteCitedItem[] : [],
-      };
+      });
     }
-    return null;
+    return cites;
   }
 
   /** Why an addressed event names this session, for an item's why_you. Mirrors eventAddressesSession. */
@@ -9312,13 +9344,15 @@ export interface NoteEntry {
   report: CollabReport | null;
   /** The report.posted payload carries the collab-note/1 marker, so its body is read as a note. */
   marked: boolean;
-  /** For a marked note, the evidence.cited event it cites: how each outside item was observed. */
+  /** For a marked note, its own evidence.cited event: how each outside item on its Evidence lines was observed. */
   cited: {
     event_id: string;
     by_session_id: string | null;
     worktree_id: string | null;
     items: NoteCitedItem[];
   } | null;
+  /** Every evidence.cited event among the report's evidence refs that its own author recorded (a review's cite step, say). */
+  author_cites: Array<NonNullable<NoteEntry["cited"]>>;
   /** The report is a consent/v1 proposal. */
   termed: boolean;
   to_person: boolean;

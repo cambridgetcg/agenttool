@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import { parseNote } from "../src/note.js";
-import { call, journal, ok, refused, runCleanup, type Journal } from "./notes-helpers.js";
+import { call, git, journal, ok, refused, runCleanup, type Journal } from "./notes-helpers.js";
 
 // collab_take and collab_done (Collab Notes spec 5.4, 5.5), and their
 // derived idempotency.
@@ -332,5 +333,121 @@ describe("derived idempotency for collab_done", () => {
     const before = j.count();
     expect((await ok(sa, "collab_done", input)).replayed).toBe(true);
     expect(j.count()).toBe(before);
+  });
+
+  test("finished, sent back for changes, the same done: not held, with a ready take; taken again, it completes afresh", async () => {
+    const { j, a, sa, sb } = pair();
+    const taken = await ok(sa, "collab_take", { title: "Edit", paths: ["src/x.ts"] });
+    const done = await ok(sa, "collab_done", { text: "Done." });
+    await ok(sb, "collab_note", { act: "request_changes", text: "Not yet.", re: done.ids.completion });
+    expect(j.store.getTask(a.workspace.id, taken.ids.task)).toMatchObject({ status: "open", review_status: "changes_requested" });
+    const before = j.count();
+    const again = await refused(sa, "collab_done", { text: "Done." });
+    expect(again.code).toBe("not_held");
+    expect(again.replayed).toBeUndefined();
+    expect(again.remedy).toEqual({ tool: "collab_take", input: { task: taken.ids.task } });
+    expect(j.count()).toBe(before);
+    await ok(sa, "collab_take", { task: taken.ids.task });
+    const named = { text: "Done, with the change.", task: taken.ids.task };
+    const redone = await ok(sa, "collab_done", { text: "Done." });
+    expect(redone.replayed).toBeUndefined();
+    expect(redone.ids.completion).not.toBe(done.ids.completion);
+    expect(j.store.getTask(a.workspace.id, taken.ids.task)).toMatchObject({ status: "completed", review_status: "pending" });
+    // The same with the task named in the call.
+    await ok(sb, "collab_note", { act: "request_changes", text: "Still not.", re: redone.ids.completion });
+    await ok(sa, "collab_take", { task: taken.ids.task });
+    const third = await ok(sa, "collab_done", named);
+    await ok(sb, "collab_note", { act: "request_changes", text: "One more.", re: third.ids.completion });
+    const mark = j.count();
+    const stale = await refused(sa, "collab_done", named);
+    expect(stale.code).toBe("not_held");
+    expect(stale.remedy).toEqual({ tool: "collab_take", input: { task: taken.ids.task } });
+    expect(j.count()).toBe(mark);
+  });
+
+  test("a replayed done after its acceptance says it was accepted", async () => {
+    const { j, sa, sb } = pair();
+    await ok(sa, "collab_take", { title: "Edit", paths: ["src/x.ts"] });
+    const done = await ok(sa, "collab_done", { text: "Done." });
+    await ok(sb, "collab_note", { act: "accept", text: "It holds.", re: done.ids.completion });
+    const before = j.count();
+    const retry = await ok(sa, "collab_done", { text: "Done." });
+    expect(retry).toMatchObject({ replayed: true, ids: { completion: done.ids.completion } });
+    expect(retry.effect).toContain("a distinct session has accepted it");
+    expect(retry.effect).not.toContain("waits for review");
+    expect(j.count()).toBe(before);
+  });
+
+  test("two identical collab_done calls at once both succeed, with one completion", async () => {
+    const { j, a, sa } = pair();
+    j.write("a.txt", "a\n");
+    j.write("b.txt", "b\n");
+    const taken = await ok(sa, "collab_take", { title: "Two files" });
+    const input = { text: "Both files are right.", evidence: ["file a.txt", "file b.txt"] };
+    const [one, two] = await Promise.all([call(sa, "collab_done", input), call(sa, "collab_done", input)]);
+    expect([one.isError ?? false, two.isError ?? false]).toEqual([false, false]);
+    expect(one.structuredContent.ids.completion).toBe(two.structuredContent.ids.completion);
+    expect(j.store.getTask(a.workspace.id, taken.ids.task).artifacts).toHaveLength(2);
+    expect(j.events().filter((event) => event.type === "task.completed")).toHaveLength(1);
+  });
+});
+
+describe("collab_done finished: what is stored", () => {
+  test("a hash the caller wrote is kept in the artifact's label, never as a checked sha256", async () => {
+    const { j, a, sa } = pair();
+    writeFileSync(join(j.directory, "outside.bin"), "x");
+    const taken = await ok(sa, "collab_take", { title: "Data work" });
+    const data = "ab".repeat(32);
+    const file = "cd".repeat(32);
+    await ok(sa, "collab_done", {
+      text: "The dataset is the one we agreed.",
+      evidence: [`data training-set sha256=${data}`, `file ../outside.bin sha256=${file}`, "test make check exit=0 runs=3", "msg slack C123 1699999"],
+    });
+    const artifacts = j.store.getTask(a.workspace.id, taken.ids.task).artifacts!
+      .map((artifact) => [artifact.kind, artifact.uri, artifact.sha256, artifact.label])
+      .sort((left, right) => String(left[3]).localeCompare(String(right[3])));
+    expect(artifacts).toEqual([
+      ["data", "training-set", null, `Evidence 1 sha256=${data}: as the caller wrote it`],
+      ["file", "../outside.bin", null, `Evidence 2 sha256=${file}: as the caller wrote it`],
+      ["test", "make check", null, "Evidence 3 exit=0 runs=3: as the caller wrote it"],
+      ["other", "slack C123 1699999", null, "Evidence 4: as the caller wrote it"],
+    ]);
+  });
+
+  test("a commit is attached as a commit artifact: checked by git, or not found", async () => {
+    const j = journal({ git: true });
+    const a = j.start("alpha");
+    const sa = j.serve(a);
+    const head = git(j.root, ["rev-parse", "HEAD"]);
+    const taken = await ok(sa, "collab_take", { title: "Commit work" });
+    const done = await ok(sa, "collab_done", { text: "Committed.", evidence: [`commit ${head}`, `commit ${"0".repeat(40)}`] });
+    expect(done.evidence.map((item: any) => item.observed)).toEqual(["server", "not_found"]);
+    expect(j.store.getTask(a.workspace.id, taken.ids.task).artifacts!.map((artifact) => [artifact.kind, artifact.uri, artifact.sha256, artifact.label])
+      .sort((left, right) => String(left[3]).localeCompare(String(right[3]))))
+      .toEqual([
+        ["commit", head, null, "Evidence 1: checked by the server"],
+        ["commit", "0".repeat(40), null, "Evidence 2: not found by git"],
+      ]);
+  });
+
+  test("ceilings: the note without its Evidence lines at most 4,000, the reasons at most 2,000, refused before any write", async () => {
+    const { j, a, sa } = pair();
+    const taken = await ok(sa, "collab_take", { title: "Long work" });
+    const before = j.count();
+    const long = await refused(sa, "collab_done", { text: `Done.\n\n${"y".repeat(4_000)}`, evidence: ["test make check exit=0"] });
+    expect(long).toMatchObject({ code: "too_long", field: "note", max: 4_000 });
+    const reasons = await refused(sa, "collab_done", {
+      text: "Done.",
+      why: Array.from({ length: 8 }, (_, index) => ({ text: `${index} ${"r".repeat(290)}`, basis: "seen" })),
+      evidence: ["test make check exit=0"],
+    });
+    expect(reasons).toMatchObject({ code: "too_long", field: "why", max: 2_000 });
+    expect(j.count()).toBe(before);
+    expect(j.store.getTask(a.workspace.id, taken.ids.task)).toMatchObject({ status: "claimed", artifacts: [] });
+    // Evidence lines do not count toward the summary's ceiling.
+    const evidence = Array.from({ length: 16 }, (_, index) => `test ${"c".repeat(200)} ${index} exit=0`);
+    const fits = await ok(sa, "collab_done", { text: `Done.\n\n${"y".repeat(3_900)}`, evidence });
+    expect(fits.note.length).toBeGreaterThan(4_000);
+    expect(j.report(fits.ids.completion).body.length).toBeLessThanOrEqual(4_000);
   });
 });
