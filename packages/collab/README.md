@@ -18,7 +18,9 @@ and its addressed mode with the Claude Code watcher, plus the unreleased
 [proposal consent tools](#proposals-and-consent-unreleased) that bring 0.5.0's 33
 tools to 36, plus the first two unreleased Collab Notes verbs, `collab_arrive` and
 `collab_inbox` (38 in all; the `notes` tools profile registers those two and
-`collab_journal_verify`). The next npm release goes through the
+`collab_journal_verify`). Do not enable the `notes` profile
+(`AGENTOOL_COLLAB_TOOLS=notes`) yet: until `collab_done` is built it gives a
+session no way to finish work or leave. The next npm release goes through the
 [public staged release path](https://docs.agenttool.dev/NPM-RELEASES.md#public-release-path-from-2026-10-12);
 its version is not chosen here.
 This source is not evidence of publication or native-harness activation;

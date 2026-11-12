@@ -7469,6 +7469,7 @@ export class CollabStore {
       const returned = listed.slice(0, limit);
       const alsoNew = scan.events.filter((event) =>
         !event.own && !event.for_me && event.sequence <= through).length;
+      let waiting: NoteWaitingEntry[] | null = null;
       if (record) {
         const now = this.timestamp();
         if (through > mark.sequence) {
@@ -7477,10 +7478,15 @@ export class CollabStore {
             WHERE workspace_id = ? AND session_id = ?
           `).run(through, now, session.workspace_id, session.id);
         }
-        this.recordNoteShown(session, returned.filter((event) => event.for_me)
-          .map((event) => event.shown_item_id), now);
+        // What waits is returned whatever the mark, so its questions are
+        // delivered too; computing it here records exactly what is returned.
+        waiting = this.noteWaiting(session);
+        this.recordNoteShown(session, [
+          ...returned.filter((event) => event.for_me).map((event) => event.shown_item_id),
+          ...noteWaitingShownItems(waiting),
+        ], now);
       }
-      return { sequences: returned.map((event) => event.sequence), through, more, also_new: alsoNew };
+      return { sequences: returned.map((event) => event.sequence), through, more, also_new: alsoNew, waiting };
     };
     const planned = input.peek
       ? this.db.transaction(() => {
@@ -7509,7 +7515,7 @@ export class CollabStore {
           written: !input.peek,
         },
         head_sequence: workspace.event_head_sequence,
-        waiting: this.noteWaiting(session, sessions),
+        waiting: planned.waiting ?? this.noteWaiting(session),
         observed_at: this.timestamp(),
       };
     }).deferred();
@@ -7520,7 +7526,8 @@ export class CollabStore {
    * that answers it, or a task with its holder, completion and reviews. The
    * housekeeping transaction runs first and records the root (and a task's
    * current completion) as returned to this session; the read mark does not
-   * move.
+   * move, though a first call creates it from the legacy cursor, as any
+   * first inbox call does, and says so.
    */
   noteThreadForSession(input: {
     session_id: string;
@@ -7530,7 +7537,7 @@ export class CollabStore {
     id: string;
   }): NoteThreadData {
     const id = validateId(input.id, `${input.kind}_id`);
-    this.noteHousekeeping(input, (session) => {
+    const markState = this.noteHousekeeping(input, (session, mark) => {
       const now = this.timestamp();
       if (input.kind === "task") {
         const task = this.requireTaskRow(session.workspace_id, id);
@@ -7542,6 +7549,7 @@ export class CollabStore {
         }
         this.recordNoteShown(session, [report.id], now);
       }
+      return { initialised_from: mark.initialised_from, clamped: mark.clamped };
     });
     return this.db.transaction(() => {
       const session = this.authenticateSession(input);
@@ -7570,6 +7578,7 @@ export class CollabStore {
           reviews,
           challenges: challenges.filter((challenge) => reports.some((row) => row.id === challenge.target_report_id)),
           termed: false,
+          mark: markState,
           observed_at: this.timestamp(),
         };
       }
@@ -7625,6 +7634,7 @@ export class CollabStore {
         reviews: [],
         challenges: challenges.filter((challenge) => ids.has(challenge.target_report_id)),
         termed: this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(root.id) !== null,
+        mark: markState,
         observed_at: this.timestamp(),
       };
     }).deferred();
@@ -7641,7 +7651,13 @@ export class CollabStore {
       const sessions = this.noteSessionViews(session.workspace_id);
       const tasks = this.listTasks(session.workspace_id);
       const { claimable } = this.projectAvailableTasks(session.workspace_id, tasks, () => false);
-      const proposals = this.listProposalStatuses(session.workspace_id, { limit: 50 }).proposals
+      // Every proposal that can still be open, challenged or consented, not
+      // the newest few: the totals are true counts. A retired proposal is
+      // withdrawn or superseded, and a closed one with no support at all can
+      // only be split or lapsed, so neither needs its status computed.
+      const now = Date.parse(this.timestamp());
+      const proposals = this.noteProposalStatuses(session.workspace_id, this.noteProposalRows(session.workspace_id)
+        .filter((row) => !row.retired && (now < Date.parse(row.closes_at) || row.supported)))
         .filter((status) => ["open", "challenged", "consented"].includes(status.ai.position));
       const reports = (this.db.query(`SELECT COUNT(*) AS count FROM reports WHERE workspace_id = ?`)
         .get(session.workspace_id) as { count: number }).count;
@@ -7654,10 +7670,50 @@ export class CollabStore {
         proposals,
         challenges: this.noteChallenges(session.workspace_id).filter((challenge) => challenge.standing).reverse(),
         report_count: reports,
-        waiting: this.noteWaiting(session, sessions),
+        waiting: this.noteWaiting(session),
         observed_at: this.timestamp(),
       };
     }).deferred();
+  }
+
+  /**
+   * Every proposal of a workspace as one cheap row, newest first, so a notes
+   * view can choose whose status to compute instead of reading a capped
+   * listing. `retired` matches proposalRetirement and `acted` any person act.
+   */
+  private noteProposalRows(workspaceId: string): NoteProposalRow[] {
+    const rows = this.db.query(`
+      SELECT t.report_id, r.from_session_id, t.closes_at, t.voices_json,
+        EXISTS (SELECT 1 FROM reports x WHERE x.workspace_id = t.workspace_id AND x.target_report_id = t.report_id
+          AND x.relation IN ('withdraws', 'corrects', 'supersedes')) AS retired,
+        EXISTS (SELECT 1 FROM reports x WHERE x.workspace_id = t.workspace_id AND x.target_report_id = t.report_id
+          AND x.relation = 'supports') AS supported,
+        EXISTS (SELECT 1 FROM proposal_person_acts a WHERE a.proposal_report_id = t.report_id) AS acted
+      FROM proposal_terms t JOIN reports r ON r.id = t.report_id
+      WHERE t.workspace_id = ?
+      ORDER BY r.event_sequence DESC
+    `).all(workspaceId) as Array<{
+      report_id: string; from_session_id: string | null; closes_at: string; voices_json: string;
+      retired: number; supported: number; acted: number;
+    }>;
+    return rows.map((row) => ({
+      report_id: row.report_id,
+      from_session_id: row.from_session_id,
+      closes_at: row.closes_at,
+      voice_ids: (JSON.parse(row.voices_json) as ProposalVoice[]).map((voice) => voice.voice_id),
+      retired: row.retired === 1,
+      supported: row.supported === 1,
+      acted: row.acted === 1,
+    }));
+  }
+
+  /** The status of each listed proposal, in the order given, sharing one read context. Unreadable terms are skipped, as listProposalStatuses skips them. */
+  private noteProposalStatuses(workspaceId: string, rows: NoteProposalRow[]): ProposalStatus[] {
+    const context = this.proposalReadContext(workspaceId);
+    const unreadable: UnreadableProposal[] = [];
+    return rows
+      .map((row) => this.readProposalStatus(context, row.report_id, unreadable))
+      .filter((status): status is ProposalStatus => status !== null);
   }
 
   /** Record that arrive or inbox returned these items to a session (spec 8.1 note_shown). */
@@ -8016,14 +8072,17 @@ export class CollabStore {
    * What waits on this session, whatever its read mark (spec 5.2): reviews
    * requested of it, proposals awaiting its voice, standing challenges on its
    * reports, answers to its own standing challenges, and person acts on
-   * proposals its voice wrote or a decision of its voice cited.
+   * proposals its voice wrote or a decision of its voice cited. Every
+   * proposal is considered, however old: a relayed no on an old agreement
+   * may stop work, so it is never cut. A stop is listed first, so a capped
+   * view of this list shows it.
    */
-  private noteWaiting(session: CoordinationSessionRow, sessions: NoteSessionView[]): NoteWaitingEntry[] {
+  private noteWaiting(session: CoordinationSessionRow): NoteWaitingEntry[] {
     const workspaceId = session.workspace_id;
     const myVoice = this.consentVoice(session.id);
-    const voiceOf = new Map(sessions.map((view) => [view.id, view.voice_id]));
+    const voices = new Map<string, string>();
     const sameVoice = (sessionId: string | null) => sessionId !== null
-      && (voiceOf.get(sessionId) ?? this.consentVoice(sessionId)) === myVoice;
+      && this.cachedVoice(sessionId, voices) === myVoice;
     const waiting: NoteWaitingEntry[] = [];
     for (const task of this.listTasks(workspaceId)) {
       if (task.effective_status === "reported_complete" && task.review_requested_session_id === session.id
@@ -8042,7 +8101,19 @@ export class CollabStore {
       }
     }
     const challenges = this.noteChallenges(workspaceId);
-    const statuses = this.listProposalStatuses(workspaceId, { limit: 50 }).proposals;
+    const decided = new Set((this.db.query(`
+      SELECT r.from_session_id, ref.value AS ref FROM reports r, json_each(r.evidence_refs_json) ref
+      WHERE r.workspace_id = ? AND r.kind = 'decision' AND ref.value LIKE 'report:%'
+    `).all(workspaceId) as Array<{ from_session_id: string | null; ref: string }>)
+      .filter((row) => sameVoice(row.from_session_id))
+      .map((row) => row.ref.slice("report:".length)));
+    // Only the proposals this session could be waited on for: still open with
+    // its voice in the snapshot, or acted on by the person and written or
+    // cited by its voice. Their statuses are computed; the rest are not read.
+    const now = Date.parse(this.timestamp());
+    const statuses = this.noteProposalStatuses(workspaceId, this.noteProposalRows(workspaceId).filter((row) =>
+      (!row.retired && now < Date.parse(row.closes_at) && row.voice_ids.includes(myVoice))
+      || (row.acted && (sameVoice(row.from_session_id) || decided.has(row.report_id)))));
     for (const status of statuses) {
       if (status.ai.closed || !["open", "challenged"].includes(status.ai.position)) continue;
       if (!status.ai.awaiting_voice_ids.includes(myVoice)) continue;
@@ -8112,12 +8183,6 @@ export class CollabStore {
         }
       }
     }
-    const decided = new Set((this.db.query(`
-      SELECT r.from_session_id, ref.value AS ref FROM reports r, json_each(r.evidence_refs_json) ref
-      WHERE r.workspace_id = ? AND r.kind = 'decision' AND ref.value LIKE 'report:%'
-    `).all(workspaceId) as Array<{ from_session_id: string | null; ref: string }>)
-      .filter((row) => sameVoice(row.from_session_id))
-      .map((row) => row.ref.slice("report:".length)));
     for (const status of statuses) {
       const mine = sameVoice(status.proposal.from_session_id);
       if (!mine && !decided.has(status.proposal.id)) continue;
@@ -8144,7 +8209,7 @@ export class CollabStore {
         summary: firstLine(status.proposal.body),
       });
     }
-    return waiting;
+    return [...waiting.filter((entry) => entry.what === "stop"), ...waiting.filter((entry) => entry.what !== "stop")];
   }
 
   private timestamp(): string {
@@ -8989,6 +9054,8 @@ export interface NoteThreadData {
   reviews: TaskReview[];
   challenges: NoteChallengeView[];
   termed: boolean;
+  /** What the housekeeping did to the read mark: created it from the legacy cursor, or clamped it to the head. */
+  mark: { initialised_from: "cursor" | null; clamped: boolean };
   observed_at: string;
 }
 
@@ -9010,6 +9077,18 @@ interface NoteMarkState {
   initialised_from: "cursor" | null;
   clamped: boolean;
   stored: boolean;
+}
+
+interface NoteProposalRow {
+  report_id: string;
+  from_session_id: string | null;
+  closes_at: string;
+  /** The voices of the snapshot taken at open, author included. */
+  voice_ids: string[];
+  retired: boolean;
+  /** Some `supports` targets it (a superset of the supports that count). */
+  supported: boolean;
+  acted: boolean;
 }
 
 interface NoteScannedEvent {
@@ -9040,6 +9119,12 @@ function noteShownItem(event: CollabEvent): string | null {
   return null;
 }
 
+/** The questions a waiting list delivers (spec 8.1 note_shown): each awaited proposal, and each completion to review. */
+export function noteWaitingShownItems(waiting: readonly NoteWaitingEntry[]): string[] {
+  return waiting.flatMap((entry) =>
+    entry.what === "voice" ? [entry.ref_id] : entry.what === "review" && entry.about_id ? [entry.about_id] : []);
+}
+
 function validateNotePurpose(value: string): string {
   const purpose = cleanText(typeof value === "string" ? value : "", "purpose", NOTE_PURPOSE_MAX_CHARS);
   if (/[\u0000-\u001f\u007f]/.test(purpose)) {
@@ -9058,7 +9143,7 @@ function validateNotePurpose(value: string): string {
  * integer-like object key (JSON object order would differ between
  * builds), no non-integer number and no undefined.
  */
-function assertNotePayload(payload: Record<string, unknown>): void {
+export function assertNotePayload(payload: Record<string, unknown>): void {
   const visit = (value: unknown, path: string): void => {
     if (value === undefined) throw new CollabError("invalid_payload", `${path} is undefined`);
     if (typeof value === "number" && !Number.isSafeInteger(value)) {

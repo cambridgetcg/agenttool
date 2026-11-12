@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import { CollabStore } from "../src/store.js";
-import { handleOf, NOTE_AUTHORISES, NOTE_CARD, NOTE_CAPABILITIES } from "../src/verbs.js";
+import { exactRef, handleOf, NOTE_AUTHORISES, NOTE_CARD, NOTE_CAPABILITIES } from "../src/verbs.js";
 import { COLLAB_PACKAGE_VERSION } from "../src/version.js";
 
 // collab_arrive (Collab Notes spec 5.1) and the verb kernel's common rules (spec 5).
@@ -209,6 +209,16 @@ describe("collab_arrive on an unbound default slot", () => {
     expect(how).not.toContain("--from-cursor");
   });
 
+  test("under the notes profile, listen.how is the inbox wait, because the watcher's ring names legacy tools", async () => {
+    const j = journal();
+    const arrived = await ok(j.server({
+      AGENTOOL_COLLAB_TOOLS: "notes",
+      CLAUDE_CODE_MESSAGING_SOCKET: "/nonexistent/12345.sock",
+    }), "collab_arrive", { purpose: "be told", root_path: j.root, name: "told" });
+    expect(arrived.surface.tools).toBe("notes");
+    expect(arrived.listen).toEqual({ how: "collab_inbox {wait_seconds: 30}" });
+  });
+
   test("refuses a purpose that is too long or holds half a character, before any write", async () => {
     const j = journal();
     const server = j.server();
@@ -368,6 +378,27 @@ describe("collab_arrive on a named slot", () => {
     const defaultParent = await call(j.server(), "collab_arrive", { purpose: "x", parent: own.you.session, root_path: j.root });
     expect(defaultParent.structuredContent.code).toBe("parent_needs_binding_key");
   });
+
+  test("a derived name over 200 characters asks for a name, before any write", async () => {
+    const j = journal();
+    const server = j.server();
+    const parent = await ok(server, "collab_arrive", { purpose: "lead", root_path: j.root, name: "n".repeat(199) });
+    const before = j.events().length;
+    const child = await call(server, "collab_arrive", { purpose: "child", binding_key: "kk", parent: parent.you.session });
+    expect(child.isError).toBe(true);
+    expect(child.structuredContent).toMatchObject({
+      code: "too_long",
+      field: "name",
+      max: 200,
+      remedy: {
+        tool: "collab_arrive",
+        input: { purpose: "child", binding_key: "kk", parent: parent.you.session, name: "<shorter>" },
+      },
+    });
+    expect(j.events().length).toBe(before);
+    const named = await ok(server, "collab_arrive", { purpose: "child", binding_key: "kk", parent: parent.you.session, name: "short" });
+    expect(named.you.name).toBe("short");
+  });
 });
 
 describe("not_arrived", () => {
@@ -395,12 +426,19 @@ describe("not_arrived", () => {
 });
 
 describe("handles", () => {
-  test("format as <kind>#<first 6 hex> and fall back to the id when there is no uuid", () => {
+  test("format as <kind>#<first 6 hex>, or <kind>:<id> when there is no uuid", () => {
     expect(handleOf("report", "report_3fa91c2e-0000-4000-8000-000000000000")).toBe("report#3fa91c");
     expect(handleOf("proposal", "report_3fa91c2e-0000-4000-8000-000000000000")).toBe("proposal#3fa91c");
     expect(handleOf("task", "task_0b12de99-1111-4111-8111-111111111111")).toBe("task#0b12de");
     expect(handleOf("session", "session_abcdef01-2222-4222-8222-222222222222")).toBe("session#abcdef");
-    expect(handleOf("task", "my-own-task")).toBe("my-own-task");
+    // A caller-chosen task id has no uuid; the typed form still says it is a task.
+    expect(handleOf("task", "my-own-task")).toBe("task:my-own-task");
+    // A uuid under another kind's prefix is not this kind's handle.
+    expect(handleOf("task", "report_3fa91c2e-0000-4000-8000-000000000000")).toBe("task:report_3fa91c2e-0000-4000-8000-000000000000");
+    // Ready calls carry the exact reference, never a short handle that could match two.
+    expect(exactRef("task", "task_0b12de99-1111-4111-8111-111111111111")).toBe("task_0b12de99-1111-4111-8111-111111111111");
+    expect(exactRef("proposal", "report_3fa91c2e-0000-4000-8000-000000000000")).toBe("report_3fa91c2e-0000-4000-8000-000000000000");
+    expect(exactRef("task", "my-own-task")).toBe("task:my-own-task");
   });
 
   test("resolve by key range, and refuse an ambiguous handle with its candidates", async () => {

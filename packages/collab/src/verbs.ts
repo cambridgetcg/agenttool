@@ -30,16 +30,17 @@ import {
 import type { CollabReport, SessionHandle } from "./protocol.js";
 import { defaultSeatRef } from "./seat-ref.js";
 import { removeSessionCredentialFile, writeSessionCredentialFile } from "./session-file.js";
-import type {
-  CollabStore,
-  NoteArrivalData,
-  NoteChallengeView,
-  NoteEntityKind,
-  NoteEntry,
-  NoteInboxData,
-  NoteSessionView,
-  NoteThreadData,
-  NoteWaitingEntry,
+import {
+  noteWaitingShownItems,
+  type CollabStore,
+  type NoteArrivalData,
+  type NoteChallengeView,
+  type NoteEntityKind,
+  type NoteEntry,
+  type NoteInboxData,
+  type NoteSessionView,
+  type NoteThreadData,
+  type NoteWaitingEntry,
 } from "./store.js";
 import { COLLAB_PACKAGE_VERSION } from "./version.js";
 
@@ -171,16 +172,39 @@ export const NOTE_CARD = [
 // ---------------------------------------------------------------------------
 // Handles
 
-const HANDLE_ID = /^(report|task|session)_([0-9a-f]{8})-[0-9a-f]{4}-/;
+const MINTED_ID = /^(report|task|session)_([0-9a-f]{8})-[0-9a-f]{4}-/;
+
+/** The table an entity kind lives in: proposals and ballots are reports. */
+function tableOf(kind: NoteEntityKind | "session"): "report" | "task" | "session" {
+  return kind === "task" || kind === "session" ? kind : "report";
+}
+
+/** The uuid hex of an id the store minted for this kind, or null for any other id. */
+function mintedHex(kind: NoteEntityKind | "session", id: string): string | null {
+  const match = MINTED_ID.exec(id);
+  return match && match[1] === tableOf(kind) ? match[2]! : null;
+}
 
 /**
  * `<kind>#<first 6 hex of the uuid>` for an id the store minted (spec 5).
- * A task created with a caller-chosen id has no uuid, so its id is its handle.
+ * A task created with a caller-chosen id has no uuid, so its handle is
+ * `task:<id>`, which still says it is a task when it is passed back.
+ * Handles are for display: two items may share one. Ready calls carry
+ * exactRef instead.
  */
 export function handleOf(kind: NoteEntityKind | "session", id: string): string {
-  const match = HANDLE_ID.exec(id);
-  if (!match) return id;
-  return `${kind}#${match[2]!.slice(0, 6)}`;
+  const hex = mintedHex(kind, id);
+  if (hex) return `${kind}#${hex.slice(0, 6)}`;
+  return kind === "session" ? id : `${kind}:${id}`;
+}
+
+/**
+ * The reference a ready call (a `next` or a remedy) carries: the full id,
+ * typed when it has no uuid. Never a short handle, which could match a
+ * second item and make the server refuse the call it suggested.
+ */
+export function exactRef(kind: NoteEntityKind, id: string): string {
+  return mintedHex(kind, id) ? id : `${kind}:${id}`;
 }
 
 /** The handle of a report, as a proposal when it carries consent/v1 terms. */
@@ -617,6 +641,20 @@ function arriveNamed(
     );
   }
   const actor = name ?? `${parent.handle.session.actor}/${key}`;
+  if (name === null && actor.length > NAME_MAX) {
+    // The caller sent no name, so the store's actor refusal would name a
+    // field it never set; ask for the one field that fixes it.
+    throw new CollabError("too_long", `The default name ${parent.handle.session.actor.slice(0, 40)}…/${key} is ${actor.length} characters; at most ${NAME_MAX}`, {
+      field: "name",
+      max: NAME_MAX,
+      actual: actor.length,
+      unit: "chars",
+      remedy: {
+        tool: "collab_arrive",
+        input: { purpose, binding_key: key, parent: parent.handle.session.id, name: "<shorter>" },
+      },
+    });
+  }
   // Exactly collab_session_start's attestation: the parent counts only when
   // this process holds it in one of its own slots.
   const parentAttested = held.some((slot) => slot.binding.handle.session.id === parent.handle.session.id);
@@ -852,6 +890,7 @@ function composeBrief(
   const shown = [
     ...cap(proposals).map((proposal) => proposal.id),
     ...cap(reviewsWanted).flatMap((review) => (review.completion ? [review.completion.id] : [])),
+    ...noteWaitingShownItems(cap(data.waiting)),
   ];
   const advice: string[] = [];
   if (pending?.more) advice.push("More is waiting for you than this brief lists; read it with collab_inbox.");
@@ -933,13 +972,16 @@ function shellQuote(value: string): string {
  * How this session can be told when something arrives (spec 5.1 listen).
  * Under Claude Code: the existing doorbell watcher with absolute paths and
  * this session filled in, never --from-cursor, for the agent to run itself.
- * Collab starts nothing.
+ * Collab starts nothing. Under the notes profile it is the inbox wait,
+ * because the watcher's ring still names collab_events_wait and
+ * collab_events_since, which that profile does not register.
  */
 export function listenHow(ctx: NoteVerbContext, sessionId: string): string {
   const inboxWait = ctx.slot_key
     ? `collab_inbox {wait_seconds: 30, binding_key: "${ctx.slot_key}"}`
     : "collab_inbox {wait_seconds: 30}";
   const database = ctx.store.db.filename;
+  if (ctx.profile === "notes") return inboxWait;
   if (!ctx.environment.CLAUDE_CODE_MESSAGING_SOCKET || !database || database === ":memory:") return inboxWait;
   // One level below the package root, in src/ and in dist/ alike.
   const watcher = resolve(import.meta.dir, "..", "integrations", "claude-code", "collab-doorbell-watch.ts");
@@ -1183,8 +1225,13 @@ function formatWaiting(ctx: NoteVerbContext, entry: NoteWaitingEntry): Record<st
       ? handleOf("report", entry.about_id) : entry.about_id }
     : null;
   const next: NoteRemedy = entry.what === "stop"
-    ? { say: `Stop work that rests on ${handle}: the person's latest act on it is a rejection.` }
-    : withSlot(ctx, { tool: "collab_inbox", input: { about: entry.what === "answer" && entry.about_id ? handleOf("report", entry.about_id) : handle } });
+    ? { say: `Stop work that rests on ${handle} (${entry.ref_id}): the person's latest act on it is a rejection.` }
+    : withSlot(ctx, {
+      tool: "collab_inbox",
+      input: {
+        about: entry.what === "answer" && entry.about_id ? exactRef("report", entry.about_id) : exactRef(entry.ref_kind, entry.ref_id),
+      },
+    });
   return {
     what: entry.what,
     ref: handle,
@@ -1221,50 +1268,87 @@ export async function inboxVerb(ctx: NoteVerbContext, input: InboxInput): Promis
   if (!Number.isInteger(waitSeconds) || waitSeconds < 0 || waitSeconds > 30) {
     throw new CollabError("invalid_wait_seconds", "wait_seconds must be an integer from 0 to 30");
   }
-  let data = ctx.store.inboxForSession({ ...credential, limit, include });
-  let alsoNew = data.also_new;
-  let waited: Record<string, unknown> | null = null;
-  if (waitSeconds > 0 && !data.entries.some((entry) => entry.for_me) && !data.more) {
-    const started = performance.now();
-    const arrived = await waitForMe(ctx, binding, data.mark.anchor, waitSeconds * 1_000);
-    waited = { seconds: Math.round((performance.now() - started) / 100) / 10, ended_by: arrived ? "item" : "timeout" };
-    if (arrived) {
-      // The first pass already moved the mark past what it counted; keep that count.
-      data = ctx.store.inboxForSession({ ...credential, limit, include });
-      alsoNew += data.also_new;
-    }
+  // A wait takes its place in the endpoint's one budget before anything is
+  // written: refused after the first pass, the call would have moved the
+  // mark past what it counted and returned none of it.
+  const waits = waitSeconds > 0;
+  if (waits && ctx.waits.active >= ctx.waits.max) {
+    throw new CollabError("too_many_waits", `At most ${ctx.waits.max} waits may run per endpoint`);
   }
-  const byId = new Map(data.sessions.map((view) => [view.id, view]));
-  const me = data.session.id;
-  const items = data.entries.map((entry) =>
-    entry.for_me ? formatEntry(entry, byId, me) : subjectLine(entry, byId, me));
-  const advice: string[] = [];
-  if (input.format === "note") advice.push("format: note renders one thread; pass about with an id or handle.");
-  if (data.mark.clamped) advice.push("Your read mark was past the journal head (the journal may have been restored from an older copy); it now reads from the head.");
-  const firstForMe = items.find((item) => item.for_me === true);
-  const next: NoteRemedy = firstForMe
-    ? withSlot(ctx, { tool: "collab_inbox", input: { about: firstForMe.handle } })
-    : data.more
-      ? withSlot(ctx, { tool: "collab_inbox", input: {} })
-      : withSlot(ctx, { tool: "collab_inbox", input: { wait_seconds: 30 } });
-  return {
-    ok: true,
-    items,
-    also_new: { count: alsoNew },
-    more: data.more,
-    read_through: { sequence: data.mark.through, head: data.head_sequence },
-    ...(data.mark.initialised_from ? { mark_initialised_from: data.mark.initialised_from } : {}),
-    waiting_on_you: data.waiting.map((entry) => formatWaiting(ctx, entry)),
-    ...(waited ? { waited } : {}),
-    advice,
-    next,
-  };
+  if (waits) ctx.waits.active += 1;
+  try {
+    const first = ctx.store.inboxForSession({ ...credential, limit, include });
+    let data = first;
+    let earlier: NoteEntry[] = [];
+    let alsoNew = first.also_new;
+    let waited: Record<string, unknown> | null = null;
+    if (waits && !first.entries.some((entry) => entry.for_me) && !first.more) {
+      const started = performance.now();
+      const arrived = await waitForMe(ctx, binding, first.mark.anchor, waitSeconds * 1_000);
+      waited = { seconds: Math.round((performance.now() - started) / 100) / 10, ended_by: arrived ? "item" : "timeout" };
+      if (arrived) {
+        // The first pass already moved the mark past what it listed and
+        // counted, so its subject lines, its count and what it said about
+        // the mark are kept, ahead of the second pass's items.
+        data = ctx.store.inboxForSession({ ...credential, limit, include });
+        earlier = first.entries;
+        alsoNew += data.also_new;
+      }
+    }
+    const byId = new Map(data.sessions.map((view) => [view.id, view]));
+    const me = data.session.id;
+    const entries = [...earlier, ...data.entries];
+    const items = entries.map((entry) =>
+      entry.for_me ? formatEntry(entry, byId, me) : subjectLine(entry, byId, me));
+    const advice: string[] = [];
+    if (input.format === "note") advice.push("format: note renders one thread; pass about with an id or handle.");
+    if (first.mark.clamped || data.mark.clamped) advice.push(MARK_CLAMPED_ADVICE);
+    const firstForMe = entries.find((entry) => entry.for_me);
+    const about = firstForMe ? entryRef(firstForMe) : null;
+    const next: NoteRemedy = about
+      ? withSlot(ctx, { tool: "collab_inbox", input: { about } })
+      : data.more
+        ? withSlot(ctx, { tool: "collab_inbox", input: {} })
+        : withSlot(ctx, { tool: "collab_inbox", input: { wait_seconds: 30 } });
+    const initialisedFrom = first.mark.initialised_from ?? data.mark.initialised_from;
+    return {
+      ok: true,
+      items,
+      also_new: { count: alsoNew },
+      more: data.more,
+      read_through: { sequence: data.mark.through, head: data.head_sequence },
+      ...(initialisedFrom ? { mark_initialised_from: initialisedFrom } : {}),
+      waiting_on_you: data.waiting.map((entry) => formatWaiting(ctx, entry)),
+      ...(waited ? { waited } : {}),
+      advice,
+      next,
+    };
+  } finally {
+    if (waits) ctx.waits.active -= 1;
+  }
+}
+
+const MARK_CLAMPED_ADVICE =
+  "Your read mark was past the journal head (the journal may have been restored from an older copy); it now reads from the head.";
+
+/**
+ * The exact reference of the entity an inbox entry concerns, for a ready
+ * about call: the report or proposal posted, or the task an event is about.
+ * Null when it concerns nothing collab_inbox can show as a thread.
+ */
+function entryRef(entry: NoteEntry): string | null {
+  const { event, report } = entry;
+  if (event.type === "report.posted") return report ? exactRef("report", report.id) : null;
+  if (event.type.startsWith("proposal.")) return exactRef("proposal", event.entity_id);
+  if (event.type.startsWith("task.")) return exactRef("task", event.entity_id);
+  return entry.task ? exactRef("task", entry.task.id) : null;
 }
 
 /**
  * Wait for a for-me event after `anchor`, reading only (spec 5.2): it uses
  * the same read-only page as collab_events_wait, refreshes nothing and writes
- * nothing. Entries already waiting on the session never end it.
+ * nothing. Entries already waiting on the session never end it. The caller
+ * holds the wait's place in the endpoint's budget.
  */
 async function waitForMe(
   ctx: NoteVerbContext,
@@ -1272,46 +1356,38 @@ async function waitForMe(
   anchor: { epoch_id: string; sequence: number; hash: string },
   durationMs: number,
 ): Promise<boolean> {
-  if (ctx.waits.active >= ctx.waits.max) {
-    throw new CollabError("too_many_waits", `At most ${ctx.waits.max} waits may run per endpoint`);
-  }
-  ctx.waits.active += 1;
-  try {
-    const sessionId = binding.handle.session.id;
-    const workspaceId = binding.handle.workspace.id;
-    let after = { ...anchor };
-    const deadline = performance.now() + durationMs;
-    while (true) {
-      if (ctx.signals.some((signal) => signal?.aborted)) {
-        throw new CollabError("wait_cancelled", "The inbox wait was cancelled");
-      }
-      const current = ctx.binding();
-      if (!current || current.handle.session.id !== sessionId) {
-        throw new CollabError("session_auth_failed", "The bound session changed during the wait");
-      }
-      let caughtUp = true;
-      try {
-        const page = ctx.store.eventsAfterAnchorForSession({
-          ...current.handle.credential,
-          workspace_id: workspaceId,
-          after_anchor: after,
-          event_limit: 50,
-        });
-        for (const event of page.events) {
-          if (event.session_id !== sessionId && ctx.store.eventAddressesSession(event, sessionId)) return true;
-        }
-        after = page.next_anchor;
-        caughtUp = !page.has_more;
-      } catch (error) {
-        if (!(error instanceof CollabError) || error.code !== "event_read_busy") throw error;
-      }
-      const remaining = deadline - performance.now();
-      if (remaining <= 0) return false;
-      if (!caughtUp) continue;
-      await abortableDelay(Math.min(WAIT_POLL_MS, remaining), ctx.signals);
+  const sessionId = binding.handle.session.id;
+  const workspaceId = binding.handle.workspace.id;
+  let after = { ...anchor };
+  const deadline = performance.now() + durationMs;
+  while (true) {
+    if (ctx.signals.some((signal) => signal?.aborted)) {
+      throw new CollabError("wait_cancelled", "The inbox wait was cancelled");
     }
-  } finally {
-    ctx.waits.active -= 1;
+    const current = ctx.binding();
+    if (!current || current.handle.session.id !== sessionId) {
+      throw new CollabError("session_auth_failed", "The bound session changed during the wait");
+    }
+    let caughtUp = true;
+    try {
+      const page = ctx.store.eventsAfterAnchorForSession({
+        ...current.handle.credential,
+        workspace_id: workspaceId,
+        after_anchor: after,
+        event_limit: 50,
+      });
+      for (const event of page.events) {
+        if (event.session_id !== sessionId && ctx.store.eventAddressesSession(event, sessionId)) return true;
+      }
+      after = page.next_anchor;
+      caughtUp = !page.has_more;
+    } catch (error) {
+      if (!(error instanceof CollabError) || error.code !== "event_read_busy") throw error;
+    }
+    const remaining = deadline - performance.now();
+    if (remaining <= 0) return false;
+    if (!caughtUp) continue;
+    await abortableDelay(Math.min(WAIT_POLL_MS, remaining), ctx.signals);
   }
 }
 
@@ -1328,33 +1404,75 @@ function abortableDelay(ms: number, signals: Array<AbortSignal | undefined>): Pr
   });
 }
 
-/** The kind an about value names, from its shape: task ids and handles are tasks, everything else a report. */
-function aboutKind(value: string): "task" | "report" {
-  return /^(task#|task:|task_)/i.test(value.trim()) ? "task" : "report";
+/**
+ * The thread an about value names. Its shape says the kind when it can (a
+ * task or report handle, a `kind:` reference, a minted id). A bare id
+ * without one (a task created with a caller-chosen id) is looked up among
+ * reports and tasks both, and refused with the candidates if both have it,
+ * so nothing is routed by guess.
+ */
+function resolveAbout(ctx: NoteVerbContext, workspaceId: string, value: string): { kind: "task" | "report"; id: string } {
+  const text = value.trim();
+  if (/^(task#|task:|task_)/i.test(text)) return { kind: "task", id: ctx.store.resolveNoteRef(workspaceId, "task", text).id };
+  if (/^((report|proposal|ballot)[#:]|report_)/i.test(text)) {
+    return { kind: "report", id: ctx.store.resolveNoteRef(workspaceId, "report", text).id };
+  }
+  const found: Array<{ kind: "task" | "report"; id: string }> = [];
+  for (const kind of ["report", "task"] as const) {
+    try {
+      found.push({ kind, id: ctx.store.resolveNoteRef(workspaceId, kind, text).id });
+    } catch (error) {
+      if (!(error instanceof CollabError) || error.code !== `${kind}_not_found`) throw error;
+    }
+  }
+  if (found.length === 1) return found[0]!;
+  if (found.length > 1) {
+    throw new CollabError("ambiguous_ref", `${text} is the id of a report and of a task`, {
+      value: text,
+      candidates: found.map((entry) => `${entry.kind}:${entry.id}`),
+      remedy: { say: "Name the kind: task:<id> or report:<id>; the candidates are listed." },
+    });
+  }
+  throw new CollabError("ref_not_found", `No report or task in this workspace has the id ${text}`, { value: text });
 }
 
 function aboutView(ctx: NoteVerbContext, binding: NoteBinding, input: InboxInput): Record<string, unknown> {
   const credential = binding.handle.credential;
   const workspaceId = binding.handle.workspace.id;
-  const kind = aboutKind(input.about!);
-  const resolved = ctx.store.resolveNoteRef(workspaceId, kind, input.about!);
-  const thread = ctx.store.noteThreadForSession({ ...credential, kind, id: resolved.id });
+  const { kind, id } = resolveAbout(ctx, workspaceId, input.about!);
+  const thread = ctx.store.noteThreadForSession({ ...credential, kind, id });
   const byId = new Map(thread.sessions.map((view) => [view.id, view]));
   const me = thread.session.id;
   const advice: string[] = [];
+  if (thread.mark.clamped) advice.push(MARK_CLAMPED_ADVICE);
   if (thread.truncated) advice.push(`This thread lists its first ${thread.answers.length} answers only.`);
   const view = thread.kind === "task" ? taskView(thread, byId, me) : reportView(thread, byId, me, advice);
   const result: Record<string, unknown> = {
     ok: true,
     ...view,
     truncated: thread.truncated,
+    // The first inbox call creates the mark, whichever form it takes.
+    ...(thread.mark.initialised_from ? { mark_initialised_from: thread.mark.initialised_from } : {}),
     advice,
     next: withSlot(ctx, { tool: "collab_inbox", input: {} }),
   };
   if (input.format === "note") {
-    const carried = carryThread(thread);
-    result.note = carried.text;
-    result.not_carried = carried.not_carried;
+    try {
+      const carried = carryThread(thread);
+      result.note = carried.text;
+      result.not_carried = carried.not_carried;
+    } catch (error) {
+      // The reader asked for a view; a root the carrier must refuse leaves
+      // the view whole and says what cannot travel and what to carry instead.
+      if (!(error instanceof CollabError) || error.code !== "not_carriable") throw error;
+      const field = typeof error.details.field === "string" ? error.details.field : "statement";
+      const rootId = thread.kind === "task" ? thread.task!.id : thread.root!.report!.id;
+      result.note = null;
+      result.not_carried = [field === "statement" ? "statement (local detail)" : `${field} (short handle)`];
+      advice.push(field === "statement"
+        ? `This thread's statement names a local detail, so it cannot be carried as a note; carry its full id (${rootId}) instead, or ask its author to restate it.`
+        : `This thread's ${field} is a short handle, so it cannot be carried as a note; carry its full id (${rootId}) instead.`);
+    }
   }
   return result;
 }

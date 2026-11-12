@@ -5959,6 +5959,7 @@ class CollabStore {
       }
       const returned = listed.slice(0, limit);
       const alsoNew = scan.events.filter((event) => !event.own && !event.for_me && event.sequence <= through).length;
+      let waiting = null;
       if (record) {
         const now = this.timestamp();
         if (through > mark.sequence) {
@@ -5967,9 +5968,13 @@ class CollabStore {
             WHERE workspace_id = ? AND session_id = ?
           `).run(through, now, session.workspace_id, session.id);
         }
-        this.recordNoteShown(session, returned.filter((event) => event.for_me).map((event) => event.shown_item_id), now);
+        waiting = this.noteWaiting(session);
+        this.recordNoteShown(session, [
+          ...returned.filter((event) => event.for_me).map((event) => event.shown_item_id),
+          ...noteWaitingShownItems(waiting)
+        ], now);
       }
-      return { sequences: returned.map((event) => event.sequence), through, more, also_new: alsoNew };
+      return { sequences: returned.map((event) => event.sequence), through, more, also_new: alsoNew, waiting };
     };
     const planned = input.peek ? this.db.transaction(() => {
       const session = this.authenticateSession(input);
@@ -5996,14 +6001,14 @@ class CollabStore {
           written: !input.peek
         },
         head_sequence: workspace.event_head_sequence,
-        waiting: this.noteWaiting(session, sessions),
+        waiting: planned.waiting ?? this.noteWaiting(session),
         observed_at: this.timestamp()
       };
     }).deferred();
   }
   noteThreadForSession(input) {
     const id = validateId(input.id, `${input.kind}_id`);
-    this.noteHousekeeping(input, (session) => {
+    const markState = this.noteHousekeeping(input, (session, mark) => {
       const now = this.timestamp();
       if (input.kind === "task") {
         const task = this.requireTaskRow(session.workspace_id, id);
@@ -6016,6 +6021,7 @@ class CollabStore {
         }
         this.recordNoteShown(session, [report.id], now);
       }
+      return { initialised_from: mark.initialised_from, clamped: mark.clamped };
     });
     return this.db.transaction(() => {
       const session = this.authenticateSession(input);
@@ -6043,6 +6049,7 @@ class CollabStore {
           reviews,
           challenges: challenges.filter((challenge) => reports.some((row) => row.id === challenge.target_report_id)),
           termed: false,
+          mark: markState,
           observed_at: this.timestamp()
         };
       }
@@ -6098,6 +6105,7 @@ class CollabStore {
         reviews: [],
         challenges: challenges.filter((challenge) => ids.has(challenge.target_report_id)),
         termed: this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(root.id) !== null,
+        mark: markState,
         observed_at: this.timestamp()
       };
     }).deferred();
@@ -6109,7 +6117,8 @@ class CollabStore {
       const sessions = this.noteSessionViews(session.workspace_id);
       const tasks = this.listTasks(session.workspace_id);
       const { claimable } = this.projectAvailableTasks(session.workspace_id, tasks, () => false);
-      const proposals = this.listProposalStatuses(session.workspace_id, { limit: 50 }).proposals.filter((status) => ["open", "challenged", "consented"].includes(status.ai.position));
+      const now = Date.parse(this.timestamp());
+      const proposals = this.noteProposalStatuses(session.workspace_id, this.noteProposalRows(session.workspace_id).filter((row) => !row.retired && (now < Date.parse(row.closes_at) || row.supported))).filter((status) => ["open", "challenged", "consented"].includes(status.ai.position));
       const reports = this.db.query(`SELECT COUNT(*) AS count FROM reports WHERE workspace_id = ?`).get(session.workspace_id).count;
       return {
         session: sessions.find((view) => view.id === session.id),
@@ -6120,10 +6129,37 @@ class CollabStore {
         proposals,
         challenges: this.noteChallenges(session.workspace_id).filter((challenge) => challenge.standing).reverse(),
         report_count: reports,
-        waiting: this.noteWaiting(session, sessions),
+        waiting: this.noteWaiting(session),
         observed_at: this.timestamp()
       };
     }).deferred();
+  }
+  noteProposalRows(workspaceId) {
+    const rows = this.db.query(`
+      SELECT t.report_id, r.from_session_id, t.closes_at, t.voices_json,
+        EXISTS (SELECT 1 FROM reports x WHERE x.workspace_id = t.workspace_id AND x.target_report_id = t.report_id
+          AND x.relation IN ('withdraws', 'corrects', 'supersedes')) AS retired,
+        EXISTS (SELECT 1 FROM reports x WHERE x.workspace_id = t.workspace_id AND x.target_report_id = t.report_id
+          AND x.relation = 'supports') AS supported,
+        EXISTS (SELECT 1 FROM proposal_person_acts a WHERE a.proposal_report_id = t.report_id) AS acted
+      FROM proposal_terms t JOIN reports r ON r.id = t.report_id
+      WHERE t.workspace_id = ?
+      ORDER BY r.event_sequence DESC
+    `).all(workspaceId);
+    return rows.map((row) => ({
+      report_id: row.report_id,
+      from_session_id: row.from_session_id,
+      closes_at: row.closes_at,
+      voice_ids: JSON.parse(row.voices_json).map((voice) => voice.voice_id),
+      retired: row.retired === 1,
+      supported: row.supported === 1,
+      acted: row.acted === 1
+    }));
+  }
+  noteProposalStatuses(workspaceId, rows) {
+    const context = this.proposalReadContext(workspaceId);
+    const unreadable = [];
+    return rows.map((row) => this.readProposalStatus(context, row.report_id, unreadable)).filter((status) => status !== null);
   }
   recordArrivalShown(credential, itemIds) {
     if (itemIds.length === 0)
@@ -6404,11 +6440,11 @@ class CollabStore {
       };
     });
   }
-  noteWaiting(session, sessions) {
+  noteWaiting(session) {
     const workspaceId = session.workspace_id;
     const myVoice = this.consentVoice(session.id);
-    const voiceOf = new Map(sessions.map((view) => [view.id, view.voice_id]));
-    const sameVoice = (sessionId) => sessionId !== null && (voiceOf.get(sessionId) ?? this.consentVoice(sessionId)) === myVoice;
+    const voices = new Map;
+    const sameVoice = (sessionId) => sessionId !== null && this.cachedVoice(sessionId, voices) === myVoice;
     const waiting = [];
     for (const task of this.listTasks(workspaceId)) {
       if (task.effective_status === "reported_complete" && task.review_requested_session_id === session.id && task.completion_report_id) {
@@ -6426,7 +6462,12 @@ class CollabStore {
       }
     }
     const challenges = this.noteChallenges(workspaceId);
-    const statuses = this.listProposalStatuses(workspaceId, { limit: 50 }).proposals;
+    const decided = new Set(this.db.query(`
+      SELECT r.from_session_id, ref.value AS ref FROM reports r, json_each(r.evidence_refs_json) ref
+      WHERE r.workspace_id = ? AND r.kind = 'decision' AND ref.value LIKE 'report:%'
+    `).all(workspaceId).filter((row) => sameVoice(row.from_session_id)).map((row) => row.ref.slice("report:".length)));
+    const now = Date.parse(this.timestamp());
+    const statuses = this.noteProposalStatuses(workspaceId, this.noteProposalRows(workspaceId).filter((row) => !row.retired && now < Date.parse(row.closes_at) && row.voice_ids.includes(myVoice) || row.acted && (sameVoice(row.from_session_id) || decided.has(row.report_id))));
     for (const status of statuses) {
       if (status.ai.closed || !["open", "challenged"].includes(status.ai.position))
         continue;
@@ -6493,10 +6534,6 @@ class CollabStore {
         }
       }
     }
-    const decided = new Set(this.db.query(`
-      SELECT r.from_session_id, ref.value AS ref FROM reports r, json_each(r.evidence_refs_json) ref
-      WHERE r.workspace_id = ? AND r.kind = 'decision' AND ref.value LIKE 'report:%'
-    `).all(workspaceId).filter((row) => sameVoice(row.from_session_id)).map((row) => row.ref.slice("report:".length)));
     for (const status of statuses) {
       const mine = sameVoice(status.proposal.from_session_id);
       if (!mine && !decided.has(status.proposal.id))
@@ -6528,7 +6565,7 @@ class CollabStore {
         summary: firstLine(status.proposal.body)
       });
     }
-    return waiting;
+    return [...waiting.filter((entry) => entry.what === "stop"), ...waiting.filter((entry) => entry.what !== "stop")];
   }
   timestamp() {
     return this.now().toISOString();
@@ -7029,6 +7066,9 @@ function noteShownItem(event) {
     return payload.completion_report_id;
   }
   return null;
+}
+function noteWaitingShownItems(waiting) {
+  return waiting.flatMap((entry) => entry.what === "voice" ? [entry.ref_id] : entry.what === "review" && entry.about_id ? [entry.about_id] : []);
 }
 function validateNotePurpose(value) {
   const purpose = cleanText(typeof value === "string" ? value : "", "purpose", NOTE_PURPOSE_MAX_CHARS);

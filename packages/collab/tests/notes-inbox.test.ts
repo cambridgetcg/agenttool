@@ -183,7 +183,7 @@ describe("collab_inbox addressing", () => {
     expect(review.completion.id).toBe(task.completion_report_id);
     // A review request also arrives as its own addressed report.
     expect(items.some((item) => item.why_you === "addressed" && String(item.statement).startsWith("Review requested"))).toBe(true);
-    expect(read.next).toEqual({ tool: "collab_inbox", input: { about: items[0]!.handle } });
+    expect(read.next).toEqual({ tool: "collab_inbox", input: { about: items[0]!.id } });
     void a;
   });
 });
@@ -310,7 +310,8 @@ describe("waiting_on_you", () => {
       ["answer", answer.id],
     ]));
     const review = second.waiting_on_you.find((entry: any) => entry.what === "review");
-    expect(review).toMatchObject({ ref: handleOf("task", task.id), by: "peer", next: { tool: "collab_inbox", input: { about: handleOf("task", task.id) } } });
+    // The ref is the display handle; the ready call names the task exactly.
+    expect(review).toMatchObject({ ref: handleOf("task", task.id), by: "peer", next: { tool: "collab_inbox", input: { about: task.id } } });
     // Supporting the proposal answers it, so it no longer waits.
     report(j.store, me, "sup", "Yes.", { kind: "inference", relation: "supports", target_report_id: proposal.proposal.id });
     const third = await ok(server, "collab_inbox");
@@ -483,5 +484,205 @@ describe("collab_inbox about", () => {
     expect(view.root.act).toBe("propose");
     expect(view.position).toBeUndefined();
     expect(view.advice.join(" ")).toContain("not built yet");
+  });
+});
+
+describe("waiting_on_you over a long journal", () => {
+  test("every proposal counts, however many newer ones there are, and a stop is listed first", async () => {
+    const j = journal();
+    const me = j.start("me");
+    const peer = j.start("peer");
+    const stopped = j.store.openProposalForSession({
+      ...me.credential, idempotency_key: "p0", question: "Proceed?", criteria: "Green.", extent: "This repo.",
+    });
+    report(j.store, peer, "sup", "Yes.", { kind: "inference", relation: "supports", target_report_id: stopped.proposal.id });
+    const status = j.store.proposalStatus(me.workspace.id, stopped.proposal.id);
+    j.store.recordPersonActAtTerminal({ proposal_report_id: stopped.proposal.id, proposal_sha256: status.proposal_sha256, act: "agree" } as never);
+    j.store.relayProposalRejectionForSession({
+      ...peer.credential, idempotency_key: "r", proposal_report_id: stopped.proposal.id,
+      proposal_sha256: status.proposal_sha256, reason: "Stop.",
+    });
+    const old = j.store.openProposalForSession({
+      ...peer.credential, idempotency_key: "old", question: "An old question?", criteria: "c", extent: "e",
+    });
+    const newer = 55;
+    for (let index = 1; index <= newer; index += 1) {
+      j.store.openProposalForSession({ ...peer.credential, idempotency_key: `p${index}`, question: `Q${index}?`, criteria: "c", extent: "e" });
+    }
+    const server = j.serve(me);
+    const read = await ok(server, "collab_inbox", { limit: 50 });
+    const waiting = read.waiting_on_you as Array<Record<string, any>>;
+    // The one signal that may stop work is never cut, and comes first.
+    expect(waiting[0]).toMatchObject({ what: "stop", id: stopped.proposal.id, due: "now" });
+    expect(waiting.filter((entry) => entry.what === "voice")).toHaveLength(newer + 1);
+    expect(waiting.some((entry) => entry.what === "voice" && entry.id === old.proposal.id)).toBe(true);
+    // Arrive lists ten of each, with true totals.
+    const arrived = await ok(server, "collab_arrive", { purpose: "look around" });
+    expect(arrived.totals.proposals).toBe(newer + 2);
+    expect(arrived.open.proposals).toHaveLength(10);
+    expect(arrived.totals.waiting_on_you).toBe(newer + 2);
+    expect(arrived.waiting_on_you[0]).toMatchObject({ what: "stop", id: stopped.proposal.id });
+  }, 30_000);
+});
+
+describe("ready calls", () => {
+  test("every ready call for a task with a caller-chosen id works, and the bare id does too", async () => {
+    const j = journal();
+    const me = j.start("me");
+    const peer = j.start("peer");
+    const server = j.serve(me);
+    await ok(server, "collab_inbox");
+    const free = j.store.createTaskForSession({
+      ...peer.credential, idempotency_key: "free", id: "my-free-task", title: "Free work", work_mode: "coordination",
+    });
+    const task = j.store.createTaskForSession({
+      ...peer.credential, idempotency_key: "t", id: "my-own-task", title: "Custom", work_mode: "edit",
+      completion_policy: "accepted", path_scopes: ["a.txt"],
+    });
+    const claimed = j.store.claimTaskForSession({ ...peer.credential, idempotency_key: "c", task_id: task.id, expected_version: task.version });
+    j.store.completeTaskForSession({
+      ...peer.credential, idempotency_key: "d", task_id: claimed.id, lease_id: claimed.lease_id!,
+      expected_version: claimed.version, summary: "Done.", review_requested_session_id: me.session.id,
+    });
+    expect(handleOf("task", task.id)).toBe("task:my-own-task");
+    const inbox = await ok(server, "collab_inbox", { limit: 50 });
+    const arrived = await ok(server, "collab_arrive", { purpose: "look around" });
+    const calls: Array<{ tool: string; input: Record<string, unknown> }> = [
+      inbox.next,
+      ...inbox.waiting_on_you.map((entry: any) => entry.next),
+      ...arrived.open.claimable.map((entry: any) => ({ tool: "collab_inbox", input: { about: entry.task } })),
+      ...arrived.open.reviews_wanted.map((entry: any) => ({ tool: "collab_inbox", input: { about: entry.task } })),
+      ...arrived.waiting_on_you.map((entry: any) => entry.next),
+    ].filter((next) => next && "tool" in next);
+    expect(calls.length).toBeGreaterThanOrEqual(5);
+    for (const next of calls) {
+      const followed = await call(server, next.tool, next.input);
+      expect(followed.isError, JSON.stringify({ next, result: followed.structuredContent })).toBeUndefined();
+    }
+    expect((await ok(server, "collab_inbox", { about: "my-free-task" })).task.id).toBe(free.id);
+    expect((await ok(server, "collab_inbox", { about: "task:my-own-task" })).task.id).toBe(task.id);
+    const missing = await call(server, "collab_inbox", { about: "no-such-thing" });
+    expect(missing.structuredContent.code).toBe("ref_not_found");
+    expect(missing.structuredContent.remedy.say).toContain("every id a later call needs");
+  });
+
+  test("a ready call names its target exactly, even when its short handle is shared", async () => {
+    const j = journal();
+    const me = j.start("me");
+    const peer = j.start("peer");
+    const server = j.serve(me);
+    await ok(server, "collab_inbox");
+    const idA = "task_abcdef12-0000-4000-8000-000000000001";
+    const idB = "task_abcdef34-0000-4000-8000-000000000002";
+    const [taskA] = [idA, idB].map((id, index) => j.store.createTaskForSession({
+      ...peer.credential, idempotency_key: `t${index}`, id, title: id, work_mode: "edit",
+      completion_policy: "accepted", path_scopes: [`file-${index}.txt`],
+    }));
+    const claimed = j.store.claimTaskForSession({ ...peer.credential, idempotency_key: "c", task_id: taskA!.id, expected_version: taskA!.version });
+    j.store.completeTaskForSession({
+      ...peer.credential, idempotency_key: "d", task_id: claimed.id, lease_id: claimed.lease_id!,
+      expected_version: claimed.version, summary: "Done.", review_requested_session_id: me.session.id,
+    });
+    const inbox = await ok(server, "collab_inbox", { limit: 50 });
+    const review = inbox.waiting_on_you.find((entry: any) => entry.what === "review");
+    // The display handle stays short; the ready call does not guess.
+    expect(review.ref).toBe("task#abcdef");
+    const viaWaiting = await ok(server, review.next.tool, review.next.input);
+    expect(viaWaiting.task.id).toBe(idA);
+    const doneItem = inbox.items.find((item: any) => item.why_you === "review_requested");
+    expect(doneItem.handle).toBe("task#abcdef");
+    const viaNext = await call(server, inbox.next.tool, inbox.next.input);
+    expect(viaNext.isError).toBeUndefined();
+  });
+});
+
+describe("the read mark, more", () => {
+  test("a wait ended by an item keeps what the first pass listed and said", async () => {
+    const j = journal();
+    const me = j.start("me");
+    const peer = j.start("peer");
+    const server = j.serve(me);
+    report(j.store, peer, "n1", "Unaddressed news.");
+    const waiting = ok(server, "collab_inbox", { include: "all", wait_seconds: 10 });
+    setTimeout(() => report(j.store, peer, "m1", "For me.", { to_session_id: me.session.id }), 300);
+    const result = await waiting;
+    expect(result.waited.ended_by).toBe("item");
+    expect(result.mark_initialised_from).toBe("cursor");
+    const reports = (result.items as Array<Record<string, any>>).filter((item) => item.act !== "event");
+    expect(reports.map((item) => [item.statement, item.for_me])).toEqual([["Unaddressed news.", false], ["For me.", true]]);
+    // Everything unaddressed the first pass passed (the journal's opening
+    // events and the news) is both listed and counted.
+    const unaddressed = (result.items as Array<Record<string, any>>).filter((item) => !item.for_me);
+    expect(unaddressed.length).toBeGreaterThanOrEqual(2);
+    expect(result.also_new).toEqual({ count: unaddressed.length });
+    expect(result.next).toEqual({ tool: "collab_inbox", input: { about: reports[1]!.id } });
+  });
+
+  test("a first call with about initialises the mark from the legacy cursor and says so", async () => {
+    const j = journal();
+    const me = j.start("me");
+    const peer = j.start("peer");
+    const posted = report(j.store, peer, "x", "For you.", { to_session_id: me.session.id });
+    const server = j.serve(me);
+    const about = await ok(server, "collab_inbox", { about: posted.id });
+    expect(about.mark_initialised_from).toBe("cursor");
+    expect(j.store.noteMark(me.workspace.id, me.session.id)).toBe(0);
+    const again = await ok(server, "collab_inbox", { about: posted.id });
+    expect(again.mark_initialised_from).toBeUndefined();
+    const inbox = await ok(server, "collab_inbox");
+    expect(inbox.mark_initialised_from).toBeUndefined();
+    expect(inbox.items.map((item: any) => item.statement)).toEqual(["For you."]);
+  });
+
+  test("what waits on you is recorded as delivered when it is returned", async () => {
+    const j = journal();
+    const me = j.start("me");
+    const peer = j.start("peer");
+    const server = j.serve(me);
+    await ok(server, "collab_inbox");
+    const task = j.store.createTaskForSession({
+      ...peer.credential, idempotency_key: "t", title: "Peer's edit", work_mode: "edit", completion_policy: "accepted",
+      path_scopes: ["a.txt"],
+    });
+    const claimed = j.store.claimTaskForSession({ ...peer.credential, idempotency_key: "c", task_id: task.id, expected_version: task.version });
+    const done = j.store.completeTaskForSession({
+      ...peer.credential, idempotency_key: "d", task_id: claimed.id, lease_id: claimed.lease_id!,
+      expected_version: claimed.version, summary: "Done.", review_requested_session_id: me.session.id,
+    });
+    const proposal = j.store.openProposalForSession({
+      ...peer.credential, idempotency_key: "p", question: "Ship it?", criteria: "Green.", extent: "This repo.",
+    });
+    await ok(server, "collab_inbox", { limit: 50 });
+    // View state may be lost; what is returned next is recorded again.
+    j.store.db.exec(`DELETE FROM note_shown`);
+    const shown = () => [proposal.proposal.id, done.completion_report_id!]
+      .map((id) => j.store.noteShownAt(me.workspace.id, me.session.id, id) !== null);
+    // A bound-slot arrive without revise_purpose writes nothing, so it records nothing.
+    await ok(server, "collab_arrive", { purpose: "look around" });
+    expect(shown()).toEqual([false, false]);
+    const read = await ok(server, "collab_inbox");
+    expect(read.items).toEqual([]);
+    expect(read.waiting_on_you.map((entry: any) => entry.what)).toEqual(expect.arrayContaining(["review", "voice"]));
+    expect(shown()).toEqual([true, true]);
+    j.store.db.exec(`DELETE FROM note_shown`);
+    await ok(server, "collab_arrive", { purpose: "look around again", revise_purpose: true });
+    expect(shown()).toEqual([true, true]);
+  });
+});
+
+describe("collab_inbox about, format note", () => {
+  test("a statement naming a local detail returns the view with note: null and says why", async () => {
+    const j = journal();
+    const me = j.start("me");
+    const peer = j.start("peer");
+    const opened = j.store.openProposalForSession({
+      ...peer.credential, idempotency_key: "p", question: "Ship /Users/someone/secret/path?", criteria: "c", extent: "e",
+    });
+    const view = await ok(j.serve(me), "collab_inbox", { about: opened.proposal.id, format: "note" });
+    expect(view.root.id).toBe(opened.proposal.id);
+    expect(view.note).toBeNull();
+    expect(view.not_carried).toEqual(["statement (local detail)"]);
+    expect(view.advice.join(" ")).toContain("cannot be carried");
+    expect(view.advice.join(" ")).toContain(opened.proposal.id);
   });
 });
