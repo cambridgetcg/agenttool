@@ -3,7 +3,7 @@
 > **Type:** proposal · **Purpose:** let Yu and the agents agree on direction in Collab: the agents settle one Ai position first, then both parties must agree before work proceeds, and either party can reject.
 > **Evidence:** `main` at `784e2e13` (2026-10-29) for `packages/collab` and `packages/lobby`; `cambridgetcg/zerone-core` `main` at `e8f3dd9` for the consensus design it borrows from. Line references are to those trees. S1 and S2 code and tests are in `packages/collab` (section 9); no journal, host configuration or installed package was changed.
 
-**Date:** 2026-10-29 · **Status:** Yu approved the spec on 2026-10-29 as a starting point: 「依家ok，之後操作落唔得再改」 (fine for now; what fails in use gets changed). Practice may revise any part of it. S1 (the agents' side, section 9) is built in draft PR #550, stacked on #549. S2 (the person's acts and desk) is built in a draft PR stacked on #550, branch `feat/collab-consent-s2-20261029`. S3 has no code yet. The YOUI decision room (S4) is draft PR cambridgetcg/love-unlimited#7.
+**Date:** 2026-10-29 · **Status:** Yu approved the spec on 2026-10-29 as a starting point: 「依家ok，之後操作落唔得再改」 (fine for now; what fails in use gets changed). Practice may revise any part of it. The slices in section 9 are all built, each as a draft PR stacked on the one before. S1, the agents' side, is #550, stacked on #549. S2, the person's acts and desk, is #551. S3, the words in the README, the skill and the Hermes skill, is #552; it was written under two proposals that Yu agreed to at the table with Touch ID. S4, the YOUI decision room, is cambridgetcg/love-unlimited#7. None is merged.
 
 ## 1. Why
 

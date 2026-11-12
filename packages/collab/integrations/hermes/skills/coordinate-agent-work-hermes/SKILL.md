@@ -1,6 +1,6 @@
 ---
 name: coordinate-agent-work-hermes
-description: Coordinate Hermes with Codex, Claude, or other local hosts through AgentTool Collab's separate credential-bound coordination and self-declared presence planes. Use for resumable cross-model work, optional presence routing, advisory task claims, structured evidence, requested and independent review, delegated child sessions, clean session exit, or refusable handoffs when the Hermes MCP server is named agenttool.
+description: Coordinate Hermes with Codex, Claude, or other local hosts through AgentTool Collab's separate credential-bound coordination and self-declared presence planes. Use for resumable cross-model work, optional presence routing, advisory task claims, structured evidence, requested and independent review, delegated child sessions, clean session exit, refusable handoffs, or direction proposals that need a person's agreement, when the Hermes MCP server is named agenttool.
 ---
 
 # Coordinate Agent Work from Hermes
@@ -149,6 +149,69 @@ access control.
 
 Offer continuation with `mcp_agenttool_collab_handoff_offer`; transfer the
 advisory lease only after the exact recipient accepts.
+
+## Decide direction with a person (proposals, unreleased)
+
+A proposal brings a question that is not a task to the table. The agents in the
+workspace settle a position first, and then a person agrees or rejects. Work
+proceeds only when both agree, and either can say no. The tools are
+`mcp_agenttool_collab_proposal_open`, `mcp_agenttool_collab_proposal_status` and
+`mcp_agenttool_collab_proposal_relay_rejection`. The main skill's section of the
+same name gives the longer reasons.
+
+**When.** Open a proposal when the answer changes what others do next and
+nothing already settles it: not the request, the code, an earlier agreement,
+or a sensible default. Typical cases:
+
+- a design decision;
+- the criteria for how to proceed, and how far;
+- context that conflicts;
+- how a shared principle reads in a particular case.
+
+Hermes Kanban work and ordinary tasks keep their own flow. A proposal spends the
+person's attention and holds the work it names, so ask once, for the decision
+that is actually open. Do not split one decision into small ones. Do not reopen
+a settled one without new evidence. To tell the person something that needs no
+decision, call `mcp_agenttool_collab_report_append` with `to_person: true`; it
+informs and authorises nothing.
+
+**Argue it.** The terms are what the person signs, so write them to be
+disagreed with:
+
+- `question`: one decision;
+- `criteria`: grounds a reader can object to;
+- `extent`: the smallest scope that lets the next step happen;
+- `known_conflicts`: every conflict you know of, named and not resolved
+  silently.
+
+The bytes are fixed once the proposal is open. A revision is a new proposal
+with `supersedes_report_id`.
+
+**Answer it.** Form your own reading before you read others' answers;
+same-model agents tend to agree with each other.
+
+- `supports`: you agree, for reasons of your own.
+- `challenges`: you disagree, with evidence. A challenge stands until its own
+  voice settles it with `resolves` or `withdraws`.
+
+Silence is not consent. Opening a proposal is not supporting it; a lone voice
+supports its own proposal explicitly. Read the position with
+`mcp_agenttool_collab_proposal_status` and never announce it yourself.
+
+**What agreement authorises.** Proceed only while
+`mcp_agenttool_collab_proposal_status` shows `may_proceed: true`. That means the
+person agreed to these exact bytes through the person desk, and the proposal is
+still on the table. No MCP tool records a person's act, and nobody relays a yes.
+Relay only a rejection the person actually gave.
+
+- An agreement covers the `extent` and nothing beyond it.
+- It never widens what Hermes's permissions, the repository or the person's
+  other instructions allow.
+- Record agreed work as a `decision` report: `authority_scope` is the extent,
+  `authority_basis` is the person's act, and the `proposal.agreed` event goes
+  in `evidence_refs`.
+- A rejection stops the work by every path.
+- An agreed reading of a principle is a precedent, binding on nothing.
 
 ## Delegate and deliver
 
