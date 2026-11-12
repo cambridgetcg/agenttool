@@ -7,8 +7,33 @@ import {
   lstatSync,
   mkdirSync,
   openSync,
+  realpathSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, posix, resolve } from "node:path";
+import {
+  BALLOT_SEALING,
+  ballotResult as computeBallotResult,
+  buildElectorate,
+  classifyCaster,
+  MAX_CASTS_PER_SESSION,
+  nextCastSeq,
+  normalizeBallotVoters,
+  openSeal,
+  resolveCasts,
+  revealedEntriesSha256,
+  unitBasis,
+  validatePollTerms,
+  type BallotResult,
+  type BallotTerms,
+  type CastToResolve,
+  type ElectorateSession,
+  type ElectorateUnit,
+  type LeftOutSession,
+  type PollTermsInput,
+  type RevealedEntry,
+  type SealOutcome,
+} from "./ballot.js";
+import { listSealFiles, readSealFile, removeEmptySealDirectory, removeSealFile, sealPath } from "./ballot-seal.js";
 import { canonicalJson } from "./canonical.js";
 import { CollabError } from "./errors.js";
 import { hasLoneSurrogate, NOTE_FORMAT, parseNote } from "./note.js";
@@ -408,6 +433,12 @@ interface ReviewRow {
 export interface CollabStoreOptions {
   now?: Clock;
   migration_failpoint?: (step: string) => void;
+  /**
+   * For tests: called while a ballot's reveal runs inside its transaction,
+   * after the seals are read ("revealing") and after its events are
+   * appended ("appended"); a throw there fails that reveal.
+   */
+  reveal_failpoint?: (step: "revealing" | "appended", ballotId: string) => void;
   repository_discovery?: Omit<RepositoryProbeOptions, "deadline"> & { budget_ms?: number };
 }
 
@@ -416,6 +447,7 @@ export class CollabStore {
   private readonly now: Clock;
   private readonly filesystemPath?: string;
   private readonly migrationFailpoint?: (step: string) => void;
+  private readonly revealFailpoint?: (step: "revealing" | "appended", ballotId: string) => void;
   private readonly repositoryDiscovery: Omit<RepositoryProbeOptions, "deadline" | "now"> & {
     budget_ms: number;
     now: () => number;
@@ -428,6 +460,7 @@ export class CollabStore {
   constructor(path: string, options: CollabStoreOptions = {}) {
     this.now = options.now ?? (() => new Date());
     this.migrationFailpoint = options.migration_failpoint;
+    this.revealFailpoint = options.reveal_failpoint;
     this.repositoryDiscovery = {
       ...options.repository_discovery,
       budget_ms: options.repository_discovery?.budget_ms ?? REPOSITORY_DISCOVERY_MS,
@@ -644,6 +677,28 @@ export class CollabStore {
           item_id TEXT NOT NULL,
           shown_at TEXT NOT NULL,
           PRIMARY KEY (workspace_id, session_id, item_id)
+        );
+        -- Which ballots may still need a reveal, so housekeeping finds due
+        -- ones without scanning events. state is open or closed.
+        CREATE TABLE IF NOT EXISTS note_ballots (
+          workspace_id TEXT NOT NULL,
+          ballot_id TEXT NOT NULL,
+          closes_at TEXT NOT NULL,
+          state TEXT NOT NULL,
+          PRIMARY KEY (workspace_id, ballot_id)
+        );
+        CREATE INDEX IF NOT EXISTS note_ballots_state_idx ON note_ballots(workspace_id, state, closes_at);
+      `);
+      // note_ballots is view state rebuilt from the journal: a lost or
+      // dropped row comes back from its ballot.opened event, and a ballot
+      // whose ballot.closed is in the journal reads closed.
+      this.db.exec(`
+        INSERT OR IGNORE INTO note_ballots (workspace_id, ballot_id, closes_at, state)
+        SELECT workspace_id, entity_id, json_extract(payload_json, '$.closes_at'), 'open' FROM events
+        WHERE type = 'ballot.opened' AND json_type(payload_json, '$.closes_at') = 'text';
+        UPDATE note_ballots SET state = 'closed' WHERE state <> 'closed' AND EXISTS (
+          SELECT 1 FROM events e WHERE e.workspace_id = note_ballots.workspace_id
+            AND e.type = 'ballot.closed' AND e.entity_id = note_ballots.ballot_id
         );
       `);
       // The unreleased S1 preview kept relayed rejections in its own table.
@@ -5671,6 +5726,24 @@ export class CollabStore {
         // A person's act wakes whoever waits on it: the author, or for a desk
         // proposal every voice it consulted.
         return this.proposalAddressesSession(event.entity_id, sessionId);
+      case "ballot.opened": {
+        // Every session whose unit the electorate lists, by session or by voice.
+        const electorate = Array.isArray(payload.electorate) ? payload.electorate : [];
+        const listed = (key: string, value: string) => electorate.some((unit) =>
+          Array.isArray(field(unit, key)) && (field(unit, key) as unknown[]).includes(value));
+        return listed("session_ids", sessionId) || listed("voice_ids", this.consentVoice(sessionId));
+      }
+      case "ballot.closed": {
+        // The opener and every session that cast; a cast or a reveal rings no one.
+        const opener = this.db.query(`
+          SELECT json_extract(payload_json, '$.opener_session_id') AS opener FROM events
+          WHERE workspace_id = ? AND type = 'ballot.opened' AND entity_id = ?
+        `).get(event.workspace_id, event.entity_id) as { opener: unknown } | null;
+        if (opener?.opener === sessionId) return true;
+        return this.db.query(`
+          SELECT 1 FROM events WHERE workspace_id = ? AND type = 'ballot.cast' AND entity_id = ? AND session_id = ? LIMIT 1
+        `).get(event.workspace_id, event.entity_id, sessionId) !== null;
+      }
       default:
         return false;
     }
@@ -7490,20 +7563,12 @@ export class CollabStore {
       }
       const obsoleted = this.activeObsoletionTargets(workspaceId);
       const termed = this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(report.id) !== null;
-      // A ballot's and a completion's events follow their report in its own
-      // transaction, so each search starts at the report's sequence.
-      const opened = this.db.query(`
-        SELECT payload_json FROM events
-        WHERE workspace_id = ? AND sequence > ? AND type = 'ballot.opened' AND entity_id = ?
-        ORDER BY sequence LIMIT 1
-      `).get(workspaceId, report.event_sequence, report.id) as { payload_json: string } | null;
+      // A poll report is a ballot when note_ballots names it (rebuilt from
+      // ballot.opened on every open); whether it still takes casts is read
+      // from the journal, so a withdrawal or an all-cast close counts.
       let ballot: NoteTargetView["ballot"] = null;
-      if (opened) {
-        const closed = this.db.query(`
-          SELECT 1 FROM events WHERE workspace_id = ? AND sequence > ? AND type = 'ballot.closed' AND entity_id = ? LIMIT 1
-        `).get(workspaceId, report.event_sequence, report.id) !== null;
-        const closesAt = (JSON.parse(opened.payload_json) as Record<string, unknown>).closes_at;
-        ballot = { open: !closed && (typeof closesAt !== "string" || this.timestamp() < closesAt) };
+      if (this.db.query(`SELECT 1 FROM note_ballots WHERE workspace_id = ? AND ballot_id = ?`).get(workspaceId, report.id) !== null) {
+        ballot = { open: this.readBallotFacts(workspaceId, report.id)?.state === "open" };
       }
       let completion: NoteTargetView["completion_of"] = null;
       if (report.task_id) {
@@ -7875,22 +7940,28 @@ export class CollabStore {
         waiting,
       };
     };
+    let reveal: NoteRevealOutcome = { revealed: [], pending: [] };
     const planned = input.peek
       ? this.db.transaction(() => {
         const session = this.authenticateSession(input);
         const mark = this.readNoteMarkState(session);
         return { mark, ...plan(session, mark, false) };
       }).deferred()
-      : this.noteHousekeeping(input, (session, mark) => ({ mark, ...plan(session, mark, true) }));
+      : (() => {
+        const housekept = this.noteHousekeeping(input, (session, mark) => ({ mark, ...plan(session, mark, true) }));
+        reveal = housekept.reveal;
+        return housekept.result;
+      })();
     return afterHousekeeping(!input.peek, () => this.db.transaction(() => {
       const session = this.authenticateSession(input);
       const sessions = this.noteSessionViews(session.workspace_id);
       const me = sessions.find((view) => view.id === session.id)!;
       const workspace = this.requireWorkspace(session.workspace_id);
+      const folds = this.noteBallotFolds(session);
       return {
         session: me,
         sessions,
-        entries: planned.sequences.map((sequence) => this.noteEntryAt(session, sequence)),
+        entries: planned.sequences.map((sequence) => this.noteEntryAt(session, sequence, folds)),
         also_new: planned.also_new,
         more: planned.more,
         for_me_total: planned.for_me_total,
@@ -7905,6 +7976,7 @@ export class CollabStore {
         },
         head_sequence: workspace.event_head_sequence,
         waiting: planned.waiting ?? this.noteWaiting(session),
+        reveal_pending: reveal.pending,
         observed_at: this.timestamp(),
       };
     }).deferred());
@@ -7926,7 +7998,7 @@ export class CollabStore {
     id: string;
   }): NoteThreadData {
     const id = validateId(input.id, `${input.kind}_id`);
-    const markState = this.noteHousekeeping(input, (session, mark) => {
+    const { result: markState, reveal } = this.noteHousekeeping(input, (session, mark) => {
       const now = this.timestamp();
       if (input.kind === "task") {
         const task = this.requireTaskRow(session.workspace_id, id);
@@ -7969,7 +8041,10 @@ export class CollabStore {
           termed: false,
           proposal: null,
           decision: null,
+          ballot: null,
+          folded: 0,
           mark: markState,
+          reveal_pending: reveal.pending,
           observed_at: this.timestamp(),
         };
       }
@@ -8014,6 +8089,13 @@ export class CollabStore {
       }
       const ids = new Set([root.id, ...answers.keys()]);
       const termed = this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(root.id) !== null;
+      const ballotFacts = this.readBallotFacts(root.workspace_id, root.id);
+      const ballot = ballotFacts ? this.ballotData(ballotFacts, session.id) : null;
+      // A ballot's own thread folds for an elector whose unit has not cast;
+      // a note inside it, asked for by its id, is shown whole (spec 5.2).
+      const folds = ballot ? this.noteBallotFolds(session) : new Map<string, string>();
+      const answerEntries = [...answers.values()].sort((left, right) => left - right)
+        .map((sequence) => this.noteEntryAt(session, sequence, folds));
       // The computed views come from this same snapshot, so the position
       // shown is the one consent/v1 computes for the answers listed.
       return {
@@ -8021,8 +8103,7 @@ export class CollabStore {
         session: me,
         sessions,
         root: this.noteEntryAt(session, root.event_sequence),
-        answers: [...answers.values()].sort((left, right) => left - right)
-          .map((sequence) => this.noteEntryAt(session, sequence)),
+        answers: answerEntries,
         truncated,
         task: null,
         reviews: [],
@@ -8030,7 +8111,10 @@ export class CollabStore {
         termed,
         proposal: termed ? this.noteProposalData(root.workspace_id, root.id, sessions) : null,
         decision: !termed && root.kind === "decision" ? this.noteDecisionData(root.workspace_id, root, sessions) : null,
+        ballot,
+        folded: answerEntries.filter((entry) => entry.folded !== null).length,
         mark: markState,
+        reveal_pending: reveal.pending,
         observed_at: this.timestamp(),
       };
     }).deferred());
@@ -8067,6 +8151,8 @@ export class CollabStore {
         challenges: this.noteChallenges(session.workspace_id).filter((challenge) => challenge.standing).reverse(),
         report_count: reports,
         waiting: this.noteWaiting(session),
+        // Open ballots only: one withdrawn or closed takes no cast.
+        ballots: this.noteOpenBallots(session).filter((ballot) => ballot.state === "open"),
         observed_at: this.timestamp(),
       };
     }).deferred();
@@ -8270,19 +8356,23 @@ export class CollabStore {
    * The housekeeping transaction every notes read begins with (spec 5.2,
    * write placement): the session is authenticated, its lapsed leases and
    * last-seen time are recorded as collab_next records them, elapsed handoffs
-   * expire as system:clock, and a missing read mark is created from the
-   * legacy cursor. `apply` runs inside the same IMMEDIATE transaction.
+   * expire as system:clock, due ballots are revealed as system:clock (each
+   * in a savepoint: a failed reveal is reported, never fatal), and a missing
+   * read mark is created from the legacy cursor. `apply` runs inside the same
+   * IMMEDIATE transaction. Seal files are deleted only after it commits.
    */
   private noteHousekeeping<T>(
     credential: { session_id: string; session_token: string; generation: number },
     apply: (session: CoordinationSessionRow, mark: NoteMarkState) => T,
-  ): T {
+  ): { result: T; reveal: NoteRevealOutcome } {
+    let reveal: NoteRevealOutcome = { revealed: [], pending: [] };
     const result = this.db.transaction(() => {
       const authenticated = this.authenticateSession(credential);
       const now = this.timestamp();
       this.recordSessionLeaseLapses(authenticated, now);
       // Nested, so it runs as a savepoint inside this one transaction.
       this.expireElapsedHandoffs(authenticated.workspace_id, "system:clock");
+      reveal = this.revealBallotsInTransaction(authenticated.workspace_id);
       this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(now, authenticated.id);
       const session = this.requireCoordinationSessionRow(authenticated.id);
       const mark = this.readNoteMarkState(session);
@@ -8296,8 +8386,9 @@ export class CollabStore {
       }
       return apply(session, mark);
     }).immediate();
+    this.cleanSeals(reveal.revealed);
     this.tightenFileModes();
-    return result;
+    return { result, reveal };
   }
 
   private recordNoteShown(session: CoordinationSessionRow, itemIds: Array<string | null>, now: string): void {
@@ -8362,7 +8453,7 @@ export class CollabStore {
   }
 
   /** One event as an inbox entry, with the report, proposal or task it concerns. */
-  private noteEntryAt(session: CoordinationSessionRow, sequence: number): NoteEntry {
+  private noteEntryAt(session: CoordinationSessionRow, sequence: number, folds?: ReadonlyMap<string, string>): NoteEntry {
     const row = this.db.query(`
       SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
         session_id, occurred_at, payload_json, prev_hash, hash
@@ -8389,6 +8480,12 @@ export class CollabStore {
     // transaction, just before the note's first report. Any other cite event
     // it names is evidence it points at, never the observation of its lines.
     const own = marked && report ? cites.find((cite) => cite.sequence === report.event_sequence - 1) ?? null : null;
+    const ballotId = event.type.startsWith("ballot.") ? event.entity_id
+      : event.type === "report.posted" && report
+        && this.db.query(`SELECT 1 FROM note_ballots WHERE workspace_id = ? AND ballot_id = ?`).get(session.workspace_id, report.id) !== null
+        ? report.id : null;
+    const ballotFacts = ballotId ? this.readBallotFacts(session.workspace_id, ballotId) : null;
+    const foldedBy = report && event.type === "report.posted" ? folds?.get(report.id) ?? null : null;
     return {
       event,
       for_me: forMe,
@@ -8401,6 +8498,8 @@ export class CollabStore {
         && this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(report.id) !== null,
       to_person: event.type === "report.posted" && payload.to_person === true,
       task: taskRow ? { id: taskRow.id, title: taskRow.title } : null,
+      ballot: ballotFacts ? this.ballotData(ballotFacts, session.id) : null,
+      folded: foldedBy ? { ballot_id: foldedBy } : null,
     };
   }
 
@@ -8457,6 +8556,10 @@ export class CollabStore {
       case "proposal.agreed":
       case "proposal.rejected":
         return "person_act";
+      case "ballot.opened":
+        return "in_electorate";
+      case "ballot.closed":
+        return "ballot_closed";
       default:
         return "addressed";
     }
@@ -8583,6 +8686,21 @@ export class CollabStore {
         summary: firstLine(status.proposal.body),
       });
     }
+    // Open ballots this session's unit may still cast in and has not (spec 5.2).
+    for (const ballot of this.noteOpenBallots(session)) {
+      if (!ballot.viewer?.may_vote || ballot.viewer.unit_has_cast) continue;
+      waiting.push({
+        what: "vote",
+        ref_kind: "ballot",
+        ref_id: ballot.ballot_id,
+        about_id: null,
+        by: ballot.opener_name,
+        by_session_id: ballot.opener_session_id,
+        due: ballot.terms.closes_at,
+        at: ballot.opened_at,
+        summary: firstLine(ballot.terms.question),
+      });
+    }
     const obsoleted = this.activeObsoletionTargets(workspaceId);
     const authorOf = new Map((this.db.query(`
       SELECT id, from_session_id FROM reports WHERE workspace_id = ? AND id IN (
@@ -8662,6 +8780,602 @@ export class CollabStore {
       });
     }
     return [...waiting.filter((entry) => entry.what === "stop"), ...waiting.filter((entry) => entry.what !== "stop")];
+  }
+
+  // ---------------------------------------------------------------------------
+  // The sealed approval ballot (spec 7, 8.2, 8.4). The arithmetic is ballot.ts;
+  // this is where it meets the journal: an open is a report plus ballot.opened,
+  // a cast is one ballot.cast holding only a commitment, and the reveal is a
+  // system:clock act that reads the seal files once the ballot has closed.
+
+  /** The journal file's real path, which seal files sit beside; null for a store with no file. */
+  journalRealpath(): string | null {
+    if (!this.filesystemPath) return null;
+    try {
+      return realpathSync(this.filesystemPath);
+    } catch {
+      return this.filesystemPath;
+    }
+  }
+
+  /** Where one cast's seal file lives (spec 7 step 3). Refuses a store with no file. */
+  ballotSealPath(ballotId: string, castId: string): string {
+    return sealPath(this.requireSealJournal(), ballotId, castId);
+  }
+
+  private requireSealJournal(): string {
+    const realpath = this.journalRealpath();
+    if (!realpath) {
+      throw new CollabError("ballots_need_a_file_journal", "A sealed ballot keeps its seals beside the journal file; this store has none", {
+        remedy: { say: "Open collab on a journal file, not an in-memory store, to poll." },
+      });
+    }
+    return realpath;
+  }
+
+  /**
+   * Open a ballot (spec 5.7, 7): the poll report and ballot.opened in one
+   * transaction, the electorate fixed and hashed inside it. `render` turns
+   * the checked terms into the poll report's body.
+   */
+  openBallotForSession(input: {
+    session_id: string;
+    session_token: string;
+    generation: number;
+    idempotency_key: string;
+    poll: PollTermsInput;
+    render: (terms: BallotTerms) => string;
+    receipt_plan?: ReceiptPlanGuard;
+  }): NoteBallotOpenReceipt {
+    this.requireSealJournal();
+    const { render, receipt_plan: plan, ...rest } = input;
+    const poll = definedPollInput(rest.poll);
+    return this.mutateAsSession(rest, rest.idempotency_key, "notes.poll.v1", { poll }, (session) => {
+      const now = this.timestamp();
+      const views = this.noteSessionViews(session.workspace_id);
+      const voters = normalizeBallotVoters(poll.voters);
+      const marked = new Set((this.db.query(`SELECT session_id FROM note_marks WHERE workspace_id = ?`)
+        .all(session.workspace_id) as Array<{ session_id: string }>).map((row) => row.session_id));
+      let chosen: NoteSessionView[];
+      if (voters) {
+        chosen = [];
+        for (const voter of voters) {
+          let view: NoteSessionView;
+          try {
+            view = this.resolveNoteSession(session.workspace_id, voter);
+          } catch (error) {
+            if (!(error instanceof CollabError)) throw error;
+            throw new CollabError(error.code, `voters: ${error.message}`, {
+              ...error.details,
+              field: "voters",
+              remedy: { say: "Name each voter by an active session's id, session# handle or name; collab_arrive lists who is here." },
+            });
+          }
+          if (!chosen.some((other) => other.id === view.id)) chosen.push(view);
+        }
+      } else {
+        const recent = Date.parse(now) - BALLOT_RECENT_MS;
+        chosen = views.filter((view) => view.status === "active" && (view.id === session.id
+          || (Date.parse(view.last_seen_at) >= recent && marked.has(view.id))));
+      }
+      const sessions: ElectorateSession[] = chosen.map((view) => ({
+        session_id: view.id,
+        voice_id: view.voice_id,
+        seat_ref: view.seat_ref,
+        name: view.actor,
+        model: view.model,
+        last_seen_at: view.last_seen_at,
+      }));
+      const electorate = buildElectorate(sessions);
+      const { terms, advice } = validatePollTerms(poll, { now, units: electorate.units, sessions });
+      const listedVoices = new Set(electorate.units.flatMap((unit) => unit.voice_ids));
+      const leftOutAll = views
+        .filter((view) => view.status === "active" && view.liveness === "live" && !listedVoices.has(view.voice_id))
+        .map((view) => ({
+          session_id: view.id,
+          name: view.actor,
+          last_seen_minutes: Math.max(0, Math.floor((Date.parse(now) - Date.parse(view.last_seen_at)) / 60_000)),
+        }));
+      const leftOut = leftOutAll.slice(0, BALLOT_LEFT_OUT_MAX);
+      const body = render(terms);
+      const normalized = {
+        task_id: null,
+        to_session_id: null,
+        kind: "observation" as const,
+        body,
+        evidence_refs: [] as string[],
+        confidence: "unknown" as const,
+        confidence_basis: null,
+        limits: null,
+        relation: "informs" as const,
+        target_report_id: null,
+        authority_scope: null,
+        authority_basis: null,
+      };
+      this.validateReportInput(session, normalized);
+      const report = this.appendReportInternal(session, { ...normalized, note: NOTE_FORMAT });
+      const payload: Record<string, unknown> = {
+        ballot_id: report.id,
+        question: terms.question,
+        options: terms.options,
+        ...(terms.criteria !== undefined ? { criteria: terms.criteria } : {}),
+        method: terms.method,
+        ...(terms.pick !== undefined ? { pick: terms.pick } : {}),
+        quorum: terms.quorum,
+        closes_at: terms.closes_at,
+        close_when_all_cast: terms.close_when_all_cast,
+        electorate: electorate.units,
+        electorate_sha256: electorate.electorate_sha256,
+        left_out: leftOut,
+        ...(leftOutAll.length > leftOut.length ? { left_out_total: leftOutAll.length } : {}),
+        chosen_by: voters ? "opener" : "default",
+        opener_session_id: session.id,
+      };
+      assertNotePayload(payload);
+      const event = this.appendEvent(session.workspace_id, "ballot.opened", report.id, session.actor, payload, session.id);
+      this.db.query(`
+        INSERT OR REPLACE INTO note_ballots (workspace_id, ballot_id, closes_at, state) VALUES (?, ?, ?, 'open')
+      `).run(session.workspace_id, report.id, terms.closes_at);
+      return {
+        ballot_id: report.id,
+        report,
+        event_id: event.id,
+        sequence: event.sequence,
+        terms,
+        electorate: electorate.units,
+        electorate_sha256: electorate.electorate_sha256,
+        left_out: leftOut,
+        left_out_total: leftOutAll.length,
+        chosen_by: voters ? "opener" as const : "default" as const,
+        advice,
+      };
+    }, plan ? { receipt_plan: plan } : {});
+  }
+
+  /**
+   * Record one sealed cast (spec 7 step 4): a ballot.cast event holding the
+   * commitment, never the vote. The seal file was written before this call,
+   * and the caller removes it when this refuses. Checked inside the
+   * transaction: the ballot is open and not withdrawn, the caster's unit is
+   * the one the commitment names, and the session's cast limit.
+   */
+  castBallotForSession(input: {
+    session_id: string;
+    session_token: string;
+    generation: number;
+    ballot_id: string;
+    cast_id: string;
+    unit_id: string;
+    commitment: string;
+  }): NoteBallotCastReceipt {
+    const ballotId = validateId(input.ballot_id, "ballot_id");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(input.cast_id)) {
+      throw new CollabError("invalid_cast_id", "A cast id is a random uuid");
+    }
+    if (!/^[0-9a-f]{64}$/.test(input.commitment)) throw new CollabError("invalid_commitment", "A commitment is a sha256 in hex");
+    // Only the commitment and ids reach the receipt: nothing derived from
+    // the vote without its salt is stored anywhere (spec 7).
+    const request = { ballot_id: ballotId, cast_id: input.cast_id, unit_id: input.unit_id, commitment: input.commitment };
+    return this.mutateAsSession(input, `b1:${input.cast_id}`, "notes.vote.v1", request, (session) => {
+      const facts = this.readBallotFacts(session.workspace_id, ballotId);
+      if (!facts) throw new CollabError("ballot_not_found", `No ballot with id ${ballotId} in this workspace`);
+      if (facts.state === "revealed" || facts.state === "closed") {
+        throw new CollabError("ballot_closed", `The ballot closed at ${facts.closed_by === "all_cast" ? "its last unit's cast" : facts.terms.closes_at}; no cast is taken after the close`, {
+          closes_at: facts.terms.closes_at,
+          closed_by: facts.closed_by,
+        });
+      }
+      if (facts.state === "withdrawn") {
+        throw new CollabError("ballot_withdrawn", "The opener withdrew this ballot; no cast is taken after a withdrawal", {
+          withdrawn_by_report: facts.withdrawn!.report_id,
+        });
+      }
+      const voice = this.consentVoice(session.id);
+      const caster = classifyCaster(facts.units, { voice_id: voice, seat_ref: this.sessionSeatRef(session.id) });
+      if (caster.unit_id !== input.unit_id) {
+        throw new CollabError("ballot_unit_changed", "The unit this cast was sealed for is not this session's unit in this ballot");
+      }
+      const castSeq = nextCastSeq(facts.casts.filter((cast) => cast.session_id === session.id).length);
+      const voices = new Map<string, string>();
+      const unitMateCast = facts.casts.some((cast) =>
+        cast.unit_id === caster.unit_id && this.cachedVoice(cast.session_id, voices) !== voice);
+      const payload = {
+        ballot_id: ballotId,
+        cast_id: input.cast_id,
+        unit_id: caster.unit_id,
+        session_id: session.id,
+        commitment: input.commitment,
+        cast_seq: castSeq,
+      };
+      assertNotePayload(payload);
+      const event = this.appendEvent(session.workspace_id, "ballot.cast", ballotId, session.actor, payload, session.id);
+      const castUnits = new Set([...facts.cast_unit_ids, ...(caster.counts_as === "counted" ? [caster.unit_id] : [])]);
+      return {
+        ballot_id: ballotId,
+        cast_id: input.cast_id,
+        cast_seq: castSeq,
+        commitment: input.commitment,
+        unit_id: caster.unit_id,
+        counts_as: caster.counts_as,
+        ...(caster.counts_as === "late" && caster.same_handle_as ? { same_handle_as: caster.same_handle_as } : {}),
+        closes_at: facts.terms.closes_at,
+        event_id: event.id,
+        sequence: event.sequence,
+        cast_at: event.occurred_at,
+        unit_mate_cast: unitMateCast,
+        closes_now: facts.terms.close_when_all_cast && facts.units.every((unit) => castUnits.has(unit.unit_id)),
+      };
+    });
+  }
+
+  /**
+   * The system:clock reveal (spec 7, "Close and reveal") of every ballot in
+   * the workspace that has closed and has no ballot.closed yet, in its own
+   * IMMEDIATE transaction. Seal files are deleted only after the commit. A
+   * reveal that fails leaves its ballot sealed for the next call and is
+   * reported in `pending`; this never throws.
+   */
+  revealDueBallots(workspaceId: string): NoteRevealOutcome {
+    try {
+      if (!this.hasDueBallot(workspaceId)) return { revealed: [], pending: [] };
+      const outcome = this.db.transaction(() => this.revealBallotsInTransaction(workspaceId)).immediate();
+      this.cleanSeals(outcome.revealed);
+      this.tightenFileModes();
+      return outcome;
+    } catch (error) {
+      return { revealed: [], pending: [{ ballot_id: null, code: error instanceof CollabError ? error.code : "reveal_failed" }] };
+    }
+  }
+
+  /** A ballot as the notes surface shows it, from the journal alone (spec 5.2 about, 7). Read-only. */
+  noteBallotView(workspaceId: string, ballotId: string, viewerSessionId?: string | null): NoteBallotData {
+    return this.db.transaction(() => {
+      const facts = this.readBallotFacts(workspaceId, validateId(ballotId, "ballot_id"));
+      if (!facts) throw new CollabError("ballot_not_found", `No ballot with id ${ballotId} in this workspace`);
+      return this.ballotData(facts, viewerSessionId ?? null);
+    }).deferred();
+  }
+
+  /** The computed result of a revealed ballot (spec 7 "Result"), or null while it is sealed. Never stored. Read-only. */
+  ballotResult(workspaceId: string, ballotId: string): BallotResult | null {
+    return this.noteBallotView(workspaceId, ballotId).result;
+  }
+
+  /** The unit a session casts for in a ballot, and whether that cast would count (spec 7 "Unit"). Read-only. */
+  ballotUnitOf(workspaceId: string, ballotId: string, sessionId: string): NoteBallotViewer {
+    return this.noteBallotView(workspaceId, ballotId, validateId(sessionId, "session_id")).viewer!;
+  }
+
+  /** This session's latest cast in a ballot, for the seal-file retry check (spec 7 step 2). Read-only. */
+  latestBallotCastForSession(workspaceId: string, ballotId: string, sessionId: string): NoteBallotCast | null {
+    const facts = this.readBallotFacts(workspaceId, validateId(ballotId, "ballot_id"));
+    if (!facts) return null;
+    return facts.casts.filter((cast) => cast.session_id === sessionId).at(-1) ?? null;
+  }
+
+  /** Whether any ballot of the workspace is due a reveal. Read-only and cheap when none is open. */
+  private hasDueBallot(workspaceId: string): boolean {
+    const open = this.db.query(`SELECT ballot_id FROM note_ballots WHERE workspace_id = ? AND state = 'open'`)
+      .all(workspaceId) as Array<{ ballot_id: string }>;
+    return open.some((row) => {
+      try {
+        const facts = this.readBallotFacts(workspaceId, row.ballot_id);
+        return facts === null || facts.state === "closed" || facts.state === "revealed";
+      } catch {
+        return true;
+      }
+    });
+  }
+
+  /**
+   * Reveal every due ballot inside the caller's transaction, each in a
+   * savepoint of its own, so one that fails is rolled back alone and the
+   * rest of the transaction still commits.
+   */
+  private revealBallotsInTransaction(workspaceId: string): NoteRevealOutcome {
+    const outcome: NoteRevealOutcome = { revealed: [], pending: [] };
+    let open: Array<{ ballot_id: string }>;
+    try {
+      open = this.db.query(`SELECT ballot_id FROM note_ballots WHERE workspace_id = ? AND state = 'open' ORDER BY closes_at, ballot_id`)
+        .all(workspaceId) as Array<{ ballot_id: string }>;
+    } catch (error) {
+      outcome.pending.push({ ballot_id: null, code: error instanceof CollabError ? error.code : "reveal_failed" });
+      return outcome;
+    }
+    for (const { ballot_id: ballotId } of open) {
+      try {
+        this.db.transaction(() => {
+          const facts = this.readBallotFacts(workspaceId, ballotId);
+          if (!facts || facts.state === "revealed") {
+            // Revealed by another process, or its opening is not in this
+            // journal: nothing to reveal here.
+            this.db.query(`UPDATE note_ballots SET state = 'closed' WHERE workspace_id = ? AND ballot_id = ?`).run(workspaceId, ballotId);
+            return;
+          }
+          if (facts.state !== "closed") return;
+          this.revealBallot(facts);
+          outcome.revealed.push(ballotId);
+        })();
+      } catch (error) {
+        outcome.pending.push({ ballot_id: ballotId, code: error instanceof CollabError ? error.code : "reveal_failed" });
+      }
+    }
+    return outcome;
+  }
+
+  /** Open each seal named by the ballot's casts, resolve the casts, and append the reveal (spec 7). */
+  private revealBallot(facts: NoteBallotFacts): void {
+    const realpath = this.journalRealpath();
+    const casts: CastToResolve[] = facts.casts.map((cast) => {
+      let seal: SealOutcome = { state: "seal_missing" };
+      if (realpath) {
+        const read = readSealFile(sealPath(realpath, facts.ballot_id, cast.cast_id));
+        seal = read.state === "missing"
+          ? { state: "seal_missing" }
+          : read.state === "unreadable"
+            ? { state: "seal_unreadable" }
+            : openSeal(read.value, cast, { workspace_id: facts.workspace_id, ballot_id: facts.ballot_id, journal_realpath: realpath });
+      }
+      return {
+        cast_id: cast.cast_id,
+        unit_id: cast.unit_id,
+        session_id: cast.session_id,
+        commitment: cast.commitment,
+        cast_seq: cast.cast_seq,
+        voice_id: this.consentVoice(cast.session_id),
+        seal,
+      };
+    });
+    const entries = resolveCasts(facts.units, casts, { ballot_id: facts.ballot_id });
+    this.revealFailpoint?.("revealing", facts.ballot_id);
+    for (const entry of entries) {
+      const payload = entry as unknown as Record<string, unknown>;
+      assertNotePayload(payload);
+      this.appendEvent(facts.workspace_id, "ballot.revealed", facts.ballot_id, "system:clock", payload, null);
+    }
+    const closed = {
+      ballot_id: facts.ballot_id,
+      entry_count: entries.length,
+      entries_sha256: revealedEntriesSha256(entries),
+      closed_at: this.timestamp(),
+    };
+    this.appendEvent(facts.workspace_id, "ballot.closed", facts.ballot_id, "system:clock", closed, null);
+    this.db.query(`UPDATE note_ballots SET state = 'closed' WHERE workspace_id = ? AND ballot_id = ?`)
+      .run(facts.workspace_id, facts.ballot_id);
+    this.revealFailpoint?.("appended", facts.ballot_id);
+  }
+
+  /**
+   * After a reveal commits: delete this journal's seal files of those
+   * ballots, orphans included (a cast whose transaction never committed).
+   * A seal another journal wrote (a copy beside this one) is left in place.
+   */
+  private cleanSeals(ballotIds: readonly string[]): void {
+    const realpath = this.journalRealpath();
+    if (!realpath) return;
+    for (const ballotId of ballotIds) {
+      try {
+        for (const castId of listSealFiles(realpath, ballotId)) {
+          const path = sealPath(realpath, ballotId, castId);
+          const read = readSealFile(path);
+          const owner = read.state === "read" && read.value !== null && typeof read.value === "object"
+            ? (read.value as Record<string, unknown>).journal_realpath
+            : undefined;
+          if (read.state !== "read" || owner === realpath || typeof owner !== "string") removeSealFile(path);
+        }
+        removeEmptySealDirectory(realpath, ballotId);
+      } catch {
+        // The reveal is committed; a seal left on disk is visible there, never in collab.
+      }
+    }
+  }
+
+  /** Everything the journal records about one ballot, judged at the store's clock. Null when no ballot.opened names it. */
+  private readBallotFacts(workspaceId: string, ballotId: string): NoteBallotFacts | null {
+    const rows = this.db.query(`
+      SELECT id, sequence, type, session_id, occurred_at, payload_json FROM events
+      WHERE workspace_id = ? AND entity_id = ?
+        AND type IN ('ballot.opened', 'ballot.cast', 'ballot.revealed', 'ballot.closed')
+      ORDER BY sequence
+    `).all(workspaceId, ballotId) as Array<{
+      id: string; sequence: number; type: string; session_id: string | null; occurred_at: string; payload_json: string;
+    }>;
+    const openedRow = rows.find((row) => row.type === "ballot.opened");
+    if (!openedRow) return null;
+    const opened = JSON.parse(openedRow.payload_json) as Record<string, any>;
+    const terms: BallotTerms = {
+      question: opened.question,
+      options: opened.options,
+      method: opened.method,
+      quorum: opened.quorum,
+      closes_at: opened.closes_at,
+      close_when_all_cast: opened.close_when_all_cast === true,
+    };
+    if (typeof opened.criteria === "string") terms.criteria = opened.criteria;
+    if (Number.isInteger(opened.pick)) terms.pick = opened.pick;
+    const units = (Array.isArray(opened.electorate) ? opened.electorate : []) as ElectorateUnit[];
+    const unitIds = new Set(units.map((unit) => unit.unit_id));
+    const casts: NoteBallotCast[] = [];
+    const castUnits = new Set<string>();
+    let allCastSequence: number | null = null;
+    const revealed: RevealedEntry[] = [];
+    let closed: NoteBallotFacts["closed"] = null;
+    for (const row of rows) {
+      const payload = JSON.parse(row.payload_json) as Record<string, any>;
+      if (row.type === "ballot.cast") {
+        casts.push({
+          cast_id: payload.cast_id,
+          unit_id: payload.unit_id,
+          session_id: payload.session_id,
+          commitment: payload.commitment,
+          cast_seq: payload.cast_seq,
+          event_id: row.id,
+          sequence: row.sequence,
+          at: row.occurred_at,
+        });
+        if (unitIds.has(payload.unit_id)) castUnits.add(payload.unit_id);
+        if (allCastSequence === null && units.length > 0 && units.every((unit) => castUnits.has(unit.unit_id))) {
+          allCastSequence = row.sequence;
+        }
+      } else if (row.type === "ballot.revealed") {
+        revealed.push(payload as RevealedEntry);
+      } else if (row.type === "ballot.closed" && closed === null) {
+        closed = {
+          event_id: row.id,
+          sequence: row.sequence,
+          at: row.occurred_at,
+          entry_count: payload.entry_count,
+          entries_sha256: payload.entries_sha256,
+        };
+      }
+    }
+    // The opener's withdrawal counts when it came before the close: after
+    // it, every vote is revealed, and withdrawing then hides no top choice.
+    const obsoleted = this.activeObsoletionTargets(workspaceId);
+    const withdrawal = (this.db.query(`
+      SELECT id, event_sequence, created_at FROM reports
+      WHERE workspace_id = ? AND target_report_id = ? AND relation = 'withdraws' AND from_session_id = ?
+      ORDER BY event_sequence
+    `).all(workspaceId, ballotId, opened.opener_session_id) as Array<{ id: string; event_sequence: number; created_at: string }>)
+      .find((row) => !obsoleted.has(row.id)
+        && Date.parse(row.created_at) < Date.parse(terms.closes_at)
+        && (!terms.close_when_all_cast || allCastSequence === null || row.event_sequence < allCastSequence)
+        && (closed === null || row.event_sequence < closed.sequence)) ?? null;
+    const withdrawn = withdrawal ? { report_id: withdrawal.id, sequence: withdrawal.event_sequence, at: withdrawal.created_at } : null;
+    const now = this.timestamp();
+    const closedBy: NoteBallotFacts["closed_by"] = Date.parse(now) >= Date.parse(terms.closes_at)
+      ? "time"
+      : terms.close_when_all_cast && !withdrawn && allCastSequence !== null ? "all_cast" : null;
+    const state: NoteBallotFacts["state"] = closed !== null
+      ? "revealed"
+      : closedBy !== null ? "closed" : withdrawn ? "withdrawn" : "open";
+    const leftOut = (Array.isArray(opened.left_out) ? opened.left_out : []) as LeftOutSession[];
+    return {
+      ballot_id: ballotId,
+      workspace_id: workspaceId,
+      opener_session_id: opened.opener_session_id,
+      opened_at: openedRow.occurred_at,
+      opened_sequence: openedRow.sequence,
+      terms,
+      units,
+      electorate_sha256: opened.electorate_sha256,
+      chosen_by: opened.chosen_by,
+      left_out: leftOut,
+      left_out_total: Number.isInteger(opened.left_out_total) ? opened.left_out_total : leftOut.length,
+      casts,
+      cast_unit_ids: [...castUnits].sort(),
+      all_cast_sequence: allCastSequence,
+      withdrawn,
+      closed_by: closedBy,
+      state,
+      revealed: closed !== null ? revealed : null,
+      closed,
+      observed_at: now,
+    };
+  }
+
+  /** The view of a ballot for one session (or none): its terms, turnout, the viewer's unit, and the result once revealed. */
+  private ballotData(facts: NoteBallotFacts, viewerSessionId: string | null): NoteBallotData {
+    const sessions = this.noteSessionViews(facts.workspace_id);
+    const byId = new Map(sessions.map((view) => [view.id, view]));
+    let viewer: NoteBallotViewer | null = null;
+    if (viewerSessionId) {
+      const voice = this.consentVoice(viewerSessionId);
+      const caster = classifyCaster(facts.units, { voice_id: voice, seat_ref: byId.get(viewerSessionId)?.seat_ref ?? null });
+      const yours = facts.casts.filter((cast) => cast.session_id === viewerSessionId).length;
+      const listed = caster.counts_as === "counted";
+      viewer = {
+        session_id: viewerSessionId,
+        unit_id: caster.unit_id,
+        counts_as: caster.counts_as,
+        ...(caster.counts_as === "late" && caster.same_handle_as ? { same_handle_as: caster.same_handle_as } : {}),
+        in_electorate: listed,
+        unit_has_cast: listed ? facts.cast_unit_ids.includes(caster.unit_id) : yours > 0,
+        your_casts: yours,
+        may_vote: facts.state === "open" && listed && yours < BALLOT_MAX_CASTS,
+      };
+    }
+    let result: BallotResult | null = null;
+    if (facts.revealed) {
+      const delivered = (this.db.query(`SELECT session_id FROM note_shown WHERE workspace_id = ? AND item_id = ?`)
+        .all(facts.workspace_id, facts.ballot_id) as Array<{ session_id: string }>).map((row) => row.session_id);
+      result = computeBallotResult({
+        terms: facts.terms,
+        units: facts.units,
+        entries: facts.revealed,
+        withdrawn: facts.withdrawn !== null,
+        sessions: Object.fromEntries(sessions.map((view) => [view.id, { name: view.actor, seat_ref: view.seat_ref, model: view.model }])),
+        delivered_session_ids: delivered,
+        left_out: facts.left_out,
+      });
+    }
+    return {
+      ...facts,
+      opener_name: byId.get(facts.opener_session_id)?.actor ?? facts.opener_session_id,
+      turnout: { cast: facts.cast_unit_ids.length, electorate: facts.units.length },
+      viewer,
+      unit_basis: unitBasis(facts.units),
+      sealing: BALLOT_SEALING,
+      result,
+    };
+  }
+
+  /** Every ballot in the workspace that has not been revealed, as one session sees it, oldest first. Read-only. */
+  private noteOpenBallots(session: CoordinationSessionRow): NoteBallotData[] {
+    const rows = this.db.query(`
+      SELECT ballot_id FROM note_ballots WHERE workspace_id = ? AND state = 'open' ORDER BY closes_at, ballot_id
+    `).all(session.workspace_id) as Array<{ ballot_id: string }>;
+    const out: NoteBallotData[] = [];
+    for (const row of rows) {
+      const facts = this.readBallotFacts(session.workspace_id, row.ballot_id);
+      if (facts && facts.state !== "revealed") out.push(this.ballotData(facts, session.id));
+    }
+    return out;
+  }
+
+  /**
+   * The notes a session sees folded (spec 5.2): for each open ballot whose
+   * electorate lists its unit and whose unit has not cast, every report in
+   * that ballot's thread (relations aimed at it or at an answer, and notes
+   * citing it), except its own. The poll report itself, which holds the
+   * terms, is not folded. A default of the view, never a gate: about shows
+   * any of them.
+   */
+  private noteBallotFolds(session: CoordinationSessionRow): Map<string, string> {
+    const folds = new Map<string, string>();
+    for (const ballot of this.noteOpenBallots(session)) {
+      if (ballot.state !== "open" || !ballot.viewer?.in_electorate || ballot.viewer.unit_has_cast) continue;
+      for (const id of this.ballotThreadIds(session.workspace_id, ballot.ballot_id)) {
+        if (folds.has(id)) continue;
+        // A session's own notes cannot sway it, so they are never folded for it.
+        const author = this.db.query(`SELECT from_session_id FROM reports WHERE id = ?`).get(id) as { from_session_id: string | null } | null;
+        if (author?.from_session_id !== session.id) folds.set(id, ballot.ballot_id);
+      }
+    }
+    return folds;
+  }
+
+  /** Every report that answers a ballot, at any depth: aimed at it or at an answer, or citing either (a note's re). */
+  private ballotThreadIds(workspaceId: string, ballotId: string): string[] {
+    const seen = new Set<string>();
+    let frontier = [ballotId];
+    while (frontier.length > 0 && seen.size < NOTE_THREAD_MAX) {
+      const next: string[] = [];
+      for (const target of frontier) {
+        const rows = this.db.query(`
+          SELECT id FROM reports WHERE workspace_id = ? AND target_report_id = ?
+          UNION
+          SELECT r.id FROM reports r, json_each(r.evidence_refs_json) ref WHERE r.workspace_id = ? AND ref.value = ?
+        `).all(workspaceId, target, workspaceId, `report:${target}`) as Array<{ id: string }>;
+        for (const row of rows) {
+          if (seen.has(row.id) || row.id === ballotId) continue;
+          seen.add(row.id);
+          next.push(row.id);
+        }
+      }
+      frontier = next;
+    }
+    return [...seen];
   }
 
   /** The store's clock, for a verb that turns a caller's close time into seconds from now. Read-only. */
@@ -9991,7 +10705,9 @@ export type NoteWhyYou =
   | "verdict_on_your_work"
   | "your_lease_recovered"
   | "voice_awaited"
-  | "person_act";
+  | "person_act"
+  | "in_electorate"
+  | "ballot_closed";
 
 /** One event as collab_inbox returns it, with the report, proposal or task it concerns. */
 export interface NoteEntry {
@@ -10014,6 +10730,10 @@ export interface NoteEntry {
   termed: boolean;
   to_person: boolean;
   task: { id: string; title: string } | null;
+  /** For a ballot event or a poll report: the ballot as this session sees it. */
+  ballot: NoteBallotData | null;
+  /** The note sits in an open ballot's thread and this session's unit has not cast (spec 5.2): shown without text. */
+  folded: { ballot_id: string } | null;
 }
 
 export interface NoteChallengeView {
@@ -10028,9 +10748,9 @@ export interface NoteChallengeView {
 }
 
 export interface NoteWaitingEntry {
-  what: "review" | "voice" | "challenge" | "answer" | "stop" | "rejected" | "record_decision";
+  what: "review" | "voice" | "vote" | "challenge" | "answer" | "stop" | "rejected" | "record_decision";
   /** The entity the next call takes. */
-  ref_kind: "task" | "proposal" | "report";
+  ref_kind: "task" | "proposal" | "report" | "ballot";
   ref_id: string;
   /** The completion to review, the challenged report, your challenge, or the person act. */
   about_id: string | null;
@@ -10251,6 +10971,8 @@ export interface NoteInboxData {
   };
   head_sequence: number;
   waiting: NoteWaitingEntry[];
+  /** Reveals the housekeeping tried and could not finish (spec 7); empty for a peek. */
+  reveal_pending: NoteRevealOutcome["pending"];
   /** The store's clock when this was read. */
   observed_at: string;
 }
@@ -10270,8 +10992,14 @@ export interface NoteThreadData {
   proposal: NoteProposalData | null;
   /** For a decision root: the composed record. */
   decision: NoteDecisionData | null;
+  /** For a ballot root (a poll report): its terms, turnout and, once revealed, the result. */
+  ballot: NoteBallotData | null;
+  /** How many answers are folded for this session (spec 5.2). */
+  folded: number;
   /** What the housekeeping did to the read mark: created it from the legacy cursor, or clamped it to the head. */
   mark: { initialised_from: "cursor" | null; clamped: boolean };
+  /** Reveals the housekeeping tried and could not finish; each stays sealed and is tried again. */
+  reveal_pending: NoteRevealOutcome["pending"];
   observed_at: string;
 }
 
@@ -10423,7 +11151,119 @@ export interface NoteArrivalData {
   challenges: NoteChallengeView[];
   report_count: number;
   waiting: NoteWaitingEntry[];
+  ballots: NoteBallotData[];
   observed_at: string;
+}
+
+/** spec 7: the default electorate is the sessions seen within the last 30 minutes. */
+const BALLOT_RECENT_MS = 30 * 60_000;
+/** ballot.opened lists at most this many left-out sessions, with the total. */
+const BALLOT_LEFT_OUT_MAX = 50;
+const BALLOT_MAX_CASTS = MAX_CASTS_PER_SESSION;
+
+/** A poll's input with absent fields dropped, as its receipt's request. */
+function definedPollInput(poll: PollTermsInput): PollTermsInput {
+  return Object.fromEntries(Object.entries(poll ?? {}).filter(([, value]) => value !== undefined)) as PollTermsInput;
+}
+
+export interface NoteBallotOpenReceipt {
+  ballot_id: string;
+  report: CollabReport;
+  event_id: string;
+  sequence: number;
+  terms: BallotTerms;
+  electorate: ElectorateUnit[];
+  electorate_sha256: string;
+  left_out: LeftOutSession[];
+  left_out_total: number;
+  chosen_by: "default" | "opener";
+  advice: string[];
+}
+
+/** What a cast recorded: ids and the commitment, never the vote. */
+export interface NoteBallotCastReceipt {
+  ballot_id: string;
+  cast_id: string;
+  cast_seq: number;
+  commitment: string;
+  unit_id: string;
+  counts_as: "counted" | "late";
+  same_handle_as?: string;
+  closes_at: string;
+  event_id: string;
+  sequence: number;
+  cast_at: string;
+  /** Another lineage of this unit cast too; if both stand, neither is counted. */
+  unit_mate_cast: boolean;
+  /** close_when_all_cast was set and this cast completed the electorate. */
+  closes_now: boolean;
+}
+
+export interface NoteRevealOutcome {
+  revealed: string[];
+  /** Reveals that failed and stay sealed until the next call; ballot_id null when the attempt failed before reaching one. */
+  pending: Array<{ ballot_id: string | null; code: string }>;
+}
+
+export interface NoteBallotCast {
+  cast_id: string;
+  unit_id: string;
+  session_id: string;
+  commitment: string;
+  cast_seq: number;
+  event_id: string;
+  sequence: number;
+  at: string;
+}
+
+export interface NoteBallotFacts {
+  ballot_id: string;
+  workspace_id: string;
+  opener_session_id: string;
+  opened_at: string;
+  opened_sequence: number;
+  terms: BallotTerms;
+  units: ElectorateUnit[];
+  electorate_sha256: string;
+  chosen_by: "default" | "opener";
+  left_out: LeftOutSession[];
+  left_out_total: number;
+  casts: NoteBallotCast[];
+  /** Electorate units with at least one cast. Turnout and timing are visible (spec 7, sealing). */
+  cast_unit_ids: string[];
+  /** The cast that completed the electorate, when every unit has cast. */
+  all_cast_sequence: number | null;
+  /** The opener's withdrawal, when it came before the close. */
+  withdrawn: { report_id: string; sequence: number; at: string } | null;
+  closed_by: "time" | "all_cast" | null;
+  /** open; withdrawn (sealed until its original close); closed (due a reveal); revealed. */
+  state: "open" | "withdrawn" | "closed" | "revealed";
+  revealed: RevealedEntry[] | null;
+  closed: { event_id: string; sequence: number; at: string; entry_count: number; entries_sha256: string } | null;
+  observed_at: string;
+}
+
+/** One session's place in a ballot. */
+export interface NoteBallotViewer {
+  session_id: string;
+  unit_id: string;
+  counts_as: "counted" | "late";
+  same_handle_as?: string;
+  in_electorate: boolean;
+  /** For a listed unit, whether any of its lineages has cast; otherwise whether this session has. */
+  unit_has_cast: boolean;
+  your_casts: number;
+  may_vote: boolean;
+}
+
+export interface NoteBallotData extends NoteBallotFacts {
+  opener_name: string;
+  turnout: { cast: number; electorate: number };
+  viewer: NoteBallotViewer | null;
+  unit_basis: string;
+  sealing: string;
+  /** Computed on read once revealed; never stored. */
+  result: BallotResult | null;
 }
 
 interface NoteMarkState {
@@ -10463,20 +11303,21 @@ const NOTE_PURPOSE_MAX_CHARS = 200;
 /** spec 8.3: every new payload stays within 64 KiB of canonical UTF-8. */
 const NOTE_PAYLOAD_MAX_BYTES = 64 * 1024;
 
-/** The item an inbox delivery records (spec 8.1 note_shown): a proposal or a completion. */
+/** The item an inbox delivery records (spec 8.1 note_shown): a proposal, a ballot or a completion. */
 function noteShownItem(event: CollabEvent): string | null {
   const payload = event.payload as Record<string, unknown>;
-  if (event.type === "proposal.opened") return event.entity_id;
+  if (event.type === "proposal.opened" || event.type === "ballot.opened") return event.entity_id;
   if (event.type === "task.reported_complete" && typeof payload.completion_report_id === "string") {
     return payload.completion_report_id;
   }
   return null;
 }
 
-/** The questions a waiting list delivers (spec 8.1 note_shown): each awaited proposal, and each completion to review. */
+/** The questions a waiting list delivers (spec 8.1 note_shown): each awaited proposal, each ballot to vote in, and each completion to review. */
 export function noteWaitingShownItems(waiting: readonly NoteWaitingEntry[]): string[] {
   return waiting.flatMap((entry) =>
-    entry.what === "voice" ? [entry.ref_id] : entry.what === "review" && entry.about_id ? [entry.about_id] : []);
+    entry.what === "voice" || entry.what === "vote" ? [entry.ref_id]
+      : entry.what === "review" && entry.about_id ? [entry.about_id] : []);
 }
 
 /**

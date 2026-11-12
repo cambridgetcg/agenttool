@@ -500,7 +500,11 @@ export type CollabEventType =
   | "handoff.expired"
   // Collab Notes (spec 8.2). Older builds route none of these to anyone.
   | "purpose.declared"
-  | "evidence.cited";
+  | "evidence.cited"
+  | "ballot.opened"
+  | "ballot.cast"
+  | "ballot.revealed"
+  | "ballot.closed";
 
 export interface CollabEvent {
   protocol: CollabProtocol;

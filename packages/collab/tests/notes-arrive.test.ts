@@ -225,14 +225,20 @@ describe("collab_arrive on an unbound default slot", () => {
     expect(how).not.toContain("--from-cursor");
   });
 
-  test("under the notes profile, listen.how is the inbox wait, because the watcher's ring names legacy tools", async () => {
+  test("under the notes profile, listen.how is the same watcher, whose ring names collab_inbox", async () => {
     const j = journal();
     const arrived = await ok(j.server({
       AGENTOOL_COLLAB_TOOLS: "notes",
       CLAUDE_CODE_MESSAGING_SOCKET: "/nonexistent/12345.sock",
     }), "collab_arrive", { purpose: "be told", root_path: j.root, name: "told" });
     expect(arrived.surface.tools).toBe("notes");
-    expect(arrived.listen).toEqual({ how: "collab_inbox {wait_seconds: 30}" });
+    expect(arrived.listen.how).toStartWith("nohup ");
+    expect(arrived.listen.how).toContain("integrations/claude-code/collab-doorbell-watch.ts");
+    const watcher = await Bun.file(resolve(import.meta.dir, "..", "integrations", "claude-code", "collab-doorbell-watch.ts")).text();
+    expect(watcher).toContain("Read them with collab_inbox");
+    // Without Claude Code it is the inbox wait, in either profile.
+    const plain = await ok(j.server({ AGENTOOL_COLLAB_TOOLS: "notes" }), "collab_arrive", { purpose: "be told", root_path: j.root, name: "plain" });
+    expect(plain.listen).toEqual({ how: "collab_inbox {wait_seconds: 30}" });
   });
 
   test("refuses a purpose that is too long or holds half a character, before any write", async () => {

@@ -5,9 +5,9 @@
 > **Code:** `../../src/mcp.ts`, `../../dist/agenttool-collab-mcp.js`.
 > **Tests:** `../../tests/events-wait.test.ts`, `../../tests/package.test.ts`.
 
-**DEVELOPMENT BUILD 0.6.0-dev.0, 42 tools in the full profile. Unreleased.** It adds the
+**DEVELOPMENT BUILD 0.6.0-dev.0, 44 tools in the full profile. Unreleased.** It adds the
 unreleased host doorbell wait, three proposal consent tools and the Collab Notes verbs
-`collab_arrive`, `collab_inbox`, `collab_note`, `collab_take`, `collab_done` and `collab_propose` to 0.5.0's 33. Collab 0.5.0 is released on GitHub
+`collab_arrive`, `collab_inbox`, `collab_note`, `collab_take`, `collab_done`, `collab_propose`, `collab_poll` and `collab_vote` to 0.5.0's 33. Collab 0.5.0 is released on GitHub
 only, not on npm; the next npm release is not chosen here. This source does not
 establish publication, so verify the protected receipt and registry separately.
 Published npm 0.4.0 has 32 tools and no
@@ -49,7 +49,7 @@ shared endpoint. Carry the key on every child call. This is cooperative routing,
 not authenticated subagent isolation or automatic OpenClaw integration; see
 [the session-fit migration note](../../README.md#session-fit-migration-unreleased).
 Verify the intended workspace and the
-42-tool inventory (full profile) after connecting. Native tool-name prefixes depend on the
+44-tool inventory (full profile) after connecting. Native tool-name prefixes depend on the
 selected adapter; the names below are the underlying MCP names.
 
 ## Status, queue, receive, acknowledge

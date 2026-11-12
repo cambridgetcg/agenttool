@@ -26,7 +26,7 @@ export const COLLAB_NOTES_EVENT_TYPES = [
  * them must lose nothing the journal records. A slice that creates one of
  * these lists it here; the harness refuses any other new table.
  */
-export const VIEW_STATE_TABLES: string[] = ["note_marks", "note_shown"];
+export const VIEW_STATE_TABLES: string[] = ["note_marks", "note_shown", "note_ballots"];
 
 /** A clock the store reads; steps advance it so every run has the same shape. */
 export class FixtureClock {
@@ -76,12 +76,15 @@ export interface FixtureManifest {
   review_task_id: string;
   /** Decisions collab_note recorded, for the notes_decisions view. */
   decisions: string[];
+  /** Sealed ballots collab_poll opened and the reveal closed, for the ballot_result view. */
+  ballots: string[];
 }
 
 type ManifestDraft = Partial<Omit<FixtureManifest, "format" | "steps" | "produced_types" | "event_types" | "head_sequence">> & {
   proposals: string[];
   notes_sessions: string[];
   decisions: string[];
+  ballots: string[];
 };
 
 export interface FixtureContext {
@@ -646,8 +649,8 @@ export const FIXTURE_STEPS: FixtureStep[] = [
       });
       const inbox = await context.tool("notes-process", "collab_inbox", {});
       if ((inbox.items as unknown[]).length !== 1) throw new Error("the notes session's inbox did not list its item");
-      // Both view tables hold rows, so dropping them is a real test.
-      for (const table of VIEW_STATE_TABLES) {
+      // Both view tables this stage fills hold rows, so dropping them is a real test.
+      for (const table of ["note_marks", "note_shown"]) {
         const rows = (context.store.db.query(`SELECT COUNT(*) AS count FROM "${table}"`).get() as { count: number }).count;
         if (rows === 0) throw new Error(`fixture view table ${table} is empty`);
       }
@@ -813,6 +816,55 @@ export const FIXTURE_STEPS: FixtureStep[] = [
       context.manifest.decisions.push((decided.ids as { report: string }).report, (own.ids as { report: string }).report);
     },
   },
+  {
+    // Collab Notes stage 4: a sealed ballot from open to reveal. The opener
+    // chooses two voters; the peer casts and then replaces its cast, the
+    // opener abstains, and a session outside the electorate casts late.
+    // The reveal runs in the housekeeping of the first inbox call after the
+    // close, and deletes the seal files, so nothing outside the journal is
+    // needed to read the result.
+    name: "notes-ballot",
+    produces: ["ballot.opened", "ballot.cast", "ballot.revealed", "ballot.closed"],
+    async run(context) {
+      const notes = "notes-process";
+      const peer = "notes-peer-process";
+      const late = "notes-late-process";
+      const opened = await context.tool(notes, "collab_poll", {
+        question: "Which layout should the fixture's cache use?\n\nOlder builds page over every ballot event, 協作 🏮.",
+        options: [
+          { key: "keep", label: "Keep one table" },
+          { key: "split", label: "Split it per workspace" },
+          { key: "drop", label: "Drop the cache" },
+        ],
+        closes: "1m",
+        criteria: "Fewest writes per open.\n\nNo new dependency.",
+        quorum: 2,
+        voters: ["fixture-notes", "fixture-notes-peer"],
+      });
+      const ballot = opened.ballot as string;
+      await context.tool(late, "collab_arrive", { root_path: context.root, name: "fixture-late-voter", purpose: "casts outside the electorate" });
+      await context.tool(peer, "collab_vote", { ballot, choice: ["keep"] });
+      context.clock.advance();
+      await context.tool(peer, "collab_vote", {
+        ballot,
+        choice: ["split"],
+        why: [{ text: "per-workspace tables halve the writes", basis: "inferred", cites: [1] }],
+        evidence: ["file fixture/notes.txt:1"],
+        shared: "same fixture, same model",
+      });
+      await context.tool(notes, "collab_vote", { ballot, choice: [] });
+      const outside = await context.tool(late, "collab_vote", { ballot, choice: ["drop"] });
+      if (outside.counts_as !== "late") throw new Error("the fixture's outside cast was not late");
+      context.clock.advance(61_000);
+      const read = await context.tool(notes, "collab_inbox", { about: ballot });
+      const result = (read.ballot as { result: { status: string } | null }).result;
+      if (result?.status !== "top_choice") throw new Error(`the fixture ballot did not reveal a top choice: ${JSON.stringify(result)}`);
+      if ((context.store.db.query(`SELECT COUNT(*) AS count FROM note_ballots`).get() as { count: number }).count === 0) {
+        throw new Error("fixture view table note_ballots is empty");
+      }
+      context.manifest.ballots.push(ballot);
+    },
+  },
   // Later slices append their steps here.
 ];
 
@@ -829,7 +881,7 @@ export async function exerciseFixture(
   const ids = new Map<string, string>();
   const tasks = new Map<string, Task>();
   const servers = new Map<string, ReturnType<typeof buildCollabMcpServer>>();
-  const manifest: ManifestDraft = { proposals: [], notes_sessions: [], decisions: [] };
+  const manifest: ManifestDraft = { proposals: [], notes_sessions: [], decisions: [], ballots: [] };
   const produced = new Set<string>();
   const ran: string[] = [];
   const names = new Set<string>();
@@ -946,6 +998,7 @@ export async function exerciseFixture(
     notes_sessions: manifest.notes_sessions,
     review_task_id: manifest.review_task_id!,
     decisions: manifest.decisions,
+    ballots: manifest.ballots,
   };
 }
 
@@ -989,6 +1042,16 @@ export const FIXTURE_VIEWS: Record<string, (store: CollabStore, manifest: Fixtur
         rests_on: record.rests_on?.id ?? null,
         agreement_current: record.agreement_current,
       };
+    }),
+  // A ballot's result, computed from the journal on every read. Its
+  // delivery count comes from note_shown, which is view state, so it is
+  // left out: losing that table may lower it and changes nothing else.
+  ballot_result: (store, manifest) =>
+    manifest.ballots.map((id) => {
+      const result = store.ballotResult(manifest.workspace_id, id);
+      if (!result) return { id, result: null };
+      const { delivery_recorded: _delivered, ...turnout } = result.turnout;
+      return { id, result: { ...result, turnout } };
     }),
 };
 

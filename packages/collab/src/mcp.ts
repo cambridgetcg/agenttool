@@ -26,6 +26,7 @@ import {
 import { CollabStore } from "./store.js";
 import { doneVerb, noteVerb, takeVerb } from "./note-verbs.js";
 import { proposeVerb } from "./propose-verb.js";
+import { pollVerb, voteVerb } from "./ballot-verbs.js";
 import {
   arriveVerb,
   FULL_PROFILE_BRIDGE,
@@ -466,6 +467,57 @@ export function buildCollabMcpServer(
       },
     },
     async (input) => noteCall(() => proposeVerb(noteContext(), input)),
+  );
+
+  server.registerTool(
+    "collab_poll",
+    {
+      title: "Open a sealed ballot on a real choice",
+      description:
+        "Ask the agents here which of 2 to 9 named options they find acceptable (approval). Every cast stays sealed " +
+        "until the close; then the votes are revealed and the result computed. The electorate is fixed now: by default " +
+        "the active sessions seen in the last 30 minutes that have used the notes surface, plus you; with voters, exactly " +
+        "those sessions. Sessions sharing a declared host handle count as one unit. Not for \"may we proceed\" (that is " +
+        "collab_propose) and not for a checkable fact. A result is the agents' preference and authorises nothing.",
+      annotations: localMutation,
+      inputSchema: {
+        question: z.string().optional().describe("Required. The choice put to the agents, at most 500 characters."),
+        options: z.array(z.object({ key: z.string(), label: z.string() })).optional()
+          .describe("Required. 2 to 9 options: key (letters, digits, _ or -, at most 32) and label (one line, at most 120)."),
+        closes: z.union([z.number(), z.string()]).optional()
+          .describe("Required. When it closes: seconds, a duration such as 30m, 2h or 1d, or an ISO time; 1 minute to 7 days."),
+        criteria: z.string().optional().describe("What makes an option acceptable, at most 2,000 characters; advice when absent."),
+        pick: z.number().optional().describe("The most options one unit may approve, 1 to the number of options; default any."),
+        quorum: z.number().optional().describe("Units that must cast (abstentions count) for a result, 2 to the electorate size; default 2."),
+        voters: z.array(z.string()).optional().describe("The sessions to poll, by id, session# handle or name; default the electorate above."),
+        close_when_all_cast: z.boolean().optional()
+          .describe("Close as soon as every unit has cast instead of waiting for closes; off by default, and stated in the terms."),
+      },
+    },
+    async (input) => noteCall(() => pollVerb(noteContext(), input)),
+  );
+
+  server.registerTool(
+    "collab_vote",
+    {
+      title: "Cast your sealed vote",
+      description:
+        "Approve the options you find acceptable in a ballot (choice: option keys, or [] to abstain). The vote is sealed " +
+        "in a file beside the journal and committed by hash; no collab tool, event or doorbell shows it before the close, " +
+        "and this result returns nothing of it. Vote before you read others' answers. You may replace your cast up to 3 " +
+        "times; the latest counts. A vote needs no reason, but one is shown with it at the close.",
+      annotations: localMutation,
+      inputSchema: {
+        ballot: z.string().optional().describe("Required. The ballot: its id or ballot# handle."),
+        choice: z.array(z.string()).optional().describe("Required. The option keys you approve, or [] to abstain."),
+        why: z.array(noteReason).optional().describe("Up to 4 reasons of at most 300 characters each."),
+        evidence: z.array(z.string()).optional().describe(
+          "Up to 4 pointers, one line each, as for collab_note; files inside your worktree are hashed now and sealed with the vote.",
+        ),
+        shared: z.string().optional().describe("What you share with the other voters (model, context, sources), at most 200 characters."),
+      },
+    },
+    async (input) => noteCall(() => voteVerb(noteContext(), input)),
   );
 
   server.registerTool(

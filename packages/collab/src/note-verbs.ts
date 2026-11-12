@@ -56,6 +56,7 @@ import {
   oneLine,
   replayReceipt,
   requireCredential,
+  revealDue,
   statementOf,
   underPlan,
   withCurrentVersion,
@@ -536,14 +537,14 @@ function requireActHere(ctx: NoteVerbContext, act: string, fields: NoteFields): 
     // criteria and extent are left out: a stand-in would be stored as the
     // terms the person signs, and collab_propose asks for each one missing.
     propose: withSlot(ctx, { tool: "collab_propose", input: { question: fields.statement } }),
+    // options and closes are left out for the same reason; collab_poll asks for them.
+    poll: withSlot(ctx, { tool: "collab_poll", input: { question: fields.statement } }),
+    // A vote is sealed, so it is never written as a note; the ready call
+    // carries no choice, and collab_vote asks for one.
+    vote: withSlot(ctx, { tool: "collab_vote", input: fields.re ? { ballot: fields.re.replace(/^ballot:/, "") } : {} }),
   };
   if (elsewhere[act]) {
-    throw new CollabError("wrong_verb", `${act} is its own verb, not a note act`, { remedy: elsewhere[act] });
-  }
-  if (["poll", "vote"].includes(act)) {
-    throw new CollabError("act_not_built", `${act} is not built in this build yet; nothing was written`, {
-      remedy: { say: `${act} arrives in a later build. Until then, say it as a note, which authorises nothing.` },
-    });
+    throw new CollabError("wrong_verb", `${act} is its own verb, not a note act; nothing was written`, { remedy: elsewhere[act] });
   }
   throw new CollabError("invalid_act", `act must be one of ${NOTE_ACTS_HERE.join(", ")}`, {
     remedy: { say: `act is one of ${NOTE_ACTS_HERE.join(", ")}; leave it out for a plain note.` },
@@ -609,6 +610,15 @@ interface PlannedNote {
 }
 
 export async function noteVerb(ctx: NoteVerbContext, input: NoteVerbInput): Promise<Record<string, unknown>> {
+  const { binding } = requireCredential(ctx);
+  // The lazy reveal runs first (spec 7), so a note on a ballot that has just
+  // closed meets it revealed; a reveal that fails never fails the note.
+  const pending = input.dry_run === true ? null : revealDue(ctx, binding.handle.workspace.id);
+  const result = await noteAct(ctx, input);
+  return pending ? { ...result, reveal_pending: pending } : result;
+}
+
+async function noteAct(ctx: NoteVerbContext, input: NoteVerbInput): Promise<Record<string, unknown>> {
   const { binding, credential } = requireCredential(ctx);
   const workspaceId = binding.handle.workspace.id;
   const me = credential.session_id;

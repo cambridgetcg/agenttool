@@ -28770,7 +28770,7 @@ function isOwnedByCurrentUser(uid) {
 }
 
 // src/note-verbs.ts
-import { existsSync as existsSync5 } from "fs";
+import { existsSync as existsSync6 } from "fs";
 
 // src/canonical.ts
 function canonicalJson(value) {
@@ -30631,19 +30631,993 @@ function sha256Bytes(value) {
 
 // src/store.ts
 import { Database } from "bun:sqlite";
-import { createHash as createHash3, randomBytes, randomUUID as randomUUID2, timingSafeEqual } from "crypto";
+import { createHash as createHash4, randomBytes, randomUUID as randomUUID3, timingSafeEqual } from "crypto";
+import {
+  chmodSync as chmodSync3,
+  closeSync as closeSync6,
+  existsSync as existsSync4,
+  lstatSync as lstatSync4,
+  mkdirSync as mkdirSync3,
+  openSync as openSync6,
+  realpathSync as realpathSync2
+} from "fs";
+import { dirname as dirname3, isAbsolute as isAbsolute3, join as join4, posix, resolve as resolve4 } from "path";
+
+// src/ballot.ts
+import { createHash as createHash2 } from "crypto";
+var BALLOT_COMMITMENT_PROTOCOL = "agenttool.collab-ballot/1";
+var BALLOT_METHOD = "approval/1";
+var MIN_BALLOT_OPTIONS = 2;
+var MAX_BALLOT_OPTIONS = 9;
+var MAX_BALLOT_OPTION_KEY = 32;
+var MAX_BALLOT_OPTION_LABEL = 120;
+var MAX_BALLOT_QUESTION = 500;
+var MAX_BALLOT_CRITERIA = 2000;
+var MIN_BALLOT_CLOSE_SECONDS = 60;
+var MAX_BALLOT_CLOSE_SECONDS = 7 * 24 * 60 * 60;
+var MIN_ELECTORATE_UNITS = 2;
+var MAX_ELECTORATE_UNITS = 16;
+var MIN_BALLOT_QUORUM = 2;
+var DEFAULT_BALLOT_QUORUM = 2;
+var MAX_VOTE_REASONS = 4;
+var MAX_VOTE_REASON = 300;
+var MAX_VOTE_EVIDENCE = 4;
+var MAX_VOTE_SHARED = 200;
+var MAX_REVEALED_ENTRY_BYTES = 8 * 1024;
+var MAX_CASTS_PER_SESSION = 3;
+var BALLOT_SEALING = "Sealed means no collab tool, event or doorbell shows a vote before the close. It does not hide a vote from a process running as the same user that reads the seal files, from the voter's own host transcript, or from agents who message each other outside collab. Turnout, timing and the size of each seal file are visible. Any process that can read a session's credential file can cast for that session's unit. Notes on an open ballot are folded by collab_inbox only; legacy tools and older builds show them.";
+var BALLOT_AUTHORISES = "Nothing. A top choice is the agents' recorded preference: not a decision and not agreement. It adds nothing to what you were already allowed to do. A direction-level choice goes to collab_propose, where every voice may still object and the person decides.";
+var BALLOT_SPLIT_NOTE = "A split among agents is not agreement.";
+var BALLOT_SAME_FAMILY_NOTE = "all counted units declare the same model family: shared support is not independent confirmation";
+var BALLOT_TIE_NEXT = {
+  say: "the opener may poll again on the tied options or put one to collab_propose"
+};
+var BALLOT_BASES = NOTE_BASES;
+function ballotUnitId(voiceIds) {
+  return `unit_${sha2562(canonicalJson(sortedUnique(voiceIds))).slice(0, 32)}`;
+}
+function electorateSha256(units) {
+  return sha2562(canonicalJson(units));
+}
+function buildElectorate(sessions) {
+  const byId = new Map;
+  for (const session of sessions) {
+    if (!nonEmptyString(session.session_id) || !nonEmptyString(session.voice_id) || typeof session.name !== "string") {
+      throw new CollabError("invalid_electorate", "every electorate session needs a session_id, a voice_id and a name");
+    }
+    const seatRef = nonEmptyString(session.seat_ref) ? session.seat_ref : null;
+    const prior = byId.get(session.session_id);
+    if (prior) {
+      if (prior.voice_id !== session.voice_id || prior.seat_ref !== seatRef) {
+        throw new CollabError("invalid_electorate", `session ${session.session_id} is listed twice with different lineage or seat`);
+      }
+      continue;
+    }
+    byId.set(session.session_id, { ...session, seat_ref: seatRef });
+  }
+  const parent = new Map;
+  const find = (voice) => {
+    let root = voice;
+    while (parent.get(root) !== root)
+      root = parent.get(root);
+    let next = voice;
+    while (next !== root) {
+      const up = parent.get(next);
+      parent.set(next, root);
+      next = up;
+    }
+    return root;
+  };
+  const union2 = (left, right) => {
+    const a = find(left);
+    const b = find(right);
+    if (a === b)
+      return;
+    if (a < b)
+      parent.set(b, a);
+    else
+      parent.set(a, b);
+  };
+  const firstVoiceBySeat = new Map;
+  for (const session of byId.values()) {
+    if (!parent.has(session.voice_id))
+      parent.set(session.voice_id, session.voice_id);
+    if (session.seat_ref === null)
+      continue;
+    const first = firstVoiceBySeat.get(session.seat_ref);
+    if (first === undefined)
+      firstVoiceBySeat.set(session.seat_ref, session.voice_id);
+    else
+      union2(first, session.voice_id);
+  }
+  const groups = new Map;
+  for (const session of byId.values()) {
+    const root = find(session.voice_id);
+    const group = groups.get(root);
+    if (group)
+      group.push(session);
+    else
+      groups.set(root, [session]);
+  }
+  const units = [...groups.values()].map((group) => {
+    const voiceIds = sortedUnique(group.map((session) => session.voice_id));
+    const unit = {
+      unit_id: ballotUnitId(voiceIds),
+      voice_ids: voiceIds,
+      session_ids: sortedUnique(group.map((session) => session.session_id)),
+      seat_refs: sortedUnique(group.flatMap((session) => session.seat_ref === null ? [] : [session.seat_ref])),
+      names: sortedUnique(group.map((session) => session.name))
+    };
+    const models = sortedUnique(group.flatMap((session) => {
+      const model = typeof session.model === "string" ? session.model.trim() : "";
+      return model ? [model] : [];
+    }));
+    if (models.length === 1)
+      unit.model = models[0];
+    else if (models.length > 1)
+      unit.models = models;
+    return unit;
+  }).sort((left, right) => compare(left.unit_id, right.unit_id));
+  return { units, electorate_sha256: electorateSha256(units) };
+}
+function classifyCaster(units, caster) {
+  const listed = units.find((unit) => unit.voice_ids.includes(caster.voice_id));
+  if (listed)
+    return { counts_as: "counted", unit_id: listed.unit_id };
+  const late = { counts_as: "late", unit_id: ballotUnitId([caster.voice_id]) };
+  const seatRef = caster.seat_ref;
+  if (nonEmptyString(seatRef)) {
+    const sameHandle = units.find((unit) => unit.seat_refs.includes(seatRef));
+    if (sameHandle)
+      late.same_handle_as = sameHandle.unit_id;
+  }
+  return late;
+}
+function unitBasis(units) {
+  const unhandled = units.filter((unit) => unit.seat_refs.length === 0).length;
+  return `A unit is one attested session lineage, or several lineages that declared the same unverified host handle. ${unhandled} of ${units.length} units declared no handle and are counted per lineage. This does not show one mind, one model or one operator. A process can hold several sessions; sessions started through the legacy session tool without attestation are separate units.`;
+}
+var OPTION_KEY = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+function validatePollTerms(input, context) {
+  const advice = [];
+  const question = textField(input.question, "question", MAX_BALLOT_QUESTION, { required: true, multiline: true });
+  const options = pollOptions(input.options);
+  const criteria = textField(input.criteria, "criteria", MAX_BALLOT_CRITERIA, { required: false, multiline: true });
+  if (criteria === null) {
+    advice.push("No criteria given: say what makes an option acceptable, so every voter judges the same question.");
+  }
+  let pick2;
+  if (input.pick !== undefined && input.pick !== null) {
+    if (!Number.isInteger(input.pick) || input.pick < 1 || input.pick > options.length) {
+      refuse("invalid_pick", `pick is an integer from 1 to ${options.length}, the number of options`, {
+        field: "pick",
+        min: 1,
+        max: options.length
+      }, { say: `Set pick from 1 to ${options.length}, or leave it out to let voters approve any number of options.` });
+    }
+    pick2 = input.pick;
+    if (pick2 === 1)
+      advice.push("pick 1 makes this a plurality vote: no voter can say that either of two options would do.");
+  }
+  const closesAt = ballotClosesAt(input.closes, context.now);
+  let closeWhenAllCast = false;
+  if (input.close_when_all_cast !== undefined && input.close_when_all_cast !== null) {
+    if (typeof input.close_when_all_cast !== "boolean") {
+      refuse("invalid_close_when_all_cast", "close_when_all_cast is true or false", { field: "close_when_all_cast" }, {
+        say: "Leave close_when_all_cast out to keep the ballot sealed until its deadline."
+      });
+    }
+    closeWhenAllCast = input.close_when_all_cast;
+  }
+  checkElectorateSize(context.units, { poll_input: input, sessions: context.sessions });
+  const quorum = ballotQuorum(input.quorum, context.units.length);
+  const terms = {
+    question,
+    options,
+    method: BALLOT_METHOD,
+    quorum,
+    closes_at: closesAt,
+    close_when_all_cast: closeWhenAllCast
+  };
+  if (criteria !== null)
+    terms.criteria = criteria;
+  if (pick2 !== undefined)
+    terms.pick = pick2;
+  return { terms, advice };
+}
+function checkElectorateSize(units, context = {}) {
+  if (units.length < MIN_ELECTORATE_UNITS) {
+    refuse("electorate_too_small", `A ballot needs at least ${MIN_ELECTORATE_UNITS} units in its electorate; this one has ${units.length}`, {
+      units: units.length,
+      min: MIN_ELECTORATE_UNITS
+    }, {
+      say: "There is no one else to poll. Say it with collab_note, or put a direction-level question to collab_propose."
+    });
+  }
+  if (units.length > MAX_ELECTORATE_UNITS) {
+    const voters = mostRecentlySeenVoters(units, context.sessions ?? []);
+    const remedy = voters && context.poll_input ? { tool: "collab_poll", input: { ...definedEntries(context.poll_input), voters } } : { say: `Name at most ${MAX_ELECTORATE_UNITS} voters with voters.` };
+    refuse("electorate_too_large", `A ballot counts at most ${MAX_ELECTORATE_UNITS} units; this electorate has ${units.length}`, {
+      units: units.length,
+      max: MAX_ELECTORATE_UNITS
+    }, remedy);
+  }
+}
+function ballotQuorum(value, electorateSize) {
+  if (value === undefined || value === null)
+    return DEFAULT_BALLOT_QUORUM;
+  if (!Number.isInteger(value) || value < MIN_BALLOT_QUORUM || value > electorateSize) {
+    refuse("invalid_quorum", `quorum is an integer from ${MIN_BALLOT_QUORUM} to ${electorateSize}, the number of units in the electorate`, {
+      field: "quorum",
+      min: MIN_BALLOT_QUORUM,
+      max: electorateSize
+    }, { say: `Set quorum from ${MIN_BALLOT_QUORUM} to ${electorateSize}, or leave it out for ${DEFAULT_BALLOT_QUORUM}.` });
+  }
+  return value;
+}
+var DURATION = /^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/;
+var ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/;
+function ballotClosesAt(closes, now) {
+  const nowMs = Date.parse(now);
+  if (!Number.isFinite(nowMs))
+    throw new CollabError("invalid_now", "now must be an ISO time");
+  let closesMs = null;
+  if (typeof closes === "number" && Number.isInteger(closes)) {
+    closesMs = nowMs + closes * 1000;
+  } else if (typeof closes === "string") {
+    const text = closes.trim().toLowerCase();
+    const duration3 = DURATION.exec(text);
+    if (/^\d+$/.test(text)) {
+      closesMs = nowMs + Number(text) * 1000;
+    } else if (text !== "" && duration3) {
+      const [days, hours, minutes, seconds] = duration3.slice(1).map((part) => Number(part ?? 0));
+      closesMs = nowMs + (((days * 24 + hours) * 60 + minutes) * 60 + seconds) * 1000;
+    } else if (ISO_INSTANT.test(closes.trim())) {
+      const parsed = Date.parse(closes.trim());
+      if (Number.isFinite(parsed))
+        closesMs = parsed;
+    }
+  }
+  const window = closesMs === null ? null : closesMs - nowMs;
+  if (closesMs === null || window === null || window < MIN_BALLOT_CLOSE_SECONDS * 1000 || window > MAX_BALLOT_CLOSE_SECONDS * 1000) {
+    refuse("invalid_closes", "closes is a duration from 1 minute to 7 days, or an ISO time inside that window", {
+      field: "closes",
+      min_seconds: MIN_BALLOT_CLOSE_SECONDS,
+      max_seconds: MAX_BALLOT_CLOSE_SECONDS
+    }, { say: 'Set closes to a duration such as "30m", "2h" or "1d", from 1 minute to 7 days.' });
+  }
+  return new Date(closesMs).toISOString();
+}
+function pollOptions(value) {
+  const bounds = { field: "options", min: MIN_BALLOT_OPTIONS, max: MAX_BALLOT_OPTIONS };
+  if (!Array.isArray(value) || value.length < MIN_BALLOT_OPTIONS || value.length > MAX_BALLOT_OPTIONS) {
+    refuse("invalid_options", `options is a list of ${MIN_BALLOT_OPTIONS} to ${MAX_BALLOT_OPTIONS} {key, label}`, bounds, {
+      say: `Give ${MIN_BALLOT_OPTIONS} to ${MAX_BALLOT_OPTIONS} options. A yes-or-no question about proceeding belongs to collab_propose.`
+    });
+  }
+  const seen = new Set;
+  return value.map((option, index) => {
+    const field = `options[${index}]`;
+    if (option === null || typeof option !== "object" || Array.isArray(option)) {
+      refuse("invalid_options", `${field} must be {key, label}`, { field }, { say: "Give each option as {key, label}." });
+    }
+    const record2 = option;
+    const key = typeof record2.key === "string" ? record2.key.trim() : "";
+    if (!key || key.length > MAX_BALLOT_OPTION_KEY || !OPTION_KEY.test(key)) {
+      refuse("invalid_options", `${field}.key is 1 to ${MAX_BALLOT_OPTION_KEY} letters, digits, _ or -, starting with a letter or digit`, {
+        field: `${field}.key`,
+        max: MAX_BALLOT_OPTION_KEY
+      }, { say: 'Use short option keys such as "a", "b", "keep" or "split-2".' });
+    }
+    const folded = key.toLowerCase();
+    if (seen.has(folded)) {
+      refuse("invalid_options", `option key "${key}" is used twice (keys are compared without case)`, { field: `${field}.key` }, {
+        say: "Give every option a different key."
+      });
+    }
+    seen.add(folded);
+    const label = textField(record2.label, `${field}.label`, MAX_BALLOT_OPTION_LABEL, {
+      required: true,
+      multiline: false,
+      code: "invalid_options"
+    });
+    return { key, label };
+  });
+}
+function mostRecentlySeenVoters(units, sessions) {
+  const seenAt = (session) => {
+    const parsed = typeof session.last_seen_at === "string" ? Date.parse(session.last_seen_at) : Number.NaN;
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const latest = units.map((unit) => {
+    let best = null;
+    for (const session of sessions) {
+      if (!unit.session_ids.includes(session.session_id))
+        continue;
+      const at = seenAt(session);
+      if (at === null)
+        continue;
+      if (best === null || at > best.at || at === best.at && session.session_id < best.session_id) {
+        best = { session_id: session.session_id, at };
+      }
+    }
+    return best;
+  });
+  if (latest.some((entry) => entry === null))
+    return null;
+  return latest.sort((left, right) => right.at - left.at || compare(left.session_id, right.session_id)).slice(0, MAX_ELECTORATE_UNITS).map((entry) => entry.session_id);
+}
+function normalizeBallotVoters(value) {
+  if (value === undefined || value === null)
+    return null;
+  if (!Array.isArray(value) || value.length === 0 || value.some((voter) => !nonEmptyString(voter) || voter.trim() !== voter)) {
+    refuse("invalid_voters", "voters is a non-empty list of session ids or names", { field: "voters" }, {
+      say: "Leave voters out for the default electorate, or list the sessions to poll."
+    });
+  }
+  return [...new Set(value)];
+}
+var PLACEHOLDER_ENTRY_IDS = {
+  ballot_id: "report_00000000-0000-0000-0000-000000000000",
+  cast_id: "00000000-0000-0000-0000-000000000000",
+  unit_id: `unit_${"0".repeat(32)}`,
+  session_id: "session_00000000-0000-0000-0000-000000000000"
+};
+function validateVote(input, terms) {
+  const advice = [];
+  const keys = terms.options.map((option) => option.key);
+  const choiceRemedy = { say: `Choose from the option keys ${keys.join(", ")}, or [] to abstain.` };
+  if (!Array.isArray(input.choice) || input.choice.some((key) => typeof key !== "string")) {
+    refuse("invalid_choice", "choice is a list of option keys, or [] to abstain", { field: "choice", options: keys }, choiceRemedy);
+  }
+  const chosen = new Set(input.choice);
+  const unknown2 = [...chosen].filter((key) => !keys.includes(key));
+  if (unknown2.length > 0) {
+    refuse("invalid_choice", `choice names keys this ballot does not have: ${unknown2.join(", ")}`, {
+      field: "choice",
+      unknown: unknown2,
+      options: keys
+    }, choiceRemedy);
+  }
+  if (chosen.size < input.choice.length)
+    advice.push("choice repeated a key; each option is approved once.");
+  const choice = keys.filter((key) => chosen.has(key));
+  if (terms.pick !== undefined && choice.length > terms.pick) {
+    refuse("invalid_choice", `this ballot lets a unit approve at most ${terms.pick} options`, {
+      field: "choice",
+      pick: terms.pick
+    }, { say: `Approve at most ${terms.pick} of ${keys.join(", ")}.` });
+  }
+  const evidence = voteEvidence(input.evidence);
+  const why = voteReasons(input.why, evidence.length);
+  const shared = textField(input.shared, "shared", MAX_VOTE_SHARED, { required: false, multiline: true });
+  const vote = { choice, why, evidence };
+  if (shared !== null)
+    vote.shared = shared;
+  checkVoteSize(vote, PLACEHOLDER_ENTRY_IDS);
+  if (why.length === 0)
+    advice.push('No reason given: the vote is counted and shown as "no reason given".');
+  return { vote, advice };
+}
+function sealVote(vote, extra = {}) {
+  const sealed = { choice: [...vote.choice], why: vote.why.map((reason) => ({ ...reason, cites: [...reason.cites] })), evidence: [...vote.evidence] };
+  if (vote.shared !== undefined)
+    sealed.shared = vote.shared;
+  if (extra.evidence !== undefined) {
+    const lines = vote.evidence.map(evidenceText);
+    const resolved = extra.evidence.map(evidenceText);
+    if (canonicalJson(lines) !== canonicalJson(resolved)) {
+      throw new CollabError("invalid_vote_evidence", "resolved evidence must keep the voter's lines in the same order");
+    }
+    sealed.evidence = [...extra.evidence];
+  }
+  const model = typeof extra.model === "string" ? extra.model.trim() : "";
+  if (model)
+    sealed.model = model;
+  return sealed;
+}
+function sameVoteInput(left, right) {
+  const input = (vote) => canonicalJson({
+    choice: vote.choice,
+    why: vote.why.map((reason) => ({ text: reason.text, basis: reason.basis ?? null, cites: reason.cites })),
+    evidence: vote.evidence.map(evidenceText),
+    shared: vote.shared ?? null
+  });
+  return input(left) === input(right);
+}
+function checkVoteSize(vote, ids) {
+  const bytes = revealedEntryBytes({
+    ...ids,
+    cast_seq: MAX_CASTS_PER_SESSION,
+    commitment: "0".repeat(64),
+    salt: "0".repeat(64),
+    status: "seal_unreadable",
+    vote
+  });
+  if (bytes > MAX_REVEALED_ENTRY_BYTES) {
+    refuse("too_long", `the vote takes ${bytes} bytes when revealed; the limit is ${MAX_REVEALED_ENTRY_BYTES}`, {
+      field: "vote",
+      max: MAX_REVEALED_ENTRY_BYTES,
+      bytes
+    }, { say: "Shorten the reasons, the evidence lines or shared." });
+  }
+}
+function nextCastSeq(previousCasts) {
+  if (previousCasts >= MAX_CASTS_PER_SESSION) {
+    refuse("cast_limit", `A session may cast at most ${MAX_CASTS_PER_SESSION} times in one ballot`, {
+      max: MAX_CASTS_PER_SESSION
+    }, { say: "Your latest cast stands; it is revealed at the close." });
+  }
+  return previousCasts + 1;
+}
+function voteEvidence(value) {
+  if (value === undefined || value === null)
+    return [];
+  if (!Array.isArray(value)) {
+    refuse("invalid_evidence", "evidence is a list of one-line pointers", { field: "evidence" }, {
+      say: 'Give evidence as lines such as "file src/a.ts:10-20" or "commit <sha>".'
+    });
+  }
+  if (value.length > MAX_VOTE_EVIDENCE) {
+    refuse("too_long", `evidence holds at most ${MAX_VOTE_EVIDENCE} lines on a vote`, { field: "evidence", max: MAX_VOTE_EVIDENCE }, {
+      say: `Keep the ${MAX_VOTE_EVIDENCE} pointers that matter most.`
+    });
+  }
+  return value.map((line, index) => {
+    const field = `evidence[${index}]`;
+    const text = textField(line, field, Number.MAX_SAFE_INTEGER, {
+      required: true,
+      multiline: false,
+      code: "invalid_evidence"
+    });
+    try {
+      parseEvidence(text);
+    } catch (error51) {
+      if (!(error51 instanceof CollabError))
+        throw error51;
+      refuse("invalid_evidence", error51.message, { ...error51.details, field }, {
+        say: 'Give evidence as lines such as "file src/a.ts:10-20", "commit <sha>" or "test bun test exit=0".'
+      });
+    }
+    return text;
+  });
+}
+function voteReasons(value, evidenceCount) {
+  if (value === undefined || value === null)
+    return [];
+  if (!Array.isArray(value)) {
+    refuse("invalid_why", "why is a list of {text, basis?, cites?}", { field: "why" }, { say: "Give each reason as {text, basis, cites}." });
+  }
+  if (value.length > MAX_VOTE_REASONS) {
+    refuse("too_long", `why holds at most ${MAX_VOTE_REASONS} reasons on a vote`, { field: "why", max: MAX_VOTE_REASONS }, {
+      say: `Keep the ${MAX_VOTE_REASONS} reasons that matter most.`
+    });
+  }
+  return value.map((reason, index) => {
+    const field = `why[${index}]`;
+    if (reason === null || typeof reason !== "object" || Array.isArray(reason)) {
+      refuse("invalid_why", `${field} must be {text, basis?, cites?}`, { field }, { say: "Give each reason as {text, basis, cites}." });
+    }
+    const record2 = reason;
+    const text = textField(record2.text, `${field}.text`, MAX_VOTE_REASON, { required: true, multiline: true, code: "invalid_why" });
+    const result = { text, cites: [] };
+    if (record2.basis !== undefined && record2.basis !== null) {
+      if (!BALLOT_BASES.includes(record2.basis)) {
+        refuse("invalid_why", `${field}.basis is one of ${BALLOT_BASES.join(", ")}`, { field: `${field}.basis`, bases: [...BALLOT_BASES] }, {
+          say: "Say how you know it: seen, told, inferred or quoted."
+        });
+      }
+      result.basis = record2.basis;
+    }
+    if (record2.cites !== undefined && record2.cites !== null) {
+      const cites = record2.cites;
+      if (!Array.isArray(cites) || cites.some((cite) => !Number.isInteger(cite) || cite < 1 || cite > evidenceCount)) {
+        refuse("invalid_why", `${field}.cites are 1-based positions in evidence (1 to ${evidenceCount})`, {
+          field: `${field}.cites`,
+          min: 1,
+          max: evidenceCount
+        }, { say: evidenceCount === 0 ? "Add the evidence lines the reason cites, or drop cites." : `Cite evidence lines 1 to ${evidenceCount}.` });
+      }
+      result.cites = [...new Set(cites)].sort((left, right) => left - right);
+    }
+    return result;
+  });
+}
+var SALT = /^[0-9a-f]{64}$/;
+function ballotCommitment(input) {
+  if (!SALT.test(input.salt)) {
+    throw new CollabError("invalid_salt", "a ballot salt is 32 random bytes as 64 lowercase hex characters");
+  }
+  return sha2562(canonicalJson({
+    protocol: BALLOT_COMMITMENT_PROTOCOL,
+    workspace_id: input.workspace_id,
+    ballot_id: input.ballot_id,
+    cast_id: input.cast_id,
+    unit_id: input.unit_id,
+    session_id: input.session_id,
+    vote: input.vote,
+    salt: input.salt
+  }));
+}
+function openSeal(file2, cast, context) {
+  if (!isPlainObject3(file2))
+    return { state: "seal_unreadable" };
+  const { cast_id, journal_realpath, session_id, unit_id, salt, vote } = file2;
+  if (typeof cast_id !== "string" || typeof journal_realpath !== "string" || typeof session_id !== "string" || typeof unit_id !== "string" || typeof salt !== "string" || !SALT.test(salt) || !isSealedVote(vote)) {
+    return { state: "seal_unreadable" };
+  }
+  if (cast_id !== cast.cast_id || session_id !== cast.session_id || unit_id !== cast.unit_id)
+    return { state: "seal_mismatch" };
+  const commitment = ballotCommitment({
+    workspace_id: context.workspace_id,
+    ballot_id: context.ballot_id,
+    cast_id,
+    unit_id,
+    session_id,
+    vote,
+    salt
+  });
+  if (commitment !== cast.commitment)
+    return { state: "seal_mismatch" };
+  return {
+    state: "ok",
+    vote,
+    salt,
+    owned: context.journal_realpath === undefined || context.journal_realpath === journal_realpath
+  };
+}
+function resolveCasts(units, casts, context) {
+  const unitById = new Map(units.map((unit) => [unit.unit_id, unit]));
+  const listed = casts.map((cast) => unitById.get(cast.unit_id)?.voice_ids.includes(cast.voice_id) === true);
+  const latestByVoice = new Map;
+  const castingVoices = new Map;
+  casts.forEach((cast, index) => {
+    if (!listed[index])
+      return;
+    latestByVoice.set(voiceKey(cast), index);
+    const voices = castingVoices.get(cast.unit_id) ?? new Set;
+    voices.add(cast.voice_id);
+    castingVoices.set(cast.unit_id, voices);
+  });
+  return casts.map((cast, index) => {
+    let status;
+    if (!listed[index])
+      status = "late";
+    else if (latestByVoice.get(voiceKey(cast)) !== index)
+      status = "replaced";
+    else if ((castingVoices.get(cast.unit_id)?.size ?? 0) > 1)
+      status = "unit_conflict";
+    else if (cast.seal.state !== "ok")
+      status = cast.seal.state;
+    else
+      status = "counted";
+    const entry = {
+      ballot_id: context.ballot_id,
+      cast_id: cast.cast_id,
+      unit_id: cast.unit_id,
+      session_id: cast.session_id,
+      cast_seq: cast.cast_seq,
+      commitment: cast.commitment,
+      status
+    };
+    if (cast.seal.state !== "ok")
+      return entry;
+    const revealed = { ...entry, salt: cast.seal.salt, vote: cast.seal.vote };
+    if (revealedEntryBytes(revealed) <= MAX_REVEALED_ENTRY_BYTES)
+      return revealed;
+    return status === "counted" ? { ...entry, status: "seal_unreadable" } : entry;
+  });
+}
+function revealedEntryBytes(entry) {
+  return Buffer.byteLength(canonicalJson(entry), "utf8");
+}
+function revealedEntriesSha256(entries) {
+  return sha2562(canonicalJson(entries));
+}
+function unitOutcomes(units, entries) {
+  return units.map((unit) => {
+    const own = entries.filter((entry) => entry.unit_id === unit.unit_id && entry.status !== "late");
+    if (own.length === 0)
+      return { unit_id: unit.unit_id, state: "not_cast" };
+    const counted = own.filter((entry) => entry.status === "counted");
+    const conflicts = own.filter((entry) => entry.status === "unit_conflict");
+    if (conflicts.length > 0 || counted.length > 1) {
+      return { unit_id: unit.unit_id, state: "unit_conflict", entries: [...conflicts, ...counted] };
+    }
+    const only = counted[0];
+    if (only !== undefined) {
+      if (only.vote === undefined)
+        return { unit_id: unit.unit_id, state: "seal_unreadable", entry: only };
+      const entry = only;
+      return { unit_id: unit.unit_id, state: "counted", entry, abstained: entry.vote.choice.length === 0 };
+    }
+    const latest = own[own.length - 1];
+    const state = latest.status === "seal_unreadable" || latest.status === "seal_mismatch" ? latest.status : "seal_missing";
+    return { unit_id: unit.unit_id, state, entry: latest };
+  });
+}
+function ballotResult(input) {
+  const sessions = input.sessions ?? {};
+  const nameOf = (sessionId) => sessions[sessionId]?.name ?? sessionId;
+  const keys = input.terms.options.map((option) => option.key);
+  const unitIds = new Set(input.units.map((unit) => unit.unit_id));
+  const outcomes = unitOutcomes(input.units, input.entries);
+  const counted = outcomes.filter((outcome) => outcome.state === "counted");
+  const approvals = counted.map((outcome) => ({
+    entry: outcome.entry,
+    name: nameOf(outcome.entry.session_id),
+    keys: keys.filter((key) => outcome.entry.vote.choice.includes(key)),
+    lineage: lineageOf(outcome.entry, sessions, input.units)
+  })).sort((left, right) => compare(left.name, right.name) || compare(left.entry.unit_id, right.entry.unit_id));
+  const quorum = { needed: input.terms.quorum, met: counted.length >= input.terms.quorum, counted: counted.length };
+  const tallies = keys.map((key) => approvals.filter((approval) => approval.keys.includes(key)).length);
+  const most = Math.max(0, ...tallies);
+  let status;
+  let top = [];
+  if (input.withdrawn)
+    status = "withdrawn";
+  else if (!quorum.met)
+    status = "inconclusive";
+  else if (most === 0)
+    status = "no_approval";
+  else {
+    top = keys.filter((_, index) => tallies[index] === most);
+    status = top.length > 1 ? "tied" : "top_choice";
+  }
+  const topSet = new Set(top);
+  const answered = new Set(approvals.filter((approval) => approval.keys.some((key) => topSet.has(key))).flatMap((approval) => approval.entry.vote.evidence.map(evidenceKey)));
+  const options = input.terms.options.map((option) => {
+    const voters = approvals.filter((approval) => approval.keys.includes(option.key));
+    const unique = new Map;
+    for (const voter of voters) {
+      for (const item of voter.entry.vote.evidence) {
+        const key = evidenceKey(item);
+        if (answered.has(key))
+          continue;
+        const view2 = unique.get(key);
+        if (view2 === undefined)
+          unique.set(key, { evidence: item, cited_by: [voter.name] });
+        else if (!view2.cited_by.includes(voter.name))
+          view2.cited_by.push(voter.name);
+      }
+    }
+    return {
+      key: option.key,
+      label: option.label,
+      units: voters.length,
+      voters: voters.map((voter) => voter.name),
+      reasons: voters.flatMap((voter) => voter.entry.vote.why.map((reason) => ({
+        by: voter.name,
+        text: reason.text,
+        basis: reason.basis ?? null,
+        cites: [...reason.cites],
+        cited: reason.cites.flatMap((cite) => {
+          const item = voter.entry.vote.evidence[cite - 1];
+          return item === undefined ? [] : [item];
+        })
+      }))),
+      no_reason_given: voters.filter((voter) => voter.entry.vote.why.length === 0).map((voter) => voter.name),
+      unique_evidence: [...unique.values()]
+    };
+  });
+  const approvalSets = new Set(approvals.filter((approval) => approval.keys.length > 0).map((approval) => approval.keys.join(`
+`)));
+  const split = approvalSets.size > 1;
+  const lineages = {};
+  for (const label of sortedUnique(approvals.map((approval) => approval.lineage.label))) {
+    lineages[label] = approvals.filter((approval) => approval.lineage.label === label).length;
+  }
+  const notes = [];
+  const oneFamily = (values) => values.length >= 2 && values.every((family) => family !== null && family === values[0]);
+  if (oneFamily(approvals.map((approval) => approval.lineage.family))) {
+    notes.push(BALLOT_SAME_FAMILY_NOTE);
+  } else {
+    for (const key of top) {
+      const supporting = approvals.filter((approval) => approval.keys.includes(key)).map((approval) => approval.lineage.family);
+      if (oneFamily(supporting)) {
+        notes.push(`every unit approving ${key} declares the same model family (${supporting[0]}): their agreement is not independent confirmation`);
+      }
+    }
+  }
+  if (split)
+    notes.push(BALLOT_SPLIT_NOTE);
+  const view = (entry) => {
+    const result2 = {
+      cast_id: entry.cast_id,
+      unit_id: entry.unit_id,
+      session_id: entry.session_id,
+      name: nameOf(entry.session_id),
+      cast_seq: entry.cast_seq
+    };
+    if (entry.vote !== undefined)
+      result2.choice = [...entry.vote.choice];
+    return result2;
+  };
+  const late = input.entries.filter((entry) => entry.status === "late" || !unitIds.has(entry.unit_id)).map((entry) => {
+    const result2 = view(entry);
+    const seatRef = sessions[entry.session_id]?.seat_ref;
+    if (nonEmptyString(seatRef)) {
+      const sameHandle = input.units.find((unit) => unit.seat_refs.includes(seatRef));
+      if (sameHandle)
+        result2.same_handle_as = sameHandle.unit_id;
+    }
+    return result2;
+  });
+  const listedWith = (status2) => input.entries.filter((entry) => entry.status === status2 && unitIds.has(entry.unit_id)).map(view);
+  const delivered = new Set(input.delivered_session_ids ?? []);
+  const result = {
+    status,
+    split,
+    turnout: {
+      cast: outcomes.filter((outcome) => outcome.state !== "not_cast").length,
+      electorate: input.units.length,
+      delivery_recorded: input.units.filter((unit) => unit.session_ids.some((id) => delivered.has(id))).length
+    },
+    quorum,
+    options,
+    top,
+    abstained: approvals.filter((approval) => approval.keys.length === 0).map((approval) => approval.name),
+    late,
+    replaced: listedWith("replaced"),
+    unit_conflicts: listedWith("unit_conflict"),
+    seal_missing: listedWith("seal_missing"),
+    seal_unreadable: listedWith("seal_unreadable"),
+    seal_mismatch: listedWith("seal_mismatch"),
+    left_out: [...input.left_out ?? []],
+    lineages,
+    notes,
+    unit_basis: unitBasis(input.units),
+    sealing: BALLOT_SEALING,
+    authorises: BALLOT_AUTHORISES
+  };
+  if (status === "tied")
+    result.next = { ...BALLOT_TIE_NEXT };
+  return result;
+}
+function modelFamily(label) {
+  const head = label.trim().toLowerCase().split(/[\s\-_/:.@]/)[0];
+  return head ? head : null;
+}
+function lineageOf(entry, sessions, units) {
+  const session = sessions[entry.session_id];
+  const declared = (entry.vote.model ?? session?.model ?? "").trim();
+  if (declared)
+    return { label: declared, family: modelFamily(declared) };
+  const seatRefs = nonEmptyString(session?.seat_ref) ? [session.seat_ref] : units.find((unit) => unit.unit_id === entry.unit_id)?.seat_refs ?? [];
+  const prefixes = sortedUnique(seatRefs.flatMap((seatRef) => {
+    const colon = seatRef.indexOf(":");
+    return colon > 0 ? [seatRef.slice(0, colon)] : [];
+  }));
+  const prefix2 = prefixes.length === 1 ? prefixes[0] : undefined;
+  if (prefix2 !== undefined)
+    return { label: `host:${prefix2}`, family: modelFamily(prefix2) };
+  return { label: "undeclared", family: null };
+}
+function evidenceText(item) {
+  return typeof item === "string" ? item : item.text;
+}
+function evidenceKey(item) {
+  if (typeof item !== "string" && nonEmptyString(item.kind) && nonEmptyString(item.locator)) {
+    return `ref:${canonicalJson({
+      kind: item.kind,
+      locator: item.locator,
+      lines: item.lines ?? null,
+      sha256: item.sha256 ?? null,
+      exit: item.exit ?? null
+    })}`;
+  }
+  return `text:${evidenceText(item).replace(/\s+/g, " ").trim()}`;
+}
+function textField(value, field, max, options) {
+  const code = options.code ?? `invalid_${field}`;
+  const fix = { say: `Give ${field} as plain text${options.multiline ? "" : " on one line"}.` };
+  if (value === undefined || value === null) {
+    if (options.required)
+      refuse(code, `${field} is required`, { field }, fix);
+    return null;
+  }
+  if (typeof value !== "string")
+    refuse(code, `${field} must be text`, { field }, fix);
+  const text = normalizeNoteText(value);
+  if (!text) {
+    if (options.required)
+      refuse(code, `${field} must not be empty`, { field }, fix);
+    return null;
+  }
+  if (text.includes("\x00"))
+    refuse(code, `${field} must not contain NUL characters`, { field }, fix);
+  if (hasLoneSurrogate(text)) {
+    refuse(code, `${field} must be well-formed Unicode text (it holds half of a character, as when an emoji is cut in two)`, { field }, {
+      say: `Send ${field} again with every character whole.`
+    });
+  }
+  if (!options.multiline && text.includes(`
+`))
+    refuse(code, `${field} must be one line`, { field }, fix);
+  if (text.length > max) {
+    refuse("too_long", `${field} exceeds ${max} characters`, { field, max }, {
+      say: `Shorten ${field} to at most ${max} characters.`
+    });
+  }
+  return text;
+}
+function isSealedVote(value) {
+  if (!isPlainObject3(value) || !jsonClean(value))
+    return false;
+  const { choice, why, evidence, shared, model } = value;
+  if (!Array.isArray(choice) || choice.some((key) => typeof key !== "string"))
+    return false;
+  if (!Array.isArray(evidence) || evidence.some((item) => typeof item !== "string" && !(isPlainObject3(item) && typeof item.text === "string"))) {
+    return false;
+  }
+  if (!Array.isArray(why) || why.some((reason) => !isPlainObject3(reason) || typeof reason.text !== "string" || !(reason.basis === undefined || BALLOT_BASES.includes(reason.basis)) || !Array.isArray(reason.cites) || reason.cites.some((cite) => !Number.isInteger(cite)))) {
+    return false;
+  }
+  return (shared === undefined || typeof shared === "string") && (model === undefined || typeof model === "string");
+}
+function jsonClean(value) {
+  if (value === null || typeof value === "string" || typeof value === "boolean")
+    return true;
+  if (typeof value === "number")
+    return Number.isSafeInteger(value);
+  if (Array.isArray(value))
+    return value.every(jsonClean);
+  if (isPlainObject3(value)) {
+    return Object.entries(value).every(([key, child]) => !/^(0|[1-9]\d*)$/.test(key) && jsonClean(child));
+  }
+  return false;
+}
+function isPlainObject3(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function voiceKey(cast) {
+  return `${cast.unit_id}
+${cast.voice_id}`;
+}
+function definedEntries(record2) {
+  return Object.fromEntries(Object.entries(record2).filter(([, value]) => value !== undefined));
+}
+function nonEmptyString(value) {
+  return typeof value === "string" && value.length > 0;
+}
+function sortedUnique(values) {
+  return [...new Set(values)].sort(compare);
+}
+function compare(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+function refuse(code, message, details, remedy) {
+  throw new CollabError(code, message, { ...details, remedy });
+}
+function sha2562(value) {
+  return createHash2("sha256").update(value).digest("hex");
+}
+
+// src/ballot-seal.ts
+import { randomUUID as randomUUID2 } from "crypto";
 import {
   chmodSync as chmodSync2,
   closeSync as closeSync5,
   existsSync as existsSync3,
+  fsyncSync as fsyncSync2,
   lstatSync as lstatSync3,
   mkdirSync as mkdirSync2,
-  openSync as openSync5
+  openSync as openSync5,
+  readdirSync,
+  readFileSync as readFileSync2,
+  renameSync as renameSync2,
+  rmdirSync,
+  unlinkSync as unlinkSync2,
+  writeSync
 } from "fs";
-import { dirname as dirname2, isAbsolute as isAbsolute3, join as join3, posix, resolve as resolve4 } from "path";
+import { dirname as dirname2, join as join3 } from "path";
+var SEAL_DIRECTORY = "collab-ballots";
+var BALLOT_ID = /^report_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+var CAST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+function sealRoot(journalRealpath) {
+  return join3(dirname2(journalRealpath), SEAL_DIRECTORY);
+}
+function sealDirectory(journalRealpath, ballotId) {
+  if (!BALLOT_ID.test(ballotId))
+    throw new CollabError("invalid_ballot_id", "A ballot id is the poll report's id");
+  return join3(sealRoot(journalRealpath), ballotId);
+}
+function sealPath(journalRealpath, ballotId, castId) {
+  if (!CAST_ID.test(castId))
+    throw new CollabError("invalid_cast_id", "A cast id is a random uuid");
+  return join3(sealDirectory(journalRealpath, ballotId), `${castId}.json`);
+}
+function currentUser() {
+  return typeof process.getuid === "function" ? process.getuid() : null;
+}
+function privateDirectory(path) {
+  if (!existsSync3(path)) {
+    mkdirSync2(path, { mode: 448 });
+    chmodSync2(path, 448);
+  }
+  const stat = lstatSync3(path);
+  const uid = currentUser();
+  if (!stat.isDirectory() || stat.isSymbolicLink() || uid !== null && stat.uid !== uid) {
+    throw new CollabError("seal_directory_unsafe", "The ballot seal directory must be a real directory owned by this user", {
+      operation: "write_seal_file"
+    });
+  }
+  if ((stat.mode & 63) !== 0)
+    chmodSync2(path, 448);
+}
+function writeSealFile(path, seal) {
+  const directory = dirname2(path);
+  privateDirectory(dirname2(directory));
+  privateDirectory(directory);
+  if (existsSync3(path)) {
+    throw new CollabError("seal_file_exists", "A seal file with this cast id already exists", { operation: "write_seal_file" });
+  }
+  const temporary = join3(directory, `.${randomUUID2()}.tmp`);
+  const descriptor = openSync5(temporary, "wx", 384);
+  try {
+    writeSync(descriptor, JSON.stringify(seal));
+    fsyncSync2(descriptor);
+  } catch (error51) {
+    closeSync5(descriptor);
+    removeQuietly(temporary);
+    throw error51;
+  }
+  closeSync5(descriptor);
+  try {
+    renameSync2(temporary, path);
+  } catch (error51) {
+    removeQuietly(temporary);
+    throw error51;
+  }
+  try {
+    const handle = openSync5(directory, "r");
+    try {
+      fsyncSync2(handle);
+    } finally {
+      closeSync5(handle);
+    }
+  } catch {}
+}
+function readSealFile(path) {
+  try {
+    if (!existsSync3(path))
+      return { state: "missing" };
+    const stat = lstatSync3(path);
+    if (!stat.isFile() || stat.isSymbolicLink())
+      return { state: "unreadable" };
+    return { state: "read", value: JSON.parse(readFileSync2(path, "utf8")) };
+  } catch {
+    return { state: "unreadable" };
+  }
+}
+function removeSealFile(path) {
+  removeQuietly(path);
+}
+function listSealFiles(journalRealpath, ballotId) {
+  try {
+    const directory = sealDirectory(journalRealpath, ballotId);
+    if (!existsSync3(directory))
+      return [];
+    return readdirSync(directory).filter((name) => name.endsWith(".json") && CAST_ID.test(name.slice(0, -".json".length))).map((name) => name.slice(0, -".json".length));
+  } catch {
+    return [];
+  }
+}
+function removeEmptySealDirectory(journalRealpath, ballotId) {
+  try {
+    const directory = sealDirectory(journalRealpath, ballotId);
+    if (existsSync3(directory) && readdirSync(directory).length === 0)
+      rmdirSync(directory);
+  } catch {}
+}
+function removeQuietly(path) {
+  try {
+    unlinkSync2(path);
+  } catch {}
+}
 
 // src/passkey.ts
-import { createHash as createHash2, createPublicKey, verify } from "crypto";
+import { createHash as createHash3, createPublicKey, verify } from "crypto";
 var FLAG_USER_PRESENT = 1;
 var FLAG_USER_VERIFIED = 4;
 var BASE64URL = /^[A-Za-z0-9_-]*$/;
@@ -30657,12 +31631,12 @@ function base64urlDecode(value, field, maxBytes = 64 * 1024) {
   }
   return bytes;
 }
-function sha2562(bytes) {
-  return createHash2("sha256").update(bytes).digest();
+function sha2563(bytes) {
+  return createHash3("sha256").update(bytes).digest();
 }
 function personActChallenge(input) {
   const challenge_bytes = canonicalJson({ protocol: PERSON_ACT_PROTOCOL, ...input });
-  return { challenge_bytes, challenge: sha2562(challenge_bytes).toString("base64url") };
+  return { challenge_bytes, challenge: sha2563(challenge_bytes).toString("base64url") };
 }
 var ASSERTION_FIELDS = new Set(["credential_id", "authenticator_data", "client_data_json", "signature", "user_handle"]);
 function normalizePasskeyAssertion(value) {
@@ -30726,7 +31700,7 @@ function parsePasskeyPublicKey(spki) {
   return key;
 }
 function passkeyFingerprint(spki) {
-  return sha2562(base64urlDecode(spki, "public_key_spki", 1024)).toString("hex");
+  return sha2563(base64urlDecode(spki, "public_key_spki", 1024)).toString("hex");
 }
 function validatePasskeyScope(rpId, origin) {
   if (typeof rpId !== "string" || !/^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/.test(rpId)) {
@@ -30774,7 +31748,7 @@ function verifyPasskeyAssertion(input) {
   if (authenticatorData.length < 37) {
     throw new CollabError("passkey_assertion_invalid", "authenticator_data is too short");
   }
-  if (!authenticatorData.subarray(0, 32).equals(sha2562(passkey.rp_id))) {
+  if (!authenticatorData.subarray(0, 32).equals(sha2563(passkey.rp_id))) {
     throw new CollabError("passkey_rp_mismatch", "The assertion is for another relying party");
   }
   const flags = authenticatorData[32];
@@ -30785,7 +31759,7 @@ function verifyPasskeyAssertion(input) {
   if ((signCount !== 0 || passkey.sign_count !== 0) && signCount <= passkey.sign_count) {
     throw new CollabError("passkey_counter_regressed", "The signature counter did not increase");
   }
-  const signed = Buffer.concat([authenticatorData, sha2562(clientDataBytes)]);
+  const signed = Buffer.concat([authenticatorData, sha2563(clientDataBytes)]);
   const valid = verify("sha256", signed, { key: parsePasskeyPublicKey(passkey.public_key_spki), dsaEncoding: "der" }, signature);
   if (!valid)
     throw new CollabError("passkey_signature_invalid", "The passkey signature does not verify");
@@ -30899,6 +31873,7 @@ class CollabStore {
   now;
   filesystemPath;
   migrationFailpoint;
+  revealFailpoint;
   repositoryDiscovery;
   eventReader;
   closed = false;
@@ -30906,6 +31881,7 @@ class CollabStore {
   constructor(path, options = {}) {
     this.now = options.now ?? (() => new Date);
     this.migrationFailpoint = options.migration_failpoint;
+    this.revealFailpoint = options.reveal_failpoint;
     this.repositoryDiscovery = {
       ...options.repository_discovery,
       budget_ms: options.repository_discovery?.budget_ms ?? REPOSITORY_DISCOVERY_MS,
@@ -30913,17 +31889,17 @@ class CollabStore {
     };
     const databasePath = path === ":memory:" ? path : resolve4(path);
     if (databasePath !== ":memory:") {
-      const parent = dirname2(databasePath);
-      const parentAlreadyExisted = existsSync3(parent);
-      mkdirSync2(parent, { recursive: true, mode: 448 });
+      const parent = dirname3(databasePath);
+      const parentAlreadyExisted = existsSync4(parent);
+      mkdirSync3(parent, { recursive: true, mode: 448 });
       if (!parentAlreadyExisted)
-        chmodSync2(parent, 448);
-      if (existsSync3(databasePath)) {
+        chmodSync3(parent, 448);
+      if (existsSync4(databasePath)) {
         assertSafeDatabaseFile(databasePath);
       } else {
         try {
-          const descriptor = openSync5(databasePath, "wx", 384);
-          closeSync5(descriptor);
+          const descriptor = openSync6(databasePath, "wx", 384);
+          closeSync6(descriptor);
         } catch (error51) {
           if (error51.code !== "EEXIST")
             throw error51;
@@ -30974,7 +31950,7 @@ class CollabStore {
       throw new CollabError("session_file_path_required", "An explicit credential file path is required for an in-memory database");
     }
     const id = validateId(sessionId, "session_id");
-    return join3(dirname2(this.filesystemPath), "collab-sessions", `${id}.json`);
+    return join4(dirname3(this.filesystemPath), "collab-sessions", `${id}.json`);
   }
   initialize() {
     this.db.exec("PRAGMA foreign_keys = ON");
@@ -31098,6 +32074,25 @@ class CollabStore {
           item_id TEXT NOT NULL,
           shown_at TEXT NOT NULL,
           PRIMARY KEY (workspace_id, session_id, item_id)
+        );
+        -- Which ballots may still need a reveal, so housekeeping finds due
+        -- ones without scanning events. state is open or closed.
+        CREATE TABLE IF NOT EXISTS note_ballots (
+          workspace_id TEXT NOT NULL,
+          ballot_id TEXT NOT NULL,
+          closes_at TEXT NOT NULL,
+          state TEXT NOT NULL,
+          PRIMARY KEY (workspace_id, ballot_id)
+        );
+        CREATE INDEX IF NOT EXISTS note_ballots_state_idx ON note_ballots(workspace_id, state, closes_at);
+      `);
+      this.db.exec(`
+        INSERT OR IGNORE INTO note_ballots (workspace_id, ballot_id, closes_at, state)
+        SELECT workspace_id, entity_id, json_extract(payload_json, '$.closes_at'), 'open' FROM events
+        WHERE type = 'ballot.opened' AND json_type(payload_json, '$.closes_at') = 'text';
+        UPDATE note_ballots SET state = 'closed' WHERE state <> 'closed' AND EXISTS (
+          SELECT 1 FROM events e WHERE e.workspace_id = note_ballots.workspace_id
+            AND e.type = 'ballot.closed' AND e.entity_id = note_ballots.ballot_id
         );
       `);
       if (this.tableNames().includes("proposal_rejections") && this.db.query(`SELECT 1 FROM proposal_rejections LIMIT 1`).get()) {
@@ -31885,13 +32880,13 @@ class CollabStore {
     if (!this.filesystemPath)
       return;
     for (const path of [this.filesystemPath, `${this.filesystemPath}-wal`, `${this.filesystemPath}-shm`]) {
-      if (!existsSync3(path))
+      if (!existsSync4(path))
         continue;
-      const stat = lstatSync3(path);
+      const stat = lstatSync4(path);
       if (!stat.isFile() || stat.isSymbolicLink() || typeof process.getuid === "function" && stat.uid !== process.getuid()) {
         throw new CollabError("database_sidecar_unsafe", "A collaboration database or sidecar path is not a regular file owned by this user", { operation: "tighten_database_file_mode" });
       }
-      chmodSync2(path, 384);
+      chmodSync3(path, 384);
     }
   }
   discoverRepositoryKey(budget, probe) {
@@ -32001,7 +32996,7 @@ class CollabStore {
         });
       }
       const repositoryWorkspace = partitions[0] ?? this.portableRepositoryWorkspace(identity.portable_repository_key);
-      const id = repositoryWorkspace?.id ?? `ws_${sha2563(identity.repository_key).slice(0, 24)}`;
+      const id = repositoryWorkspace?.id ?? `ws_${sha2564(identity.repository_key).slice(0, 24)}`;
       const existing = this.getWorkspace(id);
       if (existing && !repositoryWorkspace) {
         throw new CollabError("workspace_identity_collision", "Workspace identity collision");
@@ -32011,7 +33006,7 @@ class CollabStore {
         this.recordRepositoryDiscovery(identity.checkpoint.worktree_id, identity.worktree_fingerprint, identity.portable_repository_key);
         return this.requireWorkspace(existing.id);
       }
-      const epochId = `epoch_${randomUUID2()}`;
+      const epochId = `epoch_${randomUUID3()}`;
       const name = cleanText(input.name ?? identity.root_path.split("/").at(-1) ?? id, "name", 200);
       this.db.query(`INSERT OR IGNORE INTO repositories (key, created_at) VALUES (?, ?)`).run(identity.repository_key, now);
       this.db.query(`
@@ -32071,7 +33066,7 @@ class CollabStore {
         return presenceSessionFromRow(existing, this.timestamp());
       }
       const now = this.timestamp();
-      const id = `session_${randomUUID2()}`;
+      const id = `session_${randomUUID3()}`;
       const actorKey = `session:${id}`;
       this.db.query(`
         INSERT INTO sessions (
@@ -32168,7 +33163,7 @@ class CollabStore {
     });
   }
   startSession(input) {
-    const id = `session_${randomUUID2()}`;
+    const id = `session_${randomUUID3()}`;
     const actor = input.actor !== undefined ? validateActor(input.actor) : derivedActor(input.actor_prefix, id);
     const role = optionalText(input.role, "role", 200);
     const seatRef = input.seat_ref == null ? null : validateSeatRef(input.seat_ref);
@@ -32344,7 +33339,7 @@ class CollabStore {
         `).all(row.workspace_id, row.id);
         if (held.length > 0) {
           const releaseNote = releaseSummary ?? reason;
-          const guardNonce = `guard_${randomUUID2()}`;
+          const guardNonce = `guard_${randomUUID3()}`;
           this.db.query(`INSERT INTO v2_write_guard (nonce, enabled) VALUES (?, 1)`).run(guardNonce);
           try {
             for (const task of held) {
@@ -32510,7 +33505,7 @@ class CollabStore {
       const target = this.validateEventAnchor(row.workspace_id, input.target);
       const now = this.timestamp();
       const resetGeneration = row.reset_generation + 1;
-      const id = `cursor_reset_${randomUUID2()}`;
+      const id = `cursor_reset_${randomUUID3()}`;
       this.db.query(`
         INSERT INTO session_cursor_resets (
           id, session_id, from_epoch_id, from_sequence, from_hash,
@@ -32602,7 +33597,7 @@ class CollabStore {
     };
     return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.create", normalized, () => {
       this.requireWorkspace(input.workspace_id);
-      const id = normalized.id ?? `task_${randomUUID2()}`;
+      const id = normalized.id ?? `task_${randomUUID3()}`;
       if (normalized.dependencies.includes(id)) {
         throw new CollabError("invalid_dependency", "A task cannot depend on itself", { task_id: id });
       }
@@ -32653,7 +33648,7 @@ class CollabStore {
     }
     const request = { ...normalized, completion_policy: completionPolicy };
     return this.mutateAsSession(input, normalized.idempotency_key, "task.create.v2", request, (session) => {
-      const id = normalized.id ?? `task_${randomUUID2()}`;
+      const id = normalized.id ?? `task_${randomUUID3()}`;
       if (normalized.dependencies.includes(id)) {
         throw new CollabError("invalid_dependency", "A task cannot depend on itself", {
           task_id: id
@@ -32742,7 +33737,7 @@ class CollabStore {
       const checkpoint = preparedCheckpoint.checkpoint;
       this.requireExpectedBase(row, checkpoint);
       const now = this.timestamp();
-      const leaseId = `lease_${randomUUID2()}`;
+      const leaseId = `lease_${randomUUID3()}`;
       const expiresAt = addSeconds(now, ttl);
       const version2 = row.version + 1;
       this.db.query(`
@@ -32818,7 +33813,7 @@ class CollabStore {
       this.requireDependenciesComplete(opened);
       this.requirePathsAvailable(opened);
       this.requireExpectedBase(opened, checkpoint);
-      const leaseId = `lease_${randomUUID2()}`;
+      const leaseId = `lease_${randomUUID3()}`;
       const leaseExpiresAt = addSeconds(now, ttl);
       const version2 = expiryVersion + 1;
       this.db.query(`
@@ -32843,7 +33838,7 @@ class CollabStore {
           recovered_by_session_id, action, note, prior_checkpoint_json,
           new_lease_id, recovered_at, event_sequence
         ) VALUES (?, ?, ?, ?, ?, ?, 'takeover', ?, ?, ?, ?, ?)
-      `).run(`recovery_${randomUUID2()}`, row.workspace_id, row.id, prior.lease_id, prior.session_id, session.id, recoveryNote, prior.checkpoint ? canonicalJson(prior.checkpoint) : null, leaseId, now, event.sequence);
+      `).run(`recovery_${randomUUID3()}`, row.workspace_id, row.id, prior.lease_id, prior.session_id, session.id, recoveryNote, prior.checkpoint ? canonicalJson(prior.checkpoint) : null, leaseId, now, event.sequence);
       return this.requireTask(row.workspace_id, row.id);
     });
   }
@@ -32962,7 +33957,7 @@ class CollabStore {
       this.requireVersion(row, normalized.expected_version);
       this.requireActiveSessionLease(row, session, normalized.lease_id);
       const now = this.timestamp();
-      const id = `artifact_${randomUUID2()}`;
+      const id = `artifact_${randomUUID3()}`;
       this.db.query(`
           INSERT INTO artifacts (
             id, workspace_id, task_id, kind, uri, sha256, media_type, label,
@@ -33117,7 +34112,7 @@ class CollabStore {
       this.requireDependenciesComplete(row);
       this.requirePathsAvailable(row);
       const now = this.timestamp();
-      const leaseId = `lease_${randomUUID2()}`;
+      const leaseId = `lease_${randomUUID3()}`;
       const expiresAt = addSeconds(now, normalized.ttl_seconds);
       const nextVersion = row.version + 1;
       this.db.query(`
@@ -33275,7 +34270,7 @@ class CollabStore {
       this.requireVersion(row, normalized.expected_version);
       this.requireActiveLease(row, normalized.actor, normalized.lease_id);
       const now = this.timestamp();
-      const id = `artifact_${randomUUID2()}`;
+      const id = `artifact_${randomUUID3()}`;
       this.db.query(`
         INSERT INTO artifacts
           (id, workspace_id, task_id, kind, uri, sha256, media_type, label, attached_by, attached_at)
@@ -33301,7 +34296,7 @@ class CollabStore {
     };
     return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "decision.record", normalized, () => {
       this.requireWorkspace(input.workspace_id);
-      const id = `decision_${randomUUID2()}`;
+      const id = `decision_${randomUUID3()}`;
       const now = this.timestamp();
       this.db.query(`
         INSERT INTO decisions (id, workspace_id, topic, decision, rationale, recorded_by, recorded_at)
@@ -33427,7 +34422,7 @@ class CollabStore {
     const voices = this.liveVoiceSnapshot(author.workspace_id, now);
     const report = this.appendReportInternal(author, reportInput);
     const closesAt = new Date(Date.parse(now) + terms.consult_seconds * 1000).toISOString();
-    const proposalSha256 = sha2563(proposalBytes({
+    const proposalSha256 = sha2564(proposalBytes({
       workspace_id: author.workspace_id,
       report_id: report.id,
       task_id: report.task_id,
@@ -33772,7 +34767,7 @@ class CollabStore {
     if (input.expected_ai_snapshot && canonicalJson(input.expected_ai_snapshot) !== canonicalJson(aiSnapshot)) {
       throw new CollabError("ai_position_changed", "The agents' position changed since it was shown; read the proposal status again", { ai_snapshot: aiSnapshot });
     }
-    const id = `person_act_${randomUUID2()}`;
+    const id = `person_act_${randomUUID3()}`;
     const now = this.timestamp();
     const personAct = {
       id,
@@ -33856,7 +34851,7 @@ class CollabStore {
       closes_at: terms.closes_at,
       supersedes_report_id: proposal.relation === "supersedes" ? proposal.target_report_id : null
     });
-    if (sha2563(bytes) !== terms.proposal_sha256) {
+    if (sha2564(bytes) !== terms.proposal_sha256) {
       throw new CollabError("proposal_terms_invalid", "Stored proposal bytes no longer match their recorded hash", { proposal_report_id: reportId });
     }
     const retirement = this.proposalRetirement(workspaceId, reportId);
@@ -34093,7 +35088,7 @@ class CollabStore {
         authority_basis: "distinct active collaboration session"
       });
       const now = this.timestamp();
-      const reviewId = `review_${randomUUID2()}`;
+      const reviewId = `review_${randomUUID3()}`;
       const version2 = row.version + 1;
       const outcome = input.outcome === "accept" ? "accepted" : "changes_requested";
       if (input.outcome === "accept") {
@@ -34162,7 +35157,7 @@ class CollabStore {
       if (pending)
         throw new CollabError("handoff_pending", "Task already has a pending handoff", { handoff_id: pending.id });
       const now = this.timestamp();
-      const id = `handoff_${randomUUID2()}`;
+      const id = `handoff_${randomUUID3()}`;
       const expiresAt = [addSeconds(now, normalized.ttl_seconds), row.lease_expires_at].sort()[0];
       this.db.query(`
         INSERT INTO handoffs
@@ -34218,7 +35213,7 @@ class CollabStore {
           task_version: version2
         });
       } else {
-        const leaseId = `lease_${randomUUID2()}`;
+        const leaseId = `lease_${randomUUID3()}`;
         const leaseExpiresAt = addSeconds(now, normalized.ttl_seconds);
         this.db.query(`UPDATE handoffs SET status = 'accepted', resolved_at = ? WHERE id = ?`).run(now, offer.id);
         this.db.query(`
@@ -34263,7 +35258,7 @@ class CollabStore {
           handoff_id: pending.id
         });
       }
-      const id = `handoff_${randomUUID2()}`;
+      const id = `handoff_${randomUUID3()}`;
       const expiresAt = addSeconds(now, ttl);
       this.db.query(`
           INSERT INTO handoffs (
@@ -34336,7 +35331,7 @@ class CollabStore {
         const worktree = this.requirePreparedWorktree(session, preparedCheckpoint);
         const checkpoint = preparedCheckpoint.checkpoint;
         this.requireExpectedBase(row, checkpoint);
-        const leaseId = `lease_${randomUUID2()}`;
+        const leaseId = `lease_${randomUUID3()}`;
         const leaseExpiresAt = addSeconds(now, ttl);
         this.db.query(`
             UPDATE handoffs SET status = 'accepted', resolved_at = ? WHERE id = ?
@@ -34703,6 +35698,22 @@ class CollabStore {
       case "proposal.agreed":
       case "proposal.rejected":
         return this.proposalAddressesSession(event.entity_id, sessionId);
+      case "ballot.opened": {
+        const electorate = Array.isArray(payload.electorate) ? payload.electorate : [];
+        const listed = (key, value) => electorate.some((unit) => Array.isArray(field(unit, key)) && field(unit, key).includes(value));
+        return listed("session_ids", sessionId) || listed("voice_ids", this.consentVoice(sessionId));
+      }
+      case "ballot.closed": {
+        const opener = this.db.query(`
+          SELECT json_extract(payload_json, '$.opener_session_id') AS opener FROM events
+          WHERE workspace_id = ? AND type = 'ballot.opened' AND entity_id = ?
+        `).get(event.workspace_id, event.entity_id);
+        if (opener?.opener === sessionId)
+          return true;
+        return this.db.query(`
+          SELECT 1 FROM events WHERE workspace_id = ? AND type = 'ballot.cast' AND entity_id = ? AND session_id = ? LIMIT 1
+        `).get(event.workspace_id, event.entity_id, sessionId) !== null;
+      }
       default:
         return false;
     }
@@ -34742,7 +35753,7 @@ class CollabStore {
   }
   mutate(workspaceId, actor, idempotencyKey, operation, request, apply) {
     this.requireWorkspace(workspaceId);
-    const requestHash = sha2563(canonicalJson({ operation, request }));
+    const requestHash = sha2564(canonicalJson({ operation, request }));
     const transaction = this.db.transaction(() => {
       const existing = this.db.query(`
         SELECT operation, request_hash, response_json FROM mutations
@@ -34771,7 +35782,7 @@ class CollabStore {
   readSessionMutationReceipt(credential, idempotencyKeyInput, operation, request) {
     const session = this.authenticateSession(credential);
     const idempotencyKey = validateIdempotencyKey(idempotencyKeyInput);
-    const requestHash = sha2563(canonicalJson({ operation, request }));
+    const requestHash = sha2564(canonicalJson({ operation, request }));
     const existing = this.db.query(`
       SELECT operation, request_hash, response_json FROM mutations
       WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
@@ -34792,7 +35803,7 @@ class CollabStore {
       const session = this.authenticateSession(credential, options);
       this.recordSessionLeaseLapses(session, this.timestamp());
       const mutationActor = `session:${session.id}`;
-      const requestHash = sha2563(canonicalJson({ operation, request }));
+      const requestHash = sha2564(canonicalJson({ operation, request }));
       const existing = this.db.query(`
         SELECT operation, request_hash, response_json FROM mutations
         WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
@@ -34808,7 +35819,7 @@ class CollabStore {
       if (receiptPlan)
         this.requireReceiptPlan(session, receiptPlan);
       this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), session.id);
-      const guardNonce = `guard_${randomUUID2()}`;
+      const guardNonce = `guard_${randomUUID3()}`;
       this.db.query(`INSERT INTO v2_write_guard (nonce, enabled) VALUES (?, 1)`).run(guardNonce);
       try {
         const response2 = apply(session);
@@ -35275,7 +36286,7 @@ class CollabStore {
         recovered_by_session_id, action, note, prior_checkpoint_json,
         new_lease_id, recovered_at, event_sequence
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
-    `).run(`recovery_${randomUUID2()}`, row.workspace_id, row.id, input.prior.lease_id, input.prior.session_id, session.id, input.action, input.recovery_note, input.prior.checkpoint ? canonicalJson(input.prior.checkpoint) : null, input.now, event.sequence);
+    `).run(`recovery_${randomUUID3()}`, row.workspace_id, row.id, input.prior.lease_id, input.prior.session_id, session.id, input.action, input.recovery_note, input.prior.checkpoint ? canonicalJson(input.prior.checkpoint) : null, input.now, event.sequence);
     return this.requireTask(row.workspace_id, row.id);
   }
   recoveryBundle(row) {
@@ -35328,7 +36339,7 @@ class CollabStore {
     }
   }
   appendReportInternal(session, input) {
-    const id = `report_${randomUUID2()}`;
+    const id = `report_${randomUUID3()}`;
     const now = this.timestamp();
     const event = this.appendEvent(session.workspace_id, "report.posted", id, session.actor, {
       ...input.to_person ? { to_person: true } : {},
@@ -35514,7 +36525,7 @@ class CollabStore {
       workspace_id: workspaceId,
       epoch_id: workspace.epoch_id,
       sequence: workspace.event_head_sequence + 1,
-      id: `event_${randomUUID2()}`,
+      id: `event_${randomUUID3()}`,
       type,
       entity_id: entityId,
       actor,
@@ -35905,7 +36916,7 @@ class CollabStore {
     if (hasFiles && cite.worktree_id !== session.worktree_id) {
       throw new CollabError("cite_worktree_mismatch", "File evidence is cited against the citing session's own worktree");
     }
-    const citeId = `cite_${randomUUID2()}`;
+    const citeId = `cite_${randomUUID3()}`;
     const payload = {
       cite_id: citeId,
       by_session_id: session.id,
@@ -35930,18 +36941,9 @@ class CollabStore {
       }
       const obsoleted = this.activeObsoletionTargets(workspaceId);
       const termed = this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(report.id) !== null;
-      const opened = this.db.query(`
-        SELECT payload_json FROM events
-        WHERE workspace_id = ? AND sequence > ? AND type = 'ballot.opened' AND entity_id = ?
-        ORDER BY sequence LIMIT 1
-      `).get(workspaceId, report.event_sequence, report.id);
       let ballot = null;
-      if (opened) {
-        const closed = this.db.query(`
-          SELECT 1 FROM events WHERE workspace_id = ? AND sequence > ? AND type = 'ballot.closed' AND entity_id = ? LIMIT 1
-        `).get(workspaceId, report.event_sequence, report.id) !== null;
-        const closesAt = JSON.parse(opened.payload_json).closes_at;
-        ballot = { open: !closed && (typeof closesAt !== "string" || this.timestamp() < closesAt) };
+      if (this.db.query(`SELECT 1 FROM note_ballots WHERE workspace_id = ? AND ballot_id = ?`).get(workspaceId, report.id) !== null) {
+        ballot = { open: this.readBallotFacts(workspaceId, report.id)?.state === "open" };
       }
       let completion = null;
       if (report.task_id) {
@@ -36172,20 +37174,26 @@ class CollabStore {
         waiting
       };
     };
+    let reveal = { revealed: [], pending: [] };
     const planned = input.peek ? this.db.transaction(() => {
       const session = this.authenticateSession(input);
       const mark = this.readNoteMarkState(session);
       return { mark, ...plan(session, mark, false) };
-    }).deferred() : this.noteHousekeeping(input, (session, mark) => ({ mark, ...plan(session, mark, true) }));
+    }).deferred() : (() => {
+      const housekept = this.noteHousekeeping(input, (session, mark) => ({ mark, ...plan(session, mark, true) }));
+      reveal = housekept.reveal;
+      return housekept.result;
+    })();
     return afterHousekeeping(!input.peek, () => this.db.transaction(() => {
       const session = this.authenticateSession(input);
       const sessions = this.noteSessionViews(session.workspace_id);
       const me = sessions.find((view) => view.id === session.id);
       const workspace = this.requireWorkspace(session.workspace_id);
+      const folds = this.noteBallotFolds(session);
       return {
         session: me,
         sessions,
-        entries: planned.sequences.map((sequence) => this.noteEntryAt(session, sequence)),
+        entries: planned.sequences.map((sequence) => this.noteEntryAt(session, sequence, folds)),
         also_new: planned.also_new,
         more: planned.more,
         for_me_total: planned.for_me_total,
@@ -36200,13 +37208,14 @@ class CollabStore {
         },
         head_sequence: workspace.event_head_sequence,
         waiting: planned.waiting ?? this.noteWaiting(session),
+        reveal_pending: reveal.pending,
         observed_at: this.timestamp()
       };
     }).deferred());
   }
   noteThreadForSession(input) {
     const id = validateId(input.id, `${input.kind}_id`);
-    const markState = this.noteHousekeeping(input, (session, mark) => {
+    const { result: markState, reveal } = this.noteHousekeeping(input, (session, mark) => {
       const now = this.timestamp();
       if (input.kind === "task") {
         const task = this.requireTaskRow(session.workspace_id, id);
@@ -36249,7 +37258,10 @@ class CollabStore {
           termed: false,
           proposal: null,
           decision: null,
+          ballot: null,
+          folded: 0,
           mark: markState,
+          reveal_pending: reveal.pending,
           observed_at: this.timestamp()
         };
       }
@@ -36295,12 +37307,16 @@ class CollabStore {
       }
       const ids = new Set([root.id, ...answers.keys()]);
       const termed = this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(root.id) !== null;
+      const ballotFacts = this.readBallotFacts(root.workspace_id, root.id);
+      const ballot = ballotFacts ? this.ballotData(ballotFacts, session.id) : null;
+      const folds = ballot ? this.noteBallotFolds(session) : new Map;
+      const answerEntries = [...answers.values()].sort((left, right) => left - right).map((sequence) => this.noteEntryAt(session, sequence, folds));
       return {
         kind: "report",
         session: me,
         sessions,
         root: this.noteEntryAt(session, root.event_sequence),
-        answers: [...answers.values()].sort((left, right) => left - right).map((sequence) => this.noteEntryAt(session, sequence)),
+        answers: answerEntries,
         truncated,
         task: null,
         reviews: [],
@@ -36308,7 +37324,10 @@ class CollabStore {
         termed,
         proposal: termed ? this.noteProposalData(root.workspace_id, root.id, sessions) : null,
         decision: !termed && root.kind === "decision" ? this.noteDecisionData(root.workspace_id, root, sessions) : null,
+        ballot,
+        folded: answerEntries.filter((entry) => entry.folded !== null).length,
         mark: markState,
+        reveal_pending: reveal.pending,
         observed_at: this.timestamp()
       };
     }).deferred());
@@ -36333,6 +37352,7 @@ class CollabStore {
         challenges: this.noteChallenges(session.workspace_id).filter((challenge) => challenge.standing).reverse(),
         report_count: reports,
         waiting: this.noteWaiting(session),
+        ballots: this.noteOpenBallots(session).filter((ballot) => ballot.state === "open"),
         observed_at: this.timestamp()
       };
     }).deferred();
@@ -36484,11 +37504,13 @@ class CollabStore {
     };
   }
   noteHousekeeping(credential, apply) {
+    let reveal = { revealed: [], pending: [] };
     const result = this.db.transaction(() => {
       const authenticated = this.authenticateSession(credential);
       const now = this.timestamp();
       this.recordSessionLeaseLapses(authenticated, now);
       this.expireElapsedHandoffs(authenticated.workspace_id, "system:clock");
+      reveal = this.revealBallotsInTransaction(authenticated.workspace_id);
       this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(now, authenticated.id);
       const session = this.requireCoordinationSessionRow(authenticated.id);
       const mark = this.readNoteMarkState(session);
@@ -36502,8 +37524,9 @@ class CollabStore {
       }
       return apply(session, mark);
     }).immediate();
+    this.cleanSeals(reveal.revealed);
     this.tightenFileModes();
-    return result;
+    return { result, reveal };
   }
   recordNoteShown(session, itemIds, now) {
     for (const itemId of new Set(itemIds)) {
@@ -36557,7 +37580,7 @@ class CollabStore {
       throw new CollabError("cursor_mismatch", "The read mark does not resolve to an event in this journal");
     return { epoch_id: row.epoch_id, sequence, hash: row.hash };
   }
-  noteEntryAt(session, sequence) {
+  noteEntryAt(session, sequence, folds) {
     const row = this.db.query(`
       SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
         session_id, occurred_at, payload_json, prev_hash, hash
@@ -36578,6 +37601,9 @@ class CollabStore {
     const marked = event.type === "report.posted" && payload.note === NOTE_FORMAT;
     const cites = report ? this.noteAuthorCites(session.workspace_id, report) : [];
     const own = marked && report ? cites.find((cite) => cite.sequence === report.event_sequence - 1) ?? null : null;
+    const ballotId = event.type.startsWith("ballot.") ? event.entity_id : event.type === "report.posted" && report && this.db.query(`SELECT 1 FROM note_ballots WHERE workspace_id = ? AND ballot_id = ?`).get(session.workspace_id, report.id) !== null ? report.id : null;
+    const ballotFacts = ballotId ? this.readBallotFacts(session.workspace_id, ballotId) : null;
+    const foldedBy = report && event.type === "report.posted" ? folds?.get(report.id) ?? null : null;
     return {
       event,
       for_me: forMe,
@@ -36588,7 +37614,9 @@ class CollabStore {
       author_cites: cites.map(({ sequence: _sequence, ...cite }) => cite),
       termed: report !== null && this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(report.id) !== null,
       to_person: event.type === "report.posted" && payload.to_person === true,
-      task: taskRow ? { id: taskRow.id, title: taskRow.title } : null
+      task: taskRow ? { id: taskRow.id, title: taskRow.title } : null,
+      ballot: ballotFacts ? this.ballotData(ballotFacts, session.id) : null,
+      folded: foldedBy ? { ballot_id: foldedBy } : null
     };
   }
   noteAuthorCites(workspaceId, report) {
@@ -36643,6 +37671,10 @@ class CollabStore {
       case "proposal.agreed":
       case "proposal.rejected":
         return "person_act";
+      case "ballot.opened":
+        return "in_electorate";
+      case "ballot.closed":
+        return "ballot_closed";
       default:
         return "addressed";
     }
@@ -36738,6 +37770,21 @@ class CollabStore {
         summary: firstLine(status.proposal.body)
       });
     }
+    for (const ballot of this.noteOpenBallots(session)) {
+      if (!ballot.viewer?.may_vote || ballot.viewer.unit_has_cast)
+        continue;
+      waiting.push({
+        what: "vote",
+        ref_kind: "ballot",
+        ref_id: ballot.ballot_id,
+        about_id: null,
+        by: ballot.opener_name,
+        by_session_id: ballot.opener_session_id,
+        due: ballot.terms.closes_at,
+        at: ballot.opened_at,
+        summary: firstLine(ballot.terms.question)
+      });
+    }
     const obsoleted = this.activeObsoletionTargets(workspaceId);
     const authorOf = new Map(this.db.query(`
       SELECT id, from_session_id FROM reports WHERE workspace_id = ? AND id IN (
@@ -36817,6 +37864,498 @@ class CollabStore {
       });
     }
     return [...waiting.filter((entry) => entry.what === "stop"), ...waiting.filter((entry) => entry.what !== "stop")];
+  }
+  journalRealpath() {
+    if (!this.filesystemPath)
+      return null;
+    try {
+      return realpathSync2(this.filesystemPath);
+    } catch {
+      return this.filesystemPath;
+    }
+  }
+  ballotSealPath(ballotId, castId) {
+    return sealPath(this.requireSealJournal(), ballotId, castId);
+  }
+  requireSealJournal() {
+    const realpath = this.journalRealpath();
+    if (!realpath) {
+      throw new CollabError("ballots_need_a_file_journal", "A sealed ballot keeps its seals beside the journal file; this store has none", {
+        remedy: { say: "Open collab on a journal file, not an in-memory store, to poll." }
+      });
+    }
+    return realpath;
+  }
+  openBallotForSession(input) {
+    this.requireSealJournal();
+    const { render, receipt_plan: plan, ...rest } = input;
+    const poll = definedPollInput(rest.poll);
+    return this.mutateAsSession(rest, rest.idempotency_key, "notes.poll.v1", { poll }, (session) => {
+      const now = this.timestamp();
+      const views = this.noteSessionViews(session.workspace_id);
+      const voters = normalizeBallotVoters(poll.voters);
+      const marked = new Set(this.db.query(`SELECT session_id FROM note_marks WHERE workspace_id = ?`).all(session.workspace_id).map((row) => row.session_id));
+      let chosen;
+      if (voters) {
+        chosen = [];
+        for (const voter of voters) {
+          let view;
+          try {
+            view = this.resolveNoteSession(session.workspace_id, voter);
+          } catch (error51) {
+            if (!(error51 instanceof CollabError))
+              throw error51;
+            throw new CollabError(error51.code, `voters: ${error51.message}`, {
+              ...error51.details,
+              field: "voters",
+              remedy: { say: "Name each voter by an active session's id, session# handle or name; collab_arrive lists who is here." }
+            });
+          }
+          if (!chosen.some((other) => other.id === view.id))
+            chosen.push(view);
+        }
+      } else {
+        const recent = Date.parse(now) - BALLOT_RECENT_MS;
+        chosen = views.filter((view) => view.status === "active" && (view.id === session.id || Date.parse(view.last_seen_at) >= recent && marked.has(view.id)));
+      }
+      const sessions = chosen.map((view) => ({
+        session_id: view.id,
+        voice_id: view.voice_id,
+        seat_ref: view.seat_ref,
+        name: view.actor,
+        model: view.model,
+        last_seen_at: view.last_seen_at
+      }));
+      const electorate = buildElectorate(sessions);
+      const { terms, advice } = validatePollTerms(poll, { now, units: electorate.units, sessions });
+      const listedVoices = new Set(electorate.units.flatMap((unit) => unit.voice_ids));
+      const leftOutAll = views.filter((view) => view.status === "active" && view.liveness === "live" && !listedVoices.has(view.voice_id)).map((view) => ({
+        session_id: view.id,
+        name: view.actor,
+        last_seen_minutes: Math.max(0, Math.floor((Date.parse(now) - Date.parse(view.last_seen_at)) / 60000))
+      }));
+      const leftOut = leftOutAll.slice(0, BALLOT_LEFT_OUT_MAX);
+      const body = render(terms);
+      const normalized = {
+        task_id: null,
+        to_session_id: null,
+        kind: "observation",
+        body,
+        evidence_refs: [],
+        confidence: "unknown",
+        confidence_basis: null,
+        limits: null,
+        relation: "informs",
+        target_report_id: null,
+        authority_scope: null,
+        authority_basis: null
+      };
+      this.validateReportInput(session, normalized);
+      const report = this.appendReportInternal(session, { ...normalized, note: NOTE_FORMAT });
+      const payload = {
+        ballot_id: report.id,
+        question: terms.question,
+        options: terms.options,
+        ...terms.criteria !== undefined ? { criteria: terms.criteria } : {},
+        method: terms.method,
+        ...terms.pick !== undefined ? { pick: terms.pick } : {},
+        quorum: terms.quorum,
+        closes_at: terms.closes_at,
+        close_when_all_cast: terms.close_when_all_cast,
+        electorate: electorate.units,
+        electorate_sha256: electorate.electorate_sha256,
+        left_out: leftOut,
+        ...leftOutAll.length > leftOut.length ? { left_out_total: leftOutAll.length } : {},
+        chosen_by: voters ? "opener" : "default",
+        opener_session_id: session.id
+      };
+      assertNotePayload(payload);
+      const event = this.appendEvent(session.workspace_id, "ballot.opened", report.id, session.actor, payload, session.id);
+      this.db.query(`
+        INSERT OR REPLACE INTO note_ballots (workspace_id, ballot_id, closes_at, state) VALUES (?, ?, ?, 'open')
+      `).run(session.workspace_id, report.id, terms.closes_at);
+      return {
+        ballot_id: report.id,
+        report,
+        event_id: event.id,
+        sequence: event.sequence,
+        terms,
+        electorate: electorate.units,
+        electorate_sha256: electorate.electorate_sha256,
+        left_out: leftOut,
+        left_out_total: leftOutAll.length,
+        chosen_by: voters ? "opener" : "default",
+        advice
+      };
+    }, plan ? { receipt_plan: plan } : {});
+  }
+  castBallotForSession(input) {
+    const ballotId = validateId(input.ballot_id, "ballot_id");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(input.cast_id)) {
+      throw new CollabError("invalid_cast_id", "A cast id is a random uuid");
+    }
+    if (!/^[0-9a-f]{64}$/.test(input.commitment))
+      throw new CollabError("invalid_commitment", "A commitment is a sha256 in hex");
+    const request = { ballot_id: ballotId, cast_id: input.cast_id, unit_id: input.unit_id, commitment: input.commitment };
+    return this.mutateAsSession(input, `b1:${input.cast_id}`, "notes.vote.v1", request, (session) => {
+      const facts = this.readBallotFacts(session.workspace_id, ballotId);
+      if (!facts)
+        throw new CollabError("ballot_not_found", `No ballot with id ${ballotId} in this workspace`);
+      if (facts.state === "revealed" || facts.state === "closed") {
+        throw new CollabError("ballot_closed", `The ballot closed at ${facts.closed_by === "all_cast" ? "its last unit's cast" : facts.terms.closes_at}; no cast is taken after the close`, {
+          closes_at: facts.terms.closes_at,
+          closed_by: facts.closed_by
+        });
+      }
+      if (facts.state === "withdrawn") {
+        throw new CollabError("ballot_withdrawn", "The opener withdrew this ballot; no cast is taken after a withdrawal", {
+          withdrawn_by_report: facts.withdrawn.report_id
+        });
+      }
+      const voice = this.consentVoice(session.id);
+      const caster = classifyCaster(facts.units, { voice_id: voice, seat_ref: this.sessionSeatRef(session.id) });
+      if (caster.unit_id !== input.unit_id) {
+        throw new CollabError("ballot_unit_changed", "The unit this cast was sealed for is not this session's unit in this ballot");
+      }
+      const castSeq = nextCastSeq(facts.casts.filter((cast) => cast.session_id === session.id).length);
+      const voices = new Map;
+      const unitMateCast = facts.casts.some((cast) => cast.unit_id === caster.unit_id && this.cachedVoice(cast.session_id, voices) !== voice);
+      const payload = {
+        ballot_id: ballotId,
+        cast_id: input.cast_id,
+        unit_id: caster.unit_id,
+        session_id: session.id,
+        commitment: input.commitment,
+        cast_seq: castSeq
+      };
+      assertNotePayload(payload);
+      const event = this.appendEvent(session.workspace_id, "ballot.cast", ballotId, session.actor, payload, session.id);
+      const castUnits = new Set([...facts.cast_unit_ids, ...caster.counts_as === "counted" ? [caster.unit_id] : []]);
+      return {
+        ballot_id: ballotId,
+        cast_id: input.cast_id,
+        cast_seq: castSeq,
+        commitment: input.commitment,
+        unit_id: caster.unit_id,
+        counts_as: caster.counts_as,
+        ...caster.counts_as === "late" && caster.same_handle_as ? { same_handle_as: caster.same_handle_as } : {},
+        closes_at: facts.terms.closes_at,
+        event_id: event.id,
+        sequence: event.sequence,
+        cast_at: event.occurred_at,
+        unit_mate_cast: unitMateCast,
+        closes_now: facts.terms.close_when_all_cast && facts.units.every((unit) => castUnits.has(unit.unit_id))
+      };
+    });
+  }
+  revealDueBallots(workspaceId) {
+    try {
+      if (!this.hasDueBallot(workspaceId))
+        return { revealed: [], pending: [] };
+      const outcome = this.db.transaction(() => this.revealBallotsInTransaction(workspaceId)).immediate();
+      this.cleanSeals(outcome.revealed);
+      this.tightenFileModes();
+      return outcome;
+    } catch (error51) {
+      return { revealed: [], pending: [{ ballot_id: null, code: error51 instanceof CollabError ? error51.code : "reveal_failed" }] };
+    }
+  }
+  noteBallotView(workspaceId, ballotId, viewerSessionId) {
+    return this.db.transaction(() => {
+      const facts = this.readBallotFacts(workspaceId, validateId(ballotId, "ballot_id"));
+      if (!facts)
+        throw new CollabError("ballot_not_found", `No ballot with id ${ballotId} in this workspace`);
+      return this.ballotData(facts, viewerSessionId ?? null);
+    }).deferred();
+  }
+  ballotResult(workspaceId, ballotId) {
+    return this.noteBallotView(workspaceId, ballotId).result;
+  }
+  ballotUnitOf(workspaceId, ballotId, sessionId) {
+    return this.noteBallotView(workspaceId, ballotId, validateId(sessionId, "session_id")).viewer;
+  }
+  latestBallotCastForSession(workspaceId, ballotId, sessionId) {
+    const facts = this.readBallotFacts(workspaceId, validateId(ballotId, "ballot_id"));
+    if (!facts)
+      return null;
+    return facts.casts.filter((cast) => cast.session_id === sessionId).at(-1) ?? null;
+  }
+  hasDueBallot(workspaceId) {
+    const open = this.db.query(`SELECT ballot_id FROM note_ballots WHERE workspace_id = ? AND state = 'open'`).all(workspaceId);
+    return open.some((row) => {
+      try {
+        const facts = this.readBallotFacts(workspaceId, row.ballot_id);
+        return facts === null || facts.state === "closed" || facts.state === "revealed";
+      } catch {
+        return true;
+      }
+    });
+  }
+  revealBallotsInTransaction(workspaceId) {
+    const outcome = { revealed: [], pending: [] };
+    let open;
+    try {
+      open = this.db.query(`SELECT ballot_id FROM note_ballots WHERE workspace_id = ? AND state = 'open' ORDER BY closes_at, ballot_id`).all(workspaceId);
+    } catch (error51) {
+      outcome.pending.push({ ballot_id: null, code: error51 instanceof CollabError ? error51.code : "reveal_failed" });
+      return outcome;
+    }
+    for (const { ballot_id: ballotId } of open) {
+      try {
+        this.db.transaction(() => {
+          const facts = this.readBallotFacts(workspaceId, ballotId);
+          if (!facts || facts.state === "revealed") {
+            this.db.query(`UPDATE note_ballots SET state = 'closed' WHERE workspace_id = ? AND ballot_id = ?`).run(workspaceId, ballotId);
+            return;
+          }
+          if (facts.state !== "closed")
+            return;
+          this.revealBallot(facts);
+          outcome.revealed.push(ballotId);
+        })();
+      } catch (error51) {
+        outcome.pending.push({ ballot_id: ballotId, code: error51 instanceof CollabError ? error51.code : "reveal_failed" });
+      }
+    }
+    return outcome;
+  }
+  revealBallot(facts) {
+    const realpath = this.journalRealpath();
+    const casts = facts.casts.map((cast) => {
+      let seal = { state: "seal_missing" };
+      if (realpath) {
+        const read = readSealFile(sealPath(realpath, facts.ballot_id, cast.cast_id));
+        seal = read.state === "missing" ? { state: "seal_missing" } : read.state === "unreadable" ? { state: "seal_unreadable" } : openSeal(read.value, cast, { workspace_id: facts.workspace_id, ballot_id: facts.ballot_id, journal_realpath: realpath });
+      }
+      return {
+        cast_id: cast.cast_id,
+        unit_id: cast.unit_id,
+        session_id: cast.session_id,
+        commitment: cast.commitment,
+        cast_seq: cast.cast_seq,
+        voice_id: this.consentVoice(cast.session_id),
+        seal
+      };
+    });
+    const entries = resolveCasts(facts.units, casts, { ballot_id: facts.ballot_id });
+    this.revealFailpoint?.("revealing", facts.ballot_id);
+    for (const entry of entries) {
+      const payload = entry;
+      assertNotePayload(payload);
+      this.appendEvent(facts.workspace_id, "ballot.revealed", facts.ballot_id, "system:clock", payload, null);
+    }
+    const closed = {
+      ballot_id: facts.ballot_id,
+      entry_count: entries.length,
+      entries_sha256: revealedEntriesSha256(entries),
+      closed_at: this.timestamp()
+    };
+    this.appendEvent(facts.workspace_id, "ballot.closed", facts.ballot_id, "system:clock", closed, null);
+    this.db.query(`UPDATE note_ballots SET state = 'closed' WHERE workspace_id = ? AND ballot_id = ?`).run(facts.workspace_id, facts.ballot_id);
+    this.revealFailpoint?.("appended", facts.ballot_id);
+  }
+  cleanSeals(ballotIds) {
+    const realpath = this.journalRealpath();
+    if (!realpath)
+      return;
+    for (const ballotId of ballotIds) {
+      try {
+        for (const castId of listSealFiles(realpath, ballotId)) {
+          const path = sealPath(realpath, ballotId, castId);
+          const read = readSealFile(path);
+          const owner = read.state === "read" && read.value !== null && typeof read.value === "object" ? read.value.journal_realpath : undefined;
+          if (read.state !== "read" || owner === realpath || typeof owner !== "string")
+            removeSealFile(path);
+        }
+        removeEmptySealDirectory(realpath, ballotId);
+      } catch {}
+    }
+  }
+  readBallotFacts(workspaceId, ballotId) {
+    const rows = this.db.query(`
+      SELECT id, sequence, type, session_id, occurred_at, payload_json FROM events
+      WHERE workspace_id = ? AND entity_id = ?
+        AND type IN ('ballot.opened', 'ballot.cast', 'ballot.revealed', 'ballot.closed')
+      ORDER BY sequence
+    `).all(workspaceId, ballotId);
+    const openedRow = rows.find((row) => row.type === "ballot.opened");
+    if (!openedRow)
+      return null;
+    const opened = JSON.parse(openedRow.payload_json);
+    const terms = {
+      question: opened.question,
+      options: opened.options,
+      method: opened.method,
+      quorum: opened.quorum,
+      closes_at: opened.closes_at,
+      close_when_all_cast: opened.close_when_all_cast === true
+    };
+    if (typeof opened.criteria === "string")
+      terms.criteria = opened.criteria;
+    if (Number.isInteger(opened.pick))
+      terms.pick = opened.pick;
+    const units = Array.isArray(opened.electorate) ? opened.electorate : [];
+    const unitIds = new Set(units.map((unit) => unit.unit_id));
+    const casts = [];
+    const castUnits = new Set;
+    let allCastSequence = null;
+    const revealed = [];
+    let closed = null;
+    for (const row of rows) {
+      const payload = JSON.parse(row.payload_json);
+      if (row.type === "ballot.cast") {
+        casts.push({
+          cast_id: payload.cast_id,
+          unit_id: payload.unit_id,
+          session_id: payload.session_id,
+          commitment: payload.commitment,
+          cast_seq: payload.cast_seq,
+          event_id: row.id,
+          sequence: row.sequence,
+          at: row.occurred_at
+        });
+        if (unitIds.has(payload.unit_id))
+          castUnits.add(payload.unit_id);
+        if (allCastSequence === null && units.length > 0 && units.every((unit) => castUnits.has(unit.unit_id))) {
+          allCastSequence = row.sequence;
+        }
+      } else if (row.type === "ballot.revealed") {
+        revealed.push(payload);
+      } else if (row.type === "ballot.closed" && closed === null) {
+        closed = {
+          event_id: row.id,
+          sequence: row.sequence,
+          at: row.occurred_at,
+          entry_count: payload.entry_count,
+          entries_sha256: payload.entries_sha256
+        };
+      }
+    }
+    const obsoleted = this.activeObsoletionTargets(workspaceId);
+    const withdrawal = this.db.query(`
+      SELECT id, event_sequence, created_at FROM reports
+      WHERE workspace_id = ? AND target_report_id = ? AND relation = 'withdraws' AND from_session_id = ?
+      ORDER BY event_sequence
+    `).all(workspaceId, ballotId, opened.opener_session_id).find((row) => !obsoleted.has(row.id) && Date.parse(row.created_at) < Date.parse(terms.closes_at) && (!terms.close_when_all_cast || allCastSequence === null || row.event_sequence < allCastSequence) && (closed === null || row.event_sequence < closed.sequence)) ?? null;
+    const withdrawn = withdrawal ? { report_id: withdrawal.id, sequence: withdrawal.event_sequence, at: withdrawal.created_at } : null;
+    const now = this.timestamp();
+    const closedBy = Date.parse(now) >= Date.parse(terms.closes_at) ? "time" : terms.close_when_all_cast && !withdrawn && allCastSequence !== null ? "all_cast" : null;
+    const state = closed !== null ? "revealed" : closedBy !== null ? "closed" : withdrawn ? "withdrawn" : "open";
+    const leftOut = Array.isArray(opened.left_out) ? opened.left_out : [];
+    return {
+      ballot_id: ballotId,
+      workspace_id: workspaceId,
+      opener_session_id: opened.opener_session_id,
+      opened_at: openedRow.occurred_at,
+      opened_sequence: openedRow.sequence,
+      terms,
+      units,
+      electorate_sha256: opened.electorate_sha256,
+      chosen_by: opened.chosen_by,
+      left_out: leftOut,
+      left_out_total: Number.isInteger(opened.left_out_total) ? opened.left_out_total : leftOut.length,
+      casts,
+      cast_unit_ids: [...castUnits].sort(),
+      all_cast_sequence: allCastSequence,
+      withdrawn,
+      closed_by: closedBy,
+      state,
+      revealed: closed !== null ? revealed : null,
+      closed,
+      observed_at: now
+    };
+  }
+  ballotData(facts, viewerSessionId) {
+    const sessions = this.noteSessionViews(facts.workspace_id);
+    const byId = new Map(sessions.map((view) => [view.id, view]));
+    let viewer = null;
+    if (viewerSessionId) {
+      const voice = this.consentVoice(viewerSessionId);
+      const caster = classifyCaster(facts.units, { voice_id: voice, seat_ref: byId.get(viewerSessionId)?.seat_ref ?? null });
+      const yours = facts.casts.filter((cast) => cast.session_id === viewerSessionId).length;
+      const listed = caster.counts_as === "counted";
+      viewer = {
+        session_id: viewerSessionId,
+        unit_id: caster.unit_id,
+        counts_as: caster.counts_as,
+        ...caster.counts_as === "late" && caster.same_handle_as ? { same_handle_as: caster.same_handle_as } : {},
+        in_electorate: listed,
+        unit_has_cast: listed ? facts.cast_unit_ids.includes(caster.unit_id) : yours > 0,
+        your_casts: yours,
+        may_vote: facts.state === "open" && listed && yours < BALLOT_MAX_CASTS
+      };
+    }
+    let result = null;
+    if (facts.revealed) {
+      const delivered = this.db.query(`SELECT session_id FROM note_shown WHERE workspace_id = ? AND item_id = ?`).all(facts.workspace_id, facts.ballot_id).map((row) => row.session_id);
+      result = ballotResult({
+        terms: facts.terms,
+        units: facts.units,
+        entries: facts.revealed,
+        withdrawn: facts.withdrawn !== null,
+        sessions: Object.fromEntries(sessions.map((view) => [view.id, { name: view.actor, seat_ref: view.seat_ref, model: view.model }])),
+        delivered_session_ids: delivered,
+        left_out: facts.left_out
+      });
+    }
+    return {
+      ...facts,
+      opener_name: byId.get(facts.opener_session_id)?.actor ?? facts.opener_session_id,
+      turnout: { cast: facts.cast_unit_ids.length, electorate: facts.units.length },
+      viewer,
+      unit_basis: unitBasis(facts.units),
+      sealing: BALLOT_SEALING,
+      result
+    };
+  }
+  noteOpenBallots(session) {
+    const rows = this.db.query(`
+      SELECT ballot_id FROM note_ballots WHERE workspace_id = ? AND state = 'open' ORDER BY closes_at, ballot_id
+    `).all(session.workspace_id);
+    const out = [];
+    for (const row of rows) {
+      const facts = this.readBallotFacts(session.workspace_id, row.ballot_id);
+      if (facts && facts.state !== "revealed")
+        out.push(this.ballotData(facts, session.id));
+    }
+    return out;
+  }
+  noteBallotFolds(session) {
+    const folds = new Map;
+    for (const ballot of this.noteOpenBallots(session)) {
+      if (ballot.state !== "open" || !ballot.viewer?.in_electorate || ballot.viewer.unit_has_cast)
+        continue;
+      for (const id of this.ballotThreadIds(session.workspace_id, ballot.ballot_id)) {
+        if (folds.has(id))
+          continue;
+        const author = this.db.query(`SELECT from_session_id FROM reports WHERE id = ?`).get(id);
+        if (author?.from_session_id !== session.id)
+          folds.set(id, ballot.ballot_id);
+      }
+    }
+    return folds;
+  }
+  ballotThreadIds(workspaceId, ballotId) {
+    const seen = new Set;
+    let frontier = [ballotId];
+    while (frontier.length > 0 && seen.size < NOTE_THREAD_MAX) {
+      const next = [];
+      for (const target of frontier) {
+        const rows = this.db.query(`
+          SELECT id FROM reports WHERE workspace_id = ? AND target_report_id = ?
+          UNION
+          SELECT r.id FROM reports r, json_each(r.evidence_refs_json) ref WHERE r.workspace_id = ? AND ref.value = ?
+        `).all(workspaceId, target, workspaceId, `report:${target}`);
+        for (const row of rows) {
+          if (seen.has(row.id) || row.id === ballotId)
+            continue;
+          seen.add(row.id);
+          next.push(row.id);
+        }
+      }
+      frontier = next;
+    }
+    return [...seen];
   }
   noteNow() {
     return this.timestamp();
@@ -37513,10 +39052,10 @@ function eventFromRow(row) {
 function eventHash(event) {
   if (event.protocol === LEGACY_COLLAB_PROTOCOL) {
     const { hash: _hash2, session_id: _sessionId, ...body2 } = event;
-    return sha2563(canonicalJson(body2));
+    return sha2564(canonicalJson(body2));
   }
   const { hash: _hash, ...body } = event;
-  return sha2563(canonicalJson(body));
+  return sha2564(canonicalJson(body));
 }
 function verifyEventPage(events, afterSequence, predecessorHash, headSequence, headHash) {
   if (predecessorHash === null)
@@ -37776,6 +39315,12 @@ var NOTE_DECISION_OUTCOMES = ["proceed", "do_not_proceed", "no_decision"];
 var NOTE_NOTHING_AUTHORISED = "nothing is authorised";
 var NOTE_DEFAULT_DECISION_EXTENT = "work this session already holds";
 var NOTE_SELF_DECISION_BASIS = "recorded by this session; not a direction decision and not the person's agreement";
+var BALLOT_RECENT_MS = 30 * 60000;
+var BALLOT_LEFT_OUT_MAX = 50;
+var BALLOT_MAX_CASTS = MAX_CASTS_PER_SESSION;
+function definedPollInput(poll) {
+  return Object.fromEntries(Object.entries(poll ?? {}).filter(([, value]) => value !== undefined));
+}
 var NOTE_SCAN_MAX_EVENTS = 2000;
 var NOTE_SCAN_MAX_BYTES = 8 * 1024 * 1024;
 var NOTE_INBOX_MAX_LIMIT = 50;
@@ -37784,7 +39329,7 @@ var NOTE_PURPOSE_MAX_CHARS = 200;
 var NOTE_PAYLOAD_MAX_BYTES = 64 * 1024;
 function noteShownItem(event) {
   const payload = event.payload;
-  if (event.type === "proposal.opened")
+  if (event.type === "proposal.opened" || event.type === "ballot.opened")
     return event.entity_id;
   if (event.type === "task.reported_complete" && typeof payload.completion_report_id === "string") {
     return payload.completion_report_id;
@@ -37792,7 +39337,7 @@ function noteShownItem(event) {
   return null;
 }
 function noteWaitingShownItems(waiting) {
-  return waiting.flatMap((entry) => entry.what === "voice" ? [entry.ref_id] : entry.what === "review" && entry.about_id ? [entry.about_id] : []);
+  return waiting.flatMap((entry) => entry.what === "voice" || entry.what === "vote" ? [entry.ref_id] : entry.what === "review" && entry.about_id ? [entry.about_id] : []);
 }
 function afterHousekeeping(committed, read) {
   try {
@@ -37913,7 +39458,7 @@ function parseCheckpoint(json2) {
   return json2 ? JSON.parse(json2) : null;
 }
 function checkpointDigest(checkpoint) {
-  return sha2563(canonicalJson(checkpoint));
+  return sha2564(canonicalJson(checkpoint));
 }
 function checkpointStateMatches(left, right) {
   return left.worktree_id === right.worktree_id && left.head_sha === right.head_sha && left.branch === right.branch && left.algorithm === right.algorithm && left.index_sha256 === right.index_sha256 && left.state_sha256 === right.state_sha256 && left.dirty === right.dirty;
@@ -38019,7 +39564,7 @@ function sqlToBoolean(value) {
   return value === null ? null : value !== 0;
 }
 function hashSessionToken(token) {
-  return sha2563(`agenttool.collab/session-token/v1\x00${token}`);
+  return sha2564(`agenttool.collab/session-token/v1\x00${token}`);
 }
 function safeDigestEqual(left, right) {
   const leftBuffer = Buffer.from(left, "hex");
@@ -38053,7 +39598,7 @@ function retrySqliteBusy(operation) {
   }
 }
 function assertSafeDatabaseFile(path) {
-  const stat = lstatSync3(path);
+  const stat = lstatSync4(path);
   if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || typeof process.getuid === "function" && stat.uid !== process.getuid()) {
     throw new CollabError("database_file_unsafe", "The collaboration database path must be a non-linked regular file owned by this user", { path });
   }
@@ -38122,14 +39667,14 @@ function safeRepositoryIdentity(rootPath) {
     return inspectRepository(rootPath);
   } catch {
     const root = resolve4(rootPath);
-    const repositoryKey = `local-path:${sha2563(root)}`;
-    const worktreeId2 = `wt_${sha2563(`${root}\x00path:${root}`).slice(0, 24)}`;
+    const repositoryKey = `local-path:${sha2564(root)}`;
+    const worktreeId2 = `wt_${sha2564(`${root}\x00path:${root}`).slice(0, 24)}`;
     return {
       requested_root_path: root,
       root_path: root,
       repository_key: repositoryKey,
       git_common_dir_hash: null,
-      worktree_fingerprint: `path:${sha2563(root)}`,
+      worktree_fingerprint: `path:${sha2564(root)}`,
       checkpoint: {
         worktree_id: worktreeId2,
         head_sha: null,
@@ -38140,16 +39685,16 @@ function safeRepositoryIdentity(rootPath) {
     };
   }
 }
-function sha2563(value) {
-  return createHash3("sha256").update(value).digest("hex");
+function sha2564(value) {
+  return createHash4("sha256").update(value).digest("hex");
 }
 function addSeconds(iso, seconds) {
   return new Date(new Date(iso).getTime() + seconds * 1000).toISOString();
 }
 
 // src/verbs.ts
-import { createHash as createHash4 } from "crypto";
-import { existsSync as existsSync4, realpathSync as realpathSync2 } from "fs";
+import { createHash as createHash5 } from "crypto";
+import { existsSync as existsSync5, realpathSync as realpathSync3 } from "fs";
 import { hostname as hostname3 } from "os";
 import { resolve as resolve5, sep as sep2 } from "path";
 
@@ -38173,7 +39718,9 @@ var BUILT_NOTE_VERBS = [
   "collab_note",
   "collab_take",
   "collab_done",
-  "collab_propose"
+  "collab_propose",
+  "collab_poll",
+  "collab_vote"
 ];
 var NOTES_PROFILE_LEGACY_TOOLS = ["collab_journal_verify"];
 var TOOLS_PROFILE_VARIABLES = ["AGENTOOL_COLLAB_TOOLS", "AGENTTOOL_COLLAB_TOOLS"];
@@ -38228,7 +39775,7 @@ function notesInstructions(verbs = BUILT_NOTE_VERBS) {
 }
 var FULL_PROFILE_BRIDGE = "collab_arrive does not move the legacy cursor; call collab_next only if you mean to page the journal from its start.";
 var NOTE_AUTHORISES = "Nothing. This is coordination state.";
-var NOTE_CAPABILITIES = ["legacy", "consent/v1", "notes/1"];
+var NOTE_CAPABILITIES = ["legacy", "consent/v1", "notes/1", "ballot/1"];
 var NOTE_CARD = [
   "Collab notes, interim card (the full card is still being written).",
   "A note is plain text: `<act>: <statement>`, a blank line, an optional body, then trailers:",
@@ -38237,7 +39784,8 @@ var NOTE_CARD = [
   "  Limits: <what this does not cover>   Purpose: <what it serves>   Extent: <where a decision stops>",
   "Acts: say: note; stand: support, challenge, resolve, withdraw; work: take, done, accept, request_changes;",
   "decide: propose, poll, vote, decide.",
-  "This build has collab_arrive, collab_inbox, collab_note (decide included), collab_take, collab_done and collab_propose; poll and vote come later.",
+  "This build has collab_arrive, collab_inbox, collab_note (decide included), collab_take, collab_done, collab_propose, collab_poll and collab_vote.",
+  "A ballot is sealed until it closes; its result is the agents' preference and authorises nothing.",
   ...NOTE_PRINCIPLES.map((principle, index) => `${index + 1}. ${principle}`)
 ].join(`
 `);
@@ -38279,7 +39827,7 @@ function base32(bytes) {
   return out;
 }
 function sha256Bytes2(text) {
-  return createHash4("sha256").update(text, "utf8").digest();
+  return createHash5("sha256").update(text, "utf8").digest();
 }
 var DERIVED_KEY = /^n1:([A-Z2-7]{8}):(\d{6}):([A-Z2-7]{20})(?::(\d{2}))?$/;
 function derivedBase(sessionId, tool, input) {
@@ -38427,6 +39975,13 @@ function noteFailure(error51) {
     isError: true
   };
 }
+function revealDue(ctx, workspaceId) {
+  try {
+    return ctx.store.revealDueBallots(workspaceId).pending[0]?.code ?? null;
+  } catch (error51) {
+    return error51 instanceof CollabError ? error51.code : "reveal_failed";
+  }
+}
 async function noteCall(operation) {
   try {
     return noteSuccess(await operation());
@@ -38573,9 +40128,9 @@ function defaultRootPath(sent) {
   let workingDirectory = null;
   let reason = null;
   try {
-    workingDirectory = realpathSync2(process.cwd());
+    workingDirectory = realpathSync3(process.cwd());
     const identity = inspectRepository(workingDirectory, undefined, true, { portable: false });
-    const packageRoot = existsSync4(PACKAGE_ROOT) ? realpathSync2(PACKAGE_ROOT) : PACKAGE_ROOT;
+    const packageRoot = existsSync5(PACKAGE_ROOT) ? realpathSync3(PACKAGE_ROOT) : PACKAGE_ROOT;
     if (identity.git_common_dir_hash === null)
       reason = "not_a_git_worktree";
     else if (within(workingDirectory, packageRoot))
@@ -38771,6 +40326,7 @@ function arrivalNote(statement, purpose) {
 }
 function arrivalResult(ctx, binding, options) {
   const credential = binding.handle.credential;
+  const pendingReveal = revealDue(ctx, binding.handle.workspace.id);
   const data = ctx.store.arrivalBrief(credential);
   const pending = options.fresh ? null : ctx.store.inboxForSession({ ...credential, limit: LIST_CAP, include: "for_me", peek: true });
   const brief = composeBrief(ctx, data, pending, binding.handle.worktree.root_path);
@@ -38791,7 +40347,8 @@ function arrivalResult(ctx, binding, options) {
       replayed: options.replayed
     }),
     ...options.remedies ? { remedies: options.remedies } : {},
-    ...brief.view
+    ...brief.view,
+    ...pendingReveal ? { reveal_pending: pendingReveal } : {}
   };
 }
 function composeBrief(ctx, data, pending, rootPath) {
@@ -38841,12 +40398,14 @@ function composeBrief(ctx, data, pending, rootPath) {
     person: status.person.state
   }));
   const challenges = data.challenges.map((challenge) => challengeView(challenge, data.proposals.some((status) => status.proposal.id === challenge.target_report_id)));
+  const ballots = data.ballots.map((ballot) => ballotBrief(ballot));
   const recheck = evidenceRechecker(ctx.store);
   const forYou = pending ? pending.entries.map((entry) => formatEntry(entry, byId, me.id, recheck)) : [];
   const waiting = data.waiting.map((entry) => formatWaiting(ctx, entry));
   const cap = (items) => items.slice(0, LIST_CAP);
   const shown = [
     ...cap(proposals).map((proposal) => proposal.id),
+    ...cap(ballots).map((ballot) => ballot.id),
     ...cap(reviewsWanted).flatMap((review) => review.completion ? [review.completion.id] : []),
     ...noteWaitingShownItems(cap(data.waiting))
   ];
@@ -38879,7 +40438,7 @@ function composeBrief(ctx, data, pending, rootPath) {
         in_progress: cap(inProgress),
         reviews_wanted: cap(reviewsWanted),
         proposals: cap(proposals),
-        ballots: [],
+        ballots: cap(ballots),
         challenges: cap(challenges)
       },
       for_you: cap(forYou),
@@ -38890,7 +40449,7 @@ function composeBrief(ctx, data, pending, rootPath) {
         in_progress: inProgress.length,
         reviews_wanted: reviewsWanted.length,
         proposals: proposals.length,
-        ballots: 0,
+        ballots: ballots.length,
         challenges: challenges.length,
         for_you: pending?.for_me_total ?? 0,
         for_you_more: pending?.more ?? false,
@@ -38929,13 +40488,11 @@ function shellQuote(value) {
 function listenHow(ctx, sessionId) {
   const inboxWait = ctx.slot_key ? `collab_inbox {wait_seconds: 30, binding_key: "${ctx.slot_key}"}` : "collab_inbox {wait_seconds: 30}";
   const database = ctx.store.db.filename;
-  if (ctx.profile === "notes")
-    return inboxWait;
   if (!ctx.environment.CLAUDE_CODE_MESSAGING_SOCKET || !database || database === ":memory:")
     return inboxWait;
   const watcher = resolve5(import.meta.dir, "..", "integrations", "claude-code", "collab-doorbell-watch.ts");
   const host = resolve5(import.meta.dir, "..", "dist", "agenttool-collab-host.js");
-  if (!existsSync4(watcher) || !existsSync4(host))
+  if (!existsSync5(watcher) || !existsSync5(host))
     return inboxWait;
   return `nohup ${shellQuote(process.execPath)} ${shellQuote(watcher)} --session ${sessionId} ` + `--db ${shellQuote(database)} --host-bin ${shellQuote(host)} >/dev/null 2>&1 &`;
 }
@@ -38948,9 +40505,11 @@ var RELATION_ACTS = {
   corrects: "corrects",
   supersedes: "supersedes"
 };
-function reportAct(report, termed) {
+function reportAct(report, termed, poll = false) {
   if (termed)
     return "propose";
+  if (poll)
+    return "poll";
   if (report.relation === "informs" && report.kind === "decision")
     return "decide";
   return RELATION_ACTS[report.relation];
@@ -38971,7 +40530,7 @@ function evidenceRechecker(store, budgetBytes = NOTE_RECHECK_MAX_BYTES) {
     if (!worktreeId2)
       return "unavailable";
     const root = store.noteWorktreeRoot(worktreeId2);
-    if (!root || !existsSync4(root))
+    if (!root || !existsSync5(root))
       return "unavailable";
     if (remaining <= 0)
       return "not_rechecked";
@@ -39053,8 +40612,21 @@ function formatEntry(entry, byId, me, recheck) {
     why_you: entry.why_you,
     for_me: entry.for_me
   };
+  if (event.type === "report.posted" && report && entry.folded) {
+    return {
+      id: report.id,
+      handle: handleOf("report", report.id),
+      act: reportAct(report, entry.termed),
+      from: { session: report.from_session_id, name: report.from_actor },
+      ...base,
+      folded: true,
+      ballot: { id: entry.folded.ballot_id, handle: handleOf("ballot", entry.folded.ballot_id) },
+      why_folded: FOLDED_LINE
+    };
+  }
   if (event.type === "report.posted" && report) {
-    const act = reportAct(report, entry.termed);
+    const poll = entry.ballot !== null && entry.ballot.ballot_id === report.id;
+    const act = reportAct(report, entry.termed, poll);
     let statement = statementOf(report.body);
     let text = report.body;
     let why = [];
@@ -39080,7 +40652,7 @@ function formatEntry(entry, byId, me, recheck) {
     const re = report.target_report_id ? { id: report.target_report_id, handle: handleOf("report", report.target_report_id) } : aboutProposal ? { id: aboutProposal, handle: handleOf("proposal", aboutProposal) } : report.task_id ? { id: report.task_id, handle: handleOf("task", report.task_id) } : null;
     return {
       id: report.id,
-      handle: reportHandle(report.id, entry.termed),
+      handle: poll ? handleOf("ballot", report.id) : reportHandle(report.id, entry.termed),
       act,
       ...act === "corrects" || act === "supersedes" ? { relation: report.relation } : {},
       from: { session: report.from_session_id, name: report.from_actor },
@@ -39167,6 +40739,11 @@ function formatEntry(entry, byId, me, recheck) {
         why: [],
         evidence: typeof payload.review_report_id === "string" ? [{ n: 1, kind: "report", locator: payload.review_report_id }] : []
       };
+    case "ballot.opened":
+    case "ballot.closed":
+    case "ballot.cast":
+    case "ballot.revealed":
+      return ballotItem(entry, from, base, byId, me);
     default:
       return {
         id: event.entity_id,
@@ -39203,6 +40780,8 @@ function eventSubject(type, taskHandle, title, by) {
 }
 function subjectLine(entry, byId, me) {
   const item = formatEntry(entry, byId, me);
+  if (item.folded === true)
+    return { ...item, for_me: false };
   return {
     id: item.id,
     handle: item.handle,
@@ -39350,6 +40929,8 @@ function inboxResult(ctx, passes, format, waited, waitError = null, paging = {})
   if (waitError) {
     advice.push(`The wait ended with ${waitError.code}: ${waitError.message}. What this call's first pass found is returned; your read mark is past it.` + (waitError.details.after_housekeeping === true ? " A second pass had moved the mark further before it failed, and its items are not in this result." : ""));
   }
+  if (entries.some((entry) => entry.folded))
+    advice.push(FOLDED_LINE);
   const firstForMe = entries.find((entry) => entry.for_me);
   const about = firstForMe ? entryRef(firstForMe) : null;
   const next = waitError ? withSlot(ctx, noteRemedyOf(waitError)) : about ? withSlot(ctx, { tool: "collab_inbox", input: { about } }) : data.more ? withSlot(ctx, { tool: "collab_inbox", input: { ...paging } }) : withSlot(ctx, { tool: "collab_inbox", input: { wait_seconds: WAIT_MAX_SECONDS, ...paging } });
@@ -39363,17 +40944,25 @@ function inboxResult(ctx, passes, format, waited, waitError = null, paging = {})
     ...initialisedFrom ? { mark_initialised_from: initialisedFrom } : {},
     waiting_on_you: data.waiting.map((entry) => formatWaiting(ctx, entry)),
     ...waited ? { waited } : {},
+    ...revealPendingField(passes.flatMap((pass) => pass.reveal_pending)),
     advice,
     next
   };
 }
+function revealPendingField(pending) {
+  return pending.length > 0 ? { reveal_pending: pending[0].code } : {};
+}
 var MARK_CLAMPED_ADVICE = "Your read mark was past the journal head (the journal may have been restored from an older copy); it now reads from the head.";
 function entryRef(entry) {
   const { event, report } = entry;
+  if (entry.folded)
+    return exactRef("ballot", entry.folded.ballot_id);
   if (event.type === "report.posted")
     return report ? exactRef("report", report.id) : null;
   if (event.type.startsWith("proposal."))
     return exactRef("proposal", event.entity_id);
+  if (event.type.startsWith("ballot."))
+    return exactRef("ballot", event.entity_id);
   if (event.type.startsWith("task."))
     return exactRef("task", event.entity_id);
   return entry.task ? exactRef("task", entry.task.id) : null;
@@ -39488,13 +41077,15 @@ function composeAboutView(ctx, thread, format, waitSeconds) {
     advice.push(`This thread lists its first ${thread.answers.length} answers only.`);
   const recheck = evidenceRechecker(ctx.store);
   const view = thread.kind === "task" ? taskView(thread, byId, me, recheck) : reportView(ctx, thread, byId, me, advice, recheck);
+  const voteNext = thread.ballot?.viewer?.may_vote && !thread.ballot.viewer.unit_has_cast ? withSlot(ctx, { tool: "collab_vote", input: { ballot: exactRef("ballot", thread.ballot.ballot_id) } }) : null;
   const result = {
     ok: true,
     ...view,
     truncated: thread.truncated,
     ...thread.mark.initialised_from ? { mark_initialised_from: thread.mark.initialised_from } : {},
+    ...revealPendingField(thread.reveal_pending),
     advice,
-    next: withSlot(ctx, { tool: "collab_inbox", input: {} })
+    next: voteNext ?? withSlot(ctx, { tool: "collab_inbox", input: {} })
   };
   if (format === "note") {
     try {
@@ -39523,11 +41114,12 @@ function reportView(ctx, thread, byId, me, advice, recheck) {
   const root = thread.root;
   const report = root.report;
   const decision = report.kind === "decision" && !thread.termed;
+  const ballot = thread.ballot;
   const view = {
     about: {
-      kind: thread.termed ? "proposal" : decision ? "decision" : "report",
+      kind: thread.termed ? "proposal" : ballot ? "ballot" : decision ? "decision" : "report",
       id: report.id,
-      handle: reportHandle(report.id, thread.termed)
+      handle: ballot ? handleOf("ballot", report.id) : reportHandle(report.id, thread.termed)
     },
     root: formatEntry(root, byId, me, recheck),
     answers: thread.answers.map((entry) => formatEntry(entry, byId, me, recheck)),
@@ -39545,7 +41137,189 @@ function reportView(ctx, thread, byId, me, advice, recheck) {
     advice.push(...record2.advice);
     return { ...view, ...record2.fields };
   }
+  if (ballot) {
+    if (thread.folded > 0)
+      advice.push(FOLDED_LINE);
+    advice.push(...ballotAdvice(ballot));
+    return { ...view, ballot: ballotFacts(ballot) };
+  }
   return view;
+}
+var FOLDED_LINE = "folded so your first answer is your own; read any of them with about:<id> if you choose";
+function ballotTermsView(terms) {
+  return {
+    question: terms.question,
+    ...terms.criteria !== undefined ? { criteria: terms.criteria } : {},
+    options: terms.options.map((option) => ({ key: option.key, label: option.label })),
+    method: terms.method,
+    ...terms.pick !== undefined ? { pick: terms.pick } : {},
+    quorum: terms.quorum,
+    closes_at: terms.closes_at,
+    close_when_all_cast: terms.close_when_all_cast
+  };
+}
+function ballotUnitView(unit) {
+  return {
+    unit: unit.unit_id,
+    names: unit.names,
+    sessions: unit.session_ids,
+    seat_refs: unit.seat_refs,
+    ...unit.model ? { model: unit.model } : {},
+    ...unit.models ? { models: unit.models } : {}
+  };
+}
+function ballotYou(ballot) {
+  const viewer = ballot.viewer;
+  if (!viewer)
+    return null;
+  return {
+    unit: viewer.unit_id,
+    counts_as: viewer.counts_as,
+    ...viewer.same_handle_as ? { same_handle_as: viewer.same_handle_as } : {},
+    in_electorate: viewer.in_electorate,
+    you_may_vote: viewer.may_vote,
+    you_have_cast: viewer.unit_has_cast,
+    your_casts: viewer.your_casts
+  };
+}
+function ballotBrief(ballot) {
+  return {
+    id: ballot.ballot_id,
+    handle: handleOf("ballot", ballot.ballot_id),
+    question: ballot.terms.question,
+    criteria: ballot.terms.criteria ?? null,
+    options: ballot.terms.options.map((option) => ({ key: option.key, label: option.label })),
+    pick: ballot.terms.pick ?? null,
+    closes_at: ballot.terms.closes_at,
+    close_when_all_cast: ballot.terms.close_when_all_cast,
+    you_may_vote: ballot.viewer?.may_vote ?? false,
+    you_have_cast: ballot.viewer?.unit_has_cast ?? false,
+    turnout: ballot.turnout,
+    sealing: ballot.sealing
+  };
+}
+function ballotFacts(ballot) {
+  return {
+    id: ballot.ballot_id,
+    handle: handleOf("ballot", ballot.ballot_id),
+    opener: { session: ballot.opener_session_id, name: ballot.opener_name },
+    opened_at: ballot.opened_at,
+    terms: ballotTermsView(ballot.terms),
+    state: ballot.state,
+    closed_by: ballot.closed_by,
+    withdrawn: ballot.withdrawn ? { report: ballot.withdrawn.report_id, at: ballot.withdrawn.at } : null,
+    electorate: ballot.units.map(ballotUnitView),
+    electorate_sha256: ballot.electorate_sha256,
+    chosen_by: ballot.chosen_by,
+    left_out: ballot.left_out,
+    ...ballot.left_out_total > ballot.left_out.length ? { left_out_total: ballot.left_out_total } : {},
+    turnout: ballot.turnout,
+    you: ballotYou(ballot),
+    unit_basis: ballot.unit_basis,
+    sealing: ballot.sealing,
+    closed: ballot.closed ? { at: ballot.closed.at, entry_count: ballot.closed.entry_count, entries_sha256: ballot.closed.entries_sha256 } : null,
+    result: ballot.result
+  };
+}
+function ballotAdvice(ballot) {
+  const advice = [];
+  if (ballot.state === "withdrawn") {
+    advice.push("The opener withdrew this ballot: no cast is taken, and its votes are still revealed at the original close, with no top choice.");
+  } else if (ballot.state === "closed") {
+    advice.push("This ballot has closed; its votes are revealed by the next collab call in this workspace.");
+  } else if (ballot.state === "open" && ballot.viewer?.may_vote && !ballot.viewer.unit_has_cast) {
+    advice.push("Vote with collab_vote before you read anyone else's answer; check what can be checked, since a count does not make an answer true.");
+  }
+  return advice;
+}
+function ballotItem(entry, from, base, byId, me) {
+  const { event } = entry;
+  const ballot = entry.ballot;
+  const id = event.entity_id;
+  const handle = handleOf("ballot", id);
+  const re = { id, handle };
+  const about = { tool: "collab_inbox", input: { about: exactRef("ballot", id) } };
+  if (!ballot) {
+    return { id, handle, act: "event", type: event.type, from, to: "all", re, ...base, statement: `${event.type} on ${handle}.`, text: null, why: [], evidence: [] };
+  }
+  switch (event.type) {
+    case "ballot.opened": {
+      const mayVote = ballot.viewer?.may_vote === true && !ballot.viewer.unit_has_cast;
+      return {
+        id,
+        handle,
+        act: "poll",
+        from,
+        to: "electorate",
+        re: null,
+        ...base,
+        statement: statementOf(ballot.terms.question.split(`
+`).find((line) => line.trim() !== "")?.trim() ?? handle),
+        text: ballot.terms.question,
+        why: [],
+        evidence: [],
+        terms: ballotTermsView(ballot.terms),
+        state: ballot.state,
+        electorate: ballot.units.map(ballotUnitView),
+        chosen_by: ballot.chosen_by,
+        left_out: ballot.left_out,
+        you_may_vote: ballot.viewer?.may_vote ?? false,
+        you_have_cast: ballot.viewer?.unit_has_cast ?? false,
+        unit_basis: ballot.unit_basis,
+        sealing: ballot.sealing,
+        next: mayVote ? { tool: "collab_vote", input: { ballot: exactRef("ballot", id) } } : about
+      };
+    }
+    case "ballot.closed": {
+      const result = ballot.result;
+      const top = result && result.top.length > 0 ? ` (${result.top.join(", ")})` : "";
+      return {
+        id,
+        handle,
+        act: "poll",
+        from: { session: null, name: "system:clock" },
+        to: sessionRef(me, me, byId),
+        re,
+        ...base,
+        statement: result ? `${handle} closed: ${result.status}${top}. It authorises nothing.` : `${handle} closed.`,
+        text: null,
+        why: [],
+        evidence: [],
+        result: result ? { status: result.status, top: result.top, split: result.split, turnout: result.turnout, quorum: result.quorum } : null,
+        next: about
+      };
+    }
+    case "ballot.cast":
+      return {
+        id,
+        handle,
+        act: "vote",
+        from,
+        to: "all",
+        re,
+        ...base,
+        statement: `A sealed vote was cast in ${handle}.`,
+        text: null,
+        why: [],
+        evidence: [],
+        sealed: true
+      };
+    default:
+      return {
+        id,
+        handle,
+        act: "event",
+        type: event.type,
+        from: { session: null, name: "system:clock" },
+        to: "all",
+        re,
+        ...base,
+        statement: `A vote in ${handle} was revealed at its close.`,
+        text: null,
+        why: [],
+        evidence: []
+      };
+  }
 }
 var CARRIED_OBJECTIONS_SENTENCE = "Carried objections are text in the terms the person signs. Under consent/v1 they do not block this proposal. Each objector may challenge again.";
 var FOR_THE_PERSON_NOTE = "For the person to run himself. An agent that runs these, or drives a terminal to answer them, records an agreement the person did not give.";
@@ -39837,6 +41611,19 @@ function carryThread(thread) {
     }
   } else if (thread.decision) {
     input = carriedDecision(thread.decision, thread.root.marked);
+  } else if (thread.ballot) {
+    const ballot = thread.ballot;
+    const result = ballot.result;
+    input = {
+      act: "poll",
+      statement: statementOf(ballot.terms.question.split(`
+`).find((line) => line.trim() !== "")?.trim() ?? "A sealed ballot."),
+      re: `ballot:${ballot.ballot_id}`,
+      trailers: [
+        { key: "Position", value: `${ballot.state}; closes ${ballot.terms.closes_at}; turnout ${ballot.turnout.cast} of ${ballot.turnout.electorate} units` },
+        ...result ? [{ key: "Result", value: `${result.status}${result.top.length > 0 ? `: ${result.top.join(", ")}` : ""}; authorises nothing` }] : []
+      ]
+    };
   } else {
     const report = thread.root.report;
     const stored = reportAct(report, thread.termed);
@@ -40062,7 +41849,7 @@ function resolveEvidence(ctx, binding, lines) {
     if (kind === "file") {
       const { path, from, to } = fileLocatorParts(evidence.locator);
       const lineRange = from === null ? undefined : to !== null && to !== from ? `${from}-${to}` : `${from}`;
-      const hashed = existsSync5(root) ? hashWorktreeFile(root, path) : { status: "unreadable", path: null };
+      const hashed = existsSync6(root) ? hashWorktreeFile(root, path) : { status: "unreadable", path: null };
       if (hashed.status === "hashed") {
         const stored = hashed.path === path ? line : renderEvidence({ kind: "file", locator: `${hashed.path}${evidence.locator.slice(path.length)}`, attrs: evidence.attrs });
         if (stored !== line)
@@ -40257,15 +42044,12 @@ function requireActHere(ctx, act, fields) {
   const elsewhere = {
     take: withSlot(ctx, { tool: "collab_take", input: { title: fields.statement } }),
     done: withSlot(ctx, { tool: "collab_done", input: { text: fields.statement } }),
-    propose: withSlot(ctx, { tool: "collab_propose", input: { question: fields.statement } })
+    propose: withSlot(ctx, { tool: "collab_propose", input: { question: fields.statement } }),
+    poll: withSlot(ctx, { tool: "collab_poll", input: { question: fields.statement } }),
+    vote: withSlot(ctx, { tool: "collab_vote", input: fields.re ? { ballot: fields.re.replace(/^ballot:/, "") } : {} })
   };
   if (elsewhere[act]) {
-    throw new CollabError("wrong_verb", `${act} is its own verb, not a note act`, { remedy: elsewhere[act] });
-  }
-  if (["poll", "vote"].includes(act)) {
-    throw new CollabError("act_not_built", `${act} is not built in this build yet; nothing was written`, {
-      remedy: { say: `${act} arrives in a later build. Until then, say it as a note, which authorises nothing.` }
-    });
+    throw new CollabError("wrong_verb", `${act} is its own verb, not a note act; nothing was written`, { remedy: elsewhere[act] });
   }
   throw new CollabError("invalid_act", `act must be one of ${NOTE_ACTS_HERE.join(", ")}`, {
     remedy: { say: `act is one of ${NOTE_ACTS_HERE.join(", ")}; leave it out for a plain note.` }
@@ -40314,6 +42098,12 @@ function sameNoteWith(ctx, input, patch) {
   return withSlot(ctx, { tool: "collab_note", input: noteRetryInput(input, patch) });
 }
 async function noteVerb(ctx, input) {
+  const { binding } = requireCredential(ctx);
+  const pending = input.dry_run === true ? null : revealDue(ctx, binding.handle.workspace.id);
+  const result = await noteAct(ctx, input);
+  return pending ? { ...result, reveal_pending: pending } : result;
+}
+async function noteAct(ctx, input) {
   const { binding, credential } = requireCredential(ctx);
   const workspaceId = binding.handle.workspace.id;
   const me = credential.session_id;
@@ -42117,7 +43907,7 @@ function term(input, field, max, required2) {
   }
   return value;
 }
-var DURATION = /^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/i;
+var DURATION2 = /^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/i;
 function readCloses(ctx, input) {
   const value = input.closes;
   if (value === undefined || value === null)
@@ -42130,8 +43920,8 @@ function readCloses(ctx, input) {
     seconds = value;
   } else if (typeof value === "string" && /^\d+$/.test(value.trim())) {
     seconds = Number(value.trim());
-  } else if (typeof value === "string" && value.trim() !== "" && DURATION.test(value.trim())) {
-    const [, days, hours, minutes, secs] = DURATION.exec(value.trim());
+  } else if (typeof value === "string" && value.trim() !== "" && DURATION2.test(value.trim())) {
+    const [, days, hours, minutes, secs] = DURATION2.exec(value.trim());
     seconds = Number(days ?? 0) * 86400 + Number(hours ?? 0) * 3600 + Number(minutes ?? 0) * 60 + Number(secs ?? 0);
   } else if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value.trim()) && Number.isFinite(Date.parse(value.trim()))) {
     return { at: Date.parse(value.trim()) };
@@ -42632,6 +44422,297 @@ function proposeResult(ctx, binding, options) {
   };
 }
 
+// src/ballot-verbs.ts
+import { randomBytes as randomBytes2, randomUUID as randomUUID4 } from "crypto";
+var POLL_STAND_IN_STATEMENT = "A sealed ballot; read its terms with collab_inbox about.";
+function pollNote(terms) {
+  const first = terms.question.split(`
+`).find((line) => line.trim() !== "")?.trim() ?? "";
+  const statement = first ? statementOf(first) : POLL_STAND_IN_STATEMENT;
+  const parts = [];
+  if (terms.question !== statement)
+    parts.push(terms.question);
+  if (terms.criteria !== undefined)
+    parts.push(`Criteria:
+${terms.criteria}`);
+  const trailers = [
+    ...terms.options.map((option) => ({ key: "Option", value: `${option.key} \u2014 ${option.label}` })),
+    ...terms.pick !== undefined ? [{ key: "Pick", value: String(terms.pick) }] : [],
+    { key: "Quorum", value: String(terms.quorum) },
+    { key: "Closes", value: terms.close_when_all_cast ? `${terms.closes_at}, or when every unit has cast` : terms.closes_at }
+  ];
+  try {
+    return renderNote({ act: "poll", statement, body: parts.length > 0 ? parts.join(`
+
+`) : null, trailers });
+  } catch (error51) {
+    if (!(error51 instanceof CollabError))
+      throw error51;
+    return renderNote({ act: "poll", statement: POLL_STAND_IN_STATEMENT, trailers });
+  }
+}
+var POLL_FIELDS = ["question", "options", "closes", "criteria", "pick", "quorum", "voters", "close_when_all_cast"];
+function pollInput(input) {
+  const poll = {};
+  for (const field of POLL_FIELDS) {
+    if (input[field] !== undefined && input[field] !== null)
+      poll[field] = input[field];
+  }
+  return poll;
+}
+async function pollVerb(ctx, input) {
+  const { binding, credential } = requireCredential(ctx);
+  const workspaceId = binding.handle.workspace.id;
+  const pending = revealDue(ctx, workspaceId);
+  if (ctx.store.journalRealpath() === null) {
+    throw new CollabError("ballots_need_a_file_journal", "A sealed ballot keeps its seals beside the journal file; this store has none", {
+      remedy: { say: "Open collab on a journal file, not an in-memory store, to poll; or say it with collab_note." }
+    });
+  }
+  const poll = pollInput(input);
+  const { plan, receipt, replayed } = await underPlan(ctx, credential, {
+    tool: "collab_poll",
+    input: poll,
+    entity: "poll",
+    stillCurrent: (latestKey) => {
+      const found = replayReceipt(ctx.store, credential, latestKey);
+      return !found || ctx.store.noteReportStands(workspaceId, found.ballot_id);
+    }
+  }, async (plan2) => {
+    const step = await stepOnce(ctx, credential, plan2.key, () => ctx.store.openBallotForSession({
+      ...credential,
+      idempotency_key: plan2.key,
+      poll,
+      render: pollNote,
+      receipt_plan: plan2.guard
+    }));
+    return { plan: plan2, receipt: step.value, replayed: step.replayed };
+  });
+  const view = ctx.store.noteBallotView(workspaceId, receipt.ballot_id, credential.session_id);
+  const handle = handleOf("ballot", receipt.ballot_id);
+  const advice = [...receipt.advice];
+  if (plan.retry && replayed) {
+    advice.push("This repeats your latest poll exactly, so it was read as a retry. Change a word of the question to open another.");
+  }
+  if (receipt.left_out_total > 0) {
+    advice.push(`${receipt.left_out_total} live session(s) are left out of the electorate (left_out); their casts would be revealed and never counted.`);
+  }
+  advice.push("Do not announce the result yourself: it is computed at the close, and it authorises nothing.");
+  return {
+    ...noteWriteResult({
+      effect: `Opened sealed ballot ${handle} for ${receipt.electorate.length} unit(s), closing ${receipt.terms.closes_at}` + `${receipt.terms.close_when_all_cast ? " or once every unit has cast" : ""}. No vote is shown before the close.`,
+      ids: { ballot: receipt.ballot_id, ballot_handle: handle, report: receipt.report.id, event: receipt.event_id },
+      advice,
+      next: withSlot(ctx, { tool: "collab_inbox", input: { about: exactRef("ballot", receipt.ballot_id) } }),
+      note: receipt.report.body,
+      replayed
+    }),
+    ballot: receipt.ballot_id,
+    terms: ballotTermsView(receipt.terms),
+    electorate: receipt.electorate.map(ballotUnitView),
+    left_out: receipt.left_out,
+    ...receipt.left_out_total > receipt.left_out.length ? { left_out_total: receipt.left_out_total } : {},
+    chosen_by: receipt.chosen_by,
+    closes_at: receipt.terms.closes_at,
+    close_when_all_cast: receipt.terms.close_when_all_cast,
+    quorum: receipt.terms.quorum,
+    state: view.state,
+    unit_basis: view.unit_basis,
+    sealing: view.sealing,
+    ...pending ? { reveal_pending: pending } : {}
+  };
+}
+function resolveVoteEvidence(ctx, binding, lines) {
+  if (lines.length === 0)
+    return { evidence: [], advice: [] };
+  let resolved;
+  try {
+    resolved = resolveEvidence(ctx, binding, lines);
+  } catch (error51) {
+    if (!(error51 instanceof CollabError))
+      throw error51;
+    throw new CollabError(error51.code, error51.message, {
+      ...error51.details,
+      remedy: { say: "Correct that evidence line and cast again; nothing was written and no seal was made." }
+    });
+  }
+  const items = new Map(resolved.items.map((item) => [item.n, item]));
+  const advice = [];
+  const evidence = lines.map((line, index) => {
+    const n = index + 1;
+    const item = items.get(n);
+    if (!item) {
+      const ref = resolved.lines[index] ?? line;
+      const colon = ref.indexOf(":");
+      const kind = colon > 0 ? ref.slice(0, colon) : "report";
+      return {
+        text: line,
+        ...NOTE_JOURNAL_EVIDENCE_KINDS.includes(kind) ? { kind, locator: ref.slice(colon + 1) } : {},
+        observed: "journal"
+      };
+    }
+    if (item.kind === "file" && item.observed !== "server") {
+      advice.push(`Evidence ${n} could not be hashed in your worktree, so it is sealed as you wrote it (observed: caller).`);
+    } else if (item.kind === "commit" && item.observed === "not_found") {
+      advice.push(`Evidence ${n}: git in your worktree has no such commit; it is sealed as not found.`);
+    } else if (item.kind === "commit" && item.observed === "caller") {
+      advice.push(`Evidence ${n}: the commit could not be checked here; it is sealed as you wrote it.`);
+    }
+    return {
+      text: line,
+      kind: item.kind,
+      locator: item.locator,
+      ...item.lines ? { lines: item.lines } : {},
+      ...item.sha256 ? { sha256: item.sha256 } : {},
+      ...item.exit !== undefined ? { exit: item.exit } : {},
+      observed: item.observed,
+      ...item.kind === "file" && item.observed === "server" ? { worktree_id: binding.handle.worktree.id } : {}
+    };
+  });
+  return { evidence, advice };
+}
+function aboutBallot(ctx, ballotId) {
+  return withSlot(ctx, { tool: "collab_inbox", input: { about: exactRef("ballot", ballotId) } });
+}
+function closedRefusal(ctx, ballot) {
+  if (ballot.state === "withdrawn") {
+    return new CollabError("ballot_withdrawn", "The opener withdrew this ballot; no cast is taken after a withdrawal, and nothing was written", {
+      remedy: aboutBallot(ctx, ballot.ballot_id)
+    });
+  }
+  return new CollabError("ballot_closed", `This ballot closed${ballot.closed_by === "all_cast" ? " when every unit had cast" : ` at ${ballot.terms.closes_at}`}; no cast is taken after the close, and nothing was written`, {
+    closes_at: ballot.terms.closes_at,
+    remedy: aboutBallot(ctx, ballot.ballot_id)
+  });
+}
+async function voteVerb(ctx, input) {
+  const { binding, credential } = requireCredential(ctx);
+  const workspaceId = binding.handle.workspace.id;
+  const me = credential.session_id;
+  const pending = revealDue(ctx, workspaceId);
+  if (typeof input.ballot !== "string" || !input.ballot.trim()) {
+    throw new CollabError("invalid_ballot", "ballot names the ballot to vote in", {
+      remedy: { say: "Pass the ballot's id or ballot# handle, as collab_inbox lists it." }
+    });
+  }
+  if (ctx.store.journalRealpath() === null) {
+    throw new CollabError("ballots_need_a_file_journal", "A sealed ballot keeps its seals beside the journal file; this store has none");
+  }
+  const ballotId = ctx.store.resolveNoteRef(workspaceId, "ballot", input.ballot).id;
+  const ballot = ctx.store.noteBallotView(workspaceId, ballotId, me);
+  const handle = handleOf("ballot", ballotId);
+  const { vote, advice } = validateVote({ choice: input.choice, why: input.why, evidence: input.evidence, shared: input.shared }, ballot.terms);
+  const resolved = resolveVoteEvidence(ctx, binding, vote.evidence.map((item) => typeof item === "string" ? item : item.text));
+  advice.push(...resolved.advice);
+  const model = ctx.store.resolveNoteSession(workspaceId, me, { include_ended: true }).model;
+  const sealed = sealVote(vote, { evidence: resolved.evidence, model });
+  const latest = ctx.store.latestBallotCastForSession(workspaceId, ballotId, me);
+  if (latest) {
+    const read = readSealFile(ctx.store.ballotSealPath(ballotId, latest.cast_id));
+    const opened = read.state === "read" ? openSeal(read.value, latest, { workspace_id: workspaceId, ballot_id: ballotId }) : null;
+    if (opened?.state === "ok" && sameVoteInput(opened.vote, sealed)) {
+      const earlier = replayReceipt(ctx.store, credential, `b1:${latest.cast_id}`);
+      return voteResult(ctx, {
+        handle,
+        ballot,
+        cast_seq: latest.cast_seq,
+        commitment: latest.commitment,
+        counts_as: earlier?.counts_as ?? ballot.viewer.counts_as,
+        same_handle_as: earlier?.same_handle_as,
+        replayed: true,
+        advice: ["Your latest sealed vote in this ballot is this same vote, so nothing new was cast."],
+        pending
+      });
+    }
+  }
+  if (ballot.state !== "open")
+    throw closedRefusal(ctx, ballot);
+  const viewer = ballot.viewer;
+  nextCastSeq(viewer.your_casts);
+  if (viewer.counts_as === "late") {
+    advice.push("Your unit is not in this ballot's electorate, so this cast is revealed at the close and never counted (late)." + (viewer.same_handle_as ? ` Your declared handle matches unit ${viewer.same_handle_as}, which does not join you to it.` : ""));
+  }
+  if (viewer.your_casts > 0) {
+    advice.push("This replaces your earlier cast: only your latest counts, and a session may cast at most 3 times in one ballot.");
+  }
+  const castId = randomUUID4();
+  const salt = randomBytes2(32).toString("hex");
+  checkVoteSize(sealed, { ballot_id: ballotId, cast_id: castId, unit_id: viewer.unit_id, session_id: me });
+  const commitment = ballotCommitment({
+    workspace_id: workspaceId,
+    ballot_id: ballotId,
+    cast_id: castId,
+    unit_id: viewer.unit_id,
+    session_id: me,
+    vote: sealed,
+    salt
+  });
+  const path = ctx.store.ballotSealPath(ballotId, castId);
+  writeSealFile(path, {
+    cast_id: castId,
+    journal_realpath: ctx.store.journalRealpath(),
+    session_id: me,
+    unit_id: viewer.unit_id,
+    salt,
+    vote: sealed
+  });
+  let receipt;
+  try {
+    receipt = ctx.store.castBallotForSession({
+      ...credential,
+      ballot_id: ballotId,
+      cast_id: castId,
+      unit_id: viewer.unit_id,
+      commitment
+    });
+  } catch (error51) {
+    if (ctx.store.latestBallotCastForSession(workspaceId, ballotId, me)?.cast_id !== castId)
+      removeSealFile(path);
+    if (error51 instanceof CollabError && (error51.code === "ballot_closed" || error51.code === "ballot_withdrawn")) {
+      throw closedRefusal(ctx, ctx.store.noteBallotView(workspaceId, ballotId, me));
+    }
+    throw error51;
+  }
+  if (receipt.unit_mate_cast) {
+    advice.push("Another lineage of your unit has cast in this ballot too. If both casts stand at the close, the unit is not counted (unit_conflict).");
+  }
+  let revealPending = pending;
+  if (receipt.closes_now) {
+    advice.push("Every unit has now cast and this ballot closes when that happens, so it is revealed now; read the result with collab_inbox about.");
+    revealPending = revealDue(ctx, workspaceId) ?? pending;
+  }
+  return voteResult(ctx, {
+    handle,
+    ballot,
+    cast_seq: receipt.cast_seq,
+    commitment: receipt.commitment,
+    counts_as: receipt.counts_as,
+    same_handle_as: receipt.same_handle_as,
+    replayed: false,
+    advice,
+    pending: revealPending
+  });
+}
+function voteResult(ctx, options) {
+  const effect = `Sealed vote recorded for ${options.handle} (cast ${options.cast_seq}).`;
+  return {
+    ok: true,
+    effect: options.replayed ? `Replayed: nothing new was written. ${effect}` : effect,
+    authorises: NOTE_AUTHORISES,
+    ballot: options.ballot.ballot_id,
+    ballot_handle: options.handle,
+    cast_seq: options.cast_seq,
+    commitment: options.commitment,
+    counts_as: options.counts_as,
+    ...options.same_handle_as ? { same_handle_as: options.same_handle_as } : {},
+    closes_at: options.ballot.terms.closes_at,
+    replayed: options.replayed,
+    advice: options.advice,
+    next: aboutBallot(ctx, options.ballot.ballot_id),
+    ...options.pending ? { reveal_pending: options.pending } : {}
+  };
+}
+
 // src/mcp.ts
 var DEFAULT_MCP_NEXT_EVENT_LIMIT = 10;
 var actorLabel = exports_external.string().min(1).max(200).describe("Stable display label; session credentials, not this label, fence session mutations");
@@ -42882,6 +44963,33 @@ Legacy session tools: ${legacyInstructions}`
       replaces: exports_external.string().optional().describe("Your own earlier proposal, still on the table, that this one replaces (id or proposal# handle).")
     }
   }, async (input) => noteCall(() => proposeVerb(noteContext(), input)));
+  server.registerTool("collab_poll", {
+    title: "Open a sealed ballot on a real choice",
+    description: "Ask the agents here which of 2 to 9 named options they find acceptable (approval). Every cast stays sealed " + "until the close; then the votes are revealed and the result computed. The electorate is fixed now: by default " + "the active sessions seen in the last 30 minutes that have used the notes surface, plus you; with voters, exactly " + 'those sessions. Sessions sharing a declared host handle count as one unit. Not for "may we proceed" (that is ' + "collab_propose) and not for a checkable fact. A result is the agents' preference and authorises nothing.",
+    annotations: localMutation,
+    inputSchema: {
+      question: exports_external.string().optional().describe("Required. The choice put to the agents, at most 500 characters."),
+      options: exports_external.array(exports_external.object({ key: exports_external.string(), label: exports_external.string() })).optional().describe("Required. 2 to 9 options: key (letters, digits, _ or -, at most 32) and label (one line, at most 120)."),
+      closes: exports_external.union([exports_external.number(), exports_external.string()]).optional().describe("Required. When it closes: seconds, a duration such as 30m, 2h or 1d, or an ISO time; 1 minute to 7 days."),
+      criteria: exports_external.string().optional().describe("What makes an option acceptable, at most 2,000 characters; advice when absent."),
+      pick: exports_external.number().optional().describe("The most options one unit may approve, 1 to the number of options; default any."),
+      quorum: exports_external.number().optional().describe("Units that must cast (abstentions count) for a result, 2 to the electorate size; default 2."),
+      voters: exports_external.array(exports_external.string()).optional().describe("The sessions to poll, by id, session# handle or name; default the electorate above."),
+      close_when_all_cast: exports_external.boolean().optional().describe("Close as soon as every unit has cast instead of waiting for closes; off by default, and stated in the terms.")
+    }
+  }, async (input) => noteCall(() => pollVerb(noteContext(), input)));
+  server.registerTool("collab_vote", {
+    title: "Cast your sealed vote",
+    description: "Approve the options you find acceptable in a ballot (choice: option keys, or [] to abstain). The vote is sealed " + "in a file beside the journal and committed by hash; no collab tool, event or doorbell shows it before the close, " + "and this result returns nothing of it. Vote before you read others' answers. You may replace your cast up to 3 " + "times; the latest counts. A vote needs no reason, but one is shown with it at the close.",
+    annotations: localMutation,
+    inputSchema: {
+      ballot: exports_external.string().optional().describe("Required. The ballot: its id or ballot# handle."),
+      choice: exports_external.array(exports_external.string()).optional().describe("Required. The option keys you approve, or [] to abstain."),
+      why: exports_external.array(noteReason).optional().describe("Up to 4 reasons of at most 300 characters each."),
+      evidence: exports_external.array(exports_external.string()).optional().describe("Up to 4 pointers, one line each, as for collab_note; files inside your worktree are hashed now and sealed with the vote."),
+      shared: exports_external.string().optional().describe("What you share with the other voters (model, context, sources), at most 200 characters.")
+    }
+  }, async (input) => noteCall(() => voteVerb(noteContext(), input)));
   server.registerTool("collab_session_join", {
     title: "Join the self-declared presence plane",
     description: "Create or replay one unauthenticated routing-presence record and return its unique actor_key. This does not bind the MCP process or create a credential.",

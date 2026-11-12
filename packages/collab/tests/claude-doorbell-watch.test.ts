@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
@@ -178,11 +178,82 @@ describe("Claude Code collab doorbell watcher", () => {
     expect(connections).toHaveLength(0);
   }, 30_000);
 
+  test("keeps its anchor after a failed ring, retries with backoff, and names collab_inbox without content", async () => {
+    const own = listener("doorbell-retry");
+    const peer = store.startSession({ root_path: root, actor: "doorbell-retry-peer" });
+    // A path that exists but is no socket: every connect fails, and the
+    // owner check (this test's pid, the file's existence) still passes.
+    mkdirSync(join(socketDirectory, "b"), { recursive: true });
+    const broken = join(socketDirectory, "b", `${process.pid}.sock`);
+    writeFileSync(broken, "");
+    const watcher = startWatcher(own.session.id, ["--min-gap-ms", "0", "--retry-base-ms", "200"], broken);
+    await until(started(own.session.id));
+    const mail = store.appendReportForSession({
+      ...peer.credential, idempotency_key: "retry-mail", kind: "observation",
+      body: "doorbell-retry-body-marker", to_session_id: own.session.id,
+    });
+    const log = () => readFileSync(stateFile(own.session.id, "log"), "utf8").trim().split("\n").map((line) => JSON.parse(line));
+    await until(() => log().filter((entry) => entry.event === "ring_retry").length >= 2, 20_000);
+    // Now the socket listens: the next retry rings for the same event.
+    rmSync(broken);
+    const retried: string[][] = [];
+    const server = createServer((socket) => {
+      let buffer = "";
+      socket.on("data", (chunk) => {
+        buffer += chunk;
+      });
+      socket.on("end", () => retried.push(buffer.split("\n").filter((line) => line.length > 0)));
+    });
+    await new Promise<void>((ready) => server.listen(broken, ready));
+    try {
+      await until(() => retried.length === 1, 20_000);
+      const content = JSON.parse(retried[0]![1]!).message.content as string;
+      expect(content).toContain("Read them with collab_inbox");
+      expect(content.indexOf("collab_inbox")).toBeLessThan(content.indexOf("collab_events_since"));
+      expect(content).toContain(`after sequence ${mail.event_sequence - 1}`);
+      expect(content).not.toContain("doorbell-retry-body-marker");
+      expect(content).not.toContain("doorbell-retry-peer");
+      const entries = log();
+      const failed = entries.filter((entry) => entry.event === "ring_failed" && entry.from_sequence !== undefined);
+      expect(failed.length).toBeGreaterThanOrEqual(2);
+      // Every failed ring and the ring that landed start from the same anchor.
+      for (const entry of failed) expect(entry.from_sequence).toBe(mail.event_sequence - 1);
+      expect(entries.find((entry) => entry.event === "rang").from_sequence).toBe(mail.event_sequence - 1);
+      const waits = entries.filter((entry) => entry.event === "ring_retry").map((entry) => entry.after_ms);
+      expect(waits.slice(0, 2)).toEqual([200, 400]);
+    } finally {
+      watcher.kill("SIGTERM");
+      await watcher.exited;
+      await new Promise<void>((closed) => server.close(() => closed()));
+    }
+  }, 60_000);
+
+  test("stops with ring_failed_repeatedly after 6 failed rings in a row", async () => {
+    const own = listener("doorbell-giveup");
+    const peer = store.startSession({ root_path: root, actor: "doorbell-giveup-peer" });
+    mkdirSync(join(socketDirectory, "b"), { recursive: true });
+    const broken = join(socketDirectory, "b", `${process.pid}.sock`);
+    writeFileSync(broken, "");
+    const watcher = startWatcher(own.session.id, ["--min-gap-ms", "0", "--retry-base-ms", "20"], broken);
+    await until(started(own.session.id));
+    store.appendReportForSession({
+      ...peer.credential, idempotency_key: "giveup-mail", kind: "observation", body: "x", to_session_id: own.session.id,
+    });
+    expect(await watcher.exited).toBe(1);
+    const entries = readFileSync(stateFile(own.session.id, "log"), "utf8").trim().split("\n").map((line) => JSON.parse(line));
+    expect(entries.filter((entry) => entry.event === "ring_failed" && entry.from_sequence !== undefined)).toHaveLength(6);
+    expect(entries.filter((entry) => entry.event === "ring_retry").map((entry) => entry.after_ms)).toEqual([20, 40, 80, 160, 320]);
+    expect(entries.find((entry) => entry.event === "ring_failed_repeatedly")).toMatchObject({ failures: 6 });
+    expect(entries.at(-1)).toMatchObject({ event: "stop", reason: "ring_failed_repeatedly" });
+    expect(existsSync(stateFile(own.session.id, "pid"))).toBe(false);
+  }, 60_000);
+
   test("defaults its host bin to the packaged bundle and documents its limits", async () => {
     expect(existsSync(join(packageRoot, "dist", "agenttool-collab-host.js"))).toBe(true);
     const readme = await Bun.file(join(packageRoot, "integrations", "claude-code", "README.md")).text();
     for (const term of ["not a documented contract", "--addressed", "content-free", "one model turn",
-      "CLAUDE_CODE_MESSAGING_TOKEN", "collab_session_end", "unreleased"]) {
+      "CLAUDE_CODE_MESSAGING_TOKEN", "collab_session_end", "unreleased", "collab_inbox", "--retry-base-ms",
+      "ring_failed_repeatedly"]) {
       expect(readme).toContain(term);
     }
   });

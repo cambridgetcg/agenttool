@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import type { SessionHandle } from "../src/protocol.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore, type CollabStoreOptions } from "../src/store.js";
 
 // Shared by the collab_note, collab_take and collab_done tests: a temp
 // journal whose sessions are served by in-process MCP servers, as host
@@ -33,7 +33,7 @@ export function git(root: string, args: string[]): string {
   return result.stdout.trim();
 }
 
-export function journal(options: { git?: boolean } = {}) {
+export function journal(options: { git?: boolean; store?: Omit<CollabStoreOptions, "now"> } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "agenttool-collab-notes-"));
   const root = join(directory, "repo");
   mkdirSync(root);
@@ -44,7 +44,7 @@ export function journal(options: { git?: boolean } = {}) {
     git(root, ["commit", "-q", "-m", "fixture"]);
   }
   let now = Date.parse("2026-11-12T10:00:00.000Z");
-  const store = new CollabStore(join(directory, "state", "collab.sqlite"), { now: () => new Date(now) });
+  const store = new CollabStore(join(directory, "state", "collab.sqlite"), { ...options.store, now: () => new Date(now) });
   cleanup.push(() => {
     store.close();
     rmSync(directory, { recursive: true, force: true });
@@ -58,6 +58,10 @@ export function journal(options: { git?: boolean } = {}) {
     },
     advance(ms: number) {
       now += ms;
+    },
+    /** The store's clock now, as an ISO time. */
+    now(): string {
+      return new Date(now).toISOString();
     },
     write(path: string, content: string | Buffer) {
       mkdirSync(dirname(join(root, path)), { recursive: true });

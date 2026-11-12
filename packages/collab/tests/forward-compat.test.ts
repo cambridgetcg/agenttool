@@ -521,9 +521,36 @@ describe("forward-compatibility fixture", () => {
     ]);
   }, TEST_TIMEOUT_MS);
 
+  test("holds a sealed ballot the notes surface opened, cast in and revealed", async () => {
+    const { manifest, views, directory } = await fixture();
+    expect(manifest.ballots).toHaveLength(1);
+    const [entry] = JSON.parse(views.ballot_result!) as Array<{ id: string; result: Record<string, any> }>;
+    expect(entry!.id).toBe(manifest.ballots[0]!);
+    expect(entry!.result.status).toBe("top_choice");
+    expect(entry!.result.top).toEqual(["split"]);
+    expect(entry!.result.options.find((option: { key: string }) => option.key === "split").reasons[0].text)
+      .toBe("per-workspace tables halve the writes");
+    expect(entry!.result.abstained).toEqual(["fixture-notes"]);
+    expect(entry!.result.replaced).toEqual([expect.objectContaining({ name: "fixture-notes-peer", cast_seq: 1 })]);
+    expect(entry!.result.late).toEqual([expect.objectContaining({ name: "fixture-late-voter", choice: ["drop"] })]);
+    expect(entry!.result.turnout).toEqual({ cast: 2, electorate: 2 });
+    // The reveal deleted every seal, so a copy of the journal file alone holds the whole ballot.
+    expect(existsSync(join(directory, "collab-ballots", manifest.ballots[0]!))).toBe(false);
+  }, TEST_TIMEOUT_MS);
+
   test("dropping the view-state tables loses only view state", async () => {
     const { directory, manifest, status_at, views } = await fixture();
     const copy = copyJournal(directory, join(work, "drop-view-state"));
+    const ballotRows = (path: string) => {
+      const reader = new Database(path);
+      try {
+        return reader.query(`SELECT workspace_id, ballot_id, closes_at, state FROM note_ballots ORDER BY ballot_id`).all();
+      } finally {
+        reader.close();
+      }
+    };
+    const kept = ballotRows(copy);
+    expect(kept).toEqual(manifest.ballots.map((ballot) => expect.objectContaining({ ballot_id: ballot, state: "closed" })));
     const db = new Database(copy);
     try {
       for (const table of VIEW_STATE_TABLES) db.exec(`DROP TABLE IF EXISTS "${table}"`);
@@ -537,6 +564,8 @@ describe("forward-compatibility fixture", () => {
     } finally {
       store.close();
     }
+    // note_ballots is rebuilt from the ballot events when the store opens.
+    expect(ballotRows(copy)).toEqual(kept);
     // Reopening recreates the tables; every view reads the same as before the drop.
     expect(computeViews(copy, manifest, status_at)).toEqual(views);
   }, TEST_TIMEOUT_MS);

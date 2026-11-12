@@ -163,6 +163,7 @@ describe("MCP surface", () => {
       "collab_journal_verify",
       "collab_next",
       "collab_note",
+      "collab_poll",
       "collab_proposal_open",
       "collab_proposal_relay_rejection",
       "collab_proposal_status",
@@ -188,6 +189,7 @@ describe("MCP surface", () => {
       "collab_task_renew",
       "collab_task_review",
       "collab_task_unblock",
+      "collab_vote",
       "collab_workspace_open",
       "collab_workspace_status",
     ]);
@@ -293,9 +295,11 @@ describe("MCP surface", () => {
       "collab_inbox",
       "collab_next",
       "collab_note",
+      "collab_poll",
       "collab_propose",
       "collab_session_start",
       "collab_take",
+      "collab_vote",
     ];
     // collab_done can end the session (outcome leave), as collab_session_end does.
     const destructiveMutations = ["collab_done", "collab_session_end"];

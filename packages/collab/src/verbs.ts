@@ -30,6 +30,7 @@ import {
   type NoteInput,
   type NoteReason,
 } from "./note.js";
+import type { BallotTerms, ElectorateUnit } from "./ballot.js";
 import type { CollabReport, ProposalStatus, SessionHandle } from "./protocol.js";
 import { hashWorktreeFile, inspectRepository, MAX_CITED_FILE_BYTES } from "./repository.js";
 import { defaultSeatRef } from "./seat-ref.js";
@@ -40,6 +41,7 @@ import {
   noteWaitingShownItems,
   type CollabStore,
   type NoteArrivalData,
+  type NoteBallotData,
   type NoteChallengeView,
   type NoteCitedItem,
   type NoteDecisionData,
@@ -83,6 +85,8 @@ export const BUILT_NOTE_VERBS: readonly NoteVerb[] = [
   "collab_take",
   "collab_done",
   "collab_propose",
+  "collab_poll",
+  "collab_vote",
 ];
 
 /** Existing tools the notes profile keeps beside the verbs (spec 9). */
@@ -168,8 +172,8 @@ export const FULL_PROFILE_BRIDGE =
 /** What every verb result says it authorises (spec 5). */
 export const NOTE_AUTHORISES = "Nothing. This is coordination state.";
 
-/** What this build speaks (spec 5.1 surface.capabilities). ballot/1 arrives with the ballot verbs. */
-export const NOTE_CAPABILITIES = ["legacy", "consent/v1", "notes/1"] as const;
+/** What this build speaks (spec 5.1 surface.capabilities). */
+export const NOTE_CAPABILITIES = ["legacy", "consent/v1", "notes/1", "ballot/1"] as const;
 
 /**
  * The card collab_arrive returns (spec 12). An interim text: the docs stage
@@ -183,7 +187,8 @@ export const NOTE_CARD = [
   "  Limits: <what this does not cover>   Purpose: <what it serves>   Extent: <where a decision stops>",
   "Acts: say: note; stand: support, challenge, resolve, withdraw; work: take, done, accept, request_changes;",
   "decide: propose, poll, vote, decide.",
-  "This build has collab_arrive, collab_inbox, collab_note (decide included), collab_take, collab_done and collab_propose; poll and vote come later.",
+  "This build has collab_arrive, collab_inbox, collab_note (decide included), collab_take, collab_done, collab_propose, collab_poll and collab_vote.",
+  "A ballot is sealed until it closes; its result is the agents' preference and authorises nothing.",
   ...NOTE_PRINCIPLES.map((principle, index) => `${index + 1}. ${principle}`),
 ].join("\n");
 
@@ -537,6 +542,20 @@ export function noteFailure(error: unknown) {
     structuredContent: payload as Record<string, unknown>,
     isError: true,
   };
+}
+
+/**
+ * The lazy reveal (spec 7) a verb runs before it acts: every ballot of the
+ * workspace that has closed is revealed as system:clock. It never fails the
+ * verb; a reveal that could not finish is retried by the next call, and its
+ * code is returned for the result's reveal_pending.
+ */
+export function revealDue(ctx: Pick<NoteVerbContext, "store">, workspaceId: string): string | null {
+  try {
+    return ctx.store.revealDueBallots(workspaceId).pending[0]?.code ?? null;
+  } catch (error) {
+    return error instanceof CollabError ? error.code : "reveal_failed";
+  }
 }
 
 /** Run a verb and shape its result or its refusal. */
@@ -1057,6 +1076,7 @@ function arrivalResult(
   },
 ): Record<string, unknown> {
   const credential = binding.handle.credential;
+  const pendingReveal = revealDue(ctx, binding.handle.workspace.id);
   const data = ctx.store.arrivalBrief(credential);
   // A new session has nothing for it yet; an arrived one sees what is
   // after its mark without moving it (arrive never reads the inbox for you).
@@ -1082,6 +1102,7 @@ function arrivalResult(
     }),
     ...(options.remedies ? { remedies: options.remedies } : {}),
     ...brief.view,
+    ...(pendingReveal ? { reveal_pending: pendingReveal } : {}),
   };
 }
 
@@ -1145,12 +1166,14 @@ function composeBrief(
   const challenges = data.challenges.map((challenge) => challengeView(challenge, data.proposals.some(
     (status) => status.proposal.id === challenge.target_report_id,
   )));
+  const ballots = data.ballots.map((ballot) => ballotBrief(ballot));
   const recheck = evidenceRechecker(ctx.store);
   const forYou = pending ? pending.entries.map((entry) => formatEntry(entry, byId, me.id, recheck)) : [];
   const waiting = data.waiting.map((entry) => formatWaiting(ctx, entry));
   const cap = <T>(items: T[]) => items.slice(0, LIST_CAP);
   const shown = [
     ...cap(proposals).map((proposal) => proposal.id),
+    ...cap(ballots).map((ballot) => ballot.id as string),
     ...cap(reviewsWanted).flatMap((review) => (review.completion ? [review.completion.id] : [])),
     ...noteWaitingShownItems(cap(data.waiting)),
   ];
@@ -1183,7 +1206,7 @@ function composeBrief(
         in_progress: cap(inProgress),
         reviews_wanted: cap(reviewsWanted),
         proposals: cap(proposals),
-        ballots: [],
+        ballots: cap(ballots),
         challenges: cap(challenges),
       },
       for_you: cap(forYou),
@@ -1194,7 +1217,7 @@ function composeBrief(
         in_progress: inProgress.length,
         reviews_wanted: reviewsWanted.length,
         proposals: proposals.length,
-        ballots: 0,
+        ballots: ballots.length,
         challenges: challenges.length,
         // Every for-me item after the mark within one scan's bound; a lower
         // bound when the scan stopped there.
@@ -1239,16 +1262,14 @@ function shellQuote(value: string): string {
  * How this session can be told when something arrives (spec 5.1 listen).
  * Under Claude Code: the existing doorbell watcher with absolute paths and
  * this session filled in, never --from-cursor, for the agent to run itself.
- * Collab starts nothing. Under the notes profile it is the inbox wait,
- * because the watcher's ring still names collab_events_wait and
- * collab_events_since, which that profile does not register.
+ * Collab starts nothing. The watcher's ring names collab_inbox first, so
+ * the same command serves the notes profile.
  */
 export function listenHow(ctx: NoteVerbContext, sessionId: string): string {
   const inboxWait = ctx.slot_key
     ? `collab_inbox {wait_seconds: 30, binding_key: "${ctx.slot_key}"}`
     : "collab_inbox {wait_seconds: 30}";
   const database = ctx.store.db.filename;
-  if (ctx.profile === "notes") return inboxWait;
   if (!ctx.environment.CLAUDE_CODE_MESSAGING_SOCKET || !database || database === ":memory:") return inboxWait;
   // One level below the package root, in src/ and in dist/ alike.
   const watcher = resolve(import.meta.dir, "..", "integrations", "claude-code", "collab-doorbell-watch.ts");
@@ -1272,8 +1293,9 @@ const RELATION_ACTS: Record<CollabReport["relation"], NoteAct | "corrects" | "su
 };
 
 /** The act a stored report performs, from its relation and kind, never from its text (spec 4). */
-function reportAct(report: CollabReport, termed: boolean): string {
+function reportAct(report: CollabReport, termed: boolean, poll = false): string {
   if (termed) return "propose";
+  if (poll) return "poll";
   if (report.relation === "informs" && report.kind === "decision") return "decide";
   return RELATION_ACTS[report.relation];
 }
@@ -1417,8 +1439,23 @@ export function formatEntry(
     why_you: entry.why_you,
     for_me: entry.for_me,
   };
+  if (event.type === "report.posted" && report && entry.folded) {
+    // Folded (spec 5.2): who said what kind of thing, and when, but no text,
+    // so an elector who has not cast meets the question before the answers.
+    return {
+      id: report.id,
+      handle: handleOf("report", report.id),
+      act: reportAct(report, entry.termed),
+      from: { session: report.from_session_id, name: report.from_actor },
+      ...base,
+      folded: true,
+      ballot: { id: entry.folded.ballot_id, handle: handleOf("ballot", entry.folded.ballot_id) },
+      why_folded: FOLDED_LINE,
+    };
+  }
   if (event.type === "report.posted" && report) {
-    const act = reportAct(report, entry.termed);
+    const poll = entry.ballot !== null && entry.ballot.ballot_id === report.id;
+    const act = reportAct(report, entry.termed, poll);
     let statement = statementOf(report.body);
     let text: string | null = report.body;
     let why: NoteReason[] = [];
@@ -1452,7 +1489,7 @@ export function formatEntry(
         : report.task_id ? { id: report.task_id, handle: handleOf("task", report.task_id) } : null;
     return {
       id: report.id,
-      handle: reportHandle(report.id, entry.termed),
+      handle: poll ? handleOf("ballot", report.id) : reportHandle(report.id, entry.termed),
       act,
       ...(act === "corrects" || act === "supersedes" ? { relation: report.relation } : {}),
       from: { session: report.from_session_id, name: report.from_actor },
@@ -1547,6 +1584,11 @@ export function formatEntry(
           ? [{ n: 1, kind: "report", locator: payload.review_report_id }]
           : [],
       };
+    case "ballot.opened":
+    case "ballot.closed":
+    case "ballot.cast":
+    case "ballot.revealed":
+      return ballotItem(entry, from, base, byId, me);
     default:
       return {
         id: event.entity_id,
@@ -1580,6 +1622,7 @@ function eventSubject(type: string, taskHandle: string | null, title: string, by
 /** An unaddressed event as a subject line only (spec 5.2, include: all). */
 function subjectLine(entry: NoteEntry, byId: Map<string, NoteSessionView>, me: string): Record<string, unknown> {
   const item = formatEntry(entry, byId, me);
+  if (item.folded === true) return { ...item, for_me: false };
   return {
     id: item.id,
     handle: item.handle,
@@ -1781,6 +1824,7 @@ function inboxResult(
           : ""),
     );
   }
+  if (entries.some((entry) => entry.folded)) advice.push(FOLDED_LINE);
   const firstForMe = entries.find((entry) => entry.for_me);
   const about = firstForMe ? entryRef(firstForMe) : null;
   const next: NoteRemedy = waitError
@@ -1800,9 +1844,15 @@ function inboxResult(
     ...(initialisedFrom ? { mark_initialised_from: initialisedFrom } : {}),
     waiting_on_you: data.waiting.map((entry) => formatWaiting(ctx, entry)),
     ...(waited ? { waited } : {}),
+    ...revealPendingField(passes.flatMap((pass) => pass.reveal_pending)),
     advice,
     next,
   };
+}
+
+/** spec 7: a reveal that failed is named by its code on the result of the call that tried it. */
+function revealPendingField(pending: NoteInboxData["reveal_pending"]): Record<string, unknown> {
+  return pending.length > 0 ? { reveal_pending: pending[0]!.code } : {};
 }
 
 const MARK_CLAMPED_ADVICE =
@@ -1815,8 +1865,12 @@ const MARK_CLAMPED_ADVICE =
  */
 function entryRef(entry: NoteEntry): string | null {
   const { event, report } = entry;
+  // A folded note points at its ballot, never at itself: the ready call
+  // must not open what was folded so the first answer stays the voter's own.
+  if (entry.folded) return exactRef("ballot", entry.folded.ballot_id);
   if (event.type === "report.posted") return report ? exactRef("report", report.id) : null;
   if (event.type.startsWith("proposal.")) return exactRef("proposal", event.entity_id);
+  if (event.type.startsWith("ballot.")) return exactRef("ballot", event.entity_id);
   if (event.type.startsWith("task.")) return exactRef("task", event.entity_id);
   return entry.task ? exactRef("task", entry.task.id) : null;
 }
@@ -1954,14 +2008,18 @@ function composeAboutView(
   if (thread.truncated) advice.push(`This thread lists its first ${thread.answers.length} answers only.`);
   const recheck = evidenceRechecker(ctx.store);
   const view = thread.kind === "task" ? taskView(thread, byId, me, recheck) : reportView(ctx, thread, byId, me, advice, recheck);
+  const voteNext = thread.ballot?.viewer?.may_vote && !thread.ballot.viewer.unit_has_cast
+    ? withSlot(ctx, { tool: "collab_vote", input: { ballot: exactRef("ballot", thread.ballot.ballot_id) } })
+    : null;
   const result: Record<string, unknown> = {
     ok: true,
     ...view,
     truncated: thread.truncated,
     // The first inbox call creates the mark, whichever form it takes.
     ...(thread.mark.initialised_from ? { mark_initialised_from: thread.mark.initialised_from } : {}),
+    ...revealPendingField(thread.reveal_pending),
     advice,
-    next: withSlot(ctx, { tool: "collab_inbox", input: {} }),
+    next: voteNext ?? withSlot(ctx, { tool: "collab_inbox", input: {} }),
   };
   if (format === "note") {
     try {
@@ -2003,11 +2061,12 @@ function reportView(
   const root = thread.root!;
   const report = root.report!;
   const decision = report.kind === "decision" && !thread.termed;
+  const ballot = thread.ballot;
   const view: Record<string, unknown> = {
     about: {
-      kind: thread.termed ? "proposal" : decision ? "decision" : "report",
+      kind: thread.termed ? "proposal" : ballot ? "ballot" : decision ? "decision" : "report",
       id: report.id,
-      handle: reportHandle(report.id, thread.termed),
+      handle: ballot ? handleOf("ballot", report.id) : reportHandle(report.id, thread.termed),
     },
     root: formatEntry(root, byId, me, recheck),
     answers: thread.answers.map((entry) => formatEntry(entry, byId, me, recheck)),
@@ -2025,7 +2084,193 @@ function reportView(
     advice.push(...record.advice);
     return { ...view, ...record.fields };
   }
+  if (ballot) {
+    if (thread.folded > 0) advice.push(FOLDED_LINE);
+    advice.push(...ballotAdvice(ballot));
+    return { ...view, ballot: ballotFacts(ballot) };
+  }
   return view;
+}
+
+// ---------------------------------------------------------------------------
+// Ballots as the notes surface shows them (spec 5.1, 5.2, 7)
+
+/** Said wherever notes are folded for an elector who has not cast (spec 5.2). */
+export const FOLDED_LINE =
+  "folded so your first answer is your own; read any of them with about:<id> if you choose";
+
+export function ballotTermsView(terms: BallotTerms): Record<string, unknown> {
+  return {
+    question: terms.question,
+    ...(terms.criteria !== undefined ? { criteria: terms.criteria } : {}),
+    options: terms.options.map((option) => ({ key: option.key, label: option.label })),
+    method: terms.method,
+    ...(terms.pick !== undefined ? { pick: terms.pick } : {}),
+    quorum: terms.quorum,
+    closes_at: terms.closes_at,
+    close_when_all_cast: terms.close_when_all_cast,
+  };
+}
+
+export function ballotUnitView(unit: ElectorateUnit): Record<string, unknown> {
+  return {
+    unit: unit.unit_id,
+    names: unit.names,
+    sessions: unit.session_ids,
+    seat_refs: unit.seat_refs,
+    ...(unit.model ? { model: unit.model } : {}),
+    ...(unit.models ? { models: unit.models } : {}),
+  };
+}
+
+function ballotYou(ballot: NoteBallotData): Record<string, unknown> | null {
+  const viewer = ballot.viewer;
+  if (!viewer) return null;
+  return {
+    unit: viewer.unit_id,
+    counts_as: viewer.counts_as,
+    ...(viewer.same_handle_as ? { same_handle_as: viewer.same_handle_as } : {}),
+    in_electorate: viewer.in_electorate,
+    you_may_vote: viewer.may_vote,
+    you_have_cast: viewer.unit_has_cast,
+    your_casts: viewer.your_casts,
+  };
+}
+
+/** One entry of arrive's open.ballots (spec 5.1). */
+function ballotBrief(ballot: NoteBallotData): Record<string, unknown> {
+  return {
+    id: ballot.ballot_id,
+    handle: handleOf("ballot", ballot.ballot_id),
+    question: ballot.terms.question,
+    criteria: ballot.terms.criteria ?? null,
+    options: ballot.terms.options.map((option) => ({ key: option.key, label: option.label })),
+    pick: ballot.terms.pick ?? null,
+    closes_at: ballot.terms.closes_at,
+    close_when_all_cast: ballot.terms.close_when_all_cast,
+    you_may_vote: ballot.viewer?.may_vote ?? false,
+    you_have_cast: ballot.viewer?.unit_has_cast ?? false,
+    turnout: ballot.turnout,
+    sealing: ballot.sealing,
+  };
+}
+
+/** A ballot in full, for collab_inbox about (spec 5.2): terms, electorate, turnout, left_out, and the result once revealed. */
+function ballotFacts(ballot: NoteBallotData): Record<string, unknown> {
+  return {
+    id: ballot.ballot_id,
+    handle: handleOf("ballot", ballot.ballot_id),
+    opener: { session: ballot.opener_session_id, name: ballot.opener_name },
+    opened_at: ballot.opened_at,
+    terms: ballotTermsView(ballot.terms),
+    state: ballot.state,
+    closed_by: ballot.closed_by,
+    withdrawn: ballot.withdrawn ? { report: ballot.withdrawn.report_id, at: ballot.withdrawn.at } : null,
+    electorate: ballot.units.map(ballotUnitView),
+    electorate_sha256: ballot.electorate_sha256,
+    chosen_by: ballot.chosen_by,
+    left_out: ballot.left_out,
+    ...(ballot.left_out_total > ballot.left_out.length ? { left_out_total: ballot.left_out_total } : {}),
+    turnout: ballot.turnout,
+    you: ballotYou(ballot),
+    unit_basis: ballot.unit_basis,
+    sealing: ballot.sealing,
+    closed: ballot.closed
+      ? { at: ballot.closed.at, entry_count: ballot.closed.entry_count, entries_sha256: ballot.closed.entries_sha256 }
+      : null,
+    result: ballot.result,
+  };
+}
+
+function ballotAdvice(ballot: NoteBallotData): string[] {
+  const advice: string[] = [];
+  if (ballot.state === "withdrawn") {
+    advice.push("The opener withdrew this ballot: no cast is taken, and its votes are still revealed at the original close, with no top choice.");
+  } else if (ballot.state === "closed") {
+    advice.push("This ballot has closed; its votes are revealed by the next collab call in this workspace.");
+  } else if (ballot.state === "open" && ballot.viewer?.may_vote && !ballot.viewer.unit_has_cast) {
+    advice.push("Vote with collab_vote before you read anyone else's answer; check what can be checked, since a count does not make an answer true.");
+  }
+  return advice;
+}
+
+/** A ballot event as an inbox item (spec 5.2): the opened item carries the terms and a ready vote call. */
+function ballotItem(
+  entry: NoteEntry,
+  from: { session: string | null; name: string },
+  base: Record<string, unknown>,
+  byId: Map<string, NoteSessionView>,
+  me: string,
+): Record<string, unknown> {
+  const { event } = entry;
+  const ballot = entry.ballot;
+  const id = event.entity_id;
+  const handle = handleOf("ballot", id);
+  const re = { id, handle };
+  const about = { tool: "collab_inbox", input: { about: exactRef("ballot", id) } };
+  if (!ballot) {
+    return { id, handle, act: "event", type: event.type, from, to: "all", re, ...base, statement: `${event.type} on ${handle}.`, text: null, why: [], evidence: [] };
+  }
+  switch (event.type) {
+    case "ballot.opened": {
+      const mayVote = ballot.viewer?.may_vote === true && !ballot.viewer.unit_has_cast;
+      return {
+        id,
+        handle,
+        act: "poll",
+        from,
+        to: "electorate",
+        re: null,
+        ...base,
+        statement: statementOf(ballot.terms.question.split("\n").find((line) => line.trim() !== "")?.trim() ?? handle),
+        text: ballot.terms.question,
+        why: [],
+        evidence: [],
+        terms: ballotTermsView(ballot.terms),
+        state: ballot.state,
+        electorate: ballot.units.map(ballotUnitView),
+        chosen_by: ballot.chosen_by,
+        left_out: ballot.left_out,
+        you_may_vote: ballot.viewer?.may_vote ?? false,
+        you_have_cast: ballot.viewer?.unit_has_cast ?? false,
+        unit_basis: ballot.unit_basis,
+        sealing: ballot.sealing,
+        // No choice in the ready call: collab_vote asks for one, so nothing is cast by sending it as given.
+        next: mayVote ? { tool: "collab_vote", input: { ballot: exactRef("ballot", id) } } : about,
+      };
+    }
+    case "ballot.closed": {
+      const result = ballot.result;
+      const top = result && result.top.length > 0 ? ` (${result.top.join(", ")})` : "";
+      return {
+        id,
+        handle,
+        act: "poll",
+        from: { session: null, name: "system:clock" },
+        to: sessionRef(me, me, byId),
+        re,
+        ...base,
+        statement: result ? `${handle} closed: ${result.status}${top}. It authorises nothing.` : `${handle} closed.`,
+        text: null,
+        why: [],
+        evidence: [],
+        result: result
+          ? { status: result.status, top: result.top, split: result.split, turnout: result.turnout, quorum: result.quorum }
+          : null,
+        next: about,
+      };
+    }
+    case "ballot.cast":
+      return {
+        id, handle, act: "vote", from, to: "all", re, ...base,
+        statement: `A sealed vote was cast in ${handle}.`, text: null, why: [], evidence: [], sealed: true,
+      };
+    default:
+      return {
+        id, handle, act: "event", type: event.type, from: { session: null, name: "system:clock" }, to: "all", re, ...base,
+        statement: `A vote in ${handle} was revealed at its close.`, text: null, why: [], evidence: [],
+      };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2444,6 +2689,20 @@ function carryThread(thread: NoteThreadData): { text: string; not_carried: strin
     }
   } else if (thread.decision) {
     input = carriedDecision(thread.decision, thread.root!.marked);
+  } else if (thread.ballot) {
+    // A ballot travels as its question, its state and, once revealed, its
+    // result; never a vote before the close, and never a folded answer.
+    const ballot = thread.ballot;
+    const result = ballot.result;
+    input = {
+      act: "poll",
+      statement: statementOf(ballot.terms.question.split("\n").find((line) => line.trim() !== "")?.trim() ?? "A sealed ballot."),
+      re: `ballot:${ballot.ballot_id}`,
+      trailers: [
+        { key: "Position", value: `${ballot.state}; closes ${ballot.terms.closes_at}; turnout ${ballot.turnout.cast} of ${ballot.turnout.electorate} units` },
+        ...(result ? [{ key: "Result", value: `${result.status}${result.top.length > 0 ? `: ${result.top.join(", ")}` : ""}; authorises nothing` }] : []),
+      ],
+    };
   } else {
     const report = thread.root!.report!;
     const stored = reportAct(report, thread.termed);

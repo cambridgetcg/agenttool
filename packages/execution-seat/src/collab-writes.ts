@@ -25,7 +25,10 @@ export const COLLAB_WRITES: ReadonlySet<string> = new Set([
   "collab_take",
   "collab_done",
   "collab_propose",
-  // The rest join this list as each is registered: collab_poll, collab_vote.
+  // A ballot's poll report and each sealed cast (the hook records the tool
+  // name only, so a listed collab_vote shows timing and nothing of the vote).
+  "collab_poll",
+  "collab_vote",
 ]);
 
 /**
