@@ -30,6 +30,7 @@ import {
 } from "./compat/fixture.js";
 import { GOLDEN_BARE_REPORT_BODY, type GoldenOutcome } from "./compat/golden-scenario.js";
 import { normaliseEvents, Placeholders, type EventRow } from "./compat/normalise.js";
+import { gitIn, resolveRevision, type Revision, type Ships } from "./compat/revisions.js";
 
 // Forward compatibility (Collab Notes spec 8.5): older builds keep opening,
 // verifying, paging, acking and writing a journal this build wrote, and this
@@ -54,13 +55,6 @@ afterAll(() => {
 
 // ---------------------------------------------------------------------------
 // Revisions
-
-interface Ships {
-  mcp: boolean;
-  host: boolean;
-  host_wait: boolean;
-  host_seat_ref: boolean;
-}
 
 interface StoreCapabilities {
   event_addresses_session: boolean;
@@ -95,58 +89,14 @@ const KNOWN_REVISIONS: Record<string, { ships: Ships; store: StoreCapabilities }
 };
 
 function git(args: string[]): { ok: boolean; stdout: string; stderr: string } {
-  // From the repository root, so archive pathspecs name the same tree paths as `rev:path`.
-  const result = spawnSync("git", ["-C", repositoryRoot, ...args], { encoding: "utf8", timeout: 30_000 });
-  return { ok: result.status === 0, stdout: result.stdout ?? "", stderr: result.stderr ?? result.error?.message ?? "" };
-}
-
-interface Revision {
-  name: string;
-  sha: string | null;
-  missing: string | null;
-  ships: Ships;
-}
-
-function missingMessage(name: string, detail: string, role: "older build" | "golden"): string {
-  // The golden scenario and the event-type union check always compare with
-  // a8799aad (spec 8.5), so naming COLLAB_COMPAT_REVS as the way out there
-  // would send a reader to a setting that changes nothing.
-  const choice = role === "golden"
-    ? `The golden scenario and the event-type union check always compare with ${name}; COLLAB_COMPAT_REVS does not change that.`
-    : "COLLAB_COMPAT_REVS chooses the older builds.";
-  return `Compatibility revision "${name}" is not in this clone (${detail.trim() || "git rev-parse failed"}). `
-    + "The forward-compatibility harness needs full git history: set fetch-depth: 0 on the actions/checkout step, "
-    + `or fetch ${name}. It does not skip a missing revision. ${choice}`;
-}
-
-function resolveRevision(name: string, role: "older build" | "golden" = "older build"): Revision {
-  const none: Ships = { mcp: false, host: false, host_wait: false, host_seat_ref: false };
-  const parsed = git(["rev-parse", "--verify", "--quiet", `${name}^{commit}`]);
-  const sha = parsed.stdout.trim();
-  if (!parsed.ok || !/^[0-9a-f]{40}$/.test(sha)) {
-    return { name, sha: null, missing: missingMessage(name, parsed.stderr, role), ships: none };
-  }
-  const has = (path: string) => git(["cat-file", "-e", `${sha}:packages/collab/${path}`]).ok;
-  const host = has("dist/agenttool-collab-host.js");
-  const hostSource = host ? git(["show", `${sha}:packages/collab/src/host.ts`]).stdout : "";
-  const usage = /COLLAB_HOST_USAGE =([\s\S]*?);\n/.exec(hostSource)?.[1] ?? "";
-  return {
-    name,
-    sha,
-    missing: null,
-    ships: {
-      mcp: has("dist/agenttool-collab-mcp.js"),
-      host,
-      host_wait: host && usage.includes("agenttool-collab-host wait"),
-      host_seat_ref: host && usage.includes("--seat-ref"),
-    },
-  };
+  return gitIn(repositoryRoot, args);
 }
 
 // A blank value means the default list: an empty run would be a skip in disguise.
 const requestedRevisions = (process.env.COLLAB_COMPAT_REVS ?? "").trim().split(/\s+/).filter(Boolean);
-const revisions = (requestedRevisions.length ? requestedRevisions : DEFAULT_REVISIONS).map((name) => resolveRevision(name));
-const golden = resolveRevision(GOLDEN_REVISION, "golden");
+const revisions = (requestedRevisions.length ? requestedRevisions : DEFAULT_REVISIONS)
+  .map((name) => resolveRevision(repositoryRoot, name));
+const golden = resolveRevision(repositoryRoot, GOLDEN_REVISION, "golden");
 
 function lazy<T>(make: () => Promise<T>): () => Promise<T> {
   let promise: Promise<T> | undefined;
@@ -555,6 +505,42 @@ describe("forward-compatibility fixture", () => {
     }
     // Reopening recreates the tables; every view reads the same as before the drop.
     expect(computeViews(copy, manifest, status_at)).toEqual(views);
+  }, TEST_TIMEOUT_MS);
+});
+
+// ---------------------------------------------------------------------------
+// A missing revision fails; it never skips (spec 8.5)
+
+describe("a missing revision", () => {
+  // A well-formed name that no branch or tag here carries.
+  const absent = "collab-compat-absent-revision";
+
+  test("resolves to no commit, with a message naming fetch-depth: 0 and the revision", () => {
+    const older = resolveRevision(repositoryRoot, absent);
+    expect(older.sha).toBeNull();
+    expect(older.missing).toContain("fetch-depth: 0");
+    expect(older.missing).toContain(`"${absent}"`);
+    expect(older.missing).toContain("It does not skip a missing revision.");
+    expect(older.missing).toContain("COLLAB_COMPAT_REVS chooses the older builds.");
+    // The golden revision is fixed, so its message does not point at the setting.
+    const goldenMissing = resolveRevision(repositoryRoot, absent, "golden").missing;
+    expect(goldenMissing).toContain("fetch-depth: 0");
+    expect(goldenMissing).toContain("COLLAB_COMPAT_REVS does not change that.");
+  });
+
+  test("fails the harness run instead of skipping", async () => {
+    // Only the availability gates run in the child (this test's own name does
+    // not match, so it does not recurse). The run must fail and say why.
+    const result = await run([process.execPath, "test", import.meta.path, "-t", "is available in this clone"], {
+      timeout_ms: WORKER_TIMEOUT_MS,
+      cwd: packageRoot,
+      env: hermeticEnvironment({ COLLAB_COMPAT_REVS: absent }),
+    });
+    const output = `${result.stdout}\n${result.stderr}`;
+    expect(result.exit_code).not.toBe(0);
+    expect(output).toContain(`(fail) older build ${absent} > is available in this clone`);
+    expect(output).toContain("fetch-depth: 0");
+    expect(output).not.toMatch(/\(skip\)/);
   }, TEST_TIMEOUT_MS);
 });
 

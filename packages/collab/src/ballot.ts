@@ -11,7 +11,7 @@
 import { createHash } from "node:crypto";
 import { canonicalJson } from "./canonical.js";
 import { CollabError } from "./errors.js";
-import { NOTE_BASES, normalizeNoteText, parseEvidence, type NoteBasis } from "./note.js";
+import { hasLoneSurrogate, NOTE_BASES, normalizeNoteText, parseEvidence, type NoteBasis } from "./note.js";
 
 export const BALLOT_COMMITMENT_PROTOCOL = "agenttool.collab-ballot/1";
 export const BALLOT_METHOD = "approval/1";
@@ -1247,6 +1247,13 @@ function textField(
     return null;
   }
   if (text.includes("\0")) refuse(code, `${field} must not contain NUL characters`, { field }, fix);
+  // Half of a character, as when a host cuts an emoji at a UTF-16 boundary:
+  // the store would not keep it as given, as note.ts explains.
+  if (hasLoneSurrogate(text)) {
+    refuse(code, `${field} must be well-formed Unicode text (it holds half of a character, as when an emoji is cut in two)`, { field }, {
+      say: `Send ${field} again with every character whole.`,
+    });
+  }
   if (!options.multiline && text.includes("\n")) refuse(code, `${field} must be one line`, { field }, fix);
   if (text.length > max) {
     refuse("too_long", `${field} exceeds ${max} characters`, { field, max }, {

@@ -39,7 +39,8 @@ import {
 } from "../src/ballot.js";
 import { canonicalJson } from "../src/canonical.js";
 import { CollabError } from "../src/errors.js";
-import { NOTE_BASES, normalizeNoteText } from "../src/note.js";
+import { checkNote, NOTE_BASES, normalizeNoteFields, normalizeNoteText } from "../src/note.js";
+import { moduleReach } from "./module-purity.js";
 
 // Sealed approval ballot arithmetic. Contract: Collab Notes build spec,
 // revision 2, section 7. Nothing here touches a store, a file or the clock.
@@ -128,6 +129,18 @@ function resultOf(
   const entries = resolveCasts(units, casts, { ballot_id: BALLOT });
   return ballotResult({ terms: TERMS, units, entries, withdrawn: false, sessions: labels(sessions), ...extra });
 }
+
+describe("purity", () => {
+  test("ballot.ts loads no store, filesystem, clock or randomness", () => {
+    // Callers pass now, the salt and the cast id, so a reveal on any build
+    // recomputes the same commitments and result from the journal alone.
+    expect(moduleReach("ballot.ts")).toEqual({
+      local: ["ballot.ts", "canonical.ts", "errors.ts", "note.ts"],
+      external: ["node:crypto"],
+      ambient: [],
+    });
+  });
+});
 
 describe("units", () => {
   test("each voice is a unit, named by the first 32 hex of the sorted voice ids' hash", () => {
@@ -483,6 +496,14 @@ describe("vote shape", () => {
     }
   });
 
+  test("evidence with a line break is refused, as a note refuses it", () => {
+    // Two pointers on one item would read as one pointer that does not exist.
+    const twoInOne = "file src/a.ts\nfile src/b.ts";
+    expect(refusal(() => validateVote({ choice: ["a"], evidence: [twoInOne] }, ballot)).code).toBe("invalid_evidence");
+    expect(checkNote(normalizeNoteFields({ act: "note", statement: "s", evidence: [twoInOne] })))
+      .toEqual([expect.objectContaining({ field: "evidence[0]", message: expect.stringContaining("must be one line") })]);
+  });
+
   test("evidence lines follow the note's Evidence grammar", () => {
     const lines = ["report#3fa91c", "event:event_1", "test bun test exit=0", "url https://example.invalid/a"];
     expect(validateVote({ choice: ["a"], evidence: lines }, ballot).vote.evidence).toEqual(lines);
@@ -504,6 +525,32 @@ describe("vote shape", () => {
     expect(sameVoteInput(sealed, plain)).toBe(true);
     expect(sameVoteInput(sealed, { ...plain, choice: ["b"] })).toBe(false);
     expect(sameVoteInput(plain, { ...plain, shared: "same repo" })).toBe(false);
+  });
+
+  test("half a character is refused in every text field, with that field's code", () => {
+    // A host that cuts text at a UTF-16 boundary splits an emoji. SQLite does
+    // not keep the half as given, and these texts reach the poll note body.
+    const poll = { question: "Which layout?", options: [{ key: "a", label: "Alpha" }, { key: "b", label: "Beta" }], closes: "30m" };
+    const terms = (input: Record<string, unknown>) => validatePollTerms(input, { now: NOW, units: THREE });
+    for (const half of ["\ud800", "\udc00", "🏮".slice(0, 1)]) {
+      const cases: Array<[() => unknown, string, string]> = [
+        [() => terms({ ...poll, question: `which ${half} layout?` }), "invalid_question", "question"],
+        [() => terms({ ...poll, criteria: `smallest ${half}` }), "invalid_criteria", "criteria"],
+        [() => terms({ ...poll, options: [{ key: "a", label: `Alpha ${half}` }, poll.options[1]] }), "invalid_options", "options[0].label"],
+        [() => validateVote({ choice: ["a"], why: [{ text: `x ${half}` }] }, ballot), "invalid_why", "why[0].text"],
+        [() => validateVote({ choice: ["a"], evidence: [`file src/a${half}.ts`] }, ballot), "invalid_evidence", "evidence[0]"],
+        [() => validateVote({ choice: ["a"], shared: `same repo ${half}` }, ballot), "invalid_shared", "shared"],
+      ];
+      for (const [run, code, field] of cases) {
+        const error = refusal(run);
+        expect([error.code, error.details.field]).toEqual([code, field]);
+        expect(error.message).toContain("must be well-formed Unicode text");
+        expect(error.details.remedy).toEqual({ say: expect.any(String) });
+      }
+    }
+    // A whole pair is one ordinary character.
+    expect(validateVote({ choice: ["a"], why: [{ text: "lamp 🏮 lit" }] }, ballot).vote.why[0]!.text).toBe("lamp 🏮 lit");
+    expect(terms({ ...poll, question: "🏮 or 共筆?" }).terms.question).toBe("🏮 or 共筆?");
   });
 
   test("a session may cast at most 3 times in a ballot", () => {

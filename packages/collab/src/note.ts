@@ -315,10 +315,19 @@ function normalizeBodyText(text: string): string | null {
 }
 
 function normalizeLineValue(value: string): string | null {
-  // A one-line field cannot hold a line break; joining with a space keeps
-  // every word.
+  // Prose on one line (a Why text, a purpose) cannot hold a line break;
+  // joining with a space keeps every word.
   const line = cleanLines(value).map((part) => part.trim()).filter((part) => part !== "").join(" ");
   return line === "" ? null : line;
+}
+
+function normalizePointerValue(value: string): string | null {
+  // A pointer or a name (To, Re, Via, Replaces, an Evidence item) keeps any
+  // line break inside it, so the check refuses it as two lines. Joined with a
+  // space, two pointers would read as one that does not exist, and
+  // "Astra\n2" would be sent to "Astra 2".
+  const pointer = normalizeNoteText(value);
+  return pointer === "" ? null : pointer;
 }
 
 function normalizeMultilineValue(value: string): string | null {
@@ -331,10 +340,12 @@ function normalizeMultilineValue(value: string): string | null {
 /**
  * Bring loosely written fields (from JSON tool input, or a stored record) to
  * the form renderNote accepts: text normalised as above, empty values
- * dropped, a one-line field's line breaks joined with spaces, a trailer
+ * dropped, line breaks in Why text and Purpose joined with spaces, a trailer
  * value's blank lines dropped, basis words and act lower-cased, render keys
- * spelled as listed. It never shortens anything. A statement with a line
- * break is left as it is, so renderNote refuses it with the remedy. A blank
+ * spelled as listed. It never shortens anything. A statement, a To, Re, Via
+ * or Replaces value, or an Evidence item with a line break inside it is left
+ * as it is, so renderNote refuses it: joining would turn two values into one
+ * different value. A blank
  * Why or Evidence item stays in its place as "", so checkNote refuses it:
  * Why cites count Evidence positions, and dropping an item would move every
  * later cite onto evidence the writer did not cite.
@@ -343,6 +354,8 @@ export function normalizeNoteFields(input: NoteInput): NoteFields {
   const fields = completeFields(input);
   const line = (value: string | null): string | null =>
     typeof value === "string" ? normalizeLineValue(value) : value;
+  const pointer = (value: string | null): string | null =>
+    typeof value === "string" ? normalizePointerValue(value) : value;
   const multiline = (value: string | null): string | null =>
     typeof value === "string" ? normalizeMultilineValue(value) : value;
   const trailers: NoteTrailer[] = [];
@@ -360,9 +373,9 @@ export function normalizeNoteFields(input: NoteInput): NoteFields {
       ? cleanLines(fields.statement).join("\n").trim()
       : fields.statement,
     body: typeof fields.body === "string" ? normalizeBodyText(fields.body) : fields.body,
-    to: line(fields.to),
-    re: line(fields.re),
-    via: line(fields.via),
+    to: pointer(fields.to),
+    re: pointer(fields.re),
+    via: pointer(fields.via),
     why: fields.why.map((reason) => ({
       text: typeof reason.text === "string" ? normalizeLineValue(reason.text) ?? "" : reason.text,
       basis: typeof reason.basis === "string"
@@ -370,11 +383,11 @@ export function normalizeNoteFields(input: NoteInput): NoteFields {
         : reason.basis,
       cites: reason.cites,
     })),
-    evidence: fields.evidence.map((item) => (typeof item === "string" ? normalizeLineValue(item) ?? "" : item)),
+    evidence: fields.evidence.map((item) => (typeof item === "string" ? normalizePointerValue(item) ?? "" : item)),
     limits: multiline(fields.limits),
     purpose: line(fields.purpose),
     extent: multiline(fields.extent),
-    replaces: line(fields.replaces),
+    replaces: pointer(fields.replaces),
     trailers,
   };
 }
@@ -878,10 +891,24 @@ const NORMALIZE_HINT = "normalizeNoteFields fixes whitespace and invisible chara
 // terms and votes; a note refuses it here, before any write.
 const NUL_PROBLEM = "must not contain NUL characters";
 
+// Half of a surrogate pair, as left when a host cuts text at a UTF-16
+// boundary through an emoji. SQLite does not store it as given (it merges it
+// with the next code unit, or loses the rest), so a note holding one would
+// not be stored as returned. It is refused rather than replaced, so nothing
+// the writer sent is changed without their knowing.
+const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
+const LONE_SURROGATE_PROBLEM = "must be well-formed Unicode text (it holds half of a character, as when an emoji is cut in two)";
+
+/** True when text holds an unpaired UTF-16 surrogate. */
+export function hasLoneSurrogate(text: string): boolean {
+  return LONE_SURROGATE.test(text);
+}
+
 function lineProblem(value: unknown): string | null {
   if (typeof value !== "string") return "must be a string";
   if (value === "") return "must not be empty";
   if (value.includes("\0")) return NUL_PROBLEM;
+  if (LONE_SURROGATE.test(value)) return LONE_SURROGATE_PROBLEM;
   if (value.includes("\n") || value.includes("\r")) return "must be one line";
   if (HAS_STRIPPED.test(value)) {
     return `contains a byte-order mark, a bidirectional control or a tag character (${NORMALIZE_HINT})`;
@@ -894,6 +921,7 @@ function multilineProblem(value: unknown): string | null {
   if (typeof value !== "string") return "must be a string";
   if (value === "") return "must not be empty";
   if (value.includes("\0")) return NUL_PROBLEM;
+  if (LONE_SURROGATE.test(value)) return LONE_SURROGATE_PROBLEM;
   if (value.includes("\r")) return `contains a carriage return (${NORMALIZE_HINT})`;
   if (HAS_STRIPPED.test(value)) {
     return `contains a byte-order mark, a bidirectional control or a tag character (${NORMALIZE_HINT})`;
@@ -907,6 +935,7 @@ function multilineProblem(value: unknown): string | null {
 function bodyProblem(value: string): string | null {
   if (typeof value !== "string") return "must be a string";
   if (value.includes("\0")) return NUL_PROBLEM;
+  if (LONE_SURROGATE.test(value)) return LONE_SURROGATE_PROBLEM;
   if (value.includes("\r")) return `contains a carriage return (${NORMALIZE_HINT})`;
   if (HAS_STRIPPED.test(value)) {
     return `contains a byte-order mark, a bidirectional control or a tag character (${NORMALIZE_HINT})`;
@@ -1206,7 +1235,7 @@ function fieldsOf(parsed: ParsedNote): Omit<ParsedNote, "advice"> {
 // A last guard: whatever renderNote returns must read back as the fields it
 // was given, so the stored body, the returned note and a later read agree.
 function verifyReadsBack(text: string, fields: NoteFields): void {
-  if (normalizeNoteText(text) !== text) {
+  if (normalizeNoteText(text) !== text || LONE_SURROGATE.test(text)) {
     throw new CollabError("invalid_note_field", "The note would not be stored byte for byte", { field: "note" });
   }
   const back = fieldsOf(parseNote(text));
@@ -1385,8 +1414,9 @@ function cutRank(cut: CarryCut): number {
 // A journal note may hold hundreds of trailers, so naming each one cut could
 // make the Not-carried line alone outgrow the carried note. Cuts are named
 // once per group and reason instead: a render key, the X- keys together, or
-// any other key. That last key is never echoed: it is unchecked input and may
-// itself name a local detail.
+// any other key. Only render keys are named as written. An X- key, or any
+// other, is never echoed: it is the writer's own text and may itself name a
+// local detail that the local-detail patterns do not know.
 function describeTrailerCuts(trailers: readonly NoteTrailer[], fates: ReadonlyMap<number, TrailerFate>): string[] {
   const groups = new Map<string, { group: string; key: string; fate: TrailerFate; count: number }>();
   for (const index of [...fates.keys()].sort((left, right) => left - right)) {
@@ -1402,7 +1432,7 @@ function describeTrailerCuts(trailers: readonly NoteTrailer[], fates: ReadonlyMa
   }
   return [...groups.values()].map(({ group, key, fate, count }) => {
     const name = count === 1
-      ? group === "unknown" ? "unknown trailer" : key
+      ? group === "unknown" ? "unknown trailer" : group === "X-" ? "X- trailer" : key
       : group === "X-" ? `X- trailers ×${count}` : group === "unknown" ? `unknown trailers ×${count}` : `${group} ×${count}`;
     switch (fate.kind) {
       case "local":
@@ -1437,10 +1467,11 @@ function readable(value: string, check: (value: string) => string | null): boole
  * final `Not-carried:` line naming everything withheld or shortened
  * ("nothing" when it is all there). Values naming a local detail (a
  * workspace id, an absolute, home or temporary path, a LAN host name, a
- * localTerms entry) are withheld, never rewritten, and so are values that
- * could not be written in a note (an empty Evidence item, a NUL). Trailers
- * cut are named once per group (a render key, or the X- keys together), so
- * the Not-carried line stays short however many there were. When the note is still too long it
+ * localTerms entry) are withheld, never rewritten, and so are X- trailers
+ * whose key names one, and values that could not be written in a note (an
+ * empty Evidence item, a NUL, half a character). Trailers cut are named once
+ * per group (a render key, or the X- keys together, never an X- key itself),
+ * so the Not-carried line stays short however many there were. When the note is still too long it
  * is cut in this order until it fits: X- trailers; the body down to 240
  * characters; Evidence from the end; purpose, replaces, to; the rest of the
  * body; Why from the end; render trailers other than Sha256, Position and
@@ -1551,7 +1582,12 @@ export function renderCarriedNote(input: NoteInput, options: CarryOptions = {}):
   base.trailers.forEach((trailer, index) => {
     if (trailer.key === "Not-carried") return; // a carried note names its own cuts
     const problem = trailerProblem(trailer, index);
-    if (problem !== null || isLocal(trailer.value)) {
+    // An X- key is free text the writer chose, so it can name this machine as
+    // a value can. Render keys are collab's own words and name nothing local,
+    // so a local term that happens to match one (a host called "sha") is no
+    // reason to withhold a hash.
+    const localKey = problem === null && !RENDER_KEY_SET.has(trailer.key) && isLocal(trailer.key);
+    if (problem !== null || localKey || isLocal(trailer.value)) {
       trailerFates.set(index, { kind: problem !== null ? "unreadable" : "local" });
     } else {
       state.trailers.push(trailer);

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { CollabError } from "../src/errors.js";
 import {
   checkNote,
@@ -41,8 +42,9 @@ import {
   type NoteReason,
   type NoteTrailer,
 } from "../src/note.js";
+import { moduleReach } from "./module-purity.js";
 
-const R1 = "report_7f3a0c1e-2b4d-4e6f-8a9b-0c1d2e3f4a51";
+const R1 ="report_7f3a0c1e-2b4d-4e6f-8a9b-0c1d2e3f4a51";
 const R2 = "report_8a4b1d2f-3c5e-4f70-9bac-1d2e3f4a5b62";
 const R3 = "report_9b5c2e30-4d6f-4081-acbd-2e3f4a5b6c73";
 const T1 = "task_0b12de34-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
@@ -76,6 +78,20 @@ function withoutAdvice(parsed: ReturnType<typeof parseNote>): Omit<ReturnType<ty
   return rest;
 }
 
+// An oracle written apart from note.ts: true when every surrogate is paired.
+function wellFormed(text: string): boolean {
+  for (let at = 0; at < text.length; at += 1) {
+    const unit = text.charCodeAt(at);
+    if (unit >= 0xdc00 && unit <= 0xdfff) return false;
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = text.charCodeAt(at + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
+      at += 1;
+    }
+  }
+  return true;
+}
+
 function thrown(run: () => unknown): CollabError {
   try {
     run();
@@ -85,6 +101,20 @@ function thrown(run: () => unknown): CollabError {
   }
   throw new Error("expected a CollabError");
 }
+
+// ---------------------------------------------------------------- purity
+
+describe("purity", () => {
+  test("note.ts loads no store, filesystem, clock or randomness (spec 4)", () => {
+    // Every carrier parses and renders through this module, so it must give
+    // the same answer anywhere: in a store, a host message or a test.
+    expect(moduleReach("note.ts")).toEqual({
+      local: ["canonical.ts", "errors.ts", "note.ts"],
+      external: [],
+      ambient: [],
+    });
+  });
+});
 
 // ---------------------------------------------------------------- acts
 
@@ -941,7 +971,7 @@ describe("normalisation", () => {
       body: "\r\n\r\n    code \r\nline\t\r\n\r\n",
       to: " claude-air\n",
       re: "",
-      via: "host:\nclaude",
+      via: "\r\nhost:claude ",
       why: [{ text: " a\nb ", basis: "Seen" as NoteBasis }, { text: "c" }],
       evidence: [" commit abcdef1 ", ""],
       limits: "one\n\n  two  \n",
@@ -955,7 +985,7 @@ describe("normalisation", () => {
       statement: "s".repeat(300),
       body: "    code\nline",
       to: "claude-air",
-      via: "host: claude",
+      via: "host:claude",
       why: [why("a b", "seen"), why("c")],
       // A blank Evidence item keeps its place (see the next test).
       evidence: ["commit abcdef1", ""],
@@ -992,6 +1022,35 @@ describe("normalisation", () => {
       const error = thrown(() => renderNote(loose));
       expect([error.code, error.details.field]).toEqual(["invalid_note_field", `evidence[${blank}]`]);
     }
+  });
+
+  test("a pointer or a name keeps its line breaks, so checkNote refuses it instead of making one of two", () => {
+    // Joined with a space, two Evidence pointers would read as one pointer to
+    // a path that does not exist, and "Astra\n2" would be routed to "Astra 2".
+    const loose = normalizeNoteFields({
+      act: "note",
+      statement: "two cites in one item",
+      to: "Astra\r\n2",
+      re: "report:a\nreport:b",
+      via: "host:claude\ncode",
+      replaces: ` report:${R1}\n`,
+      why: [{ text: "x", basis: "seen", cites: [1] }],
+      evidence: ["file src/a.ts\nfile src/b.ts", " commit abcdef1\r\n"],
+    });
+    expect([loose.to, loose.re, loose.via, loose.replaces]).toEqual(["Astra\n2", "report:a\nreport:b", "host:claude\ncode", `report:${R1}`]);
+    expect(loose.evidence).toEqual(["file src/a.ts\nfile src/b.ts", "commit abcdef1"]);
+    const problems = checkNote(loose);
+    expect(problems.map((problem) => [problem.code, problem.field])).toEqual([
+      ["invalid_note_field", "to"],
+      ["invalid_note_field", "re"],
+      ["invalid_note_field", "via"],
+      ["invalid_note_field", "evidence[0]"],
+    ]);
+    for (const problem of problems) expect(problem.message).toContain("must be one line");
+    expect(thrown(() => renderNote(loose)).details.field).toBe("to");
+    // Why text and Purpose are prose, so their line breaks still join with a space.
+    const prose = normalizeNoteFields({ act: "note", statement: "s", why: [{ text: "one\r\ntwo" }], purpose: "keep\nthe lamp lit" });
+    expect([prose.why[0]!.text, prose.purpose]).toEqual(["one two", "keep the lamp lit"]);
   });
 
   test("splitNoteText reads a statement and a body with no trailer parsing", () => {
@@ -1233,6 +1292,37 @@ describe("render refuses what it cannot write faithfully", () => {
     const parsed = parseNote("note: a\u0000b");
     expect(parsed.statement).toBe("a\u0000b");
     expect(checkNote(withoutAdvice(parsed) as NoteFields)[0]?.field).toBe("statement");
+  });
+
+  test("half a character is refused in every field, so the stored body equals the note", () => {
+    // A host that cuts text at a UTF-16 boundary splits an emoji in two.
+    // SQLite does not keep a lone surrogate as given: it merges it with the
+    // next code unit or loses the rest, so the stored body would not be the note.
+    const splitEmoji = "🏮".slice(0, 1);
+    for (const half of ["\ud800", "\udc00", splitEmoji]) {
+      const cases: Array<[Parameters<typeof checkNote>[0], string]> = [
+        [{ act: "note", statement: `lamp ${half} lit` }, "statement"],
+        [{ act: "note", statement: "s", body: `body ${half}\n\nmore` }, "body"],
+        [{ act: "note", statement: "s", to: `a${half}` }, "to"],
+        [{ act: "note", statement: "s", limits: `one\ntw${half}o` }, "limits"],
+        [{ act: "note", statement: "s", why: [{ text: `w ${half}` }] }, "why[0]"],
+        [{ act: "note", statement: "s", evidence: [`file src/a${half}.ts`] }, "evidence[0]"],
+        [{ act: "note", statement: "s", trailers: [{ key: "X-a", value: `v ${half}` }] }, "trailers[0].value"],
+      ];
+      for (const [input, field] of cases) {
+        const problems = checkNote(input);
+        expect(problems).toEqual([expect.objectContaining({ code: "invalid_note_field", field })]);
+        expect(problems[0]!.message).toContain("must be well-formed Unicode text");
+        const error = thrown(() => renderNote(input));
+        expect([error.code, error.details.field]).toEqual(["invalid_note_field", field]);
+        // Normalisation leaves the half in place for the check to refuse.
+        expect(checkNote(normalizeNoteFields(input))[0]?.field).toBe(field);
+      }
+      const parsed = parseNote(`note: lamp ${half} lit`);
+      expect(checkNote(withoutAdvice(parsed) as NoteFields)[0]?.field).toBe("statement");
+    }
+    // A whole pair is one ordinary character.
+    expect(renderNote({ act: "note", statement: "lamp 🏮 lit", body: "共筆 👩‍💻" })).toBe("note: lamp 🏮 lit\n\n共筆 👩‍💻");
   });
 
   test("omitEvidence leaves Evidence lines out but still checks cites against them", () => {
@@ -1481,6 +1571,49 @@ describe("round trip over generated notes", () => {
     expect(refusedBody).toBeGreaterThan(0);
   });
 
+  test("SQLite keeps every note renderNote returns byte for byte, even from text cut mid-character", () => {
+    // Spec 4: the stored body equals the returned note. A host that cuts text
+    // at a UTF-16 boundary can leave half an emoji, which SQLite rewrites.
+    const database = new Database(":memory:");
+    database.run("CREATE TABLE bodies (id INTEGER PRIMARY KEY, body TEXT NOT NULL)");
+    const insert = database.query("INSERT INTO bodies (body) VALUES (?)");
+    const read = database.query("SELECT body FROM bodies WHERE id = ?");
+    const gen = new Gen(0x5eed_0007);
+    const emoji = ["🙂", "🏮", "👩‍💻", "共筆"];
+    const maybeCut = (text: string) => `${text} ${gen.pick(emoji)}`.slice(0, gen.chance(0.25) ? -1 : undefined);
+    let stored = 0;
+    let refused = 0;
+    try {
+      for (let index = 0; index < 1500; index += 1) {
+        const note = genNote(gen, { tricky: false });
+        const input = normalizeNoteFields({
+          ...note,
+          statement: maybeCut(note.statement),
+          body: note.body === null ? null : maybeCut(note.body),
+          why: note.why.map((reason) => ({ ...reason, text: maybeCut(reason.text) })),
+        });
+        const problems = checkNote(input);
+        const texts = [input.statement, input.body ?? "", ...input.why.map((reason) => reason.text)].join("\n");
+        if (!wellFormed(texts)) {
+          expect(problems.some((problem) => problem.message.includes("must be well-formed Unicode text"))).toBe(true);
+          expect(thrown(() => renderNote(input)).code).toBe("invalid_note_field");
+          refused += 1;
+          continue;
+        }
+        // A cut can also leave a statement over its cap; that is refused too.
+        if (problems.length > 0) continue;
+        const text = renderNote(input);
+        const { lastInsertRowid } = insert.run(text);
+        expect((read.get(lastInsertRowid) as { body: string }).body).toBe(text);
+        stored += 1;
+      }
+    } finally {
+      database.close();
+    }
+    expect(stored).toBeGreaterThan(500);
+    expect(refused).toBeGreaterThan(300);
+  });
+
   test("structured evidence round-trips through renderEvidence", () => {
     const gen = new Gen(0x5eed_0003);
     for (let index = 0; index < 2000; index += 1) {
@@ -1572,7 +1705,7 @@ describe("the carrying render", () => {
     expect(parsed.body).toBe(`short body\n\n${NOTE_CARRY_DISCLAIMER}`);
     expect(parsed.evidence).toEqual(evidence.slice(0, parsed.evidence.length));
     expect(parsed.why).toEqual([why("first", "seen", [1]), why("last", "seen", [16])]);
-    expect(carried.not_carried).toEqual([`evidence ${parsed.evidence.length + 1}-16`, "X-Trace"]);
+    expect(carried.not_carried).toEqual([`evidence ${parsed.evidence.length + 1}-16`, "X- trailer"]);
     expect(parsed.advice).toEqual([expect.stringContaining("cites Evidence 16")]);
   });
 
@@ -1604,7 +1737,7 @@ describe("the carrying render", () => {
       "evidence 2-3 (local detail)",
       "limits (local detail)",
       "purpose (local detail)",
-      "X-Where (local detail)",
+      "X- trailer (local detail)",
     ]);
     const parsed = parseNote(carried.text);
     expect(parsed.body).toBe(NOTE_CARRY_DISCLAIMER);
@@ -1666,6 +1799,27 @@ describe("the carrying render", () => {
     expect(thrown(() => renderCarriedNote({ ...base, statement: "a\u0000b" })).code).toBe("invalid_note_field");
   });
 
+  test("half a character is withheld as unreadable, like any value a note cannot hold", () => {
+    const half = "🏮".slice(0, 1);
+    const carried = renderCarriedNote({
+      ...base,
+      body: `lamp ${half}`,
+      limits: `one ${half}`,
+      why: [why("first", "seen", [1]), why(`second ${half}`, "seen")],
+      evidence: [base.evidence[0]!, `file src/a${half}.ts`],
+      trailers: [...base.trailers, { key: "X-Topic", value: `t ${half}` }],
+    });
+    expect(carried.not_carried).toEqual([
+      "body (unreadable)",
+      "why 2 (unreadable)",
+      "evidence 2 (unreadable)",
+      "limits (unreadable)",
+      "X- trailer (unreadable)",
+    ]);
+    expect(wellFormed(carried.text)).toBe(true);
+    expect(thrown(() => renderCarriedNote({ ...base, statement: `lamp ${half} lit` })).code).toBe("invalid_note_field");
+  });
+
   test("trailers cut in numbers are named by group, so Not-carried stays short", () => {
     const extensions = Array.from({ length: 300 }, (_, index) => ({ key: `X-k${index}`, value: "v" }));
     const journal = renderNote({ act: "note", statement: "many extension trailers", trailers: extensions });
@@ -1717,11 +1871,34 @@ describe("the carrying render", () => {
     expect(thrown(() => renderCarriedNote(base, { maxChars: 120 })).code).toBe("too_long");
   });
 
-  // A cut is named by its label, or, for several X- trailers, by their group.
+  test("an X- trailer whose key names this machine is withheld, and no X- key is echoed", () => {
+    // Values are checked for local detail, and keys must be too: an X- key is
+    // free text a writer chose, and a carried note holds no machine names.
+    const device = renderCarriedNote({ ...base, trailers: [...base.trailers, { key: "X-Alices-MacBook-Pro", value: "1" }] });
+    expect(device.not_carried).toEqual(["X- trailer (local detail)"]);
+    expect(device.text).not.toMatch(/macbook/i);
+    const term = renderCarriedNote(
+      { ...base, trailers: [...base.trailers, { key: "X-zeus-host", value: "1" }] },
+      { localTerms: ["zeus-host"] },
+    );
+    expect(term.not_carried).toEqual(["X- trailer (local detail)"]);
+    expect(term.text.toLowerCase()).not.toContain("zeus-host");
+    // Cut for room, a single X- trailer is named by its group, not by its key.
+    const long = renderCarriedNote({ ...base, trailers: [...base.trailers, { key: "X-Trace-Topic", value: "y".repeat(900) }] });
+    expect(long.not_carried).toEqual(["X- trailer"]);
+    expect(long.text).not.toContain("X-Trace-Topic");
+    // Render keys are collab's own words, so a local term that happens to be
+    // part of one (a host called "sha") does not withhold a hash.
+    const sha = renderCarriedNote(base, { localTerms: ["sha", "position"] });
+    expect(sha.not_carried).toEqual([]);
+    expect(parseNote(sha.text).trailers.slice(0, 2)).toEqual(base.trailers);
+  });
+
+  // A cut is named by its label, or, for X- trailers, by their group.
   const namedIn = (notCarried: readonly string[], label: string): boolean =>
     notCarried.some((entry) => entry === label
       || entry.startsWith(`${label} `)
-      || (/^X-/i.test(label) && entry.startsWith("X- trailers ×")));
+      || (/^X-/i.test(label) && /^X- trailers? /.test(`${entry} `)));
 
   test("over generated notes with more than 100 trailers: at most 800, every lost trailer named by group", () => {
     const gen = new Gen(0x5eed_0006);
