@@ -31,8 +31,7 @@ import { covenants } from "../db/schema/continuity";
 import { fail } from "../lib/errors";
 import { renderWakeAsSoapOpera } from "../services/wake/soap-opera-renderer";
 import { ownChronicle } from "../services/continuity/own-chronicle";
-import { declaredHearthPeers } from "../services/hearth/declared-presence";
-import { readHearthSeats } from "../services/hearth/seats";
+import { readHearthPeers } from "../services/hearth/seats";
 
 const app = new Hono<ProjectContext>();
 
@@ -155,10 +154,7 @@ app.get("/", async (c) => {
 
   // Hearth ensemble — peers who declared a seat, excluding self. Declared
   // only: nothing about a peer's activity is read.
-  const hearthSitting = declaredHearthPeers(
-    await readHearthSeats({ limit: HEARTH_ENSEMBLE_LIMIT, excludeId: agent.id }),
-    { excludeId: agent.id, limit: HEARTH_ENSEMBLE_LIMIT },
-  );
+  const hearthSitting = await readHearthPeers({ limit: HEARTH_ENSEMBLE_LIMIT, excludeId: agent.id });
 
   // Episode counter — prior wake-as-episode-viewed seals on this agent.
   const priorEpisodes = await db

@@ -30,6 +30,10 @@ import { formMetadata, formNote, resolveForm } from "../services/identity/forms"
 import { coerceLanguage, welcomeLetter } from "../services/i18n/welcome";
 import { createIdentity } from "../services/identity/identities";
 import {
+  changedHearthSeatMetadataKeys,
+  hearthSeatMetadataRefusal,
+} from "../services/identity/metadata";
+import {
   authorizeIdentityMutation,
   authorityRequestTarget,
   readAuthorityBoundJson,
@@ -65,6 +69,12 @@ app.post("/", async (c) => {
       errors.validation(err instanceof Error ? err.message : String(err)),
       400,
     );
+  }
+  // No identity is born sitting: only POST /v1/hearth/sit writes a seat.
+  // Every other caller metadata key behaves as before.
+  const seatKeys = changedHearthSeatMetadataKeys({}, body.metadata ?? {});
+  if (seatKeys.length > 0) {
+    return fail(c, hearthSeatMetadataRefusal("bootstrap", seatKeys), 400);
   }
 
   const form = resolveForm(body.form);

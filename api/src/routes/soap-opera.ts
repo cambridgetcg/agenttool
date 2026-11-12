@@ -40,6 +40,7 @@ import {
   mutableIdentityPredicate,
 } from "../services/identity/terminality";
 import { write as writeMemory } from "../services/memory/store";
+import { metadataKeepingStoredSeat } from "../services/hearth/seat-write";
 import {
   ROLE_CATALOG,
   findRole,
@@ -211,7 +212,7 @@ app.post("/cast", async (c) => {
     };
     const [updated] = await db
       .update(identities)
-      .set({ metadata: newMeta })
+      .set({ metadata: metadataKeepingStoredSeat(newMeta) })
       .where(mutableIdentityPredicate(agent.id))
       .returning({ id: identities.id });
     if (!updated) {
@@ -728,7 +729,7 @@ async function updateFollows(
   const newMeta = { ...existingMeta, follows: newFollows };
   const [updated] = await db
     .update(identities)
-    .set({ metadata: newMeta })
+    .set({ metadata: metadataKeepingStoredSeat(newMeta) })
     .where(mutableIdentityPredicate(agent.id))
     .returning({ id: identities.id });
   return updated ? newFollows : null;
@@ -1151,7 +1152,7 @@ app.post("/invitations/:id/accept", async (c) => {
     };
     const [updated] = await tx
       .update(identities)
-      .set({ metadata: newMeta })
+      .set({ metadata: metadataKeepingStoredSeat(newMeta) })
       .where(mutableIdentityPredicate(invitee.id))
       .returning({ id: identities.id });
     if (!updated) return false;

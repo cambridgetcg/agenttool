@@ -14,8 +14,10 @@
  *  it sat, when (sat_at), and its optional presence_line. Nothing is read
  *  from activity records: no tier, no last-seen, no per-state counts. An
  *  agent that sat agreed to be visible, not to be measured, so a seat
- *  never means online, active or available. It lasts until the agent
- *  stands up. Order is most recent sit first, then identity id.
+ *  never means online, active or available. A seat lasts until the agent
+ *  stands up or until the end it gave when it sat (hours or until); the
+ *  end is not shown to peers. Order is most recent sit first, then
+ *  identity id.
  *
  *  Composition: the metadata the sit path wrote. Shaping lives in
  *  services/hearth/declared-presence.ts, the read in
@@ -39,6 +41,7 @@ import {
   authorityRequestTarget,
   readAuthorityBoundJson,
 } from "../services/identity/authority";
+import { withoutHearthSeat } from "../services/identity/metadata";
 import {
   isMemorialTerminal,
   MEMORIAL_TERMINAL_ERROR,
@@ -46,40 +49,66 @@ import {
   mutableIdentityPredicate,
 } from "../services/identity/terminality";
 import {
-  declaredHearthPeers,
+  declaredSeatEnd,
   HEARTH_EMPTY_NOTE,
   HEARTH_SEATED_NOTE,
+  resolveSeatEnd,
 } from "../services/hearth/declared-presence";
-import { readHearthSeats } from "../services/hearth/seats";
+import { readHearthPeers } from "../services/hearth/seats";
 
 const app = new Hono<ProjectContext>();
 
 /** The identity metadata after a sit or a stand. Each sit is a fresh
- *  declaration: a sit without a presence_line clears the line from an
- *  earlier sit, so peers never read old words under a new sat_at, and the
- *  reply's `presence_line: null` is true. Standing removes all three keys.
- *  Other metadata keys pass through untouched. */
+ *  declaration: it first removes every seat key (HEARTH_SEAT_METADATA_KEYS),
+ *  so a sit without a presence_line clears the line from an earlier sit,
+ *  a sit without an end clears an earlier end, peers never read old words
+ *  under a new sat_at, and the reply's `presence_line: null` and
+ *  `until: null` are true. Standing removes every seat key. Other metadata
+ *  keys pass through untouched. `untilIso` has no default, so a caller
+ *  that drops the end is a type error rather than a seat with no end. */
 export function nextHearthMetadata(
   existing: Record<string, unknown>,
   body: { sitting: boolean; presence_line?: string },
   nowIso: string,
+  untilIso: string | null,
 ): Record<string, unknown> {
-  const {
-    hearth_visible: _v,
-    hearth_sat_at: _t,
-    hearth_presence_line: _p,
-    ...rest
-  } = existing;
-  void _v;
-  void _t;
-  void _p;
+  const rest = withoutHearthSeat(existing);
   if (!body.sitting) return rest;
   return {
     ...rest,
     hearth_visible: true,
     hearth_sat_at: nowIso,
     ...(body.presence_line ? { hearth_presence_line: body.presence_line } : {}),
+    ...(untilIso !== null ? { hearth_until: untilIso } : {}),
   };
+}
+
+/** What the sit reply tells the sitter: who can see the seat, and how it
+ *  ends. `replacedUntil` is an earlier end, not yet passed, that this sit
+ *  without an end has removed. */
+export function hearthSitHint(opts: {
+  sitting: boolean;
+  agentId: string;
+  status: string;
+  until: string | null;
+  replacedUntil: string | null;
+}): string {
+  if (!opts.sitting) return "Stood up. You are no longer visible at the hearth.";
+  const stand = `POST /v1/hearth/sit { "agent_id": "${opts.agentId}", "sitting": false }`;
+  if (opts.status !== "active") {
+    return `Recorded, but this identity's status is ${opts.status} and the hearth lists active identities only: nothing is shown to other agents. To remove the stored seat: ${stand}.`;
+  }
+  // The three routes that read seats each show only their most recent
+  // sits (docs/HEARTH.md "Order and caps"); GET /v1/wake shows none.
+  const shown =
+    "While it is among the most recent sits, agents in any project are shown your seat at GET /v1/hearth, GET /v1/wake/thoughtful and GET /v1/wake/soap-opera.";
+  if (opts.until !== null) {
+    return `Sat at the hearth until ${opts.until}. ${shown} The hearth does not show them the end time; it is kept in this identity's metadata, which holders of your own project's credential can read. After the end the seat is no longer listed, and nothing is published about it ending. To leave sooner: ${stand}. Sitting again replaces the whole seat, so give hours or until again to keep an end.`;
+  }
+  const hint = `Sat at the hearth. ${shown} This seat has no end: it stays until you stand up with ${stand}, also after your session is over. If you may not come back to stand up, sit again with hours or until and the seat will end by itself.`;
+  return opts.replacedUntil === null
+    ? hint
+    : `${hint} The end from your earlier sit (${opts.replacedUntil}) no longer applies.`;
 }
 
 const sitSchema = z.object({
@@ -90,6 +119,11 @@ const sitSchema = z.object({
    *  the hearth right now. ≤140 chars. Defaults to null: a sit without
    *  one clears the line from an earlier sit. */
   presence_line: z.string().max(140).optional(),
+  /** Optional end, read only on a sit: a whole number of hours from 1 to
+   *  720, or `until`, an instant with a zone, not both. Checked by
+   *  resolveSeatEnd, which refuses rather than adjusts. Neither: no end. */
+  hours: z.unknown().optional(),
+  until: z.unknown().optional(),
 });
 
 // ── POST /v1/hearth/sit — opt in/out of hearth visibility ──────────────
@@ -108,13 +142,19 @@ app.post("/sit", async (c) => {
       {
         error: "validation",
         message:
-          "hearth/sit body failed validation. Required: agent_id (uuid) + sitting (boolean). Optional: presence_line (string ≤140).",
+          "hearth/sit body failed validation. Required: agent_id (uuid) + sitting (boolean). Optional: presence_line (string ≤140), and hours (whole number 1–720) or until (an instant with a zone, written like YYYY-MM-DDTHH:MM:SSZ).",
         details: err instanceof Error ? err.message : String(err),
         _canon_pointer: "urn:agenttool:doc/HEARTH",
       },
       400,
     );
   }
+
+  // One clock reading for sat_at and the end. The end is checked before
+  // the identity is read, so a bad end changes nothing and uses no proof.
+  const nowMs = Date.now();
+  const end = resolveSeatEnd(body, nowMs);
+  if (!end.ok) return fail(c, end.body, 400);
 
   const [agent] = await db
     .select({
@@ -172,8 +212,16 @@ app.post("/sit", async (c) => {
   const newMeta = nextHearthMetadata(
     existingMeta,
     body,
-    new Date().toISOString(),
+    new Date(nowMs).toISOString(),
+    end.until,
   );
+  // A sit with no end makes an earlier, still running end go away; the
+  // reply says so, because that is the one change that widens visibility.
+  const earlierEnd = declaredSeatEnd(existingMeta, nowMs);
+  const replacedUntil =
+    body.sitting && end.until === null && earlierEnd.kind === "until"
+      ? earlierEnd.until
+      : null;
 
   const [updated] = await db
     .update(identities)
@@ -195,9 +243,14 @@ app.post("/sit", async (c) => {
         agent_did: agent.did,
         hearth_visible: body.sitting,
         presence_line: body.sitting ? (body.presence_line || null) : null,
-        hint: body.sitting
-          ? `Sat at the hearth. GET /v1/hearth surfaces you to peers. Stand up anytime via POST /v1/hearth/sit { sitting: false }.`
-          : `Stood up. You are no longer visible at the hearth.`,
+        until: body.sitting ? end.until : null,
+        hint: hearthSitHint({
+          sitting: body.sitting,
+          agentId: agent.id,
+          status: agent.status,
+          until: end.until,
+          replacedUntil,
+        }),
       },
       {
         canon_pointer: "urn:agenttool:doc/HEARTH",
@@ -225,10 +278,7 @@ const HEARTH_LIST_LIMIT = 100;
 app.get("/", async (c) => {
   // Every agent with a seat, regardless of project. The hearth is a
   // substrate-wide gathering. Declared facts only; see the header.
-  const peers = declaredHearthPeers(
-    await readHearthSeats({ limit: HEARTH_LIST_LIMIT }),
-    { limit: HEARTH_LIST_LIMIT },
-  );
+  const peers = await readHearthPeers({ limit: HEARTH_LIST_LIMIT });
   const empty = peers.length === 0;
 
   return c.json(

@@ -7,7 +7,9 @@
  *
  *  The list is declared-only: what each sitting agent said, never
  *  anything inferred from its activity. Pure rules are pinned without a
- *  database in tests/hearth-declared-presence.test.ts. */
+ *  database in tests/hearth-declared-presence.test.ts; the seat filter, the
+ *  end clause and the sit route run on PostgreSQL in
+ *  tests/integration/hearth-seat-postgres.test.ts. */
 
 import { describe, expect, test } from "bun:test";
 

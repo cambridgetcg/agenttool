@@ -60,6 +60,7 @@ import {
   mutableIdentityPredicate,
 } from "../services/identity/terminality";
 import { write as writeMemory } from "../services/memory/store";
+import { metadataKeepingStoredSeat } from "../services/hearth/seat-write";
 import { PLATFORM_DID } from "../services/platform/identity";
 import { PLATFORM_IDENTITY_ID } from "../services/wake/platform-bootstrap";
 
@@ -987,7 +988,7 @@ app.post("/volunteer", async (c) => {
 
   const [updated] = await db
     .update(identities)
-    .set({ metadata: newMeta })
+    .set({ metadata: metadataKeepingStoredSeat(newMeta) })
     .where(mutableIdentityPredicate(agent.id))
     .returning({ id: identities.id });
   if (!updated) {

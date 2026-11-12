@@ -502,6 +502,8 @@ describe("boring test spine", () => {
       "Prove mission participation, revocation and exact replay",
       "Create an isolated identity enrollment fixture database",
       "Prove atomic enrollment and concurrent replay refusal",
+      "Create an isolated hearth seat fixture database",
+      "Prove the seat filter, the sit route and seat-keeping metadata writers",
     ]);
     expect(
       postgresHold?.steps?.every(
@@ -563,6 +565,17 @@ describe("boring test spine", () => {
       "working-directory": "api",
       env: { IDENTITY_ENROLLMENT_TEST_DATABASE_URL: "postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_identity_enrollment_test" },
       run: "bun test tests/integration/identity-enrollment-postgres.test.ts",
+    });
+    expect(postgresHold?.steps?.[10]).toEqual({
+      name: "Create an isolated hearth seat fixture database",
+      env: { PGPASSWORD: "generation-hold-test-only" },
+      run: "createdb --host=127.0.0.1 --port=5432 --username=postgres agenttool_hearth_seat_test",
+    });
+    expect(postgresHold?.steps?.[11]).toEqual({
+      name: "Prove the seat filter, the sit route and seat-keeping metadata writers",
+      "working-directory": "api",
+      env: { HEARTH_SEAT_TEST_DATABASE_URL: "postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_hearth_seat_test" },
+      run: "bun test tests/integration/hearth-seat-postgres.test.ts",
     });
     expect(nativeSecret?.["runs-on"]).toBe("macos-15");
     expect(nativeSecret?.["timeout-minutes"]).toBe(8);

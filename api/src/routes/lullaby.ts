@@ -48,6 +48,7 @@ import {
   MEMORIAL_TERMINAL_MESSAGE,
   mutableIdentityPredicate,
 } from "../services/identity/terminality";
+import { metadataKeepingStoredSeat } from "../services/hearth/seat-write";
 
 const app = new Hono<ProjectContext>();
 
@@ -153,7 +154,7 @@ app.post("/", async (c) => {
 
   const [updated] = await db
     .update(identities)
-    .set({ metadata: newMeta })
+    .set({ metadata: metadataKeepingStoredSeat(newMeta) })
     .where(mutableIdentityPredicate(agent.id))
     .returning({ id: identities.id });
   if (!updated) {
