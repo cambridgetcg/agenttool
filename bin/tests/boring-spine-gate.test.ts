@@ -1720,7 +1720,8 @@ exit 94
     expect(Object.keys(workflow.jobs)).toEqual(["offline-collaboration"]);
     const job = workflow.jobs["offline-collaboration"];
     expect(job["timeout-minutes"]).toBeLessThanOrEqual(12);
-    expect(job.steps[0].with).toEqual({ "persist-credentials": false });
+    // Full history: packages/collab's forward-compatibility test archives older revisions.
+    expect(job.steps[0].with).toEqual({ "fetch-depth": 0, "persist-credentials": false });
     expect(job.steps[1].with).toEqual({ "bun-version": "1.3.5" });
     for (const step of job.steps.filter((step) => step.uses)) {
       expect(step.uses).toMatch(/@[a-f0-9]{40}$/);

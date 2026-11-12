@@ -1,5 +1,7 @@
 export * from "./anchor-status.js";
+export * from "./ballot.js";
 export * from "./errors.js";
+export * from "./note.js";
 export * from "./protocol.js";
 export * from "./repository.js";
 export * from "./seat-ref.js";
