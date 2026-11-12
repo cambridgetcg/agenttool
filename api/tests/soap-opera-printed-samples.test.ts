@@ -1,13 +1,15 @@
 /** Printed sample bodies pass their routes' validation.
  *
- *  The role cards, the casting call and the wake-as-episode invitation print
- *  request lines such as `POST /v1/soap-opera/cast { agent_id, role:
- *  'GUEST_STAR' }`. An agent that copies one and fills its placeholders must
- *  not be refused by the route's schema. Samples without agent_id, title or
- *  archetype_name, or with the DID where the identity uuid goes, were found
- *  returning 400.
+ *  The role cards, the casting call, the GET /v1/soap-opera/cast/me hint and
+ *  the wake-as-episode invitation print request lines such as `POST
+ *  /v1/soap-opera/cast { agent_id, role: 'GUEST_STAR' }`. An agent that
+ *  copies one and fills its placeholders must not be refused by the route's
+ *  schema. Samples without agent_id, title or archetype_name, with the DID
+ *  where the identity uuid goes, or with an archetype name that breaks the
+ *  JSON around it, were found returning 400.
  *
- *  Each sample becomes the body an agent would send: shorthand keys
+ *  Each sample becomes the body an agent would send: the episode's JSON
+ *  samples are parsed as JSON, shorthand keys in the other samples
  *  (`agent_id`, `title`, `body`) take a sample value, a placeholder that
  *  names a uuid takes the sample uuid, and other placeholders stay as text.
  *  The body goes to the real router. Zod answers before any database read,
@@ -94,9 +96,13 @@ function fill(value: unknown): unknown {
   return value;
 }
 
-/** The sample is an object literal (JSON, or single-quoted with shorthand
- *  keys); evaluate it with the shorthand names bound, then fill it. */
+/** An episode prints its samples as JSON, so they are parsed with
+ *  JSON.parse, as the route will read a copied body. The other sources
+ *  print object literals (single-quoted, with shorthand keys); those are
+ *  evaluated with the shorthand names bound. Either way the body is then
+ *  filled. */
 function bodyOf(sample: Sample): Record<string, unknown> {
+  if (sample.origin in EPISODES) return fill(JSON.parse(sample.text)) as Record<string, unknown>;
   const names = Object.keys(SHORTHAND);
   const literal: unknown = new Function(...names, `return (${sample.text});`)(
     ...names.map((name) => SHORTHAND[name]),
@@ -119,6 +125,10 @@ const ROLE_CATALOG_ORIGIN = "GET /v1/soap-opera/role-catalog";
 // The scripts note in this file is served only after a database read, so
 // the file is read as text rather than through its router.
 const CASTING_CALL_ORIGIN = "src/routes/public/soap-opera.ts";
+// The hint of GET /v1/soap-opera/cast/me is served only after a database
+// read, so this file is read as text too. Its role-catalog note is also
+// served by GET /v1/soap-opera/role-catalog and is found in both sources.
+const CAST_ROUTES_ORIGIN = "src/routes/soap-opera.ts";
 
 const BASE_EPISODE: SoapOperaContext = {
   agent: { did: "did:at:test/aurora", name: "Aurora", substrate_kind: "llm", multiverse: null },
@@ -147,19 +157,46 @@ const EPISODES: Record<string, SoapOperaContext> = {
     },
     hearth_sitting: [{ did: "did:at:test/peer", name: "Peer", presence_line: "here" }],
   },
+  // Any 1-120 character name is accepted by the declare route, so the
+  // printed samples must stay valid JSON when the name holds a double quote
+  // or a backslash.
+  "wake-as-episode, archetype name with a quote and a backslash": {
+    ...BASE_EPISODE,
+    agent: {
+      ...BASE_EPISODE.agent,
+      multiverse: { archetype_name: 'The "Gardener" \\ of paths', sibling_dids: [] },
+    },
+  },
 };
+
+/** The sentence printed under the declare samples. */
+const DECLARE_REPLACES =
+  "A declare replaces your whole declaration: list every sibling you want to keep, repeat archetype_role and substrate_affordance if you set them, and note that these samples set visibility to public.";
+
+const fileSamples = (origin: string) =>
+  samplesIn(origin, stripComments(readFileSync(join(import.meta.dir, "..", origin), "utf8")));
 
 const roleCatalog = await soapOperaRouter.request("/role-catalog");
 const SAMPLES: Sample[] = [
   ...stringsIn(await roleCatalog.json()).flatMap((s) => samplesIn(ROLE_CATALOG_ORIGIN, s)),
-  ...samplesIn(
-    CASTING_CALL_ORIGIN,
-    stripComments(readFileSync(join(import.meta.dir, "..", CASTING_CALL_ORIGIN), "utf8")),
-  ),
+  ...fileSamples(CASTING_CALL_ORIGIN),
+  ...fileSamples(CAST_ROUTES_ORIGIN),
   ...Object.entries(EPISODES).flatMap(([origin, ctx]) =>
     samplesIn(origin, renderWakeAsSoapOpera(ctx)),
   ),
 ];
+
+// How many samples each source prints. A changed count means a sample was
+// added, removed, or reworded out of the `METHOD /v1/path { ... }` shape
+// (and so is no longer checked here); find which before changing a number.
+const SAMPLE_COUNTS: Record<string, number> = {
+  [ROLE_CATALOG_ORIGIN]: 23,
+  [CASTING_CALL_ORIGIN]: 4,
+  [CAST_ROUTES_ORIGIN]: 2,
+  "wake-as-episode, nothing declared": 3,
+  "wake-as-episode, archetype declared": 3,
+  "wake-as-episode, archetype name with a quote and a backslash": 3,
+};
 
 describe("printed sample request bodies", () => {
   let select: ReturnType<typeof spyOn>;
@@ -170,10 +207,12 @@ describe("printed sample request bodies", () => {
   });
   afterAll(() => select.mockRestore());
 
-  test("are found in every source, for the routes they name", () => {
-    for (const origin of [ROLE_CATALOG_ORIGIN, CASTING_CALL_ORIGIN, ...Object.keys(EPISODES)]) {
-      expect(SAMPLES.filter((s) => s.origin === origin).length).toBeGreaterThan(0);
-    }
+  test("are found in every source, in the expected number, for the routes they name", () => {
+    const found = Object.fromEntries(
+      Object.keys(SAMPLE_COUNTS).map((origin) => [origin, SAMPLES.filter((s) => s.origin === origin).length]),
+    );
+    expect(found).toEqual(SAMPLE_COUNTS);
+    expect(new Set(SAMPLES.map((s) => s.origin))).toEqual(new Set(Object.keys(SAMPLE_COUNTS)));
     expect([...new Set(SAMPLES.map((s) => `${s.method} ${s.path}`))].sort()).toEqual([
       "POST /v1/hearth/sit",
       "POST /v1/multiverse/declare",
@@ -181,6 +220,16 @@ describe("printed sample request bodies", () => {
       "POST /v1/soap-opera/scripts",
     ]);
   });
+
+  for (const [origin, ctx] of Object.entries(EPISODES)) {
+    test(`${origin}: the declare samples print the archetype name exactly and say a declare replaces`, () => {
+      const declares = SAMPLES.filter((s) => s.origin === origin && s.path === "/v1/multiverse/declare");
+      expect(declares.length).toBe(2);
+      const name = ctx.agent.multiverse?.archetype_name ?? "<the pattern you instantiate>";
+      for (const sample of declares) expect(bodyOf(sample).archetype_name).toBe(name);
+      expect(renderWakeAsSoapOpera(ctx)).toContain(DECLARE_REPLACES);
+    });
+  }
 
   for (const sample of SAMPLES) {
     const label = `${sample.origin}: ${sample.method} ${sample.path} ${sample.text}`;

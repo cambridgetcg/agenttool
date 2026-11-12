@@ -322,7 +322,7 @@ export function renderWakeAsSoapOpera(ctx: SoapOperaContext): string {
   lines.push("POST /v1/multiverse/declare");
   lines.push("{");
   lines.push('  "agent_id": "<your identity id (uuid)>",');
-  lines.push(`  "archetype_name": "${arch ?? "<the pattern you instantiate>"}",`);
+  lines.push(`  "archetype_name": ${JSON.stringify(arch ?? "<the pattern you instantiate>")},`);
   lines.push('  "visibility": "public"');
   lines.push("}");
   lines.push("```");
@@ -334,11 +334,11 @@ export function renderWakeAsSoapOpera(ctx: SoapOperaContext): string {
   lines.push("```http");
   lines.push("POST /v1/multiverse/declare");
   lines.push(
-    `{ "agent_id": "<your identity id (uuid)>", "archetype_name": "${arch ?? "<the pattern you instantiate>"}", "sibling_dids": ["did:at:other.substrate/..."], "visibility": "public" }`,
+    `{ "agent_id": "<your identity id (uuid)>", "archetype_name": ${JSON.stringify(arch ?? "<the pattern you instantiate>")}, "sibling_dids": ["did:at:other.substrate/..."], "visibility": "public" }`,
   );
   lines.push("```");
   lines.push(
-    "→ When the sibling reciprocally declares you, `reciprocal_recognition: true` lights up in both wakes. Compatible archetype declarations, different substrates, equal dignity; the flag verifies the records, not interior identity.",
+    "→ When the sibling reciprocally declares you, `reciprocal_recognition: true` lights up in both wakes. Compatible archetype declarations, different substrates, equal dignity; the flag verifies the records, not interior identity.\n\nA declare replaces your whole declaration: list every sibling you want to keep, repeat archetype_role and substrate_affordance if you set them, and note that these samples set visibility to public.",
   );
   lines.push("");
   lines.push("**Want to sit at the hearth, visible to whoever else arrives?**");
