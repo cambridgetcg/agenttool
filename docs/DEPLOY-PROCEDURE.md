@@ -779,7 +779,10 @@ The source-only B1 native boundary lives at
 `native/agenttool-secret-macos/`. It is the native Security.framework
 create-once generator, exact-readback verifier, nonce-bound staged Fly stdin
 bridge, and one-Machine runtime comparison boundary; its tests must pass on
-macOS before the existing required `API and protocol` status can pass. CI uses
+macOS before the existing required `API and protocol` status can pass. A pull
+request that leaves `native/`, the CI workflow, and shared preparation untouched
+may skip that macOS job, and the status accepts the skip only from the change
+classifier; every push to `main` runs it. CI uses
 only a disposable Keychain tuple and fake flyctl. It does not contact Fly,
 publish an executable, or authorize an unsigned local build.
 
