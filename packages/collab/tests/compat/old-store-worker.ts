@@ -132,6 +132,11 @@ async function inspect(request: InspectRequest): Promise<Record<string, unknown>
           listed_ids: (listed.proposals as Array<{ proposal: { id: string } }>).map((status) => status.proposal.id),
           listed_unreadable: listed.unreadable,
           inbox_unreadable: typeof store.personInbox === "function" ? store.personInbox(request.workspace_id).unreadable : null,
+          // The badge (`person inbox` without --workspace): what it says, or leaves out, about this workspace.
+          inbox_summary: typeof store.personInboxSummary === "function"
+            ? (store.personInboxSummary() as Array<{ workspace_id: string }>)
+              .find((entry) => entry.workspace_id === request.workspace_id) ?? null
+            : null,
         };
       })
       : null;

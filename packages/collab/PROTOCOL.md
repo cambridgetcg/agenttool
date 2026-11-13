@@ -967,10 +967,13 @@ MCP server, the host bundle and the desk) before any writer is configured for co
 because older builds recompute positions themselves. An older build that reads proposals
 (`a8799aad` and later) refuses a consent/v2 proposal with `proposal_rule_unsupported`,
 which is right: it must not state a position under a rule it does not know. It lists the
-proposal under `unreadable` in proposal lists and the person's inbox, keeps verifying the
-chain, pages and acknowledges the new event type, routes it to no one, and keeps every
-other call working; builds before proposals ignore the table and the event. The
-forward-compatibility harness holds both. To stop opening consent/v2 proposals, unset the
+proposal under `unreadable` in proposal lists and in the person's workspace inbox
+(`person inbox --workspace <id>`), keeps verifying the chain, pages and acknowledges the
+new event type, routes it to no one, and keeps every other call working; builds before
+proposals ignore the table and the event. An older desk's inbox summary, the badge
+`person inbox` gives without `--workspace`, has no unreadable count: it neither counts nor
+names a consent/v2 proposal waiting for the person, which is one more reason to upgrade
+the desk first. The forward-compatibility harness holds all of this. To stop opening consent/v2 proposals, unset the
 variable: proposals already open keep their rule.
 
 Code: `src/consent-v2.ts`, the consent block of `src/store.ts`, `src/person-desk.ts`,

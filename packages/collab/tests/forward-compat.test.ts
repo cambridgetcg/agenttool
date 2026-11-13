@@ -677,6 +677,7 @@ interface Inspected {
     listed_ids: string[];
     listed_unreadable: Array<{ proposal_report_id: string; error: string }>;
     inbox_unreadable: Array<{ proposal_report_id: string; error: string }> | null;
+    inbox_summary: Record<string, unknown> | null;
   } | null;
   addressing: { new_type_hits: unknown[]; control_addressed: boolean | null; waiter_sequences: number[] } | null;
   paging: {
@@ -773,6 +774,11 @@ for (const revision of revisions) {
       for (const id of manifest.v2_proposals) expect(result.v2!.listed_ids).not.toContain(id);
       // The open one has no person act, so the person's inbox meets it and lists it apart.
       expect(result.v2!.inbox_unreadable).toEqual([{ proposal_report_id: open, error: "proposal_rule_unsupported" }]);
+      // The badge, though, has no unreadable count: it neither counts nor names the proposal (PROTOCOL.md
+      // "Rollout order"), which is one more reason to upgrade the desk before any writer opens one.
+      expect(result.v2!.inbox_summary).not.toBeNull();
+      expect(Object.keys(result.v2!.inbox_summary!).sort()).toEqual(["addressed_reports", "awaiting_person", "latest_report_id", "workspace_id"]);
+      for (const id of manifest.v2_proposals) expect(JSON.stringify(result.v2!.inbox_summary)).not.toContain(id);
       expect(agreed).not.toBe(open);
     }, TEST_TIMEOUT_MS);
 
