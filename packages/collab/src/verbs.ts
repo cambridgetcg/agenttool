@@ -2699,6 +2699,13 @@ function retiredPosition(status: ProposalStatus): boolean {
 }
 
 /**
+ * The reason in an advised set-aside command: the person replaces it. Double
+ * quotes and no apostrophe, so the command as given still parses in a shell
+ * and a typed reason such as "It's answered" fits the same quotes.
+ */
+const SET_ASIDE_REASON_PLACEHOLDER = '"<reason>"';
+
+/**
  * The journal the person's desk must open: named only when it is not the
  * one a plain shell would find, so the commands act on the proposal shown.
  */
@@ -2742,8 +2749,8 @@ export function forThePerson(
       ? {
         set_aside: settable.map((stance) => ({
           challenge: stance.id,
-          terminal: `agenttool-collab-host person set-aside --proposal ${id} --challenge ${stance.id} --reason '<the person's reason>'${db}`,
-          passkey: `agenttool-collab-host person ceremony --proposal ${id} --act set-aside --challenge ${stance.id} --reason '<the person's reason>'${db}`,
+          terminal: `agenttool-collab-host person set-aside --proposal ${id} --challenge ${stance.id} --reason ${SET_ASIDE_REASON_PLACEHOLDER}${db}`,
+          passkey: `agenttool-collab-host person ceremony --proposal ${id} --act set-aside --challenge ${stance.id} --reason ${SET_ASIDE_REASON_PLACEHOLDER}${db}`,
         })),
       }
       : {}),
@@ -2886,7 +2893,7 @@ export function proposalFacts(
       advice.push(
         `set_aside_possible: ${stance.id} still stands and no session of its voice is live${seen}, so no session can lift it now. ` +
           "Under consent/v2 the person can set it aside at the desk, giving a reason: " +
-          `agenttool-collab-host person set-aside --proposal ${status.proposal.id} --challenge ${stance.id} --reason '<the person's reason>'${db} ` +
+          `agenttool-collab-host person set-aside --proposal ${status.proposal.id} --challenge ${stance.id} --reason ${SET_ASIDE_REASON_PLACEHOLDER}${db} ` +
           `(for_the_person.set_aside). ${SET_ASIDE_FOR_THE_PERSON} ${replaceOrTell}`,
       );
     } else if (stance.standing && stance.flags.challenger_ended && !stance.voice_has_active_session) {

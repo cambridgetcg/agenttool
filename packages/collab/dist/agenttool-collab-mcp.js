@@ -42339,6 +42339,7 @@ var DECISION_DOES_NOT_ESTABLISH = [
 function retiredPosition(status) {
   return status.ai.position === "withdrawn" || status.ai.position === "superseded";
 }
+var SET_ASIDE_REASON_PLACEHOLDER = '"<reason>"';
 function personDeskDb(ctx) {
   const file2 = ctx.store.db.filename;
   if (!file2 || file2 === ":memory:")
@@ -42357,8 +42358,8 @@ function forThePerson(ctx, status, data) {
     ...settable.length > 0 ? {
       set_aside: settable.map((stance) => ({
         challenge: stance.id,
-        terminal: `agenttool-collab-host person set-aside --proposal ${id} --challenge ${stance.id} --reason '<the person's reason>'${db}`,
-        passkey: `agenttool-collab-host person ceremony --proposal ${id} --act set-aside --challenge ${stance.id} --reason '<the person's reason>'${db}`
+        terminal: `agenttool-collab-host person set-aside --proposal ${id} --challenge ${stance.id} --reason ${SET_ASIDE_REASON_PLACEHOLDER}${db}`,
+        passkey: `agenttool-collab-host person ceremony --proposal ${id} --act set-aside --challenge ${stance.id} --reason ${SET_ASIDE_REASON_PLACEHOLDER}${db}`
       }))
     } : {},
     note: FOR_THE_PERSON_NOTE,
@@ -42458,7 +42459,7 @@ function proposalFacts(ctx, data) {
   for (const stance of data.challenges) {
     if (v2 && stance.standing && stance.voice_has_live_session === false && !retiredPosition(status)) {
       const seen = stance.voice_last_seen_at ? `, last seen ${minutesSince(stance.voice_last_seen_at, at)} min ago` : "";
-      advice.push(`set_aside_possible: ${stance.id} still stands and no session of its voice is live${seen}, so no session can lift it now. ` + "Under consent/v2 the person can set it aside at the desk, giving a reason: " + `agenttool-collab-host person set-aside --proposal ${status.proposal.id} --challenge ${stance.id} --reason '<the person's reason>'${db} ` + `(for_the_person.set_aside). ${SET_ASIDE_FOR_THE_PERSON} ${replaceOrTell}`);
+      advice.push(`set_aside_possible: ${stance.id} still stands and no session of its voice is live${seen}, so no session can lift it now. ` + "Under consent/v2 the person can set it aside at the desk, giving a reason: " + `agenttool-collab-host person set-aside --proposal ${status.proposal.id} --challenge ${stance.id} --reason ${SET_ASIDE_REASON_PLACEHOLDER}${db} ` + `(for_the_person.set_aside). ${SET_ASIDE_FOR_THE_PERSON} ${replaceOrTell}`);
     } else if (stance.standing && stance.flags.challenger_ended && !stance.voice_has_active_session) {
       advice.push(`challenger_ended: ${stance.id} still stands, but its challenger's session has ended and no session of its voice is active, ` + `so no session can lift it. ${replaceOrTell}`);
     }

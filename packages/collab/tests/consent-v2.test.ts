@@ -861,7 +861,12 @@ describe("the notes views", () => {
     const { peer, proposal, challenge } = orphanedChallenge();
     const about = await tool(served(peer), "collab_inbox", { about: proposal.proposal.id });
     const line = about.advice.find((entry: string) => entry.startsWith(`set_aside_possible: ${challenge.id}`));
-    expect(line).toContain(`agenttool-collab-host person set-aside --proposal ${proposal.proposal.id} --challenge ${challenge.id} --reason '<the person's reason>'`);
+    const command = `agenttool-collab-host person set-aside --proposal ${proposal.proposal.id} --challenge ${challenge.id} --reason "<reason>"`;
+    expect(line).toContain(command);
+    // Every advised command parses in a shell as given.
+    for (const advised of [command, about.for_the_person.set_aside[0].terminal, about.for_the_person.set_aside[0].passkey]) {
+      expect(Bun.spawnSync(["bash", "-n", "-c", advised]).exitCode).toBe(0);
+    }
     expect(line).toContain("an agent that runs it");
     expect(about.for_the_person.set_aside).toEqual([expect.objectContaining({
       challenge: challenge.id,
