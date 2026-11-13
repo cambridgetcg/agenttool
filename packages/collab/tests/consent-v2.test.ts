@@ -767,6 +767,89 @@ describe("the notes views", () => {
     expect(Object.hasOwn(v1About.challenges[0], "voice_has_live_session")).toBe(false);
   });
 
+  test("a replacement carries a set-aside objection exactly as consent/v1 carries one never lifted", async () => {
+    const TERMS = { question: "Adopt X?", criteria: "C", extent: "E" };
+    const carriedBy = async (rule: string) => {
+      const env = { AGENTOOL_COLLAB_CONSENT_RULE: rule };
+      const alpha = session(`alpha-${rule}`);
+      const delta = session(`delta-${rule}`);
+      const first = await tool(served(alpha, env), "collab_propose", { ...TERMS, question: `Adopt X under ${rule}?` });
+      const challenged = await tool(served(delta, env), "collab_note", {
+        act: "challenge", text: "No: the rollout is unsafe.", re: first.ids.proposal,
+      });
+      store.endSession({ ...delta.credential, reason: "done" });
+      if (rule === CONSENT_RULE_V2) setAsideAtTerminal(first.ids.proposal, challenged.ids.report, "Its author left.");
+      const replacing = await tool(served(alpha, env), "collab_propose", {
+        ...TERMS, question: `Adopt X under ${rule}, revised?`, replaces: first.ids.proposal,
+      });
+      const [view] = store.personDeskProposalViews(alpha.workspace.id, [replacing.ids.proposal]);
+      if (!view || !("view" in view)) throw new Error("the desk could not read the replacement's view");
+      return { challenge: challenged.ids.report as string, replacing, spots: deskSoftSpots(view.view) };
+    };
+    const v1 = await carriedBy(CONSENT_RULE);
+    expect(v1.replacing.status.terms.known_conflicts).toContain(`report:${v1.challenge}`);
+    const v2 = await carriedBy(CONSENT_RULE_V2);
+    // The set-aside challenge was never lifted, so the replacement's terms carry it and every view names it.
+    expect(v2.replacing.status.terms.known_conflicts)
+      .toBe(`carried objection by delta-consent/v2 (report:${v2.challenge}): No: the rollout is unsafe.`);
+    expect(v2.spots.carried_objections).toEqual([expect.objectContaining({
+      challenge: v2.challenge, carried_in_terms: true, standing_on_replaced: false,
+    })]);
+    const line = v2.spots.lines.find((entry) => entry.startsWith(`Objection ${v2.challenge}`));
+    expect(line).toContain("was set aside by the person where it was raised");
+    expect(line).toContain(`Reason: "Its author left."`);
+    expect(v2.replacing.carried_objections).toEqual([expect.objectContaining({
+      challenge: v2.challenge, carried_in_terms: true, set_aside_on_replaced: expect.objectContaining({ reason: "Its author left." }),
+    })]);
+    // The objector is listed as v1 lists one, unreachable here because its session ended.
+    expect(v2.replacing.unreachable_objectors).toEqual([expect.objectContaining({ challenges: [v2.challenge] })]);
+    expect(v1.replacing.unreachable_objectors).toEqual([expect.objectContaining({ challenges: [v1.challenge] })]);
+    // A consent/v1 carry keeps its exact keys.
+    expect(Object.keys(v1.spots.carried_objections[0]!).sort()).toEqual([
+      "by", "carried_in_terms", "challenge", "counted_by_consent_v1", "raised_on", "re_raised_here", "standing_on_replaced", "statement", "voice",
+    ]);
+  });
+
+  test("a withdrawal is addressed to a set-aside objector, as consent/v1 addresses an unlifted one", async () => {
+    const withdrawnTo = async (rule: string) => {
+      const env = { AGENTOOL_COLLAB_CONSENT_RULE: rule };
+      const alpha = session(`alpha-${rule}`);
+      const delta = session(`delta-${rule}`);
+      const first = await tool(served(alpha, env), "collab_propose", { question: `Adopt Z under ${rule}?`, criteria: "C", extent: "E" });
+      const challenged = await tool(served(delta, env), "collab_note", { act: "challenge", text: "No: unsafe.", re: first.ids.proposal });
+      store.endSession({ ...delta.credential, reason: "done" });
+      if (rule === CONSENT_RULE_V2) setAsideAtTerminal(first.ids.proposal, challenged.ids.report, "Its author left.");
+      const withdrawn = await tool(served(alpha, env), "collab_note", { act: "withdraw", text: "Withdrawn after all.", re: first.ids.proposal });
+      const report = store.listReports(alpha.workspace.id).find((entry) => entry.id === withdrawn.ids.report)!;
+      return { to: report.to_session_id, delta: delta.session.id };
+    };
+    const v1 = await withdrawnTo(CONSENT_RULE);
+    expect(v1.to).toBe(v1.delta);
+    const v2 = await withdrawnTo(CONSENT_RULE_V2);
+    expect(v2.to).toBe(v2.delta);
+  });
+
+  test("a set-aside challenge its own voice lifted later is not carried, as consent/v1 carries no lifted one", async () => {
+    const env = { AGENTOOL_COLLAB_CONSENT_RULE: "consent/v2" };
+    const alpha = session("alpha");
+    const delta = session("delta");
+    const first = await tool(served(alpha, env), "collab_propose", { question: "Adopt Y?", criteria: "C", extent: "E" });
+    const challenged = await tool(served(delta, env), "collab_note", { act: "challenge", text: "No: unsafe.", re: first.ids.proposal });
+    advance(6 * HOUR + 1_000);
+    setAsideAtTerminal(first.ids.proposal, challenged.ids.report, "Its author went quiet.");
+    // The challenger's own session comes back and lifts its challenge.
+    const back = store.resumeSession(delta.credential);
+    store.appendReportForSession({
+      ...back.credential, idempotency_key: key("lift"), kind: "inference", body: "Answered; I lift it.",
+      relation: "resolves", target_report_id: challenged.ids.report,
+    });
+    const replacing = await tool(served(alpha, env), "collab_propose", {
+      question: "Adopt Y, revised?", criteria: "C", extent: "E", replaces: first.ids.proposal,
+    });
+    expect(replacing.status.terms.known_conflicts).toBeNull();
+    expect(replacing.carried_objections).toEqual([]);
+  });
+
   test("a set-aside challenge shows that it was set aside, when, on what basis and why, in every view", async () => {
     const { author, peer, proposal, challenge } = orphanedChallenge();
     setAsideAtTerminal(proposal.proposal.id, challenge.id, "Its author left.");

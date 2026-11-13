@@ -87,6 +87,8 @@ export interface DeskSoftSpots {
     re_raised_here: boolean;
     counted_by_consent_v1: false;
     statement: string;
+    /** consent/v2 only: the person set it aside where it was raised, and it was never lifted, so it is carried. */
+    set_aside_on_replaced?: { set_aside: string; at: string; basis: ProposalSetAside["basis"]; reason: string };
   }>;
   /** carriedObjectionsSentence(rule), present when carried_objections is not empty. */
   carried_note?: string;
@@ -235,12 +237,24 @@ export function deskSoftSpots(data: NoteProposalData): DeskSoftSpots {
         ? "the note has no Why and no Evidence lines."
         : "it has no evidence_refs and no confidence_basis (a legacy report's body is not read for reasons, so its text may still argue a case).")
   ), "stances with no reason or evidence"));
+  // consent/v2: where it was raised the person set it aside, and it was never lifted, so it is carried as a standing one is.
+  const setAsideThere = (entry: (typeof carried)[number]) => entry.set_aside_on_replaced
+    ? `the person set it aside there at ${entry.set_aside_on_replaced.created_at} (${entry.set_aside_on_replaced.basis}). `
+      + `Reason: ${quoted(entry.set_aside_on_replaced.reason)}`
+    : "";
   lines.push(...capped(carried.map((entry) =>
     (entry.carried_in_terms
       ? `Objection ${entry.challenge_id} by ${quoted(entry.by)}, raised on ${entry.raised_on}, is carried as text in these terms`
-        + (entry.standing_on_replaced ? " and still stands where it was raised" : " and no longer stands where it was raised")
-      : `Objection ${entry.challenge_id} by ${quoted(entry.by)} still stands on ${entry.raised_on}, which this proposal replaces, `
-        + "but is not in these terms")
+        + (entry.standing_on_replaced
+          ? " and still stands where it was raised"
+          : entry.set_aside_on_replaced
+            ? ` and was set aside by the person where it was raised: ${setAsideThere(entry)}`
+            : " and no longer stands where it was raised")
+      : entry.set_aside_on_replaced
+        ? `Objection ${entry.challenge_id} by ${quoted(entry.by)} was set aside by the person on ${entry.raised_on}, which this proposal replaces, `
+          + `but is not in these terms: ${setAsideThere(entry)}`
+        : `Objection ${entry.challenge_id} by ${quoted(entry.by)} still stands on ${entry.raised_on}, which this proposal replaces, `
+          + "but is not in these terms")
       + (entry.re_raised_here ? "; the same voice also challenges this proposal, and that challenge is counted" : "")
       + `. It said: ${quoted(excerpt(entry.statement))}`
   ), "carried objections"));
@@ -293,6 +307,16 @@ export function deskSoftSpots(data: NoteProposalData): DeskSoftSpots {
       re_raised_here: entry.re_raised_here,
       counted_by_consent_v1: false,
       statement: entry.statement,
+      ...(entry.set_aside_on_replaced
+        ? {
+          set_aside_on_replaced: {
+            set_aside: entry.set_aside_on_replaced.id,
+            at: entry.set_aside_on_replaced.created_at,
+            basis: entry.set_aside_on_replaced.basis,
+            reason: entry.set_aside_on_replaced.reason,
+          },
+        }
+        : {}),
     })),
     ...(carried.length > 0 ? { carried_note: carriedObjectionsSentence(rule) } : {}),
     ...(v2

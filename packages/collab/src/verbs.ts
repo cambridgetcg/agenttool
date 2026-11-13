@@ -2956,12 +2956,18 @@ export function proposalFacts(
       standing_on_replaced: entry.standing_on_replaced,
       re_raised_here: entry.re_raised_here,
       counted_by_consent_v1: false,
+      ...(entry.set_aside_on_replaced ? { set_aside_on_replaced: setAsideItem(entry.set_aside_on_replaced) } : {}),
     }));
     fields.carried_note = carriedObjectionsSentence(rule);
-    const shed = data.replaced.carried.filter((entry) => !entry.carried_in_terms && entry.standing_on_replaced);
+    // A challenge set aside where it was raised was never lifted, so it is shed as a standing one is (consent/v2).
+    const shed = data.replaced.carried.filter((entry) =>
+      !entry.carried_in_terms && (entry.standing_on_replaced || entry.set_aside_on_replaced !== undefined));
     if (shed.length > 0) {
+      const setAsideShed = shed.some((entry) => entry.set_aside_on_replaced !== undefined);
       advice.push(
-        `${shed.length} objection(s) still standing where they were raised, on the replaced proposal or one it replaced, are not in these terms: ` +
+        `${shed.length} objection(s) still standing where they were raised`
+          + (setAsideShed ? " (or set aside there by the person, never lifted)" : "")
+          + `, on the replaced proposal or one it replaced, are not in these terms: ` +
           `${shed.map((entry) => entry.challenge_id).join(", ")}. A replacement through collab_propose carries them.`,
       );
     }

@@ -9268,7 +9268,7 @@ class CollabStore extends CollabStoreCore {
         created_at: challenge.created_at,
         standing: !withdrawn && !lifted && setAsideId === undefined,
         answered_by_another_voice: !lifted && resolves.length > 0,
-        ...setAsideId !== undefined ? { set_aside_id: setAsideId } : {}
+        ...setAsideId !== undefined ? { set_aside_id: setAsideId, ...!withdrawn && !lifted ? { set_aside_only: true } : {} } : {}
       };
     });
   }
@@ -10144,7 +10144,8 @@ class CollabStore extends CollabStoreCore {
         answered_by_another_voice: view?.answered_by_another_voice === true,
         opened_at: status.terms.created_at,
         active_voices: activeVoices,
-        v2
+        v2,
+        set_aside_only: view?.set_aside_only === true
       });
     });
     const supports = stances.filter((stance) => stance.relation === "supports");
@@ -10170,8 +10171,20 @@ class CollabStore extends CollabStoreCore {
       const replacedId = status.proposal.target_report_id;
       const conflicts = status.terms.known_conflicts ?? "";
       const lineage = this.replacedLineage(workspaceId, replacedId);
+      const setAsideOn = new Map;
+      const setAsidesRead = new Set;
       const carried = [...challengeViews.values()].filter((challenge) => lineage.has(challenge.target_report_id)).map((challenge) => {
         const voice = challenge.from_session_id ? this.consentVoice(challenge.from_session_id, context) : null;
+        let setAside;
+        if (challenge.set_aside_only) {
+          if (!setAsidesRead.has(challenge.target_report_id)) {
+            setAsidesRead.add(challenge.target_report_id);
+            for (const entry of this.proposalSetAsides(workspaceId, challenge.target_report_id)) {
+              setAsideOn.set(entry.challenge_report_id, entry);
+            }
+          }
+          setAside = setAsideOn.get(challenge.id);
+        }
         return {
           challenge_id: challenge.id,
           raised_on: challenge.target_report_id,
@@ -10180,9 +10193,10 @@ class CollabStore extends CollabStoreCore {
           voice_id: voice,
           carried_in_terms: conflicts.includes(`report:${challenge.id}`),
           standing_on_replaced: challenge.standing,
-          re_raised_here: voice !== null && challenges.some((stance) => stance.standing && stance.voice_id === voice)
+          re_raised_here: voice !== null && challenges.some((stance) => stance.standing && stance.voice_id === voice),
+          ...setAside ? { set_aside_on_replaced: setAside } : {}
         };
-      }).filter((entry) => entry.carried_in_terms || entry.standing_on_replaced).map((entry) => ({ ...entry, statement: this.noteStanceStatement(workspaceId, this.requireReport(entry.challenge_id)) }));
+      }).filter((entry) => entry.carried_in_terms || entry.standing_on_replaced || entry.set_aside_on_replaced !== undefined).map((entry) => ({ ...entry, statement: this.noteStanceStatement(workspaceId, this.requireReport(entry.challenge_id)) }));
       replaced = { proposal_id: replacedId, carried };
     }
     return {
@@ -10255,7 +10269,7 @@ class CollabStore extends CollabStoreCore {
       ...v2 ? {
         voice_has_live_session: voice !== null && v2.live_voices.has(voice),
         voice_last_seen_at: voice !== null ? v2.last_seen(voice) : null,
-        ...setAside ? { set_aside: setAside } : {}
+        ...setAside ? { set_aside: setAside, ...facts.set_aside_only ? { set_aside_only: true } : {} } : {}
       } : {},
       id: report.id,
       relation: report.relation,
@@ -10674,7 +10688,8 @@ function deskSoftSpots(data) {
   }), "flagged supports"));
   lines.push(...capped(ended.map((stance) => `Challenge ${stance.id} by ${quoted(stance.from_actor)} still stands, but its challenger's session has ended` + (stance.voice_has_active_session ? "; another session of the same voice is active and can lift it." : ", and no session of its voice is active to lift it.") + ` While it stands the position cannot be consented.` + (v2 && stance.voice_has_live_session === false ? " Under consent/v2 the person can set it aside at the desk, with a reason, while no session of its voice is live." : "") + ` It said: ${quoted(excerpt(stance.statement))}`), "challenges whose challenger's session has ended"));
   lines.push(...capped(ungrounded.map((stance) => `${stance.relation === "supports" ? "Support" : "Challenge"} ${stance.id} by ${quoted(stance.from_actor)} ` + `(${counted(stance.counted, rule)}) gives no reason and no evidence: ` + (stance.grounded_by === "note" ? "the note has no Why and no Evidence lines." : "it has no evidence_refs and no confidence_basis (a legacy report's body is not read for reasons, so its text may still argue a case).")), "stances with no reason or evidence"));
-  lines.push(...capped(carried.map((entry) => (entry.carried_in_terms ? `Objection ${entry.challenge_id} by ${quoted(entry.by)}, raised on ${entry.raised_on}, is carried as text in these terms` + (entry.standing_on_replaced ? " and still stands where it was raised" : " and no longer stands where it was raised") : `Objection ${entry.challenge_id} by ${quoted(entry.by)} still stands on ${entry.raised_on}, which this proposal replaces, ` + "but is not in these terms") + (entry.re_raised_here ? "; the same voice also challenges this proposal, and that challenge is counted" : "") + `. It said: ${quoted(excerpt(entry.statement))}`), "carried objections"));
+  const setAsideThere = (entry) => entry.set_aside_on_replaced ? `the person set it aside there at ${entry.set_aside_on_replaced.created_at} (${entry.set_aside_on_replaced.basis}). ` + `Reason: ${quoted(entry.set_aside_on_replaced.reason)}` : "";
+  lines.push(...capped(carried.map((entry) => (entry.carried_in_terms ? `Objection ${entry.challenge_id} by ${quoted(entry.by)}, raised on ${entry.raised_on}, is carried as text in these terms` + (entry.standing_on_replaced ? " and still stands where it was raised" : entry.set_aside_on_replaced ? ` and was set aside by the person where it was raised: ${setAsideThere(entry)}` : " and no longer stands where it was raised") : entry.set_aside_on_replaced ? `Objection ${entry.challenge_id} by ${quoted(entry.by)} was set aside by the person on ${entry.raised_on}, which this proposal replaces, ` + `but is not in these terms: ${setAsideThere(entry)}` : `Objection ${entry.challenge_id} by ${quoted(entry.by)} still stands on ${entry.raised_on}, which this proposal replaces, ` + "but is not in these terms") + (entry.re_raised_here ? "; the same voice also challenges this proposal, and that challenge is counted" : "") + `. It said: ${quoted(excerpt(entry.statement))}`), "carried objections"));
   if (carried.length > 0)
     lines.push(carriedObjectionsSentence(rule));
   lines.push(...capped(setAside.map((stance) => {
@@ -10719,7 +10734,15 @@ function deskSoftSpots(data) {
       standing_on_replaced: entry.standing_on_replaced,
       re_raised_here: entry.re_raised_here,
       counted_by_consent_v1: false,
-      statement: entry.statement
+      statement: entry.statement,
+      ...entry.set_aside_on_replaced ? {
+        set_aside_on_replaced: {
+          set_aside: entry.set_aside_on_replaced.id,
+          at: entry.set_aside_on_replaced.created_at,
+          basis: entry.set_aside_on_replaced.basis,
+          reason: entry.set_aside_on_replaced.reason
+        }
+      } : {}
     })),
     ...carried.length > 0 ? { carried_note: carriedObjectionsSentence(rule) } : {},
     ...v2 ? {

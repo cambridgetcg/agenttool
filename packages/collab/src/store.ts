@@ -4790,7 +4790,7 @@ export class CollabStoreCore {
   }
 
   /** A proposal's set-asides in journal order, as the journal recorded them. */
-  private proposalSetAsides(workspaceId: string, proposalReportId: string): ProposalSetAside[] {
+  protected proposalSetAsides(workspaceId: string, proposalReportId: string): ProposalSetAside[] {
     // Only rows naming a challenge to this very proposal: the act checks it,
     // and a row that says otherwise is not read as setting anything aside.
     return (this.db.query(`

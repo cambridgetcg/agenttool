@@ -1543,7 +1543,9 @@ export class CollabStore extends CollabStoreCore {
         created_at: challenge.created_at,
         standing: !withdrawn && !lifted && setAsideId === undefined,
         answered_by_another_voice: !lifted && resolves.length > 0,
-        ...(setAsideId !== undefined ? { set_aside_id: setAsideId } : {}),
+        ...(setAsideId !== undefined
+          ? { set_aside_id: setAsideId, ...(!withdrawn && !lifted ? { set_aside_only: true as const } : {}) }
+          : {}),
       };
     });
   }
@@ -2670,6 +2672,7 @@ export class CollabStore extends CollabStoreCore {
         opened_at: status.terms.created_at,
         active_voices: activeVoices,
         v2,
+        set_aside_only: view?.set_aside_only === true,
       });
     });
     const supports = stances.filter((stance) => stance.relation === "supports");
@@ -2700,11 +2703,26 @@ export class CollabStore extends CollabStoreCore {
       // again, and one a replacement shed still stands where it was raised,
       // so the challenges on every proposal this one descends from are read:
       // each is listed when these terms carry it or it still stands.
+      // A challenge the person set aside (consent/v2) was never lifted, so it
+      // is carried and listed as one that still stands would be: the
+      // set-aside changes what blocks, never what the next terms carry.
       const lineage = this.replacedLineage(workspaceId, replacedId);
+      const setAsideOn = new Map<string, ProposalSetAside>();
+      const setAsidesRead = new Set<string>();
       const carried = [...challengeViews.values()]
         .filter((challenge) => lineage.has(challenge.target_report_id))
         .map((challenge) => {
           const voice = challenge.from_session_id ? this.consentVoice(challenge.from_session_id, context) : null;
+          let setAside: ProposalSetAside | undefined;
+          if (challenge.set_aside_only) {
+            if (!setAsidesRead.has(challenge.target_report_id)) {
+              setAsidesRead.add(challenge.target_report_id);
+              for (const entry of this.proposalSetAsides(workspaceId, challenge.target_report_id)) {
+                setAsideOn.set(entry.challenge_report_id, entry);
+              }
+            }
+            setAside = setAsideOn.get(challenge.id);
+          }
           return {
             challenge_id: challenge.id,
             raised_on: challenge.target_report_id,
@@ -2714,9 +2732,10 @@ export class CollabStore extends CollabStoreCore {
             carried_in_terms: conflicts.includes(`report:${challenge.id}`),
             standing_on_replaced: challenge.standing,
             re_raised_here: voice !== null && challenges.some((stance) => stance.standing && stance.voice_id === voice),
+            ...(setAside ? { set_aside_on_replaced: setAside } : {}),
           };
         })
-        .filter((entry) => entry.carried_in_terms || entry.standing_on_replaced)
+        .filter((entry) => entry.carried_in_terms || entry.standing_on_replaced || entry.set_aside_on_replaced !== undefined)
         .map((entry) => ({ ...entry, statement: this.noteStanceStatement(workspaceId, this.requireReport(entry.challenge_id)) }));
       replaced = { proposal_id: replacedId, carried };
     }
@@ -2776,6 +2795,8 @@ export class CollabStore extends CollabStoreCore {
         live_voices: ReadonlySet<string>;
         last_seen: (voice: string) => string | null;
       } | null;
+      /** consent/v2: the set-aside is all that keeps this challenge from standing. */
+      set_aside_only?: boolean;
     },
   ): NoteStanceView {
     const marked = this.reportIsMarked(workspaceId, report);
@@ -2812,7 +2833,7 @@ export class CollabStore extends CollabStoreCore {
         ? {
           voice_has_live_session: voice !== null && v2.live_voices.has(voice),
           voice_last_seen_at: voice !== null ? v2.last_seen(voice) : null,
-          ...(setAside ? { set_aside: setAside } : {}),
+          ...(setAside ? { set_aside: setAside, ...(facts.set_aside_only ? { set_aside_only: true as const } : {}) } : {}),
         }
         : {}),
       id: report.id,
@@ -3049,6 +3070,13 @@ export interface NoteChallengeView {
   answered_by_another_voice: boolean;
   /** consent/v2: the person set it aside (that set-aside's id), so it no longer stands. */
   set_aside_id?: string;
+  /**
+   * consent/v2: only the set-aside keeps it from standing; it was neither
+   * withdrawn nor lifted by its voice. Such a challenge was never lifted, so
+   * what consent/v1 does with a standing one (carry it into a replacement,
+   * tell its author of answers) it still does. Internal: no view prints it.
+   */
+  set_aside_only?: true;
 }
 
 export interface NoteWaitingEntry {
@@ -3369,6 +3397,8 @@ export interface NoteStanceView {
   voice_last_seen_at?: string | null;
   /** consent/v2 challenges only: the person set it aside, so it no longer stands; it stays on the record. */
   set_aside?: ProposalSetAside;
+  /** With set_aside: neither withdrawn nor lifted by its voice, so it is carried as a standing one is. Internal. */
+  set_aside_only?: true;
   flags: {
     by_author?: true;
     same_seat_as_author?: true;
@@ -3410,6 +3440,12 @@ export interface NoteCarriedObjection {
   statement: string;
   /** The same voice stands against the new proposal too. */
   re_raised_here: boolean;
+  /**
+   * consent/v2 only: the person set this challenge aside where it was raised,
+   * and it was neither withdrawn nor lifted by its voice. It was never
+   * lifted, so it is carried as a standing one would be.
+   */
+  set_aside_on_replaced?: ProposalSetAside;
 }
 
 export interface NoteProposalData {

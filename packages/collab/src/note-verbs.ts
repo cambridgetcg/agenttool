@@ -1191,7 +1191,9 @@ function planNote(
       report.target_report_id = withdrawn.id;
       report.task_id = withdrawn.view.report.task_id;
       // The objectors are the ones the withdrawal answers; the latest standing one hears it.
-      const objectors = withdrawn.view.challenges.filter((challenge) => challenge.standing && challenge.from_session_id && challenge.from_session_id !== me);
+      // A challenge the person set aside (consent/v2) was never lifted, so its author hears it too.
+      const objectors = withdrawn.view.challenges.filter((challenge) => (challenge.standing || challenge.set_aside_only)
+        && challenge.from_session_id && challenge.from_session_id !== me);
       const latest = objectors.at(-1);
       let addressee = BROADCAST;
       if (latest) {

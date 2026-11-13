@@ -39089,7 +39089,7 @@ class CollabStore extends CollabStoreCore {
         created_at: challenge.created_at,
         standing: !withdrawn && !lifted && setAsideId === undefined,
         answered_by_another_voice: !lifted && resolves.length > 0,
-        ...setAsideId !== undefined ? { set_aside_id: setAsideId } : {}
+        ...setAsideId !== undefined ? { set_aside_id: setAsideId, ...!withdrawn && !lifted ? { set_aside_only: true } : {} } : {}
       };
     });
   }
@@ -39965,7 +39965,8 @@ class CollabStore extends CollabStoreCore {
         answered_by_another_voice: view?.answered_by_another_voice === true,
         opened_at: status.terms.created_at,
         active_voices: activeVoices,
-        v2
+        v2,
+        set_aside_only: view?.set_aside_only === true
       });
     });
     const supports = stances.filter((stance) => stance.relation === "supports");
@@ -39991,8 +39992,20 @@ class CollabStore extends CollabStoreCore {
       const replacedId = status.proposal.target_report_id;
       const conflicts = status.terms.known_conflicts ?? "";
       const lineage = this.replacedLineage(workspaceId, replacedId);
+      const setAsideOn = new Map;
+      const setAsidesRead = new Set;
       const carried = [...challengeViews.values()].filter((challenge) => lineage.has(challenge.target_report_id)).map((challenge) => {
         const voice = challenge.from_session_id ? this.consentVoice(challenge.from_session_id, context) : null;
+        let setAside;
+        if (challenge.set_aside_only) {
+          if (!setAsidesRead.has(challenge.target_report_id)) {
+            setAsidesRead.add(challenge.target_report_id);
+            for (const entry of this.proposalSetAsides(workspaceId, challenge.target_report_id)) {
+              setAsideOn.set(entry.challenge_report_id, entry);
+            }
+          }
+          setAside = setAsideOn.get(challenge.id);
+        }
         return {
           challenge_id: challenge.id,
           raised_on: challenge.target_report_id,
@@ -40001,9 +40014,10 @@ class CollabStore extends CollabStoreCore {
           voice_id: voice,
           carried_in_terms: conflicts.includes(`report:${challenge.id}`),
           standing_on_replaced: challenge.standing,
-          re_raised_here: voice !== null && challenges.some((stance) => stance.standing && stance.voice_id === voice)
+          re_raised_here: voice !== null && challenges.some((stance) => stance.standing && stance.voice_id === voice),
+          ...setAside ? { set_aside_on_replaced: setAside } : {}
         };
-      }).filter((entry) => entry.carried_in_terms || entry.standing_on_replaced).map((entry) => ({ ...entry, statement: this.noteStanceStatement(workspaceId, this.requireReport(entry.challenge_id)) }));
+      }).filter((entry) => entry.carried_in_terms || entry.standing_on_replaced || entry.set_aside_on_replaced !== undefined).map((entry) => ({ ...entry, statement: this.noteStanceStatement(workspaceId, this.requireReport(entry.challenge_id)) }));
       replaced = { proposal_id: replacedId, carried };
     }
     return {
@@ -40076,7 +40090,7 @@ class CollabStore extends CollabStoreCore {
       ...v2 ? {
         voice_has_live_session: voice !== null && v2.live_voices.has(voice),
         voice_last_seen_at: voice !== null ? v2.last_seen(voice) : null,
-        ...setAside ? { set_aside: setAside } : {}
+        ...setAside ? { set_aside: setAside, ...facts.set_aside_only ? { set_aside_only: true } : {} } : {}
       } : {},
       id: report.id,
       relation: report.relation,
@@ -42472,12 +42486,14 @@ function proposalFacts(ctx, data) {
       carried_in_terms: entry.carried_in_terms,
       standing_on_replaced: entry.standing_on_replaced,
       re_raised_here: entry.re_raised_here,
-      counted_by_consent_v1: false
+      counted_by_consent_v1: false,
+      ...entry.set_aside_on_replaced ? { set_aside_on_replaced: setAsideItem(entry.set_aside_on_replaced) } : {}
     }));
     fields.carried_note = carriedObjectionsSentence(rule);
-    const shed = data.replaced.carried.filter((entry) => !entry.carried_in_terms && entry.standing_on_replaced);
+    const shed = data.replaced.carried.filter((entry) => !entry.carried_in_terms && (entry.standing_on_replaced || entry.set_aside_on_replaced !== undefined));
     if (shed.length > 0) {
-      advice.push(`${shed.length} objection(s) still standing where they were raised, on the replaced proposal or one it replaced, are not in these terms: ` + `${shed.map((entry) => entry.challenge_id).join(", ")}. A replacement through collab_propose carries them.`);
+      const setAsideShed = shed.some((entry) => entry.set_aside_on_replaced !== undefined);
+      advice.push(`${shed.length} objection(s) still standing where they were raised` + (setAsideShed ? " (or set aside there by the person, never lifted)" : "") + `, on the replaced proposal or one it replaced, are not in these terms: ` + `${shed.map((entry) => entry.challenge_id).join(", ")}. A replacement through collab_propose carries them.`);
     }
   }
   if (status.ai.position === "superseded" && status.ai.obsoleted_by_report_id) {
@@ -43561,7 +43577,7 @@ function planNote(ctx, input, context) {
       const report = base("withdraws");
       report.target_report_id = withdrawn.id;
       report.task_id = withdrawn.view.report.task_id;
-      const objectors = withdrawn.view.challenges.filter((challenge) => challenge.standing && challenge.from_session_id && challenge.from_session_id !== me);
+      const objectors = withdrawn.view.challenges.filter((challenge) => (challenge.standing || challenge.set_aside_only) && challenge.from_session_id && challenge.from_session_id !== me);
       const latest = objectors.at(-1);
       let addressee = BROADCAST;
       if (latest) {
@@ -45196,9 +45212,9 @@ function carriedLine(objection) {
 function objectionsToCarry(replaced) {
   if (!replaced)
     return [];
-  const direct = replaced.challenges.filter((challenge) => challenge.standing).map((challenge) => ({ id: challenge.id, by: challenge.from_actor, statement: challenge.statement }));
+  const direct = replaced.challenges.filter((challenge) => challenge.standing || challenge.set_aside_only === true).map((challenge) => ({ id: challenge.id, by: challenge.from_actor, statement: challenge.statement }));
   const seen = new Set(direct.map((objection) => objection.id));
-  const forwarded = (replaced.replaced?.carried ?? []).filter((entry) => entry.standing_on_replaced && !seen.has(entry.challenge_id)).map((entry) => ({ id: entry.challenge_id, by: entry.by, statement: entry.statement }));
+  const forwarded = (replaced.replaced?.carried ?? []).filter((entry) => (entry.standing_on_replaced || entry.set_aside_on_replaced !== undefined) && !seen.has(entry.challenge_id)).map((entry) => ({ id: entry.challenge_id, by: entry.by, statement: entry.statement }));
   return [...direct, ...forwarded];
 }
 function carriedConflicts(own, carried) {

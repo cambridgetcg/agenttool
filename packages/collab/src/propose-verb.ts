@@ -202,15 +202,18 @@ function carriedLine(objection: Objection): string {
  * that still stands where it was raised, whether an earlier replacement
  * carried it or shed it (one opened through collab_proposal_open carries
  * nothing), so no replacement sheds an objection that was never lifted.
+ * Under consent/v2 a challenge the person set aside, and that was not
+ * withdrawn or lifted since, was never lifted either: it no longer blocks
+ * where it was raised, but it is carried.
  */
 function objectionsToCarry(replaced: NoteProposalData | null): Objection[] {
   if (!replaced) return [];
   const direct = replaced.challenges
-    .filter((challenge) => challenge.standing)
+    .filter((challenge) => challenge.standing || challenge.set_aside_only === true)
     .map((challenge) => ({ id: challenge.id, by: challenge.from_actor, statement: challenge.statement }));
   const seen = new Set(direct.map((objection) => objection.id));
   const forwarded = (replaced.replaced?.carried ?? [])
-    .filter((entry) => entry.standing_on_replaced && !seen.has(entry.challenge_id))
+    .filter((entry) => (entry.standing_on_replaced || entry.set_aside_on_replaced !== undefined) && !seen.has(entry.challenge_id))
     .map((entry) => ({ id: entry.challenge_id, by: entry.by, statement: entry.statement }));
   return [...direct, ...forwarded];
 }
