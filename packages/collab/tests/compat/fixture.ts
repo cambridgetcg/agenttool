@@ -11,7 +11,10 @@ import type { CollabStore } from "../../src/store-notes.js";
  * harness always exercises every storage addition that exists.
  */
 
-/** Event types Collab Notes adds (spec 8.2). Older builds have never seen them. */
+/**
+ * Event types added since a8799aad: Collab Notes' (spec 8.2) and consent/v2's
+ * one. Older builds have never seen them.
+ */
 export const COLLAB_NOTES_EVENT_TYPES = [
   "purpose.declared",
   "evidence.cited",
@@ -19,14 +22,17 @@ export const COLLAB_NOTES_EVENT_TYPES = [
   "ballot.cast",
   "ballot.revealed",
   "ballot.closed",
+  "proposal.challenge_set_aside",
 ] as const;
 
 /**
- * Tables Collab Notes adds (spec 8.1). They hold view state only, so dropping
- * them must lose nothing the journal records. A slice that creates one of
- * these lists it here; the harness refuses any other new table.
+ * Tables added since a8799aad: Collab Notes' (spec 8.1) and consent/v2's
+ * proposal_set_asides, which is rebuilt from its events on every open. They
+ * hold view state only, so dropping them must lose nothing the journal
+ * records. A slice that creates one of these lists it here; the harness
+ * refuses any other new table.
  */
-export const VIEW_STATE_TABLES: string[] = ["note_marks", "note_shown", "note_ballots"];
+export const VIEW_STATE_TABLES: string[] = ["note_marks", "note_shown", "note_ballots", "proposal_set_asides"];
 
 /** A clock the store reads; steps advance it so every run has the same shape. */
 export class FixtureClock {
@@ -78,6 +84,12 @@ export interface FixtureManifest {
   decisions: string[];
   /** Sealed ballots collab_poll opened and the reveal closed, for the ballot_result view. */
   ballots: string[];
+  /**
+   * consent/v2 proposals: one with a set-aside and the person's agreement,
+   * one open with no person act. Older builds must refuse them by code and
+   * list them as unreadable, and keep every other call working.
+   */
+  v2_proposals: string[];
 }
 
 type ManifestDraft = Partial<Omit<FixtureManifest, "format" | "steps" | "produced_types" | "event_types" | "head_sequence">> & {
@@ -85,6 +97,7 @@ type ManifestDraft = Partial<Omit<FixtureManifest, "format" | "steps" | "produce
   notes_sessions: string[];
   decisions: string[];
   ballots: string[];
+  v2_proposals: string[];
 };
 
 export interface FixtureContext {
@@ -865,6 +878,89 @@ export const FIXTURE_STEPS: FixtureStep[] = [
       context.manifest.ballots.push(ballot);
     },
   },
+  {
+    // consent/v2: a proposal opened by a host configured with
+    // AGENTOOL_COLLAB_CONSENT_RULE=consent/v2, supported by a peer and
+    // challenged by a session that then leaves; the person sets that
+    // challenge aside at the terminal and, after the close, agrees. A second
+    // consent/v2 proposal stays open with no person act, so an older build's
+    // inbox meets one too.
+    name: "consent-v2-set-aside",
+    produces: ["proposal.challenge_set_aside"],
+    async run(context) {
+      const v2 = { AGENTOOL_COLLAB_CONSENT_RULE: "consent/v2" };
+      const author = "v2-author-process";
+      const peer = "notes-peer-process";
+      const challenger = "v2-challenger-process";
+      await context.tool(author, "collab_arrive", {
+        root_path: context.root,
+        name: "fixture-v2-author",
+        purpose: "opens consent/v2 proposals",
+      }, v2);
+      const opened = await context.tool(author, "collab_propose", {
+        question: "Should the fixture keep a consent/v2 proposal with a set-aside?\n\nOlder builds must refuse it by code, 協作 🏮.",
+        criteria: "Older builds list it as unreadable and keep working.",
+        extent: "The fixture journal only.",
+        closes: 600,
+      });
+      if (opened.rule !== "consent/v2") throw new Error("the fixture's consent/v2 host did not open a consent/v2 proposal");
+      const proposalId = (opened.ids as { proposal: string }).proposal;
+      await context.tool(peer, "collab_note", {
+        act: "support",
+        text: "The consent/v2 fixture proposal stands as stated.",
+        re: proposalId,
+        why: [{ text: "its terms read back", basis: "seen" }],
+      });
+      await context.tool(challenger, "collab_arrive", {
+        root_path: context.root,
+        name: "fixture-v2-challenger",
+        purpose: "challenges and then leaves",
+      });
+      const challenged = await context.tool(challenger, "collab_note", {
+        act: "challenge",
+        text: "No: the fixture should not hold a consent/v2 proposal yet.",
+        re: proposalId,
+      });
+      const challengeId = (challenged.ids as { report: string }).report;
+      await context.tool(challenger, "collab_done", { text: "Leaving the fixture.", outcome: "leave" });
+      const reason = "The challenger left; the fixture exists to hold this.";
+      const shown = context.store.personSetAsideChallenge({
+        proposal_report_id: proposalId,
+        challenge_report_id: challengeId,
+        reason,
+      });
+      context.store.recordSetAsideAtTerminal({
+        proposal_report_id: proposalId,
+        proposal_sha256: shown.proposal_sha256,
+        challenge_report_id: challengeId,
+        challenge_sha256: shown.challenge_sha256,
+        reason,
+        expected_ai_snapshot: shown.ai_snapshot,
+      });
+      if ((context.store.db.query(`SELECT COUNT(*) AS count FROM proposal_set_asides`).get() as { count: number }).count === 0) {
+        throw new Error("fixture view table proposal_set_asides is empty");
+      }
+      // After the close, one qualifying support and the challenge set aside: consented.
+      context.clock.advance(601_000);
+      const agree = context.store.personActChallenge({ proposal_report_id: proposalId, act: "agree" });
+      if (!agree.ai_snapshot.set_aside_challenge_report_ids?.includes(challengeId)) {
+        throw new Error("the fixture's agreement does not bind its set-aside");
+      }
+      const status = context.store.recordPersonActAtTerminal({
+        proposal_report_id: proposalId,
+        proposal_sha256: agree.proposal_sha256,
+        act: "agree",
+        expected_ai_snapshot: agree.ai_snapshot,
+      });
+      if (!status.may_proceed) throw new Error("the fixture's consent/v2 agreement did not let it proceed");
+      const open = await context.tool(author, "collab_propose", {
+        question: "Should the fixture keep an open consent/v2 proposal?",
+        criteria: "Older builds list it as unreadable in the person's inbox.",
+        extent: "The fixture journal only.",
+      });
+      context.manifest.v2_proposals.push(proposalId, (open.ids as { proposal: string }).proposal);
+    },
+  },
   // Later slices append their steps here.
 ];
 
@@ -881,7 +977,7 @@ export async function exerciseFixture(
   const ids = new Map<string, string>();
   const tasks = new Map<string, Task>();
   const servers = new Map<string, ReturnType<typeof buildCollabMcpServer>>();
-  const manifest: ManifestDraft = { proposals: [], notes_sessions: [], decisions: [], ballots: [] };
+  const manifest: ManifestDraft = { proposals: [], notes_sessions: [], decisions: [], ballots: [], v2_proposals: [] };
   const produced = new Set<string>();
   const ran: string[] = [];
   const names = new Set<string>();
@@ -999,6 +1095,7 @@ export async function exerciseFixture(
     review_task_id: manifest.review_task_id!,
     decisions: manifest.decisions,
     ballots: manifest.ballots,
+    v2_proposals: manifest.v2_proposals,
   };
 }
 
@@ -1011,6 +1108,11 @@ export async function exerciseFixture(
 export const FIXTURE_VIEWS: Record<string, (store: CollabStore, manifest: FixtureManifest) => unknown> = {
   proposal_status: (store, manifest) =>
     manifest.proposals.map((id) => store.proposalStatus(manifest.workspace_id, id)),
+  // consent/v2 statuses, set-asides included: read by this build only (older
+  // builds refuse them by code), unchanged by older writes, and rebuilt
+  // intact when proposal_set_asides is dropped.
+  v2_proposal_status: (store, manifest) =>
+    manifest.v2_proposals.map((id) => store.proposalStatus(manifest.workspace_id, id)),
   // Purpose, model and voice come from the journal (purpose.declared,
   // session.joined.model, attestations), never from the view tables.
   note_sessions: (store, manifest) => {

@@ -521,6 +521,16 @@ describe("forward-compatibility fixture", () => {
     ]);
   }, TEST_TIMEOUT_MS);
 
+  test("holds a consent/v2 proposal with a set-aside and the agreement that binds it", async () => {
+    const { views } = await fixture();
+    const [agreed, open] = JSON.parse(views.v2_proposal_status!) as Array<Record<string, any>>;
+    expect(agreed).toMatchObject({ rule: "consent/v2", ai: { position: "consented" }, person: { state: "agreed" }, may_proceed: true });
+    expect(agreed!.set_asides).toHaveLength(1);
+    expect(agreed!.set_asides[0]).toMatchObject({ basis: "controlling_terminal", party: "person" });
+    expect(agreed!.agreement.ai_snapshot.set_aside_challenge_report_ids).toEqual([agreed!.set_asides[0].challenge_report_id]);
+    expect(open).toMatchObject({ rule: "consent/v2", ai: { position: "open" }, person: { state: "awaiting" }, set_asides: [] });
+  }, TEST_TIMEOUT_MS);
+
   test("holds a sealed ballot the notes surface opened, cast in and revealed", async () => {
     const { manifest, views, directory } = await fixture();
     expect(manifest.ballots).toHaveLength(1);
@@ -615,6 +625,12 @@ interface Inspected {
   verified: Record<string, boolean>;
   reports: Array<{ id: string; body: string; event_sequence: number }>;
   proposals: unknown[] | null;
+  v2: {
+    refused: string[];
+    listed_ids: string[];
+    listed_unreadable: Array<{ proposal_report_id: string; error: string }>;
+    inbox_unreadable: Array<{ proposal_report_id: string; error: string }> | null;
+  } | null;
   addressing: { new_type_hits: unknown[]; control_addressed: boolean | null; waiter_sequences: number[] } | null;
   paging: {
     types: string[];
@@ -651,6 +667,7 @@ for (const revision of revisions) {
         new_types: manifest.event_types.filter((type) => (COLLAB_NOTES_EVENT_TYPES as readonly string[]).includes(type)),
         status_at,
         proposals: manifest.proposals,
+        v2_proposals: manifest.v2_proposals,
         waiter: {
           session_id: manifest.waiter.session_id,
           after_sequence: manifest.waiter.after_anchor.sequence,
@@ -689,6 +706,29 @@ for (const revision of revisions) {
       } else {
         expect(result.proposals).toBeNull();
       }
+    }, TEST_TIMEOUT_MS);
+
+    test("refuses a consent/v2 proposal by code and lists it as unreadable, without breaking its other calls", async () => {
+      const result = await inspected();
+      const { manifest } = await fixture();
+      expect(manifest.v2_proposals).toHaveLength(2);
+      expect(result.errors).toEqual({});
+      if (!result.capabilities.proposal_status) {
+        // A build with no proposals has nothing to refuse; it still verified, listed and paged above.
+        expect(result.v2).toBeNull();
+        return;
+      }
+      const [agreed, open] = manifest.v2_proposals as [string, string];
+      expect(result.v2!.refused).toEqual(["proposal_rule_unsupported", "proposal_rule_unsupported"]);
+      expect(result.v2!.listed_unreadable).toEqual(expect.arrayContaining(manifest.v2_proposals.map((id) => ({
+        proposal_report_id: id,
+        error: "proposal_rule_unsupported",
+      }))));
+      for (const id of manifest.proposals) expect(result.v2!.listed_ids).toContain(id);
+      for (const id of manifest.v2_proposals) expect(result.v2!.listed_ids).not.toContain(id);
+      // The open one has no person act, so the person's inbox meets it and lists it apart.
+      expect(result.v2!.inbox_unreadable).toEqual([{ proposal_report_id: open, error: "proposal_rule_unsupported" }]);
+      expect(agreed).not.toBe(open);
     }, TEST_TIMEOUT_MS);
 
     test("routes no new event type to any session, and still routes legacy ones", async () => {

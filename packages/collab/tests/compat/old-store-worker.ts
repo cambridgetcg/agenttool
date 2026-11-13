@@ -24,6 +24,8 @@ interface InspectRequest {
   /** The instant at which proposal views are read, shared with the new build. */
   status_at: string;
   proposals: string[];
+  /** consent/v2 proposals: a build that reads proposals must refuse each by code and list it as unreadable. */
+  v2_proposals: string[];
   waiter: { session_id: string; after_sequence: number; addressed_report_id: string };
   /** A task the newer build's collab_done finished, waiting for review. */
   review_task_id: string;
@@ -110,6 +112,28 @@ async function inspect(request: InspectRequest): Promise<Record<string, unknown>
     fixedNow = Date.parse(request.status_at);
     const proposals = capabilities.proposal_status
       ? check("proposal_status", () => request.proposals.map((id) => store.proposalStatus(request.workspace_id, id)))
+      : null;
+    // A rule this build does not know: refused by code, listed as unreadable,
+    // and nothing else breaks. A refusal is the expected answer here, so it
+    // is recorded as data, not as an error.
+    const v2 = capabilities.proposal_status && request.v2_proposals.length > 0
+      ? check("v2_proposals", () => {
+        const refused = request.v2_proposals.map((id) => {
+          try {
+            store.proposalStatus(request.workspace_id, id);
+            return "read";
+          } catch (error) {
+            return error && typeof error === "object" && "code" in error ? String(error.code) : describeError(error);
+          }
+        });
+        const listed = store.listProposalStatuses(request.workspace_id, { limit: 50 });
+        return {
+          refused,
+          listed_ids: (listed.proposals as Array<{ proposal: { id: string } }>).map((status) => status.proposal.id),
+          listed_unreadable: listed.unreadable,
+          inbox_unreadable: typeof store.personInbox === "function" ? store.personInbox(request.workspace_id).unreadable : null,
+        };
+      })
       : null;
     fixedNow = null;
 
@@ -248,7 +272,7 @@ async function inspect(request: InspectRequest): Promise<Record<string, unknown>
         written.push({ id: report.id, body: report.body });
       });
     }
-    return { capabilities, verified, reports, proposals, addressing, paging, task, reviewed_new: reviewedNew, written };
+    return { capabilities, verified, reports, proposals, v2, addressing, paging, task, reviewed_new: reviewedNew, written };
   } finally {
     store.close();
   }
