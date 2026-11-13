@@ -312,6 +312,15 @@ export interface CollabReport {
  * in the AgentTool source repository.
  */
 export const CONSENT_RULE = "consent/v1" as const;
+/**
+ * consent/v1 with one added clause: the person may set aside a standing
+ * challenge whose voice has no live session, giving a reason (PROTOCOL.md
+ * "consent/v2"). A proposal keeps the rule it opened under.
+ */
+export const CONSENT_RULE_V2 = "consent/v2" as const;
+/** Every rule this build reads, oldest first. New proposals open under the host's configured one. */
+export const CONSENT_RULES = [CONSENT_RULE, CONSENT_RULE_V2] as const;
+export type ConsentRule = (typeof CONSENT_RULES)[number];
 export const PROPOSAL_BYTES_PROTOCOL = "agenttool.collab-proposal/1" as const;
 export const DEFAULT_PROPOSAL_CONSULT_SECONDS = 6 * 60 * 60;
 export const MIN_PROPOSAL_CONSULT_SECONDS = 10 * 60;
@@ -337,7 +346,8 @@ export interface ProposalVoice {
 export interface ProposalTerms {
   report_id: string;
   workspace_id: string;
-  rule: typeof CONSENT_RULE;
+  /** Fixed when the proposal opened, and part of the bytes both parties agree to. */
+  rule: ConsentRule;
   criteria: string;
   extent: string;
   known_conflicts: string | null;
@@ -352,6 +362,8 @@ export interface ProposalTerms {
 }
 
 export const PERSON_ACT_PROTOCOL = "agenttool.collab-person-act/1" as const;
+/** The bytes a person signs to set aside one challenge (consent/v2). */
+export const PERSON_SET_ASIDE_PROTOCOL = "agenttool.collab-person-set-aside/1" as const;
 
 /** How a person's act reached the journal. Only a rejection may be relayed. */
 export type PersonActBasis = "relayed_by_session" | "controlling_terminal" | "user_verified_passkey";
@@ -403,11 +415,56 @@ export interface ProposalPersonAct {
   reason: string | null;
   relayed_by_session_id: string | null;
   /** The agents' position the person saw when acting. */
-  ai_snapshot: {
-    position: AiPosition;
-    closed: boolean;
-    qualifying_support_report_ids: string[];
-    unresolved_challenge_report_ids: string[];
+  ai_snapshot: AiSnapshot;
+  proof: PasskeyProof | null;
+  created_at: string;
+  event_sequence: number;
+}
+
+/**
+ * The agents' position as a person is shown it: what the "position changed"
+ * check compares and what a passkey signs. On a consent/v2 proposal it also
+ * names the set-aside challenges it rests on, sorted; on a consent/v1
+ * proposal it keeps exactly the four keys older builds write.
+ */
+export interface AiSnapshot {
+  position: AiPosition;
+  closed: boolean;
+  qualifying_support_report_ids: string[];
+  unresolved_challenge_report_ids: string[];
+  set_aside_challenge_report_ids?: string[];
+}
+
+/** How a set-aside reached the journal: only the person, and only authenticated. */
+export type SetAsideBasis = "controlling_terminal" | "user_verified_passkey";
+
+/**
+ * The person set aside one standing challenge on a consent/v2 proposal
+ * while no session of its voice was live. It no longer blocks the position;
+ * it stays in the journal and in every view. Final: there is no undo.
+ */
+export interface ProposalSetAside {
+  id: string;
+  workspace_id: string;
+  proposal_report_id: string;
+  proposal_sha256: string;
+  challenge_report_id: string;
+  /** SHA-256 of the challenge report's canonical content, so its text is the text shown. */
+  challenge_sha256: string;
+  party: "person";
+  basis: SetAsideBasis;
+  reason: string;
+  /** Person acts and set-asides on the proposal before this one (replay protection). */
+  prior_person_acts: number;
+  prior_set_asides: number;
+  /** The agents' position the person was shown, before this set-aside. */
+  ai_snapshot: AiSnapshot;
+  /** Why it could be set aside: no session of the challenger's voice was live at the act. */
+  challenger: {
+    voice_id: string | null;
+    session_ids: string[];
+    /** The latest activity of any session of the voice; null when none is recorded. */
+    last_seen_at: string | null;
   };
   proof: PasskeyProof | null;
   created_at: string;
@@ -415,7 +472,8 @@ export interface ProposalPersonAct {
 }
 
 export interface ProposalStatus {
-  rule: typeof CONSENT_RULE;
+  /** The proposal's own rule, fixed when it opened. */
+  rule: ConsentRule;
   proposal: CollabReport;
   terms: ProposalTerms;
   /** The exact canonical bytes both parties agree to; proposal_sha256 hashes them. */
@@ -435,6 +493,8 @@ export interface ProposalStatus {
     state: "awaiting" | "agreed" | "rejected";
     acts: ProposalPersonAct[];
   };
+  /** consent/v2 only: the challenges the person set aside, in journal order. Absent on a consent/v1 proposal. */
+  set_asides?: ProposalSetAside[];
   agreement: ProposalPersonAct | null;
   /** True only while the latest person act agrees and the author has not withdrawn or superseded it. */
   may_proceed: boolean;
@@ -494,6 +554,8 @@ export type CollabEventType =
   | "proposal.opened"
   | "proposal.agreed"
   | "proposal.rejected"
+  // consent/v2: the person set aside a standing challenge. Older builds route it to no one.
+  | "proposal.challenge_set_aside"
   | "handoff.offered"
   | "handoff.accepted"
   | "handoff.declined"

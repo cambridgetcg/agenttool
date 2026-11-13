@@ -6,12 +6,17 @@
  *
  * Confidence, the number of supports beyond the first, and who proposed do
  * not change the position. A position never authorises work by itself.
+ *
+ * consent/v2 adds one clause and no arithmetic: a challenge the person set
+ * aside is left out of `unresolved_challenge` before this runs (the store's
+ * standingProposalChallenges), so aiPosition is the same for both rules.
  */
 import { canonicalJson } from "./canonical.js";
 import {
   CONSENT_RULE,
   PROPOSAL_BYTES_PROTOCOL,
   type AiPosition,
+  type ConsentRule,
   type ProposalOrigin,
 } from "./protocol.js";
 
@@ -31,10 +36,11 @@ export interface ProposalContent {
   supersedes_report_id: string | null;
 }
 
-/** The exact bytes both parties agree to. The voice snapshot is process
- * metadata, not content, so it is deliberately left out. */
-export function proposalBytes(content: ProposalContent): string {
-  return canonicalJson({ protocol: PROPOSAL_BYTES_PROTOCOL, rule: CONSENT_RULE, ...content });
+/** The exact bytes both parties agree to, under the proposal's own rule. The
+ * voice snapshot is process metadata, not content, so it is deliberately left
+ * out. The rule is in the bytes because it is part of what the person signs. */
+export function proposalBytes(content: ProposalContent, rule: ConsentRule = CONSENT_RULE): string {
+  return canonicalJson({ protocol: PROPOSAL_BYTES_PROTOCOL, rule, ...content });
 }
 
 export interface AiPositionInput {
