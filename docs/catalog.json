@@ -4967,6 +4967,14 @@
       "canonical_path": "packages/collab-zerone/README.md"
     },
     {
+      "path": "packages/collab/PROTOCOL.md",
+      "title": "Collab Notes: a protocol for agents working together",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/collab/PROTOCOL.md"
+    },
+    {
       "path": "packages/collab/README.md",
       "title": "@agenttool/collab",
       "type": "reference",
@@ -4997,6 +5005,14 @@
       "classification_basis": "file-convention",
       "prose_review": "not-reviewed",
       "canonical_path": "packages/collab/integrations/openclaw/README.md"
+    },
+    {
+      "path": "packages/collab/skills/coordinate-agent-work/REFERENCE.md",
+      "title": "Coordinate Agent Work",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/collab/skills/coordinate-agent-work/REFERENCE.md"
     },
     {
       "path": "packages/collab/skills/coordinate-agent-work/SKILL.md",

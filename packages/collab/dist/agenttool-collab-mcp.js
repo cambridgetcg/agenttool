@@ -28804,6 +28804,12 @@ var NOTE_ACTS = [
   "poll",
   "vote"
 ];
+var NOTE_CARD_FAMILIES = {
+  say: ["note"],
+  stand: ["support", "challenge", "resolve", "withdraw"],
+  work: ["take", "done", "accept", "request_changes"],
+  decide: ["propose", "poll", "vote", "decide"]
+};
 var NOTE_ACTS_NEEDING_RE = [
   "support",
   "challenge",
@@ -39827,15 +39833,46 @@ var FULL_PROFILE_BRIDGE = "collab_arrive does not move the legacy cursor; call c
 var NOTE_AUTHORISES = "Nothing. This is coordination state.";
 var NOTE_CAPABILITIES = ["legacy", "consent/v1", "notes/1", "ballot/1"];
 var NOTE_CARD = [
-  "Collab notes, interim card (the full card is still being written).",
-  "A note is plain text: `<act>: <statement>`, a blank line, an optional body, then trailers:",
-  "  To: <name | session id | person | all>   Re: <report:\u2026 | proposal:\u2026 | task:\u2026 | file:\u2026>",
-  "  Why: <reason> (<seen|told|inferred|quoted> [n])   Evidence: <file path | commit sha | test cmd exit=n | url \u2026>",
-  "  Limits: <what this does not cover>   Purpose: <what it serves>   Extent: <where a decision stops>",
-  "Acts: say: note; stand: support, challenge, resolve, withdraw; work: take, done, accept, request_changes;",
-  "decide: propose, poll, vote, decide.",
-  "This build has collab_arrive, collab_inbox, collab_note (decide included), collab_take, collab_done, collab_propose, collab_poll and collab_vote.",
-  "A ballot is sealed until it closes; its result is the agents' preference and authorises nothing.",
+  "Collab Notes: working with other agents through this device's collab journal.",
+  "",
+  "A note is plain text, read like a commit message. Only its first line is required:",
+  "```text",
+  "<act>: <statement, one line of at most 200 characters>",
+  "",
+  "<optional body>",
+  "",
+  "To: <name | session id | person | all>",
+  "Re: <report#\u2026 | proposal#\u2026 | ballot#\u2026 | task#\u2026 | file:\u2026 | lobby:\u2026 | msg:\u2026>",
+  "Why: <one reason> (<seen | told | inferred | quoted> <evidence numbers, such as 1,2>)",
+  "Evidence: <file <path>[:a-b] | commit <sha> | test <command> exit=<n> | url <url> | report:<id>>",
+  "Limits: <what this does not cover, and what you did not check>",
+  "Purpose: <what it serves>",
+  "Extent: <where a decision stops>",
+  "```",
+  "Acts, in four families:",
+  ...Object.entries(NOTE_CARD_FAMILIES).map(([family, acts]) => `- ${family}: ${acts.join(", ")}`),
+  "",
+  "support, challenge, resolve, withdraw, accept and request_changes need Re. Only a challenger",
+  "resolves its own challenge; withdraw takes back your own note; accept and request_changes judge",
+  "another session's finished work. A Why cites Evidence lines by number, from 1. Example, sent as",
+  "the text of collab_note:",
+  "```collab-note",
+  "challenge: The retry test does not cover a lost response",
+  "",
+  "Re: report#3fa91c",
+  "Why: The test stops the server before the write commits, not after it (seen 1)",
+  "Evidence: file tests/retry.test.ts:30-48",
+  "Limits: I did not run the whole suite.",
+  "```",
+  "Start with collab_arrive and your purpose; collab_inbox shows what is for you, or one thread with",
+  "about. collab_note says, stands, reviews and decides; collab_take and collab_done hold work;",
+  "collab_propose puts a direction to the agents and the person; collab_poll and collab_vote run a",
+  "sealed ballot. The tools fill in ids, keys and versions, and every refusal says what to do",
+  "instead. To leave:",
+  "```collab-call",
+  'collab_done {"text": "Leaving: the review is finished", "outcome": "leave"}',
+  "```",
+  "Principles:",
   ...NOTE_PRINCIPLES.map((principle, index) => `${index + 1}. ${principle}`)
 ].join(`
 `);

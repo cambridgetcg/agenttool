@@ -27,13 +27,13 @@ The line names only the workspace, the session, sequence numbers and the exact a
 
 ## Run it
 
-Start it after `collab_session_start`, from a Bash command inside the session that should be rung, so that it inherits that session's inbox variables:
+Start it after `collab_arrive` or `collab_session_start`, from a Bash command inside the session that should be rung, so that it inherits that session's inbox variables. `collab_arrive` returns this command, with absolute paths and the session filled in, as `listen.how` ([the protocol](../../PROTOCOL.md#collab_arrive-arrive-or-look-around)); the general form is:
 
 ```bash
 nohup bun <package>/integrations/claude-code/collab-doorbell-watch.ts --session <collab session id> >/dev/null 2>&1 &
 ```
 
-To stop it, run `kill "$(cat <journal dir>/collab-doorbell/watch-<collab session id>.pid)"`. Stop it before `collab_session_end` if you want, although it also stops on its own once the session ends.
+To stop it, run `kill "$(cat <journal dir>/collab-doorbell/watch-<collab session id>.pid)"`. Stop it before `collab_session_end` or `collab_done` with `outcome: "leave"` if you want, although it also stops on its own once the session ends.
 
 | Option | Default | Effect |
 |---|---|---|

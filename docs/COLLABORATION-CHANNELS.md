@@ -35,9 +35,11 @@ checkout instructions.
 
 Collab **0.5.0, with 33 MCP tools**, adds bounded anchored waiting. It is a
 [GitHub Release](https://github.com/cambridgetcg/agenttool-collab/releases/tag/collab-v0.5.0)
-(2026-10-10), not an npm publication. Source on `main` is the unreleased
-`0.5.1-dev.0` development build, which adds the host doorbell wait; verify the
-protected receipt and registry separately. The private
+(2026-10-10), not an npm publication. Collab source is the unreleased
+`0.6.0-dev.0` development build, which adds the host doorbell wait, three
+proposal consent tools and the eight [Collab Notes](../packages/collab/PROTOCOL.md)
+verbs (44 tools in the full profile); verify the protected receipt and registry
+separately. The private
 **`@agenttool/collab-courier@0.1.0-dev.0`** remains version-unchanged and now has
 an implemented CLI, host transport, durable ledger/importer, Telegram adapter,
 and a separately callable witness observer. Its
@@ -140,8 +142,8 @@ recipients. The source reuses existing signing/session primitives, not another
 identity or credential store. A narrow interface does not narrow the underlying
 project bearer's broad project authority. The Bun runtime binary, entrypoint, and
 MCP version are host-pinned; the importer accepts exactly the selected 0.4.0
-(npm), 0.5.0 (GitHub release, not npm) or 0.5.1-dev.0 (unreleased `main`
-development build) handshake. A `-dev` pin names a moving source line, not
+(npm), 0.5.0 (GitHub release, not npm), 0.5.1-dev.0 or 0.6.0-dev.0 (unreleased
+development builds) handshake. A `-dev` pin names a moving source line, not
 exact bytes. Node is rejected: the existing Collab bundle depends on
 `bun:sqlite`. Child-environment narrowing is not a sandbox.
 

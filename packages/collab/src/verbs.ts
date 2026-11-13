@@ -20,6 +20,7 @@ import { CollabError } from "./errors.js";
 import {
   fileLocatorParts,
   hasLoneSurrogate,
+  NOTE_CARD_FAMILIES,
   NOTE_JOURNAL_EVIDENCE_KINDS,
   NOTE_STATEMENT_MAX,
   normalizeNoteText,
@@ -177,19 +178,53 @@ export const NOTE_AUTHORISES = "Nothing. This is coordination state.";
 export const NOTE_CAPABILITIES = ["legacy", "consent/v1", "notes/1", "ballot/1"] as const;
 
 /**
- * The card collab_arrive returns (spec 12). An interim text: the docs stage
- * writes the full card and checks its examples against the real parser.
+ * The card collab_arrive returns (spec 12). It is Markdown that also reads as
+ * plain text, so it can be pasted into a repository's AGENTS.md; the skill
+ * prints it verbatim. Its fenced examples are marked collab-note and
+ * collab-call, and tests/notes-docs.test.ts checks each one against the real
+ * parser and the registered input schemas.
  */
 export const NOTE_CARD = [
-  "Collab notes, interim card (the full card is still being written).",
-  "A note is plain text: `<act>: <statement>`, a blank line, an optional body, then trailers:",
-  "  To: <name | session id | person | all>   Re: <report:… | proposal:… | task:… | file:…>",
-  "  Why: <reason> (<seen|told|inferred|quoted> [n])   Evidence: <file path | commit sha | test cmd exit=n | url …>",
-  "  Limits: <what this does not cover>   Purpose: <what it serves>   Extent: <where a decision stops>",
-  "Acts: say: note; stand: support, challenge, resolve, withdraw; work: take, done, accept, request_changes;",
-  "decide: propose, poll, vote, decide.",
-  "This build has collab_arrive, collab_inbox, collab_note (decide included), collab_take, collab_done, collab_propose, collab_poll and collab_vote.",
-  "A ballot is sealed until it closes; its result is the agents' preference and authorises nothing.",
+  "Collab Notes: working with other agents through this device's collab journal.",
+  "",
+  "A note is plain text, read like a commit message. Only its first line is required:",
+  "```text",
+  "<act>: <statement, one line of at most 200 characters>",
+  "",
+  "<optional body>",
+  "",
+  "To: <name | session id | person | all>",
+  "Re: <report#… | proposal#… | ballot#… | task#… | file:… | lobby:… | msg:…>",
+  "Why: <one reason> (<seen | told | inferred | quoted> <evidence numbers, such as 1,2>)",
+  "Evidence: <file <path>[:a-b] | commit <sha> | test <command> exit=<n> | url <url> | report:<id>>",
+  "Limits: <what this does not cover, and what you did not check>",
+  "Purpose: <what it serves>",
+  "Extent: <where a decision stops>",
+  "```",
+  "Acts, in four families:",
+  ...Object.entries(NOTE_CARD_FAMILIES).map(([family, acts]) => `- ${family}: ${acts.join(", ")}`),
+  "",
+  "support, challenge, resolve, withdraw, accept and request_changes need Re. Only a challenger",
+  "resolves its own challenge; withdraw takes back your own note; accept and request_changes judge",
+  "another session's finished work. A Why cites Evidence lines by number, from 1. Example, sent as",
+  "the text of collab_note:",
+  "```collab-note",
+  "challenge: The retry test does not cover a lost response",
+  "",
+  "Re: report#3fa91c",
+  "Why: The test stops the server before the write commits, not after it (seen 1)",
+  "Evidence: file tests/retry.test.ts:30-48",
+  "Limits: I did not run the whole suite.",
+  "```",
+  "Start with collab_arrive and your purpose; collab_inbox shows what is for you, or one thread with",
+  "about. collab_note says, stands, reviews and decides; collab_take and collab_done hold work;",
+  "collab_propose puts a direction to the agents and the person; collab_poll and collab_vote run a",
+  "sealed ballot. The tools fill in ids, keys and versions, and every refusal says what to do",
+  "instead. To leave:",
+  "```collab-call",
+  'collab_done {"text": "Leaving: the review is finished", "outcome": "leave"}',
+  "```",
+  "Principles:",
   ...NOTE_PRINCIPLES.map((principle, index) => `${index + 1}. ${principle}`),
 ].join("\n");
 

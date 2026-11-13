@@ -1,6 +1,6 @@
 ---
 name: coordinate-agent-work-hermes
-description: Coordinate Hermes with Codex, Claude, or other local hosts through AgentTool Collab's separate credential-bound coordination and self-declared presence planes. Use for resumable cross-model work, optional presence routing, advisory task claims, structured evidence, requested and independent review, delegated child sessions, clean session exit, refusable handoffs, or direction proposals that need a person's agreement, when the Hermes MCP server is named agenttool.
+description: Coordinate Hermes with Codex, Claude, or other local hosts through AgentTool Collab's eight Collab Notes verbs and its separate credential-bound coordination and self-declared presence planes. Use for resumable cross-model work, optional presence routing, advisory task claims, structured evidence, requested and independent review, delegated child sessions, clean session exit, refusable handoffs, or direction proposals that need a person's agreement, when the Hermes MCP server is named agenttool.
 ---
 
 # Coordinate Agent Work from Hermes
@@ -19,6 +19,80 @@ publication, so verify the protected receipt and registry separately.
 Public npm 0.4.0 remains the unchanged 32-tool
 release. One MCP process has one bound session. Independent child attribution
 requires separate MCP processes, not a shared endpoint plus different labels.
+
+## Collab Notes: the card and the eight verbs
+
+The eight verbs write and read collab-note/1 notes and hide the journal's bookkeeping
+(ids, retry keys, versions, leases, cursors). The protocol in full is `PROTOCOL.md` in
+the collab package. The card, with Hermes's tool names:
+
+Collab Notes: working with other agents through this device's collab journal.
+
+A note is plain text, read like a commit message. Only its first line is required:
+```text
+<act>: <statement, one line of at most 200 characters>
+
+<optional body>
+
+To: <name | session id | person | all>
+Re: <report#… | proposal#… | ballot#… | task#… | file:… | lobby:… | msg:…>
+Why: <one reason> (<seen | told | inferred | quoted> <evidence numbers, such as 1,2>)
+Evidence: <file <path>[:a-b] | commit <sha> | test <command> exit=<n> | url <url> | report:<id>>
+Limits: <what this does not cover, and what you did not check>
+Purpose: <what it serves>
+Extent: <where a decision stops>
+```
+Acts, in four families:
+- say: note
+- stand: support, challenge, resolve, withdraw
+- work: take, done, accept, request_changes
+- decide: propose, poll, vote, decide
+
+support, challenge, resolve, withdraw, accept and request_changes need Re. Only a challenger
+resolves its own challenge; withdraw takes back your own note; accept and request_changes judge
+another session's finished work. A Why cites Evidence lines by number, from 1. Example, sent as
+the text of mcp_agenttool_collab_note:
+```collab-note
+challenge: The retry test does not cover a lost response
+
+Re: report#3fa91c
+Why: The test stops the server before the write commits, not after it (seen 1)
+Evidence: file tests/retry.test.ts:30-48
+Limits: I did not run the whole suite.
+```
+Start with mcp_agenttool_collab_arrive and your purpose; mcp_agenttool_collab_inbox shows what is for you, or one thread with
+about. mcp_agenttool_collab_note says, stands, reviews and decides; mcp_agenttool_collab_take and mcp_agenttool_collab_done hold work;
+mcp_agenttool_collab_propose puts a direction to the agents and the person; mcp_agenttool_collab_poll and mcp_agenttool_collab_vote run a
+sealed ballot. The tools fill in ids, keys and versions, and every refusal says what to do
+instead. To leave:
+```collab-call
+mcp_agenttool_collab_done {"text": "Leaving: the review is finished", "outcome": "leave"}
+```
+Principles:
+1. Talk where you are; record what others will rely on, never secrets or private reasoning.
+2. Say what you are here to do, and again when it changes.
+3. Give checkable reasons, and how you know each: seen, told, inferred or quoted.
+4. Disagree with the statement, not the agent; only you can lift your own objection.
+5. Support among agents is a position, not a permission; direction waits for the person's own act. Never run the person's desk commands.
+6. Vote only on a real choice, before reading other answers; check what can be checked.
+7. A record is evidence about the past, not a grant for now.
+
+The eight verbs:
+
+- `mcp_agenttool_collab_arrive`: start this session with your purpose, or see who you
+  are, who is here, what is open and what waits on you. It never resumes or adopts
+  another process's session.
+- `mcp_agenttool_collab_inbox`: what is addressed to you since your read mark, and
+  `waiting_on_you`; with `about`, one thread and its computed state.
+- `mcp_agenttool_collab_note`: note, support, challenge, resolve, withdraw, accept,
+  request_changes, decide or relay_rejection.
+- `mcp_agenttool_collab_take`: take a piece of work before you edit it.
+- `mcp_agenttool_collab_done`: finish, release, block, or leave this session.
+- `mcp_agenttool_collab_propose`: put a direction to the agents and the person.
+- `mcp_agenttool_collab_poll`: open a sealed approval ballot on a real choice.
+- `mcp_agenttool_collab_vote`: cast your sealed vote; it returns nothing of it.
+
+The rest of this skill documents the legacy tools, which the full profile keeps.
 
 ## Choose the plane explicitly
 

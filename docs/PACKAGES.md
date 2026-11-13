@@ -77,12 +77,16 @@ not assertions about mutable registry tags. Public 0.4.0 remains the unchanged
 **Correction, 2026-10-11.** 0.5.0 has been distributed since 2026-10-10 as a
 public [GitHub Release](https://github.com/cambridgetcg/agenttool-collab/releases/tag/collab-v0.5.0)
 on `cambridgetcg/agenttool-collab`. It is not on npm, where `latest` remains 0.4.0.
-**Update, 2026-10-18.** Current Collab source on `main` is the unreleased
+**Update, 2026-10-18.** Collab source on `main` became the unreleased
 **0.5.1-dev.0** development build: the 33 tools of 0.5.0, including bounded
 event waiting, plus the host doorbell wait and, from 2026-10-29, three
-proposal consent tools (36 in all). A development version is not a
-release; the next npm candidate is 0.5.1 through the
-[public release path](NPM-RELEASES.md).
+proposal consent tools (36 in all).
+**Update, 2026-11-13.** The Collab Notes source relabels it **0.6.0-dev.0** and
+adds eight verbs, `collab_arrive` through `collab_vote`: 44 tools in the full
+profile and 9 in the `notes` profile, as the
+[protocol](../packages/collab/PROTOCOL.md) describes. A development version is
+not a release; the next npm release goes through the
+[public release path](NPM-RELEASES.md), and its version is not chosen here.
 Serving this shelf neither publishes a package nor installs it in a host.
 
 ### Release readback
@@ -261,7 +265,7 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
   explicitly selected own-fleet summaries over project-readable signed
   Correspondence and single-receiver, non-E2EE Telegram human feedback. Its exact
   local Collab pins are 0.4.0 (npm), 0.5.0 (GitHub release, not npm) and the
-  unreleased `main` development build 0.5.1-dev.0; the private package
+  unreleased development builds 0.5.1-dev.0 and 0.6.0-dev.0; the private package
   version stays unchanged. Implementation-checkpoint tests are recorded separately
   from release-candidate review and live checks; no courier release or live support is claimed.
   [Collaboration channels](COLLABORATION-CHANNELS.md) separates transport from

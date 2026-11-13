@@ -21,7 +21,9 @@ tools to 36, plus the eight unreleased Collab Notes verbs, `collab_arrive`,
 `collab_propose`, and the sealed ballot's `collab_poll` and `collab_vote` (44 in all;
 the `notes` tools profile registers those eight and `collab_journal_verify`).
 Enabling the `notes` profile (`AGENTOOL_COLLAB_TOOLS=notes`) in a host's MCP
-configuration is a host step for the owner; this build does not take it. The next npm release goes through the
+configuration is a host step for the owner; this build does not take it. How agents
+use the verbs (the note, consensus, the ballot, identity, storage and the profiles) is
+in [PROTOCOL.md](PROTOCOL.md). The next npm release goes through the
 [public staged release path](https://docs.agenttool.dev/NPM-RELEASES.md#public-release-path-from-2026-10-12);
 its version is not chosen here.
 This source is not evidence of publication or native-harness activation;
@@ -115,6 +117,9 @@ model-facing result confirms creation and returns the session ID, never the
 token or absolute credential-file path. The journal stores only a token hash.
 The host can derive the default file as
 `<database-directory>/collab-sessions/<session-id>.json`.
+`collab_arrive` starts the same kind of session for an agent on the Collab Notes verbs
+and returns a brief of who is here and what waits; see
+[PROTOCOL.md](PROTOCOL.md#collab_arrive-arrive-or-look-around).
 
 **Seat ref (unreleased).** A session may declare a `seat_ref`: an opaque,
 unverified routing hint naming the execution seat that started it, 1 to 200
@@ -213,6 +218,10 @@ that it agreed, consented, or acted.
 
 ### Bounded anchored waiting (0.5.0)
 
+An agent on the Collab Notes verbs waits with `collab_inbox` and `wait_seconds`
+instead ([PROTOCOL.md](PROTOCOL.md#collab_inbox-what-is-for-you-and-one-thread)); the
+two share one budget of 8 waits per MCP endpoint.
+
 Use `collab_events_wait` with the bound `workspace_id` and an exact
 `after_anchor: { epoch_id, sequence, hash }` from a prior page or the session's
 cursor. `event_limit` defaults to 10 and accepts 1–50. `wait_ms` defaults to
@@ -274,6 +283,10 @@ after_anchor, event_limit? }` for one immediate page. Keep the bearer outside
 model-facing inputs. It uses the same count/byte bounds and performs no wait.
 
 ## The ordinary loop
+
+This is the loop with the legacy tools. An agent on the Collab Notes verbs starts
+with `collab_arrive` and reads with `collab_inbox` instead, as
+[PROTOCOL.md](PROTOCOL.md#the-eight-verbs) describes.
 
 Most sessions need only this loop. Each step names the tool and the field that
 carries the next step.
@@ -427,6 +440,10 @@ spending a turn on each 30-second `collab_events_wait`:
 ```bash
 agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>] [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]
 ```
+
+Under Claude Code, `collab_arrive` returns the watcher command for its session in
+`listen.how`, and the ring names `collab_inbox` first
+([PROTOCOL.md](PROTOCOL.md#collab_arrive-arrive-or-look-around)).
 
 `--session` resolves the default credential file beside the journal
 (`collab-sessions/<id>.json`). Each poll is the same authenticated,
@@ -982,8 +999,8 @@ enforce their own repository, account, and publication boundaries.
 ## Codex, Claude Code, Hermes Agent, and OpenClaw
 
 The npm package root is the plugin root for Codex and Claude, so the same
-`skills/coordinate-agent-work/SKILL.md` and 38-tool standalone MCP server ship
-once:
+`skills/coordinate-agent-work/SKILL.md` and 44-tool standalone MCP server (full
+profile) ship once:
 
 - Codex reads `.codex-plugin/plugin.json`. Its MCP declaration uses `cwd: "."`
   and starts the bundled executable relative to the installed plugin root.

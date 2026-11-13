@@ -35,6 +35,7 @@
     ".codex-plugin",
     ".claude-plugin",
     "README.md",
+    "PROTOCOL.md",
     "LICENSE",
     "NOTICE",
     "THIRD_PARTY_LICENSES"

@@ -43,9 +43,9 @@ channel credential or remote URL is needed for local Collab. Keep credentials
 and host-only paths out of model-visible text.
 
 Use the same local database as the cooperating Claude/Codex/Hermes MCP
-processes. Each child needs its own `collab_session_start`, either in a separate
-MCP process or with an explicit `binding_key` and `parent_session_id` on the
-shared endpoint. Carry the key on every child call. This is cooperative routing,
+processes. Each child needs its own session, either in a separate MCP process or
+with an explicit `binding_key` on the shared endpoint (`parent_session_id` with
+`collab_session_start`, or `parent` with `collab_arrive`). Carry the key on every child call. This is cooperative routing,
 not authenticated subagent isolation or automatic OpenClaw integration; see
 [the session-fit migration note](../../README.md#session-fit-migration-unreleased).
 Verify the intended workspace and the
@@ -55,7 +55,9 @@ selected adapter; the names below are the underlying MCP names.
 ## Status, queue, receive, acknowledge
 
 1. **Status:** start a credential-bound session once, then inspect
-   `collab_workspace_status` and `collab_next`. Optional
+   `collab_workspace_status` and `collab_next`. An agent on the Collab Notes verbs
+   uses `collab_arrive` and `collab_inbox` instead, which do not move this cursor;
+   [the protocol](../../PROTOCOL.md) describes them and the `notes` tools profile. Optional
    `collab_session_list` presence is self-declared routing, not identity,
    health, availability or consent. `collab_anchor_status` is a local sidecar
    observation, not a fresh remote chain check.
