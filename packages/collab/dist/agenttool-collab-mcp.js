@@ -43835,10 +43835,11 @@ function noteResult(ctx, options) {
   const on = planned.target?.kind === "report" ? targetHandle(planned.target) : planned.target?.kind === "task" ? handleOf("task", planned.target.id) : null;
   const to = planned.addressee.shown;
   const toText = to === "all" ? "" : to === "person" ? " for the person" : ` to ${to.name}`;
+  const until = planned.recorded_as === "challenge" && planned.target?.kind === "report" && proposalRule(ctx, main.workspace_id, planned.target.id) === CONSENT_RULE_V2 ? "until you lift it, or until the person sets it aside while no session of your voice is live" : "until you lift it";
   const effect = {
     note: `Recorded note ${handle}${on ? ` on ${on}` : ""}${toText}.`,
     support: `Recorded your support of ${on} as ${handle}${toText}. Support is a position, not a permission.`,
-    challenge: receipt.reports.length === 2 ? `Recorded your challenge to ${on} as ${handle}${toText}; it replaces your challenge ${handleOf("report", receipt.reports[1].target_report_id)}, ` + "withdrawn in the same transaction after the new one was posted, so your objection stood throughout. It stands until you lift it." : `Recorded your challenge to ${on} as ${handle}${toText}; it stands until you lift it.`,
+    challenge: receipt.reports.length === 2 ? `Recorded your challenge to ${on} as ${handle}${toText}; it replaces your challenge ${handleOf("report", receipt.reports[1].target_report_id)}, ` + `withdrawn in the same transaction after the new one was posted, so your objection stood throughout. It stands ${until}.` : `Recorded your challenge to ${on} as ${handle}${toText}; it stands ${until}.`,
     resolve: `Lifted your challenge ${on} with ${handle}${toText}.`,
     answer: `Recorded your answer to ${on} as note ${handle}${toText}; it does not lift the challenge, which only its challenger can do.`,
     withdraw: `Withdrew your ${on} with ${handle}${toText}.`
@@ -46790,7 +46791,7 @@ Legacy session tools: ${legacyInstructions}`
   })));
   server.registerTool("collab_proposal_open", {
     title: "Open a direction-level proposal for consent",
-    description: `Open a proposal the agents settle by lazy consensus (${consentRule}) before a person decides. ` + "Answer it with collab_report_append supports, challenges and resolves. The agents' position is " + "computed from the journal and authorises nothing alone; a person consents only at the controlling " + "terminal or with an enrolled passkey through the person desk, never through MCP. A challenge stands " + "until its own voice resolves or withdraws it. Use it for design direction, criteria and extent, " + "conflicting context and the reading of principles, not for every edit.",
+    description: `Open a proposal the agents settle by lazy consensus (${consentRule}) before a person decides. ` + "Answer it with collab_report_append supports, challenges and resolves. The agents' position is " + "computed from the journal and authorises nothing alone; a person consents only at the controlling " + "terminal or with an enrolled passkey through the person desk, never through MCP. A challenge stands " + "until its own voice resolves or withdraws it" + (consentRule === CONSENT_RULE_V2 ? ", or until the person sets it aside while no session of that voice is live, giving a reason" : "") + ". Use it for design direction, criteria and extent, " + "conflicting context and the reading of principles, not for every edit.",
     annotations: localRetrySafeMutation,
     inputSchema: {
       workspace_id: workspaceId,

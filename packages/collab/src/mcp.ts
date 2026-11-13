@@ -1268,7 +1268,11 @@ export function buildCollabMcpServer(
         + "Answer it with collab_report_append supports, challenges and resolves. The agents' position is "
         + "computed from the journal and authorises nothing alone; a person consents only at the controlling "
         + "terminal or with an enrolled passkey through the person desk, never through MCP. A challenge stands "
-        + "until its own voice resolves or withdraws it. Use it for design direction, criteria and extent, "
+        + "until its own voice resolves or withdraws it"
+        + (consentRule === CONSENT_RULE_V2
+          ? ", or until the person sets it aside while no session of that voice is live, giving a reason"
+          : "")
+        + ". Use it for design direction, criteria and extent, "
         + "conflicting context and the reading of principles, not for every edit.",
       annotations: localRetrySafeMutation,
       inputSchema: {

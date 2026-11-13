@@ -849,6 +849,26 @@ describe("the notes views", () => {
     expect(Object.hasOwn(v1, "set_asides")).toBe(false);
   });
 
+  test("on a consent/v2 host the legacy open and a challenge say the person may set a challenge aside", async () => {
+    const author = session("author");
+    const challenger = session("challenger");
+    const descriptionOf = (environment: Record<string, string>) =>
+      (served(author, environment) as unknown as { _registeredTools: Record<string, { description?: string }> })
+        ._registeredTools.collab_proposal_open!.description!;
+    const v1Description = descriptionOf({});
+    const v2Description = descriptionOf({ AGENTOOL_COLLAB_CONSENT_RULE: "consent/v2" });
+    expect(v1Description).toContain("A challenge stands until its own voice resolves or withdraws it. Use it");
+    expect(v2Description).toContain("A challenge stands until its own voice resolves or withdraws it, or until the person sets it aside "
+      + "while no session of that voice is live, giving a reason. Use it");
+    const env = { AGENTOOL_COLLAB_CONSENT_RULE: "consent/v2" };
+    const v2 = await tool(served(author, env), "collab_propose", { question: "Under v2?", criteria: "C", extent: "E" });
+    const v1 = await tool(served(author), "collab_propose", { question: "Under v1?", criteria: "C", extent: "E" });
+    const onV2 = await tool(served(challenger, env), "collab_note", { act: "challenge", text: "No.", re: v2.ids.proposal });
+    const onV1 = await tool(served(challenger), "collab_note", { act: "challenge", text: "No.", re: v1.ids.proposal });
+    expect(onV2.effect).toContain("it stands until you lift it, or until the person sets it aside while no session of your voice is live.");
+    expect(onV1.effect).toMatch(/; it stands until you lift it\.$/);
+  });
+
   test("collab_proposal_open opens under the configured rule", async () => {
     const author = session("author");
     const opened = await tool(served(author, { AGENTOOL_COLLAB_CONSENT_RULE: "consent/v2" }), "collab_proposal_open", {

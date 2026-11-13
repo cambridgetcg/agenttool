@@ -1533,13 +1533,18 @@ function noteResult(
   const on = planned.target?.kind === "report" ? targetHandle(planned.target) : planned.target?.kind === "task" ? handleOf("task", planned.target.id) : null;
   const to = planned.addressee.shown;
   const toText = to === "all" ? "" : to === "person" ? " for the person" : ` to ${to.name}`;
+  // consent/v2 adds one way a challenge stops blocking, so a challenger there is told it; consent/v1 keeps its words.
+  const until = planned.recorded_as === "challenge" && planned.target?.kind === "report"
+    && proposalRule(ctx, main.workspace_id, planned.target.id) === CONSENT_RULE_V2
+    ? "until you lift it, or until the person sets it aside while no session of your voice is live"
+    : "until you lift it";
   const effect = {
     note: `Recorded note ${handle}${on ? ` on ${on}` : ""}${toText}.`,
     support: `Recorded your support of ${on} as ${handle}${toText}. Support is a position, not a permission.`,
     challenge: receipt.reports.length === 2
       ? `Recorded your challenge to ${on} as ${handle}${toText}; it replaces your challenge ${handleOf("report", receipt.reports[1]!.target_report_id!)}, ` +
-        "withdrawn in the same transaction after the new one was posted, so your objection stood throughout. It stands until you lift it."
-      : `Recorded your challenge to ${on} as ${handle}${toText}; it stands until you lift it.`,
+        `withdrawn in the same transaction after the new one was posted, so your objection stood throughout. It stands ${until}.`
+      : `Recorded your challenge to ${on} as ${handle}${toText}; it stands ${until}.`,
     resolve: `Lifted your challenge ${on} with ${handle}${toText}.`,
     answer: `Recorded your answer to ${on} as note ${handle}${toText}; it does not lift the challenge, which only its challenger can do.`,
     withdraw: `Withdrew your ${on} with ${handle}${toText}.`,
