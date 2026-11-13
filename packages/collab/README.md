@@ -734,6 +734,21 @@ authorises only the proposal's `extent`. A later challenge does not silently
 revoke an agreement. `proposal.agreed` and `proposal.rejected` are addressed to
 the author, or for a desk proposal to its consulted voices.
 
+Before the person agrees, the desk shows the soft spots the agents' proposal
+views show (the owner's choice of 2026-11-12): awaited voices with no recorded
+delivery on the notes surface, with minutes since last seen; supports flagged
+`same_seat_as_author`, `same_name_as_author` or `started_after_open`; standing
+challenges whose challenger's session has ended; supports and challenges with
+no reason or evidence; and objections carried from a replaced proposal, which
+consent/v1 does not count. `proposals` and `inbox --workspace` carry them in
+one more key, `soft_spots`, keyed by proposal id, beside every existing key
+unchanged; the terminal summary and the signing page show the same lines above
+the exact bytes. They are read from the same view the agents' tools read, and
+they are display only: no signed or hashed byte includes them, and they change
+no count and nothing the desk accepts or refuses. A read that fails says so in
+their place. Code: `src/desk-soft-spots.ts`. Tests:
+`tests/person-desk-soft-spots.test.ts`.
+
 The passkey challenge is the SHA-256 of canonical act bytes naming the act, the
 proposal hash, the reason, the agents' position, and the number of person acts
 before it, so one assertion records one act once and goes stale if any of

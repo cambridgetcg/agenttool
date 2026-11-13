@@ -34693,6 +34693,23 @@ class CollabStore {
     });
     return transaction.deferred();
   }
+  personDeskProposalViews(workspaceId, proposalIds) {
+    this.requireWorkspace(workspaceId);
+    return this.db.transaction(() => {
+      const sessions = this.noteSessionViews(workspaceId);
+      const context = this.proposalReadContext(workspaceId);
+      return proposalIds.map((proposalId) => {
+        try {
+          this.requireProposalTerms(workspaceId, validateId(proposalId, "proposal_report_id"));
+          return { proposal_report_id: proposalId, view: this.noteProposalData(workspaceId, proposalId, sessions, context) };
+        } catch (error51) {
+          if (!(error51 instanceof CollabError))
+            throw error51;
+          return { proposal_report_id: proposalId, error: error51.code };
+        }
+      });
+    }).deferred();
+  }
   personInboxSummary() {
     return this.listWorkspaces().map((workspace) => {
       const inbox = this.personInbox(workspace.id);
@@ -39728,6 +39745,9 @@ import { existsSync as existsSync5, realpathSync as realpathSync3 } from "fs";
 import { hostname as hostname3 } from "os";
 import { resolve as resolve5, sep as sep2 } from "path";
 
+// src/desk-soft-spots.ts
+var CARRIED_OBJECTIONS_SENTENCE = "Carried objections are text in the terms the person signs. Under consent/v1 they do not block this proposal. Each objector may challenge again.";
+
 // src/version.ts
 var COLLAB_PACKAGE_VERSION = "0.6.0-dev.0";
 
@@ -41367,7 +41387,6 @@ function ballotItem(entry, from, base, byId, me) {
       };
   }
 }
-var CARRIED_OBJECTIONS_SENTENCE = "Carried objections are text in the terms the person signs. Under consent/v1 they do not block this proposal. Each objector may challenge again.";
 var FOR_THE_PERSON_NOTE = "For the person to run himself. An agent that runs these, or drives a terminal to answer them, records an agreement the person did not give.";
 var ANNOTATIONS_NOTE = "Flags on supports, challenges and consulted voices are display only: they change no count. The position is consent/v1's, exactly as collab_proposal_status computes it.";
 var DECISION_DOES_NOT_ESTABLISH = [

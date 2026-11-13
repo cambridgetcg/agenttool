@@ -4229,6 +4229,33 @@ export class CollabStore {
     return transaction.deferred();
   }
 
+  /**
+   * The notes surface's own view of each given proposal, for the person
+   * desk's soft-spot lines (src/desk-soft-spots.ts). It is noteProposalData,
+   * the read every agent-facing proposal view makes, so the desk and the
+   * agents see the same facts. Read-only, one snapshot: it records no
+   * delivery and moves no mark. A proposal it cannot read comes back with its
+   * error code instead of failing the others.
+   */
+  personDeskProposalViews(workspaceId: string, proposalIds: readonly string[]): Array<
+    { proposal_report_id: string; view: NoteProposalData } | { proposal_report_id: string; error: string }
+  > {
+    this.requireWorkspace(workspaceId);
+    return this.db.transaction(() => {
+      const sessions = this.noteSessionViews(workspaceId);
+      const context = this.proposalReadContext(workspaceId);
+      return proposalIds.map((proposalId) => {
+        try {
+          this.requireProposalTerms(workspaceId, validateId(proposalId, "proposal_report_id"));
+          return { proposal_report_id: proposalId, view: this.noteProposalData(workspaceId, proposalId, sessions, context) };
+        } catch (error) {
+          if (!(error instanceof CollabError)) throw error;
+          return { proposal_report_id: proposalId, error: error.code };
+        }
+      });
+    }).deferred();
+  }
+
   /** Counts across every workspace, for a badge. Read-only. */
   personInboxSummary(): Array<{ workspace_id: string; awaiting_person: number; addressed_reports: number; latest_report_id: string | null }> {
     return this.listWorkspaces().map((workspace) => {

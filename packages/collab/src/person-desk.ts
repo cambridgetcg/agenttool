@@ -14,6 +14,10 @@
  * authenticate the person, so they inform and authorise nothing. No MCP tool
  * reaches any of this.
  *
+ * The reads of proposals and the summary before an act also show the soft
+ * spots the agents' views show (src/desk-soft-spots.ts), in a `soft_spots`
+ * key and in text, outside every byte the person signs.
+ *
  * `person-remote` is the same desk behind an SSH forced command: it reads a
  * JSON argv from SSH_ORIGINAL_COMMAND, never a shell line, and allows only the
  * verbs that need neither a terminal nor a browser on that device.
@@ -23,6 +27,13 @@ import { closeSync, existsSync, openSync, readSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { canonicalJson } from "./canonical.js";
 import { resolveDatabasePath } from "./database-path.js";
+import {
+  deskSoftSpots,
+  softSpotDisplay,
+  softSpotsUnavailable,
+  softSpotSummaryLines,
+  type DeskSoftSpotsEntry,
+} from "./desk-soft-spots.js";
 import { CollabError } from "./errors.js";
 import { normalizePasskeyEnrollment, passkeyFingerprint } from "./passkey.js";
 import type { ProposalStatus } from "./protocol.js";
@@ -192,14 +203,19 @@ function runVerb(
       return done({ workspaces: store.listWorkspaces() });
     case "voices":
       return done({ voices: store.tableVoices(values.workspace!) });
-    case "proposals":
-      return values.proposal
-        ? done({ proposal: store.proposalStatus(values.workspace!, values.proposal) })
-        : done(store.listProposalStatuses(values.workspace!, { limit: parseInteger(values.limit, "limit") }));
-    case "inbox":
-      return values.workspace
-        ? done({ inbox: store.personInbox(values.workspace) })
-        : done({ summary: store.personInboxSummary() });
+    case "proposals": {
+      if (values.proposal) {
+        const proposal = store.proposalStatus(values.workspace!, values.proposal);
+        return done({ proposal, soft_spots: deskSoftSpotsFor(store, values.workspace!, [proposal]) });
+      }
+      const listed = store.listProposalStatuses(values.workspace!, { limit: parseInteger(values.limit, "limit") });
+      return done({ ...listed, soft_spots: deskSoftSpotsFor(store, values.workspace!, listed.proposals) });
+    }
+    case "inbox": {
+      if (!values.workspace) return done({ summary: store.personInboxSummary() });
+      const inbox = store.personInbox(values.workspace);
+      return done({ inbox, soft_spots: deskSoftSpotsFor(store, values.workspace, inbox.awaiting_person) });
+    }
     case "challenge":
       return done({
         challenge: store.personActChallenge({
@@ -225,9 +241,11 @@ function runVerb(
       const challenge = store.personActChallenge({ proposal_report_id: values.proposal!, act, reason: values.reason });
       const status = store.proposalStatusById(values.proposal!);
       const bytes = `${challenge.challenge_bytes}\n${status.proposal_bytes}`;
+      // Read after the bytes and kept out of them: summary lines only.
+      const softSpots = deskSoftSpotsFor(store, status.proposal.workspace_id, [status])[status.proposal.id];
       const confirmed = confirmOnTty({
         act: act === "agree" ? "agree to a proposal" : "reject a proposal",
-        summary: actSummary(status, act, challenge.reason),
+        summary: [...actSummary(status, act, challenge.reason), ...softSpotSummaryLines(softSpotDisplay(softSpots, status, "local"))],
         bytes,
         sha256: createHash("sha256").update(bytes).digest("hex"),
       }, { openTty: deps.openTty, now: deps.now });
@@ -366,6 +384,31 @@ export function actSummary(status: ProposalStatus, act: "agree" | "reject", reas
     `extent ${JSON.stringify(status.terms.extent)}`,
     act === "agree" ? "Agreeing authorises only this extent." : `reason ${JSON.stringify(reason)}`,
   ];
+}
+
+/**
+ * The soft spots the agents' proposal views show, keyed by proposal id, for
+ * the desk's reads and the summary before an act. The owner chose this on
+ * 2026-11-12 (Collab Notes spec 13 q4), as display only: the facts go in
+ * this one new key and in text, never in any byte the person signs or a
+ * store hashes. A failure to read them is said in their place and is never
+ * thrown, so it cannot change what the desk shows or accepts.
+ */
+export function deskSoftSpotsFor(
+  store: CollabStore,
+  workspaceId: string,
+  statuses: readonly ProposalStatus[],
+): Record<string, DeskSoftSpotsEntry> {
+  const ids = statuses.map((status) => status.proposal.id);
+  try {
+    return Object.fromEntries(store.personDeskProposalViews(workspaceId, ids).map((read) => [
+      read.proposal_report_id,
+      "view" in read ? deskSoftSpots(read.view) : softSpotsUnavailable(read.error),
+    ]));
+  } catch (error) {
+    const code = error instanceof CollabError ? error.code : "internal_error";
+    return Object.fromEntries(ids.map((id) => [id, softSpotsUnavailable(code)]));
+  }
 }
 
 export function parsePersonArgs(argv: string[]): { verb: Verb; values: Values } {

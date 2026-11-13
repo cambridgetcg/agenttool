@@ -15,6 +15,7 @@ import { resolve, sep } from "node:path";
 import { defaultActor } from "./actor-default.js";
 import { canonicalJson } from "./canonical.js";
 import { defaultDatabasePath } from "./database-path.js";
+import { CARRIED_OBJECTIONS_SENTENCE } from "./desk-soft-spots.js";
 import { CollabError } from "./errors.js";
 import {
   fileLocatorParts,
@@ -2296,9 +2297,12 @@ function ballotItem(
 // ---------------------------------------------------------------------------
 // Proposals and decisions as the notes surface shows them (spec 5.2, 5.6, 6)
 
-/** Said wherever a replaced proposal's objections are shown (spec 5.6). */
-export const CARRIED_OBJECTIONS_SENTENCE =
-  "Carried objections are text in the terms the person signs. Under consent/v1 they do not block this proposal. Each objector may challenge again.";
+/**
+ * Said wherever a replaced proposal's objections are shown (spec 5.6). It
+ * lives beside the person desk's soft spots, which say it too, so the desk's
+ * bundle need not load this module.
+ */
+export { CARRIED_OBJECTIONS_SENTENCE };
 
 /** Beside the person's desk commands, every time they are shown (spec 5.2). */
 export const FOR_THE_PERSON_NOTE =

@@ -4880,6 +4880,23 @@ class CollabStore {
     });
     return transaction.deferred();
   }
+  personDeskProposalViews(workspaceId, proposalIds) {
+    this.requireWorkspace(workspaceId);
+    return this.db.transaction(() => {
+      const sessions = this.noteSessionViews(workspaceId);
+      const context = this.proposalReadContext(workspaceId);
+      return proposalIds.map((proposalId) => {
+        try {
+          this.requireProposalTerms(workspaceId, validateId(proposalId, "proposal_report_id"));
+          return { proposal_report_id: proposalId, view: this.noteProposalData(workspaceId, proposalId, sessions, context) };
+        } catch (error) {
+          if (!(error instanceof CollabError))
+            throw error;
+          return { proposal_report_id: proposalId, error: error.code };
+        }
+      });
+    }).deferred();
+  }
   personInboxSummary() {
     return this.listWorkspaces().map((workspace) => {
       const inbox = this.personInbox(workspace.id);
@@ -9913,6 +9930,172 @@ function addSeconds(iso, seconds) {
 import { spawn } from "child_process";
 import { randomBytes as randomBytes2 } from "crypto";
 
+// src/desk-soft-spots.ts
+var CARRIED_OBJECTIONS_SENTENCE = "Carried objections are text in the terms the person signs. Under consent/v1 they do not block this proposal. Each objector may challenge again.";
+var SOFT_SPOTS_DISPLAY_ONLY = "Display only: these lines are not in the bytes the person signs or in any hash, they change no count, and the desk accepts and refuses exactly as it would without them.";
+var SOFT_SPOTS_HEADING = "Soft spots the agents' views show on this proposal. Display only: not in the bytes you sign; they change no count and nothing the desk accepts or refuses.";
+var SOFT_SPOTS_DELIVERY_NOTE = "Under consent/v1 silence from an awaited voice does not stop the position settling at the close. A delivery is recorded only when collab_arrive or collab_inbox returned the question; reads through legacy tools or host messages are not recorded.";
+var SOFT_SPOTS_NOT_REPORTED = "The other device's desk reported no soft spots (an older build does not compute them). None are shown here, which does not mean there are none.";
+var SOFT_SPOT_LINES_PER_KIND = 10;
+var EXCERPT_MAX = 160;
+var MAX_REMOTE_LINES = 64;
+var MAX_REMOTE_LINE = 2000;
+function quoted(text) {
+  return JSON.stringify(text).replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}\u2028\u2029]/gu, (char) => `\\u{${char.codePointAt(0).toString(16).toUpperCase()}}`);
+}
+function cut(text, max) {
+  if (text.length <= max)
+    return text;
+  let end = max;
+  const last = text.charCodeAt(end - 1);
+  if (last >= 55296 && last <= 56319)
+    end -= 1;
+  return `${text.slice(0, end)}\u2026`;
+}
+function excerpt(statement) {
+  return cut(statement, EXCERPT_MAX);
+}
+function minutesSince(at, observedAt) {
+  const age = Date.parse(observedAt) - Date.parse(at);
+  return Number.isFinite(age) ? Math.max(0, Math.floor(age / 60000)) : null;
+}
+function who(stance) {
+  return { session: stance.from_session_id, name: stance.from_actor };
+}
+function counted(value) {
+  return value ? "counted by consent/v1" : "not counted by consent/v1";
+}
+var FLAG_WORDS = {
+  same_seat_as_author: "its session declares the author's host handle (same_seat_as_author; the handle is unverified)",
+  same_name_as_author: "it has the author's name (same_name_as_author)",
+  started_after_open: "its session started after the proposal opened (started_after_open)"
+};
+function capped(lines, kind) {
+  if (lines.length <= SOFT_SPOT_LINES_PER_KIND)
+    return lines;
+  const rest = lines.length - SOFT_SPOT_LINES_PER_KIND;
+  return [
+    ...lines.slice(0, SOFT_SPOT_LINES_PER_KIND),
+    `\u2026and ${rest} more ${kind}; the JSON key soft_spots of person proposals --proposal lists every one.`
+  ];
+}
+function deskSoftSpots(data) {
+  const { status } = data;
+  const awaited = data.consulted.filter((voice) => voice.awaited && !voice.delivery_recorded).map((voice) => ({
+    voice: voice.voice_id,
+    name: voice.name,
+    last_seen_minutes: voice.last_seen_at ? minutesSince(voice.last_seen_at, data.observed_at) : null
+  }));
+  const flagged = data.supports.filter((stance) => stance.standing).map((stance) => ({
+    stance,
+    flags: ["same_seat_as_author", "same_name_as_author", "started_after_open"].filter((flag) => stance.flags[flag] === true)
+  })).filter((entry) => entry.flags.length > 0);
+  const ended = data.challenges.filter((stance) => stance.standing && stance.flags.challenger_ended === true);
+  const ungrounded = [...data.supports, ...data.challenges].filter((stance) => stance.standing && stance.flags.ungrounded === true);
+  const carried = data.replaced?.carried ?? [];
+  const lines = [];
+  const awaitedLines = awaited.map((voice) => `Awaited voice ${quoted(voice.name)} (voice ${voice.voice}) has no recorded delivery on the notes surface, ` + (voice.last_seen_minutes === null ? "and no session of it is listed here" : `last seen ${voice.last_seen_minutes} min ago`) + ": it may never have been shown this question.");
+  lines.push(...capped(awaitedLines, "awaited voices"));
+  if (awaited.length > 0)
+    lines.push(SOFT_SPOTS_DELIVERY_NOTE);
+  lines.push(...capped(flagged.map(({ stance, flags }) => {
+    const maybeAuthor = flags.includes("same_seat_as_author") || flags.includes("same_name_as_author");
+    return `Support ${stance.id} by ${quoted(stance.from_actor)} (${counted(stance.counted)}): ` + `${flags.map((flag) => FLAG_WORDS[flag]).join("; ")}.` + (maybeAuthor ? " It may be the author's own voice in another session." : "");
+  }), "flagged supports"));
+  lines.push(...capped(ended.map((stance) => `Challenge ${stance.id} by ${quoted(stance.from_actor)} still stands, but its challenger's session has ended` + (stance.voice_has_active_session ? "; another session of the same voice is active and can lift it." : ", and no session of its voice is active to lift it.") + ` While it stands the position cannot be consented. It said: ${quoted(excerpt(stance.statement))}`), "challenges whose challenger's session has ended"));
+  lines.push(...capped(ungrounded.map((stance) => `${stance.relation === "supports" ? "Support" : "Challenge"} ${stance.id} by ${quoted(stance.from_actor)} ` + `(${counted(stance.counted)}) gives no reason and no evidence: ` + (stance.grounded_by === "note" ? "the note has no Why and no Evidence lines." : "it has no evidence_refs and no confidence_basis (a legacy report's body is not read for reasons, so its text may still argue a case).")), "stances with no reason or evidence"));
+  lines.push(...capped(carried.map((entry) => (entry.carried_in_terms ? `Objection ${entry.challenge_id} by ${quoted(entry.by)}, raised on ${entry.raised_on}, is carried as text in these terms` + (entry.standing_on_replaced ? " and still stands where it was raised" : " and no longer stands where it was raised") : `Objection ${entry.challenge_id} by ${quoted(entry.by)} still stands on ${entry.raised_on}, which this proposal replaces, ` + "but is not in these terms") + (entry.re_raised_here ? "; the same voice also challenges this proposal, and that challenge is counted" : "") + `. It said: ${quoted(excerpt(entry.statement))}`), "carried objections"));
+  if (carried.length > 0)
+    lines.push(CARRIED_OBJECTIONS_SENTENCE);
+  return {
+    proposal_sha256: status.proposal_sha256,
+    position: status.ai.position,
+    observed_at: data.observed_at,
+    awaited_without_delivery: awaited,
+    flagged_supports: flagged.map(({ stance, flags }) => ({
+      report: stance.id,
+      by: who(stance),
+      voice: stance.voice_id,
+      counted: stance.counted,
+      flags
+    })),
+    ended_challengers: ended.map((stance) => ({
+      report: stance.id,
+      by: who(stance),
+      voice: stance.voice_id,
+      voice_has_active_session: stance.voice_has_active_session,
+      statement: stance.statement
+    })),
+    ungrounded: ungrounded.map((stance) => ({
+      report: stance.id,
+      relation: stance.relation,
+      by: who(stance),
+      counted: stance.counted,
+      basis: stance.grounded_by === "note" ? "no Why and no Evidence lines" : "no evidence_refs and no confidence_basis (a legacy report's body is not read for reasons)"
+    })),
+    replaced: data.replaced?.proposal_id ?? null,
+    carried_objections: carried.map((entry) => ({
+      challenge: entry.challenge_id,
+      by: { session: entry.by_session_id, name: entry.by },
+      voice: entry.voice_id,
+      raised_on: entry.raised_on,
+      carried_in_terms: entry.carried_in_terms,
+      standing_on_replaced: entry.standing_on_replaced,
+      re_raised_here: entry.re_raised_here,
+      counted_by_consent_v1: false,
+      statement: entry.statement
+    })),
+    ...carried.length > 0 ? { carried_note: CARRIED_OBJECTIONS_SENTENCE } : {},
+    count: awaited.length + flagged.length + ended.length + ungrounded.length + carried.length,
+    lines,
+    display_only: SOFT_SPOTS_DISPLAY_ONLY
+  };
+}
+function softSpotsUnavailable(code) {
+  return {
+    unavailable: code,
+    lines: [`The soft spots could not be read (${code}). None are shown, which does not mean there are none.`],
+    display_only: SOFT_SPOTS_DISPLAY_ONLY
+  };
+}
+function softSpotDisplay(entry, shown, table) {
+  if (entry === undefined) {
+    return {
+      note: SOFT_SPOTS_HEADING,
+      lines: [table === "remote" ? SOFT_SPOTS_NOT_REPORTED : softSpotsUnavailable("soft_spots_missing").lines[0]]
+    };
+  }
+  const lines = [...entry.lines];
+  const position = entry.position !== undefined && entry.position !== shown.ai.position;
+  const bytes = entry.proposal_sha256 !== undefined && entry.proposal_sha256 !== shown.proposal_sha256;
+  if (position || bytes) {
+    lines.push(`These lines were read with the agents' position ${quoted(entry.position ?? "unknown")} and proposal_sha256 ` + `${entry.proposal_sha256 ?? "unknown"}; the summary shows ${shown.ai.position} and ${shown.proposal_sha256}. ` + "The journal changed between the two reads; read it again before acting.");
+  }
+  return lines.length > 0 ? { note: SOFT_SPOTS_HEADING, lines } : null;
+}
+function softSpotSummaryLines(display) {
+  return display ? [display.note, ...display.lines.map((line) => `- ${line}`)] : [];
+}
+function remoteSoftSpots(receipt, proposalId) {
+  const map = receipt.soft_spots;
+  if (map === undefined)
+    return;
+  const entry = map !== null && typeof map === "object" && !Array.isArray(map) && Object.hasOwn(map, proposalId) ? map[proposalId] : undefined;
+  if (entry === null || typeof entry !== "object" || Array.isArray(entry) || !Array.isArray(entry.lines) || !entry.lines.every((line) => typeof line === "string")) {
+    return { lines: softSpotsUnavailable("remote_soft_spots_unreadable").lines };
+  }
+  const record = entry;
+  const lines = record.lines.slice(0, MAX_REMOTE_LINES).map((line) => cut(line, MAX_REMOTE_LINE));
+  if (record.lines.length > MAX_REMOTE_LINES) {
+    lines.push(`\u2026and ${record.lines.length - MAX_REMOTE_LINES} more lines from the other device's desk, not shown here.`);
+  }
+  return {
+    lines,
+    ...typeof record.position === "string" ? { position: record.position } : {},
+    ...typeof record.proposal_sha256 === "string" ? { proposal_sha256: record.proposal_sha256 } : {}
+  };
+}
+
 // src/person-desk.ts
 import { createHash as createHash5 } from "crypto";
 import { closeSync as closeSync6, existsSync as existsSync5, openSync as openSync6, readSync as readSync3 } from "fs";
@@ -10156,10 +10339,20 @@ function runVerb(store, verb, values, deps) {
       return done({ workspaces: store.listWorkspaces() });
     case "voices":
       return done({ voices: store.tableVoices(values.workspace) });
-    case "proposals":
-      return values.proposal ? done({ proposal: store.proposalStatus(values.workspace, values.proposal) }) : done(store.listProposalStatuses(values.workspace, { limit: parseInteger(values.limit, "limit") }));
-    case "inbox":
-      return values.workspace ? done({ inbox: store.personInbox(values.workspace) }) : done({ summary: store.personInboxSummary() });
+    case "proposals": {
+      if (values.proposal) {
+        const proposal = store.proposalStatus(values.workspace, values.proposal);
+        return done({ proposal, soft_spots: deskSoftSpotsFor(store, values.workspace, [proposal]) });
+      }
+      const listed = store.listProposalStatuses(values.workspace, { limit: parseInteger(values.limit, "limit") });
+      return done({ ...listed, soft_spots: deskSoftSpotsFor(store, values.workspace, listed.proposals) });
+    }
+    case "inbox": {
+      if (!values.workspace)
+        return done({ summary: store.personInboxSummary() });
+      const inbox = store.personInbox(values.workspace);
+      return done({ inbox, soft_spots: deskSoftSpotsFor(store, values.workspace, inbox.awaiting_person) });
+    }
     case "challenge":
       return done({
         challenge: store.personActChallenge({
@@ -10185,9 +10378,10 @@ function runVerb(store, verb, values, deps) {
       const status = store.proposalStatusById(values.proposal);
       const bytes = `${challenge.challenge_bytes}
 ${status.proposal_bytes}`;
+      const softSpots = deskSoftSpotsFor(store, status.proposal.workspace_id, [status])[status.proposal.id];
       const confirmed = confirmOnTty({
         act: act === "agree" ? "agree to a proposal" : "reject a proposal",
-        summary: actSummary(status, act, challenge.reason),
+        summary: [...actSummary(status, act, challenge.reason), ...softSpotSummaryLines(softSpotDisplay(softSpots, status, "local"))],
         bytes,
         sha256: createHash5("sha256").update(bytes).digest("hex")
       }, { openTty: deps.openTty, now: deps.now });
@@ -10316,6 +10510,18 @@ function actSummary(status, act, reason) {
     `extent ${JSON.stringify(status.terms.extent)}`,
     act === "agree" ? "Agreeing authorises only this extent." : `reason ${JSON.stringify(reason)}`
   ];
+}
+function deskSoftSpotsFor(store, workspaceId, statuses) {
+  const ids = statuses.map((status) => status.proposal.id);
+  try {
+    return Object.fromEntries(store.personDeskProposalViews(workspaceId, ids).map((read) => [
+      read.proposal_report_id,
+      "view" in read ? deskSoftSpots(read.view) : softSpotsUnavailable(read.error)
+    ]));
+  } catch (error) {
+    const code = error instanceof CollabError ? error.code : "internal_error";
+    return Object.fromEntries(ids.map((id) => [id, softSpotsUnavailable(code)]));
+  }
 }
 function parsePersonArgs(argv) {
   let parsed;
@@ -10500,7 +10706,7 @@ async function signCeremony(values, env, deps, io, command) {
     if (challenge.passkeys.length === 0) {
       throw new CollabError("passkey_not_enrolled", "No passkey is enrolled at this table; enrol one first");
     }
-    const status = await table.status(challenge);
+    const { status, soft_spots: softSpots } = await table.status(challenge);
     const origin = values.port ? `http://localhost:${parsePort(values.port)}` : challenge.passkeys[0].origin;
     const port = portOf(origin);
     const passkeys = challenge.passkeys.filter((key) => key.origin === origin);
@@ -10522,7 +10728,8 @@ async function signCeremony(values, env, deps, io, command) {
       challenge_bytes: challenge.challenge_bytes,
       challenge: challenge.challenge,
       rp_id: "localhost",
-      credentials: passkeys.map((key) => key.credential_id)
+      credentials: passkeys.map((key) => key.credential_id),
+      soft_spots: softSpotDisplay(softSpots, status, values.via ? "remote" : "local")
     };
     const browser = values["no-open"] !== true && atTerminal(deps);
     const result = await serveOnce(port, data, io, command, browser, async (body) => {
@@ -10600,7 +10807,8 @@ function localTable(values, env, deps) {
       return store.personActChallenge({ proposal_report_id: proposal, act, reason });
     },
     async status(challenge) {
-      return store.proposalStatusById(challenge.proposal_report_id);
+      const status = store.proposalStatusById(challenge.proposal_report_id);
+      return { status, soft_spots: deskSoftSpotsFor(store, status.proposal.workspace_id, [status])[status.proposal.id] };
     },
     async record(proposal, act, reason, assertion) {
       return store.recordPersonActWithPasskey({
@@ -10632,7 +10840,8 @@ function remoteTable(destination, io) {
     },
     async status(challenge) {
       const argv = ["proposals", `--workspace=${challenge.workspace_id}`, `--proposal=${challenge.proposal_report_id}`];
-      return (await receipt(argv)).proposal;
+      const read = await receipt(argv);
+      return { status: read.proposal, soft_spots: remoteSoftSpots(read, challenge.proposal_report_id) };
     },
     async record(proposal, act, reason, assertion) {
       const argv = [
@@ -10777,9 +10986,11 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.45 ui-monospa
 button { font: inherit; padding: 10px 18px; border-radius: 8px; border: 1px solid currentColor; background: transparent; cursor: pointer; }
 button.go { color: var(--go); } button.stop { color: var(--stop); } button[disabled] { opacity: .5; cursor: default; }
 #result:empty { display: none; }
+ul { margin: 6px 0 0; padding-left: 18px; } li { white-space: pre-wrap; overflow-wrap: anywhere; margin: 4px 0; }
 </style></head><body><main>
 <h1 id="title"></h1><div class="dim" id="sub"></div>
 <section id="what"></section>
+<section id="soft" hidden><div class="label" id="soft-note"></div><ul id="soft-lines"></ul></section>
 <section><div class="label">Exact bytes you are signing</div><pre id="act"></pre>
 <div class="label">The proposal they name</div><pre id="proposal"></pre></section>
 <button id="go"></button>
@@ -10813,6 +11024,11 @@ button.go { color: var(--go); } button.stop { color: var(--stop); } button[disab
     field("Question", data.question); field("Criteria", data.criteria);
     field("Extent \u2014 agreement authorises only this", data.extent); field("Known conflicts", data.known_conflicts);
     if (data.act === "reject") field("Your reason", data.reason);
+    if (data.soft_spots) {
+      $("soft-note").textContent = data.soft_spots.note;
+      for (const line of data.soft_spots.lines) { const li = document.createElement("li"); li.textContent = line; $("soft-lines").append(li); }
+      $("soft").hidden = false;
+    }
     $("act").textContent = data.challenge_bytes; $("proposal").textContent = data.proposal_bytes;
     $("go").textContent = data.act === "agree" ? "Touch ID: agree" : "Touch ID: reject";
     $("go").className = data.act === "agree" ? "go" : "stop";

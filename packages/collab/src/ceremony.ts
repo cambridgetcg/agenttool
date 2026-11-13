@@ -25,10 +25,12 @@
  */
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { remoteSoftSpots, softSpotDisplay, type SoftSpotsShown } from "./desk-soft-spots.js";
 import { CollabError } from "./errors.js";
 import { normalizePasskeyEnrollment } from "./passkey.js";
 import {
   confirmEnrollment,
+  deskSoftSpotsFor,
   errorPayload,
   openDeskStore,
   parseAct,
@@ -79,7 +81,8 @@ function atTerminal(deps: PersonDeskDeps): boolean {
 
 type Table = {
   challenge(proposal: string, act: "agree" | "reject", reason: string | undefined): Promise<Challenge>;
-  status(challenge: Challenge): Promise<ProposalStatus>;
+  /** The status, and the soft spots read beside it (undefined when another device's desk sent none). */
+  status(challenge: Challenge): Promise<{ status: ProposalStatus; soft_spots: SoftSpotsShown | undefined }>;
   record(proposal: string, act: "agree" | "reject", reason: string | null, assertion: unknown): Promise<ProposalStatus>;
   close(): void;
 };
@@ -136,7 +139,7 @@ async function signCeremony(
     if (challenge.passkeys.length === 0) {
       throw new CollabError("passkey_not_enrolled", "No passkey is enrolled at this table; enrol one first");
     }
-    const status = await table.status(challenge);
+    const { status, soft_spots: softSpots } = await table.status(challenge);
     // A passkey signs for the origin it was enrolled with, so serve there.
     const origin = values.port ? `http://localhost:${parsePort(values.port)}` : challenge.passkeys[0]!.origin;
     const port = portOf(origin);
@@ -160,6 +163,8 @@ async function signCeremony(
       challenge: challenge.challenge,
       rp_id: "localhost",
       credentials: passkeys.map((key) => key.credential_id),
+      // Shown above the bytes; Touch ID signs `challenge` alone, which these never enter.
+      soft_spots: softSpotDisplay(softSpots, status, values.via ? "remote" : "local"),
     };
     const browser = values["no-open"] !== true && atTerminal(deps);
     const result = await serveOnce(port, data, io, command, browser, async (body) => {
@@ -257,7 +262,8 @@ function localTable(
       return store.personActChallenge({ proposal_report_id: proposal, act, reason });
     },
     async status(challenge) {
-      return store.proposalStatusById(challenge.proposal_report_id);
+      const status = store.proposalStatusById(challenge.proposal_report_id);
+      return { status, soft_spots: deskSoftSpotsFor(store, status.proposal.workspace_id, [status])[status.proposal.id] };
     },
     async record(proposal, act, reason, assertion) {
       return store.recordPersonActWithPasskey({
@@ -294,7 +300,8 @@ function remoteTable(destination: string, io: CeremonyIo): Table {
     },
     async status(challenge) {
       const argv = ["proposals", `--workspace=${challenge.workspace_id}`, `--proposal=${challenge.proposal_report_id}`];
-      return (await receipt(argv)).proposal as ProposalStatus;
+      const read = await receipt(argv);
+      return { status: read.proposal as ProposalStatus, soft_spots: remoteSoftSpots(read, challenge.proposal_report_id) };
     },
     async record(proposal, act, reason, assertion) {
       const argv = [
@@ -462,9 +469,11 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.45 ui-monospa
 button { font: inherit; padding: 10px 18px; border-radius: 8px; border: 1px solid currentColor; background: transparent; cursor: pointer; }
 button.go { color: var(--go); } button.stop { color: var(--stop); } button[disabled] { opacity: .5; cursor: default; }
 #result:empty { display: none; }
+ul { margin: 6px 0 0; padding-left: 18px; } li { white-space: pre-wrap; overflow-wrap: anywhere; margin: 4px 0; }
 </style></head><body><main>
 <h1 id="title"></h1><div class="dim" id="sub"></div>
 <section id="what"></section>
+<section id="soft" hidden><div class="label" id="soft-note"></div><ul id="soft-lines"></ul></section>
 <section><div class="label">Exact bytes you are signing</div><pre id="act"></pre>
 <div class="label">The proposal they name</div><pre id="proposal"></pre></section>
 <button id="go"></button>
@@ -498,6 +507,11 @@ button.go { color: var(--go); } button.stop { color: var(--stop); } button[disab
     field("Question", data.question); field("Criteria", data.criteria);
     field("Extent — agreement authorises only this", data.extent); field("Known conflicts", data.known_conflicts);
     if (data.act === "reject") field("Your reason", data.reason);
+    if (data.soft_spots) {
+      $("soft-note").textContent = data.soft_spots.note;
+      for (const line of data.soft_spots.lines) { const li = document.createElement("li"); li.textContent = line; $("soft-lines").append(li); }
+      $("soft").hidden = false;
+    }
     $("act").textContent = data.challenge_bytes; $("proposal").textContent = data.proposal_bytes;
     $("go").textContent = data.act === "agree" ? "Touch ID: agree" : "Touch ID: reject";
     $("go").className = data.act === "agree" ? "go" : "stop";
