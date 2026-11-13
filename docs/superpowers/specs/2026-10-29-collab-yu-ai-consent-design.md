@@ -216,8 +216,9 @@ A counted ballot may be worth building only for a real multi-option preference a
 | Only the person, at the controlling terminal or with a user-verified passkey; never relayed, never through MCP. | The same reason as for agreement (section 5.2). |
 | Only while no session of the challenger's voice is live (`sessionLiveness`). | A present voice can be answered and can lift its own challenge; overriding a present objector would end two-party consent. A crashed session stops blocking when its liveness lapses. |
 | A reason is required, signed, and shown beside the challenge. | The person's judgment of the objection should be as visible as the objection. |
-| The signed bytes name the proposal hash, the challenge and a hash of its content, the reason, the count of earlier person acts and set-asides, and the agents' position. | The objection's text cannot differ from what was shown, and one assertion records one act once. |
+| The signed bytes name the proposal hash, the challenge and a hash of its content, the challenger's latest activity, the reason, the count of earlier person acts and set-asides, and the agents' position. | The objection's text cannot differ from what was shown, one assertion records one act once, and an assertion refused because the challenger came back cannot record after it leaves again unseen. |
 | Final; one challenge at a time; no undo. | An undo would be a second new act to get right; a person who regrets a set-aside can decline to agree, or reject. |
+| A set-aside changes only what blocks: a replacement still carries the challenge, and its voice is told. | The challenge was never lifted, and the clause leaves the challenger free to challenge again. |
 | On a consent/v2 proposal every person act's `ai_snapshot` names the set-aside challenges; a consent/v1 snapshot keeps its exact bytes. | An agreement binds the set-asides it rests on, and older builds keep their bytes. |
 | Additive storage: the event `proposal.challenge_set_aside` and the table `proposal_set_asides`, rebuilt from those events, with no foreign keys. | As for Collab Notes: older builds open the same file and re-verify the chain. |
 

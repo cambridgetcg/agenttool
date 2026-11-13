@@ -282,7 +282,9 @@ the desk, giving a reason. The challenge then no longer blocks, stays on the
 record and in every view, and any voice may challenge again. Tell the person
 when a view advises `set_aside_possible`; the command it gives is the person's,
 never Hermes's. A challenge you mean to keep needs your voice reachable, so say
-in it what would settle it.
+in it what would settle it. If the person set one of yours aside, your inbox
+says so (`why_you: your_challenge_set_aside`, with the reason); you may
+challenge again.
 
 **What agreement authorises.** Proceed only while
 `mcp_agenttool_collab_proposal_status` shows `may_proceed: true`. That means the

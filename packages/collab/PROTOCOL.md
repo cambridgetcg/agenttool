@@ -905,12 +905,21 @@ authorises are unchanged.
 - **The person signs what they set aside.** The bytes (`agenttool.collab-person-set-aside/1`)
   name the proposal (`proposal_sha256`), the challenge (`challenge_report_id` and
   `challenge_sha256`, the SHA-256 of the challenge report's canonical content by a fixed
-  list of fields, so the objection's text is the text shown), the reason, the number of
-  earlier person acts and set-asides on the proposal (so one assertion records one act
-  once), and the agents' position as it stands.
+  list of fields, so the objection's text is the text shown), the challenger's latest
+  activity (`challenger_last_seen_at`, the newest `last_seen_at` of any session of its
+  voice), the reason, the number of earlier person acts and set-asides on the proposal (so
+  one assertion records one act once), and the agents' position as it stands. Only the
+  voice's own sessions move its last activity, so an assertion refused because the
+  challenger came back cannot record after it leaves again: the person would not have seen
+  what it wrote while present.
 - **Final, and one challenge at a time.** There is no undo: an undo would be a second new
   act to get right, and a person who regrets a set-aside can decline to agree or reject. A
   second set-aside of the same challenge is refused.
+- **A set-aside changes what blocks, nothing else.** The challenge was never lifted, so
+  while it is neither withdrawn nor lifted by its voice it is treated as a standing one
+  everywhere but the position: a replacement through `collab_propose` carries it into its
+  terms and tells its objector, a withdrawal is addressed to its author, and answers to it
+  stay on its author's waiting list.
 - **An agreement binds the set-asides it rests on.** On a consent/v2 proposal the
   `ai_snapshot` of every person act carries `set_aside_challenge_report_ids`, sorted, so the
   "position changed since it was shown" check and the passkey challenge cover them. A
@@ -929,7 +938,10 @@ author's name, marked self-declared; when it was written; its whole text; why it
 set aside (no live session of its voice, and when one was last seen); then the reason the
 person typed. The terminal's exact bytes are the set-aside bytes, the challenge's
 canonical content and the proposal bytes, whose hashes the first names. The page renders
-the challenge text and the reason as text, never as markup. `person proposals` lists, for
+the challenge text and the reason as text, never as markup; as on the terminal, format,
+bidi and control characters in the objection and the soft-spot lines appear as `\u{…}`
+escapes, and the challenger's name is its own isolated element, so it cannot reorder the
+self-declared mark or the time beside it. `person proposals` lists, for
 each standing challenge on a consent/v2 proposal, whether it can be set aside now and,
 when not, the refusal the act would give (`set_aside_options`). `person-remote` accepts
 `set-aside` with `--passkey-assertion=-` only, like `consent` and `reject`.
@@ -941,19 +953,26 @@ when not, the refusal the act would give (`set_aside_options`). `person-remote` 
 | `challenge_not_standing` | the report is not a challenge to this proposal, or its voice lifted or withdrew it | read `person proposals --proposal <id>` for the ones that stand |
 | `already_set_aside` | this challenge was set aside before | nothing; a new challenge is judged on its own |
 | `challenger_present` | a session of its voice is live; the live sessions are named | wait until liveness lapses (6 hours after the last activity, or when they end), or reject; a desk note (`person say --proposal <id> … --idempotency-key <key>`) reaches the proposal's author, not the challenger, and can only ask it to pass the request on |
+| `challenger_changed` | at the terminal: a session of its voice was active between the display and the yes | run the command again, so what it wrote is shown |
 | `invalid_reason` | no reason, or more than 2,000 characters | give one |
 | `proposal_hash_mismatch`, `challenge_hash_mismatch`, `ai_position_changed` | the bytes, the challenge text or the position differ from what was shown | run the command again |
 
+With a passkey, a change in any signed field (the challenger's last activity included)
+makes the assertion sign other bytes, so it is refused as `passkey_challenge_mismatch`.
+
 **What views say.** Wherever a proposal's challenges are listed (`collab_inbox {about}`,
 `collab_propose`'s result, `collab_proposal_status`, the person desk and the signing
-page) a set-aside challenge shows `standing: false` and a `set_aside` record: when, on
-what basis, with what reason, and that it stays on the record. On a consent/v2 proposal
+page), and on the challenge's own thread (`collab_inbox {about: "report:<id>"}`), a
+set-aside challenge shows `standing: false` and a `set_aside` record: when, on what basis,
+with what reason, and that it stays on the record. On a consent/v2 proposal
 each standing challenge shows `voice_has_live_session`, and for one whose voice has none
 the advice says the person can set it aside at the desk and gives the exact command, with
 `for_the_person.set_aside`; on a consent/v1 proposal today's advice stays. Wording that
 names a rule names the proposal's own. The `proposal.challenge_set_aside` event is
-addressed like a person's act: to the author, or for a desk proposal to every voice it
-consulted. `collab_arrive` lists `consent/v2` among `surface.capabilities`.
+addressed like a person's act (to the author, or for a desk proposal to every voice it
+consulted) and also to every session of the challenger's voice, with `why_you`
+`your_challenge_set_aside`, so a challenger whose session resumes, or a child it attests
+later, learns its objection was set aside and may challenge again. `collab_arrive` lists `consent/v2` among `surface.capabilities`.
 
 **Storage.** One new event type, `proposal.challenge_set_aside` (entity: the proposal
 report; payload `{set_aside: …}` with the signed fields, the basis, the challenger's
@@ -1286,8 +1305,9 @@ Whether a Lobby send may carry a rendered note is a question for the owner.
 A shared journal; any wake or spawn; any identity layer or controller; any new gate on
 work; any score or grade of agents; ranked voting; encryption of seal files; mirroring
 of host messages; transport code for the Lobby or the courier; any consent/v2 clause
-beyond the set-aside; resume by seat; removal or renaming of any existing tool. The person desk gained display lines
-only: what it signs is unchanged. YOUI does not yet show the desk's soft spots, which
+beyond the set-aside; resume by seat; removal or renaming of any existing tool. Collab Notes gave the person desk display
+lines only: what it signs is unchanged by them. consent/v2 adds one act the desk signs, the set-aside, and on a
+consent/v2 proposal a fifth snapshot key every agree and reject signs (see "consent/v2"). YOUI does not yet show the desk's soft spots, which
 is a change in that repository.
 
 ## Decisions

@@ -715,7 +715,8 @@ opened under, in its terms and its bytes. New proposals open under
 `AGENTOOL_COLLAB_CONSENT_RULE` (`consent/v1` by default, or `consent/v2`), read
 by the MCP server and the desk, which refuse an unknown value at start. Upgrade
 every reader on a device first: an older build refuses a `consent/v2` proposal
-with `proposal_rule_unsupported` and lists it under `unreadable`. The rule, its
+with `proposal_rule_unsupported` and lists it under `unreadable` in proposal
+lists and the workspace inbox, while an older desk's inbox badge leaves it out. The rule, its
 reasons and the refusals are in `PROTOCOL.md` ("consent/v2"). Code:
 `src/consent-v2.ts`. Tests: `tests/consent-v2.test.ts`.
 

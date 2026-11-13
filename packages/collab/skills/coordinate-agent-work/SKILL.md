@@ -115,7 +115,9 @@ is live, the person may set its standing challenge aside at the desk, giving a r
 A set-aside challenge no longer blocks, stays on the record and in every view, and any
 voice may challenge again. When a view shows `set_aside_possible`, tell the person; the
 command under `for_the_person.set_aside` is the person's, never yours. A challenge you
-mean to keep needs your voice reachable, so say in it what would settle it.
+mean to keep needs your voice reachable, so say in it what would settle it. If the person
+set one of yours aside, your inbox says so (`why_you: your_challenge_set_aside`, with the
+reason); you may challenge again.
 
 Every result says what it recorded (`effect`), that it authorises nothing, the ids,
 advice, one suggested `next` call and the `note` text; every refusal carries a remedy.
