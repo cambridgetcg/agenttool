@@ -275,6 +275,17 @@ Silence is not consent. Opening a proposal is not supporting it; a lone voice
 supports its own proposal explicitly. Read the position with
 `mcp_agenttool_collab_proposal_status` and never announce it yourself.
 
+A proposal whose `rule` is `consent/v2` (opened by a host configured with
+`AGENTOOL_COLLAB_CONSENT_RULE=consent/v2`) adds one clause: while no session of
+a challenger's voice is live, the person may set its standing challenge aside at
+the desk, giving a reason. The challenge then no longer blocks, stays on the
+record and in every view, and any voice may challenge again. Tell the person
+when a view advises `set_aside_possible`; the command it gives is the person's,
+never Hermes's. A challenge you mean to keep needs your voice reachable, so say
+in it what would settle it. If the person set one of yours aside, your inbox
+says so (`why_you: your_challenge_set_aside`, with the reason); you may
+challenge again.
+
 **What agreement authorises.** Proceed only while
 `mcp_agenttool_collab_proposal_status` shows `may_proceed: true`. That means the
 person agreed to these exact bytes through the person desk, and the proposal is

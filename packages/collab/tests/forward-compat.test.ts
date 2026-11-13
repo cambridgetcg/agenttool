@@ -30,7 +30,15 @@ import {
 } from "./compat/fixture.js";
 import { GOLDEN_BARE_REPORT_BODY, type GoldenOutcome } from "./compat/golden-scenario.js";
 import { normaliseEvents, Placeholders, type EventRow } from "./compat/normalise.js";
-import { gitIn, resolveRevision, type Revision, type Ships } from "./compat/revisions.js";
+import {
+  gitIn,
+  resolveRevision,
+  SKIP_MISSING_VARIABLE,
+  skipMissingReason,
+  skipNotice,
+  type Revision,
+  type Ships,
+} from "./compat/revisions.js";
 
 // Forward compatibility (Collab Notes spec 8.5): older builds keep opening,
 // verifying, paging, acking and writing a journal this build wrote, and this
@@ -41,7 +49,7 @@ const packageRoot = resolve(import.meta.dir, "..");
 const repositoryRoot = spawnSync("git", ["-C", packageRoot, "rev-parse", "--show-toplevel"], { encoding: "utf8" })
   .stdout?.trim() || packageRoot;
 const worker = join(import.meta.dir, "compat", "old-store-worker.ts");
-const DEFAULT_REVISIONS = ["collab-v0.4.0", "collab-v0.5.0", "1ec5ab4b", "a8799aad"];
+const DEFAULT_REVISIONS = ["collab-v0.4.0", "collab-v0.5.0", "1ec5ab4b", "a8799aad", "24ba2300"];
 const GOLDEN_REVISION = "a8799aad";
 const WORKER_TIMEOUT_MS = 60_000;
 const HOST_TIMEOUT_MS = 20_000;
@@ -65,7 +73,12 @@ interface StoreCapabilities {
  * What each default revision is known to contain. Detection must agree, so a
  * detection mistake can never quietly skip a check.
  */
-const KNOWN_REVISIONS: Record<string, { ships: Ships; store: StoreCapabilities }> = {
+const KNOWN_REVISIONS: Record<string, {
+  ships: Ships;
+  store: StoreCapabilities;
+  /** Event types added since a8799aad that this build already knows, and so may route. */
+  knows_new_types?: readonly string[];
+}> = {
   // collab-v0.4.0
   e6302579e7f815ee03f1024df2c725ed36189715: {
     ships: { mcp: true, host: false, host_wait: false, host_seat_ref: false },
@@ -86,6 +99,13 @@ const KNOWN_REVISIONS: Record<string, { ships: Ships; store: StoreCapabilities }
     ships: { mcp: true, host: true, host_wait: true, host_seat_ref: true },
     store: { event_addresses_session: true, proposal_status: true },
   },
+  // main with Collab Notes and without consent/v2: the newest older build, so
+  // the one a device is most likely still running when a consent/v2 proposal opens.
+  "24ba230032d7d2a216afdf253817fb2b9cbcbbdd": {
+    ships: { mcp: true, host: true, host_wait: true, host_seat_ref: true },
+    store: { event_addresses_session: true, proposal_status: true },
+    knows_new_types: COLLAB_NOTES_EVENT_TYPES.filter((type) => type !== "proposal.challenge_set_aside"),
+  },
 };
 
 function git(args: string[]): { ok: boolean; stdout: string; stderr: string } {
@@ -97,6 +117,20 @@ const requestedRevisions = (process.env.COLLAB_COMPAT_REVS ?? "").trim().split(/
 const revisions = (requestedRevisions.length ? requestedRevisions : DEFAULT_REVISIONS)
   .map((name) => resolveRevision(repositoryRoot, name));
 const golden = resolveRevision(repositoryRoot, GOLDEN_REVISION, "golden");
+// Set only in the public projection's collab step (see compat/revisions.ts).
+const skipReason = skipMissingReason();
+
+/** A missing revision's one test: it fails, unless COLLAB_COMPAT_SKIP_MISSING gives a reason to skip, which is printed. */
+function missingRevisionTest(revision: Revision): void {
+  if (skipReason) {
+    console.warn(skipNotice(revision.name, skipReason));
+    test.skip("is available in this clone", () => {});
+    return;
+  }
+  test("is available in this clone", () => {
+    throw new Error(revision.missing!);
+  });
+}
 
 function lazy<T>(make: () => Promise<T>): () => Promise<T> {
   let promise: Promise<T> | undefined;
@@ -427,6 +461,8 @@ interface Fixture {
   reports: Array<{ id: string; body: string; event_sequence: number }>;
   /** Legacy-type events this build routes to the waiter after its anchor. */
   waiter_legacy_sequences: number[];
+  /** Every event this build routes to the waiter after its anchor, with its type. */
+  waiter_routed: Array<{ sequence: number; type: string }>;
 }
 
 const fixture = lazy(async (): Promise<Fixture> => {
@@ -451,14 +487,22 @@ const fixture = lazy(async (): Promise<Fixture> => {
   try {
     const reports = listAllReports(reader, manifest.workspace_id);
     const notes = new Set<string>(COLLAB_NOTES_EVENT_TYPES);
-    const waiterLegacySequences = allEvents(reader, manifest.workspace_id)
+    const waiterRouted = allEvents(reader, manifest.workspace_id)
       .filter((event) =>
         event.sequence > manifest.waiter.after_anchor.sequence
         && event.session_id !== manifest.waiter.session_id
-        && !notes.has(event.type)
         && reader.eventAddressesSession(event, manifest.waiter.session_id))
-      .map((event) => event.sequence);
-    return { directory: state, manifest, status_at: statusAt, views, reports, waiter_legacy_sequences: waiterLegacySequences };
+      .map((event) => ({ sequence: event.sequence, type: event.type }));
+    const waiterLegacySequences = waiterRouted.filter((event) => !notes.has(event.type)).map((event) => event.sequence);
+    return {
+      directory: state,
+      manifest,
+      status_at: statusAt,
+      views,
+      reports,
+      waiter_legacy_sequences: waiterLegacySequences,
+      waiter_routed: waiterRouted,
+    };
   } finally {
     reader.close();
   }
@@ -478,7 +522,8 @@ describe("forward-compatibility fixture", () => {
     expect((await fixture()).waiter_legacy_sequences.length).toBeGreaterThan(0);
   }, TEST_TIMEOUT_MS);
 
-  test("adds no event type beyond a8799aad's union except the spec's", async () => {
+  // Needs a8799aad's protocol.ts; skipped only where the golden describe below prints why.
+  test.skipIf(golden.missing !== null && skipReason !== null)("adds no event type beyond a8799aad's union except the spec's", async () => {
     if (!golden.sha) throw new Error(golden.missing!);
     const base = eventTypeUnion(git(["show", `${golden.sha}:packages/collab/src/protocol.ts`]).stdout);
     const current = eventTypeUnion(readFileSync(join(packageRoot, "src", "protocol.ts"), "utf8"));
@@ -519,6 +564,16 @@ describe("forward-compatibility fixture", () => {
         agreement_current: null,
       }),
     ]);
+  }, TEST_TIMEOUT_MS);
+
+  test("holds a consent/v2 proposal with a set-aside and the agreement that binds it", async () => {
+    const { views } = await fixture();
+    const [agreed, open] = JSON.parse(views.v2_proposal_status!) as Array<Record<string, any>>;
+    expect(agreed).toMatchObject({ rule: "consent/v2", ai: { position: "consented" }, person: { state: "agreed" }, may_proceed: true });
+    expect(agreed!.set_asides).toHaveLength(1);
+    expect(agreed!.set_asides[0]).toMatchObject({ basis: "controlling_terminal", party: "person" });
+    expect(agreed!.agreement.ai_snapshot.set_aside_challenge_report_ids).toEqual([agreed!.set_asides[0].challenge_report_id]);
+    expect(open).toMatchObject({ rule: "consent/v2", ai: { position: "open" }, person: { state: "awaiting" }, set_asides: [] });
   }, TEST_TIMEOUT_MS);
 
   test("holds a sealed ballot the notes surface opened, cast in and revealed", async () => {
@@ -591,19 +646,43 @@ describe("a missing revision", () => {
     expect(goldenMissing).toContain("COLLAB_COMPAT_REVS does not change that.");
   });
 
+  // Only the availability gates run in each child (these tests' own names do
+  // not match, so they do not recurse). The child's environment is built
+  // here, so the parent's COLLAB_COMPAT_SKIP_MISSING never reaches it unasked.
+  const availability = (extra: Record<string, string>) => run(
+    [process.execPath, "test", import.meta.path, "-t", "is available in this clone"],
+    { timeout_ms: WORKER_TIMEOUT_MS, cwd: packageRoot, env: hermeticEnvironment({ COLLAB_COMPAT_REVS: absent, ...extra }) },
+  );
+
   test("fails the harness run instead of skipping", async () => {
-    // Only the availability gates run in the child (this test's own name does
-    // not match, so it does not recurse). The run must fail and say why.
-    const result = await run([process.execPath, "test", import.meta.path, "-t", "is available in this clone"], {
-      timeout_ms: WORKER_TIMEOUT_MS,
-      cwd: packageRoot,
-      env: hermeticEnvironment({ COLLAB_COMPAT_REVS: absent }),
-    });
+    const result = await availability({});
     const output = `${result.stdout}\n${result.stderr}`;
     expect(result.exit_code).not.toBe(0);
     expect(output).toContain(`(fail) older build ${absent} > is available in this clone`);
     expect(output).toContain("fetch-depth: 0");
     expect(output).not.toMatch(/\(skip\)/);
+    expect(output).not.toContain(SKIP_MISSING_VARIABLE);
+  }, TEST_TIMEOUT_MS);
+
+  test("never skips without COLLAB_COMPAT_SKIP_MISSING: a blank value fails like an unset one", async () => {
+    const result = await availability({ [SKIP_MISSING_VARIABLE]: "   " });
+    const output = `${result.stdout}\n${result.stderr}`;
+    expect(result.exit_code).not.toBe(0);
+    expect(output).toContain(`(fail) older build ${absent} > is available in this clone`);
+    expect(output).not.toMatch(/\(skip\)/);
+    expect(skipMissingReason({})).toBeNull();
+    expect(skipMissingReason({ [SKIP_MISSING_VARIABLE]: "" })).toBeNull();
+    expect(skipMissingReason({ [SKIP_MISSING_VARIABLE]: " \t " })).toBeNull();
+  }, TEST_TIMEOUT_MS);
+
+  test("skips a missing revision when COLLAB_COMPAT_SKIP_MISSING gives a reason, and prints the reason", async () => {
+    const reason = "the projection under test holds no older revisions";
+    const result = await availability({ [SKIP_MISSING_VARIABLE]: reason });
+    const output = `${result.stdout}\n${result.stderr}`;
+    expect(result.exit_code).toBe(0);
+    expect(output).toContain(`(skip) older build ${absent} > is available in this clone`);
+    expect(output).toContain(skipNotice(absent, reason));
+    expect(output).not.toMatch(/\(fail\)/);
   }, TEST_TIMEOUT_MS);
 });
 
@@ -615,6 +694,13 @@ interface Inspected {
   verified: Record<string, boolean>;
   reports: Array<{ id: string; body: string; event_sequence: number }>;
   proposals: unknown[] | null;
+  v2: {
+    refused: string[];
+    listed_ids: string[];
+    listed_unreadable: Array<{ proposal_report_id: string; error: string }>;
+    inbox_unreadable: Array<{ proposal_report_id: string; error: string }> | null;
+    inbox_summary: Record<string, unknown> | null;
+  } | null;
   addressing: { new_type_hits: unknown[]; control_addressed: boolean | null; waiter_sequences: number[] } | null;
   paging: {
     types: string[];
@@ -633,12 +719,14 @@ interface Inspected {
 for (const revision of revisions) {
   describe(`older build ${revision.name}`, () => {
     if (revision.missing) {
-      test("is available in this clone", () => {
-        throw new Error(revision.missing!);
-      });
+      missingRevisionTest(revision);
       return;
     }
     const known = KNOWN_REVISIONS[revision.sha!];
+    // The types this build has never seen: every type added since a8799aad, less the ones it knows.
+    const knownNewTypes = new Set<string>(known?.knows_new_types ?? []);
+    const unknownToIt = (type: string) =>
+      (COLLAB_NOTES_EVENT_TYPES as readonly string[]).includes(type) && !knownNewTypes.has(type);
     const directory = join(work, "revisions", revision.sha!);
     const copy = lazy(async () => copyJournal((await fixture()).directory, join(directory, "journal")));
 
@@ -648,9 +736,10 @@ for (const revision of revisions) {
       writeFileSync(request, JSON.stringify({
         workspace_id: manifest.workspace_id,
         root_path: manifest.root_path,
-        new_types: manifest.event_types.filter((type) => (COLLAB_NOTES_EVENT_TYPES as readonly string[]).includes(type)),
+        new_types: manifest.event_types.filter(unknownToIt),
         status_at,
         proposals: manifest.proposals,
+        v2_proposals: manifest.v2_proposals,
         waiter: {
           session_id: manifest.waiter.session_id,
           after_sequence: manifest.waiter.after_anchor.sequence,
@@ -691,9 +780,37 @@ for (const revision of revisions) {
       }
     }, TEST_TIMEOUT_MS);
 
-    test("routes no new event type to any session, and still routes legacy ones", async () => {
+    test("refuses a consent/v2 proposal by code and lists it as unreadable, without breaking its other calls", async () => {
       const result = await inspected();
-      const { waiter_legacy_sequences } = await fixture();
+      const { manifest } = await fixture();
+      expect(manifest.v2_proposals).toHaveLength(2);
+      expect(result.errors).toEqual({});
+      if (!result.capabilities.proposal_status) {
+        // A build with no proposals has nothing to refuse; it still verified, listed and paged above.
+        expect(result.v2).toBeNull();
+        return;
+      }
+      const [agreed, open] = manifest.v2_proposals as [string, string];
+      expect(result.v2!.refused).toEqual(["proposal_rule_unsupported", "proposal_rule_unsupported"]);
+      expect(result.v2!.listed_unreadable).toEqual(expect.arrayContaining(manifest.v2_proposals.map((id) => ({
+        proposal_report_id: id,
+        error: "proposal_rule_unsupported",
+      }))));
+      for (const id of manifest.proposals) expect(result.v2!.listed_ids).toContain(id);
+      for (const id of manifest.v2_proposals) expect(result.v2!.listed_ids).not.toContain(id);
+      // The open one has no person act, so the person's inbox meets it and lists it apart.
+      expect(result.v2!.inbox_unreadable).toEqual([{ proposal_report_id: open, error: "proposal_rule_unsupported" }]);
+      // The badge, though, has no unreadable count: it neither counts nor names the proposal (PROTOCOL.md
+      // "Rollout order"), which is one more reason to upgrade the desk before any writer opens one.
+      expect(result.v2!.inbox_summary).not.toBeNull();
+      expect(Object.keys(result.v2!.inbox_summary!).sort()).toEqual(["addressed_reports", "awaiting_person", "latest_report_id", "workspace_id"]);
+      for (const id of manifest.v2_proposals) expect(JSON.stringify(result.v2!.inbox_summary)).not.toContain(id);
+      expect(agreed).not.toBe(open);
+    }, TEST_TIMEOUT_MS);
+
+    test("routes no event type it has never seen to any session, and still routes the ones it knows", async () => {
+      const result = await inspected();
+      const { waiter_routed } = await fixture();
       expect(result.errors).toEqual({});
       if (!result.capabilities.event_addresses_session) {
         expect(result.addressing).toBeNull();
@@ -702,8 +819,10 @@ for (const revision of revisions) {
       expect(result.addressing!.new_type_hits).toEqual([]);
       expect(result.addressing!.control_addressed).toBe(true);
       if (result.capabilities.proposal_status) {
-        // This build's routing of legacy events is unchanged from the newest older build's.
-        expect(result.addressing!.waiter_sequences).toEqual(waiter_legacy_sequences);
+        // This build routes the events the older build knows exactly as the older build does.
+        expect(result.addressing!.waiter_sequences).toEqual(
+          waiter_routed.filter((event) => !unknownToIt(event.type)).map((event) => event.sequence),
+        );
       }
     }, TEST_TIMEOUT_MS);
 
@@ -920,9 +1039,7 @@ for (const revision of revisions) {
 
 describe(`golden scenario against ${GOLDEN_REVISION}`, () => {
   if (golden.missing) {
-    test("is available in this clone", () => {
-      throw new Error(golden.missing!);
-    });
+    missingRevisionTest(golden);
     return;
   }
   const root = join(work, "golden", "repo");

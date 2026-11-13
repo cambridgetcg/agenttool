@@ -39,6 +39,29 @@ export function missingMessage(name: string, detail: string, role: RevisionRole)
     + `or fetch ${name}. It does not skip a missing revision. ${choice}`;
 }
 
+/**
+ * The public projection's explicit answer to missing history. Its commits are
+ * one-way projections, so they hold none of the older revisions these checks
+ * read. Its CI sets COLLAB_COMPAT_SKIP_MISSING, in the collab step only, to
+ * the reason; then, and only then, a check whose revision is missing is
+ * skipped and that reason printed. Unset or blank, a missing revision fails
+ * as before. Reason: a skip must be a visible choice, never a detection
+ * accident.
+ */
+export const SKIP_MISSING_VARIABLE = "COLLAB_COMPAT_SKIP_MISSING";
+
+/** The reason given for skipping missing revisions, or null when none was given. */
+export function skipMissingReason(environment: Record<string, string | undefined> = process.env): string | null {
+  const value = (environment[SKIP_MISSING_VARIABLE] ?? "").trim();
+  return value === "" ? null : value;
+}
+
+/** The line printed for each skipped revision, so the skip and its reason are in the log. */
+export function skipNotice(name: string, reason: string): string {
+  return `${SKIP_MISSING_VARIABLE}: skipping the checks that need revision "${name}", which this clone does not hold. `
+    + `Reason given: ${reason}`;
+}
+
 export function resolveRevision(repositoryRoot: string, name: string, role: RevisionRole = "older build"): Revision {
   const none: Ships = { mcp: false, host: false, host_wait: false, host_seat_ref: false };
   const parsed = gitIn(repositoryRoot, ["rev-parse", "--verify", "--quiet", `${name}^{commit}`]);

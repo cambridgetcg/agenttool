@@ -18,6 +18,13 @@
  * spots the agents' views show (src/desk-soft-spots.ts), in a `soft_spots`
  * key and in text, outside every byte the person signs.
  *
+ * consent/v2 adds one act, `set-aside`: the person sets aside a standing
+ * challenge whose voice has no live session, with a reason, at the terminal
+ * or with a passkey, by the same routes as agreement. Before it the desk
+ * shows the objection in full (its author's self-declared name, when it was
+ * written, its text), why it can be set aside, and the reason typed. `person
+ * propose` opens under AGENTOOL_COLLAB_CONSENT_RULE (src/consent-v2.ts).
+ *
  * `person-remote` is the same desk behind an SSH forced command: it reads a
  * JSON argv from SSH_ORIGINAL_COMMAND, never a shell line, and allows only the
  * verbs that need neither a terminal nor a browser on that device.
@@ -26,6 +33,7 @@ import { createHash } from "node:crypto";
 import { closeSync, existsSync, openSync, readSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { canonicalJson } from "./canonical.js";
+import { challengeContentBytes, consentRuleFromEnvironment } from "./consent-v2.js";
 import { resolveDatabasePath } from "./database-path.js";
 import {
   deskSoftSpots,
@@ -36,7 +44,7 @@ import {
 } from "./desk-soft-spots.js";
 import { CollabError } from "./errors.js";
 import { normalizePasskeyEnrollment, passkeyFingerprint } from "./passkey.js";
-import type { ProposalStatus } from "./protocol.js";
+import { CONSENT_RULE, CONSENT_RULE_V2, type CollabReport, type ConsentRule, type ProposalStatus } from "./protocol.js";
 import { CollabStore } from "./store-notes.js";
 import { confirmOnTty, type OpenTty } from "./tty.js";
 
@@ -49,9 +57,11 @@ export const PERSON_DESK_USAGE =
   + "workspaces | voices --workspace <id> | proposals --workspace <id> [--proposal <id> | --limit <n>]"
   + " | inbox [--workspace <id>]"
   + " | challenge --proposal <id> --act agree | challenge --proposal <id> --act reject --reason <text>"
+  + " | challenge --proposal <id> --act set-aside --challenge <report id> --reason <text>"
   + " | consent --proposal <id> [--passkey-assertion <path>|-]"
   + " | reject --proposal <id> --reason <text> [--passkey-assertion <path>|-]"
-  + " | ceremony --proposal <id> --act agree|reject [--reason <text>] [--via <ssh-destination>] [--port <n>] [--no-open]"
+  + " | set-aside --proposal <id> --challenge <report id> --reason <text> [--passkey-assertion <path>|-]"
+  + " | ceremony --proposal <id> --act agree|reject|set-aside [--challenge <report id>] [--reason <text>] [--via <ssh-destination>] [--port <n>] [--no-open]"
   + " | say --workspace <id> --body <text> [--proposal <id>] --idempotency-key <key>"
   + " | propose --workspace <id> --question <text> --criteria <text> --extent <text>"
   + " [--known-conflicts <text>] [--topic <text>] [--consult-seconds <n>] --idempotency-key <key>"
@@ -69,18 +79,22 @@ export interface PersonDeskDeps {
 }
 
 export type Verb =
-  | "workspaces" | "voices" | "proposals" | "inbox" | "challenge" | "consent" | "reject" | "ceremony"
+  | "workspaces" | "voices" | "proposals" | "inbox" | "challenge" | "consent" | "reject" | "set-aside" | "ceremony"
   | "say" | "propose" | "withdraw" | "passkey-enroll" | "passkeys" | "passkey-export" | "passkey-revoke";
+
+/** What a person act names: agree and reject act on a proposal; set-aside on one challenge to it (consent/v2). */
+export type DeskAct = "agree" | "reject" | "set-aside";
 
 export const VERB_OPTIONS: Record<Verb, { required: string[]; optional: string[] }> = {
   workspaces: { required: [], optional: [] },
   voices: { required: ["workspace"], optional: [] },
   proposals: { required: ["workspace"], optional: ["proposal", "limit"] },
   inbox: { required: [], optional: ["workspace"] },
-  challenge: { required: ["proposal", "act"], optional: ["reason"] },
+  challenge: { required: ["proposal", "act"], optional: ["reason", "challenge"] },
   consent: { required: ["proposal"], optional: ["passkey-assertion"] },
   reject: { required: ["proposal", "reason"], optional: ["passkey-assertion"] },
-  ceremony: { required: ["proposal", "act"], optional: ["reason", "via", "port", "no-open"] },
+  "set-aside": { required: ["proposal", "challenge", "reason"], optional: ["passkey-assertion"] },
+  ceremony: { required: ["proposal", "act"], optional: ["reason", "challenge", "via", "port", "no-open"] },
   say: { required: ["workspace", "body", "idempotency-key"], optional: ["proposal"] },
   propose: {
     required: ["workspace", "question", "criteria", "extent", "idempotency-key"],
@@ -98,14 +112,14 @@ export const CEREMONY_VERBS = new Set<Verb>(["ceremony"]);
 
 /** What `person-remote` allows: nothing that needs a terminal or a browser on that device. */
 export const REMOTE_VERBS = new Set<Verb>([
-  "workspaces", "voices", "proposals", "inbox", "challenge", "consent", "reject",
+  "workspaces", "voices", "proposals", "inbox", "challenge", "consent", "reject", "set-aside",
   "say", "propose", "withdraw", "passkeys",
 ]);
 
 const STRING_OPTIONS = [
   "workspace", "proposal", "limit", "act", "reason", "passkey-assertion", "body",
   "idempotency-key", "question", "criteria", "extent", "known-conflicts", "topic",
-  "consult-seconds", "file", "credential", "db", "via", "port", "label",
+  "consult-seconds", "file", "credential", "db", "via", "port", "label", "challenge",
 ] as const;
 const BOOLEAN_OPTIONS = ["ceremony", "no-open"] as const;
 
@@ -127,13 +141,16 @@ export function runPersonDeskCli(
   const first = argv.find((arg) => !arg.startsWith("-"));
   if (first && Object.hasOwn(VERB_OPTIONS, first)) command = `person ${first}`;
   try {
+    // Refused at start, as the MCP server refuses it: the desk opens
+    // proposals too, and must not do so under a rule it was not given.
+    const rule = consentRuleFromEnvironment(env);
     const { verb, values } = parsePersonArgs(argv);
     if (CEREMONY_VERBS.has(verb) || (verb === "passkey-enroll" && values.ceremony)) {
       throw new CollabError("usage_error", `person ${verb} serves a page; run it through agenttool-collab-host`);
     }
     const store = openDeskStore(values, env, deps);
     try {
-      const outcome = runVerb(store, verb, values, deps);
+      const outcome = runVerb(store, verb, values, deps, rule);
       return outcome.cancelled
         ? emit({ status: "cancelled", message: "Not confirmed at the terminal; nothing was written" }, EXIT_NOT_CONFIRMED)
         : emit({ status: "ok", ...outcome.result }, 0);
@@ -174,7 +191,7 @@ export function runPersonRemoteCli(
   if ((argv as string[]).some((arg) => arg === "--db" || arg.startsWith("--db="))) {
     return fail("remote_verb_refused", "The forced command pins the journal; --db is not accepted remotely");
   }
-  if ((verb === "consent" || verb === "reject") && !(argv as string[]).includes("--passkey-assertion=-")) {
+  if ((verb === "consent" || verb === "reject" || verb === "set-aside") && !(argv as string[]).includes("--passkey-assertion=-")) {
     return fail("remote_verb_refused", "Remote acts need a passkey assertion on stdin (--passkey-assertion=-)");
   }
   return runPersonDeskCli(argv as string[], env, deps);
@@ -196,6 +213,7 @@ function runVerb(
   verb: Verb,
   values: Values,
   deps: PersonDeskDeps,
+  rule: ConsentRule,
 ): { cancelled: true } | { cancelled: false; result: Record<string, unknown> } {
   const done = (result: Record<string, unknown>) => ({ cancelled: false as const, result });
   switch (verb) {
@@ -206,24 +224,75 @@ function runVerb(
     case "proposals": {
       if (values.proposal) {
         const proposal = store.proposalStatus(values.workspace!, values.proposal);
-        return done({ proposal, soft_spots: deskSoftSpotsFor(store, values.workspace!, [proposal]) });
+        return done({
+          proposal,
+          soft_spots: deskSoftSpotsFor(store, values.workspace!, [proposal]),
+          ...setAsideOptionsFor(store, values.workspace!, [proposal]),
+        });
       }
       const listed = store.listProposalStatuses(values.workspace!, { limit: parseInteger(values.limit, "limit") });
-      return done({ ...listed, soft_spots: deskSoftSpotsFor(store, values.workspace!, listed.proposals) });
+      return done({
+        ...listed,
+        soft_spots: deskSoftSpotsFor(store, values.workspace!, listed.proposals),
+        ...setAsideOptionsFor(store, values.workspace!, listed.proposals),
+      });
     }
     case "inbox": {
       if (!values.workspace) return done({ summary: store.personInboxSummary() });
       const inbox = store.personInbox(values.workspace);
       return done({ inbox, soft_spots: deskSoftSpotsFor(store, values.workspace, inbox.awaiting_person) });
     }
-    case "challenge":
+    case "challenge": {
+      const act = parseDeskAct(values);
       return done({
-        challenge: store.personActChallenge({
-          proposal_report_id: values.proposal!,
-          act: parseAct(values.act),
-          reason: values.reason,
+        challenge: act === "set-aside"
+          ? store.personSetAsideChallenge({
+            proposal_report_id: values.proposal!,
+            challenge_report_id: values.challenge!,
+            reason: values.reason,
+          })
+          : store.personActChallenge({ proposal_report_id: values.proposal!, act, reason: values.reason }),
+      });
+    }
+    case "set-aside": {
+      if (values["passkey-assertion"] !== undefined) {
+        return done({
+          proposal: store.recordSetAsideWithPasskey({
+            proposal_report_id: values.proposal!,
+            challenge_report_id: values.challenge!,
+            reason: values.reason,
+            assertion: readJsonInput(values["passkey-assertion"], deps) as never,
+          }),
+        });
+      }
+      // Every check the act runs, before anything reaches the terminal.
+      const challenge = store.personSetAsideChallenge({
+        proposal_report_id: values.proposal!,
+        challenge_report_id: values.challenge!,
+        reason: values.reason,
+      });
+      const status = store.proposalStatusById(values.proposal!);
+      const bytes = setAsideShownBytes(challenge.challenge_bytes, challenge.objection, status);
+      const softSpots = deskSoftSpotsFor(store, status.proposal.workspace_id, [status])[status.proposal.id];
+      const confirmed = confirmOnTty({
+        act: "set aside a challenge",
+        summary: [...setAsideSummary(status, challenge), ...softSpotSummaryLines(softSpotDisplay(softSpots, status, "local"))],
+        bytes,
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+      }, { openTty: deps.openTty, now: deps.now });
+      if (!confirmed) return { cancelled: true };
+      return done({
+        proposal: store.recordSetAsideAtTerminal({
+          proposal_report_id: status.proposal.id,
+          proposal_sha256: challenge.proposal_sha256,
+          challenge_report_id: challenge.challenge_report_id,
+          challenge_sha256: challenge.challenge_sha256,
+          challenger_last_seen_at: challenge.challenger_last_seen_at,
+          reason: challenge.reason,
+          expected_ai_snapshot: challenge.ai_snapshot,
         }),
       });
+    }
     case "consent":
     case "reject": {
       const act = verb === "consent" ? "agree" as const : "reject" as const;
@@ -280,6 +349,7 @@ function runVerb(
           known_conflicts: values["known-conflicts"],
           topic: values.topic,
           consult_seconds: parseInteger(values["consult-seconds"], "consult-seconds"),
+          ...(rule !== CONSENT_RULE ? { rule } : {}),
         }),
       });
     case "withdraw":
@@ -372,6 +442,42 @@ function activePasskey(store: CollabStore, credentialId: string) {
     throw new CollabError("passkey_not_enrolled", "No active enrolled passkey has this credential id");
   }
   return passkey;
+}
+
+/**
+ * What the terminal shows as the exact bytes of a set-aside: the bytes signed,
+ * then the challenge's canonical content and the proposal's bytes, whose
+ * hashes they name, so every byte the act binds is on the screen.
+ */
+export function setAsideShownBytes(challengeBytes: string, objection: CollabReport, status: ProposalStatus): string {
+  return `${challengeBytes}\n${challengeContentBytes(objection)}\n${status.proposal_bytes}`;
+}
+
+/**
+ * The objection in full before a set-aside (consent/v2 decision 11): its
+ * author's name, marked self-declared; when it was written; its whole text;
+ * why it can be set aside; then the person's reason. Agent-written text is
+ * shown as JSON so it cannot fake a line.
+ */
+export function setAsideSummary(
+  status: ProposalStatus,
+  challenge: ReturnType<CollabStore["personSetAsideChallenge"]>,
+): string[] {
+  const objection = challenge.objection;
+  const seen = challenge.challenger.last_seen_at;
+  return [
+    `workspace ${status.proposal.workspace_id}, proposal ${status.proposal.id} (${status.rule})`,
+    `agents' position: ${status.ai.position} (${status.ai.qualifying_support_report_ids.length} qualifying supports, `
+      + `${status.ai.unresolved_challenge_report_ids.length} standing challenges)`,
+    `question ${JSON.stringify(status.proposal.body)}`,
+    `challenge ${objection.id} by ${JSON.stringify(objection.from_actor)} (name self-declared), written ${objection.created_at}`,
+    `it says ${JSON.stringify(objection.body)}`,
+    `why it can be set aside: no session of its voice is live`
+      + (seen ? ` (last seen ${seen})` : " (no session of it is recorded)")
+      + ", so no session can lift it now.",
+    `your reason ${JSON.stringify(challenge.reason)}`,
+    "Setting it aside is final. It stays on the record and in every view; any voice may challenge again.",
+  ];
 }
 
 /** Summary lines for the terminal. Agent-written text is shown as JSON so it cannot fake a line. */
@@ -472,6 +578,39 @@ export function parseAct(value: string | undefined): "agree" | "reject" {
     throw new CollabError("usage_error", `--act must be agree or reject; ${PERSON_DESK_USAGE}`);
   }
   return value;
+}
+
+/**
+ * --act for `challenge` and `ceremony`: agree, reject or set-aside. --challenge
+ * names the challenge a set-aside acts on, so it goes with set-aside and only
+ * with it, and a set-aside always takes a reason.
+ */
+export function parseDeskAct(values: Values): DeskAct {
+  const act = values.act;
+  if (act !== "agree" && act !== "reject" && act !== "set-aside") {
+    throw new CollabError("usage_error", `--act must be agree, reject or set-aside; ${PERSON_DESK_USAGE}`);
+  }
+  if ((act === "set-aside") !== (values.challenge !== undefined)) {
+    throw new CollabError(
+      "usage_error",
+      `--challenge names the challenge to set aside; give it with --act set-aside, and only then; ${PERSON_DESK_USAGE}`,
+    );
+  }
+  return act;
+}
+
+/**
+ * Per standing challenge on each consent/v2 proposal listed: whether the
+ * person can set it aside now and, when not, why. Present only when a listed
+ * proposal is consent/v2, so a consent/v1 read keeps its exact shape.
+ */
+function setAsideOptionsFor(
+  store: CollabStore,
+  workspaceId: string,
+  statuses: readonly ProposalStatus[],
+): { set_aside_options?: ReturnType<CollabStore["personSetAsideOptions"]> } {
+  const v2 = statuses.filter((status) => status.rule === CONSENT_RULE_V2).map((status) => status.proposal.id);
+  return v2.length > 0 ? { set_aside_options: store.personSetAsideOptions(workspaceId, v2) } : {};
 }
 
 export function parseInteger(value: string | undefined, name: string): number | undefined {

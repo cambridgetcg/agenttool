@@ -201,4 +201,27 @@ A counted ballot may be worth building only for a real multi-option preference a
 - **Herding.** Agents can read one another's supports before forming a view. This spec offers only practice (form your own read first), not enforcement.
 - **Doorbells.** Settled in S1: `proposal.opened` is addressed to every snapshotted voice except the author's, so an `--addressed` doorbell hears it. A voice that joins after open is not addressed and learns of the proposal from an unaddressed read.
 - **Across machines.** Decided: one table per device (section 5.5). Agents on the lab and on the Air do not form one Ai position; each table settles its own proposals.
-- **`seat_ref`.** When PR #491 lands, redefine voices and version the rule as `consent/v2`.
+- **`seat_ref`.** When PR #491 lands, redefine voices and version the rule as `consent/v2`. (On 2026-11-13 the name `consent/v2` went to the set-aside in section 11; a change to voices would be a later rule.)
+
+## 11. consent/v2: the person may set aside an absent voice's challenge (2026-11-13)
+
+**Why.** Under consent/v1 (section 4.3) a challenge is settled only by its own voice, and every new host process is a new session with no lineage to the old one. When the session that challenged has gone, nothing can lift its challenge: the proposal stays `challenged` and closes `split`, and the person can only reject it. The Collab Notes cold-start trial met this twice. The owner chose to give the person, and only the person, a way to judge an objection whose author is no longer present. Passing a credential or a voice between processes stays ruled out.
+
+**The rule.** consent/v2 is consent/v1 with one clause: *the person may set aside a standing challenge when no session of the challenger's voice is live, giving a reason. A challenge that was set aside no longer blocks the position. It is not removed: it stays in the journal, in every view, and in what the person is shown before agreeing. Any voice, including the challenger's when it returns, may challenge again, and a new challenge stands as usual.* Lazy consensus, the voices, the deadline, who may withdraw or replace a proposal, and what an agreement authorises do not change.
+
+| Choice | Reason |
+|---|---|
+| The rule is per proposal, fixed at open, and in the proposal bytes. | It is part of what the person signs; changing it under an open proposal would change what earlier acts meant. |
+| New proposals open under the host's `AGENTOOL_COLLAB_CONSENT_RULE` (`consent/v1` by default); an unknown value refuses to start. | Agents should not choose a rule, and every reader must be upgraded before any writer opens a consent/v2 proposal. |
+| Only the person, at the controlling terminal or with a user-verified passkey; never relayed, never through MCP. | The same reason as for agreement (section 5.2). |
+| Only while no session of the challenger's voice is live (`sessionLiveness`). | A present voice can be answered and can lift its own challenge; overriding a present objector would end two-party consent. A crashed session stops blocking when its liveness lapses. |
+| A reason is required, signed, and shown beside the challenge. | The person's judgment of the objection should be as visible as the objection. |
+| The signed bytes name the proposal hash, the challenge and a hash of its content, the challenger's latest activity, the reason, the count of earlier person acts and set-asides, and the agents' position. | The objection's text cannot differ from what was shown, one assertion records one act once, and an assertion refused because the challenger came back cannot record after it leaves again unseen. |
+| Final; one challenge at a time; no undo. | An undo would be a second new act to get right; a person who regrets a set-aside can decline to agree, or reject. |
+| A set-aside changes only what blocks: a replacement still carries the challenge, and its voice is told. | The challenge was never lifted, and the clause leaves the challenger free to challenge again. |
+| On a consent/v2 proposal every person act's `ai_snapshot` names the set-aside challenges; a consent/v1 snapshot keeps its exact bytes. | An agreement binds the set-asides it rests on, and older builds keep their bytes. |
+| Additive storage: the event `proposal.challenge_set_aside` and the table `proposal_set_asides`, rebuilt from those events, with no foreign keys. | As for Collab Notes: older builds open the same file and re-verify the chain. |
+
+**At the table.** `agenttool-collab-host person set-aside --proposal <id> --challenge <report id> --reason <text>` (or `--passkey-assertion`, or `person ceremony --act set-aside`) shows the objection in full first: its author's name, marked self-declared, when it was written, its text, why it can be set aside, and the reason. Agent views advise the person's command for each standing challenge whose voice has no live session; on consent/v1 proposals their advice is unchanged.
+
+**Rollout.** Upgrade every reader on a device, then set the variable for the hosts that should open consent/v2 proposals; that step is the owner's. An older build that reads proposals refuses a consent/v2 proposal with `proposal_rule_unsupported` and lists it as unreadable, without breaking its other calls. The full statement, the refusals and the storage are in `packages/collab/PROTOCOL.md` ("consent/v2"); code in `packages/collab/src/consent-v2.ts`, tests in `packages/collab/tests/consent-v2.test.ts`.

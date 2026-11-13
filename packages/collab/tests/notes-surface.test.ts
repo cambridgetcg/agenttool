@@ -14,6 +14,7 @@ import {
   toolsProfile,
 } from "../src/verbs.js";
 import { COLLAB_PACKAGE_VERSION } from "../src/version.js";
+import { resolveRevision, skipMissingReason, skipNotice } from "./compat/revisions.js";
 
 // The tools profile switch and the two instruction texts (Collab Notes spec 9).
 
@@ -113,6 +114,15 @@ async function stdio(
   }
 }
 
+/**
+ * Whether a8799aad is here to compare with. Where the package is projected
+ * without that history, the comparison fails, unless COLLAB_COMPAT_SKIP_MISSING
+ * gives a reason to skip it, which is printed (tests/compat/revisions.ts).
+ */
+const baseMissing = resolveRevision(repositoryRoot || packageRoot, BASE_REVISION, "golden").missing !== null;
+const skipBase = baseMissing && skipMissingReason() !== null;
+if (skipBase) console.warn(skipNotice(BASE_REVISION, skipMissingReason()!));
+
 /** a8799aad's committed MCP bundle, which runs with no install. */
 function baseBundle(): string {
   const shown = spawnSync("git", ["-C", repositoryRoot, "show", `${BASE_REVISION}:packages/collab/dist/agenttool-collab-mcp.js`], {
@@ -130,7 +140,7 @@ function baseBundle(): string {
 const source = join(packageRoot, "bin", "agenttool-collab-mcp.ts");
 
 describe("the tools profile", () => {
-  test("full keeps every existing tool byte for byte and adds the verbs built so far", async () => {
+  test.skipIf(skipBase)("full keeps every existing tool byte for byte and adds the verbs built so far", async () => {
     const [base, mine] = await Promise.all([stdio(baseBundle()), stdio(source)]);
     expect(base.tools.length).toBe(LEGACY_TOOLS);
     const mineByName = new Map(mine.tools.map((tool) => [tool.name, tool]));
@@ -268,7 +278,7 @@ describe("the server instructions", () => {
     expect(initialized.serverInfo.version).toBe(COLLAB_PACKAGE_VERSION);
   }, 60_000);
 
-  test("full: the notes text, the cursor sentence, then the existing text under Legacy session tools:", async () => {
+  test.skipIf(skipBase)("full: the notes text, the cursor sentence, then the existing text under Legacy session tools:", async () => {
     const [base, mine] = await Promise.all([stdio(baseBundle()), stdio(source)]);
     const legacy = (base.initialized.instructions as string).replace(`Collab ${BASE_VERSION}: `, `Collab ${COLLAB_PACKAGE_VERSION}: `);
     expect(base.initialized.instructions).toStartWith(`Collab ${BASE_VERSION}: collab_events_wait`);

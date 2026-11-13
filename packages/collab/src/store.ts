@@ -24,9 +24,12 @@ import {
   MAX_WAIT_PAGE_BYTES,
   SESSION_STALE_AFTER_MS,
   CONSENT_RULE,
+  CONSENT_RULE_V2,
   DEFAULT_PROPOSAL_CONSULT_SECONDS,
   MAX_PROPOSAL_CONSULT_SECONDS,
   MIN_PROPOSAL_CONSULT_SECONDS,
+  type AiSnapshot,
+  type ConsentRule,
   type PasskeyAssertion,
   type PasskeyProof,
   type PersonActBasis,
@@ -34,9 +37,11 @@ import {
   type PersonPasskey,
   type ProposalOrigin,
   type ProposalPersonAct,
+  type ProposalSetAside,
   type ProposalStatus,
   type ProposalTerms,
   type ProposalVoice,
+  type SetAsideBasis,
   type UnreadableProposal,
   type SessionEventPageInput,
   type ArtifactRef,
@@ -86,6 +91,14 @@ import {
   verifyPasskeyAssertion,
 } from "./passkey.js";
 import { aiPosition, proposalBytes } from "./proposal.js";
+import {
+  challengeContentSha256,
+  isConsentRule,
+  normalizeSetAsideReason,
+  setAsideChallenge,
+  setAsideRefusal,
+  validateConsentRule,
+} from "./consent-v2.js";
 import {
   inspectRepository,
   inspectSuccessorCommit,
@@ -669,6 +682,21 @@ export class CollabStoreCore {
           PRIMARY KEY (workspace_id, ballot_id)
         );
         CREATE INDEX IF NOT EXISTS note_ballots_state_idx ON note_ballots(workspace_id, state, closes_at);
+        -- consent/v2 set-asides: one row per proposal.challenge_set_aside
+        -- event, rebuilt from those events on every open, so losing it loses
+        -- nothing the journal records. No foreign keys; older builds ignore it.
+        CREATE TABLE IF NOT EXISTS proposal_set_asides (
+          id TEXT PRIMARY KEY,
+          workspace_id TEXT NOT NULL,
+          proposal_report_id TEXT NOT NULL,
+          challenge_report_id TEXT NOT NULL,
+          set_aside_json TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          event_sequence INTEGER NOT NULL,
+          UNIQUE (workspace_id, challenge_report_id)
+        );
+        CREATE INDEX IF NOT EXISTS proposal_set_asides_proposal_idx
+          ON proposal_set_asides(workspace_id, proposal_report_id, event_sequence);
       `);
       // note_ballots is view state rebuilt from the journal: a lost or
       // dropped row comes back from its ballot.opened event, and a ballot
@@ -681,6 +709,17 @@ export class CollabStoreCore {
           SELECT 1 FROM events e WHERE e.workspace_id = note_ballots.workspace_id
             AND e.type = 'ballot.closed' AND e.entity_id = note_ballots.ballot_id
         );
+        INSERT OR IGNORE INTO proposal_set_asides (
+          id, workspace_id, proposal_report_id, challenge_report_id, set_aside_json, created_at, event_sequence
+        )
+        SELECT json_extract(payload_json, '$.set_aside.id'), workspace_id, entity_id,
+          json_extract(payload_json, '$.set_aside.challenge_report_id'), json_extract(payload_json, '$.set_aside'),
+          occurred_at, sequence
+        FROM events
+        WHERE type = 'proposal.challenge_set_aside'
+          AND json_type(payload_json, '$.set_aside.id') = 'text'
+          AND json_type(payload_json, '$.set_aside.challenge_report_id') = 'text'
+        ORDER BY workspace_id, sequence;
       `);
       // The unreleased S1 preview kept relayed rejections in its own table.
       // Their acts would otherwise read as absent, so such a journal is refused.
@@ -3684,9 +3723,11 @@ export class CollabStoreCore {
   }
 
   /**
-   * Open a direction-level proposal whose agent position is computed by
-   * consent/v1. The proposal is an ordinary `proposal` report plus additive
-   * terms; agreement later binds to `proposal_sha256`, never to the report id.
+   * Open a direction-level proposal whose agent position is computed by its
+   * rule: consent/v1 unless the host passes the rule it is configured with
+   * (AGENTOOL_COLLAB_CONSENT_RULE). The proposal is an ordinary `proposal`
+   * report plus additive terms; agreement later binds to `proposal_sha256`,
+   * never to the report id.
    */
   openProposalForSession(input: {
     session_id: string;
@@ -3706,6 +3747,8 @@ export class CollabStoreCore {
     consult_seconds?: number;
     task_id?: string;
     supersedes_report_id?: string;
+    /** The host's configured rule; the proposal keeps it for good. */
+    rule?: ConsentRule;
   }): ProposalStatus {
     const normalized = {
       ...normalizeProposalTerms(input),
@@ -3717,6 +3760,7 @@ export class CollabStoreCore {
       supersedes_report_id: input.supersedes_report_id
         ? validateId(input.supersedes_report_id, "supersedes_report_id")
         : null,
+      ...ruleRequestField(input.rule),
     };
     return this.mutateAsSession(input, input.idempotency_key, "proposal.open.v1", normalized, (session) => {
       const reportInput = {
@@ -3737,7 +3781,10 @@ export class CollabStoreCore {
       if (normalized.supersedes_report_id) {
         this.requireOpenToRevision(session.workspace_id, normalized.supersedes_report_id);
       }
-      return this.openProposalInternal(session, this.consentVoice(session.id), reportInput, normalized);
+      return this.openProposalInternal(session, this.consentVoice(session.id), reportInput, {
+        ...normalized,
+        rule: normalized.rule ?? CONSENT_RULE,
+      });
     });
   }
 
@@ -3756,8 +3803,10 @@ export class CollabStoreCore {
     evidence_refs?: string[];
     topic?: string;
     consult_seconds?: number;
+    /** The desk's configured rule; the proposal keeps it for good. */
+    rule?: ConsentRule;
   }): ProposalStatus {
-    const normalized = normalizeProposalTerms(input);
+    const normalized = { ...normalizeProposalTerms(input), ...ruleRequestField(input.rule) };
     const idempotencyKey = validateIdempotencyKey(input.idempotency_key);
     return this.mutate(input.workspace_id, PERSON_DESK_ACTOR, idempotencyKey, "person.proposal.open.v1", normalized, () => {
       for (const reference of normalized.evidence_refs) this.requireEvidenceRef(input.workspace_id, reference);
@@ -3779,7 +3828,7 @@ export class CollabStoreCore {
         { workspace_id: input.workspace_id, actor: PERSON_DESK_ACTOR, id: null },
         PERSON_VOICE_ID,
         reportInput,
-        { ...normalized, origin: "person_relayed", supersedes_report_id: null },
+        { ...normalized, origin: "person_relayed", supersedes_report_id: null, rule: normalized.rule ?? CONSENT_RULE },
       );
     });
   }
@@ -3834,6 +3883,7 @@ export class CollabStoreCore {
     terms: ReturnType<typeof normalizeProposalTerms> & {
       origin: ProposalOrigin;
       supersedes_report_id: string | null;
+      rule: ConsentRule;
     },
   ): ProposalStatus {
     const now = this.timestamp();
@@ -3854,9 +3904,9 @@ export class CollabStoreCore {
       topic: terms.topic,
       closes_at: closesAt,
       supersedes_report_id: terms.supersedes_report_id,
-    }));
+    }, terms.rule));
     const event = this.appendEvent(author.workspace_id, "proposal.opened", report.id, author.actor, {
-      rule: CONSENT_RULE,
+      rule: terms.rule,
       proposal_sha256: proposalSha256,
       criteria: terms.criteria,
       extent: terms.extent,
@@ -3876,7 +3926,7 @@ export class CollabStoreCore {
     `).run(
       report.id,
       author.workspace_id,
-      CONSENT_RULE,
+      terms.rule,
       terms.criteria,
       terms.extent,
       terms.known_conflicts,
@@ -3941,7 +3991,7 @@ export class CollabStoreCore {
     act: "agree" | "reject";
     reason: string | null;
     prior_person_acts: number;
-    ai_snapshot: ProposalPersonAct["ai_snapshot"];
+    ai_snapshot: AiSnapshot;
     challenge_bytes: string;
     challenge: string;
     passkeys: Array<Pick<PersonPasskey, "credential_id" | "rp_id" | "origin" | "label" | "fingerprint">>;
@@ -3994,7 +4044,7 @@ export class CollabStoreCore {
     proposal_sha256: string;
     act: "agree" | "reject";
     reason?: string;
-    expected_ai_snapshot: ProposalPersonAct["ai_snapshot"];
+    expected_ai_snapshot: AiSnapshot;
   }): ProposalStatus {
     const act = validatePersonAct(input.act);
     const reason = normalizeActReason(act, input.reason);
@@ -4078,6 +4128,182 @@ export class CollabStoreCore {
     const status = transaction.immediate();
     this.tightenFileModes();
     return status;
+  }
+
+  /**
+   * consent/v2: the bytes a passkey signs to set aside one standing challenge,
+   * the objection as the journal holds it, and why it can be set aside.
+   * Read-only. The same checks as the act run first, so the person is never
+   * asked to confirm or touch for a set-aside the desk would refuse. The bytes
+   * bind the proposal, the challenge's content hash, the reason, the count of
+   * earlier person acts and set-asides, and the agents' position as it
+   * stands, so one assertion records one set-aside once.
+   */
+  personSetAsideChallenge(input: { proposal_report_id: string; challenge_report_id: string; reason: unknown }): {
+    workspace_id: string;
+    proposal_report_id: string;
+    proposal_sha256: string;
+    act: "set_aside";
+    challenge_report_id: string;
+    challenge_sha256: string;
+    challenger_last_seen_at: string | null;
+    reason: string;
+    prior_person_acts: number;
+    prior_set_asides: number;
+    ai_snapshot: AiSnapshot;
+    /** The challenge report, its author's name self-declared, shown in full before the act. */
+    objection: CollabReport & { author_basis: "self_declared" };
+    challenger: ProposalSetAside["challenger"];
+    challenge_bytes: string;
+    challenge: string;
+    passkeys: Array<Pick<PersonPasskey, "credential_id" | "rp_id" | "origin" | "label" | "fingerprint">>;
+  } {
+    const reason = normalizeSetAsideReason(input.reason);
+    const challengeId = validateId(input.challenge_report_id, "challenge_report_id");
+    return this.db.transaction(() => {
+      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
+      const facts = this.setAsideFacts(terms, challengeId, reason);
+      return {
+        ...facts.bytes,
+        act: "set_aside" as const,
+        objection: { ...facts.challenge, author_basis: "self_declared" as const },
+        challenger: facts.challenger,
+        ...setAsideChallenge(facts.bytes),
+        passkeys: this.listPersonPasskeys().filter((key) => key.revoked_at === null).map((key) => ({
+          credential_id: key.credential_id,
+          rp_id: key.rp_id,
+          origin: key.origin,
+          label: key.label,
+          fingerprint: key.fingerprint,
+        })),
+      };
+    }).deferred();
+  }
+
+  /**
+   * Record a set-aside after the host CLI showed the objection in full, the
+   * reason and the exact bytes on the controlling terminal and read "yes"
+   * there. Everything is checked again inside the transaction, the
+   * challenger's absence and its latest activity included, so a change
+   * since the display refuses.
+   */
+  recordSetAsideAtTerminal(input: {
+    proposal_report_id: string;
+    proposal_sha256: string;
+    challenge_report_id: string;
+    challenge_sha256: string;
+    /** The challenger's latest activity as the terminal showed it. */
+    challenger_last_seen_at: string | null;
+    reason: unknown;
+    expected_ai_snapshot: AiSnapshot;
+  }): ProposalStatus {
+    const reason = normalizeSetAsideReason(input.reason);
+    const challengeId = validateId(input.challenge_report_id, "challenge_report_id");
+    const transaction = this.db.transaction(() => {
+      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
+      return this.recordSetAside(terms, challengeId, reason, {
+        basis: "controlling_terminal",
+        actor: PERSON_TERMINAL_ACTOR,
+        proof: null,
+        proposal_sha256: validateSha256(input.proposal_sha256),
+        challenge_sha256: validateSha256(input.challenge_sha256),
+        challenger_last_seen_at: input.challenger_last_seen_at,
+        expected_ai_snapshot: input.expected_ai_snapshot,
+      });
+    });
+    const status = transaction.immediate();
+    this.tightenFileModes();
+    return status;
+  }
+
+  /** Record a set-aside signed by an enrolled passkey; the proof is journaled with it. */
+  recordSetAsideWithPasskey(input: {
+    proposal_report_id: string;
+    challenge_report_id: string;
+    reason: unknown;
+    assertion: PasskeyAssertion;
+  }): ProposalStatus {
+    const reason = normalizeSetAsideReason(input.reason);
+    const challengeId = validateId(input.challenge_report_id, "challenge_report_id");
+    const assertion = normalizePasskeyAssertion(input.assertion);
+    const transaction = this.db.transaction(() => {
+      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
+      const passkey = this.listPersonPasskeys().find((key) =>
+        key.credential_id === assertion.credential_id && key.revoked_at === null
+      );
+      if (!passkey) {
+        throw new CollabError("passkey_not_enrolled", "No active enrolled passkey has this credential id");
+      }
+      // The refusals first: a replayed or stale assertion is answered by what changed.
+      const facts = this.setAsideFacts(terms, challengeId, reason);
+      const derived = setAsideChallenge(facts.bytes);
+      const { sign_count } = verifyPasskeyAssertion({ passkey, assertion, expected_challenge: derived.challenge });
+      this.db.query(`UPDATE person_passkeys SET sign_count = ? WHERE credential_id = ?`)
+        .run(sign_count, passkey.credential_id);
+      return this.recordSetAside(terms, challengeId, reason, {
+        basis: "user_verified_passkey",
+        actor: PERSON_PASSKEY_ACTOR,
+        proof: {
+          ...assertion,
+          public_key_spki: passkey.public_key_spki,
+          rp_id: passkey.rp_id,
+          origin: passkey.origin,
+          challenge_bytes: derived.challenge_bytes,
+          challenge: derived.challenge,
+          sign_count,
+        },
+        proposal_sha256: facts.bytes.proposal_sha256,
+        challenge_sha256: facts.bytes.challenge_sha256,
+        challenger_last_seen_at: facts.bytes.challenger_last_seen_at,
+        expected_ai_snapshot: facts.bytes.ai_snapshot,
+      });
+    });
+    const status = transaction.immediate();
+    this.tightenFileModes();
+    return status;
+  }
+
+  /**
+   * For the person desk's reads: each standing challenge on each consent/v2
+   * proposal given, whether it can be set aside now and, when not, the
+   * refusal the act would give. Consent/v1 proposals are left out: they have
+   * no set-aside. Read-only, one snapshot.
+   */
+  personSetAsideOptions(workspaceId: string, proposalIds: readonly string[]): Record<string, Array<{
+    challenge_report_id: string;
+    by: { session: string | null; name: string; basis: "self_declared" };
+    can_set_aside: boolean;
+    refusal: { error: string; message: string } | null;
+    challenger: ProposalSetAside["challenger"] & { live_sessions: Array<{ id: string; actor: string; last_seen_at: string }> };
+  }>> {
+    this.requireWorkspace(workspaceId);
+    return this.db.transaction(() => {
+      const options: ReturnType<CollabStoreCore["personSetAsideOptions"]> = {};
+      for (const proposalId of proposalIds) {
+        const terms = this.requireProposalTerms(workspaceId, validateId(proposalId, "proposal_report_id"));
+        if (terms.rule !== CONSENT_RULE_V2) continue;
+        const status = this.proposalStatusInternal(workspaceId, terms.report_id);
+        options[terms.report_id] = status.ai.unresolved_challenge_report_ids.map((challengeId) => {
+          const challenge = this.requireReport(challengeId);
+          const presence = this.challengerPresence(workspaceId, challenge.from_session_id);
+          let refusal: { error: string; message: string } | null = null;
+          try {
+            this.refuseUnrecordableSetAside(status, challenge, presence);
+          } catch (error) {
+            if (!(error instanceof CollabError)) throw error;
+            refusal = { error: error.code, message: error.message };
+          }
+          return {
+            challenge_report_id: challengeId,
+            by: { session: challenge.from_session_id, name: challenge.from_actor, basis: "self_declared" as const },
+            can_set_aside: refusal === null,
+            refusal,
+            challenger: presence,
+          };
+        });
+      }
+      return options;
+    }).deferred();
   }
 
   /** Enrol a passkey after the host CLI confirmed it at the controlling terminal. */
@@ -4335,7 +4561,7 @@ export class CollabStoreCore {
     actor: string;
     session_id: string | null;
     proof: PasskeyProof | null;
-    expected_ai_snapshot: ProposalPersonAct["ai_snapshot"] | null;
+    expected_ai_snapshot: AiSnapshot | null;
   }): ProposalStatus {
     const current = this.proposalStatusInternal(input.workspace_id, input.proposal_report_id);
     if (current.proposal_sha256 !== input.proposal_sha256) {
@@ -4398,6 +4624,199 @@ export class CollabStoreCore {
     return this.proposalStatusInternal(input.workspace_id, input.proposal_report_id);
   }
 
+  /**
+   * What a set-aside of this challenge would sign, after every check the act
+   * makes. Inside the caller's transaction.
+   */
+  private setAsideFacts(terms: ProposalTerms, challengeId: string, reason: string): {
+    status: ProposalStatus;
+    challenge: CollabReport;
+    challenger: ProposalSetAside["challenger"];
+    bytes: Parameters<typeof setAsideChallenge>[0];
+  } {
+    const status = this.proposalStatusInternal(terms.workspace_id, terms.report_id);
+    const row = this.db.query(`SELECT * FROM reports WHERE id = ?`).get(challengeId) as ReportRow | null;
+    const challenge = row ? reportFromRow(row) : null;
+    const presence = this.challengerPresence(terms.workspace_id, challenge?.from_session_id ?? null);
+    this.refuseUnrecordableSetAside(status, challenge, presence);
+    return {
+      status,
+      challenge: challenge!,
+      challenger: { voice_id: presence.voice_id, session_ids: presence.session_ids, last_seen_at: presence.last_seen_at },
+      bytes: {
+        workspace_id: terms.workspace_id,
+        proposal_report_id: terms.report_id,
+        proposal_sha256: terms.proposal_sha256,
+        challenge_report_id: challengeId,
+        challenge_sha256: challengeContentSha256(challenge!),
+        challenger_last_seen_at: presence.last_seen_at,
+        reason,
+        prior_person_acts: this.personActCount(terms.report_id),
+        prior_set_asides: this.setAsideCount(terms.workspace_id, terms.report_id),
+        ai_snapshot: aiSnapshotOf(status),
+      },
+    };
+  }
+
+  /**
+   * The checks a set-aside must pass, shared by the challenge, the options
+   * the desk lists, and the record. Only the person reaches them, and only
+   * through the terminal or a passkey: no session path and no MCP tool exists.
+   */
+  private refuseUnrecordableSetAside(
+    status: ProposalStatus,
+    challenge: CollabReport | null,
+    presence: { live_sessions: Array<{ id: string; actor: string; last_seen_at: string }> },
+  ): void {
+    const proposalId = status.proposal.id;
+    if (status.rule !== CONSENT_RULE_V2) {
+      throw setAsideRefusal("rule_has_no_set_aside", { proposal_report_id: proposalId, rule: status.rule });
+    }
+    if (status.ai.position === "withdrawn" || status.ai.position === "superseded") {
+      throw setAsideRefusal("proposal_not_on_table", {
+        position: status.ai.position,
+        obsoleted_by_report_id: status.ai.obsoleted_by_report_id,
+      });
+    }
+    if (
+      !challenge
+      || challenge.workspace_id !== status.proposal.workspace_id
+      || challenge.relation !== "challenges"
+      || challenge.target_report_id !== proposalId
+    ) {
+      throw setAsideRefusal("challenge_not_standing", {
+        challenge_report_id: challenge?.id ?? null,
+        challenge_state: "not_a_challenge_to_this_proposal",
+      }, "That report is not a challenge to this proposal");
+    }
+    const earlier = (status.set_asides ?? []).find((entry) => entry.challenge_report_id === challenge.id);
+    if (earlier) {
+      throw setAsideRefusal("already_set_aside", {
+        challenge_report_id: challenge.id,
+        set_aside_id: earlier.id,
+        set_aside_at: earlier.created_at,
+      });
+    }
+    if (!status.ai.unresolved_challenge_report_ids.includes(challenge.id)) {
+      throw setAsideRefusal("challenge_not_standing", {
+        challenge_report_id: challenge.id,
+        challenge_state: "withdrawn_or_lifted_by_its_voice",
+      }, "That challenge no longer stands: it was withdrawn or lifted by its own voice");
+    }
+    if (presence.live_sessions.length > 0) {
+      throw setAsideRefusal("challenger_present", {
+        challenge_report_id: challenge.id,
+        live_sessions: presence.live_sessions,
+      });
+    }
+  }
+
+  /** Append one set-aside inside the caller's transaction, after the checks run again. */
+  private recordSetAside(
+    terms: ProposalTerms,
+    challengeId: string,
+    reason: string,
+    act: {
+      basis: SetAsideBasis;
+      actor: string;
+      proof: PasskeyProof | null;
+      proposal_sha256: string;
+      challenge_sha256: string;
+      challenger_last_seen_at: string | null;
+      expected_ai_snapshot: AiSnapshot;
+    },
+  ): ProposalStatus {
+    if (act.proposal_sha256 !== terms.proposal_sha256) {
+      throw setAsideRefusal("proposal_hash_mismatch", { proposal_sha256: terms.proposal_sha256 });
+    }
+    const facts = this.setAsideFacts(terms, challengeId, reason);
+    if (act.challenge_sha256 !== facts.bytes.challenge_sha256) {
+      throw setAsideRefusal("challenge_hash_mismatch", { challenge_sha256: facts.bytes.challenge_sha256 });
+    }
+    // Absent now is not enough: a voice that came and went since the display may have said more.
+    if (act.challenger_last_seen_at !== facts.bytes.challenger_last_seen_at) {
+      throw setAsideRefusal("challenger_changed", {
+        challenge_report_id: challengeId,
+        shown_last_seen_at: act.challenger_last_seen_at,
+        last_seen_at: facts.bytes.challenger_last_seen_at,
+      });
+    }
+    if (canonicalJson(act.expected_ai_snapshot) !== canonicalJson(facts.bytes.ai_snapshot)) {
+      throw setAsideRefusal("ai_position_changed", { ai_snapshot: facts.bytes.ai_snapshot });
+    }
+    const record = {
+      id: `set_aside_${randomUUID()}`,
+      proposal_report_id: terms.report_id,
+      proposal_sha256: terms.proposal_sha256,
+      challenge_report_id: challengeId,
+      challenge_sha256: facts.bytes.challenge_sha256,
+      party: "person" as const,
+      basis: act.basis,
+      reason,
+      prior_person_acts: facts.bytes.prior_person_acts,
+      prior_set_asides: facts.bytes.prior_set_asides,
+      ai_snapshot: facts.bytes.ai_snapshot,
+      challenger: facts.challenger,
+      proof: act.proof,
+    };
+    const event = this.appendEvent(
+      terms.workspace_id,
+      "proposal.challenge_set_aside",
+      terms.report_id,
+      act.actor,
+      { set_aside: record },
+    );
+    this.db.query(`
+      INSERT INTO proposal_set_asides (
+        id, workspace_id, proposal_report_id, challenge_report_id, set_aside_json, created_at, event_sequence
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(record.id, terms.workspace_id, terms.report_id, challengeId, canonicalJson(record), event.occurred_at, event.sequence);
+    return this.proposalStatusInternal(terms.workspace_id, terms.report_id);
+  }
+
+  /**
+   * The challenger's voice and every session of it in the workspace. "Live"
+   * is sessionLiveness, the notion the voice snapshot uses, so a session that
+   * crashed without ending stops blocking once its liveness lapses. A
+   * challenge with no session has no voice that could ever lift it.
+   */
+  private challengerPresence(workspaceId: string, challengerSessionId: string | null): ProposalSetAside["challenger"] & {
+    live_sessions: Array<{ id: string; actor: string; last_seen_at: string }>;
+  } {
+    if (challengerSessionId === null) return { voice_id: null, session_ids: [], last_seen_at: null, live_sessions: [] };
+    const observedAt = this.timestamp();
+    const voice = this.consentVoice(challengerSessionId);
+    const members = (this.db.query(`
+      SELECT id, actor, status, last_seen_at FROM coordination_sessions WHERE workspace_id = ? ORDER BY id
+    `).all(workspaceId) as Array<Pick<CoordinationSessionRow, "id" | "actor" | "status" | "last_seen_at">>)
+      .filter((row) => this.consentVoice(row.id) === voice);
+    return {
+      voice_id: voice,
+      session_ids: members.map((row) => row.id),
+      last_seen_at: members.map((row) => row.last_seen_at).sort().at(-1) ?? null,
+      live_sessions: members
+        .filter((row) => sessionLiveness(row, observedAt) === "live")
+        .map((row) => ({ id: row.id, actor: row.actor, last_seen_at: row.last_seen_at })),
+    };
+  }
+
+  private setAsideCount(workspaceId: string, proposalReportId: string): number {
+    return (this.db.query(`SELECT COUNT(*) AS count FROM proposal_set_asides WHERE workspace_id = ? AND proposal_report_id = ?`)
+      .get(workspaceId, proposalReportId) as { count: number }).count;
+  }
+
+  /** A proposal's set-asides in journal order, as the journal recorded them. */
+  protected proposalSetAsides(workspaceId: string, proposalReportId: string): ProposalSetAside[] {
+    // Only rows naming a challenge to this very proposal: the act checks it,
+    // and a row that says otherwise is not read as setting anything aside.
+    return (this.db.query(`
+      SELECT s.* FROM proposal_set_asides s
+      JOIN reports r ON r.id = s.challenge_report_id
+        AND r.workspace_id = s.workspace_id AND r.target_report_id = s.proposal_report_id AND r.relation = 'challenges'
+      WHERE s.workspace_id = ? AND s.proposal_report_id = ? ORDER BY s.event_sequence
+    `).all(workspaceId, proposalReportId) as ProposalSetAsideRow[]).map(proposalSetAsideFromRow);
+  }
+
   private personActCount(proposalReportId: string): number {
     return (this.db.query(`SELECT COUNT(*) AS count FROM proposal_person_acts WHERE proposal_report_id = ?`)
       .get(proposalReportId) as { count: number }).count;
@@ -4444,9 +4863,14 @@ export class CollabStoreCore {
    * Challenges to a proposal that still stand. Under consent/v1 a challenge is
    * settled only by its own voice: a `resolves` from that voice, or the
    * challenger withdrawing it. Another voice, the author included, cannot
-   * settle someone else's soft veto.
+   * settle someone else's soft veto. consent/v2 adds one clause: a challenge
+   * the person set aside (`setAside`, empty under consent/v1) no longer stands.
    */
-  private standingProposalChallenges(context: ProposalReadContext, reportId: string): string[] {
+  private standingProposalChallenges(
+    context: ProposalReadContext,
+    reportId: string,
+    setAside: ReadonlySet<string> = new Set(),
+  ): string[] {
     const challenges = this.db.query(`
       SELECT id, from_session_id FROM reports
       WHERE workspace_id = ? AND target_report_id = ? AND relation = 'challenges'
@@ -4465,7 +4889,7 @@ export class CollabStoreCore {
         && answer.from_session_id !== null
         && this.consentVoice(answer.from_session_id, context) === challengerVoice
       );
-      if (!resolved) standing.push(challenge.id);
+      if (!resolved && !setAside.has(challenge.id)) standing.push(challenge.id);
     }
     return standing;
   }
@@ -4491,7 +4915,7 @@ export class CollabStoreCore {
       topic: terms.topic,
       closes_at: terms.closes_at,
       supersedes_report_id: proposal.relation === "supersedes" ? proposal.target_report_id : null,
-    });
+    }, terms.rule);
     if (sha256(bytes) !== terms.proposal_sha256) {
       throw new CollabError(
         "proposal_terms_invalid",
@@ -4506,7 +4930,13 @@ export class CollabStoreCore {
       ORDER BY event_sequence
     `).all(workspaceId, reportId) as Array<{ id: string; from_session_id: string | null }>)
       .filter((support) => support.from_session_id !== null && !context.obsoleted.has(support.id));
-    const challengeIds = this.standingProposalChallenges(context, reportId);
+    // A consent/v1 proposal never gains a set-aside, whatever the table holds.
+    const setAsides = terms.rule === CONSENT_RULE_V2 ? this.proposalSetAsides(workspaceId, reportId) : null;
+    const challengeIds = this.standingProposalChallenges(
+      context,
+      reportId,
+      new Set(setAsides?.map((entry) => entry.challenge_report_id) ?? []),
+    );
     const computed = aiPosition({
       now: this.timestamp(),
       closes_at: terms.closes_at,
@@ -4527,7 +4957,7 @@ export class CollabStoreCore {
     const state = latest === null ? "awaiting" : latest.act === "agree" ? "agreed" : "rejected";
     const agreement = latest?.act === "agree" ? latest : null;
     return {
-      rule: CONSENT_RULE,
+      rule: terms.rule,
       proposal,
       terms,
       proposal_bytes: bytes,
@@ -4542,6 +4972,8 @@ export class CollabStoreCore {
         basis: "computed_from_journal",
       },
       person: { state, acts },
+      // Present only under consent/v2, so a consent/v1 status keeps its exact shape.
+      ...(setAsides ? { set_asides: setAsides } : {}),
       agreement,
       may_proceed: agreement !== null && retirement === null,
       authority_boundary: "an_agreement_authorises_only_the_proposal_extent",
@@ -5659,6 +6091,14 @@ export class CollabStoreCore {
     );
   }
 
+  /** consent/v2: whether a set-aside's journaled challenger is this session's voice (routing only). */
+  protected setAsideAddressesChallenger(challenger: unknown, sessionId: string): boolean {
+    if (challenger === null || typeof challenger !== "object") return false;
+    const { voice_id: voice, session_ids: sessions } = challenger as Record<string, unknown>;
+    if (Array.isArray(sessions) && sessions.includes(sessionId)) return true;
+    return typeof voice === "string" && this.consentVoice(sessionId) === voice;
+  }
+
   eventAddressesSession(event: CollabEvent, sessionId: string): boolean {
     const payload = (event.payload ?? {}) as Record<string, unknown>;
     const field = (value: unknown, key: string) =>
@@ -5707,6 +6147,13 @@ export class CollabStoreCore {
         // A person's act wakes whoever waits on it: the author, or for a desk
         // proposal every voice it consulted.
         return this.proposalAddressesSession(event.entity_id, sessionId);
+      case "proposal.challenge_set_aside":
+        // As an agreement does, and the challenger too: every session of its
+        // voice, so the voice learns its objection was set aside when it
+        // returns (a resumed session, or a child it attests later) and may
+        // challenge again, which the clause leaves it free to do.
+        return this.proposalAddressesSession(event.entity_id, sessionId)
+          || this.setAsideAddressesChallenger(field(payload.set_aside, "challenger"), sessionId);
       case "ballot.opened": {
         // Every session whose unit the electorate lists, by session or by voice.
         const electorate = Array.isArray(payload.electorate) ? payload.electorate : [];
@@ -8047,7 +8494,7 @@ interface ProposalTermsRow {
 }
 
 function proposalTermsFromRow(row: ProposalTermsRow): ProposalTerms {
-  if (row.rule !== CONSENT_RULE) {
+  if (!isConsentRule(row.rule)) {
     throw new CollabError(
       "proposal_rule_unsupported",
       "This proposal was opened under a consent rule this package does not implement",
@@ -8057,7 +8504,7 @@ function proposalTermsFromRow(row: ProposalTermsRow): ProposalTerms {
   return {
     report_id: row.report_id,
     workspace_id: row.workspace_id,
-    rule: CONSENT_RULE,
+    rule: row.rule,
     criteria: row.criteria,
     extent: row.extent,
     known_conflicts: row.known_conflicts,
@@ -8092,8 +8539,31 @@ function proposalPersonActFromRow(row: ProposalPersonActRow): ProposalPersonAct 
   const { ai_snapshot_json, proof_json, ...rest } = row;
   return {
     ...rest,
-    ai_snapshot: JSON.parse(ai_snapshot_json) as ProposalPersonAct["ai_snapshot"],
+    ai_snapshot: JSON.parse(ai_snapshot_json) as AiSnapshot,
     proof: proof_json ? JSON.parse(proof_json) as PasskeyProof : null,
+  };
+}
+
+interface ProposalSetAsideRow {
+  id: string;
+  workspace_id: string;
+  proposal_report_id: string;
+  challenge_report_id: string;
+  set_aside_json: string;
+  created_at: string;
+  event_sequence: number;
+}
+
+function proposalSetAsideFromRow(row: ProposalSetAsideRow): ProposalSetAside {
+  const record = JSON.parse(row.set_aside_json) as Omit<ProposalSetAside, "workspace_id" | "created_at" | "event_sequence">;
+  return {
+    ...record,
+    id: row.id,
+    workspace_id: row.workspace_id,
+    proposal_report_id: row.proposal_report_id,
+    challenge_report_id: row.challenge_report_id,
+    created_at: row.created_at,
+    event_sequence: row.event_sequence,
   };
 }
 
@@ -8144,13 +8614,22 @@ export interface ReceiptPlanGuard {
 const MAX_INBOX_SCAN = 500;
 const MAX_INBOX_PROPOSALS = 50;
 
-function aiSnapshotOf(status: ProposalStatus): ProposalPersonAct["ai_snapshot"] {
-  return {
+/**
+ * The position a person is shown, compared before an act and signed by a
+ * passkey. On a consent/v2 proposal an agreement binds the set-asides it
+ * rests on; a consent/v1 snapshot keeps exactly its four keys and bytes.
+ */
+function aiSnapshotOf(status: ProposalStatus): AiSnapshot {
+  const snapshot: AiSnapshot = {
     position: status.ai.position,
     closed: status.ai.closed,
     qualifying_support_report_ids: status.ai.qualifying_support_report_ids,
     unresolved_challenge_report_ids: status.ai.unresolved_challenge_report_ids,
   };
+  if (status.rule === CONSENT_RULE_V2) {
+    snapshot.set_aside_challenge_report_ids = (status.set_asides ?? []).map((entry) => entry.challenge_report_id).sort();
+  }
+  return snapshot;
 }
 
 /** A rejection needs a reason, which is signed with it; an agreement takes none. */
@@ -8203,6 +8682,17 @@ function normalizeProposalTerms(input: {
     topic: optionalText(input.topic, "topic", 200),
     consult_seconds: validateConsultSeconds(input.consult_seconds),
   };
+}
+
+/**
+ * The rule as a request field: present only when it is not consent/v1, so a
+ * consent/v1 open hashes exactly as before and its receipts replay unchanged,
+ * while a retry under a differently configured host is refused as a
+ * different request instead of replaying the other rule's proposal.
+ */
+function ruleRequestField(rule: ConsentRule | undefined): { rule?: ConsentRule } {
+  const value = validateConsentRule(rule ?? CONSENT_RULE);
+  return value === CONSENT_RULE ? {} : { rule: value };
 }
 
 function validateProposalOrigin(value: ProposalOrigin): ProposalOrigin {

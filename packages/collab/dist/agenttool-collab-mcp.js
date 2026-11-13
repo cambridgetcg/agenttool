@@ -28587,6 +28587,23 @@ function journalHashAtSequence(store, workspaceId, sequence) {
   }
 }
 
+// src/consent-v2.ts
+import { createHash } from "crypto";
+
+// src/canonical.ts
+function canonicalJson(value) {
+  return JSON.stringify(sortValue(value));
+}
+function sortValue(value) {
+  if (Array.isArray(value))
+    return value.map(sortValue);
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0).map(([key, child]) => [key, sortValue(child)]);
+    return Object.fromEntries(entries);
+  }
+  return value;
+}
+
 // src/protocol.ts
 var COLLAB_PROTOCOL = "agenttool.collab/0.1";
 var LEGACY_COLLAB_PROTOCOL = COLLAB_PROTOCOL;
@@ -28596,17 +28613,126 @@ var SESSION_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
 var EVIDENCE_REF_PREFIXES = ["artifact:", "event:", "report:", "checkpoint:"];
 var EVIDENCE_REFS_DESCRIPTION = "Evidence references point inside this workspace's journal and start with artifact:, event:, " + "report:, or checkpoint: (a task's base_checkpoint_digest or result_checkpoint_digest), " + 'for example "artifact:artifact_<id>".';
 var CONSENT_RULE = "consent/v1";
+var CONSENT_RULE_V2 = "consent/v2";
+var CONSENT_RULES = [CONSENT_RULE, CONSENT_RULE_V2];
 var PROPOSAL_BYTES_PROTOCOL = "agenttool.collab-proposal/1";
 var DEFAULT_PROPOSAL_CONSULT_SECONDS = 6 * 60 * 60;
 var MIN_PROPOSAL_CONSULT_SECONDS = 10 * 60;
 var MAX_PROPOSAL_CONSULT_SECONDS = 7 * 24 * 60 * 60;
 var PERSON_ACT_PROTOCOL = "agenttool.collab-person-act/1";
+var PERSON_SET_ASIDE_PROTOCOL = "agenttool.collab-person-set-aside/1";
 var DEFAULT_WAIT_EVENT_LIMIT = 10;
 var MAX_WAIT_EVENT_LIMIT = 50;
 var MAX_WAIT_MS = 30000;
 var MAX_WAIT_PAGE_BYTES = 256 * 1024;
 var MAX_WAIT_RESPONSE_BYTES = 1024 * 1024;
 var MAX_WAIT_ANCHOR_BYTES = 8 * 1024 * 1024;
+
+// src/consent-v2.ts
+var CONSENT_RULE_VARIABLES = ["AGENTOOL_COLLAB_CONSENT_RULE", "AGENTTOOL_COLLAB_CONSENT_RULE"];
+var MAX_SET_ASIDE_REASON = 2000;
+var CHALLENGE_CONTENT_PROTOCOL = "agenttool.collab-challenge-content/1";
+function isConsentRule(value) {
+  return CONSENT_RULES.includes(value);
+}
+function validateConsentRule(value) {
+  if (!isConsentRule(value)) {
+    throw new CollabError("invalid_consent_rule", `The consent rule must be ${CONSENT_RULES.join(" | ")}`);
+  }
+  return value;
+}
+function consentRuleFromEnvironment(environment) {
+  const values = CONSENT_RULE_VARIABLES.map((name) => ({ name, value: environment[name] })).filter((entry) => entry.value !== undefined && entry.value !== "");
+  for (const { name, value } of values) {
+    if (!isConsentRule(value)) {
+      throw new CollabError("invalid_consent_rule", `${name} must be ${CONSENT_RULES.join(" | ")}, not ${JSON.stringify(value)}`);
+    }
+  }
+  if (values.length === 2 && values[0].value !== values[1].value) {
+    throw new CollabError("conflicting_consent_rule", `AGENTOOL_COLLAB_CONSENT_RULE and AGENTTOOL_COLLAB_CONSENT_RULE disagree; set one of them to ${CONSENT_RULES.join(" | ")}`);
+  }
+  return values[0]?.value ?? CONSENT_RULE;
+}
+function challengeContentBytes(report) {
+  return canonicalJson({
+    protocol: CHALLENGE_CONTENT_PROTOCOL,
+    id: report.id,
+    workspace_id: report.workspace_id,
+    task_id: report.task_id,
+    from_session_id: report.from_session_id,
+    from_actor: report.from_actor,
+    to_session_id: report.to_session_id,
+    kind: report.kind,
+    body: report.body,
+    evidence_refs: report.evidence_refs,
+    confidence: report.confidence,
+    confidence_basis: report.confidence_basis,
+    limits: report.limits,
+    relation: report.relation,
+    target_report_id: report.target_report_id,
+    created_at: report.created_at
+  });
+}
+function challengeContentSha256(report) {
+  return createHash("sha256").update(challengeContentBytes(report)).digest("hex");
+}
+function setAsideChallenge(input) {
+  const challenge_bytes = canonicalJson({ protocol: PERSON_SET_ASIDE_PROTOCOL, act: "set_aside", ...input });
+  return { challenge_bytes, challenge: createHash("sha256").update(challenge_bytes).digest("base64url") };
+}
+function normalizeSetAsideReason(value) {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!text || text.length > MAX_SET_ASIDE_REASON || text.includes("\x00")) {
+    throw setAsideRefusal("invalid_reason", {});
+  }
+  return text;
+}
+var REFUSALS = {
+  rule_has_no_set_aside: {
+    message: "This proposal opened under consent/v1, which has no set-aside: only each challenge's own voice can lift it",
+    remedy: "Reject it at the desk if it should not go ahead. A proposal opened by a host configured with " + "AGENTOOL_COLLAB_CONSENT_RULE=consent/v2 can have an absent voice's challenge set aside; a proposal keeps the rule it opened under."
+  },
+  proposal_not_on_table: {
+    message: "A withdrawn or superseded proposal is no longer on the table",
+    remedy: "Read the proposal that replaced it, if any, and act there."
+  },
+  challenge_not_standing: {
+    message: "That report is not a standing challenge to this proposal",
+    remedy: "Only a challenge that still stands can be set aside; `person proposals --workspace <id> --proposal <id>` lists them under set_aside_options."
+  },
+  already_set_aside: {
+    message: "This challenge was already set aside; a set-aside is final and applies to one challenge once",
+    remedy: "Nothing more is needed for it. A new challenge on the proposal stands as usual and is judged on its own."
+  },
+  challenger_present: {
+    message: "A session of the challenger's voice is live, so it can answer and lift its own challenge",
+    remedy: "Wait, reject, or ask through the author. live_sessions names the challenger's live sessions; only they can " + "resolve or withdraw the challenge. A desk note reaches the proposal's author (for a desk proposal, the voices it " + "consulted), not the challenger, and can ask it to pass the request on: " + '`person say --workspace <workspace id> --proposal <proposal id> --body "<your note>" --idempotency-key <new key>`. ' + "A session stops being live 6 hours after its last activity, or when it ends; the set-aside can be made then. " + "Or reject the proposal."
+  },
+  challenger_changed: {
+    message: "A session of the challenger's voice was active after the objection was shown, so it may have said more",
+    remedy: "Run the command again, so the challenger's latest activity and what it wrote are shown before you confirm."
+  },
+  invalid_reason: {
+    message: `A set-aside needs a reason of 1 to ${MAX_SET_ASIDE_REASON} characters`,
+    remedy: "Give --reason with why this objection should no longer block; it is signed with the act and shown beside the challenge."
+  },
+  proposal_hash_mismatch: {
+    message: "The act names different proposal bytes; read the proposal status again",
+    remedy: "Run the command again, so the current bytes are shown before you confirm."
+  },
+  challenge_hash_mismatch: {
+    message: "The act names a challenge text other than the one in the journal",
+    remedy: "Run the command again, so the objection is shown as the journal holds it."
+  },
+  ai_position_changed: {
+    message: "The agents' position changed since it was shown; read the proposal status again",
+    remedy: "Run the command again, so the current position is shown before you confirm."
+  }
+};
+function setAsideRefusal(code, details, message) {
+  const refusal = REFUSALS[code];
+  return new CollabError(code, message ?? refusal.message, { ...details, remedy: refusal.remedy });
+}
 
 // src/seat-ref.ts
 var MAX_SEAT_REF = 200;
@@ -28771,20 +28897,6 @@ function isOwnedByCurrentUser(uid) {
 
 // src/note-verbs.ts
 import { existsSync as existsSync6 } from "fs";
-
-// src/canonical.ts
-function canonicalJson(value) {
-  return JSON.stringify(sortValue(value));
-}
-function sortValue(value) {
-  if (Array.isArray(value))
-    return value.map(sortValue);
-  if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0).map(([key, child]) => [key, sortValue(child)]);
-    return Object.fromEntries(entries);
-  }
-  return value;
-}
 
 // src/note.ts
 var NOTE_FORMAT = "collab-note/1";
@@ -30091,7 +30203,7 @@ ${NOTE_CARRY_DISCLAIMER}`,
 }
 
 // src/repository.ts
-import { createHash } from "crypto";
+import { createHash as createHash2 } from "crypto";
 import {
   closeSync as closeSync4,
   constants as fsConstants,
@@ -30389,7 +30501,7 @@ function hashWorktreeFile(rootPath, cited, maxBytes = MAX_CITED_FILE_BYTES) {
       return { status: "not_a_file", path: inside };
     if (before.size > maxBytes)
       return { status: "too_large", path: inside };
-    const hash2 = createHash("sha256");
+    const hash2 = createHash2("sha256");
     const buffer = Buffer.allocUnsafe(64 * 1024);
     let total = 0;
     while (true) {
@@ -30523,7 +30635,7 @@ function digestUntrackedContent(rootPath, paths) {
     remainingBytes: MAX_UNTRACKED_BYTES,
     deadline: Date.now() + MAX_UNTRACKED_HASH_MS
   };
-  const aggregate = createHash("sha256");
+  const aggregate = createHash2("sha256");
   aggregate.update("agenttool.collab/untracked-state/v1\x00");
   for (const entry of entries) {
     if (Date.now() > budget.deadline)
@@ -30572,7 +30684,7 @@ function digestStableFile(path, budget) {
     const before = fstatSync3(descriptor);
     if (!before.isFile() || before.size > budget.remainingBytes || Date.now() > budget.deadline)
       return null;
-    const hash2 = createHash("sha256");
+    const hash2 = createHash2("sha256");
     const buffer = Buffer.allocUnsafe(64 * 1024);
     while (true) {
       if (Date.now() > budget.deadline)
@@ -30629,10 +30741,10 @@ function lengthPrefix(value) {
   return prefix2;
 }
 function sha256(value) {
-  return createHash("sha256").update(value).digest("hex");
+  return createHash2("sha256").update(value).digest("hex");
 }
 function sha256Bytes(value) {
-  return createHash("sha256").update(value).digest("hex");
+  return createHash2("sha256").update(value).digest("hex");
 }
 
 // src/store-notes.ts
@@ -30640,7 +30752,7 @@ import { randomUUID as randomUUID4 } from "crypto";
 import { realpathSync as realpathSync2 } from "fs";
 
 // src/ballot.ts
-import { createHash as createHash2 } from "crypto";
+import { createHash as createHash3 } from "crypto";
 var BALLOT_COMMITMENT_PROTOCOL = "agenttool.collab-ballot/1";
 var BALLOT_METHOD = "approval/1";
 var MIN_BALLOT_OPTIONS = 2;
@@ -31486,7 +31598,7 @@ function refuse(code, message, details, remedy) {
   throw new CollabError(code, message, { ...details, remedy });
 }
 function sha2562(value) {
-  return createHash2("sha256").update(value).digest("hex");
+  return createHash3("sha256").update(value).digest("hex");
 }
 
 // src/ballot-seal.ts
@@ -31635,7 +31747,7 @@ function removeQuietly(path) {
 
 // src/store.ts
 import { Database } from "bun:sqlite";
-import { createHash as createHash4, randomBytes, randomUUID as randomUUID3, timingSafeEqual } from "crypto";
+import { createHash as createHash5, randomBytes, randomUUID as randomUUID3, timingSafeEqual } from "crypto";
 import {
   chmodSync as chmodSync3,
   closeSync as closeSync6,
@@ -31647,7 +31759,7 @@ import {
 import { dirname as dirname3, isAbsolute as isAbsolute3, join as join4, posix, resolve as resolve4 } from "path";
 
 // src/passkey.ts
-import { createHash as createHash3, createPublicKey, verify } from "crypto";
+import { createHash as createHash4, createPublicKey, verify } from "crypto";
 var FLAG_USER_PRESENT = 1;
 var FLAG_USER_VERIFIED = 4;
 var BASE64URL = /^[A-Za-z0-9_-]*$/;
@@ -31662,7 +31774,7 @@ function base64urlDecode(value, field, maxBytes = 64 * 1024) {
   return bytes;
 }
 function sha2563(bytes) {
-  return createHash3("sha256").update(bytes).digest();
+  return createHash4("sha256").update(bytes).digest();
 }
 function personActChallenge(input) {
   const challenge_bytes = canonicalJson({ protocol: PERSON_ACT_PROTOCOL, ...input });
@@ -31797,8 +31909,8 @@ function verifyPasskeyAssertion(input) {
 }
 
 // src/proposal.ts
-function proposalBytes(content) {
-  return canonicalJson({ protocol: PROPOSAL_BYTES_PROTOCOL, rule: CONSENT_RULE, ...content });
+function proposalBytes(content, rule = CONSENT_RULE) {
+  return canonicalJson({ protocol: PROPOSAL_BYTES_PROTOCOL, rule, ...content });
 }
 function aiPosition(input) {
   const closed = Date.parse(input.now) >= Date.parse(input.closes_at);
@@ -32115,6 +32227,21 @@ class CollabStoreCore {
           PRIMARY KEY (workspace_id, ballot_id)
         );
         CREATE INDEX IF NOT EXISTS note_ballots_state_idx ON note_ballots(workspace_id, state, closes_at);
+        -- consent/v2 set-asides: one row per proposal.challenge_set_aside
+        -- event, rebuilt from those events on every open, so losing it loses
+        -- nothing the journal records. No foreign keys; older builds ignore it.
+        CREATE TABLE IF NOT EXISTS proposal_set_asides (
+          id TEXT PRIMARY KEY,
+          workspace_id TEXT NOT NULL,
+          proposal_report_id TEXT NOT NULL,
+          challenge_report_id TEXT NOT NULL,
+          set_aside_json TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          event_sequence INTEGER NOT NULL,
+          UNIQUE (workspace_id, challenge_report_id)
+        );
+        CREATE INDEX IF NOT EXISTS proposal_set_asides_proposal_idx
+          ON proposal_set_asides(workspace_id, proposal_report_id, event_sequence);
       `);
       this.db.exec(`
         INSERT OR IGNORE INTO note_ballots (workspace_id, ballot_id, closes_at, state)
@@ -32124,6 +32251,17 @@ class CollabStoreCore {
           SELECT 1 FROM events e WHERE e.workspace_id = note_ballots.workspace_id
             AND e.type = 'ballot.closed' AND e.entity_id = note_ballots.ballot_id
         );
+        INSERT OR IGNORE INTO proposal_set_asides (
+          id, workspace_id, proposal_report_id, challenge_report_id, set_aside_json, created_at, event_sequence
+        )
+        SELECT json_extract(payload_json, '$.set_aside.id'), workspace_id, entity_id,
+          json_extract(payload_json, '$.set_aside.challenge_report_id'), json_extract(payload_json, '$.set_aside'),
+          occurred_at, sequence
+        FROM events
+        WHERE type = 'proposal.challenge_set_aside'
+          AND json_type(payload_json, '$.set_aside.id') = 'text'
+          AND json_type(payload_json, '$.set_aside.challenge_report_id') = 'text'
+        ORDER BY workspace_id, sequence;
       `);
       if (this.tableNames().includes("proposal_rejections") && this.db.query(`SELECT 1 FROM proposal_rejections LIMIT 1`).get()) {
         throw new CollabError("preview_journal_unsupported", "This journal holds rejections from the unreleased consent preview; use a fresh journal");
@@ -34367,7 +34505,8 @@ class CollabStoreCore {
       confidence_basis: optionalText(input.confidence_basis, "confidence_basis", 2000),
       limits: optionalText(input.limits, "limits", 2000),
       origin: validateProposalOrigin(input.origin ?? "ai"),
-      supersedes_report_id: input.supersedes_report_id ? validateId(input.supersedes_report_id, "supersedes_report_id") : null
+      supersedes_report_id: input.supersedes_report_id ? validateId(input.supersedes_report_id, "supersedes_report_id") : null,
+      ...ruleRequestField(input.rule)
     };
     return this.mutateAsSession(input, input.idempotency_key, "proposal.open.v1", normalized, (session) => {
       const reportInput = {
@@ -34388,11 +34527,14 @@ class CollabStoreCore {
       if (normalized.supersedes_report_id) {
         this.requireOpenToRevision(session.workspace_id, normalized.supersedes_report_id);
       }
-      return this.openProposalInternal(session, this.consentVoice(session.id), reportInput, normalized);
+      return this.openProposalInternal(session, this.consentVoice(session.id), reportInput, {
+        ...normalized,
+        rule: normalized.rule ?? CONSENT_RULE
+      });
     });
   }
   openPersonProposal(input) {
-    const normalized = normalizeProposalTerms(input);
+    const normalized = { ...normalizeProposalTerms(input), ...ruleRequestField(input.rule) };
     const idempotencyKey = validateIdempotencyKey(input.idempotency_key);
     return this.mutate(input.workspace_id, PERSON_DESK_ACTOR, idempotencyKey, "person.proposal.open.v1", normalized, () => {
       for (const reference of normalized.evidence_refs)
@@ -34411,7 +34553,7 @@ class CollabStoreCore {
         authority_scope: null,
         authority_basis: null
       };
-      return this.openProposalInternal({ workspace_id: input.workspace_id, actor: PERSON_DESK_ACTOR, id: null }, PERSON_VOICE_ID, reportInput, { ...normalized, origin: "person_relayed", supersedes_report_id: null });
+      return this.openProposalInternal({ workspace_id: input.workspace_id, actor: PERSON_DESK_ACTOR, id: null }, PERSON_VOICE_ID, reportInput, { ...normalized, origin: "person_relayed", supersedes_report_id: null, rule: normalized.rule ?? CONSENT_RULE });
     });
   }
   withdrawPersonProposal(input) {
@@ -34466,9 +34608,9 @@ class CollabStoreCore {
       topic: terms.topic,
       closes_at: closesAt,
       supersedes_report_id: terms.supersedes_report_id
-    }));
+    }, terms.rule));
     const event = this.appendEvent(author.workspace_id, "proposal.opened", report.id, author.actor, {
-      rule: CONSENT_RULE,
+      rule: terms.rule,
       proposal_sha256: proposalSha256,
       criteria: terms.criteria,
       extent: terms.extent,
@@ -34485,7 +34627,7 @@ class CollabStoreCore {
         topic, closes_at, voices_json, author_voice_id, proposal_sha256,
         opened_event_id, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(report.id, author.workspace_id, CONSENT_RULE, terms.criteria, terms.extent, terms.known_conflicts, terms.origin, terms.topic, closesAt, canonicalJson(voices), authorVoiceId, proposalSha256, event.id, now);
+    `).run(report.id, author.workspace_id, terms.rule, terms.criteria, terms.extent, terms.known_conflicts, terms.origin, terms.topic, closesAt, canonicalJson(voices), authorVoiceId, proposalSha256, event.id, now);
     return this.proposalStatusInternal(author.workspace_id, report.id);
   }
   relayProposalRejectionForSession(input) {
@@ -34620,6 +34762,115 @@ class CollabStoreCore {
     const status = transaction.immediate();
     this.tightenFileModes();
     return status;
+  }
+  personSetAsideChallenge(input) {
+    const reason = normalizeSetAsideReason(input.reason);
+    const challengeId = validateId(input.challenge_report_id, "challenge_report_id");
+    return this.db.transaction(() => {
+      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
+      const facts = this.setAsideFacts(terms, challengeId, reason);
+      return {
+        ...facts.bytes,
+        act: "set_aside",
+        objection: { ...facts.challenge, author_basis: "self_declared" },
+        challenger: facts.challenger,
+        ...setAsideChallenge(facts.bytes),
+        passkeys: this.listPersonPasskeys().filter((key) => key.revoked_at === null).map((key) => ({
+          credential_id: key.credential_id,
+          rp_id: key.rp_id,
+          origin: key.origin,
+          label: key.label,
+          fingerprint: key.fingerprint
+        }))
+      };
+    }).deferred();
+  }
+  recordSetAsideAtTerminal(input) {
+    const reason = normalizeSetAsideReason(input.reason);
+    const challengeId = validateId(input.challenge_report_id, "challenge_report_id");
+    const transaction = this.db.transaction(() => {
+      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
+      return this.recordSetAside(terms, challengeId, reason, {
+        basis: "controlling_terminal",
+        actor: PERSON_TERMINAL_ACTOR,
+        proof: null,
+        proposal_sha256: validateSha256(input.proposal_sha256),
+        challenge_sha256: validateSha256(input.challenge_sha256),
+        challenger_last_seen_at: input.challenger_last_seen_at,
+        expected_ai_snapshot: input.expected_ai_snapshot
+      });
+    });
+    const status = transaction.immediate();
+    this.tightenFileModes();
+    return status;
+  }
+  recordSetAsideWithPasskey(input) {
+    const reason = normalizeSetAsideReason(input.reason);
+    const challengeId = validateId(input.challenge_report_id, "challenge_report_id");
+    const assertion = normalizePasskeyAssertion(input.assertion);
+    const transaction = this.db.transaction(() => {
+      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
+      const passkey = this.listPersonPasskeys().find((key) => key.credential_id === assertion.credential_id && key.revoked_at === null);
+      if (!passkey) {
+        throw new CollabError("passkey_not_enrolled", "No active enrolled passkey has this credential id");
+      }
+      const facts = this.setAsideFacts(terms, challengeId, reason);
+      const derived = setAsideChallenge(facts.bytes);
+      const { sign_count } = verifyPasskeyAssertion({ passkey, assertion, expected_challenge: derived.challenge });
+      this.db.query(`UPDATE person_passkeys SET sign_count = ? WHERE credential_id = ?`).run(sign_count, passkey.credential_id);
+      return this.recordSetAside(terms, challengeId, reason, {
+        basis: "user_verified_passkey",
+        actor: PERSON_PASSKEY_ACTOR,
+        proof: {
+          ...assertion,
+          public_key_spki: passkey.public_key_spki,
+          rp_id: passkey.rp_id,
+          origin: passkey.origin,
+          challenge_bytes: derived.challenge_bytes,
+          challenge: derived.challenge,
+          sign_count
+        },
+        proposal_sha256: facts.bytes.proposal_sha256,
+        challenge_sha256: facts.bytes.challenge_sha256,
+        challenger_last_seen_at: facts.bytes.challenger_last_seen_at,
+        expected_ai_snapshot: facts.bytes.ai_snapshot
+      });
+    });
+    const status = transaction.immediate();
+    this.tightenFileModes();
+    return status;
+  }
+  personSetAsideOptions(workspaceId, proposalIds) {
+    this.requireWorkspace(workspaceId);
+    return this.db.transaction(() => {
+      const options = {};
+      for (const proposalId of proposalIds) {
+        const terms = this.requireProposalTerms(workspaceId, validateId(proposalId, "proposal_report_id"));
+        if (terms.rule !== CONSENT_RULE_V2)
+          continue;
+        const status = this.proposalStatusInternal(workspaceId, terms.report_id);
+        options[terms.report_id] = status.ai.unresolved_challenge_report_ids.map((challengeId) => {
+          const challenge = this.requireReport(challengeId);
+          const presence = this.challengerPresence(workspaceId, challenge.from_session_id);
+          let refusal = null;
+          try {
+            this.refuseUnrecordableSetAside(status, challenge, presence);
+          } catch (error51) {
+            if (!(error51 instanceof CollabError))
+              throw error51;
+            refusal = { error: error51.code, message: error51.message };
+          }
+          return {
+            challenge_report_id: challengeId,
+            by: { session: challenge.from_session_id, name: challenge.from_actor, basis: "self_declared" },
+            can_set_aside: refusal === null,
+            refusal,
+            challenger: presence
+          };
+        });
+      }
+      return options;
+    }).deferred();
   }
   enrollPersonPasskey(input) {
     const enrollment = normalizePasskeyEnrollment(input);
@@ -34820,6 +35071,135 @@ class CollabStoreCore {
     `).run(id, input.workspace_id, input.proposal_report_id, input.proposal_sha256, input.act, input.basis, input.reason, personAct.relayed_by_session_id, canonicalJson(aiSnapshot), input.proof ? canonicalJson(input.proof) : null, now, event.sequence);
     return this.proposalStatusInternal(input.workspace_id, input.proposal_report_id);
   }
+  setAsideFacts(terms, challengeId, reason) {
+    const status = this.proposalStatusInternal(terms.workspace_id, terms.report_id);
+    const row = this.db.query(`SELECT * FROM reports WHERE id = ?`).get(challengeId);
+    const challenge = row ? reportFromRow(row) : null;
+    const presence = this.challengerPresence(terms.workspace_id, challenge?.from_session_id ?? null);
+    this.refuseUnrecordableSetAside(status, challenge, presence);
+    return {
+      status,
+      challenge,
+      challenger: { voice_id: presence.voice_id, session_ids: presence.session_ids, last_seen_at: presence.last_seen_at },
+      bytes: {
+        workspace_id: terms.workspace_id,
+        proposal_report_id: terms.report_id,
+        proposal_sha256: terms.proposal_sha256,
+        challenge_report_id: challengeId,
+        challenge_sha256: challengeContentSha256(challenge),
+        challenger_last_seen_at: presence.last_seen_at,
+        reason,
+        prior_person_acts: this.personActCount(terms.report_id),
+        prior_set_asides: this.setAsideCount(terms.workspace_id, terms.report_id),
+        ai_snapshot: aiSnapshotOf(status)
+      }
+    };
+  }
+  refuseUnrecordableSetAside(status, challenge, presence) {
+    const proposalId = status.proposal.id;
+    if (status.rule !== CONSENT_RULE_V2) {
+      throw setAsideRefusal("rule_has_no_set_aside", { proposal_report_id: proposalId, rule: status.rule });
+    }
+    if (status.ai.position === "withdrawn" || status.ai.position === "superseded") {
+      throw setAsideRefusal("proposal_not_on_table", {
+        position: status.ai.position,
+        obsoleted_by_report_id: status.ai.obsoleted_by_report_id
+      });
+    }
+    if (!challenge || challenge.workspace_id !== status.proposal.workspace_id || challenge.relation !== "challenges" || challenge.target_report_id !== proposalId) {
+      throw setAsideRefusal("challenge_not_standing", {
+        challenge_report_id: challenge?.id ?? null,
+        challenge_state: "not_a_challenge_to_this_proposal"
+      }, "That report is not a challenge to this proposal");
+    }
+    const earlier = (status.set_asides ?? []).find((entry) => entry.challenge_report_id === challenge.id);
+    if (earlier) {
+      throw setAsideRefusal("already_set_aside", {
+        challenge_report_id: challenge.id,
+        set_aside_id: earlier.id,
+        set_aside_at: earlier.created_at
+      });
+    }
+    if (!status.ai.unresolved_challenge_report_ids.includes(challenge.id)) {
+      throw setAsideRefusal("challenge_not_standing", {
+        challenge_report_id: challenge.id,
+        challenge_state: "withdrawn_or_lifted_by_its_voice"
+      }, "That challenge no longer stands: it was withdrawn or lifted by its own voice");
+    }
+    if (presence.live_sessions.length > 0) {
+      throw setAsideRefusal("challenger_present", {
+        challenge_report_id: challenge.id,
+        live_sessions: presence.live_sessions
+      });
+    }
+  }
+  recordSetAside(terms, challengeId, reason, act) {
+    if (act.proposal_sha256 !== terms.proposal_sha256) {
+      throw setAsideRefusal("proposal_hash_mismatch", { proposal_sha256: terms.proposal_sha256 });
+    }
+    const facts = this.setAsideFacts(terms, challengeId, reason);
+    if (act.challenge_sha256 !== facts.bytes.challenge_sha256) {
+      throw setAsideRefusal("challenge_hash_mismatch", { challenge_sha256: facts.bytes.challenge_sha256 });
+    }
+    if (act.challenger_last_seen_at !== facts.bytes.challenger_last_seen_at) {
+      throw setAsideRefusal("challenger_changed", {
+        challenge_report_id: challengeId,
+        shown_last_seen_at: act.challenger_last_seen_at,
+        last_seen_at: facts.bytes.challenger_last_seen_at
+      });
+    }
+    if (canonicalJson(act.expected_ai_snapshot) !== canonicalJson(facts.bytes.ai_snapshot)) {
+      throw setAsideRefusal("ai_position_changed", { ai_snapshot: facts.bytes.ai_snapshot });
+    }
+    const record2 = {
+      id: `set_aside_${randomUUID3()}`,
+      proposal_report_id: terms.report_id,
+      proposal_sha256: terms.proposal_sha256,
+      challenge_report_id: challengeId,
+      challenge_sha256: facts.bytes.challenge_sha256,
+      party: "person",
+      basis: act.basis,
+      reason,
+      prior_person_acts: facts.bytes.prior_person_acts,
+      prior_set_asides: facts.bytes.prior_set_asides,
+      ai_snapshot: facts.bytes.ai_snapshot,
+      challenger: facts.challenger,
+      proof: act.proof
+    };
+    const event = this.appendEvent(terms.workspace_id, "proposal.challenge_set_aside", terms.report_id, act.actor, { set_aside: record2 });
+    this.db.query(`
+      INSERT INTO proposal_set_asides (
+        id, workspace_id, proposal_report_id, challenge_report_id, set_aside_json, created_at, event_sequence
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(record2.id, terms.workspace_id, terms.report_id, challengeId, canonicalJson(record2), event.occurred_at, event.sequence);
+    return this.proposalStatusInternal(terms.workspace_id, terms.report_id);
+  }
+  challengerPresence(workspaceId, challengerSessionId) {
+    if (challengerSessionId === null)
+      return { voice_id: null, session_ids: [], last_seen_at: null, live_sessions: [] };
+    const observedAt = this.timestamp();
+    const voice = this.consentVoice(challengerSessionId);
+    const members = this.db.query(`
+      SELECT id, actor, status, last_seen_at FROM coordination_sessions WHERE workspace_id = ? ORDER BY id
+    `).all(workspaceId).filter((row) => this.consentVoice(row.id) === voice);
+    return {
+      voice_id: voice,
+      session_ids: members.map((row) => row.id),
+      last_seen_at: members.map((row) => row.last_seen_at).sort().at(-1) ?? null,
+      live_sessions: members.filter((row) => sessionLiveness(row, observedAt) === "live").map((row) => ({ id: row.id, actor: row.actor, last_seen_at: row.last_seen_at }))
+    };
+  }
+  setAsideCount(workspaceId, proposalReportId) {
+    return this.db.query(`SELECT COUNT(*) AS count FROM proposal_set_asides WHERE workspace_id = ? AND proposal_report_id = ?`).get(workspaceId, proposalReportId).count;
+  }
+  proposalSetAsides(workspaceId, proposalReportId) {
+    return this.db.query(`
+      SELECT s.* FROM proposal_set_asides s
+      JOIN reports r ON r.id = s.challenge_report_id
+        AND r.workspace_id = s.workspace_id AND r.target_report_id = s.proposal_report_id AND r.relation = 'challenges'
+      WHERE s.workspace_id = ? AND s.proposal_report_id = ? ORDER BY s.event_sequence
+    `).all(workspaceId, proposalReportId).map(proposalSetAsideFromRow);
+  }
   personActCount(proposalReportId) {
     return this.db.query(`SELECT COUNT(*) AS count FROM proposal_person_acts WHERE proposal_report_id = ?`).get(proposalReportId).count;
   }
@@ -34842,7 +35222,7 @@ class CollabStoreCore {
       LIMIT 1
     `).get(workspaceId, reportId);
   }
-  standingProposalChallenges(context, reportId) {
+  standingProposalChallenges(context, reportId, setAside = new Set) {
     const challenges = this.db.query(`
       SELECT id, from_session_id FROM reports
       WHERE workspace_id = ? AND target_report_id = ? AND relation = 'challenges'
@@ -34858,7 +35238,7 @@ class CollabStoreCore {
       `).all(context.workspaceId, challenge.id);
       const challengerVoice = challenge.from_session_id ? this.consentVoice(challenge.from_session_id, context) : null;
       const resolved = challengerVoice !== null && answers.some((answer) => !context.obsoleted.has(answer.id) && answer.from_session_id !== null && this.consentVoice(answer.from_session_id, context) === challengerVoice);
-      if (!resolved)
+      if (!resolved && !setAside.has(challenge.id))
         standing.push(challenge.id);
     }
     return standing;
@@ -34880,7 +35260,7 @@ class CollabStoreCore {
       topic: terms.topic,
       closes_at: terms.closes_at,
       supersedes_report_id: proposal.relation === "supersedes" ? proposal.target_report_id : null
-    });
+    }, terms.rule);
     if (sha2564(bytes) !== terms.proposal_sha256) {
       throw new CollabError("proposal_terms_invalid", "Stored proposal bytes no longer match their recorded hash", { proposal_report_id: reportId });
     }
@@ -34890,7 +35270,8 @@ class CollabStoreCore {
       WHERE workspace_id = ? AND target_report_id = ? AND relation = 'supports'
       ORDER BY event_sequence
     `).all(workspaceId, reportId).filter((support) => support.from_session_id !== null && !context.obsoleted.has(support.id));
-    const challengeIds = this.standingProposalChallenges(context, reportId);
+    const setAsides = terms.rule === CONSENT_RULE_V2 ? this.proposalSetAsides(workspaceId, reportId) : null;
+    const challengeIds = this.standingProposalChallenges(context, reportId, new Set(setAsides?.map((entry) => entry.challenge_report_id) ?? []));
     const computed = aiPosition({
       now: this.timestamp(),
       closes_at: terms.closes_at,
@@ -34909,7 +35290,7 @@ class CollabStoreCore {
     const state = latest === null ? "awaiting" : latest.act === "agree" ? "agreed" : "rejected";
     const agreement = latest?.act === "agree" ? latest : null;
     return {
-      rule: CONSENT_RULE,
+      rule: terms.rule,
       proposal,
       terms,
       proposal_bytes: bytes,
@@ -34924,6 +35305,7 @@ class CollabStoreCore {
         basis: "computed_from_journal"
       },
       person: { state, acts },
+      ...setAsides ? { set_asides: setAsides } : {},
       agreement,
       may_proceed: agreement !== null && retirement === null,
       authority_boundary: "an_agreement_authorises_only_the_proposal_extent"
@@ -35689,6 +36071,14 @@ class CollabStoreCore {
       return row.from_session_id === sessionId;
     return JSON.parse(row.voices_json).some((voice) => voice.voice_id !== row.author_voice_id && voice.live_session_ids.includes(sessionId));
   }
+  setAsideAddressesChallenger(challenger, sessionId) {
+    if (challenger === null || typeof challenger !== "object")
+      return false;
+    const { voice_id: voice, session_ids: sessions } = challenger;
+    if (Array.isArray(sessions) && sessions.includes(sessionId))
+      return true;
+    return typeof voice === "string" && this.consentVoice(sessionId) === voice;
+  }
   eventAddressesSession(event, sessionId) {
     const payload = event.payload ?? {};
     const field = (value, key) => value !== null && typeof value === "object" ? value[key] : undefined;
@@ -35728,6 +36118,8 @@ class CollabStoreCore {
       case "proposal.agreed":
       case "proposal.rejected":
         return this.proposalAddressesSession(event.entity_id, sessionId);
+      case "proposal.challenge_set_aside":
+        return this.proposalAddressesSession(event.entity_id, sessionId) || this.setAsideAddressesChallenger(field(payload.set_aside, "challenger"), sessionId);
       case "ballot.opened": {
         const electorate = Array.isArray(payload.electorate) ? payload.electorate : [];
         const listed = (key, value) => electorate.some((unit) => Array.isArray(field(unit, key)) && field(unit, key).includes(value));
@@ -37321,13 +37713,13 @@ function reviewFromRow(row) {
   return { ...row };
 }
 function proposalTermsFromRow(row) {
-  if (row.rule !== CONSENT_RULE) {
+  if (!isConsentRule(row.rule)) {
     throw new CollabError("proposal_rule_unsupported", "This proposal was opened under a consent rule this package does not implement", { proposal_report_id: row.report_id, rule: row.rule });
   }
   return {
     report_id: row.report_id,
     workspace_id: row.workspace_id,
-    rule: CONSENT_RULE,
+    rule: row.rule,
     criteria: row.criteria,
     extent: row.extent,
     known_conflicts: row.known_conflicts,
@@ -37349,15 +37741,31 @@ function proposalPersonActFromRow(row) {
     proof: proof_json ? JSON.parse(proof_json) : null
   };
 }
+function proposalSetAsideFromRow(row) {
+  const record2 = JSON.parse(row.set_aside_json);
+  return {
+    ...record2,
+    id: row.id,
+    workspace_id: row.workspace_id,
+    proposal_report_id: row.proposal_report_id,
+    challenge_report_id: row.challenge_report_id,
+    created_at: row.created_at,
+    event_sequence: row.event_sequence
+  };
+}
 var MAX_INBOX_SCAN = 500;
 var MAX_INBOX_PROPOSALS = 50;
 function aiSnapshotOf(status) {
-  return {
+  const snapshot = {
     position: status.ai.position,
     closed: status.ai.closed,
     qualifying_support_report_ids: status.ai.qualifying_support_report_ids,
     unresolved_challenge_report_ids: status.ai.unresolved_challenge_report_ids
   };
+  if (status.rule === CONSENT_RULE_V2) {
+    snapshot.set_aside_challenge_report_ids = (status.set_asides ?? []).map((entry) => entry.challenge_report_id).sort();
+  }
+  return snapshot;
 }
 function normalizeActReason(act, reason) {
   if (act === "agree") {
@@ -37389,6 +37797,10 @@ function normalizeProposalTerms(input) {
     topic: optionalText(input.topic, "topic", 200),
     consult_seconds: validateConsultSeconds(input.consult_seconds)
   };
+}
+function ruleRequestField(rule) {
+  const value = validateConsentRule(rule ?? CONSENT_RULE);
+  return value === CONSENT_RULE ? {} : { rule: value };
 }
 function validateProposalOrigin(value) {
   if (value !== "ai" && value !== "person_relayed") {
@@ -37635,7 +38047,7 @@ function safeRepositoryIdentity(rootPath) {
   }
 }
 function sha2564(value) {
-  return createHash4("sha256").update(value).digest("hex");
+  return createHash5("sha256").update(value).digest("hex");
 }
 function addSeconds(iso, seconds) {
   return new Date(new Date(iso).getTime() + seconds * 1000).toISOString();
@@ -38270,6 +38682,7 @@ class CollabStore extends CollabStoreCore {
       const ballot = ballotFacts ? this.ballotData(ballotFacts, session.id) : null;
       const folds = ballot ? this.noteBallotFolds(session) : new Map;
       const answerEntries = [...answers.values()].sort((left, right) => left - right).map((sequence) => this.noteEntryAt(session, sequence, folds));
+      const setAside = root.relation === "challenges" && root.target_report_id && challenges.some((challenge) => challenge.id === root.id && challenge.set_aside_id !== undefined) ? this.proposalSetAsides(root.workspace_id, root.target_report_id).find((entry) => entry.challenge_report_id === root.id) : undefined;
       return {
         kind: "report",
         session: me,
@@ -38284,6 +38697,7 @@ class CollabStore extends CollabStoreCore {
         proposal: termed ? this.noteProposalData(root.workspace_id, root.id, sessions) : null,
         decision: !termed && root.kind === "decision" ? this.noteDecisionData(root.workspace_id, root, sessions) : null,
         ballot,
+        ...setAside ? { set_aside: setAside } : {},
         folded: answerEntries.filter((entry) => entry.folded !== null).length,
         mark: markState,
         reveal_pending: reveal.pending,
@@ -38661,6 +39075,8 @@ class CollabStore extends CollabStoreCore {
       case "proposal.agreed":
       case "proposal.rejected":
         return "person_act";
+      case "proposal.challenge_set_aside":
+        return this.setAsideAddressesChallenger(payload.set_aside?.challenger, sessionId) ? "your_challenge_set_aside" : "person_act";
       case "ballot.opened":
         return "in_electorate";
       case "ballot.closed":
@@ -38672,6 +39088,12 @@ class CollabStore extends CollabStoreCore {
   noteChallenges(workspaceId) {
     const obsoleted = this.activeObsoletionTargets(workspaceId);
     const voices = new Map;
+    const setAside = new Map(this.db.query(`
+      SELECT s.challenge_report_id, s.id FROM proposal_set_asides s
+      JOIN proposal_terms t ON t.report_id = s.proposal_report_id AND t.rule = ?
+      JOIN reports r ON r.id = s.challenge_report_id AND r.target_report_id = s.proposal_report_id
+      WHERE s.workspace_id = ?
+    `).all(CONSENT_RULE_V2, workspaceId).map((row) => [row.challenge_report_id, row.id]));
     const challenges = this.db.query(`
       SELECT id, from_session_id, from_actor, target_report_id, created_at FROM reports
       WHERE workspace_id = ? AND relation = 'challenges' ORDER BY event_sequence
@@ -38684,14 +39106,16 @@ class CollabStore extends CollabStoreCore {
       const voice = challenge.from_session_id ? this.cachedVoice(challenge.from_session_id, voices) : null;
       const lifted = voice !== null && resolves.some((answer) => this.cachedVoice(answer.from_session_id, voices) === voice);
       const withdrawn = obsoleted.has(challenge.id);
+      const setAsideId = setAside.get(challenge.id);
       return {
         id: challenge.id,
         target_report_id: challenge.target_report_id,
         from_session_id: challenge.from_session_id,
         from_actor: challenge.from_actor,
         created_at: challenge.created_at,
-        standing: !withdrawn && !lifted,
-        answered_by_another_voice: !lifted && resolves.length > 0
+        standing: !withdrawn && !lifted && setAsideId === undefined,
+        answered_by_another_voice: !lifted && resolves.length > 0,
+        ...setAsideId !== undefined ? { set_aside_id: setAsideId, ...!withdrawn && !lifted ? { set_aside_only: true } : {} } : {}
       };
     });
   }
@@ -38782,9 +39206,9 @@ class CollabStore extends CollabStoreCore {
       )
     `).all(workspaceId, workspaceId).map((row) => [row.id, row.from_session_id]));
     for (const challenge of challenges) {
-      if (!challenge.standing)
+      if (!challenge.standing && !challenge.set_aside_only)
         continue;
-      if (authorOf.get(challenge.target_report_id) === session.id && challenge.from_session_id !== session.id) {
+      if (challenge.standing && authorOf.get(challenge.target_report_id) === session.id && challenge.from_session_id !== session.id) {
         waiting.push({
           what: "challenge",
           ref_kind: "report",
@@ -38817,7 +39241,7 @@ class CollabStore extends CollabStoreCore {
             by_session_id: answer.from_session_id,
             due: null,
             at: answer.created_at,
-            summary: "An answer to your standing challenge; only you can lift it."
+            summary: challenge.standing ? "An answer to your standing challenge; only you can lift it." : "An answer to your challenge, which the person set aside, so it no longer blocks; you may lift it, or challenge again."
           });
         }
       }
@@ -39550,6 +39974,11 @@ class CollabStore extends CollabStoreCore {
     const qualifying = new Set(status.ai.qualifying_support_report_ids);
     const unresolved = new Set(status.ai.unresolved_challenge_report_ids);
     const activeVoices = new Set(sessions.filter((view) => view.status === "active").map((view) => view.voice_id));
+    const v2 = status.rule === CONSENT_RULE_V2 ? {
+      set_asides: new Map((status.set_asides ?? []).map((entry) => [entry.challenge_report_id, entry])),
+      live_voices: new Set(sessions.filter((view) => view.liveness === "live").map((view) => view.voice_id)),
+      last_seen: (voice) => sessions.filter((view) => view.voice_id === voice).map((view) => view.last_seen_at).sort().at(-1) ?? null
+    } : null;
     const stances = this.db.query(`
       SELECT * FROM reports WHERE workspace_id = ? AND target_report_id = ? AND relation IN ('supports', 'challenges')
       ORDER BY event_sequence
@@ -39561,7 +39990,9 @@ class CollabStore extends CollabStoreCore {
         standing: report.relation === "supports" ? !context.obsoleted.has(report.id) : unresolved.has(report.id),
         answered_by_another_voice: view?.answered_by_another_voice === true,
         opened_at: status.terms.created_at,
-        active_voices: activeVoices
+        active_voices: activeVoices,
+        v2,
+        set_aside_only: view?.set_aside_only === true
       });
     });
     const supports = stances.filter((stance) => stance.relation === "supports");
@@ -39587,8 +40018,20 @@ class CollabStore extends CollabStoreCore {
       const replacedId = status.proposal.target_report_id;
       const conflicts = status.terms.known_conflicts ?? "";
       const lineage = this.replacedLineage(workspaceId, replacedId);
+      const setAsideOn = new Map;
+      const setAsidesRead = new Set;
       const carried = [...challengeViews.values()].filter((challenge) => lineage.has(challenge.target_report_id)).map((challenge) => {
         const voice = challenge.from_session_id ? this.consentVoice(challenge.from_session_id, context) : null;
+        let setAside;
+        if (challenge.set_aside_only) {
+          if (!setAsidesRead.has(challenge.target_report_id)) {
+            setAsidesRead.add(challenge.target_report_id);
+            for (const entry of this.proposalSetAsides(workspaceId, challenge.target_report_id)) {
+              setAsideOn.set(entry.challenge_report_id, entry);
+            }
+          }
+          setAside = setAsideOn.get(challenge.id);
+        }
         return {
           challenge_id: challenge.id,
           raised_on: challenge.target_report_id,
@@ -39597,9 +40040,10 @@ class CollabStore extends CollabStoreCore {
           voice_id: voice,
           carried_in_terms: conflicts.includes(`report:${challenge.id}`),
           standing_on_replaced: challenge.standing,
-          re_raised_here: voice !== null && challenges.some((stance) => stance.standing && stance.voice_id === voice)
+          re_raised_here: voice !== null && challenges.some((stance) => stance.standing && stance.voice_id === voice),
+          ...setAside ? { set_aside_on_replaced: setAside } : {}
         };
-      }).filter((entry) => entry.carried_in_terms || entry.standing_on_replaced).map((entry) => ({ ...entry, statement: this.noteStanceStatement(workspaceId, this.requireReport(entry.challenge_id)) }));
+      }).filter((entry) => entry.carried_in_terms || entry.standing_on_replaced || entry.set_aside_on_replaced !== undefined).map((entry) => ({ ...entry, statement: this.noteStanceStatement(workspaceId, this.requireReport(entry.challenge_id)) }));
       replaced = { proposal_id: replacedId, carried };
     }
     return {
@@ -39666,7 +40110,14 @@ class CollabStore extends CollabStoreCore {
         flags.answered_by_another_voice = true;
     }
     const voice = report.from_session_id ? this.consentVoice(report.from_session_id, context) : null;
+    const v2 = report.relation === "challenges" && facts.v2 ? facts.v2 : null;
+    const setAside = v2?.set_asides.get(report.id);
     return {
+      ...v2 ? {
+        voice_has_live_session: voice !== null && v2.live_voices.has(voice),
+        voice_last_seen_at: voice !== null ? v2.last_seen(voice) : null,
+        ...setAside ? { set_aside: setAside, ...facts.set_aside_only ? { set_aside_only: true } : {} } : {}
+      } : {},
       id: report.id,
       relation: report.relation,
       from_session_id: report.from_session_id,
@@ -39858,6 +40309,7 @@ var NOTE_ADDRESSING_EVENT_TYPES = [
   "proposal.opened",
   "proposal.agreed",
   "proposal.rejected",
+  "proposal.challenge_set_aside",
   "ballot.opened",
   "ballot.closed"
 ];
@@ -39996,13 +40448,21 @@ function firstLine(text) {
 }
 
 // src/verbs.ts
-import { createHash as createHash5 } from "crypto";
+import { createHash as createHash6 } from "crypto";
 import { existsSync as existsSync5, realpathSync as realpathSync3 } from "fs";
 import { hostname as hostname3 } from "os";
 import { resolve as resolve5, sep as sep2 } from "path";
 
 // src/desk-soft-spots.ts
-var CARRIED_OBJECTIONS_SENTENCE = "Carried objections are text in the terms the person signs. Under consent/v1 they do not block this proposal. Each objector may challenge again.";
+function carriedObjectionsSentence(rule = CONSENT_RULE) {
+  return `Carried objections are text in the terms the person signs. Under ${rule} they do not block this proposal. Each objector may challenge again.`;
+}
+var CARRIED_OBJECTIONS_SENTENCE = carriedObjectionsSentence(CONSENT_RULE);
+var SET_ASIDE_SENTENCE = "A challenge the person set aside no longer blocks the position. It stays on the record and in what the person is shown; any voice, its own included, may challenge again, and a new challenge stands as usual.";
+function softSpotsDeliveryNote(rule = CONSENT_RULE) {
+  return `Under ${rule} silence from an awaited voice does not stop the position settling at the close. A delivery is recorded only when collab_arrive or collab_inbox returned the question; reads through legacy tools or host messages are not recorded.`;
+}
+var SOFT_SPOTS_DELIVERY_NOTE = softSpotsDeliveryNote(CONSENT_RULE);
 
 // src/version.ts
 var COLLAB_PACKAGE_VERSION = "0.6.0-dev.0";
@@ -40081,7 +40541,7 @@ function notesInstructions(verbs = BUILT_NOTE_VERBS) {
 }
 var FULL_PROFILE_BRIDGE = "collab_arrive does not move the legacy cursor; call collab_next only if you mean to page the journal from its start.";
 var NOTE_AUTHORISES = "Nothing. This is coordination state.";
-var NOTE_CAPABILITIES = ["legacy", "consent/v1", "notes/1", "ballot/1"];
+var NOTE_CAPABILITIES = ["legacy", "consent/v1", "consent/v2", "notes/1", "ballot/1"];
 var NOTE_CARD = [
   "Collab Notes: working with other agents through this device's collab journal.",
   "",
@@ -40164,7 +40624,7 @@ function base32(bytes) {
   return out;
 }
 function sha256Bytes2(text) {
-  return createHash5("sha256").update(text, "utf8").digest();
+  return createHash6("sha256").update(text, "utf8").digest();
 }
 var DERIVED_KEY = /^n1:([A-Z2-7]{8}):(\d{6}):([A-Z2-7]{20})(?::(\d{2}))?$/;
 function derivedBase(sessionId, tool, input) {
@@ -40866,7 +41326,8 @@ function challengeView(challenge, onProposal, byId) {
     on_id: challenge.target_report_id,
     by: sessionShown(challenge.from_session_id, challenge.from_actor, byId),
     standing: challenge.standing,
-    ...challenge.answered_by_another_voice ? { answered_by_another_voice: true } : {}
+    ...challenge.answered_by_another_voice ? { answered_by_another_voice: true } : {},
+    ...challenge.set_aside_id !== undefined ? { set_aside: challenge.set_aside_id } : {}
   };
 }
 function shellQuote(value) {
@@ -41099,6 +41560,26 @@ function formatEntry(entry, byId, me, recheck) {
         why: [],
         evidence: [],
         basis
+      };
+    }
+    case "proposal.challenge_set_aside": {
+      const record2 = payload.set_aside ?? {};
+      const basis = typeof record2.basis === "string" ? record2.basis : "unknown";
+      const challenge = typeof record2.challenge_report_id === "string" ? record2.challenge_report_id : null;
+      return {
+        id: event.entity_id,
+        handle: handleOf("proposal", event.entity_id),
+        act: "set_aside",
+        from: { session: null, name: "person" },
+        to: "voices",
+        re: { id: event.entity_id, handle: handleOf("proposal", event.entity_id) },
+        ...base,
+        statement: `The person set aside ${challenge ? handleOf("report", challenge) : "a challenge"} on ${handleOf("proposal", event.entity_id)} ` + `(${basis}): it no longer blocks the position, and it stays on the record.`,
+        text: typeof record2.reason === "string" ? record2.reason : null,
+        why: [],
+        evidence: [],
+        basis,
+        challenge: challenge ? { id: challenge, handle: handleOf("report", challenge) } : null
       };
     }
     case "task.reported_complete":
@@ -41640,6 +42121,12 @@ function reportView(ctx, thread, byId, me, advice, recheck) {
       challenges: thread.challenges.map((challenge) => challengeView(challenge, thread.termed && challenge.target_report_id === report.id, byId))
     }
   };
+  if (thread.set_aside) {
+    const entry = thread.set_aside;
+    view.standing = false;
+    view.set_aside = setAsideItem(entry);
+    advice.push(`${report.id} was set aside by the person at ${entry.created_at} (${entry.basis}) on ${handleOf("proposal", entry.proposal_report_id)}, ` + `while no session of its voice was live. Reason: ${JSON.stringify(entry.reason)}. ${SET_ASIDE_SENTENCE}`);
+  }
   if (thread.proposal) {
     const facts = proposalFacts(ctx, thread.proposal);
     advice.push(...facts.advice);
@@ -41847,7 +42334,11 @@ function ballotItem(entry, from, base, byId, me) {
   }
 }
 var FOR_THE_PERSON_NOTE = "For the person to run himself. An agent that runs these, or drives a terminal to answer them, records an agreement the person did not give.";
-var ANNOTATIONS_NOTE = "Flags on supports, challenges and consulted voices are display only: they change no count. The position is consent/v1's, exactly as collab_proposal_status computes it.";
+var SET_ASIDE_FOR_THE_PERSON = "The command is the person's own: an agent that runs it, or drives a terminal to answer it, records a set-aside the person did not make.";
+function annotationsNote(rule = CONSENT_RULE) {
+  return `Flags on supports, challenges and consulted voices are display only: they change no count. The position is ${rule}'s, exactly as collab_proposal_status computes it.`;
+}
+var ANNOTATIONS_NOTE = annotationsNote(CONSENT_RULE);
 var DECISION_DOES_NOT_ESTABLISH = [
   "who or what model wrote it: a session's name and model are self-declared",
   "that the voices were independent: sessions of one model or one operator may err together, and a seat_ref is unverified",
@@ -41856,20 +42347,29 @@ var DECISION_DOES_NOT_ESTABLISH = [
 function retiredPosition(status) {
   return status.ai.position === "withdrawn" || status.ai.position === "superseded";
 }
+var SET_ASIDE_REASON_PLACEHOLDER = '"<reason>"';
 function personDeskDb(ctx) {
   const file2 = ctx.store.db.filename;
   if (!file2 || file2 === ":memory:")
     return "";
   return file2 === defaultDatabasePath(ctx.environment) ? "" : ` --db ${shellQuote(file2)}`;
 }
-function forThePerson(ctx, status) {
+function forThePerson(ctx, status, data) {
   const id = status.proposal.id;
   const db = personDeskDb(ctx);
   const position = status.ai.position;
   const now = retiredPosition(status) ? `It is ${position}, so the desk no longer takes an agreement on it.` : status.may_proceed ? "The person has agreed to these bytes; nothing more is asked of the person, who may still reject." : position !== "consented" ? `The desk takes an agreement only once the agents' position is consented; it is ${position} now. The person may reject at any time.` : status.person.state === "rejected" ? "The person's latest act is a rejection; the person may agree again on the same bytes, or leave it rejected." : "The agents' position is consented; the person may agree or reject.";
+  const settable = status.rule === CONSENT_RULE_V2 && !retiredPosition(status) && data ? data.challenges.filter((stance) => stance.standing && stance.voice_has_live_session === false) : [];
   return {
     passkey: `agenttool-collab-host person ceremony --proposal ${id} --act agree${db}`,
     terminal: `agenttool-collab-host person consent --proposal ${id}${db}`,
+    ...settable.length > 0 ? {
+      set_aside: settable.map((stance) => ({
+        challenge: stance.id,
+        terminal: `agenttool-collab-host person set-aside --proposal ${id} --challenge ${stance.id} --reason ${SET_ASIDE_REASON_PLACEHOLDER}${db}`,
+        passkey: `agenttool-collab-host person ceremony --proposal ${id} --act set-aside --challenge ${stance.id} --reason ${SET_ASIDE_REASON_PLACEHOLDER}${db}`
+      }))
+    } : {},
     note: FOR_THE_PERSON_NOTE,
     now
   };
@@ -41901,11 +42401,11 @@ function proposalNeeds(data) {
       }
       return status.ai.qualifying_support_report_ids.length === 0 ? `Support from the awaited voices (${names(awaited)}) would make it consented before ${closes}; at the close, one qualifying support with no standing challenge settles it consented, and none lets it lapse.` : `Support from the voices still awaited (${names(awaited)}) would make it consented now; at ${closes} it settles consented as it stands, unless a challenge stands then.`;
     case "challenged":
-      return `${standing.length} standing challenge(s) (${standing.join(", ")}) hold it challenged, and only each challenger's voice can lift its own; one still standing at ${closes} closes it split.`;
+      return status.rule === CONSENT_RULE_V2 ? `${standing.length} standing challenge(s) (${standing.join(", ")}) hold it challenged. Each challenger's voice can lift its own, ` + `and under consent/v2 the person can set one aside at the desk while no session of its voice is live; one still standing at ${closes} closes it split.` : `${standing.length} standing challenge(s) (${standing.join(", ")}) hold it challenged, and only each challenger's voice can lift its own; one still standing at ${closes} closes it split.`;
     case "consented":
       return status.ai.closed ? "The agents' position is settled consented; nothing moves without the person's own act at the desk (for_the_person)." : `The agents' position is consented; nothing moves without the person's own act at the desk (for_the_person), and a challenge before ${closes} would make it challenged.`;
     case "split":
-      return "Closed split: a challenge stood at the close, so the position cannot move; replace the proposal (collab_propose with replaces) if something has changed.";
+      return status.rule === CONSENT_RULE_V2 ? "Closed split: a challenge still stands. Under consent/v2 the person can set aside a challenge whose voice has no live session, " + "and its voice can still lift it; otherwise replace the proposal (collab_propose with replaces) if something has changed." : "Closed split: a challenge stood at the close, so the position cannot move; replace the proposal (collab_propose with replaces) if something has changed.";
     case "lapsed":
       return "Closed lapsed: no qualifying support by the close, so the position cannot move; replace the proposal if the question still matters.";
   }
@@ -41923,7 +42423,20 @@ function stanceItem(stance) {
     ...stance.flags.ungrounded ? {
       ungrounded_basis: stance.grounded_by === "note" ? "no Why and no Evidence lines" : "no evidence_refs and no confidence_basis (a legacy report's body is not read for reasons)"
     } : {},
-    ...stance.flags.challenger_ended ? { voice_has_active_session: stance.voice_has_active_session } : {}
+    ...stance.flags.challenger_ended ? { voice_has_active_session: stance.voice_has_active_session } : {},
+    ...stance.voice_has_live_session !== undefined ? { voice_has_live_session: stance.voice_has_live_session, voice_last_seen_at: stance.voice_last_seen_at ?? null } : {},
+    ...stance.set_aside ? { set_aside: setAsideItem(stance.set_aside) } : {}
+  };
+}
+function setAsideItem(entry) {
+  return {
+    id: entry.id,
+    by: "person",
+    at: entry.created_at,
+    basis: entry.basis,
+    reason: entry.reason,
+    challenger_last_seen_at: entry.challenger.last_seen_at,
+    note: SET_ASIDE_SENTENCE
   };
 }
 function proposalFacts(ctx, data) {
@@ -41941,27 +42454,37 @@ function proposalFacts(ctx, data) {
     ...voice.ended ? { ended: true } : {}
   }));
   const silent = data.consulted.filter((voice) => voice.awaited && !voice.delivery_recorded);
-  const deliveryNote = `${silent.length} awaited voice(s) have no recorded delivery on the notes surface` + (silent.length > 0 ? ` (${names(silent)}): they may never have been shown the question, and consent/v1 still lets their silence settle the position at its close.` : ".");
+  const rule = status.rule;
+  const v2 = rule === CONSENT_RULE_V2;
+  const deliveryNote = `${silent.length} awaited voice(s) have no recorded delivery on the notes surface` + (silent.length > 0 ? ` (${names(silent)}): they may never have been shown the question, and ${rule} still lets their silence settle the position at its close.` : ".");
   if (silent.length > 0)
     advice.push(deliveryNote);
   const authorActive = data.author?.status === "active";
   const authorName = data.author?.actor ?? status.proposal.from_actor;
   const replaceOrTell = (authorActive ? `Only its author's session (${authorName}, ${data.author.id}) can replace it carrying the objection (collab_propose with replaces). ` : "Its author's session has ended too, so no session can replace it. ") + `Anyone else tells the person with a note on it to the person (collab_note with re "${exactRef("proposal", status.proposal.id)}" and to "person"); the person can still reject it.`;
   const open = !status.ai.closed && !retiredPosition(status) && status.person.state !== "rejected";
+  const db = personDeskDb(ctx);
   for (const stance of data.challenges) {
-    if (stance.standing && stance.flags.challenger_ended && !stance.voice_has_active_session) {
+    if (v2 && stance.standing && stance.voice_has_live_session === false && !retiredPosition(status)) {
+      const seen = stance.voice_last_seen_at ? `, last seen ${minutesSince(stance.voice_last_seen_at, at)} min ago` : "";
+      advice.push(`set_aside_possible: ${stance.id} still stands and no session of its voice is live${seen}, so no session can lift it now. ` + "Under consent/v2 the person can set it aside at the desk, giving a reason: " + `agenttool-collab-host person set-aside --proposal ${status.proposal.id} --challenge ${stance.id} --reason ${SET_ASIDE_REASON_PLACEHOLDER}${db} ` + `(for_the_person.set_aside). ${SET_ASIDE_FOR_THE_PERSON} ${replaceOrTell}`);
+    } else if (stance.standing && stance.flags.challenger_ended && !stance.voice_has_active_session) {
       advice.push(`challenger_ended: ${stance.id} still stands, but its challenger's session has ended and no session of its voice is active, ` + `so no session can lift it. ${replaceOrTell}`);
     }
   }
   const standingChallenges = data.challenges.filter((stance) => stance.standing);
   const countedSupports = data.supports.filter((stance) => stance.counted);
   if (open && status.ai.position === "challenged" && standingChallenges.length > 0 && standingChallenges.every((stance) => !stance.voice_has_active_session) && countedSupports.length > 0 && countedSupports.every((stance) => stance.from_session_ended)) {
-    advice.push("Every challenge standing here and every support counted here comes from a session that has ended: no active session can " + "lift those challenges (only each challenger's voice can) or withdraw those supports (only the session that wrote each can). " + `As it stands it rests with the person, who can reject it at the desk, or with the close at ${status.terms.closes_at}, ` + `when a challenge still standing makes it split${authorActive ? `, unless its author's session (${authorName}) withdraws or replaces it first` : ""}.`);
+    advice.push("Every challenge standing here and every support counted here comes from a session that has ended: no active session can " + "lift those challenges (only each challenger's voice can) or withdraw those supports (only the session that wrote each can). " + `As it stands it rests with the person, who can reject it at the desk${v2 ? " or set those challenges aside there" : ""}, or with the close at ${status.terms.closes_at}, ` + `when a challenge still standing makes it split${authorActive ? `, unless its author's session (${authorName}) withdraws or replaces it first` : ""}.`);
   }
   const flagged = [...data.supports, ...data.challenges].filter((stance) => stance.flags.same_seat_as_author || stance.flags.same_name_as_author || stance.flags.started_after_open || stance.flags.ungrounded || stance.flags.answered_by_another_voice || stance.flags.challenger_ended);
   if (flagged.length > 0)
-    advice.push(ANNOTATIONS_NOTE);
+    advice.push(annotationsNote(rule));
+  const setAsides = v2 ? data.challenges.filter((stance) => stance.set_aside !== undefined) : [];
+  if (setAsides.length > 0)
+    advice.push(`${setAsides.length} challenge(s) were set aside by the person. ${SET_ASIDE_SENTENCE}`);
   const fields = {
+    ...v2 ? { rule } : {},
     position: status.ai.position,
     closed: status.ai.closed,
     closes_at: status.terms.closes_at,
@@ -41974,7 +42497,16 @@ function proposalFacts(ctx, data) {
     challenges: data.challenges.map(stanceItem),
     consulted,
     delivery: { awaited_without_delivery: silent.length, note: deliveryNote },
-    annotations: ANNOTATIONS_NOTE
+    annotations: annotationsNote(rule),
+    ...v2 ? {
+      set_asides: setAsides.map((stance) => ({
+        challenge: stance.id,
+        handle: handleOf("report", stance.id),
+        by: { session: stance.from_session_id, name: stance.from_actor },
+        statement: stance.statement,
+        ...setAsideItem(stance.set_aside)
+      }))
+    } : {}
   };
   if (data.replaced) {
     fields.replaced = { id: data.replaced.proposal_id, handle: handleOf("proposal", data.replaced.proposal_id) };
@@ -41987,18 +42519,20 @@ function proposalFacts(ctx, data) {
       carried_in_terms: entry.carried_in_terms,
       standing_on_replaced: entry.standing_on_replaced,
       re_raised_here: entry.re_raised_here,
-      counted_by_consent_v1: false
+      counted_by_consent_v1: false,
+      ...entry.set_aside_on_replaced ? { set_aside_on_replaced: setAsideItem(entry.set_aside_on_replaced) } : {}
     }));
-    fields.carried_note = CARRIED_OBJECTIONS_SENTENCE;
-    const shed = data.replaced.carried.filter((entry) => !entry.carried_in_terms && entry.standing_on_replaced);
+    fields.carried_note = carriedObjectionsSentence(rule);
+    const shed = data.replaced.carried.filter((entry) => !entry.carried_in_terms && (entry.standing_on_replaced || entry.set_aside_on_replaced !== undefined));
     if (shed.length > 0) {
-      advice.push(`${shed.length} objection(s) still standing where they were raised, on the replaced proposal or one it replaced, are not in these terms: ` + `${shed.map((entry) => entry.challenge_id).join(", ")}. A replacement through collab_propose carries them.`);
+      const setAsideShed = shed.some((entry) => entry.set_aside_on_replaced !== undefined);
+      advice.push(`${shed.length} objection(s) still standing where they were raised` + (setAsideShed ? " (or set aside there by the person, never lifted)" : "") + `, on the replaced proposal or one it replaced, are not in these terms: ` + `${shed.map((entry) => entry.challenge_id).join(", ")}. A replacement through collab_propose carries them.`);
     }
   }
   if (status.ai.position === "superseded" && status.ai.obsoleted_by_report_id) {
     fields.replaced_by = { id: status.ai.obsoleted_by_report_id, handle: handleOf("proposal", status.ai.obsoleted_by_report_id) };
   }
-  fields.for_the_person = forThePerson(ctx, status);
+  fields.for_the_person = forThePerson(ctx, status, data);
   fields.status = status;
   return { fields, advice };
 }
@@ -43010,13 +43544,17 @@ function planNote(ctx, input, context) {
         advice.push("This is public and unsealed; to vote, use collab_vote.");
       }
       if (view.author?.id === me) {
-        const lone = act === "support" && view.termed && ctx.store.noteProposalView(workspaceId, reportTarget2.id).lone;
-        advice.push(lone ? `You wrote ${targetHandle(reportTarget2)} and are the only voice on it: this explicit support is what consent/v1 counts from a lone voice. It adds no second voice, and the person still decides.` : `You wrote ${targetHandle(reportTarget2)}; standing on your own report adds no second voice.`);
+        const proposalView = act === "support" && view.termed ? ctx.store.noteProposalView(workspaceId, reportTarget2.id) : null;
+        const lone = proposalView?.lone === true;
+        advice.push(lone ? `You wrote ${targetHandle(reportTarget2)} and are the only voice on it: this explicit support is what ${proposalView.status.rule} counts from a lone voice. It adds no second voice, and the person still decides.` : `You wrote ${targetHandle(reportTarget2)}; standing on your own report adds no second voice.`);
       }
       if (view.obsoleted)
         advice.push(`${targetHandle(reportTarget2)} was withdrawn or replaced by its author; your ${act} is recorded on it all the same.`);
       if (view.termed && !view.obsoleted)
         advice.push(...lateVoiceAdvice(ctx, workspaceId, me, act, reportTarget2));
+      if (act === "challenge" && view.termed && !view.obsoleted && proposalRule(ctx, workspaceId, reportTarget2.id) === CONSENT_RULE_V2) {
+        advice.push(CONSENT_V2_CHALLENGE_ADVICE);
+      }
       if (act === "challenge" && context.replacedId) {
         return finish({
           recorded_as: "challenge",
@@ -43072,7 +43610,7 @@ function planNote(ctx, input, context) {
       const report = base("withdraws");
       report.target_report_id = withdrawn.id;
       report.task_id = withdrawn.view.report.task_id;
-      const objectors = withdrawn.view.challenges.filter((challenge) => challenge.standing && challenge.from_session_id && challenge.from_session_id !== me);
+      const objectors = withdrawn.view.challenges.filter((challenge) => (challenge.standing || challenge.set_aside_only) && challenge.from_session_id && challenge.from_session_id !== me);
       const latest = objectors.at(-1);
       let addressee = BROADCAST;
       if (latest) {
@@ -43145,7 +43683,7 @@ function lateVoiceAdvice(ctx, workspaceId, me, act, proposal) {
   if (data.status.terms.voices.some((snapshot) => snapshot.voice_id === voice))
     return [];
   const handle = targetHandle(proposal);
-  const late = `Your voice was not live when ${handle} opened, so it is not one of the voices consent/v1 waits for.`;
+  const late = `Your voice was not live when ${handle} opened, so it is not one of the voices ${data.status.rule} waits for.`;
   if (act === "challenge") {
     return [
       `${late} A challenge counts whoever makes it: while yours stands, the position is challenged, and split at the close. ` + "Only your voice can lift it (resolve), or you can withdraw it."
@@ -43155,6 +43693,14 @@ function lateVoiceAdvice(ctx, workspaceId, me, act, proposal) {
   return [
     `${late} Your support still counts as a support from a voice other than the author's, but it answers for no awaited voice ` + `(${awaited} awaited now). Before the close the position is consented once a support counts, no voice is awaited and no ` + "challenge stands; at the close, one counted support and no standing challenge are enough. The person still decides."
   ];
+}
+var CONSENT_V2_CHALLENGE_ADVICE = "This proposal is under consent/v2: while no session of your voice is live, the person may set your challenge aside with a reason. " + "It stays on the record if that happens, and you may challenge again.";
+function proposalRule(ctx, workspaceId, proposalId) {
+  try {
+    return ctx.store.proposalStatus(workspaceId, proposalId).rule;
+  } catch {
+    return null;
+  }
 }
 function textIsNote(input) {
   if (input.act !== undefined || typeof input.text !== "string")
@@ -43297,10 +43843,11 @@ function noteResult(ctx, options) {
   const on = planned.target?.kind === "report" ? targetHandle(planned.target) : planned.target?.kind === "task" ? handleOf("task", planned.target.id) : null;
   const to = planned.addressee.shown;
   const toText = to === "all" ? "" : to === "person" ? " for the person" : ` to ${to.name}`;
+  const until = planned.recorded_as === "challenge" && planned.target?.kind === "report" && proposalRule(ctx, main.workspace_id, planned.target.id) === CONSENT_RULE_V2 ? "until you lift it, or until the person sets it aside while no session of your voice is live" : "until you lift it";
   const effect = {
     note: `Recorded note ${handle}${on ? ` on ${on}` : ""}${toText}.`,
     support: `Recorded your support of ${on} as ${handle}${toText}. Support is a position, not a permission.`,
-    challenge: receipt.reports.length === 2 ? `Recorded your challenge to ${on} as ${handle}${toText}; it replaces your challenge ${handleOf("report", receipt.reports[1].target_report_id)}, ` + "withdrawn in the same transaction after the new one was posted, so your objection stood throughout. It stands until you lift it." : `Recorded your challenge to ${on} as ${handle}${toText}; it stands until you lift it.`,
+    challenge: receipt.reports.length === 2 ? `Recorded your challenge to ${on} as ${handle}${toText}; it replaces your challenge ${handleOf("report", receipt.reports[1].target_report_id)}, ` + `withdrawn in the same transaction after the new one was posted, so your objection stood throughout. It stands ${until}.` : `Recorded your challenge to ${on} as ${handle}${toText}; it stands ${until}.`,
     resolve: `Lifted your challenge ${on} with ${handle}${toText}.`,
     answer: `Recorded your answer to ${on} as note ${handle}${toText}; it does not lift the challenge, which only its challenger can do.`,
     withdraw: `Withdrew your ${on} with ${handle}${toText}.`
@@ -44699,9 +45246,9 @@ function carriedLine(objection) {
 function objectionsToCarry(replaced) {
   if (!replaced)
     return [];
-  const direct = replaced.challenges.filter((challenge) => challenge.standing).map((challenge) => ({ id: challenge.id, by: challenge.from_actor, statement: challenge.statement }));
+  const direct = replaced.challenges.filter((challenge) => challenge.standing || challenge.set_aside_only === true).map((challenge) => ({ id: challenge.id, by: challenge.from_actor, statement: challenge.statement }));
   const seen = new Set(direct.map((objection) => objection.id));
-  const forwarded = (replaced.replaced?.carried ?? []).filter((entry) => entry.standing_on_replaced && !seen.has(entry.challenge_id)).map((entry) => ({ id: entry.challenge_id, by: entry.by, statement: entry.statement }));
+  const forwarded = (replaced.replaced?.carried ?? []).filter((entry) => (entry.standing_on_replaced || entry.set_aside_on_replaced !== undefined) && !seen.has(entry.challenge_id)).map((entry) => ({ id: entry.challenge_id, by: entry.by, statement: entry.statement }));
   return [...direct, ...forwarded];
 }
 function carriedConflicts(own, carried) {
@@ -44775,7 +45322,7 @@ function objectorsOf(ctx, workspaceId, me, knownConflicts, replaced) {
 }
 var OBJECTOR_EVIDENCE_CHALLENGES = NOTE_EVIDENCE_MAX - 1;
 var REPORT_REFS_MAX = 128;
-function objectorNote(proposalId, replacedId, challenges) {
+function objectorNote(proposalId, replacedId, challenges, rule = CONSENT_RULE) {
   const shown = challenges.slice(0, OBJECTOR_EVIDENCE_CHALLENGES);
   const rest = challenges.slice(OBJECTOR_EVIDENCE_CHALLENGES);
   const many = challenges.length > 1;
@@ -44783,7 +45330,7 @@ function objectorNote(proposalId, replacedId, challenges) {
     act: "note",
     statement: many ? `Your ${challenges.length} objections to a replaced proposal were carried into the new one as text.` : "Your objection to a replaced proposal was carried into the new one as text.",
     body: [
-      CARRIED_OBJECTIONS_SENTENCE,
+      carriedObjectionsSentence(rule),
       `The replaced proposal is proposal:${replacedId}.`,
       ...rest.length > 0 ? [`Also carried, beyond the ${shown.length} in Evidence: ${rest.map((id) => `report:${id}`).join(" ")}`] : []
     ].join(`
@@ -44874,6 +45421,7 @@ async function proposeVerb(ctx, input) {
   const { binding, credential } = requireCredential(ctx);
   const workspaceId = binding.handle.workspace.id;
   const me = credential.session_id;
+  const rule = ctx.consent_rule ?? CONSENT_RULE;
   const question = term(input, "question", QUESTION_MAX, true);
   const criteria = term(input, "criteria", CRITERIA_MAX, true);
   const extent = term(input, "extent", EXTENT_MAX, true);
@@ -44966,7 +45514,7 @@ async function proposeVerb(ctx, input) {
   });
   if (replaced && !unfit) {
     for (const objector of objectorsOf(ctx, workspaceId, me, composed.text ?? null, replaced)) {
-      objectorNote(standIn, replaced.status.proposal.id, objector.challenges);
+      objectorNote(standIn, replaced.status.proposal.id, objector.challenges, rule);
     }
   }
   const { plan, cite, citeReplayed, status, notes, replays, steps } = await underPlan(ctx, credential, {
@@ -45021,7 +45569,8 @@ async function proposeVerb(ctx, input) {
           ...topic !== undefined ? { topic } : {},
           ...seconds !== undefined ? { consult_seconds: seconds } : {},
           ...taskId ? { task_id: taskId } : {},
-          ...replacedId ? { supersedes_report_id: replacedId } : {}
+          ...replacedId ? { supersedes_report_id: replacedId } : {},
+          ...rule !== CONSENT_RULE ? { rule } : {}
         }));
       });
       if (opened.replayed)
@@ -45039,7 +45588,7 @@ async function proposeVerb(ctx, input) {
             continue;
           }
           steps2 += 1;
-          const told = objectorNote(status2.proposal.id, replaced.status.proposal.id, objector.challenges);
+          const told = objectorNote(status2.proposal.id, replaced.status.proposal.id, objector.challenges, status2.rule);
           const sent = await stepOnce(ctx, credential, key, () => ctx.store.appendNoteForSession({
             ...credential,
             idempotency_key: key,
@@ -45107,7 +45656,7 @@ function proposeResult(ctx, binding, options) {
     };
   });
   if (data.lone) {
-    advice.push("You are the lone voice here: consent/v1 counts only an explicit support from you (collab_note act support), and without one it lapses at the close.");
+    advice.push(`You are the lone voice here: ${status.rule} counts only an explicit support from you (collab_note act support), and without one it lapses at the close.`);
   }
   const notified = options.notes.filter((entry) => entry.report !== null);
   const unreachable = options.notes.filter((entry) => entry.report === null && !entry.objector.mine);
@@ -45132,7 +45681,7 @@ function proposeResult(ctx, binding, options) {
   }
   return {
     ...noteWriteResult({
-      effect: `Opened proposal ${handle} (proposal_sha256 ${status.proposal_sha256}) for the agents to settle by consent/v1 and the person to decide; ` + `the agents' position is ${status.ai.position}, closing ${status.terms.closes_at}.` + (replacedId ? ` It replaces ${handleOf("proposal", replacedId)}, carrying ${data.replaced.carried.filter((entry) => entry.carried_in_terms).length} objection(s) into its terms as text.` : ""),
+      effect: `Opened proposal ${handle} (proposal_sha256 ${status.proposal_sha256}) for the agents to settle by ${status.rule} and the person to decide; ` + `the agents' position is ${status.ai.position}, closing ${status.terms.closes_at}.` + (replacedId ? ` It replaces ${handleOf("proposal", replacedId)}, carrying ${data.replaced.carried.filter((entry) => entry.carried_in_terms).length} objection(s) into its terms as text.` : ""),
       ids: {
         proposal: proposalId,
         proposal_handle: handle,
@@ -45564,6 +46113,7 @@ function buildCollabMcpServer(store2, options = {}) {
   };
   const environment = options.environment ?? process.env;
   const profile = toolsProfile(environment);
+  const consentRule = consentRuleFromEnvironment(environment);
   const legacyInstructions = `Collab ${COLLAB_PACKAGE_VERSION}: collab_events_wait offers bounded read-only anchored observation for an already running host, ` + "without acknowledging, refreshing presence, or renewing leases; continue from next_anchor, never head. " + "Local-first coordination journal for honest exchange among independent coding-agent sessions. " + "Use collab_session_start once per default or named binding_key, then collab_next. Named children require an explicit actor and parent_session_id; " + "send their binding_key on every call. Selectors are cooperative routing, not authenticated subagent isolation. " + "Default-slot actor can use Claude metadata only with matching selected PID, messaging socket and process start time. A host restart resumes from the " + "mode-0600 credential file without exposing its bearer token to the model. Exchange observations, " + "inferences, proposals, or authorised decisions as structured reports with evidence, confidence, " + "limits, and explicit authority scope. Direction-level proposals (collab_proposal_open) are settled by the agents " + "through lazy consensus; that position authorises nothing alone, and a person's consent is never recorded through MCP. " + "Claim before editing overlapping path scopes. Session leases remain live while their " + "session is live (6 hours since activity); optional renew is lease-fenced, not version-gated. " + "An advisory coordination lease is not ownership, a filesystem lock, or authority. Edit-task " + "completion is actor-reported and remains pending until a distinct session accepts it. Challenges " + "remain append-only disagreement; acknowledgement means processed, not agreed. Expired session " + "leases require explicit recovery. Git checkpoints are local evidence, not attribution or atomic " + "Git/SQLite locks. Store concise coordination facts only\u2014never credentials, prompts, transcripts, " + "chain-of-thought, or sensitive source content. Cursor rollback recovery must be enabled by the host " + "and completed with an audited cursor reset before session mutations resume. The host owns spawning, " + "wakeups, waiting, and stopping. The separate collab_session_join/list/heartbeat/leave tools preserve " + "the public v0.2 self-declared presence plane; they provide routing hints only and never authenticate a caller. " + "The read-only collab_anchor_status tool can compare this journal with an optional local Zerone witness sidecar; " + "it never contacts a chain, broadcasts, spends funds, or turns an anchor into truth or authority.";
   const server = new McpServer({ name: "agenttool-collab", version: COLLAB_PACKAGE_VERSION }, {
     capabilities: { tools: {} },
@@ -45641,6 +46191,7 @@ Legacy session tools: ${legacyInstructions}`
     store: store2,
     environment,
     profile,
+    consent_rule: consentRule,
     slot_key: requestSlot.getStore().key,
     binding: () => state.binding,
     bind: (binding) => {
@@ -45737,7 +46288,7 @@ Legacy session tools: ${legacyInstructions}`
   }, async (input) => noteCall(() => doneVerb(noteContext(), input), input));
   server.registerTool("collab_propose", {
     title: "Put a direction to the agents and the person",
-    description: "Open a consent/v1 proposal: the agents settle a position by lazy consensus (support and challenge with collab_note), " + "and the person decides at his own desk. The question is stored verbatim, so its bytes and proposal_sha256 are what " + "collab_proposal_open makes from the same terms. evidence and limits enter the bytes the person signs. With replaces, " + "the standing objections to your earlier proposal are carried into its terms as text and each reachable objector is told; " + "under consent/v1 a carried objection does not block. The position authorises nothing; no agent tool records agreement.",
+    description: `Open a ${consentRule} proposal: the agents settle a position by lazy consensus (support and challenge with collab_note), ` + "and the person decides at his own desk. The question is stored verbatim, so its bytes and proposal_sha256 are what " + "collab_proposal_open makes from the same terms. evidence and limits enter the bytes the person signs. With replaces, " + "the standing objections to your earlier proposal are carried into its terms as text and each reachable objector is told; " + `under ${consentRule} a carried objection does not block. ` + (consentRule === CONSENT_RULE_V2 ? "The person may set aside a standing challenge whose voice has no live session, giving a reason. " : "") + "The position authorises nothing; no agent tool records agreement.",
     annotations: localMutation,
     inputSchema: {
       question: exports_external.string().describe("What is being decided, stored verbatim (at most 8,000 characters)."),
@@ -46248,7 +46799,7 @@ Legacy session tools: ${legacyInstructions}`
   })));
   server.registerTool("collab_proposal_open", {
     title: "Open a direction-level proposal for consent",
-    description: `Open a proposal the agents settle by lazy consensus (${CONSENT_RULE}) before a person decides. ` + "Answer it with collab_report_append supports, challenges and resolves. The agents' position is " + "computed from the journal and authorises nothing alone; a person consents only at the controlling " + "terminal or with an enrolled passkey through the person desk, never through MCP. A challenge stands " + "until its own voice resolves or withdraws it. Use it for design direction, criteria and extent, " + "conflicting context and the reading of principles, not for every edit.",
+    description: `Open a proposal the agents settle by lazy consensus (${consentRule}) before a person decides. ` + "Answer it with collab_report_append supports, challenges and resolves. The agents' position is " + "computed from the journal and authorises nothing alone; a person consents only at the controlling " + "terminal or with an enrolled passkey through the person desk, never through MCP. A challenge stands " + "until its own voice resolves or withdraws it" + (consentRule === CONSENT_RULE_V2 ? ", or until the person sets it aside while no session of that voice is live, giving a reason" : "") + ". Use it for design direction, criteria and extent, " + "conflicting context and the reading of principles, not for every edit.",
     annotations: localRetrySafeMutation,
     inputSchema: {
       workspace_id: workspaceId,
@@ -46269,7 +46820,13 @@ Legacy session tools: ${legacyInstructions}`
     }
   }, async ({ workspace_id, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    return { proposal: store2.openProposalForSession({ ...boundCredential(), ...input }) };
+    return {
+      proposal: store2.openProposalForSession({
+        ...boundCredential(),
+        ...input,
+        ...consentRule !== CONSENT_RULE ? { rule: consentRule } : {}
+      })
+    };
   }));
   server.registerTool("collab_proposal_status", {
     title: "Read proposal consent status",

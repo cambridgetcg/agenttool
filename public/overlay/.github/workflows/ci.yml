@@ -64,8 +64,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # collab's forward-compatibility harness reads older revisions from
-          # git history; it fails, rather than skips, when one is missing.
+          # The guard reads this repository's own history. collab's
+          # forward-compatibility checks read older collab revisions, which a
+          # projection's history does not hold; they fail when one is missing,
+          # unless COLLAB_COMPAT_SKIP_MISSING (set only in the collab step
+          # below) gives the reason to skip.
           fetch-depth: 0
           persist-credentials: false
       - name: Set up Bun 1.3.5
@@ -224,6 +227,11 @@ jobs:
         working-directory: packages/credential-broker
         run: bun run ci
       - name: "collab: agenttool.collab coordination and presence journal"
+        env:
+          # An explicit, printed skip of the checks that compare with older
+          # collab revisions: this projection's history does not hold them.
+          # The private repository's CI runs those checks in full.
+          COLLAB_COMPAT_SKIP_MISSING: "the public projection's history does not hold the older collab revisions; the private repository's CI runs these checks"
         working-directory: packages/collab
         run: bun run ci
       - name: "codex-usage: privacy-minimal local Codex numeric usage and MCP pulse"

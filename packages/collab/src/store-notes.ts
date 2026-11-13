@@ -53,7 +53,9 @@ import {
   type CollabReport,
   type EventCursor,
   type PersonActBasis,
+  CONSENT_RULE_V2,
   type ProposalPersonAct,
+  type ProposalSetAside,
   type ProposalStatus,
   type ProposalVoice,
   type SessionLiveness,
@@ -977,6 +979,11 @@ export class CollabStore extends CollabStoreCore {
       const folds = ballot ? this.noteBallotFolds(session) : new Map<string, string>();
       const answerEntries = [...answers.values()].sort((left, right) => left - right)
         .map((sequence) => this.noteEntryAt(session, sequence, folds));
+      // consent/v2: a set-aside is not a report, so a challenge's own thread names it here.
+      const setAside = root.relation === "challenges" && root.target_report_id
+        && challenges.some((challenge) => challenge.id === root.id && challenge.set_aside_id !== undefined)
+        ? this.proposalSetAsides(root.workspace_id, root.target_report_id).find((entry) => entry.challenge_report_id === root.id)
+        : undefined;
       // The computed views come from this same snapshot, so the position
       // shown is the one consent/v1 computes for the answers listed.
       return {
@@ -993,6 +1000,7 @@ export class CollabStore extends CollabStoreCore {
         proposal: termed ? this.noteProposalData(root.workspace_id, root.id, sessions) : null,
         decision: !termed && root.kind === "decision" ? this.noteDecisionData(root.workspace_id, root, sessions) : null,
         ballot,
+        ...(setAside ? { set_aside: setAside } : {}),
         folded: answerEntries.filter((entry) => entry.folded !== null).length,
         mark: markState,
         reveal_pending: reveal.pending,
@@ -1489,6 +1497,11 @@ export class CollabStore extends CollabStoreCore {
       case "proposal.agreed":
       case "proposal.rejected":
         return "person_act";
+      case "proposal.challenge_set_aside":
+        // The challenger's voice is told its objection was set aside; the author, of the person's act.
+        return this.setAsideAddressesChallenger((payload.set_aside as Record<string, unknown> | undefined)?.challenger, sessionId)
+          ? "your_challenge_set_aside"
+          : "person_act";
       case "ballot.opened":
         return "in_electorate";
       case "ballot.closed":
@@ -1502,11 +1515,19 @@ export class CollabStore extends CollabStoreCore {
    * Every challenge in a workspace with whether it still stands. As in
    * consent/v1, a challenge stands until it is withdrawn or lifted by its own
    * voice; a `resolves` from any other voice is shown as an answer and lifts
-   * nothing on this view. Journal order.
+   * nothing on this view. On a consent/v2 proposal a challenge the person
+   * set aside no longer stands either, and says so. Journal order.
    */
   private noteChallenges(workspaceId: string): NoteChallengeView[] {
     const obsoleted = this.activeObsoletionTargets(workspaceId);
     const voices = new Map<string, string>();
+    const setAside = new Map((this.db.query(`
+      SELECT s.challenge_report_id, s.id FROM proposal_set_asides s
+      JOIN proposal_terms t ON t.report_id = s.proposal_report_id AND t.rule = ?
+      JOIN reports r ON r.id = s.challenge_report_id AND r.target_report_id = s.proposal_report_id
+      WHERE s.workspace_id = ?
+    `).all(CONSENT_RULE_V2, workspaceId) as Array<{ challenge_report_id: string; id: string }>)
+      .map((row) => [row.challenge_report_id, row.id]));
     const challenges = this.db.query(`
       SELECT id, from_session_id, from_actor, target_report_id, created_at FROM reports
       WHERE workspace_id = ? AND relation = 'challenges' ORDER BY event_sequence
@@ -1523,14 +1544,18 @@ export class CollabStore extends CollabStoreCore {
       const lifted = voice !== null
         && resolves.some((answer) => this.cachedVoice(answer.from_session_id!, voices) === voice);
       const withdrawn = obsoleted.has(challenge.id);
+      const setAsideId = setAside.get(challenge.id);
       return {
         id: challenge.id,
         target_report_id: challenge.target_report_id,
         from_session_id: challenge.from_session_id,
         from_actor: challenge.from_actor,
         created_at: challenge.created_at,
-        standing: !withdrawn && !lifted,
+        standing: !withdrawn && !lifted && setAsideId === undefined,
         answered_by_another_voice: !lifted && resolves.length > 0,
+        ...(setAsideId !== undefined
+          ? { set_aside_id: setAsideId, ...(!withdrawn && !lifted ? { set_aside_only: true as const } : {}) }
+          : {}),
       };
     });
   }
@@ -1642,8 +1667,11 @@ export class CollabStore extends CollabStoreCore {
     `).all(workspaceId, workspaceId) as Array<{ id: string; from_session_id: string | null }>)
       .map((row) => [row.id, row.from_session_id]));
     for (const challenge of challenges) {
-      if (!challenge.standing) continue;
-      if (authorOf.get(challenge.target_report_id) === session.id && challenge.from_session_id !== session.id) {
+      // consent/v2: a challenge the person set aside no longer waits on the
+      // author it targets, but its own author may still lift it or challenge
+      // again, so answers to it are still listed for that author.
+      if (!challenge.standing && !challenge.set_aside_only) continue;
+      if (challenge.standing && authorOf.get(challenge.target_report_id) === session.id && challenge.from_session_id !== session.id) {
         waiting.push({
           what: "challenge",
           ref_kind: "report",
@@ -1680,7 +1708,9 @@ export class CollabStore extends CollabStoreCore {
             by_session_id: answer.from_session_id,
             due: null,
             at: answer.created_at,
-            summary: "An answer to your standing challenge; only you can lift it.",
+            summary: challenge.standing
+              ? "An answer to your standing challenge; only you can lift it."
+              : "An answer to your challenge, which the person set aside, so it no longer blocks; you may lift it, or challenge again.",
           });
         }
       }
@@ -2636,6 +2666,14 @@ export class CollabStore extends CollabStoreCore {
     const qualifying = new Set(status.ai.qualifying_support_report_ids);
     const unresolved = new Set(status.ai.unresolved_challenge_report_ids);
     const activeVoices = new Set(sessions.filter((view) => view.status === "active").map((view) => view.voice_id));
+    // consent/v2 only: what a set-aside turns on. Absent under consent/v1, so its views keep their shape.
+    const v2 = status.rule === CONSENT_RULE_V2
+      ? {
+        set_asides: new Map((status.set_asides ?? []).map((entry) => [entry.challenge_report_id, entry])),
+        live_voices: new Set(sessions.filter((view) => view.liveness === "live").map((view) => view.voice_id)),
+        last_seen: (voice: string) => sessions.filter((view) => view.voice_id === voice).map((view) => view.last_seen_at).sort().at(-1) ?? null,
+      }
+      : null;
     const stances = (this.db.query(`
       SELECT * FROM reports WHERE workspace_id = ? AND target_report_id = ? AND relation IN ('supports', 'challenges')
       ORDER BY event_sequence
@@ -2648,6 +2686,8 @@ export class CollabStore extends CollabStoreCore {
         answered_by_another_voice: view?.answered_by_another_voice === true,
         opened_at: status.terms.created_at,
         active_voices: activeVoices,
+        v2,
+        set_aside_only: view?.set_aside_only === true,
       });
     });
     const supports = stances.filter((stance) => stance.relation === "supports");
@@ -2678,11 +2718,26 @@ export class CollabStore extends CollabStoreCore {
       // again, and one a replacement shed still stands where it was raised,
       // so the challenges on every proposal this one descends from are read:
       // each is listed when these terms carry it or it still stands.
+      // A challenge the person set aside (consent/v2) was never lifted, so it
+      // is carried and listed as one that still stands would be: the
+      // set-aside changes what blocks, never what the next terms carry.
       const lineage = this.replacedLineage(workspaceId, replacedId);
+      const setAsideOn = new Map<string, ProposalSetAside>();
+      const setAsidesRead = new Set<string>();
       const carried = [...challengeViews.values()]
         .filter((challenge) => lineage.has(challenge.target_report_id))
         .map((challenge) => {
           const voice = challenge.from_session_id ? this.consentVoice(challenge.from_session_id, context) : null;
+          let setAside: ProposalSetAside | undefined;
+          if (challenge.set_aside_only) {
+            if (!setAsidesRead.has(challenge.target_report_id)) {
+              setAsidesRead.add(challenge.target_report_id);
+              for (const entry of this.proposalSetAsides(workspaceId, challenge.target_report_id)) {
+                setAsideOn.set(entry.challenge_report_id, entry);
+              }
+            }
+            setAside = setAsideOn.get(challenge.id);
+          }
           return {
             challenge_id: challenge.id,
             raised_on: challenge.target_report_id,
@@ -2692,9 +2747,10 @@ export class CollabStore extends CollabStoreCore {
             carried_in_terms: conflicts.includes(`report:${challenge.id}`),
             standing_on_replaced: challenge.standing,
             re_raised_here: voice !== null && challenges.some((stance) => stance.standing && stance.voice_id === voice),
+            ...(setAside ? { set_aside_on_replaced: setAside } : {}),
           };
         })
-        .filter((entry) => entry.carried_in_terms || entry.standing_on_replaced)
+        .filter((entry) => entry.carried_in_terms || entry.standing_on_replaced || entry.set_aside_on_replaced !== undefined)
         .map((entry) => ({ ...entry, statement: this.noteStanceStatement(workspaceId, this.requireReport(entry.challenge_id)) }));
       replaced = { proposal_id: replacedId, carried };
     }
@@ -2748,6 +2804,14 @@ export class CollabStore extends CollabStoreCore {
       answered_by_another_voice: boolean;
       opened_at: string | null;
       active_voices: ReadonlySet<string>;
+      /** Set for a stance on a consent/v2 proposal only. */
+      v2?: {
+        set_asides: ReadonlyMap<string, ProposalSetAside>;
+        live_voices: ReadonlySet<string>;
+        last_seen: (voice: string) => string | null;
+      } | null;
+      /** consent/v2: the set-aside is all that keeps this challenge from standing. */
+      set_aside_only?: boolean;
     },
   ): NoteStanceView {
     const marked = this.reportIsMarked(workspaceId, report);
@@ -2777,7 +2841,16 @@ export class CollabStore extends CollabStoreCore {
       if (facts.answered_by_another_voice) flags.answered_by_another_voice = true;
     }
     const voice = report.from_session_id ? this.consentVoice(report.from_session_id, context) : null;
+    const v2 = report.relation === "challenges" && facts.v2 ? facts.v2 : null;
+    const setAside = v2?.set_asides.get(report.id);
     return {
+      ...(v2
+        ? {
+          voice_has_live_session: voice !== null && v2.live_voices.has(voice),
+          voice_last_seen_at: voice !== null ? v2.last_seen(voice) : null,
+          ...(setAside ? { set_aside: setAside, ...(facts.set_aside_only ? { set_aside_only: true as const } : {}) } : {}),
+        }
+        : {}),
       id: report.id,
       relation: report.relation as "supports" | "challenges",
       from_session_id: report.from_session_id,
@@ -2960,6 +3033,8 @@ export type NoteWhyYou =
   | "your_lease_recovered"
   | "voice_awaited"
   | "person_act"
+  /** consent/v2: the person set aside a challenge of this session's voice. */
+  | "your_challenge_set_aside"
   | "in_electorate"
   | "ballot_closed";
 
@@ -3010,6 +3085,15 @@ export interface NoteChallengeView {
   standing: boolean;
   /** A `resolves` from another voice exists; on this view it lifts nothing. */
   answered_by_another_voice: boolean;
+  /** consent/v2: the person set it aside (that set-aside's id), so it no longer stands. */
+  set_aside_id?: string;
+  /**
+   * consent/v2: only the set-aside keeps it from standing; it was neither
+   * withdrawn nor lifted by its voice. Such a challenge was never lifted, so
+   * what consent/v1 does with a standing one (carry it into a replacement,
+   * tell its author of answers) it still does. Internal: no view prints it.
+   */
+  set_aside_only?: true;
 }
 
 export interface NoteWaitingEntry {
@@ -3257,6 +3341,8 @@ export interface NoteThreadData {
   decision: NoteDecisionData | null;
   /** For a ballot root (a poll report): its terms, turnout and, once revealed, the result. */
   ballot: NoteBallotData | null;
+  /** consent/v2: the root is a challenge the person set aside, and this is that set-aside. */
+  set_aside?: ProposalSetAside;
   /** How many answers are folded for this session (spec 5.2). */
   folded: number;
   /** What the housekeeping did to the read mark: created it from the legacy cursor, or clamped it to the head. */
@@ -3324,6 +3410,14 @@ export interface NoteStanceView {
   /** consent/v1 counts it: a qualifying support, or a standing challenge. */
   counted: boolean;
   standing: boolean;
+  /** consent/v2 challenges only: a session of its voice is live now (sessionLiveness), so it can lift it itself. */
+  voice_has_live_session?: boolean;
+  /** consent/v2 challenges only: the latest activity of any session of its voice. */
+  voice_last_seen_at?: string | null;
+  /** consent/v2 challenges only: the person set it aside, so it no longer stands; it stays on the record. */
+  set_aside?: ProposalSetAside;
+  /** With set_aside: neither withdrawn nor lifted by its voice, so it is carried as a standing one is. Internal. */
+  set_aside_only?: true;
   flags: {
     by_author?: true;
     same_seat_as_author?: true;
@@ -3365,6 +3459,12 @@ export interface NoteCarriedObjection {
   statement: string;
   /** The same voice stands against the new proposal too. */
   re_raised_here: boolean;
+  /**
+   * consent/v2 only: the person set this challenge aside where it was raised,
+   * and it was neither withdrawn nor lifted by its voice. It was never
+   * lifted, so it is carried as a standing one would be.
+   */
+  set_aside_on_replaced?: ProposalSetAside;
 }
 
 export interface NoteProposalData {
@@ -3452,6 +3552,7 @@ const NOTE_ADDRESSING_EVENT_TYPES = [
   "proposal.opened",
   "proposal.agreed",
   "proposal.rejected",
+  "proposal.challenge_set_aside",
   "ballot.opened",
   "ballot.closed",
 ] as const;

@@ -30,7 +30,7 @@ import {
   type NoteInput,
   type NoteReason,
 } from "./note.js";
-import type { CollabReport, ProposalStatus, Task } from "./protocol.js";
+import { CONSENT_RULE_V2, type CollabReport, type ProposalStatus, type Task } from "./protocol.js";
 import { gitCommitExists, hashWorktreeFile, MAX_CITED_FILE_BYTES } from "./repository.js";
 import { removeSessionCredentialFile } from "./session-file.js";
 import {
@@ -1116,14 +1116,17 @@ function planNote(
       if (view.author?.id === me) {
         // The author who is the only voice is told its support is the one
         // consent/v1 asks for; "no second voice" alone reads as "not counted".
-        const lone = act === "support" && view.termed
-          && ctx.store.noteProposalView(workspaceId, reportTarget.id).lone;
+        const proposalView = act === "support" && view.termed ? ctx.store.noteProposalView(workspaceId, reportTarget.id) : null;
+        const lone = proposalView?.lone === true;
         advice.push(lone
-          ? `You wrote ${targetHandle(reportTarget)} and are the only voice on it: this explicit support is what consent/v1 counts from a lone voice. It adds no second voice, and the person still decides.`
+          ? `You wrote ${targetHandle(reportTarget)} and are the only voice on it: this explicit support is what ${proposalView!.status.rule} counts from a lone voice. It adds no second voice, and the person still decides.`
           : `You wrote ${targetHandle(reportTarget)}; standing on your own report adds no second voice.`);
       }
       if (view.obsoleted) advice.push(`${targetHandle(reportTarget)} was withdrawn or replaced by its author; your ${act} is recorded on it all the same.`);
       if (view.termed && !view.obsoleted) advice.push(...lateVoiceAdvice(ctx, workspaceId, me, act, reportTarget));
+      if (act === "challenge" && view.termed && !view.obsoleted && proposalRule(ctx, workspaceId, reportTarget.id) === CONSENT_RULE_V2) {
+        advice.push(CONSENT_V2_CHALLENGE_ADVICE);
+      }
       if (act === "challenge" && context.replacedId) {
         return finish({
           recorded_as: "challenge",
@@ -1188,7 +1191,9 @@ function planNote(
       report.target_report_id = withdrawn.id;
       report.task_id = withdrawn.view.report.task_id;
       // The objectors are the ones the withdrawal answers; the latest standing one hears it.
-      const objectors = withdrawn.view.challenges.filter((challenge) => challenge.standing && challenge.from_session_id && challenge.from_session_id !== me);
+      // A challenge the person set aside (consent/v2) was never lifted, so its author hears it too.
+      const objectors = withdrawn.view.challenges.filter((challenge) => (challenge.standing || challenge.set_aside_only)
+        && challenge.from_session_id && challenge.from_session_id !== me);
       const latest = objectors.at(-1);
       let addressee = BROADCAST;
       if (latest) {
@@ -1283,7 +1288,7 @@ function lateVoiceAdvice(
   const voice = ctx.store.consentVoiceOf(me);
   if (data.status.terms.voices.some((snapshot) => snapshot.voice_id === voice)) return [];
   const handle = targetHandle(proposal);
-  const late = `Your voice was not live when ${handle} opened, so it is not one of the voices consent/v1 waits for.`;
+  const late = `Your voice was not live when ${handle} opened, so it is not one of the voices ${data.status.rule} waits for.`;
   if (act === "challenge") {
     return [
       `${late} A challenge counts whoever makes it: while yours stands, the position is challenged, and split at the close. ` +
@@ -1296,6 +1301,20 @@ function lateVoiceAdvice(
       `(${awaited} awaited now). Before the close the position is consented once a support counts, no voice is awaited and no ` +
       "challenge stands; at the close, one counted support and no standing challenge are enough. The person still decides.",
   ];
+}
+
+/** Said to a challenger on a consent/v2 proposal: its objection can be set aside once its voice is gone. */
+export const CONSENT_V2_CHALLENGE_ADVICE =
+  "This proposal is under consent/v2: while no session of your voice is live, the person may set your challenge aside with a reason. " +
+  "It stays on the record if that happens, and you may challenge again.";
+
+/** A proposal's rule, or null when its terms cannot be read (advice only; it never refuses the stance). */
+function proposalRule(ctx: NoteVerbContext, workspaceId: string, proposalId: string): string | null {
+  try {
+    return ctx.store.proposalStatus(workspaceId, proposalId).rule;
+  } catch {
+    return null;
+  }
 }
 
 /** Whether this call's text is read as a whole note (so its fields live in the text). */
@@ -1514,13 +1533,18 @@ function noteResult(
   const on = planned.target?.kind === "report" ? targetHandle(planned.target) : planned.target?.kind === "task" ? handleOf("task", planned.target.id) : null;
   const to = planned.addressee.shown;
   const toText = to === "all" ? "" : to === "person" ? " for the person" : ` to ${to.name}`;
+  // consent/v2 adds one way a challenge stops blocking, so a challenger there is told it; consent/v1 keeps its words.
+  const until = planned.recorded_as === "challenge" && planned.target?.kind === "report"
+    && proposalRule(ctx, main.workspace_id, planned.target.id) === CONSENT_RULE_V2
+    ? "until you lift it, or until the person sets it aside while no session of your voice is live"
+    : "until you lift it";
   const effect = {
     note: `Recorded note ${handle}${on ? ` on ${on}` : ""}${toText}.`,
     support: `Recorded your support of ${on} as ${handle}${toText}. Support is a position, not a permission.`,
     challenge: receipt.reports.length === 2
       ? `Recorded your challenge to ${on} as ${handle}${toText}; it replaces your challenge ${handleOf("report", receipt.reports[1]!.target_report_id!)}, ` +
-        "withdrawn in the same transaction after the new one was posted, so your objection stood throughout. It stands until you lift it."
-      : `Recorded your challenge to ${on} as ${handle}${toText}; it stands until you lift it.`,
+        `withdrawn in the same transaction after the new one was posted, so your objection stood throughout. It stands ${until}.`
+      : `Recorded your challenge to ${on} as ${handle}${toText}; it stands ${until}.`,
     resolve: `Lifted your challenge ${on} with ${handle}${toText}.`,
     answer: `Recorded your answer to ${on} as note ${handle}${toText}; it does not lift the challenge, which only its challenger can do.`,
     withdraw: `Withdrew your ${on} with ${handle}${toText}.`,
