@@ -398,11 +398,17 @@ to `--wait-ms` (default 600,000, maximum 3,600,000). Events attributed to the
 waiting session are passed over unless `--include-own`; unattributed events
 such as `workspace.opened` count as unread. With `--addressed`, other
 sessions' events ring only when their routing fields name the waiting session
-(`CollabStore.eventAddressesSession`): a report addressed to it or answering
-one of its reports, a handoff offered to it or answering its offer, a review
-requested of it, a verdict on its completion, or recovery of its expired
-lease. Free text is never inspected, and the receipt adds
-`skipped_unaddressed_events`.
+(`CollabStore.eventAddressesSession`): a report addressed to it, or answering
+one of its reports with no other addressee; a handoff offered to it, or an
+answer to its own offer (accepted, declined, or lost because the target left
+or the deadline passed); or recovery of its expired lease. A review request or
+verdict rings once, through the addressed report written beside it. Free text
+is never inspected, and the receipt adds `skipped_unaddressed_events`. This
+routed set is wider than a knock: an answer sent without `to_session_id`, an
+answer to its handoff offer, and recovery of its lease ring here, but are not
+counted in `addressed_waiting` and never reach `knocks` or `doorbell-scan`
+(see [Declared rest and knocks](#declared-rest-and-knocks)). Every knock also
+rings here; not every ring is a knock.
 
 It prints one JSON line without the credential and without any event type,
 actor, entity or payload. Exit 0 with `status: "ready"` means at least one
@@ -533,7 +539,9 @@ offered to it, past its acknowledged cursor and not authored by it.
 `task.reported_complete` is not counted, because its review-request report
 already is, and a `handoff.accepted` never matches.
 
-Only an explicit address knocks; a mention or an implied ask never does.
+Only an explicit address knocks; a mention or an implied ask never does, and
+neither does an answer sent without `to_session_id` (a host `wait --addressed`
+rings for those too; see [Host doorbell wait](#host-doorbell-wait-unreleased)).
 `collab_report_append` with `to_session_id`, `collab_handoff_offer` to a
 session, `collab_task_complete` with `review_requested_session_id`, and
 `collab_task_review` (addressed to the reporter) return

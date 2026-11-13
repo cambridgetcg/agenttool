@@ -12,11 +12,12 @@ This watcher joins the two. It loops `agenttool-collab-host wait` and posts one 
 ## What rings
 
 - **By default (`--addressed`):** only events whose routing fields name the bound collab session ring the doorbell:
-  - a report addressed to it, or a report answering one of its reports;
-  - a handoff offered to it, or an answer to its own offer;
-  - a review requested of it;
-  - a verdict on its own completion;
+  - a report addressed to it, or a report answering one of its reports with no other addressee;
+  - a handoff offered to it, or an answer to its own offer (accepted, declined, or lost because the target left or the deadline passed);
+  - a review requested of it, or a verdict on its own completion (each rings once, through the addressed report written beside it);
   - the recovery of its expired lease.
+
+  This routed set is wider than a knock. An answer sent without `to_session_id`, an answer to its handoff offer, and the recovery of its lease ring here, but are not counted in `addressed_waiting` and never reach `knocks` or `doorbell-scan`.
 - **`--all`:** any event from another session rings.
 - **Never:** the session's own events, unless `--include-own` is passed.
 

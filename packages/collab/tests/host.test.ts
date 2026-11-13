@@ -640,12 +640,16 @@ describe("addressed doorbell", () => {
       ...b.credential, idempotency_key: "review-complete", task_id: claimed.id, lease_id: claimed.lease_id!,
       expected_version: claimed.version, summary: "done", review_requested_session_id: a.session.id,
     });
-    expect(routes("task.reported_complete")).toEqual({ a: true, b: false });
+    // A review request and its verdict ring through the addressed report
+    // written beside the task event; the task events name nobody.
+    expect(routes("task.reported_complete")).toEqual({ a: false, b: false });
+    expect(routes("report.posted")).toEqual({ a: true, b: false });
     store.reviewTaskForSession({
       ...a.credential, idempotency_key: "review-accept", task_id: reported.id,
       expected_version: reported.version, outcome: "accept", summary: "accepted",
     });
-    expect(routes("task.accepted")).toEqual({ a: false, b: true });
+    expect(routes("task.accepted")).toEqual({ a: false, b: false });
+    expect(routes("report.posted")).toEqual({ a: false, b: true });
     expect(routes("session.joined")).toEqual({ a: false, b: false });
   });
 

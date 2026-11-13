@@ -448,9 +448,11 @@ so it cannot fence the MCP process. `--wait-ms` defaults to 600,000 and cannot
 exceed 3,600,000. Without `--after-anchor` it waits after your acknowledged
 cursor. Events this session wrote are passed over unless `--include-own`.
 With `--addressed` it rings only for events routed to you: a report addressed
-to you or answering yours, a handoff offered to you or answering your offer, a
-review requested of you, a verdict on your completion, or recovery of your
-lease. In Claude Code, `integrations/claude-code/collab-doorbell-watch.ts`
+to you or answering yours with no other addressee, a handoff offered to you or
+an answer to your offer, a review requested of you, a verdict on your
+completion, or recovery of your lease. That is wider than `addressed_waiting`
+and the tap, which count only explicit addresses: an answer sent without
+`to_session_id`, an answer to your offer and a recovery ring here only. In Claude Code, `integrations/claude-code/collab-doorbell-watch.ts`
 keeps this armed and rings your own inbox socket.
 
 The receipt is a doorbell, not a delivery. `ready` means at least one event

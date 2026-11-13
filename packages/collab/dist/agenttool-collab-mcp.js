@@ -33468,6 +33468,8 @@ class CollabStore {
     return this.eventsSince(workspaceId2, validated.sequence, limit);
   }
   eventAddressesSession(event, sessionId2) {
+    if (event.session_id === sessionId2)
+      return false;
     const payload = event.payload ?? {};
     const field = (value, key2) => value !== null && typeof value === "object" ? value[key2] : undefined;
     switch (event.type) {
@@ -33477,22 +33479,17 @@ class CollabStore {
         if (typeof payload.target_report_id !== "string")
           return false;
         const target = this.db.query(`SELECT from_session_id FROM reports WHERE id = ?`).get(payload.target_report_id);
-        return target?.from_session_id === sessionId2;
+        return target?.from_session_id === sessionId2 && typeof payload.to_session_id !== "string";
       }
       case "handoff.offered":
         return field(payload.handoff, "to_session_id") === sessionId2;
       case "handoff.accepted":
       case "handoff.declined":
       case "handoff.expired": {
+        if (event.type === "handoff.expired" && !handoffExpiryIsNewsToOfferer(payload.reason))
+          return false;
         const offer = this.db.query(`SELECT from_session_id FROM handoffs WHERE id = ?`).get(event.entity_id);
         return offer?.from_session_id === sessionId2;
-      }
-      case "task.reported_complete":
-        return payload.review_requested_session_id === sessionId2;
-      case "task.accepted":
-      case "task.changes_requested": {
-        const task = this.db.query(`SELECT reported_by_session_id FROM tasks WHERE workspace_id = ? AND id = ?`).get(event.workspace_id, event.entity_id);
-        return task?.reported_by_session_id === sessionId2;
       }
       case "task.recovered":
         return field(payload.prior_lease, "session_id") === sessionId2;
@@ -35021,6 +35018,18 @@ function sessionLiveness(row, observedAt, rest) {
     return "resting";
   const age = Date.parse(observedAt) - Date.parse(row.last_seen_at);
   return age <= SESSION_STALE_AFTER_MS ? "live" : "stale";
+}
+var HANDOFF_EXPIRY_IS_NEWS_TO_OFFERER = {
+  target_session_ended: true,
+  offer_deadline_elapsed: true,
+  task_released: false,
+  task_reported_complete: false,
+  task_blocked: false,
+  task_completed: false,
+  source_lease_expired: false
+};
+function handoffExpiryIsNewsToOfferer(reason) {
+  return typeof reason === "string" && Object.hasOwn(HANDOFF_EXPIRY_IS_NEWS_TO_OFFERER, reason) && HANDOFF_EXPIRY_IS_NEWS_TO_OFFERER[reason];
 }
 function isAddressedTo(event, sessionId2) {
   if (event.session_id === sessionId2)

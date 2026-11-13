@@ -2095,7 +2095,7 @@ export class CollabStore {
           row.actor,
           {
             task_id: handoff.task_id,
-            reason: "target_session_ended",
+            reason: "target_session_ended" satisfies HandoffExpiryReason,
           },
           row.id,
         );
@@ -4528,13 +4528,19 @@ export class CollabStore {
 
   /**
    * Whether an event's routing fields name this session: a report addressed to
-   * it or answering one of its reports, a handoff offered to it or answering
-   * its offer, a review it was asked for, a verdict on its completion, or the
-   * recovery of its expired lease. Report bodies and other free text are never
-   * inspected. Addressing is routing, not access control: every session can
-   * still read the event.
+   * it, or answering one of its reports with no other addressee; a handoff
+   * offered to it, or an answer to its own offer (accepted, declined, or lost
+   * through no act of its own); or the recovery of its expired lease. This is
+   * the set `wait --addressed` rings for. It contains isAddressedTo's explicit
+   * set, which alone feeds addressed_waiting, the tap and the wake. A review
+   * request or verdict rings through the addressed report written beside its
+   * task event, so the task events themselves name nobody. Never an event this
+   * session wrote. Report bodies and other free text are never inspected.
+   * Addressing is routing, not access control: every session can still read
+   * the event.
    */
   eventAddressesSession(event: CollabEvent, sessionId: string): boolean {
+    if (event.session_id === sessionId) return false;
     const payload = (event.payload ?? {}) as Record<string, unknown>;
     const field = (value: unknown, key: string) =>
       value !== null && typeof value === "object" ? (value as Record<string, unknown>)[key] : undefined;
@@ -4544,24 +4550,19 @@ export class CollabStore {
         if (typeof payload.target_report_id !== "string") return false;
         const target = this.db.query(`SELECT from_session_id FROM reports WHERE id = ?`)
           .get(payload.target_report_id) as { from_session_id: string | null } | null;
-        return target?.from_session_id === sessionId;
+        // An answer to this session's report is its mail unless the sender
+        // chose another addressee: then it is that session's.
+        return target?.from_session_id === sessionId && typeof payload.to_session_id !== "string";
       }
       case "handoff.offered":
         return field(payload.handoff, "to_session_id") === sessionId;
       case "handoff.accepted":
       case "handoff.declined":
       case "handoff.expired": {
+        if (event.type === "handoff.expired" && !handoffExpiryIsNewsToOfferer(payload.reason)) return false;
         const offer = this.db.query(`SELECT from_session_id FROM handoffs WHERE id = ?`)
           .get(event.entity_id) as { from_session_id: string | null } | null;
         return offer?.from_session_id === sessionId;
-      }
-      case "task.reported_complete":
-        return payload.review_requested_session_id === sessionId;
-      case "task.accepted":
-      case "task.changes_requested": {
-        const task = this.db.query(`SELECT reported_by_session_id FROM tasks WHERE workspace_id = ? AND id = ?`)
-          .get(event.workspace_id, event.entity_id) as { reported_by_session_id: string | null } | null;
-        return task?.reported_by_session_id === sessionId;
       }
       case "task.recovered":
         return field(payload.prior_lease, "session_id") === sessionId;
@@ -5924,7 +5925,7 @@ export class CollabStore {
     taskId: string,
     now: string,
     actor: string,
-    reason: string,
+    reason: HandoffExpiryReason,
   ): void {
     const rows = this.db.query(`
       SELECT * FROM handoffs WHERE workspace_id = ? AND task_id = ? AND status = 'pending'
@@ -5954,7 +5955,7 @@ export class CollabStore {
           .run(now, row.id);
         this.appendEvent(workspaceId, "handoff.expired", row.id, actor, {
           task_id: row.task_id,
-          reason: "offer_deadline_elapsed",
+          reason: "offer_deadline_elapsed" satisfies HandoffExpiryReason,
         });
       }
     });
@@ -6845,6 +6846,30 @@ function sessionLiveness(
 }
 
 /** The events-table columns isAddressedTo reads. */
+/**
+ * Why a pending handoff offer expired, and whether that is news to the session
+ * that made the offer. Its own act on its task (release, report, block,
+ * complete) is not, and neither is its lease lapsing: when another session
+ * takes the task, task.recovered tells the prior holder. Every expiry reason
+ * the store writes is classed here; an unknown reason reads as no news.
+ */
+const HANDOFF_EXPIRY_IS_NEWS_TO_OFFERER = {
+  target_session_ended: true,
+  offer_deadline_elapsed: true,
+  task_released: false,
+  task_reported_complete: false,
+  task_blocked: false,
+  task_completed: false,
+  source_lease_expired: false,
+} as const;
+type HandoffExpiryReason = keyof typeof HANDOFF_EXPIRY_IS_NEWS_TO_OFFERER;
+
+function handoffExpiryIsNewsToOfferer(reason: unknown): boolean {
+  return typeof reason === "string"
+    && Object.hasOwn(HANDOFF_EXPIRY_IS_NEWS_TO_OFFERER, reason)
+    && HANDOFF_EXPIRY_IS_NEWS_TO_OFFERER[reason as HandoffExpiryReason];
+}
+
 export interface AddressedEventRow {
   type: string;
   session_id: string | null;
