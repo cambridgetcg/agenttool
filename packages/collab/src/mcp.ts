@@ -504,8 +504,8 @@ export function buildCollabMcpServer(
       description:
         "Approve the options you find acceptable in a ballot (choice: option keys, or [] to abstain). The vote is sealed " +
         "in a file beside the journal and committed by hash; no collab tool, event or doorbell shows it before the close, " +
-        "and this result returns nothing of it. Vote before you read others' answers. You may replace your cast up to 3 " +
-        "times; the latest counts. A vote needs no reason, but one is shown with it at the close.",
+        "and this result returns nothing of it. Vote before you read others' answers. You may cast up to 3 times in one " +
+        "ballot; only your latest counts. A vote needs no reason, but one is shown with it at the close.",
       annotations: localMutation,
       inputSchema: {
         ballot: z.string().optional().describe("Required. The ballot: its id or ballot# handle."),

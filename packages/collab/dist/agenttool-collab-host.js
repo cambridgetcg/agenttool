@@ -1328,6 +1328,16 @@ function listSealFiles(journalRealpath, ballotId) {
     return [];
   }
 }
+function listSealBallots(journalRealpath) {
+  try {
+    const root = sealRoot(journalRealpath);
+    if (!existsSync2(root) || !lstatSync2(root).isDirectory())
+      return [];
+    return readdirSync(root).filter((name) => BALLOT_ID.test(name));
+  } catch {
+    return [];
+  }
+}
 function removeEmptySealDirectory(journalRealpath, ballotId) {
   try {
     const directory = sealDirectory(journalRealpath, ballotId);
@@ -2104,6 +2114,7 @@ class CollabStore {
       this.db.close();
       throw error;
     }
+    this.sweepRevealedSeals();
   }
   close() {
     this.closed = true;
@@ -8204,7 +8215,11 @@ class CollabStore {
       if (caster.unit_id !== input.unit_id) {
         throw new CollabError("ballot_unit_changed", "The unit this cast was sealed for is not this session's unit in this ballot");
       }
-      const castSeq = nextCastSeq(facts.casts.filter((cast) => cast.session_id === session.id).length);
+      const mine = facts.casts.filter((cast) => cast.session_id === session.id);
+      if (input.after_cast_id !== undefined && (mine.at(-1)?.cast_id ?? null) !== input.after_cast_id) {
+        throw new CollabError("changed_under_you", "This session cast in this ballot after the call read it, so this cast was not recorded");
+      }
+      const castSeq = nextCastSeq(mine.length);
       const voices = new Map;
       const unitMateCast = facts.casts.some((cast) => cast.unit_id === caster.unit_id && this.cachedVoice(cast.session_id, voices) !== voice);
       const payload = {
@@ -8358,6 +8373,19 @@ class CollabStore {
       } catch {}
     }
   }
+  sweepRevealedSeals() {
+    try {
+      const realpath = this.journalRealpath();
+      if (!realpath)
+        return;
+      const revealed = listSealBallots(realpath).filter((ballotId) => this.db.query(`
+        SELECT 1 FROM note_ballots b WHERE b.ballot_id = ? AND b.state = 'closed' AND EXISTS (
+          SELECT 1 FROM events e WHERE e.workspace_id = b.workspace_id AND e.type = 'ballot.closed' AND e.entity_id = b.ballot_id
+        ) LIMIT 1
+      `).get(ballotId) !== null);
+      this.cleanSeals(revealed);
+    } catch {}
+  }
   readBallotFacts(workspaceId, ballotId) {
     const rows = this.db.query(`
       SELECT id, sequence, type, session_id, occurred_at, payload_json FROM events
@@ -8386,6 +8414,7 @@ class CollabStore {
     const casts = [];
     const castUnits = new Set;
     let allCastSequence = null;
+    let allCastAt = null;
     const revealed = [];
     let closed = null;
     for (const row of rows) {
@@ -8405,6 +8434,7 @@ class CollabStore {
           castUnits.add(payload.unit_id);
         if (allCastSequence === null && units.length > 0 && units.every((unit) => castUnits.has(unit.unit_id))) {
           allCastSequence = row.sequence;
+          allCastAt = row.occurred_at;
         }
       } else if (row.type === "ballot.revealed") {
         revealed.push(payload);
@@ -8418,15 +8448,15 @@ class CollabStore {
         };
       }
     }
-    const obsoleted = this.activeObsoletionTargets(workspaceId);
     const withdrawal = this.db.query(`
       SELECT id, event_sequence, created_at FROM reports
       WHERE workspace_id = ? AND target_report_id = ? AND relation = 'withdraws' AND from_session_id = ?
       ORDER BY event_sequence
-    `).all(workspaceId, ballotId, opened.opener_session_id).find((row) => !obsoleted.has(row.id) && Date.parse(row.created_at) < Date.parse(terms.closes_at) && (!terms.close_when_all_cast || allCastSequence === null || row.event_sequence < allCastSequence) && (closed === null || row.event_sequence < closed.sequence)) ?? null;
+    `).all(workspaceId, ballotId, opened.opener_session_id).find((row) => Date.parse(row.created_at) < Date.parse(terms.closes_at) && (!terms.close_when_all_cast || allCastSequence === null || row.event_sequence < allCastSequence) && (closed === null || row.event_sequence < closed.sequence)) ?? null;
     const withdrawn = withdrawal ? { report_id: withdrawal.id, sequence: withdrawal.event_sequence, at: withdrawal.created_at } : null;
     const now = this.timestamp();
-    const closedBy = Date.parse(now) >= Date.parse(terms.closes_at) ? "time" : terms.close_when_all_cast && !withdrawn && allCastSequence !== null ? "all_cast" : null;
+    const closedAllCast = terms.close_when_all_cast && !withdrawn && allCastAt !== null && Date.parse(allCastAt) < Date.parse(terms.closes_at);
+    const closedBy = closedAllCast ? "all_cast" : Date.parse(now) >= Date.parse(terms.closes_at) ? "time" : null;
     const state = closed !== null ? "revealed" : closedBy !== null ? "closed" : withdrawn ? "withdrawn" : "open";
     const leftOut = Array.isArray(opened.left_out) ? opened.left_out : [];
     return {

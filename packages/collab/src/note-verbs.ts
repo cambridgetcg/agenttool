@@ -584,6 +584,32 @@ function targetHandle(target: Extract<ReTarget, { kind: "report" }>): string {
   return handleOf(target.label, target.id);
 }
 
+/**
+ * What a withdrawal does to a ballot (spec 7): the opener's first one
+ * before the close is final, so withdrawing it later reopens nothing. Only
+ * advice; it never refuses the withdrawal.
+ */
+function ballotWithdrawalAdvice(
+  ctx: NoteVerbContext,
+  workspaceId: string,
+  withdrawn: Extract<ReTarget, { kind: "report" }>,
+): string[] {
+  if (withdrawn.view.ballot) {
+    return [withdrawn.view.ballot.open
+      ? "A withdrawn ballot stays withdrawn: no cast is taken from now, its votes are revealed at the original close with " +
+        "no top choice, and withdrawing this withdrawal later does not reopen it. Open a new poll to ask again."
+      : `${targetHandle(withdrawn)} already takes no casts (it was withdrawn or has closed), so this withdrawal changes neither its state nor its result.`];
+  }
+  const { relation, target_report_id: targetId } = withdrawn.view.report;
+  if (relation !== "withdraws" || !targetId) return [];
+  try {
+    if (!ctx.store.noteTarget(workspaceId, targetId).ballot) return [];
+  } catch {
+    return [];
+  }
+  return [`This does not reopen ${handleOf("ballot", targetId)}: a ballot's withdrawal is final. Open a new poll to ask again.`];
+}
+
 /** The caller's note call as a ready input, with any fields replaced (dry_run dropped). */
 function noteRetryInput(input: NoteVerbInput, patch: Record<string, unknown> = {}): Record<string, unknown> {
   const { dry_run: _dry, ...rest } = input;
@@ -1059,6 +1085,7 @@ function planNote(
         advice.push(`${others.length} other session(s) also stand against it; also_challenged_by has a ready note for each.`);
       }
       if (withdrawn.view.obsoleted) advice.push(`${targetHandle(withdrawn)} was already withdrawn or replaced; this is recorded all the same.`);
+      advice.push(...ballotWithdrawalAdvice(ctx, workspaceId, withdrawn));
       return finish({ recorded_as: "withdraw", target, addressee, reports: [report], entity: withdrawn.id });
     }
     case "accept":

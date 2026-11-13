@@ -33,7 +33,7 @@ import {
   type RevealedEntry,
   type SealOutcome,
 } from "./ballot.js";
-import { listSealFiles, readSealFile, removeEmptySealDirectory, removeSealFile, sealPath } from "./ballot-seal.js";
+import { listSealBallots, listSealFiles, readSealFile, removeEmptySealDirectory, removeSealFile, sealPath } from "./ballot-seal.js";
 import { canonicalJson } from "./canonical.js";
 import { CollabError } from "./errors.js";
 import { hasLoneSurrogate, NOTE_FORMAT, parseNote } from "./note.js";
@@ -498,6 +498,7 @@ export class CollabStore {
       this.db.close();
       throw error;
     }
+    this.sweepRevealedSeals();
   }
 
   close(): void {
@@ -8937,7 +8938,11 @@ export class CollabStore {
    * commitment, never the vote. The seal file was written before this call,
    * and the caller removes it when this refuses. Checked inside the
    * transaction: the ballot is open and not withdrawn, the caster's unit is
-   * the one the commitment names, and the session's cast limit.
+   * the one the commitment names, and the session's cast limit. With
+   * `after_cast_id` (the session's latest cast the caller saw, or null for
+   * none), a session that has cast since then is refused changed_under_you:
+   * two processes holding one session would otherwise both pass the retry
+   * check and record one vote twice, as a replacement it never made.
    */
   castBallotForSession(input: {
     session_id: string;
@@ -8947,6 +8952,7 @@ export class CollabStore {
     cast_id: string;
     unit_id: string;
     commitment: string;
+    after_cast_id?: string | null;
   }): NoteBallotCastReceipt {
     const ballotId = validateId(input.ballot_id, "ballot_id");
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(input.cast_id)) {
@@ -8975,7 +8981,11 @@ export class CollabStore {
       if (caster.unit_id !== input.unit_id) {
         throw new CollabError("ballot_unit_changed", "The unit this cast was sealed for is not this session's unit in this ballot");
       }
-      const castSeq = nextCastSeq(facts.casts.filter((cast) => cast.session_id === session.id).length);
+      const mine = facts.casts.filter((cast) => cast.session_id === session.id);
+      if (input.after_cast_id !== undefined && (mine.at(-1)?.cast_id ?? null) !== input.after_cast_id) {
+        throw new CollabError("changed_under_you", "This session cast in this ballot after the call read it, so this cast was not recorded");
+      }
+      const castSeq = nextCastSeq(mine.length);
       const voices = new Map<string, string>();
       const unitMateCast = facts.casts.some((cast) =>
         cast.unit_id === caster.unit_id && this.cachedVoice(cast.session_id, voices) !== voice);
@@ -9170,6 +9180,29 @@ export class CollabStore {
     }
   }
 
+  /**
+   * At open: clean the seal directories of ballots this journal has already
+   * revealed. A process that died between a reveal's commit and its
+   * cleanSeals left them, and no later reveal would name them again; among
+   * them can be an orphan seal whose vote was never revealed. Never throws.
+   */
+  private sweepRevealedSeals(): void {
+    try {
+      const realpath = this.journalRealpath();
+      if (!realpath) return;
+      // Events are read only for a ballot note_ballots already reads closed,
+      // so the open ballots' seal directories cost a lookup in a small table.
+      const revealed = listSealBallots(realpath).filter((ballotId) => this.db.query(`
+        SELECT 1 FROM note_ballots b WHERE b.ballot_id = ? AND b.state = 'closed' AND EXISTS (
+          SELECT 1 FROM events e WHERE e.workspace_id = b.workspace_id AND e.type = 'ballot.closed' AND e.entity_id = b.ballot_id
+        ) LIMIT 1
+      `).get(ballotId) !== null);
+      this.cleanSeals(revealed);
+    } catch {
+      // A seal left on disk is visible there, never in collab; the next open tries again.
+    }
+  }
+
   /** Everything the journal records about one ballot, judged at the store's clock. Null when no ballot.opened names it. */
   private readBallotFacts(workspaceId: string, ballotId: string): NoteBallotFacts | null {
     const rows = this.db.query(`
@@ -9198,6 +9231,7 @@ export class CollabStore {
     const casts: NoteBallotCast[] = [];
     const castUnits = new Set<string>();
     let allCastSequence: number | null = null;
+    let allCastAt: string | null = null;
     const revealed: RevealedEntry[] = [];
     let closed: NoteBallotFacts["closed"] = null;
     for (const row of rows) {
@@ -9216,6 +9250,7 @@ export class CollabStore {
         if (unitIds.has(payload.unit_id)) castUnits.add(payload.unit_id);
         if (allCastSequence === null && units.length > 0 && units.every((unit) => castUnits.has(unit.unit_id))) {
           allCastSequence = row.sequence;
+          allCastAt = row.occurred_at;
         }
       } else if (row.type === "ballot.revealed") {
         revealed.push(payload as RevealedEntry);
@@ -9229,23 +9264,29 @@ export class CollabStore {
         };
       }
     }
-    // The opener's withdrawal counts when it came before the close: after
-    // it, every vote is revealed, and withdrawing then hides no top choice.
-    const obsoleted = this.activeObsoletionTargets(workspaceId);
+    // The opener's first withdrawal before the close counts, and it is final
+    // for the ballot. Withdrawing the withdrawal later is not read here: the
+    // casts refused in between cannot be taken back, and an opener who could
+    // undo it would choose, after seeing turnout or the revealed votes,
+    // whether the ballot counts. A withdrawal after the close counts neither:
+    // every vote is revealed by then, and it would hide a top choice.
     const withdrawal = (this.db.query(`
       SELECT id, event_sequence, created_at FROM reports
       WHERE workspace_id = ? AND target_report_id = ? AND relation = 'withdraws' AND from_session_id = ?
       ORDER BY event_sequence
     `).all(workspaceId, ballotId, opened.opener_session_id) as Array<{ id: string; event_sequence: number; created_at: string }>)
-      .find((row) => !obsoleted.has(row.id)
-        && Date.parse(row.created_at) < Date.parse(terms.closes_at)
+      .find((row) => Date.parse(row.created_at) < Date.parse(terms.closes_at)
         && (!terms.close_when_all_cast || allCastSequence === null || row.event_sequence < allCastSequence)
         && (closed === null || row.event_sequence < closed.sequence)) ?? null;
     const withdrawn = withdrawal ? { report_id: withdrawal.id, sequence: withdrawal.event_sequence, at: withdrawal.created_at } : null;
     const now = this.timestamp();
-    const closedBy: NoteBallotFacts["closed_by"] = Date.parse(now) >= Date.parse(terms.closes_at)
-      ? "time"
-      : terms.close_when_all_cast && !withdrawn && allCastSequence !== null ? "all_cast" : null;
+    // An all-cast close happened at its last cast, so it stays the reason
+    // once the deadline has passed too.
+    const closedAllCast = terms.close_when_all_cast && !withdrawn && allCastAt !== null
+      && Date.parse(allCastAt) < Date.parse(terms.closes_at);
+    const closedBy: NoteBallotFacts["closed_by"] = closedAllCast
+      ? "all_cast"
+      : Date.parse(now) >= Date.parse(terms.closes_at) ? "time" : null;
     const state: NoteBallotFacts["state"] = closed !== null
       ? "revealed"
       : closedBy !== null ? "closed" : withdrawn ? "withdrawn" : "open";

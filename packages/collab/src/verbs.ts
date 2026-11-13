@@ -1179,6 +1179,9 @@ function composeBrief(
   ];
   const advice: string[] = [];
   if (pending?.more) advice.push("More is waiting for you than this brief lists; read it with collab_inbox.");
+  for (const ballot of cap(data.ballots).filter(unitMateHasCast)) {
+    advice.push(`${handleOf("ballot", ballot.ballot_id)}: ${UNIT_MATE_CAST_ADVICE}`);
+  }
   return {
     shown,
     advice,
@@ -1825,6 +1828,9 @@ function inboxResult(
     );
   }
   if (entries.some((entry) => entry.folded)) advice.push(FOLDED_LINE);
+  if (entries.some((entry) => entry.for_me && entry.event.type === "ballot.opened" && entry.ballot && unitMateHasCast(entry.ballot))) {
+    advice.push(UNIT_MATE_CAST_ADVICE);
+  }
   const firstForMe = entries.find((entry) => entry.for_me);
   const about = firstForMe ? entryRef(firstForMe) : null;
   const next: NoteRemedy = waitError
@@ -2132,10 +2138,20 @@ function ballotYou(ballot: NoteBallotData): Record<string, unknown> | null {
     ...(viewer.same_handle_as ? { same_handle_as: viewer.same_handle_as } : {}),
     in_electorate: viewer.in_electorate,
     you_may_vote: viewer.may_vote,
-    you_have_cast: viewer.unit_has_cast,
+    you_have_cast: viewer.your_casts > 0,
+    unit_has_cast: viewer.unit_has_cast,
     your_casts: viewer.your_casts,
   };
 }
+
+/** Another lineage of this session's unit has cast and this session has not: its own cast would cancel both. */
+function unitMateHasCast(ballot: NoteBallotData): boolean {
+  const viewer = ballot.viewer;
+  return ballot.state === "open" && viewer !== null && viewer.in_electorate && viewer.unit_has_cast && viewer.your_casts === 0;
+}
+
+const UNIT_MATE_CAST_ADVICE =
+  "Another lineage of your unit has cast in this ballot; a cast by you makes the unit unit_conflict, and then neither is counted.";
 
 /** One entry of arrive's open.ballots (spec 5.1). */
 function ballotBrief(ballot: NoteBallotData): Record<string, unknown> {
@@ -2149,7 +2165,8 @@ function ballotBrief(ballot: NoteBallotData): Record<string, unknown> {
     closes_at: ballot.terms.closes_at,
     close_when_all_cast: ballot.terms.close_when_all_cast,
     you_may_vote: ballot.viewer?.may_vote ?? false,
-    you_have_cast: ballot.viewer?.unit_has_cast ?? false,
+    you_have_cast: (ballot.viewer?.your_casts ?? 0) > 0,
+    unit_has_cast: ballot.viewer?.unit_has_cast ?? false,
     turnout: ballot.turnout,
     sealing: ballot.sealing,
   };
@@ -2190,6 +2207,8 @@ function ballotAdvice(ballot: NoteBallotData): string[] {
     advice.push("This ballot has closed; its votes are revealed by the next collab call in this workspace.");
   } else if (ballot.state === "open" && ballot.viewer?.may_vote && !ballot.viewer.unit_has_cast) {
     advice.push("Vote with collab_vote before you read anyone else's answer; check what can be checked, since a count does not make an answer true.");
+  } else if (unitMateHasCast(ballot)) {
+    advice.push(UNIT_MATE_CAST_ADVICE);
   }
   return advice;
 }
@@ -2232,7 +2251,8 @@ function ballotItem(
         chosen_by: ballot.chosen_by,
         left_out: ballot.left_out,
         you_may_vote: ballot.viewer?.may_vote ?? false,
-        you_have_cast: ballot.viewer?.unit_has_cast ?? false,
+        you_have_cast: (ballot.viewer?.your_casts ?? 0) > 0,
+        unit_has_cast: ballot.viewer?.unit_has_cast ?? false,
         unit_basis: ballot.unit_basis,
         sealing: ballot.sealing,
         // No choice in the ready call: collab_vote asks for one, so nothing is cast by sending it as given.

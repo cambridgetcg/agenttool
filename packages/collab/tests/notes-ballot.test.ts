@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import {
@@ -13,6 +13,7 @@ import {
   revealedEntryBytes,
   type RevealedEntry,
 } from "../src/ballot.js";
+import { writeSealFile } from "../src/ballot-seal.js";
 import { pollNote } from "../src/ballot-verbs.js";
 import { canonicalJson } from "../src/canonical.js";
 import { buildCollabMcpServer } from "../src/mcp.js";
@@ -220,6 +221,21 @@ describe("collab_poll: the electorate (spec 7)", () => {
     expect(fresh.replayed).toBeUndefined();
     expect(fresh.ballot).not.toBe(first.ballot);
   });
+
+  test("the same poll after its ballot has closed opens a new ballot, not a replay of the closed one", async () => {
+    const j = journal();
+    const [opener, peer] = await voters(j, ["opener", "peer"]);
+    const first = await poll(opener!);
+    j.advance(2 * 60 * MINUTE);
+    await ok(peer!.server, "collab_inbox");
+    expect((await about(opener!, first.ballot)).ballot.state).toBe("revealed");
+    const again = await poll(opener!);
+    expect(again.replayed).toBeUndefined();
+    expect(again.ballot).not.toBe(first.ballot);
+    expect(again.state).toBe("open");
+    expect(Date.parse(again.closes_at)).toBeGreaterThan(Date.parse(j.now()));
+    expect(again.effect).not.toContain("Replayed");
+  });
 });
 
 describe("collab_vote: units and casts (spec 7)", () => {
@@ -260,6 +276,8 @@ describe("collab_vote: units and casts (spec 7)", () => {
     const limit = await refused(peer!.server, "collab_vote", { ballot: opened.ballot, choice: ["keep", "split"] });
     expect(limit.code).toBe("cast_limit");
     expect(j.count()).toBe(before);
+    // The tool says the same: three casts, which is two replacements.
+    expect(peer!.server._registeredTools.collab_vote.description).toContain("You may cast up to 3 times in one ballot; only your latest counts.");
     // The child shares the peer's voice, so its cast is that voice's latest, not a second voice.
     const fromChild = await ok(childServer, "collab_vote", { ballot: opened.ballot, choice: ["split"] });
     expect(fromChild.counts_as).toBe("counted");
@@ -311,6 +329,115 @@ describe("collab_vote: units and casts (spec 7)", () => {
     const changed = await ok(peer!.server, "collab_vote", { ...vote, why: [{ text: "fewer writes, measured", basis: "seen" }] });
     expect(changed.replayed).toBe(false);
     expect(changed.cast_seq).toBe(2);
+  });
+
+  test("a lost-response retry after the close replays, whether this call or an earlier one revealed the ballot", async () => {
+    const j = journal();
+    const [opener, peer] = await voters(j, ["opener", "peer"]);
+    const opened = await poll(opener!);
+    const vote = { ballot: opened.ballot, choice: ["keep"], why: [{ text: "simplest", basis: "inferred" }] };
+    const first = await ok(peer!.server, "collab_vote", vote);
+    const casts = () => j.events().filter((event) => event.type === "ballot.cast").length;
+    j.advance(31 * MINUTE);
+    // No call in between: this call's own reveal runs first and removes the seal.
+    const again = await ok(peer!.server, "collab_vote", vote);
+    expect(closedCount(j, opened.ballot)).toBe(1);
+    expect(sealFiles(j, opened.ballot)).toEqual([]);
+    expect(again.replayed).toBe(true);
+    expect([again.cast_seq, again.commitment, again.counts_as]).toEqual([first.cast_seq, first.commitment, first.counts_as]);
+    expect(again.effect).toBe(`Replayed: nothing new was written. Your vote in ${first.ballot_handle} (cast 1) was recorded before the close and revealed at the close as counted.`);
+    expect(casts()).toBe(1);
+    // After another session's call revealed it, the same.
+    await ok(opener!.server, "collab_inbox");
+    expect((await ok(peer!.server, "collab_vote", vote)).replayed).toBe(true);
+    expect(casts()).toBe(1);
+    // A different vote after the close is refused, naming the true close.
+    const late = await refused(peer!.server, "collab_vote", { ...vote, choice: ["split"] });
+    expect(late.code).toBe("ballot_closed");
+    expect(late.message).toContain(`closed at ${opened.closes_at}`);
+    expect(casts()).toBe(1);
+  });
+
+  test("two processes holding one session cast one vote once: the overtaken one is told to send it again, and that replays", async () => {
+    const j = journal();
+    const [opener, peer] = await voters(j, ["opener", "peer"]);
+    const opened = await poll(opener!);
+    const second = buildCollabMcpServer(j.store, {
+      environment: {},
+      resumed_session: { handle: peer!.handle, credential_file: j.store.defaultSessionCredentialPath(peer!.handle.session.id) },
+    });
+    const vote = { ballot: opened.ballot, choice: ["keep"] };
+    const original = j.store.castBallotForSession.bind(j.store);
+    let inner: Promise<Record<string, any>> | null = null;
+    // The first call has passed its retry check and written its seal; the
+    // other process casts the same vote before the first call's transaction.
+    j.store.castBallotForSession = ((input: Parameters<typeof original>[0]) => {
+      j.store.castBallotForSession = original;
+      inner = ok(second, "collab_vote", vote);
+      return original(input);
+    }) as typeof original;
+    const overtaken = await refused(peer!.server, "collab_vote", vote);
+    const other = await inner!;
+    expect(other).toMatchObject({ replayed: false, cast_seq: 1 });
+    expect(overtaken.code).toBe("changed_under_you");
+    expect(overtaken.remedy).toEqual({ tool: "collab_vote", input: vote });
+    expect(j.events().filter((event) => event.type === "ballot.cast")).toHaveLength(1);
+    expect(sealFiles(j, opened.ballot)).toHaveLength(1);
+    const resent = await ok(peer!.server, "collab_vote", overtaken.remedy.input);
+    expect(resent).toMatchObject({ replayed: true, cast_seq: 1, commitment: other.commitment });
+    await ok(opener!.server, "collab_vote", { ballot: opened.ballot, choice: ["split"] });
+    j.advance(31 * MINUTE);
+    const result = (await about(opener!, opened.ballot)).ballot.result;
+    expect(result.replaced).toEqual([]);
+    expect(result.options.find((option: any) => option.key === "keep").voters).toEqual(["peer"]);
+  });
+
+  test("a cast sealed for another unit is refused in the store, an outsider sharing a voter's handle included", async () => {
+    const j = journal();
+    const [opener, peer] = await voters(j, ["opener", "peer"], (name) => (name === "peer" ? { seat_ref: "claude-code:seat-1" } : {}));
+    const opened = await poll(opener!);
+    const [outsider] = await voters(j, ["outsider"], () => ({ seat_ref: "claude-code:seat-1" }));
+    const unitOf = (name: string) => opened.electorate.find((unit: any) => unit.names[0] === name).unit;
+    const attempt = (voter: Voter, unitId: string) => {
+      try {
+        j.store.castBallotForSession({ ...voter.handle.credential, ballot_id: opened.ballot, cast_id: crypto.randomUUID(), unit_id: unitId, commitment: "0".repeat(64) });
+        return "recorded";
+      } catch (error: any) {
+        return error.code as string;
+      }
+    };
+    expect(attempt(peer!, unitOf("opener"))).toBe("ballot_unit_changed");
+    expect(attempt(outsider!, unitOf("peer"))).toBe("ballot_unit_changed");
+    expect(j.events().filter((event) => event.type === "ballot.cast")).toEqual([]);
+  });
+
+  test("a linked seal directory is refused before any cast; a loose one is tightened to 0700", async () => {
+    const j = journal();
+    const [opener, peer] = await voters(j, ["opener", "peer"]);
+    const opened = await poll(opener!);
+    const state = realpathSync(join(j.directory, "state"));
+    const elsewhere = mkdtempSync(join(tmpdir(), "agenttool-collab-ballot-elsewhere-"));
+    cleanup.push(() => rmSync(elsewhere, { recursive: true, force: true }));
+    const vote = { ballot: opened.ballot, choice: ["keep"] };
+    const casts = () => j.events().filter((event) => event.type === "ballot.cast").length;
+    // The seal root is a link.
+    symlinkSync(elsewhere, join(state, "collab-ballots"));
+    expect((await refused(peer!.server, "collab_vote", vote)).code).toBe("seal_directory_unsafe");
+    expect(casts()).toBe(0);
+    expect(readdirSync(elsewhere)).toEqual([]);
+    // The ballot's own directory is a link.
+    unlinkSync(join(state, "collab-ballots"));
+    mkdirSync(join(state, "collab-ballots"), { mode: 0o700 });
+    symlinkSync(elsewhere, join(state, "collab-ballots", opened.ballot));
+    expect((await refused(peer!.server, "collab_vote", vote)).code).toBe("seal_directory_unsafe");
+    expect(casts()).toBe(0);
+    expect(readdirSync(elsewhere)).toEqual([]);
+    // A real directory others can read is made private, and the cast goes ahead.
+    unlinkSync(join(state, "collab-ballots", opened.ballot));
+    chmodSync(join(state, "collab-ballots"), 0o755);
+    await ok(peer!.server, "collab_vote", vote);
+    expect(statSync(join(state, "collab-ballots")).mode & 0o777).toBe(0o700);
+    expect(casts()).toBe(1);
   });
 
   test("a cast refused at the close or after a withdrawal leaves no seal file", async () => {
@@ -403,6 +530,8 @@ describe("sealing: nothing of a vote before the reveal (spec 7)", () => {
     const votes = [
       { server: peer!.server, choice: ["optwyx"], why: [{ text: "reason-marker-alpha halves the writes", basis: "inferred", cites: [1] }], evidence: ["file docs/cache.md:1", "test bun test probe-marker-beta exit=0"], shared: "shared-marker-gamma" },
       { server: third!.server, choice: ["optmno", "optwyx"], why: [{ text: "reason-marker-delta", basis: "seen" }], evidence: [] as string[], shared: undefined },
+      // The third session replaces its cast.
+      { server: third!.server, choice: ["optkzq"], why: [{ text: "reason-marker-epsilon", basis: "seen" }], evidence: [] as string[], shared: "shared-marker-zeta" },
     ];
     const results: Array<Record<string, any>> = [];
     for (const vote of votes) {
@@ -412,11 +541,13 @@ describe("sealing: nothing of a vote before the reveal (spec 7)", () => {
     }
     // A replacement and an abstention, each as sealed as the rest.
     results.push(await ok(opener!.server, "collab_vote", { ballot: opened.ballot, choice: [] }));
+    expect(results[2]!.cast_seq).toBe(2);
     const seals = sealFiles(j, opened.ballot).map((name) => JSON.parse(readFileSync(join(sealDir(j, opened.ballot), name), "utf8")));
-    expect(seals).toHaveLength(3);
+    expect(seals).toHaveLength(4);
     const needles = new Set<string>([
       "reason-marker-alpha", "probe-marker-beta", "shared-marker-gamma", "reason-marker-delta", "docs/cache.md:1",
-      JSON.stringify(["optwyx"]), JSON.stringify(["optwyx", "optmno"]), JSON.stringify(["optmno", "optwyx"]), '"choice"',
+      "reason-marker-epsilon", "shared-marker-zeta",
+      JSON.stringify(["optwyx"]), JSON.stringify(["optwyx", "optmno"]), JSON.stringify(["optmno", "optwyx"]), JSON.stringify(["optkzq"]), '"choice"',
     ]);
     for (const seal of seals) {
       for (const value of [seal.vote, seal.vote.choice, { ballot_id: opened.ballot, vote: seal.vote }, { choice: seal.vote.choice, why: seal.vote.why }]) {
@@ -458,6 +589,9 @@ describe("sealing: nothing of a vote before the reveal (spec 7)", () => {
     j.advance(31 * MINUTE);
     const result = (await about(opener!, opened.ballot)).ballot.result;
     expect(result.options.find((option: any) => option.key === "optwyx").reasons[0].text).toBe("reason-marker-alpha halves the writes");
+    expect(result.replaced).toEqual([expect.objectContaining({ name: "third", cast_seq: 1 })]);
+    expect([...result.replaced[0].choice].sort()).toEqual(["optmno", "optwyx"]);
+    expect(result.options.find((option: any) => option.key === "optkzq").voters).toEqual(["third"]);
     for (const entry of revealed(j, opened.ballot)) {
       const seal = seals.find((candidate) => candidate.cast_id === entry.cast_id)!;
       expect(entry.salt).toBe(seal.salt);
@@ -516,6 +650,13 @@ describe("the reveal (spec 7, Close and reveal)", () => {
     expect(view.result.status).toBe("top_choice");
     // A late cast after the close is refused.
     expect((await refused(peer!.server, "collab_vote", { ballot: opened.ballot, choice: ["split"] })).code).toBe("ballot_closed");
+    // Once the deadline has passed too, it still closed when every unit had cast.
+    j.advance(31 * MINUTE);
+    expect((await about(opener!, opened.ballot)).ballot.closed_by).toBe("all_cast");
+    const after = await refused(peer!.server, "collab_vote", { ballot: opened.ballot, choice: ["split"] });
+    expect(after.code).toBe("ballot_closed");
+    expect(after.message).toContain("closed when every unit had cast");
+    expect(after.message).not.toContain(opened.closes_at);
   });
 
   test("a withdrawn ballot is revealed only at its original close, with no top choice", async () => {
@@ -537,6 +678,45 @@ describe("the reveal (spec 7, Close and reveal)", () => {
     expect(result.top).toEqual([]);
     expect(result.options.find((option: any) => option.key === "keep").units).toBe(1);
     expect(result.options.find((option: any) => option.key === "keep").reasons[0].text).toBe("simplest");
+  });
+
+  test("a withdrawal is final: withdrawing it after the reveal does not turn the result into a top choice", async () => {
+    const j = journal();
+    const [opener, peer, third] = await voters(j, ["opener", "peer", "third"]);
+    const opened = await poll(opener!);
+    await ok(peer!.server, "collab_vote", { ballot: opened.ballot, choice: ["keep"] });
+    await ok(opener!.server, "collab_vote", { ballot: opened.ballot, choice: ["keep"] });
+    const withdrawal = await ok(opener!.server, "collab_note", { act: "withdraw", re: opened.ballot, text: "Withdrawn." });
+    expect(withdrawal.advice.join(" ")).toContain("withdrawing this withdrawal later does not reopen it");
+    expect((await refused(third!.server, "collab_vote", { ballot: opened.ballot, choice: ["split"] })).code).toBe("ballot_withdrawn");
+    j.advance(31 * MINUTE);
+    expect((await about(opener!, opened.ballot)).ballot.result.status).toBe("withdrawn");
+    const undo = await ok(opener!.server, "collab_note", { act: "withdraw", re: withdrawal.ids.report, text: "I take back my withdrawal." });
+    expect(undo.advice.join(" ")).toContain(`This does not reopen ${opened.ids.ballot_handle}`);
+    const view = (await about(peer!, opened.ballot)).ballot;
+    expect(view.state).toBe("revealed");
+    expect(view.withdrawn).toEqual({ report: withdrawal.ids.report, at: expect.any(String) });
+    expect(view.result.status).toBe("withdrawn");
+    expect(view.result.top).toEqual([]);
+    expect(j.store.ballotResult(opener!.handle.workspace.id, opened.ballot)).toMatchObject({ status: "withdrawn", top: [] });
+  });
+
+  test("a withdrawal withdrawn before the close does not reopen the ballot", async () => {
+    const j = journal();
+    const [opener, peer] = await voters(j, ["opener", "peer"]);
+    const opened = await poll(opener!);
+    const withdrawal = await ok(opener!.server, "collab_note", { act: "withdraw", re: opened.ballot, text: "Withdrawn." });
+    await ok(opener!.server, "collab_note", { act: "withdraw", re: withdrawal.ids.report, text: "I take it back." });
+    const view = (await about(peer!, opened.ballot)).ballot;
+    expect(view.state).toBe("withdrawn");
+    expect(view.withdrawn.report).toBe(withdrawal.ids.report);
+    expect((await refused(peer!.server, "collab_vote", { ballot: opened.ballot, choice: ["keep"] })).code).toBe("ballot_withdrawn");
+    // Polling the same question again opens a new ballot.
+    const fresh = await poll(opener!);
+    expect(fresh.ballot).not.toBe(opened.ballot);
+    expect(fresh.state).toBe("open");
+    j.advance(31 * MINUTE);
+    expect((await about(peer!, opened.ballot)).ballot.result.status).toBe("withdrawn");
   });
 
   test("two store instances racing to reveal append exactly one ballot.closed", async () => {
@@ -637,6 +817,61 @@ describe("the reveal (spec 7, Close and reveal)", () => {
     expect(result.quorum).toEqual({ needed: 2, met: false, counted: 1 });
     expect(result.status).toBe("inconclusive");
     for (const entry of revealed(j, opened.ballot)) expect(revealedEntryBytes(entry)).toBeLessThanOrEqual(MAX_REVEALED_ENTRY_BYTES);
+  });
+
+  /** A seal whose cast never committed, as a process that died between the seal write and the cast leaves it. */
+  function orphanSeal(j: Journal, opened: Record<string, any>, voter: Voter): string {
+    const castId = crypto.randomUUID();
+    writeSealFile(j.store.ballotSealPath(opened.ballot, castId), {
+      cast_id: castId,
+      journal_realpath: j.store.journalRealpath()!,
+      session_id: voter.handle.session.id,
+      unit_id: opened.electorate.find((unit: any) => unit.names[0] === voter.name).unit,
+      salt: "a".repeat(64),
+      vote: { choice: ["drop"], why: [{ text: "orphan-marker", cites: [] }], evidence: [] },
+    });
+    return castId;
+  }
+
+  test("a seal whose cast never committed is never revealed, and the reveal removes it", async () => {
+    const j = journal();
+    const [opener, peer] = await voters(j, ["opener", "peer"]);
+    const opened = await poll(opener!);
+    await ok(peer!.server, "collab_vote", { ballot: opened.ballot, choice: ["keep"] });
+    const orphan = orphanSeal(j, opened, opener!);
+    expect(sealFiles(j, opened.ballot)).toHaveLength(2);
+    j.advance(31 * MINUTE);
+    await ok(peer!.server, "collab_inbox");
+    expect(revealed(j, opened.ballot).map((entry) => entry.session_id)).toEqual([peer!.handle.session.id]);
+    expect(revealed(j, opened.ballot).some((entry) => entry.cast_id === orphan)).toBe(false);
+    expect(JSON.stringify(j.events())).not.toContain("orphan-marker");
+    expect(sealFiles(j, opened.ballot)).toEqual([]);
+    expect(existsSync(sealDir(j, opened.ballot))).toBe(false);
+  });
+
+  test("seals a process left when it died after the reveal committed are removed at the next open; an open ballot's stay", async () => {
+    const j = journal();
+    const [opener, peer] = await voters(j, ["opener", "peer"]);
+    const done = await poll(opener!, { closes: "2m" });
+    await ok(peer!.server, "collab_vote", { ballot: done.ballot, choice: ["keep"] });
+    orphanSeal(j, done, opener!);
+    // The process dies after the commit, before cleanSeals.
+    const store = j.store as unknown as { cleanSeals: (ids: readonly string[]) => void };
+    const clean = store.cleanSeals;
+    store.cleanSeals = () => {};
+    j.advance(3 * MINUTE);
+    await ok(peer!.server, "collab_inbox");
+    store.cleanSeals = clean;
+    expect(closedCount(j, done.ballot)).toBe(1);
+    expect(sealFiles(j, done.ballot)).toHaveLength(2);
+    await ok(opener!.server, "collab_inbox");
+    const open = await poll(opener!);
+    await ok(peer!.server, "collab_vote", { ballot: open.ballot, choice: ["split"] });
+    const next = new CollabStore(join(j.directory, "state", "collab.sqlite"), { now: () => new Date(j.now()) });
+    cleanup.push(() => next.close());
+    expect(sealFiles(j, done.ballot)).toEqual([]);
+    expect(existsSync(sealDir(j, done.ballot))).toBe(false);
+    expect(sealFiles(j, open.ballot)).toHaveLength(1);
   });
 
   test("each revealed entry stays within its 8 KiB bound; a vote over it is refused before any seal", async () => {
@@ -804,6 +1039,27 @@ describe("ballots in collab_inbox and collab_arrive (spec 5.1, 5.2)", () => {
     const after = await ok(peer!.server, "collab_inbox");
     expect(after.waiting_on_you.some((entry: any) => entry.what === "vote")).toBe(false);
     expect((await ok(peer!.server, "collab_arrive", { purpose: "look" })).open.ballots[0].you_have_cast).toBe(true);
+  });
+
+  test("a session whose unit-mate cast is told so, not that it cast, and warned that its own cast would conflict", async () => {
+    const j = journal();
+    const [opener, b, c] = await voters(j, ["opener", "b", "c"], (name) => (name === "opener" ? {} : { seat_ref: "codex:shared-host" }));
+    const opened = await poll(opener!);
+    await ok(b!.server, "collab_vote", { ballot: opened.ballot, choice: ["keep"] });
+    const warning = "Another lineage of your unit has cast in this ballot; a cast by you makes the unit unit_conflict, and then neither is counted.";
+    const inbox = await ok(c!.server, "collab_inbox");
+    const item = inbox.items.find((entry: any) => entry.id === opened.ballot && entry.terms);
+    expect(item).toMatchObject({ you_may_vote: true, you_have_cast: false, unit_has_cast: true });
+    expect(inbox.advice).toContain(warning);
+    const view = await about(c!, opened.ballot);
+    expect(view.ballot.you).toMatchObject({ you_may_vote: true, you_have_cast: false, unit_has_cast: true, your_casts: 0 });
+    expect(view.advice).toContain(warning);
+    const arrived = await ok(c!.server, "collab_arrive", { purpose: "look" });
+    expect(arrived.open.ballots[0]).toMatchObject({ you_may_vote: true, you_have_cast: false, unit_has_cast: true });
+    expect(arrived.advice).toContain(`${opened.ids.ballot_handle}: ${warning}`);
+    // The session that cast is told it cast.
+    expect((await about(b!, opened.ballot)).ballot.you).toMatchObject({ you_have_cast: true, unit_has_cast: true, your_casts: 1 });
+    expect((await about(b!, opened.ballot)).advice).not.toContain(warning);
   });
 
   test("notes in an open ballot's thread are folded for an elector that has not cast, the read mark moves past them, and legacy tools show them", async () => {

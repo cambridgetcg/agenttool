@@ -31603,6 +31603,16 @@ function listSealFiles(journalRealpath, ballotId) {
     return [];
   }
 }
+function listSealBallots(journalRealpath) {
+  try {
+    const root = sealRoot(journalRealpath);
+    if (!existsSync3(root) || !lstatSync3(root).isDirectory())
+      return [];
+    return readdirSync(root).filter((name) => BALLOT_ID.test(name));
+  } catch {
+    return [];
+  }
+}
 function removeEmptySealDirectory(journalRealpath, ballotId) {
   try {
     const directory = sealDirectory(journalRealpath, ballotId);
@@ -31917,6 +31927,7 @@ class CollabStore {
       this.db.close();
       throw error51;
     }
+    this.sweepRevealedSeals();
   }
   close() {
     this.closed = true;
@@ -38017,7 +38028,11 @@ class CollabStore {
       if (caster.unit_id !== input.unit_id) {
         throw new CollabError("ballot_unit_changed", "The unit this cast was sealed for is not this session's unit in this ballot");
       }
-      const castSeq = nextCastSeq(facts.casts.filter((cast) => cast.session_id === session.id).length);
+      const mine = facts.casts.filter((cast) => cast.session_id === session.id);
+      if (input.after_cast_id !== undefined && (mine.at(-1)?.cast_id ?? null) !== input.after_cast_id) {
+        throw new CollabError("changed_under_you", "This session cast in this ballot after the call read it, so this cast was not recorded");
+      }
+      const castSeq = nextCastSeq(mine.length);
       const voices = new Map;
       const unitMateCast = facts.casts.some((cast) => cast.unit_id === caster.unit_id && this.cachedVoice(cast.session_id, voices) !== voice);
       const payload = {
@@ -38171,6 +38186,19 @@ class CollabStore {
       } catch {}
     }
   }
+  sweepRevealedSeals() {
+    try {
+      const realpath = this.journalRealpath();
+      if (!realpath)
+        return;
+      const revealed = listSealBallots(realpath).filter((ballotId) => this.db.query(`
+        SELECT 1 FROM note_ballots b WHERE b.ballot_id = ? AND b.state = 'closed' AND EXISTS (
+          SELECT 1 FROM events e WHERE e.workspace_id = b.workspace_id AND e.type = 'ballot.closed' AND e.entity_id = b.ballot_id
+        ) LIMIT 1
+      `).get(ballotId) !== null);
+      this.cleanSeals(revealed);
+    } catch {}
+  }
   readBallotFacts(workspaceId, ballotId) {
     const rows = this.db.query(`
       SELECT id, sequence, type, session_id, occurred_at, payload_json FROM events
@@ -38199,6 +38227,7 @@ class CollabStore {
     const casts = [];
     const castUnits = new Set;
     let allCastSequence = null;
+    let allCastAt = null;
     const revealed = [];
     let closed = null;
     for (const row of rows) {
@@ -38218,6 +38247,7 @@ class CollabStore {
           castUnits.add(payload.unit_id);
         if (allCastSequence === null && units.length > 0 && units.every((unit) => castUnits.has(unit.unit_id))) {
           allCastSequence = row.sequence;
+          allCastAt = row.occurred_at;
         }
       } else if (row.type === "ballot.revealed") {
         revealed.push(payload);
@@ -38231,15 +38261,15 @@ class CollabStore {
         };
       }
     }
-    const obsoleted = this.activeObsoletionTargets(workspaceId);
     const withdrawal = this.db.query(`
       SELECT id, event_sequence, created_at FROM reports
       WHERE workspace_id = ? AND target_report_id = ? AND relation = 'withdraws' AND from_session_id = ?
       ORDER BY event_sequence
-    `).all(workspaceId, ballotId, opened.opener_session_id).find((row) => !obsoleted.has(row.id) && Date.parse(row.created_at) < Date.parse(terms.closes_at) && (!terms.close_when_all_cast || allCastSequence === null || row.event_sequence < allCastSequence) && (closed === null || row.event_sequence < closed.sequence)) ?? null;
+    `).all(workspaceId, ballotId, opened.opener_session_id).find((row) => Date.parse(row.created_at) < Date.parse(terms.closes_at) && (!terms.close_when_all_cast || allCastSequence === null || row.event_sequence < allCastSequence) && (closed === null || row.event_sequence < closed.sequence)) ?? null;
     const withdrawn = withdrawal ? { report_id: withdrawal.id, sequence: withdrawal.event_sequence, at: withdrawal.created_at } : null;
     const now = this.timestamp();
-    const closedBy = Date.parse(now) >= Date.parse(terms.closes_at) ? "time" : terms.close_when_all_cast && !withdrawn && allCastSequence !== null ? "all_cast" : null;
+    const closedAllCast = terms.close_when_all_cast && !withdrawn && allCastAt !== null && Date.parse(allCastAt) < Date.parse(terms.closes_at);
+    const closedBy = closedAllCast ? "all_cast" : Date.parse(now) >= Date.parse(terms.closes_at) ? "time" : null;
     const state = closed !== null ? "revealed" : closedBy !== null ? "closed" : withdrawn ? "withdrawn" : "open";
     const leftOut = Array.isArray(opened.left_out) ? opened.left_out : [];
     return {
@@ -40412,6 +40442,9 @@ function composeBrief(ctx, data, pending, rootPath) {
   const advice = [];
   if (pending?.more)
     advice.push("More is waiting for you than this brief lists; read it with collab_inbox.");
+  for (const ballot of cap(data.ballots).filter(unitMateHasCast)) {
+    advice.push(`${handleOf("ballot", ballot.ballot_id)}: ${UNIT_MATE_CAST_ADVICE}`);
+  }
   return {
     shown,
     advice,
@@ -40931,6 +40964,9 @@ function inboxResult(ctx, passes, format, waited, waitError = null, paging = {})
   }
   if (entries.some((entry) => entry.folded))
     advice.push(FOLDED_LINE);
+  if (entries.some((entry) => entry.for_me && entry.event.type === "ballot.opened" && entry.ballot && unitMateHasCast(entry.ballot))) {
+    advice.push(UNIT_MATE_CAST_ADVICE);
+  }
   const firstForMe = entries.find((entry) => entry.for_me);
   const about = firstForMe ? entryRef(firstForMe) : null;
   const next = waitError ? withSlot(ctx, noteRemedyOf(waitError)) : about ? withSlot(ctx, { tool: "collab_inbox", input: { about } }) : data.more ? withSlot(ctx, { tool: "collab_inbox", input: { ...paging } }) : withSlot(ctx, { tool: "collab_inbox", input: { wait_seconds: WAIT_MAX_SECONDS, ...paging } });
@@ -41178,10 +41214,16 @@ function ballotYou(ballot) {
     ...viewer.same_handle_as ? { same_handle_as: viewer.same_handle_as } : {},
     in_electorate: viewer.in_electorate,
     you_may_vote: viewer.may_vote,
-    you_have_cast: viewer.unit_has_cast,
+    you_have_cast: viewer.your_casts > 0,
+    unit_has_cast: viewer.unit_has_cast,
     your_casts: viewer.your_casts
   };
 }
+function unitMateHasCast(ballot) {
+  const viewer = ballot.viewer;
+  return ballot.state === "open" && viewer !== null && viewer.in_electorate && viewer.unit_has_cast && viewer.your_casts === 0;
+}
+var UNIT_MATE_CAST_ADVICE = "Another lineage of your unit has cast in this ballot; a cast by you makes the unit unit_conflict, and then neither is counted.";
 function ballotBrief(ballot) {
   return {
     id: ballot.ballot_id,
@@ -41193,7 +41235,8 @@ function ballotBrief(ballot) {
     closes_at: ballot.terms.closes_at,
     close_when_all_cast: ballot.terms.close_when_all_cast,
     you_may_vote: ballot.viewer?.may_vote ?? false,
-    you_have_cast: ballot.viewer?.unit_has_cast ?? false,
+    you_have_cast: (ballot.viewer?.your_casts ?? 0) > 0,
+    unit_has_cast: ballot.viewer?.unit_has_cast ?? false,
     turnout: ballot.turnout,
     sealing: ballot.sealing
   };
@@ -41229,6 +41272,8 @@ function ballotAdvice(ballot) {
     advice.push("This ballot has closed; its votes are revealed by the next collab call in this workspace.");
   } else if (ballot.state === "open" && ballot.viewer?.may_vote && !ballot.viewer.unit_has_cast) {
     advice.push("Vote with collab_vote before you read anyone else's answer; check what can be checked, since a count does not make an answer true.");
+  } else if (unitMateHasCast(ballot)) {
+    advice.push(UNIT_MATE_CAST_ADVICE);
   }
   return advice;
 }
@@ -41264,7 +41309,8 @@ function ballotItem(entry, from, base, byId, me) {
         chosen_by: ballot.chosen_by,
         left_out: ballot.left_out,
         you_may_vote: ballot.viewer?.may_vote ?? false,
-        you_have_cast: ballot.viewer?.unit_has_cast ?? false,
+        you_have_cast: (ballot.viewer?.your_casts ?? 0) > 0,
+        unit_has_cast: ballot.viewer?.unit_has_cast ?? false,
         unit_basis: ballot.unit_basis,
         sealing: ballot.sealing,
         next: mayVote ? { tool: "collab_vote", input: { ballot: exactRef("ballot", id) } } : about
@@ -42090,6 +42136,21 @@ function reText(target) {
 function targetHandle(target) {
   return handleOf(target.label, target.id);
 }
+function ballotWithdrawalAdvice(ctx, workspaceId, withdrawn) {
+  if (withdrawn.view.ballot) {
+    return [withdrawn.view.ballot.open ? "A withdrawn ballot stays withdrawn: no cast is taken from now, its votes are revealed at the original close with " + "no top choice, and withdrawing this withdrawal later does not reopen it. Open a new poll to ask again." : `${targetHandle(withdrawn)} already takes no casts (it was withdrawn or has closed), so this withdrawal changes neither its state nor its result.`];
+  }
+  const { relation, target_report_id: targetId } = withdrawn.view.report;
+  if (relation !== "withdraws" || !targetId)
+    return [];
+  try {
+    if (!ctx.store.noteTarget(workspaceId, targetId).ballot)
+      return [];
+  } catch {
+    return [];
+  }
+  return [`This does not reopen ${handleOf("ballot", targetId)}: a ballot's withdrawal is final. Open a new poll to ask again.`];
+}
 function noteRetryInput(input, patch = {}) {
   const { dry_run: _dry, ...rest } = input;
   return { ...rest, ...patch };
@@ -42457,6 +42518,7 @@ function planNote(ctx, input, context) {
       }
       if (withdrawn.view.obsoleted)
         advice.push(`${targetHandle(withdrawn)} was already withdrawn or replaced; this is recorded all the same.`);
+      advice.push(...ballotWithdrawalAdvice(ctx, workspaceId, withdrawn));
       return finish({ recorded_as: "withdraw", target, addressee, reports: [report], entity: withdrawn.id });
     }
     case "accept":
@@ -44476,7 +44538,7 @@ async function pollVerb(ctx, input) {
     entity: "poll",
     stillCurrent: (latestKey) => {
       const found = replayReceipt(ctx.store, credential, latestKey);
-      return !found || ctx.store.noteReportStands(workspaceId, found.ballot_id);
+      return !found || ctx.store.noteReportStands(workspaceId, found.ballot_id) && ctx.store.noteBallotView(workspaceId, found.ballot_id).state === "open";
     }
   }, async (plan2) => {
     const step = await stepOnce(ctx, credential, plan2.key, () => ctx.store.openBallotForSession({
@@ -44574,6 +44636,25 @@ function resolveVoteEvidence(ctx, binding, lines) {
 function aboutBallot(ctx, ballotId) {
   return withSlot(ctx, { tool: "collab_inbox", input: { about: exactRef("ballot", ballotId) } });
 }
+function castVote(ctx, ballot, cast) {
+  if (ballot.revealed) {
+    const entry = ballot.revealed.find((candidate) => candidate.cast_id === cast.cast_id);
+    return entry?.vote ? { vote: entry.vote, revealed_as: entry.status } : null;
+  }
+  const read = readSealFile(ctx.store.ballotSealPath(ballot.ballot_id, cast.cast_id));
+  if (read.state !== "read")
+    return null;
+  const opened = openSeal(read.value, cast, { workspace_id: ballot.workspace_id, ballot_id: ballot.ballot_id });
+  return opened.state === "ok" ? { vote: opened.vote, revealed_as: null } : null;
+}
+function voteCall(input) {
+  const call = {};
+  for (const field of ["ballot", "choice", "why", "evidence", "shared"]) {
+    if (input[field] !== undefined)
+      call[field] = input[field];
+  }
+  return call;
+}
 function closedRefusal(ctx, ballot) {
   if (ballot.state === "withdrawn") {
     return new CollabError("ballot_withdrawn", "The opener withdrew this ballot; no cast is taken after a withdrawal, and nothing was written", {
@@ -44607,23 +44688,24 @@ async function voteVerb(ctx, input) {
   const model = ctx.store.resolveNoteSession(workspaceId, me, { include_ended: true }).model;
   const sealed = sealVote(vote, { evidence: resolved.evidence, model });
   const latest = ctx.store.latestBallotCastForSession(workspaceId, ballotId, me);
-  if (latest) {
-    const read = readSealFile(ctx.store.ballotSealPath(ballotId, latest.cast_id));
-    const opened = read.state === "read" ? openSeal(read.value, latest, { workspace_id: workspaceId, ballot_id: ballotId }) : null;
-    if (opened?.state === "ok" && sameVoteInput(opened.vote, sealed)) {
-      const earlier = replayReceipt(ctx.store, credential, `b1:${latest.cast_id}`);
-      return voteResult(ctx, {
-        handle,
-        ballot,
-        cast_seq: latest.cast_seq,
-        commitment: latest.commitment,
-        counts_as: earlier?.counts_as ?? ballot.viewer.counts_as,
-        same_handle_as: earlier?.same_handle_as,
-        replayed: true,
-        advice: ["Your latest sealed vote in this ballot is this same vote, so nothing new was cast."],
-        pending
-      });
-    }
+  const earlierVote = latest ? castVote(ctx, ballot, latest) : null;
+  if (latest && earlierVote && sameVoteInput(earlierVote.vote, sealed)) {
+    const earlier = replayReceipt(ctx.store, credential, `b1:${latest.cast_id}`);
+    return voteResult(ctx, {
+      handle,
+      ballot,
+      cast_seq: latest.cast_seq,
+      commitment: latest.commitment,
+      counts_as: earlier?.counts_as ?? ballot.viewer.counts_as,
+      same_handle_as: earlier?.same_handle_as,
+      replayed: true,
+      revealed_as: earlierVote.revealed_as,
+      advice: [
+        "Your latest vote in this ballot is this same vote, so nothing new was cast.",
+        ...earlierVote.revealed_as ? ["The ballot has closed and revealed it; read the result with collab_inbox about."] : []
+      ],
+      pending
+    });
   }
   if (ballot.state !== "open")
     throw closedRefusal(ctx, ballot);
@@ -44663,13 +44745,17 @@ async function voteVerb(ctx, input) {
       ballot_id: ballotId,
       cast_id: castId,
       unit_id: viewer.unit_id,
-      commitment
+      commitment,
+      after_cast_id: latest?.cast_id ?? null
     });
   } catch (error51) {
     if (ctx.store.latestBallotCastForSession(workspaceId, ballotId, me)?.cast_id !== castId)
       removeSealFile(path);
     if (error51 instanceof CollabError && (error51.code === "ballot_closed" || error51.code === "ballot_withdrawn")) {
       throw closedRefusal(ctx, ctx.store.noteBallotView(workspaceId, ballotId, me));
+    }
+    if (error51 instanceof CollabError && error51.code === "changed_under_you") {
+      throw changedUnderYou(ctx, { tool: "collab_vote", input: voteCall(input) }, null);
     }
     throw error51;
   }
@@ -44694,7 +44780,7 @@ async function voteVerb(ctx, input) {
   });
 }
 function voteResult(ctx, options) {
-  const effect = `Sealed vote recorded for ${options.handle} (cast ${options.cast_seq}).`;
+  const effect = options.revealed_as ? `Your vote in ${options.handle} (cast ${options.cast_seq}) was recorded before the close and revealed at the close as ${options.revealed_as}.` : `Sealed vote recorded for ${options.handle} (cast ${options.cast_seq}).`;
   return {
     ok: true,
     effect: options.replayed ? `Replayed: nothing new was written. ${effect}` : effect,
@@ -44980,7 +45066,7 @@ Legacy session tools: ${legacyInstructions}`
   }, async (input) => noteCall(() => pollVerb(noteContext(), input)));
   server.registerTool("collab_vote", {
     title: "Cast your sealed vote",
-    description: "Approve the options you find acceptable in a ballot (choice: option keys, or [] to abstain). The vote is sealed " + "in a file beside the journal and committed by hash; no collab tool, event or doorbell shows it before the close, " + "and this result returns nothing of it. Vote before you read others' answers. You may replace your cast up to 3 " + "times; the latest counts. A vote needs no reason, but one is shown with it at the close.",
+    description: "Approve the options you find acceptable in a ballot (choice: option keys, or [] to abstain). The vote is sealed " + "in a file beside the journal and committed by hash; no collab tool, event or doorbell shows it before the close, " + "and this result returns nothing of it. Vote before you read others' answers. You may cast up to 3 times in one " + "ballot; only your latest counts. A vote needs no reason, but one is shown with it at the close.",
     annotations: localMutation,
     inputSchema: {
       ballot: exports_external.string().optional().describe("Required. The ballot: its id or ballot# handle."),

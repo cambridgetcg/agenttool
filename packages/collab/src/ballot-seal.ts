@@ -146,6 +146,17 @@ export function listSealFiles(journalRealpath: string, ballotId: string): string
   }
 }
 
+/** The ballots that have a seal directory beside this journal, by ballot id. Never throws. */
+export function listSealBallots(journalRealpath: string): string[] {
+  try {
+    const root = sealRoot(journalRealpath);
+    if (!existsSync(root) || !lstatSync(root).isDirectory()) return [];
+    return readdirSync(root).filter((name) => BALLOT_ID.test(name));
+  } catch {
+    return [];
+  }
+}
+
 /** Remove a ballot's seal directory once it is empty. */
 export function removeEmptySealDirectory(journalRealpath: string, ballotId: string): void {
   try {

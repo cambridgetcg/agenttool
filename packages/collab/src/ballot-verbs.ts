@@ -16,15 +16,18 @@ import {
   validateVote,
   type BallotTerms,
   type ResolvedVoteEvidence,
+  type RevealedStatus,
+  type SealedVote,
 } from "./ballot.js";
 import { readSealFile, removeSealFile, writeSealFile } from "./ballot-seal.js";
 import { CollabError } from "./errors.js";
 import { NOTE_JOURNAL_EVIDENCE_KINDS, renderNote } from "./note.js";
 import { resolveEvidence, stepOnce } from "./note-verbs.js";
-import type { NoteBallotCastReceipt, NoteBallotData, NoteBallotOpenReceipt } from "./store.js";
+import type { NoteBallotCast, NoteBallotCastReceipt, NoteBallotData, NoteBallotOpenReceipt } from "./store.js";
 import {
   ballotTermsView,
   ballotUnitView,
+  changedUnderYou,
   exactRef,
   handleOf,
   noteWriteResult,
@@ -111,11 +114,15 @@ export async function pollVerb(ctx: NoteVerbContext, input: PollInput): Promise<
     tool: "collab_poll",
     input: poll,
     entity: "poll",
-    // An earlier poll is current while it still stands: the same poll
-    // opened again after a withdrawal is a new ballot.
+    // An earlier poll is current while its report stands and its ballot
+    // still takes casts: the same poll sent again after a withdrawal or
+    // after the close opens a new ballot.
     stillCurrent: (latestKey) => {
       const found = replayReceipt<NoteBallotOpenReceipt>(ctx.store, credential, latestKey);
-      return !found || ctx.store.noteReportStands(workspaceId, found.ballot_id);
+      return !found || (
+        ctx.store.noteReportStands(workspaceId, found.ballot_id)
+        && ctx.store.noteBallotView(workspaceId, found.ballot_id).state === "open"
+      );
     },
   }, async (plan) => {
     const step = await stepOnce(ctx, credential, plan.key, () => ctx.store.openBallotForSession({
@@ -237,6 +244,35 @@ function aboutBallot(ctx: NoteVerbContext, ballotId: string) {
   return withSlot(ctx, { tool: "collab_inbox", input: { about: exactRef("ballot", ballotId) } });
 }
 
+/**
+ * The vote a cast holds, for the retry check (spec 7 step 2): its seal file
+ * until the reveal, then its revealed entry, since the reveal removes the
+ * seal and the reveal runs before this check. Null when neither holds a
+ * vote that opens.
+ */
+function castVote(ctx: NoteVerbContext, ballot: NoteBallotData, cast: NoteBallotCast): {
+  vote: SealedVote;
+  revealed_as: RevealedStatus | null;
+} | null {
+  if (ballot.revealed) {
+    const entry = ballot.revealed.find((candidate) => candidate.cast_id === cast.cast_id);
+    return entry?.vote ? { vote: entry.vote, revealed_as: entry.status } : null;
+  }
+  const read = readSealFile(ctx.store.ballotSealPath(ballot.ballot_id, cast.cast_id));
+  if (read.state !== "read") return null;
+  const opened = openSeal(read.value, cast, { workspace_id: ballot.workspace_id, ballot_id: ballot.ballot_id });
+  return opened.state === "ok" ? { vote: opened.vote, revealed_as: null } : null;
+}
+
+/** The caller's collab_vote input as sent, for a remedy that sends it again. */
+function voteCall(input: VoteVerbInput): Record<string, unknown> {
+  const call: Record<string, unknown> = {};
+  for (const field of ["ballot", "choice", "why", "evidence", "shared"] as const) {
+    if (input[field] !== undefined) call[field] = input[field];
+  }
+  return call;
+}
+
 function closedRefusal(ctx: NoteVerbContext, ballot: NoteBallotData): CollabError {
   if (ballot.state === "withdrawn") {
     return new CollabError("ballot_withdrawn", "The opener withdrew this ballot; no cast is taken after a withdrawal, and nothing was written", {
@@ -275,27 +311,26 @@ export async function voteVerb(ctx: NoteVerbContext, input: VoteVerbInput): Prom
   const model = ctx.store.resolveNoteSession(workspaceId, me, { include_ended: true }).model;
   const sealed = sealVote(vote, { evidence: resolved.evidence, model });
 
-  // 2. A retry: this session's latest seal holds the same vote.
+  // 2. A retry: this session's latest cast holds the same vote.
   const latest = ctx.store.latestBallotCastForSession(workspaceId, ballotId, me);
-  if (latest) {
-    const read = readSealFile(ctx.store.ballotSealPath(ballotId, latest.cast_id));
-    const opened = read.state === "read"
-      ? openSeal(read.value, latest, { workspace_id: workspaceId, ballot_id: ballotId })
-      : null;
-    if (opened?.state === "ok" && sameVoteInput(opened.vote, sealed)) {
-      const earlier = replayReceipt<NoteBallotCastReceipt>(ctx.store, credential, `b1:${latest.cast_id}`);
-      return voteResult(ctx, {
-        handle,
-        ballot,
-        cast_seq: latest.cast_seq,
-        commitment: latest.commitment,
-        counts_as: earlier?.counts_as ?? ballot.viewer!.counts_as,
-        same_handle_as: earlier?.same_handle_as,
-        replayed: true,
-        advice: ["Your latest sealed vote in this ballot is this same vote, so nothing new was cast."],
-        pending,
-      });
-    }
+  const earlierVote = latest ? castVote(ctx, ballot, latest) : null;
+  if (latest && earlierVote && sameVoteInput(earlierVote.vote, sealed)) {
+    const earlier = replayReceipt<NoteBallotCastReceipt>(ctx.store, credential, `b1:${latest.cast_id}`);
+    return voteResult(ctx, {
+      handle,
+      ballot,
+      cast_seq: latest.cast_seq,
+      commitment: latest.commitment,
+      counts_as: earlier?.counts_as ?? ballot.viewer!.counts_as,
+      same_handle_as: earlier?.same_handle_as,
+      replayed: true,
+      revealed_as: earlierVote.revealed_as,
+      advice: [
+        "Your latest vote in this ballot is this same vote, so nothing new was cast.",
+        ...(earlierVote.revealed_as ? ["The ballot has closed and revealed it; read the result with collab_inbox about."] : []),
+      ],
+      pending,
+    });
   }
 
   if (ballot.state !== "open") throw closedRefusal(ctx, ballot);
@@ -343,11 +378,18 @@ export async function voteVerb(ctx: NoteVerbContext, input: VoteVerbInput): Prom
       cast_id: castId,
       unit_id: viewer.unit_id,
       commitment,
+      // Another process holding this session may cast between the retry
+      // check above and this transaction; then this call sends nothing.
+      after_cast_id: latest?.cast_id ?? null,
     });
   } catch (error) {
     if (ctx.store.latestBallotCastForSession(workspaceId, ballotId, me)?.cast_id !== castId) removeSealFile(path);
     if (error instanceof CollabError && (error.code === "ballot_closed" || error.code === "ballot_withdrawn")) {
       throw closedRefusal(ctx, ctx.store.noteBallotView(workspaceId, ballotId, me));
+    }
+    if (error instanceof CollabError && error.code === "changed_under_you") {
+      // Sent again, the same vote finds that cast and replays it if it is this vote.
+      throw changedUnderYou(ctx, { tool: "collab_vote", input: voteCall(input) }, null);
     }
     throw error;
   }
@@ -383,11 +425,15 @@ function voteResult(
     counts_as: "counted" | "late";
     same_handle_as?: string;
     replayed: boolean;
+    /** Set on a replay after the reveal: the earlier cast's revealed status. */
+    revealed_as?: RevealedStatus | null;
     advice: string[];
     pending: string | null;
   },
 ): Record<string, unknown> {
-  const effect = `Sealed vote recorded for ${options.handle} (cast ${options.cast_seq}).`;
+  const effect = options.revealed_as
+    ? `Your vote in ${options.handle} (cast ${options.cast_seq}) was recorded before the close and revealed at the close as ${options.revealed_as}.`
+    : `Sealed vote recorded for ${options.handle} (cast ${options.cast_seq}).`;
   return {
     ok: true,
     effect: options.replayed ? `Replayed: nothing new was written. ${effect}` : effect,
