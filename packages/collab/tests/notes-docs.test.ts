@@ -219,6 +219,20 @@ describe("the card", () => {
   });
 });
 
+describe("skill files stay inside their own directory", () => {
+  // The skills inspector (packages/skills) refuses a SKILL.md whose link
+  // leaves its skill directory (RESOURCE_PATH_ESCAPE), and that check runs
+  // only in the repository's wider gate. A document outside the directory is
+  // named in plain text, never linked.
+  for (const path of [SKILL, HERMES_SKILL]) {
+    test(`${path} links to nothing outside its directory`, () => {
+      const targets = [...read(path).matchAll(/\]\(([^)\s]+)\)/g)].map((match) => match[1]!);
+      const local = targets.filter((target) => !/^[a-z][a-z0-9+.-]*:/i.test(target) && !target.startsWith("#"));
+      expect(local.filter((target) => target.startsWith("..") || target.startsWith("/"))).toEqual([]);
+    });
+  }
+});
+
 describe("PROTOCOL.md", () => {
   const protocol = read("PROTOCOL.md");
   const blocks = fences(protocol);

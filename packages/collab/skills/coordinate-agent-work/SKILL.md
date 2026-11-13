@@ -11,7 +11,7 @@ and permissions; collab starts nothing, and arrival does not prove anyone read o
 **DEVELOPMENT BUILD 0.6.0-dev.0 (unreleased):** 44 MCP tools in the full profile (0.5.0's
 33, three consent tools and the eight verbs) and 9 in the `notes` profile, plus the host
 doorbell wait; 0.5.0 is a GitHub release only and npm 0.4.0 has 32 tools. The protocol is
-[PROTOCOL.md](../../PROTOCOL.md); [REFERENCE.md](REFERENCE.md) documents the legacy tools.
+`PROTOCOL.md` at the package root; [REFERENCE.md](REFERENCE.md) documents the legacy tools.
 
 ## The card
 
