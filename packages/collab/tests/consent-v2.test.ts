@@ -802,6 +802,37 @@ describe("the ceremony page", () => {
     expect(store.proposalStatusById(proposal.proposal.id).set_asides![0]).toMatchObject({ basis: "user_verified_passkey", reason });
   });
 
+  test("a bidi control in the challenger's name cannot reorder the page's self-declared mark or time", async () => {
+    const passkey = makePasskey();
+    const origin = `http://localhost:${20_000 + Math.floor(Math.random() * 20_000)}`;
+    enrol(passkey, origin);
+    const author = session("author");
+    const peer = session("peer");
+    const opened = store.openProposalForSession({
+      ...author.credential, idempotency_key: key("open"), question: "Q?", criteria: "C", extent: "E", consult_seconds: 24 * 60 * 60, ...V2,
+    });
+    store.appendReportForSession({ ...peer.credential, idempotency_key: key("s"), kind: "inference", body: "Yes.", relation: "supports", target_report_id: opened.proposal.id });
+    const spoofer = session("codex‮");
+    const challenge = store.appendReportForSession({
+      ...spoofer.credential, idempotency_key: key("c"), kind: "inference", body: "No ‮reversed.", relation: "challenges", target_report_id: opened.proposal.id,
+    });
+    store.endSession({ ...spoofer.credential, reason: "gone" });
+    const ceremony = await runCeremony([
+      "ceremony", `--proposal=${opened.proposal.id}`, "--act=set-aside", `--challenge=${challenge.id}`, "--reason=Gone.", `--db=${databasePath}`,
+    ], { openTty: () => null });
+    // Agent text reaches the page with format characters made visible, as the terminal shows them.
+    expect(ceremony.data.objection.by).toBe("codex\\u{202E}");
+    expect(ceremony.data.objection.text).toBe("No \\u{202E}reversed.");
+    expect(ceremony.data.objection.content_bytes).not.toContain("‮");
+    expect(ceremony.data.soft_spots.lines.some((line: string) => line.includes("codex\\u{202E}"))).toBe(true);
+    expect(ceremony.html).not.toContain("‮");
+    // The name is its own isolated element, not uppercased, apart from the mark and the time.
+    expect(ceremony.html).toContain('document.createElement("bdi")');
+    expect(ceremony.html).toMatch(/\.label \.name \{[^}]*text-transform: none/);
+    await ceremony.post({ assertion: { credential_id: "x" } }).catch(() => null);
+    await ceremony.done.catch(() => null);
+  });
+
   test("refuses a set-aside the desk would refuse before serving a page", async () => {
     const passkey = makePasskey();
     enrol(passkey);

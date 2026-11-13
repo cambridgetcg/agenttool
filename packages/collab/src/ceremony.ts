@@ -50,7 +50,7 @@ import {
   type PersonDeskDeps,
 } from "./person-desk.js";
 import type { CollabReport, ProposalStatus } from "./protocol.js";
-import { openDevTty } from "./tty.js";
+import { openDevTty, terminalRendering } from "./tty.js";
 
 export const DEFAULT_CEREMONY_PORT = 17778;
 export const CEREMONY_TIMEOUT_MS = 180_000;
@@ -181,7 +181,9 @@ async function signCeremony(
       rp_id: "localhost",
       credentials: passkeys.map((key) => key.credential_id),
       // Shown above the bytes; Touch ID signs `challenge` alone, which these never enter.
-      soft_spots: softSpotDisplay(softSpots, status, values.via ? "remote" : "local"),
+      soft_spots: act === "set-aside"
+        ? visibleSoftSpots(softSpotDisplay(softSpots, status, values.via ? "remote" : "local"))
+        : softSpotDisplay(softSpots, status, values.via ? "remote" : "local"),
       ...(act === "set-aside" ? { objection: objectionShown(challenge) } : {}),
     };
     const browser = values["no-open"] !== true && atTerminal(deps);
@@ -262,6 +264,16 @@ async function enrollCeremony(
  * full text, why it can be set aside, and its canonical content, whose hash
  * the signed bytes name. Read from what the table returned, never rebuilt.
  */
+/**
+ * A set-aside page shows agent-written text as the terminal does: a format,
+ * bidi or control character a page could hide or use to reorder what
+ * follows (a name ending in U+202E, say) appears as a \u{…} escape, so
+ * the self-declared mark and the time beside a name read as written.
+ */
+function visibleSoftSpots(display: ReturnType<typeof softSpotDisplay>): ReturnType<typeof softSpotDisplay> {
+  return display ? { note: display.note, lines: display.lines.map(terminalRendering) } : null;
+}
+
 function objectionShown(challenge: Challenge): Record<string, unknown> {
   const objection = challenge.objection;
   if (!objection || objection.id !== challenge.challenge_report_id) {
@@ -270,13 +282,13 @@ function objectionShown(challenge: Challenge): Record<string, unknown> {
   const seen = challenge.challenger?.last_seen_at ?? null;
   return {
     id: objection.id,
-    by: objection.from_actor,
+    by: terminalRendering(objection.from_actor),
     by_basis: "self-declared",
     written_at: objection.created_at,
-    text: objection.body,
+    text: terminalRendering(objection.body),
     why: "No session of its voice is live, so no session can lift it now"
       + (seen ? ` (last seen ${seen}).` : " (no session of it is recorded)."),
-    content_bytes: challengeContentBytes(objection),
+    content_bytes: terminalRendering(challengeContentBytes(objection)),
   };
 }
 
@@ -529,6 +541,7 @@ main { max-width: 680px; margin: 0 auto; padding: 32px 16px 48px; }
 h1 { font-size: 1.15rem; margin: 0 0 4px; } .dim { color: var(--dim); font-size: .85rem; }
 section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 14px 0; }
 .label { font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); margin-top: 10px; }
+.label .name { text-transform: none; letter-spacing: normal; color: var(--fg); }
 .value { white-space: pre-wrap; overflow-wrap: anywhere; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.45 ui-monospace, Menlo, monospace; margin: 6px 0 0; }
 button { font: inherit; padding: 10px 18px; border-radius: 8px; border: 1px solid currentColor; background: transparent; cursor: pointer; }
@@ -574,7 +587,12 @@ ul { margin: 6px 0 0; padding-left: 18px; } li { white-space: pre-wrap; overflow
     field("Question", data.question); field("Criteria", data.criteria);
     field("Extent — agreement authorises only this", data.extent); field("Known conflicts", data.known_conflicts);
     if (aside) {
-      field("The challenge, by " + data.objection.by + " (name " + data.objection.by_basis + "), written " + data.objection.written_at, data.objection.text);
+      // The name is its own isolated element, shown as typed: its characters cannot reorder the mark and the time after it.
+      const label = document.createElement("div"); label.className = "label";
+      const who = document.createElement("bdi"); who.className = "name"; who.textContent = data.objection.by;
+      const mark = document.createElement("span"); mark.textContent = " (name " + data.objection.by_basis + "), written " + data.objection.written_at;
+      const said = document.createElement("div"); said.className = "value"; said.textContent = data.objection.text;
+      label.append("The challenge, by ", who, mark); $("what").append(label, said);
       field("Why it can be set aside", data.objection.why);
       field("Your reason", data.reason);
       field("What setting it aside does", "It no longer blocks the agents' position. It stays on the record and in every view, and any voice may challenge again. It cannot be undone.");
