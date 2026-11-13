@@ -810,6 +810,24 @@ returns `actor_required`; supply an explicit label rather than scanning other
 sessions. No `.key`, transcript, `logPath`, credential, or sibling file is read.
 Only the name is retained; later name changes do not rewrite attribution.
 
+Several identifiers name "the host", and they are not interchangeable:
+
+| Identifier | Where it comes from | What compares it |
+|---|---|---|
+| `host_pid` and `host_started_at` in a host binding | The MCP process's direct parent in the process table; `ps -o lstart=` in the C locale and the machine's **local** time, spaces collapsed | `knocks --host-ancestor`, and host wiring with its own local-time `ps` |
+| `mcp_pid` in a host binding | The MCP process itself | A binding counts only while that pid is still a collab MCP process |
+| The actor-default pid and `procStart` | `AGENTOOL_COLLAB_CLAUDE_PID` or the direct parent, checked against Claude Code's session file in **UTC** | Only whose display name is borrowed; it never moves the host binding |
+| The watcher's owner pid | The numeric basename of `CLAUDE_CODE_MESSAGING_SOCKET` | Whether the Claude Code process to ring is still alive |
+| An actor label | Free text chosen at `collab_session_start` | Nothing in Collab. A host that finds its own sessions by label must pass `actor` explicitly: the default is the display name and never carries a host's suffix |
+
+Never compare `host_started_at` with `procStart`: one is local time and the
+other UTC. `host_started_at` also changes for the same live process when the
+machine's time zone changes, so a binding written before a zone change stops
+matching and that host reads as gone until the session is started or resumed
+again. This build stores no host conversation id; lines not yet merged each
+add one, defined in their own READMEs. Readers ignore binding keys they do not
+know (`tests/host-identifiers.test.ts`).
+
 Named child bindings require an explicit `actor` and `parent_session_id` at start
 and `binding_key` on every call. Existing hosts need no changes for the default slot. A host integrating
 the library can restore separate host-resumed handles via `resumed_sessions`;

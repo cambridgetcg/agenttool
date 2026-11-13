@@ -28356,11 +28356,12 @@ function parseProcessTable(statusOutput, argsOutput) {
   }
   return table;
 }
+var PROCESS_TABLE_PS_ENV = { LC_ALL: "C", PATH: "/usr/bin:/bin" };
 function readProcessTable() {
   try {
     const run = (format) => execFileSync(PS, ["-A", "-ww", "-o", format], {
       encoding: "utf8",
-      env: { LC_ALL: "C", PATH: "/usr/bin:/bin" },
+      env: { ...PROCESS_TABLE_PS_ENV },
       maxBuffer: 64 * 1024 * 1024,
       timeout: PS_TIMEOUT_MS,
       stdio: ["ignore", "pipe", "ignore"]

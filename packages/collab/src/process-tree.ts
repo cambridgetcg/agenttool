@@ -72,6 +72,16 @@ export function parseProcessTable(statusOutput: string, argsOutput: string): Pro
 }
 
 /**
+ * The environment `ps` runs in. It sets no TZ on purpose: `lstart` is then the
+ * machine's local time, and that string becomes a host binding's
+ * `host_started_at`, which knocks and host wiring compare with their own
+ * local-time `ps`. Adding TZ here would make every live host read as gone.
+ * (actor-default.ts reads Claude's `procStart`, which is UTC; the two are
+ * never compared with each other.)
+ */
+export const PROCESS_TABLE_PS_ENV = { LC_ALL: "C", PATH: "/usr/bin:/bin" } as const;
+
+/**
  * Read the whole process table with two `/bin/ps` calls under `LC_ALL=C`.
  * Returns null when ps fails or is denied (it may be inside a Codex
  * seatbelt); every caller then fails closed.
@@ -81,7 +91,7 @@ export function readProcessTable(): ProcessTable | null {
     const run = (format: string) =>
       execFileSync(PS, ["-A", "-ww", "-o", format], {
         encoding: "utf8",
-        env: { LC_ALL: "C", PATH: "/usr/bin:/bin" },
+        env: { ...PROCESS_TABLE_PS_ENV },
         maxBuffer: 64 * 1024 * 1024,
         timeout: PS_TIMEOUT_MS,
         stdio: ["ignore", "pipe", "ignore"],
