@@ -22,7 +22,6 @@ infra/
     agenttool.toml      — Mirror of api/fly.toml (snapshot only)
   cloudflare/           — Secret-free bounded zone desired state; read-only audit input
   pages/                — Shared Pages Worker + route-complete invocation policy
-  OPERATOR-CUSTODY.md   — Operator-only credential custody and provider aliases; never published
   README.md             — This file
   CLAUDE.md             — Internal guide for Claude
 ```
@@ -45,9 +44,9 @@ Full deploy semantics + ordering: `docs/STACK.md` § 8.
 |---|---|
 | **Local (developer machine)** | `bin/agenttool-secret` CLI → macOS Keychain / Linux libsecret / Windows DPAPI |
 | **Server (Fly)** | `fly secrets set KEY=value -a agenttool` |
-| **Cloudflare API token** | macOS Keychain service `agenttool-cloudflare-token`, account `macair` |
+| **Cloudflare API token** | `CLOUDFLARE_API_TOKEN`, or else the deploy tool's own macOS Keychain entry under its fixed legacy account (see `bin/frontend-deploy.sh`) |
 
-The local keychain is not a mirror of Fly's secret store. Most local entries are for dev tools and Fly secrets are for the running api, but some local items are recovery copies of production values; see [`OPERATOR-CUSTODY.md`](OPERATOR-CUSTODY.md) (operator-only; not published).
+The local keychain is not a mirror of Fly's secret store. Most local entries are for dev tools and Fly secrets are for the running api. Where operator recovery material is held is recorded only in the operator's custody note, kept outside this public repository.
 
 The platform needs no paid third-party API keys: it doesn't proxy paid search APIs or commercial proxy networks. Agents keep their own provider keys in `/v1/vault` and call providers from processes they control; see `docs/IDENTITY-ANCHOR.md` promise 6.
 

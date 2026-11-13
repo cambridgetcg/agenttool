@@ -1,0 +1,30 @@
+{
+  "id": "/",
+  "name": "AgentTool technical library — core reference and Build",
+  "short_name": "AgentTool",
+  "description": "Technical references for Identity, Wake & Continuity, Memory, Tools and Collaboration, with optional modules grouped in Build.",
+  "lang": "en",
+  "start_url": "/",
+  "scope": "/",
+  "display": "browser",
+  "background_color": "#F7F3EC",
+  "theme_color": "#F7F3EC",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

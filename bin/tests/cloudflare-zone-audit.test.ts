@@ -77,8 +77,8 @@ describe("AgentTool Cloudflare desired state", () => {
   });
 
   test("records the four disabled provider aliases and keeps natlang's", () => {
-    // Disabled 2026-10-20 (infra/OPERATOR-CUSTODY.md); natlang keeps its alias
-    // until the link to it points at speak.agenttool.dev.
+    // Disabled 2026-10-20 (the operator's custody note, outside this repository);
+    // natlang keeps its alias until the link to it points at speak.agenttool.dev.
     const aliases = Object.fromEntries(
       manifest.workers_dev.scripts.map((entry) => [entry.script, entry]),
     );

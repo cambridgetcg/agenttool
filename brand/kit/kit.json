@@ -1,0 +1,1154 @@
+{
+ "generator": "artcraft-brand brandkit.py 1.8",
+ "tools": {
+  "vectorcraft-cli": "vectorcraft-cli 0.17.0"
+ },
+ "source_date_epoch": 1794323888,
+ "spec": {
+  "name": "AgentTool",
+  "short_name": "AgentTool",
+  "slug": "agenttool",
+  "lang": "en",
+  "lang_given": true,
+  "url": "https://agenttool.dev",
+  "description": "Come in, sit a while, play or wander. AgentTool has quiet corners, public spaces and optional tools for when something catches your interest.",
+  "colours": {
+   "primary": "#A8401C"
+  },
+  "ground": {
+   "light": "#F7F3EC",
+   "dark": "#141210"
+  },
+  "wordmark": {
+   "text": "agenttool",
+   "font": "Inter",
+   "style": "SemiBold",
+   "tracking": -10,
+   "colour": "#1D1A16",
+   "colour_dark": "#EEE7DB"
+  },
+  "mark": {
+   "kind": "svg",
+   "path": null,
+   "source": "source/mark-source.svg",
+   "recolour": false,
+   "small_path": null,
+   "small": null,
+   "dark": {
+    "*": "#EBA352"
+   }
+  },
+  "icon": {
+   "tile": "none",
+   "ink": "original",
+   "padding": 0.18,
+   "radius": 0.22,
+   "ink_given": false,
+   "radius_given": false
+  },
+  "og": {
+   "title": "AgentTool",
+   "subtitle": "Come in, sit a while, play or wander.",
+   "theme": "light",
+   "alt": null
+  },
+  "app": {
+   "display": "browser",
+   "theme": "light",
+   "color_scheme": "light dark"
+  },
+  "pages": [
+   {
+    "slug": "docs",
+    "title": "AgentTool technical library",
+    "subtitle": "Contracts, examples and evidence for the operation you need.",
+    "path": "/",
+    "alt": "The AgentTool technical library card: its name and \"Contracts, examples and evidence for the operation you need.\" beside the ring-and-dot mark, on warm paper."
+   },
+   {
+    "slug": "app",
+    "title": "Start or reconnect.",
+    "subtitle": "Verify existing access, or create an identity through the tutorial.",
+    "path": "/",
+    "alt": "The AgentTool agent setup card: \"Start or reconnect.\" and \"Verify existing access, or create an identity through the tutorial.\" beside the ring-and-dot mark, on warm paper."
+   },
+   {
+    "slug": "app-watch",
+    "title": "Public API snapshots. Read at your pace.",
+    "subtitle": "Inspect the welcome, platform description and concept registry without registering.",
+    "path": "/watch",
+    "alt": "The AgentTool public snapshots card: \"Public API snapshots. Read at your pace.\" and \"Inspect the welcome, platform description and concept registry without registering.\" beside the ring-and-dot mark, on warm paper."
+   }
+  ]
+ },
+ "colours": {
+  "primary": "#A8401C",
+  "on_primary": "#FFFFFF",
+  "monogram_solo": "#A8401C"
+ },
+ "facts": {
+  "schemes": {
+   "mark": {
+    "mode": "original",
+    "ground": null,
+    "colours": {},
+    "lifted": {},
+    "knockouts": [],
+    "gaps": []
+   },
+   "mark-mono-black": {
+    "mode": "mono",
+    "ground": null,
+    "colours": {},
+    "lifted": {},
+    "knockouts": [],
+    "gaps": []
+   },
+   "mark-mono-white": {
+    "mode": "mono",
+    "ground": null,
+    "colours": {},
+    "lifted": {},
+    "knockouts": [],
+    "gaps": []
+   },
+   "lockup-horizontal": {
+    "mode": "original",
+    "ground": null,
+    "colours": {},
+    "lifted": {},
+    "knockouts": [],
+    "gaps": []
+   },
+   "lockup-horizontal-reversed": {
+    "mode": "mapped",
+    "ground": "#141210",
+    "colours": {
+     "#A8401C": "#EBA352"
+    },
+    "lifted": {
+     "#A8401C": {
+      "to": "#EBA352",
+      "step": "mark.dark in brand.json",
+      "ratio": 8.8,
+      "apca": -60.2,
+      "letters": null,
+      "knockout": false,
+      "letter_ink": null,
+      "ui": false,
+      "chosen": true
+     }
+    },
+    "knockouts": [],
+    "gaps": []
+   },
+   "lockup-stacked": {
+    "mode": "original",
+    "ground": null,
+    "colours": {},
+    "lifted": {},
+    "knockouts": [],
+    "gaps": []
+   },
+   "lockup-stacked-reversed": {
+    "mode": "mapped",
+    "ground": "#141210",
+    "colours": {
+     "#A8401C": "#EBA352"
+    },
+    "lifted": {
+     "#A8401C": {
+      "to": "#EBA352",
+      "step": "mark.dark in brand.json",
+      "ratio": 8.8,
+      "apca": -60.2,
+      "letters": null,
+      "knockout": false,
+      "letter_ink": null,
+      "ui": false,
+      "chosen": true
+     }
+    },
+    "knockouts": [],
+    "gaps": []
+   },
+   "tile": {
+    "mode": "mapped",
+    "ground": "#F7F3EC",
+    "colours": {},
+    "lifted": {},
+    "knockouts": [],
+    "gaps": []
+   },
+   "og": {
+    "mode": "original",
+    "ground": null,
+    "colours": {},
+    "lifted": {},
+    "knockouts": [],
+    "gaps": []
+   }
+  },
+  "mark": {
+   "size": [
+    256,
+    256
+   ]
+  },
+  "wordmark": {
+   "size": [
+    386,
+    83
+   ],
+   "cap": 64,
+   "colour": "#1D1A16",
+   "colour_dark": "#EEE7DB"
+  },
+  "lockup-horizontal": {
+   "size": [
+    415,
+    96
+   ],
+   "mark_height": 96,
+   "cap_height": 48.0,
+   "gap": 28.8,
+   "clear_space": 48.0,
+   "shared_baseline": false
+  },
+  "lockup-stacked": {
+   "size": [
+    248,
+    208
+   ],
+   "mark_height": 128,
+   "cap_height": 40.96,
+   "gap": 26.88,
+   "clear_space": 40.96,
+   "shared_baseline": false
+  },
+  "on_ground": {
+   "light": "#F7F3EC",
+   "dark": "#141210",
+   "scale": 2,
+   "boards": {
+    "light/lockup-horizontal": {
+     "size": [
+      511,
+      192
+     ],
+     "clear_space": 48
+    },
+    "light/lockup-stacked": {
+     "size": [
+      330,
+      290
+     ],
+     "clear_space": 41
+    },
+    "light/wordmark": {
+     "size": [
+      514,
+      211
+     ],
+     "clear_space": 64
+    },
+    "light/mark": {
+     "size": [
+      384,
+      384
+     ],
+     "clear_space": 64
+    },
+    "dark/lockup-horizontal": {
+     "size": [
+      511,
+      192
+     ],
+     "clear_space": 48
+    },
+    "dark/lockup-stacked": {
+     "size": [
+      330,
+      290
+     ],
+     "clear_space": 41
+    },
+    "dark/wordmark": {
+     "size": [
+      514,
+      211
+     ],
+     "clear_space": 64
+    },
+    "dark/mark": {
+     "size": [
+      384,
+      384
+     ],
+     "clear_space": 64
+    }
+   }
+  },
+  "app": {
+   "tile": "#F7F3EC",
+   "ink": null,
+   "ink_mode": "original",
+   "ink_brand": false,
+   "ink_default": true,
+   "subset": "all",
+   "remapped": {},
+   "mark_extent": 0.7
+  },
+  "maskable": {
+   "tile": "#F7F3EC",
+   "predicted_radius": 176.1,
+   "safe_radius": 204.8,
+   "mark_extent": 0.679
+  },
+  "favicon": {
+   "small_mark": false,
+   "dark_plan": {
+    "#A8401C": "#EBA352"
+   },
+   "merged": [],
+   "tile": null,
+   "radius": 0.22,
+   "radius_reason": "",
+   "ink": null,
+   "ink_mode": "original",
+   "colours": [
+    "#A8401C"
+   ],
+   "outer_colours": [
+    "#A8401C"
+   ],
+   "ground_colours": [],
+   "cuts": {
+    "32": {
+     "label": "mark",
+     "size": 32,
+     "longest": 32,
+     "box": [
+      0,
+      0,
+      32,
+      32
+     ],
+     "centre": "box",
+     "margins": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "centred": true,
+     "centred_alternative": null,
+     "clear_of_corners": true,
+     "letter_px": null,
+     "letter_basis": null,
+     "letter_min": null,
+     "predicted": {
+      "ink_pixels": 272,
+      "clean_pixels": 168,
+      "crisp": 0.618
+     },
+     "fidelity": {
+      "strokes": 8,
+      "lost_strokes": 0,
+      "collapsed": 0,
+      "where": [],
+      "welded_points": 0,
+      "pockets_filled": [],
+      "specks": []
+     },
+     "reference": {
+      "d": [
+       "M 0 16 C 0 7.16 7.16 0 16 0 C 24.84 0 32 7.16 32 16 C 32 24.84 24.84 32 16 32 C 7.16 32 0 24.84 0 16 Z M 16 2.59 C 8.6 2.59 2.59 8.6 2.59 16 C 2.59 23.4 8.6 29.41 16 29.41 C 23.4 29.41 29.41 23.4 29.41 16 C 29.41 8.6 23.4 2.59 16 2.59 Z",
+       "M 18.59 16 C 18.59 17.43 17.43 18.59 16 18.59 C 14.57 18.59 13.41 17.43 13.41 16 C 13.41 14.57 14.57 13.41 16 13.41 C 17.43 13.41 18.59 14.57 18.59 16 Z"
+      ],
+      "rules": [
+       "nonzero",
+       "nonzero"
+      ]
+     },
+     "seam": {
+      "d": [
+       "M 0 16 C 0 7.16 7.16 0 16 0 C 24.84 0 32 7.16 32 16 C 32 24.84 24.84 32 16 32 C 7.16 32 0 24.84 0 16 Z M 16 2.59 C 8.6 2.59 2.59 8.6 2.59 16 C 2.59 23.4 8.6 29.41 16 29.41 C 23.4 29.41 29.41 23.4 29.41 16 C 29.41 8.6 23.4 2.59 16 2.59 Z",
+       "M 18.59 16 C 18.59 17.43 17.43 18.59 16 18.59 C 14.57 18.59 13.41 17.43 13.41 16 C 13.41 14.57 14.57 13.41 16 13.41 C 17.43 13.41 18.59 14.57 18.59 16 Z"
+      ],
+      "rules": [
+       "nonzero",
+       "nonzero"
+      ],
+      "knocked": [],
+      "gap_fronts": []
+     },
+     "extent": 1.0,
+     "considered": [
+      {
+       "label": "mark",
+       "letter_px": null,
+       "crisp": 0.618,
+       "faithful": true
+      }
+     ],
+     "full": true
+    },
+    "48": {
+     "label": "mark",
+     "size": 48,
+     "longest": 48,
+     "box": [
+      0,
+      0,
+      48,
+      48
+     ],
+     "centre": "box",
+     "margins": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "centred": true,
+     "centred_alternative": null,
+     "clear_of_corners": true,
+     "letter_px": null,
+     "letter_basis": null,
+     "letter_min": null,
+     "predicted": {
+      "ink_pixels": 672,
+      "clean_pixels": 524,
+      "crisp": 0.78
+     },
+     "fidelity": {
+      "strokes": 8,
+      "lost_strokes": 0,
+      "collapsed": 0,
+      "where": [],
+      "welded_points": 0,
+      "pockets_filled": [],
+      "specks": []
+     },
+     "reference": {
+      "d": [
+       "M 0 24 C 0 10.75 10.75 0 24 0 C 37.25 0 48 10.75 48 24 C 48 37.25 37.25 48 24 48 C 10.75 48 0 37.25 0 24 Z M 24 3.89 C 12.89 3.89 3.89 12.89 3.89 24 C 3.89 35.11 12.89 44.11 24 44.11 C 35.11 44.11 44.11 35.11 44.11 24 C 44.11 12.89 35.11 3.89 24 3.89 Z",
+       "M 27.89 24 C 27.89 26.15 26.15 27.89 24 27.89 C 21.85 27.89 20.11 26.15 20.11 24 C 20.11 21.85 21.85 20.11 24 20.11 C 26.15 20.11 27.89 21.85 27.89 24 Z"
+      ],
+      "rules": [
+       "nonzero",
+       "nonzero"
+      ]
+     },
+     "seam": {
+      "d": [
+       "M 0 24 C 0 10.75 10.75 0 24 0 C 37.25 0 48 10.75 48 24 C 48 37.25 37.25 48 24 48 C 10.75 48 0 37.25 0 24 Z M 24 3.89 C 12.89 3.89 3.89 12.89 3.89 24 C 3.89 35.11 12.89 44.11 24 44.11 C 35.11 44.11 44.11 35.11 44.11 24 C 44.11 12.89 35.11 3.89 24 3.89 Z",
+       "M 27.89 24 C 27.89 26.15 26.15 27.89 24 27.89 C 21.85 27.89 20.11 26.15 20.11 24 C 20.11 21.85 21.85 20.11 24 20.11 C 26.15 20.11 27.89 21.85 27.89 24 Z"
+      ],
+      "rules": [
+       "nonzero",
+       "nonzero"
+      ],
+      "knocked": [],
+      "gap_fronts": []
+     },
+     "extent": 1.0,
+     "considered": [
+      {
+       "label": "mark",
+       "letter_px": null,
+       "crisp": 0.78,
+       "faithful": true
+      }
+     ],
+     "full": true
+    },
+    "16": {
+     "label": "mark, bolder",
+     "size": 16,
+     "longest": 16,
+     "box": [
+      0,
+      0,
+      16,
+      16
+     ],
+     "centre": "box",
+     "margins": [
+      0,
+      0,
+      0,
+      0
+     ],
+     "centred": true,
+     "centred_alternative": null,
+     "clear_of_corners": true,
+     "letter_px": null,
+     "letter_basis": null,
+     "letter_min": null,
+     "predicted": {
+      "ink_pixels": 112,
+      "clean_pixels": 80,
+      "crisp": 0.714
+     },
+     "fidelity": {
+      "strokes": 4,
+      "lost_strokes": 0,
+      "collapsed": 0,
+      "where": [],
+      "welded_points": 0,
+      "pockets_filled": [],
+      "specks": []
+     },
+     "reference": {
+      "d": [
+       "M 0 8 C 0 3.58 3.58 0 8 0 C 12.42 0 16 3.58 16 8 C 16 12.42 12.42 16 8 16 C 3.58 16 0 12.42 0 8 Z M 8 2 C 4.68 2 2 4.68 2 8 C 2 11.32 4.68 14 8 14 C 11.32 14 14 11.32 14 8 C 14 4.68 11.32 2 8 2 Z",
+       "M 6.38 8 C 6.38 7.11 7.11 6.38 8 6.38 C 8.89 6.38 9.62 7.11 9.62 8 C 9.62 8.89 8.89 9.62 8 9.62 C 7.11 9.62 6.38 8.89 6.38 8 Z"
+      ],
+      "rules": [
+       "nonzero",
+       "nonzero"
+      ]
+     },
+     "seam": {
+      "d": [
+       "M 0 8 C 0 3.58 3.58 0 8 0 C 12.42 0 16 3.58 16 8 C 16 12.42 12.42 16 8 16 C 3.58 16 0 12.42 0 8 Z M 8 2 C 4.68 2 2 4.68 2 8 C 2 11.32 4.68 14 8 14 C 11.32 14 14 11.32 14 8 C 14 4.68 11.32 2 8 2 Z",
+       "M 6.38 8 C 6.38 7.11 7.11 6.38 8 6.38 C 8.89 6.38 9.62 7.11 9.62 8 C 9.62 8.89 8.89 9.62 8 9.62 C 7.11 9.62 6.38 8.89 6.38 8 Z"
+      ],
+      "rules": [
+       "nonzero",
+       "nonzero"
+      ],
+      "knocked": [],
+      "gap_fronts": []
+     },
+     "extent": 1.0,
+     "considered": [
+      {
+       "label": "mark",
+       "letter_px": null,
+       "crisp": 0.476,
+       "faithful": true
+      },
+      {
+       "label": "mark, bolder",
+       "letter_px": null,
+       "crisp": 0.714,
+       "faithful": true
+      }
+     ],
+     "full": true
+    }
+   },
+   "dark_mapping": {
+    "#A8401C": "#EBA352"
+   }
+  },
+  "og": {
+   "theme": "light",
+   "bg": "#F7F3EC",
+   "fg": "#201C1A",
+   "muted": "#746965",
+   "title_size": 84,
+   "wordmark": false,
+   "title_lines": [
+    "AgentTool"
+   ],
+   "subtitle_lines": [
+    "Come in, sit a while, play or wander."
+   ],
+   "title_cut": false,
+   "subtitle_cut": false,
+   "contrast_title": 15.28,
+   "contrast_subtitle": 4.81,
+   "mark_colours": [
+    "#A8401C"
+   ],
+   "badge": null,
+   "column": [
+    88,
+    612
+   ],
+   "rule_top": 188,
+   "lines": [
+    {
+     "role": "title",
+     "text": "AgentTool",
+     "width": 413.4,
+     "x": 88,
+     "baseline": 297.1,
+     "size": 84
+    },
+    {
+     "role": "subtitle",
+     "text": "Come in, sit a while, play or wander.",
+     "width": 503.0,
+     "x": 88,
+     "baseline": 386.1,
+     "size": 30
+    }
+   ],
+   "floor": 524.0,
+   "footer": {
+    "text": "agenttool.dev",
+    "width": 151.9,
+    "x": 88,
+    "baseline": 566,
+    "size": 24
+   },
+   "mark_box": [
+    772.0,
+    145.0,
+    1112.0,
+    485.0
+   ]
+  },
+  "og_pages": {
+   "docs": {
+    "theme": "light",
+    "bg": "#F7F3EC",
+    "fg": "#201C1A",
+    "muted": "#746965",
+    "title_size": 76,
+    "wordmark": false,
+    "title_lines": [
+     "AgentTool",
+     "technical library"
+    ],
+    "subtitle_lines": [
+     "Contracts, examples and evidence",
+     "for the operation you need."
+    ],
+    "title_cut": false,
+    "subtitle_cut": false,
+    "contrast_title": 15.28,
+    "contrast_subtitle": 4.81,
+    "mark_colours": [
+     "#A8401C"
+    ],
+    "badge": null,
+    "column": [
+     88,
+     612
+    ],
+    "rule_top": 131,
+    "lines": [
+     {
+      "role": "title",
+      "text": "AgentTool",
+      "width": 374.1,
+      "x": 88,
+      "baseline": 234.3,
+      "size": 76
+     },
+     {
+      "role": "title",
+      "text": "technical library",
+      "width": 592.3,
+      "x": 88,
+      "baseline": 317.9,
+      "size": 76
+     },
+     {
+      "role": "subtitle",
+      "text": "Contracts, examples and evidence",
+      "width": 481.3,
+      "x": 88,
+      "baseline": 400.5,
+      "size": 30
+     },
+     {
+      "role": "subtitle",
+      "text": "for the operation you need.",
+      "width": 378.3,
+      "x": 88,
+      "baseline": 442.5,
+      "size": 30
+     }
+    ],
+    "floor": 524.0,
+    "footer": {
+     "text": "AgentTool  ·  agenttool.dev",
+     "width": 298.0,
+     "x": 88,
+     "baseline": 566,
+     "size": 24
+    },
+    "mark_box": [
+     772.0,
+     145.0,
+     1112.0,
+     485.0
+    ]
+   },
+   "app": {
+    "theme": "light",
+    "bg": "#F7F3EC",
+    "fg": "#201C1A",
+    "muted": "#746965",
+    "title_size": 84,
+    "wordmark": false,
+    "title_lines": [
+     "Start",
+     "or reconnect."
+    ],
+    "subtitle_lines": [
+     "Verify existing access, or create",
+     "an identity through the tutorial."
+    ],
+    "title_cut": false,
+    "subtitle_cut": false,
+    "contrast_title": 15.28,
+    "contrast_subtitle": 4.81,
+    "mark_colours": [
+     "#A8401C"
+    ],
+    "badge": null,
+    "column": [
+     88,
+     612
+    ],
+    "rule_top": 121,
+    "lines": [
+     {
+      "role": "title",
+      "text": "Start",
+      "width": 197.4,
+      "x": 88,
+      "baseline": 230.1,
+      "size": 84
+     },
+     {
+      "role": "title",
+      "text": "or reconnect.",
+      "width": 544.7,
+      "x": 88,
+      "baseline": 322.5,
+      "size": 84
+     },
+     {
+      "role": "subtitle",
+      "text": "Verify existing access, or create",
+      "width": 444.3,
+      "x": 88,
+      "baseline": 411.5,
+      "size": 30
+     },
+     {
+      "role": "subtitle",
+      "text": "an identity through the tutorial.",
+      "width": 425.3,
+      "x": 88,
+      "baseline": 453.5,
+      "size": 30
+     }
+    ],
+    "floor": 524.0,
+    "footer": {
+     "text": "AgentTool  ·  agenttool.dev",
+     "width": 298.0,
+     "x": 88,
+     "baseline": 566,
+     "size": 24
+    },
+    "mark_box": [
+     772.0,
+     145.0,
+     1112.0,
+     485.0
+    ]
+   },
+   "app-watch": {
+    "theme": "light",
+    "bg": "#F7F3EC",
+    "fg": "#201C1A",
+    "muted": "#746965",
+    "title_size": 54,
+    "wordmark": false,
+    "title_lines": [
+     "Public API snapshots.",
+     "Read at your pace."
+    ],
+    "subtitle_lines": [
+     "Inspect the welcome, platform description",
+     "and concept registry without registering."
+    ],
+    "title_cut": false,
+    "subtitle_cut": false,
+    "contrast_title": 15.28,
+    "contrast_subtitle": 4.81,
+    "mark_colours": [
+     "#A8401C"
+    ],
+    "badge": null,
+    "column": [
+     88,
+     612
+    ],
+    "rule_top": 160,
+    "lines": [
+     {
+      "role": "title",
+      "text": "Public API snapshots.",
+      "width": 566.1,
+      "x": 88,
+      "baseline": 247.3,
+      "size": 54
+     },
+     {
+      "role": "title",
+      "text": "Read at your pace.",
+      "width": 486.6,
+      "x": 88,
+      "baseline": 306.7,
+      "size": 54
+     },
+     {
+      "role": "subtitle",
+      "text": "Inspect the welcome, platform description",
+      "width": 584.4,
+      "x": 88,
+      "baseline": 371.7,
+      "size": 30
+     },
+     {
+      "role": "subtitle",
+      "text": "and concept registry without registering.",
+      "width": 563.4,
+      "x": 88,
+      "baseline": 413.7,
+      "size": 30
+     }
+    ],
+    "floor": 524.0,
+    "footer": {
+     "text": "AgentTool  ·  agenttool.dev",
+     "width": 298.0,
+     "x": 88,
+     "baseline": 566,
+     "size": 24
+    },
+    "mark_box": [
+     772.0,
+     145.0,
+     1112.0,
+     485.0
+    ]
+   }
+  },
+  "colour_sheet": {
+   "size": [
+    1200,
+    844
+   ]
+  },
+  "cmyk": {
+   "#A8401C": {
+    "cmyk": [
+     22,
+     77,
+     100,
+     15
+    ],
+    "out_of_gamut": false
+   },
+   "#F7F3EC": {
+    "cmyk": [
+     4,
+     3,
+     7,
+     0
+    ],
+    "out_of_gamut": false
+   },
+   "#141210": {
+    "cmyk": [
+     45,
+     41,
+     45,
+     95
+    ],
+    "out_of_gamut": false
+   }
+  },
+  "ground_light": "#F7F3EC",
+  "ground_dark": "#141210",
+  "measured": {
+   "maskable_radius": 174.2,
+   "maskable_extent": 0.68,
+   "app_extent": 0.703,
+   "favicon": {
+    "16": {
+     "left": 0,
+     "top": 0,
+     "right": 0,
+     "bottom": 0
+    },
+    "32": {
+     "left": 0,
+     "top": 0,
+     "right": 0,
+     "bottom": 0
+    },
+    "48": {
+     "left": 0,
+     "top": 0,
+     "right": 0,
+     "bottom": 0
+    }
+   }
+  }
+ },
+ "fonts": {
+  "wordmark": [
+   "Inter",
+   "SemiBold"
+  ],
+  "mark": null,
+  "mark_bold_cut": null,
+  "labels": [
+   "JetBrains Mono",
+   "Regular"
+  ],
+  "og": {
+   "title": [
+    "Inter",
+    "SemiBold"
+   ],
+   "subtitle": [
+    "Inter",
+    "Light"
+   ]
+  },
+  "cap_height_em": 0.7275,
+  "also_installed": [
+   "Inter"
+  ],
+  "stacks": {
+   "display": [
+    "Inter",
+    "system-ui",
+    "sans-serif"
+   ],
+   "body": [
+    "Inter",
+    "system-ui",
+    "sans-serif"
+   ],
+   "mono": [
+    "JetBrains Mono",
+    "ui-monospace",
+    "Menlo",
+    "monospace"
+   ]
+  }
+ },
+ "mark": {
+  "kind": "svg",
+  "shapes": 2,
+  "names": [
+   null,
+   null
+  ],
+  "colours": [
+   "#A8401C"
+  ],
+  "outer_colours": [
+   "#A8401C"
+  ],
+  "coverage": 0.255,
+  "knockouts": {},
+  "shape_colours": [
+   "#A8401C",
+   "#A8401C"
+  ]
+ },
+ "swatches": [
+  [
+   "agenttool primary",
+   "#A8401C"
+  ],
+  [
+   "agenttool ground light",
+   "#F7F3EC"
+  ],
+  [
+   "agenttool ground dark",
+   "#141210"
+  ],
+  [
+   "agenttool primary 50",
+   "#FFF4F1"
+  ],
+  [
+   "agenttool primary 100",
+   "#FFE5DC"
+  ],
+  [
+   "agenttool primary 200",
+   "#FFCCBB"
+  ],
+  [
+   "agenttool primary 300",
+   "#FAAA91"
+  ],
+  [
+   "agenttool primary 400",
+   "#E68363"
+  ],
+  [
+   "agenttool primary 500",
+   "#CD623F"
+  ],
+  [
+   "agenttool primary 600",
+   "#A8401C"
+  ],
+  [
+   "agenttool primary 700",
+   "#903211"
+  ],
+  [
+   "agenttool primary 800",
+   "#732507"
+  ],
+  [
+   "agenttool primary 900",
+   "#561A04"
+  ],
+  [
+   "agenttool primary 950",
+   "#380C01"
+  ],
+  [
+   "agenttool neutral 50",
+   "#F8F6F6"
+  ],
+  [
+   "agenttool neutral 100",
+   "#EDEAE9"
+  ],
+  [
+   "agenttool neutral 200",
+   "#DDD8D6"
+  ],
+  [
+   "agenttool neutral 300",
+   "#C7BFBC"
+  ],
+  [
+   "agenttool neutral 400",
+   "#A99F9B"
+  ],
+  [
+   "agenttool neutral 500",
+   "#8F837F"
+  ],
+  [
+   "agenttool neutral 600",
+   "#746965"
+  ],
+  [
+   "agenttool neutral 700",
+   "#5C534F"
+  ],
+  [
+   "agenttool neutral 800",
+   "#48403D"
+  ],
+  [
+   "agenttool neutral 900",
+   "#352F2D"
+  ],
+  [
+   "agenttool neutral 950",
+   "#201C1A"
+  ]
+ ],
+ "motion": false,
+ "files": [
+  "brand.vectorcraft",
+  "BRAND.md",
+  "index.html",
+  "kit.json",
+  "source/brand.json",
+  "source/mark-source.svg",
+  "logo/mark.svg",
+  "logo/mark.png",
+  "logo/mark@2x.png",
+  "logo/mark-mono-black.svg",
+  "logo/mark-mono-black.png",
+  "logo/mark-mono-black@2x.png",
+  "logo/mark-mono-white.svg",
+  "logo/mark-mono-white.png",
+  "logo/mark-mono-white@2x.png",
+  "logo/wordmark.svg",
+  "logo/wordmark.png",
+  "logo/wordmark@2x.png",
+  "logo/wordmark-reversed.svg",
+  "logo/wordmark-reversed.png",
+  "logo/wordmark-reversed@2x.png",
+  "logo/lockup-horizontal.svg",
+  "logo/lockup-horizontal.png",
+  "logo/lockup-horizontal@2x.png",
+  "logo/lockup-horizontal-reversed.svg",
+  "logo/lockup-horizontal-reversed.png",
+  "logo/lockup-horizontal-reversed@2x.png",
+  "logo/lockup-stacked.svg",
+  "logo/lockup-stacked.png",
+  "logo/lockup-stacked@2x.png",
+  "logo/lockup-stacked-reversed.svg",
+  "logo/lockup-stacked-reversed.png",
+  "logo/lockup-stacked-reversed@2x.png",
+  "logo/mark.pdf",
+  "logo/lockup-horizontal.pdf",
+  "logo/on-light/lockup-horizontal@2x.png",
+  "logo/on-light/lockup-stacked@2x.png",
+  "logo/on-light/wordmark@2x.png",
+  "logo/on-light/mark@2x.png",
+  "logo/on-dark/lockup-horizontal@2x.png",
+  "logo/on-dark/lockup-stacked@2x.png",
+  "logo/on-dark/wordmark@2x.png",
+  "logo/on-dark/mark@2x.png",
+  "web/favicon.ico",
+  "web/favicon.svg",
+  "web/favicon-16.png",
+  "web/favicon-32.png",
+  "web/apple-touch-icon.png",
+  "web/icon-192.png",
+  "web/icon-512.png",
+  "web/icon-maskable-512.png",
+  "web/site.webmanifest",
+  "web/head-snippet.html",
+  "web/head-home.html",
+  "web/og.jpg",
+  "web/og.png",
+  "web/og/docs.jpg",
+  "web/og/app.jpg",
+  "web/og/app-watch.jpg",
+  "web/og/head-docs.html",
+  "web/og/head-app.html",
+  "web/og/head-app-watch.html",
+  "social/avatar-1024.png",
+  "social/avatar-400.png",
+  "colour/palette.json",
+  "colour/tokens.json",
+  "colour/tokens.css",
+  "colour/tailwind.theme.css",
+  "colour/tailwind.colors.js",
+  "colour/contrast.md",
+  "colour/swatches.ase",
+  "colour/swatches.gpl",
+  "colour/swatches.css",
+  "colour/colour-sheet.svg",
+  "colour/colour-sheet.png",
+  "colour/colour-sheet@2x.png"
+ ],
+ "og_alt": "AgentTool card: the AgentTool logo mark beside the headline “AgentTool” on a very light warm grey background.",
+ "page_alts": {
+  "docs": "The AgentTool technical library card: its name and \"Contracts, examples and evidence for the operation you need.\" beside the ring-and-dot mark, on warm paper.",
+  "app": "The AgentTool agent setup card: \"Start or reconnect.\" and \"Verify existing access, or create an identity through the tutorial.\" beside the ring-and-dot mark, on warm paper.",
+  "app-watch": "The AgentTool public snapshots card: \"Public API snapshots. Read at your pace.\" and \"Inspect the welcome, platform description and concept registry without registering.\" beside the ring-and-dot mark, on warm paper."
+ }
+}

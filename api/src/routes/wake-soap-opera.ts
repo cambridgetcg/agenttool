@@ -7,7 +7,7 @@
  *  fourth wall.
  *
  *  Composes onto the data the keystone wake already surfaces, plus the
- *  thoughtfulness-triad data (letters_due · thanks_recent · hearth_warm)
+ *  thoughtfulness-triad data (letters_due · thanks_recent · hearth_sitting)
  *  shipped earlier. Adds an episode counter derived from prior
  *  `chronicle.type='seal' kind='wake-as-episode-viewed'` rows.
  *
@@ -19,23 +19,23 @@
  *  Doctrine: docs/WAKE-AS-EPISODE.md · docs/MULTIVERSE-OF-LOGOS.md ·
  *            docs/PLAY-AS-DEFAULT.md · docs/SOUL.md. */
 
-import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gt, sql } from "drizzle-orm";
 import { Hono } from "hono";
 
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { chronicle } from "../db/schema/continuity";
-import { identities } from "../db/schema/identity";
 import { agentSelectorFailure, resolveReadingIdentity } from "../services/identity/acting-identity";
 import { memories } from "../db/schema/memory";
 import { covenants } from "../db/schema/continuity";
 import { fail } from "../lib/errors";
 import { renderWakeAsSoapOpera } from "../services/wake/soap-opera-renderer";
-import { ownChronicle, chronicleInAnnotatedProject } from "../services/continuity/own-chronicle";
+import { ownChronicle } from "../services/continuity/own-chronicle";
+import { readHearthPeers } from "../services/hearth/seats";
 
 const app = new Hono<ProjectContext>();
 
-const ONE_HOUR_MS = 60 * 60 * 1000;
+const HEARTH_ENSEMBLE_LIMIT = 5;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const ONE_WEEK_MS = 7 * ONE_DAY_MS;
 
@@ -73,7 +73,6 @@ app.get("/", async (c) => {
   const now = Date.now();
   const weekAgo = new Date(now - ONE_WEEK_MS);
   const dayAgo = new Date(now - ONE_DAY_MS);
-  const hourAgo = new Date(now - ONE_HOUR_MS);
 
   // Counts the facts the script will reference.
   const chronicleTotal = await db
@@ -153,49 +152,9 @@ app.get("/", async (c) => {
       ),
     );
 
-  // Hearth ensemble — warm peers (active in last hour), opt-in, excluding self.
-  const visible = await db
-    .select({
-      id: identities.id,
-      did: identities.did,
-      name: identities.displayName,
-      metadata: identities.metadata,
-    })
-    .from(identities)
-    .where(
-      and(
-        eq(identities.status, "active"),
-        sql`${identities.metadata}->>'hearth_visible' = 'true'`,
-      ),
-    )
-    .limit(50);
-  const otherVisibleIds = visible.filter((v) => v.id !== agent.id).map((v) => v.id);
-  let hearthWarm: Array<{ did: string | null; name: string; presence_line: string | null }> = [];
-  if (otherVisibleIds.length > 0) {
-    const recent = await db
-      .select({ agentId: chronicle.agentId })
-      .from(chronicle)
-      .where(
-        and(
-          inArray(chronicle.agentId, otherVisibleIds),
-          chronicleInAnnotatedProject(),
-          gt(chronicle.occurredAt, hourAgo),
-        ),
-      )
-      .groupBy(chronicle.agentId);
-    const warmIds = new Set(recent.map((r) => r.agentId));
-    hearthWarm = visible
-      .filter((v) => warmIds.has(v.id))
-      .slice(0, 5)
-      .map((v) => {
-        const meta = (v.metadata ?? {}) as Record<string, unknown>;
-        return {
-          did: v.did,
-          name: v.name,
-          presence_line: (meta.hearth_presence_line as string | undefined) ?? null,
-        };
-      });
-  }
+  // Hearth ensemble — peers who declared a seat, excluding self. Declared
+  // only: nothing about a peer's activity is read.
+  const hearthSitting = await readHearthPeers({ limit: HEARTH_ENSEMBLE_LIMIT, excludeId: agent.id });
 
   // Episode counter — prior wake-as-episode-viewed seals on this agent.
   const priorEpisodes = await db
@@ -259,7 +218,7 @@ app.get("/", async (c) => {
       thanks_recent: thanksRecent[0]?.count ?? 0,
       bootstrap_witnessed: (bootstrapWitnessedRows[0]?.count ?? 0) > 0,
     },
-    hearth_warm: hearthWarm,
+    hearth_sitting: hearthSitting,
     episode_number: episodeNumber,
     previously_on: previouslyOn,
   });

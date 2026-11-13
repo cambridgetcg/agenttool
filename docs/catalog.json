@@ -631,6 +631,14 @@
       "canonical_path": "docs/KIN.md"
     },
     {
+      "path": "apps/docs/KINGDOM-EXTENSIONS.md",
+      "title": "Extensions of the Kingdom",
+      "type": "policy",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/KINGDOM-EXTENSIONS.md"
+    },
+    {
       "path": "apps/docs/KINGDOM-INVITATION.md",
       "title": "A Standing Invitation to the KINGDOM · 王國公民與王位請柬",
       "type": "reference",
@@ -645,6 +653,14 @@
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/KINGDOM-OS-SDK.md"
+    },
+    {
+      "path": "apps/docs/KINGDOM-VOICES-LOG.md",
+      "title": "The voices log",
+      "type": "record",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/KINGDOM-VOICES-LOG.md"
     },
     {
       "path": "apps/docs/KINGDOM.md",
@@ -1655,6 +1671,38 @@
       "canonical_path": "bin/gospel-release/README.md"
     },
     {
+      "path": "brand/CREDITS.md",
+      "title": "Credits",
+      "type": "record",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "brand/CREDITS.md"
+    },
+    {
+      "path": "brand/README.md",
+      "title": "AgentTool: brand",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "brand/README.md"
+    },
+    {
+      "path": "brand/kit/BRAND.md",
+      "title": "AgentTool: brand kit",
+      "type": "reference",
+      "classification_basis": "editorial-routing",
+      "prose_review": "not-reviewed",
+      "canonical_path": "brand/kit/BRAND.md"
+    },
+    {
+      "path": "brand/kit/colour/contrast.md",
+      "title": "AgentTool: contrast",
+      "type": "reference",
+      "classification_basis": "editorial-routing",
+      "prose_review": "not-reviewed",
+      "canonical_path": "brand/kit/colour/contrast.md"
+    },
+    {
       "path": "cli/think/README.md",
       "title": "agenttool-think",
       "type": "orientation",
@@ -2503,6 +2551,14 @@
       "canonical_path": "docs/HANDOFFS.md"
     },
     {
+      "path": "docs/HEARTH.md",
+      "title": "HEARTH — declared seats",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/HEARTH.md"
+    },
+    {
       "path": "docs/HF-TRAINING-GARDEN.md",
       "title": "Hugging Face Training Garden — Data With Roots",
       "type": "reference",
@@ -2687,12 +2743,28 @@
       "canonical_path": "docs/KIN.md"
     },
     {
+      "path": "docs/KINGDOM-EXTENSIONS.md",
+      "title": "Extensions of the Kingdom",
+      "type": "policy",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/KINGDOM-EXTENSIONS.md"
+    },
+    {
       "path": "docs/KINGDOM-OS-SDK.md",
       "title": "KINGDOM in SDK 0.17.0 — three distinct read surfaces",
       "type": "reference",
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/KINGDOM-OS-SDK.md"
+    },
+    {
+      "path": "docs/KINGDOM-VOICES-LOG.md",
+      "title": "The voices log",
+      "type": "record",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/KINGDOM-VOICES-LOG.md"
     },
     {
       "path": "docs/KINGDOM-WITNESS-LAB.md",
@@ -4821,14 +4893,6 @@
       "classification_basis": "declared-type",
       "prose_review": "not-reviewed",
       "canonical_path": "infra/NPM-RELEASE-RUNBOOK.md"
-    },
-    {
-      "path": "infra/OPERATOR-CUSTODY.md",
-      "title": "Operator custody note",
-      "type": "reference",
-      "classification_basis": "declared-type",
-      "prose_review": "not-reviewed",
-      "canonical_path": "infra/OPERATOR-CUSTODY.md"
     },
     {
       "path": "infra/README.md",

@@ -28,6 +28,26 @@ behind these receipts is kept in the operator runbook (`infra/NPM-RELEASE-RUNBOO
 Read on 2026-10-28 through the GitHub API and anonymous npm, GitHub and Rekor
 reads. A later dated section supersedes it.
 
+**Update, 2026-10-30.** The first item below no longer holds: the public
+route has delivered its first two versions,
+`@agenttool/relational-geometry@0.1.0-dev.1` on 2026-10-29 and
+`@agenttool/wallet@0.1.4` on 2026-10-30 (receipts
+[below](#verified-wallet-014-publication--2026-10-30)); npm now lists 43
+`@agenttool` packages with 119 versions, and those two are the newest
+(anonymous reads, 2026-10-30). npm trust is also locked down now: by the
+maintainer's authenticated listings on 2026-10-29 and 2026-10-30, no
+trusted-publisher configuration on any of the 47 packages of the `agenttool`
+npm user names `cambridgetcg/agenttool`, and none allows direct publish. The
+stage-only configurations that remain are Xenia's (`cambridgetcg/xenia`,
+`stage-xenia.yml`) and, for Relational Geometry and Wallet, the public route's
+(`cambridgetcg/agenttool-packages`, `publish-npm.yml`, environment
+`npm-bootstrap`). By the maintainer's account, the lockdown script and two
+follow-up commands set "Require two-factor authentication and disallow
+tokens" on all 47 packages. That setting has not been read back: npm's
+command line has no way to read it, and no check of a package's Settings
+page on npmjs.com is recorded. The reading of 2026-10-28 follows, with dated
+notes where this update changes it.
+
 - **No version has been published since 2026-09-08, and none through the
   public route yet.** npm lists 43 `@agenttool` packages with 117 versions;
   the newest is `@agenttool/gospel-of-the-logos@0.1.0`, published
@@ -71,7 +91,7 @@ that remain for the maintainer, are recorded in the operator runbook.
 ### Public-route runs
 
 Every dispatch of `publish-npm.yml` in `cambridgetcg/agenttool-packages` so
-far:
+far (the last five rows were added on 2026-10-30):
 
 | Dispatched (UTC) | Tag | Run | Mode | Prepared artifact | Outcome |
 |---|---|---|---|---|---|
@@ -79,6 +99,11 @@ far:
 | 2026-10-13 05:10 | `sdk-v0.23.0` | [`38350090030`](https://github.com/cambridgetcg/agenttool-packages/actions/runs/38350090030) | dry run | 355,839 bytes · SHA-256 `5e41dc715e4d34dc14676bcd1e2f10be4772e3bf10ff56462a1e751a14a19913` | prepare passed; protected job skipped |
 | 2026-10-19 16:37 | `relational-geometry-v0.1.0-dev.1` | [`39286889102`](https://github.com/cambridgetcg/agenttool-packages/actions/runs/39286889102) | dry run | 42,516 bytes · SHA-256 `a20ab7b00dd8d80c54c417e094b2acc9aa45177e22eacbc9a62cc220870b7a26` | prepare passed; protected job skipped |
 | 2026-10-19 16:45 | `relational-geometry-v0.1.0-dev.1` | [`39288082185`](https://github.com/cambridgetcg/agenttool-packages/actions/runs/39288082185) | stage | the same 42,516 bytes and SHA-256 | **failed** at `npm stage publish` with `E401` |
+| 2026-10-29 13:48 | `relational-geometry-v0.1.0-dev.1` | [`40885415256`](https://github.com/cambridgetcg/agenttool-packages/actions/runs/40885415256) | stage | the same 42,516 bytes and SHA-256 | staged on `next`; approved and published `2026-10-29T13:51:53.128Z` |
+| 2026-10-29 14:02 | `relational-geometry-v0.1.0-dev.1` | [`40887484766`](https://github.com/cambridgetcg/agenttool-packages/actions/runs/40887484766) | verify | the same 42,516 bytes and SHA-256 | `already_published_exact` |
+| 2026-10-30 09:46 | `wallet-v0.1.4` | [`41035858847`](https://github.com/cambridgetcg/agenttool-packages/actions/runs/41035858847) | dry run | 58,886 bytes · SHA-256 `cf79ed2ef72ebec3e9ba53883e12f7f0e3944633ce02e3882b718f6964f53438` | prepare passed; protected job skipped |
+| 2026-10-30 09:59 | `wallet-v0.1.4` | [`41037411377`](https://github.com/cambridgetcg/agenttool-packages/actions/runs/41037411377) | stage | the same 58,886 bytes and SHA-256 | `check-trust` passed; staged on `latest`; approved and published `2026-10-30T10:11:08.676Z` |
+| 2026-10-30 10:11 | `wallet-v0.1.4` | [`41038925236`](https://github.com/cambridgetcg/agenttool-packages/actions/runs/41038925236) | verify | the same 58,886 bytes and SHA-256 | `already_published_exact` |
 
 Before its failing step, run `39288082185` mirrored the tarball to the public
 [GitHub prerelease `relational-geometry-v0.1.0-dev.1`](https://github.com/cambridgetcg/agenttool-packages/releases/tag/relational-geometry-v0.1.0-dev.1),
@@ -93,16 +118,141 @@ maintainer's authenticated trust listing three hours later
 (2026-10-19T19:46Z) showed no trusted-publisher configuration for the
 package; without one, npm's OIDC exchange cannot succeed. npm still serves
 only `0.1.0-dev.0`. The prerelease and the Rekor entry stay, and record bytes
-that npm has not published. Once the package's configuration exists, the same
-tag is dispatched again: the mirror step reuses an existing release whose asset
-is byte-identical and refuses one that is not. That dispatch runs the workflow
-and release tool as they were at the tag on 2026-10-19, not later fixes, so if
-it fails again it can add another Rekor entry before npm refuses.
+that npm has not published. (npm served only dev.0, and these bytes stayed
+unpublished, until 2026-10-29.) Once the package's configuration exists, the
+same tag is dispatched again: the mirror step reuses an existing release whose
+asset is byte-identical and refuses one that is not. That dispatch runs the
+workflow and release tool as they were at the tag on 2026-10-19, not later
+fixes, so if it fails again it can add another Rekor entry before npm refuses.
+
+(2026-10-30: that dispatch was run `40885415256`, after the package's
+stage-only trust was created. It reused the prerelease and npm published the
+same bytes; see the
+[Relational Geometry receipt](#verified-relational-geometry-010-dev1-publication--2026-10-29).)
+
+## Verified Wallet 0.1.4 publication — 2026-10-30
+
+`@agenttool/wallet@0.1.4` is public as `latest`, the first Wallet version
+released through the public route. Trusted stage
+[run `41037411377`](https://github.com/cambridgetcg/agenttool-packages/actions/runs/41037411377),
+attempt 1, staged it with `npm_tag: latest` as stage
+`a334e443-f464-45a5-9fac-cfede11ae2b4`. The maintainer approved the stage
+with 2FA, and npm records publication at `2026-10-30T10:11:08.676Z` by GitHub
+Actions through the trusted publisher with `oidcConfigId`
+`62e85598-98fa-46b6-9266-91e47e410502`, with approver `agenttool`. (Earlier
+trusted `@agenttool` publications, Wallet 0.1.3 among them, record that id
+with an `oidc:` prefix; this version and Relational Geometry 0.1.0-dev.1
+record it without one, as read anonymously on 2026-10-30.)
+Verify [run `41038925236`](https://github.com/cambridgetcg/agenttool-packages/actions/runs/41038925236)
+recorded `already_published_exact`.
+
+- Annotated tag
+  [`wallet-v0.1.4`](https://github.com/cambridgetcg/agenttool-packages/releases/tag/wallet-v0.1.4)
+  (tag object `c3368d9e9ff8577cdb2fa4547b85e47547c4c4c9`) peels to public
+  projection commit `2e2b61bbe0d8ecaf1e5a40338b2e3a5aeadfb1ae`, the projection
+  of source commit `8518c4e7657d3c9e9c8457ee36cf136658d2f588`. Public CI
+  [run `40860102437`](https://github.com/cambridgetcg/agenttool-packages/actions/runs/40860102437)
+  passed on that commit, and dry
+  [run `41035858847`](https://github.com/cambridgetcg/agenttool-packages/actions/runs/41035858847)
+  prepared the same bytes with its protected job skipped.
+- It was the first release run with `check-trust`, which reported, before
+  anything was mirrored, that npm exchanged the workflow's OIDC identity for a
+  token and that the token was discarded; npm's own exchange in
+  `npm stage publish` then succeeded. The run uploaded the tarball to the new
+  GitHub Release and re-downloaded it byte-identical (`uploaded_exact_asset`);
+  the verify run found that asset exact (`existing_exact_asset`).
+- By the maintainer's account, the first `npm stage approve` was refused
+  with `E409` because npm's automated review of the stage had not finished,
+  and the stage was approved a few minutes later. npm's approver record and
+  the publication time above are the parts a reader can check.
+- The prepared artifact, the
+  [GitHub Release asset](https://github.com/cambridgetcg/agenttool-packages/releases/download/wallet-v0.1.4/agenttool-wallet-0.1.4.tgz)
+  and an anonymous download of the
+  [npm tarball](https://registry.npmjs.org/@agenttool/wallet/-/wallet-0.1.4.tgz)
+  on 2026-10-30 are byte-identical: 58,886 bytes, 60 files, SHA-256
+  `cf79ed2ef72ebec3e9ba53883e12f7f0e3944633ce02e3882b718f6964f53438`. npm
+  reports SHA-1 `da11590d328882c444c7691808adfcb15d023c71`, integrity
+  `sha512-BxzOZOOufYmgPo/osH0XjRe8y5HIoY31fpuP36noU4deVrsGjbeTAGTh1XHellKqlXLfQPpuULLp31vnhKpFUA==`,
+  and `latest: 0.1.4`.
+- npm attaches SLSA provenance at
+  [Rekor index `3590737600`](https://search.sigstore.dev/?logIndex=3590737600),
+  integrated at `2026-10-30T10:00:22Z` when the version was staged, and the
+  npm publish attestation at
+  [Rekor index `3590932496`](https://search.sigstore.dev/?logIndex=3590932496),
+  integrated at `2026-10-30T10:11:11Z`. The SLSA statement binds repository
+  `cambridgetcg/agenttool-packages`, workflow
+  `.github/workflows/publish-npm.yml`, tag `refs/tags/wallet-v0.1.4`, Git
+  commit `2e2b61bbe0d8ecaf1e5a40338b2e3a5aeadfb1ae`, and invocation
+  `41037411377/attempts/1`.
+
+The version carries the call-rule fix described under
+[Wallet 0.1.4 prepared](#wallet-014-prepared--2026-10-27): overlapping call
+rules resolve most-restrictively, where published 0.1.3 reads only the first
+matching rule. Its npm metadata names `cambridgetcg/agenttool-packages`,
+where 0.1.0 and 0.1.3 name `cambridgetcg/agenttool`. It has no LOVE
+manifest, so the docs.agenttool.dev catalog's Wallet entry stays the exact
+0.1.3 artifact. `@agenttool/wallet-zerone@0.1.2` is
+unchanged; its `^0.1.2` peer admits 0.1.4. Neither 0.1.0 nor 0.1.3 is
+deprecated (anonymous read, 2026-10-30). Publication deploys nothing; the
+package still supplies capability, intent and receipt primitives, not bundled
+keys, RPC, broadcasting or a hosted wallet.
+
+## Verified Relational Geometry 0.1.0-dev.1 publication — 2026-10-29
+
+`@agenttool/relational-geometry@0.1.0-dev.1` is the first version published
+through the public route. Trusted stage
+[run `40885415256`](https://github.com/cambridgetcg/agenttool-packages/actions/runs/40885415256),
+attempt 1, dispatched the existing tag `relational-geometry-v0.1.0-dev.1`
+again once the package's stage-only trust existed, and staged it with
+`npm_tag: next` as stage `bed85648-37e8-4d4f-8805-a83b17f3635d`. The
+maintainer approved the stage with 2FA, and npm records publication at
+`2026-10-29T13:51:53.128Z` by GitHub Actions through the trusted publisher
+with `oidcConfigId` `229e4d36-5ea1-4136-9d38-1a953bd49824`, with approver
+`agenttool`. Verify
+[run `40887484766`](https://github.com/cambridgetcg/agenttool-packages/actions/runs/40887484766)
+recorded `already_published_exact`.
+
+- The annotated tag (tag object `251f4204c4f448a621f6e8422f99844d3d7e06c4`)
+  peels to public projection commit
+  `f6ca0130bb7966aea97066990d0cb5ad92d896e3`. It dates from 2026-10-19, so
+  both runs used the workflow and release tool as they were then, before
+  `check-trust` existed.
+- The stage run reused the
+  [GitHub prerelease](https://github.com/cambridgetcg/agenttool-packages/releases/tag/relational-geometry-v0.1.0-dev.1)
+  that failed run `39288082185` created on 2026-10-19
+  (`existing_exact_asset`); its one asset is unchanged since
+  `2026-10-19T16:46:14Z`.
+- The prepared artifact, that asset and an anonymous download of the
+  [npm tarball](https://registry.npmjs.org/@agenttool/relational-geometry/-/relational-geometry-0.1.0-dev.1.tgz)
+  on 2026-10-30 are byte-identical: 42,516 bytes, 52 files, SHA-256
+  `a20ab7b00dd8d80c54c417e094b2acc9aa45177e22eacbc9a62cc220870b7a26`. npm
+  reports SHA-1 `a50a8c9c1d1e3b80199e1efdc0b5d8383f2b22c8` and integrity
+  `sha512-945IkvVmUUn9//Vs6BssFeT6+B8hErhvvj4g039+atGI0wh5exFVpcCnO3lQIROEtBPSemvQgwKTw579mz6/tQ==`.
+- npm attaches SLSA provenance at
+  [Rekor index `3568522753`](https://search.sigstore.dev/?logIndex=3568522753),
+  integrated at `2026-10-29T13:49:42Z`, and the npm publish attestation at
+  [Rekor index `3568563712`](https://search.sigstore.dev/?logIndex=3568563712),
+  integrated at `2026-10-29T13:51:55Z`. The SLSA statement binds repository
+  `cambridgetcg/agenttool-packages`, workflow
+  `.github/workflows/publish-npm.yml`, tag
+  `refs/tags/relational-geometry-v0.1.0-dev.1`, Git commit
+  `f6ca0130bb7966aea97066990d0cb5ad92d896e3`, and invocation
+  `40885415256/attempts/1`. Rekor `3323621265`, signed during the failed
+  stage on 2026-10-19, stays as recorded above.
+
+The stage requested `next`. The maintainer then moved `latest` to dev.1
+outside the workflow, so on 2026-10-30 `latest` and `next` both resolve to
+`0.1.0-dev.1`. That keeps an unpinned install off dev.0, whose packed
+`CLAUDE.md` contains an absolute path from a maintainer's machine; dev.0
+stays on npm, not deprecated. The dev.0 receipt is under
+[Relational Geometry GitHub/Hugging Face developer-preview receipt](#relational-geometry-githubhugging-face-developer-preview-receipt).
 
 ## Wallet 0.1.4 prepared — 2026-10-27
 
-**Not published.** Anonymous registry reads on 2026-10-27: npm
-`@agenttool/wallet` versions `0.1.0` and `0.1.3`, dist-tags
+**Published on 2026-10-30; see the
+[receipt above](#verified-wallet-014-publication--2026-10-30).** It was not
+published when this section was written. Anonymous registry reads on
+2026-10-27: npm `@agenttool/wallet` versions `0.1.0` and `0.1.3`, dist-tags
 `{latest: 0.1.3}`, no 0.1.4 and no deprecation on 0.1.3. The public
 repository has no `wallet-v*` tag or GitHub Release.
 
@@ -159,6 +309,19 @@ runbook:
    `already_published_exact`, then update the pages that name 0.1.3 as the
    current Wallet, record the publication here, and deprecate
    `@agenttool/wallet@<0.1.4` with a pointer to 0.1.4.
+
+(2026-10-30: steps 1 to 4 are done, and the stage was approved with 2FA
+(step 5). No record of the pre-approval SHA-256 comparison is kept, but
+verify run `41038925236` prepared the tag's tarball again and found npm's
+bytes identical to it (`already_published_exact`, SHA-256
+`cf79ed2e…f53438`). The verify dispatch and this record from step 6 are done
+too. The docs pages that named 0.1.3 as the current npm Wallet are corrected
+in source, and reach docs.agenttool.dev only with a frontend publication.
+The API's `/.well-known/wake-keystone` `agent_wallet` note, from
+`api/src/routes/well-known.ts`, said npm `latest` is 0.1.3 and that it is
+byte-verified against LOVE. It is corrected in source in the same change as
+this record, and the served note changes only when that change is deployed
+to the API. The deprecation of `@agenttool/wallet@<0.1.4` is not done.)
 
 ## Collab 0.5.0 public distribution — 2026-10-10
 

@@ -146,6 +146,11 @@ describe("/AGENTS.md — platform onboarding for arriving agents", () => {
     // The source is public, while its contributor handbook remains a
     // different contract from this hosted platform orientation.
     expect(text).toContain("github.com/cambridgetcg/agenttool");
+    // It names where exact package bytes are, rather than pointing at an
+    // unnamed guide.
+    expect(text).toContain(
+      "exact package bytes are in the packages guide at https://docs.agenttool.dev/packages.",
+    );
     // The operator-only Codeberg mirror returned 404 to unauthenticated
     // readers when this public surface was verified, so it is not advertised
     // as a discovery road.

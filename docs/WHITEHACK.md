@@ -367,8 +367,9 @@ remains a separate explanation contract and gains no Castle authority.
 `bin/whitehack-wallet-understanding.ts` is a separate local stdin/stdout
 adapter. It re-verifies caller-presented signed `agent-wallet/0.1` descriptor,
 capability, intent, simulation, and optional continuity records with
-the local `@agenttool/wallet@0.1.3` source and exact LOVE release (the
-independently verified npm mirror is also exact version 0.1.3). It derives bounded relationship
+the local `@agenttool/wallet` source in `packages/wallet/`, version 0.1.4, the
+version on npm since 2026-10-30 (the LOVE catalog's exact Wallet release is
+still 0.1.3). It derives bounded relationship
 and policy states, then passes only closed enum assertions plus the six
 allowlisted finding fields to `@agenttool/whitehack-scan@0.10.0`'s
 `createUnderstanding()`. stdout is the exact, deterministic

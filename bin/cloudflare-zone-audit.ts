@@ -614,8 +614,8 @@ export function validateManifest(value: unknown): DesiredManifest {
   ], "workers_dev.scripts");
   const providerAliasBoundary =
     "Public provider alias is active, but its deployed source/config is not currently recovered in this repository.";
-  // Disabled 2026-10-20 (infra/OPERATOR-CUSTODY.md, "Provider aliases outside
-  // the agenttool.dev zone"): the live audit must report a re-enabled alias as
+  // Disabled 2026-10-20 (recorded in the operator's custody note, kept outside
+  // this public repository): the live audit must report a re-enabled alias as
   // drift, not expect the bypass back.
   const disabledProviderAlias = {
     enabled: false,

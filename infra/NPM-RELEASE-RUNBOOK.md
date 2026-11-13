@@ -9,7 +9,7 @@
 
 **Operator-only. Not published.** It describes which credentials can still publish,
 how the release environments are configured and the steps that need Yu's trusted
-device. Like `infra/OPERATOR-CUSTODY.md`, it stays in `infra/`, which no Pages
+device. Like the x402 proof runbook, it stays in `infra/`, which no Pages
 project serves and the public package projection never includes. The public
 receipts for each release are in [`docs/NPM-RELEASES.md`](../docs/NPM-RELEASES.md).
 
@@ -24,6 +24,45 @@ reads, with Yu's authenticated npm trust listing of 2026-10-19T19:46Z for npm
 trust. It corrects the status claims below where they disagree with it; apart
 from its warnings, it changes no procedure. The public run log is in the
 [receipts](../docs/NPM-RELEASES.md#state-as-of-2026-10-28).
+
+**Update, 2026-10-30.** The lockdown and the first stages are done; the
+token revocation is not.
+
+- **Lockdown, done 2026-10-29 and 2026-10-30.** Yu ran it on all 47
+  packages. His authenticated listings afterwards show no configuration that
+  names `cambridgetcg/agenttool` and none that allows direct publish, so the
+  direct-publish trust of `cambridgetcg/agenttool` that 22 packages had on
+  2026-10-19 (see [Outcome](#outcome) and the [lockdown](#lock-down-once-now))
+  is gone. Stage-only trust remains for `@agenttool/xenia`
+  (`cambridgetcg/xenia`, `stage-xenia.yml`) and for
+  `@agenttool/relational-geometry` and `@agenttool/wallet`
+  (`cambridgetcg/agenttool-packages`, `publish-npm.yml`, environment
+  `npm-bootstrap`, matching what `enable` sets). By Yu's account, the script
+  and two follow-up commands set "Require two-factor authentication and
+  disallow tokens" on all 47. It has not been read back: npm's CLI cannot read
+  it, and the Settings-page check in the [lockdown](#lock-down-once-now)
+  procedure is not recorded for any package. Until the tokens are revoked,
+  this unverified setting is what is meant to stop them from publishing.
+- **First stages, approved 2026-10-29 and 2026-10-30.** The canary,
+  `relational-geometry-v0.1.0-dev.1`, staged in
+  [run 40885415256](https://github.com/cambridgetcg/agenttool-packages/actions/runs/40885415256)
+  (its tag predates `check-trust`) and was published on 2026-10-29;
+  `wallet-v0.1.4`, the first stage to run `check-trust`, staged in
+  [run 41037411377](https://github.com/cambridgetcg/agenttool-packages/actions/runs/41037411377)
+  and was published on 2026-10-30. By Yu's account, his first
+  `npm stage approve` for Wallet returned `E409` because npm's automated
+  review was unfinished; the approval succeeded minutes later. Receipts:
+  [Wallet](../docs/NPM-RELEASES.md#verified-wallet-014-publication--2026-10-30),
+  [Relational Geometry](../docs/NPM-RELEASES.md#verified-relational-geometry-010-dev1-publication--2026-10-29).
+- **Token revocation is not recorded as done** (open step 1 below). Nor is
+  the deprecation of `@agenttool/wallet@<0.1.4`, the last part of the
+  [Wallet record's](../docs/NPM-RELEASES.md#wallet-014-prepared--2026-10-27)
+  step 6; neither 0.1.0 nor 0.1.3 was deprecated on 2026-10-30.
+
+The reading of 2026-10-28 follows, with dated notes where this update changes
+it. Its "Nothing has been delivered" bullet no longer holds, and the lockdown
+that its `publish-npm.yml` warning waits for is done; the warning itself is
+left as written.
 
 - **Visibility.** Yu made this repository public at about 11:11Z on
   2026-10-28; it had been private since 2026-09-25, and public before that.
@@ -62,7 +101,8 @@ Open steps for Yu:
 1. Revoke on npmjs.com the tokens whose secrets were deleted, and any other
    write or bypass-2FA token not in use.
 2. Lock down npm trust on all 47 packages, then enable stage-only trust for
-   one package just before each release.
+   one package just before each release. (Lockdown done 2026-10-29 and
+   2026-10-30, see the update above; `enable` stays per release.)
 
 Also Yu's to decide: moving xenia's `beta` tag to beta.7; a `latest` policy
 for prerelease-only packages; deprecating `@agenttool/sdk` 0.3.0–0.8.0; a
@@ -83,6 +123,8 @@ the version is not public on npm until a maintainer approves the stage with
 but the trusted-publisher configurations that name it can still publish 22 of
 them directly until Yu revokes them (see the
 [trust lockdown](#npm-trust-lock-down-now-enable-per-release-yu-trusted-device)).
+(2026-10-30: revoked by the lockdown; see the
+[update above](#state-as-of-2026-10-28).)
 The scope-wide, bypass-2FA `NPM_TOKEN` that this repository's `npm-bootstrap`
 environment held was deleted on 2026-10-28; the token itself awaits revocation
 on npm (see [public repository settings](#public-repository-settings-yu-once)).
@@ -440,15 +482,33 @@ two separate modes, and without one it prints its usage and does nothing.
 npx, makes every npm call with `npx --yes npm@11.17.0`, pauses 2 seconds
 between calls, and saves every listing in a record directory. Use the npm user
 `agenttool` with account 2FA; npm rejects a bypass-2FA token for `npm trust`.
-npm asks for 2FA only when its output is a terminal, and the script saves its
-listings to files, so it first makes one listing on the terminal: complete 2FA
-there and tick "skip for the next 5 minutes". A saved listing that fails with
-`EOTP` means that window lapsed; re-run. Copy the script to the trusted device.
+npm asks for 2FA only when its input and output are a terminal, so run the
+script directly on one, not piped or redirected; its `run.log` keeps the
+record. The script saves its listings to files, so it first makes one listing
+on the terminal: complete 2FA there and tick "skip for the next 5 minutes". If
+that window lapses during the saved listings, the script asks on the terminal
+again and retries the listing once. Before a real lockdown, wait 5 minutes
+after the dry run or any other run that asked for 2FA, or the window it opened
+can lapse midway; lockdown warns when it finds such a run. An `E404` for
+`/-/v1/done` means a browser approval was not completed in time (the registry
+ends npm's wait after about 5 minutes), not that a package is missing: re-run
+with the browser ready, approve each prompt within 5 minutes, and tick "skip
+for the next 5 minutes". When npm gives no reason for a failure, the script
+names both likely causes, an approval that timed out and a lapsed 2FA window.
+If a listing on the terminal fails, the run stops, and you re-run it; only a
+retry in the check after the change is recorded instead, so the check can
+finish.
+
+The record directory, readable only by you, keeps `run.log` (every line the
+script printed, with npm's stderr) and, when something needs attention,
+`needs-attention.txt`: one `<package> <reason>` line per problem, the reasons
+listed in the script's header. Copy the script to the trusted device.
 
 ### Lock down (once, now)
 
 ```bash
 DRY_RUN=1 bash npm-trust-repoint.sh lockdown   # lists all 47 and shows the plan; changes nothing
+# wait 5 minutes after the dry run, so its 2FA window cannot lapse midway
 bash npm-trust-repoint.sh lockdown             # revokes, disallows tokens, lists again
 ```
 
@@ -488,7 +548,8 @@ one listed is expected.
 On 2026-10-19 the listing showed 22 packages trusting `cambridgetcg/agenttool`
 `publish-npm.yml` in `npm-bootstrap` with `createPackage` and
 `createStagedPackage`, and 16 with none. Until they are revoked, a workflow file
-of that name added to this repository again could publish them directly. A
+of that name added to this repository again could publish them directly.
+(2026-10-30: revoked; see the [update above](#state-as-of-2026-10-28).) A
 re-run finds nothing more to revoke and sets the same access again.
 
 **What lockdown closes outside the public route.** The nine outside packages

@@ -1,0 +1,1 @@
+../../docs/KINGDOM-VOICES-LOG.md

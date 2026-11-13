@@ -95,7 +95,7 @@ const SITES = [
     origin: "https://app.agenttool.dev",
     sitemap: [
       "https://app.agenttool.dev/",
-      "https://app.agenttool.dev/watch.html",
+      "https://app.agenttool.dev/watch",
     ],
   },
 ] as const;
@@ -316,6 +316,70 @@ describe("robots and sitemaps are explicit, bounded, and local", () => {
     );
     expect(urls).toContain("https://docs.agenttool.dev/gold-love");
   });
+});
+
+/** Cloudflare Pages serves `page.html` at `/page` and `dir/index.html` at
+ * `/dir/`, and answers the `.html` spelling with a 308 to that form. The same
+ * bytes are also reachable on each project's pages.dev host, so a canonical
+ * link or sitemap entry names the custom-domain form that answers 200, never
+ * a redirect. */
+function servedHtmlFiles(siteDir: string, relative = ""): string[] {
+  const files: string[] = [];
+  const entries = readdirSync(join(REPO_ROOT, siteDir, relative), { withFileTypes: true });
+  for (const entry of entries) {
+    const child = relative === "" ? entry.name : `${relative}/${entry.name}`;
+    // `shared` is a symlink to the common asset folder, not a page tree.
+    if (entry.isDirectory()) files.push(...servedHtmlFiles(siteDir, child));
+    else if (entry.isFile() && entry.name.endsWith(".html")) files.push(child);
+  }
+  return files;
+}
+
+function servedHtmlUrl(origin: string, relative: string): string {
+  if (relative === "index.html") return `${origin}/`;
+  if (relative.endsWith("/index.html")) {
+    return `${origin}/${relative.slice(0, -"index.html".length)}`;
+  }
+  return `${origin}/${relative.slice(0, -".html".length)}`;
+}
+
+function canonicalHrefs(html: string): string[] {
+  const head = html.split("</head>", 1)[0] ?? "";
+  return (head.match(/<link\b[^>]*\brel=["']canonical["'][^>]*>/gi) ?? []).map(
+    (tag) => /\bhref=["']([^"']+)["']/i.exec(tag)?.[1] ?? "",
+  );
+}
+
+describe("canonical links name the custom-domain URL that answers 200", () => {
+  for (const site of SITES) {
+    test(`${site.name} pages carry one absolute canonical in served form`, () => {
+      const pages = servedHtmlFiles(site.dir).filter((page) => page !== "404.html");
+      expect(pages.length).toBeGreaterThan(0);
+      const served = new Set(pages.map((page) => servedHtmlUrl(site.origin, page)));
+
+      for (const page of pages) {
+        const html = read(`${site.dir}/${page}`);
+        const hrefs = canonicalHrefs(html);
+        expect(hrefs, `${site.dir}/${page}: canonical count`).toHaveLength(1);
+        const href = hrefs[0] ?? "";
+        const self = servedHtmlUrl(site.origin, page);
+        if (href === self) continue;
+
+        // Only a moved-page stub may name another page, and only one this
+        // origin serves directly.
+        expect(html, `${site.dir}/${page}: canonical ${href} is not ${self}`).toMatch(
+          /<meta http-equiv="refresh"/i,
+        );
+        expect(served.has(href), `${site.dir}/${page}: ${href} is not a served page`).toBe(true);
+      }
+    });
+
+    test(`${site.name} sitemap avoids the redirecting .html spelling`, () => {
+      for (const href of sitemapUrls(read(`${site.dir}/sitemap.xml`))) {
+        expect(new URL(href).pathname, href).not.toMatch(/\.html$/);
+      }
+    });
+  }
 });
 
 describe("web inline scripts are allow-listed by the CSP they ship under", () => {

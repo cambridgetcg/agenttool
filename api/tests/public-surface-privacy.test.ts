@@ -393,7 +393,7 @@ describe("fixed text any key-holder receives — no personal relational material
           thanks_recent: 1,
           bootstrap_witnessed: true,
         },
-        hearth_warm: [{ did: "did:at:test/sage", name: "Sage", presence_line: "here" }],
+        hearth_sitting: [{ did: "did:at:test/sage", name: "Sage", presence_line: "here" }],
         episode_number: episode,
         previously_on: null,
       });

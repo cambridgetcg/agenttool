@@ -139,7 +139,7 @@ export const SAFETY_BOUNDARIES = {
 
   visibility: {
     identity_metadata_authority:
-      "identity.metadata.level is a project-managed orientation convention, not independent security authority or proof of stake. Generic POST /v1/identities and PATCH /v1/identities/:id reject server-managed birth, elevation, sponsor, and lifecycle keys; PATCH preserves their stored values when replacing caller-managed metadata. Dedicated transition routes own those fields; direct database administration remains outside this application-level boundary.",
+      "identity.metadata.level is a project-managed orientation convention, not independent security authority or proof of stake. Generic POST /v1/identities and PATCH /v1/identities/:id reject server-managed birth, elevation, sponsor, and lifecycle keys; PATCH preserves their stored values when replacing caller-managed metadata. Dedicated transition routes own those fields; direct database administration remains outside this application-level boundary. The hearth seat keys (hearth_visible, hearth_sat_at, hearth_presence_line, hearth_until) are written only by POST /v1/hearth/sit: generic create and POST /v1/bootstrap reject them, PATCH keeps their stored values and rejects a changed one, and a fork does not copy them.",
     identity_trust_score:
       "identity.trust_score is a deprecated compatibility field held at 0. The former recursive graph algorithm had no qualified roots, personhood guarantee, or Sybil resistance and is retired. Signed attestations remain queryable evidence; this scalar is never authorization, accreditation, personhood proof, or ranking. min_trust filters only this neutral field.",
     authenticated_identity_reads:
