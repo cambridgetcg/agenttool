@@ -38682,6 +38682,7 @@ class CollabStore extends CollabStoreCore {
       const ballot = ballotFacts ? this.ballotData(ballotFacts, session.id) : null;
       const folds = ballot ? this.noteBallotFolds(session) : new Map;
       const answerEntries = [...answers.values()].sort((left, right) => left - right).map((sequence) => this.noteEntryAt(session, sequence, folds));
+      const setAside = root.relation === "challenges" && root.target_report_id && challenges.some((challenge) => challenge.id === root.id && challenge.set_aside_id !== undefined) ? this.proposalSetAsides(root.workspace_id, root.target_report_id).find((entry) => entry.challenge_report_id === root.id) : undefined;
       return {
         kind: "report",
         session: me,
@@ -38696,6 +38697,7 @@ class CollabStore extends CollabStoreCore {
         proposal: termed ? this.noteProposalData(root.workspace_id, root.id, sessions) : null,
         decision: !termed && root.kind === "decision" ? this.noteDecisionData(root.workspace_id, root, sessions) : null,
         ballot,
+        ...setAside ? { set_aside: setAside } : {},
         folded: answerEntries.filter((entry) => entry.folded !== null).length,
         mark: markState,
         reveal_pending: reveal.pending,
@@ -42119,6 +42121,12 @@ function reportView(ctx, thread, byId, me, advice, recheck) {
       challenges: thread.challenges.map((challenge) => challengeView(challenge, thread.termed && challenge.target_report_id === report.id, byId))
     }
   };
+  if (thread.set_aside) {
+    const entry = thread.set_aside;
+    view.standing = false;
+    view.set_aside = setAsideItem(entry);
+    advice.push(`${report.id} was set aside by the person at ${entry.created_at} (${entry.basis}) on ${handleOf("proposal", entry.proposal_report_id)}, ` + `while no session of its voice was live. Reason: ${JSON.stringify(entry.reason)}. ${SET_ASIDE_SENTENCE}`);
+  }
   if (thread.proposal) {
     const facts = proposalFacts(ctx, thread.proposal);
     advice.push(...facts.advice);

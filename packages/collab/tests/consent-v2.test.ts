@@ -999,6 +999,18 @@ describe("the notes views", () => {
     });
     expect(about.set_asides).toEqual([expect.objectContaining({ challenge: challenge.id, reason: "Its author left." })]);
     expect(about.advice.some((entry: string) => entry.includes("set aside by the person"))).toBe(true);
+    // The challenge's own thread says so too, with the reason, and a consent/v1 thread keeps its keys.
+    const thread = await tool(served(peer), "collab_inbox", { about: `report:${challenge.id}` });
+    expect(thread).toMatchObject({
+      standing: false,
+      set_aside: { by: "person", basis: "controlling_terminal", reason: "Its author left.", at: clock.toISOString(), note: SET_ASIDE_SENTENCE },
+    });
+    expect(thread.advice.some((entry: string) => entry.startsWith(`${challenge.id} was set aside by the person`)
+      && entry.includes(`"Its author left."`))).toBe(true);
+    const v1 = orphanedChallenge({ rule: CONSENT_RULE });
+    const v1Thread = await tool(served(v1.peer), "collab_inbox", { about: `report:${v1.challenge.id}` });
+    expect(Object.hasOwn(v1Thread, "set_aside")).toBe(false);
+    expect(Object.hasOwn(v1Thread, "standing")).toBe(false);
     // collab_proposal_status carries the same record.
     const legacy = await tool(served(peer), "collab_proposal_status", {
       workspace_id: proposal.proposal.workspace_id, proposal_report_id: proposal.proposal.id,

@@ -2441,6 +2441,16 @@ function reportView(
       challenges: thread.challenges.map((challenge) => challengeView(challenge, thread.termed && challenge.target_report_id === report.id, byId)),
     },
   };
+  if (thread.set_aside) {
+    // consent/v2: the challenge's own thread says it no longer stands and why, as its proposal's view does.
+    const entry = thread.set_aside;
+    view.standing = false;
+    view.set_aside = setAsideItem(entry);
+    advice.push(
+      `${report.id} was set aside by the person at ${entry.created_at} (${entry.basis}) on ${handleOf("proposal", entry.proposal_report_id)}, `
+        + `while no session of its voice was live. Reason: ${JSON.stringify(entry.reason)}. ${SET_ASIDE_SENTENCE}`,
+    );
+  }
   if (thread.proposal) {
     const facts = proposalFacts(ctx, thread.proposal);
     advice.push(...facts.advice);

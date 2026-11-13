@@ -979,6 +979,11 @@ export class CollabStore extends CollabStoreCore {
       const folds = ballot ? this.noteBallotFolds(session) : new Map<string, string>();
       const answerEntries = [...answers.values()].sort((left, right) => left - right)
         .map((sequence) => this.noteEntryAt(session, sequence, folds));
+      // consent/v2: a set-aside is not a report, so a challenge's own thread names it here.
+      const setAside = root.relation === "challenges" && root.target_report_id
+        && challenges.some((challenge) => challenge.id === root.id && challenge.set_aside_id !== undefined)
+        ? this.proposalSetAsides(root.workspace_id, root.target_report_id).find((entry) => entry.challenge_report_id === root.id)
+        : undefined;
       // The computed views come from this same snapshot, so the position
       // shown is the one consent/v1 computes for the answers listed.
       return {
@@ -995,6 +1000,7 @@ export class CollabStore extends CollabStoreCore {
         proposal: termed ? this.noteProposalData(root.workspace_id, root.id, sessions) : null,
         decision: !termed && root.kind === "decision" ? this.noteDecisionData(root.workspace_id, root, sessions) : null,
         ballot,
+        ...(setAside ? { set_aside: setAside } : {}),
         folded: answerEntries.filter((entry) => entry.folded !== null).length,
         mark: markState,
         reveal_pending: reveal.pending,
@@ -3335,6 +3341,8 @@ export interface NoteThreadData {
   decision: NoteDecisionData | null;
   /** For a ballot root (a poll report): its terms, turnout and, once revealed, the result. */
   ballot: NoteBallotData | null;
+  /** consent/v2: the root is a challenge the person set aside, and this is that set-aside. */
+  set_aside?: ProposalSetAside;
   /** How many answers are folded for this session (spec 5.2). */
   folded: number;
   /** What the housekeeping did to the read mark: created it from the legacy cursor, or clamped it to the head. */

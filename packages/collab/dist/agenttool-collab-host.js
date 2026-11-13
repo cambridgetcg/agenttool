@@ -8861,6 +8861,7 @@ class CollabStore extends CollabStoreCore {
       const ballot = ballotFacts ? this.ballotData(ballotFacts, session.id) : null;
       const folds = ballot ? this.noteBallotFolds(session) : new Map;
       const answerEntries = [...answers.values()].sort((left, right) => left - right).map((sequence) => this.noteEntryAt(session, sequence, folds));
+      const setAside = root.relation === "challenges" && root.target_report_id && challenges.some((challenge) => challenge.id === root.id && challenge.set_aside_id !== undefined) ? this.proposalSetAsides(root.workspace_id, root.target_report_id).find((entry) => entry.challenge_report_id === root.id) : undefined;
       return {
         kind: "report",
         session: me,
@@ -8875,6 +8876,7 @@ class CollabStore extends CollabStoreCore {
         proposal: termed ? this.noteProposalData(root.workspace_id, root.id, sessions) : null,
         decision: !termed && root.kind === "decision" ? this.noteDecisionData(root.workspace_id, root, sessions) : null,
         ballot,
+        ...setAside ? { set_aside: setAside } : {},
         folded: answerEntries.filter((entry) => entry.folded !== null).length,
         mark: markState,
         reveal_pending: reveal.pending,
