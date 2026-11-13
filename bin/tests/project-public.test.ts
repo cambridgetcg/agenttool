@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import {
@@ -901,6 +901,22 @@ describe("the real allowlist and overlay", () => {
     expect(ci).toContain("551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb");
     expect(ci).not.toContain("apps/docs");
     expect(ci).not.toMatch(/(?:^|[\s"'])bin\//mu);
+  });
+
+  test("the public CI skips collab's older-revision checks only in the collab step, and says why", () => {
+    // The projection's history holds none of the older collab revisions, so
+    // its answer is explicit: the variable that makes those checks skip, with
+    // a printed reason, is set once, in the collab step, and nowhere else.
+    const settings = [...ci.matchAll(/^ {10}COLLAB_COMPAT_SKIP_MISSING: "([^"\n]+)"$/gmu)].map((match) => match[1]);
+    expect(settings).toHaveLength(1);
+    expect(settings[0]!.length).toBeGreaterThan(20);
+    expect(ci.match(/COLLAB_COMPAT_SKIP_MISSING:/gu)).toHaveLength(1);
+    const step = ci.slice(ci.lastIndexOf("      - name:", ci.indexOf("COLLAB_COMPAT_SKIP_MISSING:")));
+    expect(step).toMatch(/^ {6}- name: "collab: [^\n]*"\n {8}env:\n(?: {10}#[^\n]*\n)* {10}COLLAB_COMPAT_SKIP_MISSING: "[^"\n]+"\n {8}working-directory: packages\/collab\n {8}run: bun run ci\n/u);
+    // The private workflows never set it, so a private run cannot skip.
+    for (const name of readdirSync(join(ROOT, ".github", "workflows"))) {
+      expect(readFileSync(join(ROOT, ".github", "workflows", name), "utf8")).not.toContain("COLLAB_COMPAT_SKIP_MISSING");
+    }
   });
 
   test("the committed allowlist projects cleanly through every layer except gitleaks", () => {

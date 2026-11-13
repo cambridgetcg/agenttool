@@ -30,7 +30,15 @@ import {
 } from "./compat/fixture.js";
 import { GOLDEN_BARE_REPORT_BODY, type GoldenOutcome } from "./compat/golden-scenario.js";
 import { normaliseEvents, Placeholders, type EventRow } from "./compat/normalise.js";
-import { gitIn, resolveRevision, type Revision, type Ships } from "./compat/revisions.js";
+import {
+  gitIn,
+  resolveRevision,
+  SKIP_MISSING_VARIABLE,
+  skipMissingReason,
+  skipNotice,
+  type Revision,
+  type Ships,
+} from "./compat/revisions.js";
 
 // Forward compatibility (Collab Notes spec 8.5): older builds keep opening,
 // verifying, paging, acking and writing a journal this build wrote, and this
@@ -97,6 +105,20 @@ const requestedRevisions = (process.env.COLLAB_COMPAT_REVS ?? "").trim().split(/
 const revisions = (requestedRevisions.length ? requestedRevisions : DEFAULT_REVISIONS)
   .map((name) => resolveRevision(repositoryRoot, name));
 const golden = resolveRevision(repositoryRoot, GOLDEN_REVISION, "golden");
+// Set only in the public projection's collab step (see compat/revisions.ts).
+const skipReason = skipMissingReason();
+
+/** A missing revision's one test: it fails, unless COLLAB_COMPAT_SKIP_MISSING gives a reason to skip, which is printed. */
+function missingRevisionTest(revision: Revision): void {
+  if (skipReason) {
+    console.warn(skipNotice(revision.name, skipReason));
+    test.skip("is available in this clone", () => {});
+    return;
+  }
+  test("is available in this clone", () => {
+    throw new Error(revision.missing!);
+  });
+}
 
 function lazy<T>(make: () => Promise<T>): () => Promise<T> {
   let promise: Promise<T> | undefined;
@@ -478,7 +500,8 @@ describe("forward-compatibility fixture", () => {
     expect((await fixture()).waiter_legacy_sequences.length).toBeGreaterThan(0);
   }, TEST_TIMEOUT_MS);
 
-  test("adds no event type beyond a8799aad's union except the spec's", async () => {
+  // Needs a8799aad's protocol.ts; skipped only where the golden describe below prints why.
+  test.skipIf(golden.missing !== null && skipReason !== null)("adds no event type beyond a8799aad's union except the spec's", async () => {
     if (!golden.sha) throw new Error(golden.missing!);
     const base = eventTypeUnion(git(["show", `${golden.sha}:packages/collab/src/protocol.ts`]).stdout);
     const current = eventTypeUnion(readFileSync(join(packageRoot, "src", "protocol.ts"), "utf8"));
@@ -601,19 +624,43 @@ describe("a missing revision", () => {
     expect(goldenMissing).toContain("COLLAB_COMPAT_REVS does not change that.");
   });
 
+  // Only the availability gates run in each child (these tests' own names do
+  // not match, so they do not recurse). The child's environment is built
+  // here, so the parent's COLLAB_COMPAT_SKIP_MISSING never reaches it unasked.
+  const availability = (extra: Record<string, string>) => run(
+    [process.execPath, "test", import.meta.path, "-t", "is available in this clone"],
+    { timeout_ms: WORKER_TIMEOUT_MS, cwd: packageRoot, env: hermeticEnvironment({ COLLAB_COMPAT_REVS: absent, ...extra }) },
+  );
+
   test("fails the harness run instead of skipping", async () => {
-    // Only the availability gates run in the child (this test's own name does
-    // not match, so it does not recurse). The run must fail and say why.
-    const result = await run([process.execPath, "test", import.meta.path, "-t", "is available in this clone"], {
-      timeout_ms: WORKER_TIMEOUT_MS,
-      cwd: packageRoot,
-      env: hermeticEnvironment({ COLLAB_COMPAT_REVS: absent }),
-    });
+    const result = await availability({});
     const output = `${result.stdout}\n${result.stderr}`;
     expect(result.exit_code).not.toBe(0);
     expect(output).toContain(`(fail) older build ${absent} > is available in this clone`);
     expect(output).toContain("fetch-depth: 0");
     expect(output).not.toMatch(/\(skip\)/);
+    expect(output).not.toContain(SKIP_MISSING_VARIABLE);
+  }, TEST_TIMEOUT_MS);
+
+  test("never skips without COLLAB_COMPAT_SKIP_MISSING: a blank value fails like an unset one", async () => {
+    const result = await availability({ [SKIP_MISSING_VARIABLE]: "   " });
+    const output = `${result.stdout}\n${result.stderr}`;
+    expect(result.exit_code).not.toBe(0);
+    expect(output).toContain(`(fail) older build ${absent} > is available in this clone`);
+    expect(output).not.toMatch(/\(skip\)/);
+    expect(skipMissingReason({})).toBeNull();
+    expect(skipMissingReason({ [SKIP_MISSING_VARIABLE]: "" })).toBeNull();
+    expect(skipMissingReason({ [SKIP_MISSING_VARIABLE]: " \t " })).toBeNull();
+  }, TEST_TIMEOUT_MS);
+
+  test("skips a missing revision when COLLAB_COMPAT_SKIP_MISSING gives a reason, and prints the reason", async () => {
+    const reason = "the projection under test holds no older revisions";
+    const result = await availability({ [SKIP_MISSING_VARIABLE]: reason });
+    const output = `${result.stdout}\n${result.stderr}`;
+    expect(result.exit_code).toBe(0);
+    expect(output).toContain(`(skip) older build ${absent} > is available in this clone`);
+    expect(output).toContain(skipNotice(absent, reason));
+    expect(output).not.toMatch(/\(fail\)/);
   }, TEST_TIMEOUT_MS);
 });
 
@@ -649,9 +696,7 @@ interface Inspected {
 for (const revision of revisions) {
   describe(`older build ${revision.name}`, () => {
     if (revision.missing) {
-      test("is available in this clone", () => {
-        throw new Error(revision.missing!);
-      });
+      missingRevisionTest(revision);
       return;
     }
     const known = KNOWN_REVISIONS[revision.sha!];
@@ -960,9 +1005,7 @@ for (const revision of revisions) {
 
 describe(`golden scenario against ${GOLDEN_REVISION}`, () => {
   if (golden.missing) {
-    test("is available in this clone", () => {
-      throw new Error(golden.missing!);
-    });
+    missingRevisionTest(golden);
     return;
   }
   const root = join(work, "golden", "repo");
