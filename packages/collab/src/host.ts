@@ -193,10 +193,18 @@ export interface HostWaitReceipt {
   head_sequence: number;
   /** Events this session wrote itself, passed over unless --include-own. */
   skipped_own_events: number;
-  /** With --addressed only: other sessions' events whose routing does not name this session. */
+  /**
+   * With --addressed only: events whose routing does not name this session.
+   * An event never addresses its own author, so with --include-own the
+   * session's own events are counted here too.
+   */
   skipped_unaddressed_events?: number;
   waited_ms: number;
-  /** Present when the first unread event exceeds the bounded page and could not be inspected. */
+  /**
+   * Present when the first unread event exceeds the bounded page and could
+   * not be inspected. On an idle receipt it means a standing rest kept the
+   * wait before that event: nothing behind it can ring until the rest is over.
+   */
   first_event_oversized?: true;
   /**
    * Events passed over, for good, because of the session's declared rest:
@@ -295,8 +303,12 @@ export function endSessionFromCredential(
  * session rings (isAddressedTo: the set a host doorbell wakes for), whatever
  * the flags ask. What a rest holds is passed over, not kept for later: it
  * waits in the journal, collab_next counts it on return, and the end of
- * `until` starts nothing. The rest is read only when an event would ring and
- * once at the deadline, so a quiet wait costs one extra read.
+ * `until` starts nothing. That holds for a wait that keeps running or is
+ * continued from next_anchor: the rest is judged when a poll sees the event,
+ * so a note landing in the last poll interval before the rest ends, or a wait
+ * armed afresh from the acknowledged cursor after it, still rings. The rest
+ * is read at most once per page, only when an event would ring, and once at
+ * the deadline, so a quiet wait costs one extra read.
  */
 export function waitForSessionEvents(
   store: CollabStore,
@@ -316,9 +328,13 @@ export function waitForSessionEvents(
   let held = 0;
   const standingRest = (): SessionRest | null => store.getCoordinationSession(session.id)?.rest ?? null;
   const holds = (rest: SessionRest | null): boolean => rest !== null && !rest.wake_on.includes("addressed");
-  /** Whether the session's rest, read now, lets this would-ring event ring. */
+  // One read serves a whole page: the page is a single snapshot already.
+  let pageRest: { rest: SessionRest | null } | null = null;
+  let pinnedByOversized = false;
+  /** Whether the session's rest lets this would-ring event ring. */
   const restAllows = (event: Parameters<CollabStore["eventAddressesSession"]>[0]): boolean => {
-    const rest = standingRest();
+    pageRest ??= { rest: standingRest() };
+    const rest = pageRest.rest;
     if (rest === null) return true;
     if (holds(rest)) return false;
     return isAddressedTo({
@@ -343,10 +359,13 @@ export function waitForSessionEvents(
   const idle = (headSequence: number): HostWaitReceipt => ({
     ...receipt("idle", headSequence),
     ...(holds(standingRest()) ? { held_by_rest: true as const } : {}),
+    ...(pinnedByOversized ? { first_event_oversized: true as const } : {}),
   });
   let headSequence = observed.sequence;
   while (true) {
     let drained = true;
+    pageRest = null;
+    pinnedByOversized = false;
     try {
       const page = store.eventsAfterAnchorForSession({
         ...credential,
@@ -373,6 +392,7 @@ export function waitForSessionEvents(
         // (consent unknown) nor passed over (unread), so the wait stays before
         // it; this one event can still ring once the rest is over.
         if (standingRest() === null) return { ...receipt("ready", headSequence), first_event_oversized: true };
+        pinnedByOversized = true;
       } else if (!(error instanceof CollabError) || error.code !== "event_read_busy" || clock.now() >= deadline) {
         throw error;
       }
@@ -560,6 +580,12 @@ function parseHostArgs(argv: string[]): HostArgs {
   try {
     parsed = parseHostOptions(argv);
   } catch (error) {
+    // A quiet verb placed after an option brings flags end and wait do not
+    // know. Say where the verb belongs, not which flag was unknown.
+    if (!argv.includes("end") && !argv.includes("wait")
+      && COLLAB_HOST_QUIET_VERBS.some((verb) => argv.includes(verb))) {
+      throw verbUsageError("The verb must be the first argument (end and wait may follow their options)");
+    }
     throw new CollabError(
       "usage_error",
       `${error instanceof Error ? error.message : String(error)}; ${COLLAB_HOST_USAGE}`,

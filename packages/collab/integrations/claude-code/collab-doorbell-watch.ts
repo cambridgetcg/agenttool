@@ -11,8 +11,10 @@
  *
  * It exits when the owning Claude Code process or its socket is gone, when the
  * collab session ends, on SIGTERM/SIGINT, or after --max-hours. One watcher
- * per collab session (pidfile). It never writes to the journal and never
- * prints the inbox token. See README.md beside this file.
+ * per collab session (pidfile). It changes no event, cursor or session row
+ * (the wait it runs opens the journal through the store) and never prints the
+ * inbox token. Every line it posts starts a turn, so it obeys a declared rest:
+ * see "What rings" in README.md beside this file.
  */
 import { Database } from "bun:sqlite";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -34,6 +36,8 @@ interface WaitReceipt {
   next_anchor?: Anchor;
   /** Idle only: the session rests without wake_on "addressed", so nothing may start a turn in it. */
   held_by_rest?: true;
+  /** Events this wait passed over for good because of the session's declared rest. */
+  skipped_held_events?: number;
 }
 
 const USAGE = "usage: collab-doorbell-watch --session <id> [--db <path>] [--host-bin <path>] [--all] "
@@ -79,11 +83,12 @@ const hostBin = resolve(values["host-bin"] ?? process.env.AGENTTOOL_COLLAB_HOST_
   ?? join(import.meta.dir, "..", "..", "dist", "agenttool-collab-host.js"));
 const cycleMs = integer("cycle-ms", 1_800_000, 1_000, 3_600_000);
 const minGapMs = integer("min-gap-ms", 60_000, 0, 3_600_000);
-// AGENTTOOL_COLLAB_DOORBELL_TEST_MAX_MS is a test hook for the lifetime below, not an interface.
-const testMaxMs = Number(process.env.AGENTTOOL_COLLAB_DOORBELL_TEST_MAX_MS);
-const maxMs = Number.isSafeInteger(testMaxMs) && testMaxMs > 0
-  ? testMaxMs
-  : integer("max-hours", 12, 1, 72) * 3_600_000;
+const maxHoursMs = integer("max-hours", 12, 1, 72) * 3_600_000;
+// AGENTTOOL_COLLAB_DOORBELL_TEST_MAX_MS is a test hook for the lifetime, not
+// an interface: whole milliseconds only, and the start log entry says so.
+const testMaxRaw = process.env.AGENTTOOL_COLLAB_DOORBELL_TEST_MAX_MS ?? "";
+const testMaxMs = /^[1-9]\d{0,8}$/.test(testMaxRaw) ? Number(testMaxRaw) : null;
+const maxMs = testMaxMs ?? maxHoursMs;
 const addressed = values.all !== true;
 const socket = process.env.CLAUDE_CODE_MESSAGING_SOCKET ?? "";
 const token = process.env.CLAUDE_CODE_MESSAGING_TOKEN;
@@ -178,9 +183,9 @@ function sessionActive(): boolean {
 
 const ownerGone = () => (ownerPid !== null && !alive(ownerPid)) || !existsSync(socket);
 
-function waitOnce(after: Anchor, waitMs = cycleMs): Promise<WaitReceipt> {
+function waitOnce(after: Anchor): Promise<WaitReceipt> {
   const args = [hostBin, "wait", "--session", sessionId, "--db", dbPath,
-    "--after-anchor", JSON.stringify(after), "--wait-ms", String(waitMs)];
+    "--after-anchor", JSON.stringify(after), "--wait-ms", String(cycleMs)];
   if (addressed) args.push("--addressed");
   if (values["include-own"]) args.push("--include-own");
   return new Promise((resolveReceipt) => {
@@ -222,6 +227,33 @@ function ring(text: string): Promise<boolean> {
   });
 }
 
+/**
+ * Whether the session rests, right now, without wake_on "addressed". Asked of
+ * the quiet `knocks --session` verb: it needs no credential, so it still
+ * answers when the wait itself is failing. If it cannot be read, the last
+ * receipt's answer stands.
+ */
+function restHoldsNow(): Promise<boolean> {
+  return new Promise((resolveHeld) => {
+    const proc = spawn(process.execPath, [hostBin, "knocks", "--session", sessionId, "--db", dbPath], {
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    let out = "";
+    proc.stdout!.on("data", (chunk) => {
+      out += chunk;
+    });
+    proc.on("error", () => resolveHeld(heldByRest));
+    proc.on("close", () => {
+      try {
+        const report = JSON.parse(out.split("\n")[0] ?? "") as { rest?: { wake_on?: string[] } | null };
+        resolveHeld(report.rest != null && !(report.rest.wake_on ?? []).includes("addressed"));
+      } catch {
+        resolveHeld(heldByRest);
+      }
+    });
+  });
+}
+
 const sleep = (ms: number) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
 const started = Date.now();
 let anchor: Anchor = values["from-cursor"]
@@ -229,19 +261,22 @@ let anchor: Anchor = values["from-cursor"]
   : head();
 let lastRing = 0;
 let authRetries = 0;
-// Whether the last receipt found the session at a rest that asked for no
-// turn. The watcher's own notices are turns too, so they obey it.
+// Whether the last idle receipt found the session at a rest that asked for
+// no turn. It can be a whole cycle old, so it is only the fallback for
+// restHoldsNow(), which the watcher's own notices ask before they ring.
 let heldByRest = false;
-log({ event: "start", pid: process.pid, workspace_id: workspaceId, after_sequence: anchor.sequence, addressed });
+// Events passed over because of a rest since the last ring. The next ring
+// says so: its anchor lies past them, and only collab_next reads from the cursor.
+let heldSinceRing = 0;
+log({
+  event: "start", pid: process.pid, workspace_id: workspaceId, after_sequence: anchor.sequence, addressed,
+  ...(testMaxMs === null ? {} : { test_max_ms: testMaxMs }),
+});
 
 while (true) {
   if (ownerGone()) stop("owner_gone");
   if (Date.now() - started >= maxMs) {
-    // Ask once more, now: the last cycle's answer can be half an hour old.
-    const probe = await waitOnce(anchor, 0);
-    if (probe.status === "idle") heldByRest = probe.held_by_rest === true;
-    else if (probe.status === "ready") heldByRest = false;
-    if (heldByRest) {
+    if (await restHoldsNow()) {
       log({ event: "expired_in_held_rest" });
       stop("max_lifetime");
     }
@@ -254,24 +289,38 @@ while (true) {
     anchor = receipt.next_anchor;
     authRetries = 0;
     heldByRest = receipt.held_by_rest === true;
+    heldSinceRing += receipt.skipped_held_events ?? 0;
     log({ event: heldByRest ? "held" : "idle", next_sequence: anchor.sequence });
     continue;
   }
   if (receipt.status === "ready" && receipt.next_anchor) {
     authRetries = 0;
     heldByRest = false;
-    // Coalesce a burst: wait out the gap, then ring once for everything up to the head.
+    // Coalesce a burst: wait out the gap, then ask again from the same
+    // anchor. The session may have declared a rest meanwhile, and the wait is
+    // what reads it; if nothing changed it answers ready at once and rings
+    // once for everything up to the head.
     const gap = lastRing + minGapMs - Date.now();
-    if (gap > 0) await sleep(gap);
+    if (gap > 0) {
+      await sleep(gap);
+      continue;
+    }
     if (ownerGone()) stop("owner_gone");
     const from = receipt.next_anchor;
     const covered = head();
     const what = addressed ? "at least one routed to this session" : "at least one from another session";
+    heldSinceRing += receipt.skipped_held_events ?? 0;
+    const passedOver = heldSinceRing > 0
+      ? `While this session rested, ${heldSinceRing} event(s) before that anchor were passed over without a ring: `
+        + "read from your cursor with collab_next first. "
+      : "";
     const rang = await ring(`[collab doorbell] ready: workspace ${workspaceId}, session ${sessionId}: `
       + `${covered.sequence - from.sequence} event(s) after sequence ${from.sequence} `
       + `(head ${covered.sequence}), ${what}. This line carries no event content. `
       + `Read them with collab_events_wait or collab_events_since after_anchor ${JSON.stringify(from)}. `
+      + passedOver
       + `Watcher pid ${process.pid} re-arms itself; stop it with kill ${process.pid}.`);
+    heldSinceRing = 0;
     lastRing = Date.now();
     log({ event: rang ? "rang" : "ring_failed", from_sequence: from.sequence, head_sequence: covered.sequence });
     if (!rang && ownerGone()) stop("owner_gone");
@@ -293,7 +342,7 @@ while (true) {
     await sleep(5_000);
     continue;
   }
-  if (heldByRest) {
+  if (await restHoldsNow()) {
     log({ event: "stopped_in_held_rest", error: receipt.error ?? "unknown_error" });
     stop(`error:${receipt.error ?? "unknown"}`, 1);
   }

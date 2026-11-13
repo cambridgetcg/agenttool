@@ -399,7 +399,8 @@ after `--after-anchor` (exact `{ epoch_id, sequence, hash }` JSON) or, by
 default, after the session's acknowledged cursor, polling every 250 ms for up
 to `--wait-ms` (default 600,000, maximum 3,600,000). Events attributed to the
 waiting session are passed over unless `--include-own`; unattributed events
-such as `workspace.opened` count as unread. With `--addressed`, other
+such as `workspace.opened` count as unread. With `--addressed`, an event never
+addresses its own author (so `--include-own` then changes nothing), and other
 sessions' events ring only when their routing fields name the waiting session
 (`CollabStore.eventAddressesSession`): a report addressed to it, or answering
 one of its reports with no other addressee; a handoff offered to it, or an
@@ -419,8 +420,12 @@ rings. While it rests with it, only a note explicitly addressed to it rings
 (the set a host doorbell wakes for), whatever `--addressed` or `--include-own`
 ask. Events held this way are passed over, not kept for later: the receipt
 counts them in `skipped_held_events`, they wait in the journal, and
-`collab_next` counts addressed ones on return, so neither a return nor the end
-of `until` rings for them. An idle receipt adds `held_by_rest: true` while a
+`collab_next` counts addressed ones on return. A wait that keeps running, or
+is continued from `next_anchor`, therefore does not ring for them when the
+session returns or `until` ends. The rest is judged when a poll sees the
+event, so a note that lands in the last poll interval before the rest ends
+still rings, and so does held mail under a wait armed afresh from the
+acknowledged cursor afterwards. An idle receipt adds `held_by_rest: true` while a
 rest without `wake_on: ["addressed"]` still stands. The rest is read, never
 liveness: a `stale` session that did not declare rest is still rung by a wait
 it armed.
@@ -529,13 +534,14 @@ report, or end the session and start a new one.
 
 `agenttool-collab-host` has four verbs: `end` and `wait` print one receipt line of
 `agenttool.collab-host/1`, and `knocks` and `doorbell-scan` are quiet (see
-[Declared rest and knocks](#declared-rest-and-knocks)). `--help` prints
+[Declared rest and knocks](#declared-rest-and-knocks)). `--help`, given first
+or with `end` or `wait`, prints
 `status: "help"` with a `usage` line naming every verb, `verbs` (every verb
-this build answers) and `quiet_verbs`. A first word the build does not know
-exits 1 with `usage_error`, the same two lists, and no echo of what was given;
+this build answers) and `quiet_verbs`; after a quiet verb it prints nothing. A first word the build does not know
+exits 1 with `usage_error`, the same two lists, and no echo of what was given, even with `--help`;
 `end` and `wait` may follow their options, the quiet verbs must come first.
 Host wiring that may meet another build can rely on one rule that holds for
-every build: a quiet verb prints its own protocol's line or nothing and never
+every build when the verb is given first: a quiet verb prints its own protocol's line or nothing and never
 exits non-zero, so exit 1 with a `usage_error` receipt means the verb is absent.
 A help receipt without `verbs` comes from a build older than the list and
 says nothing either way. Ignore keys you do not know.
@@ -584,7 +590,7 @@ it on every call, so an idempotent replay shows the addressee's current state:
 |---|---|---|
 | `tap` | `live` | a host hook may show a pointer at its next turn |
 | `wake` | `resting` with `wake_on: ["addressed"]` | a host doorbell may wake it |
-| `held` | `resting` without it, or `stale` | no tap and no host wake; the note waits for its return (a `wait` the addressee armed itself stays silent for a rest, and still rings a `stale` session) |
+| `held` | `resting` without it, or `stale` | no host wake; the note waits for its return. A resting session is not tapped and a `wait` it armed stays silent; a `stale` one is tapped when its host next takes a turn, and a `wait` it armed still rings |
 | `none` | `ended` | never knocked; the note stays honestly unread |
 
 `delivery` describes what the addressee declared, not what a host did, and
@@ -636,7 +642,7 @@ nothing and exit 0. `doorbell-scan` bindings name credential-file paths: keep
 them in host configuration, never in model-visible text.
 
 The host binding comes from the host side, never from a model's claim. The MCP
-server's start (`collab_session_start`) and resume
+server's default-slot start (`collab_session_start`) and resume
 (`AGENTOOL_COLLAB_SESSION_FILE`) paths write
 `<database-directory>/collab-sessions/<session-id>.host.json` (mode `0600`,
 format `agenttool.collab-host-binding/1`) with `host_kind` (`claude-code`,
@@ -657,8 +663,9 @@ resolve every symlink or case alias, prevent direct edits, or arbitrate a
 process using another database.
 
 When a session lease's TTL has passed and its holder has ended or gone unseen
-for 6 hours, the task reads as `recovery_required`; a legacy actor lease does
-as soon as its TTL has passed. Before taking
+for 6 hours, the task reads as `recovery_required`. (A legacy actor lease
+reads `lease_expired` as soon as its TTL has passed and is taken by the next
+ordinary claim; `collab_task_recover` applies to session leases only.) Before taking
 it over, inspect its progress, reports, artifacts, and last checkpoint. Call
 `collab_task_recover` explicitly with the chosen takeover, release, or block
 action and a concise recovery note explaining what was checked and how useful
@@ -711,7 +718,9 @@ another session's attempt to correct, withdraw, or supersede returns
 preserve the earlier record. Corrections append history; they do not rewrite
 it. `to_session_id` routes a report into that session's `collab_next` instead
 of everyone's; `collab_report_list` still shows it. Addressing is routing, not
-access control.
+access control. A report that answers another, a challenge above all, rings
+only the session it names: leave it unaddressed, or address the target's
+author, when the author should be rung.
 It narrows the reports list only: the `report.posted` event, body included,
 still appears in every session's event page.
 
@@ -841,7 +850,8 @@ silences its parent's tap. That absence is also what holds a child's wake: its
 `wake_on` consent is recorded, but no host taps or wakes it, and `doorbell-scan`
 lists it with `binding: null`. Its notes wait for `collab_next` with its
 `binding_key`, or for a host that knows its id (`knocks --session`,
-`wait --session`). Work that must be woken runs under its own host process with
+`wait --session`). A sender's hint for a named child still reads `tap` or
+`wake`: it reports the declaration, and no host acts on it. Work that must be woken runs under its own host process with
 a default-slot session. The older packaged skill adapters
 describe the separate-process workflow, which remains supported; the MCP schemas
 and this section specify the new opt-in multiplexing contract.

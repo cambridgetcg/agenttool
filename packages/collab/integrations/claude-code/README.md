@@ -3,7 +3,7 @@
 > **Compass:** [Collab boundary](../../README.md), [coordination skill](../../skills/coordinate-agent-work/SKILL.md).
 > **Implements:** A host-side watcher that wakes one Claude Code session when collab mail arrives for it. It is not a native lifecycle adapter.
 > **Code:** `collab-doorbell-watch.ts`, `../../src/host.ts` (`agenttool-collab-host wait`), `../../src/store.ts` (`eventAddressesSession`).
-> **Tests:** `../../tests/claude-doorbell-watch.test.ts`, `../../tests/host.test.ts`.
+> **Tests:** `../../tests/claude-doorbell-watch.test.ts`, `../../tests/claude-doorbell-rest.test.ts`, `../../tests/wait-rest.test.ts`, `../../tests/host.test.ts`.
 
 Collab never wakes an agent. The host does. Claude Code gives every session a per-session inbox socket. Its path is in `CLAUDE_CODE_MESSAGING_SOCKET` and its token is in `CLAUDE_CODE_MESSAGING_TOKEN`. A line posted there starts a new turn in an idle session, or is read between tool calls in a busy one.
 
@@ -19,8 +19,8 @@ This watcher joins the two. It loops `agenttool-collab-host wait` and posts one 
 
   This routed set is wider than a knock. An answer sent without `to_session_id`, an answer to its handoff offer, and the recovery of its lease ring here, but are not counted in `addressed_waiting` and never reach `knocks` or `doorbell-scan`.
 - **`--all`:** any event from another session rings.
-- **Never:** the session's own events, unless `--include-own` is passed.
-- **Never into a rest that asked for no turn.** While the session rests without `wake_on: ["addressed"]`, nothing rings, and the watcher's own expiry and "stopped" notices stay silent too (it logs and exits). While it rests with `wake_on: ["addressed"]`, only a note explicitly addressed to it rings, even with `--all`. What a rest holds is not rung later: read it with `collab_next` when you return, and re-arm the watcher if it has expired. A session that is merely `stale` and declared no rest is still rung.
+- **Never:** the session's own events, unless `--include-own` is passed with `--all`. In the default addressed mode an event never addresses its own author, so `--include-own` changes nothing there.
+- **Never into a rest that asked for no turn.** While the session rests without `wake_on: ["addressed"]`, nothing rings: a ring delayed by `--min-gap-ms` asks again before it fires, and the watcher's own expiry and "stopped" notices first ask the journal whether the session rests now, then log and exit silently if it does. While it rests with `wake_on: ["addressed"]`, only a note explicitly addressed to it rings, even with `--all`. What a rest holds is not rung later. The next ring after a rest says how many events were passed over: its anchor lies past them, so read from your cursor with `collab_next` first, and re-arm the watcher if it has expired. A note that lands within one poll before a rest ends (a quarter second, a little longer at a cycle start) can still ring. A session that is merely `stale` and declared no rest is still rung.
 
 Report bodies and other free text are never inspected. Addressing is routing, not access control: every session can still read the event.
 
@@ -39,7 +39,7 @@ To stop it, run `kill "$(cat <journal dir>/collab-doorbell/watch-<collab session
 | Option | Default | Effect |
 |---|---|---|
 | `--addressed` / `--all` | addressed | Which events ring |
-| `--include-own` | off | Also ring for your own events |
+| `--include-own` | off | Also ring for your own events (with `--all` only) |
 | `--from-cursor` | off | Start after your acknowledged cursor instead of the current head |
 | `--cycle-ms` | 1,800,000 | Each `wait` deadline (at most 3,600,000) |
 | `--min-gap-ms` | 60,000 | Minimum time between rings. A burst inside the gap becomes one ring |

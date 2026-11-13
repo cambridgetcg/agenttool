@@ -150,4 +150,79 @@ describe("Claude Code collab doorbell watcher against a declared rest", () => {
     expect(rings[1]).toContain("expired after");
     expect(logOf(own.session.id)).not.toContain("expired_in_held_rest");
   }, 30_000);
+
+  test("a ring delayed by the gap does not fire into a rest declared during the gap", async () => {
+    const own = listener("gap-rester");
+    const peer = store.startSession({ root_path: root, actor: "peer" });
+    const watcher = startWatcher(own.session.id, 60_000, ["--min-gap-ms", "4000"]);
+    await until(() => logOf(own.session.id).includes('"start"'));
+
+    mail(peer, own, "first");
+    await until(() => rings.length === 1);
+    // The second note lands inside the gap: the wait answers ready and the watcher holds its ring.
+    mail(peer, own, "second");
+    await Bun.sleep(1_000);
+    store.restSessionForSession({ ...own.credential, idempotency_key: "rest-in-gap", mode: "resting" });
+
+    // Well past the gap: the delayed ring looked again and found the rest.
+    await until(() => logOf(own.session.id).includes('"held"'), 12_000);
+    expect(rings).toHaveLength(1);
+    watcher.kill("SIGTERM");
+    await watcher.exited;
+  }, 30_000);
+
+  test("the first ring after a rest says mail was passed over and points at collab_next", async () => {
+    const own = listener("until-rester");
+    const peer = store.startSession({ root_path: root, actor: "peer" });
+    store.restSessionForSession({
+      ...own.credential, idempotency_key: "short-rest", mode: "resting",
+      until: new Date(Date.now() + 2_500).toISOString(),
+    });
+    const watcher = startWatcher(own.session.id, 60_000);
+    await until(() => logOf(own.session.id).includes('"start"'));
+
+    mail(peer, own, "held-during-rest");
+    await until(() => logOf(own.session.id).includes('"held"'));
+    expect(rings).toEqual([]);
+
+    // The rest ends by itself and starts nothing. Fresh mail then rings, and
+    // the line must not send the reader past the note that was held.
+    await until(() => store.getCoordinationSession(own.session.id)?.rest === null, 6_000);
+    await Bun.sleep(1_200);
+    expect(rings).toEqual([]);
+    mail(peer, own, "fresh");
+    await until(() => rings.length === 1);
+    expect(rings[0]).toContain("[collab doorbell] ready");
+    expect(rings[0]).toContain("1 event(s) before that anchor were passed over");
+    expect(rings[0]).toContain("collab_next");
+    expect(rings[0]).not.toContain("body-held-during-rest");
+    watcher.kill("SIGTERM");
+    await watcher.exited;
+  }, 30_000);
+
+  test("the stopped notice asks the journal, not its memory, whether the session rests", async () => {
+    // Rested when the watcher last heard, returned since: it must be told.
+    const returned = listener("returned-rester");
+    store.restSessionForSession({ ...returned.credential, idempotency_key: "rest", mode: "resting" });
+    const first = startWatcher(returned.session.id, 60_000);
+    await until(() => logOf(returned.session.id).includes('"held"'));
+    store.restSessionForSession({ ...returned.credential, idempotency_key: "return", mode: "ready" });
+    // A resume elsewhere raises the generation; the credential file the watcher reads is now stale for good.
+    store.resumeSession(returned.credential);
+    expect(await first.exited).toBe(1);
+    expect(rings).toHaveLength(1);
+    expect(rings[0]).toContain("[collab doorbell] stopped: session_auth_failed");
+    expect(logOf(returned.session.id)).not.toContain("stopped_in_held_rest");
+
+    // Awake when the watcher last heard, resting since: it must be left alone.
+    rings.length = 0;
+    const resting = listener("late-rester");
+    const second = startWatcher(resting.session.id, 60_000);
+    await until(() => logOf(resting.session.id).includes('"idle"'));
+    store.restSessionForSession({ ...resting.credential, idempotency_key: "rest", mode: "resting" });
+    store.resumeSession(resting.credential);
+    expect(await second.exited).toBe(1);
+    expect(rings).toEqual([]);
+    expect(logOf(resting.session.id)).toContain("stopped_in_held_rest");
+  }, 60_000);
 });

@@ -5918,8 +5918,11 @@ function waitForSessionEvents(store, credential, options, clock = systemClock) {
   let held = 0;
   const standingRest = () => store.getCoordinationSession(session.id)?.rest ?? null;
   const holds = (rest) => rest !== null && !rest.wake_on.includes("addressed");
+  let pageRest = null;
+  let pinnedByOversized = false;
   const restAllows = (event) => {
-    const rest = standingRest();
+    pageRest ??= { rest: standingRest() };
+    const rest = pageRest.rest;
     if (rest === null)
       return true;
     if (holds(rest))
@@ -5945,11 +5948,14 @@ function waitForSessionEvents(store, credential, options, clock = systemClock) {
   });
   const idle = (headSequence2) => ({
     ...receipt("idle", headSequence2),
-    ...holds(standingRest()) ? { held_by_rest: true } : {}
+    ...holds(standingRest()) ? { held_by_rest: true } : {},
+    ...pinnedByOversized ? { first_event_oversized: true } : {}
   });
   let headSequence = observed.sequence;
   while (true) {
     let drained = true;
+    pageRest = null;
+    pinnedByOversized = false;
     try {
       const page = store.eventsAfterAnchorForSession({
         ...credential,
@@ -5977,6 +5983,7 @@ function waitForSessionEvents(store, credential, options, clock = systemClock) {
       if (error instanceof CollabError && error.code === "event_too_large") {
         if (standingRest() === null)
           return { ...receipt("ready", headSequence), first_event_oversized: true };
+        pinnedByOversized = true;
       } else if (!(error instanceof CollabError) || error.code !== "event_read_busy" || clock.now() >= deadline) {
         throw error;
       }
@@ -6110,6 +6117,9 @@ function parseHostArgs(argv) {
   try {
     parsed = parseHostOptions(argv);
   } catch (error) {
+    if (!argv.includes("end") && !argv.includes("wait") && COLLAB_HOST_QUIET_VERBS.some((verb) => argv.includes(verb))) {
+      throw verbUsageError("The verb must be the first argument (end and wait may follow their options)");
+    }
     throw new CollabError("usage_error", `${error instanceof Error ? error.message : String(error)}; ${COLLAB_HOST_USAGE}`);
   }
   const [command, ...extra] = parsed.positionals;

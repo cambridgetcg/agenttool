@@ -219,7 +219,9 @@ A related report must use the same task scope as its target: pass the target's
 the server returns `report_task_mismatch`. Answer someone else's proposal with
 `supports` or `challenges`; challenge another session's report rather than
 correcting it. Challenge the report, not the actor. Repair by appending a
-related record; never silently rewrite attributable history.
+related record; never silently rewrite attributable history. A challenge with
+`to_session_id` rings only that session: leave it unaddressed, or address the
+report's author, when the author should hear it.
 
 `to_session_id` routes a report into that session's `collab_next` instead of
 everyone's. Anyone can still read it with `collab_report_list`; addressing is
@@ -256,7 +258,7 @@ so an idempotent retry shows the addressee's current state:
 |---|---|---|
 | `tap` | `live` | a host hook may show a one-line pointer at its next turn |
 | `wake` | `resting` with `wake_on: ["addressed"]` | a host doorbell may wake it |
-| `held` | `resting` without it, or `stale` | no tap and no host wake; the note waits for its return |
+| `held` | `resting` without it, or `stale` | no host wake; the note waits for its return (a resting session is not tapped; a `stale` one is tapped when its host next takes a turn) |
 | `none` | `ended` | never knocked; departure is complete and the note stays unread |
 
 The hint names what the addressee declared, not what any host did, and nothing

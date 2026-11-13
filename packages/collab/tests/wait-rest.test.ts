@@ -217,6 +217,60 @@ describe("host wait against a rest without wake_on addressed", () => {
     expect(returned.skipped_held_events).toBeUndefined();
   });
 
+  test("reads the rest once for a page of mail, not once for each note", () => {
+    const own = start("busy-rester");
+    const peer = start("peer");
+    rest(own, "rest");
+    const anchor = head(own);
+    for (const key of ["one", "two", "three", "four", "five"]) mail(peer, own, key);
+
+    let reads = 0;
+    const read = store.getCoordinationSession.bind(store);
+    store.getCoordinationSession = (sessionId: string) => {
+      reads += 1;
+      return read(sessionId);
+    };
+    try {
+      expect(wait(own, anchor, { addressed: true, wait_ms: 0 })).toMatchObject({
+        status: "idle", skipped_held_events: 5, held_by_rest: true,
+      });
+    } finally {
+      store.getCoordinationSession = read;
+    }
+    // Once to find the session, once for the page that held five notes, once at the deadline.
+    expect(reads).toBe(3);
+  });
+
+  test("an event too large to inspect pins the wait under a rest, and the receipt says so", () => {
+    const own = start("pinned-rester");
+    const peer = start("peer");
+    rest(own, "rest");
+    const anchor = head(own);
+    // A synthetic valid row larger than the bounded page, as tests/events-wait.test.ts builds it.
+    const internals = store as unknown as {
+      db: { transaction: (run: () => void) => { immediate: () => void } };
+      appendEvent: (...args: unknown[]) => unknown;
+    };
+    internals.db.transaction(() => {
+      internals.appendEvent(
+        own.workspace.id, "report.posted", "oversized", "fixture",
+        { evidence_refs: Array.from({ length: 128 }, (_, index) => `${index}-${"界".repeat(1990)}`) },
+        peer.session.id,
+      );
+    }).immediate();
+    mail(peer, own, "behind-the-large-one");
+
+    // It can be neither rung (consent unknown) nor passed over (unread): the wait stays before it.
+    const pinned = wait(own, anchor, { addressed: true });
+    expect(pinned).toMatchObject({
+      status: "idle", next_anchor: anchor, held_by_rest: true, first_event_oversized: true,
+    });
+    expect(pinned.skipped_held_events).toBeUndefined();
+
+    comeBack(own, "return");
+    expect(wait(own, anchor, { addressed: true })).toMatchObject({ status: "ready", first_event_oversized: true });
+  });
+
   test("agrees with the tap: mail is held here exactly while knocks reports it and marks nothing", () => {
     const own = start("rester");
     const peer = start("peer");

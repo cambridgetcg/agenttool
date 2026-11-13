@@ -89,14 +89,28 @@ describe("agenttool-collab-host verbs and help", () => {
   });
 
   test("no verb, or a quiet verb after an option, says the verb comes first", () => {
-    for (const argv of [[], ["--db", "/nowhere"], ["--db", "/nowhere", "knocks"], ["--db", "/nowhere", "doorbell-scan"]]) {
+    for (const argv of [
+      [],
+      ["--db", "/nowhere"],
+      ["--db", "/nowhere", "knocks"],
+      ["--db", "/nowhere", "doorbell-scan"],
+      // With the quiet verb's own flags, which end and wait do not know.
+      ["--db", "/nowhere", "knocks", "--host-ancestor", "4242", "--mark-tapped"],
+      ["--db", "/nowhere", "knocks", "--session", "s1", "--mark-tapped"],
+      ["--db", "/nowhere", "knocks", "--session", "s1", "--with-sender"],
+    ]) {
       const refused = run(argv);
       expect(refused.exit_code).toBe(1);
       expect(refused.receipt).toMatchObject({ status: "error", error: "usage_error", verbs: VERBS, quiet_verbs: QUIET });
       expect(refused.receipt!.message).toContain("first argument");
       expect(refused.receipt!.message).toContain(COLLAB_HOST_HELP_USAGE);
       expect(refused.receipt!.message).not.toStartWith("Unknown verb");
+      expect(refused.line).not.toContain("4242");
     }
+    // An argument error of end or wait that merely mentions a quiet verb is still that verb's own error.
+    const own = run(["end", "--reason", "knocks", "--bogus"]);
+    expect(own.receipt!.message).toEndWith(COLLAB_HOST_USAGE);
+    expect(own.receipt).not.toHaveProperty("verbs");
   });
 
   test("every listed verb is answered by this build, quiet verbs silently", () => {

@@ -6845,7 +6845,6 @@ function sessionLiveness(
   return age <= SESSION_STALE_AFTER_MS ? "live" : "stale";
 }
 
-/** The events-table columns isAddressedTo reads. */
 /**
  * Why a pending handoff offer expired, and whether that is news to the session
  * that made the offer. Its own act on its task (release, report, block,
@@ -6870,6 +6869,7 @@ function handoffExpiryIsNewsToOfferer(reason: unknown): boolean {
     && HANDOFF_EXPIRY_IS_NEWS_TO_OFFERER[reason as HandoffExpiryReason];
 }
 
+/** The events-table columns isAddressedTo reads. */
 export interface AddressedEventRow {
   type: string;
   session_id: string | null;
