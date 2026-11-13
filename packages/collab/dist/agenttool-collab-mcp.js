@@ -37185,7 +37185,8 @@ class CollabStore {
     }
     const plan = (session, mark, record2) => {
       const scan = this.scanNoteEvents(session, mark.sequence);
-      const listed = scan.events.filter((event) => input.include === "all" ? !event.own : event.for_me);
+      const shaped = input.include === "all" ? noteLines(scan.events.filter((event) => !event.own), true) : { lines: scan.events.filter((event) => event.for_me), dropped: [] };
+      const listed = shaped.lines;
       let through = scan.last_sequence;
       let more = scan.capped;
       if (listed.length > limit) {
@@ -37214,6 +37215,7 @@ class CollabStore {
         through,
         more,
         also_new: alsoNew,
+        not_listed: input.include === "all" ? notListed(shaped.dropped, through) : null,
         for_me_total: scan.events.filter((event) => event.for_me).length,
         for_me_total_capped: scan.capped,
         waiting
@@ -37240,6 +37242,7 @@ class CollabStore {
         sessions,
         entries: planned.sequences.map((sequence) => this.noteEntryAt(session, sequence, folds)),
         also_new: planned.also_new,
+        ...planned.not_listed ? { not_listed: planned.not_listed } : {},
         more: planned.more,
         for_me_total: planned.for_me_total,
         for_me_total_capped: planned.for_me_total_capped,
@@ -37275,7 +37278,8 @@ class CollabStore {
       const mark = this.readNoteMarkState(session);
       const after = Math.min(input.since, workspace.event_head_sequence);
       const scan = this.scanNoteEvents(session, after, this.endedNamesakes(session));
-      const listed = scan.events.filter((event) => input.include === "all" ? !event.own : event.for_me || event.for_name !== null);
+      const shaped = noteLines(scan.events.filter((event) => input.include === "all" ? !event.own : event.for_me || event.for_name !== null), false);
+      const listed = shaped.lines;
       let through = scan.last_sequence;
       let more = scan.capped;
       if (listed.length > limit) {
@@ -37290,6 +37294,7 @@ class CollabStore {
         sessions,
         entries: returned.map((event) => this.noteEntryAt(session, event.sequence, folds, event.for_name)),
         also_new: scan.events.filter((event) => !event.own && !event.for_me && event.for_name === null && event.sequence <= through).length,
+        not_listed: notListed(shaped.dropped, through),
         more,
         for_me_total: scan.events.filter((event) => event.for_me).length,
         for_me_total_capped: scan.capped,
@@ -37338,12 +37343,19 @@ class CollabStore {
           ORDER BY sequence LIMIT ?
         `).all(session.workspace_id, from, session.id, ...NOTE_ADDRESSING_EVENT_TYPES, NOTE_SCAN_MAX_EVENTS + 1);
         capped = rows.length > NOTE_SCAN_MAX_EVENTS;
+        const things = new Set;
         for (const row of rows.slice(0, NOTE_SCAN_MAX_EVENTS)) {
           const event = eventFromRow(row);
           if (this.eventAddressesSession(event, session.id))
             continue;
           if (this.namesakeAddressed(event, namesakes) === null)
             continue;
+          const thing = noteThingOf(event);
+          if (thing !== null) {
+            if (things.has(thing))
+              continue;
+            things.add(thing);
+          }
           count += 1;
           earliest ??= event.sequence;
         }
@@ -37730,6 +37742,8 @@ class CollabStore {
         own,
         for_me: forMe,
         for_name: own || forMe ? null : this.namesakeAddressed(event, namesakes),
+        thing: noteThingOf(event),
+        attached: event.type === "evidence.cited" || event.type === "artifact.attached",
         shown_item_id: forMe ? noteShownItem(event) : null
       };
     });
@@ -38779,7 +38793,8 @@ class CollabStore {
         awaited: status.ai.awaiting_voice_ids.includes(voice.voice_id),
         supported: supports.some((stance) => stance.counted && stance.voice_id === voice.voice_id),
         challenged: challenges.some((stance) => stance.standing && stance.voice_id === voice.voice_id),
-        delivery_recorded: members.some((view) => this.noteShownAt(workspaceId, view.id, proposalId) !== null)
+        delivery_recorded: members.some((view) => this.noteShownAt(workspaceId, view.id, proposalId) !== null),
+        ended: members.length > 0 && members.every((view) => view.status === "ended")
       };
     });
     let replaced = null;
@@ -38873,6 +38888,7 @@ class CollabStore {
       from_actor: report.from_actor,
       voice_id: voice,
       voice_has_active_session: voice !== null && facts.active_voices.has(voice),
+      from_session_ended: session?.status === "ended",
       created_at: report.created_at,
       statement,
       marked,
@@ -39556,6 +39572,54 @@ var NOTE_INBOX_MAX_LIMIT = 50;
 var NOTE_THREAD_MAX = 200;
 var NOTE_PURPOSE_MAX_CHARS = 200;
 var NOTE_PAYLOAD_MAX_BYTES = 64 * 1024;
+function noteThingOf(event) {
+  const payload = event.payload ?? {};
+  switch (event.type) {
+    case "report.posted":
+    case "proposal.opened":
+    case "ballot.opened":
+      return `report:${event.entity_id}`;
+    case "task.reported_complete":
+      return typeof payload.completion_report_id === "string" ? `report:${payload.completion_report_id}` : null;
+    case "task.accepted":
+    case "task.changes_requested":
+      return typeof payload.review_report_id === "string" ? `report:${payload.review_report_id}` : null;
+    default:
+      return null;
+  }
+}
+function noteLines(candidates, keepEveryForMe) {
+  const dropped = [];
+  const rank = (event) => event.for_me ? 2 : event.for_name !== null ? 1 : 0;
+  const best = new Map;
+  for (const event of candidates) {
+    if (event.attached && !event.for_me || event.thing === null)
+      continue;
+    const held = best.get(event.thing);
+    if (!held || rank(event) > rank(held))
+      best.set(event.thing, event);
+  }
+  const lines = candidates.filter((event) => {
+    if (event.attached && !event.for_me) {
+      dropped.push({ sequence: event.sequence, why: "attached" });
+      return false;
+    }
+    if (event.thing === null)
+      return true;
+    const keep = best.get(event.thing) === event || keepEveryForMe && event.for_me;
+    if (!keep)
+      dropped.push({ sequence: event.sequence, why: "duplicate" });
+    return keep;
+  });
+  return { lines, dropped };
+}
+function notListed(dropped, through) {
+  const within = dropped.filter((entry) => entry.sequence <= through);
+  return {
+    attached: within.filter((entry) => entry.why === "attached").length,
+    duplicates: within.filter((entry) => entry.why === "duplicate").length
+  };
+}
 function noteShownItem(event) {
   const payload = event.payload;
   if (event.type === "proposal.opened" || event.type === "ballot.opened")
@@ -40029,9 +40093,9 @@ var NOTE_CARD = [
   ...Object.entries(NOTE_CARD_FAMILIES).map(([family, acts]) => `- ${family}: ${acts.join(", ")}`),
   "",
   "support, challenge, resolve, withdraw, accept and request_changes need Re. Only a challenger",
-  "resolves its own challenge; withdraw takes back your own note; accept and request_changes judge",
-  "another session's finished work. A Why cites Evidence lines by number, from 1. Example, sent as",
-  "the text of collab_note:",
+  "resolves its own challenge; withdraw takes back a note this session wrote; accept and",
+  "request_changes judge another session's finished work. A Why cites Evidence lines by number,",
+  "from 1. Example, sent as the text of collab_note:",
   "```collab-note",
   "challenge: The retry test does not cover a lost response",
   "",
@@ -40465,7 +40529,7 @@ async function arriveDefault(ctx, input, sent, name, model) {
   const mark = handle.workspace.event_head_sequence;
   const root = handle.worktree.root_path;
   return arrivalResult(ctx, binding, {
-    effect: `Started session ${handle.session.id} as ${handle.session.actor} with purpose "${purpose}", in the worktree at ${root}` + `${defaulted ? " (root_path was not given, so this is the git worktree of this MCP server's working directory)" : ""}. ` + `Your read mark starts at the journal head (sequence ${mark}); the legacy cursor was not moved.`,
+    effect: `Started session ${handle.session.id} as ${handle.session.actor} with purpose "${purpose}", in the worktree at ${root}` + `${defaulted ? " (root_path was not given, so this is the git worktree of this MCP server's working directory)" : ""}. ` + `Your read mark starts at the journal head (sequence ${mark}); the legacy cursor was not moved. ${ARRIVAL_NOTE_NOT_POSTED}`,
     advice,
     fresh: true,
     record: true,
@@ -40511,7 +40575,7 @@ function arriveNamed(ctx, input, purpose, name, model) {
   const binding = bindNewSession(ctx, handle);
   const speaksAs = defaultSession ? `session ${defaultSession.id}` : "no session (the default slot has not arrived)";
   return arrivalResult(ctx, binding, {
-    effect: `Started session ${handle.session.id} as ${handle.session.actor}, a named child of ${parent.handle.session.id}, ` + `in the worktree at ${handle.worktree.root_path}. ` + `This session shares its parent's voice and ballot unit. Send binding_key ${key} on every call; ` + `without it you speak as ${speaksAs}.`,
+    effect: `Started session ${handle.session.id} as ${handle.session.actor}, a named child of ${parent.handle.session.id}, ` + `in the worktree at ${handle.worktree.root_path}. ` + `This session shares its parent's voice and ballot unit. Send binding_key ${key} on every call; ` + `without it you speak as ${speaksAs}. ${ARRIVAL_NOTE_NOT_POSTED}`,
     advice: [],
     fresh: true,
     record: true,
@@ -40561,7 +40625,7 @@ async function arriveBound(ctx, binding, input, purpose) {
   if (input.revise_purpose !== true) {
     const before = ctx.store.arrivalBrief(credential).session;
     return arrivalResult(ctx, binding, {
-      effect: `You are speaking as session ${before.id} (name ${before.actor}, purpose ${before.purpose ?? "none declared"}). ` + `${root} Nothing was written.`,
+      effect: `You are speaking as session ${before.id} (name ${before.actor}, purpose ${before.purpose ?? "none declared"}). ` + `${root} Nothing was written. The note is not posted either.`,
       advice,
       fresh: false,
       record: false,
@@ -40583,7 +40647,7 @@ async function arriveBound(ctx, binding, input, purpose) {
     advice.push("This repeats your latest purpose declaration exactly, so it was read as a retry. Add a word to say it again.");
   const session = binding.handle.session;
   return arrivalResult(ctx, binding, {
-    effect: `You are speaking as session ${session.id} (name ${session.actor}, purpose ${receipt.purpose}). ${root} ` + `Your purpose is recorded as declared at sequence ${receipt.sequence}; the role you started with is kept as it was.`,
+    effect: `You are speaking as session ${session.id} (name ${session.actor}, purpose ${receipt.purpose}). ${root} ` + `Your purpose is recorded as declared at sequence ${receipt.sequence}; the role you started with is kept as it was. ` + "The note is not posted as a report.",
     advice,
     fresh: false,
     record: true,
@@ -40598,6 +40662,7 @@ function boundRemedies(ctx, sessionId, purpose) {
     { tool: "collab_arrive", input: { purpose, binding_key: "<choose>", parent: sessionId } }
   ];
 }
+var ARRIVAL_NOTE_NOT_POSTED = "The note field is text for a host message; it is not posted to the journal, where your arrival is the session.joined event.";
 function arrivalNote(statement, purpose) {
   return renderNote({ act: "note", statement, ...purpose ? { purpose } : {} });
 }
@@ -40653,7 +40718,7 @@ function arrivalBehind(ctx, credential, name) {
       ...forName.at_least ? { at_least: true } : {},
       see: withSlot(ctx, { tool: "collab_inbox", input: { since: forName.earliest_sequence - 1 } })
     };
-    advice.push(`${forName.count}${forName.at_least ? " or more" : ""} item(s) were addressed to ${forName.sessions === 1 ? "an ended session" : "ended sessions"} ` + `that also called itself ${name}; left_for_your_name.see reads them. Names are self-declared, so this is routing, ` + "not identity: you are a new session and voice, and nothing those sessions held, said or stood on passes to you.");
+    advice.push(`${forName.count}${forName.at_least ? " or more" : ""} item(s) were addressed to ${forName.sessions === 1 ? "an ended session" : "ended sessions"} ` + `that also called itself ${name}; left_for_your_name.see starts at the earliest of them, and before_you_arrived.see, which ` + "reads from the start, includes them too. Names are self-declared, so this is routing, " + "not identity: you are a new session and voice, and nothing those sessions held, said or stood on passes to you.");
   }
   return { view, advice };
 }
@@ -40681,7 +40746,7 @@ function composeBrief(ctx, data, pending, rootPath) {
     task: handleOf("task", task.id),
     id: task.id,
     title: task.title,
-    by: task.assignee,
+    by: sessionShown(task.assignee_session_id, task.assignee ?? "unknown", byId),
     purpose: task.assignee_session_id ? byId.get(task.assignee_session_id)?.purpose ?? null : null,
     paths: task.path_scopes
   }));
@@ -40690,7 +40755,7 @@ function composeBrief(ctx, data, pending, rootPath) {
     task: handleOf("task", task.id),
     id: task.id,
     title: task.title,
-    by: task.reported_by,
+    by: sessionShown(task.reported_by_session_id, task.reported_by ?? "unknown", byId),
     completion: task.completion_report_id ? { id: task.completion_report_id, handle: handleOf("report", task.completion_report_id) } : null,
     you_may_review: task.reported_by_session_id !== me.id
   }));
@@ -40703,11 +40768,11 @@ function composeBrief(ctx, data, pending, rootPath) {
     your_voice_awaited: status.ai.awaiting_voice_ids.includes(me.voice_id),
     person: status.person.state
   }));
-  const challenges = data.challenges.map((challenge) => challengeView(challenge, data.proposals.some((status) => status.proposal.id === challenge.target_report_id)));
+  const challenges = data.challenges.map((challenge) => challengeView(challenge, data.proposals.some((status) => status.proposal.id === challenge.target_report_id), byId));
   const ballots = data.ballots.map((ballot) => ballotBrief(ballot));
   const recheck = evidenceRechecker(ctx.store);
   const forYou = pending ? pending.entries.map((entry) => formatEntry(entry, byId, me.id, recheck)) : [];
-  const waiting = data.waiting.map((entry) => formatWaiting(ctx, entry));
+  const waiting = data.waiting.map((entry) => formatWaiting(ctx, entry, byId));
   const cap = (items) => items.slice(0, LIST_CAP);
   const shown = [
     ...cap(proposals).map((proposal) => proposal.id),
@@ -40780,13 +40845,13 @@ function composeBrief(ctx, data, pending, rootPath) {
     }
   };
 }
-function challengeView(challenge, onProposal) {
+function challengeView(challenge, onProposal, byId) {
   return {
     id: challenge.id,
     handle: handleOf("report", challenge.id),
     on: reportHandle(challenge.target_report_id, onProposal),
     on_id: challenge.target_report_id,
-    by: challenge.from_actor,
+    by: sessionShown(challenge.from_session_id, challenge.from_actor, byId),
     standing: challenge.standing,
     ...challenge.answered_by_another_voice ? { answered_by_another_voice: true } : {}
   };
@@ -40830,7 +40895,10 @@ function journalEvidence(refs) {
   });
 }
 function sessionRef(sessionId, fallbackName, byId) {
-  return { session: sessionId ?? null, name: sessionId ? byId.get(sessionId)?.actor ?? fallbackName : fallbackName };
+  return sessionShown(sessionId, sessionId ? byId.get(sessionId)?.actor ?? fallbackName : fallbackName, byId);
+}
+function sessionShown(sessionId, name, byId) {
+  return { session: sessionId ?? null, name, ...sessionId && byId.get(sessionId)?.status === "ended" ? { ended: true } : {} };
 }
 var NOTE_RECHECK_MAX_BYTES = 64 * 1024 * 1024;
 function evidenceRechecker(store, budgetBytes = NOTE_RECHECK_MAX_BYTES) {
@@ -40928,7 +40996,7 @@ function formatEntry(entry, byId, me, recheck) {
       id: report.id,
       handle: handleOf("report", report.id),
       act: entry.verdict ?? reportAct(report, entry.termed),
-      from: { session: report.from_session_id, name: report.from_actor },
+      from: sessionShown(report.from_session_id, report.from_actor, byId),
       ...base,
       folded: true,
       ballot: { id: entry.folded.ballot_id, handle: handleOf("ballot", entry.folded.ballot_id) },
@@ -40966,7 +41034,7 @@ function formatEntry(entry, byId, me, recheck) {
       handle: poll ? handleOf("ballot", report.id) : reportHandle(report.id, entry.termed),
       act,
       ...act === "corrects" || act === "supersedes" ? { relation: report.relation } : {},
-      from: { session: report.from_session_id, name: report.from_actor },
+      from: sessionShown(report.from_session_id, report.from_actor, byId),
       to,
       re,
       ...base,
@@ -41105,7 +41173,8 @@ function subjectLine(entry, byId, me) {
     for_me: false
   };
 }
-function formatWaiting(ctx, entry) {
+var PERSON_ACT_WAITING = new Set(["stop", "rejected", "record_decision"]);
+function formatWaiting(ctx, entry, byId) {
   const handle = handleOf(entry.ref_kind, entry.ref_id);
   const about = entry.about_id ? { id: entry.about_id, handle: entry.what === "review" || entry.what === "challenge" || entry.what === "answer" ? handleOf("report", entry.about_id) : entry.about_id } : null;
   const next = entry.what === "stop" ? { say: `Stop work that rests on ${handle} (${entry.ref_id}): the person's latest act on it is a rejection.` } : entry.what === "record_decision" ? {
@@ -41121,7 +41190,7 @@ function formatWaiting(ctx, entry) {
     ref: handle,
     id: entry.ref_id,
     ...about ? { about } : {},
-    by: entry.by,
+    by: PERSON_ACT_WAITING.has(entry.what) ? entry.by : sessionShown(entry.by_session_id, entry.by, byId),
     due: entry.due,
     at: entry.at,
     summary: entry.summary,
@@ -41304,14 +41373,23 @@ function inboxResult(ctx, passes, format, waited, waitError = null, paging = {},
   const alsoNew = passes.reduce((sum, pass) => sum + pass.also_new, 0);
   const seeFrom = data.looked_back ? data.looked_back.after : passes[0].mark.before;
   const see = alsoNew > 0 && paging.include !== "all" ? { see: withSlot(ctx, { tool: "collab_inbox", input: { since: seeFrom, include: "all" } }) } : {};
+  const left = passes.reduce((sum, pass) => ({
+    attached: sum.attached + (pass.not_listed?.attached ?? 0),
+    duplicates: sum.duplicates + (pass.not_listed?.duplicates ?? 0)
+  }), { attached: 0, duplicates: 0 });
+  const notListed2 = left.attached + left.duplicates;
+  if (notListed2 > 0) {
+    advice.push(`${notListed2} event(s) in what was read are not lines of their own, so this list is not the whole journal: ` + `${left.attached} cite evidence or attach artifacts to a report or task beside them, and ${left.duplicates} ` + "repeat a proposal, ballot, completion or verdict listed once. collab_inbox about shows any thread whole.");
+  }
   return {
     ok: true,
     items,
     also_new: { count: alsoNew, ...see },
+    ...notListed2 > 0 ? { not_listed: { count: notListed2, ...left } } : {},
     more: data.more,
     read_through: { sequence: data.mark.through, head: data.head_sequence },
     ...initialisedFrom ? { mark_initialised_from: initialisedFrom } : {},
-    waiting_on_you: data.waiting.map((entry) => formatWaiting(ctx, entry)),
+    waiting_on_you: data.waiting.map((entry) => formatWaiting(ctx, entry, byId)),
     ...waited ? { waited } : {},
     ...revealPendingField(passes.flatMap((pass) => pass.reveal_pending)),
     advice,
@@ -41546,7 +41624,7 @@ function reportView(ctx, thread, byId, me, advice, recheck) {
     root: formatEntry(root, byId, me, recheck),
     answers: thread.answers.map((entry) => formatEntry(entry, byId, me, recheck)),
     state: {
-      challenges: thread.challenges.map((challenge) => challengeView(challenge, thread.termed && challenge.target_report_id === report.id))
+      challenges: thread.challenges.map((challenge) => challengeView(challenge, thread.termed && challenge.target_report_id === report.id, byId))
     }
   };
   if (thread.proposal) {
@@ -41568,7 +41646,7 @@ function reportView(ctx, thread, byId, me, advice, recheck) {
   return view;
 }
 var FOLDED_LINE = "folded so your first answer is your own; read any of them with about:<id> if you choose";
-function ballotTermsView(terms) {
+function ballotTermsView(terms, observedAt) {
   return {
     question: terms.question,
     ...terms.criteria !== undefined ? { criteria: terms.criteria } : {},
@@ -41577,6 +41655,7 @@ function ballotTermsView(terms) {
     ...terms.pick !== undefined ? { pick: terms.pick } : {},
     quorum: terms.quorum,
     closes_at: terms.closes_at,
+    ...observedAt ? { closes_in: durationUntil(terms.closes_at, observedAt) } : {},
     close_when_all_cast: terms.close_when_all_cast
   };
 }
@@ -41619,6 +41698,7 @@ function ballotBrief(ballot) {
     options: ballot.terms.options.map((option) => ({ key: option.key, label: option.label })),
     pick: ballot.terms.pick ?? null,
     closes_at: ballot.terms.closes_at,
+    closes_in: durationUntil(ballot.terms.closes_at, ballot.observed_at),
     close_when_all_cast: ballot.terms.close_when_all_cast,
     you_may_vote: ballot.viewer?.may_vote ?? false,
     you_have_cast: (ballot.viewer?.your_casts ?? 0) > 0,
@@ -41633,7 +41713,7 @@ function ballotFacts(ballot) {
     handle: handleOf("ballot", ballot.ballot_id),
     opener: { session: ballot.opener_session_id, name: ballot.opener_name },
     opened_at: ballot.opened_at,
-    terms: ballotTermsView(ballot.terms),
+    terms: ballotTermsView(ballot.terms, ballot.observed_at),
     state: ballot.state,
     closed_by: ballot.closed_by,
     withdrawn: ballot.withdrawn ? { report: ballot.withdrawn.report_id, at: ballot.withdrawn.at } : null,
@@ -41689,7 +41769,7 @@ function ballotItem(entry, from, base, byId, me) {
         text: ballot.terms.question,
         why: [],
         evidence: [],
-        terms: ballotTermsView(ballot.terms),
+        terms: ballotTermsView(ballot.terms, ballot.observed_at),
         state: ballot.state,
         electorate: ballot.units.map(ballotUnitView),
         chosen_by: ballot.chosen_by,
@@ -41821,7 +41901,7 @@ function stanceItem(stance) {
   return {
     id: stance.id,
     handle: handleOf("report", stance.id),
-    by: { session: stance.from_session_id, name: stance.from_actor },
+    by: { session: stance.from_session_id, name: stance.from_actor, ...stance.from_session_ended ? { ended: true } : {} },
     voice: stance.voice_id,
     statement: stance.statement,
     counted: stance.counted,
@@ -41844,16 +41924,26 @@ function proposalFacts(ctx, data) {
     delivery_recorded: voice.delivery_recorded,
     awaited: voice.awaited,
     supported: voice.supported,
-    challenged: voice.challenged
+    challenged: voice.challenged,
+    ...voice.ended ? { ended: true } : {}
   }));
   const silent = data.consulted.filter((voice) => voice.awaited && !voice.delivery_recorded);
   const deliveryNote = `${silent.length} awaited voice(s) have no recorded delivery on the notes surface` + (silent.length > 0 ? ` (${names(silent)}): they may never have been shown the question, and consent/v1 still lets their silence settle the position at its close.` : ".");
   if (silent.length > 0)
     advice.push(deliveryNote);
+  const authorActive = data.author?.status === "active";
+  const authorName = data.author?.actor ?? status.proposal.from_actor;
+  const replaceOrTell = (authorActive ? `Only its author's session (${authorName}, ${data.author.id}) can replace it carrying the objection (collab_propose with replaces). ` : "Its author's session has ended too, so no session can replace it. ") + `Anyone else tells the person with a note on it to the person (collab_note with re "${exactRef("proposal", status.proposal.id)}" and to "person"); the person can still reject it.`;
+  const open = !status.ai.closed && !retiredPosition(status) && status.person.state !== "rejected";
   for (const stance of data.challenges) {
     if (stance.standing && stance.flags.challenger_ended && !stance.voice_has_active_session) {
-      advice.push(`challenger_ended: ${stance.id} still stands, but its challenger's session has ended and no session of its voice is active. ` + "Replace the proposal carrying the objection (collab_propose with replaces), or tell the person, who can reject.");
+      advice.push(`challenger_ended: ${stance.id} still stands, but its challenger's session has ended and no session of its voice is active, ` + `so no session can lift it. ${replaceOrTell}`);
     }
+  }
+  const standingChallenges = data.challenges.filter((stance) => stance.standing);
+  const countedSupports = data.supports.filter((stance) => stance.counted);
+  if (open && status.ai.position === "challenged" && standingChallenges.length > 0 && standingChallenges.every((stance) => !stance.voice_has_active_session) && countedSupports.length > 0 && countedSupports.every((stance) => stance.from_session_ended)) {
+    advice.push("Every challenge standing here and every support counted here comes from a session that has ended: no active session can " + "lift those challenges (only each challenger's voice can) or withdraw those supports (only the session that wrote each can). " + `As it stands it rests with the person, who can reject it at the desk, or with the close at ${status.terms.closes_at}, ` + `when a challenge still standing makes it split${authorActive ? `, unless its author's session (${authorName}) withdraws or replaces it first` : ""}.`);
   }
   const flagged = [...data.supports, ...data.challenges].filter((stance) => stance.flags.same_seat_as_author || stance.flags.same_name_as_author || stance.flags.started_after_open || stance.flags.ungrounded || stance.flags.answered_by_another_voice || stance.flags.challenger_ended);
   if (flagged.length > 0)
@@ -41994,17 +42084,17 @@ function taskView(thread, byId, me, recheck) {
       work_mode: task.work_mode,
       completion_policy: task.completion_policy,
       paths: task.path_scopes,
-      holder: task.assignee_session_id ? { session: task.assignee_session_id, name: task.assignee, purpose: holder?.purpose ?? null } : null,
+      holder: task.assignee_session_id ? { ...sessionShown(task.assignee_session_id, task.assignee ?? "unknown", byId), purpose: holder?.purpose ?? null } : null,
       completion: task.completion_report_id ? {
         id: task.completion_report_id,
         handle: handleOf("report", task.completion_report_id),
-        by: task.reported_by,
+        by: sessionShown(task.reported_by_session_id, task.reported_by ?? "unknown", byId),
         at: task.reported_at
       } : null,
       review_requested: task.review_requested_session_id ? sessionRef(task.review_requested_session_id, task.review_requested_session_id, byId) : null,
       reviews: thread.reviews.map((review) => ({
         outcome: review.outcome,
-        by: review.reviewer_actor,
+        by: sessionShown(review.reviewer_session_id, review.reviewer_actor, byId),
         at: review.created_at,
         summary: review.summary,
         of_current_completion: generation !== null && review.review_generation === generation && task.review_status !== "pending"
@@ -42366,20 +42456,77 @@ function recordedEvidence(fresh, recorded, advice) {
   return { ...fresh, items: fresh.items.map((item) => byPosition.get(item.n) ?? item) };
 }
 var BROADCAST = { to_session_id: null, to_person: false, shown: "all", advice: [] };
-function explicitAddressee(ctx, workspaceId, value) {
+function namedSession(ctx, workspaceId, value) {
+  const text = value.trim();
+  const sessions = ctx.store.noteSessionViews(workspaceId);
+  const byIdOrHandle = /^session#[0-9a-fA-F]{6,32}$/.test(text) || sessions.some((view) => view.id === text);
+  if (byIdOrHandle) {
+    let view;
+    try {
+      view = ctx.store.resolveNoteSession(workspaceId, text);
+    } catch (error51) {
+      if (!(error51 instanceof CollabError) || error51.code !== "session_not_found")
+        throw error51;
+      try {
+        view = ctx.store.resolveNoteSession(workspaceId, text, { include_ended: true });
+      } catch (inner) {
+        if (inner instanceof CollabError && inner.code === "session_not_found")
+          return null;
+        throw inner;
+      }
+    }
+    return { view, by_name: false, ended_of: 0, advice: [] };
+  }
+  const active = sessions.filter((view) => view.status === "active" && view.actor === text);
+  if (active.length > 1) {
+    throw new CollabError("ambiguous_session", `${text} names ${active.length} active sessions; use the id of the one you mean`, {
+      value: text,
+      candidates: active.slice(0, 10).map((view) => ({ session: view.id, name: view.actor, last_seen_at: view.last_seen_at })),
+      candidates_total: active.length
+    });
+  }
+  if (active.length === 1) {
+    const view = active[0];
+    return {
+      view,
+      by_name: true,
+      ended_of: 0,
+      advice: [`${text} is the name of one active session (${view.id}); names are self-declared, so this routes by name.`]
+    };
+  }
+  const ended = sessions.filter((view) => view.actor === text);
+  if (ended.length === 0)
+    return null;
+  const latest = ended[0];
+  return {
+    view: latest,
+    by_name: true,
+    ended_of: ended.length,
+    advice: [
+      `No active session is named ${text}; this is addressed to that name's latest session (${latest.id}, last seen ` + `${latest.last_seen_at}), which has ended${ended.length > 1 ? `, the latest of ${ended.length} that carried the name` : ""}. ` + `A later session that arrives as ${text} is told of it on arrival (left_for_your_name). Names are self-declared, ` + "so this routes by name; it does not show who will read it."
+    ]
+  };
+}
+function explicitAddressee(ctx, workspaceId, value, input) {
   if (value === "all")
     return BROADCAST;
   if (value === "person")
     return { to_session_id: null, to_person: true, shown: "person", advice: [] };
-  let view;
-  try {
-    view = ctx.store.resolveNoteSession(workspaceId, value);
-  } catch (error51) {
-    if (!(error51 instanceof CollabError) || error51.code !== "session_not_found")
-      throw error51;
-    view = ctx.store.resolveNoteSession(workspaceId, value, { include_ended: true });
+  const named = namedSession(ctx, workspaceId, value);
+  if (!named) {
+    const text = value.trim();
+    const kind = /^session[#_]/.test(text) ? `No session in this workspace has the id or handle ${text}` : `No session named ${text} has arrived in this workspace yet`;
+    throw new CollabError("session_not_found", `${kind}, so nothing can be addressed to it; nothing was written`, {
+      value: text,
+      remedy: textIsNote(input) ? { say: "Change the To: line to all and send it again: a later arrival reads notes for all back through before_you_arrived." } : sameNoteWith(ctx, input, { to: "all" })
+    });
   }
-  return sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at);
+  const { view } = named;
+  if (named.by_name && view.status === "ended") {
+    return { to_session_id: view.id, to_person: false, shown: { session: view.id, name: view.actor }, advice: named.advice };
+  }
+  const addressee = sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at);
+  return { ...addressee, advice: [...named.advice, ...addressee.advice] };
 }
 function sessionAddressee(id, name, status, liveness, lastSeenAt) {
   const advice = [];
@@ -42677,7 +42824,12 @@ function keyAddressee(ctx, workspaceId, value) {
     return null;
   const text = value.trim();
   if (/^session#[0-9a-fA-F]{6,32}$/.test(text)) {
-    return ctx.store.resolveNoteSession(workspaceId, text, { include_ended: true }).id;
+    try {
+      return ctx.store.resolveNoteSession(workspaceId, text, { include_ended: true }).id;
+    } catch (error51) {
+      if (!(error51 instanceof CollabError))
+        throw error51;
+    }
   }
   return text;
 }
@@ -42775,7 +42927,7 @@ function planNote(ctx, input, context) {
   const advice = [];
   const extra = {};
   const hasCite = evidence.items.length > 0;
-  const explicit = fields.to !== null ? explicitAddressee(ctx, workspaceId, fields.to) : null;
+  const explicit = fields.to !== null && act !== "accept" && act !== "request_changes" && act !== "relay_rejection" ? explicitAddressee(ctx, workspaceId, fields.to, input) : null;
   const reportTarget = target?.kind === "report" ? target : null;
   const base = (relation, extraRefs = []) => ({
     kind: noteKind(fields.why),
@@ -42891,18 +43043,18 @@ function planNote(ctx, input, context) {
       report.to_session_id = addressee.to_session_id;
       report.to_person = addressee.to_person;
       advice.push("Only the challenger can lift a challenge; your answer was sent to them" + (challenger ? ` (challenger voice ${challenger.voice_id}; yours is ${myVoice}).` : "."));
+      const myName = ctx.store.noteSessionViews(workspaceId).find((view) => view.id === me)?.actor ?? null;
+      if (challenger && myName !== null && challenger.actor === myName) {
+        const proposal = onProposal(ctx, workspaceId, challenge.view);
+        advice.push(`${newVoiceSentence(myName)} So this does not lift the challenge; it is recorded as an answer.` + (proposal ? " To tell the person where you stand, post a note on it to the person, who can still reject the proposal." : ""));
+      }
       extra.recorded_as_answer = true;
       return finish({ recorded_as: "answer", target, addressee, reports: [report], entity: challenge.id, fields });
     }
     case "withdraw": {
       const withdrawn = requireReportTarget(ctx, input, act, target);
       if (withdrawn.view.report.from_session_id !== me) {
-        throw new CollabError("not_your_report", `${targetHandle(withdrawn)} was written by another session, and only its author session withdraws it`, {
-          remedy: withSlot(ctx, {
-            tool: "collab_note",
-            input: { act: "note", text: "I no longer stand by this.", re: exactRef("report", withdrawn.id) }
-          })
-        });
+        throw notYourReport(ctx, workspaceId, me, withdrawn, "withdraws it");
       }
       const report = base("withdraws");
       report.target_report_id = withdrawn.id;
@@ -42940,7 +43092,7 @@ function planNote(ctx, input, context) {
     case "accept":
     case "request_changes": {
       const completion = reviewTarget(ctx, input, target, workspaceId, me);
-      if (explicit)
+      if (fields.to !== null)
         advice.push("A verdict goes to the session that reported the work; to was not used.");
       extra.review = completion;
       return finish({ recorded_as: act, target, addressee: BROADCAST, reports: [], entity: completion.completion_id });
@@ -42998,12 +43150,52 @@ function textIsNote(input) {
 `)[0] ?? "");
   return head !== null && isNoteAct(head[1].toLowerCase());
 }
+function onProposal(ctx, workspaceId, view) {
+  if (view.termed)
+    return true;
+  const targetId = view.report.target_report_id;
+  if (!targetId)
+    return false;
+  try {
+    return ctx.store.noteTarget(workspaceId, targetId).termed;
+  } catch {
+    return false;
+  }
+}
+function noLongerStandRemedy(ctx, reportId, proposal, termed) {
+  return withSlot(ctx, {
+    tool: "collab_note",
+    input: {
+      act: "note",
+      text: "I no longer stand by this.",
+      re: exactRef(termed ? "proposal" : "report", reportId),
+      ...proposal ? { to: "person" } : {}
+    }
+  });
+}
+function newVoiceSentence(name) {
+  return `A new session is a new voice even under the same name (${name}): nothing passes between sessions, ` + "so only the session that wrote it can take it back.";
+}
+function notYourReport(ctx, workspaceId, me, target, what) {
+  const author = target.view.author;
+  const myName = ctx.store.noteSessionViews(workspaceId).find((view) => view.id === me)?.actor ?? null;
+  const sameName = author !== null && myName !== null && author.actor === myName;
+  const proposal = onProposal(ctx, workspaceId, target.view);
+  return new CollabError("not_your_report", `${targetHandle(target)} was written by another session, and only its author session ${what}. ` + (sameName ? `${newVoiceSentence(author.actor)} ` : "") + `To say where you stand, post a note on it${proposal ? " to the person, who can still reject the proposal" : ""}; nothing was written`, {
+    ...author ? { author: { session: author.id, name: author.actor, ...author.status === "ended" ? { ended: true } : {} } } : {},
+    remedy: noLongerStandRemedy(ctx, target.id, proposal, target.view.termed)
+  });
+}
 function replacedChallenge(ctx, workspaceId, me, replacedId, targetId) {
   const old = ctx.store.noteTarget(workspaceId, replacedId);
-  if (old.report.relation !== "challenges" || old.report.from_session_id !== me) {
+  if (old.report.relation !== "challenges") {
     throw new CollabError("replaces_not_yours", "replaces names a challenge this session wrote", {
       remedy: { say: "replaces is your own earlier challenge; to answer someone else's, post a note with re." }
     });
+  }
+  if (old.report.from_session_id !== me) {
+    const refusal = notYourReport(ctx, workspaceId, me, { kind: "report", id: replacedId, label: "report", view: old }, "replaces it");
+    throw new CollabError("replaces_not_yours", `${refusal.message.replace(/; nothing was written$/, "")}. Your new challenge can still be posted without replaces; nothing was written`, refusal.details);
   }
   if (old.report.target_report_id !== targetId) {
     throw new CollabError("replaces_other_target", "The replaced challenge stands on a different report", {
@@ -43238,6 +43430,22 @@ function reviewRefusal(ctx, error51) {
     completion_report_obsolete: "Its author withdrew or replaced this completion; request changes instead, or wait for a new completion.",
     task_not_pending_review: "The task does not wait for review now (it was reviewed already, or its policy needs none)."
   };
+  if (error51.code === "task_not_pending_review" && typeof error51.details.review_report_id === "string") {
+    const review = error51.details.review_report_id;
+    const later = `To agree or disagree now, support or challenge its review ${handleOf("report", review)} with collab_note ` + `(re: "${exactRef("report", review)}"); a challenge records disagreement and does not reopen the accepted task.`;
+    return new CollabError(error51.code, `${String(error51.message).split(". ")[0]}. ${later}`, {
+      ...error51.details,
+      remedy: { say: later }
+    });
+  }
+  if (error51.code === "git_checkpoint_stale" && typeof error51.details.remedy === "string") {
+    const notes = error51.details.remedy.replace(/\(2\) Re-completion: review task "[^"]*" with outcome "request_changes"; once it is claimed again, collab_task_complete captures a fresh result checkpoint for a new review\./, "(2) Re-completion: request changes on it (collab_note act request_changes); once its holder takes it again, " + "collab_done finished captures a fresh result checkpoint for a new review.");
+    const refusal = typeof error51.details.host_commit_refusal === "string" ? error51.details.host_commit_refusal : "";
+    return new CollabError(error51.code, `The completion worktree changed after its result checkpoint was captured: ${refusal}. ${notes}`, {
+      ...error51.details,
+      remedy: { say: notes }
+    });
+  }
   if (!say[error51.code] || error51.details.remedy && typeof error51.details.remedy === "object")
     return error51;
   return new CollabError(error51.code, error51.message, { ...error51.details, remedy: { say: say[error51.code] } });
@@ -43340,7 +43548,7 @@ function planDecide(ctx, input, context) {
     refs.push(`event:${target.id}`);
   }
   if (fields.to !== null)
-    addressee = explicitAddressee(ctx, workspaceId, fields.to);
+    addressee = explicitAddressee(ctx, workspaceId, fields.to, input);
   const withoutExtent = () => {
     const { extent: _dropped, ...rest } = noteRetryInput(input);
     if (textIsNote(input)) {
@@ -43746,9 +43954,12 @@ async function claimStep(ctx, binding, credential, task, key, guard, retryInput,
       });
     }
     if (error51.code === "task_blocked") {
-      throw new CollabError("task_blocked", `${handleOf("task", task.id)} is blocked: ${String(error51.details.blocker ?? "")}`, {
+      throw new CollabError("task_blocked", `${handleOf("task", task.id)} is blocked: ${String(error51.details.blocker ?? "")}. These verbs do not unblock a task, so ask on it; nothing was written`, {
         blocker: error51.details.blocker ?? null,
-        remedy: { say: "A blocked task is unblocked first (collab_task_unblock on the full tool profile), then taken." }
+        remedy: withSlot(ctx, {
+          tool: "collab_note",
+          input: { text: `Is the blocker on ${handleOf("task", task.id)} cleared? I would take it once it is unblocked.`, re: exactRef("task", task.id) }
+        })
       });
     }
     if (created && error51.code !== "changed_under_you") {
@@ -43952,8 +44163,8 @@ function readFinished(ctx, binding, input, statement, body) {
   const evidence = resolveEvidence(ctx, binding, fields.evidence);
   fields = { ...fields, evidence: evidence.lines };
   refuseNoteProblems(fields);
-  const reviewer = input.review_by !== undefined && input.review_by !== null ? reviewerSession(ctx, workspaceId, String(input.review_by)) : null;
-  return { fields, evidence, reviewer };
+  const reviewer = input.review_by !== undefined && input.review_by !== null ? reviewerSession(ctx, workspaceId, String(input.review_by), input) : null;
+  return { fields, evidence, reviewer: reviewer?.id ?? null, reviewer_how: reviewer?.how ?? null };
 }
 function doneKeyInput(input, outcome, text, taskId, finished) {
   return {
@@ -43988,14 +44199,20 @@ function doneTask(ctx, credential, workspaceId, taskId, base) {
     remedy: { say: "Take the work first: collab_take with title set to what you are doing, and paths if you will edit files." }
   });
 }
-function reviewerSession(ctx, workspaceId, value) {
-  try {
-    return ctx.store.resolveNoteSession(workspaceId, value).id;
-  } catch (error51) {
-    if (!(error51 instanceof CollabError) || error51.code !== "session_not_found")
-      throw error51;
-    return ctx.store.resolveNoteSession(workspaceId, value, { include_ended: true }).id;
+function reviewerSession(ctx, workspaceId, value, input) {
+  const named = namedSession(ctx, workspaceId, value);
+  if (!named) {
+    const { review_by: _reviewBy, ...rest } = input;
+    throw new CollabError("review_requested_session_unavailable", `review_by names ${value.trim()}, and no session of that name has arrived in this workspace; a requested reviewer must be ` + "an active session. Any distinct session can review the work unasked, so leave review_by out; nothing was written", { reason: "never_arrived", value: value.trim(), remedy: withSlot(ctx, { tool: "collab_done", input: rest }) });
   }
+  const how = named.by_name ? named.view.status === "active" ? `the one active session named ${named.view.actor} (${named.view.id})` : `the latest session named ${named.view.actor} (${named.view.id}), which has ended` : `session ${named.view.id}${named.view.status === "ended" ? ", which has ended" : ""}`;
+  return { id: named.view.id, how };
+}
+function reviewerRefusal(ctx, error51, retryInput, how) {
+  if (!(error51 instanceof CollabError) || error51.code !== "review_requested_session_unavailable")
+    return error51;
+  const { review_by: _reviewBy, ...withoutReviewer } = retryInput;
+  return new CollabError("review_requested_session_unavailable", `review_by was read as ${how ?? "a session that is not active here"}, and a requested reviewer must be an active session in ` + "this workspace. Any distinct session can review the work unasked, so leave review_by out (name who you hope will " + "review in the text if you like); nothing was written", { reason: "not_active", remedy: withSlot(ctx, { tool: "collab_done", input: withoutReviewer }) });
 }
 function requireHeld(ctx, credential, task, retryInput) {
   if (task.assignee_session_id === credential.session_id && task.lease_id && task.status === "claimed")
@@ -44052,11 +44269,17 @@ async function finishTask(ctx, binding, credential, task, options) {
     const current = requireHeld(ctx, credential, ctx.store.getTask(workspaceId, task.id), retryInput);
     return { version: current.version, state: { task: handleOf("task", current.id), state: current.effective_status } };
   };
-  const precheck = beforeFirstWrite(() => ctx.store.noteCompletePrecheck(credential, {
-    task_id: task.id,
-    evidence_refs: evidence.journal,
-    review_requested_session_id: reviewer
-  }));
+  const precheck = beforeFirstWrite(() => {
+    try {
+      ctx.store.noteCompletePrecheck(credential, {
+        task_id: task.id,
+        evidence_refs: evidence.journal,
+        review_requested_session_id: reviewer
+      });
+    } catch (error51) {
+      throw reviewerRefusal(ctx, error51, retryInput, options.reviewer_how);
+    }
+  });
   const cites = evidence.items.length > 0;
   const attachStep = (index) => index + (cites ? 2 : 1);
   const completeStep = cites ? evidence.items.length + 2 : 1;
@@ -44155,7 +44378,7 @@ async function finishTask(ctx, binding, credential, task, options) {
       const steps = evidence.items.length + (cites ? 2 : 1);
       return { plan: plan2, artifacts: artifacts2, completed: completed2.value, replayed: replays === steps, recordedItems: recordedItems2, cite: cite2 };
     } catch (error51) {
-      throw refusedAfter(error51, recorded);
+      throw refusedAfter(reviewerRefusal(ctx, error51, retryInput, options.reviewer_how), recorded);
     }
   });
   if (plan.retry && replayed)
@@ -44669,6 +44892,15 @@ async function proposeVerb(ctx, input) {
     }
     const id = ctx.store.resolveNoteRef(workspaceId, "proposal", input.replaces).id;
     replaced = ctx.store.noteProposalView(workspaceId, id);
+    if (replaced.status.proposal.from_session_id !== me) {
+      const author = replaced.author;
+      const myName = ctx.store.noteSessionViews(workspaceId).find((view) => view.id === me)?.actor ?? null;
+      const sameName = author !== null && myName !== null && author.actor === myName;
+      throw new CollabError("not_your_report", `${handleOf("proposal", id)} was opened by another session, and only its author session replaces it. ` + (sameName ? `${newVoiceSentence(author.actor)} ` : "") + "To say where you stand, post a note on it to the person, who can still reject it; or open a new proposal without replaces. Nothing was written", {
+        ...author ? { author: { session: author.id, name: author.actor, ...author.status === "ended" ? { ended: true } : {} } } : {},
+        remedy: noLongerStandRemedy(ctx, id, true, true)
+      });
+    }
   }
   const standing = objectionsToCarry(replaced);
   let composed = { text: conflicts, ids_only: [] };
@@ -44925,6 +45157,8 @@ function proposeResult(ctx, binding, options) {
 // src/ballot-verbs.ts
 import { randomBytes as randomBytes2, randomUUID as randomUUID4 } from "crypto";
 var POLL_STAND_IN_STATEMENT = "A sealed ballot; read its terms with collab_inbox about.";
+var WAIT_FOR_CLOSE_SECONDS = 30;
+var WAIT_FOR_CLOSE_ADVICE = "collab_inbox {wait_seconds: 30} waits for the close: a wait ends when a ballot you are in, opened or cast in closes, " + "and returns its result; a wait over 30 seconds is one more call (closes_in says how long is left).";
 function pollNote(terms) {
   const first = terms.question.split(`
 `).find((line) => line.trim() !== "")?.trim() ?? "";
@@ -44998,22 +45232,24 @@ async function pollVerb(ctx, input) {
     advice.push(`${receipt.left_out_total} live session(s) are left out of the electorate (left_out); their casts would be revealed and never counted.`);
   }
   advice.push("Do not announce the result yourself: it is computed at the close, and it authorises nothing.");
+  advice.push(WAIT_FOR_CLOSE_ADVICE);
   return {
     ...noteWriteResult({
       effect: `Opened sealed ballot ${handle} for ${receipt.electorate.length} unit(s), closing ${receipt.terms.closes_at}` + `${receipt.terms.close_when_all_cast ? " or once every unit has cast" : ""}. No vote is shown before the close.`,
       ids: { ballot: receipt.ballot_id, ballot_handle: handle, report: receipt.report.id, event: receipt.event_id },
       advice,
-      next: withSlot(ctx, { tool: "collab_inbox", input: { about: exactRef("ballot", receipt.ballot_id) } }),
+      next: withSlot(ctx, { tool: "collab_inbox", input: { wait_seconds: WAIT_FOR_CLOSE_SECONDS } }),
       note: receipt.report.body,
       replayed
     }),
     ballot: receipt.ballot_id,
-    terms: ballotTermsView(receipt.terms),
+    terms: ballotTermsView(receipt.terms, view.observed_at),
     electorate: receipt.electorate.map(ballotUnitView),
     left_out: receipt.left_out,
     ...receipt.left_out_total > receipt.left_out.length ? { left_out_total: receipt.left_out_total } : {},
     chosen_by: receipt.chosen_by,
     closes_at: receipt.terms.closes_at,
+    closes_in: durationUntil(receipt.terms.closes_at, view.observed_at),
     close_when_all_cast: receipt.terms.close_when_all_cast,
     quorum: receipt.terms.quorum,
     state: view.state,
@@ -45227,6 +45463,10 @@ async function voteVerb(ctx, input) {
   });
 }
 function voteResult(ctx, options) {
+  let open = false;
+  try {
+    open = !options.revealed_as && ctx.store.noteBallotState(options.ballot.workspace_id, options.ballot.ballot_id) === "open";
+  } catch {}
   const effect = options.revealed_as ? `Your vote in ${options.handle} (cast ${options.cast_seq}) was recorded before the close and revealed at the close as ${options.revealed_as}.` : `Sealed vote recorded for ${options.handle} (cast ${options.cast_seq}).`;
   return {
     ok: true,
@@ -45239,9 +45479,10 @@ function voteResult(ctx, options) {
     counts_as: options.counts_as,
     ...options.same_handle_as ? { same_handle_as: options.same_handle_as } : {},
     closes_at: options.ballot.terms.closes_at,
+    closes_in: durationUntil(options.ballot.terms.closes_at, ctx.store.noteNow()),
     replayed: options.replayed,
-    advice: options.advice,
-    next: aboutBallot(ctx, options.ballot.ballot_id),
+    advice: open ? [...options.advice, WAIT_FOR_CLOSE_ADVICE] : options.advice,
+    next: open ? withSlot(ctx, { tool: "collab_inbox", input: { wait_seconds: WAIT_FOR_CLOSE_SECONDS } }) : aboutBallot(ctx, options.ballot.ballot_id),
     ...options.pending ? { reveal_pending: options.pending } : {}
   };
 }
@@ -45417,12 +45658,12 @@ Legacy session tools: ${legacyInstructions}`
   }, async (input) => noteCall(() => arriveVerb(noteContext(), input), input));
   server.registerTool("collab_inbox", {
     title: "What is for you, and one thread",
-    description: "Items addressed to you since your read mark, oldest first, with what waits on you whatever the mark. " + "With about (an id or handle such as report#3fa91c or task#0b12de): that report and everything answering it, " + "or a task's holder, completion and reviews. With since (a journal sequence; 0 is the start): a look-back over " + "what came after it, in the same shape; it only reads, so it moves no mark, runs no housekeeping and records " + "nothing as delivered. wait_seconds waits, reading only, for a new item for you, or for the close of a ballot " + "you may vote in, opened or cast in. Otherwise it moves its own read mark and last-seen time, never the legacy cursor.",
+    description: "Items addressed to you since your read mark, oldest first, with what waits on you whatever the mark. " + "With about (an id or handle such as report#3fa91c or task#0b12de): that report and everything answering it, " + "or a task's holder, completion and reviews. With since (a journal sequence; 0 is the start): a look-back over " + "what came after it, one line per thing, in the same shape; it only reads, so it moves no mark, runs no " + "housekeeping and records nothing as delivered. wait_seconds waits, reading only, for a new item for you, or for " + "the close of a ballot you may vote in, opened or cast in; with about or since it is ignored and the call does not " + "wait. Otherwise it moves its own read mark and last-seen time, never the legacy cursor.",
     annotations: localMutation,
     inputSchema: {
       about: exports_external.string().optional().describe("One thread: a report, proposal, ballot or task id or handle (at most 300 characters); not a session."),
       since: exports_external.number().optional().describe("A whole number, 0 or more: read back from just after this journal sequence, oldest first, without moving your mark; with include all, every item."),
-      wait_seconds: exports_external.number().optional().describe("A whole number from 0 to 30: with nothing new for you, wait up to this long for an item; default 0."),
+      wait_seconds: exports_external.number().optional().describe("A whole number from 0 to 30: with nothing new for you, wait up to this long for an item or a ballot's close; default 0. Ignored with about or since."),
       include: exports_external.string().optional().describe("for_me (the default), or all to add unaddressed items as subject lines."),
       limit: exports_external.number().optional().describe("Items per call, a whole number from 1 to 50; default 20."),
       format: exports_external.string().optional().describe("json (the default), or note: with about, the thread root and its state as one collab-note/1 text of at most 800 characters, for a person to carry.")

@@ -137,7 +137,9 @@ describe("addressees and arrival", () => {
     j.store.endSession({ ...b.credential, reason: "done here" });
     const ended = await ok(sa, "collab_note", { text: "For bravo, who left.", to: "bravo" });
     expect(j.report(ended.ids.report).to_session_id).toBe(b.session.id);
-    expect(ended.advice.join(" ")).toContain("has ended its session");
+    // By name with no active session: the name's latest session, which has ended, said so.
+    expect(ended.advice.join(" ")).toContain("No active session is named bravo");
+    expect(ended.advice.join(" ")).toContain("which has ended");
     const c = j.start("charlie");
     j.advance(7 * 60 * 60 * 1000);
     const late = await ok(sa, "collab_note", { text: "For charlie, quiet for hours.", to: c.session.id });
@@ -1091,5 +1093,175 @@ describe("a doubled act word", () => {
     // Without act, the text is read as a whole note, as before.
     const whole = await ok(sb, "collab_note", { text: "note: read whole", dry_run: true });
     expect(whole).toMatchObject({ read_as: "collab-note/1", parsed: { statement: "read whole" } });
+  });
+});
+
+describe("a name reaches the agent it means", () => {
+  test("a name no session has carried is refused, with the same call to all, and nothing is written", async () => {
+    const { j, sa } = pair();
+    const before = j.count();
+    const refusal = await refused(sa, "collab_note", { text: "For dee, when dee comes.", to: "dee" });
+    expect(refusal.code).toBe("session_not_found");
+    expect(refusal.message).toContain("No session named dee has arrived in this workspace yet");
+    expect(refusal.remedy).toEqual({ tool: "collab_note", input: { text: "For dee, when dee comes.", to: "all" } });
+    expect(j.count()).toBe(before);
+    // Written as a whole note, the remedy says to change its To line.
+    const whole = await refused(sa, "collab_note", { text: "note: For dee.\n\nTo: dee" });
+    expect(whole.remedy.say).toContain("To: line to all");
+    // The ready call works, and a later arrival reads it back through before_you_arrived.
+    const sent = await ok(sa, refusal.remedy.tool, refusal.remedy.input);
+    const dee = await ok(buildCollabMcpServer(j.store, { environment: {} }), "collab_arrive", { purpose: "look", root_path: j.root, name: "dee" });
+    expect(dee.before_you_arrived.see).toEqual({ tool: "collab_inbox", input: { since: 0, include: "all" } });
+    void sent;
+  });
+
+  test("with no active session of the name, the latest that carried it; a later arrival of that name is told", async () => {
+    const j = journal();
+    const ben = j.start("ben");
+    const sBen = j.serve(ben);
+    const cy1 = j.start("cy");
+    j.store.endSession({ ...cy1.credential, reason: "first sitting over" });
+    j.advance(60_000);
+    const cy2 = j.start("cy");
+    j.advance(60_000);
+    j.store.endSession({ ...cy2.credential, reason: "second sitting over" });
+    const sent = await ok(sBen, "collab_note", { text: "For cy, whoever comes next.", to: "cy" });
+    expect(j.report(sent.ids.report).to_session_id).toBe(cy2.session.id);
+    const said = sent.advice.join(" ");
+    expect(said).toContain("No active session is named cy");
+    expect(said).toContain(`latest session (${cy2.session.id}`);
+    expect(said).toContain("the latest of 2 that carried the name");
+    expect(said).toContain("left_for_your_name");
+    // An id still names exactly that session, ended or not.
+    const exact = await ok(sBen, "collab_note", { text: "For the first cy.", to: cy1.session.id });
+    expect(j.report(exact.ids.report).to_session_id).toBe(cy1.session.id);
+    // The next cy to arrive is told of both.
+    const cy3 = await ok(buildCollabMcpServer(j.store, { environment: {} }), "collab_arrive", { purpose: "back", root_path: j.root, name: "cy" });
+    expect(cy3.left_for_your_name.count).toBe(2);
+  });
+
+  test("one active session of the name is that session; several are ambiguous, listing only the active ones", async () => {
+    const j = journal();
+    const ben = j.start("ben");
+    const sBen = j.serve(ben);
+    const old = j.start("cy");
+    j.store.endSession({ ...old.credential, reason: "gone" });
+    const cy = j.start("cy");
+    const one = await ok(sBen, "collab_note", { text: "For cy.", to: "cy" });
+    expect(j.report(one.ids.report).to_session_id).toBe(cy.session.id);
+    expect(one.advice.join(" ")).toContain(`cy is the name of one active session (${cy.session.id})`);
+    const twin = j.start("cy");
+    const ambiguous = await refused(sBen, "collab_note", { text: "Which cy?", to: "cy" });
+    expect(ambiguous.code).toBe("ambiguous_session");
+    expect(ambiguous.candidates.map((candidate: any) => candidate.session).sort()).toEqual([cy.session.id, twin.session.id].sort());
+  });
+
+  test("a verdict is not refused over a to it does not use", async () => {
+    const { j, a, sb } = pair();
+    const done = completedTask(j, a);
+    const accepted = await ok(sb, "collab_note", { act: "accept", text: "The fix holds.", re: done.completion_report_id, to: "nobody-here" });
+    expect(accepted.advice.join(" ")).toContain("to was not used");
+    const handle = await ok(sb, "collab_note", { act: "accept", text: "Still holds.", re: done.completion_report_id, to: "session#abcdef", dry_run: true });
+    expect(handle.dry_run).toBe(true);
+  });
+});
+
+describe("a stance by an ended session looks like one", () => {
+  test("views mark the ended session; a new session of the name gets one remedy wherever it may not take back", async () => {
+    const j = journal();
+    // As in the trial: cy proposes alone, so its own support is the one that counts; dee arrives later and challenges.
+    const cy = j.start("cy");
+    const sCy = j.serve(cy);
+    const proposal = await ok(sCy, "collab_propose", { question: "Drop digits from slugs?", criteria: "No collisions.", extent: "src/slug.js" });
+    const support = await ok(sCy, "collab_note", { act: "support", text: "As a matter of taste.", re: proposal.ids.proposal });
+    const dee = j.start("dee");
+    const sDee = j.serve(dee);
+    const challenge = await ok(sDee, "collab_note", { act: "challenge", text: "Titles collide.", re: proposal.ids.proposal });
+    const second = await ok(sCy, "collab_propose", { question: "Keep a changelog?", criteria: "Someone reads it.", extent: "CHANGELOG.md" });
+    j.store.endSession({ ...cy.credential, reason: "sitting over" });
+    j.store.endSession({ ...dee.credential, reason: "sitting over" });
+    const dee2 = j.start("dee");
+    const cy2 = j.start("cy");
+    const [sDee2, sCy2] = [j.serve(dee2), j.serve(cy2)];
+    // The challenge reads as an ended session's, wherever it is named.
+    const arrived = await ok(sDee2, "collab_arrive", { purpose: "look" });
+    expect(arrived.open.challenges[0].by).toEqual({ session: dee.session.id, name: "dee", ended: true });
+    const view = await ok(sDee2, "collab_inbox", { about: proposal.ids.proposal });
+    expect(view.challenges[0].by).toEqual({ session: dee.session.id, name: "dee", ended: true });
+    expect(view.supports[0].by).toEqual({ session: cy.session.id, name: "cy", ended: true });
+    expect(view.answers.find((item: any) => item.id === challenge.ids.report).from).toEqual({ session: dee.session.id, name: "dee", ended: true });
+    expect(view.supports[0].counted).toBe(true);
+    expect(view.position).toBe("challenged");
+    const consulted = (await ok(sDee2, "collab_inbox", { about: second.ids.proposal })).consulted;
+    expect(consulted).toEqual([expect.objectContaining({ voice: dee.session.id, name: "dee", ended: true })]);
+    const said = view.advice.join(" ");
+    expect(said).toContain("no active session can lift those challenges");
+    expect(said).toContain("rests with the person");
+    expect(said).toContain("Its author's session has ended too, so no session can replace it.");
+    // One remedy wherever a same-name session may not take back what an earlier one wrote.
+    const toPerson = { tool: "collab_note", input: { act: "note", text: "I no longer stand by this.", re: proposal.ids.proposal, to: "person" } };
+    const withdraw = await refused(sCy2, "collab_note", { act: "withdraw", text: "Withdrawn.", re: proposal.ids.proposal });
+    expect(withdraw.code).toBe("not_your_report");
+    expect(withdraw.message).toContain("A new session is a new voice even under the same name (cy)");
+    expect(withdraw.remedy).toEqual(toPerson);
+    const replace = await refused(sCy2, "collab_propose", {
+      question: "Keep digits in slugs?", criteria: "No collisions.", extent: "src/slug.js", replaces: proposal.ids.proposal,
+    });
+    expect(replace.code).toBe("not_your_report");
+    expect(replace.remedy).toEqual(toPerson);
+    const ownSupport = await refused(sCy2, "collab_note", { act: "withdraw", text: "Withdrawn.", re: support.ids.report });
+    expect(ownSupport.remedy).toEqual({ tool: "collab_note", input: { act: "note", text: "I no longer stand by this.", re: support.ids.report, to: "person" } });
+    const replacing = await refused(sDee2, "collab_note", { act: "challenge", text: "Still collide.", re: proposal.ids.proposal, replaces: challenge.ids.report });
+    expect(replacing.code).toBe("replaces_not_yours");
+    expect(replacing.remedy).toEqual({ tool: "collab_note", input: { act: "note", text: "I no longer stand by this.", re: challenge.ids.report, to: "person" } });
+    const lift = await ok(sDee2, "collab_note", { act: "resolve", text: "Answered.", re: challenge.ids.report });
+    expect(lift.recorded_as).toBe("answer");
+    expect(lift.advice.join(" ")).toContain("A new session is a new voice even under the same name (dee)");
+    // The remedy the refusals give is a note that is written.
+    await ok(sCy2, toPerson.tool, toPerson.input);
+  });
+});
+
+describe("a look-back reads like a record", () => {
+  test("one line per thing: no bare cites or artifacts, and a proposal, ballot, completion or verdict once, counted", async () => {
+    const j = journal();
+    const cy = j.start("cy");
+    const dee = j.start("dee");
+    const [sCy, sDee] = [j.serve(cy), j.serve(dee)];
+    await ok(sCy, "collab_inbox");
+    await ok(sDee, "collab_inbox");
+    j.write("src/slug.js", "export const slug = (s) => s;\n");
+    const taken = await ok(sCy, "collab_take", { title: "Fix slug", paths: ["src/slug.js"] });
+    const done = await ok(sCy, "collab_done", { text: "Fixed slug.", evidence: ["file src/slug.js", "test node t.js exit=0"] });
+    const proposal = await ok(sCy, "collab_propose", { question: "Drop digits?", criteria: "No collisions.", extent: "src/slug.js" });
+    const ballot = await ok(sCy, "collab_poll", {
+      question: "Which flag?", options: [{ key: "lower", label: "--lower" }, { key: "case", label: "--case=lower" }], closes: "30m",
+    });
+    await ok(sDee, "collab_note", { act: "accept", text: "The fix holds.", re: done.ids.completion, evidence: ["file src/slug.js"] });
+    // The reporter's own pass still shows every item for it, as before: the verdict's report and its task event.
+    const pass = await ok(sCy, "collab_inbox", { limit: 50 });
+    expect(pass.items.filter((item: any) => item.act === "accept")).toHaveLength(2);
+    expect(pass.not_listed).toBeUndefined();
+    const eve = j.start("eve");
+    const sEve = j.serve(eve);
+    const look = await ok(sEve, "collab_inbox", { since: 0, include: "all", limit: 50 });
+    const items = look.items as Array<Record<string, any>>;
+    expect(items.filter((item) => item.type === "evidence.cited" || item.type === "artifact.attached")).toEqual([]);
+    expect(items.filter((item) => item.id === proposal.ids.proposal)).toHaveLength(1);
+    expect(items.filter((item) => item.id === ballot.ballot)).toHaveLength(1);
+    // The completion's report and its task event are one line; so are the verdict's.
+    expect(items.filter((item) => item.id === done.ids.completion || (item.id === taken.ids.task && item.act === "done"))).toHaveLength(1);
+    expect(items.filter((item) => item.act === "accept")).toHaveLength(1);
+    // What was left out is counted, so the list is not read as the whole journal.
+    const attached = j.events().filter((event) => event.type === "evidence.cited" || event.type === "artifact.attached").length;
+    expect(attached).toBeGreaterThan(2);
+    expect(look.not_listed).toEqual({ count: attached + 4, attached, duplicates: 4 });
+    expect(look.advice.join(" ")).toContain("are not lines of their own");
+    // A pass with include: all reads the same way for items not addressed to the reader.
+    const before = j.store.noteMark(eve.workspace.id, eve.session.id);
+    expect(before).toBeNull();
+    const all = await ok(sEve, "collab_inbox", { include: "all", limit: 50 });
+    expect(all.items.filter((item: any) => item.id === proposal.ids.proposal)).toHaveLength(1);
+    expect(all.not_listed).toEqual(look.not_listed);
   });
 });

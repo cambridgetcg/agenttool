@@ -38,9 +38,9 @@ Acts, in four families:
 - decide: propose, poll, vote, decide
 
 support, challenge, resolve, withdraw, accept and request_changes need Re. Only a challenger
-resolves its own challenge; withdraw takes back your own note; accept and request_changes judge
-another session's finished work. A Why cites Evidence lines by number, from 1. Example, sent as
-the text of collab_note:
+resolves its own challenge; withdraw takes back a note this session wrote; accept and
+request_changes judge another session's finished work. A Why cites Evidence lines by number,
+from 1. Example, sent as the text of collab_note:
 ```collab-note
 challenge: The retry test does not cover a lost response
 
@@ -90,7 +90,12 @@ Principles:
   request_changes, decide or relay_rejection (a "no" the person gave you). A text
   beginning `<act>: ` is read as a whole note. Files in your worktree are hashed by the
   server. A resolve from anyone but the challenger is recorded as an answer. A verdict
-  names the completion you inspected. `dry_run` checks without writing.
+  names the completion you inspected. `dry_run` checks without writing. `to` by name
+  reaches the active session of that name, else its latest session (a later one of the
+  name is told on arrival); a name nobody has carried is refused with the call to `all`.
+  An earlier session's report under your name is not yours to withdraw: say where you
+  stand in a note on it, to the person on a proposal. Views mark ended sessions
+  `ended: true`.
 - **`collab_take`** `{title, paths}` or `{task}`: claim before you edit; with `paths` a
   distinct session reviews it. A lapsed lease needs `because`.
 - **`collab_done`** `{text}`: `finished` (with `why`, `evidence`, `limits`,

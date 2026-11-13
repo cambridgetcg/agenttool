@@ -7928,8 +7928,11 @@ export class CollabStore {
     }
     const plan = (session: CoordinationSessionRow, mark: NoteMarkState, record: boolean) => {
       const scan = this.scanNoteEvents(session, mark.sequence);
-      const listed = scan.events.filter((event) =>
-        input.include === "all" ? !event.own : event.for_me);
+      // With include: "all", one line per thing; every item for this session stays.
+      const shaped = input.include === "all"
+        ? noteLines(scan.events.filter((event) => !event.own), true)
+        : { lines: scan.events.filter((event) => event.for_me), dropped: [] };
+      const listed = shaped.lines;
       let through = scan.last_sequence;
       let more = scan.capped;
       if (listed.length > limit) {
@@ -7963,6 +7966,7 @@ export class CollabStore {
         through,
         more,
         also_new: alsoNew,
+        not_listed: input.include === "all" ? notListed(shaped.dropped, through) : null,
         for_me_total: scan.events.filter((event) => event.for_me).length,
         for_me_total_capped: scan.capped,
         waiting,
@@ -7991,6 +7995,7 @@ export class CollabStore {
         sessions,
         entries: planned.sequences.map((sequence) => this.noteEntryAt(session, sequence, folds)),
         also_new: planned.also_new,
+        ...(planned.not_listed ? { not_listed: planned.not_listed } : {}),
         more: planned.more,
         for_me_total: planned.for_me_total,
         for_me_total_capped: planned.for_me_total_capped,
@@ -8044,8 +8049,10 @@ export class CollabStore {
       const mark = this.readNoteMarkState(session);
       const after = Math.min(input.since, workspace.event_head_sequence);
       const scan = this.scanNoteEvents(session, after, this.endedNamesakes(session));
-      const listed = scan.events.filter((event) =>
-        input.include === "all" ? !event.own : event.for_me || event.for_name !== null);
+      // A record, not a log: one line per thing, whichever include.
+      const shaped = noteLines(scan.events.filter((event) =>
+        input.include === "all" ? !event.own : event.for_me || event.for_name !== null), false);
+      const listed = shaped.lines;
       let through = scan.last_sequence;
       let more = scan.capped;
       if (listed.length > limit) {
@@ -8061,6 +8068,7 @@ export class CollabStore {
         entries: returned.map((event) => this.noteEntryAt(session, event.sequence, folds, event.for_name)),
         also_new: scan.events.filter((event) =>
           !event.own && !event.for_me && event.for_name === null && event.sequence <= through).length,
+        not_listed: notListed(shaped.dropped, through),
         more,
         for_me_total: scan.events.filter((event) => event.for_me).length,
         for_me_total_capped: scan.capped,
@@ -8120,10 +8128,17 @@ export class CollabStore {
           ORDER BY sequence LIMIT ?
         `).all(session.workspace_id, from, session.id, ...NOTE_ADDRESSING_EVENT_TYPES, NOTE_SCAN_MAX_EVENTS + 1) as EventRow[];
         capped = rows.length > NOTE_SCAN_MAX_EVENTS;
+        // Counted as a look-back lists them: one line per thing.
+        const things = new Set<string>();
         for (const row of rows.slice(0, NOTE_SCAN_MAX_EVENTS)) {
           const event = eventFromRow(row);
           if (this.eventAddressesSession(event, session.id)) continue;
           if (this.namesakeAddressed(event, namesakes) === null) continue;
+          const thing = noteThingOf(event);
+          if (thing !== null) {
+            if (things.has(thing)) continue;
+            things.add(thing);
+          }
           count += 1;
           earliest ??= event.sequence;
         }
@@ -8630,6 +8645,8 @@ export class CollabStore {
         own,
         for_me: forMe,
         for_name: own || forMe ? null : this.namesakeAddressed(event, namesakes),
+        thing: noteThingOf(event),
+        attached: event.type === "evidence.cited" || event.type === "artifact.attached",
         shown_item_id: forMe ? noteShownItem(event) : null,
       };
     });
@@ -9975,6 +9992,7 @@ export class CollabStore {
           supported: supports.some((stance) => stance.counted && stance.voice_id === voice.voice_id),
           challenged: challenges.some((stance) => stance.standing && stance.voice_id === voice.voice_id),
           delivery_recorded: members.some((view) => this.noteShownAt(workspaceId, view.id, proposalId) !== null),
+          ended: members.length > 0 && members.every((view) => view.status === "ended"),
         };
       });
     let replaced: NoteProposalData["replaced"] = null;
@@ -10091,6 +10109,7 @@ export class CollabStore {
       from_actor: report.from_actor,
       voice_id: voice,
       voice_has_active_session: voice !== null && facts.active_voices.has(voice),
+      from_session_ended: session?.status === "ended",
       created_at: report.created_at,
       statement,
       marked,
@@ -11275,6 +11294,13 @@ export interface NoteInboxData {
   observed_at: string;
   /** A look-back (collab_inbox since): the sequences it read after and through. The mark did not move. */
   looked_back?: { after: number; through: number };
+  /**
+   * A look-back or a pass with include: "all": events within what was read
+   * that are not lines of their own, so the listing is not taken as the
+   * whole journal. attached: cited evidence and attached artifacts;
+   * duplicates: a second line of a proposal, ballot, completion or verdict.
+   */
+  not_listed?: { attached: number; duplicates: number };
 }
 
 export interface NoteThreadData {
@@ -11347,6 +11373,8 @@ export interface NoteStanceView {
   voice_id: string | null;
   /** Some active session still speaks for this voice. */
   voice_has_active_session: boolean;
+  /** The session that wrote it has ended (only it could withdraw it). */
+  from_session_ended: boolean;
   created_at: string;
   statement: string;
   marked: boolean;
@@ -11377,6 +11405,8 @@ export interface NoteConsultedVoice {
   challenged: boolean;
   /** collab_arrive or collab_inbox returned the proposal to one of its sessions (note_shown). */
   delivery_recorded: boolean;
+  /** Every session of this voice has ended, so none can speak for it now. */
+  ended: boolean;
 }
 
 export interface NoteCarriedObjection {
@@ -11622,6 +11652,14 @@ interface NoteScannedEvent {
   for_me: boolean;
   /** In a look-back: the ended session carrying the reader's name that this event is addressed to. */
   for_name: string | null;
+  /**
+   * The report this event is one line of (a proposal or ballot it opened,
+   * a completion or verdict its task event records), so a listing can show
+   * each once; null for an event that stands alone.
+   */
+  thing: string | null;
+  /** Cited evidence or an attached artifact: detail of a report or task, never a line of its own in a listing. */
+  attached: boolean;
   shown_item_id: string | null;
 }
 
@@ -11634,6 +11672,77 @@ export const NOTE_THREAD_MAX = 200;
 const NOTE_PURPOSE_MAX_CHARS = 200;
 /** spec 8.3: every new payload stays within 64 KiB of canonical UTF-8. */
 const NOTE_PAYLOAD_MAX_BYTES = 64 * 1024;
+
+/**
+ * The report an event is one line of, for a listing that shows each thing
+ * once: a report itself; the proposal or ballot an opening event opened (its
+ * entity is that report); the completion a task.reported_complete records;
+ * the review report a verdict event records. Null for anything else.
+ */
+function noteThingOf(event: CollabEvent): string | null {
+  const payload = (event.payload ?? {}) as Record<string, unknown>;
+  switch (event.type) {
+    case "report.posted":
+    case "proposal.opened":
+    case "ballot.opened":
+      return `report:${event.entity_id}`;
+    case "task.reported_complete":
+      return typeof payload.completion_report_id === "string" ? `report:${payload.completion_report_id}` : null;
+    case "task.accepted":
+    case "task.changes_requested":
+      return typeof payload.review_report_id === "string" ? `report:${payload.review_report_id}` : null;
+    default:
+      return null;
+  }
+}
+
+/** What a listing leaves out so it reads one line per thing. */
+interface NoteLines {
+  lines: NoteScannedEvent[];
+  /** Each candidate not listed, and why: detail attached to a report or task, or a second line of a thing listed once. */
+  dropped: Array<{ sequence: number; why: "attached" | "duplicate" }>;
+}
+
+/**
+ * One line per thing a reader would call one thing (a look-back, or a pass
+ * with include: "all"): cited evidence and attached artifacts are left out,
+ * since they are detail of the report or task beside them, and a report is
+ * merged with the event that opened it as a proposal or ballot, or with the
+ * task event recording it as a completion or verdict. The line kept is one
+ * addressed to the reader if there is one, then one addressed to its name,
+ * then the earliest. With keepEveryForMe (a pass), no line addressed to the
+ * reader is ever dropped, so a pass shows all it showed before.
+ */
+function noteLines(candidates: NoteScannedEvent[], keepEveryForMe: boolean): NoteLines {
+  const dropped: NoteLines["dropped"] = [];
+  const rank = (event: NoteScannedEvent) => (event.for_me ? 2 : event.for_name !== null ? 1 : 0);
+  const best = new Map<string, NoteScannedEvent>();
+  for (const event of candidates) {
+    if (event.attached && !event.for_me || event.thing === null) continue;
+    const held = best.get(event.thing);
+    if (!held || rank(event) > rank(held)) best.set(event.thing, event);
+  }
+  const lines = candidates.filter((event) => {
+    if (event.attached && !event.for_me) {
+      dropped.push({ sequence: event.sequence, why: "attached" });
+      return false;
+    }
+    if (event.thing === null) return true;
+    const keep = best.get(event.thing) === event || (keepEveryForMe && event.for_me);
+    if (!keep) dropped.push({ sequence: event.sequence, why: "duplicate" });
+    return keep;
+  });
+  return { lines, dropped };
+}
+
+/** The counts of what a listing left out, up to the sequence it read through. */
+function notListed(dropped: NoteLines["dropped"], through: number): { attached: number; duplicates: number } {
+  const within = dropped.filter((entry) => entry.sequence <= through);
+  return {
+    attached: within.filter((entry) => entry.why === "attached").length,
+    duplicates: within.filter((entry) => entry.why === "duplicate").length,
+  };
+}
 
 /** The item an inbox delivery records (spec 8.1 note_shown): a proposal, a ballot or a completion. */
 function noteShownItem(event: CollabEvent): string | null {

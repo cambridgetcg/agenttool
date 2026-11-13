@@ -28,6 +28,7 @@ import {
   ballotTermsView,
   ballotUnitView,
   changedUnderYou,
+  durationUntil,
   exactRef,
   handleOf,
   noteWriteResult,
@@ -46,6 +47,12 @@ import {
 // The poll note (spec 8.2: the poll report's body is the rendered poll note)
 
 const POLL_STAND_IN_STATEMENT = "A sealed ballot; read its terms with collab_inbox about.";
+
+/** A wait for a ballot's close: the inbox wait ends when a ballot this session is part of closes. */
+const WAIT_FOR_CLOSE_SECONDS = 30;
+const WAIT_FOR_CLOSE_ADVICE =
+  "collab_inbox {wait_seconds: 30} waits for the close: a wait ends when a ballot you are in, opened or cast in closes, " +
+  "and returns its result; a wait over 30 seconds is one more call (closes_in says how long is left).";
 
 /**
  * The poll report's body. The question's first line is the statement; the
@@ -144,6 +151,7 @@ export async function pollVerb(ctx: NoteVerbContext, input: PollInput): Promise<
     advice.push(`${receipt.left_out_total} live session(s) are left out of the electorate (left_out); their casts would be revealed and never counted.`);
   }
   advice.push("Do not announce the result yourself: it is computed at the close, and it authorises nothing.");
+  advice.push(WAIT_FOR_CLOSE_ADVICE);
   return {
     ...noteWriteResult({
       effect:
@@ -151,17 +159,19 @@ export async function pollVerb(ctx: NoteVerbContext, input: PollInput): Promise<
         `${receipt.terms.close_when_all_cast ? " or once every unit has cast" : ""}. No vote is shown before the close.`,
       ids: { ballot: receipt.ballot_id, ballot_handle: handle, report: receipt.report.id, event: receipt.event_id },
       advice,
-      next: withSlot(ctx, { tool: "collab_inbox", input: { about: exactRef("ballot", receipt.ballot_id) } }),
+      // A wait ends at the close; about would not wait.
+      next: withSlot(ctx, { tool: "collab_inbox", input: { wait_seconds: WAIT_FOR_CLOSE_SECONDS } }),
       note: receipt.report.body,
       replayed,
     }),
     ballot: receipt.ballot_id,
-    terms: ballotTermsView(receipt.terms),
+    terms: ballotTermsView(receipt.terms, view.observed_at),
     electorate: receipt.electorate.map(ballotUnitView),
     left_out: receipt.left_out,
     ...(receipt.left_out_total > receipt.left_out.length ? { left_out_total: receipt.left_out_total } : {}),
     chosen_by: receipt.chosen_by,
     closes_at: receipt.terms.closes_at,
+    closes_in: durationUntil(receipt.terms.closes_at, view.observed_at),
     close_when_all_cast: receipt.terms.close_when_all_cast,
     quorum: receipt.terms.quorum,
     state: view.state,
@@ -442,6 +452,13 @@ function voteResult(
     pending: string | null;
   },
 ): Record<string, unknown> {
+  // Read now: this cast may itself have closed a ballot that closes once every unit has cast.
+  let open = false;
+  try {
+    open = !options.revealed_as && ctx.store.noteBallotState(options.ballot.workspace_id, options.ballot.ballot_id) === "open";
+  } catch {
+    // The cast is recorded; a state that cannot be read only changes the suggested call.
+  }
   const effect = options.revealed_as
     ? `Your vote in ${options.handle} (cast ${options.cast_seq}) was recorded before the close and revealed at the close as ${options.revealed_as}.`
     : `Sealed vote recorded for ${options.handle} (cast ${options.cast_seq}).`;
@@ -456,9 +473,11 @@ function voteResult(
     counts_as: options.counts_as,
     ...(options.same_handle_as ? { same_handle_as: options.same_handle_as } : {}),
     closes_at: options.ballot.terms.closes_at,
+    closes_in: durationUntil(options.ballot.terms.closes_at, ctx.store.noteNow()),
     replayed: options.replayed,
-    advice: options.advice,
-    next: aboutBallot(ctx, options.ballot.ballot_id),
+    advice: open ? [...options.advice, WAIT_FOR_CLOSE_ADVICE] : options.advice,
+    // While it is open, a wait ends at its close; about would not wait.
+    next: open ? withSlot(ctx, { tool: "collab_inbox", input: { wait_seconds: WAIT_FOR_CLOSE_SECONDS } }) : aboutBallot(ctx, options.ballot.ballot_id),
     ...(options.pending ? { reveal_pending: options.pending } : {}),
   };
 }

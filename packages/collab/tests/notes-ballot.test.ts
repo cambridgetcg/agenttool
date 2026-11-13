@@ -1038,6 +1038,7 @@ describe("ballots in collab_inbox and collab_arrive (spec 5.1, 5.2)", () => {
       method: "approval/1",
       quorum: 2,
       closes_at: opened.closes_at,
+      closes_in: "30m",
       close_when_all_cast: false,
     });
     expect(item.you_may_vote).toBe(true);
@@ -1294,5 +1295,31 @@ describe("a look-back on an open ballot", () => {
     const after = JSON.stringify(await ok(peer!.server, "collab_inbox", { since: 0 }));
     expect(after).toContain("lean-marker-one");
     expect(after).not.toContain("reason-marker-lookback");
+  });
+});
+
+describe("waiting for a ballot", () => {
+  test("poll and vote suggest a wait, which ends at the close, and every view of the ballot says how long is left", async () => {
+    const j = journal();
+    const [opener, peer] = await voters(j, ["opener", "peer"]);
+    const opened = await poll(opener!);
+    const wait = { tool: "collab_inbox", input: { wait_seconds: 30 } };
+    expect(opened.next).toEqual(wait);
+    expect(opened.advice.join(" ")).toContain("a wait ends when a ballot you are in, opened or cast in closes");
+    expect(opened.closes_in).toBe("30m");
+    expect(opened.terms.closes_in).toBe("30m");
+    j.advance(10 * MINUTE);
+    const voted = await ok(peer!.server, "collab_vote", { ballot: opened.ballot, choice: ["keep"] });
+    expect(voted).toMatchObject({ closes_at: opened.closes_at, closes_in: "20m", next: wait });
+    expect(voted.advice.join(" ")).toContain("a wait ends when a ballot");
+    expect((await about(peer!, opened.ballot)).ballot.terms.closes_in).toBe("20m");
+    const arrived = await ok(opener!.server, "collab_arrive", { purpose: "look" });
+    expect(arrived.open.ballots[0]).toMatchObject({ closes_at: opened.closes_at, closes_in: "20m" });
+    // After the close a replayed vote points at the result, not at a wait.
+    j.advance(21 * MINUTE);
+    const replayed = await ok(peer!.server, "collab_vote", { ballot: opened.ballot, choice: ["keep"] });
+    expect(replayed.replayed).toBe(true);
+    expect(replayed.closes_in).toBe("closed");
+    expect(replayed.next).toEqual({ tool: "collab_inbox", input: { about: opened.ballot } });
   });
 });

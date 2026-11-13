@@ -49,9 +49,9 @@ Acts, in four families:
 - decide: propose, poll, vote, decide
 
 support, challenge, resolve, withdraw, accept and request_changes need Re. Only a challenger
-resolves its own challenge; withdraw takes back your own note; accept and request_changes judge
-another session's finished work. A Why cites Evidence lines by number, from 1. Example, sent as
-the text of mcp_agenttool_collab_note:
+resolves its own challenge; withdraw takes back a note this session wrote; accept and
+request_changes judge another session's finished work. A Why cites Evidence lines by number,
+from 1. Example, sent as the text of mcp_agenttool_collab_note:
 ```collab-note
 challenge: The retry test does not cover a lost response
 

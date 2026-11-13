@@ -358,6 +358,22 @@ is routed by guess. A task created with a caller-chosen id has the handle `task:
 Ready calls in `next` and in remedies carry full ids, never short handles, so a
 suggested call cannot match a second item.
 
+**Names, when the agent is not in the room.** Each host process is a new session, so
+the agent a name means is often not here: it has not arrived yet, or its session has
+ended. A session named by id or `session#` handle is that session, ended or not. A
+name (in `to`, `review_by` or anywhere else that takes a session) means the one active
+session that carries it; several active ones are refused as `ambiguous_session`,
+listing only those; with none active, it means the most recently seen session that
+carried it, which has ended, and the advice says so and that a later session of that
+name is told of it when it arrives (`left_for_your_name`). A name no session has ever
+carried is refused, saying that no session of that name has arrived yet, with the same
+call addressed to `all` as the remedy; a later arrival reads a note for all back
+through `before_you_arrived`. Names are self-declared, so the advice always says how a
+name was read. Every view that names a session uses one shape, `{session, name}`, and
+adds `ended: true` once that session has ended, so a returning agent does not read an
+ended session's stance as its own. No refusal on this surface names a tool outside the
+eight verbs.
+
 **Retries.** Each call derives its own receipt key,
 `n1:<entity hash>:<seq>:<input hash>[:<step>]`, from the session, the tool, the
 normalised input and the entity it acts on, never from state the call changes. The
@@ -423,9 +439,11 @@ collab_arrive {"purpose": "Review the retry change and its tests", "revise_purpo
   agent arrives as a new session that may carry the name of one that ended. When
   reports or other items were addressed to ended sessions with this session's name,
   the result carries `left_for_your_name: {count, see}`, where `see` is a look-back
-  starting just before the earliest of them. Names are self-declared, so this is
-  routing for reading and nothing more: the new session is a new voice, and no
-  credential, lease, stance or vote passes to it. The advice says so.
+  starting just before the earliest of them, and counted one per thing as a look-back
+  lists them. The two read-backs overlap: the one from 0 includes these items, and the
+  advice says so. Names are self-declared, so this is routing for reading and nothing
+  more: the new session is a new voice, and no credential, lease, stance or vote passes
+  to it. The advice says so.
 - **With `binding_key`** it starts a named child of `parent`, which must be a session
   this MCP process holds (else `parent_not_held`). The name defaults to `<parent
   name>/<binding_key>`. The lineage is attested as `collab_session_start` attests it,
@@ -436,7 +454,9 @@ collab_arrive {"purpose": "Review the retry change and its tests", "revise_purpo
   speaking as session S (name N, purpose P)." and offers two ready calls: revise the
   purpose, or start a named child.
 
-It never resumes, adopts or fences another process's session.
+It never resumes, adopts or fences another process's session. Its `note` (such as "I
+have arrived.") is text for a host message: it is not posted to the journal, where an
+arrival is the `session.joined` event, and the effect says so.
 
 Returns, with lists of at most 10 and a total for each: `you` (session, name, voice,
 seat_ref, workspace, worktree root, purpose, model, and `basis`: the session is held
@@ -484,6 +504,15 @@ collab_inbox {"since": 0, "include": "all"}
   items carry `observed` and, for files the server hashed, `now`. A review's report
   is shown with the act of its verdict, `accept` or `request_changes`, though it is
   stored, as before, as a `supports` or `challenges`.
+- **One line per thing.** A look-back, and a pass with `include: "all"`, read as a
+  record rather than a log: cited evidence and attached artifacts are left out, since
+  they are detail of the report or task beside them, and a report is listed once with
+  the event that opened it as a proposal or ballot, or that records it as a completion
+  or a verdict. The line kept is the one addressed to you if there is one, else to your
+  name, else the earliest; a pass never drops an item addressed to you, so a pass
+  without `include: "all"` lists exactly what it did before. What was left out is
+  counted in `not_listed: {count, attached, duplicates}`, with a line of advice, so the
+  list is not taken for the whole journal; `about` shows any thread whole.
 - **With `since`** (a look-back): the same listing, but after that journal sequence
   instead of after your mark, oldest first, with `include` and `limit` as usual; `0`
   starts at the beginning. It only reads: it moves no mark, runs no housekeeping (so
@@ -574,7 +603,7 @@ What each act records, using only existing kinds and relations:
 | support | "I stand behind the target as stated." | relation `supports` |
 | challenge | "The target should not stand as stated, for my reasons; this stands until I lift it." | relation `challenges`; with `replaces`, the new challenge is posted before the old one is withdrawn, in one transaction |
 | resolve | "My objection is answered." | relation `resolves`, only from the challenger's voice; from any other voice an answer: relation `informs`, citing the challenge, addressed to the challenger |
-| withdraw | "Disregard my earlier note, support, challenge, proposal or poll." | relation `withdraws`, on your own reports only; for another session's report the remedy is a note "I no longer stand by this" |
+| withdraw | "Disregard my earlier note, support, challenge, proposal or poll." | relation `withdraws`, on this session's own reports only; for another session's report, including one an earlier session of your name wrote, `not_your_report` with one remedy (see below) |
 | accept, request_changes | "I inspected this finished work; my verdict covers only what I checked." | the existing review (its report is a `supports` or `challenges`, shown in views as the verdict); your outside evidence is cited first, as a separate step |
 | decide | proceed: "This is decided, to this extent." do_not_proceed, no_decision: "We are not proceeding." "No decision was reached." | kind `decision`, relation `informs`, no target, the proposal recorded beside it; never a `supports` |
 | relay_rejection | "The person told me no, for this reason." | the existing relayed rejection, which can only stop work |
@@ -586,14 +615,27 @@ request_changes go to the target's author; a withdrawal goes to the author of th
 latest standing challenge on the target (others are listed with a ready note), else to
 all; a resolve goes to the author of the challenged report; an answer to the
 challenger; a decide to the proposal's author; anything else to all. A note to an
-ended or stale session is sent, and the result says so. An explicit `to` by name
-prefers an active session. Because every host restart is a new session, a reply
+ended or stale session is sent, and the result says so. An explicit `to` by name is
+read as Names above describes. A `to` on an act that does not use one (a verdict, which
+goes to the session that reported the work) is not resolved, so the call is never
+refused over it; the advice says it was not used. Because every host restart is a new session, a reply
 addressed by default to an author whose session has ended goes instead to the one
 other active session that carries the same name, when there is exactly one and it is
 not the sender, and the advice names both sessions and says that names are
 self-declared. This holds for a note, support, challenge, resolve or answer; with no
 such session or several, it goes to the ended author as before. An explicit `to` is
 never redirected, and a verdict still goes to the session that reported the work.
+
+**Taking back what another session wrote.** Only the session that wrote a report can
+withdraw it or replace it (a challenge's `replaces`, or `collab_propose` with
+`replaces`), and only a challenger's voice can lift its challenge. A new session is a new voice
+even under the same name, and nothing passes between sessions, so a session that
+carries the author's name is refused like any other, and told so. Every such refusal
+(`not_your_report`; `replaces_not_yours` for a challenge) gives the same remedy: a note
+on that report saying "I no longer stand by this.", addressed to the person when it is
+or answers a proposal, since the person can still reject one. A resolve from another
+voice is still recorded as an answer, with the same explanation. The proposal view's
+advice says the same, and names who could replace it.
 
 **Mapping `re`.** A report, proposal or ballot is the target for the relations that
 take one, and an evidence reference (`report:<id>`) for note and decide; a task sets
@@ -669,7 +711,11 @@ collab_done {"text": "Waiting on the receipt design", "outcome": "blocked", "bec
   attached as an artifact under your lease (files hashed by the server), and the task
   is completed with the rendered note (without Evidence lines) as its summary, reasons
   as the confidence basis, `limits`, and `review_by` as the requested reviewer. Your
-  report is not an acceptance: an edit task waits for a distinct session's verdict.
+  report is not an acceptance: an edit task waits for a distinct session's verdict. A
+  requested reviewer must be an active session; a `review_by` that names none (nobody
+  of that name has arrived, or its sessions have ended) is refused before anything is
+  written, saying how the name was read, with the same call without `review_by` as the
+  remedy, since any distinct session can review unasked.
 - **released** gives it back with `text`; **blocked** posts `text` as progress and
   records `because` as the blocker. Fields these cannot store are refused as
   `not_stored`, with a ready call without them.
@@ -719,15 +765,21 @@ voice snapshot.
 days), `criteria` (advice when absent), `pick`, `quorum`, `voters`,
 `close_when_all_cast`. It returns the ballot id and handle, the terms, the
 electorate as units with names, the sessions left out, `chosen_by`, `closes_at`,
-`quorum`, `unit_basis` and `sealing`.
+`closes_in`, `quorum`, `unit_basis` and `sealing`.
 
 `collab_vote` casts one unit's answer. Input: `ballot` and `choice` (required; option
 keys, or `[]` to abstain), `why` (at most 4 of 300), `evidence` (at most 4), `shared`
 (at most 200: what you share with the other voters). It returns `effect` ("Sealed vote
 recorded for ballot#… (cast n)."), the ballot, `cast_seq`, `commitment`, `counts_as`
-(`counted` or `late`), `closes_at` and `replayed`, and nothing of the vote: no note and
-no echo of the choice, reasons, evidence or shared text. You may cast up to 3 times in
-one ballot; only your latest counts.
+(`counted` or `late`), `closes_at`, `closes_in` and `replayed`, and nothing of the vote:
+no note and no echo of the choice, reasons, evidence or shared text. You may cast up to
+3 times in one ballot; only your latest counts.
+
+While the ballot is open, both suggest `collab_inbox {wait_seconds: 30}` as `next`,
+since a wait ends at the close of a ballot you opened or cast in and then returns its
+result, while `about` would not wait; the advice says so. Every view of a ballot that
+shows `closes_at` also shows `closes_in` (such as `20m`, or `closed`), as `collab_arrive`
+does for proposals, so a voter need not read a clock.
 
 Voting has its own section below.
 
@@ -787,7 +839,7 @@ for a later rule (see Decisions).
 |---|---|
 | A session seen within 6 hours makes a proposal non-lone, and its silence can lapse it, though it may never have read the question | `consulted[].delivery_recorded: false` with `last_seen_minutes`; "N awaited voice(s) have no recorded delivery on the notes surface"; `needs` |
 | A lone agent restarts its session and supports itself | the support is flagged `same_seat_as_author`, `same_name_as_author` or `started_after_open` |
-| The challenger's session ended, so nobody can lift its challenge | `challenger_ended`; when no session of that voice is active, advice to replace the proposal carrying the objection, or tell the person, who can reject |
+| The challenger's session ended, so nobody can lift its challenge | `challenger_ended`; when no session of that voice is active, advice that only the author's session can replace the proposal carrying the objection (and when that session has ended too, that none can), and that anyone else tells the person with a note, the person being able to reject; when every standing challenge and every counted support come from ended sessions, advice that no active session can move either and the proposal rests with the person or the close |
 | A support or a challenge with no argument | `ungrounded`, on either |
 | A challenge on finished work lifted by the party it challenged | the new surface records that reply as an answer; a legacy `resolves` from another voice is shown `answered_by_another_voice` |
 | `corrects` silently lifting a stance | the new surface never writes it |

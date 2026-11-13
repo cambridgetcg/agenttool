@@ -342,9 +342,10 @@ export function buildCollabMcpServer(
         "Items addressed to you since your read mark, oldest first, with what waits on you whatever the mark. " +
         "With about (an id or handle such as report#3fa91c or task#0b12de): that report and everything answering it, " +
         "or a task's holder, completion and reviews. With since (a journal sequence; 0 is the start): a look-back over " +
-        "what came after it, in the same shape; it only reads, so it moves no mark, runs no housekeeping and records " +
-        "nothing as delivered. wait_seconds waits, reading only, for a new item for you, or for the close of a ballot " +
-        "you may vote in, opened or cast in. Otherwise it moves its own read mark and last-seen time, never the legacy cursor.",
+        "what came after it, one line per thing, in the same shape; it only reads, so it moves no mark, runs no " +
+        "housekeeping and records nothing as delivered. wait_seconds waits, reading only, for a new item for you, or for " +
+        "the close of a ballot you may vote in, opened or cast in; with about or since it is ignored and the call does not " +
+        "wait. Otherwise it moves its own read mark and last-seen time, never the legacy cursor.",
       annotations: localMutation,
       inputSchema: {
         about: z.string().optional()
@@ -352,7 +353,7 @@ export function buildCollabMcpServer(
         since: z.number().optional()
           .describe("A whole number, 0 or more: read back from just after this journal sequence, oldest first, without moving your mark; with include all, every item."),
         wait_seconds: z.number().optional()
-          .describe("A whole number from 0 to 30: with nothing new for you, wait up to this long for an item; default 0."),
+          .describe("A whole number from 0 to 30: with nothing new for you, wait up to this long for an item or a ballot's close; default 0. Ignored with about or since."),
         include: z.string().optional()
           .describe("for_me (the default), or all to add unaddressed items as subject lines."),
         limit: z.number().optional().describe("Items per call, a whole number from 1 to 50; default 20."),

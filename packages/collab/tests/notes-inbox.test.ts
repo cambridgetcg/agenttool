@@ -314,7 +314,7 @@ describe("waiting_on_you", () => {
     ]));
     const review = second.waiting_on_you.find((entry: any) => entry.what === "review");
     // The ref is the display handle; the ready call names the task exactly.
-    expect(review).toMatchObject({ ref: handleOf("task", task.id), by: "peer", next: { tool: "collab_inbox", input: { about: task.id } } });
+    expect(review).toMatchObject({ ref: handleOf("task", task.id), by: { session: peer.session.id, name: "peer" }, next: { tool: "collab_inbox", input: { about: task.id } } });
     // Supporting the proposal answers it, so it no longer waits.
     report(j.store, me, "sup", "Yes.", { kind: "inference", relation: "supports", target_report_id: proposal.proposal.id });
     const third = await ok(server, "collab_inbox");
@@ -490,7 +490,7 @@ describe("collab_inbox about", () => {
       handle: handleOf("report", challenge.id),
       on: handleOf("report", root.id),
       on_id: root.id,
-      by: "peer",
+      by: { session: peer.session.id, name: "peer" },
       standing: true,
       answered_by_another_voice: true,
     }]);
@@ -526,7 +526,7 @@ describe("collab_inbox about", () => {
       state: "reported_complete",
       review_status: "pending",
       holder: null,
-      completion: { id: done.completion_report_id, by: "peer" },
+      completion: { id: done.completion_report_id, by: { session: peer.session.id, name: "peer" } },
       reviews: [],
     });
     expect(held.thread.map((item: any) => item.statement)).toEqual(["Done."]);
@@ -537,7 +537,7 @@ describe("collab_inbox about", () => {
     });
     const reviewed = await ok(server, "collab_inbox", { about: task.id });
     expect(reviewed.task).toMatchObject({ state: "open", review_status: "changes_requested" });
-    expect(reviewed.task.reviews).toEqual([expect.objectContaining({ outcome: "changes_requested", by: "me", summary: "Not yet." })]);
+    expect(reviewed.task.reviews).toEqual([expect.objectContaining({ outcome: "changes_requested", by: { session: me.session.id, name: "me" }, summary: "Not yet." })]);
     const note = await ok(server, "collab_inbox", { about: task.id, format: "note" });
     expect(note.note).toContain(`Re: task:${task.id}`);
     expect(note.note).toContain("Position: open; review changes_requested");
@@ -958,5 +958,21 @@ describe("about names one thread", () => {
     // A report with an id still reads as before.
     const posted = report(j.store, me, "r", "Mine.");
     expect((await ok(server, "collab_inbox", { about: posted.id })).root.id).toBe(posted.id);
+  });
+});
+
+describe("what waits on you names an ended session as one", () => {
+  test("a standing challenge by a session that has ended is marked ended where it waits", async () => {
+    const j = journal();
+    const me = j.start("me");
+    const peer = j.start("peer");
+    const mine = report(j.store, me, "mine", "My claim.");
+    report(j.store, peer, "ch", "Not so.", { kind: "inference", relation: "challenges", target_report_id: mine.id });
+    j.store.endSession({ ...peer.credential, reason: "gone" });
+    const read = await ok(j.serve(me), "collab_inbox", { limit: 50 });
+    const waiting = read.waiting_on_you.find((entry: any) => entry.what === "challenge");
+    expect(waiting.by).toEqual({ session: peer.session.id, name: "peer", ended: true });
+    const item = read.items.find((entry: any) => entry.act === "challenge");
+    expect(item.from).toEqual({ session: peer.session.id, name: "peer", ended: true });
   });
 });

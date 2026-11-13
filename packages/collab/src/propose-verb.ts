@@ -24,6 +24,8 @@ import type { NoteAppendReceipt, NoteCiteReceipt, NoteProposalData } from "./sto
 import {
   beforeFirstWrite,
   evidenceSummary,
+  newVoiceSentence,
+  noLongerStandRemedy,
   recordedEvidence,
   refusedAfter,
   resolveEvidence,
@@ -480,6 +482,23 @@ export async function proposeVerb(ctx: NoteVerbContext, input: ProposeInput): Pr
     }
     const id = ctx.store.resolveNoteRef(workspaceId, "proposal", input.replaces).id;
     replaced = ctx.store.noteProposalView(workspaceId, id);
+    if (replaced.status.proposal.from_session_id !== me) {
+      // The store would refuse the supersede after the cite; this says why, with
+      // the one remedy every take-back refusal gives, before anything is written.
+      const author = replaced.author;
+      const myName = ctx.store.noteSessionViews(workspaceId).find((view) => view.id === me)?.actor ?? null;
+      const sameName = author !== null && myName !== null && author.actor === myName;
+      throw new CollabError(
+        "not_your_report",
+        `${handleOf("proposal", id)} was opened by another session, and only its author session replaces it. ` +
+          (sameName ? `${newVoiceSentence(author!.actor)} ` : "") +
+          "To say where you stand, post a note on it to the person, who can still reject it; or open a new proposal without replaces. Nothing was written",
+        {
+          ...(author ? { author: { session: author.id, name: author.actor, ...(author.status === "ended" ? { ended: true } : {}) } } : {}),
+          remedy: noLongerStandRemedy(ctx, id, true, true),
+        },
+      );
+    }
   }
   const standing = objectionsToCarry(replaced);
   // A refusal here waits for the first write: a retry whose open was already

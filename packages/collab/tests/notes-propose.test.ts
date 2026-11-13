@@ -354,7 +354,9 @@ describe("collab_propose replaces: carried objections", () => {
     const first = await ok(sa, "collab_propose", TERMS);
     const before = j.count();
     const notMine = await refused(sb, "collab_propose", { ...TERMS, evidence: ["file src/a.ts"], replaces: first.ids.proposal });
-    expect(notMine.code).toBe("report_author_mismatch");
+    // The one take-back refusal and remedy: a note on the proposal to the person.
+    expect(notMine.code).toBe("not_your_report");
+    expect(notMine.remedy).toEqual({ tool: "collab_note", input: { act: "note", text: "I no longer stand by this.", re: first.ids.proposal, to: "person" } });
     expect(j.count()).toBe(before);
     await ok(sa, "collab_note", { act: "withdraw", text: "Withdrawn.", re: first.ids.proposal });
     const mark = j.count();

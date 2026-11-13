@@ -7366,7 +7366,8 @@ class CollabStore {
     }
     const plan = (session, mark, record) => {
       const scan = this.scanNoteEvents(session, mark.sequence);
-      const listed = scan.events.filter((event) => input.include === "all" ? !event.own : event.for_me);
+      const shaped = input.include === "all" ? noteLines(scan.events.filter((event) => !event.own), true) : { lines: scan.events.filter((event) => event.for_me), dropped: [] };
+      const listed = shaped.lines;
       let through = scan.last_sequence;
       let more = scan.capped;
       if (listed.length > limit) {
@@ -7395,6 +7396,7 @@ class CollabStore {
         through,
         more,
         also_new: alsoNew,
+        not_listed: input.include === "all" ? notListed(shaped.dropped, through) : null,
         for_me_total: scan.events.filter((event) => event.for_me).length,
         for_me_total_capped: scan.capped,
         waiting
@@ -7421,6 +7423,7 @@ class CollabStore {
         sessions,
         entries: planned.sequences.map((sequence) => this.noteEntryAt(session, sequence, folds)),
         also_new: planned.also_new,
+        ...planned.not_listed ? { not_listed: planned.not_listed } : {},
         more: planned.more,
         for_me_total: planned.for_me_total,
         for_me_total_capped: planned.for_me_total_capped,
@@ -7456,7 +7459,8 @@ class CollabStore {
       const mark = this.readNoteMarkState(session);
       const after = Math.min(input.since, workspace.event_head_sequence);
       const scan = this.scanNoteEvents(session, after, this.endedNamesakes(session));
-      const listed = scan.events.filter((event) => input.include === "all" ? !event.own : event.for_me || event.for_name !== null);
+      const shaped = noteLines(scan.events.filter((event) => input.include === "all" ? !event.own : event.for_me || event.for_name !== null), false);
+      const listed = shaped.lines;
       let through = scan.last_sequence;
       let more = scan.capped;
       if (listed.length > limit) {
@@ -7471,6 +7475,7 @@ class CollabStore {
         sessions,
         entries: returned.map((event) => this.noteEntryAt(session, event.sequence, folds, event.for_name)),
         also_new: scan.events.filter((event) => !event.own && !event.for_me && event.for_name === null && event.sequence <= through).length,
+        not_listed: notListed(shaped.dropped, through),
         more,
         for_me_total: scan.events.filter((event) => event.for_me).length,
         for_me_total_capped: scan.capped,
@@ -7519,12 +7524,19 @@ class CollabStore {
           ORDER BY sequence LIMIT ?
         `).all(session.workspace_id, from, session.id, ...NOTE_ADDRESSING_EVENT_TYPES, NOTE_SCAN_MAX_EVENTS + 1);
         capped = rows.length > NOTE_SCAN_MAX_EVENTS;
+        const things = new Set;
         for (const row of rows.slice(0, NOTE_SCAN_MAX_EVENTS)) {
           const event = eventFromRow(row);
           if (this.eventAddressesSession(event, session.id))
             continue;
           if (this.namesakeAddressed(event, namesakes) === null)
             continue;
+          const thing = noteThingOf(event);
+          if (thing !== null) {
+            if (things.has(thing))
+              continue;
+            things.add(thing);
+          }
           count += 1;
           earliest ??= event.sequence;
         }
@@ -7911,6 +7923,8 @@ class CollabStore {
         own,
         for_me: forMe,
         for_name: own || forMe ? null : this.namesakeAddressed(event, namesakes),
+        thing: noteThingOf(event),
+        attached: event.type === "evidence.cited" || event.type === "artifact.attached",
         shown_item_id: forMe ? noteShownItem(event) : null
       };
     });
@@ -8960,7 +8974,8 @@ class CollabStore {
         awaited: status.ai.awaiting_voice_ids.includes(voice.voice_id),
         supported: supports.some((stance) => stance.counted && stance.voice_id === voice.voice_id),
         challenged: challenges.some((stance) => stance.standing && stance.voice_id === voice.voice_id),
-        delivery_recorded: members.some((view) => this.noteShownAt(workspaceId, view.id, proposalId) !== null)
+        delivery_recorded: members.some((view) => this.noteShownAt(workspaceId, view.id, proposalId) !== null),
+        ended: members.length > 0 && members.every((view) => view.status === "ended")
       };
     });
     let replaced = null;
@@ -9054,6 +9069,7 @@ class CollabStore {
       from_actor: report.from_actor,
       voice_id: voice,
       voice_has_active_session: voice !== null && facts.active_voices.has(voice),
+      from_session_ended: session?.status === "ended",
       created_at: report.created_at,
       statement,
       marked,
@@ -9737,6 +9753,54 @@ var NOTE_INBOX_MAX_LIMIT = 50;
 var NOTE_THREAD_MAX = 200;
 var NOTE_PURPOSE_MAX_CHARS = 200;
 var NOTE_PAYLOAD_MAX_BYTES = 64 * 1024;
+function noteThingOf(event) {
+  const payload = event.payload ?? {};
+  switch (event.type) {
+    case "report.posted":
+    case "proposal.opened":
+    case "ballot.opened":
+      return `report:${event.entity_id}`;
+    case "task.reported_complete":
+      return typeof payload.completion_report_id === "string" ? `report:${payload.completion_report_id}` : null;
+    case "task.accepted":
+    case "task.changes_requested":
+      return typeof payload.review_report_id === "string" ? `report:${payload.review_report_id}` : null;
+    default:
+      return null;
+  }
+}
+function noteLines(candidates, keepEveryForMe) {
+  const dropped = [];
+  const rank = (event) => event.for_me ? 2 : event.for_name !== null ? 1 : 0;
+  const best = new Map;
+  for (const event of candidates) {
+    if (event.attached && !event.for_me || event.thing === null)
+      continue;
+    const held = best.get(event.thing);
+    if (!held || rank(event) > rank(held))
+      best.set(event.thing, event);
+  }
+  const lines = candidates.filter((event) => {
+    if (event.attached && !event.for_me) {
+      dropped.push({ sequence: event.sequence, why: "attached" });
+      return false;
+    }
+    if (event.thing === null)
+      return true;
+    const keep = best.get(event.thing) === event || keepEveryForMe && event.for_me;
+    if (!keep)
+      dropped.push({ sequence: event.sequence, why: "duplicate" });
+    return keep;
+  });
+  return { lines, dropped };
+}
+function notListed(dropped, through) {
+  const within = dropped.filter((entry) => entry.sequence <= through);
+  return {
+    attached: within.filter((entry) => entry.why === "attached").length,
+    duplicates: within.filter((entry) => entry.why === "duplicate").length
+  };
+}
 function noteShownItem(event) {
   const payload = event.payload;
   if (event.type === "proposal.opened" || event.type === "ballot.opened")

@@ -44,6 +44,7 @@ import {
   type NoteCitedItem,
   type NoteCiteReceipt,
   type NoteReportInput,
+  type NoteSessionView,
   type NoteTargetView,
 } from "./store.js";
 import {
@@ -384,21 +385,96 @@ export interface Addressee {
 
 const BROADCAST: Addressee = { to_session_id: null, to_person: false, shown: "all", advice: [] };
 
+/**
+ * The session a value names on the notes surface, reaching the agent meant
+ * when it is not in the room, which with one host process per sitting is
+ * the ordinary case. An id or session# handle names that session, ended or
+ * not. A name names: the one active session that carries it; several active
+ * ones are refused as ambiguous, listing them; with none active, the most
+ * recently seen session that carried it, which has ended. A name no session
+ * ever carried names nothing (null), and the caller says so. Names are
+ * self-declared, so `advice` says how the name was read.
+ */
+export function namedSession(
+  ctx: NoteVerbContext,
+  workspaceId: string,
+  value: string,
+): { view: NoteSessionView; by_name: boolean; ended_of: number; advice: string[] } | null {
+  const text = value.trim();
+  const sessions = ctx.store.noteSessionViews(workspaceId);
+  const byIdOrHandle = /^session#[0-9a-fA-F]{6,32}$/.test(text) || sessions.some((view) => view.id === text);
+  if (byIdOrHandle) {
+    let view;
+    try {
+      view = ctx.store.resolveNoteSession(workspaceId, text);
+    } catch (error) {
+      if (!(error instanceof CollabError) || error.code !== "session_not_found") throw error;
+      try {
+        view = ctx.store.resolveNoteSession(workspaceId, text, { include_ended: true });
+      } catch (inner) {
+        if (inner instanceof CollabError && inner.code === "session_not_found") return null;
+        throw inner;
+      }
+    }
+    return { view, by_name: false, ended_of: 0, advice: [] };
+  }
+  const active = sessions.filter((view) => view.status === "active" && view.actor === text);
+  if (active.length > 1) {
+    throw new CollabError("ambiguous_session", `${text} names ${active.length} active sessions; use the id of the one you mean`, {
+      value: text,
+      candidates: active.slice(0, 10).map((view) => ({ session: view.id, name: view.actor, last_seen_at: view.last_seen_at })),
+      candidates_total: active.length,
+    });
+  }
+  if (active.length === 1) {
+    const view = active[0]!;
+    return {
+      view,
+      by_name: true,
+      ended_of: 0,
+      advice: [`${text} is the name of one active session (${view.id}); names are self-declared, so this routes by name.`],
+    };
+  }
+  // noteSessionViews lists the most recently seen first.
+  const ended = sessions.filter((view) => view.actor === text);
+  if (ended.length === 0) return null;
+  const latest = ended[0]!;
+  return {
+    view: latest,
+    by_name: true,
+    ended_of: ended.length,
+    advice: [
+      `No active session is named ${text}; this is addressed to that name's latest session (${latest.id}, last seen ` +
+        `${latest.last_seen_at}), which has ended${ended.length > 1 ? `, the latest of ${ended.length} that carried the name` : ""}. ` +
+        `A later session that arrives as ${text} is told of it on arrival (left_for_your_name). Names are self-declared, ` +
+        "so this routes by name; it does not show who will read it.",
+    ],
+  };
+}
+
 /** An explicit `to`: a session (by name, id or handle, ended ones included), person, or all. */
-function explicitAddressee(ctx: NoteVerbContext, workspaceId: string, value: string): Addressee {
+function explicitAddressee(ctx: NoteVerbContext, workspaceId: string, value: string, input: NoteVerbInput): Addressee {
   if (value === "all") return BROADCAST;
   if (value === "person") return { to_session_id: null, to_person: true, shown: "person", advice: [] };
-  // An active session first: a name reused after a restart then means the
-  // session that answers to it now, and an ended one is named only when no
-  // active session has it.
-  let view;
-  try {
-    view = ctx.store.resolveNoteSession(workspaceId, value);
-  } catch (error) {
-    if (!(error instanceof CollabError) || error.code !== "session_not_found") throw error;
-    view = ctx.store.resolveNoteSession(workspaceId, value, { include_ended: true });
+  const named = namedSession(ctx, workspaceId, value);
+  if (!named) {
+    const text = value.trim();
+    const kind = /^session[#_]/.test(text) ? `No session in this workspace has the id or handle ${text}` : `No session named ${text} has arrived in this workspace yet`;
+    throw new CollabError("session_not_found", `${kind}, so nothing can be addressed to it; nothing was written`, {
+      value: text,
+      // A note for all is read back by a later arrival through before_you_arrived.
+      remedy: textIsNote(input)
+        ? { say: "Change the To: line to all and send it again: a later arrival reads notes for all back through before_you_arrived." }
+        : sameNoteWith(ctx, input, { to: "all" }),
+    });
   }
-  return sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at);
+  const { view } = named;
+  if (named.by_name && view.status === "ended") {
+    // The advice already says it has ended, and how the name was read.
+    return { to_session_id: view.id, to_person: false, shown: { session: view.id, name: view.actor }, advice: named.advice };
+  }
+  const addressee = sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at);
+  return { ...addressee, advice: [...named.advice, ...addressee.advice] };
 }
 
 export function sessionAddressee(
@@ -816,7 +892,13 @@ function keyAddressee(ctx: NoteVerbContext, workspaceId: string, value: string |
   if (value === null) return null;
   const text = value.trim();
   if (/^session#[0-9a-fA-F]{6,32}$/.test(text)) {
-    return ctx.store.resolveNoteSession(workspaceId, text, { include_ended: true }).id;
+    try {
+      return ctx.store.resolveNoteSession(workspaceId, text, { include_ended: true }).id;
+    } catch (error) {
+      // Planning refuses a handle that names no one, with its remedy; an act
+      // that does not use to (a verdict) is not refused over it here.
+      if (!(error instanceof CollabError)) throw error;
+    }
   }
   return text;
 }
@@ -955,8 +1037,11 @@ function planNote(
   const advice: string[] = [];
   const extra: Record<string, unknown> = {};
   const hasCite = evidence.items.length > 0;
-  const explicit = fields.to !== null
-    ? explicitAddressee(ctx, workspaceId, fields.to)
+  // A verdict goes to the reporter and a relayed no keeps no addressee, so
+  // their `to` is never resolved: the call is not refused over a field it
+  // does not use (each says what becomes of it).
+  const explicit = fields.to !== null && act !== "accept" && act !== "request_changes" && act !== "relay_rejection"
+    ? explicitAddressee(ctx, workspaceId, fields.to, input)
     : null;
   const reportTarget = target?.kind === "report" ? target : null;
   const base = (relation: NoteReportInput["relation"], extraRefs: string[] = []): NoteReportInput => ({
@@ -1083,22 +1168,21 @@ function planNote(
         "Only the challenger can lift a challenge; your answer was sent to them" +
           (challenger ? ` (challenger voice ${challenger.voice_id}; yours is ${myVoice}).` : "."),
       );
+      const myName = ctx.store.noteSessionViews(workspaceId).find((view) => view.id === me)?.actor ?? null;
+      if (challenger && myName !== null && challenger.actor === myName) {
+        const proposal = onProposal(ctx, workspaceId, challenge.view);
+        advice.push(
+          `${newVoiceSentence(myName)} So this does not lift the challenge; it is recorded as an answer.` +
+            (proposal ? " To tell the person where you stand, post a note on it to the person, who can still reject the proposal." : ""),
+        );
+      }
       extra.recorded_as_answer = true;
       return finish({ recorded_as: "answer", target, addressee, reports: [report], entity: challenge.id, fields });
     }
     case "withdraw": {
       const withdrawn = requireReportTarget(ctx, input, act, target);
       if (withdrawn.view.report.from_session_id !== me) {
-        throw new CollabError(
-          "not_your_report",
-          `${targetHandle(withdrawn)} was written by another session, and only its author session withdraws it`,
-          {
-            remedy: withSlot(ctx, {
-              tool: "collab_note",
-              input: { act: "note", text: "I no longer stand by this.", re: exactRef("report", withdrawn.id) },
-            }),
-          },
-        );
+        throw notYourReport(ctx, workspaceId, me, withdrawn, "withdraws it");
       }
       const report = base("withdraws");
       report.target_report_id = withdrawn.id;
@@ -1138,7 +1222,7 @@ function planNote(
     case "accept":
     case "request_changes": {
       const completion = reviewTarget(ctx, input, target, workspaceId, me);
-      if (explicit) advice.push("A verdict goes to the session that reported the work; to was not used.");
+      if (fields.to !== null) advice.push("A verdict goes to the session that reported the work; to was not used.");
       extra.review = completion;
       return finish({ recorded_as: act, target, addressee: BROADCAST, reports: [], entity: completion.completion_id });
     }
@@ -1221,6 +1305,69 @@ function textIsNote(input: NoteVerbInput): boolean {
   return head !== null && isNoteAct(head[1]!.toLowerCase());
 }
 
+/**
+ * Whether a report sits on a proposal: it is one, or it answers one. Only
+ * for addressing a remedy; nothing is decided by it.
+ */
+function onProposal(ctx: NoteVerbContext, workspaceId: string, view: NoteTargetView): boolean {
+  if (view.termed) return true;
+  const targetId = view.report.target_report_id;
+  if (!targetId) return false;
+  try {
+    return ctx.store.noteTarget(workspaceId, targetId).termed;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The one remedy wherever a session may not take back a report it did not
+ * write (withdraw, a challenge's replaces, a proposal's replaces): a note on
+ * that thread saying it no longer stands by it, to the person when the
+ * thread is a proposal, since the person can still reject one.
+ */
+export function noLongerStandRemedy(ctx: NoteVerbContext, reportId: string, proposal: boolean, termed: boolean): NoteRemedy {
+  return withSlot(ctx, {
+    tool: "collab_note",
+    input: {
+      act: "note",
+      text: "I no longer stand by this.",
+      re: exactRef(termed ? "proposal" : "report", reportId),
+      ...(proposal ? { to: "person" } : {}),
+    },
+  });
+}
+
+/** Said when a session carries the name of the one that wrote what it tried to take back. */
+export function newVoiceSentence(name: string): string {
+  return `A new session is a new voice even under the same name (${name}): nothing passes between sessions, ` +
+    "so only the session that wrote it can take it back.";
+}
+
+/** The refusal of a withdraw (or replace) of a report this session did not write, with the one remedy. */
+function notYourReport(
+  ctx: NoteVerbContext,
+  workspaceId: string,
+  me: string,
+  target: Extract<ReTarget, { kind: "report" }>,
+  what: string,
+): CollabError {
+  const author = target.view.author;
+  const myName = ctx.store.noteSessionViews(workspaceId).find((view) => view.id === me)?.actor ?? null;
+  const sameName = author !== null && myName !== null && author.actor === myName;
+  const proposal = onProposal(ctx, workspaceId, target.view);
+  return new CollabError(
+    "not_your_report",
+    `${targetHandle(target)} was written by another session, and only its author session ${what}. ` +
+      (sameName ? `${newVoiceSentence(author!.actor)} ` : "") +
+      `To say where you stand, post a note on it${proposal ? " to the person, who can still reject the proposal" : ""}; nothing was written`,
+    {
+      ...(author ? { author: { session: author.id, name: author.actor, ...(author.status === "ended" ? { ended: true } : {}) } } : {}),
+      remedy: noLongerStandRemedy(ctx, target.id, proposal, target.view.termed),
+    },
+  );
+}
+
 /** The withdrawal of the challenge a new one replaces: posted second, in the same transaction. */
 function replacedChallenge(
   ctx: NoteVerbContext,
@@ -1230,10 +1377,15 @@ function replacedChallenge(
   targetId: string,
 ): NoteReportInput {
   const old = ctx.store.noteTarget(workspaceId, replacedId);
-  if (old.report.relation !== "challenges" || old.report.from_session_id !== me) {
+  if (old.report.relation !== "challenges") {
     throw new CollabError("replaces_not_yours", "replaces names a challenge this session wrote", {
       remedy: { say: "replaces is your own earlier challenge; to answer someone else's, post a note with re." },
     });
+  }
+  if (old.report.from_session_id !== me) {
+    // The same refusal, and the same remedy, as withdrawing another session's report.
+    const refusal = notYourReport(ctx, workspaceId, me, { kind: "report", id: replacedId, label: "report", view: old }, "replaces it");
+    throw new CollabError("replaces_not_yours", `${refusal.message.replace(/; nothing was written$/, "")}. Your new challenge can still be posted without replaces; nothing was written`, refusal.details);
   }
   if (old.report.target_report_id !== targetId) {
     throw new CollabError("replaces_other_target", "The replaced challenge stands on a different report", {
@@ -1529,6 +1681,29 @@ function reviewRefusal(ctx: NoteVerbContext, error: unknown): unknown {
     completion_report_obsolete: "Its author withdrew or replaced this completion; request changes instead, or wait for a new completion.",
     task_not_pending_review: "The task does not wait for review now (it was reviewed already, or its policy needs none).",
   };
+  // The store's own words for these two name tools of the full profile; on
+  // this surface they are said with the verbs instead.
+  if (error.code === "task_not_pending_review" && typeof error.details.review_report_id === "string") {
+    const review = error.details.review_report_id;
+    const later = `To agree or disagree now, support or challenge its review ${handleOf("report", review)} with collab_note ` +
+      `(re: "${exactRef("report", review)}"); a challenge records disagreement and does not reopen the accepted task.`;
+    return new CollabError(error.code, `${String(error.message).split(". ")[0]}. ${later}`, {
+      ...error.details,
+      remedy: { say: later },
+    });
+  }
+  if (error.code === "git_checkpoint_stale" && typeof error.details.remedy === "string") {
+    const notes = error.details.remedy.replace(
+      /\(2\) Re-completion: review task "[^"]*" with outcome "request_changes"; once it is claimed again, collab_task_complete captures a fresh result checkpoint for a new review\./,
+      "(2) Re-completion: request changes on it (collab_note act request_changes); once its holder takes it again, " +
+        "collab_done finished captures a fresh result checkpoint for a new review.",
+    );
+    const refusal = typeof error.details.host_commit_refusal === "string" ? error.details.host_commit_refusal : "";
+    return new CollabError(error.code, `The completion worktree changed after its result checkpoint was captured: ${refusal}. ${notes}`, {
+      ...error.details,
+      remedy: { say: notes },
+    });
+  }
   if (!say[error.code] || (error.details.remedy && typeof error.details.remedy === "object")) return error;
   return new CollabError(error.code, error.message, { ...error.details, remedy: { say: say[error.code]! } });
 }
@@ -1685,7 +1860,7 @@ function planDecide(
   } else if (target?.kind === "event") {
     refs.push(`event:${target.id}`);
   }
-  if (fields.to !== null) addressee = explicitAddressee(ctx, workspaceId, fields.to);
+  if (fields.to !== null) addressee = explicitAddressee(ctx, workspaceId, fields.to, input);
   // The ready call without an extent. Written as a note's Extent: line, the
   // extent is in the text, so the text is sent again without that line.
   const withoutExtent = (): NoteRemedy => {
@@ -2165,9 +2340,13 @@ async function claimStep(
       });
     }
     if (error.code === "task_blocked") {
-      throw new CollabError("task_blocked", `${handleOf("task", task.id)} is blocked: ${String(error.details.blocker ?? "")}`, {
+      throw new CollabError("task_blocked", `${handleOf("task", task.id)} is blocked: ${String(error.details.blocker ?? "")}. These verbs do not unblock a task, so ask on it; nothing was written`, {
         blocker: error.details.blocker ?? null,
-        remedy: { say: "A blocked task is unblocked first (collab_task_unblock on the full tool profile), then taken." },
+        // These verbs do not unblock a task, so the remedy is to ask on it.
+        remedy: withSlot(ctx, {
+          tool: "collab_note",
+          input: { text: `Is the blocker on ${handleOf("task", task.id)} cleared? I would take it once it is unblocked.`, re: exactRef("task", task.id) },
+        }),
       });
     }
     if (created && error.code !== "changed_under_you") {
@@ -2442,6 +2621,8 @@ interface FinishedDone {
   evidence: ResolvedEvidence;
   /** The requested reviewer's session id. */
   reviewer: string | null;
+  /** How review_by was read, for a refusal that names it. */
+  reviewer_how: string | null;
 }
 
 /**
@@ -2467,9 +2648,9 @@ function readFinished(ctx: NoteVerbContext, binding: NoteBinding, input: DoneInp
   // done whose reviewer has left since still replays. On a fresh call the
   // store's own check refuses an ended reviewer before anything is written.
   const reviewer = input.review_by !== undefined && input.review_by !== null
-    ? reviewerSession(ctx, workspaceId, String(input.review_by))
+    ? reviewerSession(ctx, workspaceId, String(input.review_by), input)
     : null;
-  return { fields, evidence, reviewer };
+  return { fields, evidence, reviewer: reviewer?.id ?? null, reviewer_how: reviewer?.how ?? null };
 }
 
 function doneKeyInput(
@@ -2517,13 +2698,43 @@ function doneTask(ctx: NoteVerbContext, credential: Credential, workspaceId: str
   });
 }
 
-function reviewerSession(ctx: NoteVerbContext, workspaceId: string, value: string): string {
-  try {
-    return ctx.store.resolveNoteSession(workspaceId, value).id;
-  } catch (error) {
-    if (!(error instanceof CollabError) || error.code !== "session_not_found") throw error;
-    return ctx.store.resolveNoteSession(workspaceId, value, { include_ended: true }).id;
+/**
+ * review_by as a session id, read as `to` reads a name. An ended session is
+ * returned, so the retry of a done whose reviewer has left since still
+ * replays; a fresh call is refused before anything is written (reviewerRefusal).
+ * A name no session ever carried is refused here, with the same call
+ * without review_by.
+ */
+function reviewerSession(ctx: NoteVerbContext, workspaceId: string, value: string, input: DoneInput): { id: string; how: string } {
+  const named = namedSession(ctx, workspaceId, value);
+  if (!named) {
+    const { review_by: _reviewBy, ...rest } = input as unknown as Record<string, unknown>;
+    throw new CollabError(
+      "review_requested_session_unavailable",
+      `review_by names ${value.trim()}, and no session of that name has arrived in this workspace; a requested reviewer must be ` +
+        "an active session. Any distinct session can review the work unasked, so leave review_by out; nothing was written",
+      { reason: "never_arrived", value: value.trim(), remedy: withSlot(ctx, { tool: "collab_done", input: rest }) },
+    );
   }
+  const how = named.by_name
+    ? named.view.status === "active"
+      ? `the one active session named ${named.view.actor} (${named.view.id})`
+      : `the latest session named ${named.view.actor} (${named.view.id}), which has ended`
+    : `session ${named.view.id}${named.view.status === "ended" ? ", which has ended" : ""}`;
+  return { id: named.view.id, how };
+}
+
+/** The store's refusal of a reviewer who is not active, said for this surface, with the same call without review_by. */
+function reviewerRefusal(ctx: NoteVerbContext, error: unknown, retryInput: Record<string, unknown>, how: string | null): unknown {
+  if (!(error instanceof CollabError) || error.code !== "review_requested_session_unavailable") return error;
+  const { review_by: _reviewBy, ...withoutReviewer } = retryInput;
+  return new CollabError(
+    "review_requested_session_unavailable",
+    `review_by was read as ${how ?? "a session that is not active here"}, and a requested reviewer must be an active session in ` +
+      "this workspace. Any distinct session can review the work unasked, so leave review_by out (name who you hope will " +
+      "review in the text if you like); nothing was written",
+    { reason: "not_active", remedy: withSlot(ctx, { tool: "collab_done", input: withoutReviewer }) },
+  );
 }
 
 function requireHeld(ctx: NoteVerbContext, credential: Credential, task: Task, retryInput: Record<string, unknown>): Task {
@@ -2602,11 +2813,17 @@ async function finishTask(
   };
   // The rest of what the completion checks cheaply (journal pointers that
   // exist, a reviewer still active here) is checked before the first write.
-  const precheck = beforeFirstWrite(() => ctx.store.noteCompletePrecheck(credential, {
-    task_id: task.id,
-    evidence_refs: evidence.journal,
-    review_requested_session_id: reviewer,
-  }));
+  const precheck = beforeFirstWrite(() => {
+    try {
+      ctx.store.noteCompletePrecheck(credential, {
+        task_id: task.id,
+        evidence_refs: evidence.journal,
+        review_requested_session_id: reviewer,
+      });
+    } catch (error) {
+      throw reviewerRefusal(ctx, error, retryInput, options.reviewer_how);
+    }
+  });
   // Steps: 01 cites the outside evidence (when there is some), so a reviewer
   // on the notes surface sees each item with how it was observed; then one
   // artifact per item, as spec 5.5 keeps them; then the completion.
@@ -2713,7 +2930,7 @@ async function finishTask(
       const steps = evidence.items.length + (cites ? 2 : 1);
       return { plan, artifacts, completed: completed.value, replayed: replays === steps, recordedItems, cite };
     } catch (error) {
-      throw refusedAfter(error, recorded);
+      throw refusedAfter(reviewerRefusal(ctx, error, retryInput, options.reviewer_how), recorded);
     }
   });
   if (plan.retry && replayed) advice.push("This repeats your latest done on this task exactly, so it was read as a retry.");

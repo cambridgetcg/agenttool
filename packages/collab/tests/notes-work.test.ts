@@ -757,3 +757,56 @@ describe("a path conflict with finished work waiting for review", () => {
     void j;
   });
 });
+
+describe("review_by names a session that is not here", () => {
+  test("a name no session has carried, or one whose sessions have ended, is refused with the same call without review_by", async () => {
+    const { j, a, b, sa } = pair();
+    j.write("a.txt", "a\n");
+    const taken = await ok(sa, "collab_take", { title: "Edit", paths: ["a.txt"] });
+    const input = { text: "Done.", evidence: ["file a.txt"] };
+    const before = j.count();
+    // Nobody named dee has arrived: refused before anything is written, never a bare "check the id".
+    const never = await refused(sa, "collab_done", { ...input, review_by: "dee" });
+    expect(never).toMatchObject({ code: "review_requested_session_unavailable", reason: "never_arrived" });
+    expect(never.message).toContain("no session of that name has arrived");
+    expect(never.message).toContain("Any distinct session can review");
+    expect(never.remedy).toEqual({ tool: "collab_done", input });
+    expect(j.count()).toBe(before);
+    // bravo has left: the name is read as its latest session, which has ended.
+    j.store.endSession({ ...b.credential, reason: "left" });
+    const mark = j.count();
+    const ended = await refused(sa, "collab_done", { ...input, review_by: "bravo" });
+    expect(ended).toMatchObject({ code: "review_requested_session_unavailable", reason: "not_active" });
+    expect(ended.message).toContain(`the latest session named bravo (${b.session.id}), which has ended`);
+    expect(ended.remedy).toEqual({ tool: "collab_done", input: { ...input, task: taken.ids.task } });
+    // No refusal on this surface points at a tool the notes profile does not have.
+    for (const refusal of [never, ended]) expect(JSON.stringify(refusal)).not.toMatch(/collab_(workspace|session|task)_/);
+    expect(j.count()).toBe(mark);
+    // The ready call works.
+    await ok(sa, ended.remedy.tool, ended.remedy.input);
+    void a;
+  });
+});
+
+describe("refusals on this surface name only its own verbs", () => {
+  test("a blocked task, and a verdict on work already accepted, point at notes verbs, not at legacy tools", async () => {
+    const j = journal();
+    const a = j.start("alpha");
+    const b = j.start("bravo");
+    const c = j.start("charlie");
+    const [sa, sb, sc] = [j.serve(a), j.serve(b), j.serve(c)];
+    const taken = await ok(sa, "collab_take", { title: "Waits on a decision" });
+    await ok(sa, "collab_done", { text: "Blocked on the owner", outcome: "blocked", because: "the owner has not chosen" });
+    const blocked = await refused(sb, "collab_take", { task: taken.ids.task });
+    expect(blocked.code).toBe("task_blocked");
+    expect(blocked.remedy).toMatchObject({ tool: "collab_note", input: { re: taken.ids.task } });
+    j.write("a.txt", "a\n");
+    const edit = await ok(sa, "collab_take", { title: "Edit", paths: ["a.txt"] });
+    const done = await ok(sa, "collab_done", { text: "Edited.", task: edit.ids.task });
+    await ok(sb, "collab_note", { act: "accept", text: "Looks right.", re: done.ids.completion });
+    const late = await refused(sc, "collab_note", { act: "accept", text: "Agreed.", re: done.ids.completion });
+    expect(late.code).toBe("task_not_pending_review");
+    expect(late.message).toContain("support or challenge its review");
+    for (const refusal of [blocked, late]) expect(JSON.stringify(refusal)).not.toMatch(/collab_(task|report|workspace|session)_/);
+  });
+});

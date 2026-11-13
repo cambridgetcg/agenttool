@@ -205,9 +205,9 @@ export const NOTE_CARD = [
   ...Object.entries(NOTE_CARD_FAMILIES).map(([family, acts]) => `- ${family}: ${acts.join(", ")}`),
   "",
   "support, challenge, resolve, withdraw, accept and request_changes need Re. Only a challenger",
-  "resolves its own challenge; withdraw takes back your own note; accept and request_changes judge",
-  "another session's finished work. A Why cites Evidence lines by number, from 1. Example, sent as",
-  "the text of collab_note:",
+  "resolves its own challenge; withdraw takes back a note this session wrote; accept and",
+  "request_changes judge another session's finished work. A Why cites Evidence lines by number,",
+  "from 1. Example, sent as the text of collab_note:",
   "```collab-note",
   "challenge: The retry test does not cover a lost response",
   "",
@@ -766,7 +766,7 @@ export function minutesSince(at: string, observedAt: string): number | null {
   return Number.isFinite(age) ? Math.max(0, Math.floor(age / 60_000)) : null;
 }
 
-function durationUntil(at: string, observedAt: string): string {
+export function durationUntil(at: string, observedAt: string): string {
   const left = Date.parse(at) - Date.parse(observedAt);
   if (!Number.isFinite(left) || left <= 0) return "closed";
   const minutes = Math.ceil(left / 60_000);
@@ -932,7 +932,7 @@ async function arriveDefault(
     effect:
       `Started session ${handle.session.id} as ${handle.session.actor} with purpose "${purpose}", in the worktree at ${root}` +
       `${defaulted ? " (root_path was not given, so this is the git worktree of this MCP server's working directory)" : ""}. ` +
-      `Your read mark starts at the journal head (sequence ${mark}); the legacy cursor was not moved.`,
+      `Your read mark starts at the journal head (sequence ${mark}); the legacy cursor was not moved. ${ARRIVAL_NOTE_NOT_POSTED}`,
     advice,
     fresh: true,
     record: true,
@@ -1001,7 +1001,7 @@ function arriveNamed(
       `Started session ${handle.session.id} as ${handle.session.actor}, a named child of ${parent.handle.session.id}, ` +
       `in the worktree at ${handle.worktree.root_path}. ` +
       `This session shares its parent's voice and ballot unit. Send binding_key ${key} on every call; ` +
-      `without it you speak as ${speaksAs}.`,
+      `without it you speak as ${speaksAs}. ${ARRIVAL_NOTE_NOT_POSTED}`,
     advice: [],
     fresh: true,
     record: true,
@@ -1075,7 +1075,7 @@ async function arriveBound(
     return arrivalResult(ctx, binding, {
       effect:
         `You are speaking as session ${before.id} (name ${before.actor}, purpose ${before.purpose ?? "none declared"}). ` +
-        `${root} Nothing was written.`,
+        `${root} Nothing was written. The note is not posted either.`,
       advice,
       fresh: false,
       record: false,
@@ -1099,7 +1099,8 @@ async function arriveBound(
   return arrivalResult(ctx, binding, {
     effect:
       `You are speaking as session ${session.id} (name ${session.actor}, purpose ${receipt.purpose}). ${root} ` +
-      `Your purpose is recorded as declared at sequence ${receipt.sequence}; the role you started with is kept as it was.`,
+      `Your purpose is recorded as declared at sequence ${receipt.sequence}; the role you started with is kept as it was. ` +
+      "The note is not posted as a report.",
     advice,
     fresh: false,
     record: true,
@@ -1115,6 +1116,10 @@ function boundRemedies(ctx: NoteVerbContext, sessionId: string, purpose: string)
     { tool: "collab_arrive", input: { purpose, binding_key: "<choose>", parent: sessionId } },
   ];
 }
+
+/** Said wherever arrive returns its note, so it is not taken as posted. */
+const ARRIVAL_NOTE_NOT_POSTED =
+  "The note field is text for a host message; it is not posted to the journal, where your arrival is the session.joined event.";
 
 function arrivalNote(statement: string, purpose: string | null): string {
   return renderNote({ act: "note", statement, ...(purpose ? { purpose } : {}) });
@@ -1206,7 +1211,8 @@ function arrivalBehind(
     };
     advice.push(
       `${forName.count}${forName.at_least ? " or more" : ""} item(s) were addressed to ${forName.sessions === 1 ? "an ended session" : "ended sessions"} ` +
-        `that also called itself ${name}; left_for_your_name.see reads them. Names are self-declared, so this is routing, ` +
+        `that also called itself ${name}; left_for_your_name.see starts at the earliest of them, and before_you_arrived.see, which ` +
+        "reads from the start, includes them too. Names are self-declared, so this is routing, " +
         "not identity: you are a new session and voice, and nothing those sessions held, said or stood on passes to you.",
     );
   }
@@ -1246,7 +1252,7 @@ function composeBrief(
     task: handleOf("task", task.id),
     id: task.id,
     title: task.title,
-    by: task.assignee,
+    by: sessionShown(task.assignee_session_id, task.assignee ?? "unknown", byId),
     purpose: task.assignee_session_id ? byId.get(task.assignee_session_id)?.purpose ?? null : null,
     paths: task.path_scopes,
   }));
@@ -1255,7 +1261,7 @@ function composeBrief(
     task: handleOf("task", task.id),
     id: task.id,
     title: task.title,
-    by: task.reported_by,
+    by: sessionShown(task.reported_by_session_id, task.reported_by ?? "unknown", byId),
     completion: task.completion_report_id
       ? { id: task.completion_report_id, handle: handleOf("report", task.completion_report_id) }
       : null,
@@ -1272,11 +1278,11 @@ function composeBrief(
   }));
   const challenges = data.challenges.map((challenge) => challengeView(challenge, data.proposals.some(
     (status) => status.proposal.id === challenge.target_report_id,
-  )));
+  ), byId));
   const ballots = data.ballots.map((ballot) => ballotBrief(ballot));
   const recheck = evidenceRechecker(ctx.store);
   const forYou = pending ? pending.entries.map((entry) => formatEntry(entry, byId, me.id, recheck)) : [];
-  const waiting = data.waiting.map((entry) => formatWaiting(ctx, entry));
+  const waiting = data.waiting.map((entry) => formatWaiting(ctx, entry, byId));
   const cap = <T>(items: T[]) => items.slice(0, LIST_CAP);
   const shown = [
     ...cap(proposals).map((proposal) => proposal.id),
@@ -1352,13 +1358,13 @@ function composeBrief(
   };
 }
 
-function challengeView(challenge: NoteChallengeView, onProposal: boolean) {
+function challengeView(challenge: NoteChallengeView, onProposal: boolean, byId: Map<string, NoteSessionView>) {
   return {
     id: challenge.id,
     handle: handleOf("report", challenge.id),
     on: reportHandle(challenge.target_report_id, onProposal),
     on_id: challenge.target_report_id,
-    by: challenge.from_actor,
+    by: sessionShown(challenge.from_session_id, challenge.from_actor, byId),
     standing: challenge.standing,
     ...(challenge.answered_by_another_voice ? { answered_by_another_voice: true } : {}),
   };
@@ -1424,7 +1430,19 @@ function journalEvidence(refs: string[]): FormattedEvidence[] {
 }
 
 function sessionRef(sessionId: string | null | undefined, fallbackName: string, byId: Map<string, NoteSessionView>) {
-  return { session: sessionId ?? null, name: sessionId ? byId.get(sessionId)?.actor ?? fallbackName : fallbackName };
+  return sessionShown(sessionId, sessionId ? byId.get(sessionId)?.actor ?? fallbackName : fallbackName, byId);
+}
+
+/**
+ * A session as every view shows one, {session, name}, with ended: true once
+ * that session has ended. A returning agent under an old name is a new
+ * session, so it must not read an ended session's stance as its own; the
+ * name is self-declared either way.
+ */
+type SessionShown = { session: string | null; name: string; ended?: true };
+
+function sessionShown(sessionId: string | null | undefined, name: string, byId: Map<string, NoteSessionView>): SessionShown {
+  return { session: sessionId ?? null, name, ...(sessionId && byId.get(sessionId)?.status === "ended" ? { ended: true } : {}) };
 }
 
 /** At most this much is re-hashed for evidence[].now in one call (spec 5.2). */
@@ -1560,7 +1578,7 @@ export function formatEntry(
       id: report.id,
       handle: handleOf("report", report.id),
       act: entry.verdict ?? reportAct(report, entry.termed),
-      from: { session: report.from_session_id, name: report.from_actor },
+      from: sessionShown(report.from_session_id, report.from_actor, byId),
       ...base,
       folded: true,
       ballot: { id: entry.folded.ballot_id, handle: handleOf("ballot", entry.folded.ballot_id) },
@@ -1607,7 +1625,7 @@ export function formatEntry(
       handle: poll ? handleOf("ballot", report.id) : reportHandle(report.id, entry.termed),
       act,
       ...(act === "corrects" || act === "supersedes" ? { relation: report.relation } : {}),
-      from: { session: report.from_session_id, name: report.from_actor },
+      from: sessionShown(report.from_session_id, report.from_actor, byId),
       to,
       re,
       ...base,
@@ -1751,7 +1769,10 @@ function subjectLine(entry: NoteEntry, byId: Map<string, NoteSessionView>, me: s
   };
 }
 
-function formatWaiting(ctx: NoteVerbContext, entry: NoteWaitingEntry): Record<string, unknown> {
+/** Waiting entries for a person's act: their by is how the act reached the journal, not a session. */
+const PERSON_ACT_WAITING: ReadonlySet<NoteWaitingEntry["what"]> = new Set(["stop", "rejected", "record_decision"]);
+
+function formatWaiting(ctx: NoteVerbContext, entry: NoteWaitingEntry, byId: Map<string, NoteSessionView>): Record<string, unknown> {
   const handle = handleOf(entry.ref_kind, entry.ref_id);
   const about = entry.about_id
     ? { id: entry.about_id, handle: entry.what === "review" || entry.what === "challenge" || entry.what === "answer"
@@ -1778,7 +1799,8 @@ function formatWaiting(ctx: NoteVerbContext, entry: NoteWaitingEntry): Record<st
     ref: handle,
     id: entry.ref_id,
     ...(about ? { about } : {}),
-    by: entry.by,
+    // A person's act is named by how it reached the journal; anything else by its session.
+    by: PERSON_ACT_WAITING.has(entry.what) ? entry.by : sessionShown(entry.by_session_id, entry.by, byId),
     due: entry.due,
     at: entry.at,
     summary: entry.summary,
@@ -2048,14 +2070,27 @@ function inboxResult(
   const see = alsoNew > 0 && paging.include !== "all"
     ? { see: withSlot(ctx, { tool: "collab_inbox", input: { since: seeFrom, include: "all" } }) }
     : {};
+  const left = passes.reduce((sum, pass) => ({
+    attached: sum.attached + (pass.not_listed?.attached ?? 0),
+    duplicates: sum.duplicates + (pass.not_listed?.duplicates ?? 0),
+  }), { attached: 0, duplicates: 0 });
+  const notListed = left.attached + left.duplicates;
+  if (notListed > 0) {
+    advice.push(
+      `${notListed} event(s) in what was read are not lines of their own, so this list is not the whole journal: ` +
+        `${left.attached} cite evidence or attach artifacts to a report or task beside them, and ${left.duplicates} ` +
+        "repeat a proposal, ballot, completion or verdict listed once. collab_inbox about shows any thread whole.",
+    );
+  }
   return {
     ok: true,
     items,
     also_new: { count: alsoNew, ...see },
+    ...(notListed > 0 ? { not_listed: { count: notListed, ...left } } : {}),
     more: data.more,
     read_through: { sequence: data.mark.through, head: data.head_sequence },
     ...(initialisedFrom ? { mark_initialised_from: initialisedFrom } : {}),
-    waiting_on_you: data.waiting.map((entry) => formatWaiting(ctx, entry)),
+    waiting_on_you: data.waiting.map((entry) => formatWaiting(ctx, entry, byId)),
     ...(waited ? { waited } : {}),
     ...revealPendingField(passes.flatMap((pass) => pass.reveal_pending)),
     advice,
@@ -2359,7 +2394,7 @@ function reportView(
     root: formatEntry(root, byId, me, recheck),
     answers: thread.answers.map((entry) => formatEntry(entry, byId, me, recheck)),
     state: {
-      challenges: thread.challenges.map((challenge) => challengeView(challenge, thread.termed && challenge.target_report_id === report.id)),
+      challenges: thread.challenges.map((challenge) => challengeView(challenge, thread.termed && challenge.target_report_id === report.id, byId)),
     },
   };
   if (thread.proposal) {
@@ -2387,7 +2422,11 @@ function reportView(
 export const FOLDED_LINE =
   "folded so your first answer is your own; read any of them with about:<id> if you choose";
 
-export function ballotTermsView(terms: BallotTerms): Record<string, unknown> {
+/**
+ * A ballot's terms as views show them; with the store's clock, closes_in too
+ * (the form collab_arrive gives proposals), so a voter need not read a clock.
+ */
+export function ballotTermsView(terms: BallotTerms, observedAt?: string): Record<string, unknown> {
   return {
     question: terms.question,
     ...(terms.criteria !== undefined ? { criteria: terms.criteria } : {}),
@@ -2396,6 +2435,7 @@ export function ballotTermsView(terms: BallotTerms): Record<string, unknown> {
     ...(terms.pick !== undefined ? { pick: terms.pick } : {}),
     quorum: terms.quorum,
     closes_at: terms.closes_at,
+    ...(observedAt ? { closes_in: durationUntil(terms.closes_at, observedAt) } : {}),
     close_when_all_cast: terms.close_when_all_cast,
   };
 }
@@ -2445,6 +2485,7 @@ function ballotBrief(ballot: NoteBallotData): Record<string, unknown> {
     options: ballot.terms.options.map((option) => ({ key: option.key, label: option.label })),
     pick: ballot.terms.pick ?? null,
     closes_at: ballot.terms.closes_at,
+    closes_in: durationUntil(ballot.terms.closes_at, ballot.observed_at),
     close_when_all_cast: ballot.terms.close_when_all_cast,
     you_may_vote: ballot.viewer?.may_vote ?? false,
     you_have_cast: (ballot.viewer?.your_casts ?? 0) > 0,
@@ -2461,7 +2502,7 @@ function ballotFacts(ballot: NoteBallotData): Record<string, unknown> {
     handle: handleOf("ballot", ballot.ballot_id),
     opener: { session: ballot.opener_session_id, name: ballot.opener_name },
     opened_at: ballot.opened_at,
-    terms: ballotTermsView(ballot.terms),
+    terms: ballotTermsView(ballot.terms, ballot.observed_at),
     state: ballot.state,
     closed_by: ballot.closed_by,
     withdrawn: ballot.withdrawn ? { report: ballot.withdrawn.report_id, at: ballot.withdrawn.at } : null,
@@ -2527,7 +2568,7 @@ function ballotItem(
         text: ballot.terms.question,
         why: [],
         evidence: [],
-        terms: ballotTermsView(ballot.terms),
+        terms: ballotTermsView(ballot.terms, ballot.observed_at),
         state: ballot.state,
         electorate: ballot.units.map(ballotUnitView),
         chosen_by: ballot.chosen_by,
@@ -2688,7 +2729,7 @@ function stanceItem(stance: NoteStanceView): Record<string, unknown> & { standin
   return {
     id: stance.id,
     handle: handleOf("report", stance.id),
-    by: { session: stance.from_session_id, name: stance.from_actor },
+    by: { session: stance.from_session_id, name: stance.from_actor, ...(stance.from_session_ended ? { ended: true } : {}) },
     voice: stance.voice_id,
     statement: stance.statement,
     counted: stance.counted,
@@ -2725,6 +2766,7 @@ export function proposalFacts(
     awaited: voice.awaited,
     supported: voice.supported,
     challenged: voice.challenged,
+    ...(voice.ended ? { ended: true } : {}),
   }));
   const silent = data.consulted.filter((voice) => voice.awaited && !voice.delivery_recorded);
   const deliveryNote = `${silent.length} awaited voice(s) have no recorded delivery on the notes surface` +
@@ -2732,13 +2774,37 @@ export function proposalFacts(
       ? ` (${names(silent)}): they may never have been shown the question, and consent/v1 still lets their silence settle the position at its close.`
       : ".");
   if (silent.length > 0) advice.push(deliveryNote);
+  const authorActive = data.author?.status === "active";
+  const authorName = data.author?.actor ?? status.proposal.from_actor;
+  // Who could still replace the proposal, and how anyone else is heard: the
+  // same note to the person that every take-back refusal offers.
+  const replaceOrTell = (authorActive
+    ? `Only its author's session (${authorName}, ${data.author!.id}) can replace it carrying the objection (collab_propose with replaces). `
+    : "Its author's session has ended too, so no session can replace it. ") +
+    `Anyone else tells the person with a note on it to the person (collab_note with re "${exactRef("proposal", status.proposal.id)}" and to "person"); the person can still reject it.`;
+  const open = !status.ai.closed && !retiredPosition(status) && status.person.state !== "rejected";
   for (const stance of data.challenges) {
     if (stance.standing && stance.flags.challenger_ended && !stance.voice_has_active_session) {
       advice.push(
-        `challenger_ended: ${stance.id} still stands, but its challenger's session has ended and no session of its voice is active. ` +
-          "Replace the proposal carrying the objection (collab_propose with replaces), or tell the person, who can reject.",
+        `challenger_ended: ${stance.id} still stands, but its challenger's session has ended and no session of its voice is active, ` +
+          `so no session can lift it. ${replaceOrTell}`,
       );
     }
+  }
+  // A position no active session can move, said only when the code makes it
+  // so: a standing challenge is lifted only by its challenger's voice, and a
+  // support is withdrawn only by the session that wrote it.
+  const standingChallenges = data.challenges.filter((stance) => stance.standing);
+  const countedSupports = data.supports.filter((stance) => stance.counted);
+  if (open && status.ai.position === "challenged"
+    && standingChallenges.length > 0 && standingChallenges.every((stance) => !stance.voice_has_active_session)
+    && countedSupports.length > 0 && countedSupports.every((stance) => stance.from_session_ended)) {
+    advice.push(
+      "Every challenge standing here and every support counted here comes from a session that has ended: no active session can " +
+        "lift those challenges (only each challenger's voice can) or withdraw those supports (only the session that wrote each can). " +
+        `As it stands it rests with the person, who can reject it at the desk, or with the close at ${status.terms.closes_at}, ` +
+        `when a challenge still standing makes it split${authorActive ? `, unless its author's session (${authorName}) withdraws or replaces it first` : ""}.`,
+    );
   }
   const flagged = [...data.supports, ...data.challenges].filter((stance) =>
     stance.flags.same_seat_as_author || stance.flags.same_name_as_author || stance.flags.started_after_open
@@ -2930,13 +2996,13 @@ function taskView(
       completion_policy: task.completion_policy,
       paths: task.path_scopes,
       holder: task.assignee_session_id
-        ? { session: task.assignee_session_id, name: task.assignee, purpose: holder?.purpose ?? null }
+        ? { ...sessionShown(task.assignee_session_id, task.assignee ?? "unknown", byId), purpose: holder?.purpose ?? null }
         : null,
       completion: task.completion_report_id
         ? {
           id: task.completion_report_id,
           handle: handleOf("report", task.completion_report_id),
-          by: task.reported_by,
+          by: sessionShown(task.reported_by_session_id, task.reported_by ?? "unknown", byId),
           at: task.reported_at,
         }
         : null,
@@ -2945,7 +3011,7 @@ function taskView(
         : null,
       reviews: thread.reviews.map((review) => ({
         outcome: review.outcome,
-        by: review.reviewer_actor,
+        by: sessionShown(review.reviewer_session_id, review.reviewer_actor, byId),
         at: review.created_at,
         summary: review.summary,
         of_current_completion: generation !== null && review.review_generation === generation

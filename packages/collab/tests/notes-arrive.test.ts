@@ -159,7 +159,7 @@ describe("collab_arrive on an unbound default slot", () => {
       task: handleOf("task", task.task.id),
       id: task.task.id,
       title: "Held by the peer",
-      by: "peer",
+      by: { session: peer.you.session, name: "peer" },
       purpose: "reviews the parser",
       paths: [],
     }]);
@@ -570,7 +570,7 @@ describe("the arrive brief's values", () => {
       handle: handleOf("report", onProposal.id),
       on: handleOf("proposal", proposal.proposal.id),
       on_id: proposal.proposal.id,
-      by: "peer",
+      by: { session: peer.session.id, name: "peer" },
       standing: true,
     });
     expect(brief.open.challenges).toContainEqual({
@@ -578,14 +578,14 @@ describe("the arrive brief's values", () => {
       handle: handleOf("report", onClaim.id),
       on: handleOf("report", claim.id),
       on_id: claim.id,
-      by: "peer",
+      by: { session: peer.session.id, name: "peer" },
       standing: true,
     });
     const review = {
       task: handleOf("task", task.id),
       id: task.id,
       title: "Mine",
-      by: "me",
+      by: { session: me.session.id, name: "me" },
       completion: { id: completed.completion_report_id, handle: handleOf("report", completed.completion_report_id!) },
     };
     // Your own completion is not yours to review; another session may review it.
@@ -742,6 +742,8 @@ describe("arriving after others", () => {
     expect(said).toContain("also called itself ada");
     expect(said).toContain("self-declared");
     expect(said).toContain("not identity");
+    // The two read-backs overlap, and the advice says so.
+    expect(said).toContain("includes them too");
     expect(again.before_you_arrived.see).toEqual({ tool: "collab_inbox", input: { since: 0, include: "all" } });
 
     const marks = j.store.db.query(`SELECT * FROM note_marks ORDER BY session_id`).all();
@@ -753,7 +755,7 @@ describe("arriving after others", () => {
       [reply.ids.report, "Checked it.", true, false, "addressed", "support"],
     ]);
     // Shown in full, as an item for you is, and addressed to the ended session it was sent to.
-    expect(forName[0]!.to).toEqual({ session: ada.you.session, name: "ada" });
+    expect(forName[0]!.to).toEqual({ session: ada.you.session, name: "ada", ended: true });
     expect(look.advice.join(" ")).toContain("Names are self-declared");
     // A broadcast is not for anyone's name; a look-back writes nothing.
     expect(look.items.some((item: any) => item.statement === "For everyone." && item.for_your_name)).toBe(false);
@@ -765,5 +767,21 @@ describe("arriving after others", () => {
     const theirs = await ok(cyServer, "collab_inbox", { since: 0, include: "all" });
     expect(theirs.items.some((item: any) => item.for_your_name)).toBe(false);
     expect("text" in theirs.items.find((item: any) => item.id === toAda.ids.report)).toBe(false);
+  });
+});
+
+describe("what arrival writes", () => {
+  test("says the note it returns is not posted, and the card says withdraw is for this session's own notes", async () => {
+    const j = journal();
+    const server = j.server();
+    const first = await ok(server, "collab_arrive", { purpose: "look around", root_path: j.root, name: "me" });
+    expect(first.effect).toContain("it is not posted to the journal, where your arrival is the session.joined event");
+    expect(j.events().filter((event) => event.type === "report.posted")).toEqual([]);
+    const again = await ok(server, "collab_arrive", { purpose: "look again" });
+    expect(again.effect).toContain("Nothing was written. The note is not posted either.");
+    const revised = await ok(server, "collab_arrive", { purpose: "a new purpose", revise_purpose: true });
+    expect(revised.effect).toContain("The note is not posted as a report.");
+    expect(NOTE_CARD).toContain("withdraw takes back a note this session wrote");
+    expect(NOTE_CARD).not.toContain("your own note");
   });
 });
