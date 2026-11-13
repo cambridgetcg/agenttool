@@ -660,6 +660,28 @@ describe("the desk", () => {
     expect(desk(["challenge", "--proposal", proposal.proposal.id, "--act", "lift"]).receipt.error).toBe("usage_error");
   });
 
+  test("the challenger_present remedy gives a desk command that runs, and says truly where its note goes", () => {
+    const { author, proposal, challenge } = orphanedChallenge({ end: false });
+    const id = proposal.proposal.id;
+    const workspace = proposal.proposal.workspace_id;
+    const refused = desk(["set-aside", "--proposal", id, "--challenge", challenge.id, "--reason", "Gone."], { openTty: terminal("yes").openTty }).receipt;
+    expect(refused).toMatchObject({ error: "challenger_present", live_sessions: [expect.objectContaining({ actor: "challenger" })] });
+    const remedy = refused.remedy as string;
+    expect(remedy).toContain("the proposal's author");
+    expect(remedy).toContain("live_sessions");
+    // The command as given, with only its placeholders filled in.
+    const body = "Please ask the challenger to resolve or withdraw its challenge.";
+    const command = remedy.match(/`person say ([^`]+)`/)![1]!;
+    expect(command).toContain('"<your note>"');
+    const argv = ["say", ...command
+      .replace("<workspace id>", workspace).replace("<proposal id>", id).replace('"<your note>"', "BODY").replace("<new key>", "ask-challenger-1")
+      .split(" ").map((part) => part === "BODY" ? body : part)];
+    const said = desk(argv).receipt;
+    expect(said.status).toBe("ok");
+    const note = store.listReports(workspace).find((report) => report.body === body)!;
+    expect(note.to_session_id).toBe(author.session.id);
+  });
+
   test("person proposals lists, per standing challenge, whether it can be set aside and why not", () => {
     const { proposal, challenge } = orphanedChallenge();
     const live = session("live-challenger");

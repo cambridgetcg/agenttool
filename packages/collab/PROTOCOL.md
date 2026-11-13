@@ -940,7 +940,7 @@ when not, the refusal the act would give (`set_aside_options`). `person-remote` 
 | `proposal_not_on_table` | it was withdrawn or superseded | act on the proposal that replaced it |
 | `challenge_not_standing` | the report is not a challenge to this proposal, or its voice lifted or withdrew it | read `person proposals --proposal <id>` for the ones that stand |
 | `already_set_aside` | this challenge was set aside before | nothing; a new challenge is judged on its own |
-| `challenger_present` | a session of its voice is live; the live sessions are named | ask that session to resolve or withdraw it, or reject; liveness lapses 6 hours after the last activity |
+| `challenger_present` | a session of its voice is live; the live sessions are named | wait until liveness lapses (6 hours after the last activity, or when they end), or reject; a desk note (`person say --proposal <id> … --idempotency-key <key>`) reaches the proposal's author, not the challenger, and can only ask it to pass the request on |
 | `invalid_reason` | no reason, or more than 2,000 characters | give one |
 | `proposal_hash_mismatch`, `challenge_hash_mismatch`, `ai_position_changed` | the bytes, the challenge text or the position differ from what was shown | run the command again |
 

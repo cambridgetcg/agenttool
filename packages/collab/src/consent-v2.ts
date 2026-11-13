@@ -183,10 +183,16 @@ const REFUSALS: Record<SetAsideRefusal, { message: string; remedy: string }> = {
     message: "This challenge was already set aside; a set-aside is final and applies to one challenge once",
     remedy: "Nothing more is needed for it. A new challenge on the proposal stands as usual and is judged on its own.",
   },
+  // The desk cannot address a note to the challenger: a note about a proposal goes to its author
+  // (or, for a desk proposal, to the voices it consulted), so the remedy says so rather than promise more.
   challenger_present: {
     message: "A session of the challenger's voice is live, so it can answer and lift its own challenge",
-    remedy: "Ask that session to resolve or withdraw it (a desk note: `person say --workspace <id> --proposal <id> --body <text>`), "
-      + "or reject the proposal. A session stops being live 6 hours after its last activity, or when it ends.",
+    remedy: "Wait, reject, or ask through the author. live_sessions names the challenger's live sessions; only they can "
+      + "resolve or withdraw the challenge. A desk note reaches the proposal's author (for a desk proposal, the voices it "
+      + "consulted), not the challenger, and can ask it to pass the request on: "
+      + "`person say --workspace <workspace id> --proposal <proposal id> --body \"<your note>\" --idempotency-key <new key>`. "
+      + "A session stops being live 6 hours after its last activity, or when it ends; the set-aside can be made then. "
+      + "Or reject the proposal.",
   },
   challenger_changed: {
     message: "A session of the challenger's voice was active after the objection was shown, so it may have said more",
