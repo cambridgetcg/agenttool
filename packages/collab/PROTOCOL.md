@@ -992,8 +992,22 @@ new event type, routes it to no one, and keeps every other call working; builds 
 proposals ignore the table and the event. An older desk's inbox summary, the badge
 `person inbox` gives without `--workspace`, has no unreadable count: it neither counts nor
 names a consent/v2 proposal waiting for the person, which is one more reason to upgrade
-the desk first. The forward-compatibility harness holds all of this. To stop opening consent/v2 proposals, unset the
-variable: proposals already open keep their rule.
+the desk first. The forward-compatibility harness holds all of this, for every older
+build down to `collab-v0.4.0` and up to main with Collab Notes and without consent/v2
+(`24ba2300`).
+
+That last build's notes verbs do not read a proposal's rule when they list or answer
+it, so its sessions are not shut out of a consent/v2 proposal: `collab_inbox` shows an
+awaited voice the question, and a support or challenge written with `collab_note` is
+recorded and counts. What such a session cannot do is read the status
+(`collab_inbox {about}` refuses by `proposal_rule_unsupported`), and the effect line of
+its challenge still says only its own voice can lift it, which consent/v2 no longer
+promises once that voice has left. This paragraph was checked by hand against that
+build's bundle on a scratch journal, not by the harness. It is the reason to upgrade
+readers first: an agent should know the rule it answers under.
+
+To stop opening consent/v2 proposals, unset the variable: proposals already open keep
+their rule.
 
 Code: `src/consent-v2.ts`, the consent block of `src/store.ts`, `src/person-desk.ts`,
 `src/ceremony.ts`. Tests: `tests/consent-v2.test.ts`, `tests/forward-compat.test.ts`.

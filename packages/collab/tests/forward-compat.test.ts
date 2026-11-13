@@ -49,7 +49,7 @@ const packageRoot = resolve(import.meta.dir, "..");
 const repositoryRoot = spawnSync("git", ["-C", packageRoot, "rev-parse", "--show-toplevel"], { encoding: "utf8" })
   .stdout?.trim() || packageRoot;
 const worker = join(import.meta.dir, "compat", "old-store-worker.ts");
-const DEFAULT_REVISIONS = ["collab-v0.4.0", "collab-v0.5.0", "1ec5ab4b", "a8799aad"];
+const DEFAULT_REVISIONS = ["collab-v0.4.0", "collab-v0.5.0", "1ec5ab4b", "a8799aad", "24ba2300"];
 const GOLDEN_REVISION = "a8799aad";
 const WORKER_TIMEOUT_MS = 60_000;
 const HOST_TIMEOUT_MS = 20_000;
@@ -73,7 +73,12 @@ interface StoreCapabilities {
  * What each default revision is known to contain. Detection must agree, so a
  * detection mistake can never quietly skip a check.
  */
-const KNOWN_REVISIONS: Record<string, { ships: Ships; store: StoreCapabilities }> = {
+const KNOWN_REVISIONS: Record<string, {
+  ships: Ships;
+  store: StoreCapabilities;
+  /** Event types added since a8799aad that this build already knows, and so may route. */
+  knows_new_types?: readonly string[];
+}> = {
   // collab-v0.4.0
   e6302579e7f815ee03f1024df2c725ed36189715: {
     ships: { mcp: true, host: false, host_wait: false, host_seat_ref: false },
@@ -93,6 +98,13 @@ const KNOWN_REVISIONS: Record<string, { ships: Ships; store: StoreCapabilities }
   a8799aad9f8d9774b6c966b970d4219a222fad22: {
     ships: { mcp: true, host: true, host_wait: true, host_seat_ref: true },
     store: { event_addresses_session: true, proposal_status: true },
+  },
+  // main with Collab Notes and without consent/v2: the newest older build, so
+  // the one a device is most likely still running when a consent/v2 proposal opens.
+  "24ba230032d7d2a216afdf253817fb2b9cbcbbdd": {
+    ships: { mcp: true, host: true, host_wait: true, host_seat_ref: true },
+    store: { event_addresses_session: true, proposal_status: true },
+    knows_new_types: COLLAB_NOTES_EVENT_TYPES.filter((type) => type !== "proposal.challenge_set_aside"),
   },
 };
 
@@ -449,6 +461,8 @@ interface Fixture {
   reports: Array<{ id: string; body: string; event_sequence: number }>;
   /** Legacy-type events this build routes to the waiter after its anchor. */
   waiter_legacy_sequences: number[];
+  /** Every event this build routes to the waiter after its anchor, with its type. */
+  waiter_routed: Array<{ sequence: number; type: string }>;
 }
 
 const fixture = lazy(async (): Promise<Fixture> => {
@@ -473,14 +487,22 @@ const fixture = lazy(async (): Promise<Fixture> => {
   try {
     const reports = listAllReports(reader, manifest.workspace_id);
     const notes = new Set<string>(COLLAB_NOTES_EVENT_TYPES);
-    const waiterLegacySequences = allEvents(reader, manifest.workspace_id)
+    const waiterRouted = allEvents(reader, manifest.workspace_id)
       .filter((event) =>
         event.sequence > manifest.waiter.after_anchor.sequence
         && event.session_id !== manifest.waiter.session_id
-        && !notes.has(event.type)
         && reader.eventAddressesSession(event, manifest.waiter.session_id))
-      .map((event) => event.sequence);
-    return { directory: state, manifest, status_at: statusAt, views, reports, waiter_legacy_sequences: waiterLegacySequences };
+      .map((event) => ({ sequence: event.sequence, type: event.type }));
+    const waiterLegacySequences = waiterRouted.filter((event) => !notes.has(event.type)).map((event) => event.sequence);
+    return {
+      directory: state,
+      manifest,
+      status_at: statusAt,
+      views,
+      reports,
+      waiter_legacy_sequences: waiterLegacySequences,
+      waiter_routed: waiterRouted,
+    };
   } finally {
     reader.close();
   }
@@ -701,6 +723,10 @@ for (const revision of revisions) {
       return;
     }
     const known = KNOWN_REVISIONS[revision.sha!];
+    // The types this build has never seen: every type added since a8799aad, less the ones it knows.
+    const knownNewTypes = new Set<string>(known?.knows_new_types ?? []);
+    const unknownToIt = (type: string) =>
+      (COLLAB_NOTES_EVENT_TYPES as readonly string[]).includes(type) && !knownNewTypes.has(type);
     const directory = join(work, "revisions", revision.sha!);
     const copy = lazy(async () => copyJournal((await fixture()).directory, join(directory, "journal")));
 
@@ -710,7 +736,7 @@ for (const revision of revisions) {
       writeFileSync(request, JSON.stringify({
         workspace_id: manifest.workspace_id,
         root_path: manifest.root_path,
-        new_types: manifest.event_types.filter((type) => (COLLAB_NOTES_EVENT_TYPES as readonly string[]).includes(type)),
+        new_types: manifest.event_types.filter(unknownToIt),
         status_at,
         proposals: manifest.proposals,
         v2_proposals: manifest.v2_proposals,
@@ -782,9 +808,9 @@ for (const revision of revisions) {
       expect(agreed).not.toBe(open);
     }, TEST_TIMEOUT_MS);
 
-    test("routes no new event type to any session, and still routes legacy ones", async () => {
+    test("routes no event type it has never seen to any session, and still routes the ones it knows", async () => {
       const result = await inspected();
-      const { waiter_legacy_sequences } = await fixture();
+      const { waiter_routed } = await fixture();
       expect(result.errors).toEqual({});
       if (!result.capabilities.event_addresses_session) {
         expect(result.addressing).toBeNull();
@@ -793,8 +819,10 @@ for (const revision of revisions) {
       expect(result.addressing!.new_type_hits).toEqual([]);
       expect(result.addressing!.control_addressed).toBe(true);
       if (result.capabilities.proposal_status) {
-        // This build's routing of legacy events is unchanged from the newest older build's.
-        expect(result.addressing!.waiter_sequences).toEqual(waiter_legacy_sequences);
+        // This build routes the events the older build knows exactly as the older build does.
+        expect(result.addressing!.waiter_sequences).toEqual(
+          waiter_routed.filter((event) => !unknownToIt(event.type)).map((event) => event.sequence),
+        );
       }
     }, TEST_TIMEOUT_MS);
 
