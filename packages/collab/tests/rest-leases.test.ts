@@ -107,6 +107,26 @@ describe("declared rest and session leases", () => {
     expect(view(task)).toEqual({ status: "claimed", holder: "resting" });
   });
 
+  test("declaring a rest counts as being seen, like any session call; the standing rest does not", () => {
+    const rester = session("redeclaring-rester");
+    const task = claimBriefly(rester, "redeclared", "src/redeclared.ts");
+
+    // Five hours unseen, then the declaration itself: the holder was seen again.
+    advance(5 * HOUR_MS);
+    store.restSessionForSession({
+      ...rester.credential,
+      idempotency_key: "rest-at-five-hours",
+      mode: "resting",
+      until: fromNow(48 * HOUR_MS),
+    });
+    advance(5 * HOUR_MS);
+    expect(view(task)).toEqual({ status: "claimed", holder: "resting" });
+
+    // The rest still stands and adds nothing: six hours after that call the lease lapses.
+    advance(HOUR_MS + 1);
+    expect(view(task)).toEqual({ status: "recovery_required", holder: "resting" });
+  });
+
   test("a standing rest does not extend a lease once its holder has gone unseen for 6 hours", () => {
     const rester = session("long-rester");
     const silent = session("long-silent");

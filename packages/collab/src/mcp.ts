@@ -149,7 +149,7 @@ export function buildCollabMcpServer(
         "inferences, proposals, or authorised decisions as structured reports with evidence, confidence, " +
         "limits, and explicit authority scope. Claim before editing overlapping path scopes. Session leases remain live while their " +
         "session is live (6 hours since activity); optional renew is lease-fenced, not version-gated. " +
-        "An advisory coordination lease is not ownership, a filesystem lock, or authority. Edit-task " +
+        "Rest does not change that: a resting holder's lease is judged by when it was last seen, like any other. An advisory coordination lease is not ownership, a filesystem lock, or authority. Edit-task " +
         "completion is actor-reported and remains pending until a distinct session accepts it. Challenges " +
         "remain append-only disagreement; acknowledgement means processed, not agreed. Expired session " +
         "leases require explicit recovery. Git checkpoints are local evidence, not attribution or atomic " +

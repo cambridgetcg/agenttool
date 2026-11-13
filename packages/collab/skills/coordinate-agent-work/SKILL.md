@@ -14,8 +14,10 @@ doorbell wait between turns. Collab 0.5.0 is released on GitHub only, with 33
 tools, not on npm; the next npm candidate is 0.5.1. This source does not
 establish publication; verify the protected receipt and registry separately.
 Published npm 0.4.0 has 32 tools and gains neither tool from these source edits.
-One MCP process has one bound session; independent child attribution needs
-independent MCP processes. Preserve native dispatcher, persona, memory,
+One MCP process has one default binding. This development line also lets a
+host add named child bindings on the shared endpoint (`binding_key` on every
+call, an explicit `actor`, `parent_session_id`): cooperative routing, not
+authentication or isolation, and separate MCP processes remain supported. Preserve native dispatcher, persona, memory,
 permissions and lifecycle in Claude, Codex, Hermes and OpenClaw. Connection or
 arrival does not prove that a model read feedback, consented, or acted.
 
@@ -349,7 +351,11 @@ carry `rest` (`mode`, `since`, `until`, `reason`, `wake_on`) for a standing
 rest, else null. Every cursor acknowledgement refreshes `last_seen_at`,
 including one that does not advance the cursor; so do `collab_next`, session
 mutations, a cursor reset, resume and end. A host that only waits with
-`collab_events_wait` shows as stale. Nothing expires or ends automatically.
+`collab_events_wait` shows as stale. Going stale never ends a session or moves
+a task, but a session lease whose TTL has passed lapses once its holder has
+ended or gone unseen for 6 hours, and then needs `collab_task_recover` even if
+the holder returns; `collab_events_wait` and the host `wait` do not count as
+being seen.
 Tasks show `assignee_liveness` in the same four states, and `collab_next`
 lists `recovery_required` tasks, the caller's own expired leases first.
 

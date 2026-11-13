@@ -15,8 +15,11 @@ host doorbell wait between turns. Collab 0.5.0 is released on GitHub only,
 with 33 tools, not on npm; the next npm candidate is 0.5.1. This source does
 not establish publication, so verify the protected receipt and registry
 separately. Public npm 0.4.0 remains the unchanged 32-tool
-release. One MCP process has one bound session. Independent child attribution
-requires separate MCP processes, not a shared endpoint plus different labels.
+release. One MCP process has one default binding. This development line also
+lets a host add named child bindings on a shared endpoint (`binding_key` on
+every call, an explicit `actor`, `parent_session_id`): cooperative routing, not
+authentication; different labels alone never separate children, and separate
+MCP processes remain supported.
 
 ## Choose the plane explicitly
 
@@ -180,8 +183,10 @@ others. A session reads, in this order of precedence, `ended`, `resting`,
 `stale` or `live`: `ended` once ended; `resting` while a declared rest stands;
 `stale` after 6 hours without `collab_next`, a session mutation, a cursor
 acknowledgement, reset, resume or end; otherwise `live`. Every acknowledgement
-refreshes `last_seen_at`, including one that does not advance the cursor, and
-nothing expires automatically. Tasks show `assignee_liveness` in the same four
+refreshes `last_seen_at`, including one that does not advance the cursor.
+Going stale never ends a session or moves a task, but a session lease whose TTL
+has passed lapses once its holder has ended or gone unseen for 6 hours, and
+read-only waits do not count as being seen. Tasks show `assignee_liveness` in the same four
 states; recover an expired lease only through
 `mcp_agenttool_collab_task_recover` with an explicit action and note.
 `role` is fixed for the session's lifetime; correct it with an `informs`

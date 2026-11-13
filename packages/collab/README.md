@@ -517,7 +517,9 @@ reads as stale. This does not change session status. A session lease becomes
 recoverable only when both its stored TTL deadline has passed and the holder
 has ended or has not been seen for 6 hours; no task ownership transfers
 automatically. A declared rest neither shortens nor extends a lease: a resting
-holder is counted by when it was last seen, like any other. Activity while
+holder is counted by when it was last seen, like any other. Declaring a rest or
+returning from one is itself a session call, so like any session mutation it
+counts as being seen; a standing rest alone does not. Activity while
 present retains the lease, but once expired it requires explicit recovery even
 if its holder becomes live again. Read-only waits never refresh liveness.
 `role` is fixed for the session's lifetime; correct it with an `informs`
@@ -654,8 +656,9 @@ case-insensitive. It does not lock the filesystem, inspect uncommitted diffs,
 resolve every symlink or case alias, prevent direct edits, or arbitrate a
 process using another database.
 
-When a session is stale and its lease TTL has passed, the task reads as
-`recovery_required`. Before taking
+When a session lease's TTL has passed and its holder has ended or gone unseen
+for 6 hours, the task reads as `recovery_required`; a legacy actor lease does
+as soon as its TTL has passed. Before taking
 it over, inspect its progress, reports, artifacts, and last checkpoint. Call
 `collab_task_recover` explicitly with the chosen takeover, release, or block
 action and a concise recovery note explaining what was checked and how useful
@@ -740,10 +743,12 @@ Old explicit actor labels, default bindings, renewal requests carrying
 `expected_version`, presence APIs, event protocols and exact idempotency receipts
 remain readable/usable. Renewal accepts a stale version but still rejects the
 wrong holder, lease, generation or idempotency payload. Legacy actor leases
-remain TTL-bound; a credential-bound lease lives while its holder is `live`
-(active and seen within the existing six-hour window). `lease_expires_at` remains
-the stored minimum deadline, not the full effective lifetime; inspect
-`effective_status` and `assignee_liveness`. This is recorded activity, not proof
+remain TTL-bound; a credential-bound lease lives while its holder is active
+and was seen within the existing six-hour window, whether or not it has declared
+a rest. `lease_expires_at` remains
+the stored minimum deadline, not the full effective lifetime; read
+`effective_status` for the lease, because `assignee_liveness` can read `resting`
+or `live` on either side of expiry. This is recorded activity, not proof
 of a running process. Hosts should end departed sessions with `release_leases`.
 Expiry is checked against the pre-refresh session row. An additive
 `session_lease_lapses` table retains expired lease IDs across later polling,
@@ -753,7 +758,14 @@ them. No claim is released or transferred until explicit recovery/end.
 Back up the selected journal and upgrade all serving MCP processes together
 before relying on new lease or cross-clone semantics. An older server can still
 read/open the schema and existing roots, but uses its old expiry/discovery rules;
-mixed old/new servers cannot offer the new coordination guarantees. No live
+mixed old/new servers cannot offer the new coordination guarantees. The build
+with declared rest and knocks that preceded this line (commit `cdf54b68`,
+labelled 0.5.0) is an older server in this sense: it expires session leases at
+their TTL, so it can take over a lease this build still calls held, and a
+holder that returns through it after six hours refreshes `last_seen_at` without
+a `session_lease_lapses` row, so this build reads that lease as claimed again.
+Until every MCP process on a journal runs this build, holders should keep
+renewing inside the TTL. No live
 journal, host configuration or installed package is changed by this source PR.
 
 `repository_aliases` and `repository_discovery` are additive routing metadata.
