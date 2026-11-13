@@ -218,7 +218,12 @@ describe("agenttool-collab-host end", () => {
         status: "help",
         usage: "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]"
           + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]"
-          + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]",
+          + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]"
+          + " | agenttool-collab-host knocks --host-ancestor auto|<pid> [--mark-tapped] [--db <path>]"
+          + " | agenttool-collab-host knocks --session <id> [--mark-tapped] [--with-sender] [--db <path>]"
+          + " | agenttool-collab-host doorbell-scan [--db <path>]",
+        verbs: ["end", "wait", "knocks", "doorbell-scan"],
+        quiet_verbs: ["knocks", "doorbell-scan"],
       });
     }
   });

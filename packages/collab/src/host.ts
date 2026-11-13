@@ -68,6 +68,12 @@ export const COLLAB_KNOCKS_USAGE =
 export const COLLAB_KNOCKS_SESSION_USAGE =
   "usage: agenttool-collab-host knocks --session <id> [--mark-tapped] [--with-sender] [--db <path>]";
 export const COLLAB_DOORBELL_SCAN_USAGE = "usage: agenttool-collab-host doorbell-scan [--db <path>]";
+/** Every verb's usage in one line, for `--help` and for an error that could not tell which verb was meant. */
+export const COLLAB_HOST_HELP_USAGE = [
+  COLLAB_HOST_USAGE,
+  ...[COLLAB_KNOCKS_USAGE, COLLAB_KNOCKS_SESSION_USAGE, COLLAB_DOORBELL_SCAN_USAGE]
+    .map((line) => line.slice("usage: ".length)),
+].join(" | ");
 
 /** The trimmed-length limit endSession applies to its reason. */
 const MAX_HOST_REASON = 2_000;
@@ -110,6 +116,10 @@ export interface HostHelpReceipt {
   protocol: typeof COLLAB_HOST_PROTOCOL;
   status: "help";
   usage: string;
+  /** Every verb this build answers. A build older than this list answers --help without it. */
+  verbs: readonly string[];
+  /** The verbs among them that print their own protocol's line or nothing, and always exit 0. */
+  quiet_verbs: readonly string[];
 }
 
 export interface HostEndOptions {
@@ -396,9 +406,55 @@ export function runCollabHostCli(
   dependencies: HostCliDependencies = {},
 ): { exit_code: 0 | 1; line: string | null } {
   const [verb, ...rest] = argv;
-  if (verb === "knocks") return quietly(() => runKnocks(rest, env, dependencies));
-  if (verb === "doorbell-scan") return quietly(() => runDoorbellScan(rest, env, dependencies));
+  if (verb !== undefined && Object.hasOwn(HOST_VERBS, verb)) {
+    return HOST_VERBS[verb as HostVerb].run(rest, argv, env, dependencies);
+  }
+  if (verb !== undefined && !verb.startsWith("-")) {
+    // A word this build does not know: another build's verb, or a typo. It is
+    // answered before its flags are parsed, and nothing given is echoed back.
+    return { exit_code: 1, line: JSON.stringify(errorReceipt(verbUsageError("Unknown verb"))) };
+  }
+  // No verb yet: --help, or end or wait with an option before the verb.
   return runEndOrWait(argv, env, dependencies.wait_clock ?? systemClock);
+}
+
+type HostVerbRun = (
+  rest: string[],
+  argv: string[],
+  env: Record<string, string | undefined>,
+  dependencies: HostCliDependencies,
+) => { exit_code: 0 | 1; line: string | null };
+
+const runReceiptVerb: HostVerbRun = (_rest, argv, env, dependencies) =>
+  runEndOrWait(argv, env, dependencies.wait_clock ?? systemClock);
+
+/**
+ * Every verb this build answers. Dispatch reads this table and help prints
+ * it, so a verb cannot be answered without being listed. A quiet verb prints
+ * its own protocol's line or nothing and always exits 0, so for any build,
+ * exit 1 with a usage_error receipt means the verb is absent.
+ */
+const HOST_VERBS = {
+  end: { quiet: false, run: runReceiptVerb },
+  wait: { quiet: false, run: runReceiptVerb },
+  knocks: { quiet: true, run: (rest, _argv, env, dependencies) => quietly(() => runKnocks(rest, env, dependencies)) },
+  "doorbell-scan": {
+    quiet: true,
+    run: (rest, _argv, env, dependencies) => quietly(() => runDoorbellScan(rest, env, dependencies)),
+  },
+} satisfies Record<string, { quiet: boolean; run: HostVerbRun }>;
+type HostVerb = keyof typeof HOST_VERBS;
+
+export const COLLAB_HOST_VERBS: readonly string[] = Object.keys(HOST_VERBS);
+export const COLLAB_HOST_QUIET_VERBS: readonly string[] =
+  COLLAB_HOST_VERBS.filter((verb) => HOST_VERBS[verb as HostVerb].quiet);
+
+/** A usage error that could not tell which verb was meant: it names them all. */
+function verbUsageError(problem: string): CollabError {
+  return new CollabError("usage_error", `${problem}; ${COLLAB_HOST_HELP_USAGE}`, {
+    verbs: COLLAB_HOST_VERBS,
+    quiet_verbs: COLLAB_HOST_QUIET_VERBS,
+  });
 }
 
 function quietly(run: () => KnockReport | DoorbellScan | null): { exit_code: 0; line: string | null } {
@@ -417,7 +473,13 @@ function runEndOrWait(
 ): { exit_code: 0 | 1; line: string } {
   let secret: string | null = null;
   if (argv.some((arg) => arg === "--help" || arg === "-h")) {
-    const help: HostHelpReceipt = { protocol: COLLAB_HOST_PROTOCOL, status: "help", usage: COLLAB_HOST_USAGE };
+    const help: HostHelpReceipt = {
+      protocol: COLLAB_HOST_PROTOCOL,
+      status: "help",
+      usage: COLLAB_HOST_HELP_USAGE,
+      verbs: COLLAB_HOST_VERBS,
+      quiet_verbs: COLLAB_HOST_QUIET_VERBS,
+    };
     return { exit_code: 0, line: JSON.stringify(help) };
   }
   const emit = (payload: HostEndReceipt | HostWaitReceipt | HostErrorReceipt, exitCode: 0 | 1) => {
@@ -504,7 +566,11 @@ function parseHostArgs(argv: string[]): HostArgs {
     );
   }
   const [command, ...extra] = parsed.positionals;
-  if ((command !== "end" && command !== "wait") || extra.length > 0) {
+  if (command !== "end" && command !== "wait") {
+    // No verb, or a quiet verb placed after an option: only end and wait may follow one.
+    throw verbUsageError("The verb must be the first argument (end and wait may follow their options)");
+  }
+  if (extra.length > 0) {
     throw new CollabError("usage_error", COLLAB_HOST_USAGE);
   }
   const foreign = (command === "end" ? WAIT_ONLY_OPTIONS : END_ONLY_OPTIONS)

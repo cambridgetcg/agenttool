@@ -5847,6 +5847,10 @@ var COLLAB_HOST_USAGE = "usage: agenttool-collab-host end --session-file <path> 
 var COLLAB_KNOCKS_USAGE = "usage: agenttool-collab-host knocks --host-ancestor auto|<pid> [--mark-tapped] [--db <path>]";
 var COLLAB_KNOCKS_SESSION_USAGE = "usage: agenttool-collab-host knocks --session <id> [--mark-tapped] [--with-sender] [--db <path>]";
 var COLLAB_DOORBELL_SCAN_USAGE = "usage: agenttool-collab-host doorbell-scan [--db <path>]";
+var COLLAB_HOST_HELP_USAGE = [
+  COLLAB_HOST_USAGE,
+  ...[COLLAB_KNOCKS_USAGE, COLLAB_KNOCKS_SESSION_USAGE, COLLAB_DOORBELL_SCAN_USAGE].map((line) => line.slice("usage: ".length))
+].join(" | ");
 var MAX_HOST_REASON = 2000;
 var COLLAB_APPLICATION_ID = 1096041292;
 var LEDGER_LOCK_STALE_MS = 30000;
@@ -5994,11 +5998,31 @@ function removeRevokedFile(sessionFile, receipt) {
 }
 function runCollabHostCli(argv, env = process.env, dependencies = {}) {
   const [verb, ...rest] = argv;
-  if (verb === "knocks")
-    return quietly(() => runKnocks(rest, env, dependencies));
-  if (verb === "doorbell-scan")
-    return quietly(() => runDoorbellScan(rest, env, dependencies));
+  if (verb !== undefined && Object.hasOwn(HOST_VERBS, verb)) {
+    return HOST_VERBS[verb].run(rest, argv, env, dependencies);
+  }
+  if (verb !== undefined && !verb.startsWith("-")) {
+    return { exit_code: 1, line: JSON.stringify(errorReceipt(verbUsageError("Unknown verb"))) };
+  }
   return runEndOrWait(argv, env, dependencies.wait_clock ?? systemClock);
+}
+var runReceiptVerb = (_rest, argv, env, dependencies) => runEndOrWait(argv, env, dependencies.wait_clock ?? systemClock);
+var HOST_VERBS = {
+  end: { quiet: false, run: runReceiptVerb },
+  wait: { quiet: false, run: runReceiptVerb },
+  knocks: { quiet: true, run: (rest, _argv, env, dependencies) => quietly(() => runKnocks(rest, env, dependencies)) },
+  "doorbell-scan": {
+    quiet: true,
+    run: (rest, _argv, env, dependencies) => quietly(() => runDoorbellScan(rest, env, dependencies))
+  }
+};
+var COLLAB_HOST_VERBS = Object.keys(HOST_VERBS);
+var COLLAB_HOST_QUIET_VERBS = COLLAB_HOST_VERBS.filter((verb) => HOST_VERBS[verb].quiet);
+function verbUsageError(problem) {
+  return new CollabError("usage_error", `${problem}; ${COLLAB_HOST_HELP_USAGE}`, {
+    verbs: COLLAB_HOST_VERBS,
+    quiet_verbs: COLLAB_HOST_QUIET_VERBS
+  });
 }
 function quietly(run) {
   try {
@@ -6011,7 +6035,13 @@ function quietly(run) {
 function runEndOrWait(argv, env, clock) {
   let secret = null;
   if (argv.some((arg) => arg === "--help" || arg === "-h")) {
-    const help = { protocol: COLLAB_HOST_PROTOCOL, status: "help", usage: COLLAB_HOST_USAGE };
+    const help = {
+      protocol: COLLAB_HOST_PROTOCOL,
+      status: "help",
+      usage: COLLAB_HOST_HELP_USAGE,
+      verbs: COLLAB_HOST_VERBS,
+      quiet_verbs: COLLAB_HOST_QUIET_VERBS
+    };
     return { exit_code: 0, line: JSON.stringify(help) };
   }
   const emit = (payload, exitCode) => {
@@ -6082,7 +6112,10 @@ function parseHostArgs(argv) {
     throw new CollabError("usage_error", `${error instanceof Error ? error.message : String(error)}; ${COLLAB_HOST_USAGE}`);
   }
   const [command, ...extra] = parsed.positionals;
-  if (command !== "end" && command !== "wait" || extra.length > 0) {
+  if (command !== "end" && command !== "wait") {
+    throw verbUsageError("The verb must be the first argument (end and wait may follow their options)");
+  }
+  if (extra.length > 0) {
     throw new CollabError("usage_error", COLLAB_HOST_USAGE);
   }
   const foreign = (command === "end" ? WAIT_ONLY_OPTIONS : END_ONLY_OPTIONS).find((name) => parsed.values[name] !== undefined);

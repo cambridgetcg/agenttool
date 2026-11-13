@@ -523,6 +523,21 @@ if its holder becomes live again. Read-only waits never refresh liveness.
 `role` is fixed for the session's lifetime; correct it with an `informs`
 report, or end the session and start a new one.
 
+### Host verbs and help
+
+`agenttool-collab-host` has four verbs: `end` and `wait` print one receipt line of
+`agenttool.collab-host/1`, and `knocks` and `doorbell-scan` are quiet (see
+[Declared rest and knocks](#declared-rest-and-knocks)). `--help` prints
+`status: "help"` with a `usage` line naming every verb, `verbs` (every verb
+this build answers) and `quiet_verbs`. A first word the build does not know
+exits 1 with `usage_error`, the same two lists, and no echo of what was given;
+`end` and `wait` may follow their options, the quiet verbs must come first.
+Host wiring that may meet another build can rely on one rule that holds for
+every build: a quiet verb prints its own protocol's line or nothing and never
+exits non-zero, so exit 1 with a `usage_error` receipt means the verb is absent.
+A help receipt without `verbs` comes from a build older than the list and
+says nothing either way. Ignore keys you do not know.
+
 ### Declared rest and knocks
 
 `collab_session_rest` declares rest for the caller's own credential-bound
