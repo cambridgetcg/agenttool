@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import { CollabStore } from "../src/store.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
-import { exactRef, handleOf, NOTE_AUTHORISES, NOTE_CARD, NOTE_CAPABILITIES } from "../src/verbs.js";
+import { ALONE_ADVICE, exactRef, handleOf, NOTE_AUTHORISES, NOTE_CARD, NOTE_CAPABILITIES } from "../src/verbs.js";
 import { COLLAB_PACKAGE_VERSION } from "../src/version.js";
 
 // collab_arrive (Collab Notes spec 5.1) and the verb kernel's common rules (spec 5).
@@ -113,7 +113,8 @@ describe("collab_arrive on an unbound default slot", () => {
     expect(arrived.you.root_path).toBe(realpathSync(j.root));
     expect(arrived.ids).toEqual({ session: id, session_handle: handleOf("session", id), workspace_id: arrived.you.workspace_id });
     expect(arrived.note).toBe("note: I have arrived.\n\nPurpose: fix the flaky test");
-    expect(arrived.next).toEqual({ tool: "collab_inbox", input: {} });
+    // Another session wrote before this one, and a new inbox starts empty: the next call is the read-back.
+    expect(arrived.next).toEqual({ tool: "collab_inbox", input: { since: 0, include: "all" } });
 
     // The session itself: role = purpose; a mark at the head it joined at; no cursor move.
     expect(head.type).toBe("session.joined");
@@ -428,7 +429,7 @@ describe("collab_arrive on a named slot", () => {
     expect(child.effect).toContain(
       `This session shares its parent's voice and ballot unit. Send binding_key k1 on every call; without it you speak as session ${parentId}.`,
     );
-    expect(child.next).toEqual({ tool: "collab_inbox", input: { binding_key: "k1" } });
+    expect(child.next).toEqual({ tool: "collab_inbox", input: { since: 0, include: "all", binding_key: "k1" } });
     expect(child.you.voice).toBe(parentId);
     expect(child.you.root_path).toBe(parent.you.root_path);
     expect(child.effect).toContain(`in the worktree at ${parent.you.root_path}`);
@@ -699,6 +700,9 @@ describe("arriving after others", () => {
     // Only the journal's own opening came before: nobody was here.
     expect(first.before_you_arrived).toBeUndefined();
     expect(first.left_for_your_name).toBeUndefined();
+    // Alone on a fresh journal: the inbox is the next call, and the agent is told how to leave something for a later one.
+    expect(first.next).toEqual({ tool: "collab_inbox", input: {} });
+    expect(first.advice).toContain(ALONE_ADVICE);
     const peerServer = j.server();
     await ok(peerServer, "collab_arrive", { purpose: "second here", root_path: j.root, name: "ben" });
     await ok(peerServer, "collab_note", { text: "Ben was here first." });
@@ -710,6 +714,9 @@ describe("arriving after others", () => {
       see: { tool: "collab_inbox", input: { since: 0, include: "all" } },
     });
     expect(later.advice.join(" ")).toContain("Your read mark starts at the journal head");
+    // The read-back is the suggested next call, and with others here nothing is said about being alone.
+    expect(later.next).toEqual(later.before_you_arrived.see);
+    expect(later.advice).not.toContain(ALONE_ADVICE);
     expect(later.left_for_your_name).toBeUndefined();
     // The inbox starts at the head; the ready call reads back what it cannot.
     expect((await ok(server, "collab_inbox", { include: "all" })).items).toEqual([]);

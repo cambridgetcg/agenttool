@@ -40676,6 +40676,8 @@ function arrivalResult(ctx, binding, options) {
     ctx.store.recordArrivalShown(credential, brief.shown);
   }
   const behind = options.fresh ? arrivalBehind(ctx, credential, data.session.actor) : { view: {}, advice: [] };
+  const readBack = behind.view.before_you_arrived?.see;
+  const alone = options.fresh && Array.isArray(brief.view.here) && brief.view.here.length === 0;
   return {
     ...noteWriteResult({
       effect: options.effect,
@@ -40684,8 +40686,8 @@ function arrivalResult(ctx, binding, options) {
         session_handle: handleOf("session", data.session.id),
         workspace_id: data.workspace.id
       },
-      advice: [...options.advice, ...behind.advice, ...brief.advice],
-      next: withSlot(ctx, { tool: "collab_inbox", input: {} }),
+      advice: [...options.advice, ...behind.advice, ...alone ? [ALONE_ADVICE] : [], ...brief.advice],
+      next: readBack ?? withSlot(ctx, { tool: "collab_inbox", input: {} }),
       note: options.note,
       replayed: options.replayed
     }),
@@ -40695,6 +40697,7 @@ function arrivalResult(ctx, binding, options) {
     ...pendingReveal ? { reveal_pending: pendingReveal } : {}
   };
 }
+var ALONE_ADVICE = "No other session is here now. A name reaches only a session that has arrived, so to leave something for an agent who " + "comes later, address it to all and leave review_by out; a later arrival is pointed to what came before it.";
 function arrivalBehind(ctx, credential, name) {
   let behind;
   try {
@@ -45683,7 +45686,7 @@ Legacy session tools: ${legacyInstructions}`
       text: exports_external.string().describe("The statement (first line, at most 200 characters), then a blank line and any body."),
       act: exports_external.string().optional().describe("note | support | challenge | resolve | withdraw | accept | request_changes | relay_rejection | decide."),
       re: exports_external.string().optional().describe("What this answers: report#\u2026, proposal#\u2026, task#\u2026, a full id, or file:/lobby:/msg: text. Required for every act but note."),
-      to: exports_external.string().optional().describe("A session name or id, person, or all. Default: whoever the act answers."),
+      to: exports_external.string().optional().describe("A session that has arrived here (name or id), person, or all; for an agent who comes later, all. Default: whoever the act answers."),
       via: exports_external.string().optional().describe("host:\u2026 | file:\u2026 | lobby:\u2026 | msg:\u2026: the text came from another channel, so seen and quoted reasons are recorded as told."),
       why: exports_external.array(noteReason).optional().describe("Up to 8 reasons."),
       evidence: noteEvidence,
@@ -45718,7 +45721,7 @@ Legacy session tools: ${legacyInstructions}`
       why: exports_external.array(noteReason).optional().describe("Up to 8 reasons (finished)."),
       evidence: noteEvidence,
       limits: exports_external.string().optional().describe("What the work does not cover (finished; at most 2,000 characters)."),
-      review_by: exports_external.string().optional().describe("A session name or id to ask for the review (finished, reviewed tasks)."),
+      review_by: exports_external.string().optional().describe("An active session's name or id to ask for the review (finished, reviewed tasks); leave it out when nobody else is here."),
       because: exports_external.string().optional().describe("The blocker (blocked), or why held work is left unfinished (leave); at most 2,000 characters.")
     }
   }, async (input) => noteCall(() => doneVerb(noteContext(), input), input));

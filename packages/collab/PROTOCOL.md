@@ -434,7 +434,10 @@ collab_arrive {"purpose": "Review the retry change and its tests", "revise_purpo
   handed the whole history as news, but it also means the inbox never shows what came
   before; so when other sessions were here first, the result carries
   `before_you_arrived: {events, see}`, where `see` is the look-back
-  `collab_inbox {since: 0, include: "all"}`, and an advice line says so.
+  `collab_inbox {since: 0, include: "all"}`, an advice line says so, and that
+  look-back is the result's `next` call. A new session that finds nobody else here is
+  told that a name reaches only a session that has arrived, so what it leaves for an
+  agent who comes later goes to all, with `review_by` left out.
 - **Items left for your name.** Every host process is a new session, so a returning
   agent arrives as a new session that may carry the name of one that ended. When
   reports or other items were addressed to ended sessions with this session's name,

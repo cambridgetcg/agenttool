@@ -1151,6 +1151,11 @@ function arrivalResult(
     ctx.store.recordArrivalShown(credential, brief.shown);
   }
   const behind = options.fresh ? arrivalBehind(ctx, credential, data.session.actor) : { view: {}, advice: [] };
+  // A new session's inbox starts empty, so where others wrote before it the
+  // useful next call is the read-back, which also covers what was left for
+  // its name.
+  const readBack = (behind.view.before_you_arrived as { see?: NoteRemedy } | undefined)?.see;
+  const alone = options.fresh && Array.isArray(brief.view.here) && brief.view.here.length === 0;
   return {
     ...noteWriteResult({
       effect: options.effect,
@@ -1159,8 +1164,8 @@ function arrivalResult(
         session_handle: handleOf("session", data.session.id),
         workspace_id: data.workspace.id,
       },
-      advice: [...options.advice, ...behind.advice, ...brief.advice],
-      next: withSlot(ctx, { tool: "collab_inbox", input: {} }),
+      advice: [...options.advice, ...behind.advice, ...(alone ? [ALONE_ADVICE] : []), ...brief.advice],
+      next: readBack ?? withSlot(ctx, { tool: "collab_inbox", input: {} }),
       note: options.note,
       replayed: options.replayed,
     }),
@@ -1170,6 +1175,11 @@ function arrivalResult(
     ...(pendingReveal ? { reveal_pending: pendingReveal } : {}),
   };
 }
+
+/** Said to a new session that finds nobody else here: how to leave something for an agent who comes later. */
+export const ALONE_ADVICE =
+  "No other session is here now. A name reaches only a session that has arrived, so to leave something for an agent who " +
+  "comes later, address it to all and leave review_by out; a later arrival is pointed to what came before it.";
 
 /**
  * What a new session's arrival says about what came before it. Its read
