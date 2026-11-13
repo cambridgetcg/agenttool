@@ -1,4 +1,4 @@
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 // Opens and closes one store at a shared start time, as a person-desk call does.
 const [databasePath, startAtText] = Bun.argv.slice(2);

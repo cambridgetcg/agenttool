@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildCollabMcpServer } from "../src/mcp.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 import {
   BUILT_NOTE_VERBS,
   FULL_PROFILE_BRIDGE,

@@ -7,7 +7,7 @@ import { defaultActor } from "../src/actor-default.js";
 import { CollabError } from "../src/errors.js";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import { SESSION_STALE_AFTER_MS } from "../src/protocol.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 let directory: string;
 let root: string;

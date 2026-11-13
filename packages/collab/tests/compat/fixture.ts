@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildCollabMcpServer } from "../../src/mcp.js";
 import type { EventCursor, ProposalStatus, SessionHandle, Task } from "../../src/protocol.js";
-import type { CollabStore } from "../../src/store.js";
+import type { CollabStore } from "../../src/store-notes.js";
 
 /**
  * The forward-compatibility fixture (Collab Notes spec 8.5): a journal written

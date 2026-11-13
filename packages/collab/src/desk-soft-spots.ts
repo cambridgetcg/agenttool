@@ -9,12 +9,12 @@
  * proposal bytes or anything else a person signs or a store hashes, and they
  * change nothing the desk accepts or refuses.
  *
- * The facts are noteProposalData's (src/store.ts), the read every
+ * The facts are noteProposalData's (src/store-notes.ts), the read every
  * agent-facing proposal view makes, so the desk and the agents see the same
  * ones. This module only selects and words them; it reads nothing itself.
  */
 import type { ProposalStatus } from "./protocol.js";
-import type { NoteProposalData, NoteStanceView } from "./store.js";
+import type { NoteProposalData, NoteStanceView } from "./store-notes.js";
 
 /** Beside carried objections in every view, agents' and the desk's (spec 5.6). */
 export const CARRIED_OBJECTIONS_SENTENCE =

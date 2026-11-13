@@ -19,7 +19,7 @@ import { CollabError } from "../src/errors.js";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import type { ArtifactRef, CollabEvent, SessionHandle, Task } from "../src/protocol.js";
 import { inspectSuccessorCommit } from "../src/repository.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 let directory: string;
 let root: string;

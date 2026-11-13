@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import type { SessionHandle } from "../src/protocol.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 const packageRoot = resolve(import.meta.dir, "..");
 const watcherEntry = join(packageRoot, "integrations", "claude-code", "collab-doorbell-watch.ts");

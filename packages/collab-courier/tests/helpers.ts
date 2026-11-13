@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync, realpathSync } from 'nod
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createPrivateKey, createPublicKey, randomUUID } from 'node:crypto';
-import { CollabStore } from '../../collab/src/store.js';
+import { CollabStore } from '../../collab/src/store-notes.js';
 import { writeSessionCredentialFile } from '../../collab/src/session-file.js';
 import { COLLAB_PACKAGE_VERSION } from '../../collab/src/version.js';
 import { Binding, parseBinding } from '../src/binding.js';

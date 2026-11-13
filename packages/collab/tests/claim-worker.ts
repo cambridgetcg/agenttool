@@ -1,5 +1,5 @@
 import { CollabError } from "../src/errors.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 const [databasePath, workspaceId, taskId, actor, idempotencyKey, startAtText] = Bun.argv.slice(2);
 if (!databasePath || !workspaceId || !taskId || !actor || !idempotencyKey || !startAtText) {

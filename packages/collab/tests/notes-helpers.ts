@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import type { SessionHandle } from "../src/protocol.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
-import { CollabStore, type CollabStoreOptions } from "../src/store.js";
+import { CollabStore, type CollabStoreOptions } from "../src/store-notes.js";
 
 // Shared by the collab_note, collab_take and collab_done tests: a temp
 // journal whose sessions are served by in-process MCP servers, as host

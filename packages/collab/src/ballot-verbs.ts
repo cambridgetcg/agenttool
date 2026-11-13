@@ -23,7 +23,7 @@ import { readSealFile, removeSealFile, writeSealFile } from "./ballot-seal.js";
 import { CollabError } from "./errors.js";
 import { NOTE_JOURNAL_EVIDENCE_KINDS, renderNote } from "./note.js";
 import { resolveEvidence, stepOnce } from "./note-verbs.js";
-import type { NoteBallotCast, NoteBallotCastReceipt, NoteBallotData, NoteBallotOpenReceipt } from "./store.js";
+import type { NoteBallotCast, NoteBallotCastReceipt, NoteBallotData, NoteBallotOpenReceipt } from "./store-notes.js";
 import {
   ballotTermsView,
   ballotUnitView,

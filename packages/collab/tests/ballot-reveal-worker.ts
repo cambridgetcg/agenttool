@@ -1,4 +1,4 @@
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 // Opens its own store on a shared journal and runs the lazy ballot reveal at
 // a shared start time, so two processes race for the same due ballot.

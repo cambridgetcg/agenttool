@@ -7,7 +7,7 @@ import { buildCollabMcpServer } from "../src/mcp.js";
 import type { SessionHandle } from "../src/protocol.js";
 import { defaultSeatRef } from "../src/seat-ref.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 const CLAUDE_SESSION = "C05687D3-1DEF-4749-BC65-4637D9F20620";
 const CODEX_THREAD = "019a0000-0000-7000-8000-000000000001";

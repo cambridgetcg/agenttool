@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, statSync } fr
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildCollabMcpServer } from "../src/mcp.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
 import { ALONE_ADVICE, exactRef, handleOf, NOTE_AUTHORISES, NOTE_CARD, NOTE_CAPABILITIES } from "../src/verbs.js";
 import { COLLAB_PACKAGE_VERSION } from "../src/version.js";

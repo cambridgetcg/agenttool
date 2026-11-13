@@ -6,7 +6,7 @@ import { CollabError } from "../src/errors.js";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import type { CollabEvent, SessionHandle } from "../src/protocol.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 import { handleOf } from "../src/verbs.js";
 
 // collab_inbox (Collab Notes spec 5.2) without the ballot parts, and the

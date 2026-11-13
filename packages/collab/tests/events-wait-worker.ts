@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 const [mode, path, root] = process.argv.slice(2);
 if (!path) throw new Error("fixture database required");

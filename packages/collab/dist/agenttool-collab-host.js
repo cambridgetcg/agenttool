@@ -129,19 +129,9 @@ function isOwnedByCurrentUser(uid) {
   return typeof process.getuid !== "function" || uid === process.getuid();
 }
 
-// src/store.ts
-import { Database } from "bun:sqlite";
-import { createHash as createHash4, randomBytes, randomUUID, timingSafeEqual } from "crypto";
-import {
-  chmodSync as chmodSync3,
-  closeSync as closeSync4,
-  existsSync as existsSync4,
-  lstatSync as lstatSync4,
-  mkdirSync as mkdirSync3,
-  openSync as openSync4,
-  realpathSync as realpathSync2
-} from "fs";
-import { dirname as dirname3, isAbsolute as isAbsolute3, join as join3, posix, resolve as resolve4 } from "path";
+// src/store-notes.ts
+import { randomUUID as randomUUID2 } from "crypto";
+import { realpathSync as realpathSync2 } from "fs";
 
 // src/ballot.ts
 import { createHash } from "crypto";
@@ -1362,6 +1352,19 @@ function removeQuietly(path) {
   } catch {}
 }
 
+// src/store.ts
+import { Database } from "bun:sqlite";
+import { createHash as createHash4, randomBytes, randomUUID, timingSafeEqual } from "crypto";
+import {
+  chmodSync as chmodSync3,
+  closeSync as closeSync4,
+  existsSync as existsSync4,
+  lstatSync as lstatSync4,
+  mkdirSync as mkdirSync3,
+  openSync as openSync4
+} from "fs";
+import { dirname as dirname3, isAbsolute as isAbsolute3, join as join3, posix, resolve as resolve4 } from "path";
+
 // src/passkey.ts
 import { createHash as createHash2, createPublicKey, verify } from "crypto";
 var FLAG_USER_PRESENT = 1;
@@ -2076,7 +2079,7 @@ var V2_GUARD_TRIGGERS = [
   "handoffs_v2_insert_guard"
 ];
 
-class CollabStore {
+class CollabStoreCore {
   db;
   now;
   filesystemPath;
@@ -2125,7 +2128,6 @@ class CollabStore {
       this.db.close();
       throw error;
     }
-    this.sweepRevealedSeals();
   }
   close() {
     this.closed = true;
@@ -4891,23 +4893,6 @@ class CollabStore {
     });
     return transaction.deferred();
   }
-  personDeskProposalViews(workspaceId, proposalIds) {
-    this.requireWorkspace(workspaceId);
-    return this.db.transaction(() => {
-      const sessions = this.noteSessionViews(workspaceId);
-      const context = this.proposalReadContext(workspaceId);
-      return proposalIds.map((proposalId) => {
-        try {
-          this.requireProposalTerms(workspaceId, validateId(proposalId, "proposal_report_id"));
-          return { proposal_report_id: proposalId, view: this.noteProposalData(workspaceId, proposalId, sessions, context) };
-        } catch (error) {
-          if (!(error instanceof CollabError))
-            throw error;
-          return { proposal_report_id: proposalId, error: error.code };
-        }
-      });
-    }).deferred();
-  }
   personInboxSummary() {
     return this.listWorkspaces().map((workspace) => {
       const inbox = this.personInbox(workspace.id);
@@ -7020,6 +7005,846 @@ class CollabStore {
       throw new CollabError("handoff_not_found", `Handoff '${id}' was not found`);
     return handoffFromRow(row);
   }
+  latestReceiptKeyForSession(credential, prefix) {
+    return this.latestReceiptKey(this.authenticateSession(credential), prefix);
+  }
+  latestReceiptKey(session, prefix) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*:$/.test(prefix) || prefix.length > 100) {
+      throw new CollabError("invalid_receipt_prefix", "A receipt prefix is a key prefix ending in ':'");
+    }
+    const upper = `${prefix.slice(0, -1)};`;
+    const row = this.db.query(`
+      SELECT idempotency_key FROM mutations
+      WHERE workspace_id = ? AND actor = ? AND idempotency_key >= ? AND idempotency_key < ?
+      ORDER BY idempotency_key DESC
+      LIMIT 1
+    `).get(session.workspace_id, `session:${session.id}`, prefix, upper);
+    return row?.idempotency_key ?? null;
+  }
+  withReceiptPlan(plan, run) {
+    if (!plan)
+      return run();
+    if (this.ambientReceiptPlan)
+      throw new CollabError("receipt_plan_nested", "A receipt plan is already in force");
+    this.ambientReceiptPlan = plan;
+    try {
+      return run();
+    } finally {
+      this.ambientReceiptPlan = null;
+    }
+  }
+  ambientPlanFor(idempotencyKey) {
+    const plan = this.ambientReceiptPlan;
+    if (!plan)
+      return;
+    return idempotencyKey === plan.key || idempotencyKey.startsWith(`${plan.key}:`) ? plan : undefined;
+  }
+  requireReceiptPlan(session, plan) {
+    const latest = this.latestReceiptKey(session, plan.prefix);
+    if (latest === plan.latest || latest === plan.key || latest !== null && latest.startsWith(`${plan.key}:`))
+      return;
+    throw new CollabError("receipt_plan_stale", "Another call by this session acted on the same entity after this call chose its key; nothing was written");
+  }
+  timestamp() {
+    return this.now().toISOString();
+  }
+}
+function normalizeMutation(input) {
+  return { ...input, actor: validateActor(input.actor), idempotency_key: validateIdempotencyKey(input.idempotency_key) };
+}
+function normalizeVersionedMutation(input) {
+  validateExpectedVersion(input.expected_version);
+  return normalizeMutation(input);
+}
+function normalizeLeaseInput(input) {
+  return {
+    ...normalizeVersionedMutation(input),
+    task_id: validateId(input.task_id, "task_id"),
+    lease_id: validateId(input.lease_id, "lease_id")
+  };
+}
+function validateActor(value) {
+  const actor = cleanText(value, "actor", 200);
+  if (/^person:/i.test(actor)) {
+    throw new CollabError("invalid_actor", "Actor labels beginning with person: are reserved for the person desk");
+  }
+  return actor;
+}
+function derivedActor(prefix, sessionId) {
+  if (prefix === undefined) {
+    throw new CollabError("actor_required", "Supply actor, or actor_prefix to derive one from the new session id");
+  }
+  if (typeof prefix !== "string" || !/^[a-z][a-z0-9-]{0,39}$/.test(prefix)) {
+    throw new CollabError("invalid_actor_prefix", "actor_prefix is 1 to 40 lower-case letters, digits or dashes");
+  }
+  return validateActor(`${prefix}-${sessionId.slice("session_".length, "session_".length + 6)}`);
+}
+var MAX_MODEL_LABEL = 200;
+function validateModelLabel(value) {
+  const model = cleanText(value, "model", MAX_MODEL_LABEL);
+  if (/[\u0000-\u001f\u007f]/.test(model)) {
+    throw new CollabError("invalid_model", "model must be one line of text");
+  }
+  return model;
+}
+function validateExpectedVersion(value) {
+  if (!Number.isInteger(value) || value < 1) {
+    throw new CollabError("invalid_expected_version", "expected_version must be a positive integer");
+  }
+  return value;
+}
+function validateRuntimeKind(value) {
+  const runtime = cleanText(value, "runtime_kind", 64).toLowerCase();
+  if (!/^[a-z0-9][a-z0-9._:-]*$/.test(runtime)) {
+    throw new CollabError("invalid_runtime_kind", "runtime_kind contains unsupported characters");
+  }
+  return runtime;
+}
+function normalizeSessionCapabilities(values) {
+  if (!Array.isArray(values) || values.length > MAX_SESSION_CAPABILITIES) {
+    throw new CollabError("invalid_declared_capabilities", `A session may declare at most ${MAX_SESSION_CAPABILITIES} capabilities`);
+  }
+  const normalized = values.map((value) => {
+    const capability = cleanText(value, "declared_capability", MAX_SESSION_CAPABILITY_LENGTH).toLowerCase();
+    if (!/^[a-z0-9][a-z0-9._:-]*$/.test(capability)) {
+      throw new CollabError("invalid_declared_capability", "Declared capabilities must be symbolic names, not free-form content");
+    }
+    return capability;
+  });
+  return uniqueSorted(normalized);
+}
+function validatePresenceTtl(value) {
+  const ttl = value ?? DEFAULT_PRESENCE_SECONDS;
+  if (!Number.isInteger(ttl) || ttl < 30 || ttl > MAX_PRESENCE_SECONDS) {
+    throw new CollabError("invalid_presence_ttl", `ttl_seconds must be an integer between 30 and ${MAX_PRESENCE_SECONDS}`);
+  }
+  return ttl;
+}
+function validateSessionListLimit(value) {
+  const limit = value ?? DEFAULT_SESSION_LIST_LIMIT;
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_SESSION_LIST_LIMIT) {
+    throw new CollabError("invalid_session_list_limit", `limit must be an integer between 1 and ${MAX_SESSION_LIST_LIMIT}`);
+  }
+  return limit;
+}
+function validateNextEventLimit(value) {
+  const limit = value ?? DEFAULT_NEXT_EVENT_LIMIT;
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_NEXT_EVENT_LIMIT) {
+    throw new CollabError("invalid_event_limit", `event_limit must be an integer between 1 and ${MAX_NEXT_EVENT_LIMIT}`);
+  }
+  return limit;
+}
+var BOUND_AFTER_SEQUENCE_REMEDY = "A bound collab_next always pages from the acknowledged session cursor. Advance it with " + "collab_cursor_ack (next_anchor of the page you processed), or read from any position " + "without acknowledging with collab_events_since (after_sequence or after_anchor).";
+function requireBoundAfterSequence(afterSequence, session) {
+  if (!Number.isInteger(afterSequence) || afterSequence < 0) {
+    throw new CollabError("invalid_cursor", "Event cursor must be a non-negative integer");
+  }
+  if (afterSequence === session.cursor_sequence)
+    return;
+  throw new CollabError("after_sequence_unsupported_in_bound_session", `after_sequence ${afterSequence} differs from this session's acknowledged cursor ` + `(sequence ${session.cursor_sequence}). ${BOUND_AFTER_SEQUENCE_REMEDY}`, {
+    after_sequence: afterSequence,
+    cursor: {
+      epoch_id: session.cursor_epoch_id,
+      sequence: session.cursor_sequence,
+      hash: session.cursor_hash
+    },
+    cursor_version: session.cursor_version,
+    remedy: BOUND_AFTER_SEQUENCE_REMEDY
+  });
+}
+function normalizeSessionRenewInput(input) {
+  if (input.expected_version !== undefined)
+    validateExpectedVersion(input.expected_version);
+  const request = {
+    task_id: validateId(input.task_id, "task_id"),
+    lease_id: validateId(input.lease_id, "lease_id"),
+    ...input.expected_version === undefined ? {} : { expected_version: input.expected_version }
+  };
+  return { ...request, request, idempotency_key: validateIdempotencyKey(input.idempotency_key) };
+}
+function normalizeSessionLeaseInput(input) {
+  const normalized = {
+    idempotency_key: validateIdempotencyKey(input.idempotency_key),
+    task_id: validateId(input.task_id, "task_id"),
+    lease_id: validateId(input.lease_id, "lease_id"),
+    expected_version: validateExpectedVersion(input.expected_version)
+  };
+  return {
+    ...normalized,
+    request: {
+      task_id: normalized.task_id,
+      lease_id: normalized.lease_id,
+      expected_version: normalized.expected_version
+    }
+  };
+}
+function validateIdempotencyKey(value) {
+  const key = cleanText(value, "idempotency_key", 200);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(key)) {
+    throw new CollabError("invalid_idempotency_key", "Idempotency key contains unsupported characters");
+  }
+  return key;
+}
+function validateId(value, field) {
+  const id = cleanText(value, field, 200);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(id)) {
+    throw new CollabError(`invalid_${field}`, `${field} contains unsupported characters`);
+  }
+  return id;
+}
+function cleanText(value, field, max) {
+  const text = value.trim();
+  if (!text)
+    throw new CollabError(`invalid_${field}`, `${field} must not be empty`);
+  if (text.length > max)
+    throw new CollabError(`invalid_${field}`, `${field} exceeds ${max} characters`);
+  if (text.includes("\x00"))
+    throw new CollabError(`invalid_${field}`, `${field} must not contain NUL bytes`);
+  return text;
+}
+function optionalText(value, field, max) {
+  if (value === undefined || value.trim() === "")
+    return null;
+  return cleanText(value, field, max);
+}
+function validateTtl(value) {
+  const ttl = value ?? DEFAULT_LEASE_SECONDS;
+  if (!Number.isInteger(ttl) || ttl < 30 || ttl > MAX_LEASE_SECONDS) {
+    throw new CollabError("invalid_ttl", `ttl_seconds must be an integer between 30 and ${MAX_LEASE_SECONDS}`);
+  }
+  return ttl;
+}
+function validateSha256(value) {
+  const digest = value.toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(digest))
+    throw new CollabError("invalid_sha256", "sha256 must be 64 hexadecimal characters");
+  return digest;
+}
+function validateGitObjectId(value) {
+  const oid = value.toLowerCase();
+  if (!/^[a-f0-9]{40,64}$/.test(oid)) {
+    throw new CollabError("invalid_git_object_id", "Git object IDs must contain 40 to 64 hexadecimal characters");
+  }
+  return oid;
+}
+function validateArtifactKind(value) {
+  if (!["file", "commit", "test", "data", "url", "other"].includes(value)) {
+    throw new CollabError("invalid_artifact_kind", "Unsupported artifact kind");
+  }
+  return value;
+}
+function validateReportKind(value) {
+  if (!["observation", "inference", "proposal", "decision"].includes(value)) {
+    throw new CollabError("invalid_report_kind", "Unsupported report kind");
+  }
+  return value;
+}
+function validateReportConfidence(value) {
+  if (!["high", "medium", "low", "unknown"].includes(value)) {
+    throw new CollabError("invalid_report_confidence", "Unsupported report confidence");
+  }
+  return value;
+}
+function validateReportRelation(value) {
+  if (![
+    "informs",
+    "supports",
+    "challenges",
+    "corrects",
+    "withdraws",
+    "supersedes",
+    "resolves"
+  ].includes(value)) {
+    throw new CollabError("invalid_report_relation", "Unsupported report relation");
+  }
+  return value;
+}
+function normalizeEvidenceRefs(references) {
+  if (!Array.isArray(references) || references.length > MAX_REPORT_REFS) {
+    throw new CollabError("invalid_evidence_refs", `A report may contain at most ${MAX_REPORT_REFS} evidence references`);
+  }
+  return uniqueSorted(references.map((reference) => {
+    if (typeof reference !== "string") {
+      throw invalidEvidenceRef("Evidence references must be strings");
+    }
+    try {
+      return cleanText(reference, "evidence_ref", MAX_REPORT_REF_LENGTH);
+    } catch (error) {
+      if (error instanceof CollabError)
+        throw invalidEvidenceRef(error.message);
+      throw error;
+    }
+  }));
+}
+function invalidEvidenceRef(reason) {
+  return new CollabError("invalid_evidence_ref", `${reason}. ${EVIDENCE_REFS_DESCRIPTION}`, { allowed_prefixes: [...EVIDENCE_REF_PREFIXES] });
+}
+function normalizePathScopes(scopes) {
+  if (!Array.isArray(scopes) || scopes.length > MAX_PATH_SCOPES) {
+    throw new CollabError("invalid_path_scopes", `A task may have at most ${MAX_PATH_SCOPES} path scopes`);
+  }
+  let totalLength = 0;
+  const normalized = scopes.map((scope) => {
+    if (typeof scope !== "string" || !scope || scope.length > MAX_PATH_SCOPE_LENGTH || scope.includes("\x00") || scope.includes("\\") || isAbsolute3(scope)) {
+      throw new CollabError("invalid_path_scope", "Path scopes must be non-empty repository-relative POSIX paths", { scope });
+    }
+    totalLength += scope.length;
+    if (totalLength > MAX_PATH_SCOPES_TOTAL) {
+      throw new CollabError("invalid_path_scopes", `Combined path scopes may not exceed ${MAX_PATH_SCOPES_TOTAL} characters`);
+    }
+    const clean = posix.normalize(scope.replace(/^\.\//, "")).replace(/\/$/, "");
+    if (!clean || clean === "." || clean === ".." || clean.startsWith("../")) {
+      throw new CollabError("invalid_path_scope", "Root-wide and parent path scopes are not allowed", { scope });
+    }
+    return clean;
+  });
+  return uniqueSorted(normalized);
+}
+function normalizeDependencies(dependencies) {
+  if (!Array.isArray(dependencies) || dependencies.length > MAX_DEPENDENCIES) {
+    throw new CollabError("invalid_dependencies", `A task may have at most ${MAX_DEPENDENCIES} dependencies`);
+  }
+  return uniqueSorted(dependencies.map((id) => validateId(id, "dependency")));
+}
+function pathConflicts(left, right) {
+  const conflicts = [];
+  for (const a of left) {
+    for (const b of right) {
+      const leftKey = a.normalize("NFC").toLowerCase();
+      const rightKey = b.normalize("NFC").toLowerCase();
+      if (leftKey === rightKey || leftKey.startsWith(`${rightKey}/`) || rightKey.startsWith(`${leftKey}/`))
+        conflicts.push([a, b]);
+    }
+  }
+  return conflicts;
+}
+function uniqueSorted(values) {
+  return [...new Set(values)].sort();
+}
+function parseStringArray(json) {
+  return JSON.parse(json);
+}
+function artifactFromRow(row) {
+  return { ...row };
+}
+function decisionFromRow(row) {
+  return { ...row };
+}
+function handoffFromRow(row) {
+  return { ...row };
+}
+function eventFromRow(row) {
+  const base = {
+    protocol: row.protocol,
+    workspace_id: row.workspace_id,
+    epoch_id: row.epoch_id,
+    sequence: row.sequence,
+    id: row.id,
+    type: row.type,
+    entity_id: row.entity_id,
+    actor: row.actor,
+    occurred_at: row.occurred_at,
+    payload: JSON.parse(row.payload_json),
+    prev_hash: row.prev_hash,
+    hash: row.hash
+  };
+  return row.protocol === LEGACY_COLLAB_PROTOCOL ? base : { ...base, session_id: row.session_id };
+}
+function eventHash(event) {
+  if (event.protocol === LEGACY_COLLAB_PROTOCOL) {
+    const { hash: _hash2, session_id: _sessionId, ...body2 } = event;
+    return sha2564(canonicalJson(body2));
+  }
+  const { hash: _hash, ...body } = event;
+  return sha2564(canonicalJson(body));
+}
+function verifyEventPage(events, afterSequence, predecessorHash, headSequence, headHash) {
+  if (predecessorHash === null)
+    return false;
+  if (events.length === 0) {
+    return afterSequence === headSequence && predecessorHash === headHash;
+  }
+  let expectedSequence = afterSequence + 1;
+  let previous = predecessorHash;
+  for (const event of events) {
+    if (event.sequence !== expectedSequence || event.prev_hash !== previous)
+      return false;
+    if (event.hash !== eventHash(event))
+      return false;
+    previous = event.hash;
+    expectedSequence += 1;
+  }
+  const lastSequence = events.at(-1)?.sequence ?? afterSequence;
+  return lastSequence !== headSequence || previous === headHash;
+}
+function presenceSessionFromRow(row, observedAt) {
+  const presence = row.left_at ? "left" : observedAt < row.presence_expires_at ? "live" : "stale";
+  return {
+    protocol: COLLAB_SESSION_PROTOCOL,
+    id: row.id,
+    workspace_id: row.workspace_id,
+    epoch_id: row.epoch_id,
+    client_instance_id: row.client_instance_id,
+    actor_label: row.actor_label,
+    actor_key: row.actor_key,
+    runtime_kind: row.runtime_kind,
+    provider_label: row.provider_label,
+    model_label: row.model_label,
+    declared_capabilities: parseStringArray(row.declared_capabilities_json),
+    capability_basis: "self_declared",
+    version: row.version,
+    joined_at: row.joined_at,
+    last_seen_at: row.last_seen_at,
+    presence_expires_at: row.presence_expires_at,
+    presence,
+    left_at: row.left_at
+  };
+}
+function requirePresenceSessionVersion(row, expectedVersion) {
+  if (row.version !== expectedVersion) {
+    throw new CollabError("session_version_conflict", "Presence session version changed", {
+      session_id: row.id,
+      expected_version: expectedVersion,
+      actual_version: row.version
+    });
+  }
+}
+function requireMatchingPresenceSessionJoin(row, input) {
+  const same = row.actor_label === input.actor_label && row.runtime_kind === input.runtime_kind && row.provider_label === input.provider_label && row.model_label === input.model_label && canonicalJson(parseStringArray(row.declared_capabilities_json)) === canonicalJson(input.declared_capabilities);
+  if (!same) {
+    throw new CollabError("session_instance_conflict", "client_instance_id was already joined with different self-declared metadata", { session_id: row.id });
+  }
+}
+function sessionLiveness(row, observedAt) {
+  if (row.status !== "active")
+    return "stale";
+  const age = Date.parse(observedAt) - Date.parse(row.last_seen_at);
+  return age <= SESSION_STALE_AFTER_MS ? "live" : "stale";
+}
+function recoveryRequiredFirst(tasks, isOwn) {
+  const byExpiry = (left, right) => (left.lease_expires_at ?? "").localeCompare(right.lease_expires_at ?? "") || left.id.localeCompare(right.id);
+  const pending = tasks.filter((task) => task.effective_status === "recovery_required");
+  return [
+    ...pending.filter(isOwn).sort(byExpiry),
+    ...pending.filter((task) => !isOwn(task)).sort(byExpiry)
+  ];
+}
+function coordinationSessionFromRow(row, observedAt) {
+  return {
+    id: row.id,
+    workspace_id: row.workspace_id,
+    worktree_id: row.worktree_id,
+    actor: row.actor,
+    role: row.role,
+    parent_session_id: row.parent_session_id,
+    status: row.status,
+    generation: row.generation,
+    joined_at: row.joined_at,
+    last_seen_at: row.last_seen_at,
+    ended_at: row.ended_at,
+    cursor: {
+      epoch_id: row.cursor_epoch_id,
+      sequence: row.cursor_sequence,
+      hash: row.cursor_hash
+    },
+    cursor_version: row.cursor_version,
+    reset_generation: row.reset_generation,
+    cursor_recovery_required: row.cursor_recovery_required !== 0,
+    liveness: sessionLiveness(row, observedAt)
+  };
+}
+function worktreeFromRow(row) {
+  return {
+    id: row.id,
+    workspace_id: row.workspace_id,
+    root_path: row.root_path,
+    repository_key: row.repository_key,
+    git_common_dir_hash: row.git_common_dir_hash,
+    branch: row.branch,
+    head_sha: row.head_sha,
+    dirty: sqlToBoolean(row.dirty),
+    registered_at: row.registered_at,
+    last_seen_at: row.last_seen_at
+  };
+}
+function checkpointFromWorktreeRow(row, capturedAt) {
+  return {
+    worktree_id: row.id,
+    head_sha: row.head_sha,
+    branch: row.branch,
+    dirty: sqlToBoolean(row.dirty),
+    captured_at: capturedAt
+  };
+}
+function reportFromRow(row) {
+  return {
+    id: row.id,
+    workspace_id: row.workspace_id,
+    task_id: row.task_id,
+    from_session_id: row.from_session_id,
+    from_actor: row.from_actor,
+    to_session_id: row.to_session_id,
+    kind: row.kind,
+    body: row.body,
+    evidence_refs: parseStringArray(row.evidence_refs_json),
+    confidence: row.confidence,
+    confidence_basis: row.confidence_basis,
+    limits: row.limits,
+    relation: row.relation,
+    target_report_id: row.target_report_id,
+    authority_scope: row.authority_scope,
+    authority_basis: row.authority_basis,
+    created_at: row.created_at,
+    event_sequence: row.event_sequence
+  };
+}
+function reviewFromRow(row) {
+  return { ...row };
+}
+function proposalTermsFromRow(row) {
+  if (row.rule !== CONSENT_RULE) {
+    throw new CollabError("proposal_rule_unsupported", "This proposal was opened under a consent rule this package does not implement", { proposal_report_id: row.report_id, rule: row.rule });
+  }
+  return {
+    report_id: row.report_id,
+    workspace_id: row.workspace_id,
+    rule: CONSENT_RULE,
+    criteria: row.criteria,
+    extent: row.extent,
+    known_conflicts: row.known_conflicts,
+    origin: row.origin,
+    topic: row.topic,
+    closes_at: row.closes_at,
+    voices: JSON.parse(row.voices_json),
+    author_voice_id: row.author_voice_id,
+    proposal_sha256: row.proposal_sha256,
+    opened_event_id: row.opened_event_id,
+    created_at: row.created_at
+  };
+}
+function proposalPersonActFromRow(row) {
+  const { ai_snapshot_json, proof_json, ...rest } = row;
+  return {
+    ...rest,
+    ai_snapshot: JSON.parse(ai_snapshot_json),
+    proof: proof_json ? JSON.parse(proof_json) : null
+  };
+}
+var MAX_INBOX_SCAN = 500;
+var MAX_INBOX_PROPOSALS = 50;
+function aiSnapshotOf(status) {
+  return {
+    position: status.ai.position,
+    closed: status.ai.closed,
+    qualifying_support_report_ids: status.ai.qualifying_support_report_ids,
+    unresolved_challenge_report_ids: status.ai.unresolved_challenge_report_ids
+  };
+}
+function normalizeActReason(act, reason) {
+  if (act === "agree") {
+    if (reason !== undefined && reason.trim() !== "") {
+      throw new CollabError("invalid_reason", "An agreement takes no reason");
+    }
+    return null;
+  }
+  return cleanText(reason ?? "", "reason", 2000);
+}
+var PERSON_DESK_ACTOR = "person:desk";
+var PERSON_TERMINAL_ACTOR = "person:terminal";
+var PERSON_PASSKEY_ACTOR = "person:passkey";
+var PERSON_VOICE_ID = "person";
+var PERSON_DESK_LIMITS = "Written at the person desk, which does not authenticate the person.";
+function validatePersonAct(value) {
+  if (value !== "agree" && value !== "reject") {
+    throw new CollabError("invalid_act", "act must be agree or reject");
+  }
+  return value;
+}
+function normalizeProposalTerms(input) {
+  return {
+    question: cleanText(input.question, "question", MAX_REPORT_BODY),
+    criteria: cleanText(input.criteria, "criteria", 4000),
+    extent: cleanText(input.extent, "extent", 1000),
+    known_conflicts: optionalText(input.known_conflicts, "known_conflicts", 4000),
+    evidence_refs: normalizeEvidenceRefs(input.evidence_refs ?? []),
+    topic: optionalText(input.topic, "topic", 200),
+    consult_seconds: validateConsultSeconds(input.consult_seconds)
+  };
+}
+function validateProposalOrigin(value) {
+  if (value !== "ai" && value !== "person_relayed") {
+    throw new CollabError("invalid_origin", "origin must be ai or person_relayed");
+  }
+  return value;
+}
+function validateConsultSeconds(value) {
+  const seconds = value ?? DEFAULT_PROPOSAL_CONSULT_SECONDS;
+  if (!Number.isInteger(seconds) || seconds < MIN_PROPOSAL_CONSULT_SECONDS || seconds > MAX_PROPOSAL_CONSULT_SECONDS) {
+    throw new CollabError("invalid_consult_seconds", `consult_seconds must be an integer between ${MIN_PROPOSAL_CONSULT_SECONDS} and ${MAX_PROPOSAL_CONSULT_SECONDS}`);
+  }
+  return seconds;
+}
+function parseCheckpoint(json) {
+  return json ? JSON.parse(json) : null;
+}
+function checkpointDigest(checkpoint) {
+  return sha2564(canonicalJson(checkpoint));
+}
+function checkpointStateMatches(left, right) {
+  return left.worktree_id === right.worktree_id && left.head_sha === right.head_sha && left.branch === right.branch && left.algorithm === right.algorithm && left.index_sha256 === right.index_sha256 && left.state_sha256 === right.state_sha256 && left.dirty === right.dirty;
+}
+function requireCompleteGitCheckpoint(checkpoint) {
+  if (checkpoint.source !== "server_observed" || checkpoint.algorithm !== "git-state/v1" || checkpoint.head_sha === null || checkpoint.dirty === null || typeof checkpoint.index_sha256 !== "string" || !/^[a-f0-9]{64}$/.test(checkpoint.index_sha256) || typeof checkpoint.state_sha256 !== "string" || !/^[a-f0-9]{64}$/.test(checkpoint.state_sha256)) {
+    throw new CollabError("git_checkpoint_incomplete", "Acceptance requires a complete server-observed Git checkpoint", { worktree_id: checkpoint.worktree_id });
+  }
+}
+function artifactRepositoryPath(uri, rootPath) {
+  let value = uri;
+  if (value.startsWith("file:")) {
+    try {
+      const url = new URL(value);
+      if (url.protocol !== "file:" || url.hostname !== "" && url.hostname !== "localhost") {
+        return null;
+      }
+      value = decodeURIComponent(url.pathname);
+    } catch {
+      return null;
+    }
+  }
+  if (!value || value.includes("\x00") || value.includes("\\"))
+    return null;
+  let relative2;
+  if (isAbsolute3(value)) {
+    const absolute = posix.normalize(value);
+    if (!absolute.startsWith(`${rootPath}/`))
+      return null;
+    relative2 = absolute.slice(rootPath.length + 1);
+  } else {
+    relative2 = posix.normalize(value);
+  }
+  if (!relative2 || relative2 === "." || relative2 === ".." || relative2.startsWith("../") || relative2.endsWith("/") || relative2 === ".git" || relative2.startsWith(".git/"))
+    return null;
+  return relative2;
+}
+function pathWithinScopes(path, scopes) {
+  return scopes.some((scope) => path === scope || path.startsWith(`${scope}/`));
+}
+function gitCheckpointStaleError(taskId, result, observed, refusal) {
+  const branch = result.branch ? `"${result.branch}"` : "(none: its HEAD was detached)";
+  const remedy = `Two ways forward. (1) Host commit: exactly one commit on branch ${branch} whose only parent ` + `is the result checkpoint HEAD ${result.head_sha}, changing only paths inside the task's ` + "path_scopes, each byte-equal to the newest file artifact this task attached for that uri " + "(since its latest request_changes), with the worktree left clean; then review again. " + `(2) Re-completion: review task "${taskId}" with outcome "request_changes"; once it is ` + "claimed again, collab_task_complete captures a fresh result checkpoint for a new review. " + "Never amend, reset or rewrite a shared branch to meet (1): if other commits already sit " + "on it, use (2).";
+  return new CollabError("git_checkpoint_stale", `The completion worktree changed after its result checkpoint was captured: ${refusal}. ${remedy}`, {
+    result_checkpoint: result,
+    observed_checkpoint: observed,
+    boundary: "checkpoint_validation_is_a_local_observation_not_an_atomic_git_sqlite_lock",
+    host_commit_refusal: refusal,
+    remedy
+  });
+}
+function hydrateLegacyMutationResponse(value, now) {
+  if (Array.isArray(value)) {
+    return value.map((item) => hydrateLegacyMutationResponse(item, now));
+  }
+  if (!isRecordValue(value))
+    return value;
+  const hydratedEntries = Object.entries(value).map(([key, item]) => [
+    key,
+    hydrateLegacyMutationResponse(item, now)
+  ]);
+  const hydrated = Object.fromEntries(hydratedEntries);
+  if (typeof hydrated.id !== "string" || typeof hydrated.workspace_id !== "string" || !["open", "claimed", "blocked", "completed"].includes(typeof hydrated.status === "string" ? hydrated.status : "") || !Array.isArray(hydrated.dependencies) || !Array.isArray(hydrated.path_scopes) || !Number.isInteger(hydrated.version)) {
+    return hydrated;
+  }
+  const expired = hydrated.status === "claimed" && typeof hydrated.lease_expires_at === "string" && now >= hydrated.lease_expires_at;
+  return {
+    ...hydrated,
+    effective_status: typeof hydrated.effective_status === "string" ? hydrated.effective_status : expired ? "lease_expired" : hydrated.status,
+    work_mode: typeof hydrated.work_mode === "string" ? hydrated.work_mode : "coordination",
+    completion_policy: typeof hydrated.completion_policy === "string" ? hydrated.completion_policy : "reported",
+    review_status: typeof hydrated.review_status === "string" ? hydrated.review_status : "legacy_unreviewed",
+    expected_base_sha: hydrated.expected_base_sha ?? null,
+    base_checkpoint: hydrated.base_checkpoint ?? null,
+    base_checkpoint_digest: hydratedCheckpointDigest(hydrated.base_checkpoint_digest, hydrated.base_checkpoint),
+    result_checkpoint: hydrated.result_checkpoint ?? null,
+    result_checkpoint_digest: hydratedCheckpointDigest(hydrated.result_checkpoint_digest, hydrated.result_checkpoint),
+    completion_report_id: hydrated.completion_report_id ?? null,
+    assignee_session_id: hydrated.assignee_session_id ?? null,
+    assignee_liveness: hydrated.assignee_liveness ?? null,
+    claim_worktree_id: hydrated.claim_worktree_id ?? null,
+    reported_by: hydrated.reported_by ?? null,
+    reported_by_session_id: hydrated.reported_by_session_id ?? null,
+    reported_at: hydrated.reported_at ?? null,
+    accepted_by: hydrated.accepted_by ?? null,
+    accepted_by_session_id: hydrated.accepted_by_session_id ?? null,
+    accepted_at: hydrated.accepted_at ?? null,
+    review_requested_session_id: hydrated.review_requested_session_id ?? null
+  };
+}
+function hydratedCheckpointDigest(stored, checkpoint) {
+  if (typeof stored === "string")
+    return stored;
+  return isRecordValue(checkpoint) ? checkpointDigest(checkpoint) : null;
+}
+function isRecordValue(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function booleanToSql(value) {
+  return value === null ? null : value ? 1 : 0;
+}
+function sqlToBoolean(value) {
+  return value === null ? null : value !== 0;
+}
+function hashSessionToken(token) {
+  return sha2564(`agenttool.collab/session-token/v1\x00${token}`);
+}
+function safeDigestEqual(left, right) {
+  const leftBuffer = Buffer.from(left, "hex");
+  const rightBuffer = Buffer.from(right, "hex");
+  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+}
+function pragmaNumber(db, name) {
+  const row = db.query(`PRAGMA ${name}`).get();
+  const value = row?.[name];
+  if (!Number.isInteger(value)) {
+    throw new CollabError("database_pragma_unavailable", `Could not read PRAGMA ${name}`);
+  }
+  return value;
+}
+function retrySqliteBusy(operation) {
+  const deadline = Date.now() + SQLITE_BUSY_RETRY_MS;
+  let delay = 10;
+  while (true) {
+    try {
+      operation();
+      return;
+    } catch (error) {
+      const code = error.code;
+      const busy = code === "SQLITE_BUSY" || error instanceof Error && /database is (?:locked|busy)/i.test(error.message);
+      if (!busy || Date.now() >= deadline)
+        throw error;
+      const remaining = deadline - Date.now();
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.min(delay, remaining));
+      delay = Math.min(delay * 2, 100);
+    }
+  }
+}
+function assertSafeDatabaseFile(path) {
+  const stat = lstatSync4(path);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || typeof process.getuid === "function" && stat.uid !== process.getuid()) {
+    throw new CollabError("database_file_unsafe", "The collaboration database path must be a non-linked regular file owned by this user", { path });
+  }
+}
+function quoteIdentifier(value) {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {
+    throw new CollabError("invalid_sql_identifier", "Invalid internal SQL identifier");
+  }
+  return `"${value}"`;
+}
+function assertDistinctLegacyWorktreeIdentities(workspaces) {
+  const selectors = [
+    {
+      field: "worktrees.root_path",
+      value: (workspace) => workspace.identity.root_path
+    },
+    {
+      field: "worktrees.id",
+      value: (workspace) => workspace.identity.checkpoint.worktree_id
+    },
+    {
+      field: "worktrees.fingerprint",
+      value: (workspace) => workspace.identity.worktree_fingerprint
+    }
+  ];
+  const collisions = [];
+  for (const selector of selectors) {
+    const groups = new Map;
+    for (const workspace of workspaces) {
+      const value = selector.value(workspace);
+      const workspaceIds2 = groups.get(value) ?? [];
+      workspaceIds2.push(workspace.id);
+      groups.set(value, workspaceIds2);
+    }
+    for (const workspaceIds2 of groups.values()) {
+      if (workspaceIds2.length < 2)
+        continue;
+      collisions.push({
+        field: selector.field,
+        workspace_ids: workspaceIds2.sort()
+      });
+    }
+  }
+  if (collisions.length === 0)
+    return;
+  collisions.sort((left, right) => {
+    const fieldOrder = left.field < right.field ? -1 : left.field > right.field ? 1 : 0;
+    if (fieldOrder !== 0)
+      return fieldOrder;
+    const leftIds = left.workspace_ids.join("\x00");
+    const rightIds = right.workspace_ids.join("\x00");
+    return leftIds < rightIds ? -1 : leftIds > rightIds ? 1 : 0;
+  });
+  const workspaceIds = [
+    ...new Set(collisions.flatMap((collision) => collision.workspace_ids))
+  ].sort();
+  throw new CollabError("migration_identity_collision", "Legacy workspaces resolve to the same worktree identity; migration will not merge distinct journals", {
+    workspace_ids: workspaceIds,
+    collisions,
+    boundary: "v0_3_will_not_merge_distinct_legacy_journals_that_resolve_to_one_worktree",
+    required_action: "keep_the_original_audit_database_and_use_a_compatible_v0_2_client_or_choose_a_fresh_v0_3_database"
+  });
+}
+function safeRepositoryIdentity(rootPath) {
+  try {
+    return inspectRepository(rootPath);
+  } catch {
+    const root = resolve4(rootPath);
+    const repositoryKey = `local-path:${sha2564(root)}`;
+    const worktreeId2 = `wt_${sha2564(`${root}\x00path:${root}`).slice(0, 24)}`;
+    return {
+      requested_root_path: root,
+      root_path: root,
+      repository_key: repositoryKey,
+      git_common_dir_hash: null,
+      worktree_fingerprint: `path:${sha2564(root)}`,
+      checkpoint: {
+        worktree_id: worktreeId2,
+        head_sha: null,
+        branch: null,
+        dirty: null,
+        captured_at: new Date().toISOString()
+      }
+    };
+  }
+}
+function sha2564(value) {
+  return createHash4("sha256").update(value).digest("hex");
+}
+function addSeconds(iso, seconds) {
+  return new Date(new Date(iso).getTime() + seconds * 1000).toISOString();
+}
+
+// src/store-notes.ts
+class CollabStore extends CollabStoreCore {
+  constructor(path, options = {}) {
+    super(path, options);
+    this.sweepRevealedSeals();
+  }
+  personDeskProposalViews(workspaceId, proposalIds) {
+    this.requireWorkspace(workspaceId);
+    return this.db.transaction(() => {
+      const sessions = this.noteSessionViews(workspaceId);
+      const context = this.proposalReadContext(workspaceId);
+      return proposalIds.map((proposalId) => {
+        try {
+          this.requireProposalTerms(workspaceId, validateId(proposalId, "proposal_report_id"));
+          return { proposal_report_id: proposalId, view: this.noteProposalData(workspaceId, proposalId, sessions, context) };
+        } catch (error) {
+          if (!(error instanceof CollabError))
+            throw error;
+          return { proposal_report_id: proposalId, error: error.code };
+        }
+      });
+    }).deferred();
+  }
   noteSessionViews(workspaceId) {
     this.requireWorkspace(workspaceId);
     const rows = this.db.query(`
@@ -7142,7 +7967,7 @@ class CollabStore {
     if (hasFiles && cite.worktree_id !== session.worktree_id) {
       throw new CollabError("cite_worktree_mismatch", "File evidence is cited against the citing session's own worktree");
     }
-    const citeId = `cite_${randomUUID()}`;
+    const citeId = `cite_${randomUUID2()}`;
     const payload = {
       cite_id: citeId,
       by_session_id: session.id,
@@ -7296,46 +8121,6 @@ class CollabStore {
     if (!row)
       return { found: false };
     return { found: true, operation: row.operation, value: JSON.parse(row.response_json) };
-  }
-  latestReceiptKeyForSession(credential, prefix) {
-    return this.latestReceiptKey(this.authenticateSession(credential), prefix);
-  }
-  latestReceiptKey(session, prefix) {
-    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*:$/.test(prefix) || prefix.length > 100) {
-      throw new CollabError("invalid_receipt_prefix", "A receipt prefix is a key prefix ending in ':'");
-    }
-    const upper = `${prefix.slice(0, -1)};`;
-    const row = this.db.query(`
-      SELECT idempotency_key FROM mutations
-      WHERE workspace_id = ? AND actor = ? AND idempotency_key >= ? AND idempotency_key < ?
-      ORDER BY idempotency_key DESC
-      LIMIT 1
-    `).get(session.workspace_id, `session:${session.id}`, prefix, upper);
-    return row?.idempotency_key ?? null;
-  }
-  withReceiptPlan(plan, run) {
-    if (!plan)
-      return run();
-    if (this.ambientReceiptPlan)
-      throw new CollabError("receipt_plan_nested", "A receipt plan is already in force");
-    this.ambientReceiptPlan = plan;
-    try {
-      return run();
-    } finally {
-      this.ambientReceiptPlan = null;
-    }
-  }
-  ambientPlanFor(idempotencyKey) {
-    const plan = this.ambientReceiptPlan;
-    if (!plan)
-      return;
-    return idempotencyKey === plan.key || idempotencyKey.startsWith(`${plan.key}:`) ? plan : undefined;
-  }
-  requireReceiptPlan(session, plan) {
-    const latest = this.latestReceiptKey(session, plan.prefix);
-    if (latest === plan.latest || latest === plan.key || latest !== null && latest.startsWith(`${plan.key}:`))
-      return;
-    throw new CollabError("receipt_plan_stale", "Another call by this session acted on the same entity after this call chose its key; nothing was written");
   }
   initNoteMark(credential, sequence) {
     const marked = this.db.transaction(() => {
@@ -9154,490 +9939,6 @@ class CollabStore {
       throw new CollabError("event_not_found", `No event at sequence ${sequence}`);
     return row.id;
   }
-  timestamp() {
-    return this.now().toISOString();
-  }
-}
-function normalizeMutation(input) {
-  return { ...input, actor: validateActor(input.actor), idempotency_key: validateIdempotencyKey(input.idempotency_key) };
-}
-function normalizeVersionedMutation(input) {
-  validateExpectedVersion(input.expected_version);
-  return normalizeMutation(input);
-}
-function normalizeLeaseInput(input) {
-  return {
-    ...normalizeVersionedMutation(input),
-    task_id: validateId(input.task_id, "task_id"),
-    lease_id: validateId(input.lease_id, "lease_id")
-  };
-}
-function validateActor(value) {
-  const actor = cleanText(value, "actor", 200);
-  if (/^person:/i.test(actor)) {
-    throw new CollabError("invalid_actor", "Actor labels beginning with person: are reserved for the person desk");
-  }
-  return actor;
-}
-function derivedActor(prefix, sessionId) {
-  if (prefix === undefined) {
-    throw new CollabError("actor_required", "Supply actor, or actor_prefix to derive one from the new session id");
-  }
-  if (typeof prefix !== "string" || !/^[a-z][a-z0-9-]{0,39}$/.test(prefix)) {
-    throw new CollabError("invalid_actor_prefix", "actor_prefix is 1 to 40 lower-case letters, digits or dashes");
-  }
-  return validateActor(`${prefix}-${sessionId.slice("session_".length, "session_".length + 6)}`);
-}
-var MAX_MODEL_LABEL = 200;
-function validateModelLabel(value) {
-  const model = cleanText(value, "model", MAX_MODEL_LABEL);
-  if (/[\u0000-\u001f\u007f]/.test(model)) {
-    throw new CollabError("invalid_model", "model must be one line of text");
-  }
-  return model;
-}
-function validateExpectedVersion(value) {
-  if (!Number.isInteger(value) || value < 1) {
-    throw new CollabError("invalid_expected_version", "expected_version must be a positive integer");
-  }
-  return value;
-}
-function validateRuntimeKind(value) {
-  const runtime = cleanText(value, "runtime_kind", 64).toLowerCase();
-  if (!/^[a-z0-9][a-z0-9._:-]*$/.test(runtime)) {
-    throw new CollabError("invalid_runtime_kind", "runtime_kind contains unsupported characters");
-  }
-  return runtime;
-}
-function normalizeSessionCapabilities(values) {
-  if (!Array.isArray(values) || values.length > MAX_SESSION_CAPABILITIES) {
-    throw new CollabError("invalid_declared_capabilities", `A session may declare at most ${MAX_SESSION_CAPABILITIES} capabilities`);
-  }
-  const normalized = values.map((value) => {
-    const capability = cleanText(value, "declared_capability", MAX_SESSION_CAPABILITY_LENGTH).toLowerCase();
-    if (!/^[a-z0-9][a-z0-9._:-]*$/.test(capability)) {
-      throw new CollabError("invalid_declared_capability", "Declared capabilities must be symbolic names, not free-form content");
-    }
-    return capability;
-  });
-  return uniqueSorted(normalized);
-}
-function validatePresenceTtl(value) {
-  const ttl = value ?? DEFAULT_PRESENCE_SECONDS;
-  if (!Number.isInteger(ttl) || ttl < 30 || ttl > MAX_PRESENCE_SECONDS) {
-    throw new CollabError("invalid_presence_ttl", `ttl_seconds must be an integer between 30 and ${MAX_PRESENCE_SECONDS}`);
-  }
-  return ttl;
-}
-function validateSessionListLimit(value) {
-  const limit = value ?? DEFAULT_SESSION_LIST_LIMIT;
-  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_SESSION_LIST_LIMIT) {
-    throw new CollabError("invalid_session_list_limit", `limit must be an integer between 1 and ${MAX_SESSION_LIST_LIMIT}`);
-  }
-  return limit;
-}
-function validateNextEventLimit(value) {
-  const limit = value ?? DEFAULT_NEXT_EVENT_LIMIT;
-  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_NEXT_EVENT_LIMIT) {
-    throw new CollabError("invalid_event_limit", `event_limit must be an integer between 1 and ${MAX_NEXT_EVENT_LIMIT}`);
-  }
-  return limit;
-}
-var BOUND_AFTER_SEQUENCE_REMEDY = "A bound collab_next always pages from the acknowledged session cursor. Advance it with " + "collab_cursor_ack (next_anchor of the page you processed), or read from any position " + "without acknowledging with collab_events_since (after_sequence or after_anchor).";
-function requireBoundAfterSequence(afterSequence, session) {
-  if (!Number.isInteger(afterSequence) || afterSequence < 0) {
-    throw new CollabError("invalid_cursor", "Event cursor must be a non-negative integer");
-  }
-  if (afterSequence === session.cursor_sequence)
-    return;
-  throw new CollabError("after_sequence_unsupported_in_bound_session", `after_sequence ${afterSequence} differs from this session's acknowledged cursor ` + `(sequence ${session.cursor_sequence}). ${BOUND_AFTER_SEQUENCE_REMEDY}`, {
-    after_sequence: afterSequence,
-    cursor: {
-      epoch_id: session.cursor_epoch_id,
-      sequence: session.cursor_sequence,
-      hash: session.cursor_hash
-    },
-    cursor_version: session.cursor_version,
-    remedy: BOUND_AFTER_SEQUENCE_REMEDY
-  });
-}
-function normalizeSessionRenewInput(input) {
-  if (input.expected_version !== undefined)
-    validateExpectedVersion(input.expected_version);
-  const request = {
-    task_id: validateId(input.task_id, "task_id"),
-    lease_id: validateId(input.lease_id, "lease_id"),
-    ...input.expected_version === undefined ? {} : { expected_version: input.expected_version }
-  };
-  return { ...request, request, idempotency_key: validateIdempotencyKey(input.idempotency_key) };
-}
-function normalizeSessionLeaseInput(input) {
-  const normalized = {
-    idempotency_key: validateIdempotencyKey(input.idempotency_key),
-    task_id: validateId(input.task_id, "task_id"),
-    lease_id: validateId(input.lease_id, "lease_id"),
-    expected_version: validateExpectedVersion(input.expected_version)
-  };
-  return {
-    ...normalized,
-    request: {
-      task_id: normalized.task_id,
-      lease_id: normalized.lease_id,
-      expected_version: normalized.expected_version
-    }
-  };
-}
-function validateIdempotencyKey(value) {
-  const key = cleanText(value, "idempotency_key", 200);
-  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(key)) {
-    throw new CollabError("invalid_idempotency_key", "Idempotency key contains unsupported characters");
-  }
-  return key;
-}
-function validateId(value, field) {
-  const id = cleanText(value, field, 200);
-  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(id)) {
-    throw new CollabError(`invalid_${field}`, `${field} contains unsupported characters`);
-  }
-  return id;
-}
-function cleanText(value, field, max) {
-  const text = value.trim();
-  if (!text)
-    throw new CollabError(`invalid_${field}`, `${field} must not be empty`);
-  if (text.length > max)
-    throw new CollabError(`invalid_${field}`, `${field} exceeds ${max} characters`);
-  if (text.includes("\x00"))
-    throw new CollabError(`invalid_${field}`, `${field} must not contain NUL bytes`);
-  return text;
-}
-function optionalText(value, field, max) {
-  if (value === undefined || value.trim() === "")
-    return null;
-  return cleanText(value, field, max);
-}
-function validateTtl(value) {
-  const ttl = value ?? DEFAULT_LEASE_SECONDS;
-  if (!Number.isInteger(ttl) || ttl < 30 || ttl > MAX_LEASE_SECONDS) {
-    throw new CollabError("invalid_ttl", `ttl_seconds must be an integer between 30 and ${MAX_LEASE_SECONDS}`);
-  }
-  return ttl;
-}
-function validateSha256(value) {
-  const digest = value.toLowerCase();
-  if (!/^[a-f0-9]{64}$/.test(digest))
-    throw new CollabError("invalid_sha256", "sha256 must be 64 hexadecimal characters");
-  return digest;
-}
-function validateGitObjectId(value) {
-  const oid = value.toLowerCase();
-  if (!/^[a-f0-9]{40,64}$/.test(oid)) {
-    throw new CollabError("invalid_git_object_id", "Git object IDs must contain 40 to 64 hexadecimal characters");
-  }
-  return oid;
-}
-function validateArtifactKind(value) {
-  if (!["file", "commit", "test", "data", "url", "other"].includes(value)) {
-    throw new CollabError("invalid_artifact_kind", "Unsupported artifact kind");
-  }
-  return value;
-}
-function validateReportKind(value) {
-  if (!["observation", "inference", "proposal", "decision"].includes(value)) {
-    throw new CollabError("invalid_report_kind", "Unsupported report kind");
-  }
-  return value;
-}
-function validateReportConfidence(value) {
-  if (!["high", "medium", "low", "unknown"].includes(value)) {
-    throw new CollabError("invalid_report_confidence", "Unsupported report confidence");
-  }
-  return value;
-}
-function validateReportRelation(value) {
-  if (![
-    "informs",
-    "supports",
-    "challenges",
-    "corrects",
-    "withdraws",
-    "supersedes",
-    "resolves"
-  ].includes(value)) {
-    throw new CollabError("invalid_report_relation", "Unsupported report relation");
-  }
-  return value;
-}
-function normalizeEvidenceRefs(references) {
-  if (!Array.isArray(references) || references.length > MAX_REPORT_REFS) {
-    throw new CollabError("invalid_evidence_refs", `A report may contain at most ${MAX_REPORT_REFS} evidence references`);
-  }
-  return uniqueSorted(references.map((reference) => {
-    if (typeof reference !== "string") {
-      throw invalidEvidenceRef("Evidence references must be strings");
-    }
-    try {
-      return cleanText(reference, "evidence_ref", MAX_REPORT_REF_LENGTH);
-    } catch (error) {
-      if (error instanceof CollabError)
-        throw invalidEvidenceRef(error.message);
-      throw error;
-    }
-  }));
-}
-function invalidEvidenceRef(reason) {
-  return new CollabError("invalid_evidence_ref", `${reason}. ${EVIDENCE_REFS_DESCRIPTION}`, { allowed_prefixes: [...EVIDENCE_REF_PREFIXES] });
-}
-function normalizePathScopes(scopes) {
-  if (!Array.isArray(scopes) || scopes.length > MAX_PATH_SCOPES) {
-    throw new CollabError("invalid_path_scopes", `A task may have at most ${MAX_PATH_SCOPES} path scopes`);
-  }
-  let totalLength = 0;
-  const normalized = scopes.map((scope) => {
-    if (typeof scope !== "string" || !scope || scope.length > MAX_PATH_SCOPE_LENGTH || scope.includes("\x00") || scope.includes("\\") || isAbsolute3(scope)) {
-      throw new CollabError("invalid_path_scope", "Path scopes must be non-empty repository-relative POSIX paths", { scope });
-    }
-    totalLength += scope.length;
-    if (totalLength > MAX_PATH_SCOPES_TOTAL) {
-      throw new CollabError("invalid_path_scopes", `Combined path scopes may not exceed ${MAX_PATH_SCOPES_TOTAL} characters`);
-    }
-    const clean = posix.normalize(scope.replace(/^\.\//, "")).replace(/\/$/, "");
-    if (!clean || clean === "." || clean === ".." || clean.startsWith("../")) {
-      throw new CollabError("invalid_path_scope", "Root-wide and parent path scopes are not allowed", { scope });
-    }
-    return clean;
-  });
-  return uniqueSorted(normalized);
-}
-function normalizeDependencies(dependencies) {
-  if (!Array.isArray(dependencies) || dependencies.length > MAX_DEPENDENCIES) {
-    throw new CollabError("invalid_dependencies", `A task may have at most ${MAX_DEPENDENCIES} dependencies`);
-  }
-  return uniqueSorted(dependencies.map((id) => validateId(id, "dependency")));
-}
-function pathConflicts(left, right) {
-  const conflicts = [];
-  for (const a of left) {
-    for (const b of right) {
-      const leftKey = a.normalize("NFC").toLowerCase();
-      const rightKey = b.normalize("NFC").toLowerCase();
-      if (leftKey === rightKey || leftKey.startsWith(`${rightKey}/`) || rightKey.startsWith(`${leftKey}/`))
-        conflicts.push([a, b]);
-    }
-  }
-  return conflicts;
-}
-function uniqueSorted(values) {
-  return [...new Set(values)].sort();
-}
-function parseStringArray(json) {
-  return JSON.parse(json);
-}
-function artifactFromRow(row) {
-  return { ...row };
-}
-function decisionFromRow(row) {
-  return { ...row };
-}
-function handoffFromRow(row) {
-  return { ...row };
-}
-function eventFromRow(row) {
-  const base = {
-    protocol: row.protocol,
-    workspace_id: row.workspace_id,
-    epoch_id: row.epoch_id,
-    sequence: row.sequence,
-    id: row.id,
-    type: row.type,
-    entity_id: row.entity_id,
-    actor: row.actor,
-    occurred_at: row.occurred_at,
-    payload: JSON.parse(row.payload_json),
-    prev_hash: row.prev_hash,
-    hash: row.hash
-  };
-  return row.protocol === LEGACY_COLLAB_PROTOCOL ? base : { ...base, session_id: row.session_id };
-}
-function eventHash(event) {
-  if (event.protocol === LEGACY_COLLAB_PROTOCOL) {
-    const { hash: _hash2, session_id: _sessionId, ...body2 } = event;
-    return sha2564(canonicalJson(body2));
-  }
-  const { hash: _hash, ...body } = event;
-  return sha2564(canonicalJson(body));
-}
-function verifyEventPage(events, afterSequence, predecessorHash, headSequence, headHash) {
-  if (predecessorHash === null)
-    return false;
-  if (events.length === 0) {
-    return afterSequence === headSequence && predecessorHash === headHash;
-  }
-  let expectedSequence = afterSequence + 1;
-  let previous = predecessorHash;
-  for (const event of events) {
-    if (event.sequence !== expectedSequence || event.prev_hash !== previous)
-      return false;
-    if (event.hash !== eventHash(event))
-      return false;
-    previous = event.hash;
-    expectedSequence += 1;
-  }
-  const lastSequence = events.at(-1)?.sequence ?? afterSequence;
-  return lastSequence !== headSequence || previous === headHash;
-}
-function presenceSessionFromRow(row, observedAt) {
-  const presence = row.left_at ? "left" : observedAt < row.presence_expires_at ? "live" : "stale";
-  return {
-    protocol: COLLAB_SESSION_PROTOCOL,
-    id: row.id,
-    workspace_id: row.workspace_id,
-    epoch_id: row.epoch_id,
-    client_instance_id: row.client_instance_id,
-    actor_label: row.actor_label,
-    actor_key: row.actor_key,
-    runtime_kind: row.runtime_kind,
-    provider_label: row.provider_label,
-    model_label: row.model_label,
-    declared_capabilities: parseStringArray(row.declared_capabilities_json),
-    capability_basis: "self_declared",
-    version: row.version,
-    joined_at: row.joined_at,
-    last_seen_at: row.last_seen_at,
-    presence_expires_at: row.presence_expires_at,
-    presence,
-    left_at: row.left_at
-  };
-}
-function requirePresenceSessionVersion(row, expectedVersion) {
-  if (row.version !== expectedVersion) {
-    throw new CollabError("session_version_conflict", "Presence session version changed", {
-      session_id: row.id,
-      expected_version: expectedVersion,
-      actual_version: row.version
-    });
-  }
-}
-function requireMatchingPresenceSessionJoin(row, input) {
-  const same = row.actor_label === input.actor_label && row.runtime_kind === input.runtime_kind && row.provider_label === input.provider_label && row.model_label === input.model_label && canonicalJson(parseStringArray(row.declared_capabilities_json)) === canonicalJson(input.declared_capabilities);
-  if (!same) {
-    throw new CollabError("session_instance_conflict", "client_instance_id was already joined with different self-declared metadata", { session_id: row.id });
-  }
-}
-function sessionLiveness(row, observedAt) {
-  if (row.status !== "active")
-    return "stale";
-  const age = Date.parse(observedAt) - Date.parse(row.last_seen_at);
-  return age <= SESSION_STALE_AFTER_MS ? "live" : "stale";
-}
-function recoveryRequiredFirst(tasks, isOwn) {
-  const byExpiry = (left, right) => (left.lease_expires_at ?? "").localeCompare(right.lease_expires_at ?? "") || left.id.localeCompare(right.id);
-  const pending = tasks.filter((task) => task.effective_status === "recovery_required");
-  return [
-    ...pending.filter(isOwn).sort(byExpiry),
-    ...pending.filter((task) => !isOwn(task)).sort(byExpiry)
-  ];
-}
-function coordinationSessionFromRow(row, observedAt) {
-  return {
-    id: row.id,
-    workspace_id: row.workspace_id,
-    worktree_id: row.worktree_id,
-    actor: row.actor,
-    role: row.role,
-    parent_session_id: row.parent_session_id,
-    status: row.status,
-    generation: row.generation,
-    joined_at: row.joined_at,
-    last_seen_at: row.last_seen_at,
-    ended_at: row.ended_at,
-    cursor: {
-      epoch_id: row.cursor_epoch_id,
-      sequence: row.cursor_sequence,
-      hash: row.cursor_hash
-    },
-    cursor_version: row.cursor_version,
-    reset_generation: row.reset_generation,
-    cursor_recovery_required: row.cursor_recovery_required !== 0,
-    liveness: sessionLiveness(row, observedAt)
-  };
-}
-function worktreeFromRow(row) {
-  return {
-    id: row.id,
-    workspace_id: row.workspace_id,
-    root_path: row.root_path,
-    repository_key: row.repository_key,
-    git_common_dir_hash: row.git_common_dir_hash,
-    branch: row.branch,
-    head_sha: row.head_sha,
-    dirty: sqlToBoolean(row.dirty),
-    registered_at: row.registered_at,
-    last_seen_at: row.last_seen_at
-  };
-}
-function checkpointFromWorktreeRow(row, capturedAt) {
-  return {
-    worktree_id: row.id,
-    head_sha: row.head_sha,
-    branch: row.branch,
-    dirty: sqlToBoolean(row.dirty),
-    captured_at: capturedAt
-  };
-}
-function reportFromRow(row) {
-  return {
-    id: row.id,
-    workspace_id: row.workspace_id,
-    task_id: row.task_id,
-    from_session_id: row.from_session_id,
-    from_actor: row.from_actor,
-    to_session_id: row.to_session_id,
-    kind: row.kind,
-    body: row.body,
-    evidence_refs: parseStringArray(row.evidence_refs_json),
-    confidence: row.confidence,
-    confidence_basis: row.confidence_basis,
-    limits: row.limits,
-    relation: row.relation,
-    target_report_id: row.target_report_id,
-    authority_scope: row.authority_scope,
-    authority_basis: row.authority_basis,
-    created_at: row.created_at,
-    event_sequence: row.event_sequence
-  };
-}
-function reviewFromRow(row) {
-  return { ...row };
-}
-function proposalTermsFromRow(row) {
-  if (row.rule !== CONSENT_RULE) {
-    throw new CollabError("proposal_rule_unsupported", "This proposal was opened under a consent rule this package does not implement", { proposal_report_id: row.report_id, rule: row.rule });
-  }
-  return {
-    report_id: row.report_id,
-    workspace_id: row.workspace_id,
-    rule: CONSENT_RULE,
-    criteria: row.criteria,
-    extent: row.extent,
-    known_conflicts: row.known_conflicts,
-    origin: row.origin,
-    topic: row.topic,
-    closes_at: row.closes_at,
-    voices: JSON.parse(row.voices_json),
-    author_voice_id: row.author_voice_id,
-    proposal_sha256: row.proposal_sha256,
-    opened_event_id: row.opened_event_id,
-    created_at: row.created_at
-  };
-}
-function proposalPersonActFromRow(row) {
-  const { ai_snapshot_json, proof_json, ...rest } = row;
-  return {
-    ...rest,
-    ai_snapshot: JSON.parse(ai_snapshot_json),
-    proof: proof_json ? JSON.parse(proof_json) : null
-  };
 }
 var NOTE_OUTSIDE_EVIDENCE_KINDS = ["file", "commit", "test", "url", "data", "msg"];
 var NOTE_CITE_LOCATOR_MAX = 1000;
@@ -9873,297 +10174,6 @@ function firstLine(text) {
     return line;
   const end = /[\uD800-\uDBFF]$/.test(line.slice(0, 199)) ? 198 : 199;
   return `${line.slice(0, end)}\u2026`;
-}
-var MAX_INBOX_SCAN = 500;
-var MAX_INBOX_PROPOSALS = 50;
-function aiSnapshotOf(status) {
-  return {
-    position: status.ai.position,
-    closed: status.ai.closed,
-    qualifying_support_report_ids: status.ai.qualifying_support_report_ids,
-    unresolved_challenge_report_ids: status.ai.unresolved_challenge_report_ids
-  };
-}
-function normalizeActReason(act, reason) {
-  if (act === "agree") {
-    if (reason !== undefined && reason.trim() !== "") {
-      throw new CollabError("invalid_reason", "An agreement takes no reason");
-    }
-    return null;
-  }
-  return cleanText(reason ?? "", "reason", 2000);
-}
-var PERSON_DESK_ACTOR = "person:desk";
-var PERSON_TERMINAL_ACTOR = "person:terminal";
-var PERSON_PASSKEY_ACTOR = "person:passkey";
-var PERSON_VOICE_ID = "person";
-var PERSON_DESK_LIMITS = "Written at the person desk, which does not authenticate the person.";
-function validatePersonAct(value) {
-  if (value !== "agree" && value !== "reject") {
-    throw new CollabError("invalid_act", "act must be agree or reject");
-  }
-  return value;
-}
-function normalizeProposalTerms(input) {
-  return {
-    question: cleanText(input.question, "question", MAX_REPORT_BODY),
-    criteria: cleanText(input.criteria, "criteria", 4000),
-    extent: cleanText(input.extent, "extent", 1000),
-    known_conflicts: optionalText(input.known_conflicts, "known_conflicts", 4000),
-    evidence_refs: normalizeEvidenceRefs(input.evidence_refs ?? []),
-    topic: optionalText(input.topic, "topic", 200),
-    consult_seconds: validateConsultSeconds(input.consult_seconds)
-  };
-}
-function validateProposalOrigin(value) {
-  if (value !== "ai" && value !== "person_relayed") {
-    throw new CollabError("invalid_origin", "origin must be ai or person_relayed");
-  }
-  return value;
-}
-function validateConsultSeconds(value) {
-  const seconds = value ?? DEFAULT_PROPOSAL_CONSULT_SECONDS;
-  if (!Number.isInteger(seconds) || seconds < MIN_PROPOSAL_CONSULT_SECONDS || seconds > MAX_PROPOSAL_CONSULT_SECONDS) {
-    throw new CollabError("invalid_consult_seconds", `consult_seconds must be an integer between ${MIN_PROPOSAL_CONSULT_SECONDS} and ${MAX_PROPOSAL_CONSULT_SECONDS}`);
-  }
-  return seconds;
-}
-function parseCheckpoint(json) {
-  return json ? JSON.parse(json) : null;
-}
-function checkpointDigest(checkpoint) {
-  return sha2564(canonicalJson(checkpoint));
-}
-function checkpointStateMatches(left, right) {
-  return left.worktree_id === right.worktree_id && left.head_sha === right.head_sha && left.branch === right.branch && left.algorithm === right.algorithm && left.index_sha256 === right.index_sha256 && left.state_sha256 === right.state_sha256 && left.dirty === right.dirty;
-}
-function requireCompleteGitCheckpoint(checkpoint) {
-  if (checkpoint.source !== "server_observed" || checkpoint.algorithm !== "git-state/v1" || checkpoint.head_sha === null || checkpoint.dirty === null || typeof checkpoint.index_sha256 !== "string" || !/^[a-f0-9]{64}$/.test(checkpoint.index_sha256) || typeof checkpoint.state_sha256 !== "string" || !/^[a-f0-9]{64}$/.test(checkpoint.state_sha256)) {
-    throw new CollabError("git_checkpoint_incomplete", "Acceptance requires a complete server-observed Git checkpoint", { worktree_id: checkpoint.worktree_id });
-  }
-}
-function artifactRepositoryPath(uri, rootPath) {
-  let value = uri;
-  if (value.startsWith("file:")) {
-    try {
-      const url = new URL(value);
-      if (url.protocol !== "file:" || url.hostname !== "" && url.hostname !== "localhost") {
-        return null;
-      }
-      value = decodeURIComponent(url.pathname);
-    } catch {
-      return null;
-    }
-  }
-  if (!value || value.includes("\x00") || value.includes("\\"))
-    return null;
-  let relative2;
-  if (isAbsolute3(value)) {
-    const absolute = posix.normalize(value);
-    if (!absolute.startsWith(`${rootPath}/`))
-      return null;
-    relative2 = absolute.slice(rootPath.length + 1);
-  } else {
-    relative2 = posix.normalize(value);
-  }
-  if (!relative2 || relative2 === "." || relative2 === ".." || relative2.startsWith("../") || relative2.endsWith("/") || relative2 === ".git" || relative2.startsWith(".git/"))
-    return null;
-  return relative2;
-}
-function pathWithinScopes(path, scopes) {
-  return scopes.some((scope) => path === scope || path.startsWith(`${scope}/`));
-}
-function gitCheckpointStaleError(taskId, result, observed, refusal) {
-  const branch = result.branch ? `"${result.branch}"` : "(none: its HEAD was detached)";
-  const remedy = `Two ways forward. (1) Host commit: exactly one commit on branch ${branch} whose only parent ` + `is the result checkpoint HEAD ${result.head_sha}, changing only paths inside the task's ` + "path_scopes, each byte-equal to the newest file artifact this task attached for that uri " + "(since its latest request_changes), with the worktree left clean; then review again. " + `(2) Re-completion: review task "${taskId}" with outcome "request_changes"; once it is ` + "claimed again, collab_task_complete captures a fresh result checkpoint for a new review. " + "Never amend, reset or rewrite a shared branch to meet (1): if other commits already sit " + "on it, use (2).";
-  return new CollabError("git_checkpoint_stale", `The completion worktree changed after its result checkpoint was captured: ${refusal}. ${remedy}`, {
-    result_checkpoint: result,
-    observed_checkpoint: observed,
-    boundary: "checkpoint_validation_is_a_local_observation_not_an_atomic_git_sqlite_lock",
-    host_commit_refusal: refusal,
-    remedy
-  });
-}
-function hydrateLegacyMutationResponse(value, now) {
-  if (Array.isArray(value)) {
-    return value.map((item) => hydrateLegacyMutationResponse(item, now));
-  }
-  if (!isRecordValue(value))
-    return value;
-  const hydratedEntries = Object.entries(value).map(([key, item]) => [
-    key,
-    hydrateLegacyMutationResponse(item, now)
-  ]);
-  const hydrated = Object.fromEntries(hydratedEntries);
-  if (typeof hydrated.id !== "string" || typeof hydrated.workspace_id !== "string" || !["open", "claimed", "blocked", "completed"].includes(typeof hydrated.status === "string" ? hydrated.status : "") || !Array.isArray(hydrated.dependencies) || !Array.isArray(hydrated.path_scopes) || !Number.isInteger(hydrated.version)) {
-    return hydrated;
-  }
-  const expired = hydrated.status === "claimed" && typeof hydrated.lease_expires_at === "string" && now >= hydrated.lease_expires_at;
-  return {
-    ...hydrated,
-    effective_status: typeof hydrated.effective_status === "string" ? hydrated.effective_status : expired ? "lease_expired" : hydrated.status,
-    work_mode: typeof hydrated.work_mode === "string" ? hydrated.work_mode : "coordination",
-    completion_policy: typeof hydrated.completion_policy === "string" ? hydrated.completion_policy : "reported",
-    review_status: typeof hydrated.review_status === "string" ? hydrated.review_status : "legacy_unreviewed",
-    expected_base_sha: hydrated.expected_base_sha ?? null,
-    base_checkpoint: hydrated.base_checkpoint ?? null,
-    base_checkpoint_digest: hydratedCheckpointDigest(hydrated.base_checkpoint_digest, hydrated.base_checkpoint),
-    result_checkpoint: hydrated.result_checkpoint ?? null,
-    result_checkpoint_digest: hydratedCheckpointDigest(hydrated.result_checkpoint_digest, hydrated.result_checkpoint),
-    completion_report_id: hydrated.completion_report_id ?? null,
-    assignee_session_id: hydrated.assignee_session_id ?? null,
-    assignee_liveness: hydrated.assignee_liveness ?? null,
-    claim_worktree_id: hydrated.claim_worktree_id ?? null,
-    reported_by: hydrated.reported_by ?? null,
-    reported_by_session_id: hydrated.reported_by_session_id ?? null,
-    reported_at: hydrated.reported_at ?? null,
-    accepted_by: hydrated.accepted_by ?? null,
-    accepted_by_session_id: hydrated.accepted_by_session_id ?? null,
-    accepted_at: hydrated.accepted_at ?? null,
-    review_requested_session_id: hydrated.review_requested_session_id ?? null
-  };
-}
-function hydratedCheckpointDigest(stored, checkpoint) {
-  if (typeof stored === "string")
-    return stored;
-  return isRecordValue(checkpoint) ? checkpointDigest(checkpoint) : null;
-}
-function isRecordValue(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function booleanToSql(value) {
-  return value === null ? null : value ? 1 : 0;
-}
-function sqlToBoolean(value) {
-  return value === null ? null : value !== 0;
-}
-function hashSessionToken(token) {
-  return sha2564(`agenttool.collab/session-token/v1\x00${token}`);
-}
-function safeDigestEqual(left, right) {
-  const leftBuffer = Buffer.from(left, "hex");
-  const rightBuffer = Buffer.from(right, "hex");
-  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
-}
-function pragmaNumber(db, name) {
-  const row = db.query(`PRAGMA ${name}`).get();
-  const value = row?.[name];
-  if (!Number.isInteger(value)) {
-    throw new CollabError("database_pragma_unavailable", `Could not read PRAGMA ${name}`);
-  }
-  return value;
-}
-function retrySqliteBusy(operation) {
-  const deadline = Date.now() + SQLITE_BUSY_RETRY_MS;
-  let delay = 10;
-  while (true) {
-    try {
-      operation();
-      return;
-    } catch (error) {
-      const code = error.code;
-      const busy = code === "SQLITE_BUSY" || error instanceof Error && /database is (?:locked|busy)/i.test(error.message);
-      if (!busy || Date.now() >= deadline)
-        throw error;
-      const remaining = deadline - Date.now();
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.min(delay, remaining));
-      delay = Math.min(delay * 2, 100);
-    }
-  }
-}
-function assertSafeDatabaseFile(path) {
-  const stat = lstatSync4(path);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || typeof process.getuid === "function" && stat.uid !== process.getuid()) {
-    throw new CollabError("database_file_unsafe", "The collaboration database path must be a non-linked regular file owned by this user", { path });
-  }
-}
-function quoteIdentifier(value) {
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {
-    throw new CollabError("invalid_sql_identifier", "Invalid internal SQL identifier");
-  }
-  return `"${value}"`;
-}
-function assertDistinctLegacyWorktreeIdentities(workspaces) {
-  const selectors = [
-    {
-      field: "worktrees.root_path",
-      value: (workspace) => workspace.identity.root_path
-    },
-    {
-      field: "worktrees.id",
-      value: (workspace) => workspace.identity.checkpoint.worktree_id
-    },
-    {
-      field: "worktrees.fingerprint",
-      value: (workspace) => workspace.identity.worktree_fingerprint
-    }
-  ];
-  const collisions = [];
-  for (const selector of selectors) {
-    const groups = new Map;
-    for (const workspace of workspaces) {
-      const value = selector.value(workspace);
-      const workspaceIds2 = groups.get(value) ?? [];
-      workspaceIds2.push(workspace.id);
-      groups.set(value, workspaceIds2);
-    }
-    for (const workspaceIds2 of groups.values()) {
-      if (workspaceIds2.length < 2)
-        continue;
-      collisions.push({
-        field: selector.field,
-        workspace_ids: workspaceIds2.sort()
-      });
-    }
-  }
-  if (collisions.length === 0)
-    return;
-  collisions.sort((left, right) => {
-    const fieldOrder = left.field < right.field ? -1 : left.field > right.field ? 1 : 0;
-    if (fieldOrder !== 0)
-      return fieldOrder;
-    const leftIds = left.workspace_ids.join("\x00");
-    const rightIds = right.workspace_ids.join("\x00");
-    return leftIds < rightIds ? -1 : leftIds > rightIds ? 1 : 0;
-  });
-  const workspaceIds = [
-    ...new Set(collisions.flatMap((collision) => collision.workspace_ids))
-  ].sort();
-  throw new CollabError("migration_identity_collision", "Legacy workspaces resolve to the same worktree identity; migration will not merge distinct journals", {
-    workspace_ids: workspaceIds,
-    collisions,
-    boundary: "v0_3_will_not_merge_distinct_legacy_journals_that_resolve_to_one_worktree",
-    required_action: "keep_the_original_audit_database_and_use_a_compatible_v0_2_client_or_choose_a_fresh_v0_3_database"
-  });
-}
-function safeRepositoryIdentity(rootPath) {
-  try {
-    return inspectRepository(rootPath);
-  } catch {
-    const root = resolve4(rootPath);
-    const repositoryKey = `local-path:${sha2564(root)}`;
-    const worktreeId2 = `wt_${sha2564(`${root}\x00path:${root}`).slice(0, 24)}`;
-    return {
-      requested_root_path: root,
-      root_path: root,
-      repository_key: repositoryKey,
-      git_common_dir_hash: null,
-      worktree_fingerprint: `path:${sha2564(root)}`,
-      checkpoint: {
-        worktree_id: worktreeId2,
-        head_sha: null,
-        branch: null,
-        dirty: null,
-        captured_at: new Date().toISOString()
-      }
-    };
-  }
-}
-function sha2564(value) {
-  return createHash4("sha256").update(value).digest("hex");
-}
-function addSeconds(iso, seconds) {
-  return new Date(new Date(iso).getTime() + seconds * 1000).toISOString();
 }
 
 // src/ceremony.ts
@@ -10528,12 +10538,12 @@ function runPersonDeskCli(argv, env = process.env, deps = {}) {
     if (CEREMONY_VERBS.has(verb) || verb === "passkey-enroll" && values.ceremony) {
       throw new CollabError("usage_error", `person ${verb} serves a page; run it through agenttool-collab-host`);
     }
-    const store = openDeskStore(values, env, deps);
+    const store2 = openDeskStore(values, env, deps);
     try {
-      const outcome = runVerb(store, verb, values, deps);
+      const outcome = runVerb(store2, verb, values, deps);
       return outcome.cancelled ? emit({ status: "cancelled", message: "Not confirmed at the terminal; nothing was written" }, EXIT_NOT_CONFIRMED) : emit({ status: "ok", ...outcome.result }, 0);
     } finally {
-      store.close();
+      store2.close();
     }
   } catch (error) {
     return emit(errorPayload(error), 1);
@@ -10572,30 +10582,30 @@ function openDeskStore(values, env, deps) {
   }
   return new CollabStore(databasePath, deps.storeNow ? { now: deps.storeNow } : {});
 }
-function runVerb(store, verb, values, deps) {
+function runVerb(store2, verb, values, deps) {
   const done = (result) => ({ cancelled: false, result });
   switch (verb) {
     case "workspaces":
-      return done({ workspaces: store.listWorkspaces() });
+      return done({ workspaces: store2.listWorkspaces() });
     case "voices":
-      return done({ voices: store.tableVoices(values.workspace) });
+      return done({ voices: store2.tableVoices(values.workspace) });
     case "proposals": {
       if (values.proposal) {
-        const proposal = store.proposalStatus(values.workspace, values.proposal);
-        return done({ proposal, soft_spots: deskSoftSpotsFor(store, values.workspace, [proposal]) });
+        const proposal = store2.proposalStatus(values.workspace, values.proposal);
+        return done({ proposal, soft_spots: deskSoftSpotsFor(store2, values.workspace, [proposal]) });
       }
-      const listed = store.listProposalStatuses(values.workspace, { limit: parseInteger(values.limit, "limit") });
-      return done({ ...listed, soft_spots: deskSoftSpotsFor(store, values.workspace, listed.proposals) });
+      const listed = store2.listProposalStatuses(values.workspace, { limit: parseInteger(values.limit, "limit") });
+      return done({ ...listed, soft_spots: deskSoftSpotsFor(store2, values.workspace, listed.proposals) });
     }
     case "inbox": {
       if (!values.workspace)
-        return done({ summary: store.personInboxSummary() });
-      const inbox = store.personInbox(values.workspace);
-      return done({ inbox, soft_spots: deskSoftSpotsFor(store, values.workspace, inbox.awaiting_person) });
+        return done({ summary: store2.personInboxSummary() });
+      const inbox = store2.personInbox(values.workspace);
+      return done({ inbox, soft_spots: deskSoftSpotsFor(store2, values.workspace, inbox.awaiting_person) });
     }
     case "challenge":
       return done({
-        challenge: store.personActChallenge({
+        challenge: store2.personActChallenge({
           proposal_report_id: values.proposal,
           act: parseAct(values.act),
           reason: values.reason
@@ -10606,7 +10616,7 @@ function runVerb(store, verb, values, deps) {
       const act = verb === "consent" ? "agree" : "reject";
       if (values["passkey-assertion"] !== undefined) {
         return done({
-          proposal: store.recordPersonActWithPasskey({
+          proposal: store2.recordPersonActWithPasskey({
             proposal_report_id: values.proposal,
             act,
             reason: values.reason,
@@ -10614,11 +10624,11 @@ function runVerb(store, verb, values, deps) {
           })
         });
       }
-      const challenge = store.personActChallenge({ proposal_report_id: values.proposal, act, reason: values.reason });
-      const status = store.proposalStatusById(values.proposal);
+      const challenge = store2.personActChallenge({ proposal_report_id: values.proposal, act, reason: values.reason });
+      const status = store2.proposalStatusById(values.proposal);
       const bytes = `${challenge.challenge_bytes}
 ${status.proposal_bytes}`;
-      const softSpots = deskSoftSpotsFor(store, status.proposal.workspace_id, [status])[status.proposal.id];
+      const softSpots = deskSoftSpotsFor(store2, status.proposal.workspace_id, [status])[status.proposal.id];
       const confirmed = confirmOnTty({
         act: act === "agree" ? "agree to a proposal" : "reject a proposal",
         summary: [...actSummary(status, act, challenge.reason), ...softSpotSummaryLines(softSpotDisplay(softSpots, status, "local"))],
@@ -10628,7 +10638,7 @@ ${status.proposal_bytes}`;
       if (!confirmed)
         return { cancelled: true };
       return done({
-        proposal: store.recordPersonActAtTerminal({
+        proposal: store2.recordPersonActAtTerminal({
           proposal_report_id: status.proposal.id,
           proposal_sha256: status.proposal_sha256,
           act,
@@ -10639,7 +10649,7 @@ ${status.proposal_bytes}`;
     }
     case "say":
       return done({
-        report: store.appendPersonNote({
+        report: store2.appendPersonNote({
           workspace_id: values.workspace,
           idempotency_key: values["idempotency-key"],
           body: values.body,
@@ -10648,7 +10658,7 @@ ${status.proposal_bytes}`;
       });
     case "propose":
       return done({
-        proposal: store.openPersonProposal({
+        proposal: store2.openPersonProposal({
           workspace_id: values.workspace,
           idempotency_key: values["idempotency-key"],
           question: values.question,
@@ -10661,7 +10671,7 @@ ${status.proposal_bytes}`;
       });
     case "withdraw":
       return done({
-        proposal: store.withdrawPersonProposal({
+        proposal: store2.withdrawPersonProposal({
           workspace_id: values.workspace,
           idempotency_key: values["idempotency-key"],
           proposal_report_id: values.proposal,
@@ -10683,12 +10693,12 @@ ${status.proposal_bytes}`;
         origin: input.origin,
         label: values.label ?? input.label
       });
-      return confirmEnrollment(store, enrollment, deps) ? done({ passkey: store.enrollPersonPasskey(enrollment) }) : { cancelled: true };
+      return confirmEnrollment(store2, enrollment, deps) ? done({ passkey: store2.enrollPersonPasskey(enrollment) }) : { cancelled: true };
     }
     case "passkeys":
-      return done({ passkeys: store.listPersonPasskeys() });
+      return done({ passkeys: store2.listPersonPasskeys() });
     case "passkey-export": {
-      const passkey = activePasskey(store, values.credential);
+      const passkey = activePasskey(store2, values.credential);
       return done({
         enrollment: {
           credential_id: passkey.credential_id,
@@ -10702,7 +10712,7 @@ ${status.proposal_bytes}`;
       });
     }
     case "passkey-revoke": {
-      const passkey = activePasskey(store, values.credential);
+      const passkey = activePasskey(store2, values.credential);
       const bytes = canonicalJson({ revoke: passkey.credential_id, fingerprint: passkey.fingerprint });
       const confirmed = confirmOnTty({
         act: "revoke a passkey",
@@ -10712,14 +10722,14 @@ ${status.proposal_bytes}`;
       }, { openTty: deps.openTty, now: deps.now });
       if (!confirmed)
         return { cancelled: true };
-      return done({ passkey: store.revokePersonPasskey(passkey.credential_id) });
+      return done({ passkey: store2.revokePersonPasskey(passkey.credential_id) });
     }
     case "ceremony":
       throw new CollabError("usage_error", "person ceremony serves a page; run it through agenttool-collab-host");
   }
 }
-function confirmEnrollment(store, enrollment, deps) {
-  if (store.listPersonPasskeys().some((key) => key.credential_id === enrollment.credential_id)) {
+function confirmEnrollment(store2, enrollment, deps) {
+  if (store2.listPersonPasskeys().some((key) => key.credential_id === enrollment.credential_id)) {
     throw new CollabError("passkey_already_enrolled", "This credential id is already enrolled");
   }
   const bytes = canonicalJson(enrollment);
@@ -10735,8 +10745,8 @@ function confirmEnrollment(store, enrollment, deps) {
     sha256: createHash5("sha256").update(bytes).digest("hex")
   }, { openTty: deps.openTty, now: deps.now });
 }
-function activePasskey(store, credentialId) {
-  const passkey = store.listPersonPasskeys().find((key) => key.credential_id === credentialId);
+function activePasskey(store2, credentialId) {
+  const passkey = store2.listPersonPasskeys().find((key) => key.credential_id === credentialId);
   if (!passkey || passkey.revoked_at !== null) {
     throw new CollabError("passkey_not_enrolled", "No active enrolled passkey has this credential id");
   }
@@ -10751,10 +10761,10 @@ function actSummary(status, act, reason) {
     act === "agree" ? "Agreeing authorises only this extent." : `reason ${JSON.stringify(reason)}`
   ];
 }
-function deskSoftSpotsFor(store, workspaceId, statuses) {
+function deskSoftSpotsFor(store2, workspaceId, statuses) {
   const ids = statuses.map((status) => status.proposal.id);
   try {
-    return Object.fromEntries(store.personDeskProposalViews(workspaceId, ids).map((read) => [
+    return Object.fromEntries(store2.personDeskProposalViews(workspaceId, ids).map((read) => [
       read.proposal_report_id,
       "view" in read ? deskSoftSpots(read.view) : softSpotsUnavailable(read.error)
     ]));
@@ -10994,7 +11004,7 @@ async function enrollCeremony(values, env, deps, io, command) {
   probe.close();
   const port = values.port ? parsePort(values.port) : DEFAULT_CEREMONY_PORT;
   const origin = `http://localhost:${port}`;
-  const store = openDeskStore(values, env, deps);
+  const store2 = openDeskStore(values, env, deps);
   try {
     const challenge = randomBytes2(32).toString("base64url");
     const data = {
@@ -11016,15 +11026,15 @@ async function enrollCeremony(values, env, deps, io, command) {
         origin,
         label: values.label ?? "Touch ID"
       });
-      if (!confirmEnrollment(store, enrollment, deps)) {
+      if (!confirmEnrollment(store2, enrollment, deps)) {
         throw new CollabError("not_confirmed", "Not confirmed at the terminal; nothing was enrolled");
       }
-      const passkey = store.enrollPersonPasskey(enrollment);
+      const passkey = store2.enrollPersonPasskey(enrollment);
       return { enrolled: true, fingerprint: passkey.fingerprint, origin: passkey.origin };
     });
     return { status: "ok", ...result };
   } finally {
-    store.close();
+    store2.close();
   }
 }
 function checkCreateClientData(value, challenge, origin) {
@@ -11041,24 +11051,24 @@ function checkCreateClientData(value, challenge, origin) {
   }
 }
 function localTable(values, env, deps) {
-  const store = openDeskStore(values, env, deps);
+  const store2 = openDeskStore(values, env, deps);
   return {
     async challenge(proposal, act, reason) {
-      return store.personActChallenge({ proposal_report_id: proposal, act, reason });
+      return store2.personActChallenge({ proposal_report_id: proposal, act, reason });
     },
     async status(challenge) {
-      const status = store.proposalStatusById(challenge.proposal_report_id);
-      return { status, soft_spots: deskSoftSpotsFor(store, status.proposal.workspace_id, [status])[status.proposal.id] };
+      const status = store2.proposalStatusById(challenge.proposal_report_id);
+      return { status, soft_spots: deskSoftSpotsFor(store2, status.proposal.workspace_id, [status])[status.proposal.id] };
     },
     async record(proposal, act, reason, assertion) {
-      return store.recordPersonActWithPasskey({
+      return store2.recordPersonActWithPasskey({
         proposal_report_id: proposal,
         act,
         reason: reason ?? undefined,
         assertion
       });
     },
-    close: () => store.close()
+    close: () => store2.close()
   };
 }
 function remoteTable(destination, io) {
@@ -11323,15 +11333,15 @@ var systemClock = {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
   }
 };
-function endSessionFromCredential(store, credential, options) {
+function endSessionFromCredential(store2, credential, options) {
   let resumed;
   try {
     if (!options.release_leases)
-      store.preflightSessionEnd(credential);
-    resumed = store.resumeSession(credential, { allow_cursor_recovery: true });
+      store2.preflightSessionEnd(credential);
+    resumed = store2.resumeSession(credential, { allow_cursor_recovery: true });
   } catch (error) {
     if (error instanceof CollabError && error.code === "session_auth_failed") {
-      const known = store.getCoordinationSession(credential.session_id);
+      const known = store2.getCoordinationSession(credential.session_id);
       if (known?.status === "ended") {
         return removeRevokedFile(options.session_file, {
           protocol: COLLAB_HOST_PROTOCOL,
@@ -11344,7 +11354,7 @@ function endSessionFromCredential(store, credential, options) {
     }
     throw error;
   }
-  const ended = store.endSessionWithReleases({
+  const ended = store2.endSessionWithReleases({
     ...resumed.credential,
     reason: options.reason,
     release_leases: options.release_leases
@@ -11361,10 +11371,10 @@ function endSessionFromCredential(store, credential, options) {
     ended_at: ended.session.ended_at
   });
 }
-function endSessionsForSeatRefs(store, options, secrets = []) {
+function endSessionsForSeatRefs(store2, options, secrets = []) {
   const seatRefs = [...new Set(options.seat_refs.map(validateSeatRef))];
-  const sessions = store.activeSessionIdsForSeatRefs(seatRefs).map((sessionId) => {
-    const sessionFile = store.defaultSessionCredentialPath(sessionId);
+  const sessions = store2.activeSessionIdsForSeatRefs(seatRefs).map((sessionId) => {
+    const sessionFile = store2.defaultSessionCredentialPath(sessionId);
     if (!existsSync6(sessionFile))
       return { session_id: sessionId, status: "credential_missing" };
     try {
@@ -11373,7 +11383,7 @@ function endSessionsForSeatRefs(store, options, secrets = []) {
       if (credential.session_id !== sessionId) {
         throw new CollabError("session_auth_failed", "Session credentials are invalid");
       }
-      const { status, released, ended_at, warning } = endSessionFromCredential(store, credential, {
+      const { status, released, ended_at, warning } = endSessionFromCredential(store2, credential, {
         session_file: sessionFile,
         reason: options.reason,
         release_leases: options.release_leases
@@ -11386,8 +11396,8 @@ function endSessionsForSeatRefs(store, options, secrets = []) {
   });
   return { protocol: COLLAB_HOST_PROTOCOL, status: "ended_by_seat_ref", seat_refs: seatRefs, sessions };
 }
-function waitForSessionEvents(store, credential, options, clock = systemClock) {
-  const session = store.getCoordinationSession(credential.session_id);
+function waitForSessionEvents(store2, credential, options, clock = systemClock) {
+  const session = store2.getCoordinationSession(credential.session_id);
   if (!session)
     throw new CollabError("session_auth_failed", "Session credentials are invalid");
   const workspaceId = session.workspace_id;
@@ -11413,7 +11423,7 @@ function waitForSessionEvents(store, credential, options, clock = systemClock) {
   while (true) {
     let drained = true;
     try {
-      const page = store.eventsAfterAnchorForSession({
+      const page = store2.eventsAfterAnchorForSession({
         ...credential,
         workspace_id: workspaceId,
         after_anchor: observed,
@@ -11422,7 +11432,7 @@ function waitForSessionEvents(store, credential, options, clock = systemClock) {
       headSequence = page.head_sequence;
       for (const event of page.events) {
         const own = event.session_id === credential.session_id;
-        const routed = !options.addressed || store.eventAddressesSession(event, session.id);
+        const routed = !options.addressed || store2.eventAddressesSession(event, session.id);
         if ((options.include_own || !own) && routed) {
           return receipt("ready", headSequence);
         }
@@ -11489,44 +11499,44 @@ function runCollabHostCli(argv, env = process.env, clock = systemClock, personDe
       throw new CollabError("journal_not_found", "No collaboration journal exists at the selected path; pass --db or set AGENTOOL_COLLAB_DB");
     }
     if (args.command === "end_by_seat_ref") {
-      const store2 = new CollabStore(databasePath);
+      const store3 = new CollabStore(databasePath);
       try {
-        const receipt = endSessionsForSeatRefs(store2, args, secrets);
+        const receipt = endSessionsForSeatRefs(store3, args, secrets);
         return emit(receipt, receipt.sessions.some((session) => session.status === "error") ? 1 : 0);
       } finally {
-        store2.close();
+        store3.close();
       }
     }
     if (args.command === "end") {
       const credential = readSessionCredentialFile(args.session_file);
       secrets.push(credential.session_token);
-      const store2 = new CollabStore(databasePath);
+      const store3 = new CollabStore(databasePath);
       try {
-        return emit(endSessionFromCredential(store2, credential, {
+        return emit(endSessionFromCredential(store3, credential, {
           session_file: args.session_file,
           reason: args.reason,
           release_leases: args.release_leases
         }), 0);
       } finally {
-        store2.close();
+        store3.close();
       }
     }
-    const store = new CollabStore(databasePath);
+    const store2 = new CollabStore(databasePath);
     try {
-      const sessionFile = args.session_file ?? store.defaultSessionCredentialPath(args.session);
+      const sessionFile = args.session_file ?? store2.defaultSessionCredentialPath(args.session);
       const credential = readSessionCredentialFile(sessionFile);
       secrets.push(credential.session_token);
       if (args.session !== undefined && credential.session_id !== args.session) {
         throw new CollabError("session_auth_failed", "Session credentials are invalid");
       }
-      return emit(waitForSessionEvents(store, credential, {
+      return emit(waitForSessionEvents(store2, credential, {
         after_anchor: args.after_anchor,
         wait_ms: args.wait_ms,
         include_own: args.include_own,
         addressed: args.addressed
       }, clock), 0);
     } finally {
-      store.close();
+      store2.close();
     }
   } catch (error) {
     return emit(errorReceipt(error), 1);

@@ -5,7 +5,7 @@ import { CollabError } from "../src/errors.js";
 import { NOTE_FORMAT, parseNote } from "../src/note.js";
 import { proposalBytes, type ProposalContent } from "../src/proposal.js";
 import type { ProposalStatus, SessionHandle } from "../src/protocol.js";
-import { NOTE_NOTHING_AUTHORISED, NOTE_SELF_DECISION_BASIS } from "../src/store.js";
+import { NOTE_NOTHING_AUTHORISED, NOTE_SELF_DECISION_BASIS } from "../src/store-notes.js";
 import {
   CARRIED_OBJECTIONS_SENTENCE,
   DECISION_DOES_NOT_ESTABLISH,

@@ -19,7 +19,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { canonicalJson } from "../src/canonical.js";
 import type { CollabEvent, EventCursor } from "../src/protocol.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 import {
   COLLAB_NOTES_EVENT_TYPES,
   exerciseFixture,

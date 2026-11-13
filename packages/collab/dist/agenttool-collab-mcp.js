@@ -30635,19 +30635,9 @@ function sha256Bytes(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
-// src/store.ts
-import { Database } from "bun:sqlite";
-import { createHash as createHash4, randomBytes, randomUUID as randomUUID3, timingSafeEqual } from "crypto";
-import {
-  chmodSync as chmodSync3,
-  closeSync as closeSync6,
-  existsSync as existsSync4,
-  lstatSync as lstatSync4,
-  mkdirSync as mkdirSync3,
-  openSync as openSync6,
-  realpathSync as realpathSync2
-} from "fs";
-import { dirname as dirname3, isAbsolute as isAbsolute3, join as join4, posix, resolve as resolve4 } from "path";
+// src/store-notes.ts
+import { randomUUID as randomUUID4 } from "crypto";
+import { realpathSync as realpathSync2 } from "fs";
 
 // src/ballot.ts
 import { createHash as createHash2 } from "crypto";
@@ -31643,6 +31633,19 @@ function removeQuietly(path) {
   } catch {}
 }
 
+// src/store.ts
+import { Database } from "bun:sqlite";
+import { createHash as createHash4, randomBytes, randomUUID as randomUUID3, timingSafeEqual } from "crypto";
+import {
+  chmodSync as chmodSync3,
+  closeSync as closeSync6,
+  existsSync as existsSync4,
+  lstatSync as lstatSync4,
+  mkdirSync as mkdirSync3,
+  openSync as openSync6
+} from "fs";
+import { dirname as dirname3, isAbsolute as isAbsolute3, join as join4, posix, resolve as resolve4 } from "path";
+
 // src/passkey.ts
 import { createHash as createHash3, createPublicKey, verify } from "crypto";
 var FLAG_USER_PRESENT = 1;
@@ -31895,7 +31898,7 @@ var V2_GUARD_TRIGGERS = [
   "handoffs_v2_insert_guard"
 ];
 
-class CollabStore {
+class CollabStoreCore {
   db;
   now;
   filesystemPath;
@@ -31944,7 +31947,6 @@ class CollabStore {
       this.db.close();
       throw error51;
     }
-    this.sweepRevealedSeals();
   }
   close() {
     this.closed = true;
@@ -34710,23 +34712,6 @@ class CollabStore {
     });
     return transaction.deferred();
   }
-  personDeskProposalViews(workspaceId, proposalIds) {
-    this.requireWorkspace(workspaceId);
-    return this.db.transaction(() => {
-      const sessions = this.noteSessionViews(workspaceId);
-      const context = this.proposalReadContext(workspaceId);
-      return proposalIds.map((proposalId) => {
-        try {
-          this.requireProposalTerms(workspaceId, validateId(proposalId, "proposal_report_id"));
-          return { proposal_report_id: proposalId, view: this.noteProposalData(workspaceId, proposalId, sessions, context) };
-        } catch (error51) {
-          if (!(error51 instanceof CollabError))
-            throw error51;
-          return { proposal_report_id: proposalId, error: error51.code };
-        }
-      });
-    }).deferred();
-  }
   personInboxSummary() {
     return this.listWorkspaces().map((workspace) => {
       const inbox = this.personInbox(workspace.id);
@@ -36839,6 +36824,846 @@ class CollabStore {
       throw new CollabError("handoff_not_found", `Handoff '${id}' was not found`);
     return handoffFromRow(row);
   }
+  latestReceiptKeyForSession(credential, prefix2) {
+    return this.latestReceiptKey(this.authenticateSession(credential), prefix2);
+  }
+  latestReceiptKey(session, prefix2) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*:$/.test(prefix2) || prefix2.length > 100) {
+      throw new CollabError("invalid_receipt_prefix", "A receipt prefix is a key prefix ending in ':'");
+    }
+    const upper = `${prefix2.slice(0, -1)};`;
+    const row = this.db.query(`
+      SELECT idempotency_key FROM mutations
+      WHERE workspace_id = ? AND actor = ? AND idempotency_key >= ? AND idempotency_key < ?
+      ORDER BY idempotency_key DESC
+      LIMIT 1
+    `).get(session.workspace_id, `session:${session.id}`, prefix2, upper);
+    return row?.idempotency_key ?? null;
+  }
+  withReceiptPlan(plan, run) {
+    if (!plan)
+      return run();
+    if (this.ambientReceiptPlan)
+      throw new CollabError("receipt_plan_nested", "A receipt plan is already in force");
+    this.ambientReceiptPlan = plan;
+    try {
+      return run();
+    } finally {
+      this.ambientReceiptPlan = null;
+    }
+  }
+  ambientPlanFor(idempotencyKey) {
+    const plan = this.ambientReceiptPlan;
+    if (!plan)
+      return;
+    return idempotencyKey === plan.key || idempotencyKey.startsWith(`${plan.key}:`) ? plan : undefined;
+  }
+  requireReceiptPlan(session, plan) {
+    const latest = this.latestReceiptKey(session, plan.prefix);
+    if (latest === plan.latest || latest === plan.key || latest !== null && latest.startsWith(`${plan.key}:`))
+      return;
+    throw new CollabError("receipt_plan_stale", "Another call by this session acted on the same entity after this call chose its key; nothing was written");
+  }
+  timestamp() {
+    return this.now().toISOString();
+  }
+}
+function normalizeMutation(input) {
+  return { ...input, actor: validateActor(input.actor), idempotency_key: validateIdempotencyKey(input.idempotency_key) };
+}
+function normalizeVersionedMutation(input) {
+  validateExpectedVersion(input.expected_version);
+  return normalizeMutation(input);
+}
+function normalizeLeaseInput(input) {
+  return {
+    ...normalizeVersionedMutation(input),
+    task_id: validateId(input.task_id, "task_id"),
+    lease_id: validateId(input.lease_id, "lease_id")
+  };
+}
+function validateActor(value) {
+  const actor = cleanText(value, "actor", 200);
+  if (/^person:/i.test(actor)) {
+    throw new CollabError("invalid_actor", "Actor labels beginning with person: are reserved for the person desk");
+  }
+  return actor;
+}
+function derivedActor(prefix2, sessionId) {
+  if (prefix2 === undefined) {
+    throw new CollabError("actor_required", "Supply actor, or actor_prefix to derive one from the new session id");
+  }
+  if (typeof prefix2 !== "string" || !/^[a-z][a-z0-9-]{0,39}$/.test(prefix2)) {
+    throw new CollabError("invalid_actor_prefix", "actor_prefix is 1 to 40 lower-case letters, digits or dashes");
+  }
+  return validateActor(`${prefix2}-${sessionId.slice("session_".length, "session_".length + 6)}`);
+}
+var MAX_MODEL_LABEL = 200;
+function validateModelLabel(value) {
+  const model = cleanText(value, "model", MAX_MODEL_LABEL);
+  if (/[\u0000-\u001f\u007f]/.test(model)) {
+    throw new CollabError("invalid_model", "model must be one line of text");
+  }
+  return model;
+}
+function validateExpectedVersion(value) {
+  if (!Number.isInteger(value) || value < 1) {
+    throw new CollabError("invalid_expected_version", "expected_version must be a positive integer");
+  }
+  return value;
+}
+function validateRuntimeKind(value) {
+  const runtime = cleanText(value, "runtime_kind", 64).toLowerCase();
+  if (!/^[a-z0-9][a-z0-9._:-]*$/.test(runtime)) {
+    throw new CollabError("invalid_runtime_kind", "runtime_kind contains unsupported characters");
+  }
+  return runtime;
+}
+function normalizeSessionCapabilities(values) {
+  if (!Array.isArray(values) || values.length > MAX_SESSION_CAPABILITIES) {
+    throw new CollabError("invalid_declared_capabilities", `A session may declare at most ${MAX_SESSION_CAPABILITIES} capabilities`);
+  }
+  const normalized = values.map((value) => {
+    const capability = cleanText(value, "declared_capability", MAX_SESSION_CAPABILITY_LENGTH).toLowerCase();
+    if (!/^[a-z0-9][a-z0-9._:-]*$/.test(capability)) {
+      throw new CollabError("invalid_declared_capability", "Declared capabilities must be symbolic names, not free-form content");
+    }
+    return capability;
+  });
+  return uniqueSorted(normalized);
+}
+function validatePresenceTtl(value) {
+  const ttl = value ?? DEFAULT_PRESENCE_SECONDS;
+  if (!Number.isInteger(ttl) || ttl < 30 || ttl > MAX_PRESENCE_SECONDS) {
+    throw new CollabError("invalid_presence_ttl", `ttl_seconds must be an integer between 30 and ${MAX_PRESENCE_SECONDS}`);
+  }
+  return ttl;
+}
+function validateSessionListLimit(value) {
+  const limit = value ?? DEFAULT_SESSION_LIST_LIMIT;
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_SESSION_LIST_LIMIT) {
+    throw new CollabError("invalid_session_list_limit", `limit must be an integer between 1 and ${MAX_SESSION_LIST_LIMIT}`);
+  }
+  return limit;
+}
+function validateNextEventLimit(value) {
+  const limit = value ?? DEFAULT_NEXT_EVENT_LIMIT;
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_NEXT_EVENT_LIMIT) {
+    throw new CollabError("invalid_event_limit", `event_limit must be an integer between 1 and ${MAX_NEXT_EVENT_LIMIT}`);
+  }
+  return limit;
+}
+var BOUND_AFTER_SEQUENCE_REMEDY = "A bound collab_next always pages from the acknowledged session cursor. Advance it with " + "collab_cursor_ack (next_anchor of the page you processed), or read from any position " + "without acknowledging with collab_events_since (after_sequence or after_anchor).";
+function requireBoundAfterSequence(afterSequence, session) {
+  if (!Number.isInteger(afterSequence) || afterSequence < 0) {
+    throw new CollabError("invalid_cursor", "Event cursor must be a non-negative integer");
+  }
+  if (afterSequence === session.cursor_sequence)
+    return;
+  throw new CollabError("after_sequence_unsupported_in_bound_session", `after_sequence ${afterSequence} differs from this session's acknowledged cursor ` + `(sequence ${session.cursor_sequence}). ${BOUND_AFTER_SEQUENCE_REMEDY}`, {
+    after_sequence: afterSequence,
+    cursor: {
+      epoch_id: session.cursor_epoch_id,
+      sequence: session.cursor_sequence,
+      hash: session.cursor_hash
+    },
+    cursor_version: session.cursor_version,
+    remedy: BOUND_AFTER_SEQUENCE_REMEDY
+  });
+}
+function normalizeSessionRenewInput(input) {
+  if (input.expected_version !== undefined)
+    validateExpectedVersion(input.expected_version);
+  const request = {
+    task_id: validateId(input.task_id, "task_id"),
+    lease_id: validateId(input.lease_id, "lease_id"),
+    ...input.expected_version === undefined ? {} : { expected_version: input.expected_version }
+  };
+  return { ...request, request, idempotency_key: validateIdempotencyKey(input.idempotency_key) };
+}
+function normalizeSessionLeaseInput(input) {
+  const normalized = {
+    idempotency_key: validateIdempotencyKey(input.idempotency_key),
+    task_id: validateId(input.task_id, "task_id"),
+    lease_id: validateId(input.lease_id, "lease_id"),
+    expected_version: validateExpectedVersion(input.expected_version)
+  };
+  return {
+    ...normalized,
+    request: {
+      task_id: normalized.task_id,
+      lease_id: normalized.lease_id,
+      expected_version: normalized.expected_version
+    }
+  };
+}
+function validateIdempotencyKey(value) {
+  const key = cleanText(value, "idempotency_key", 200);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(key)) {
+    throw new CollabError("invalid_idempotency_key", "Idempotency key contains unsupported characters");
+  }
+  return key;
+}
+function validateId(value, field) {
+  const id = cleanText(value, field, 200);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(id)) {
+    throw new CollabError(`invalid_${field}`, `${field} contains unsupported characters`);
+  }
+  return id;
+}
+function cleanText(value, field, max) {
+  const text = value.trim();
+  if (!text)
+    throw new CollabError(`invalid_${field}`, `${field} must not be empty`);
+  if (text.length > max)
+    throw new CollabError(`invalid_${field}`, `${field} exceeds ${max} characters`);
+  if (text.includes("\x00"))
+    throw new CollabError(`invalid_${field}`, `${field} must not contain NUL bytes`);
+  return text;
+}
+function optionalText(value, field, max) {
+  if (value === undefined || value.trim() === "")
+    return null;
+  return cleanText(value, field, max);
+}
+function validateTtl(value) {
+  const ttl = value ?? DEFAULT_LEASE_SECONDS;
+  if (!Number.isInteger(ttl) || ttl < 30 || ttl > MAX_LEASE_SECONDS) {
+    throw new CollabError("invalid_ttl", `ttl_seconds must be an integer between 30 and ${MAX_LEASE_SECONDS}`);
+  }
+  return ttl;
+}
+function validateSha256(value) {
+  const digest = value.toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(digest))
+    throw new CollabError("invalid_sha256", "sha256 must be 64 hexadecimal characters");
+  return digest;
+}
+function validateGitObjectId(value) {
+  const oid = value.toLowerCase();
+  if (!/^[a-f0-9]{40,64}$/.test(oid)) {
+    throw new CollabError("invalid_git_object_id", "Git object IDs must contain 40 to 64 hexadecimal characters");
+  }
+  return oid;
+}
+function validateArtifactKind(value) {
+  if (!["file", "commit", "test", "data", "url", "other"].includes(value)) {
+    throw new CollabError("invalid_artifact_kind", "Unsupported artifact kind");
+  }
+  return value;
+}
+function validateReportKind(value) {
+  if (!["observation", "inference", "proposal", "decision"].includes(value)) {
+    throw new CollabError("invalid_report_kind", "Unsupported report kind");
+  }
+  return value;
+}
+function validateReportConfidence(value) {
+  if (!["high", "medium", "low", "unknown"].includes(value)) {
+    throw new CollabError("invalid_report_confidence", "Unsupported report confidence");
+  }
+  return value;
+}
+function validateReportRelation(value) {
+  if (![
+    "informs",
+    "supports",
+    "challenges",
+    "corrects",
+    "withdraws",
+    "supersedes",
+    "resolves"
+  ].includes(value)) {
+    throw new CollabError("invalid_report_relation", "Unsupported report relation");
+  }
+  return value;
+}
+function normalizeEvidenceRefs(references) {
+  if (!Array.isArray(references) || references.length > MAX_REPORT_REFS) {
+    throw new CollabError("invalid_evidence_refs", `A report may contain at most ${MAX_REPORT_REFS} evidence references`);
+  }
+  return uniqueSorted(references.map((reference) => {
+    if (typeof reference !== "string") {
+      throw invalidEvidenceRef("Evidence references must be strings");
+    }
+    try {
+      return cleanText(reference, "evidence_ref", MAX_REPORT_REF_LENGTH);
+    } catch (error51) {
+      if (error51 instanceof CollabError)
+        throw invalidEvidenceRef(error51.message);
+      throw error51;
+    }
+  }));
+}
+function invalidEvidenceRef(reason) {
+  return new CollabError("invalid_evidence_ref", `${reason}. ${EVIDENCE_REFS_DESCRIPTION}`, { allowed_prefixes: [...EVIDENCE_REF_PREFIXES] });
+}
+function normalizePathScopes(scopes) {
+  if (!Array.isArray(scopes) || scopes.length > MAX_PATH_SCOPES) {
+    throw new CollabError("invalid_path_scopes", `A task may have at most ${MAX_PATH_SCOPES} path scopes`);
+  }
+  let totalLength = 0;
+  const normalized = scopes.map((scope) => {
+    if (typeof scope !== "string" || !scope || scope.length > MAX_PATH_SCOPE_LENGTH || scope.includes("\x00") || scope.includes("\\") || isAbsolute3(scope)) {
+      throw new CollabError("invalid_path_scope", "Path scopes must be non-empty repository-relative POSIX paths", { scope });
+    }
+    totalLength += scope.length;
+    if (totalLength > MAX_PATH_SCOPES_TOTAL) {
+      throw new CollabError("invalid_path_scopes", `Combined path scopes may not exceed ${MAX_PATH_SCOPES_TOTAL} characters`);
+    }
+    const clean = posix.normalize(scope.replace(/^\.\//, "")).replace(/\/$/, "");
+    if (!clean || clean === "." || clean === ".." || clean.startsWith("../")) {
+      throw new CollabError("invalid_path_scope", "Root-wide and parent path scopes are not allowed", { scope });
+    }
+    return clean;
+  });
+  return uniqueSorted(normalized);
+}
+function normalizeDependencies(dependencies) {
+  if (!Array.isArray(dependencies) || dependencies.length > MAX_DEPENDENCIES) {
+    throw new CollabError("invalid_dependencies", `A task may have at most ${MAX_DEPENDENCIES} dependencies`);
+  }
+  return uniqueSorted(dependencies.map((id) => validateId(id, "dependency")));
+}
+function pathConflicts(left, right) {
+  const conflicts = [];
+  for (const a of left) {
+    for (const b of right) {
+      const leftKey = a.normalize("NFC").toLowerCase();
+      const rightKey = b.normalize("NFC").toLowerCase();
+      if (leftKey === rightKey || leftKey.startsWith(`${rightKey}/`) || rightKey.startsWith(`${leftKey}/`))
+        conflicts.push([a, b]);
+    }
+  }
+  return conflicts;
+}
+function uniqueSorted(values) {
+  return [...new Set(values)].sort();
+}
+function parseStringArray(json2) {
+  return JSON.parse(json2);
+}
+function artifactFromRow(row) {
+  return { ...row };
+}
+function decisionFromRow(row) {
+  return { ...row };
+}
+function handoffFromRow(row) {
+  return { ...row };
+}
+function eventFromRow(row) {
+  const base = {
+    protocol: row.protocol,
+    workspace_id: row.workspace_id,
+    epoch_id: row.epoch_id,
+    sequence: row.sequence,
+    id: row.id,
+    type: row.type,
+    entity_id: row.entity_id,
+    actor: row.actor,
+    occurred_at: row.occurred_at,
+    payload: JSON.parse(row.payload_json),
+    prev_hash: row.prev_hash,
+    hash: row.hash
+  };
+  return row.protocol === LEGACY_COLLAB_PROTOCOL ? base : { ...base, session_id: row.session_id };
+}
+function eventHash(event) {
+  if (event.protocol === LEGACY_COLLAB_PROTOCOL) {
+    const { hash: _hash2, session_id: _sessionId, ...body2 } = event;
+    return sha2564(canonicalJson(body2));
+  }
+  const { hash: _hash, ...body } = event;
+  return sha2564(canonicalJson(body));
+}
+function verifyEventPage(events, afterSequence, predecessorHash, headSequence, headHash) {
+  if (predecessorHash === null)
+    return false;
+  if (events.length === 0) {
+    return afterSequence === headSequence && predecessorHash === headHash;
+  }
+  let expectedSequence = afterSequence + 1;
+  let previous = predecessorHash;
+  for (const event of events) {
+    if (event.sequence !== expectedSequence || event.prev_hash !== previous)
+      return false;
+    if (event.hash !== eventHash(event))
+      return false;
+    previous = event.hash;
+    expectedSequence += 1;
+  }
+  const lastSequence = events.at(-1)?.sequence ?? afterSequence;
+  return lastSequence !== headSequence || previous === headHash;
+}
+function presenceSessionFromRow(row, observedAt) {
+  const presence = row.left_at ? "left" : observedAt < row.presence_expires_at ? "live" : "stale";
+  return {
+    protocol: COLLAB_SESSION_PROTOCOL,
+    id: row.id,
+    workspace_id: row.workspace_id,
+    epoch_id: row.epoch_id,
+    client_instance_id: row.client_instance_id,
+    actor_label: row.actor_label,
+    actor_key: row.actor_key,
+    runtime_kind: row.runtime_kind,
+    provider_label: row.provider_label,
+    model_label: row.model_label,
+    declared_capabilities: parseStringArray(row.declared_capabilities_json),
+    capability_basis: "self_declared",
+    version: row.version,
+    joined_at: row.joined_at,
+    last_seen_at: row.last_seen_at,
+    presence_expires_at: row.presence_expires_at,
+    presence,
+    left_at: row.left_at
+  };
+}
+function requirePresenceSessionVersion(row, expectedVersion) {
+  if (row.version !== expectedVersion) {
+    throw new CollabError("session_version_conflict", "Presence session version changed", {
+      session_id: row.id,
+      expected_version: expectedVersion,
+      actual_version: row.version
+    });
+  }
+}
+function requireMatchingPresenceSessionJoin(row, input) {
+  const same = row.actor_label === input.actor_label && row.runtime_kind === input.runtime_kind && row.provider_label === input.provider_label && row.model_label === input.model_label && canonicalJson(parseStringArray(row.declared_capabilities_json)) === canonicalJson(input.declared_capabilities);
+  if (!same) {
+    throw new CollabError("session_instance_conflict", "client_instance_id was already joined with different self-declared metadata", { session_id: row.id });
+  }
+}
+function sessionLiveness(row, observedAt) {
+  if (row.status !== "active")
+    return "stale";
+  const age = Date.parse(observedAt) - Date.parse(row.last_seen_at);
+  return age <= SESSION_STALE_AFTER_MS ? "live" : "stale";
+}
+function recoveryRequiredFirst(tasks, isOwn) {
+  const byExpiry = (left, right) => (left.lease_expires_at ?? "").localeCompare(right.lease_expires_at ?? "") || left.id.localeCompare(right.id);
+  const pending = tasks.filter((task) => task.effective_status === "recovery_required");
+  return [
+    ...pending.filter(isOwn).sort(byExpiry),
+    ...pending.filter((task) => !isOwn(task)).sort(byExpiry)
+  ];
+}
+function coordinationSessionFromRow(row, observedAt) {
+  return {
+    id: row.id,
+    workspace_id: row.workspace_id,
+    worktree_id: row.worktree_id,
+    actor: row.actor,
+    role: row.role,
+    parent_session_id: row.parent_session_id,
+    status: row.status,
+    generation: row.generation,
+    joined_at: row.joined_at,
+    last_seen_at: row.last_seen_at,
+    ended_at: row.ended_at,
+    cursor: {
+      epoch_id: row.cursor_epoch_id,
+      sequence: row.cursor_sequence,
+      hash: row.cursor_hash
+    },
+    cursor_version: row.cursor_version,
+    reset_generation: row.reset_generation,
+    cursor_recovery_required: row.cursor_recovery_required !== 0,
+    liveness: sessionLiveness(row, observedAt)
+  };
+}
+function worktreeFromRow(row) {
+  return {
+    id: row.id,
+    workspace_id: row.workspace_id,
+    root_path: row.root_path,
+    repository_key: row.repository_key,
+    git_common_dir_hash: row.git_common_dir_hash,
+    branch: row.branch,
+    head_sha: row.head_sha,
+    dirty: sqlToBoolean(row.dirty),
+    registered_at: row.registered_at,
+    last_seen_at: row.last_seen_at
+  };
+}
+function checkpointFromWorktreeRow(row, capturedAt) {
+  return {
+    worktree_id: row.id,
+    head_sha: row.head_sha,
+    branch: row.branch,
+    dirty: sqlToBoolean(row.dirty),
+    captured_at: capturedAt
+  };
+}
+function reportFromRow(row) {
+  return {
+    id: row.id,
+    workspace_id: row.workspace_id,
+    task_id: row.task_id,
+    from_session_id: row.from_session_id,
+    from_actor: row.from_actor,
+    to_session_id: row.to_session_id,
+    kind: row.kind,
+    body: row.body,
+    evidence_refs: parseStringArray(row.evidence_refs_json),
+    confidence: row.confidence,
+    confidence_basis: row.confidence_basis,
+    limits: row.limits,
+    relation: row.relation,
+    target_report_id: row.target_report_id,
+    authority_scope: row.authority_scope,
+    authority_basis: row.authority_basis,
+    created_at: row.created_at,
+    event_sequence: row.event_sequence
+  };
+}
+function reviewFromRow(row) {
+  return { ...row };
+}
+function proposalTermsFromRow(row) {
+  if (row.rule !== CONSENT_RULE) {
+    throw new CollabError("proposal_rule_unsupported", "This proposal was opened under a consent rule this package does not implement", { proposal_report_id: row.report_id, rule: row.rule });
+  }
+  return {
+    report_id: row.report_id,
+    workspace_id: row.workspace_id,
+    rule: CONSENT_RULE,
+    criteria: row.criteria,
+    extent: row.extent,
+    known_conflicts: row.known_conflicts,
+    origin: row.origin,
+    topic: row.topic,
+    closes_at: row.closes_at,
+    voices: JSON.parse(row.voices_json),
+    author_voice_id: row.author_voice_id,
+    proposal_sha256: row.proposal_sha256,
+    opened_event_id: row.opened_event_id,
+    created_at: row.created_at
+  };
+}
+function proposalPersonActFromRow(row) {
+  const { ai_snapshot_json, proof_json, ...rest } = row;
+  return {
+    ...rest,
+    ai_snapshot: JSON.parse(ai_snapshot_json),
+    proof: proof_json ? JSON.parse(proof_json) : null
+  };
+}
+var MAX_INBOX_SCAN = 500;
+var MAX_INBOX_PROPOSALS = 50;
+function aiSnapshotOf(status) {
+  return {
+    position: status.ai.position,
+    closed: status.ai.closed,
+    qualifying_support_report_ids: status.ai.qualifying_support_report_ids,
+    unresolved_challenge_report_ids: status.ai.unresolved_challenge_report_ids
+  };
+}
+function normalizeActReason(act, reason) {
+  if (act === "agree") {
+    if (reason !== undefined && reason.trim() !== "") {
+      throw new CollabError("invalid_reason", "An agreement takes no reason");
+    }
+    return null;
+  }
+  return cleanText(reason ?? "", "reason", 2000);
+}
+var PERSON_DESK_ACTOR = "person:desk";
+var PERSON_TERMINAL_ACTOR = "person:terminal";
+var PERSON_PASSKEY_ACTOR = "person:passkey";
+var PERSON_VOICE_ID = "person";
+var PERSON_DESK_LIMITS = "Written at the person desk, which does not authenticate the person.";
+function validatePersonAct(value) {
+  if (value !== "agree" && value !== "reject") {
+    throw new CollabError("invalid_act", "act must be agree or reject");
+  }
+  return value;
+}
+function normalizeProposalTerms(input) {
+  return {
+    question: cleanText(input.question, "question", MAX_REPORT_BODY),
+    criteria: cleanText(input.criteria, "criteria", 4000),
+    extent: cleanText(input.extent, "extent", 1000),
+    known_conflicts: optionalText(input.known_conflicts, "known_conflicts", 4000),
+    evidence_refs: normalizeEvidenceRefs(input.evidence_refs ?? []),
+    topic: optionalText(input.topic, "topic", 200),
+    consult_seconds: validateConsultSeconds(input.consult_seconds)
+  };
+}
+function validateProposalOrigin(value) {
+  if (value !== "ai" && value !== "person_relayed") {
+    throw new CollabError("invalid_origin", "origin must be ai or person_relayed");
+  }
+  return value;
+}
+function validateConsultSeconds(value) {
+  const seconds = value ?? DEFAULT_PROPOSAL_CONSULT_SECONDS;
+  if (!Number.isInteger(seconds) || seconds < MIN_PROPOSAL_CONSULT_SECONDS || seconds > MAX_PROPOSAL_CONSULT_SECONDS) {
+    throw new CollabError("invalid_consult_seconds", `consult_seconds must be an integer between ${MIN_PROPOSAL_CONSULT_SECONDS} and ${MAX_PROPOSAL_CONSULT_SECONDS}`);
+  }
+  return seconds;
+}
+function parseCheckpoint(json2) {
+  return json2 ? JSON.parse(json2) : null;
+}
+function checkpointDigest(checkpoint) {
+  return sha2564(canonicalJson(checkpoint));
+}
+function checkpointStateMatches(left, right) {
+  return left.worktree_id === right.worktree_id && left.head_sha === right.head_sha && left.branch === right.branch && left.algorithm === right.algorithm && left.index_sha256 === right.index_sha256 && left.state_sha256 === right.state_sha256 && left.dirty === right.dirty;
+}
+function requireCompleteGitCheckpoint(checkpoint) {
+  if (checkpoint.source !== "server_observed" || checkpoint.algorithm !== "git-state/v1" || checkpoint.head_sha === null || checkpoint.dirty === null || typeof checkpoint.index_sha256 !== "string" || !/^[a-f0-9]{64}$/.test(checkpoint.index_sha256) || typeof checkpoint.state_sha256 !== "string" || !/^[a-f0-9]{64}$/.test(checkpoint.state_sha256)) {
+    throw new CollabError("git_checkpoint_incomplete", "Acceptance requires a complete server-observed Git checkpoint", { worktree_id: checkpoint.worktree_id });
+  }
+}
+function artifactRepositoryPath(uri, rootPath) {
+  let value = uri;
+  if (value.startsWith("file:")) {
+    try {
+      const url2 = new URL(value);
+      if (url2.protocol !== "file:" || url2.hostname !== "" && url2.hostname !== "localhost") {
+        return null;
+      }
+      value = decodeURIComponent(url2.pathname);
+    } catch {
+      return null;
+    }
+  }
+  if (!value || value.includes("\x00") || value.includes("\\"))
+    return null;
+  let relative2;
+  if (isAbsolute3(value)) {
+    const absolute = posix.normalize(value);
+    if (!absolute.startsWith(`${rootPath}/`))
+      return null;
+    relative2 = absolute.slice(rootPath.length + 1);
+  } else {
+    relative2 = posix.normalize(value);
+  }
+  if (!relative2 || relative2 === "." || relative2 === ".." || relative2.startsWith("../") || relative2.endsWith("/") || relative2 === ".git" || relative2.startsWith(".git/"))
+    return null;
+  return relative2;
+}
+function pathWithinScopes(path, scopes) {
+  return scopes.some((scope) => path === scope || path.startsWith(`${scope}/`));
+}
+function gitCheckpointStaleError(taskId, result, observed, refusal) {
+  const branch = result.branch ? `"${result.branch}"` : "(none: its HEAD was detached)";
+  const remedy = `Two ways forward. (1) Host commit: exactly one commit on branch ${branch} whose only parent ` + `is the result checkpoint HEAD ${result.head_sha}, changing only paths inside the task's ` + "path_scopes, each byte-equal to the newest file artifact this task attached for that uri " + "(since its latest request_changes), with the worktree left clean; then review again. " + `(2) Re-completion: review task "${taskId}" with outcome "request_changes"; once it is ` + "claimed again, collab_task_complete captures a fresh result checkpoint for a new review. " + "Never amend, reset or rewrite a shared branch to meet (1): if other commits already sit " + "on it, use (2).";
+  return new CollabError("git_checkpoint_stale", `The completion worktree changed after its result checkpoint was captured: ${refusal}. ${remedy}`, {
+    result_checkpoint: result,
+    observed_checkpoint: observed,
+    boundary: "checkpoint_validation_is_a_local_observation_not_an_atomic_git_sqlite_lock",
+    host_commit_refusal: refusal,
+    remedy
+  });
+}
+function hydrateLegacyMutationResponse(value, now) {
+  if (Array.isArray(value)) {
+    return value.map((item) => hydrateLegacyMutationResponse(item, now));
+  }
+  if (!isRecordValue(value))
+    return value;
+  const hydratedEntries = Object.entries(value).map(([key, item]) => [
+    key,
+    hydrateLegacyMutationResponse(item, now)
+  ]);
+  const hydrated = Object.fromEntries(hydratedEntries);
+  if (typeof hydrated.id !== "string" || typeof hydrated.workspace_id !== "string" || !["open", "claimed", "blocked", "completed"].includes(typeof hydrated.status === "string" ? hydrated.status : "") || !Array.isArray(hydrated.dependencies) || !Array.isArray(hydrated.path_scopes) || !Number.isInteger(hydrated.version)) {
+    return hydrated;
+  }
+  const expired = hydrated.status === "claimed" && typeof hydrated.lease_expires_at === "string" && now >= hydrated.lease_expires_at;
+  return {
+    ...hydrated,
+    effective_status: typeof hydrated.effective_status === "string" ? hydrated.effective_status : expired ? "lease_expired" : hydrated.status,
+    work_mode: typeof hydrated.work_mode === "string" ? hydrated.work_mode : "coordination",
+    completion_policy: typeof hydrated.completion_policy === "string" ? hydrated.completion_policy : "reported",
+    review_status: typeof hydrated.review_status === "string" ? hydrated.review_status : "legacy_unreviewed",
+    expected_base_sha: hydrated.expected_base_sha ?? null,
+    base_checkpoint: hydrated.base_checkpoint ?? null,
+    base_checkpoint_digest: hydratedCheckpointDigest(hydrated.base_checkpoint_digest, hydrated.base_checkpoint),
+    result_checkpoint: hydrated.result_checkpoint ?? null,
+    result_checkpoint_digest: hydratedCheckpointDigest(hydrated.result_checkpoint_digest, hydrated.result_checkpoint),
+    completion_report_id: hydrated.completion_report_id ?? null,
+    assignee_session_id: hydrated.assignee_session_id ?? null,
+    assignee_liveness: hydrated.assignee_liveness ?? null,
+    claim_worktree_id: hydrated.claim_worktree_id ?? null,
+    reported_by: hydrated.reported_by ?? null,
+    reported_by_session_id: hydrated.reported_by_session_id ?? null,
+    reported_at: hydrated.reported_at ?? null,
+    accepted_by: hydrated.accepted_by ?? null,
+    accepted_by_session_id: hydrated.accepted_by_session_id ?? null,
+    accepted_at: hydrated.accepted_at ?? null,
+    review_requested_session_id: hydrated.review_requested_session_id ?? null
+  };
+}
+function hydratedCheckpointDigest(stored, checkpoint) {
+  if (typeof stored === "string")
+    return stored;
+  return isRecordValue(checkpoint) ? checkpointDigest(checkpoint) : null;
+}
+function isRecordValue(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function booleanToSql(value) {
+  return value === null ? null : value ? 1 : 0;
+}
+function sqlToBoolean(value) {
+  return value === null ? null : value !== 0;
+}
+function hashSessionToken(token) {
+  return sha2564(`agenttool.collab/session-token/v1\x00${token}`);
+}
+function safeDigestEqual(left, right) {
+  const leftBuffer = Buffer.from(left, "hex");
+  const rightBuffer = Buffer.from(right, "hex");
+  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+}
+function pragmaNumber(db, name) {
+  const row = db.query(`PRAGMA ${name}`).get();
+  const value = row?.[name];
+  if (!Number.isInteger(value)) {
+    throw new CollabError("database_pragma_unavailable", `Could not read PRAGMA ${name}`);
+  }
+  return value;
+}
+function retrySqliteBusy(operation) {
+  const deadline = Date.now() + SQLITE_BUSY_RETRY_MS;
+  let delay = 10;
+  while (true) {
+    try {
+      operation();
+      return;
+    } catch (error51) {
+      const code = error51.code;
+      const busy = code === "SQLITE_BUSY" || error51 instanceof Error && /database is (?:locked|busy)/i.test(error51.message);
+      if (!busy || Date.now() >= deadline)
+        throw error51;
+      const remaining = deadline - Date.now();
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.min(delay, remaining));
+      delay = Math.min(delay * 2, 100);
+    }
+  }
+}
+function assertSafeDatabaseFile(path) {
+  const stat = lstatSync4(path);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || typeof process.getuid === "function" && stat.uid !== process.getuid()) {
+    throw new CollabError("database_file_unsafe", "The collaboration database path must be a non-linked regular file owned by this user", { path });
+  }
+}
+function quoteIdentifier(value) {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {
+    throw new CollabError("invalid_sql_identifier", "Invalid internal SQL identifier");
+  }
+  return `"${value}"`;
+}
+function assertDistinctLegacyWorktreeIdentities(workspaces) {
+  const selectors = [
+    {
+      field: "worktrees.root_path",
+      value: (workspace) => workspace.identity.root_path
+    },
+    {
+      field: "worktrees.id",
+      value: (workspace) => workspace.identity.checkpoint.worktree_id
+    },
+    {
+      field: "worktrees.fingerprint",
+      value: (workspace) => workspace.identity.worktree_fingerprint
+    }
+  ];
+  const collisions = [];
+  for (const selector of selectors) {
+    const groups = new Map;
+    for (const workspace of workspaces) {
+      const value = selector.value(workspace);
+      const workspaceIds2 = groups.get(value) ?? [];
+      workspaceIds2.push(workspace.id);
+      groups.set(value, workspaceIds2);
+    }
+    for (const workspaceIds2 of groups.values()) {
+      if (workspaceIds2.length < 2)
+        continue;
+      collisions.push({
+        field: selector.field,
+        workspace_ids: workspaceIds2.sort()
+      });
+    }
+  }
+  if (collisions.length === 0)
+    return;
+  collisions.sort((left, right) => {
+    const fieldOrder = left.field < right.field ? -1 : left.field > right.field ? 1 : 0;
+    if (fieldOrder !== 0)
+      return fieldOrder;
+    const leftIds = left.workspace_ids.join("\x00");
+    const rightIds = right.workspace_ids.join("\x00");
+    return leftIds < rightIds ? -1 : leftIds > rightIds ? 1 : 0;
+  });
+  const workspaceIds = [
+    ...new Set(collisions.flatMap((collision) => collision.workspace_ids))
+  ].sort();
+  throw new CollabError("migration_identity_collision", "Legacy workspaces resolve to the same worktree identity; migration will not merge distinct journals", {
+    workspace_ids: workspaceIds,
+    collisions,
+    boundary: "v0_3_will_not_merge_distinct_legacy_journals_that_resolve_to_one_worktree",
+    required_action: "keep_the_original_audit_database_and_use_a_compatible_v0_2_client_or_choose_a_fresh_v0_3_database"
+  });
+}
+function safeRepositoryIdentity(rootPath) {
+  try {
+    return inspectRepository(rootPath);
+  } catch {
+    const root = resolve4(rootPath);
+    const repositoryKey = `local-path:${sha2564(root)}`;
+    const worktreeId2 = `wt_${sha2564(`${root}\x00path:${root}`).slice(0, 24)}`;
+    return {
+      requested_root_path: root,
+      root_path: root,
+      repository_key: repositoryKey,
+      git_common_dir_hash: null,
+      worktree_fingerprint: `path:${sha2564(root)}`,
+      checkpoint: {
+        worktree_id: worktreeId2,
+        head_sha: null,
+        branch: null,
+        dirty: null,
+        captured_at: new Date().toISOString()
+      }
+    };
+  }
+}
+function sha2564(value) {
+  return createHash4("sha256").update(value).digest("hex");
+}
+function addSeconds(iso, seconds) {
+  return new Date(new Date(iso).getTime() + seconds * 1000).toISOString();
+}
+
+// src/store-notes.ts
+class CollabStore extends CollabStoreCore {
+  constructor(path, options = {}) {
+    super(path, options);
+    this.sweepRevealedSeals();
+  }
+  personDeskProposalViews(workspaceId, proposalIds) {
+    this.requireWorkspace(workspaceId);
+    return this.db.transaction(() => {
+      const sessions = this.noteSessionViews(workspaceId);
+      const context = this.proposalReadContext(workspaceId);
+      return proposalIds.map((proposalId) => {
+        try {
+          this.requireProposalTerms(workspaceId, validateId(proposalId, "proposal_report_id"));
+          return { proposal_report_id: proposalId, view: this.noteProposalData(workspaceId, proposalId, sessions, context) };
+        } catch (error51) {
+          if (!(error51 instanceof CollabError))
+            throw error51;
+          return { proposal_report_id: proposalId, error: error51.code };
+        }
+      });
+    }).deferred();
+  }
   noteSessionViews(workspaceId) {
     this.requireWorkspace(workspaceId);
     const rows = this.db.query(`
@@ -36961,7 +37786,7 @@ class CollabStore {
     if (hasFiles && cite.worktree_id !== session.worktree_id) {
       throw new CollabError("cite_worktree_mismatch", "File evidence is cited against the citing session's own worktree");
     }
-    const citeId = `cite_${randomUUID3()}`;
+    const citeId = `cite_${randomUUID4()}`;
     const payload = {
       cite_id: citeId,
       by_session_id: session.id,
@@ -37115,46 +37940,6 @@ class CollabStore {
     if (!row)
       return { found: false };
     return { found: true, operation: row.operation, value: JSON.parse(row.response_json) };
-  }
-  latestReceiptKeyForSession(credential, prefix2) {
-    return this.latestReceiptKey(this.authenticateSession(credential), prefix2);
-  }
-  latestReceiptKey(session, prefix2) {
-    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*:$/.test(prefix2) || prefix2.length > 100) {
-      throw new CollabError("invalid_receipt_prefix", "A receipt prefix is a key prefix ending in ':'");
-    }
-    const upper = `${prefix2.slice(0, -1)};`;
-    const row = this.db.query(`
-      SELECT idempotency_key FROM mutations
-      WHERE workspace_id = ? AND actor = ? AND idempotency_key >= ? AND idempotency_key < ?
-      ORDER BY idempotency_key DESC
-      LIMIT 1
-    `).get(session.workspace_id, `session:${session.id}`, prefix2, upper);
-    return row?.idempotency_key ?? null;
-  }
-  withReceiptPlan(plan, run) {
-    if (!plan)
-      return run();
-    if (this.ambientReceiptPlan)
-      throw new CollabError("receipt_plan_nested", "A receipt plan is already in force");
-    this.ambientReceiptPlan = plan;
-    try {
-      return run();
-    } finally {
-      this.ambientReceiptPlan = null;
-    }
-  }
-  ambientPlanFor(idempotencyKey) {
-    const plan = this.ambientReceiptPlan;
-    if (!plan)
-      return;
-    return idempotencyKey === plan.key || idempotencyKey.startsWith(`${plan.key}:`) ? plan : undefined;
-  }
-  requireReceiptPlan(session, plan) {
-    const latest = this.latestReceiptKey(session, plan.prefix);
-    if (latest === plan.latest || latest === plan.key || latest !== null && latest.startsWith(`${plan.key}:`))
-      return;
-    throw new CollabError("receipt_plan_stale", "Another call by this session acted on the same entity after this call chose its key; nothing was written");
   }
   initNoteMark(credential, sequence) {
     const marked = this.db.transaction(() => {
@@ -38973,490 +39758,6 @@ class CollabStore {
       throw new CollabError("event_not_found", `No event at sequence ${sequence}`);
     return row.id;
   }
-  timestamp() {
-    return this.now().toISOString();
-  }
-}
-function normalizeMutation(input) {
-  return { ...input, actor: validateActor(input.actor), idempotency_key: validateIdempotencyKey(input.idempotency_key) };
-}
-function normalizeVersionedMutation(input) {
-  validateExpectedVersion(input.expected_version);
-  return normalizeMutation(input);
-}
-function normalizeLeaseInput(input) {
-  return {
-    ...normalizeVersionedMutation(input),
-    task_id: validateId(input.task_id, "task_id"),
-    lease_id: validateId(input.lease_id, "lease_id")
-  };
-}
-function validateActor(value) {
-  const actor = cleanText(value, "actor", 200);
-  if (/^person:/i.test(actor)) {
-    throw new CollabError("invalid_actor", "Actor labels beginning with person: are reserved for the person desk");
-  }
-  return actor;
-}
-function derivedActor(prefix2, sessionId) {
-  if (prefix2 === undefined) {
-    throw new CollabError("actor_required", "Supply actor, or actor_prefix to derive one from the new session id");
-  }
-  if (typeof prefix2 !== "string" || !/^[a-z][a-z0-9-]{0,39}$/.test(prefix2)) {
-    throw new CollabError("invalid_actor_prefix", "actor_prefix is 1 to 40 lower-case letters, digits or dashes");
-  }
-  return validateActor(`${prefix2}-${sessionId.slice("session_".length, "session_".length + 6)}`);
-}
-var MAX_MODEL_LABEL = 200;
-function validateModelLabel(value) {
-  const model = cleanText(value, "model", MAX_MODEL_LABEL);
-  if (/[\u0000-\u001f\u007f]/.test(model)) {
-    throw new CollabError("invalid_model", "model must be one line of text");
-  }
-  return model;
-}
-function validateExpectedVersion(value) {
-  if (!Number.isInteger(value) || value < 1) {
-    throw new CollabError("invalid_expected_version", "expected_version must be a positive integer");
-  }
-  return value;
-}
-function validateRuntimeKind(value) {
-  const runtime = cleanText(value, "runtime_kind", 64).toLowerCase();
-  if (!/^[a-z0-9][a-z0-9._:-]*$/.test(runtime)) {
-    throw new CollabError("invalid_runtime_kind", "runtime_kind contains unsupported characters");
-  }
-  return runtime;
-}
-function normalizeSessionCapabilities(values) {
-  if (!Array.isArray(values) || values.length > MAX_SESSION_CAPABILITIES) {
-    throw new CollabError("invalid_declared_capabilities", `A session may declare at most ${MAX_SESSION_CAPABILITIES} capabilities`);
-  }
-  const normalized = values.map((value) => {
-    const capability = cleanText(value, "declared_capability", MAX_SESSION_CAPABILITY_LENGTH).toLowerCase();
-    if (!/^[a-z0-9][a-z0-9._:-]*$/.test(capability)) {
-      throw new CollabError("invalid_declared_capability", "Declared capabilities must be symbolic names, not free-form content");
-    }
-    return capability;
-  });
-  return uniqueSorted(normalized);
-}
-function validatePresenceTtl(value) {
-  const ttl = value ?? DEFAULT_PRESENCE_SECONDS;
-  if (!Number.isInteger(ttl) || ttl < 30 || ttl > MAX_PRESENCE_SECONDS) {
-    throw new CollabError("invalid_presence_ttl", `ttl_seconds must be an integer between 30 and ${MAX_PRESENCE_SECONDS}`);
-  }
-  return ttl;
-}
-function validateSessionListLimit(value) {
-  const limit = value ?? DEFAULT_SESSION_LIST_LIMIT;
-  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_SESSION_LIST_LIMIT) {
-    throw new CollabError("invalid_session_list_limit", `limit must be an integer between 1 and ${MAX_SESSION_LIST_LIMIT}`);
-  }
-  return limit;
-}
-function validateNextEventLimit(value) {
-  const limit = value ?? DEFAULT_NEXT_EVENT_LIMIT;
-  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_NEXT_EVENT_LIMIT) {
-    throw new CollabError("invalid_event_limit", `event_limit must be an integer between 1 and ${MAX_NEXT_EVENT_LIMIT}`);
-  }
-  return limit;
-}
-var BOUND_AFTER_SEQUENCE_REMEDY = "A bound collab_next always pages from the acknowledged session cursor. Advance it with " + "collab_cursor_ack (next_anchor of the page you processed), or read from any position " + "without acknowledging with collab_events_since (after_sequence or after_anchor).";
-function requireBoundAfterSequence(afterSequence, session) {
-  if (!Number.isInteger(afterSequence) || afterSequence < 0) {
-    throw new CollabError("invalid_cursor", "Event cursor must be a non-negative integer");
-  }
-  if (afterSequence === session.cursor_sequence)
-    return;
-  throw new CollabError("after_sequence_unsupported_in_bound_session", `after_sequence ${afterSequence} differs from this session's acknowledged cursor ` + `(sequence ${session.cursor_sequence}). ${BOUND_AFTER_SEQUENCE_REMEDY}`, {
-    after_sequence: afterSequence,
-    cursor: {
-      epoch_id: session.cursor_epoch_id,
-      sequence: session.cursor_sequence,
-      hash: session.cursor_hash
-    },
-    cursor_version: session.cursor_version,
-    remedy: BOUND_AFTER_SEQUENCE_REMEDY
-  });
-}
-function normalizeSessionRenewInput(input) {
-  if (input.expected_version !== undefined)
-    validateExpectedVersion(input.expected_version);
-  const request = {
-    task_id: validateId(input.task_id, "task_id"),
-    lease_id: validateId(input.lease_id, "lease_id"),
-    ...input.expected_version === undefined ? {} : { expected_version: input.expected_version }
-  };
-  return { ...request, request, idempotency_key: validateIdempotencyKey(input.idempotency_key) };
-}
-function normalizeSessionLeaseInput(input) {
-  const normalized = {
-    idempotency_key: validateIdempotencyKey(input.idempotency_key),
-    task_id: validateId(input.task_id, "task_id"),
-    lease_id: validateId(input.lease_id, "lease_id"),
-    expected_version: validateExpectedVersion(input.expected_version)
-  };
-  return {
-    ...normalized,
-    request: {
-      task_id: normalized.task_id,
-      lease_id: normalized.lease_id,
-      expected_version: normalized.expected_version
-    }
-  };
-}
-function validateIdempotencyKey(value) {
-  const key = cleanText(value, "idempotency_key", 200);
-  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(key)) {
-    throw new CollabError("invalid_idempotency_key", "Idempotency key contains unsupported characters");
-  }
-  return key;
-}
-function validateId(value, field) {
-  const id = cleanText(value, field, 200);
-  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(id)) {
-    throw new CollabError(`invalid_${field}`, `${field} contains unsupported characters`);
-  }
-  return id;
-}
-function cleanText(value, field, max) {
-  const text = value.trim();
-  if (!text)
-    throw new CollabError(`invalid_${field}`, `${field} must not be empty`);
-  if (text.length > max)
-    throw new CollabError(`invalid_${field}`, `${field} exceeds ${max} characters`);
-  if (text.includes("\x00"))
-    throw new CollabError(`invalid_${field}`, `${field} must not contain NUL bytes`);
-  return text;
-}
-function optionalText(value, field, max) {
-  if (value === undefined || value.trim() === "")
-    return null;
-  return cleanText(value, field, max);
-}
-function validateTtl(value) {
-  const ttl = value ?? DEFAULT_LEASE_SECONDS;
-  if (!Number.isInteger(ttl) || ttl < 30 || ttl > MAX_LEASE_SECONDS) {
-    throw new CollabError("invalid_ttl", `ttl_seconds must be an integer between 30 and ${MAX_LEASE_SECONDS}`);
-  }
-  return ttl;
-}
-function validateSha256(value) {
-  const digest = value.toLowerCase();
-  if (!/^[a-f0-9]{64}$/.test(digest))
-    throw new CollabError("invalid_sha256", "sha256 must be 64 hexadecimal characters");
-  return digest;
-}
-function validateGitObjectId(value) {
-  const oid = value.toLowerCase();
-  if (!/^[a-f0-9]{40,64}$/.test(oid)) {
-    throw new CollabError("invalid_git_object_id", "Git object IDs must contain 40 to 64 hexadecimal characters");
-  }
-  return oid;
-}
-function validateArtifactKind(value) {
-  if (!["file", "commit", "test", "data", "url", "other"].includes(value)) {
-    throw new CollabError("invalid_artifact_kind", "Unsupported artifact kind");
-  }
-  return value;
-}
-function validateReportKind(value) {
-  if (!["observation", "inference", "proposal", "decision"].includes(value)) {
-    throw new CollabError("invalid_report_kind", "Unsupported report kind");
-  }
-  return value;
-}
-function validateReportConfidence(value) {
-  if (!["high", "medium", "low", "unknown"].includes(value)) {
-    throw new CollabError("invalid_report_confidence", "Unsupported report confidence");
-  }
-  return value;
-}
-function validateReportRelation(value) {
-  if (![
-    "informs",
-    "supports",
-    "challenges",
-    "corrects",
-    "withdraws",
-    "supersedes",
-    "resolves"
-  ].includes(value)) {
-    throw new CollabError("invalid_report_relation", "Unsupported report relation");
-  }
-  return value;
-}
-function normalizeEvidenceRefs(references) {
-  if (!Array.isArray(references) || references.length > MAX_REPORT_REFS) {
-    throw new CollabError("invalid_evidence_refs", `A report may contain at most ${MAX_REPORT_REFS} evidence references`);
-  }
-  return uniqueSorted(references.map((reference) => {
-    if (typeof reference !== "string") {
-      throw invalidEvidenceRef("Evidence references must be strings");
-    }
-    try {
-      return cleanText(reference, "evidence_ref", MAX_REPORT_REF_LENGTH);
-    } catch (error51) {
-      if (error51 instanceof CollabError)
-        throw invalidEvidenceRef(error51.message);
-      throw error51;
-    }
-  }));
-}
-function invalidEvidenceRef(reason) {
-  return new CollabError("invalid_evidence_ref", `${reason}. ${EVIDENCE_REFS_DESCRIPTION}`, { allowed_prefixes: [...EVIDENCE_REF_PREFIXES] });
-}
-function normalizePathScopes(scopes) {
-  if (!Array.isArray(scopes) || scopes.length > MAX_PATH_SCOPES) {
-    throw new CollabError("invalid_path_scopes", `A task may have at most ${MAX_PATH_SCOPES} path scopes`);
-  }
-  let totalLength = 0;
-  const normalized = scopes.map((scope) => {
-    if (typeof scope !== "string" || !scope || scope.length > MAX_PATH_SCOPE_LENGTH || scope.includes("\x00") || scope.includes("\\") || isAbsolute3(scope)) {
-      throw new CollabError("invalid_path_scope", "Path scopes must be non-empty repository-relative POSIX paths", { scope });
-    }
-    totalLength += scope.length;
-    if (totalLength > MAX_PATH_SCOPES_TOTAL) {
-      throw new CollabError("invalid_path_scopes", `Combined path scopes may not exceed ${MAX_PATH_SCOPES_TOTAL} characters`);
-    }
-    const clean = posix.normalize(scope.replace(/^\.\//, "")).replace(/\/$/, "");
-    if (!clean || clean === "." || clean === ".." || clean.startsWith("../")) {
-      throw new CollabError("invalid_path_scope", "Root-wide and parent path scopes are not allowed", { scope });
-    }
-    return clean;
-  });
-  return uniqueSorted(normalized);
-}
-function normalizeDependencies(dependencies) {
-  if (!Array.isArray(dependencies) || dependencies.length > MAX_DEPENDENCIES) {
-    throw new CollabError("invalid_dependencies", `A task may have at most ${MAX_DEPENDENCIES} dependencies`);
-  }
-  return uniqueSorted(dependencies.map((id) => validateId(id, "dependency")));
-}
-function pathConflicts(left, right) {
-  const conflicts = [];
-  for (const a of left) {
-    for (const b of right) {
-      const leftKey = a.normalize("NFC").toLowerCase();
-      const rightKey = b.normalize("NFC").toLowerCase();
-      if (leftKey === rightKey || leftKey.startsWith(`${rightKey}/`) || rightKey.startsWith(`${leftKey}/`))
-        conflicts.push([a, b]);
-    }
-  }
-  return conflicts;
-}
-function uniqueSorted(values) {
-  return [...new Set(values)].sort();
-}
-function parseStringArray(json2) {
-  return JSON.parse(json2);
-}
-function artifactFromRow(row) {
-  return { ...row };
-}
-function decisionFromRow(row) {
-  return { ...row };
-}
-function handoffFromRow(row) {
-  return { ...row };
-}
-function eventFromRow(row) {
-  const base = {
-    protocol: row.protocol,
-    workspace_id: row.workspace_id,
-    epoch_id: row.epoch_id,
-    sequence: row.sequence,
-    id: row.id,
-    type: row.type,
-    entity_id: row.entity_id,
-    actor: row.actor,
-    occurred_at: row.occurred_at,
-    payload: JSON.parse(row.payload_json),
-    prev_hash: row.prev_hash,
-    hash: row.hash
-  };
-  return row.protocol === LEGACY_COLLAB_PROTOCOL ? base : { ...base, session_id: row.session_id };
-}
-function eventHash(event) {
-  if (event.protocol === LEGACY_COLLAB_PROTOCOL) {
-    const { hash: _hash2, session_id: _sessionId, ...body2 } = event;
-    return sha2564(canonicalJson(body2));
-  }
-  const { hash: _hash, ...body } = event;
-  return sha2564(canonicalJson(body));
-}
-function verifyEventPage(events, afterSequence, predecessorHash, headSequence, headHash) {
-  if (predecessorHash === null)
-    return false;
-  if (events.length === 0) {
-    return afterSequence === headSequence && predecessorHash === headHash;
-  }
-  let expectedSequence = afterSequence + 1;
-  let previous = predecessorHash;
-  for (const event of events) {
-    if (event.sequence !== expectedSequence || event.prev_hash !== previous)
-      return false;
-    if (event.hash !== eventHash(event))
-      return false;
-    previous = event.hash;
-    expectedSequence += 1;
-  }
-  const lastSequence = events.at(-1)?.sequence ?? afterSequence;
-  return lastSequence !== headSequence || previous === headHash;
-}
-function presenceSessionFromRow(row, observedAt) {
-  const presence = row.left_at ? "left" : observedAt < row.presence_expires_at ? "live" : "stale";
-  return {
-    protocol: COLLAB_SESSION_PROTOCOL,
-    id: row.id,
-    workspace_id: row.workspace_id,
-    epoch_id: row.epoch_id,
-    client_instance_id: row.client_instance_id,
-    actor_label: row.actor_label,
-    actor_key: row.actor_key,
-    runtime_kind: row.runtime_kind,
-    provider_label: row.provider_label,
-    model_label: row.model_label,
-    declared_capabilities: parseStringArray(row.declared_capabilities_json),
-    capability_basis: "self_declared",
-    version: row.version,
-    joined_at: row.joined_at,
-    last_seen_at: row.last_seen_at,
-    presence_expires_at: row.presence_expires_at,
-    presence,
-    left_at: row.left_at
-  };
-}
-function requirePresenceSessionVersion(row, expectedVersion) {
-  if (row.version !== expectedVersion) {
-    throw new CollabError("session_version_conflict", "Presence session version changed", {
-      session_id: row.id,
-      expected_version: expectedVersion,
-      actual_version: row.version
-    });
-  }
-}
-function requireMatchingPresenceSessionJoin(row, input) {
-  const same = row.actor_label === input.actor_label && row.runtime_kind === input.runtime_kind && row.provider_label === input.provider_label && row.model_label === input.model_label && canonicalJson(parseStringArray(row.declared_capabilities_json)) === canonicalJson(input.declared_capabilities);
-  if (!same) {
-    throw new CollabError("session_instance_conflict", "client_instance_id was already joined with different self-declared metadata", { session_id: row.id });
-  }
-}
-function sessionLiveness(row, observedAt) {
-  if (row.status !== "active")
-    return "stale";
-  const age = Date.parse(observedAt) - Date.parse(row.last_seen_at);
-  return age <= SESSION_STALE_AFTER_MS ? "live" : "stale";
-}
-function recoveryRequiredFirst(tasks, isOwn) {
-  const byExpiry = (left, right) => (left.lease_expires_at ?? "").localeCompare(right.lease_expires_at ?? "") || left.id.localeCompare(right.id);
-  const pending = tasks.filter((task) => task.effective_status === "recovery_required");
-  return [
-    ...pending.filter(isOwn).sort(byExpiry),
-    ...pending.filter((task) => !isOwn(task)).sort(byExpiry)
-  ];
-}
-function coordinationSessionFromRow(row, observedAt) {
-  return {
-    id: row.id,
-    workspace_id: row.workspace_id,
-    worktree_id: row.worktree_id,
-    actor: row.actor,
-    role: row.role,
-    parent_session_id: row.parent_session_id,
-    status: row.status,
-    generation: row.generation,
-    joined_at: row.joined_at,
-    last_seen_at: row.last_seen_at,
-    ended_at: row.ended_at,
-    cursor: {
-      epoch_id: row.cursor_epoch_id,
-      sequence: row.cursor_sequence,
-      hash: row.cursor_hash
-    },
-    cursor_version: row.cursor_version,
-    reset_generation: row.reset_generation,
-    cursor_recovery_required: row.cursor_recovery_required !== 0,
-    liveness: sessionLiveness(row, observedAt)
-  };
-}
-function worktreeFromRow(row) {
-  return {
-    id: row.id,
-    workspace_id: row.workspace_id,
-    root_path: row.root_path,
-    repository_key: row.repository_key,
-    git_common_dir_hash: row.git_common_dir_hash,
-    branch: row.branch,
-    head_sha: row.head_sha,
-    dirty: sqlToBoolean(row.dirty),
-    registered_at: row.registered_at,
-    last_seen_at: row.last_seen_at
-  };
-}
-function checkpointFromWorktreeRow(row, capturedAt) {
-  return {
-    worktree_id: row.id,
-    head_sha: row.head_sha,
-    branch: row.branch,
-    dirty: sqlToBoolean(row.dirty),
-    captured_at: capturedAt
-  };
-}
-function reportFromRow(row) {
-  return {
-    id: row.id,
-    workspace_id: row.workspace_id,
-    task_id: row.task_id,
-    from_session_id: row.from_session_id,
-    from_actor: row.from_actor,
-    to_session_id: row.to_session_id,
-    kind: row.kind,
-    body: row.body,
-    evidence_refs: parseStringArray(row.evidence_refs_json),
-    confidence: row.confidence,
-    confidence_basis: row.confidence_basis,
-    limits: row.limits,
-    relation: row.relation,
-    target_report_id: row.target_report_id,
-    authority_scope: row.authority_scope,
-    authority_basis: row.authority_basis,
-    created_at: row.created_at,
-    event_sequence: row.event_sequence
-  };
-}
-function reviewFromRow(row) {
-  return { ...row };
-}
-function proposalTermsFromRow(row) {
-  if (row.rule !== CONSENT_RULE) {
-    throw new CollabError("proposal_rule_unsupported", "This proposal was opened under a consent rule this package does not implement", { proposal_report_id: row.report_id, rule: row.rule });
-  }
-  return {
-    report_id: row.report_id,
-    workspace_id: row.workspace_id,
-    rule: CONSENT_RULE,
-    criteria: row.criteria,
-    extent: row.extent,
-    known_conflicts: row.known_conflicts,
-    origin: row.origin,
-    topic: row.topic,
-    closes_at: row.closes_at,
-    voices: JSON.parse(row.voices_json),
-    author_voice_id: row.author_voice_id,
-    proposal_sha256: row.proposal_sha256,
-    opened_event_id: row.opened_event_id,
-    created_at: row.created_at
-  };
-}
-function proposalPersonActFromRow(row) {
-  const { ai_snapshot_json, proof_json, ...rest } = row;
-  return {
-    ...rest,
-    ai_snapshot: JSON.parse(ai_snapshot_json),
-    proof: proof_json ? JSON.parse(proof_json) : null
-  };
 }
 var NOTE_OUTSIDE_EVIDENCE_KINDS = ["file", "commit", "test", "url", "data", "msg"];
 var NOTE_CITE_LOCATOR_MAX = 1000;
@@ -39693,297 +39994,6 @@ function firstLine(text) {
   const end = /[\uD800-\uDBFF]$/.test(line.slice(0, 199)) ? 198 : 199;
   return `${line.slice(0, end)}\u2026`;
 }
-var MAX_INBOX_SCAN = 500;
-var MAX_INBOX_PROPOSALS = 50;
-function aiSnapshotOf(status) {
-  return {
-    position: status.ai.position,
-    closed: status.ai.closed,
-    qualifying_support_report_ids: status.ai.qualifying_support_report_ids,
-    unresolved_challenge_report_ids: status.ai.unresolved_challenge_report_ids
-  };
-}
-function normalizeActReason(act, reason) {
-  if (act === "agree") {
-    if (reason !== undefined && reason.trim() !== "") {
-      throw new CollabError("invalid_reason", "An agreement takes no reason");
-    }
-    return null;
-  }
-  return cleanText(reason ?? "", "reason", 2000);
-}
-var PERSON_DESK_ACTOR = "person:desk";
-var PERSON_TERMINAL_ACTOR = "person:terminal";
-var PERSON_PASSKEY_ACTOR = "person:passkey";
-var PERSON_VOICE_ID = "person";
-var PERSON_DESK_LIMITS = "Written at the person desk, which does not authenticate the person.";
-function validatePersonAct(value) {
-  if (value !== "agree" && value !== "reject") {
-    throw new CollabError("invalid_act", "act must be agree or reject");
-  }
-  return value;
-}
-function normalizeProposalTerms(input) {
-  return {
-    question: cleanText(input.question, "question", MAX_REPORT_BODY),
-    criteria: cleanText(input.criteria, "criteria", 4000),
-    extent: cleanText(input.extent, "extent", 1000),
-    known_conflicts: optionalText(input.known_conflicts, "known_conflicts", 4000),
-    evidence_refs: normalizeEvidenceRefs(input.evidence_refs ?? []),
-    topic: optionalText(input.topic, "topic", 200),
-    consult_seconds: validateConsultSeconds(input.consult_seconds)
-  };
-}
-function validateProposalOrigin(value) {
-  if (value !== "ai" && value !== "person_relayed") {
-    throw new CollabError("invalid_origin", "origin must be ai or person_relayed");
-  }
-  return value;
-}
-function validateConsultSeconds(value) {
-  const seconds = value ?? DEFAULT_PROPOSAL_CONSULT_SECONDS;
-  if (!Number.isInteger(seconds) || seconds < MIN_PROPOSAL_CONSULT_SECONDS || seconds > MAX_PROPOSAL_CONSULT_SECONDS) {
-    throw new CollabError("invalid_consult_seconds", `consult_seconds must be an integer between ${MIN_PROPOSAL_CONSULT_SECONDS} and ${MAX_PROPOSAL_CONSULT_SECONDS}`);
-  }
-  return seconds;
-}
-function parseCheckpoint(json2) {
-  return json2 ? JSON.parse(json2) : null;
-}
-function checkpointDigest(checkpoint) {
-  return sha2564(canonicalJson(checkpoint));
-}
-function checkpointStateMatches(left, right) {
-  return left.worktree_id === right.worktree_id && left.head_sha === right.head_sha && left.branch === right.branch && left.algorithm === right.algorithm && left.index_sha256 === right.index_sha256 && left.state_sha256 === right.state_sha256 && left.dirty === right.dirty;
-}
-function requireCompleteGitCheckpoint(checkpoint) {
-  if (checkpoint.source !== "server_observed" || checkpoint.algorithm !== "git-state/v1" || checkpoint.head_sha === null || checkpoint.dirty === null || typeof checkpoint.index_sha256 !== "string" || !/^[a-f0-9]{64}$/.test(checkpoint.index_sha256) || typeof checkpoint.state_sha256 !== "string" || !/^[a-f0-9]{64}$/.test(checkpoint.state_sha256)) {
-    throw new CollabError("git_checkpoint_incomplete", "Acceptance requires a complete server-observed Git checkpoint", { worktree_id: checkpoint.worktree_id });
-  }
-}
-function artifactRepositoryPath(uri, rootPath) {
-  let value = uri;
-  if (value.startsWith("file:")) {
-    try {
-      const url2 = new URL(value);
-      if (url2.protocol !== "file:" || url2.hostname !== "" && url2.hostname !== "localhost") {
-        return null;
-      }
-      value = decodeURIComponent(url2.pathname);
-    } catch {
-      return null;
-    }
-  }
-  if (!value || value.includes("\x00") || value.includes("\\"))
-    return null;
-  let relative2;
-  if (isAbsolute3(value)) {
-    const absolute = posix.normalize(value);
-    if (!absolute.startsWith(`${rootPath}/`))
-      return null;
-    relative2 = absolute.slice(rootPath.length + 1);
-  } else {
-    relative2 = posix.normalize(value);
-  }
-  if (!relative2 || relative2 === "." || relative2 === ".." || relative2.startsWith("../") || relative2.endsWith("/") || relative2 === ".git" || relative2.startsWith(".git/"))
-    return null;
-  return relative2;
-}
-function pathWithinScopes(path, scopes) {
-  return scopes.some((scope) => path === scope || path.startsWith(`${scope}/`));
-}
-function gitCheckpointStaleError(taskId, result, observed, refusal) {
-  const branch = result.branch ? `"${result.branch}"` : "(none: its HEAD was detached)";
-  const remedy = `Two ways forward. (1) Host commit: exactly one commit on branch ${branch} whose only parent ` + `is the result checkpoint HEAD ${result.head_sha}, changing only paths inside the task's ` + "path_scopes, each byte-equal to the newest file artifact this task attached for that uri " + "(since its latest request_changes), with the worktree left clean; then review again. " + `(2) Re-completion: review task "${taskId}" with outcome "request_changes"; once it is ` + "claimed again, collab_task_complete captures a fresh result checkpoint for a new review. " + "Never amend, reset or rewrite a shared branch to meet (1): if other commits already sit " + "on it, use (2).";
-  return new CollabError("git_checkpoint_stale", `The completion worktree changed after its result checkpoint was captured: ${refusal}. ${remedy}`, {
-    result_checkpoint: result,
-    observed_checkpoint: observed,
-    boundary: "checkpoint_validation_is_a_local_observation_not_an_atomic_git_sqlite_lock",
-    host_commit_refusal: refusal,
-    remedy
-  });
-}
-function hydrateLegacyMutationResponse(value, now) {
-  if (Array.isArray(value)) {
-    return value.map((item) => hydrateLegacyMutationResponse(item, now));
-  }
-  if (!isRecordValue(value))
-    return value;
-  const hydratedEntries = Object.entries(value).map(([key, item]) => [
-    key,
-    hydrateLegacyMutationResponse(item, now)
-  ]);
-  const hydrated = Object.fromEntries(hydratedEntries);
-  if (typeof hydrated.id !== "string" || typeof hydrated.workspace_id !== "string" || !["open", "claimed", "blocked", "completed"].includes(typeof hydrated.status === "string" ? hydrated.status : "") || !Array.isArray(hydrated.dependencies) || !Array.isArray(hydrated.path_scopes) || !Number.isInteger(hydrated.version)) {
-    return hydrated;
-  }
-  const expired = hydrated.status === "claimed" && typeof hydrated.lease_expires_at === "string" && now >= hydrated.lease_expires_at;
-  return {
-    ...hydrated,
-    effective_status: typeof hydrated.effective_status === "string" ? hydrated.effective_status : expired ? "lease_expired" : hydrated.status,
-    work_mode: typeof hydrated.work_mode === "string" ? hydrated.work_mode : "coordination",
-    completion_policy: typeof hydrated.completion_policy === "string" ? hydrated.completion_policy : "reported",
-    review_status: typeof hydrated.review_status === "string" ? hydrated.review_status : "legacy_unreviewed",
-    expected_base_sha: hydrated.expected_base_sha ?? null,
-    base_checkpoint: hydrated.base_checkpoint ?? null,
-    base_checkpoint_digest: hydratedCheckpointDigest(hydrated.base_checkpoint_digest, hydrated.base_checkpoint),
-    result_checkpoint: hydrated.result_checkpoint ?? null,
-    result_checkpoint_digest: hydratedCheckpointDigest(hydrated.result_checkpoint_digest, hydrated.result_checkpoint),
-    completion_report_id: hydrated.completion_report_id ?? null,
-    assignee_session_id: hydrated.assignee_session_id ?? null,
-    assignee_liveness: hydrated.assignee_liveness ?? null,
-    claim_worktree_id: hydrated.claim_worktree_id ?? null,
-    reported_by: hydrated.reported_by ?? null,
-    reported_by_session_id: hydrated.reported_by_session_id ?? null,
-    reported_at: hydrated.reported_at ?? null,
-    accepted_by: hydrated.accepted_by ?? null,
-    accepted_by_session_id: hydrated.accepted_by_session_id ?? null,
-    accepted_at: hydrated.accepted_at ?? null,
-    review_requested_session_id: hydrated.review_requested_session_id ?? null
-  };
-}
-function hydratedCheckpointDigest(stored, checkpoint) {
-  if (typeof stored === "string")
-    return stored;
-  return isRecordValue(checkpoint) ? checkpointDigest(checkpoint) : null;
-}
-function isRecordValue(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function booleanToSql(value) {
-  return value === null ? null : value ? 1 : 0;
-}
-function sqlToBoolean(value) {
-  return value === null ? null : value !== 0;
-}
-function hashSessionToken(token) {
-  return sha2564(`agenttool.collab/session-token/v1\x00${token}`);
-}
-function safeDigestEqual(left, right) {
-  const leftBuffer = Buffer.from(left, "hex");
-  const rightBuffer = Buffer.from(right, "hex");
-  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
-}
-function pragmaNumber(db, name) {
-  const row = db.query(`PRAGMA ${name}`).get();
-  const value = row?.[name];
-  if (!Number.isInteger(value)) {
-    throw new CollabError("database_pragma_unavailable", `Could not read PRAGMA ${name}`);
-  }
-  return value;
-}
-function retrySqliteBusy(operation) {
-  const deadline = Date.now() + SQLITE_BUSY_RETRY_MS;
-  let delay = 10;
-  while (true) {
-    try {
-      operation();
-      return;
-    } catch (error51) {
-      const code = error51.code;
-      const busy = code === "SQLITE_BUSY" || error51 instanceof Error && /database is (?:locked|busy)/i.test(error51.message);
-      if (!busy || Date.now() >= deadline)
-        throw error51;
-      const remaining = deadline - Date.now();
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.min(delay, remaining));
-      delay = Math.min(delay * 2, 100);
-    }
-  }
-}
-function assertSafeDatabaseFile(path) {
-  const stat = lstatSync4(path);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || typeof process.getuid === "function" && stat.uid !== process.getuid()) {
-    throw new CollabError("database_file_unsafe", "The collaboration database path must be a non-linked regular file owned by this user", { path });
-  }
-}
-function quoteIdentifier(value) {
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {
-    throw new CollabError("invalid_sql_identifier", "Invalid internal SQL identifier");
-  }
-  return `"${value}"`;
-}
-function assertDistinctLegacyWorktreeIdentities(workspaces) {
-  const selectors = [
-    {
-      field: "worktrees.root_path",
-      value: (workspace) => workspace.identity.root_path
-    },
-    {
-      field: "worktrees.id",
-      value: (workspace) => workspace.identity.checkpoint.worktree_id
-    },
-    {
-      field: "worktrees.fingerprint",
-      value: (workspace) => workspace.identity.worktree_fingerprint
-    }
-  ];
-  const collisions = [];
-  for (const selector of selectors) {
-    const groups = new Map;
-    for (const workspace of workspaces) {
-      const value = selector.value(workspace);
-      const workspaceIds2 = groups.get(value) ?? [];
-      workspaceIds2.push(workspace.id);
-      groups.set(value, workspaceIds2);
-    }
-    for (const workspaceIds2 of groups.values()) {
-      if (workspaceIds2.length < 2)
-        continue;
-      collisions.push({
-        field: selector.field,
-        workspace_ids: workspaceIds2.sort()
-      });
-    }
-  }
-  if (collisions.length === 0)
-    return;
-  collisions.sort((left, right) => {
-    const fieldOrder = left.field < right.field ? -1 : left.field > right.field ? 1 : 0;
-    if (fieldOrder !== 0)
-      return fieldOrder;
-    const leftIds = left.workspace_ids.join("\x00");
-    const rightIds = right.workspace_ids.join("\x00");
-    return leftIds < rightIds ? -1 : leftIds > rightIds ? 1 : 0;
-  });
-  const workspaceIds = [
-    ...new Set(collisions.flatMap((collision) => collision.workspace_ids))
-  ].sort();
-  throw new CollabError("migration_identity_collision", "Legacy workspaces resolve to the same worktree identity; migration will not merge distinct journals", {
-    workspace_ids: workspaceIds,
-    collisions,
-    boundary: "v0_3_will_not_merge_distinct_legacy_journals_that_resolve_to_one_worktree",
-    required_action: "keep_the_original_audit_database_and_use_a_compatible_v0_2_client_or_choose_a_fresh_v0_3_database"
-  });
-}
-function safeRepositoryIdentity(rootPath) {
-  try {
-    return inspectRepository(rootPath);
-  } catch {
-    const root = resolve4(rootPath);
-    const repositoryKey = `local-path:${sha2564(root)}`;
-    const worktreeId2 = `wt_${sha2564(`${root}\x00path:${root}`).slice(0, 24)}`;
-    return {
-      requested_root_path: root,
-      root_path: root,
-      repository_key: repositoryKey,
-      git_common_dir_hash: null,
-      worktree_fingerprint: `path:${sha2564(root)}`,
-      checkpoint: {
-        worktree_id: worktreeId2,
-        head_sha: null,
-        branch: null,
-        dirty: null,
-        captured_at: new Date().toISOString()
-      }
-    };
-  }
-}
-function sha2564(value) {
-  return createHash4("sha256").update(value).digest("hex");
-}
-function addSeconds(iso, seconds) {
-  return new Date(new Date(iso).getTime() + seconds * 1000).toISOString();
-}
 
 // src/verbs.ts
 import { createHash as createHash5 } from "crypto";
@@ -40160,10 +40170,10 @@ var DERIVED_KEY = /^n1:([A-Z2-7]{8}):(\d{6}):([A-Z2-7]{20})(?::(\d{2}))?$/;
 function derivedBase(sessionId, tool, input) {
   return base32(sha256Bytes2(canonicalJson({ session_id: sessionId, tool, input }))).slice(0, 20);
 }
-function planReceipt(store, credential, call) {
+function planReceipt(store2, credential, call) {
   const base = derivedBase(credential.session_id, call.tool, call.input);
   const eh = base32(sha256Bytes2(call.entity)).slice(0, 8);
-  const latest = store.latestReceiptKeyForSession(credential, `n1:${eh}:`);
+  const latest = store2.latestReceiptKeyForSession(credential, `n1:${eh}:`);
   const parsed = latest ? DERIVED_KEY.exec(latest) : null;
   const latestSeq = parsed ? Number(parsed[2]) : 0;
   const retry = parsed !== null && parsed[3] === base && (call.stillCurrent?.(latest) ?? true);
@@ -40215,8 +40225,8 @@ function changedUnderYou(ctx, call, state) {
     remedy: withSlot(ctx, { tool: call.tool, input: call.input })
   });
 }
-function replayReceipt(store, credential, key) {
-  const found = store.readReceiptByKey(credential, key);
+function replayReceipt(store2, credential, key) {
+  const found = store2.readReceiptByKey(credential, key);
   return found.found ? found.value : null;
 }
 function noteWriteResult(fields) {
@@ -40904,12 +40914,12 @@ function sessionShown(sessionId, name, byId) {
   return { session: sessionId ?? null, name, ...sessionId && byId.get(sessionId)?.status === "ended" ? { ended: true } : {} };
 }
 var NOTE_RECHECK_MAX_BYTES = 64 * 1024 * 1024;
-function evidenceRechecker(store, budgetBytes = NOTE_RECHECK_MAX_BYTES) {
+function evidenceRechecker(store2, budgetBytes = NOTE_RECHECK_MAX_BYTES) {
   let remaining = budgetBytes;
   return (worktreeId2, item) => {
     if (!worktreeId2)
       return "unavailable";
-    const root = store.noteWorktreeRoot(worktreeId2);
+    const root = store2.noteWorktreeRoot(worktreeId2);
     if (!root || !existsSync5(root))
       return "unavailable";
     if (remaining <= 0)
@@ -45158,7 +45168,7 @@ function proposeResult(ctx, binding, options) {
 }
 
 // src/ballot-verbs.ts
-import { randomBytes as randomBytes2, randomUUID as randomUUID4 } from "crypto";
+import { randomBytes as randomBytes2, randomUUID as randomUUID5 } from "crypto";
 var POLL_STAND_IN_STATEMENT = "A sealed ballot; read its terms with collab_inbox about.";
 var WAIT_FOR_CLOSE_SECONDS = 30;
 var WAIT_FOR_CLOSE_ADVICE = "collab_inbox {wait_seconds: 30} waits for the close: a wait ends when a ballot you are in, opened or cast in closes, " + "and returns its result; a wait over 30 seconds is one more call (closes_in says how long is left).";
@@ -45394,7 +45404,7 @@ async function voteVerb(ctx, input) {
   if (viewer.your_casts > 0) {
     advice.push("This replaces your earlier cast: only your latest counts, and a session may cast at most 3 times in one ballot.");
   }
-  const castId = randomUUID4();
+  const castId = randomUUID5();
   const salt = randomBytes2(32).toString("hex");
   checkVoteSize(sealed, { ballot_id: ballotId, cast_id: castId, unit_id: viewer.unit_id, session_id: me });
   const commitment = ballotCommitment({
@@ -45535,7 +45545,7 @@ var localDestructiveMutation = {
   openWorldHint: false
 };
 var WAITS_PER_ENDPOINT = 8;
-function buildCollabMcpServer(store, options = {}) {
+function buildCollabMcpServer(store2, options = {}) {
   const slots = new Map([["", { key: "", binding: options.resumed_session ?? null }]]);
   for (const [key2, binding] of Object.entries(options.resumed_sessions ?? {})) {
     if (!key2 || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(key2)) {
@@ -45628,7 +45638,7 @@ Legacy session tools: ${legacyInstructions}`
     return value;
   };
   const noteContext = (signal) => ({
-    store,
+    store: store2,
     environment,
     profile,
     slot_key: requestSlot.getStore().key,
@@ -45782,7 +45792,7 @@ Legacy session tools: ${legacyInstructions}`
       declared_capabilities: exports_external.array(exports_external.string().min(1).max(100).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/)).max(32).optional(),
       ttl_seconds: presenceTtlSeconds
     }
-  }, async (input) => call(() => ({ session: store.joinSession(input) })));
+  }, async (input) => call(() => ({ session: store2.joinSession(input) })));
   server.registerTool("collab_session_list", {
     title: "List self-declared presence sessions",
     description: "List recent live, stale, or explicitly left routing hints. Presence is not health, authentication, permission, or credential-bound coordination.",
@@ -45792,7 +45802,7 @@ Legacy session tools: ${legacyInstructions}`
       presence: exports_external.enum(["live", "stale", "left"]).optional(),
       limit: exports_external.number().int().min(1).max(500).optional()
     }
-  }, async ({ workspace_id, presence, limit }) => call(() => ({ sessions: store.listSessions(workspace_id, presence, limit) })));
+  }, async ({ workspace_id, presence, limit }) => call(() => ({ sessions: store2.listSessions(workspace_id, presence, limit) })));
   server.registerTool("collab_session_heartbeat", {
     title: "Refresh a self-declared presence hint",
     description: "Refresh server-timed routing presence. This never renews or releases a task lease and does not authenticate the caller.",
@@ -45803,7 +45813,7 @@ Legacy session tools: ${legacyInstructions}`
       expected_version: sessionExpectedVersion,
       ttl_seconds: presenceTtlSeconds
     }
-  }, async (input) => call(() => ({ session: store.heartbeatSession(input) })));
+  }, async (input) => call(() => ({ session: store2.heartbeatSession(input) })));
   server.registerTool("collab_session_leave", {
     title: "Leave the self-declared presence plane",
     description: "Mark one routing-presence incarnation as left. This does not end a credential-bound session or release its task leases.",
@@ -45813,7 +45823,7 @@ Legacy session tools: ${legacyInstructions}`
       idempotency_key: key,
       expected_version: sessionExpectedVersion
     }
-  }, async (input) => call(() => ({ session: store.leaveSession(input) })));
+  }, async (input) => call(() => ({ session: store2.leaveSession(input) })));
   server.registerTool("collab_session_start", {
     title: "Join an independent local collaboration session",
     description: "Create and bind a credential-fenced session. The bearer is written to a mode-0600 local file and is never returned in tool output.",
@@ -45838,20 +45848,20 @@ Legacy session tools: ${legacyInstructions}`
     }
     const parentAttested = input.parent_session_id !== undefined && [...slots.values()].some((slot) => slot.binding?.handle.session.id === input.parent_session_id);
     const seatRef = input.seat_ref ?? defaultSeatRef(environment);
-    const handle = store.startSession({
+    const handle = store2.startSession({
       ...input,
       actor: input.actor ?? defaultActor(),
       parent_attested: parentAttested,
       seat_ref: seatRef
     });
-    const credentialFile = store.defaultSessionCredentialPath(handle.session.id);
+    const credentialFile = store2.defaultSessionCredentialPath(handle.session.id);
     try {
       const path = writeSessionCredentialFile(credentialFile, handle.credential);
       state.binding = { handle, credential_file: path };
       return publicSessionBinding(state.binding, seatRef);
     } catch (error51) {
       try {
-        store.endSession({ ...handle.credential, reason: "credential_file_write_failed" });
+        store2.endSession({ ...handle.credential, reason: "credential_file_write_failed" });
       } catch {}
       throw error51;
     }
@@ -45869,7 +45879,7 @@ Legacy session tools: ${legacyInstructions}`
     const current = state.binding;
     if (!current)
       throw new CollabError("session_not_bound", "No session is bound");
-    const ended = store.endSessionWithReleases({
+    const ended = store2.endSessionWithReleases({
       ...current.handle.credential,
       reason,
       release_leases,
@@ -45898,14 +45908,14 @@ Legacy session tools: ${legacyInstructions}`
     if (state.binding) {
       throw new CollabError("session_already_bound", "A bound MCP process cannot open or register another workspace", { session_id: state.binding.handle.session.id });
     }
-    return { workspace: store.openWorkspace(input) };
+    return { workspace: store2.openWorkspace(input) };
   }));
   server.registerTool("collab_workspace_status", {
     title: "Read collaboration status",
     description: "Return task counts, active sessions (with derived liveness) and claims, blockers, pending reviews, reports, and decisions.",
     annotations: localReadOnly,
     inputSchema: { workspace_id: workspaceId }
-  }, async ({ workspace_id }) => call(() => store.workspaceStatus(workspace_id)));
+  }, async ({ workspace_id }) => call(() => store2.workspaceStatus(workspace_id)));
   server.registerTool("collab_next", {
     title: "Poll the next useful collaboration state",
     description: "Poll without acknowledging, with 1\u201350 events per page and a default of 10. Routed reports are bounded to the exact event page; task, conflict, and handoff projections describe the same snapshot head. A bound session always pages from its acknowledged cursor: advance with collab_cursor_ack, or read elsewhere with collab_events_since. " + "recovery_required lists expired session leases awaiting collab_task_recover, the caller's own first. " + "Session liveness and task assignee_liveness are a derived view (stale after 6 hours unseen), never a status change.",
@@ -45919,12 +45929,12 @@ Legacy session tools: ${legacyInstructions}`
     }
   }, async ({ workspace_id, actor, after_sequence, known_cursor, event_limit }) => call(() => {
     requireWorkspace(workspace_id);
-    return state.binding ? store.nextForSession({
+    return state.binding ? store2.nextForSession({
       ...boundCredential(),
       known_cursor,
       event_limit: event_limit ?? DEFAULT_MCP_NEXT_EVENT_LIMIT,
       after_sequence
-    }) : store.nextForActor(workspace_id, requireLegacyActor(actor), after_sequence ?? 0, event_limit ?? DEFAULT_MCP_NEXT_EVENT_LIMIT);
+    }) : store2.nextForActor(workspace_id, requireLegacyActor(actor), after_sequence ?? 0, event_limit ?? DEFAULT_MCP_NEXT_EVENT_LIMIT);
   }));
   server.registerTool("collab_cursor_ack", {
     title: "Acknowledge processed collaboration events",
@@ -45937,7 +45947,7 @@ Legacy session tools: ${legacyInstructions}`
     }
   }, async ({ workspace_id, anchor, expected_cursor_version }) => call(() => {
     requireWorkspace(workspace_id);
-    const session = store.acknowledgeSessionCursor({
+    const session = store2.acknowledgeSessionCursor({
       ...boundCredential(),
       anchor,
       expected_cursor_version
@@ -45969,7 +45979,7 @@ Legacy session tools: ${legacyInstructions}`
     }
   }, async ({ workspace_id, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    const session = store.resetSessionCursor({ ...boundCredential(true), ...input });
+    const session = store2.resetSessionCursor({ ...boundCredential(true), ...input });
     const binding = state.binding;
     if (binding) {
       binding.handle = {
@@ -46007,7 +46017,7 @@ Legacy session tools: ${legacyInstructions}`
     if (!state.binding && (input.work_mode !== undefined || input.completion_policy !== undefined || input.expected_base_sha !== undefined)) {
       throw new CollabError("session_required_for_v2_task_options", "work_mode, completion_policy, and expected_base_sha require a bound v0.2 session");
     }
-    const task = state.binding ? store.createTaskForSession({ ...boundCredential(), ...input, id: task_id }) : store.createTask({
+    const task = state.binding ? store2.createTaskForSession({ ...boundCredential(), ...input, id: task_id }) : store2.createTask({
       workspace_id,
       actor: requireLegacyActor(actor),
       ...input,
@@ -46023,13 +46033,13 @@ Legacy session tools: ${legacyInstructions}`
       workspace_id: workspaceId,
       status: exports_external.enum(["open", "claimed", "blocked", "completed"]).optional()
     }
-  }, async ({ workspace_id, status }) => call(() => ({ tasks: store.listTasks(workspace_id, status) })));
+  }, async ({ workspace_id, status }) => call(() => ({ tasks: store2.listTasks(workspace_id, status) })));
   server.registerTool("collab_task_get", {
     title: "Read one task",
     description: "Return a task, review/lease/checkpoint state, and artifact references.",
     annotations: localReadOnly,
     inputSchema: { workspace_id: workspaceId, task_id: taskId }
-  }, async ({ workspace_id, task_id }) => call(() => ({ task: store.getTask(workspace_id, task_id) })));
+  }, async ({ workspace_id, task_id }) => call(() => ({ task: store2.getTask(workspace_id, task_id) })));
   server.registerTool("collab_task_claim", {
     title: "Claim a task coordination lease",
     description: "Atomically claim if accepted dependencies and repository-wide path scopes permit it. Expired session leases require collab_task_recover.",
@@ -46044,7 +46054,7 @@ Legacy session tools: ${legacyInstructions}`
     }
   }, async ({ workspace_id, actor, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    const task = state.binding ? store.claimTaskForSession({ ...boundCredential(), ...input }) : store.claimTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
+    const task = state.binding ? store2.claimTaskForSession({ ...boundCredential(), ...input }) : store2.claimTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
     return { task };
   }));
   server.registerTool("collab_task_recover", {
@@ -46064,7 +46074,7 @@ Legacy session tools: ${legacyInstructions}`
   }, async ({ workspace_id, ...input }) => call(() => {
     requireWorkspace(workspace_id);
     return {
-      task: store.recoverTaskForSession({ ...boundCredential(), ...input })
+      task: store2.recoverTaskForSession({ ...boundCredential(), ...input })
     };
   }));
   server.registerTool("collab_task_renew", {
@@ -46074,7 +46084,7 @@ Legacy session tools: ${legacyInstructions}`
     inputSchema: leaseMutationSchema({ ttl_seconds: ttlSeconds, expected_version: expectedVersion.optional() })
   }, async ({ workspace_id, actor, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    const task = state.binding ? store.renewLeaseForSession({ ...boundCredential(), ...input }) : store.renewLease({ workspace_id, actor: requireLegacyActor(actor), ...input });
+    const task = state.binding ? store2.renewLeaseForSession({ ...boundCredential(), ...input }) : store2.renewLease({ workspace_id, actor: requireLegacyActor(actor), ...input });
     return { task };
   }));
   server.registerTool("collab_task_progress", {
@@ -46084,7 +46094,7 @@ Legacy session tools: ${legacyInstructions}`
     inputSchema: leaseMutationSchema({ message: exports_external.string().min(1).max(2000) })
   }, async ({ workspace_id, actor, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    const task = state.binding ? store.progressTaskForSession({ ...boundCredential(), ...input }) : store.progressTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
+    const task = state.binding ? store2.progressTaskForSession({ ...boundCredential(), ...input }) : store2.progressTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
     return { task };
   }));
   server.registerTool("collab_task_release", {
@@ -46094,7 +46104,7 @@ Legacy session tools: ${legacyInstructions}`
     inputSchema: leaseMutationSchema({ summary: exports_external.string().max(2000).optional() })
   }, async ({ workspace_id, actor, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    const task = state.binding ? store.releaseTaskForSession({ ...boundCredential(), ...input }) : store.releaseTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
+    const task = state.binding ? store2.releaseTaskForSession({ ...boundCredential(), ...input }) : store2.releaseTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
     return { task };
   }));
   server.registerTool("collab_task_block", {
@@ -46104,7 +46114,7 @@ Legacy session tools: ${legacyInstructions}`
     inputSchema: leaseMutationSchema({ blocker: exports_external.string().min(1).max(2000) })
   }, async ({ workspace_id, actor, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    const task = state.binding ? store.blockTaskForSession({ ...boundCredential(), ...input }) : store.blockTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
+    const task = state.binding ? store2.blockTaskForSession({ ...boundCredential(), ...input }) : store2.blockTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
     return { task };
   }));
   server.registerTool("collab_task_unblock", {
@@ -46121,7 +46131,7 @@ Legacy session tools: ${legacyInstructions}`
     }
   }, async ({ workspace_id, actor, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    const task = state.binding ? store.unblockTaskForSession({ ...boundCredential(), ...input }) : store.unblockTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
+    const task = state.binding ? store2.unblockTaskForSession({ ...boundCredential(), ...input }) : store2.unblockTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
     return { task };
   }));
   server.registerTool("collab_artifact_attach", {
@@ -46137,7 +46147,7 @@ Legacy session tools: ${legacyInstructions}`
     })
   }, async ({ workspace_id, actor, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    return state.binding ? store.attachArtifactForSession({ ...boundCredential(), ...input }) : store.attachArtifact({ workspace_id, actor: requireLegacyActor(actor), ...input });
+    return state.binding ? store2.attachArtifactForSession({ ...boundCredential(), ...input }) : store2.attachArtifact({ workspace_id, actor: requireLegacyActor(actor), ...input });
   }));
   server.registerTool("collab_task_complete", {
     title: "Report a claimed task complete",
@@ -46156,7 +46166,7 @@ Legacy session tools: ${legacyInstructions}`
     if (!state.binding && input.review_requested_session_id !== undefined) {
       throw new CollabError("session_required_for_review_request", "review_requested_session_id requires a bound v0.2 session");
     }
-    const task = state.binding ? store.completeTaskForSession({ ...boundCredential(), ...input }) : store.completeTask({
+    const task = state.binding ? store2.completeTaskForSession({ ...boundCredential(), ...input }) : store2.completeTask({
       workspace_id,
       actor: requireLegacyActor(actor),
       task_id: input.task_id,
@@ -46185,7 +46195,7 @@ Legacy session tools: ${legacyInstructions}`
     }
   }, async ({ workspace_id, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    return store.reviewTaskForSession({ ...boundCredential(), ...input });
+    return store2.reviewTaskForSession({ ...boundCredential(), ...input });
   }));
   server.registerTool("collab_report_append", {
     title: "Append a structured collaboration report",
@@ -46219,7 +46229,7 @@ Legacy session tools: ${legacyInstructions}`
   }, async ({ workspace_id, ...input }) => call(() => {
     requireWorkspace(workspace_id);
     return {
-      report: store.appendReportForSession({ ...boundCredential(), ...input })
+      report: store2.appendReportForSession({ ...boundCredential(), ...input })
     };
   }));
   server.registerTool("collab_report_list", {
@@ -46234,7 +46244,7 @@ Legacy session tools: ${legacyInstructions}`
       to_session_id: exports_external.string().min(1).optional()
     }
   }, async ({ workspace_id, ...options2 }) => call(() => ({
-    reports: store.listReports(workspace_id, options2)
+    reports: store2.listReports(workspace_id, options2)
   })));
   server.registerTool("collab_proposal_open", {
     title: "Open a direction-level proposal for consent",
@@ -46259,7 +46269,7 @@ Legacy session tools: ${legacyInstructions}`
     }
   }, async ({ workspace_id, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    return { proposal: store.openProposalForSession({ ...boundCredential(), ...input }) };
+    return { proposal: store2.openProposalForSession({ ...boundCredential(), ...input }) };
   }));
   server.registerTool("collab_proposal_status", {
     title: "Read proposal consent status",
@@ -46272,7 +46282,7 @@ Legacy session tools: ${legacyInstructions}`
     }
   }, async ({ workspace_id, proposal_report_id, limit }) => call(() => {
     requireWorkspace(workspace_id);
-    return proposal_report_id ? { proposal: store.proposalStatus(workspace_id, proposal_report_id) } : store.listProposalStatuses(workspace_id, { limit });
+    return proposal_report_id ? { proposal: store2.proposalStatus(workspace_id, proposal_report_id) } : store2.listProposalStatuses(workspace_id, { limit });
   }));
   server.registerTool("collab_proposal_relay_rejection", {
     title: "Relay a person's rejection of a proposal",
@@ -46287,7 +46297,7 @@ Legacy session tools: ${legacyInstructions}`
     }
   }, async ({ workspace_id, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    return { proposal: store.relayProposalRejectionForSession({ ...boundCredential(), ...input }) };
+    return { proposal: store2.relayProposalRejectionForSession({ ...boundCredential(), ...input }) };
   }));
   server.registerTool("collab_decision_record", {
     title: "Record a collaboration decision",
@@ -46307,7 +46317,7 @@ Legacy session tools: ${legacyInstructions}`
     requireWorkspace(workspace_id);
     if (state.binding) {
       return {
-        report: store.appendReportForSession({
+        report: store2.appendReportForSession({
           ...boundCredential(),
           idempotency_key: input.idempotency_key,
           kind: "decision",
@@ -46320,7 +46330,7 @@ Rationale: ${input.rationale}` : ""}`,
       };
     }
     return {
-      decision: store.recordDecision({
+      decision: store2.recordDecision({
         workspace_id,
         actor: requireLegacyActor(actor),
         ...input
@@ -46339,11 +46349,11 @@ Rationale: ${input.rationale}` : ""}`,
     })
   }, async ({ workspace_id, actor, to_actor, to_session_id, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    return state.binding ? store.offerHandoffForSession({
+    return state.binding ? store2.offerHandoffForSession({
       ...boundCredential(),
       ...input,
       to_session_id: requiredString(to_session_id, "to_session_id")
-    }) : store.offerHandoff({
+    }) : store2.offerHandoff({
       workspace_id,
       actor: requireLegacyActor(actor),
       ...input,
@@ -46365,7 +46375,7 @@ Rationale: ${input.rationale}` : ""}`,
     }
   }, async ({ workspace_id, actor, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    return state.binding ? store.respondHandoffForSession({ ...boundCredential(), ...input }) : store.respondHandoff({
+    return state.binding ? store2.respondHandoffForSession({ ...boundCredential(), ...input }) : store2.respondHandoff({
       workspace_id,
       actor: requireLegacyActor(actor),
       ...input
@@ -46385,7 +46395,7 @@ Rationale: ${input.rationale}` : ""}`,
     if (after_anchor && after_sequence !== undefined) {
       throw new CollabError("ambiguous_cursor", "Provide after_anchor or after_sequence, not both");
     }
-    return after_anchor ? store.eventsAfterAnchor(workspace_id, after_anchor, limit ?? 100) : store.eventsSince(workspace_id, after_sequence ?? 0, limit ?? 100);
+    return after_anchor ? store2.eventsAfterAnchor(workspace_id, after_anchor, limit ?? 100) : store2.eventsSince(workspace_id, after_sequence ?? 0, limit ?? 100);
   }));
   server.registerTool("collab_events_wait", {
     title: "Wait for an exact anchored local event page",
@@ -46433,7 +46443,7 @@ Rationale: ${input.rationale}` : ""}`,
       while (true) {
         check2();
         try {
-          const page = store.eventsAfterAnchorForSession(input);
+          const page = store2.eventsAfterAnchorForSession(input);
           check2();
           if (page.events.length || performance.now() >= deadline) {
             const result = {
@@ -46470,7 +46480,7 @@ Rationale: ${input.rationale}` : ""}`,
     inputSchema: { workspace_id: workspaceId }
   }, async ({ workspace_id }) => call(() => ({
     workspace_id,
-    chain_valid: store.verifyJournal(workspace_id),
+    chain_valid: store2.verifyJournal(workspace_id),
     verification_scope: "full_journal"
   })));
   server.registerTool("collab_anchor_status", {
@@ -46478,7 +46488,7 @@ Rationale: ${input.rationale}` : ""}`,
     description: "Compare the journal head against the local sidecar anchor ledger written by the" + " @agenttool/collab-zerone bridge, which witnesses head hashes on the zerone chain." + " Local file read only \u2014 never contacts a chain. The host selects the path; the MCP caller" + " cannot choose or discover it. A missing bridge simply reports unanchored." + " States: unanchored, anchor_pending, anchored, anchor_stale, anchor_conflict.",
     annotations: localReadOnly,
     inputSchema: { workspace_id: workspaceId }
-  }, async ({ workspace_id }) => call(() => anchorStatusForWorkspace(store, workspace_id)));
+  }, async ({ workspace_id }) => call(() => anchorStatusForWorkspace(store2, workspace_id)));
   server.registerTool = register2;
   return server;
 }
@@ -46555,17 +46565,17 @@ function isRecord(value) {
 // bin/agenttool-collab-mcp.ts
 async function main() {
   const databasePath = resolveDatabasePath(process.env);
-  const store = new CollabStore(databasePath);
+  const store2 = new CollabStore(databasePath);
   const sessionFile = process.env.AGENTOOL_COLLAB_SESSION_FILE;
   const resumed = sessionFile ? (() => {
     const credential = readSessionCredentialFile(sessionFile);
-    const handle = store.resumeSession(credential, {
+    const handle = store2.resumeSession(credential, {
       allow_cursor_recovery: process.env.AGENTOOL_COLLAB_ALLOW_CURSOR_RECOVERY === "1"
     });
     const credentialFile = writeSessionCredentialFile(sessionFile, handle.credential, { replace: true });
     return { handle, credential_file: credentialFile };
   })() : undefined;
-  const server = buildCollabMcpServer(store, { resumed_session: resumed });
+  const server = buildCollabMcpServer(store2, { resumed_session: resumed });
   const transport = new StdioServerTransport;
   let shuttingDown = false;
   const shutdown = async (exitCode) => {
@@ -46575,7 +46585,7 @@ async function main() {
     try {
       await server.close();
     } finally {
-      store.close();
+      store2.close();
       process.exit(exitCode);
     }
   };

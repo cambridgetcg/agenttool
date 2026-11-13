@@ -56,7 +56,7 @@ import {
   type NoteThreadData,
   type NoteWaitingEntry,
   type ReceiptPlanGuard,
-} from "./store.js";
+} from "./store-notes.js";
 import { COLLAB_PACKAGE_VERSION } from "./version.js";
 
 // ---------------------------------------------------------------------------

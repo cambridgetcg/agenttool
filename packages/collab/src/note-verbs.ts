@@ -46,7 +46,7 @@ import {
   type NoteReportInput,
   type NoteSessionView,
   type NoteTargetView,
-} from "./store.js";
+} from "./store-notes.js";
 import {
   changedUnderYou,
   derivedBase,

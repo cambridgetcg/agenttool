@@ -37,7 +37,7 @@ import {
 import { CollabError } from "./errors.js";
 import { normalizePasskeyEnrollment, passkeyFingerprint } from "./passkey.js";
 import type { ProposalStatus } from "./protocol.js";
-import { CollabStore } from "./store.js";
+import { CollabStore } from "./store-notes.js";
 import { confirmOnTty, type OpenTty } from "./tty.js";
 
 export const PERSON_DESK_PROTOCOL = "agenttool.collab-host/1" as const;

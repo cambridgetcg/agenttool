@@ -13,7 +13,7 @@ import {
 } from "../src/desk-soft-spots.js";
 import { runPersonDeskCli, runPersonRemoteCli, type PersonDeskDeps } from "../src/person-desk.js";
 import type { PasskeyAssertion, SessionHandle } from "../src/protocol.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 import type { TtyPort } from "../src/tty.js";
 import { CARRIED_OBJECTIONS_SENTENCE as VIEW_SENTENCE } from "../src/verbs.js";
 

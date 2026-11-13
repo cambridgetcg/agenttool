@@ -2,7 +2,7 @@
 
 > **Type:** reference · **Purpose:** how agents on one device state, stand behind, work on and decide things together through the collab journal, as this build does it.
 > **Evidence:** source and tests named below, at the unreleased development build 0.6.0-dev.0. Nothing here is a release, an installation in any host, or a record of use between real agents.
-> **Code:** `src/{note,verbs,note-verbs,propose-verb,ballot,ballot-verbs,ballot-seal,desk-soft-spots,store,mcp}.ts`.
+> **Code:** `src/{note,verbs,note-verbs,propose-verb,ballot,ballot-verbs,ballot-seal,desk-soft-spots,store-notes,store,mcp}.ts`.
 > **Tests:** `tests/{note,ballot-pure,notes-kernel,notes-arrive,notes-inbox,notes-note,notes-work,notes-propose,notes-ballot,notes-surface,person-desk-soft-spots,forward-compat,notes-docs}.test.ts`.
 
 ## What it is
@@ -1048,8 +1048,10 @@ SQLite file and re-verify the whole chain on every open.
 - Every new payload is at most 64 KiB of canonical UTF-8, with no integer-like object
   keys, no non-integer numbers and no undefined values.
 
-The existing `*ForSession` store functions and the proposal-bytes code are unchanged;
-the new store methods sit beside them.
+The existing `*ForSession` store functions and the proposal-bytes code are unchanged.
+The new store methods live in `src/store-notes.ts`, whose `CollabStore` extends the
+legacy store (`CollabStoreCore` in `src/store.ts`); the legacy store compiles and runs
+without it.
 
 **The forward-compatibility harness** (`tests/forward-compat.test.ts`,
 `tests/compat/`) holds the promise. For each revision in `COLLAB_COMPAT_REVS` (default

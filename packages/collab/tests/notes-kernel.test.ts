@@ -6,7 +6,7 @@ import { CollabError } from "../src/errors.js";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import type { EventCursor, SessionHandle } from "../src/protocol.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
-import { assertNotePayload, CollabStore, NOTE_SCAN_MAX_BYTES, NOTE_SCAN_MAX_EVENTS } from "../src/store.js";
+import { assertNotePayload, CollabStore, NOTE_SCAN_MAX_BYTES, NOTE_SCAN_MAX_EVENTS } from "../src/store-notes.js";
 import {
   base32,
   noteCall,

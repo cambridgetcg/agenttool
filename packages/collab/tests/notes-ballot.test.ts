@@ -20,7 +20,7 @@ import { buildCollabMcpServer } from "../src/mcp.js";
 import { parseNote } from "../src/note.js";
 import type { SessionHandle } from "../src/protocol.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 import { base32, FOLDED_LINE, NOTE_CAPABILITIES } from "../src/verbs.js";
 import { cleanup, journal, ok, refused, runCleanup, type Journal } from "./notes-helpers.js";
 

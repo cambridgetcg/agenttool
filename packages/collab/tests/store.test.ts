@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { CollabError } from "../src/errors.js";
-import { CollabStore, normalizePathScopes, pathConflicts } from "../src/store.js";
+import { CollabStore, normalizePathScopes, pathConflicts } from "../src/store-notes.js";
 
 let directory: string;
 let root: string;

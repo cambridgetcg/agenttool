@@ -6,7 +6,7 @@ import {
   readSessionCredentialFile,
   writeSessionCredentialFile,
 } from "../src/session-file.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 async function main(): Promise<void> {
   const databasePath = resolveDatabasePath(process.env);

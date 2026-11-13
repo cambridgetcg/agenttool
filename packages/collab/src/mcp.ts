@@ -23,7 +23,7 @@ import {
   removeSessionCredentialFile,
   writeSessionCredentialFile,
 } from "./session-file.js";
-import { CollabStore } from "./store.js";
+import { CollabStore } from "./store-notes.js";
 import { doneVerb, noteVerb, takeVerb } from "./note-verbs.js";
 import { proposeVerb } from "./propose-verb.js";
 import { pollVerb, voteVerb } from "./ballot-verbs.js";

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { runGoldenScenario } from "./golden-scenario.js";
@@ -40,6 +40,11 @@ const now = () => (fixedNow === null ? new Date() : new Date(fixedNow));
 
 async function load(file: string): Promise<any> {
   return await import(pathToFileURL(join(sourceDirectory!, file)).href);
+}
+
+/** That build's CollabStore: from store-notes.ts where the build has one, else from store.ts, as older revisions keep it. */
+async function loadStore(): Promise<any> {
+  return await load(existsSync(join(sourceDirectory!, "store-notes.ts")) ? "store-notes.ts" : "store.ts");
 }
 
 function describeError(error: unknown): string {
@@ -91,7 +96,7 @@ function allReports(store: any, workspaceId: string): Array<{ id: string; body: 
 }
 
 async function inspect(request: InspectRequest): Promise<Record<string, unknown>> {
-  const { CollabStore } = await load("store.ts");
+  const { CollabStore } = await loadStore();
   const store = check("open", () => new CollabStore(databasePath!, { now }));
   if (!store) return {};
   try {
@@ -250,13 +255,13 @@ async function inspect(request: InspectRequest): Promise<Record<string, unknown>
 }
 
 async function golden(root: string): Promise<Record<string, unknown>> {
-  const [{ CollabStore }, { buildCollabMcpServer }] = await Promise.all([load("store.ts"), load("mcp.ts")]);
+  const [{ CollabStore }, { buildCollabMcpServer }] = await Promise.all([loadStore(), load("mcp.ts")]);
   const result = await runGoldenScenario({ CollabStore, buildCollabMcpServer }, { databasePath: databasePath!, root });
   return { ...result };
 }
 
 async function verify(): Promise<Record<string, unknown>> {
-  const { CollabStore } = await load("store.ts");
+  const { CollabStore } = await loadStore();
   const store = check("open", () => new CollabStore(databasePath!));
   if (!store) return {};
   try {

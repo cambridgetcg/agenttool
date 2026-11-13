@@ -14,7 +14,7 @@ import {
   readSessionCredentialFile,
   removeSessionCredentialFile,
 } from "./session-file.js";
-import { CollabStore } from "./store.js";
+import { CollabStore } from "./store-notes.js";
 import { openInBrowser, runCeremonyCli, type CeremonyIo } from "./ceremony.js";
 import {
   PERSON_DESK_USAGE,

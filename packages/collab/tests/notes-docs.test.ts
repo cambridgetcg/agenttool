@@ -12,7 +12,7 @@ import {
   type NoteAct,
   type NoteInput,
 } from "../src/note.js";
-import { CollabStore, NOTE_DECISION_OUTCOMES } from "../src/store.js";
+import { CollabStore, NOTE_DECISION_OUTCOMES } from "../src/store-notes.js";
 import { NOTE_CARD, NOTE_PRINCIPLES, NOTE_VERBS } from "../src/verbs.js";
 
 // Every example in the card, PROTOCOL.md and the two skills is checked here

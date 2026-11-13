@@ -13,7 +13,7 @@ import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import { EVIDENCE_REF_PREFIXES, EVIDENCE_REFS_DESCRIPTION } from "../src/protocol.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 import { COLLAB_PACKAGE_VERSION } from "../src/version.js";
 
 const packageRoot = resolve(import.meta.dir, "..");

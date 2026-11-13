@@ -7,7 +7,7 @@ import { MAX_HOST_WAIT_MS, runCollabHostCli, waitForSessionEvents } from "../src
 import { PERSON_DESK_USAGE } from "../src/person-desk.js";
 import type { EventCursor, SessionHandle } from "../src/protocol.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 const packageRoot = resolve(import.meta.dir, "..");
 const hostEntry = join(packageRoot, "bin", "agenttool-collab-host.ts");

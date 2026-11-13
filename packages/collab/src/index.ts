@@ -6,6 +6,6 @@ export * from "./protocol.js";
 export * from "./repository.js";
 export * from "./seat-ref.js";
 export * from "./session-file.js";
-export * from "./store.js";
+export * from "./store-notes.js";
 export { buildCollabMcpServer } from "./mcp.js";
 export { COLLAB_PACKAGE_VERSION } from "./version.js";

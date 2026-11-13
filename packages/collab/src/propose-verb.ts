@@ -20,7 +20,7 @@ import {
   type NoteFields,
 } from "./note.js";
 import type { ProposalStatus } from "./protocol.js";
-import type { NoteAppendReceipt, NoteCiteReceipt, NoteProposalData } from "./store.js";
+import type { NoteAppendReceipt, NoteCiteReceipt, NoteProposalData } from "./store-notes.js";
 import {
   beforeFirstWrite,
   evidenceSummary,

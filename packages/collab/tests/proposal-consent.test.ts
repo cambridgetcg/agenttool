@@ -7,7 +7,7 @@ import { CollabError } from "../src/errors.js";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import { aiPosition, type AiPositionInput } from "../src/proposal.js";
 import type { ReportRelation, SessionHandle } from "../src/protocol.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 // consent/v1, the agents' side of person–agent consent. Contract:
 // docs/superpowers/specs/2026-10-29-collab-yu-ai-consent-design.md section 4.
