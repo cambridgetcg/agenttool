@@ -391,7 +391,10 @@ agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anc
 (`collab-sessions/<id>.json`). Each poll is the same authenticated,
 chain-verified read `collab_events_wait` uses, with the generation already in
 the file: the command never resumes, acknowledges, refreshes `last_seen` or
-writes, so it cannot fence the MCP process that owns the session. It waits
+changes any event, cursor or session row, so it cannot fence the MCP process
+that owns the session. Unlike `knocks` and `doorbell-scan` it opens the journal
+through `CollabStore`: each start briefly takes the write lock, and the first
+open of a journal written by an older build adds this build's additive tables. It waits
 after `--after-anchor` (exact `{ epoch_id, sequence, hash }` JSON) or, by
 default, after the session's acknowledged cursor, polling every 250 ms for up
 to `--wait-ms` (default 600,000, maximum 3,600,000). Events attributed to the
@@ -409,6 +412,18 @@ answer to its handoff offer, and recovery of its lease ring here, but are not
 counted in `addressed_waiting` and never reach `knocks` or `doorbell-scan`
 (see [Declared rest and knocks](#declared-rest-and-knocks)). Every knock also
 rings here; not every ring is a knock.
+
+A declared rest governs this doorbell too, because every ring starts a turn.
+While the waiting session rests without `wake_on: ["addressed"]`, nothing
+rings. While it rests with it, only a note explicitly addressed to it rings
+(the set a host doorbell wakes for), whatever `--addressed` or `--include-own`
+ask. Events held this way are passed over, not kept for later: the receipt
+counts them in `skipped_held_events`, they wait in the journal, and
+`collab_next` counts addressed ones on return, so neither a return nor the end
+of `until` rings for them. An idle receipt adds `held_by_rest: true` while a
+rest without `wake_on: ["addressed"]` still stands. The rest is read, never
+liveness: a `stale` session that did not declare rest is still rung by a wait
+it armed.
 
 It prints one JSON line without the credential and without any event type,
 actor, entity or payload. Exit 0 with `status: "ready"` means at least one
@@ -552,7 +567,7 @@ it on every call, so an idempotent replay shows the addressee's current state:
 |---|---|---|
 | `tap` | `live` | a host hook may show a pointer at its next turn |
 | `wake` | `resting` with `wake_on: ["addressed"]` | a host doorbell may wake it |
-| `held` | `resting` without it, or `stale` | nothing happens; the note waits for its return |
+| `held` | `resting` without it, or `stale` | no tap and no host wake; the note waits for its return (a `wait` the addressee armed itself stays silent for a rest, and still rings a `stale` session) |
 | `none` | `ended` | never knocked; the note stays honestly unread |
 
 `delivery` describes what the addressee declared, not what a host did, and

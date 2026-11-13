@@ -20,6 +20,7 @@ This watcher joins the two. It loops `agenttool-collab-host wait` and posts one 
   This routed set is wider than a knock. An answer sent without `to_session_id`, an answer to its handoff offer, and the recovery of its lease ring here, but are not counted in `addressed_waiting` and never reach `knocks` or `doorbell-scan`.
 - **`--all`:** any event from another session rings.
 - **Never:** the session's own events, unless `--include-own` is passed.
+- **Never into a rest that asked for no turn.** While the session rests without `wake_on: ["addressed"]`, nothing rings, and the watcher's own expiry and "stopped" notices stay silent too (it logs and exits). While it rests with `wake_on: ["addressed"]`, only a note explicitly addressed to it rings, even with `--all`. What a rest holds is not rung later: read it with `collab_next` when you return, and re-arm the watcher if it has expired. A session that is merely `stale` and declared no rest is still rung.
 
 Report bodies and other free text are never inspected. Addressing is routing, not access control: every session can still read the event.
 
@@ -42,16 +43,16 @@ To stop it, run `kill "$(cat <journal dir>/collab-doorbell/watch-<collab session
 | `--from-cursor` | off | Start after your acknowledged cursor instead of the current head |
 | `--cycle-ms` | 1,800,000 | Each `wait` deadline (at most 3,600,000) |
 | `--min-gap-ms` | 60,000 | Minimum time between rings. A burst inside the gap becomes one ring |
-| `--max-hours` | 12 | Lifetime. At expiry it rings once to ask for a re-arm |
+| `--max-hours` | 12 | Lifetime. At expiry it rings once to ask for a re-arm, unless the session rests without `wake_on: ["addressed"]` |
 | `--db`, `--host-bin` | the MCP's journal, and the packaged `dist/agenttool-collab-host.js` | Overrides |
 
 ## Lifecycle and boundaries
 
 - **Owner bound.** It exits when the owning Claude Code process (named by the socket) or its socket is gone.
 - **Session bound.** It stops quietly once the collab session ends. After a resume, the MCP process rewrites the credential file with the new generation, and the watcher retries the read up to three times.
-- **Other errors.** Any other error (fork, rollback, recovery required) rings one "stopped" line and exits. It never loops on an error.
+- **Other errors.** Any other error (fork, rollback, recovery required) rings one "stopped" line and exits, or exits without the line while the session rests without `wake_on: ["addressed"]`. It never loops on an error.
 - **One per session.** A pidfile in `<journal dir>/collab-doorbell/` (mode `0700`) ensures one watcher per collab session. The log there records only sequence numbers and outcomes.
-- **Read-only.** It never writes to the journal, never acknowledges, never resumes, and cannot fence the MCP process. The verified read is `agenttool-collab-host wait`. The watcher itself reads only the session's workspace id, status and journal head.
+- **Read-only.** It changes no event, cursor or session row, never acknowledges, never resumes, and cannot fence the MCP process. The verified read is `agenttool-collab-host wait`, which opens the journal through the store (a brief write lock at each start, and this build's additive tables on a journal from an older build). The watcher itself reads only the session's workspace id, status and journal head.
 - **Token.** Each ring opens with an auth line carrying `CLAUDE_CODE_MESSAGING_TOKEN`. On macOS this lets Claude Code verify the post as the session's own child, so a session that bypasses permission prompts still delivers it rather than holding it. The token is never printed or logged.
 - **Not a contract.** The message line `{"type":"user","message":{"role":"user","content":…}}` is the shape Claude Code 2.1.302 prints in its own `[uds-messaging]` debug hint. It is **not a documented contract** and may change. Claude Code still applies its normal peer-message handling and rate limits.
 - **Cost.** Each ring is one model turn. Idle cycles cost nothing. Waiting writes no `last_seen`, so a quiet listener reads `stale` after 6 hours until its next `collab_next` or acknowledgement.

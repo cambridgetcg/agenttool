@@ -32,6 +32,8 @@ interface WaitReceipt {
   status: "ready" | "idle" | "error";
   error?: string;
   next_anchor?: Anchor;
+  /** Idle only: the session rests without wake_on "addressed", so nothing may start a turn in it. */
+  held_by_rest?: true;
 }
 
 const USAGE = "usage: collab-doorbell-watch --session <id> [--db <path>] [--host-bin <path>] [--all] "
@@ -77,7 +79,11 @@ const hostBin = resolve(values["host-bin"] ?? process.env.AGENTTOOL_COLLAB_HOST_
   ?? join(import.meta.dir, "..", "..", "dist", "agenttool-collab-host.js"));
 const cycleMs = integer("cycle-ms", 1_800_000, 1_000, 3_600_000);
 const minGapMs = integer("min-gap-ms", 60_000, 0, 3_600_000);
-const maxMs = integer("max-hours", 12, 1, 72) * 3_600_000;
+// AGENTTOOL_COLLAB_DOORBELL_TEST_MAX_MS is a test hook for the lifetime below, not an interface.
+const testMaxMs = Number(process.env.AGENTTOOL_COLLAB_DOORBELL_TEST_MAX_MS);
+const maxMs = Number.isSafeInteger(testMaxMs) && testMaxMs > 0
+  ? testMaxMs
+  : integer("max-hours", 12, 1, 72) * 3_600_000;
 const addressed = values.all !== true;
 const socket = process.env.CLAUDE_CODE_MESSAGING_SOCKET ?? "";
 const token = process.env.CLAUDE_CODE_MESSAGING_TOKEN;
@@ -172,9 +178,9 @@ function sessionActive(): boolean {
 
 const ownerGone = () => (ownerPid !== null && !alive(ownerPid)) || !existsSync(socket);
 
-function waitOnce(after: Anchor): Promise<WaitReceipt> {
+function waitOnce(after: Anchor, waitMs = cycleMs): Promise<WaitReceipt> {
   const args = [hostBin, "wait", "--session", sessionId, "--db", dbPath,
-    "--after-anchor", JSON.stringify(after), "--wait-ms", String(cycleMs)];
+    "--after-anchor", JSON.stringify(after), "--wait-ms", String(waitMs)];
   if (addressed) args.push("--addressed");
   if (values["include-own"]) args.push("--include-own");
   return new Promise((resolveReceipt) => {
@@ -223,11 +229,22 @@ let anchor: Anchor = values["from-cursor"]
   : head();
 let lastRing = 0;
 let authRetries = 0;
+// Whether the last receipt found the session at a rest that asked for no
+// turn. The watcher's own notices are turns too, so they obey it.
+let heldByRest = false;
 log({ event: "start", pid: process.pid, workspace_id: workspaceId, after_sequence: anchor.sequence, addressed });
 
 while (true) {
   if (ownerGone()) stop("owner_gone");
   if (Date.now() - started >= maxMs) {
+    // Ask once more, now: the last cycle's answer can be half an hour old.
+    const probe = await waitOnce(anchor, 0);
+    if (probe.status === "idle") heldByRest = probe.held_by_rest === true;
+    else if (probe.status === "ready") heldByRest = false;
+    if (heldByRest) {
+      log({ event: "expired_in_held_rest" });
+      stop("max_lifetime");
+    }
     await ring(`[collab doorbell] The watcher for session ${sessionId} expired after `
       + `${maxMs / 3_600_000} h. Re-arm it if you still want to be rung.`);
     stop("max_lifetime");
@@ -236,11 +253,13 @@ while (true) {
   if (receipt.status === "idle" && receipt.next_anchor) {
     anchor = receipt.next_anchor;
     authRetries = 0;
-    log({ event: "idle", next_sequence: anchor.sequence });
+    heldByRest = receipt.held_by_rest === true;
+    log({ event: heldByRest ? "held" : "idle", next_sequence: anchor.sequence });
     continue;
   }
   if (receipt.status === "ready" && receipt.next_anchor) {
     authRetries = 0;
+    heldByRest = false;
     // Coalesce a burst: wait out the gap, then ring once for everything up to the head.
     const gap = lastRing + minGapMs - Date.now();
     if (gap > 0) await sleep(gap);
@@ -273,6 +292,10 @@ while (true) {
     log({ event: "busy_retry" });
     await sleep(5_000);
     continue;
+  }
+  if (heldByRest) {
+    log({ event: "stopped_in_held_rest", error: receipt.error ?? "unknown_error" });
+    stop(`error:${receipt.error ?? "unknown"}`, 1);
   }
   await ring(`[collab doorbell] stopped: ${receipt.error ?? "unknown_error"} for session ${sessionId}. `
     + "The watcher exited; check the session before re-arming.");

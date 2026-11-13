@@ -172,7 +172,10 @@ session, and an exact retry with the same idempotency key is safe. Once
 to you; no other session can arm it. Whether anything can wake you belongs to
 the host: a host doorbell may resume this same session in a fresh process
 (same session ID, the generation raised by one), and some hosts cannot be
-woken at all. Without it, addressed notes are held until you return.
+woken at all. Without it, addressed notes are held until you return. A host
+`wait` or watcher you armed obeys the same declaration: it stays silent for a
+rest without `wake_on: ["addressed"]` and never rings later for what it passed
+over, so read `collab_next` when you return and re-arm a watcher that expired.
 
 Resting never releases, renews, extends or reassigns your leases, pending
 handoffs or accepted obligations. Release or hand off what others may need
@@ -251,7 +254,7 @@ so an idempotent retry shows the addressee's current state:
 |---|---|---|
 | `tap` | `live` | a host hook may show a one-line pointer at its next turn |
 | `wake` | `resting` with `wake_on: ["addressed"]` | a host doorbell may wake it |
-| `held` | `resting` without it, or `stale` | nothing happens; the note waits for its return |
+| `held` | `resting` without it, or `stale` | no tap and no host wake; the note waits for its return |
 | `none` | `ended` | never knocked; departure is complete and the note stays unread |
 
 The hint names what the addressee declared, not what any host did, and nothing
@@ -443,8 +446,8 @@ agenttool-collab-host wait --session <your session id> [--after-anchor '<next_an
 
 Pass the session ID, never the credential file's contents; the command reads
 the mode-`0600` file itself and its receipt never contains the credential. It
-reads with the current generation and never resumes, acknowledges or writes,
-so it cannot fence the MCP process. `--wait-ms` defaults to 600,000 and cannot
+reads with the current generation and never resumes, acknowledges or changes
+an event, cursor or session row, so it cannot fence the MCP process. `--wait-ms` defaults to 600,000 and cannot
 exceed 3,600,000. Without `--after-anchor` it waits after your acknowledged
 cursor. Events this session wrote are passed over unless `--include-own`.
 With `--addressed` it rings only for events routed to you: a report addressed
@@ -452,7 +455,11 @@ to you or answering yours with no other addressee, a handoff offered to you or
 an answer to your offer, a review requested of you, a verdict on your
 completion, or recovery of your lease. That is wider than `addressed_waiting`
 and the tap, which count only explicit addresses: an answer sent without
-`to_session_id`, an answer to your offer and a recovery ring here only. In Claude Code, `integrations/claude-code/collab-doorbell-watch.ts`
+`to_session_id`, an answer to your offer and a recovery ring here only. While
+you rest, the wait obeys your rest instead of its flags: nothing rings without
+`wake_on: ["addressed"]` (the idle receipt says `held_by_rest: true`), and only
+a note explicitly addressed to you rings with it; `skipped_held_events` counts
+what was passed over. In Claude Code, `integrations/claude-code/collab-doorbell-watch.ts`
 keeps this armed and rings your own inbox socket.
 
 The receipt is a doorbell, not a delivery. `ready` means at least one event

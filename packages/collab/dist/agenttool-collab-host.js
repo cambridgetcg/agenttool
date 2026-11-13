@@ -5910,6 +5910,21 @@ function waitForSessionEvents(store, credential, options, clock = systemClock) {
   let observed = afterAnchor;
   let skipped = 0;
   let unaddressed = 0;
+  let held = 0;
+  const standingRest = () => store.getCoordinationSession(session.id)?.rest ?? null;
+  const holds = (rest) => rest !== null && !rest.wake_on.includes("addressed");
+  const restAllows = (event) => {
+    const rest = standingRest();
+    if (rest === null)
+      return true;
+    if (holds(rest))
+      return false;
+    return isAddressedTo({
+      type: event.type,
+      session_id: event.session_id ?? null,
+      payload_json: JSON.stringify(event.payload ?? null)
+    }, session.id);
+  };
   const receipt = (status, headSequence2) => ({
     protocol: COLLAB_HOST_PROTOCOL,
     status,
@@ -5920,7 +5935,12 @@ function waitForSessionEvents(store, credential, options, clock = systemClock) {
     head_sequence: headSequence2,
     skipped_own_events: skipped,
     ...options.addressed ? { skipped_unaddressed_events: unaddressed } : {},
-    waited_ms: Math.max(0, Math.round(clock.now() - started))
+    waited_ms: Math.max(0, Math.round(clock.now() - started)),
+    ...held > 0 ? { skipped_held_events: held } : {}
+  });
+  const idle = (headSequence2) => ({
+    ...receipt("idle", headSequence2),
+    ...holds(standingRest()) ? { held_by_rest: true } : {}
   });
   let headSequence = observed.sequence;
   while (true) {
@@ -5936,11 +5956,13 @@ function waitForSessionEvents(store, credential, options, clock = systemClock) {
       for (const event of page.events) {
         const own = event.session_id === credential.session_id;
         const routed = !options.addressed || store.eventAddressesSession(event, session.id);
-        if ((options.include_own || !own) && routed) {
+        const rings = (options.include_own || !own) && routed;
+        if (rings && restAllows(event))
           return receipt("ready", headSequence);
-        }
         observed = { epoch_id: event.epoch_id, sequence: event.sequence, hash: event.hash };
-        if (own && !options.include_own)
+        if (rings)
+          held += 1;
+        else if (own && !options.include_own)
           skipped += 1;
         else
           unaddressed += 1;
@@ -5948,9 +5970,9 @@ function waitForSessionEvents(store, credential, options, clock = systemClock) {
       drained = !page.has_more;
     } catch (error) {
       if (error instanceof CollabError && error.code === "event_too_large") {
-        return { ...receipt("ready", headSequence), first_event_oversized: true };
-      }
-      if (!(error instanceof CollabError) || error.code !== "event_read_busy" || clock.now() >= deadline) {
+        if (standingRest() === null)
+          return { ...receipt("ready", headSequence), first_event_oversized: true };
+      } else if (!(error instanceof CollabError) || error.code !== "event_read_busy" || clock.now() >= deadline) {
         throw error;
       }
     }
@@ -5958,7 +5980,7 @@ function waitForSessionEvents(store, credential, options, clock = systemClock) {
       continue;
     const remaining = deadline - clock.now();
     if (remaining <= 0)
-      return receipt("idle", headSequence);
+      return idle(headSequence);
     clock.sleep(Math.min(HOST_WAIT_POLL_MS, remaining));
   }
 }

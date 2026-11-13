@@ -188,6 +188,15 @@ export interface HostWaitReceipt {
   waited_ms: number;
   /** Present when the first unread event exceeds the bounded page and could not be inspected. */
   first_event_oversized?: true;
+  /**
+   * Events passed over, for good, because of the session's declared rest:
+   * under a rest without wake_on "addressed", every event that would have
+   * rung; under a rest with it, every such event not explicitly addressed to
+   * the session. Absent when there were none.
+   */
+  skipped_held_events?: number;
+  /** Idle only: a rest without wake_on "addressed" stood when the wait ended. */
+  held_by_rest?: true;
 }
 
 export interface HostWaitOptions {
@@ -269,6 +278,15 @@ export function endSessionFromCredential(
  * the MCP process that owns the credential. Each poll is the same
  * authenticated, chain-verified snapshot collab_events_wait uses; fencing,
  * session end, cursor recovery, rollback, or fork fails explicitly.
+ *
+ * A declared rest is the session's own statement of what may start a turn in
+ * it, so the doorbell obeys it. Under a rest without wake_on "addressed"
+ * nothing rings; under a rest with it, only a note explicitly addressed to the
+ * session rings (isAddressedTo: the set a host doorbell wakes for), whatever
+ * the flags ask. What a rest holds is passed over, not kept for later: it
+ * waits in the journal, collab_next counts it on return, and the end of
+ * `until` starts nothing. The rest is read only when an event would ring and
+ * once at the deadline, so a quiet wait costs one extra read.
  */
 export function waitForSessionEvents(
   store: CollabStore,
@@ -285,6 +303,20 @@ export function waitForSessionEvents(
   let observed = afterAnchor;
   let skipped = 0;
   let unaddressed = 0;
+  let held = 0;
+  const standingRest = (): SessionRest | null => store.getCoordinationSession(session.id)?.rest ?? null;
+  const holds = (rest: SessionRest | null): boolean => rest !== null && !rest.wake_on.includes("addressed");
+  /** Whether the session's rest, read now, lets this would-ring event ring. */
+  const restAllows = (event: Parameters<CollabStore["eventAddressesSession"]>[0]): boolean => {
+    const rest = standingRest();
+    if (rest === null) return true;
+    if (holds(rest)) return false;
+    return isAddressedTo({
+      type: event.type,
+      session_id: event.session_id ?? null,
+      payload_json: JSON.stringify(event.payload ?? null),
+    }, session.id);
+  };
   const receipt = (status: HostWaitReceipt["status"], headSequence: number): HostWaitReceipt => ({
     protocol: COLLAB_HOST_PROTOCOL,
     status,
@@ -296,6 +328,11 @@ export function waitForSessionEvents(
     skipped_own_events: skipped,
     ...(options.addressed ? { skipped_unaddressed_events: unaddressed } : {}),
     waited_ms: Math.max(0, Math.round(clock.now() - started)),
+    ...(held > 0 ? { skipped_held_events: held } : {}),
+  });
+  const idle = (headSequence: number): HostWaitReceipt => ({
+    ...receipt("idle", headSequence),
+    ...(holds(standingRest()) ? { held_by_rest: true as const } : {}),
   });
   let headSequence = observed.sequence;
   while (true) {
@@ -311,26 +348,28 @@ export function waitForSessionEvents(
       for (const event of page.events) {
         const own = event.session_id === credential.session_id;
         const routed = !options.addressed || store.eventAddressesSession(event, session.id);
-        if ((options.include_own || !own) && routed) {
-          return receipt("ready", headSequence);
-        }
+        const rings = (options.include_own || !own) && routed;
+        if (rings && restAllows(event)) return receipt("ready", headSequence);
         observed = { epoch_id: event.epoch_id, sequence: event.sequence, hash: event.hash };
-        if (own && !options.include_own) skipped += 1;
+        if (rings) held += 1;
+        else if (own && !options.include_own) skipped += 1;
         else unaddressed += 1;
       }
       drained = !page.has_more;
     } catch (error) {
       if (error instanceof CollabError && error.code === "event_too_large") {
-        // Its author and routing are unknown without a larger read, so ring rather than skip it.
-        return { ...receipt("ready", headSequence), first_event_oversized: true };
-      }
-      if (!(error instanceof CollabError) || error.code !== "event_read_busy" || clock.now() >= deadline) {
+        // Its author and routing are unknown without a larger read, so ring
+        // rather than skip it. Under any standing rest it can be neither rung
+        // (consent unknown) nor passed over (unread), so the wait stays before
+        // it; this one event can still ring once the rest is over.
+        if (standingRest() === null) return { ...receipt("ready", headSequence), first_event_oversized: true };
+      } else if (!(error instanceof CollabError) || error.code !== "event_read_busy" || clock.now() >= deadline) {
         throw error;
       }
     }
     if (!drained) continue;
     const remaining = deadline - clock.now();
-    if (remaining <= 0) return receipt("idle", headSequence);
+    if (remaining <= 0) return idle(headSequence);
     clock.sleep(Math.min(HOST_WAIT_POLL_MS, remaining));
   }
 }
