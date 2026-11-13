@@ -6075,6 +6075,14 @@ export class CollabStoreCore {
     );
   }
 
+  /** consent/v2: whether a set-aside's journaled challenger is this session's voice (routing only). */
+  protected setAsideAddressesChallenger(challenger: unknown, sessionId: string): boolean {
+    if (challenger === null || typeof challenger !== "object") return false;
+    const { voice_id: voice, session_ids: sessions } = challenger as Record<string, unknown>;
+    if (Array.isArray(sessions) && sessions.includes(sessionId)) return true;
+    return typeof voice === "string" && this.consentVoice(sessionId) === voice;
+  }
+
   eventAddressesSession(event: CollabEvent, sessionId: string): boolean {
     const payload = (event.payload ?? {}) as Record<string, unknown>;
     const field = (value: unknown, key: string) =>
@@ -6120,10 +6128,16 @@ export class CollabStoreCore {
       }
       case "proposal.agreed":
       case "proposal.rejected":
-      case "proposal.challenge_set_aside":
         // A person's act wakes whoever waits on it: the author, or for a desk
         // proposal every voice it consulted.
         return this.proposalAddressesSession(event.entity_id, sessionId);
+      case "proposal.challenge_set_aside":
+        // As an agreement does, and the challenger too: every session of its
+        // voice, so the voice learns its objection was set aside when it
+        // returns (a resumed session, or a child it attests later) and may
+        // challenge again, which the clause leaves it free to do.
+        return this.proposalAddressesSession(event.entity_id, sessionId)
+          || this.setAsideAddressesChallenger(field(payload.set_aside, "challenger"), sessionId);
       case "ballot.opened": {
         // Every session whose unit the electorate lists, by session or by voice.
         const electorate = Array.isArray(payload.electorate) ? payload.electorate : [];

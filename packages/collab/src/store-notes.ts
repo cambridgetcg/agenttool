@@ -1490,8 +1490,12 @@ export class CollabStore extends CollabStoreCore {
         return "voice_awaited";
       case "proposal.agreed":
       case "proposal.rejected":
-      case "proposal.challenge_set_aside":
         return "person_act";
+      case "proposal.challenge_set_aside":
+        // The challenger's voice is told its objection was set aside; the author, of the person's act.
+        return this.setAsideAddressesChallenger((payload.set_aside as Record<string, unknown> | undefined)?.challenger, sessionId)
+          ? "your_challenge_set_aside"
+          : "person_act";
       case "ballot.opened":
         return "in_electorate";
       case "ballot.closed":
@@ -1657,8 +1661,11 @@ export class CollabStore extends CollabStoreCore {
     `).all(workspaceId, workspaceId) as Array<{ id: string; from_session_id: string | null }>)
       .map((row) => [row.id, row.from_session_id]));
     for (const challenge of challenges) {
-      if (!challenge.standing) continue;
-      if (authorOf.get(challenge.target_report_id) === session.id && challenge.from_session_id !== session.id) {
+      // consent/v2: a challenge the person set aside no longer waits on the
+      // author it targets, but its own author may still lift it or challenge
+      // again, so answers to it are still listed for that author.
+      if (!challenge.standing && !challenge.set_aside_only) continue;
+      if (challenge.standing && authorOf.get(challenge.target_report_id) === session.id && challenge.from_session_id !== session.id) {
         waiting.push({
           what: "challenge",
           ref_kind: "report",
@@ -1695,7 +1702,9 @@ export class CollabStore extends CollabStoreCore {
             by_session_id: answer.from_session_id,
             due: null,
             at: answer.created_at,
-            summary: "An answer to your standing challenge; only you can lift it.",
+            summary: challenge.standing
+              ? "An answer to your standing challenge; only you can lift it."
+              : "An answer to your challenge, which the person set aside, so it no longer blocks; you may lift it, or challenge again.",
           });
         }
       }
@@ -3018,6 +3027,8 @@ export type NoteWhyYou =
   | "your_lease_recovered"
   | "voice_awaited"
   | "person_act"
+  /** consent/v2: the person set aside a challenge of this session's voice. */
+  | "your_challenge_set_aside"
   | "in_electorate"
   | "ballot_closed";
 

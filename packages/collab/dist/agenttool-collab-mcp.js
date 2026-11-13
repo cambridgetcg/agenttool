@@ -36057,6 +36057,14 @@ class CollabStoreCore {
       return row.from_session_id === sessionId;
     return JSON.parse(row.voices_json).some((voice) => voice.voice_id !== row.author_voice_id && voice.live_session_ids.includes(sessionId));
   }
+  setAsideAddressesChallenger(challenger, sessionId) {
+    if (challenger === null || typeof challenger !== "object")
+      return false;
+    const { voice_id: voice, session_ids: sessions } = challenger;
+    if (Array.isArray(sessions) && sessions.includes(sessionId))
+      return true;
+    return typeof voice === "string" && this.consentVoice(sessionId) === voice;
+  }
   eventAddressesSession(event, sessionId) {
     const payload = event.payload ?? {};
     const field = (value, key) => value !== null && typeof value === "object" ? value[key] : undefined;
@@ -36095,8 +36103,9 @@ class CollabStoreCore {
       }
       case "proposal.agreed":
       case "proposal.rejected":
-      case "proposal.challenge_set_aside":
         return this.proposalAddressesSession(event.entity_id, sessionId);
+      case "proposal.challenge_set_aside":
+        return this.proposalAddressesSession(event.entity_id, sessionId) || this.setAsideAddressesChallenger(field(payload.set_aside, "challenger"), sessionId);
       case "ballot.opened": {
         const electorate = Array.isArray(payload.electorate) ? payload.electorate : [];
         const listed = (key, value) => electorate.some((unit) => Array.isArray(field(unit, key)) && field(unit, key).includes(value));
@@ -39049,8 +39058,9 @@ class CollabStore extends CollabStoreCore {
         return "voice_awaited";
       case "proposal.agreed":
       case "proposal.rejected":
-      case "proposal.challenge_set_aside":
         return "person_act";
+      case "proposal.challenge_set_aside":
+        return this.setAsideAddressesChallenger(payload.set_aside?.challenger, sessionId) ? "your_challenge_set_aside" : "person_act";
       case "ballot.opened":
         return "in_electorate";
       case "ballot.closed":
@@ -39180,9 +39190,9 @@ class CollabStore extends CollabStoreCore {
       )
     `).all(workspaceId, workspaceId).map((row) => [row.id, row.from_session_id]));
     for (const challenge of challenges) {
-      if (!challenge.standing)
+      if (!challenge.standing && !challenge.set_aside_only)
         continue;
-      if (authorOf.get(challenge.target_report_id) === session.id && challenge.from_session_id !== session.id) {
+      if (challenge.standing && authorOf.get(challenge.target_report_id) === session.id && challenge.from_session_id !== session.id) {
         waiting.push({
           what: "challenge",
           ref_kind: "report",
@@ -39215,7 +39225,7 @@ class CollabStore extends CollabStoreCore {
             by_session_id: answer.from_session_id,
             due: null,
             at: answer.created_at,
-            summary: "An answer to your standing challenge; only you can lift it."
+            summary: challenge.standing ? "An answer to your standing challenge; only you can lift it." : "An answer to your challenge, which the person set aside, so it no longer blocks; you may lift it, or challenge again."
           });
         }
       }

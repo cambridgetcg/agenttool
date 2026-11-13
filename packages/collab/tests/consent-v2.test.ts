@@ -430,6 +430,49 @@ describe("the set-aside clause", () => {
   });
 });
 
+describe("the challenger whose challenge was set aside is told", () => {
+  test("the event addresses every session of its voice, a resumed one and a later child included", () => {
+    const { author, peer, proposal, challenge, challenger } = orphanedChallenge({ end: false });
+    advance(6 * HOUR + 1_000);
+    setAsideAtTerminal(proposal.proposal.id, challenge.id);
+    const event = store.eventsSince(proposal.proposal.workspace_id).events.at(-1)!;
+    expect(event.type).toBe("proposal.challenge_set_aside");
+    // The crashed host restarts and resumes the same session: the same voice, present again.
+    const back = store.resumeSession(challenger.credential);
+    expect(store.eventAddressesSession(event, back.session.id)).toBe(true);
+    // A child it attests later speaks for the same voice.
+    const child = store.startSession({ root_path: root, actor: "challenger-child", parent_session_id: back.session.id, parent_attested: true });
+    expect(store.consentVoiceOf(child.session.id)).toBe(store.consentVoiceOf(back.session.id));
+    expect(store.eventAddressesSession(event, child.session.id)).toBe(true);
+    expect(store.eventAddressesSession(event, author.session.id)).toBe(true);
+    expect(store.eventAddressesSession(event, peer.session.id)).toBe(false);
+  });
+
+  test("its inbox lists the set-aside, saying why it is told, and its waiting list keeps answers to it", async () => {
+    const { author, proposal, challenge, challenger } = orphanedChallenge({ end: false });
+    advance(6 * HOUR + 1_000);
+    setAsideAtTerminal(proposal.proposal.id, challenge.id, "Its author went quiet.");
+    const back = store.resumeSession(challenger.credential);
+    const credentialFile = writeSessionCredentialFile(store.defaultSessionCredentialPath(back.session.id), back.credential);
+    const inboxOf = async () => {
+      const server = buildCollabMcpServer(store, { environment: {}, resumed_session: { handle: back, credential_file: credentialFile } });
+      const registration = (server as unknown as { _registeredTools: Record<string, { handler?: Function; callback?: Function }> })._registeredTools.collab_inbox!;
+      return (await (registration.handler ?? registration.callback)!({}, {}) as { structuredContent: Record<string, any> }).structuredContent;
+    };
+    const inbox = await inboxOf();
+    const item = (inbox.items as Array<Record<string, any>>).find((entry) => entry.act === "set_aside");
+    expect(item).toMatchObject({ challenge: { id: challenge.id }, text: "Its author went quiet.", why_you: "your_challenge_set_aside" });
+    // The author answers the challenge; the challenger, which alone can lift it, is still told.
+    const answer = store.appendReportForSession({
+      ...author.credential, idempotency_key: key("answer"), kind: "inference", body: "The order is in PROTOCOL.md.",
+      relation: "resolves", target_report_id: challenge.id,
+    });
+    expect((await inboxOf()).waiting_on_you).toEqual(expect.arrayContaining([expect.objectContaining({
+      what: "answer", id: answer.id, about: expect.objectContaining({ id: challenge.id }), summary: expect.stringContaining("set aside"),
+    })]));
+  });
+});
+
 describe("an agreement binds the set-asides it rests on", () => {
   test("the agreement's snapshot names them, and a position shown before a set-aside is refused", () => {
     const { proposal, challenge } = orphanedChallenge();
