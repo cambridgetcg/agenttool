@@ -849,6 +849,31 @@ describe("the reveal (spec 7, Close and reveal)", () => {
     expect(existsSync(sealDir(j, opened.ballot))).toBe(false);
   });
 
+  test("a temporary seal a dead process left is never revealed, and the reveal removes it", async () => {
+    const j = journal();
+    const [opener, peer] = await voters(j, ["opener", "peer"]);
+    const opened = await poll(opener!);
+    await ok(peer!.server, "collab_vote", { ballot: opened.ballot, choice: ["keep"] });
+    // A process died between a seal's write and its rename: one whole, one torn.
+    const whole = join(sealDir(j, opened.ballot), `.${crypto.randomUUID()}.tmp`);
+    writeFileSync(whole, JSON.stringify({
+      journal_realpath: j.store.journalRealpath(),
+      vote: { choice: ["drop"], why: [{ text: "temporary-marker", cites: [] }], evidence: [] },
+    }), { mode: 0o600 });
+    const torn = join(sealDir(j, opened.ballot), `.${crypto.randomUUID()}.tmp`);
+    writeFileSync(torn, '{"vote":{"choice":["dr', { mode: 0o600 });
+    // Something else's file in the directory is not collab's to remove.
+    const foreign = join(sealDir(j, opened.ballot), "notes.txt");
+    writeFileSync(foreign, "kept");
+    j.advance(31 * MINUTE);
+    await ok(peer!.server, "collab_inbox");
+    expect(revealed(j, opened.ballot).map((entry) => entry.session_id)).toEqual([peer!.handle.session.id]);
+    expect(JSON.stringify(j.events())).not.toContain("temporary-marker");
+    expect(existsSync(whole)).toBe(false);
+    expect(existsSync(torn)).toBe(false);
+    expect(readFileSync(foreign, "utf8")).toBe("kept");
+  });
+
   test("seals a process left when it died after the reveal committed are removed at the next open; an open ballot's stay", async () => {
     const j = journal();
     const [opener, peer] = await voters(j, ["opener", "peer"]);

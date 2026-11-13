@@ -249,7 +249,8 @@ describe("collab_done", () => {
     const two = await ok(sa, "collab_take", { title: "Stuck" });
     const noBecause = await refused(sa, "collab_done", { text: "Halfway.", outcome: "blocked" });
     expect(noBecause.code).toBe("because_required");
-    expect(noBecause.remedy).toEqual({ tool: "collab_done", input: { text: "Halfway.", outcome: "blocked", because: "<what blocks it>" } });
+    // A remedy never carries a stand-in value a tool would store as real text.
+    expect(noBecause.remedy).toEqual({ say: "Send the same call with because set to one line on what blocks the work." });
     const before = j.count();
     await ok(sa, "collab_done", { text: "Halfway through.", outcome: "blocked", because: "Waiting on the schema decision." });
     expect(types(j, before)).toEqual(["task.progressed", "task.blocked"]);
@@ -265,7 +266,7 @@ describe("collab_done", () => {
     const { sa } = pair();
     const none = await refused(sa, "collab_done", { text: "Done." });
     expect(none.code).toBe("nothing_held");
-    expect(none.remedy).toEqual({ tool: "collab_take", input: { title: "<the work you are doing>" } });
+    expect(none.remedy).toEqual({ say: "Take the work first: collab_take with title set to what you are doing, and paths if you will edit files." });
     const one = await ok(sa, "collab_take", { title: "One" });
     await ok(sa, "collab_take", { title: "Two" });
     const several = await refused(sa, "collab_done", { text: "Done." });

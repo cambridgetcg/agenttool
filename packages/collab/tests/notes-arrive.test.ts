@@ -494,10 +494,7 @@ describe("collab_arrive on a named slot", () => {
       code: "too_long",
       field: "name",
       max: 200,
-      remedy: {
-        tool: "collab_arrive",
-        input: { purpose: "child", binding_key: "kk", parent: parent.you.session, name: "<shorter>" },
-      },
+      remedy: { say: "Send the same call with name set to a short name for this child, at most 200 characters." },
     });
     expect(j.events().length).toBe(before);
     const named = await ok(server, "collab_arrive", { purpose: "child", binding_key: "kk", parent: parent.you.session, name: "short" });

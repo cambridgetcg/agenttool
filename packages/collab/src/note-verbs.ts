@@ -2336,7 +2336,7 @@ export async function doneVerb(ctx: NoteVerbContext, input: DoneInput): Promise<
   const blocker = freeText(input.because, "because", BLOCKER_MAX, false);
   if (!blocker) {
     throw new CollabError("because_required", "A blocked task needs because: what blocks it", {
-      remedy: withSlot(ctx, { tool: "collab_done", input: { ...input, because: "<what blocks it>" } }),
+      remedy: { say: "Send the same call with because set to one line on what blocks the work." },
     });
   }
   const progress = freeText(input.text, "text", PROGRESS_MAX, true)!;
@@ -2426,7 +2426,7 @@ function doneTask(ctx: NoteVerbContext, credential: Credential, workspaceId: str
   const earlierTask = receipt ? ("task" in receipt && typeof receipt.task === "object" ? receipt.task.id : (receipt as Task).id) : null;
   if (earlierTask) return ctx.store.getTask(workspaceId, earlierTask);
   throw new CollabError("nothing_held", "You hold no task", {
-    remedy: withSlot(ctx, { tool: "collab_take", input: { title: "<the work you are doing>" } }),
+    remedy: { say: "Take the work first: collab_take with title set to what you are doing, and paths if you will edit files." },
   });
 }
 

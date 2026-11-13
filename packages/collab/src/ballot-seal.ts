@@ -146,6 +146,26 @@ export function listSealFiles(journalRealpath: string, ballotId: string): string
   }
 }
 
+const TEMPORARY = /^\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.tmp$/;
+
+/**
+ * The temporary seal files in one ballot's directory, as full paths: what a
+ * process that died between a seal's write and its rename left behind. Each
+ * holds a whole vote or part of one, under a name no cast ever carried.
+ * Never throws.
+ */
+export function listSealTemporaries(journalRealpath: string, ballotId: string): string[] {
+  try {
+    const directory = sealDirectory(journalRealpath, ballotId);
+    if (!existsSync(directory)) return [];
+    return readdirSync(directory)
+      .filter((name) => TEMPORARY.test(name))
+      .map((name) => join(directory, name));
+  } catch {
+    return [];
+  }
+}
+
 /** The ballots that have a seal directory beside this journal, by ballot id. Never throws. */
 export function listSealBallots(journalRealpath: string): string[] {
   try {

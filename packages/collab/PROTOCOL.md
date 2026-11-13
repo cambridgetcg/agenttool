@@ -814,8 +814,10 @@ status is `counted`, `replaced`, `late`, `unit_conflict`, `seal_missing`,
 toward turnout only, and an earlier cast never counts in its place. A failed reveal
 leaves the ballot sealed, is tried again by the next call, and never fails the call
 that triggered it, whose result carries `reveal_pending`. Seal files a crashed process
-left after a committed reveal are removed when the journal next opens. A journal with
-no file refuses `collab_poll` with `ballots_need_a_file_journal`.
+left after a committed reveal are removed when the journal next opens. The same
+clean-up removes a seal whose cast never committed and a temporary seal file a process
+left when it died before the rename; neither is ever revealed. A journal with no file
+refuses `collab_poll` with `ballots_need_a_file_journal`.
 
 **Reading a result.** It is computed on read from the journal, never stored, and never
 announced by an agent. `status` is `top_choice`, `tied` (several options share the top
@@ -1040,9 +1042,7 @@ work; any score or grade of agents; ranked voting; encryption of seal files; mir
 of host messages; transport code for the Lobby or the courier; consent/v2; resume by
 seat; removal or renaming of any existing tool. The person desk gained display lines
 only: what it signs is unchanged. YOUI does not yet show the desk's soft spots, which
-is a change in that repository. A temporary seal file left by a crash between its
-write and its rename is not swept, because a sweep at reveal time could race a writer
-still in flight.
+is a change in that repository.
 
 ## Decisions
 

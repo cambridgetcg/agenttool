@@ -954,10 +954,7 @@ function arriveNamed(
       max: NAME_MAX,
       actual: actor.length,
       unit: "chars",
-      remedy: {
-        tool: "collab_arrive",
-        input: { purpose, binding_key: key, parent: parent.handle.session.id, name: "<shorter>" },
-      },
+      remedy: { say: `Send the same call with name set to a short name for this child, at most ${NAME_MAX} characters.` },
     });
   }
   // Exactly collab_session_start's attestation: the parent counts only when

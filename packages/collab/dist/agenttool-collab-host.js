@@ -1328,6 +1328,17 @@ function listSealFiles(journalRealpath, ballotId) {
     return [];
   }
 }
+var TEMPORARY = /^\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.tmp$/;
+function listSealTemporaries(journalRealpath, ballotId) {
+  try {
+    const directory = sealDirectory(journalRealpath, ballotId);
+    if (!existsSync2(directory))
+      return [];
+    return readdirSync(directory).filter((name) => TEMPORARY.test(name)).map((name) => join2(directory, name));
+  } catch {
+    return [];
+  }
+}
 function listSealBallots(journalRealpath) {
   try {
     const root = sealRoot(journalRealpath);
@@ -8379,8 +8390,11 @@ class CollabStore {
       return;
     for (const ballotId of ballotIds) {
       try {
-        for (const castId of listSealFiles(realpath, ballotId)) {
-          const path = sealPath(realpath, ballotId, castId);
+        const paths = [
+          ...listSealFiles(realpath, ballotId).map((castId) => sealPath(realpath, ballotId, castId)),
+          ...listSealTemporaries(realpath, ballotId)
+        ];
+        for (const path of paths) {
           const read = readSealFile(path);
           const owner = read.state === "read" && read.value !== null && typeof read.value === "object" ? read.value.journal_realpath : undefined;
           if (read.state !== "read" || owner === realpath || typeof owner !== "string")

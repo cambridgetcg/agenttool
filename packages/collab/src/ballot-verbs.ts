@@ -360,14 +360,25 @@ export async function voteVerb(ctx: NoteVerbContext, input: VoteVerbInput): Prom
     salt,
   });
   const path = ctx.store.ballotSealPath(ballotId, castId);
-  writeSealFile(path, {
-    cast_id: castId,
-    journal_realpath: ctx.store.journalRealpath()!,
-    session_id: me,
-    unit_id: viewer.unit_id,
-    salt,
-    vote: sealed,
-  });
+  try {
+    writeSealFile(path, {
+      cast_id: castId,
+      journal_realpath: ctx.store.journalRealpath()!,
+      session_id: me,
+      unit_id: viewer.unit_id,
+      salt,
+      vote: sealed,
+    });
+  } catch (error) {
+    // A reveal in another process clears a ballot's seal directory once it
+    // has closed, and that can take this write's temporary file with it.
+    // The honest refusal is then the close, not a file error.
+    if (!(error instanceof CollabError)) {
+      const now = ctx.store.noteBallotView(workspaceId, ballotId, me);
+      if (now.state !== "open") throw closedRefusal(ctx, now);
+    }
+    throw error;
+  }
 
   // 4. The cast itself; a refused one leaves no seal behind.
   let receipt: NoteBallotCastReceipt;

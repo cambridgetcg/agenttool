@@ -33,7 +33,7 @@ import {
   type RevealedEntry,
   type SealOutcome,
 } from "./ballot.js";
-import { listSealBallots, listSealFiles, readSealFile, removeEmptySealDirectory, removeSealFile, sealPath } from "./ballot-seal.js";
+import { listSealBallots, listSealFiles, listSealTemporaries, readSealFile, removeEmptySealDirectory, removeSealFile, sealPath } from "./ballot-seal.js";
 import { canonicalJson } from "./canonical.js";
 import { CollabError } from "./errors.js";
 import { hasLoneSurrogate, NOTE_FORMAT, parseNote } from "./note.js";
@@ -9184,16 +9184,22 @@ export class CollabStore {
 
   /**
    * After a reveal commits: delete this journal's seal files of those
-   * ballots, orphans included (a cast whose transaction never committed).
-   * A seal another journal wrote (a copy beside this one) is left in place.
+   * ballots, orphans included (a cast whose transaction never committed),
+   * and the temporary files a write left when its process died before the
+   * rename. A cast still being written when its ballot is revealed is past
+   * the close and would be refused anyway. A seal another journal wrote (a
+   * copy beside this one) is left in place.
    */
   private cleanSeals(ballotIds: readonly string[]): void {
     const realpath = this.journalRealpath();
     if (!realpath) return;
     for (const ballotId of ballotIds) {
       try {
-        for (const castId of listSealFiles(realpath, ballotId)) {
-          const path = sealPath(realpath, ballotId, castId);
+        const paths = [
+          ...listSealFiles(realpath, ballotId).map((castId) => sealPath(realpath, ballotId, castId)),
+          ...listSealTemporaries(realpath, ballotId),
+        ];
+        for (const path of paths) {
           const read = readSealFile(path);
           const owner = read.state === "read" && read.value !== null && typeof read.value === "object"
             ? (read.value as Record<string, unknown>).journal_realpath

@@ -31609,6 +31609,17 @@ function listSealFiles(journalRealpath, ballotId) {
     return [];
   }
 }
+var TEMPORARY = /^\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.tmp$/;
+function listSealTemporaries(journalRealpath, ballotId) {
+  try {
+    const directory = sealDirectory(journalRealpath, ballotId);
+    if (!existsSync3(directory))
+      return [];
+    return readdirSync(directory).filter((name) => TEMPORARY.test(name)).map((name) => join3(directory, name));
+  } catch {
+    return [];
+  }
+}
 function listSealBallots(journalRealpath) {
   try {
     const root = sealRoot(journalRealpath);
@@ -38198,8 +38209,11 @@ class CollabStore {
       return;
     for (const ballotId of ballotIds) {
       try {
-        for (const castId of listSealFiles(realpath, ballotId)) {
-          const path = sealPath(realpath, ballotId, castId);
+        const paths = [
+          ...listSealFiles(realpath, ballotId).map((castId) => sealPath(realpath, ballotId, castId)),
+          ...listSealTemporaries(realpath, ballotId)
+        ];
+        for (const path of paths) {
           const read = readSealFile(path);
           const owner = read.state === "read" && read.value !== null && typeof read.value === "object" ? read.value.journal_realpath : undefined;
           if (read.state !== "read" || owner === realpath || typeof owner !== "string")
@@ -40302,10 +40316,7 @@ function arriveNamed(ctx, input, purpose, name, model) {
       max: NAME_MAX,
       actual: actor.length,
       unit: "chars",
-      remedy: {
-        tool: "collab_arrive",
-        input: { purpose, binding_key: key, parent: parent.handle.session.id, name: "<shorter>" }
-      }
+      remedy: { say: `Send the same call with name set to a short name for this child, at most ${NAME_MAX} characters.` }
     });
   }
   const parentAttested = held.some((slot) => slot.binding.handle.session.id === parent.handle.session.id);
@@ -43542,7 +43553,7 @@ async function doneVerb(ctx, input) {
   const blocker = freeText(input.because, "because", BLOCKER_MAX, false);
   if (!blocker) {
     throw new CollabError("because_required", "A blocked task needs because: what blocks it", {
-      remedy: withSlot(ctx, { tool: "collab_done", input: { ...input, because: "<what blocks it>" } })
+      remedy: { say: "Send the same call with because set to one line on what blocks the work." }
     });
   }
   const progress = freeText(input.text, "text", PROGRESS_MAX, true);
@@ -43603,7 +43614,7 @@ function doneTask(ctx, credential, workspaceId, taskId, base) {
   if (earlierTask)
     return ctx.store.getTask(workspaceId, earlierTask);
   throw new CollabError("nothing_held", "You hold no task", {
-    remedy: withSlot(ctx, { tool: "collab_take", input: { title: "<the work you are doing>" } })
+    remedy: { say: "Take the work first: collab_take with title set to what you are doing, and paths if you will edit files." }
   });
 }
 function reviewerSession(ctx, workspaceId, value) {
@@ -44786,14 +44797,23 @@ async function voteVerb(ctx, input) {
     salt
   });
   const path = ctx.store.ballotSealPath(ballotId, castId);
-  writeSealFile(path, {
-    cast_id: castId,
-    journal_realpath: ctx.store.journalRealpath(),
-    session_id: me,
-    unit_id: viewer.unit_id,
-    salt,
-    vote: sealed
-  });
+  try {
+    writeSealFile(path, {
+      cast_id: castId,
+      journal_realpath: ctx.store.journalRealpath(),
+      session_id: me,
+      unit_id: viewer.unit_id,
+      salt,
+      vote: sealed
+    });
+  } catch (error51) {
+    if (!(error51 instanceof CollabError)) {
+      const now = ctx.store.noteBallotView(workspaceId, ballotId, me);
+      if (now.state !== "open")
+        throw closedRefusal(ctx, now);
+    }
+    throw error51;
+  }
   let receipt;
   try {
     receipt = ctx.store.castBallotForSession({
