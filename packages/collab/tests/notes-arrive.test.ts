@@ -691,3 +691,79 @@ describe("handles", () => {
     expect(found.task.handle).toBe(idA === handleOf("task", idA) ? idA : "task#abcdef");
   });
 });
+
+describe("arriving after others", () => {
+  test("a new session is told what came before it and how to read it back, and nothing is said on a fresh journal", async () => {
+    const j = journal();
+    const first = await ok(j.server(), "collab_arrive", { purpose: "first here", root_path: j.root, name: "ada" });
+    // Only the journal's own opening came before: nobody was here.
+    expect(first.before_you_arrived).toBeUndefined();
+    expect(first.left_for_your_name).toBeUndefined();
+    const peerServer = j.server();
+    await ok(peerServer, "collab_arrive", { purpose: "second here", root_path: j.root, name: "ben" });
+    await ok(peerServer, "collab_note", { text: "Ben was here first." });
+    const server = j.server();
+    const later = await ok(server, "collab_arrive", { purpose: "third here", root_path: j.root, name: "cy" });
+    const joined = j.events().find((event) => event.type === "session.joined" && event.entity_id === later.you.session)!;
+    expect(later.before_you_arrived).toEqual({
+      events: joined.sequence - 1,
+      see: { tool: "collab_inbox", input: { since: 0, include: "all" } },
+    });
+    expect(later.advice.join(" ")).toContain("Your read mark starts at the journal head");
+    expect(later.left_for_your_name).toBeUndefined();
+    // The inbox starts at the head; the ready call reads back what it cannot.
+    expect((await ok(server, "collab_inbox", { include: "all" })).items).toEqual([]);
+    const back = await ok(server, later.before_you_arrived.see.tool, later.before_you_arrived.see.input);
+    expect(back.items.map((item: any) => item.statement)).toContain("Ben was here first.");
+  });
+
+  test("items left for an ended session of the same name are routed to a look-back, said to be routing, not identity", async () => {
+    const j = journal();
+    const adaServer = j.server();
+    const ada = await ok(adaServer, "collab_arrive", { purpose: "fix the slug", root_path: j.root, name: "ada" });
+    const benServer = j.server();
+    await ok(benServer, "collab_arrive", { purpose: "review", root_path: j.root, name: "ben" });
+    const claim = await ok(adaServer, "collab_note", { text: "The slug regex is fixed." });
+    const toAda = await ok(benServer, "collab_note", { text: "A question for ada.", to: "ada" });
+    await ok(adaServer, "collab_done", { text: "Leaving: back later", outcome: "leave" });
+    // Written after ada left, so addressed to the ended session.
+    const reply = await ok(benServer, "collab_note", { act: "support", text: "Checked it.", re: claim.ids.report });
+    expect(j.store.db.query(`SELECT to_session_id FROM reports WHERE id = ?`).get(reply.ids.report)).toEqual({ to_session_id: ada.you.session });
+    await ok(benServer, "collab_note", { text: "For everyone." });
+
+    const againServer = j.server();
+    const again = await ok(againServer, "collab_arrive", { purpose: "back to the slug", root_path: j.root, name: "ada" });
+    // A new session and a new voice: nothing passes from the ended one.
+    expect(again.you.session).not.toBe(ada.you.session);
+    expect(again.you.voice).toBe(again.you.session);
+    const earliest = j.events().find((event) => event.entity_id === toAda.ids.report)!.sequence;
+    expect(again.left_for_your_name).toEqual({ count: 2, see: { tool: "collab_inbox", input: { since: earliest - 1 } } });
+    const said = again.advice.join(" ");
+    expect(said).toContain("also called itself ada");
+    expect(said).toContain("self-declared");
+    expect(said).toContain("not identity");
+    expect(again.before_you_arrived.see).toEqual({ tool: "collab_inbox", input: { since: 0, include: "all" } });
+
+    const marks = j.store.db.query(`SELECT * FROM note_marks ORDER BY session_id`).all();
+    const shown = j.store.db.query(`SELECT * FROM note_shown ORDER BY session_id, item_id`).all();
+    const look = await ok(againServer, again.left_for_your_name.see.tool, again.left_for_your_name.see.input);
+    const forName = (look.items as Array<Record<string, any>>).filter((item) => item.for_your_name);
+    expect(forName.map((item) => [item.id, item.statement, "text" in item, item.for_me, item.why_you, item.act])).toEqual([
+      [toAda.ids.report, "A question for ada.", true, false, "addressed", "note"],
+      [reply.ids.report, "Checked it.", true, false, "addressed", "support"],
+    ]);
+    // Shown in full, as an item for you is, and addressed to the ended session it was sent to.
+    expect(forName[0]!.to).toEqual({ session: ada.you.session, name: "ada" });
+    expect(look.advice.join(" ")).toContain("Names are self-declared");
+    // A broadcast is not for anyone's name; a look-back writes nothing.
+    expect(look.items.some((item: any) => item.statement === "For everyone." && item.for_your_name)).toBe(false);
+    expect(j.store.db.query(`SELECT * FROM note_marks ORDER BY session_id`).all()).toEqual(marks);
+    expect(j.store.db.query(`SELECT * FROM note_shown ORDER BY session_id, item_id`).all()).toEqual(shown);
+    // Another name sees them as subject lines only.
+    const cyServer = j.server();
+    await ok(cyServer, "collab_arrive", { purpose: "look", root_path: j.root, name: "cy" });
+    const theirs = await ok(cyServer, "collab_inbox", { since: 0, include: "all" });
+    expect(theirs.items.some((item: any) => item.for_your_name)).toBe(false);
+    expect("text" in theirs.items.find((item: any) => item.id === toAda.ids.report)).toBe(false);
+  });
+});

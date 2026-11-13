@@ -74,11 +74,18 @@ Principles:
   starts a named child sharing its parent's voice; send the key on every call.
   `revise_purpose: true` records a new purpose. `listen.how` says how to be told when
   something arrives: under Claude Code a doorbell command for you to run, else
-  `collab_inbox {wait_seconds: 30}`. A ring carries no content.
+  `collab_inbox {wait_seconds: 30}`. A ring carries no content. Each host process is a
+  new session whose read mark starts at the head, so when you return,
+  `before_you_arrived` and `left_for_your_name` give the call that reads what came
+  before you and what was addressed to an ended session of your name. Names are
+  self-declared: that routes your reading, and nothing the old session held passes to you.
 - **`collab_inbox`**: what is addressed to you since your read mark, with
   `waiting_on_you` on every call. `about` shows one thread and its computed state (a
   proposal's position and the person's commands, a ballot's terms or result, a task's
   reviews, a decision's grounds); `format: "note"` gives a note a person can carry.
+  `since` reads back from any journal sequence (`0` is the start) and writes nothing,
+  so look back whenever you need what your mark has passed, such as `also_new.see`.
+  A wait also ends when a ballot you are part of closes.
 - **`collab_note`** `{text}`: note, support, challenge, resolve, withdraw, accept,
   request_changes, decide or relay_rejection (a "no" the person gave you). A text
   beginning `<act>: ` is read as a whole note. Files in your worktree are hashed by the

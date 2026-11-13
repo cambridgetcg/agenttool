@@ -950,3 +950,146 @@ describe("a FIFO at a cited path", () => {
     expect(out.now).toMatchObject({ kind: "file", observed: "server", now: "changed" });
   });
 });
+
+describe("a reply to an ended author", () => {
+  test("reaches the one active session of that name, and says so; an explicit to is never redirected", async () => {
+    const j = journal();
+    const ada = j.start("ada");
+    const ben = j.start("ben");
+    const [sAda, sBen] = [j.serve(ada), j.serve(ben)];
+    const claim = await ok(sAda, "collab_note", { text: "The slug regex is fixed." });
+    j.store.endSession({ ...ada.credential, reason: "host restarted" });
+    const ada2 = j.start("ada");
+    for (const args of [
+      { act: "support", text: "Checked it." },
+      { act: "challenge", text: "Not for non-ASCII input." },
+      { text: "A note on it." },
+    ]) {
+      const sent = await ok(sBen, "collab_note", { ...args, re: claim.ids.report });
+      expect(j.report(sent.ids.report).to_session_id).toBe(ada2.session.id);
+      expect(sent.to).toEqual({ session: ada2.session.id, name: "ada" });
+      const said = sent.advice.join(" ");
+      expect(said).toContain(`ada's session that wrote this (${ada.session.id}) has ended; this is addressed to the active session named ada (session ${ada2.session.id})`);
+      expect(said).toContain("Names are self-declared");
+    }
+    // A dry run says where it would go before anything is written.
+    const dry = await ok(sBen, "collab_note", { act: "support", text: "Checked again.", re: claim.ids.report, dry_run: true });
+    expect(dry.to).toEqual({ session: ada2.session.id, name: "ada" });
+    // An explicit to is never redirected.
+    const explicit = await ok(sBen, "collab_note", { text: "For the old session.", re: claim.ids.report, to: ada.session.id });
+    expect(j.report(explicit.ids.report).to_session_id).toBe(ada.session.id);
+    expect(explicit.advice.join(" ")).toContain("has ended its session");
+    // The live session of that name replying itself is not sent its own reply.
+    const own = await ok(j.serve(ada2), "collab_note", { act: "support", text: "Still holds.", re: claim.ids.report });
+    expect(j.report(own.ids.report).to_session_id).toBe(ada.session.id);
+    // Two live sessions of that name: today's behaviour, to the ended author.
+    j.start("ada");
+    const several = await ok(sBen, "collab_note", { text: "Which ada?", re: claim.ids.report });
+    expect(j.report(several.ids.report).to_session_id).toBe(ada.session.id);
+    expect(several.advice.join(" ")).toContain("has ended its session");
+    expect(several.advice.join(" ")).not.toContain("addressed to the active session named");
+  });
+
+  test("an answer to an ended challenger reaches the live session of its name", async () => {
+    const j = journal();
+    const ada = j.start("ada");
+    const ben = j.start("ben");
+    const [sAda, sBen] = [j.serve(ada), j.serve(ben)];
+    const claim = await ok(sAda, "collab_note", { text: "A claim." });
+    const challenge = await ok(sBen, "collab_note", { act: "challenge", text: "No.", re: claim.ids.report });
+    j.store.endSession({ ...ben.credential, reason: "host restarted" });
+    const ben2 = j.start("ben");
+    const answer = await ok(sAda, "collab_note", { act: "resolve", text: "Here is why.", re: challenge.ids.report });
+    expect(answer.recorded_as).toBe("answer");
+    expect(j.report(answer.ids.report).to_session_id).toBe(ben2.session.id);
+    // A new session of that name is a new voice: it cannot lift the ended session's challenge.
+    const lift = await ok(j.serve(ben2), "collab_note", { act: "resolve", text: "Answered.", re: challenge.ids.report });
+    expect(lift.recorded_as).toBe("answer");
+  });
+});
+
+describe("a review verdict reads as a verdict", () => {
+  test("in item and thread views, from collab_note and from the legacy review, with stored bytes unchanged", async () => {
+    const { j, a, b, sa, sb } = pair();
+    const first = completedTask(j, a, { key: "one", paths: ["src/one.ts"] });
+    await ok(sb, "collab_note", { act: "accept", text: "The fix is correct.", re: first.completion_report_id });
+    const second = completedTask(j, a, { key: "two", paths: ["src/two.ts"] });
+    const legacy = j.store.reviewTaskForSession({
+      ...b.credential, idempotency_key: "legacy-review", task_id: second.id, expected_version: second.version,
+      outcome: "request_changes", summary: "One more pass.",
+    });
+    const third = completedTask(j, a, { key: "three", paths: ["src/three.ts"] });
+    const stance = await ok(sb, "collab_note", { act: "support", text: "A stance, not a review.", re: third.completion_report_id });
+    const inbox = await ok(sa, "collab_inbox", { limit: 50 });
+    const reports = (inbox.items as Array<Record<string, any>>).filter((item) => item.from?.name === "bravo" && item.id?.startsWith("report_"));
+    expect(reports.map((item) => [item.statement, item.act])).toEqual([
+      // The collab_note review path stores the rendered note as the summary, unmarked, so it reads as written.
+      ["accept: The fix is correct.", "accept"],
+      ["One more pass.", "request_changes"],
+      ["A stance, not a review.", "support"],
+    ]);
+    expect(reports[0]!.act_mismatch).toBeUndefined();
+    const thread = await ok(sa, "collab_inbox", { about: `task:${first.id}` });
+    expect(thread.task.state).toBe("accepted");
+    expect(thread.thread.find((item: any) => item.statement === "accept: The fix is correct.").act).toBe("accept");
+    const answers = (await ok(sa, "collab_inbox", { about: second.completion_report_id })).answers;
+    expect(answers.map((item: any) => item.act)).toEqual(["request_changes"]);
+    // Stored as before: the relation and the bytes are untouched.
+    expect(j.report(legacy.report.id)).toMatchObject({ relation: "challenges", body: "One more pass." });
+    const accepted = j.store.db.query(`SELECT relation FROM reports WHERE task_id = ? AND from_session_id = ?`).get(first.id, b.session.id);
+    expect(accepted).toEqual({ relation: "supports" });
+    expect(j.report(stance.ids.report).relation).toBe("supports");
+  });
+});
+
+describe("a voice that arrived after a proposal opened", () => {
+  test("is told what consent/v1 does with its support and with its challenge", async () => {
+    const j = journal();
+    const author = j.start("author");
+    const early = j.start("early");
+    const opened = j.store.openProposalForSession({
+      ...author.credential, idempotency_key: "p", question: "Move to ES modules?", criteria: "Tests pass.", extent: "The package.",
+    });
+    const late = j.start("late");
+    const sLate = j.serve(late);
+    const support = await ok(sLate, "collab_note", { act: "support", text: "Yes.", re: opened.proposal.id });
+    const said = support.advice.join(" ");
+    expect(said).toContain("Your voice was not live when proposal#");
+    expect(said).toContain("still counts as a support from a voice other than the author's");
+    expect(said).toContain("(1 awaited now)");
+    // What the advice says is what the store computes: counted, and the early voice still awaited.
+    const status = j.store.proposalStatus(author.workspace.id, opened.proposal.id);
+    expect(status.ai.qualifying_support_report_ids).toContain(support.ids.report);
+    expect(status.ai.awaiting_voice_ids).toEqual([early.session.id]);
+    expect(status.ai.position).toBe("open");
+    // A voice in the snapshot is told nothing of the kind.
+    const counted = await ok(j.serve(early), "collab_note", { act: "support", text: "Yes too.", re: opened.proposal.id });
+    expect(counted.advice.join(" ")).not.toContain("was not live");
+    expect(j.store.proposalStatus(author.workspace.id, opened.proposal.id).ai.position).toBe("consented");
+    const challenge = await ok(sLate, "collab_note", { act: "challenge", text: "On reflection, no.", re: opened.proposal.id });
+    expect(challenge.advice.join(" ")).toContain("A challenge counts whoever makes it");
+    expect(j.store.proposalStatus(author.workspace.id, opened.proposal.id).ai.position).toBe("challenged");
+  });
+});
+
+describe("a doubled act word", () => {
+  test("is left out of the statement once when act is given, and said; another act word stays", async () => {
+    const { j, a, sb } = pair();
+    const done = completedTask(j, a);
+    const accepted = await ok(sb, "collab_note", { act: "accept", text: "Accept: the fix is correct", re: done.completion_report_id });
+    expect(accepted.note).toStartWith("accept: the fix is correct");
+    expect(accepted.note).not.toContain("Accept:");
+    expect(accepted.advice.join(" ")).toContain("left out of the statement");
+    expect(parseNote(j.report(accepted.ids.review_report).body).statement).toBe("the fix is correct");
+    const root = await ok(sb, "collab_note", { text: "A claim." });
+    const shouted = await ok(sb, "collab_note", { act: "note", text: "NOTE: still a note\n\nwith a body", re: root.ids.report, dry_run: true });
+    expect(shouted.parsed).toMatchObject({ statement: "still a note", body: "with a body" });
+    // Another act word is the caller's own words.
+    const other = await ok(sb, "collab_note", { act: "note", text: "Challenge: this is only a note", dry_run: true });
+    expect(other.parsed.statement).toBe("Challenge: this is only a note");
+    expect(other.advice.join(" ")).toContain("stays in the statement");
+    // Without act, the text is read as a whole note, as before.
+    const whole = await ok(sb, "collab_note", { text: "note: read whole", dry_run: true });
+    expect(whole).toMatchObject({ read_as: "collab-note/1", parsed: { statement: "read whole" } });
+  });
+});

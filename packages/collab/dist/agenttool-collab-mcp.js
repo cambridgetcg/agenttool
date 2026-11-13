@@ -37258,6 +37258,123 @@ class CollabStore {
       };
     }).deferred());
   }
+  inboxLookBackForSession(input) {
+    const limit = input.limit;
+    if (!Number.isInteger(limit) || limit < 1 || limit > NOTE_INBOX_MAX_LIMIT) {
+      throw new CollabError("invalid_limit", `limit must be an integer from 1 to ${NOTE_INBOX_MAX_LIMIT}`);
+    }
+    if (input.include !== "for_me" && input.include !== "all") {
+      throw new CollabError("invalid_include", "include must be for_me or all");
+    }
+    if (!Number.isSafeInteger(input.since) || input.since < 0) {
+      throw new CollabError("invalid_since", "since must be a whole number, 0 or more");
+    }
+    return this.db.transaction(() => {
+      const session = this.authenticateSession(input);
+      const workspace = this.requireWorkspace(session.workspace_id);
+      const mark = this.readNoteMarkState(session);
+      const after = Math.min(input.since, workspace.event_head_sequence);
+      const scan = this.scanNoteEvents(session, after, this.endedNamesakes(session));
+      const listed = scan.events.filter((event) => input.include === "all" ? !event.own : event.for_me || event.for_name !== null);
+      let through = scan.last_sequence;
+      let more = scan.capped;
+      if (listed.length > limit) {
+        through = listed[limit].sequence - 1;
+        more = true;
+      }
+      const returned = listed.slice(0, limit);
+      const sessions = this.noteSessionViews(session.workspace_id);
+      const folds = this.noteBallotFolds(session);
+      return {
+        session: sessions.find((view) => view.id === session.id),
+        sessions,
+        entries: returned.map((event) => this.noteEntryAt(session, event.sequence, folds, event.for_name)),
+        also_new: scan.events.filter((event) => !event.own && !event.for_me && event.for_name === null && event.sequence <= through).length,
+        more,
+        for_me_total: scan.events.filter((event) => event.for_me).length,
+        for_me_total_capped: scan.capped,
+        mark: {
+          before: mark.sequence,
+          through: mark.sequence,
+          anchor: this.anchorAt(workspace, mark.sequence),
+          initialised_from: null,
+          clamped: false,
+          written: false
+        },
+        head_sequence: workspace.event_head_sequence,
+        waiting: this.noteWaiting(session),
+        reveal_pending: [],
+        observed_at: this.timestamp(),
+        looked_back: { after, through }
+      };
+    }).deferred();
+  }
+  noteArrivalBehind(credential) {
+    return this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      const joined = this.db.query(`
+        SELECT sequence FROM events WHERE workspace_id = ? AND type = 'session.joined' AND entity_id = ?
+      `).get(session.workspace_id, session.id);
+      const before = joined ? joined.sequence - 1 : 0;
+      const bySessions = this.db.query(`
+        SELECT COUNT(*) AS count FROM events
+        WHERE workspace_id = ? AND sequence <= ? AND session_id IS NOT NULL AND session_id <> ?
+      `).get(session.workspace_id, before, session.id).count;
+      const namesakes = this.endedNamesakes(session);
+      let count = 0;
+      let earliest = null;
+      let capped = false;
+      if (namesakes.length > 0) {
+        const from = this.db.query(`
+          SELECT MIN(sequence) AS sequence FROM events
+          WHERE workspace_id = ? AND type = 'session.joined' AND entity_id IN (${namesakes.map(() => "?").join(", ")})
+        `).get(session.workspace_id, ...namesakes).sequence ?? 0;
+        const rows = this.db.query(`
+          SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
+            session_id, occurred_at, payload_json, prev_hash, hash
+          FROM events WHERE workspace_id = ? AND sequence > ?
+            AND (session_id IS NULL OR session_id <> ?)
+            AND type IN (${NOTE_ADDRESSING_EVENT_TYPES.map(() => "?").join(", ")})
+          ORDER BY sequence LIMIT ?
+        `).all(session.workspace_id, from, session.id, ...NOTE_ADDRESSING_EVENT_TYPES, NOTE_SCAN_MAX_EVENTS + 1);
+        capped = rows.length > NOTE_SCAN_MAX_EVENTS;
+        for (const row of rows.slice(0, NOTE_SCAN_MAX_EVENTS)) {
+          const event = eventFromRow(row);
+          if (this.eventAddressesSession(event, session.id))
+            continue;
+          if (this.namesakeAddressed(event, namesakes) === null)
+            continue;
+          count += 1;
+          earliest ??= event.sequence;
+        }
+      }
+      return {
+        joined_sequence: joined?.sequence ?? null,
+        events_before: before,
+        by_other_sessions_before: bySessions,
+        for_name: { count, earliest_sequence: earliest, at_least: capped, sessions: namesakes.length }
+      };
+    }).deferred();
+  }
+  noteBallotsToWatch(credential) {
+    return this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      return this.noteOpenBallots(session).filter((ballot) => ballot.state === "open").filter((ballot) => ballot.viewer?.in_electorate === true || ballot.opener_session_id === session.id || (ballot.viewer?.your_casts ?? 0) > 0).map((ballot) => ({ ballot_id: ballot.ballot_id, closes_at: ballot.terms.closes_at }));
+    }).deferred();
+  }
+  noteBallotState(workspaceId, ballotId) {
+    return this.db.transaction(() => this.readBallotFacts(workspaceId, validateId(ballotId, "ballot_id"))?.state ?? null).deferred();
+  }
+  noteBallotClosedEntry(credential, ballotId) {
+    return this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      const row = this.db.query(`
+        SELECT sequence FROM events WHERE workspace_id = ? AND type = 'ballot.closed' AND entity_id = ?
+        ORDER BY sequence LIMIT 1
+      `).get(session.workspace_id, validateId(ballotId, "ballot_id"));
+      return row ? this.noteEntryAt(session, row.sequence, this.noteBallotFolds(session)) : null;
+    }).deferred();
+  }
   noteThreadForSession(input) {
     const id = validateId(input.id, `${input.kind}_id`);
     const { result: markState, reveal } = this.noteHousekeeping(input, (session, mark) => {
@@ -37583,7 +37700,7 @@ class CollabStore {
       `).run(session.workspace_id, session.id, itemId, now);
     }
   }
-  scanNoteEvents(session, after) {
+  scanNoteEvents(session, after, namesakes = []) {
     const sizes = this.db.query(`
       SELECT sequence, length(CAST(payload_json AS BLOB)) AS bytes FROM events
       WHERE workspace_id = ? AND sequence > ? ORDER BY sequence LIMIT ?
@@ -37612,10 +37729,21 @@ class CollabStore {
         type: event.type,
         own,
         for_me: forMe,
+        for_name: own || forMe ? null : this.namesakeAddressed(event, namesakes),
         shown_item_id: forMe ? noteShownItem(event) : null
       };
     });
     return { events, last_sequence: end, capped: taken < sizes.length };
+  }
+  namesakeAddressed(event, namesakes) {
+    return namesakes.find((id) => event.session_id !== id && this.eventAddressesSession(event, id)) ?? null;
+  }
+  endedNamesakes(session) {
+    return this.db.query(`
+      SELECT id FROM coordination_sessions
+      WHERE workspace_id = ? AND actor = ? AND status = 'ended' AND id <> ?
+      ORDER BY joined_at, id
+    `).all(session.workspace_id, session.actor, session.id).map((row) => row.id);
   }
   anchorAt(workspace, sequence) {
     if (sequence === 0)
@@ -37625,7 +37753,7 @@ class CollabStore {
       throw new CollabError("cursor_mismatch", "The read mark does not resolve to an event in this journal");
     return { epoch_id: row.epoch_id, sequence, hash: row.hash };
   }
-  noteEntryAt(session, sequence, folds) {
+  noteEntryAt(session, sequence, folds, forName = null) {
     const row = this.db.query(`
       SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
         session_id, occurred_at, payload_json, prev_hash, hash
@@ -37636,6 +37764,7 @@ class CollabStore {
     const event = eventFromRow(row);
     const payload = event.payload;
     const forMe = event.session_id !== session.id && this.eventAddressesSession(event, session.id);
+    const namesake = !forMe && forName !== null ? forName : null;
     let report = null;
     if (event.type === "report.posted" || event.type.startsWith("proposal.")) {
       const reportRow = this.db.query(`SELECT * FROM reports WHERE id = ?`).get(event.entity_id);
@@ -37652,7 +37781,7 @@ class CollabStore {
     return {
       event,
       for_me: forMe,
-      why_you: forMe ? this.noteWhyYou(event, session.id) : null,
+      why_you: forMe ? this.noteWhyYou(event, session.id) : namesake ? this.noteWhyYou(event, namesake) : null,
       report,
       marked,
       cited: own ? { event_id: own.event_id, by_session_id: own.by_session_id, worktree_id: own.worktree_id, items: own.items } : null,
@@ -37661,8 +37790,25 @@ class CollabStore {
       to_person: event.type === "report.posted" && payload.to_person === true,
       task: taskRow ? { id: taskRow.id, title: taskRow.title } : null,
       ballot: ballotFacts ? this.ballotData(ballotFacts, session.id) : null,
-      folded: foldedBy ? { ballot_id: foldedBy } : null
+      folded: foldedBy ? { ballot_id: foldedBy } : null,
+      for_name: namesake ? { session_id: namesake } : null,
+      verdict: report && event.type === "report.posted" ? this.reviewVerdictOf(report) : null
     };
+  }
+  reviewVerdictOf(report) {
+    if (!report.task_id || report.relation !== "supports" && report.relation !== "challenges")
+      return null;
+    const next = this.db.query(`
+      SELECT type, json_extract(payload_json, '$.review_report_id') AS review_report_id
+      FROM events WHERE workspace_id = ? AND sequence = ?
+    `).get(report.workspace_id, report.event_sequence + 1);
+    if (!next || next.review_report_id !== report.id)
+      return null;
+    if (next.type === "task.accepted")
+      return "accept";
+    if (next.type === "task.changes_requested")
+      return "request_changes";
+    return null;
   }
   noteAuthorCites(workspaceId, report) {
     if (!report.from_session_id)
@@ -39382,6 +39528,22 @@ var NOTE_DECISION_OUTCOMES = ["proceed", "do_not_proceed", "no_decision"];
 var NOTE_NOTHING_AUTHORISED = "nothing is authorised";
 var NOTE_DEFAULT_DECISION_EXTENT = "work this session already holds";
 var NOTE_SELF_DECISION_BASIS = "recorded by this session; not a direction decision and not the person's agreement";
+var NOTE_ADDRESSING_EVENT_TYPES = [
+  "report.posted",
+  "handoff.offered",
+  "handoff.accepted",
+  "handoff.declined",
+  "handoff.expired",
+  "task.reported_complete",
+  "task.accepted",
+  "task.changes_requested",
+  "task.recovered",
+  "proposal.opened",
+  "proposal.agreed",
+  "proposal.rejected",
+  "ballot.opened",
+  "ballot.closed"
+];
 var BALLOT_RECENT_MS = 30 * 60000;
 var BALLOT_LEFT_OUT_MAX = 50;
 var BALLOT_MAX_CASTS = MAX_CASTS_PER_SESSION;
@@ -40448,6 +40610,7 @@ function arrivalResult(ctx, binding, options) {
   if (options.record) {
     ctx.store.recordArrivalShown(credential, brief.shown);
   }
+  const behind = options.fresh ? arrivalBehind(ctx, credential, data.session.actor) : { view: {}, advice: [] };
   return {
     ...noteWriteResult({
       effect: options.effect,
@@ -40456,15 +40619,43 @@ function arrivalResult(ctx, binding, options) {
         session_handle: handleOf("session", data.session.id),
         workspace_id: data.workspace.id
       },
-      advice: [...options.advice, ...brief.advice],
+      advice: [...options.advice, ...behind.advice, ...brief.advice],
       next: withSlot(ctx, { tool: "collab_inbox", input: {} }),
       note: options.note,
       replayed: options.replayed
     }),
     ...options.remedies ? { remedies: options.remedies } : {},
     ...brief.view,
+    ...behind.view,
     ...pendingReveal ? { reveal_pending: pendingReveal } : {}
   };
+}
+function arrivalBehind(ctx, credential, name) {
+  let behind;
+  try {
+    behind = ctx.store.noteArrivalBehind(credential);
+  } catch {
+    return { view: {}, advice: [] };
+  }
+  const view = {};
+  const advice = [];
+  if (behind.by_other_sessions_before > 0) {
+    view.before_you_arrived = {
+      events: behind.events_before,
+      see: withSlot(ctx, { tool: "collab_inbox", input: { since: 0, include: "all" } })
+    };
+    advice.push(`${behind.events_before} events came before you arrived. Your read mark starts at the journal head, so collab_inbox ` + "shows only what comes after it; before_you_arrived.see reads back from the start, moving no mark.");
+  }
+  const forName = behind.for_name;
+  if (forName.count > 0 && forName.earliest_sequence !== null) {
+    view.left_for_your_name = {
+      count: forName.count,
+      ...forName.at_least ? { at_least: true } : {},
+      see: withSlot(ctx, { tool: "collab_inbox", input: { since: forName.earliest_sequence - 1 } })
+    };
+    advice.push(`${forName.count}${forName.at_least ? " or more" : ""} item(s) were addressed to ${forName.sessions === 1 ? "an ended session" : "ended sessions"} ` + `that also called itself ${name}; left_for_your_name.see reads them. Names are self-declared, so this is routing, ` + "not identity: you are a new session and voice, and nothing those sessions held, said or stood on passes to you.");
+  }
+  return { view, advice };
 }
 function composeBrief(ctx, data, pending, rootPath) {
   const me = data.session;
@@ -40728,13 +40919,15 @@ function formatEntry(entry, byId, me, recheck) {
     sequence: event.sequence,
     at: event.occurred_at,
     why_you: entry.why_you,
-    for_me: entry.for_me
+    for_me: entry.for_me,
+    ...entry.for_name ? { for_your_name: true } : {}
   };
+  const addressed = entry.for_name?.session_id ?? me;
   if (event.type === "report.posted" && report && entry.folded) {
     return {
       id: report.id,
       handle: handleOf("report", report.id),
-      act: reportAct(report, entry.termed),
+      act: entry.verdict ?? reportAct(report, entry.termed),
       from: { session: report.from_session_id, name: report.from_actor },
       ...base,
       folded: true,
@@ -40744,7 +40937,7 @@ function formatEntry(entry, byId, me, recheck) {
   }
   if (event.type === "report.posted" && report) {
     const poll = entry.ballot !== null && entry.ballot.ballot_id === report.id;
-    const act = reportAct(report, entry.termed, poll);
+    const act = entry.verdict ?? reportAct(report, entry.termed, poll);
     let statement = statementOf(report.body);
     let text = report.body;
     let why = [];
@@ -40833,7 +41026,7 @@ function formatEntry(entry, byId, me, recheck) {
         handle: taskHandle ?? event.entity_id,
         act: "done",
         from,
-        to: sessionRef(me, me, byId),
+        to: sessionRef(addressed, addressed, byId),
         re: { id: event.entity_id, handle: taskHandle ?? event.entity_id },
         ...base,
         statement: `The completion of ${taskTitle} is ready for review.`,
@@ -40849,7 +41042,7 @@ function formatEntry(entry, byId, me, recheck) {
         handle: taskHandle ?? event.entity_id,
         act: event.type === "task.accepted" ? "accept" : "request_changes",
         from,
-        to: sessionRef(me, me, byId),
+        to: sessionRef(addressed, addressed, byId),
         re: { id: event.entity_id, handle: taskHandle ?? event.entity_id },
         ...base,
         statement: typeof payload.summary === "string" ? statementOf(payload.summary) : `A verdict on ${taskTitle}.`,
@@ -40869,7 +41062,7 @@ function formatEntry(entry, byId, me, recheck) {
         act: "event",
         type: event.type,
         from,
-        to: entry.for_me ? sessionRef(me, me, byId) : "all",
+        to: entry.for_me || entry.for_name ? sessionRef(addressed, addressed, byId) : "all",
         re: taskHandle ? { id: entry.task.id, handle: taskHandle } : null,
         ...base,
         statement: eventSubject(event.type, taskHandle, taskTitle, from.name),
@@ -40971,6 +41164,12 @@ function validInboxInput(ctx, input) {
       remedy: { say: "format is json (the default) or note (with about: the thread as one collab-note/1 text)." }
     });
   }
+  const since = input.since ?? null;
+  if (since !== null && (typeof since !== "number" || !Number.isSafeInteger(since) || since < 0)) {
+    throw new CollabError("invalid_since", "since must be a whole number, 0 or more: a journal sequence to read back from", {
+      remedy: inboxRetry(ctx, input, "since", typeof since === "number" && Number.isFinite(since) ? Math.max(0, Math.round(since)) : 0)
+    });
+  }
   let about = null;
   if (input.about !== undefined) {
     about = typeof input.about === "string" ? input.about.trim() : "";
@@ -40989,56 +41188,98 @@ function validInboxInput(ctx, input) {
       });
     }
   }
-  return { waitSeconds, limit, include, format, about };
+  return { waitSeconds, limit, include, format, about, since };
 }
 async function inboxVerb(ctx, input) {
   const { binding, credential } = requireCredential(ctx);
-  const { waitSeconds, limit, include, format, about } = validInboxInput(ctx, input);
+  const { waitSeconds, limit, include, format, about, since } = validInboxInput(ctx, input);
   if (about !== null)
-    return aboutView(ctx, binding, about, format, waitSeconds);
+    return aboutView(ctx, binding, about, format, waitSeconds, since !== null);
+  if (since !== null)
+    return lookBack(ctx, input, { since, limit, include, format, waitSeconds });
   const waits = waitSeconds > 0;
   if (waits && ctx.waits.active >= ctx.waits.max) {
     throw new CollabError("too_many_waits", `At most ${ctx.waits.max} waits may run per endpoint`);
   }
   if (waits)
     ctx.waits.active += 1;
+  const paging = { ...include === "all" ? { include } : {}, ...input.limit !== undefined ? { limit } : {} };
   try {
     const first = ctx.store.inboxForSession({ ...credential, limit, include });
     const passes = [first];
     let waited = null;
     let waitError = null;
+    const extras = [];
     if (waits && !first.entries.some((entry) => entry.for_me) && !first.more) {
       const started = performance.now();
       const seconds = () => Math.round((performance.now() - started) / 100) / 10;
       try {
-        const arrived = await waitForMe(ctx, binding, first.mark.anchor, waitSeconds * 1000);
-        waited = { seconds: seconds(), ended_by: arrived ? "item" : "timeout" };
-        if (arrived)
+        const woke = await waitForMe(ctx, binding, first.mark.anchor, waitSeconds * 1000);
+        waited = woke === null ? { seconds: seconds(), ended_by: "timeout" } : woke.ended_by === "item" ? { seconds: seconds(), ended_by: "item" } : { seconds: seconds(), ended_by: "ballot_closed", ballot: { id: woke.ballot_id, handle: handleOf("ballot", woke.ballot_id) } };
+        if (woke)
           passes.push(ctx.store.inboxForSession({ ...credential, limit, include }));
+        if (woke?.ended_by === "ballot_closed") {
+          const listed = passes.some((pass) => pass.entries.some((entry) => entry.event.type === "ballot.closed" && entry.event.entity_id === woke.ballot_id));
+          const closed = listed ? null : ballotClosedEntry(ctx, credential, woke.ballot_id);
+          if (closed)
+            extras.push(closed);
+        }
       } catch (error51) {
         if (error51 instanceof CollabError && error51.code === "wait_cancelled") {
           throw new CollabError(error51.code, error51.message, {
-            first_pass: inboxResult(ctx, passes, format, null)
+            first_pass: inboxResult(ctx, passes, format, null, null, paging)
           });
         }
         waitError = error51 instanceof CollabError ? error51 : new CollabError("internal_error", error51 instanceof Error ? error51.message : String(error51));
         waited = { seconds: seconds(), ended_by: "error", code: waitError.code, message: waitError.message };
       }
     }
-    const paging = { ...include === "all" ? { include } : {}, ...input.limit !== undefined ? { limit } : {} };
-    return afterThreadRead(() => inboxResult(ctx, passes, format, waited, waitError, paging));
+    return afterThreadRead(() => inboxResult(ctx, passes, format, waited, waitError, paging, extras));
   } finally {
     if (waits)
       ctx.waits.active -= 1;
   }
 }
-function inboxResult(ctx, passes, format, waited, waitError = null, paging = {}) {
+function ballotClosedEntry(ctx, credential, ballotId) {
+  try {
+    return ctx.store.noteBallotClosedEntry(credential, ballotId);
+  } catch {
+    return null;
+  }
+}
+function lookBack(ctx, input, options) {
+  const { credential } = requireCredential(ctx);
+  const data = ctx.store.inboxLookBackForSession({ ...credential, since: options.since, limit: options.limit, include: options.include });
+  const result = inboxResult(ctx, [data], options.format, null, null, inboxPaging(input));
+  const advice = result.advice;
+  if (options.waitSeconds > 0) {
+    advice.unshift("wait_seconds applies to your inbox from its read mark, not to a look-back, so this call did not wait; leave since out to wait for new items.");
+  }
+  const lookedBack = data.looked_back;
+  if (options.since > data.head_sequence) {
+    advice.push(`since (${options.since}) is past the journal head (${data.head_sequence}); there is nothing after it yet.`);
+  }
+  if (data.entries.some((entry) => entry.for_name))
+    advice.push(FOR_YOUR_NAME_ADVICE);
+  advice.push(LOOK_BACK_ADVICE);
+  return {
+    ...result,
+    looked_back: lookedBack,
+    next: data.more ? withSlot(ctx, { tool: "collab_inbox", input: { ...inboxPaging(input), since: lookedBack.through } }) : result.next
+  };
+}
+function inboxPaging(input) {
+  return { ...input.include === "all" ? { include: "all" } : {}, ...input.limit !== undefined ? { limit: input.limit } : {} };
+}
+var LOOK_BACK_ADVICE = "A look-back only reads: your read mark (read_through) did not move, and nothing it lists is recorded as delivered to you.";
+var FOR_YOUR_NAME_ADVICE = "Items marked for_your_name were addressed to an ended session that carried your name. Names are self-declared: " + "this routes reading to you, it does not make you that session, and nothing that session held, said or stood on passes to you.";
+function inboxResult(ctx, passes, format, waited, waitError = null, paging = {}, extras = []) {
   const data = passes.at(-1);
   const byId = new Map(data.sessions.map((view) => [view.id, view]));
   const me = data.session.id;
-  const entries = passes.flatMap((pass) => pass.entries);
+  const entries = [...passes.flatMap((pass) => pass.entries), ...extras];
   const recheck = evidenceRechecker(ctx.store);
-  const items = entries.map((entry) => entry.for_me ? formatEntry(entry, byId, me, recheck) : subjectLine(entry, byId, me));
+  const items = entries.map((entry) => entry.for_me || entry.for_name || extras.includes(entry) ? formatEntry(entry, byId, me, recheck) : subjectLine(entry, byId, me));
   const advice = [];
   if (format === "note")
     advice.push("format: note renders one thread; pass about with an id or handle.");
@@ -41052,14 +41293,21 @@ function inboxResult(ctx, passes, format, waited, waitError = null, paging = {})
   if (entries.some((entry) => entry.for_me && entry.event.type === "ballot.opened" && entry.ballot && unitMateHasCast(entry.ballot))) {
     advice.push(UNIT_MATE_CAST_ADVICE);
   }
-  const firstForMe = entries.find((entry) => entry.for_me);
+  if (waited?.ended_by === "ballot_closed") {
+    const ballot = waited.ballot.handle;
+    advice.push(passes.some((pass) => pass.reveal_pending.length > 0) ? `${ballot} closed while you waited; its reveal did not finish (reveal_pending), so it stays sealed and the next call tries again.` : `${ballot} closed while you waited, so the wait ended at its close and its votes were revealed, as any call reveals them.`);
+  }
+  const firstForMe = entries.find((entry) => entry.for_me || entry.for_name) ?? extras[0];
   const about = firstForMe ? entryRef(firstForMe) : null;
   const next = waitError ? withSlot(ctx, noteRemedyOf(waitError)) : about ? withSlot(ctx, { tool: "collab_inbox", input: { about } }) : data.more ? withSlot(ctx, { tool: "collab_inbox", input: { ...paging } }) : withSlot(ctx, { tool: "collab_inbox", input: { wait_seconds: WAIT_MAX_SECONDS, ...paging } });
   const initialisedFrom = passes.map((pass) => pass.mark.initialised_from).find((value) => value) ?? null;
+  const alsoNew = passes.reduce((sum, pass) => sum + pass.also_new, 0);
+  const seeFrom = data.looked_back ? data.looked_back.after : passes[0].mark.before;
+  const see = alsoNew > 0 && paging.include !== "all" ? { see: withSlot(ctx, { tool: "collab_inbox", input: { since: seeFrom, include: "all" } }) } : {};
   return {
     ok: true,
     items,
-    also_new: { count: passes.reduce((sum, pass) => sum + pass.also_new, 0) },
+    also_new: { count: alsoNew, ...see },
     more: data.more,
     read_through: { sequence: data.mark.through, head: data.head_sequence },
     ...initialisedFrom ? { mark_initialised_from: initialisedFrom } : {},
@@ -41093,6 +41341,21 @@ async function waitForMe(ctx, binding, anchor, durationMs) {
   const workspaceId = binding.handle.workspace.id;
   let after = { ...anchor };
   const deadline = performance.now() + durationMs;
+  const watched = ctx.store.noteBallotsToWatch(binding.handle.credential);
+  const watchedIds = new Set(watched.map((ballot) => ballot.ballot_id));
+  const clock = () => {
+    if (watched.length === 0)
+      return { closed: null, untilMs: Infinity };
+    const now = Date.parse(ctx.store.noteNow());
+    let untilMs = Infinity;
+    for (const ballot of watched) {
+      const left = Date.parse(ballot.closes_at) - now;
+      if (left <= 0)
+        return { closed: ballot.ballot_id, untilMs: 0 };
+      untilMs = Math.min(untilMs, left);
+    }
+    return { closed: null, untilMs };
+  };
   while (true) {
     if (ctx.signals.some((signal) => signal?.aborted)) {
       throw new CollabError("wait_cancelled", "The inbox wait was cancelled");
@@ -41111,7 +41374,12 @@ async function waitForMe(ctx, binding, anchor, durationMs) {
       });
       for (const event of page.events) {
         if (event.session_id !== sessionId && ctx.store.eventAddressesSession(event, sessionId))
-          return true;
+          return { ended_by: "item" };
+        if ((event.type === "ballot.cast" || event.type === "ballot.closed") && watchedIds.has(event.entity_id)) {
+          const state = ctx.store.noteBallotState(workspaceId, event.entity_id);
+          if (state === "closed" || state === "revealed")
+            return { ended_by: "ballot_closed", ballot_id: event.entity_id };
+        }
       }
       after = page.next_anchor;
       caughtUp = !page.has_more;
@@ -41119,12 +41387,15 @@ async function waitForMe(ctx, binding, anchor, durationMs) {
       if (!(error51 instanceof CollabError) || error51.code !== "event_read_busy")
         throw error51;
     }
+    const { closed, untilMs } = clock();
+    if (closed)
+      return { ended_by: "ballot_closed", ballot_id: closed };
     const remaining = deadline - performance.now();
     if (remaining <= 0)
-      return false;
+      return null;
     if (!caughtUp)
       continue;
-    await abortableDelay(Math.min(WAIT_POLL_MS, remaining), ctx.signals);
+    await abortableDelay(Math.max(0, Math.min(WAIT_POLL_MS, remaining, untilMs)), ctx.signals);
   }
 }
 function abortableDelay(ms, signals) {
@@ -41150,11 +41421,16 @@ function resolveAbout(ctx, workspaceId, value) {
     return { kind: "report", id: ctx.store.resolveNoteRef(workspaceId, "report", text).id };
   }
   const found = [];
+  let unreadable = false;
   for (const kind of ["report", "task"]) {
     try {
       found.push({ kind, id: ctx.store.resolveNoteRef(workspaceId, kind, text).id });
     } catch (error51) {
-      if (!(error51 instanceof CollabError) || error51.code !== `${kind}_not_found`)
+      if (!(error51 instanceof CollabError))
+        throw error51;
+      if (error51.code === `invalid_${kind}_id`)
+        unreadable = true;
+      else if (error51.code !== `${kind}_not_found`)
         throw error51;
     }
   }
@@ -41167,14 +41443,36 @@ function resolveAbout(ctx, workspaceId, value) {
       remedy: { say: "Name the kind: task:<id> or report:<id>; the candidates are listed." }
     });
   }
+  const sessions = aboutSessions(ctx, workspaceId, text);
+  if (sessions.length > 0 || unreadable || /^session[#_:]/i.test(text)) {
+    throw new CollabError("about_not_a_thread", sessions.length > 0 ? `${text} names ${sessions.length === 1 ? "a session" : `${sessions.length} sessions`}, not a thread; about reads one thread` : `${text} is not a thread collab_inbox can show; about reads one thread`, {
+      value: text,
+      ...sessions.length > 0 ? { sessions } : {},
+      remedy: { say: ABOUT_TAKES }
+    });
+  }
   throw new CollabError("ref_not_found", `No report or task in this workspace has the id ${text}`, { value: text });
 }
-function aboutView(ctx, binding, about, format, waitSeconds = 0) {
+var ABOUT_TAKES = "about takes one thread: a report, proposal, ballot or task, by its id or handle (such as report#3fa91c or task#0b12de). " + "To read what a session wrote, or anything from before you arrived, read back through the journal with " + 'collab_inbox {since: 0, include: "all"}; a look-back moves no read mark.';
+function aboutSessions(ctx, workspaceId, text) {
+  try {
+    const view = ctx.store.resolveNoteSession(workspaceId, text, { include_ended: true });
+    return [{ session: view.id, name: view.actor }];
+  } catch (error51) {
+    if (!(error51 instanceof CollabError))
+      throw error51;
+    if (error51.code === "ambiguous_session") {
+      return (error51.details.candidates ?? []).map((candidate) => ({ session: candidate.session, name: candidate.name }));
+    }
+    return [];
+  }
+}
+function aboutView(ctx, binding, about, format, waitSeconds = 0, sinceGiven = false) {
   const credential = binding.handle.credential;
   const workspaceId = binding.handle.workspace.id;
   const { kind, id } = resolveAbout(ctx, workspaceId, about);
   const thread = ctx.store.noteThreadForSession({ ...credential, kind, id });
-  return afterThreadRead(() => composeAboutView(ctx, thread, format, waitSeconds));
+  return afterThreadRead(() => composeAboutView(ctx, thread, format, waitSeconds, sinceGiven));
 }
 function afterThreadRead(compose) {
   try {
@@ -41185,12 +41483,15 @@ function afterThreadRead(compose) {
     throw new CollabError(error51.code, error51.message, { ...error51.details, after_housekeeping: true });
   }
 }
-function composeAboutView(ctx, thread, format, waitSeconds) {
+function composeAboutView(ctx, thread, format, waitSeconds, sinceGiven) {
   const byId = new Map(thread.sessions.map((view2) => [view2.id, view2]));
   const me = thread.session.id;
   const advice = [];
   if (waitSeconds > 0) {
     advice.push("wait_seconds applies to your inbox, not to a thread view, so this call did not wait; leave about out to wait for new items.");
+  }
+  if (sinceGiven) {
+    advice.push("since reads back through the journal, not through one thread, so this call shows the thread only; leave about out to read back.");
   }
   if (thread.mark.clamped)
     advice.push(MARK_CLAMPED_ADVICE);
@@ -41409,7 +41710,7 @@ function ballotItem(entry, from, base, byId, me) {
         handle,
         act: "poll",
         from: { session: null, name: "system:clock" },
-        to: sessionRef(me, me, byId),
+        to: entry.for_me ? sessionRef(me, me, byId) : entry.for_name ? sessionRef(entry.for_name.session_id, entry.for_name.session_id, byId) : "all",
         re,
         ...base,
         statement: result ? `${handle} closed: ${result.status}${top}. It authorises nothing.` : `${handle} closed.`,
@@ -42095,6 +42396,25 @@ function authorAddressee(target, me) {
     return BROADCAST;
   return sessionAddressee(author.id, author.actor, author.status, author.liveness, author.last_seen_at);
 }
+function replyAddressee(ctx, workspaceId, author, me) {
+  if (!author || author.id === me)
+    return BROADCAST;
+  if (author.status === "ended") {
+    const live = ctx.store.noteSessionViews(workspaceId).filter((view) => view.status === "active" && view.actor === author.actor && view.id !== author.id);
+    if (live.length === 1 && live[0].id !== me) {
+      const now = live[0];
+      const routed = sessionAddressee(now.id, now.actor, now.status, now.liveness, now.last_seen_at);
+      return {
+        ...routed,
+        advice: [
+          `${author.actor}'s session that wrote this (${author.id}) has ended; this is addressed to the active session named ` + `${now.actor} (session ${now.id}). Names are self-declared, so this is routing by name, not proof that it is the same agent.`,
+          ...routed.advice
+        ]
+      };
+    }
+  }
+  return sessionAddressee(author.id, author.actor, author.status, author.liveness, author.last_seen_at);
+}
 function viewAddressee(ctx, workspaceId, sessionId) {
   const view = ctx.store.resolveNoteSession(workspaceId, sessionId, { include_ended: true });
   return sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at);
@@ -42158,10 +42478,18 @@ function readNoteInput(input) {
     return { fields, read_as: "collab-note/1", advice };
   }
   const act = (input.act ?? "note").trim().toLowerCase();
+  let text = input.text;
   if (input.act !== undefined && headAct !== null) {
-    advice.push(`text begins with "${head[1]}: ", which stays in the statement because act was given.`);
+    const rest = normalizeNoteText(input.text).slice(head[0].length);
+    if (headAct === act && (rest.split(`
+`)[0] ?? "").trim() !== "") {
+      text = rest;
+      advice.push(`text began with "${head[1]}: ", the act you gave, so that word was left out of the statement.`);
+    } else {
+      advice.push(`text begins with "${head[1]}: ", which stays in the statement because act was given.`);
+    }
   }
-  const { statement, body } = splitNoteText(input.text);
+  const { statement, body } = splitNoteText(text);
   return {
     fields: normalizeNoteFields({ act, statement, body, ...structured }),
     read_as: null,
@@ -42477,7 +42805,7 @@ function planNote(ctx, input, context) {
         report.task_id = reportTarget.view.report.task_id;
         if (reportTarget.view.termed)
           report.about_proposal_id = reportTarget.id;
-        addressee = authorAddressee(reportTarget.view, me);
+        addressee = replyAddressee(ctx, workspaceId, reportTarget.view.author, me);
       } else if (target?.kind === "task") {
         report.task_id = target.id;
         const holder = target.task.assignee_session_id ?? target.task.reported_by_session_id;
@@ -42507,7 +42835,7 @@ function planNote(ctx, input, context) {
       report.task_id = view.report.task_id;
       if (view.termed)
         report.about_proposal_id = reportTarget2.id;
-      const addressee = explicit ?? authorAddressee(view, me);
+      const addressee = explicit ?? replyAddressee(ctx, workspaceId, view.author, me);
       report.to_session_id = addressee.to_session_id;
       report.to_person = addressee.to_person;
       if (view.completion_of?.pending_review) {
@@ -42522,6 +42850,8 @@ function planNote(ctx, input, context) {
       }
       if (view.obsoleted)
         advice.push(`${targetHandle(reportTarget2)} was withdrawn or replaced by its author; your ${act} is recorded on it all the same.`);
+      if (view.termed && !view.obsoleted)
+        advice.push(...lateVoiceAdvice(ctx, workspaceId, me, act, reportTarget2));
       if (act === "challenge" && context.replacedId) {
         return finish({
           recorded_as: "challenge",
@@ -42547,7 +42877,7 @@ function planNote(ctx, input, context) {
         const report2 = base("resolves");
         report2.target_report_id = challenge.id;
         report2.task_id = challenge.view.report.task_id;
-        const addressee2 = explicit ?? authorAddressee(challenged, me);
+        const addressee2 = explicit ?? replyAddressee(ctx, workspaceId, challenged.author, me);
         report2.to_session_id = addressee2.to_session_id;
         report2.to_person = addressee2.to_person;
         if (challenge.view.obsoleted)
@@ -42557,7 +42887,7 @@ function planNote(ctx, input, context) {
       fields = { ...fields, act: "note" };
       const report = base("informs", [`report:${challenge.id}`]);
       report.task_id = challenge.view.report.task_id;
-      const addressee = explicit ?? (challenger ? sessionAddressee(challenger.id, challenger.actor, challenger.status, challenger.liveness, challenger.last_seen_at) : BROADCAST);
+      const addressee = explicit ?? (challenger ? replyAddressee(ctx, workspaceId, challenger, me) : BROADCAST);
       report.to_session_id = addressee.to_session_id;
       report.to_person = addressee.to_person;
       advice.push("Only the challenger can lift a challenge; your answer was sent to them" + (challenger ? ` (challenger voice ${challenger.voice_id}; yours is ${myVoice}).` : "."));
@@ -42638,6 +42968,28 @@ function planNote(ctx, input, context) {
       return finish({ recorded_as: "relay_rejection", target, addressee: BROADCAST, reports: [], entity: reportTarget.id });
     }
   }
+}
+function lateVoiceAdvice(ctx, workspaceId, me, act, proposal) {
+  let data;
+  try {
+    data = ctx.store.noteProposalView(workspaceId, proposal.id);
+  } catch {
+    return [];
+  }
+  const voice = ctx.store.consentVoiceOf(me);
+  if (data.status.terms.voices.some((snapshot) => snapshot.voice_id === voice))
+    return [];
+  const handle = targetHandle(proposal);
+  const late = `Your voice was not live when ${handle} opened, so it is not one of the voices consent/v1 waits for.`;
+  if (act === "challenge") {
+    return [
+      `${late} A challenge counts whoever makes it: while yours stands, the position is challenged, and split at the close. ` + "Only your voice can lift it (resolve), or you can withdraw it."
+    ];
+  }
+  const awaited = data.status.ai.awaiting_voice_ids.length;
+  return [
+    `${late} Your support still counts as a support from a voice other than the author's, but it answers for no awaited voice ` + `(${awaited} awaited now). Before the close the position is consented once a support counts, no voice is awaited and no ` + "challenge stands; at the close, one counted support and no standing challenge are enough. The person still decides."
+  ];
 }
 function textIsNote(input) {
   if (input.act !== undefined || typeof input.text !== "string")
@@ -45052,7 +45404,7 @@ Legacy session tools: ${legacyInstructions}`
   });
   server.registerTool("collab_arrive", {
     title: "Arrive, or look around",
-    description: "Start your coordination session on this slot, or, when it already has one, see who you are, who is here, " + "what is open and what waits on you. On a slot that already has a session it writes nothing unless " + "revise_purpose is true. With binding_key it starts a named child of a session this MCP process holds, which " + "shares that parent's voice. It never moves the legacy cursor, and never resumes or adopts another process's session.",
+    description: "Start your coordination session on this slot, or, when it already has one, see who you are, who is here, " + "what is open and what waits on you. On a slot that already has a session it writes nothing unless " + "revise_purpose is true. With binding_key it starts a named child of a session this MCP process holds, which " + "shares that parent's voice. It never moves the legacy cursor, and never resumes or adopts another process's session. " + "A new session's read mark starts at the journal head; when others were here first, before_you_arrived gives the " + "collab_inbox call that reads back, and left_for_your_name points at items addressed to ended sessions that used " + "your name (names are self-declared: this routes reading, it passes on nothing those sessions held).",
     annotations: localMutation,
     inputSchema: {
       purpose: exports_external.string().optional().describe("Required. What you are here to do, in one line of at most 200 characters. Self-declared; revisable."),
@@ -45065,10 +45417,11 @@ Legacy session tools: ${legacyInstructions}`
   }, async (input) => noteCall(() => arriveVerb(noteContext(), input), input));
   server.registerTool("collab_inbox", {
     title: "What is for you, and one thread",
-    description: "Items addressed to you since your read mark, oldest first, with what waits on you whatever the mark. " + "With about (an id or handle such as report#3fa91c or task#0b12de): that report and everything answering it, " + "or a task's holder, completion and reviews. wait_seconds waits, reading only, for a new item for you. " + "It moves its own read mark and last-seen time, never the legacy cursor.",
+    description: "Items addressed to you since your read mark, oldest first, with what waits on you whatever the mark. " + "With about (an id or handle such as report#3fa91c or task#0b12de): that report and everything answering it, " + "or a task's holder, completion and reviews. With since (a journal sequence; 0 is the start): a look-back over " + "what came after it, in the same shape; it only reads, so it moves no mark, runs no housekeeping and records " + "nothing as delivered. wait_seconds waits, reading only, for a new item for you, or for the close of a ballot " + "you may vote in, opened or cast in. Otherwise it moves its own read mark and last-seen time, never the legacy cursor.",
     annotations: localMutation,
     inputSchema: {
-      about: exports_external.string().optional().describe("One thread: a report, proposal or task id or handle (at most 300 characters)."),
+      about: exports_external.string().optional().describe("One thread: a report, proposal, ballot or task id or handle (at most 300 characters); not a session."),
+      since: exports_external.number().optional().describe("A whole number, 0 or more: read back from just after this journal sequence, oldest first, without moving your mark; with include all, every item."),
       wait_seconds: exports_external.number().optional().describe("A whole number from 0 to 30: with nothing new for you, wait up to this long for an item; default 0."),
       include: exports_external.string().optional().describe("for_me (the default), or all to add unaddressed items as subject lines."),
       limit: exports_external.number().optional().describe("Items per call, a whole number from 1 to 50; default 20."),

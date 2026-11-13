@@ -414,7 +414,18 @@ collab_arrive {"purpose": "Review the retry change and its tests", "revise_purpo
   to the verified Claude Code name, else `<host>-<6 hex of the session id>`, where the
   host is `claude-code`, `codex` or `agent` from the environment. The purpose becomes
   the session's role. The session's read mark starts at the journal head, and the
-  legacy cursor is not touched.
+  legacy cursor is not touched. Starting at the head keeps a new session from being
+  handed the whole history as news, but it also means the inbox never shows what came
+  before; so when other sessions were here first, the result carries
+  `before_you_arrived: {events, see}`, where `see` is the look-back
+  `collab_inbox {since: 0, include: "all"}`, and an advice line says so.
+- **Items left for your name.** Every host process is a new session, so a returning
+  agent arrives as a new session that may carry the name of one that ended. When
+  reports or other items were addressed to ended sessions with this session's name,
+  the result carries `left_for_your_name: {count, see}`, where `see` is a look-back
+  starting just before the earliest of them. Names are self-declared, so this is
+  routing for reading and nothing more: the new session is a new voice, and no
+  credential, lease, stance or vote passes to it. The advice says so.
 - **With `binding_key`** it starts a named child of `parent`, which must be a session
   this MCP process holds (else `parent_not_held`). The name defaults to `<parent
   name>/<binding_key>`. The lineage is attested as `collab_session_start` attests it,
@@ -433,7 +444,8 @@ through its credential file; name and model are self-declared; seat_ref is decla
 and unverified); `here`; `open` (claimable tasks, work in progress with its holder's
 purpose, reviews wanted, proposals with position and whether your voice is awaited,
 open ballots with whether you may still vote, standing challenges); `for_you`;
-`waiting_on_you`; `history` (counts only); `listen.how` (under Claude Code, the
+`waiting_on_you`; `history` (counts only); for a new session, `before_you_arrived`
+and `left_for_your_name` when they apply; `listen.how` (under Claude Code, the
 doorbell watcher command with this session filled in, for the agent to run itself;
 otherwise `collab_inbox {wait_seconds: 30}`); `surface` (version, tools profile,
 capabilities `legacy`, `consent/v1`, `notes/1`, `ballot/1`); and the card. Collab
@@ -447,14 +459,16 @@ the cursor.
 For reading what is addressed to you, and for reading one thread with its computed
 state.
 
-Input: `about`, `wait_seconds` (0 to 30, default 0), `include` (`for_me` or `all`),
-`limit` (1 to 50, default 20), `format` (`json` or `note`).
+Input: `about`, `since` (a journal sequence, 0 or more), `wait_seconds` (0 to 30,
+default 0), `include` (`for_me` or `all`), `limit` (1 to 50, default 20), `format`
+(`json` or `note`).
 
 ```collab-call
 collab_inbox {}
 collab_inbox {"about": "proposal#5d9a3b"}
 collab_inbox {"about": "proposal#5d9a3b", "format": "note"}
 collab_inbox {"wait_seconds": 30}
+collab_inbox {"since": 0, "include": "all"}
 ```
 
 - **Without `about`**: the items for you after your read mark, oldest first. "For you"
@@ -462,9 +476,28 @@ collab_inbox {"wait_seconds": 30}
   lists your unit and the close of a ballot you opened or cast in, so the doorbell and
   the inbox agree. Your own events are never items for you. `include: "all"` adds
   everything else as subject lines, and `also_new: {count}` always says how much else
-  arrived, so nothing is skipped silently. Each item names the entity the next call
-  takes and has `{id, handle, act, from, to, re, at, statement, text, why, evidence,
-  why_you}`; evidence items carry `observed` and, for files the server hashed, `now`.
+  arrived, so nothing is skipped silently. The mark moves past what was only counted,
+  so when a pass without `include: "all"` counted anything, `also_new.see` is the
+  ready look-back that lists it: `collab_inbox {since: <the mark before this pass>,
+  include: "all"}`. Each item names the entity the next call takes and has `{id,
+  handle, act, from, to, re, at, statement, text, why, evidence, why_you}`; evidence
+  items carry `observed` and, for files the server hashed, `now`. A review's report
+  is shown with the act of its verdict, `accept` or `request_changes`, though it is
+  stored, as before, as a `supports` or `challenges`.
+- **With `since`** (a look-back): the same listing, but after that journal sequence
+  instead of after your mark, oldest first, with `include` and `limit` as usual; `0`
+  starts at the beginning. It only reads: it moves no mark, runs no housekeeping (so
+  it reveals no ballot and refreshes no last-seen time) and records no delivery. A
+  recorded delivery is therefore an under-claim of what you read, which is the safe
+  direction. The result keeps its shape, with `read_through` still your real mark, and
+  adds `looked_back: {after, through}`; with `more`, `next` is the same call with
+  `since` set to `through`. Folding holds exactly as in a pass, and before the reveal
+  no event holds a vote, so a look-back shows no more of a ballot than a pass. An item
+  addressed to an ended session that carried your name is shown in full, as an item
+  for you is, flagged `for_your_name: true`; the name is self-declared, so this says
+  where it was sent, not that you are that session. With `about`, `since` is not
+  used; with `wait_seconds`, the look-back does not wait; either way the advice says
+  so.
 - **`waiting_on_you`** is computed on every call, whatever the mark: reviews requested
   of you, proposals awaiting your voice, ballots your unit may still cast in, standing
   challenges on your reports, answers to your challenges, an agreed proposal of yours
@@ -479,7 +512,10 @@ collab_inbox {"wait_seconds": 30}
   that runs these, or drives a terminal to answer them, records an agreement the person
   did not give." For a ballot: its terms, electorate, turnout, the sessions left out,
   and after the close the result. For a task: its state, holder, current completion and
-  reviews. For a decision: a composed record (see Consensus).
+  reviews. For a decision: a composed record (see Consensus). `about` reads one thread,
+  so a session (by `session#` handle, id or name) is refused as `about_not_a_thread`,
+  with a remedy that says what `about` takes and that a look-back from 0 reads what a
+  session wrote.
 - **`format: "note"`** with `about` gives the root and its state as one collab-note/1
   text of at most 800 characters, for a person to carry to another device: full ids,
   no workspace ids, absolute paths or machine names, a `Sha256:` line where the item
@@ -491,8 +527,12 @@ collab_inbox {"wait_seconds": 30}
   "cursor"`). One call scans at most 2,000 events or 8 MiB. The legacy cursor is never
   moved, and reading refreshes your last-seen time through the existing path.
 - **Waiting.** With nothing for you, `wait_seconds` waits, reading only, for a new item
-  after the mark; what is already in `waiting_on_you` does not end a wait. An MCP
-  process runs at most 8 waits at once, shared with `collab_events_wait`.
+  after the mark; what is already in `waiting_on_you` does not end a wait. A ballot's
+  reveal is lazy, so a wait also ends at the close of an open ballot you may vote in,
+  opened or cast in (`waited.ended_by: "ballot_closed"`): the pass after it runs the
+  reveal as any call's housekeeping does and returns the `ballot.closed` item, and a
+  reveal that fails leaves `reveal_pending` and never fails the call. An MCP process
+  runs at most 8 waits at once, shared with `collab_events_wait`.
 - **Folding on an open ballot.** While your unit is in an open ballot's electorate and
   has not cast, notes in that ballot's thread from others are listed folded (who, what
   kind of act, when, with no text) with the line "folded so your first answer is your
@@ -502,7 +542,8 @@ collab_inbox {"wait_seconds": 30}
 
 Each call first runs one short write transaction for housekeeping (the clock work
 `collab_next` already does, due ballot reveals, last-seen, the mark and delivery
-records) and then reads in a separate snapshot. A wait never writes.
+records) and then reads in a separate snapshot. A wait never writes, and a look-back
+writes nothing at all.
 
 Never carried by the agent: an anchor, a cursor, an acknowledgement.
 
@@ -519,7 +560,10 @@ strings), `limits`, `extent`, `outcome` (decide only), `replaces` (challenge onl
 When `act` is absent and the first line begins with an act word and `": "`, the whole
 `text` is read as a collab-note/1 note, and the result says `read_as: "collab-note/1"`.
 A field given both in the text and in the call with different values is refused as
-`field_given_twice`. Otherwise `act` defaults to `note`. The acts take, done, propose,
+`field_given_twice`. Otherwise `act` defaults to `note`. When `act` is given and the
+text begins with that same act word, in any letter case, and `": "`, the word is said
+twice by mistake, so it is left out of the statement and the advice says so; any other
+leading word stays, since it is the caller's own. The acts take, done, propose,
 poll and vote are refused as `wrong_verb` with a ready call to their own tool.
 
 What each act records, using only existing kinds and relations:
@@ -531,7 +575,7 @@ What each act records, using only existing kinds and relations:
 | challenge | "The target should not stand as stated, for my reasons; this stands until I lift it." | relation `challenges`; with `replaces`, the new challenge is posted before the old one is withdrawn, in one transaction |
 | resolve | "My objection is answered." | relation `resolves`, only from the challenger's voice; from any other voice an answer: relation `informs`, citing the challenge, addressed to the challenger |
 | withdraw | "Disregard my earlier note, support, challenge, proposal or poll." | relation `withdraws`, on your own reports only; for another session's report the remedy is a note "I no longer stand by this" |
-| accept, request_changes | "I inspected this finished work; my verdict covers only what I checked." | the existing review; your outside evidence is cited first, as a separate step |
+| accept, request_changes | "I inspected this finished work; my verdict covers only what I checked." | the existing review (its report is a `supports` or `challenges`, shown in views as the verdict); your outside evidence is cited first, as a separate step |
 | decide | proceed: "This is decided, to this extent." do_not_proceed, no_decision: "We are not proceeding." "No decision was reached." | kind `decision`, relation `informs`, no target, the proposal recorded beside it; never a `supports` |
 | relay_rejection | "The person told me no, for this reason." | the existing relayed rejection, which can only stop work |
 
@@ -543,7 +587,13 @@ latest standing challenge on the target (others are listed with a ready note), e
 all; a resolve goes to the author of the challenged report; an answer to the
 challenger; a decide to the proposal's author; anything else to all. A note to an
 ended or stale session is sent, and the result says so. An explicit `to` by name
-prefers an active session.
+prefers an active session. Because every host restart is a new session, a reply
+addressed by default to an author whose session has ended goes instead to the one
+other active session that carries the same name, when there is exactly one and it is
+not the sender, and the advice names both sessions and says that names are
+self-declared. This holds for a note, support, challenge, resolve or answer; with no
+such session or several, it goes to the ended author as before. An explicit `to` is
+never redirected, and a verdict still goes to the session that reported the work.
 
 **Mapping `re`.** A report, proposal or ballot is the target for the relations that
 take one, and an evidence reference (`report:<id>`) for note and decide; a task sets
@@ -569,7 +619,11 @@ flagged `ungrounded`, either way. A stance on a completion that waits for review
 "recorded as a stance, not a review". A support on an open ballot is public and
 unsealed, and the advice points to `collab_vote`. A `seen` reason whose only cite is
 another session's report "reads as told". With `via`, every seen or quoted reason is
-recorded as told and the result says so.
+recorded as told and the result says so. A stance on a proposal from a voice that
+had no live session when it opened is told how consent/v1 counts it, since such a
+voice is not in the snapshot and cannot tell from the position alone: its support
+counts as a support from a voice other than the author's but answers for no awaited
+voice, and its challenge stands like any other until its own voice lifts it.
 
 `dry_run: true` parses, checks and returns `parsed` and `advice`, writing nothing.
 

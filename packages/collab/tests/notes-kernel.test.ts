@@ -351,12 +351,12 @@ describe("the inbox scan bounds", () => {
     expect(first.items).toEqual([]);
     expect(first.more).toBe(true);
     expect(first.read_through.sequence).toBe(start + NOTE_SCAN_MAX_EVENTS);
-    expect(first.also_new).toEqual({ count: NOTE_SCAN_MAX_EVENTS });
+    expect(first.also_new).toEqual({ count: NOTE_SCAN_MAX_EVENTS, see: { tool: "collab_inbox", input: { since: start, include: "all" } } });
     expect(first.next).toEqual({ tool: "collab_inbox", input: {} });
     const second = await ok(server, "collab_inbox");
     expect(second.items.map((item: any) => item.statement)).toEqual(["For me."]);
     expect(second.more).toBe(false);
-    expect(second.also_new).toEqual({ count: 100 });
+    expect(second.also_new).toEqual({ count: 100, see: { tool: "collab_inbox", input: { since: start + NOTE_SCAN_MAX_EVENTS, include: "all" } } });
     expect(second.read_through.sequence).toBe(j.head(me.workspace.id).sequence);
   }, 60_000);
 
@@ -386,10 +386,10 @@ describe("the inbox scan bounds", () => {
     const first = await ok(server, "collab_inbox");
     expect(first.more).toBe(true);
     expect(first.read_through.sequence).toBe(start + fits);
-    expect(first.also_new).toEqual({ count: fits });
+    expect(first.also_new).toEqual({ count: fits, see: { tool: "collab_inbox", input: { since: start, include: "all" } } });
     const second = await ok(server, "collab_inbox");
     expect(second.more).toBe(false);
-    expect(second.also_new).toEqual({ count: count - fits });
+    expect(second.also_new).toEqual({ count: count - fits, see: { tool: "collab_inbox", input: { since: start + fits, include: "all" } } });
   }, 60_000);
 });
 

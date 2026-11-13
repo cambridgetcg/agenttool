@@ -7439,6 +7439,123 @@ class CollabStore {
       };
     }).deferred());
   }
+  inboxLookBackForSession(input) {
+    const limit = input.limit;
+    if (!Number.isInteger(limit) || limit < 1 || limit > NOTE_INBOX_MAX_LIMIT) {
+      throw new CollabError("invalid_limit", `limit must be an integer from 1 to ${NOTE_INBOX_MAX_LIMIT}`);
+    }
+    if (input.include !== "for_me" && input.include !== "all") {
+      throw new CollabError("invalid_include", "include must be for_me or all");
+    }
+    if (!Number.isSafeInteger(input.since) || input.since < 0) {
+      throw new CollabError("invalid_since", "since must be a whole number, 0 or more");
+    }
+    return this.db.transaction(() => {
+      const session = this.authenticateSession(input);
+      const workspace = this.requireWorkspace(session.workspace_id);
+      const mark = this.readNoteMarkState(session);
+      const after = Math.min(input.since, workspace.event_head_sequence);
+      const scan = this.scanNoteEvents(session, after, this.endedNamesakes(session));
+      const listed = scan.events.filter((event) => input.include === "all" ? !event.own : event.for_me || event.for_name !== null);
+      let through = scan.last_sequence;
+      let more = scan.capped;
+      if (listed.length > limit) {
+        through = listed[limit].sequence - 1;
+        more = true;
+      }
+      const returned = listed.slice(0, limit);
+      const sessions = this.noteSessionViews(session.workspace_id);
+      const folds = this.noteBallotFolds(session);
+      return {
+        session: sessions.find((view) => view.id === session.id),
+        sessions,
+        entries: returned.map((event) => this.noteEntryAt(session, event.sequence, folds, event.for_name)),
+        also_new: scan.events.filter((event) => !event.own && !event.for_me && event.for_name === null && event.sequence <= through).length,
+        more,
+        for_me_total: scan.events.filter((event) => event.for_me).length,
+        for_me_total_capped: scan.capped,
+        mark: {
+          before: mark.sequence,
+          through: mark.sequence,
+          anchor: this.anchorAt(workspace, mark.sequence),
+          initialised_from: null,
+          clamped: false,
+          written: false
+        },
+        head_sequence: workspace.event_head_sequence,
+        waiting: this.noteWaiting(session),
+        reveal_pending: [],
+        observed_at: this.timestamp(),
+        looked_back: { after, through }
+      };
+    }).deferred();
+  }
+  noteArrivalBehind(credential) {
+    return this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      const joined = this.db.query(`
+        SELECT sequence FROM events WHERE workspace_id = ? AND type = 'session.joined' AND entity_id = ?
+      `).get(session.workspace_id, session.id);
+      const before = joined ? joined.sequence - 1 : 0;
+      const bySessions = this.db.query(`
+        SELECT COUNT(*) AS count FROM events
+        WHERE workspace_id = ? AND sequence <= ? AND session_id IS NOT NULL AND session_id <> ?
+      `).get(session.workspace_id, before, session.id).count;
+      const namesakes = this.endedNamesakes(session);
+      let count = 0;
+      let earliest = null;
+      let capped = false;
+      if (namesakes.length > 0) {
+        const from = this.db.query(`
+          SELECT MIN(sequence) AS sequence FROM events
+          WHERE workspace_id = ? AND type = 'session.joined' AND entity_id IN (${namesakes.map(() => "?").join(", ")})
+        `).get(session.workspace_id, ...namesakes).sequence ?? 0;
+        const rows = this.db.query(`
+          SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
+            session_id, occurred_at, payload_json, prev_hash, hash
+          FROM events WHERE workspace_id = ? AND sequence > ?
+            AND (session_id IS NULL OR session_id <> ?)
+            AND type IN (${NOTE_ADDRESSING_EVENT_TYPES.map(() => "?").join(", ")})
+          ORDER BY sequence LIMIT ?
+        `).all(session.workspace_id, from, session.id, ...NOTE_ADDRESSING_EVENT_TYPES, NOTE_SCAN_MAX_EVENTS + 1);
+        capped = rows.length > NOTE_SCAN_MAX_EVENTS;
+        for (const row of rows.slice(0, NOTE_SCAN_MAX_EVENTS)) {
+          const event = eventFromRow(row);
+          if (this.eventAddressesSession(event, session.id))
+            continue;
+          if (this.namesakeAddressed(event, namesakes) === null)
+            continue;
+          count += 1;
+          earliest ??= event.sequence;
+        }
+      }
+      return {
+        joined_sequence: joined?.sequence ?? null,
+        events_before: before,
+        by_other_sessions_before: bySessions,
+        for_name: { count, earliest_sequence: earliest, at_least: capped, sessions: namesakes.length }
+      };
+    }).deferred();
+  }
+  noteBallotsToWatch(credential) {
+    return this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      return this.noteOpenBallots(session).filter((ballot) => ballot.state === "open").filter((ballot) => ballot.viewer?.in_electorate === true || ballot.opener_session_id === session.id || (ballot.viewer?.your_casts ?? 0) > 0).map((ballot) => ({ ballot_id: ballot.ballot_id, closes_at: ballot.terms.closes_at }));
+    }).deferred();
+  }
+  noteBallotState(workspaceId, ballotId) {
+    return this.db.transaction(() => this.readBallotFacts(workspaceId, validateId(ballotId, "ballot_id"))?.state ?? null).deferred();
+  }
+  noteBallotClosedEntry(credential, ballotId) {
+    return this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      const row = this.db.query(`
+        SELECT sequence FROM events WHERE workspace_id = ? AND type = 'ballot.closed' AND entity_id = ?
+        ORDER BY sequence LIMIT 1
+      `).get(session.workspace_id, validateId(ballotId, "ballot_id"));
+      return row ? this.noteEntryAt(session, row.sequence, this.noteBallotFolds(session)) : null;
+    }).deferred();
+  }
   noteThreadForSession(input) {
     const id = validateId(input.id, `${input.kind}_id`);
     const { result: markState, reveal } = this.noteHousekeeping(input, (session, mark) => {
@@ -7764,7 +7881,7 @@ class CollabStore {
       `).run(session.workspace_id, session.id, itemId, now);
     }
   }
-  scanNoteEvents(session, after) {
+  scanNoteEvents(session, after, namesakes = []) {
     const sizes = this.db.query(`
       SELECT sequence, length(CAST(payload_json AS BLOB)) AS bytes FROM events
       WHERE workspace_id = ? AND sequence > ? ORDER BY sequence LIMIT ?
@@ -7793,10 +7910,21 @@ class CollabStore {
         type: event.type,
         own,
         for_me: forMe,
+        for_name: own || forMe ? null : this.namesakeAddressed(event, namesakes),
         shown_item_id: forMe ? noteShownItem(event) : null
       };
     });
     return { events, last_sequence: end, capped: taken < sizes.length };
+  }
+  namesakeAddressed(event, namesakes) {
+    return namesakes.find((id) => event.session_id !== id && this.eventAddressesSession(event, id)) ?? null;
+  }
+  endedNamesakes(session) {
+    return this.db.query(`
+      SELECT id FROM coordination_sessions
+      WHERE workspace_id = ? AND actor = ? AND status = 'ended' AND id <> ?
+      ORDER BY joined_at, id
+    `).all(session.workspace_id, session.actor, session.id).map((row) => row.id);
   }
   anchorAt(workspace, sequence) {
     if (sequence === 0)
@@ -7806,7 +7934,7 @@ class CollabStore {
       throw new CollabError("cursor_mismatch", "The read mark does not resolve to an event in this journal");
     return { epoch_id: row.epoch_id, sequence, hash: row.hash };
   }
-  noteEntryAt(session, sequence, folds) {
+  noteEntryAt(session, sequence, folds, forName = null) {
     const row = this.db.query(`
       SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
         session_id, occurred_at, payload_json, prev_hash, hash
@@ -7817,6 +7945,7 @@ class CollabStore {
     const event = eventFromRow(row);
     const payload = event.payload;
     const forMe = event.session_id !== session.id && this.eventAddressesSession(event, session.id);
+    const namesake = !forMe && forName !== null ? forName : null;
     let report = null;
     if (event.type === "report.posted" || event.type.startsWith("proposal.")) {
       const reportRow = this.db.query(`SELECT * FROM reports WHERE id = ?`).get(event.entity_id);
@@ -7833,7 +7962,7 @@ class CollabStore {
     return {
       event,
       for_me: forMe,
-      why_you: forMe ? this.noteWhyYou(event, session.id) : null,
+      why_you: forMe ? this.noteWhyYou(event, session.id) : namesake ? this.noteWhyYou(event, namesake) : null,
       report,
       marked,
       cited: own ? { event_id: own.event_id, by_session_id: own.by_session_id, worktree_id: own.worktree_id, items: own.items } : null,
@@ -7842,8 +7971,25 @@ class CollabStore {
       to_person: event.type === "report.posted" && payload.to_person === true,
       task: taskRow ? { id: taskRow.id, title: taskRow.title } : null,
       ballot: ballotFacts ? this.ballotData(ballotFacts, session.id) : null,
-      folded: foldedBy ? { ballot_id: foldedBy } : null
+      folded: foldedBy ? { ballot_id: foldedBy } : null,
+      for_name: namesake ? { session_id: namesake } : null,
+      verdict: report && event.type === "report.posted" ? this.reviewVerdictOf(report) : null
     };
+  }
+  reviewVerdictOf(report) {
+    if (!report.task_id || report.relation !== "supports" && report.relation !== "challenges")
+      return null;
+    const next = this.db.query(`
+      SELECT type, json_extract(payload_json, '$.review_report_id') AS review_report_id
+      FROM events WHERE workspace_id = ? AND sequence = ?
+    `).get(report.workspace_id, report.event_sequence + 1);
+    if (!next || next.review_report_id !== report.id)
+      return null;
+    if (next.type === "task.accepted")
+      return "accept";
+    if (next.type === "task.changes_requested")
+      return "request_changes";
+    return null;
   }
   noteAuthorCites(workspaceId, report) {
     if (!report.from_session_id)
@@ -9563,6 +9709,22 @@ var NOTE_DECISION_OUTCOMES = ["proceed", "do_not_proceed", "no_decision"];
 var NOTE_NOTHING_AUTHORISED = "nothing is authorised";
 var NOTE_DEFAULT_DECISION_EXTENT = "work this session already holds";
 var NOTE_SELF_DECISION_BASIS = "recorded by this session; not a direction decision and not the person's agreement";
+var NOTE_ADDRESSING_EVENT_TYPES = [
+  "report.posted",
+  "handoff.offered",
+  "handoff.accepted",
+  "handoff.declined",
+  "handoff.expired",
+  "task.reported_complete",
+  "task.accepted",
+  "task.changes_requested",
+  "task.recovered",
+  "proposal.opened",
+  "proposal.agreed",
+  "proposal.rejected",
+  "ballot.opened",
+  "ballot.closed"
+];
 var BALLOT_RECENT_MS = 30 * 60000;
 var BALLOT_LEFT_OUT_MAX = 50;
 var BALLOT_MAX_CASTS = MAX_CASTS_PER_SESSION;

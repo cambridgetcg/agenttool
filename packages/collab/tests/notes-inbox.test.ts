@@ -222,6 +222,7 @@ describe("the read mark", () => {
     const peer = j.start("peer");
     const server = j.serve(me);
     await ok(server, "collab_inbox");
+    const startMark = j.head();
     const addressed: number[] = [];
     for (let index = 0; index < 5; index += 1) {
       report(j.store, peer, `noise-${index}`, `Unaddressed ${index}.`);
@@ -231,11 +232,12 @@ describe("the read mark", () => {
     expect(first.items.map((item: any) => item.statement)).toEqual(["For me 0.", "For me 1."]);
     expect(first.more).toBe(true);
     expect(first.read_through.sequence).toBe(addressed[2]! - 1);
-    // Noise 0, 1 and 2 lie before the cut; each is counted, none is skipped silently.
-    expect(first.also_new).toEqual({ count: 3 });
+    // Noise 0, 1 and 2 lie before the cut; each is counted, none is skipped silently,
+    // and a ready look-back from where the pass started reads them.
+    expect(first.also_new).toEqual({ count: 3, see: { tool: "collab_inbox", input: { since: startMark, include: "all" } } });
     const second = await ok(server, "collab_inbox", { limit: 2 });
     expect(second.items.map((item: any) => item.statement)).toEqual(["For me 2.", "For me 3."]);
-    expect(second.also_new).toEqual({ count: 2 });
+    expect(second.also_new).toEqual({ count: 2, see: { tool: "collab_inbox", input: { since: first.read_through.sequence, include: "all" } } });
     const third = await ok(server, "collab_inbox", { limit: 2 });
     expect(third.items.map((item: any) => item.statement)).toEqual(["For me 4."]);
     expect(third.more).toBe(false);
@@ -378,6 +380,7 @@ describe("wait_seconds", () => {
     const peer = j.start("peer");
     const server = j.serve(me);
     await ok(server, "collab_inbox");
+    const startMark = j.head();
     // Counted by the pass before the wait; the result must keep that count.
     report(j.store, peer, "before", "Also not for you.");
     const started = performance.now();
@@ -390,7 +393,8 @@ describe("wait_seconds", () => {
     expect(elapsed).toBeLessThan(10_000);
     expect(result.waited.ended_by).toBe("item");
     expect(result.items.map((item: any) => item.statement)).toEqual(["For you."]);
-    expect(result.also_new).toEqual({ count: 2 });
+    // Both passes' counts, and one look-back from where the first pass started.
+    expect(result.also_new).toEqual({ count: 2, see: { tool: "collab_inbox", input: { since: startMark, include: "all" } } });
   });
 
   test("a wait that fails after the first pass still returns that pass, which already moved the mark", async () => {
@@ -816,5 +820,143 @@ describe("ready calls keep the way the caller reads", () => {
     const view = await ok(server, "collab_inbox", { about: posted.id, wait_seconds: 3 });
     expect(performance.now() - started).toBeLessThan(2_000);
     expect(view.advice.join(" ")).toContain("did not wait");
+  });
+});
+
+describe("looking back (since)", () => {
+  /** A session whose read mark starts at the head, as collab_arrive starts one. */
+  function arrived(j: ReturnType<typeof journal>, actor: string) {
+    const handle = j.start(actor);
+    j.store.initNoteMark(handle.credential, j.head());
+    return handle;
+  }
+
+  const viewState = (j: ReturnType<typeof journal>) => JSON.stringify([
+    j.store.db.query(`SELECT * FROM coordination_sessions ORDER BY id`).all(),
+    j.store.db.query(`SELECT * FROM note_marks ORDER BY session_id`).all(),
+    j.store.db.query(`SELECT * FROM note_shown ORDER BY session_id, item_id`).all(),
+    j.store.db.query(`SELECT COUNT(*) AS n FROM events`).get(),
+    j.store.db.query(`SELECT COUNT(*) AS n FROM mutations`).get(),
+  ]);
+
+  test("reads what came before arrival, oldest first, pages with since, and writes nothing", async () => {
+    const j = journal();
+    const peer = j.start("peer");
+    for (let index = 0; index < 3; index += 1) report(j.store, peer, `before-${index}`, `Before you came ${index}.`);
+    const proposal = j.store.openProposalForSession({
+      ...peer.credential, idempotency_key: "p", question: "Ship the parser?", criteria: "Green.", extent: "The parser.",
+    });
+    const me = arrived(j, "me");
+    const server = j.serve(me);
+    const mark = j.store.noteMark(me.workspace.id, me.session.id)!;
+    report(j.store, peer, "to-me", "For you, after you came.", { to_session_id: me.session.id });
+    // The inbox starts at the mark: nothing from before arrival can be read there.
+    const before = viewState(j);
+    const all = await ok(server, "collab_inbox", { since: 0, include: "all" });
+    expect(viewState(j)).toBe(before);
+    expect(all.items.filter((item: any) => item.act === "note").map((item: any) => [item.statement, item.for_me])).toEqual([
+      ["Before you came 0.", false],
+      ["Before you came 1.", false],
+      ["Before you came 2.", false],
+      ["For you, after you came.", true],
+    ]);
+    // Oldest first, and the shape of a pass: subject lines for others' items, the item for you in full.
+    const sequences = all.items.map((item: any) => item.sequence);
+    expect(sequences).toEqual([...sequences].sort((left: number, right: number) => left - right));
+    expect(all.items.find((item: any) => item.statement === "Before you came 0.").text).toBeUndefined();
+    expect(all.items.find((item: any) => item.for_me).text).toBe("For you, after you came.");
+    expect(all.items.some((item: any) => item.id === proposal.proposal.id && item.act === "propose")).toBe(true);
+    expect(all.read_through).toEqual({ sequence: mark, head: j.head() });
+    expect(all.looked_back).toEqual({ after: 0, through: j.head() });
+    expect(all.more).toBe(false);
+    expect(all.advice.join(" ")).toContain("did not move");
+    // Nothing a look-back returns is recorded as delivered, and the mark stands.
+    expect(j.store.noteShownAt(me.workspace.id, me.session.id, proposal.proposal.id)).toBeNull();
+    expect(j.store.noteMark(me.workspace.id, me.session.id)).toBe(mark);
+    // Paging: more, with the same call from through, until the end; together they are the whole read.
+    const paged: number[] = [];
+    let input: Record<string, unknown> = { since: 0, include: "all", limit: 2 };
+    for (let page = 0; page < 20; page += 1) {
+      const read = await ok(server, "collab_inbox", input);
+      paged.push(...read.items.map((item: any) => item.sequence));
+      if (!read.more) break;
+      expect(read.next).toEqual({ tool: "collab_inbox", input: { include: "all", limit: 2, since: read.looked_back.through } });
+      input = read.next.input;
+    }
+    expect(paged).toEqual(sequences);
+    expect(viewState(j)).toBe(before);
+    // The item for you is still unread by the inbox, which then moves the mark as before.
+    const inbox = await ok(server, "collab_inbox");
+    expect(inbox.items.map((item: any) => item.statement)).toEqual(["For you, after you came."]);
+  });
+
+  test("a pass's also_new.see reads back what the pass only counted", async () => {
+    const j = journal();
+    const me = arrived(j, "me");
+    const peer = j.start("peer");
+    const server = j.serve(me);
+    await ok(server, "collab_inbox");
+    const from = j.store.noteMark(me.workspace.id, me.session.id)!;
+    report(j.store, peer, "n1", "Counted, not shown.");
+    const pass = await ok(server, "collab_inbox");
+    expect(pass.items).toEqual([]);
+    expect(pass.also_new).toEqual({ count: 1, see: { tool: "collab_inbox", input: { since: from, include: "all" } } });
+    // The mark has moved past it, so include: all from the mark no longer has it.
+    expect((await ok(server, "collab_inbox", { include: "all" })).items).toEqual([]);
+    const seen = await ok(server, pass.also_new.see.tool, pass.also_new.see.input);
+    expect(seen.items.map((item: any) => item.statement)).toEqual(["Counted, not shown."]);
+    // With include: all the counted items are listed already, so nothing is offered twice.
+    report(j.store, peer, "n2", "Listed as a subject line.");
+    const listed = await ok(server, "collab_inbox", { include: "all" });
+    expect(listed.also_new).toEqual({ count: 1 });
+  });
+
+  test("since is checked and given a remedy; with wait_seconds it does not wait, and about takes the call", async () => {
+    const j = journal();
+    const me = arrived(j, "me");
+    const peer = j.start("peer");
+    const server = j.serve(me);
+    const negative = await call(server, "collab_inbox", { since: -3 });
+    expect(negative.structuredContent).toMatchObject({ code: "invalid_since", remedy: { tool: "collab_inbox", input: { since: 0 } } });
+    const fraction = await call(server, "collab_inbox", { since: 1.6, include: "all" });
+    expect(fraction.structuredContent).toMatchObject({ code: "invalid_since", remedy: { tool: "collab_inbox", input: { since: 2, include: "all" } } });
+    const past = await ok(server, "collab_inbox", { since: j.head() + 10 });
+    expect(past.items).toEqual([]);
+    expect(past.advice.join(" ")).toContain("past the journal head");
+    const started = performance.now();
+    const waited = await ok(server, "collab_inbox", { since: 0, wait_seconds: 3 });
+    expect(performance.now() - started).toBeLessThan(2_000);
+    expect(waited.waited).toBeUndefined();
+    expect(waited.advice[0]).toContain("did not wait");
+    const posted = report(j.store, peer, "r", "A thread.");
+    const thread = await ok(server, "collab_inbox", { about: posted.id, since: 0 });
+    expect(thread.root.id).toBe(posted.id);
+    expect(thread.advice.join(" ")).toContain("since reads back through the journal");
+  });
+});
+
+describe("about names one thread", () => {
+  test("a session handle, a session id or a bare name is refused with what about takes and how to read back", async () => {
+    const j = journal();
+    const me = j.start("me");
+    const peer = j.start("peer");
+    const server = j.serve(me);
+    const before = JSON.stringify(j.store.db.query(`SELECT COUNT(*) AS n FROM events`).get());
+    for (const value of [handleOf("session", peer.session.id), peer.session.id, "peer"]) {
+      const refusal = (await call(server, "collab_inbox", { about: value })).structuredContent;
+      expect(refusal).toMatchObject({ code: "about_not_a_thread", value, sessions: [{ session: peer.session.id, name: "peer" }] });
+      expect(refusal.remedy.say).toContain("a report, proposal, ballot or task");
+      expect(refusal.remedy.say).toContain('collab_inbox {since: 0, include: "all"}');
+    }
+    expect(JSON.stringify(j.store.db.query(`SELECT COUNT(*) AS n FROM events`).get())).toBe(before);
+    // An ended session's name, and a session handle that matches no session, are not threads either.
+    j.store.endSession({ ...peer.credential, reason: "gone" });
+    expect((await call(server, "collab_inbox", { about: "peer" })).structuredContent.code).toBe("about_not_a_thread");
+    const stranger = (await call(server, "collab_inbox", { about: "session#abcdef" })).structuredContent;
+    expect(stranger.code).toBe("about_not_a_thread");
+    expect(stranger.sessions).toBeUndefined();
+    // A report with an id still reads as before.
+    const posted = report(j.store, me, "r", "Mine.");
+    expect((await ok(server, "collab_inbox", { about: posted.id })).root.id).toBe(posted.id);
   });
 });

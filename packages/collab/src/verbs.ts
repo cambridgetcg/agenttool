@@ -1145,6 +1145,7 @@ function arrivalResult(
   if (options.record) {
     ctx.store.recordArrivalShown(credential, brief.shown);
   }
+  const behind = options.fresh ? arrivalBehind(ctx, credential, data.session.actor) : { view: {}, advice: [] };
   return {
     ...noteWriteResult({
       effect: options.effect,
@@ -1153,15 +1154,63 @@ function arrivalResult(
         session_handle: handleOf("session", data.session.id),
         workspace_id: data.workspace.id,
       },
-      advice: [...options.advice, ...brief.advice],
+      advice: [...options.advice, ...behind.advice, ...brief.advice],
       next: withSlot(ctx, { tool: "collab_inbox", input: {} }),
       note: options.note,
       replayed: options.replayed,
     }),
     ...(options.remedies ? { remedies: options.remedies } : {}),
     ...brief.view,
+    ...behind.view,
     ...(pendingReveal ? { reveal_pending: pendingReveal } : {}),
   };
+}
+
+/**
+ * What a new session's arrival says about what came before it. Its read
+ * mark starts at the head, so the inbox shows nothing earlier; a look-back
+ * reads it. Items addressed to ended sessions of the same name are routed to
+ * a look-back too, said plainly to be routing by a self-declared name: a new
+ * session with an old name is a new voice and inherits nothing.
+ */
+function arrivalBehind(
+  ctx: NoteVerbContext,
+  credential: SessionHandle["credential"],
+  name: string,
+): { view: Record<string, unknown>; advice: string[] } {
+  let behind;
+  try {
+    behind = ctx.store.noteArrivalBehind(credential);
+  } catch {
+    // The session has started and is bound; a hint that cannot be read never fails its arrival.
+    return { view: {}, advice: [] };
+  }
+  const view: Record<string, unknown> = {};
+  const advice: string[] = [];
+  if (behind.by_other_sessions_before > 0) {
+    view.before_you_arrived = {
+      events: behind.events_before,
+      see: withSlot(ctx, { tool: "collab_inbox", input: { since: 0, include: "all" } }),
+    };
+    advice.push(
+      `${behind.events_before} events came before you arrived. Your read mark starts at the journal head, so collab_inbox ` +
+        "shows only what comes after it; before_you_arrived.see reads back from the start, moving no mark.",
+    );
+  }
+  const forName = behind.for_name;
+  if (forName.count > 0 && forName.earliest_sequence !== null) {
+    view.left_for_your_name = {
+      count: forName.count,
+      ...(forName.at_least ? { at_least: true } : {}),
+      see: withSlot(ctx, { tool: "collab_inbox", input: { since: forName.earliest_sequence - 1 } }),
+    };
+    advice.push(
+      `${forName.count}${forName.at_least ? " or more" : ""} item(s) were addressed to ${forName.sessions === 1 ? "an ended session" : "ended sessions"} ` +
+        `that also called itself ${name}; left_for_your_name.see reads them. Names are self-declared, so this is routing, ` +
+        "not identity: you are a new session and voice, and nothing those sessions held, said or stood on passes to you.",
+    );
+  }
+  return { view, advice };
 }
 
 function composeBrief(
@@ -1499,14 +1548,18 @@ export function formatEntry(
     at: event.occurred_at,
     why_you: entry.why_you,
     for_me: entry.for_me,
+    // In a look-back: addressed to an ended session that carried your name.
+    ...(entry.for_name ? { for_your_name: true } : {}),
   };
+  // Whom an addressed event names: you, or in a look-back the ended session of your name.
+  const addressed = entry.for_name?.session_id ?? me;
   if (event.type === "report.posted" && report && entry.folded) {
     // Folded (spec 5.2): who said what kind of thing, and when, but no text,
     // so an elector who has not cast meets the question before the answers.
     return {
       id: report.id,
       handle: handleOf("report", report.id),
-      act: reportAct(report, entry.termed),
+      act: entry.verdict ?? reportAct(report, entry.termed),
       from: { session: report.from_session_id, name: report.from_actor },
       ...base,
       folded: true,
@@ -1516,7 +1569,8 @@ export function formatEntry(
   }
   if (event.type === "report.posted" && report) {
     const poll = entry.ballot !== null && entry.ballot.ballot_id === report.id;
-    const act = reportAct(report, entry.termed, poll);
+    // A review's report is stored as a support or a challenge; it reads as the verdict it recorded.
+    const act = entry.verdict ?? reportAct(report, entry.termed, poll);
     let statement = statementOf(report.body);
     let text: string | null = report.body;
     let why: NoteReason[] = [];
@@ -1617,7 +1671,7 @@ export function formatEntry(
         handle: taskHandle ?? event.entity_id,
         act: "done",
         from,
-        to: sessionRef(me, me, byId),
+        to: sessionRef(addressed, addressed, byId),
         re: { id: event.entity_id, handle: taskHandle ?? event.entity_id },
         ...base,
         statement: `The completion of ${taskTitle} is ready for review.`,
@@ -1635,7 +1689,7 @@ export function formatEntry(
         handle: taskHandle ?? event.entity_id,
         act: event.type === "task.accepted" ? "accept" : "request_changes",
         from,
-        to: sessionRef(me, me, byId),
+        to: sessionRef(addressed, addressed, byId),
         re: { id: event.entity_id, handle: taskHandle ?? event.entity_id },
         ...base,
         statement: typeof payload.summary === "string" ? statementOf(payload.summary) : `A verdict on ${taskTitle}.`,
@@ -1657,7 +1711,7 @@ export function formatEntry(
         act: "event",
         type: event.type,
         from,
-        to: entry.for_me ? sessionRef(me, me, byId) : "all",
+        to: entry.for_me || entry.for_name ? sessionRef(addressed, addressed, byId) : "all",
         re: taskHandle ? { id: entry.task!.id, handle: taskHandle } : null,
         ...base,
         statement: eventSubject(event.type, taskHandle, taskTitle, from.name),
@@ -1737,6 +1791,8 @@ function formatWaiting(ctx: NoteVerbContext, entry: NoteWaitingEntry): Record<st
 
 export interface InboxInput {
   about?: string;
+  /** A journal sequence to read back from (a look-back), instead of the read mark. */
+  since?: number;
   wait_seconds?: number;
   include?: string;
   limit?: number;
@@ -1788,6 +1844,12 @@ function validInboxInput(ctx: NoteVerbContext, input: InboxInput) {
       remedy: { say: "format is json (the default) or note (with about: the thread as one collab-note/1 text)." },
     });
   }
+  const since = input.since ?? null;
+  if (since !== null && (typeof since !== "number" || !Number.isSafeInteger(since) || since < 0)) {
+    throw new CollabError("invalid_since", "since must be a whole number, 0 or more: a journal sequence to read back from", {
+      remedy: inboxRetry(ctx, input, "since", typeof since === "number" && Number.isFinite(since) ? Math.max(0, Math.round(since)) : 0),
+    });
+  }
   let about: string | null = null;
   if (input.about !== undefined) {
     about = typeof input.about === "string" ? input.about.trim() : "";
@@ -1806,13 +1868,14 @@ function validInboxInput(ctx: NoteVerbContext, input: InboxInput) {
       });
     }
   }
-  return { waitSeconds, limit, include: include as "for_me" | "all", format: format as "json" | "note", about };
+  return { waitSeconds, limit, include: include as "for_me" | "all", format: format as "json" | "note", about, since };
 }
 
 export async function inboxVerb(ctx: NoteVerbContext, input: InboxInput): Promise<Record<string, unknown>> {
   const { binding, credential } = requireCredential(ctx);
-  const { waitSeconds, limit, include, format, about } = validInboxInput(ctx, input);
-  if (about !== null) return aboutView(ctx, binding, about, format, waitSeconds);
+  const { waitSeconds, limit, include, format, about, since } = validInboxInput(ctx, input);
+  if (about !== null) return aboutView(ctx, binding, about, format, waitSeconds, since !== null);
+  if (since !== null) return lookBack(ctx, input, { since, limit, include, format, waitSeconds });
   // A wait takes its place in the endpoint's one budget before anything is
   // written: refused after the first pass, the call would have moved the
   // mark past what it counted and returned none of it.
@@ -1821,27 +1884,43 @@ export async function inboxVerb(ctx: NoteVerbContext, input: InboxInput): Promis
     throw new CollabError("too_many_waits", `At most ${ctx.waits.max} waits may run per endpoint`);
   }
   if (waits) ctx.waits.active += 1;
+  const paging = { ...(include === "all" ? { include } : {}), ...(input.limit !== undefined ? { limit } : {}) };
   try {
     const first = ctx.store.inboxForSession({ ...credential, limit, include });
     const passes: NoteInboxData[] = [first];
     let waited: Record<string, unknown> | null = null;
     let waitError: CollabError | null = null;
+    const extras: NoteEntry[] = [];
     if (waits && !first.entries.some((entry) => entry.for_me) && !first.more) {
       const started = performance.now();
       const seconds = () => Math.round((performance.now() - started) / 100) / 10;
       // From here on the first pass has written (mark, last-seen, delivery
       // records), so a failure must not discard what it found.
       try {
-        const arrived = await waitForMe(ctx, binding, first.mark.anchor, waitSeconds * 1_000);
-        waited = { seconds: seconds(), ended_by: arrived ? "item" : "timeout" };
+        const woke = await waitForMe(ctx, binding, first.mark.anchor, waitSeconds * 1_000);
+        waited = woke === null
+          ? { seconds: seconds(), ended_by: "timeout" }
+          : woke.ended_by === "item"
+            ? { seconds: seconds(), ended_by: "item" }
+            : { seconds: seconds(), ended_by: "ballot_closed", ballot: { id: woke.ballot_id, handle: handleOf("ballot", woke.ballot_id) } };
         // The first pass already moved the mark past what it listed and
         // counted, so its subject lines, its count and what it said about
-        // the mark are kept, ahead of the second pass's items.
-        if (arrived) passes.push(ctx.store.inboxForSession({ ...credential, limit, include }));
+        // the mark are kept, ahead of the second pass's items. A ballot that
+        // closed during the wait is revealed by that pass's housekeeping,
+        // exactly as any call reveals it (a failure is reveal_pending).
+        if (woke) passes.push(ctx.store.inboxForSession({ ...credential, limit, include }));
+        if (woke?.ended_by === "ballot_closed") {
+          const listed = passes.some((pass) => pass.entries.some((entry) =>
+            entry.event.type === "ballot.closed" && entry.event.entity_id === woke.ballot_id));
+          // The close reaches the opener and its casters as an item; a voter
+          // who had not cast is shown it too, since that is what it waited on.
+          const closed = listed ? null : ballotClosedEntry(ctx, credential, woke.ballot_id);
+          if (closed) extras.push(closed);
+        }
       } catch (error) {
         if (error instanceof CollabError && error.code === "wait_cancelled") {
           throw new CollabError(error.code, error.message, {
-            first_pass: inboxResult(ctx, passes, format, null),
+            first_pass: inboxResult(ctx, passes, format, null, null, paging),
           });
         }
         waitError = error instanceof CollabError
@@ -1850,12 +1929,66 @@ export async function inboxVerb(ctx: NoteVerbContext, input: InboxInput): Promis
         waited = { seconds: seconds(), ended_by: "error", code: waitError.code, message: waitError.message };
       }
     }
-    const paging = { ...(include === "all" ? { include } : {}), ...(input.limit !== undefined ? { limit } : {}) };
-    return afterThreadRead(() => inboxResult(ctx, passes, format, waited, waitError, paging));
+    return afterThreadRead(() => inboxResult(ctx, passes, format, waited, waitError, paging, extras));
   } finally {
     if (waits) ctx.waits.active -= 1;
   }
 }
+
+/** A ballot's close as an entry, read after the reveal; null when it is not there (the reveal is pending) or cannot be read. */
+function ballotClosedEntry(ctx: NoteVerbContext, credential: SessionHandle["credential"], ballotId: string): NoteEntry | null {
+  try {
+    return ctx.store.noteBallotClosedEntry(credential, ballotId);
+  } catch {
+    // The pass after the wait has been returned whole; a missing close item never fails the call.
+    return null;
+  }
+}
+
+/**
+ * A look-back (collab_inbox {since}): what came after a journal sequence,
+ * oldest first, in the inbox's own shape. It is read-only: it moves no read
+ * mark, runs no housekeeping and records no delivery, so it can be repeated
+ * freely and never claims that anything was shown. Folding holds as in a pass.
+ */
+function lookBack(
+  ctx: NoteVerbContext,
+  input: InboxInput,
+  options: { since: number; limit: number; include: "for_me" | "all"; format: "json" | "note"; waitSeconds: number },
+): Record<string, unknown> {
+  const { credential } = requireCredential(ctx);
+  const data = ctx.store.inboxLookBackForSession({ ...credential, since: options.since, limit: options.limit, include: options.include });
+  const result = inboxResult(ctx, [data], options.format, null, null, inboxPaging(input));
+  const advice = result.advice as string[];
+  if (options.waitSeconds > 0) {
+    advice.unshift("wait_seconds applies to your inbox from its read mark, not to a look-back, so this call did not wait; leave since out to wait for new items.");
+  }
+  const lookedBack = data.looked_back!;
+  if (options.since > data.head_sequence) {
+    advice.push(`since (${options.since}) is past the journal head (${data.head_sequence}); there is nothing after it yet.`);
+  }
+  if (data.entries.some((entry) => entry.for_name)) advice.push(FOR_YOUR_NAME_ADVICE);
+  advice.push(LOOK_BACK_ADVICE);
+  return {
+    ...result,
+    looked_back: lookedBack,
+    next: data.more
+      ? withSlot(ctx, { tool: "collab_inbox", input: { ...inboxPaging(input), since: lookedBack.through } })
+      : result.next,
+  };
+}
+
+/** The caller's include and limit, as a ready call that reads on keeps them. */
+function inboxPaging(input: InboxInput): Record<string, unknown> {
+  return { ...(input.include === "all" ? { include: "all" } : {}), ...(input.limit !== undefined ? { limit: input.limit } : {}) };
+}
+
+const LOOK_BACK_ADVICE =
+  "A look-back only reads: your read mark (read_through) did not move, and nothing it lists is recorded as delivered to you.";
+
+const FOR_YOUR_NAME_ADVICE =
+  "Items marked for_your_name were addressed to an ended session that carried your name. Names are self-declared: " +
+  "this routes reading to you, it does not make you that session, and nothing that session held, said or stood on passes to you.";
 
 /** One inbox result from its passes (one, or the first and the one after a wait). */
 function inboxResult(
@@ -1866,14 +1999,16 @@ function inboxResult(
   waitError: CollabError | null = null,
   /** include and limit as the caller sent them, so a ready call to read on keeps reading the same way. */
   paging: Record<string, unknown> = {},
+  /** Entries returned beside the passes' own: the close of a ballot a wait woke at. */
+  extras: NoteEntry[] = [],
 ): Record<string, unknown> {
   const data = passes.at(-1)!;
   const byId = new Map(data.sessions.map((view) => [view.id, view]));
   const me = data.session.id;
-  const entries = passes.flatMap((pass) => pass.entries);
+  const entries = [...passes.flatMap((pass) => pass.entries), ...extras];
   const recheck = evidenceRechecker(ctx.store);
   const items = entries.map((entry) =>
-    entry.for_me ? formatEntry(entry, byId, me, recheck) : subjectLine(entry, byId, me));
+    entry.for_me || entry.for_name || extras.includes(entry) ? formatEntry(entry, byId, me, recheck) : subjectLine(entry, byId, me));
   const advice: string[] = [];
   if (format === "note") advice.push("format: note renders one thread; pass about with an id or handle.");
   if (passes.some((pass) => pass.mark.clamped)) advice.push(MARK_CLAMPED_ADVICE);
@@ -1889,7 +2024,13 @@ function inboxResult(
   if (entries.some((entry) => entry.for_me && entry.event.type === "ballot.opened" && entry.ballot && unitMateHasCast(entry.ballot))) {
     advice.push(UNIT_MATE_CAST_ADVICE);
   }
-  const firstForMe = entries.find((entry) => entry.for_me);
+  if (waited?.ended_by === "ballot_closed") {
+    const ballot = (waited.ballot as { handle: string }).handle;
+    advice.push(passes.some((pass) => pass.reveal_pending.length > 0)
+      ? `${ballot} closed while you waited; its reveal did not finish (reveal_pending), so it stays sealed and the next call tries again.`
+      : `${ballot} closed while you waited, so the wait ended at its close and its votes were revealed, as any call reveals them.`);
+  }
+  const firstForMe = entries.find((entry) => entry.for_me || entry.for_name) ?? extras[0];
   const about = firstForMe ? entryRef(firstForMe) : null;
   const next: NoteRemedy = waitError
     ? withSlot(ctx, noteRemedyOf(waitError))
@@ -1899,10 +2040,18 @@ function inboxResult(
         ? withSlot(ctx, { tool: "collab_inbox", input: { ...paging } })
         : withSlot(ctx, { tool: "collab_inbox", input: { wait_seconds: WAIT_MAX_SECONDS, ...paging } });
   const initialisedFrom = passes.map((pass) => pass.mark.initialised_from).find((value) => value) ?? null;
+  const alsoNew = passes.reduce((sum, pass) => sum + pass.also_new, 0);
+  // What was only counted can be read back: a look-back from where this
+  // call started, with every item. With include: "all" they are listed
+  // here already, as subject lines, so nothing is offered twice.
+  const seeFrom = data.looked_back ? data.looked_back.after : passes[0]!.mark.before;
+  const see = alsoNew > 0 && paging.include !== "all"
+    ? { see: withSlot(ctx, { tool: "collab_inbox", input: { since: seeFrom, include: "all" } }) }
+    : {};
   return {
     ok: true,
     items,
-    also_new: { count: passes.reduce((sum, pass) => sum + pass.also_new, 0) },
+    also_new: { count: alsoNew, ...see },
     more: data.more,
     read_through: { sequence: data.mark.through, head: data.head_sequence },
     ...(initialisedFrom ? { mark_initialised_from: initialisedFrom } : {}),
@@ -1939,22 +2088,45 @@ function entryRef(entry: NoteEntry): string | null {
   return entry.task ? exactRef("task", entry.task.id) : null;
 }
 
+type WaitEnd = { ended_by: "item" } | { ended_by: "ballot_closed"; ballot_id: string };
+
 /**
  * Wait for a for-me event after `anchor`, reading only (spec 5.2): it uses
  * the same read-only page as collab_events_wait, refreshes nothing and writes
  * nothing. Entries already waiting on the session never end it. The caller
  * holds the wait's place in the endpoint's budget.
+ *
+ * It also ends at the close of an open ballot this session may vote in,
+ * opened or cast in: a ballot's reveal is lazy, so without this a waiter
+ * learns of a close only on its next call. The ballots are read once, and
+ * the close is judged at the store's clock as the reveal judges it; the
+ * reveal itself is left to the caller's next pass, so the wait stays
+ * read-only. Null when it timed out.
  */
 async function waitForMe(
   ctx: NoteVerbContext,
   binding: NoteBinding,
   anchor: { epoch_id: string; sequence: number; hash: string },
   durationMs: number,
-): Promise<boolean> {
+): Promise<WaitEnd | null> {
   const sessionId = binding.handle.session.id;
   const workspaceId = binding.handle.workspace.id;
   let after = { ...anchor };
   const deadline = performance.now() + durationMs;
+  const watched = ctx.store.noteBallotsToWatch(binding.handle.credential);
+  const watchedIds = new Set(watched.map((ballot) => ballot.ballot_id));
+  /** The first watched ballot whose close time has come, and how long until the next one does. */
+  const clock = (): { closed: string | null; untilMs: number } => {
+    if (watched.length === 0) return { closed: null, untilMs: Infinity };
+    const now = Date.parse(ctx.store.noteNow());
+    let untilMs = Infinity;
+    for (const ballot of watched) {
+      const left = Date.parse(ballot.closes_at) - now;
+      if (left <= 0) return { closed: ballot.ballot_id, untilMs: 0 };
+      untilMs = Math.min(untilMs, left);
+    }
+    return { closed: null, untilMs };
+  };
   while (true) {
     if (ctx.signals.some((signal) => signal?.aborted)) {
       throw new CollabError("wait_cancelled", "The inbox wait was cancelled");
@@ -1972,17 +2144,25 @@ async function waitForMe(
         event_limit: 50,
       });
       for (const event of page.events) {
-        if (event.session_id !== sessionId && ctx.store.eventAddressesSession(event, sessionId)) return true;
+        if (event.session_id !== sessionId && ctx.store.eventAddressesSession(event, sessionId)) return { ended_by: "item" };
+        // A close before the deadline (every unit cast), or one another
+        // process has already revealed.
+        if ((event.type === "ballot.cast" || event.type === "ballot.closed") && watchedIds.has(event.entity_id)) {
+          const state = ctx.store.noteBallotState(workspaceId, event.entity_id);
+          if (state === "closed" || state === "revealed") return { ended_by: "ballot_closed", ballot_id: event.entity_id };
+        }
       }
       after = page.next_anchor;
       caughtUp = !page.has_more;
     } catch (error) {
       if (!(error instanceof CollabError) || error.code !== "event_read_busy") throw error;
     }
+    const { closed, untilMs } = clock();
+    if (closed) return { ended_by: "ballot_closed", ballot_id: closed };
     const remaining = deadline - performance.now();
-    if (remaining <= 0) return false;
+    if (remaining <= 0) return null;
     if (!caughtUp) continue;
-    await abortableDelay(Math.min(WAIT_POLL_MS, remaining), ctx.signals);
+    await abortableDelay(Math.max(0, Math.min(WAIT_POLL_MS, remaining, untilMs)), ctx.signals);
   }
 }
 
@@ -2013,11 +2193,15 @@ function resolveAbout(ctx: NoteVerbContext, workspaceId: string, value: string):
     return { kind: "report", id: ctx.store.resolveNoteRef(workspaceId, "report", text).id };
   }
   const found: Array<{ kind: "task" | "report"; id: string }> = [];
+  let unreadable = false;
   for (const kind of ["report", "task"] as const) {
     try {
       found.push({ kind, id: ctx.store.resolveNoteRef(workspaceId, kind, text).id });
     } catch (error) {
-      if (!(error instanceof CollabError) || error.code !== `${kind}_not_found`) throw error;
+      if (!(error instanceof CollabError)) throw error;
+      // A value no id can have (a session handle, say) is not refused as a bad id.
+      if (error.code === `invalid_${kind}_id`) unreadable = true;
+      else if (error.code !== `${kind}_not_found`) throw error;
     }
   }
   if (found.length === 1) return found[0]!;
@@ -2028,7 +2212,42 @@ function resolveAbout(ctx: NoteVerbContext, workspaceId: string, value: string):
       remedy: { say: "Name the kind: task:<id> or report:<id>; the candidates are listed." },
     });
   }
+  const sessions = aboutSessions(ctx, workspaceId, text);
+  if (sessions.length > 0 || unreadable || /^session[#_:]/i.test(text)) {
+    throw new CollabError(
+      "about_not_a_thread",
+      sessions.length > 0
+        ? `${text} names ${sessions.length === 1 ? "a session" : `${sessions.length} sessions`}, not a thread; about reads one thread`
+        : `${text} is not a thread collab_inbox can show; about reads one thread`,
+      {
+        value: text,
+        ...(sessions.length > 0 ? { sessions } : {}),
+        remedy: { say: ABOUT_TAKES },
+      },
+    );
+  }
   throw new CollabError("ref_not_found", `No report or task in this workspace has the id ${text}`, { value: text });
+}
+
+const ABOUT_TAKES =
+  "about takes one thread: a report, proposal, ballot or task, by its id or handle (such as report#3fa91c or task#0b12de). " +
+  "To read what a session wrote, or anything from before you arrived, read back through the journal with " +
+  "collab_inbox {since: 0, include: \"all\"}; a look-back moves no read mark.";
+
+/** The sessions a value names by id, session# handle or display name, ended ones included. Read-only. */
+function aboutSessions(ctx: NoteVerbContext, workspaceId: string, text: string): Array<{ session: string; name: string }> {
+  try {
+    const view = ctx.store.resolveNoteSession(workspaceId, text, { include_ended: true });
+    return [{ session: view.id, name: view.actor }];
+  } catch (error) {
+    if (!(error instanceof CollabError)) throw error;
+    // Several sessions share the name; it names sessions all the same.
+    if (error.code === "ambiguous_session") {
+      return ((error.details.candidates as Array<{ session: string; name: string }> | undefined) ?? [])
+        .map((candidate) => ({ session: candidate.session, name: candidate.name }));
+    }
+    return [];
+  }
 }
 
 function aboutView(
@@ -2037,6 +2256,7 @@ function aboutView(
   about: string,
   format: "json" | "note",
   waitSeconds = 0,
+  sinceGiven = false,
 ): Record<string, unknown> {
   const credential = binding.handle.credential;
   const workspaceId = binding.handle.workspace.id;
@@ -2044,7 +2264,7 @@ function aboutView(
   const thread = ctx.store.noteThreadForSession({ ...credential, kind, id });
   // The thread call has recorded its housekeeping, so a refusal from here on
   // must never say that nothing was written.
-  return afterThreadRead(() => composeAboutView(ctx, thread, format, waitSeconds));
+  return afterThreadRead(() => composeAboutView(ctx, thread, format, waitSeconds, sinceGiven));
 }
 
 function afterThreadRead<T>(compose: () => T): T {
@@ -2061,12 +2281,16 @@ function composeAboutView(
   thread: NoteThreadData,
   format: "json" | "note",
   waitSeconds: number,
+  sinceGiven: boolean,
 ): Record<string, unknown> {
   const byId = new Map(thread.sessions.map((view) => [view.id, view]));
   const me = thread.session.id;
   const advice: string[] = [];
   if (waitSeconds > 0) {
     advice.push("wait_seconds applies to your inbox, not to a thread view, so this call did not wait; leave about out to wait for new items.");
+  }
+  if (sinceGiven) {
+    advice.push("since reads back through the journal, not through one thread, so this call shows the thread only; leave about out to read back.");
   }
   if (thread.mark.clamped) advice.push(MARK_CLAMPED_ADVICE);
   if (thread.truncated) advice.push(`This thread lists its first ${thread.answers.length} answers only.`);
@@ -2325,7 +2549,9 @@ function ballotItem(
         handle,
         act: "poll",
         from: { session: null, name: "system:clock" },
-        to: sessionRef(me, me, byId),
+        // The close reaches the opener and its casters; anyone else is shown it unaddressed.
+        to: entry.for_me ? sessionRef(me, me, byId)
+          : entry.for_name ? sessionRef(entry.for_name.session_id, entry.for_name.session_id, byId) : "all",
         re,
         ...base,
         statement: result ? `${handle} closed: ${result.status}${top}. It authorises nothing.` : `${handle} closed.`,

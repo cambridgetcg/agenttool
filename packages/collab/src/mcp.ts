@@ -309,7 +309,10 @@ export function buildCollabMcpServer(
         "Start your coordination session on this slot, or, when it already has one, see who you are, who is here, " +
         "what is open and what waits on you. On a slot that already has a session it writes nothing unless " +
         "revise_purpose is true. With binding_key it starts a named child of a session this MCP process holds, which " +
-        "shares that parent's voice. It never moves the legacy cursor, and never resumes or adopts another process's session.",
+        "shares that parent's voice. It never moves the legacy cursor, and never resumes or adopts another process's session. " +
+        "A new session's read mark starts at the journal head; when others were here first, before_you_arrived gives the " +
+        "collab_inbox call that reads back, and left_for_your_name points at items addressed to ended sessions that used " +
+        "your name (names are self-declared: this routes reading, it passes on nothing those sessions held).",
       annotations: localMutation,
       inputSchema: {
         // Required, but checked by the verb: a missing purpose, the likeliest
@@ -338,12 +341,16 @@ export function buildCollabMcpServer(
       description:
         "Items addressed to you since your read mark, oldest first, with what waits on you whatever the mark. " +
         "With about (an id or handle such as report#3fa91c or task#0b12de): that report and everything answering it, " +
-        "or a task's holder, completion and reviews. wait_seconds waits, reading only, for a new item for you. " +
-        "It moves its own read mark and last-seen time, never the legacy cursor.",
+        "or a task's holder, completion and reviews. With since (a journal sequence; 0 is the start): a look-back over " +
+        "what came after it, in the same shape; it only reads, so it moves no mark, runs no housekeeping and records " +
+        "nothing as delivered. wait_seconds waits, reading only, for a new item for you, or for the close of a ballot " +
+        "you may vote in, opened or cast in. Otherwise it moves its own read mark and last-seen time, never the legacy cursor.",
       annotations: localMutation,
       inputSchema: {
         about: z.string().optional()
-          .describe("One thread: a report, proposal or task id or handle (at most 300 characters)."),
+          .describe("One thread: a report, proposal, ballot or task id or handle (at most 300 characters); not a session."),
+        since: z.number().optional()
+          .describe("A whole number, 0 or more: read back from just after this journal sequence, oldest first, without moving your mark; with include all, every item."),
         wait_seconds: z.number().optional()
           .describe("A whole number from 0 to 30: with nothing new for you, wait up to this long for an item; default 0."),
         include: z.string().optional()

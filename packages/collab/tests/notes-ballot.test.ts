@@ -1198,3 +1198,101 @@ describe("note_ballots (spec 8.1)", () => {
     }
   });
 });
+
+describe("a wait across a ballot's close", () => {
+  test("wakes at the close, reveals as any call does, and returns the closed item; read-only until then", async () => {
+    const j = journal();
+    const [opener, peer, third] = await voters(j, ["opener", "peer", "third"]);
+    const opened = await poll(opener!);
+    await ok(peer!.server, "collab_vote", { ballot: opened.ballot, choice: ["keep"] });
+    await ok(opener!.server, "collab_vote", { ballot: opened.ballot, choice: ["keep"] });
+    // An outsider, not in the electorate, is not woken by this ballot.
+    const outsider = j.start("outsider");
+    const outsiderServer = j.serve(outsider);
+    for (const voter of [opener!, peer!, third!]) await ok(voter.server, "collab_inbox", { limit: 50 });
+    await ok(outsiderServer, "collab_inbox", { limit: 50 });
+    const started = performance.now();
+    const waits = [opener!, third!].map((voter) => ok(voter.server, "collab_inbox", { wait_seconds: 20 }));
+    const outsiderWait = ok(outsiderServer, "collab_inbox", { wait_seconds: 2 });
+    await new Promise((done) => setTimeout(done, 400));
+    // Nothing is revealed while the ballot is open.
+    expect(revealed(j, opened.ballot)).toEqual([]);
+    j.advance(31 * MINUTE);
+    const [openerResult, thirdResult] = await Promise.all(waits);
+    expect(performance.now() - started).toBeLessThan(5_000);
+    for (const result of [openerResult!, thirdResult!]) {
+      expect(result.waited).toMatchObject({ ended_by: "ballot_closed", ballot: { id: opened.ballot } });
+      expect(result.advice.join(" ")).toContain("closed while you waited");
+      const closed = result.items.find((item: any) => item.id === opened.ballot && item.act === "poll" && item.result);
+      expect(closed.result.status).toBe("top_choice");
+      expect(result.next).toEqual({ tool: "collab_inbox", input: { about: opened.ballot } });
+    }
+    // The opener is rung by the close; a voter who had not cast is shown it unaddressed.
+    expect(openerResult!.items.find((item: any) => item.result).for_me).toBe(true);
+    expect(thirdResult!.items.find((item: any) => item.result)).toMatchObject({ for_me: false, to: "all" });
+    expect(revealed(j, opened.ballot)).toHaveLength(2);
+    expect(closedCount(j, opened.ballot)).toBe(1);
+    expect((await outsiderWait).waited.ended_by).toBe("timeout");
+  });
+
+  test("a reveal that fails at the close is reveal_pending and never fails the call", async () => {
+    let fail = false;
+    let j!: Journal;
+    j = journal({
+      store: {
+        reveal_failpoint: (step) => {
+          if (fail && step === "appended") throw new Error("injected reveal failure");
+        },
+      },
+    });
+    const [opener, peer] = await voters(j, ["opener", "peer"]);
+    const opened = await poll(opener!);
+    await ok(peer!.server, "collab_vote", { ballot: opened.ballot, choice: ["keep"] });
+    await ok(opener!.server, "collab_inbox", { limit: 50 });
+    const waiting = ok(opener!.server, "collab_inbox", { wait_seconds: 20 });
+    await new Promise((done) => setTimeout(done, 300));
+    fail = true;
+    j.advance(31 * MINUTE);
+    const result = await waiting;
+    expect(result.ok).toBe(true);
+    expect(result.waited.ended_by).toBe("ballot_closed");
+    expect(result.reveal_pending).toBe("reveal_failed");
+    expect(result.advice.join(" ")).toContain("did not finish");
+    expect(closedCount(j, opened.ballot)).toBe(0);
+    fail = false;
+    await ok(opener!.server, "collab_inbox");
+    expect(closedCount(j, opened.ballot)).toBe(1);
+  });
+});
+
+describe("a look-back on an open ballot", () => {
+  test("folds as a pass does for a voter who has not cast, and shows no vote", async () => {
+    const j = journal();
+    const [opener, peer, talker] = await voters(j, ["opener", "peer", "talker"]);
+    const opened = await poll(opener!);
+    const lean = await ok(opener!.server, "collab_note", { text: "I lean keep: lean-marker-one.", re: opened.ballot, to: "peer" });
+    const reply = await ok(talker!.server, "collab_note", { text: "Split wins: lean-marker-two.", re: lean.ids.report });
+    await ok(talker!.server, "collab_vote", {
+      ballot: opened.ballot, choice: ["split"], why: [{ text: "reason-marker-lookback", basis: "inferred" }], shared: "shared-marker-lookback",
+    });
+    const marks = j.store.db.query(`SELECT * FROM note_marks ORDER BY session_id`).all();
+    for (const include of ["for_me", "all"] as const) {
+      const look = await ok(peer!.server, "collab_inbox", { since: 0, include });
+      const text = JSON.stringify(look);
+      for (const needle of ["lean-marker", "reason-marker-lookback", "shared-marker-lookback"]) expect(text).not.toContain(needle);
+      const folded = (look.items as Array<Record<string, any>>).filter((item) => item.folded);
+      expect(folded.map((item) => item.id)).toEqual(include === "all" ? [lean.ids.report, reply.ids.report] : [lean.ids.report]);
+      expect(look.advice).toContain(FOLDED_LINE);
+      if (include === "all") {
+        const cast = look.items.find((item: any) => item.act === "vote");
+        expect(Object.keys(cast).sort()).toEqual(["act", "at", "for_me", "from", "handle", "id", "sequence", "statement"]);
+      }
+    }
+    expect(j.store.db.query(`SELECT * FROM note_marks ORDER BY session_id`).all()).toEqual(marks);
+    // Once the peer's unit has cast, the look-back shows the notes, still no vote.
+    await ok(peer!.server, "collab_vote", { ballot: opened.ballot, choice: ["keep"] });
+    const after = JSON.stringify(await ok(peer!.server, "collab_inbox", { since: 0 }));
+    expect(after).toContain("lean-marker-one");
+    expect(after).not.toContain("reason-marker-lookback");
+  });
+});

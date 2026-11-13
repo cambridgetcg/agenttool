@@ -423,6 +423,36 @@ export function authorAddressee(target: NoteTargetView, me: string): Addressee {
   return sessionAddressee(author.id, author.actor, author.status, author.liveness, author.last_seen_at);
 }
 
+/**
+ * A reply's default addressee: the author of what it answers. When that
+ * author's session has ended and exactly one other active session in the
+ * workspace carries its name (and it is not the caller), the reply goes to
+ * that session and says so, since every host restart is a new session and
+ * the reply would otherwise sit with a session no one reads as. A name is
+ * self-declared, so this is routing only: with none or several such
+ * sessions it goes to the ended author as before.
+ */
+function replyAddressee(ctx: NoteVerbContext, workspaceId: string, author: NoteTargetView["author"], me: string): Addressee {
+  if (!author || author.id === me) return BROADCAST;
+  if (author.status === "ended") {
+    const live = ctx.store.noteSessionViews(workspaceId)
+      .filter((view) => view.status === "active" && view.actor === author.actor && view.id !== author.id);
+    if (live.length === 1 && live[0]!.id !== me) {
+      const now = live[0]!;
+      const routed = sessionAddressee(now.id, now.actor, now.status, now.liveness, now.last_seen_at);
+      return {
+        ...routed,
+        advice: [
+          `${author.actor}'s session that wrote this (${author.id}) has ended; this is addressed to the active session named ` +
+            `${now.actor} (session ${now.id}). Names are self-declared, so this is routing by name, not proof that it is the same agent.`,
+          ...routed.advice,
+        ],
+      };
+    }
+  }
+  return sessionAddressee(author.id, author.actor, author.status, author.liveness, author.last_seen_at);
+}
+
 function viewAddressee(ctx: NoteVerbContext, workspaceId: string, sessionId: string): Addressee {
   const view = ctx.store.resolveNoteSession(workspaceId, sessionId, { include_ended: true });
   return sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at);
@@ -518,10 +548,19 @@ function readNoteInput(input: NoteVerbInput): { fields: NoteFields; read_as: "co
     return { fields, read_as: "collab-note/1", advice };
   }
   const act = (input.act ?? "note").trim().toLowerCase();
+  let text = input.text;
   if (input.act !== undefined && headAct !== null) {
-    advice.push(`text begins with "${head![1]}: ", which stays in the statement because act was given.`);
+    // The same act word said twice would be stored as "accept: Accept: …".
+    // Any other act word is the caller's own words, so it stays.
+    const rest = normalizeNoteText(input.text).slice(head![0].length);
+    if (headAct === act && (rest.split("\n")[0] ?? "").trim() !== "") {
+      text = rest;
+      advice.push(`text began with "${head![1]}: ", the act you gave, so that word was left out of the statement.`);
+    } else {
+      advice.push(`text begins with "${head![1]}: ", which stays in the statement because act was given.`);
+    }
   }
-  const { statement, body } = splitNoteText(input.text);
+  const { statement, body } = splitNoteText(text);
   return {
     fields: normalizeNoteFields({ act: act as NoteAct, statement, body, ...structured } as NoteInput),
     read_as: null,
@@ -951,7 +990,7 @@ function planNote(
         report.evidence_refs!.push(`report:${reportTarget.id}`);
         report.task_id = reportTarget.view.report.task_id;
         if (reportTarget.view.termed) report.about_proposal_id = reportTarget.id;
-        addressee = authorAddressee(reportTarget.view, me);
+        addressee = replyAddressee(ctx, workspaceId, reportTarget.view.author, me);
       } else if (target?.kind === "task") {
         report.task_id = target.id;
         const holder = target.task.assignee_session_id ?? target.task.reported_by_session_id;
@@ -980,7 +1019,7 @@ function planNote(
       report.target_report_id = reportTarget.id;
       report.task_id = view.report.task_id;
       if (view.termed) report.about_proposal_id = reportTarget.id;
-      const addressee = explicit ?? authorAddressee(view, me);
+      const addressee = explicit ?? replyAddressee(ctx, workspaceId, view.author, me);
       report.to_session_id = addressee.to_session_id;
       report.to_person = addressee.to_person;
       if (view.completion_of?.pending_review) {
@@ -999,6 +1038,7 @@ function planNote(
           : `You wrote ${targetHandle(reportTarget)}; standing on your own report adds no second voice.`);
       }
       if (view.obsoleted) advice.push(`${targetHandle(reportTarget)} was withdrawn or replaced by its author; your ${act} is recorded on it all the same.`);
+      if (view.termed && !view.obsoleted) advice.push(...lateVoiceAdvice(ctx, workspaceId, me, act, reportTarget));
       if (act === "challenge" && context.replacedId) {
         return finish({
           recorded_as: "challenge",
@@ -1024,7 +1064,7 @@ function planNote(
         const report = base("resolves");
         report.target_report_id = challenge.id;
         report.task_id = challenge.view.report.task_id;
-        const addressee = explicit ?? authorAddressee(challenged, me);
+        const addressee = explicit ?? replyAddressee(ctx, workspaceId, challenged.author, me);
         report.to_session_id = addressee.to_session_id;
         report.to_person = addressee.to_person;
         if (challenge.view.obsoleted) advice.push(`${targetHandle(challenge)} was already withdrawn; the resolve is recorded all the same.`);
@@ -1035,9 +1075,8 @@ function planNote(
       fields = { ...fields, act: "note" };
       const report = base("informs", [`report:${challenge.id}`]);
       report.task_id = challenge.view.report.task_id;
-      const addressee = explicit ?? (challenger
-        ? sessionAddressee(challenger.id, challenger.actor, challenger.status, challenger.liveness, challenger.last_seen_at)
-        : BROADCAST);
+      // The challenger is never this session here: its own voice resolves.
+      const addressee = explicit ?? (challenger ? replyAddressee(ctx, workspaceId, challenger, me) : BROADCAST);
       report.to_session_id = addressee.to_session_id;
       report.to_person = addressee.to_person;
       advice.push(
@@ -1133,6 +1172,46 @@ function planNote(
       return finish({ recorded_as: "relay_rejection", target, addressee: BROADCAST, reports: [], entity: reportTarget.id });
     }
   }
+}
+
+/**
+ * What consent/v1 does with a stance from a voice the proposal's snapshot
+ * does not hold (it had no live session when the proposal opened), stated
+ * from the rule in proposal.ts as the store applies it: a support from any
+ * voice but the author's counts as a support, but only snapshot voices are
+ * awaited, so it answers for none of them; a standing challenge counts
+ * whoever made it. Only advice; nothing is refused or recounted.
+ */
+function lateVoiceAdvice(
+  ctx: NoteVerbContext,
+  workspaceId: string,
+  me: string,
+  act: "support" | "challenge",
+  proposal: Extract<ReTarget, { kind: "report" }>,
+): string[] {
+  let data;
+  try {
+    data = ctx.store.noteProposalView(workspaceId, proposal.id);
+  } catch {
+    // Terms that cannot be read are shown by collab_inbox about; advice never refuses the stance.
+    return [];
+  }
+  const voice = ctx.store.consentVoiceOf(me);
+  if (data.status.terms.voices.some((snapshot) => snapshot.voice_id === voice)) return [];
+  const handle = targetHandle(proposal);
+  const late = `Your voice was not live when ${handle} opened, so it is not one of the voices consent/v1 waits for.`;
+  if (act === "challenge") {
+    return [
+      `${late} A challenge counts whoever makes it: while yours stands, the position is challenged, and split at the close. ` +
+        "Only your voice can lift it (resolve), or you can withdraw it.",
+    ];
+  }
+  const awaited = data.status.ai.awaiting_voice_ids.length;
+  return [
+    `${late} Your support still counts as a support from a voice other than the author's, but it answers for no awaited voice ` +
+      `(${awaited} awaited now). Before the close the position is consented once a support counts, no voice is awaited and no ` +
+      "challenge stands; at the close, one counted support and no standing challenge are enough. The person still decides.",
+  ];
 }
 
 /** Whether this call's text is read as a whole note (so its fields live in the text). */

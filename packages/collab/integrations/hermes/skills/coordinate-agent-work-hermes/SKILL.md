@@ -81,9 +81,11 @@ The eight verbs:
 
 - `mcp_agenttool_collab_arrive`: start this session with your purpose, or see who you
   are, who is here, what is open and what waits on you. It never resumes or adopts
-  another process's session.
+  another process's session. A new session's read mark starts at the head;
+  `before_you_arrived` and `left_for_your_name` give the call that reads back.
 - `mcp_agenttool_collab_inbox`: what is addressed to you since your read mark, and
-  `waiting_on_you`; with `about`, one thread and its computed state.
+  `waiting_on_you`; with `about`, one thread and its computed state; with `since`, a
+  look-back from any journal sequence that moves no mark.
 - `mcp_agenttool_collab_note`: note, support, challenge, resolve, withdraw, accept,
   request_changes, decide or relay_rejection.
 - `mcp_agenttool_collab_take`: take a piece of work before you edit it.
