@@ -18,6 +18,13 @@
  * `person-remote` forced command, which verifies it against its own enrolled
  * passkeys. The page and Touch ID stay on this device.
  *
+ * consent/v2's set-aside signs the same way (`--act set-aside --challenge
+ * <report id> --reason <text>`). Its page shows the objection in full, its
+ * author's name marked self-declared, why it can be set aside and the
+ * reason, all as text: agent-written challenge text and the person's typed
+ * reason are data embedded as JSON and rendered with textContent, never as
+ * markup.
+ *
  * A person who starts a ceremony at the terminal has the page opened in the
  * browser for them (`--no-open` declines). A ceremony started by another
  * program has no terminal, and that program opens the page itself: YOUI
@@ -25,6 +32,7 @@
  */
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { challengeContentBytes, consentRuleFromEnvironment } from "./consent-v2.js";
 import { remoteSoftSpots, softSpotDisplay, type SoftSpotsShown } from "./desk-soft-spots.js";
 import { CollabError } from "./errors.js";
 import { normalizePasskeyEnrollment } from "./passkey.js";
@@ -33,14 +41,15 @@ import {
   deskSoftSpotsFor,
   errorPayload,
   openDeskStore,
-  parseAct,
+  parseDeskAct,
   parseInteger,
   parsePersonArgs,
   PERSON_DESK_PROTOCOL,
   EXIT_NOT_CONFIRMED,
+  type DeskAct,
   type PersonDeskDeps,
 } from "./person-desk.js";
-import type { ProposalStatus } from "./protocol.js";
+import type { CollabReport, ProposalStatus } from "./protocol.js";
 import { openDevTty } from "./tty.js";
 
 export const DEFAULT_CEREMONY_PORT = 17778;
@@ -80,10 +89,11 @@ function atTerminal(deps: PersonDeskDeps): boolean {
 }
 
 type Table = {
-  challenge(proposal: string, act: "agree" | "reject", reason: string | undefined): Promise<Challenge>;
+  /** `objection` names the challenge a set-aside acts on; null for agree and reject. */
+  challenge(proposal: string, act: DeskAct, reason: string | undefined, objection: string | null): Promise<Challenge>;
   /** The status, and the soft spots read beside it (undefined when another device's desk sent none). */
   status(challenge: Challenge): Promise<{ status: ProposalStatus; soft_spots: SoftSpotsShown | undefined }>;
-  record(proposal: string, act: "agree" | "reject", reason: string | null, assertion: unknown): Promise<ProposalStatus>;
+  record(proposal: string, act: DeskAct, reason: string | null, objection: string | null, assertion: unknown): Promise<ProposalStatus>;
   close(): void;
 };
 
@@ -91,11 +101,15 @@ type Challenge = {
   workspace_id: string;
   proposal_report_id: string;
   proposal_sha256: string;
-  act: "agree" | "reject";
+  act: "agree" | "reject" | "set_aside";
   reason: string | null;
   challenge_bytes: string;
   challenge: string;
   passkeys: Array<{ credential_id: string; origin: string; label: string | null; fingerprint: string }>;
+  /** A set-aside's challenge, as the journal holds it, and why it can be set aside. */
+  challenge_report_id?: string;
+  objection?: CollabReport;
+  challenger?: { voice_id: string | null; last_seen_at: string | null };
 };
 
 export async function runCeremonyCli(
@@ -111,6 +125,8 @@ export async function runCeremonyCli(
     line: JSON.stringify({ protocol: PERSON_DESK_PROTOCOL, command, ...payload }),
   });
   try {
+    // Refused at start, as every desk verb refuses it.
+    consentRuleFromEnvironment(env);
     const { verb, values } = parsePersonArgs(argv);
     if (verb === "passkey-enroll" && values.ceremony) {
       return emit(await enrollCeremony(values, env, deps, io, command), 0);
@@ -132,10 +148,11 @@ async function signCeremony(
   io: CeremonyIo,
   command: string,
 ): Promise<Record<string, unknown>> {
-  const act = parseAct(values.act);
+  const act = parseDeskAct(values);
+  const objectionId = act === "set-aside" ? values.challenge! : null;
   const table = values.via ? remoteTable(values.via, io) : localTable(values, env, deps);
   try {
-    const challenge = await table.challenge(values.proposal!, act, values.reason);
+    const challenge = await table.challenge(values.proposal!, act, values.reason, objectionId);
     if (challenge.passkeys.length === 0) {
       throw new CollabError("passkey_not_enrolled", "No passkey is enrolled at this table; enrol one first");
     }
@@ -165,15 +182,23 @@ async function signCeremony(
       credentials: passkeys.map((key) => key.credential_id),
       // Shown above the bytes; Touch ID signs `challenge` alone, which these never enter.
       soft_spots: softSpotDisplay(softSpots, status, values.via ? "remote" : "local"),
+      ...(act === "set-aside" ? { objection: objectionShown(challenge) } : {}),
     };
     const browser = values["no-open"] !== true && atTerminal(deps);
     const result = await serveOnce(port, data, io, command, browser, async (body) => {
-      const recorded = await table.record(challenge.proposal_report_id, act, challenge.reason, (body as { assertion?: unknown }).assertion);
+      const recorded = await table.record(
+        challenge.proposal_report_id,
+        act,
+        challenge.reason,
+        objectionId,
+        (body as { assertion?: unknown }).assertion,
+      );
       return {
         recorded: true,
         person_state: recorded.person.state,
         may_proceed: recorded.may_proceed,
         proposal_sha256: recorded.proposal_sha256,
+        ...(act === "set-aside" ? { set_aside: objectionId, position: recorded.ai.position } : {}),
       };
     });
     return { status: "ok", ...result };
@@ -231,6 +256,30 @@ async function enrollCeremony(
   }
 }
 
+/**
+ * The objection as the signing page shows it (consent/v2 decision 11): the
+ * challenge's author name, marked self-declared, when it was written, its
+ * full text, why it can be set aside, and its canonical content, whose hash
+ * the signed bytes name. Read from what the table returned, never rebuilt.
+ */
+function objectionShown(challenge: Challenge): Record<string, unknown> {
+  const objection = challenge.objection;
+  if (!objection || objection.id !== challenge.challenge_report_id) {
+    throw new CollabError("remote_desk_failed", "The desk did not return the challenge it would set aside");
+  }
+  const seen = challenge.challenger?.last_seen_at ?? null;
+  return {
+    id: objection.id,
+    by: objection.from_actor,
+    by_basis: "self-declared",
+    written_at: objection.created_at,
+    text: objection.body,
+    why: "No session of its voice is live, so no session can lift it now"
+      + (seen ? ` (last seen ${seen}).` : " (no session of it is recorded)."),
+    content_bytes: challengeContentBytes(objection),
+  };
+}
+
 function checkCreateClientData(value: unknown, challenge: string, origin: string): void {
   let clientData: Record<string, unknown> | null = null;
   try {
@@ -258,20 +307,29 @@ function localTable(
 ): Table {
   const store = openDeskStore(values, env, deps);
   return {
-    async challenge(proposal, act, reason) {
-      return store.personActChallenge({ proposal_report_id: proposal, act, reason });
+    async challenge(proposal, act, reason, objection) {
+      return act === "set-aside"
+        ? store.personSetAsideChallenge({ proposal_report_id: proposal, challenge_report_id: objection!, reason })
+        : store.personActChallenge({ proposal_report_id: proposal, act, reason });
     },
     async status(challenge) {
       const status = store.proposalStatusById(challenge.proposal_report_id);
       return { status, soft_spots: deskSoftSpotsFor(store, status.proposal.workspace_id, [status])[status.proposal.id] };
     },
-    async record(proposal, act, reason, assertion) {
-      return store.recordPersonActWithPasskey({
-        proposal_report_id: proposal,
-        act,
-        reason: reason ?? undefined,
-        assertion: assertion as never,
-      });
+    async record(proposal, act, reason, objection, assertion) {
+      return act === "set-aside"
+        ? store.recordSetAsideWithPasskey({
+          proposal_report_id: proposal,
+          challenge_report_id: objection!,
+          reason,
+          assertion: assertion as never,
+        })
+        : store.recordPersonActWithPasskey({
+          proposal_report_id: proposal,
+          act,
+          reason: reason ?? undefined,
+          assertion: assertion as never,
+        });
     },
     close: () => store.close(),
   };
@@ -294,8 +352,14 @@ function remoteTable(destination: string, io: CeremonyIo): Table {
     return result;
   };
   return {
-    async challenge(proposal, act, reason) {
-      const argv = ["challenge", `--proposal=${proposal}`, `--act=${act}`, ...(reason ? [`--reason=${reason}`] : [])];
+    async challenge(proposal, act, reason, objection) {
+      const argv = [
+        "challenge",
+        `--proposal=${proposal}`,
+        `--act=${act}`,
+        ...(objection ? [`--challenge=${objection}`] : []),
+        ...(reason ? [`--reason=${reason}`] : []),
+      ];
       return (await receipt(argv)).challenge as Challenge;
     },
     async status(challenge) {
@@ -303,10 +367,11 @@ function remoteTable(destination: string, io: CeremonyIo): Table {
       const read = await receipt(argv);
       return { status: read.proposal as ProposalStatus, soft_spots: remoteSoftSpots(read, challenge.proposal_report_id) };
     },
-    async record(proposal, act, reason, assertion) {
+    async record(proposal, act, reason, objection, assertion) {
       const argv = [
-        act === "agree" ? "consent" : "reject",
+        act === "agree" ? "consent" : act === "reject" ? "reject" : "set-aside",
         `--proposal=${proposal}`,
+        ...(objection ? [`--challenge=${objection}`] : []),
         ...(reason ? [`--reason=${reason}`] : []),
         "--passkey-assertion=-",
       ];
@@ -475,6 +540,7 @@ ul { margin: 6px 0 0; padding-left: 18px; } li { white-space: pre-wrap; overflow
 <section id="what"></section>
 <section id="soft" hidden><div class="label" id="soft-note"></div><ul id="soft-lines"></ul></section>
 <section><div class="label">Exact bytes you are signing</div><pre id="act"></pre>
+<div id="objection-bytes" hidden><div class="label">The challenge they name</div><pre id="objection"></pre></div>
 <div class="label">The proposal they name</div><pre id="proposal"></pre></section>
 <button id="go"></button>
 <section id="result"></section>
@@ -502,10 +568,18 @@ ul { margin: 6px 0 0; padding-left: 18px; } li { white-space: pre-wrap; overflow
   const left = Date.parse(data.expires_at) - Date.now();
   setTimeout(() => { if (!posted) { $("go").disabled = true; say(expired); } }, Math.max(0, left));
   if (data.kind === "sign") {
-    $("title").textContent = data.act === "agree" ? "Agree to this proposal" : "Reject this proposal";
+    const aside = data.act === "set-aside";
+    $("title").textContent = data.act === "agree" ? "Agree to this proposal" : aside ? "Set aside a challenge to this proposal" : "Reject this proposal";
     $("sub").textContent = "Table: " + data.table + " · agents' position: " + data.position;
     field("Question", data.question); field("Criteria", data.criteria);
     field("Extent — agreement authorises only this", data.extent); field("Known conflicts", data.known_conflicts);
+    if (aside) {
+      field("The challenge, by " + data.objection.by + " (name " + data.objection.by_basis + "), written " + data.objection.written_at, data.objection.text);
+      field("Why it can be set aside", data.objection.why);
+      field("Your reason", data.reason);
+      field("What setting it aside does", "It no longer blocks the agents' position. It stays on the record and in every view, and any voice may challenge again. It cannot be undone.");
+      $("objection").textContent = data.objection.content_bytes; $("objection-bytes").hidden = false;
+    }
     if (data.act === "reject") field("Your reason", data.reason);
     if (data.soft_spots) {
       $("soft-note").textContent = data.soft_spots.note;
@@ -513,7 +587,7 @@ ul { margin: 6px 0 0; padding-left: 18px; } li { white-space: pre-wrap; overflow
       $("soft").hidden = false;
     }
     $("act").textContent = data.challenge_bytes; $("proposal").textContent = data.proposal_bytes;
-    $("go").textContent = data.act === "agree" ? "Touch ID: agree" : "Touch ID: reject";
+    $("go").textContent = data.act === "agree" ? "Touch ID: agree" : aside ? "Touch ID: set aside" : "Touch ID: reject";
     $("go").className = data.act === "agree" ? "go" : "stop";
     $("go").onclick = async () => {
       $("go").disabled = true;
@@ -523,7 +597,8 @@ ul { margin: 6px 0 0; padding-left: 18px; } li { white-space: pre-wrap; overflow
         const r = await post({ assertion: { credential_id: enc(c.rawId), authenticator_data: enc(c.response.authenticatorData),
           client_data_json: enc(c.response.clientDataJSON), signature: enc(c.response.signature),
           user_handle: c.response.userHandle ? enc(c.response.userHandle) : null } });
-        say(r.ok ? (data.act === "agree" ? "Recorded. Your agreement authorises only the extent above. You can close this page." : "Recorded. You can close this page.")
+        say(r.ok ? (data.act === "agree" ? "Recorded. Your agreement authorises only the extent above. You can close this page."
+          : aside ? "Recorded. The challenge is set aside and stays on the record; agreeing is a separate act. You can close this page." : "Recorded. You can close this page.")
           : "The desk refused: " + (r.message || r.error));
       } catch (e) { say("Nothing was signed: " + e.message); $("go").disabled = false; }
     };
