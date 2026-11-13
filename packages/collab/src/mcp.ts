@@ -328,7 +328,7 @@ export function buildCollabMcpServer(
           .describe("With binding_key: the session this MCP process holds that the new session descends from (id, session# handle or name; at most 200 characters)."),
       },
     },
-    async (input) => noteCall(() => arriveVerb(noteContext(), input)),
+    async (input) => noteCall(() => arriveVerb(noteContext(), input), input),
   );
 
   server.registerTool(
@@ -353,7 +353,7 @@ export function buildCollabMcpServer(
           .describe("json (the default), or note: with about, the thread root and its state as one collab-note/1 text of at most 800 characters, for a person to carry."),
       },
     },
-    async (input, ctx) => noteCall(() => inboxVerb(noteContext(ctx.mcpReq?.signal), input)),
+    async (input, ctx) => noteCall(() => inboxVerb(noteContext(ctx.mcpReq?.signal), input), input),
   );
 
   const noteReason = z.object({
@@ -394,7 +394,7 @@ export function buildCollabMcpServer(
         dry_run: z.boolean().optional().describe("Parse, check and render; write nothing."),
       },
     },
-    async (input) => noteCall(() => noteVerb(noteContext(), input)),
+    async (input) => noteCall(() => noteVerb(noteContext(), input), input),
   );
 
   server.registerTool(
@@ -415,7 +415,7 @@ export function buildCollabMcpServer(
         because: z.string().optional().describe("Why you recover a lapsed lease (at most 4,000 characters)."),
       },
     },
-    async (input) => noteCall(() => takeVerb(noteContext(), input)),
+    async (input) => noteCall(() => takeVerb(noteContext(), input), input),
   );
 
   server.registerTool(
@@ -438,7 +438,7 @@ export function buildCollabMcpServer(
         because: z.string().optional().describe("The blocker (blocked), or why held work is left unfinished (leave); at most 2,000 characters."),
       },
     },
-    async (input) => noteCall(() => doneVerb(noteContext(), input)),
+    async (input) => noteCall(() => doneVerb(noteContext(), input), input),
   );
 
   server.registerTool(
@@ -466,7 +466,7 @@ export function buildCollabMcpServer(
         replaces: z.string().optional().describe("Your own earlier proposal, still on the table, that this one replaces (id or proposal# handle)."),
       },
     },
-    async (input) => noteCall(() => proposeVerb(noteContext(), input)),
+    async (input) => noteCall(() => proposeVerb(noteContext(), input), input),
   );
 
   server.registerTool(
@@ -494,7 +494,7 @@ export function buildCollabMcpServer(
           .describe("Close as soon as every unit has cast instead of waiting for closes; off by default, and stated in the terms."),
       },
     },
-    async (input) => noteCall(() => pollVerb(noteContext(), input)),
+    async (input) => noteCall(() => pollVerb(noteContext(), input), input),
   );
 
   server.registerTool(
@@ -517,7 +517,7 @@ export function buildCollabMcpServer(
         shared: z.string().optional().describe("What you share with the other voters (model, context, sources), at most 200 characters."),
       },
     },
-    async (input) => noteCall(() => voteVerb(noteContext(), input)),
+    async (input) => noteCall(() => voteVerb(noteContext(), input), input),
   );
 
   server.registerTool(

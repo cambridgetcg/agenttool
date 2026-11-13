@@ -165,6 +165,9 @@ describe("collab_poll: the electorate (spec 7)", () => {
     const [alone] = await voters(j, ["alone"]);
     const small = await refused(alone!.server, "collab_poll", { question: "Which?", options: OPTIONS, closes: "30m" });
     expect(small.code).toBe("electorate_too_small");
+    // An agent alone is told the electorate is fixed at the open, so it does not wait inside a poll that cannot start.
+    expect(small.message).toContain("fixed when the ballot opens");
+    expect(small.remedy.say).toContain("once another agent has arrived");
     expect(small.remedy.say).toContain("collab_note");
     expect(small.remedy.say).toContain("collab_propose");
     const others = Array.from({ length: 16 }, (_, index) => j.start(`voter-${index}`));

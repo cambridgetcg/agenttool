@@ -595,8 +595,33 @@ export function revealDue(ctx: Pick<NoteVerbContext, "store">, workspaceId: stri
 }
 
 /** Run a verb and shape its result or its refusal. */
-export async function noteCall(operation: () => Record<string, unknown> | Promise<Record<string, unknown>>) {
+const STAND_IN = /^<[^<>\n]{1,120}>$/;
+
+/**
+ * A ready call may leave one field for the caller's own words, written as
+ * `<what you did>`. Sent on unchanged it would be stored as if the caller had
+ * said it, so a field that is nothing but such a stand-in is refused before
+ * the verb runs. Angle brackets inside real text are untouched.
+ */
+export function refuseStandIns(input: unknown): void {
+  if (input === null || typeof input !== "object") return;
+  for (const [field, value] of Object.entries(input as Record<string, unknown>)) {
+    if (typeof value !== "string") continue;
+    const text = value.trim();
+    if (!STAND_IN.test(text)) continue;
+    throw new CollabError("stand_in_not_filled", `${field} still holds the stand-in ${text}; nothing was written`, {
+      field,
+      remedy: { say: `Send the call again with ${field} in your own words.` },
+    });
+  }
+}
+
+export async function noteCall(
+  operation: () => Record<string, unknown> | Promise<Record<string, unknown>>,
+  input?: unknown,
+) {
   try {
+    refuseStandIns(input);
     return noteSuccess(await operation());
   } catch (error) {
     return noteFailure(error);

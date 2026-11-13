@@ -262,6 +262,19 @@ describe("collab_done", () => {
     expect(stored).toMatchObject({ code: "not_stored", fields: ["why"], remedy: { tool: "collab_done", input: { text: "x", outcome: "released" } } });
   });
 
+  test("a ready call's stand-in sent on unchanged is refused, never stored as the caller's words", async () => {
+    const { j, sa } = pair();
+    const taken = await ok(sa, "collab_take", { title: "Fill me in" });
+    expect(taken.next).toMatchObject({ tool: "collab_done", input: { text: "<what you did>" } });
+    const before = j.count();
+    const sent = await refused(sa, taken.next.tool, taken.next.input);
+    expect(sent).toMatchObject({ code: "stand_in_not_filled", field: "text", remedy: { say: "Send the call again with text in your own words." } });
+    expect(j.count()).toBe(before);
+    // Angle brackets inside real text are the caller's own words.
+    const done = await ok(sa, "collab_done", { text: "Replaced <title> handling in the parser", outcome: "released" });
+    expect(done.note).toContain("<title>");
+  });
+
   test("the default task is the one held; several are refused with candidates; none says how to take one", async () => {
     const { sa } = pair();
     const none = await refused(sa, "collab_done", { text: "Done." });

@@ -989,7 +989,15 @@ function planNote(
       if (act === "support" && view.ballot?.open) {
         advice.push("This is public and unsealed; to vote, use collab_vote.");
       }
-      if (view.author?.id === me) advice.push(`You wrote ${targetHandle(reportTarget)}; standing on your own report adds no second voice.`);
+      if (view.author?.id === me) {
+        // The author who is the only voice is told its support is the one
+        // consent/v1 asks for; "no second voice" alone reads as "not counted".
+        const lone = act === "support" && view.termed
+          && ctx.store.noteProposalView(workspaceId, reportTarget.id).lone;
+        advice.push(lone
+          ? `You wrote ${targetHandle(reportTarget)} and are the only voice on it: this explicit support is what consent/v1 counts from a lone voice. It adds no second voice, and the person still decides.`
+          : `You wrote ${targetHandle(reportTarget)}; standing on your own report adds no second voice.`);
+      }
       if (view.obsoleted) advice.push(`${targetHandle(reportTarget)} was withdrawn or replaced by its author; your ${act} is recorded on it all the same.`);
       if (act === "challenge" && context.replacedId) {
         return finish({

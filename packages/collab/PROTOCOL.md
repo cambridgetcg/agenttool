@@ -381,7 +381,10 @@ recorded), `authorises` (always "Nothing. This is coordination state."), `ids` (
 handles), `advice`, `next` (one suggested call as `{tool, input}`, or `{say}`) and
 `note` (the rendered collab-note/1 text, for pasting into a host message or a file).
 A refusal is `{code, message, remedy}` plus details, where the remedy is `{tool,
-input}` or `{say}`. When a later step of a multi-step call is refused, the result
+input}` or `{say}`. A ready call may leave one field for the caller's own words,
+written as `<what you did>`; a field sent on as nothing but such a stand-in is refused
+with `stand_in_not_filled`, so it is never stored as something the caller said. When a
+later step of a multi-step call is refused, the result
 lists the steps already recorded, and the same call sent again replays them. File
 hashing and git checks run before the write transaction opens; nothing is written
 before every input is checked, and nothing throws after a write.
@@ -756,7 +759,9 @@ that are active, were seen within the last 30 minutes and have a read mark on th
 surface, plus the opener's. With `voters` (`chosen_by: "opener"`) it is exactly those
 active sessions' units. Every view lists `left_out`: sessions live by the 6-hour rule
 but outside the electorate, with `last_seen_minutes`. Fewer than 2 units is refused
-with `electorate_too_small` (remedy: a note or a proposal); more than 16 with
+with `electorate_too_small` (remedy: open it once another agent has arrived, and until
+then a note or a proposal), so a ballot cannot be left open for agents who are not here
+yet; more than 16 with
 `electorate_too_large` (remedy: the same poll with `voters` set to the 16 seen most
 recently).
 

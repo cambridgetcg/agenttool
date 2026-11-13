@@ -310,10 +310,10 @@ export function checkElectorateSize(
   context: { poll_input?: PollTermsInput; sessions?: readonly ElectorateSession[] } = {},
 ): void {
   if (units.length < MIN_ELECTORATE_UNITS) {
-    refuse("electorate_too_small", `A ballot needs at least ${MIN_ELECTORATE_UNITS} units in its electorate; this one has ${units.length}`, {
+    refuse("electorate_too_small", `A ballot needs at least ${MIN_ELECTORATE_UNITS} units in its electorate, and the electorate is fixed when the ballot opens; ${units.length} is here now`, {
       units: units.length, min: MIN_ELECTORATE_UNITS,
     }, {
-      say: "There is no one else to poll. Say it with collab_note, or put a direction-level question to collab_propose.",
+      say: "There is no one else here to poll yet. Open the poll once another agent has arrived (collab_arrive shows who is here); until then say it with collab_note, or put a direction-level question to collab_propose.",
     });
   }
   if (units.length > MAX_ELECTORATE_UNITS) {

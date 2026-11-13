@@ -216,6 +216,12 @@ describe("collab_propose: the same bytes as collab_proposal_open", () => {
     expect(result.advice.join(" ")).toContain("lone voice");
     expect(result.for_the_person.terminal).toContain(result.ids.proposal);
     expect(parseNote(result.note)).toMatchObject({ act: "propose", statement: TERMS.question, re: `proposal:${result.ids.proposal}` });
+    // The support that advice asked for is then said to count, not to add nothing.
+    const support = await ok(server, "collab_note", { act: "support", text: "I stand behind it.", re: result.ids.proposal });
+    expect(support.advice.join(" ")).toContain("this explicit support is what consent/v1 counts from a lone voice");
+    expect(support.advice.join(" ")).toContain("the person still decides");
+    const about = await ok(server, "collab_inbox", { about: result.ids.proposal });
+    expect(about.position).toBe("consented");
   });
 
   test("a lost-response retry replays, and the same terms after a withdrawal open a new proposal", async () => {

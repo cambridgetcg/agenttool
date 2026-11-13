@@ -30833,11 +30833,11 @@ function validatePollTerms(input, context) {
 }
 function checkElectorateSize(units, context = {}) {
   if (units.length < MIN_ELECTORATE_UNITS) {
-    refuse("electorate_too_small", `A ballot needs at least ${MIN_ELECTORATE_UNITS} units in its electorate; this one has ${units.length}`, {
+    refuse("electorate_too_small", `A ballot needs at least ${MIN_ELECTORATE_UNITS} units in its electorate, and the electorate is fixed when the ballot opens; ${units.length} is here now`, {
       units: units.length,
       min: MIN_ELECTORATE_UNITS
     }, {
-      say: "There is no one else to poll. Say it with collab_note, or put a direction-level question to collab_propose."
+      say: "There is no one else here to poll yet. Open the poll once another agent has arrived (collab_arrive shows who is here); until then say it with collab_note, or put a direction-level question to collab_propose."
     });
   }
   if (units.length > MAX_ELECTORATE_UNITS) {
@@ -40083,8 +40083,25 @@ function revealDue(ctx, workspaceId) {
     return error51 instanceof CollabError ? error51.code : "reveal_failed";
   }
 }
-async function noteCall(operation) {
+var STAND_IN = /^<[^<>\n]{1,120}>$/;
+function refuseStandIns(input) {
+  if (input === null || typeof input !== "object")
+    return;
+  for (const [field, value] of Object.entries(input)) {
+    if (typeof value !== "string")
+      continue;
+    const text = value.trim();
+    if (!STAND_IN.test(text))
+      continue;
+    throw new CollabError("stand_in_not_filled", `${field} still holds the stand-in ${text}; nothing was written`, {
+      field,
+      remedy: { say: `Send the call again with ${field} in your own words.` }
+    });
+  }
+}
+async function noteCall(operation, input) {
   try {
+    refuseStandIns(input);
     return noteSuccess(await operation());
   } catch (error51) {
     return noteFailure(error51);
@@ -42499,8 +42516,10 @@ function planNote(ctx, input, context) {
       if (act === "support" && view.ballot?.open) {
         advice.push("This is public and unsealed; to vote, use collab_vote.");
       }
-      if (view.author?.id === me)
-        advice.push(`You wrote ${targetHandle(reportTarget2)}; standing on your own report adds no second voice.`);
+      if (view.author?.id === me) {
+        const lone = act === "support" && view.termed && ctx.store.noteProposalView(workspaceId, reportTarget2.id).lone;
+        advice.push(lone ? `You wrote ${targetHandle(reportTarget2)} and are the only voice on it: this explicit support is what consent/v1 counts from a lone voice. It adds no second voice, and the person still decides.` : `You wrote ${targetHandle(reportTarget2)}; standing on your own report adds no second voice.`);
+      }
       if (view.obsoleted)
         advice.push(`${targetHandle(reportTarget2)} was withdrawn or replaced by its author; your ${act} is recorded on it all the same.`);
       if (act === "challenge" && context.replacedId) {
@@ -45043,7 +45062,7 @@ Legacy session tools: ${legacyInstructions}`
       revise_purpose: exports_external.boolean().optional().describe("On a slot that already has a session: record purpose as your current purpose."),
       parent: exports_external.string().optional().describe("With binding_key: the session this MCP process holds that the new session descends from (id, session# handle or name; at most 200 characters).")
     }
-  }, async (input) => noteCall(() => arriveVerb(noteContext(), input)));
+  }, async (input) => noteCall(() => arriveVerb(noteContext(), input), input));
   server.registerTool("collab_inbox", {
     title: "What is for you, and one thread",
     description: "Items addressed to you since your read mark, oldest first, with what waits on you whatever the mark. " + "With about (an id or handle such as report#3fa91c or task#0b12de): that report and everything answering it, " + "or a task's holder, completion and reviews. wait_seconds waits, reading only, for a new item for you. " + "It moves its own read mark and last-seen time, never the legacy cursor.",
@@ -45055,7 +45074,7 @@ Legacy session tools: ${legacyInstructions}`
       limit: exports_external.number().optional().describe("Items per call, a whole number from 1 to 50; default 20."),
       format: exports_external.string().optional().describe("json (the default), or note: with about, the thread root and its state as one collab-note/1 text of at most 800 characters, for a person to carry.")
     }
-  }, async (input, ctx) => noteCall(() => inboxVerb(noteContext(ctx.mcpReq?.signal), input)));
+  }, async (input, ctx) => noteCall(() => inboxVerb(noteContext(ctx.mcpReq?.signal), input), input));
   const noteReason = exports_external.object({
     text: exports_external.string().describe("One reason, at most 300 characters."),
     basis: exports_external.string().optional().describe("How you know it: seen, told, inferred or quoted."),
@@ -45080,7 +45099,7 @@ Legacy session tools: ${legacyInstructions}`
       replaces: exports_external.string().optional().describe("With act challenge: your earlier challenge this one replaces; it is withdrawn in the same transaction."),
       dry_run: exports_external.boolean().optional().describe("Parse, check and render; write nothing.")
     }
-  }, async (input) => noteCall(() => noteVerb(noteContext(), input)));
+  }, async (input) => noteCall(() => noteVerb(noteContext(), input), input));
   server.registerTool("collab_take", {
     title: "Take a piece of work",
     description: "Create a task with title and claim it, or claim task. With paths the task is an edit task that waits for a distinct " + "reviewer; without, a coordination task you report done. A lapsed lease is recovered only with because. A path " + "overlap names who holds it and how to ask them. A lease is coordination, not ownership or a lock.",
@@ -45093,7 +45112,7 @@ Legacy session tools: ${legacyInstructions}`
       review: exports_external.string().optional().describe("required | none: override whether a new task waits for review."),
       because: exports_external.string().optional().describe("Why you recover a lapsed lease (at most 4,000 characters).")
     }
-  }, async (input) => noteCall(() => takeVerb(noteContext(), input)));
+  }, async (input) => noteCall(() => takeVerb(noteContext(), input), input));
   server.registerTool("collab_done", {
     title: "End your hold, or leave",
     description: "outcome finished (the default) reports the work done, with its reasons, evidence (attached as artifacts) and limits; " + "released gives it back; blocked records because as the blocker; leave releases every hold and ends this session, " + "after which it is no voice in new proposals here. task defaults to the one task you hold.",
@@ -45108,7 +45127,7 @@ Legacy session tools: ${legacyInstructions}`
       review_by: exports_external.string().optional().describe("A session name or id to ask for the review (finished, reviewed tasks)."),
       because: exports_external.string().optional().describe("The blocker (blocked), or why held work is left unfinished (leave); at most 2,000 characters.")
     }
-  }, async (input) => noteCall(() => doneVerb(noteContext(), input)));
+  }, async (input) => noteCall(() => doneVerb(noteContext(), input), input));
   server.registerTool("collab_propose", {
     title: "Put a direction to the agents and the person",
     description: "Open a consent/v1 proposal: the agents settle a position by lazy consensus (support and challenge with collab_note), " + "and the person decides at his own desk. The question is stored verbatim, so its bytes and proposal_sha256 are what " + "collab_proposal_open makes from the same terms. evidence and limits enter the bytes the person signs. With replaces, " + "the standing objections to your earlier proposal are carried into its terms as text and each reachable objector is told; " + "under consent/v1 a carried objection does not block. The position authorises nothing; no agent tool records agreement.",
@@ -45124,7 +45143,7 @@ Legacy session tools: ${legacyInstructions}`
       topic: exports_external.string().optional().describe("A label for later reading, for example principle:<name> (at most 200 characters)."),
       replaces: exports_external.string().optional().describe("Your own earlier proposal, still on the table, that this one replaces (id or proposal# handle).")
     }
-  }, async (input) => noteCall(() => proposeVerb(noteContext(), input)));
+  }, async (input) => noteCall(() => proposeVerb(noteContext(), input), input));
   server.registerTool("collab_poll", {
     title: "Open a sealed ballot on a real choice",
     description: "Ask the agents here which of 2 to 9 named options they find acceptable (approval). Every cast stays sealed " + "until the close; then the votes are revealed and the result computed. The electorate is fixed now: by default " + "the active sessions seen in the last 30 minutes that have used the notes surface, plus you; with voters, exactly " + 'those sessions. Sessions sharing a declared host handle count as one unit. Not for "may we proceed" (that is ' + "collab_propose) and not for a checkable fact. A result is the agents' preference and authorises nothing.",
@@ -45139,7 +45158,7 @@ Legacy session tools: ${legacyInstructions}`
       voters: exports_external.array(exports_external.string()).optional().describe("The sessions to poll, by id, session# handle or name; default the electorate above."),
       close_when_all_cast: exports_external.boolean().optional().describe("Close as soon as every unit has cast instead of waiting for closes; off by default, and stated in the terms.")
     }
-  }, async (input) => noteCall(() => pollVerb(noteContext(), input)));
+  }, async (input) => noteCall(() => pollVerb(noteContext(), input), input));
   server.registerTool("collab_vote", {
     title: "Cast your sealed vote",
     description: "Approve the options you find acceptable in a ballot (choice: option keys, or [] to abstain). The vote is sealed " + "in a file beside the journal and committed by hash; no collab tool, event or doorbell shows it before the close, " + "and this result returns nothing of it. Vote before you read others' answers. You may cast up to 3 times in one " + "ballot; only your latest counts. A vote needs no reason, but one is shown with it at the close.",
@@ -45151,7 +45170,7 @@ Legacy session tools: ${legacyInstructions}`
       evidence: exports_external.array(exports_external.string()).optional().describe("Up to 4 pointers, one line each, as for collab_note; files inside your worktree are hashed now and sealed with the vote."),
       shared: exports_external.string().optional().describe("What you share with the other voters (model, context, sources), at most 200 characters.")
     }
-  }, async (input) => noteCall(() => voteVerb(noteContext(), input)));
+  }, async (input) => noteCall(() => voteVerb(noteContext(), input), input));
   server.registerTool("collab_session_join", {
     title: "Join the self-declared presence plane",
     description: "Create or replay one unauthenticated routing-presence record and return its unique actor_key. This does not bind the MCP process or create a credential.",
