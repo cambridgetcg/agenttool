@@ -30,7 +30,7 @@ import {
   type NoteInput,
   type NoteReason,
 } from "./note.js";
-import type { CollabReport, ProposalStatus, Task } from "./protocol.js";
+import { CONSENT_RULE_V2, type CollabReport, type ProposalStatus, type Task } from "./protocol.js";
 import { gitCommitExists, hashWorktreeFile, MAX_CITED_FILE_BYTES } from "./repository.js";
 import { removeSessionCredentialFile } from "./session-file.js";
 import {
@@ -1116,14 +1116,17 @@ function planNote(
       if (view.author?.id === me) {
         // The author who is the only voice is told its support is the one
         // consent/v1 asks for; "no second voice" alone reads as "not counted".
-        const lone = act === "support" && view.termed
-          && ctx.store.noteProposalView(workspaceId, reportTarget.id).lone;
+        const proposalView = act === "support" && view.termed ? ctx.store.noteProposalView(workspaceId, reportTarget.id) : null;
+        const lone = proposalView?.lone === true;
         advice.push(lone
-          ? `You wrote ${targetHandle(reportTarget)} and are the only voice on it: this explicit support is what consent/v1 counts from a lone voice. It adds no second voice, and the person still decides.`
+          ? `You wrote ${targetHandle(reportTarget)} and are the only voice on it: this explicit support is what ${proposalView!.status.rule} counts from a lone voice. It adds no second voice, and the person still decides.`
           : `You wrote ${targetHandle(reportTarget)}; standing on your own report adds no second voice.`);
       }
       if (view.obsoleted) advice.push(`${targetHandle(reportTarget)} was withdrawn or replaced by its author; your ${act} is recorded on it all the same.`);
       if (view.termed && !view.obsoleted) advice.push(...lateVoiceAdvice(ctx, workspaceId, me, act, reportTarget));
+      if (act === "challenge" && view.termed && !view.obsoleted && proposalRule(ctx, workspaceId, reportTarget.id) === CONSENT_RULE_V2) {
+        advice.push(CONSENT_V2_CHALLENGE_ADVICE);
+      }
       if (act === "challenge" && context.replacedId) {
         return finish({
           recorded_as: "challenge",
@@ -1283,7 +1286,7 @@ function lateVoiceAdvice(
   const voice = ctx.store.consentVoiceOf(me);
   if (data.status.terms.voices.some((snapshot) => snapshot.voice_id === voice)) return [];
   const handle = targetHandle(proposal);
-  const late = `Your voice was not live when ${handle} opened, so it is not one of the voices consent/v1 waits for.`;
+  const late = `Your voice was not live when ${handle} opened, so it is not one of the voices ${data.status.rule} waits for.`;
   if (act === "challenge") {
     return [
       `${late} A challenge counts whoever makes it: while yours stands, the position is challenged, and split at the close. ` +
@@ -1296,6 +1299,20 @@ function lateVoiceAdvice(
       `(${awaited} awaited now). Before the close the position is consented once a support counts, no voice is awaited and no ` +
       "challenge stands; at the close, one counted support and no standing challenge are enough. The person still decides.",
   ];
+}
+
+/** Said to a challenger on a consent/v2 proposal: its objection can be set aside once its voice is gone. */
+export const CONSENT_V2_CHALLENGE_ADVICE =
+  "This proposal is under consent/v2: while no session of your voice is live, the person may set your challenge aside with a reason. " +
+  "It stays on the record if that happens, and you may challenge again.";
+
+/** A proposal's rule, or null when its terms cannot be read (advice only; it never refuses the stance). */
+function proposalRule(ctx: NoteVerbContext, workspaceId: string, proposalId: string): string | null {
+  try {
+    return ctx.store.proposalStatus(workspaceId, proposalId).rule;
+  } catch {
+    return null;
+  }
 }
 
 /** Whether this call's text is read as a whole note (so its fields live in the text). */

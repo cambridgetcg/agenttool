@@ -53,7 +53,9 @@ import {
   type CollabReport,
   type EventCursor,
   type PersonActBasis,
+  CONSENT_RULE_V2,
   type ProposalPersonAct,
+  type ProposalSetAside,
   type ProposalStatus,
   type ProposalVoice,
   type SessionLiveness,
@@ -1488,6 +1490,7 @@ export class CollabStore extends CollabStoreCore {
         return "voice_awaited";
       case "proposal.agreed":
       case "proposal.rejected":
+      case "proposal.challenge_set_aside":
         return "person_act";
       case "ballot.opened":
         return "in_electorate";
@@ -1502,11 +1505,19 @@ export class CollabStore extends CollabStoreCore {
    * Every challenge in a workspace with whether it still stands. As in
    * consent/v1, a challenge stands until it is withdrawn or lifted by its own
    * voice; a `resolves` from any other voice is shown as an answer and lifts
-   * nothing on this view. Journal order.
+   * nothing on this view. On a consent/v2 proposal a challenge the person
+   * set aside no longer stands either, and says so. Journal order.
    */
   private noteChallenges(workspaceId: string): NoteChallengeView[] {
     const obsoleted = this.activeObsoletionTargets(workspaceId);
     const voices = new Map<string, string>();
+    const setAside = new Map((this.db.query(`
+      SELECT s.challenge_report_id, s.id FROM proposal_set_asides s
+      JOIN proposal_terms t ON t.report_id = s.proposal_report_id AND t.rule = ?
+      JOIN reports r ON r.id = s.challenge_report_id AND r.target_report_id = s.proposal_report_id
+      WHERE s.workspace_id = ?
+    `).all(CONSENT_RULE_V2, workspaceId) as Array<{ challenge_report_id: string; id: string }>)
+      .map((row) => [row.challenge_report_id, row.id]));
     const challenges = this.db.query(`
       SELECT id, from_session_id, from_actor, target_report_id, created_at FROM reports
       WHERE workspace_id = ? AND relation = 'challenges' ORDER BY event_sequence
@@ -1523,14 +1534,16 @@ export class CollabStore extends CollabStoreCore {
       const lifted = voice !== null
         && resolves.some((answer) => this.cachedVoice(answer.from_session_id!, voices) === voice);
       const withdrawn = obsoleted.has(challenge.id);
+      const setAsideId = setAside.get(challenge.id);
       return {
         id: challenge.id,
         target_report_id: challenge.target_report_id,
         from_session_id: challenge.from_session_id,
         from_actor: challenge.from_actor,
         created_at: challenge.created_at,
-        standing: !withdrawn && !lifted,
+        standing: !withdrawn && !lifted && setAsideId === undefined,
         answered_by_another_voice: !lifted && resolves.length > 0,
+        ...(setAsideId !== undefined ? { set_aside_id: setAsideId } : {}),
       };
     });
   }
@@ -2636,6 +2649,14 @@ export class CollabStore extends CollabStoreCore {
     const qualifying = new Set(status.ai.qualifying_support_report_ids);
     const unresolved = new Set(status.ai.unresolved_challenge_report_ids);
     const activeVoices = new Set(sessions.filter((view) => view.status === "active").map((view) => view.voice_id));
+    // consent/v2 only: what a set-aside turns on. Absent under consent/v1, so its views keep their shape.
+    const v2 = status.rule === CONSENT_RULE_V2
+      ? {
+        set_asides: new Map((status.set_asides ?? []).map((entry) => [entry.challenge_report_id, entry])),
+        live_voices: new Set(sessions.filter((view) => view.liveness === "live").map((view) => view.voice_id)),
+        last_seen: (voice: string) => sessions.filter((view) => view.voice_id === voice).map((view) => view.last_seen_at).sort().at(-1) ?? null,
+      }
+      : null;
     const stances = (this.db.query(`
       SELECT * FROM reports WHERE workspace_id = ? AND target_report_id = ? AND relation IN ('supports', 'challenges')
       ORDER BY event_sequence
@@ -2648,6 +2669,7 @@ export class CollabStore extends CollabStoreCore {
         answered_by_another_voice: view?.answered_by_another_voice === true,
         opened_at: status.terms.created_at,
         active_voices: activeVoices,
+        v2,
       });
     });
     const supports = stances.filter((stance) => stance.relation === "supports");
@@ -2748,6 +2770,12 @@ export class CollabStore extends CollabStoreCore {
       answered_by_another_voice: boolean;
       opened_at: string | null;
       active_voices: ReadonlySet<string>;
+      /** Set for a stance on a consent/v2 proposal only. */
+      v2?: {
+        set_asides: ReadonlyMap<string, ProposalSetAside>;
+        live_voices: ReadonlySet<string>;
+        last_seen: (voice: string) => string | null;
+      } | null;
     },
   ): NoteStanceView {
     const marked = this.reportIsMarked(workspaceId, report);
@@ -2777,7 +2805,16 @@ export class CollabStore extends CollabStoreCore {
       if (facts.answered_by_another_voice) flags.answered_by_another_voice = true;
     }
     const voice = report.from_session_id ? this.consentVoice(report.from_session_id, context) : null;
+    const v2 = report.relation === "challenges" && facts.v2 ? facts.v2 : null;
+    const setAside = v2?.set_asides.get(report.id);
     return {
+      ...(v2
+        ? {
+          voice_has_live_session: voice !== null && v2.live_voices.has(voice),
+          voice_last_seen_at: voice !== null ? v2.last_seen(voice) : null,
+          ...(setAside ? { set_aside: setAside } : {}),
+        }
+        : {}),
       id: report.id,
       relation: report.relation as "supports" | "challenges",
       from_session_id: report.from_session_id,
@@ -3010,6 +3047,8 @@ export interface NoteChallengeView {
   standing: boolean;
   /** A `resolves` from another voice exists; on this view it lifts nothing. */
   answered_by_another_voice: boolean;
+  /** consent/v2: the person set it aside (that set-aside's id), so it no longer stands. */
+  set_aside_id?: string;
 }
 
 export interface NoteWaitingEntry {
@@ -3324,6 +3363,12 @@ export interface NoteStanceView {
   /** consent/v1 counts it: a qualifying support, or a standing challenge. */
   counted: boolean;
   standing: boolean;
+  /** consent/v2 challenges only: a session of its voice is live now (sessionLiveness), so it can lift it itself. */
+  voice_has_live_session?: boolean;
+  /** consent/v2 challenges only: the latest activity of any session of its voice. */
+  voice_last_seen_at?: string | null;
+  /** consent/v2 challenges only: the person set it aside, so it no longer stands; it stays on the record. */
+  set_aside?: ProposalSetAside;
   flags: {
     by_author?: true;
     same_seat_as_author?: true;
@@ -3452,6 +3497,7 @@ const NOTE_ADDRESSING_EVENT_TYPES = [
   "proposal.opened",
   "proposal.agreed",
   "proposal.rejected",
+  "proposal.challenge_set_aside",
   "ballot.opened",
   "ballot.closed",
 ] as const;

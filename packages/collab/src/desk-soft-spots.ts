@@ -2,7 +2,9 @@
  * The soft spots of consent/v1 that the agents' proposal views already show
  * (Collab Notes spec section 6), written for the person desk. The owner was
  * asked (spec 13 q4) whether the desk may show them before the person agrees
- * and said yes on 2026-11-12, as display only.
+ * and said yes on 2026-11-12, as display only. Every line names the
+ * proposal's own rule; on a consent/v2 proposal each set-aside has a line of
+ * its own, since a set-aside challenge stays in what the person is shown.
  *
  * Display only means: these facts go in one new optional JSON key and in the
  * text the person reads, never in the act bytes, the ai_snapshot, the
@@ -13,12 +15,20 @@
  * agent-facing proposal view makes, so the desk and the agents see the same
  * ones. This module only selects and words them; it reads nothing itself.
  */
-import type { ProposalStatus } from "./protocol.js";
+import { CONSENT_RULE, CONSENT_RULE_V2, type ConsentRule, type ProposalSetAside, type ProposalStatus } from "./protocol.js";
 import type { NoteProposalData, NoteStanceView } from "./store-notes.js";
 
-/** Beside carried objections in every view, agents' and the desk's (spec 5.6). */
-export const CARRIED_OBJECTIONS_SENTENCE =
-  "Carried objections are text in the terms the person signs. Under consent/v1 they do not block this proposal. Each objector may challenge again.";
+/** Beside carried objections in every view, agents' and the desk's (spec 5.6), naming the proposal's rule. */
+export function carriedObjectionsSentence(rule: ConsentRule = CONSENT_RULE): string {
+  return `Carried objections are text in the terms the person signs. Under ${rule} they do not block this proposal. Each objector may challenge again.`;
+}
+
+/** The consent/v1 wording, which every consent/v1 view keeps. */
+export const CARRIED_OBJECTIONS_SENTENCE = carriedObjectionsSentence(CONSENT_RULE);
+
+/** Beside every set-aside, agents' views and the desk's (consent/v2). */
+export const SET_ASIDE_SENTENCE =
+  "A challenge the person set aside no longer blocks the position. It stays on the record and in what the person is shown; any voice, its own included, may challenge again, and a new challenge stands as usual.";
 
 export const SOFT_SPOTS_DISPLAY_ONLY =
   "Display only: these lines are not in the bytes the person signs or in any hash, they change no count, and the desk accepts and refuses exactly as it would without them.";
@@ -27,8 +37,11 @@ export const SOFT_SPOTS_DISPLAY_ONLY =
 export const SOFT_SPOTS_HEADING =
   "Soft spots the agents' views show on this proposal. Display only: not in the bytes you sign; they change no count and nothing the desk accepts or refuses.";
 
-export const SOFT_SPOTS_DELIVERY_NOTE =
-  "Under consent/v1 silence from an awaited voice does not stop the position settling at the close. A delivery is recorded only when collab_arrive or collab_inbox returned the question; reads through legacy tools or host messages are not recorded.";
+export function softSpotsDeliveryNote(rule: ConsentRule = CONSENT_RULE): string {
+  return `Under ${rule} silence from an awaited voice does not stop the position settling at the close. A delivery is recorded only when collab_arrive or collab_inbox returned the question; reads through legacy tools or host messages are not recorded.`;
+}
+
+export const SOFT_SPOTS_DELIVERY_NOTE = softSpotsDeliveryNote(CONSENT_RULE);
 
 export const SOFT_SPOTS_NOT_REPORTED =
   "The other device's desk reported no soft spots (an older build does not compute them). None are shown here, which does not mean there are none.";
@@ -75,8 +88,19 @@ export interface DeskSoftSpots {
     counted_by_consent_v1: false;
     statement: string;
   }>;
-  /** CARRIED_OBJECTIONS_SENTENCE, present when carried_objections is not empty. */
+  /** carriedObjectionsSentence(rule), present when carried_objections is not empty. */
   carried_note?: string;
+  /** consent/v2 only: the proposal's rule, and each challenge the person set aside. */
+  rule?: ConsentRule;
+  set_asides?: Array<{
+    challenge: string;
+    by: Who;
+    set_aside: string;
+    at: string;
+    basis: ProposalSetAside["basis"];
+    reason: string;
+    statement: string;
+  }>;
   /** How many items the lists above hold together; a stance may be in two lists. */
   count: number;
   /** The same facts as text, empty when there are none. */
@@ -133,8 +157,8 @@ function who(stance: NoteStanceView): Who {
   return { session: stance.from_session_id, name: stance.from_actor };
 }
 
-function counted(value: boolean): string {
-  return value ? "counted by consent/v1" : "not counted by consent/v1";
+function counted(value: boolean, rule: ConsentRule): string {
+  return value ? `counted by ${rule}` : `not counted by ${rule}`;
 }
 
 const FLAG_WORDS = {
@@ -156,6 +180,8 @@ function capped(lines: string[], kind: string): string[] {
 /** Select and word one proposal's soft spots from the agents' own view of it. */
 export function deskSoftSpots(data: NoteProposalData): DeskSoftSpots {
   const { status } = data;
+  const rule = status.rule;
+  const v2 = rule === CONSENT_RULE_V2;
   const awaited = data.consulted
     .filter((voice) => voice.awaited && !voice.delivery_recorded)
     .map((voice) => ({
@@ -175,6 +201,7 @@ export function deskSoftSpots(data: NoteProposalData): DeskSoftSpots {
   const ungrounded = [...data.supports, ...data.challenges]
     .filter((stance) => stance.standing && stance.flags.ungrounded === true);
   const carried = data.replaced?.carried ?? [];
+  const setAside = v2 ? data.challenges.filter((stance) => stance.set_aside !== undefined) : [];
 
   const lines: string[] = [];
   const awaitedLines = awaited.map((voice) =>
@@ -183,10 +210,10 @@ export function deskSoftSpots(data: NoteProposalData): DeskSoftSpots {
       + ": it may never have been shown this question."
   );
   lines.push(...capped(awaitedLines, "awaited voices"));
-  if (awaited.length > 0) lines.push(SOFT_SPOTS_DELIVERY_NOTE);
+  if (awaited.length > 0) lines.push(softSpotsDeliveryNote(rule));
   lines.push(...capped(flagged.map(({ stance, flags }) => {
     const maybeAuthor = flags.includes("same_seat_as_author") || flags.includes("same_name_as_author");
-    return `Support ${stance.id} by ${quoted(stance.from_actor)} (${counted(stance.counted)}): `
+    return `Support ${stance.id} by ${quoted(stance.from_actor)} (${counted(stance.counted, rule)}): `
       + `${flags.map((flag) => FLAG_WORDS[flag]).join("; ")}.`
       + (maybeAuthor ? " It may be the author's own voice in another session." : "");
   }), "flagged supports"));
@@ -195,11 +222,15 @@ export function deskSoftSpots(data: NoteProposalData): DeskSoftSpots {
       + (stance.voice_has_active_session
         ? "; another session of the same voice is active and can lift it."
         : ", and no session of its voice is active to lift it.")
-      + ` While it stands the position cannot be consented. It said: ${quoted(excerpt(stance.statement))}`
+      + ` While it stands the position cannot be consented.`
+      + (v2 && stance.voice_has_live_session === false
+        ? " Under consent/v2 the person can set it aside at the desk, with a reason, while no session of its voice is live."
+        : "")
+      + ` It said: ${quoted(excerpt(stance.statement))}`
   ), "challenges whose challenger's session has ended"));
   lines.push(...capped(ungrounded.map((stance) =>
     `${stance.relation === "supports" ? "Support" : "Challenge"} ${stance.id} by ${quoted(stance.from_actor)} `
-      + `(${counted(stance.counted)}) gives no reason and no evidence: `
+      + `(${counted(stance.counted, rule)}) gives no reason and no evidence: `
       + (stance.grounded_by === "note"
         ? "the note has no Why and no Evidence lines."
         : "it has no evidence_refs and no confidence_basis (a legacy report's body is not read for reasons, so its text may still argue a case).")
@@ -213,7 +244,15 @@ export function deskSoftSpots(data: NoteProposalData): DeskSoftSpots {
       + (entry.re_raised_here ? "; the same voice also challenges this proposal, and that challenge is counted" : "")
       + `. It said: ${quoted(excerpt(entry.statement))}`
   ), "carried objections"));
-  if (carried.length > 0) lines.push(CARRIED_OBJECTIONS_SENTENCE);
+  if (carried.length > 0) lines.push(carriedObjectionsSentence(rule));
+  lines.push(...capped(setAside.map((stance) => {
+    const entry = stance.set_aside!;
+    return `Challenge ${stance.id} by ${quoted(stance.from_actor)} was set aside by the person at ${entry.created_at} `
+      + `(${entry.basis}), while no session of its voice was live`
+      + (entry.challenger.last_seen_at ? ` (last seen ${entry.challenger.last_seen_at})` : "")
+      + `. Reason: ${quoted(entry.reason)}. It no longer blocks the position. It said: ${quoted(excerpt(stance.statement))}`;
+  }), "set-aside challenges"));
+  if (setAside.length > 0) lines.push(SET_ASIDE_SENTENCE);
 
   return {
     proposal_sha256: status.proposal_sha256,
@@ -255,8 +294,22 @@ export function deskSoftSpots(data: NoteProposalData): DeskSoftSpots {
       counted_by_consent_v1: false,
       statement: entry.statement,
     })),
-    ...(carried.length > 0 ? { carried_note: CARRIED_OBJECTIONS_SENTENCE } : {}),
-    count: awaited.length + flagged.length + ended.length + ungrounded.length + carried.length,
+    ...(carried.length > 0 ? { carried_note: carriedObjectionsSentence(rule) } : {}),
+    ...(v2
+      ? {
+        rule,
+        set_asides: setAside.map((stance) => ({
+          challenge: stance.id,
+          by: who(stance),
+          set_aside: stance.set_aside!.id,
+          at: stance.set_aside!.created_at,
+          basis: stance.set_aside!.basis,
+          reason: stance.set_aside!.reason,
+          statement: stance.statement,
+        })),
+      }
+      : {}),
+    count: awaited.length + flagged.length + ended.length + ungrounded.length + carried.length + setAside.length,
     lines,
     display_only: SOFT_SPOTS_DISPLAY_ONLY,
   };

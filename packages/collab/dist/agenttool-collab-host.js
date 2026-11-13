@@ -9215,6 +9215,7 @@ class CollabStore extends CollabStoreCore {
         return "voice_awaited";
       case "proposal.agreed":
       case "proposal.rejected":
+      case "proposal.challenge_set_aside":
         return "person_act";
       case "ballot.opened":
         return "in_electorate";
@@ -9227,6 +9228,12 @@ class CollabStore extends CollabStoreCore {
   noteChallenges(workspaceId) {
     const obsoleted = this.activeObsoletionTargets(workspaceId);
     const voices = new Map;
+    const setAside = new Map(this.db.query(`
+      SELECT s.challenge_report_id, s.id FROM proposal_set_asides s
+      JOIN proposal_terms t ON t.report_id = s.proposal_report_id AND t.rule = ?
+      JOIN reports r ON r.id = s.challenge_report_id AND r.target_report_id = s.proposal_report_id
+      WHERE s.workspace_id = ?
+    `).all(CONSENT_RULE_V2, workspaceId).map((row) => [row.challenge_report_id, row.id]));
     const challenges = this.db.query(`
       SELECT id, from_session_id, from_actor, target_report_id, created_at FROM reports
       WHERE workspace_id = ? AND relation = 'challenges' ORDER BY event_sequence
@@ -9239,14 +9246,16 @@ class CollabStore extends CollabStoreCore {
       const voice = challenge.from_session_id ? this.cachedVoice(challenge.from_session_id, voices) : null;
       const lifted = voice !== null && resolves.some((answer) => this.cachedVoice(answer.from_session_id, voices) === voice);
       const withdrawn = obsoleted.has(challenge.id);
+      const setAsideId = setAside.get(challenge.id);
       return {
         id: challenge.id,
         target_report_id: challenge.target_report_id,
         from_session_id: challenge.from_session_id,
         from_actor: challenge.from_actor,
         created_at: challenge.created_at,
-        standing: !withdrawn && !lifted,
-        answered_by_another_voice: !lifted && resolves.length > 0
+        standing: !withdrawn && !lifted && setAsideId === undefined,
+        answered_by_another_voice: !lifted && resolves.length > 0,
+        ...setAsideId !== undefined ? { set_aside_id: setAsideId } : {}
       };
     });
   }
@@ -10105,6 +10114,11 @@ class CollabStore extends CollabStoreCore {
     const qualifying = new Set(status.ai.qualifying_support_report_ids);
     const unresolved = new Set(status.ai.unresolved_challenge_report_ids);
     const activeVoices = new Set(sessions.filter((view) => view.status === "active").map((view) => view.voice_id));
+    const v2 = status.rule === CONSENT_RULE_V2 ? {
+      set_asides: new Map((status.set_asides ?? []).map((entry) => [entry.challenge_report_id, entry])),
+      live_voices: new Set(sessions.filter((view) => view.liveness === "live").map((view) => view.voice_id)),
+      last_seen: (voice) => sessions.filter((view) => view.voice_id === voice).map((view) => view.last_seen_at).sort().at(-1) ?? null
+    } : null;
     const stances = this.db.query(`
       SELECT * FROM reports WHERE workspace_id = ? AND target_report_id = ? AND relation IN ('supports', 'challenges')
       ORDER BY event_sequence
@@ -10116,7 +10130,8 @@ class CollabStore extends CollabStoreCore {
         standing: report.relation === "supports" ? !context.obsoleted.has(report.id) : unresolved.has(report.id),
         answered_by_another_voice: view?.answered_by_another_voice === true,
         opened_at: status.terms.created_at,
-        active_voices: activeVoices
+        active_voices: activeVoices,
+        v2
       });
     });
     const supports = stances.filter((stance) => stance.relation === "supports");
@@ -10221,7 +10236,14 @@ class CollabStore extends CollabStoreCore {
         flags.answered_by_another_voice = true;
     }
     const voice = report.from_session_id ? this.consentVoice(report.from_session_id, context) : null;
+    const v2 = report.relation === "challenges" && facts.v2 ? facts.v2 : null;
+    const setAside = v2?.set_asides.get(report.id);
     return {
+      ...v2 ? {
+        voice_has_live_session: voice !== null && v2.live_voices.has(voice),
+        voice_last_seen_at: voice !== null ? v2.last_seen(voice) : null,
+        ...setAside ? { set_aside: setAside } : {}
+      } : {},
       id: report.id,
       relation: report.relation,
       from_session_id: report.from_session_id,
@@ -10413,6 +10435,7 @@ var NOTE_ADDRESSING_EVENT_TYPES = [
   "proposal.opened",
   "proposal.agreed",
   "proposal.rejected",
+  "proposal.challenge_set_aside",
   "ballot.opened",
   "ballot.closed"
 ];
@@ -10555,10 +10578,17 @@ import { spawn } from "child_process";
 import { randomBytes as randomBytes2 } from "crypto";
 
 // src/desk-soft-spots.ts
-var CARRIED_OBJECTIONS_SENTENCE = "Carried objections are text in the terms the person signs. Under consent/v1 they do not block this proposal. Each objector may challenge again.";
+function carriedObjectionsSentence(rule = CONSENT_RULE) {
+  return `Carried objections are text in the terms the person signs. Under ${rule} they do not block this proposal. Each objector may challenge again.`;
+}
+var CARRIED_OBJECTIONS_SENTENCE = carriedObjectionsSentence(CONSENT_RULE);
+var SET_ASIDE_SENTENCE = "A challenge the person set aside no longer blocks the position. It stays on the record and in what the person is shown; any voice, its own included, may challenge again, and a new challenge stands as usual.";
 var SOFT_SPOTS_DISPLAY_ONLY = "Display only: these lines are not in the bytes the person signs or in any hash, they change no count, and the desk accepts and refuses exactly as it would without them.";
 var SOFT_SPOTS_HEADING = "Soft spots the agents' views show on this proposal. Display only: not in the bytes you sign; they change no count and nothing the desk accepts or refuses.";
-var SOFT_SPOTS_DELIVERY_NOTE = "Under consent/v1 silence from an awaited voice does not stop the position settling at the close. A delivery is recorded only when collab_arrive or collab_inbox returned the question; reads through legacy tools or host messages are not recorded.";
+function softSpotsDeliveryNote(rule = CONSENT_RULE) {
+  return `Under ${rule} silence from an awaited voice does not stop the position settling at the close. A delivery is recorded only when collab_arrive or collab_inbox returned the question; reads through legacy tools or host messages are not recorded.`;
+}
+var SOFT_SPOTS_DELIVERY_NOTE = softSpotsDeliveryNote(CONSENT_RULE);
 var SOFT_SPOTS_NOT_REPORTED = "The other device's desk reported no soft spots (an older build does not compute them). None are shown here, which does not mean there are none.";
 var SOFT_SPOT_LINES_PER_KIND = 10;
 var EXCERPT_MAX = 160;
@@ -10586,8 +10616,8 @@ function minutesSince(at, observedAt) {
 function who(stance) {
   return { session: stance.from_session_id, name: stance.from_actor };
 }
-function counted(value) {
-  return value ? "counted by consent/v1" : "not counted by consent/v1";
+function counted(value, rule) {
+  return value ? `counted by ${rule}` : `not counted by ${rule}`;
 }
 var FLAG_WORDS = {
   same_seat_as_author: "its session declares the author's host handle (same_seat_as_author; the handle is unverified)",
@@ -10605,6 +10635,8 @@ function capped(lines, kind) {
 }
 function deskSoftSpots(data) {
   const { status } = data;
+  const rule = status.rule;
+  const v2 = rule === CONSENT_RULE_V2;
   const awaited = data.consulted.filter((voice) => voice.awaited && !voice.delivery_recorded).map((voice) => ({
     voice: voice.voice_id,
     name: voice.name,
@@ -10617,20 +10649,27 @@ function deskSoftSpots(data) {
   const ended = data.challenges.filter((stance) => stance.standing && stance.flags.challenger_ended === true);
   const ungrounded = [...data.supports, ...data.challenges].filter((stance) => stance.standing && stance.flags.ungrounded === true);
   const carried = data.replaced?.carried ?? [];
+  const setAside = v2 ? data.challenges.filter((stance) => stance.set_aside !== undefined) : [];
   const lines = [];
   const awaitedLines = awaited.map((voice) => `Awaited voice ${quoted(voice.name)} (voice ${voice.voice}) has no recorded delivery on the notes surface, ` + (voice.last_seen_minutes === null ? "and no session of it is listed here" : `last seen ${voice.last_seen_minutes} min ago`) + ": it may never have been shown this question.");
   lines.push(...capped(awaitedLines, "awaited voices"));
   if (awaited.length > 0)
-    lines.push(SOFT_SPOTS_DELIVERY_NOTE);
+    lines.push(softSpotsDeliveryNote(rule));
   lines.push(...capped(flagged.map(({ stance, flags }) => {
     const maybeAuthor = flags.includes("same_seat_as_author") || flags.includes("same_name_as_author");
-    return `Support ${stance.id} by ${quoted(stance.from_actor)} (${counted(stance.counted)}): ` + `${flags.map((flag) => FLAG_WORDS[flag]).join("; ")}.` + (maybeAuthor ? " It may be the author's own voice in another session." : "");
+    return `Support ${stance.id} by ${quoted(stance.from_actor)} (${counted(stance.counted, rule)}): ` + `${flags.map((flag) => FLAG_WORDS[flag]).join("; ")}.` + (maybeAuthor ? " It may be the author's own voice in another session." : "");
   }), "flagged supports"));
-  lines.push(...capped(ended.map((stance) => `Challenge ${stance.id} by ${quoted(stance.from_actor)} still stands, but its challenger's session has ended` + (stance.voice_has_active_session ? "; another session of the same voice is active and can lift it." : ", and no session of its voice is active to lift it.") + ` While it stands the position cannot be consented. It said: ${quoted(excerpt(stance.statement))}`), "challenges whose challenger's session has ended"));
-  lines.push(...capped(ungrounded.map((stance) => `${stance.relation === "supports" ? "Support" : "Challenge"} ${stance.id} by ${quoted(stance.from_actor)} ` + `(${counted(stance.counted)}) gives no reason and no evidence: ` + (stance.grounded_by === "note" ? "the note has no Why and no Evidence lines." : "it has no evidence_refs and no confidence_basis (a legacy report's body is not read for reasons, so its text may still argue a case).")), "stances with no reason or evidence"));
+  lines.push(...capped(ended.map((stance) => `Challenge ${stance.id} by ${quoted(stance.from_actor)} still stands, but its challenger's session has ended` + (stance.voice_has_active_session ? "; another session of the same voice is active and can lift it." : ", and no session of its voice is active to lift it.") + ` While it stands the position cannot be consented.` + (v2 && stance.voice_has_live_session === false ? " Under consent/v2 the person can set it aside at the desk, with a reason, while no session of its voice is live." : "") + ` It said: ${quoted(excerpt(stance.statement))}`), "challenges whose challenger's session has ended"));
+  lines.push(...capped(ungrounded.map((stance) => `${stance.relation === "supports" ? "Support" : "Challenge"} ${stance.id} by ${quoted(stance.from_actor)} ` + `(${counted(stance.counted, rule)}) gives no reason and no evidence: ` + (stance.grounded_by === "note" ? "the note has no Why and no Evidence lines." : "it has no evidence_refs and no confidence_basis (a legacy report's body is not read for reasons, so its text may still argue a case).")), "stances with no reason or evidence"));
   lines.push(...capped(carried.map((entry) => (entry.carried_in_terms ? `Objection ${entry.challenge_id} by ${quoted(entry.by)}, raised on ${entry.raised_on}, is carried as text in these terms` + (entry.standing_on_replaced ? " and still stands where it was raised" : " and no longer stands where it was raised") : `Objection ${entry.challenge_id} by ${quoted(entry.by)} still stands on ${entry.raised_on}, which this proposal replaces, ` + "but is not in these terms") + (entry.re_raised_here ? "; the same voice also challenges this proposal, and that challenge is counted" : "") + `. It said: ${quoted(excerpt(entry.statement))}`), "carried objections"));
   if (carried.length > 0)
-    lines.push(CARRIED_OBJECTIONS_SENTENCE);
+    lines.push(carriedObjectionsSentence(rule));
+  lines.push(...capped(setAside.map((stance) => {
+    const entry = stance.set_aside;
+    return `Challenge ${stance.id} by ${quoted(stance.from_actor)} was set aside by the person at ${entry.created_at} ` + `(${entry.basis}), while no session of its voice was live` + (entry.challenger.last_seen_at ? ` (last seen ${entry.challenger.last_seen_at})` : "") + `. Reason: ${quoted(entry.reason)}. It no longer blocks the position. It said: ${quoted(excerpt(stance.statement))}`;
+  }), "set-aside challenges"));
+  if (setAside.length > 0)
+    lines.push(SET_ASIDE_SENTENCE);
   return {
     proposal_sha256: status.proposal_sha256,
     position: status.ai.position,
@@ -10669,8 +10708,20 @@ function deskSoftSpots(data) {
       counted_by_consent_v1: false,
       statement: entry.statement
     })),
-    ...carried.length > 0 ? { carried_note: CARRIED_OBJECTIONS_SENTENCE } : {},
-    count: awaited.length + flagged.length + ended.length + ungrounded.length + carried.length,
+    ...carried.length > 0 ? { carried_note: carriedObjectionsSentence(rule) } : {},
+    ...v2 ? {
+      rule,
+      set_asides: setAside.map((stance) => ({
+        challenge: stance.id,
+        by: who(stance),
+        set_aside: stance.set_aside.id,
+        at: stance.set_aside.created_at,
+        basis: stance.set_aside.basis,
+        reason: stance.set_aside.reason,
+        statement: stance.statement
+      }))
+    } : {},
+    count: awaited.length + flagged.length + ended.length + ungrounded.length + carried.length + setAside.length,
     lines,
     display_only: SOFT_SPOTS_DISPLAY_ONLY
   };

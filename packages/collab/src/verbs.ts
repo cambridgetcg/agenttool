@@ -15,7 +15,7 @@ import { resolve, sep } from "node:path";
 import { defaultActor } from "./actor-default.js";
 import { canonicalJson } from "./canonical.js";
 import { defaultDatabasePath } from "./database-path.js";
-import { CARRIED_OBJECTIONS_SENTENCE } from "./desk-soft-spots.js";
+import { CARRIED_OBJECTIONS_SENTENCE, carriedObjectionsSentence, SET_ASIDE_SENTENCE } from "./desk-soft-spots.js";
 import { CollabError } from "./errors.js";
 import {
   fileLocatorParts,
@@ -33,7 +33,15 @@ import {
   type NoteReason,
 } from "./note.js";
 import type { BallotTerms, ElectorateUnit } from "./ballot.js";
-import type { CollabReport, ProposalStatus, SessionHandle } from "./protocol.js";
+import {
+  CONSENT_RULE,
+  CONSENT_RULE_V2,
+  type CollabReport,
+  type ConsentRule,
+  type ProposalSetAside,
+  type ProposalStatus,
+  type SessionHandle,
+} from "./protocol.js";
 import { hashWorktreeFile, inspectRepository, MAX_CITED_FILE_BYTES } from "./repository.js";
 import { defaultSeatRef } from "./seat-ref.js";
 import { removeSessionCredentialFile, writeSessionCredentialFile } from "./session-file.js";
@@ -175,7 +183,7 @@ export const FULL_PROFILE_BRIDGE =
 export const NOTE_AUTHORISES = "Nothing. This is coordination state.";
 
 /** What this build speaks (spec 5.1 surface.capabilities). */
-export const NOTE_CAPABILITIES = ["legacy", "consent/v1", "notes/1", "ballot/1"] as const;
+export const NOTE_CAPABILITIES = ["legacy", "consent/v1", "consent/v2", "notes/1", "ballot/1"] as const;
 
 /**
  * The card collab_arrive returns (spec 12). It is Markdown that also reads as
@@ -640,6 +648,8 @@ export interface NoteVerbContext {
   store: CollabStore;
   environment: Record<string, string | undefined>;
   profile: ToolsProfile;
+  /** The rule new proposals open under (AGENTOOL_COLLAB_CONSENT_RULE); consent/v1 when absent. */
+  consent_rule?: ConsentRule;
   /** "" for the default slot, else the call's binding_key. */
   slot_key: string;
   binding(): NoteBinding | null;
@@ -1377,6 +1387,7 @@ function challengeView(challenge: NoteChallengeView, onProposal: boolean, byId: 
     by: sessionShown(challenge.from_session_id, challenge.from_actor, byId),
     standing: challenge.standing,
     ...(challenge.answered_by_another_voice ? { answered_by_another_voice: true } : {}),
+    ...(challenge.set_aside_id !== undefined ? { set_aside: challenge.set_aside_id } : {}),
   };
 }
 
@@ -1691,6 +1702,29 @@ export function formatEntry(
         why: [],
         evidence: [],
         basis,
+      };
+    }
+    case "proposal.challenge_set_aside": {
+      // consent/v2: the person set aside an absent voice's challenge. It no
+      // longer blocks; the challenge itself stays on the record.
+      const record = (payload.set_aside ?? {}) as Record<string, unknown>;
+      const basis = typeof record.basis === "string" ? record.basis : "unknown";
+      const challenge = typeof record.challenge_report_id === "string" ? record.challenge_report_id : null;
+      return {
+        id: event.entity_id,
+        handle: handleOf("proposal", event.entity_id),
+        act: "set_aside",
+        from: { session: null, name: "person" },
+        to: "voices",
+        re: { id: event.entity_id, handle: handleOf("proposal", event.entity_id) },
+        ...base,
+        statement: `The person set aside ${challenge ? handleOf("report", challenge) : "a challenge"} on ${handleOf("proposal", event.entity_id)} `
+          + `(${basis}): it no longer blocks the position, and it stays on the record.`,
+        text: typeof record.reason === "string" ? record.reason : null,
+        why: [],
+        evidence: [],
+        basis,
+        challenge: challenge ? { id: challenge, handle: handleOf("report", challenge) } : null,
       };
     }
     case "task.reported_complete":
@@ -2642,9 +2676,16 @@ export { CARRIED_OBJECTIONS_SENTENCE };
 export const FOR_THE_PERSON_NOTE =
   "For the person to run himself. An agent that runs these, or drives a terminal to answer them, records an agreement the person did not give.";
 
-/** What a flag on a support or challenge does to the position: nothing (spec 6). */
-export const ANNOTATIONS_NOTE =
-  "Flags on supports, challenges and consulted voices are display only: they change no count. The position is consent/v1's, exactly as collab_proposal_status computes it.";
+/** Beside a set-aside command wherever one is shown (consent/v2). */
+export const SET_ASIDE_FOR_THE_PERSON =
+  "The command is the person's own: an agent that runs it, or drives a terminal to answer it, records a set-aside the person did not make.";
+
+/** What a flag on a support or challenge does to the position: nothing (spec 6). Names the proposal's own rule. */
+export function annotationsNote(rule: ConsentRule = CONSENT_RULE): string {
+  return `Flags on supports, challenges and consulted voices are display only: they change no count. The position is ${rule}'s, exactly as collab_proposal_status computes it.`;
+}
+
+export const ANNOTATIONS_NOTE = annotationsNote(CONSENT_RULE);
 
 /** What a composed decision record cannot show (spec 5.2). */
 export const DECISION_DOES_NOT_ESTABLISH = [
@@ -2672,7 +2713,11 @@ function personDeskDb(ctx: Pick<NoteVerbContext, "store" | "environment">): stri
  * 5.2): data for the person, never a call. `now` says whether the desk would
  * take an agreement as things stand.
  */
-export function forThePerson(ctx: Pick<NoteVerbContext, "store" | "environment">, status: ProposalStatus): Record<string, unknown> {
+export function forThePerson(
+  ctx: Pick<NoteVerbContext, "store" | "environment">,
+  status: ProposalStatus,
+  data?: NoteProposalData,
+): Record<string, unknown> {
   const id = status.proposal.id;
   const db = personDeskDb(ctx);
   const position = status.ai.position;
@@ -2685,9 +2730,23 @@ export function forThePerson(ctx: Pick<NoteVerbContext, "store" | "environment">
         : status.person.state === "rejected"
           ? "The person's latest act is a rejection; the person may agree again on the same bytes, or leave it rejected."
           : "The agents' position is consented; the person may agree or reject.";
+  // consent/v2: each standing challenge with no live session of its voice
+  // can be set aside by the person; the reason is the person's to write.
+  const settable = status.rule === CONSENT_RULE_V2 && !retiredPosition(status) && data
+    ? data.challenges.filter((stance) => stance.standing && stance.voice_has_live_session === false)
+    : [];
   return {
     passkey: `agenttool-collab-host person ceremony --proposal ${id} --act agree${db}`,
     terminal: `agenttool-collab-host person consent --proposal ${id}${db}`,
+    ...(settable.length > 0
+      ? {
+        set_aside: settable.map((stance) => ({
+          challenge: stance.id,
+          terminal: `agenttool-collab-host person set-aside --proposal ${id} --challenge ${stance.id} --reason '<the person's reason>'${db}`,
+          passkey: `agenttool-collab-host person ceremony --proposal ${id} --act set-aside --challenge ${stance.id} --reason '<the person's reason>'${db}`,
+        })),
+      }
+      : {}),
     note: FOR_THE_PERSON_NOTE,
     now,
   };
@@ -2723,13 +2782,19 @@ export function proposalNeeds(data: NoteProposalData): string {
         ? `Support from the awaited voices (${names(awaited)}) would make it consented before ${closes}; at the close, one qualifying support with no standing challenge settles it consented, and none lets it lapse.`
         : `Support from the voices still awaited (${names(awaited)}) would make it consented now; at ${closes} it settles consented as it stands, unless a challenge stands then.`;
     case "challenged":
-      return `${standing.length} standing challenge(s) (${standing.join(", ")}) hold it challenged, and only each challenger's voice can lift its own; one still standing at ${closes} closes it split.`;
+      return status.rule === CONSENT_RULE_V2
+        ? `${standing.length} standing challenge(s) (${standing.join(", ")}) hold it challenged. Each challenger's voice can lift its own, `
+          + `and under consent/v2 the person can set one aside at the desk while no session of its voice is live; one still standing at ${closes} closes it split.`
+        : `${standing.length} standing challenge(s) (${standing.join(", ")}) hold it challenged, and only each challenger's voice can lift its own; one still standing at ${closes} closes it split.`;
     case "consented":
       return status.ai.closed
         ? "The agents' position is settled consented; nothing moves without the person's own act at the desk (for_the_person)."
         : `The agents' position is consented; nothing moves without the person's own act at the desk (for_the_person), and a challenge before ${closes} would make it challenged.`;
     case "split":
-      return "Closed split: a challenge stood at the close, so the position cannot move; replace the proposal (collab_propose with replaces) if something has changed.";
+      return status.rule === CONSENT_RULE_V2
+        ? "Closed split: a challenge still stands. Under consent/v2 the person can set aside a challenge whose voice has no live session, "
+          + "and its voice can still lift it; otherwise replace the proposal (collab_propose with replaces) if something has changed."
+        : "Closed split: a challenge stood at the close, so the position cannot move; replace the proposal (collab_propose with replaces) if something has changed.";
     case "lapsed":
       return "Closed lapsed: no qualifying support by the close, so the position cannot move; replace the proposal if the question still matters.";
   }
@@ -2753,6 +2818,24 @@ function stanceItem(stance: NoteStanceView): Record<string, unknown> & { standin
       }
       : {}),
     ...(stance.flags.challenger_ended ? { voice_has_active_session: stance.voice_has_active_session } : {}),
+    // consent/v2 challenges only, so consent/v1 views keep their shape.
+    ...(stance.voice_has_live_session !== undefined
+      ? { voice_has_live_session: stance.voice_has_live_session, voice_last_seen_at: stance.voice_last_seen_at ?? null }
+      : {}),
+    ...(stance.set_aside ? { set_aside: setAsideItem(stance.set_aside) } : {}),
+  };
+}
+
+/** A set-aside as every view shows it: when, on what basis, with what reason, and that it stays on the record. */
+function setAsideItem(entry: ProposalSetAside): Record<string, unknown> {
+  return {
+    id: entry.id,
+    by: "person",
+    at: entry.created_at,
+    basis: entry.basis,
+    reason: entry.reason,
+    challenger_last_seen_at: entry.challenger.last_seen_at,
+    note: SET_ASIDE_SENTENCE,
   };
 }
 
@@ -2779,9 +2862,11 @@ export function proposalFacts(
     ...(voice.ended ? { ended: true } : {}),
   }));
   const silent = data.consulted.filter((voice) => voice.awaited && !voice.delivery_recorded);
+  const rule = status.rule;
+  const v2 = rule === CONSENT_RULE_V2;
   const deliveryNote = `${silent.length} awaited voice(s) have no recorded delivery on the notes surface` +
     (silent.length > 0
-      ? ` (${names(silent)}): they may never have been shown the question, and consent/v1 still lets their silence settle the position at its close.`
+      ? ` (${names(silent)}): they may never have been shown the question, and ${rule} still lets their silence settle the position at its close.`
       : ".");
   if (silent.length > 0) advice.push(deliveryNote);
   const authorActive = data.author?.status === "active";
@@ -2793,8 +2878,18 @@ export function proposalFacts(
     : "Its author's session has ended too, so no session can replace it. ") +
     `Anyone else tells the person with a note on it to the person (collab_note with re "${exactRef("proposal", status.proposal.id)}" and to "person"); the person can still reject it.`;
   const open = !status.ai.closed && !retiredPosition(status) && status.person.state !== "rejected";
+  const db = personDeskDb(ctx);
   for (const stance of data.challenges) {
-    if (stance.standing && stance.flags.challenger_ended && !stance.voice_has_active_session) {
+    if (v2 && stance.standing && stance.voice_has_live_session === false && !retiredPosition(status)) {
+      // consent/v2 (decision 10): the person may set it aside; the command is the person's, never an agent's.
+      const seen = stance.voice_last_seen_at ? `, last seen ${minutesSince(stance.voice_last_seen_at, at)} min ago` : "";
+      advice.push(
+        `set_aside_possible: ${stance.id} still stands and no session of its voice is live${seen}, so no session can lift it now. ` +
+          "Under consent/v2 the person can set it aside at the desk, giving a reason: " +
+          `agenttool-collab-host person set-aside --proposal ${status.proposal.id} --challenge ${stance.id} --reason '<the person's reason>'${db} ` +
+          `(for_the_person.set_aside). ${SET_ASIDE_FOR_THE_PERSON} ${replaceOrTell}`,
+      );
+    } else if (stance.standing && stance.flags.challenger_ended && !stance.voice_has_active_session) {
       advice.push(
         `challenger_ended: ${stance.id} still stands, but its challenger's session has ended and no session of its voice is active, ` +
           `so no session can lift it. ${replaceOrTell}`,
@@ -2812,15 +2907,18 @@ export function proposalFacts(
     advice.push(
       "Every challenge standing here and every support counted here comes from a session that has ended: no active session can " +
         "lift those challenges (only each challenger's voice can) or withdraw those supports (only the session that wrote each can). " +
-        `As it stands it rests with the person, who can reject it at the desk, or with the close at ${status.terms.closes_at}, ` +
+        `As it stands it rests with the person, who can reject it at the desk${v2 ? " or set those challenges aside there" : ""}, or with the close at ${status.terms.closes_at}, ` +
         `when a challenge still standing makes it split${authorActive ? `, unless its author's session (${authorName}) withdraws or replaces it first` : ""}.`,
     );
   }
   const flagged = [...data.supports, ...data.challenges].filter((stance) =>
     stance.flags.same_seat_as_author || stance.flags.same_name_as_author || stance.flags.started_after_open
     || stance.flags.ungrounded || stance.flags.answered_by_another_voice || stance.flags.challenger_ended);
-  if (flagged.length > 0) advice.push(ANNOTATIONS_NOTE);
+  if (flagged.length > 0) advice.push(annotationsNote(rule));
+  const setAsides = v2 ? data.challenges.filter((stance) => stance.set_aside !== undefined) : [];
+  if (setAsides.length > 0) advice.push(`${setAsides.length} challenge(s) were set aside by the person. ${SET_ASIDE_SENTENCE}`);
   const fields: Record<string, unknown> = {
+    ...(v2 ? { rule } : {}),
     position: status.ai.position,
     closed: status.ai.closed,
     closes_at: status.terms.closes_at,
@@ -2833,7 +2931,18 @@ export function proposalFacts(
     challenges: data.challenges.map(stanceItem),
     consulted,
     delivery: { awaited_without_delivery: silent.length, note: deliveryNote },
-    annotations: ANNOTATIONS_NOTE,
+    annotations: annotationsNote(rule),
+    ...(v2
+      ? {
+        set_asides: setAsides.map((stance) => ({
+          challenge: stance.id,
+          handle: handleOf("report", stance.id),
+          by: { session: stance.from_session_id, name: stance.from_actor },
+          statement: stance.statement,
+          ...setAsideItem(stance.set_aside!),
+        })),
+      }
+      : {}),
   };
   if (data.replaced) {
     fields.replaced = { id: data.replaced.proposal_id, handle: handleOf("proposal", data.replaced.proposal_id) };
@@ -2848,7 +2957,7 @@ export function proposalFacts(
       re_raised_here: entry.re_raised_here,
       counted_by_consent_v1: false,
     }));
-    fields.carried_note = CARRIED_OBJECTIONS_SENTENCE;
+    fields.carried_note = carriedObjectionsSentence(rule);
     const shed = data.replaced.carried.filter((entry) => !entry.carried_in_terms && entry.standing_on_replaced);
     if (shed.length > 0) {
       advice.push(
@@ -2860,7 +2969,7 @@ export function proposalFacts(
   if (status.ai.position === "superseded" && status.ai.obsoleted_by_report_id) {
     fields.replaced_by = { id: status.ai.obsoleted_by_report_id, handle: handleOf("proposal", status.ai.obsoleted_by_report_id) };
   }
-  fields.for_the_person = forThePerson(ctx, status);
+  fields.for_the_person = forThePerson(ctx, status, data);
   fields.status = status;
   return { fields, advice };
 }

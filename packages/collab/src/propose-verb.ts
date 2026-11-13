@@ -7,6 +7,9 @@
  * objections a replaced proposal still faced carried into the new terms as
  * text, and a note to each of those objectors who can still be reached.
  * consent/v1 itself is not touched: a carried objection does not block.
+ * The proposal opens under the rule the host is configured with
+ * (ctx.consent_rule, from AGENTOOL_COLLAB_CONSENT_RULE); consent/v2 changes
+ * nothing here but the wording, which names the proposal's own rule.
  */
 import { CollabError } from "./errors.js";
 import {
@@ -19,7 +22,7 @@ import {
   splitNoteText,
   type NoteFields,
 } from "./note.js";
-import type { ProposalStatus } from "./protocol.js";
+import { CONSENT_RULE, type ConsentRule, type ProposalStatus } from "./protocol.js";
 import type { NoteAppendReceipt, NoteCiteReceipt, NoteProposalData } from "./store-notes.js";
 import {
   beforeFirstWrite,
@@ -33,8 +36,8 @@ import {
   type Credential,
   type RecordedStep,
 } from "./note-verbs.js";
+import { carriedObjectionsSentence } from "./desk-soft-spots.js";
 import {
-  CARRIED_OBJECTIONS_SENTENCE,
   exactRef,
   handleOf,
   minutesSince,
@@ -325,7 +328,12 @@ const REPORT_REFS_MAX = 128;
  * a note's caps: Evidence lines for the new proposal and the first 15, the
  * rest named by id in the body, so rendering never fails after the open.
  */
-function objectorNote(proposalId: string, replacedId: string, challenges: string[]): { body: string; evidence_refs: string[] } {
+function objectorNote(
+  proposalId: string,
+  replacedId: string,
+  challenges: string[],
+  rule: ConsentRule = CONSENT_RULE,
+): { body: string; evidence_refs: string[] } {
   const shown = challenges.slice(0, OBJECTOR_EVIDENCE_CHALLENGES);
   const rest = challenges.slice(OBJECTOR_EVIDENCE_CHALLENGES);
   const many = challenges.length > 1;
@@ -335,7 +343,7 @@ function objectorNote(proposalId: string, replacedId: string, challenges: string
       ? `Your ${challenges.length} objections to a replaced proposal were carried into the new one as text.`
       : "Your objection to a replaced proposal was carried into the new one as text.",
     body: [
-      CARRIED_OBJECTIONS_SENTENCE,
+      carriedObjectionsSentence(rule),
       `The replaced proposal is proposal:${replacedId}.`,
       ...(rest.length > 0
         ? [`Also carried, beyond the ${shown.length} in Evidence: ${rest.map((id) => `report:${id}`).join(" ")}`]
@@ -451,6 +459,7 @@ export async function proposeVerb(ctx: NoteVerbContext, input: ProposeInput): Pr
   const { binding, credential } = requireCredential(ctx);
   const workspaceId = binding.handle.workspace.id;
   const me = credential.session_id;
+  const rule = ctx.consent_rule ?? CONSENT_RULE;
   const question = term(input, "question", QUESTION_MAX, true)!;
   const criteria = term(input, "criteria", CRITERIA_MAX, true)!;
   const extent = term(input, "extent", EXTENT_MAX, true)!;
@@ -558,7 +567,7 @@ export async function proposeVerb(ctx: NoteVerbContext, input: ProposeInput): Pr
   // So is each objector's note, for the objectors these terms carry.
   if (replaced && !unfit) {
     for (const objector of objectorsOf(ctx, workspaceId, me, composed.text ?? null, replaced)) {
-      objectorNote(standIn, replaced.status.proposal.id, objector.challenges);
+      objectorNote(standIn, replaced.status.proposal.id, objector.challenges, rule);
     }
   }
   const { plan, cite, citeReplayed, status, notes, replays, steps } = await underPlan(ctx, credential, {
@@ -614,6 +623,7 @@ export async function proposeVerb(ctx: NoteVerbContext, input: ProposeInput): Pr
           ...(seconds !== undefined ? { consult_seconds: seconds } : {}),
           ...(taskId ? { task_id: taskId } : {}),
           ...(replacedId ? { supersedes_report_id: replacedId } : {}),
+          ...(rule !== CONSENT_RULE ? { rule } : {}),
         }));
       });
       if (opened.replayed) replays += 1;
@@ -632,7 +642,7 @@ export async function proposeVerb(ctx: NoteVerbContext, input: ProposeInput): Pr
             continue;
           }
           steps += 1;
-          const told = objectorNote(status.proposal.id, replaced!.status.proposal.id, objector.challenges);
+          const told = objectorNote(status.proposal.id, replaced!.status.proposal.id, objector.challenges, status.rule);
           const sent = await stepOnce(ctx, credential, key, () => ctx.store.appendNoteForSession({
             ...credential,
             idempotency_key: key,
@@ -713,7 +723,7 @@ function proposeResult(
     };
   });
   if (data.lone) {
-    advice.push("You are the lone voice here: consent/v1 counts only an explicit support from you (collab_note act support), and without one it lapses at the close.");
+    advice.push(`You are the lone voice here: ${status.rule} counts only an explicit support from you (collab_note act support), and without one it lapses at the close.`);
   }
   const notified = options.notes.filter((entry) => entry.report !== null);
   const unreachable = options.notes.filter((entry) => entry.report === null && !entry.objector.mine);
@@ -742,7 +752,7 @@ function proposeResult(
   return {
     ...noteWriteResult({
       effect:
-        `Opened proposal ${handle} (proposal_sha256 ${status.proposal_sha256}) for the agents to settle by consent/v1 and the person to decide; ` +
+        `Opened proposal ${handle} (proposal_sha256 ${status.proposal_sha256}) for the agents to settle by ${status.rule} and the person to decide; ` +
         `the agents' position is ${status.ai.position}, closing ${status.terms.closes_at}.` +
         (replacedId
           ? ` It replaces ${handleOf("proposal", replacedId)}, carrying ${data.replaced!.carried.filter((entry) => entry.carried_in_terms).length} objection(s) into its terms as text.`

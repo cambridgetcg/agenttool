@@ -4,8 +4,10 @@ import { z } from "zod";
 import { defaultActor } from "./actor-default.js";
 import { anchorStatusForWorkspace } from "./anchor-status.js";
 import { CollabError } from "./errors.js";
+import { consentRuleFromEnvironment } from "./consent-v2.js";
 import {
   CONSENT_RULE,
+  CONSENT_RULE_V2,
   DEFAULT_PROPOSAL_CONSULT_SECONDS,
   DEFAULT_WAIT_EVENT_LIMIT,
   EVIDENCE_REFS_DESCRIPTION,
@@ -107,7 +109,8 @@ export interface CollabMcpServerOptions {
   resumed_sessions?: Record<string, BoundSession>;
   /**
    * Where a session start without seat_ref looks for one, and where the tools
-   * profile (AGENTOOL_COLLAB_TOOLS) is read (defaults to process.env).
+   * profile (AGENTOOL_COLLAB_TOOLS) and the consent rule new proposals open
+   * under (AGENTOOL_COLLAB_CONSENT_RULE) are read (defaults to process.env).
    */
   environment?: Record<string, string | undefined>;
 }
@@ -142,6 +145,9 @@ export function buildCollabMcpServer(
   // An unknown or conflicting value refuses to start: guessing a profile would
   // hide tools an agent was told about, or show tools a host meant to hide.
   const profile = toolsProfile(environment);
+  // The rule new proposals open under, refused at start the same way: a host
+  // must not state a position under a rule it was not configured for.
+  const consentRule = consentRuleFromEnvironment(environment);
   const legacyInstructions =
     `Collab ${COLLAB_PACKAGE_VERSION}: collab_events_wait offers bounded read-only anchored observation for an already running host, ` +
     "without acknowledging, refreshing presence, or renewing leases; continue from next_anchor, never head. " +
@@ -276,6 +282,7 @@ export function buildCollabMcpServer(
     store,
     environment,
     profile,
+    consent_rule: consentRule,
     slot_key: requestSlot.getStore()!.key,
     binding: () => state.binding,
     bind: (binding) => {
@@ -454,11 +461,15 @@ export function buildCollabMcpServer(
     {
       title: "Put a direction to the agents and the person",
       description:
-        "Open a consent/v1 proposal: the agents settle a position by lazy consensus (support and challenge with collab_note), " +
+        `Open a ${consentRule} proposal: the agents settle a position by lazy consensus (support and challenge with collab_note), ` +
         "and the person decides at his own desk. The question is stored verbatim, so its bytes and proposal_sha256 are what " +
         "collab_proposal_open makes from the same terms. evidence and limits enter the bytes the person signs. With replaces, " +
         "the standing objections to your earlier proposal are carried into its terms as text and each reachable objector is told; " +
-        "under consent/v1 a carried objection does not block. The position authorises nothing; no agent tool records agreement.",
+        `under ${consentRule} a carried objection does not block. ` +
+        (consentRule === CONSENT_RULE_V2
+          ? "The person may set aside a standing challenge whose voice has no live session, giving a reason. "
+          : "") +
+        "The position authorises nothing; no agent tool records agreement.",
       annotations: localMutation,
       inputSchema: {
         question: z.string().describe("What is being decided, stored verbatim (at most 8,000 characters)."),
@@ -1253,7 +1264,7 @@ export function buildCollabMcpServer(
     {
       title: "Open a direction-level proposal for consent",
       description:
-        `Open a proposal the agents settle by lazy consensus (${CONSENT_RULE}) before a person decides. `
+        `Open a proposal the agents settle by lazy consensus (${consentRule}) before a person decides. `
         + "Answer it with collab_report_append supports, challenges and resolves. The agents' position is "
         + "computed from the journal and authorises nothing alone; a person consents only at the controlling "
         + "terminal or with an enrolled passkey through the person desk, never through MCP. A challenge stands "
@@ -1285,7 +1296,13 @@ export function buildCollabMcpServer(
     },
     async ({ workspace_id, ...input }) => call(() => {
       requireWorkspace(workspace_id);
-      return { proposal: store.openProposalForSession({ ...boundCredential(), ...input }) };
+      return {
+        proposal: store.openProposalForSession({
+          ...boundCredential(),
+          ...input,
+          ...(consentRule !== CONSENT_RULE ? { rule: consentRule } : {}),
+        }),
+      };
     }),
   );
 
