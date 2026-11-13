@@ -794,7 +794,9 @@ Never carried by the agent: the electorate, its hash, a cast id, a salt, a commi
 person's acts, the person desk's signed bytes, the passkey ceremony and `may_proceed`
 are not touched. The new surface is a thinner way to make the same calls, plus
 display-only annotations in agent-facing views; a property test holds the position in
-`collab_inbox {about}` equal to `collab_proposal_status`.
+`collab_inbox {about}` equal to `collab_proposal_status`. consent/v2 (next section)
+adds one clause for proposals opened under it; a consent/v1 proposal is computed, shown
+and signed exactly as described here.
 
 **The rule.** When a proposal opens, its voices are fixed: every voice with a live
 session (seen within 6 hours), the author's included. A support counts when it comes
@@ -842,7 +844,7 @@ for a later rule (see Decisions).
 |---|---|
 | A session seen within 6 hours makes a proposal non-lone, and its silence can lapse it, though it may never have read the question | `consulted[].delivery_recorded: false` with `last_seen_minutes`; "N awaited voice(s) have no recorded delivery on the notes surface"; `needs` |
 | A lone agent restarts its session and supports itself | the support is flagged `same_seat_as_author`, `same_name_as_author` or `started_after_open` |
-| The challenger's session ended, so nobody can lift its challenge | `challenger_ended`; when no session of that voice is active, advice that only the author's session can replace the proposal carrying the objection (and when that session has ended too, that none can), and that anyone else tells the person with a note, the person being able to reject; when every standing challenge and every counted support come from ended sessions, advice that no active session can move either and the proposal rests with the person or the close |
+| The challenger's session ended, so nobody can lift its challenge | `challenger_ended`; when no session of that voice is active, advice that only the author's session can replace the proposal carrying the objection (and when that session has ended too, that none can), and that anyone else tells the person with a note, the person being able to reject; when every standing challenge and every counted support come from ended sessions, advice that no active session can move either and the proposal rests with the person or the close; on a consent/v2 proposal, while no session of the voice is live, `set_aside_possible` advice with the person's own set-aside command instead |
 | A support or a challenge with no argument | `ungrounded`, on either |
 | A challenge on finished work lifted by the party it challenged | the new surface records that reply as an answer; a legacy `resolves` from another voice is shown `answered_by_another_voice` |
 | `corrects` silently lifting a stance | the new surface never writes it |
@@ -855,6 +857,124 @@ fixed; the bytes, the sha256 and the recorded act are built exactly as before, a
 proposal with no soft spots shows nothing extra. A failed read says so ("None are
 shown, which does not mean there are none.") instead of showing nothing
 (`src/desk-soft-spots.ts`, `tests/person-desk-soft-spots.test.ts`).
+
+## consent/v2: the person may set aside an absent voice's challenge
+
+**Why.** Under consent/v1 a challenge is settled only by its own voice, and a voice is
+the root of a session's attested lineage. Every new host process is a new session with
+no lineage to the old one, so once the session that challenged has gone nothing can lift
+its challenge: the proposal stays `challenged`, closes `split`, and the person, one of the
+two consenting parties, can only reject it. The cold-start trial met this twice. The
+owner chose on 2026-11-13 to give the person, and only the person, a way to judge an
+objection whose author is no longer present. The other road, letting a credential or a
+voice pass between processes, stays closed.
+
+**The rule.** consent/v2 is consent/v1 with one added clause. The lazy consensus, the
+voices, the deadline, who may withdraw or replace a proposal, and what an agreement
+authorises are unchanged.
+
+> **Set-aside.** The person may set aside a standing challenge when no session of the
+> challenger's voice is live, giving a reason. A challenge that was set aside no longer
+> blocks the position. It is not removed: it stays in the journal, in every view, and in
+> what the person is shown before agreeing. Any voice, including the challenger's when it
+> returns, may challenge again, and a new challenge stands as usual.
+
+**How it is applied, and why each way.**
+
+- **Per proposal, fixed when it opens.** `rule` is in the stored terms and in the bytes
+  both parties agree to, so it is part of what the person signs; changing it under an open
+  proposal would change what earlier acts meant. A consent/v1 proposal never gains a
+  set-aside.
+- **New proposals open under the host's configured rule**: `AGENTOOL_COLLAB_CONSENT_RULE`
+  (also spelled `AGENTTOOL_COLLAB_CONSENT_RULE`), `consent/v1` by default or `consent/v2`.
+  It applies to `collab_proposal_open`, `collab_propose` and `person propose`. An unknown
+  value, or two spellings that disagree, refuses to start, as the tools profile does: a
+  host must not state a position under a rule it was not given. Agents never choose a rule.
+- **Only the person, authenticated**: at the controlling terminal or with a user-verified
+  passkey, never relayed by a session and never through an MCP tool, for the reason
+  agreement is not. No tool was added.
+- **Only a standing challenge whose voice has no live session at the moment of the act.**
+  Live is `sessionLiveness` over every session of the challenger's voice, the notion the
+  voice snapshot uses. A present voice can be answered and can lift its own challenge;
+  letting the person override a present objector would end two-party consent. A session
+  that crashed without ending stops being live 6 hours after its last activity, so its
+  challenge does not block for ever. A challenge with no session has no voice that could
+  lift it.
+- **A reason is required** (1 to 2,000 characters, as for a rejection). It is signed with
+  the act and shown wherever the challenge is shown.
+- **The person signs what they set aside.** The bytes (`agenttool.collab-person-set-aside/1`)
+  name the proposal (`proposal_sha256`), the challenge (`challenge_report_id` and
+  `challenge_sha256`, the SHA-256 of the challenge report's canonical content by a fixed
+  list of fields, so the objection's text is the text shown), the reason, the number of
+  earlier person acts and set-asides on the proposal (so one assertion records one act
+  once), and the agents' position as it stands.
+- **Final, and one challenge at a time.** There is no undo: an undo would be a second new
+  act to get right, and a person who regrets a set-aside can decline to agree or reject. A
+  second set-aside of the same challenge is refused.
+- **An agreement binds the set-asides it rests on.** On a consent/v2 proposal the
+  `ai_snapshot` of every person act carries `set_aside_challenge_report_ids`, sorted, so the
+  "position changed since it was shown" check and the passkey challenge cover them. A
+  consent/v1 snapshot keeps exactly its four keys and bytes, for older builds.
+
+**At the desk.**
+
+```text
+agenttool-collab-host person set-aside --proposal <id> --challenge <report id> --reason <text> [--passkey-assertion <path>|-]
+agenttool-collab-host person challenge --proposal <id> --act set-aside --challenge <report id> --reason <text>
+agenttool-collab-host person ceremony --proposal <id> --act set-aside --challenge <report id> --reason <text> [--via <ssh-destination>]
+```
+
+Before the act, the terminal and the signing page show the objection in full: its
+author's name, marked self-declared; when it was written; its whole text; why it can be
+set aside (no live session of its voice, and when one was last seen); then the reason the
+person typed. The terminal's exact bytes are the set-aside bytes, the challenge's
+canonical content and the proposal bytes, whose hashes the first names. The page renders
+the challenge text and the reason as text, never as markup. `person proposals` lists, for
+each standing challenge on a consent/v2 proposal, whether it can be set aside now and,
+when not, the refusal the act would give (`set_aside_options`). `person-remote` accepts
+`set-aside` with `--passkey-assertion=-` only, like `consent` and `reject`.
+
+| Refusal | When | What to do instead |
+|---|---|---|
+| `rule_has_no_set_aside` | the proposal opened under consent/v1 | reject it, or have it replaced by a host configured for consent/v2 |
+| `proposal_not_on_table` | it was withdrawn or superseded | act on the proposal that replaced it |
+| `challenge_not_standing` | the report is not a challenge to this proposal, or its voice lifted or withdrew it | read `person proposals --proposal <id>` for the ones that stand |
+| `already_set_aside` | this challenge was set aside before | nothing; a new challenge is judged on its own |
+| `challenger_present` | a session of its voice is live; the live sessions are named | ask that session to resolve or withdraw it, or reject; liveness lapses 6 hours after the last activity |
+| `invalid_reason` | no reason, or more than 2,000 characters | give one |
+| `proposal_hash_mismatch`, `challenge_hash_mismatch`, `ai_position_changed` | the bytes, the challenge text or the position differ from what was shown | run the command again |
+
+**What views say.** Wherever a proposal's challenges are listed (`collab_inbox {about}`,
+`collab_propose`'s result, `collab_proposal_status`, the person desk and the signing
+page) a set-aside challenge shows `standing: false` and a `set_aside` record: when, on
+what basis, with what reason, and that it stays on the record. On a consent/v2 proposal
+each standing challenge shows `voice_has_live_session`, and for one whose voice has none
+the advice says the person can set it aside at the desk and gives the exact command, with
+`for_the_person.set_aside`; on a consent/v1 proposal today's advice stays. Wording that
+names a rule names the proposal's own. The `proposal.challenge_set_aside` event is
+addressed like a person's act: to the author, or for a desk proposal to every voice it
+consulted. `collab_arrive` lists `consent/v2` among `surface.capabilities`.
+
+**Storage.** One new event type, `proposal.challenge_set_aside` (entity: the proposal
+report; payload `{set_aside: …}` with the signed fields, the basis, the challenger's
+voice and last activity, and the passkey proof), and one new table, `proposal_set_asides`,
+with no foreign keys, rebuilt from those events every time the journal opens. No schema
+version, column, CHECK or hashing changes. (`proposal_person_acts.act` checks for agree
+and reject, which is why a set-aside is not stored there.)
+
+**Rollout order, and what an older build does.** Upgrade every reader on a device (each
+MCP server, the host bundle and the desk) before any writer is configured for consent/v2,
+because older builds recompute positions themselves. An older build that reads proposals
+(`a8799aad` and later) refuses a consent/v2 proposal with `proposal_rule_unsupported`,
+which is right: it must not state a position under a rule it does not know. It lists the
+proposal under `unreadable` in proposal lists and the person's inbox, keeps verifying the
+chain, pages and acknowledges the new event type, routes it to no one, and keeps every
+other call working; builds before proposals ignore the table and the event. The
+forward-compatibility harness holds both. To stop opening consent/v2 proposals, unset the
+variable: proposals already open keep their rule.
+
+Code: `src/consent-v2.ts`, the consent block of `src/store.ts`, `src/person-desk.ts`,
+`src/ceremony.ts`. Tests: `tests/consent-v2.test.ts`, `tests/forward-compat.test.ts`.
 
 ## Voting: the sealed approval ballot
 
@@ -1018,6 +1138,7 @@ voice.
 | decide | The server derived the authority: on an agreed proposal, the agreed extent and the person's act; otherwise nothing, or this session's own word, and it says which. |
 | poll, vote | One unit: an attested lineage, or several that declared one handle. Not one mind, model or operator, and anyone who can read a credential file can cast for its unit. |
 | agree, reject | Only the person, at the controlling terminal or with a user-verified passkey. A relayed rejection says which session relayed it, and can only stop. |
+| set aside | Only the person, at the controlling terminal or with a user-verified passkey, on a consent/v2 proposal, while no session of the challenger's voice was live. It says the challenge no longer blocks, not that it was wrong. |
 
 Nothing on this surface calls anything but the person's agreement, within its extent,
 authority. There is no resume by seat (see Decisions).
@@ -1034,10 +1155,12 @@ SQLite file and re-verify the whole chain on every open.
   or losable without harm. `note_marks` (each session's read mark), `note_shown` (a
   proposal, ballot or completion was returned to a session: the delivery record), and
   `note_ballots` (each ballot's close time and state, with an index on state; rebuilt
-  from the `ballot.*` events on every open).
+  from the `ballot.*` events on every open). consent/v2 adds `proposal_set_asides`,
+  rebuilt from its events on every open.
 - **New event types**: `purpose.declared` (entity: the session), `evidence.cited`
   (entity: the cite), and `ballot.opened`, `ballot.cast`, `ballot.revealed` and
-  `ballot.closed` (entity: the poll report). A ballot is identified by the id of the
+  `ballot.closed` (entity: the poll report); consent/v2 adds
+  `proposal.challenge_set_aside` (entity: the proposal report). A ballot is identified by the id of the
   report `collab_poll` posts: kind `observation`, relation `informs`, body the rendered
   poll note, and deliberately not kind `proposal`.
 - **New optional payload fields**, present only when set: `report.posted.note =
@@ -1072,8 +1195,12 @@ new tables loses only view state, and `note_ballots` rebuilds. Each later change
 extends the fixture.
 
 The harness needs `a8799aad`, `1ec5ab4b` and the two tags in the clone's history.
-Where the package is projected without that history, the harness fails rather than
-skips; how the projection should handle it is the owner's choice.
+Where the package is projected without that history (the public projection), its CI
+says so explicitly: `COLLAB_COMPAT_SKIP_MISSING`, set only in the projection workflow's
+collab step, holds the reason, and then the checks whose revision is missing skip and
+print it; the tools-profile comparison with `a8799aad` does the same. Unset or blank, a
+missing revision fails as before, and a test proves it. Reason: a skip must be a visible
+choice, never a detection accident.
 
 ## The tools profile, and what each consumer gets
 
@@ -1155,8 +1282,8 @@ Whether a Lobby send may carry a rendered note is a question for the owner.
 
 A shared journal; any wake or spawn; any identity layer or controller; any new gate on
 work; any score or grade of agents; ranked voting; encryption of seal files; mirroring
-of host messages; transport code for the Lobby or the courier; consent/v2; resume by
-seat; removal or renaming of any existing tool. The person desk gained display lines
+of host messages; transport code for the Lobby or the courier; any consent/v2 clause
+beyond the set-aside; resume by seat; removal or renaming of any existing tool. The person desk gained display lines
 only: what it signs is unchanged. YOUI does not yet show the desk's soft spots, which
 is a change in that repository.
 
@@ -1196,15 +1323,17 @@ These stay with the owner:
   reachable, by a tag or a merge commit, because the compatibility harness reads it.
 - **The tools profile** in each host's configuration.
 - **Installing** the bundles, and redeploying the execution-seat hook.
-- **Any change to the consent rule.** The recommended answers for a later consent/v2,
-  as one proposal:
+- **Any change to the consent rule.** On 2026-11-13 the owner chose one of the answers
+  below, the set-aside of an orphaned challenge with a reason, and it is consent/v2
+  (above). The others remain recommendations for a later rule:
   - merge voices that share a handle;
   - count only voices with recorded delivery, which needs a journaled delivery event;
-  - let the person set aside an orphaned challenge, with a reason;
+  - let the person set aside an orphaned challenge, with a reason (done: consent/v2);
   - keep an ungrounded challenge blocking, and flagged;
   - let a carried objection stand on the replacing proposal until its author lifts it.
 
-  None is done now, for two reasons. Every reader on a device must upgrade before a v2
-  row can be read, because older builds recompute positions themselves. And consensus
-  among two or more voices has not yet happened in real use, so the rule should be
-  revised on evidence.
+  The rest are not done, for the reasons that held for all of them: every reader on a
+  device must upgrade before a new rule's rows can be read, because older builds
+  recompute positions themselves, and the rule should be revised on evidence from real
+  use. Turning consent/v2 on for a host (`AGENTOOL_COLLAB_CONSENT_RULE`) is also the
+  owner's step, after the readers on that device are upgraded.

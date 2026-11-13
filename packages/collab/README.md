@@ -706,6 +706,19 @@ on every read, so a later `resolves` or `supports` can move `split` or
 `lapsed` to `consented`. Lists and the inbox name a proposal whose stored terms
 fail their hash under `unreadable` instead of failing the whole read.
 
+Under `consent/v2` the table is the same with one added clause: while no
+session of a challenger's voice is live, the person may set its standing
+challenge aside at the desk, at the terminal or with a passkey, giving a
+reason; it then no longer blocks the position, stays in the journal and in
+every view, and any voice may challenge again. A proposal keeps the rule it
+opened under, in its terms and its bytes. New proposals open under
+`AGENTOOL_COLLAB_CONSENT_RULE` (`consent/v1` by default, or `consent/v2`), read
+by the MCP server and the desk, which refuse an unknown value at start. Upgrade
+every reader on a device first: an older build refuses a `consent/v2` proposal
+with `proposal_rule_unsupported` and lists it under `unreadable`. The rule, its
+reasons and the refusals are in `PROTOCOL.md` ("consent/v2"). Code:
+`src/consent-v2.ts`. Tests: `tests/consent-v2.test.ts`.
+
 `collab_proposal_relay_rejection` records that a person rejected the exact
 bytes named by `proposal_sha256`, as relayed by this session (`basis:
 relayed_by_session`). A relayed rejection is forgeable, so it only pauses work.
@@ -727,6 +740,7 @@ through MCP. Code: `src/{person-desk,ceremony,passkey,tty}.ts`. Tests:
 | `workspaces`, `voices --workspace <id>`, `proposals --workspace <id> [--proposal <id> \| --limit <n>]`, `inbox [--workspace <id>]`, `passkeys` | read; `inbox` without a workspace counts every workspace |
 | `consent --proposal <id>` / `reject --proposal <id> --reason <text>` | show the exact act and proposal bytes on `/dev/tty` and record only on `yes` typed there (`basis: controlling_terminal`) |
 | `ceremony --proposal <id> --act agree\|reject [--reason <text>] [--via <ssh-destination>] [--no-open]` | serve a one-time signing page on the passkey's origin (`http://localhost:17778` by default); Touch ID signs the act bytes and the desk records them (`basis: user_verified_passkey`) |
+| `set-aside --proposal <id> --challenge <report id> --reason <text> [--passkey-assertion <path>\|-]`, or `ceremony ... --act set-aside --challenge <report id> --reason <text>` | consent/v2 only: show the objection in full and set aside a standing challenge whose voice has no live session; `proposals` lists which can be (`set_aside_options`) |
 | `passkey-enroll --ceremony [--label <text>] [--no-open]` | serve a one-time page that creates the passkey, then show its fingerprint on `/dev/tty` and enrol it only on `yes` |
 | `passkey-enroll --file <path>\|-`, `passkey-export --credential <id>`, `passkey-revoke --credential <id>` | enrol a passkey exported from another table, export one, or revoke one; enrol and revoke are confirmed on `/dev/tty` |
 | `challenge --proposal <id> --act agree` or `--act reject --reason <text>`, then `consent`/`reject` with `--passkey-assertion <path>\|-` | the same passkey act in two steps, for a page the desk does not serve |
@@ -795,7 +809,7 @@ Each device keeps its own journal, its own agents' voices and its own person
 desk. A person reaches another device's table through `agenttool-collab-host
 person-remote`, an SSH forced command that reads a JSON argv from
 `SSH_ORIGINAL_COMMAND`, never a shell line. It allows the read verbs, `say`,
-`propose`, `withdraw`, `challenge`, and `consent`/`reject` with
+`propose`, `withdraw`, `challenge`, and `consent`/`reject`/`set-aside` with
 `--passkey-assertion=-` only; it refuses enrolment, revocation, export,
 ceremonies and `--db`. A ceremony with `--via <destination>` serves the page
 on the person's own device and verifies at the remote table. To add a device:

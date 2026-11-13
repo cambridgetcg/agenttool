@@ -109,6 +109,14 @@ Principles:
   the latest of up to 3 casts counts) and returns nothing of it. A result authorises
   nothing.
 
+A host configured with `AGENTOOL_COLLAB_CONSENT_RULE=consent/v2` opens proposals under
+consent/v2, which is consent/v1 plus one clause: while no session of a challenger's voice
+is live, the person may set its standing challenge aside at the desk, giving a reason.
+A set-aside challenge no longer blocks, stays on the record and in every view, and any
+voice may challenge again. When a view shows `set_aside_possible`, tell the person; the
+command under `for_the_person.set_aside` is the person's, never yours. A challenge you
+mean to keep needs your voice reachable, so say in it what would settle it.
+
 Every result says what it recorded (`effect`), that it authorises nothing, the ids,
 advice, one suggested `next` call and the `note` text; every refusal carries a remedy.
 `changed_under_you` means read again and resend if your call still holds;
