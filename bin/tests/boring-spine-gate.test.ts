@@ -983,6 +983,7 @@ describe("boring test spine", () => {
       "packages/codex-usage",
       "packages/collab-zerone",
       "packages/collab-courier",
+      "packages/execution-seat",
       "packages/lobby",
       "packages/lobby-doorbell",
       "packages/browser",
@@ -1053,6 +1054,7 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/collab && bun run ci");
     expect(preflight).toContain("cd packages/codex-usage && bun run ci");
     expect(workflow).toContain("broker, collab, Codex usage, collab-zerone");
+    expect(preflight).toContain("cd packages/execution-seat && bun run ci");
     expect(preflight).toContain("cd packages/lobby && bun run ci");
     expect(preflight).toContain("cd packages/lobby-doorbell && bun run ci");
     expect(preflight).toContain("cd packages/browser && bun run ci");
@@ -1531,9 +1533,9 @@ exit 94
       const result = run(prepareCommand, narrowedEnv);
       expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
       const calls = (await readFile(capture, "utf8")).trim().split("\n");
-      expect(calls).toHaveLength(68);
+      expect(calls).toHaveLength(69);
       expect(calls.filter((line) => line.includes("\tinstall "))).toHaveLength(
-        58,
+        59,
       );
       expect(calls.filter((line) => line.endsWith("\trun build"))).toHaveLength(
         10,
@@ -1731,7 +1733,8 @@ exit 94
     expect(Object.keys(workflow.jobs)).toEqual(["offline-collaboration"]);
     const job = workflow.jobs["offline-collaboration"];
     expect(job["timeout-minutes"]).toBeLessThanOrEqual(12);
-    expect(job.steps[0].with).toEqual({ "persist-credentials": false });
+    // Full history: packages/collab's forward-compatibility test archives older revisions.
+    expect(job.steps[0].with).toEqual({ "fetch-depth": 0, "persist-credentials": false });
     expect(job.steps[1].with).toEqual({ "bun-version": "1.3.5" });
     for (const step of job.steps.filter((step) => step.uses)) {
       expect(step.uses).toMatch(/@[a-f0-9]{40}$/);

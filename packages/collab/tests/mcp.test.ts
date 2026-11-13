@@ -13,7 +13,7 @@ import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import { EVIDENCE_REF_PREFIXES, EVIDENCE_REFS_DESCRIPTION } from "../src/protocol.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 import { COLLAB_PACKAGE_VERSION } from "../src/version.js";
 
 const packageRoot = resolve(import.meta.dir, "..");
@@ -149,16 +149,25 @@ describe("MCP surface", () => {
     const { server } = node();
     expect(Object.keys((server as any)._registeredTools).sort()).toEqual([
       "collab_anchor_status",
+      "collab_arrive",
       "collab_artifact_attach",
       "collab_cursor_ack",
       "collab_cursor_reset",
       "collab_decision_record",
+      "collab_done",
       "collab_events_since",
       "collab_events_wait",
       "collab_handoff_offer",
       "collab_handoff_respond",
+      "collab_inbox",
       "collab_journal_verify",
       "collab_next",
+      "collab_note",
+      "collab_poll",
+      "collab_proposal_open",
+      "collab_proposal_relay_rejection",
+      "collab_proposal_status",
+      "collab_propose",
       "collab_report_append",
       "collab_report_list",
       "collab_session_end",
@@ -167,6 +176,7 @@ describe("MCP surface", () => {
       "collab_session_leave",
       "collab_session_list",
       "collab_session_start",
+      "collab_take",
       "collab_task_block",
       "collab_task_claim",
       "collab_task_complete",
@@ -179,6 +189,7 @@ describe("MCP surface", () => {
       "collab_task_renew",
       "collab_task_review",
       "collab_task_unblock",
+      "collab_vote",
       "collab_workspace_open",
       "collab_workspace_status",
     ]);
@@ -247,6 +258,7 @@ describe("MCP surface", () => {
       "collab_events_since",
       "collab_events_wait",
       "collab_journal_verify",
+      "collab_proposal_status",
       "collab_report_list",
       "collab_session_list",
       "collab_task_get",
@@ -274,13 +286,23 @@ describe("MCP surface", () => {
       "collab_task_review",
       "collab_task_unblock",
       "collab_report_append",
+      "collab_proposal_open",
+      "collab_proposal_relay_rejection",
       "collab_workspace_open",
     ];
     const nonIdempotentMutations = [
+      "collab_arrive",
+      "collab_inbox",
       "collab_next",
+      "collab_note",
+      "collab_poll",
+      "collab_propose",
       "collab_session_start",
+      "collab_take",
+      "collab_vote",
     ];
-    const destructiveMutations = ["collab_session_end"];
+    // collab_done can end the session (outcome leave), as collab_session_end does.
+    const destructiveMutations = ["collab_done", "collab_session_end"];
 
     for (const name of readOnly) {
       expect(tools[name].annotations).toEqual({
@@ -1001,6 +1023,7 @@ describe("MCP surface", () => {
       .filter((name) => tools[name].inputSchema?.shape?.evidence_refs !== undefined)
       .sort();
     expect(withEvidence).toEqual([
+      "collab_proposal_open",
       "collab_report_append",
       "collab_task_complete",
       "collab_task_review",

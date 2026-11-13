@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CollabError } from "../src/errors.js";
 import type { SessionHandle } from "../src/protocol.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 // Characterization tests: each pins a rule the ordinary-loop docs state, on
 // behaviour origin/main already has. They pass before the doc rewrite.

@@ -8,7 +8,7 @@
 >
 > **Implements:** Cross-cutting channel guide: local Collab and signed Correspondence, plus an unreleased private, own-fleet selected-summary courier and Telegram human feedback source candidate. Source implementation is not a released or live service, distributed task manager, or native agent dispatcher.
 >
-> **Code:** `packages/collab/src/mcp.ts` · `packages/collab/src/store.ts` · `packages/collab/src/repository.ts` · `packages/collab/src/anchor-status.ts` · `packages/collab-courier/src/` · `packages/collab-courier/bin/agenttool-collab-courier.ts` · `packages/sdk-ts/src/correspondence.ts` · `api/src/services/correspondence/` · `api/src/services/wake/push.ts` · `packages/collab-zerone/src/`.
+> **Code:** `packages/collab/src/mcp.ts` · `packages/collab/src/store.ts` · `packages/collab/src/store-notes.ts` · `packages/collab/src/repository.ts` · `packages/collab/src/anchor-status.ts` · `packages/collab-courier/src/` · `packages/collab-courier/bin/agenttool-collab-courier.ts` · `packages/sdk-ts/src/correspondence.ts` · `api/src/services/correspondence/` · `api/src/services/wake/push.ts` · `packages/collab-zerone/src/`.
 >
 > **Tests:** `packages/collab/tests/events-wait.test.ts` · `packages/collab/tests/mcp.test.ts` · `packages/collab/tests/v2.test.ts` · `packages/collab/tests/anchor-status.test.ts` · `packages/collab-courier/tests/courier.test.ts` · `packages/collab-courier/tests/boundaries.test.ts` · `packages/collab-courier/tests/cli.test.ts` · `packages/collab-courier/tests/telegram.test.ts` · `packages/collab-courier/tests/witness.test.ts` · `packages/sdk-ts/tests/correspondence.test.ts` · `api/tests/agent-correspondence-spec.test.ts` · `packages/collab-zerone/tests/cli.test.ts` · `packages/collab-zerone/tests/alias.test.ts` (source tests, not a final gate or live verification receipt).
 
@@ -35,9 +35,11 @@ checkout instructions.
 
 Collab **0.5.0, with 33 MCP tools**, adds bounded anchored waiting. It is a
 [GitHub Release](https://github.com/cambridgetcg/agenttool-collab/releases/tag/collab-v0.5.0)
-(2026-10-10), not an npm publication. Source on `main` is the unreleased
-`0.5.1-dev.0` development build, which adds the host doorbell wait; verify the
-protected receipt and registry separately. The private
+(2026-10-10), not an npm publication. Collab source is the unreleased
+`0.6.0-dev.0` development build, which adds the host doorbell wait, three
+proposal consent tools and the eight [Collab Notes](../packages/collab/PROTOCOL.md)
+verbs (44 tools in the full profile); verify the protected receipt and registry
+separately. The private
 **`@agenttool/collab-courier@0.1.0-dev.0`** remains version-unchanged and now has
 an implemented CLI, host transport, durable ledger/importer, Telegram adapter,
 and a separately callable witness observer. Its
@@ -140,8 +142,8 @@ recipients. The source reuses existing signing/session primitives, not another
 identity or credential store. A narrow interface does not narrow the underlying
 project bearer's broad project authority. The Bun runtime binary, entrypoint, and
 MCP version are host-pinned; the importer accepts exactly the selected 0.4.0
-(npm), 0.5.0 (GitHub release, not npm) or 0.5.1-dev.0 (unreleased `main`
-development build) handshake. A `-dev` pin names a moving source line, not
+(npm), 0.5.0 (GitHub release, not npm), 0.5.1-dev.0 or 0.6.0-dev.0 (unreleased
+development builds) handshake. A `-dev` pin names a moving source line, not
 exact bytes. Node is rejected: the existing Collab bundle depends on
 `bun:sqlite`. Child-environment narrowing is not a sandbox.
 

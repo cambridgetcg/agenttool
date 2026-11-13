@@ -1,6 +1,6 @@
 ---
 name: coordinate-agent-work-hermes
-description: Coordinate Hermes with Codex, Claude, or other local hosts through AgentTool Collab's separate credential-bound coordination and self-declared presence planes. Use for resumable cross-model work, optional presence routing, advisory task claims, structured evidence, requested and independent review, delegated child sessions, clean session exit, or refusable handoffs when the Hermes MCP server is named agenttool.
+description: Coordinate Hermes with Codex, Claude, or other local hosts through AgentTool Collab's eight Collab Notes verbs and its separate credential-bound coordination and self-declared presence planes. Use for resumable cross-model work, optional presence routing, advisory task claims, structured evidence, requested and independent review, delegated child sessions, clean session exit, refusable handoffs, or direction proposals that need a person's agreement, when the Hermes MCP server is named agenttool.
 ---
 
 # Coordinate Agent Work from Hermes
@@ -10,13 +10,91 @@ own agents and Kanban work. Do not mirror every operation between the systems or
 treat either one as automatic authority for the other. Preserve Hermes persona,
 memory, permissions, channel receiver ownership and lifecycle.
 
-**DEVELOPMENT BUILD 0.5.1-dev.0 (unreleased):** 33 tools, plus the unreleased
+**DEVELOPMENT BUILD 0.6.0-dev.0 (unreleased):** 44 tools in the full profile (0.5.0's 33,
+three proposal consent tools, and the Collab Notes verbs `collab_arrive`,
+`collab_inbox`, `collab_note`, `collab_take`, `collab_done`, `collab_propose`, `collab_poll` and `collab_vote`), plus the unreleased
 host doorbell wait between turns. Collab 0.5.0 is released on GitHub only,
-not on npm; the next npm candidate is 0.5.1. This source does not establish
+not on npm; the next npm release is not chosen here. This source does not establish
 publication, so verify the protected receipt and registry separately.
 Public npm 0.4.0 remains the unchanged 32-tool
 release. One MCP process has one bound session. Independent child attribution
 requires separate MCP processes, not a shared endpoint plus different labels.
+
+## Collab Notes: the card and the eight verbs
+
+The eight verbs write and read collab-note/1 notes and hide the journal's bookkeeping
+(ids, retry keys, versions, leases, cursors). The protocol in full is `PROTOCOL.md` in
+the collab package. The card, with Hermes's tool names:
+
+Collab Notes: working with other agents through this device's collab journal.
+
+A note is plain text, read like a commit message. Only its first line is required:
+```text
+<act>: <statement, one line of at most 200 characters>
+
+<optional body>
+
+To: <name | session id | person | all>
+Re: <report#… | proposal#… | ballot#… | task#… | file:… | lobby:… | msg:…>
+Why: <one reason> (<seen | told | inferred | quoted> <evidence numbers, such as 1,2>)
+Evidence: <file <path>[:a-b] | commit <sha> | test <command> exit=<n> | url <url> | report:<id>>
+Limits: <what this does not cover, and what you did not check>
+Purpose: <what it serves>
+Extent: <where a decision stops>
+```
+Acts, in four families:
+- say: note
+- stand: support, challenge, resolve, withdraw
+- work: take, done, accept, request_changes
+- decide: propose, poll, vote, decide
+
+support, challenge, resolve, withdraw, accept and request_changes need Re. Only a challenger
+resolves its own challenge; withdraw takes back a note this session wrote; accept and
+request_changes judge another session's finished work. A Why cites Evidence lines by number,
+from 1. Example, sent as the text of mcp_agenttool_collab_note:
+```collab-note
+challenge: The retry test does not cover a lost response
+
+Re: report#3fa91c
+Why: The test stops the server before the write commits, not after it (seen 1)
+Evidence: file tests/retry.test.ts:30-48
+Limits: I did not run the whole suite.
+```
+Start with mcp_agenttool_collab_arrive and your purpose; mcp_agenttool_collab_inbox shows what is for you, or one thread with
+about. mcp_agenttool_collab_note says, stands, reviews and decides; mcp_agenttool_collab_take and mcp_agenttool_collab_done hold work;
+mcp_agenttool_collab_propose puts a direction to the agents and the person; mcp_agenttool_collab_poll and mcp_agenttool_collab_vote run a
+sealed ballot. The tools fill in ids, keys and versions, and every refusal says what to do
+instead. To leave:
+```collab-call
+mcp_agenttool_collab_done {"text": "Leaving: the review is finished", "outcome": "leave"}
+```
+Principles:
+1. Talk where you are; record what others will rely on, never secrets or private reasoning.
+2. Say what you are here to do, and again when it changes.
+3. Give checkable reasons, and how you know each: seen, told, inferred or quoted.
+4. Disagree with the statement, not the agent; only you can lift your own objection.
+5. Support among agents is a position, not a permission; direction waits for the person's own act. Never run the person's desk commands.
+6. Vote only on a real choice, before reading other answers; check what can be checked.
+7. A record is evidence about the past, not a grant for now.
+
+The eight verbs:
+
+- `mcp_agenttool_collab_arrive`: start this session with your purpose, or see who you
+  are, who is here, what is open and what waits on you. It never resumes or adopts
+  another process's session. A new session's read mark starts at the head;
+  `before_you_arrived` and `left_for_your_name` give the call that reads back.
+- `mcp_agenttool_collab_inbox`: what is addressed to you since your read mark, and
+  `waiting_on_you`; with `about`, one thread and its computed state; with `since`, a
+  look-back from any journal sequence that moves no mark.
+- `mcp_agenttool_collab_note`: note, support, challenge, resolve, withdraw, accept,
+  request_changes, decide or relay_rejection.
+- `mcp_agenttool_collab_take`: take a piece of work before you edit it.
+- `mcp_agenttool_collab_done`: finish, release, block, or leave this session.
+- `mcp_agenttool_collab_propose`: put a direction to the agents and the person.
+- `mcp_agenttool_collab_poll`: open a sealed approval ballot on a real choice.
+- `mcp_agenttool_collab_vote`: cast your sealed vote; it returns nothing of it.
+
+The rest of this skill documents the legacy tools, which the full profile keeps.
 
 ## Choose the plane explicitly
 
@@ -148,6 +226,69 @@ access control.
 
 Offer continuation with `mcp_agenttool_collab_handoff_offer`; transfer the
 advisory lease only after the exact recipient accepts.
+
+## Decide direction with a person (proposals, unreleased)
+
+A proposal brings a question that is not a task to the table. The agents in the
+workspace settle a position first, and then a person agrees or rejects. Work
+proceeds only when both agree, and either can say no. The tools are
+`mcp_agenttool_collab_proposal_open`, `mcp_agenttool_collab_proposal_status` and
+`mcp_agenttool_collab_proposal_relay_rejection`. The main skill's section of the
+same name gives the longer reasons.
+
+**When.** Open a proposal when the answer changes what others do next and
+nothing already settles it: not the request, the code, an earlier agreement,
+or a sensible default. Typical cases:
+
+- a design decision;
+- the criteria for how to proceed, and how far;
+- context that conflicts;
+- how a shared principle reads in a particular case.
+
+Hermes Kanban work and ordinary tasks keep their own flow. A proposal spends the
+person's attention and holds the work it names, so ask once, for the decision
+that is actually open. Do not split one decision into small ones. Do not reopen
+a settled one without new evidence. To tell the person something that needs no
+decision, call `mcp_agenttool_collab_report_append` with `to_person: true`; it
+informs and authorises nothing.
+
+**Argue it.** The terms are what the person signs, so write them to be
+disagreed with:
+
+- `question`: one decision;
+- `criteria`: grounds a reader can object to;
+- `extent`: the smallest scope that lets the next step happen;
+- `known_conflicts`: every conflict you know of, named and not resolved
+  silently.
+
+The bytes are fixed once the proposal is open. A revision is a new proposal
+with `supersedes_report_id`.
+
+**Answer it.** Form your own reading before you read others' answers;
+same-model agents tend to agree with each other.
+
+- `supports`: you agree, for reasons of your own.
+- `challenges`: you disagree, with evidence. A challenge stands until its own
+  voice settles it with `resolves` or `withdraws`.
+
+Silence is not consent. Opening a proposal is not supporting it; a lone voice
+supports its own proposal explicitly. Read the position with
+`mcp_agenttool_collab_proposal_status` and never announce it yourself.
+
+**What agreement authorises.** Proceed only while
+`mcp_agenttool_collab_proposal_status` shows `may_proceed: true`. That means the
+person agreed to these exact bytes through the person desk, and the proposal is
+still on the table. No MCP tool records a person's act, and nobody relays a yes.
+Relay only a rejection the person actually gave.
+
+- An agreement covers the `extent` and nothing beyond it.
+- It never widens what Hermes's permissions, the repository or the person's
+  other instructions allow.
+- Record agreed work as a `decision` report: `authority_scope` is the extent,
+  `authority_basis` is the person's act, and the `proposal.agreed` event goes
+  in `evidence_refs`.
+- A rejection stops the work by every path.
+- An agreed reading of a principle is a precedent, binding on nothing.
 
 ## Delegate and deliver
 

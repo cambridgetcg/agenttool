@@ -10,9 +10,11 @@
  * the agent reads and verifies the events through its own MCP session.
  *
  * It exits when the owning Claude Code process or its socket is gone, when the
- * collab session ends, on SIGTERM/SIGINT, or after --max-hours. One watcher
- * per collab session (pidfile). It never writes to the journal and never
- * prints the inbox token. See README.md beside this file.
+ * collab session ends, on SIGTERM/SIGINT, after --max-hours, or after
+ * RING_FAILURE_LIMIT rings in a row fail. A failed ring keeps its anchor and
+ * is retried with backoff, so nothing routed is passed over. One watcher per
+ * collab session (pidfile). It never writes to the journal and never prints
+ * the inbox token. See README.md beside this file.
  */
 import { Database } from "bun:sqlite";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -35,7 +37,10 @@ interface WaitReceipt {
 }
 
 const USAGE = "usage: collab-doorbell-watch --session <id> [--db <path>] [--host-bin <path>] [--all] "
-  + "[--from-cursor] [--include-own] [--cycle-ms <ms>] [--min-gap-ms <ms>] [--max-hours <h>] [--once]";
+  + "[--from-cursor] [--include-own] [--cycle-ms <ms>] [--min-gap-ms <ms>] [--retry-base-ms <ms>] [--max-hours <h>] [--once]";
+
+/** Consecutive failed rings after which the watcher stops (spec 9). */
+const RING_FAILURE_LIMIT = 6;
 
 const { values } = parseArgs({
   args: process.argv.slice(2),
@@ -49,6 +54,7 @@ const { values } = parseArgs({
     "include-own": { type: "boolean" },
     "cycle-ms": { type: "string" },
     "min-gap-ms": { type: "string" },
+    "retry-base-ms": { type: "string" },
     "max-hours": { type: "string" },
     once: { type: "boolean" },
   },
@@ -77,6 +83,8 @@ const hostBin = resolve(values["host-bin"] ?? process.env.AGENTTOOL_COLLAB_HOST_
   ?? join(import.meta.dir, "..", "..", "dist", "agenttool-collab-host.js"));
 const cycleMs = integer("cycle-ms", 1_800_000, 1_000, 3_600_000);
 const minGapMs = integer("min-gap-ms", 60_000, 0, 3_600_000);
+// The first retry after a failed ring waits this long, doubling each time.
+const retryBaseMs = integer("retry-base-ms", 5_000, 1, 600_000);
 const maxMs = integer("max-hours", 12, 1, 72) * 3_600_000;
 const addressed = values.all !== true;
 const socket = process.env.CLAUDE_CODE_MESSAGING_SOCKET ?? "";
@@ -223,6 +231,7 @@ let anchor: Anchor = values["from-cursor"]
   : head();
 let lastRing = 0;
 let authRetries = 0;
+let ringFailures = 0;
 log({ event: "start", pid: process.pid, workspace_id: workspaceId, after_sequence: anchor.sequence, addressed });
 
 while (true) {
@@ -251,11 +260,24 @@ while (true) {
     const rang = await ring(`[collab doorbell] ready: workspace ${workspaceId}, session ${sessionId}: `
       + `${covered.sequence - from.sequence} event(s) after sequence ${from.sequence} `
       + `(head ${covered.sequence}), ${what}. This line carries no event content. `
-      + `Read them with collab_events_wait or collab_events_since after_anchor ${JSON.stringify(from)}. `
+      + `Read them with collab_inbox, or with collab_events_since after_anchor ${JSON.stringify(from)}. `
       + `Watcher pid ${process.pid} re-arms itself; stop it with kill ${process.pid}.`);
     lastRing = Date.now();
     log({ event: rang ? "rang" : "ring_failed", from_sequence: from.sequence, head_sequence: covered.sequence });
-    if (!rang && ownerGone()) stop("owner_gone");
+    if (!rang) {
+      if (ownerGone()) stop("owner_gone");
+      // Keep the anchor: the next wait finds the same events and rings again.
+      ringFailures += 1;
+      if (ringFailures >= RING_FAILURE_LIMIT) {
+        log({ event: "ring_failed_repeatedly", failures: ringFailures, from_sequence: from.sequence });
+        stop("ring_failed_repeatedly", 1);
+      }
+      const backoff = Math.max(minGapMs, retryBaseMs * 2 ** (ringFailures - 1));
+      log({ event: "ring_retry", attempt: ringFailures, after_ms: backoff });
+      await sleep(backoff);
+      continue;
+    }
+    ringFailures = 0;
     anchor = covered;
     if (values.once) stop("once");
     continue;

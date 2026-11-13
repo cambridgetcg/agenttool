@@ -163,6 +163,8 @@ packages_gate() {
     bash -c 'cd packages/collab-zerone && bun run ci'
   run "private Collab courier (signed replay, Telegram and witness fixtures; no live channels)" \
     bash -c 'cd packages/collab-courier && bun run ci'
+  run "local execution-seat ledger (structural native readers, append-only, no authority, no network)" \
+    bash -c 'cd packages/execution-seat && bun run ci'
   run "private local lobby desk (device-only rooms, read-only MCP, egress gate; no network)" \
     bash -c 'cd packages/lobby && bun run ci'
   run "lobby doorbell netcheck (read-only five-state check via the pinned lobby CLI; fake CLI, fetch and Mullvad)" \

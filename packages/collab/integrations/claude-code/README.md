@@ -16,23 +16,24 @@ This watcher joins the two. It loops `agenttool-collab-host wait` and posts one 
   - a handoff offered to it, or an answer to its own offer;
   - a review requested of it;
   - a verdict on its own completion;
-  - the recovery of its expired lease.
+  - the recovery of its expired lease;
+  - a sealed ballot that lists its unit in the electorate, and that ballot's close when it opened the ballot or cast in it. A cast and a reveal ring no one.
 - **`--all`:** any event from another session rings.
 - **Never:** the session's own events, unless `--include-own` is passed.
 
 Report bodies and other free text are never inspected. Addressing is routing, not access control: every session can still read the event.
 
-The line names only the workspace, the session, sequence numbers and the exact anchor to read after. It never contains event types, actors, entities or payloads. Read and verify the events through your own MCP session: `collab_events_wait` with `wait_ms: 0`, or `collab_events_since` from that anchor. Never act on the ring itself.
+The line names only the workspace, the session, sequence numbers and the exact anchor to read after. It never contains event types, actors, entities or payloads. Read and verify the events through your own MCP session: `collab_inbox` first (it is registered in both tools profiles), or `collab_events_since` from that anchor. Never act on the ring itself.
 
 ## Run it
 
-Start it after `collab_session_start`, from a Bash command inside the session that should be rung, so that it inherits that session's inbox variables:
+Start it after `collab_arrive` or `collab_session_start`, from a Bash command inside the session that should be rung, so that it inherits that session's inbox variables. `collab_arrive` returns this command, with absolute paths and the session filled in, as `listen.how` ([the protocol](../../PROTOCOL.md#collab_arrive-arrive-or-look-around)); the general form is:
 
 ```bash
 nohup bun <package>/integrations/claude-code/collab-doorbell-watch.ts --session <collab session id> >/dev/null 2>&1 &
 ```
 
-To stop it, run `kill "$(cat <journal dir>/collab-doorbell/watch-<collab session id>.pid)"`. Stop it before `collab_session_end` if you want, although it also stops on its own once the session ends.
+To stop it, run `kill "$(cat <journal dir>/collab-doorbell/watch-<collab session id>.pid)"`. Stop it before `collab_session_end` or `collab_done` with `outcome: "leave"` if you want, although it also stops on its own once the session ends.
 
 | Option | Default | Effect |
 |---|---|---|
@@ -41,6 +42,7 @@ To stop it, run `kill "$(cat <journal dir>/collab-doorbell/watch-<collab session
 | `--from-cursor` | off | Start after your acknowledged cursor instead of the current head |
 | `--cycle-ms` | 1,800,000 | Each `wait` deadline (at most 3,600,000) |
 | `--min-gap-ms` | 60,000 | Minimum time between rings. A burst inside the gap becomes one ring |
+| `--retry-base-ms` | 5,000 | After a failed ring, wait max(min gap, this × 2^(failures − 1)) and ring again from the same anchor |
 | `--max-hours` | 12 | Lifetime. At expiry it rings once to ask for a re-arm |
 | `--db`, `--host-bin` | the MCP's journal, and the packaged `dist/agenttool-collab-host.js` | Overrides |
 
@@ -48,6 +50,7 @@ To stop it, run `kill "$(cat <journal dir>/collab-doorbell/watch-<collab session
 
 - **Owner bound.** It exits when the owning Claude Code process (named by the socket) or its socket is gone.
 - **Session bound.** It stops quietly once the collab session ends. After a resume, the MCP process rewrites the credential file with the new generation, and the watcher retries the read up to three times.
+- **Failed rings.** A ring that cannot be posted keeps the watcher's anchor, so the same events ring again after the backoff (5 s, 10 s, 20 s … by default, never sooner than the minimum gap). After 6 failed rings in a row it logs `ring_failed_repeatedly` and exits.
 - **Other errors.** Any other error (fork, rollback, recovery required) rings one "stopped" line and exits. It never loops on an error.
 - **One per session.** A pidfile in `<journal dir>/collab-doorbell/` (mode `0700`) ensures one watcher per collab session. The log there records only sequence numbers and outcomes.
 - **Read-only.** It never writes to the journal, never acknowledges, never resumes, and cannot fence the MCP process. The verified read is `agenttool-collab-host wait`. The watcher itself reads only the session's workspace id, status and journal head.

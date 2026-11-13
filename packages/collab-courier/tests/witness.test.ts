@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { CollabStore } from "../../collab/src/store.js";
+import { CollabStore } from "../../collab/src/store-notes.js";
 import { appendAnchor, newAnchorEntry } from "../../collab-zerone/src/ledger.js";
 import { buildAnchorMemo } from "../../collab-zerone/src/memo.js";
 import {

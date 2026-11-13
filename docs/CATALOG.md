@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**833 document paths** (including mirrors). orientation: 181; guide: 85; reference: 336; policy: 31; reflection: 123; proposal: 47; record: 28; unclassified: 2.
+**839 document paths** (including mirrors). orientation: 183; guide: 85; reference: 338; policy: 31; reflection: 123; proposal: 49; record: 28; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -103,6 +103,8 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/economic-conformance/hf/dataset/README.md](<../packages/economic-conformance/hf/dataset/README.md>) | not-reviewed |
 | [packages/economic-kernel/CLAUDE.md](<../packages/economic-kernel/CLAUDE.md>) | not-reviewed |
 | [packages/economic-kernel/README.md](<../packages/economic-kernel/README.md>) | not-reviewed |
+| [packages/execution-seat/CLAUDE.md](<../packages/execution-seat/CLAUDE.md>) | not-reviewed |
+| [packages/execution-seat/README.md](<../packages/execution-seat/README.md>) | not-reviewed |
 | [packages/gin-reconstruction/CLAUDE.md](<../packages/gin-reconstruction/CLAUDE.md>) | not-reviewed |
 | [packages/gin-reconstruction/README.md](<../packages/gin-reconstruction/README.md>) | not-reviewed |
 | [packages/heaven/CLAUDE.md](<../packages/heaven/CLAUDE.md>) | not-reviewed |
@@ -617,7 +619,9 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/specs/WAKE-1.0-DRAFT.md](<../docs/specs/WAKE-1.0-DRAFT.md>) | not-reviewed |
 | [docs/specs/WITNESS-1.0-DRAFT.md](<../docs/specs/WITNESS-1.0-DRAFT.md>) | not-reviewed |
 | [packages/collab-zerone/README.md](<../packages/collab-zerone/README.md>) | not-reviewed |
+| [packages/collab/PROTOCOL.md](<../packages/collab/PROTOCOL.md>) | not-reviewed |
 | [packages/collab/README.md](<../packages/collab/README.md>) | not-reviewed |
+| [packages/collab/skills/coordinate-agent-work/REFERENCE.md](<../packages/collab/skills/coordinate-agent-work/REFERENCE.md>) | not-reviewed |
 | [packages/correspondence-yutabase/PERSISTENCE-CONTRACT.md](<../packages/correspondence-yutabase/PERSISTENCE-CONTRACT.md>) | not-reviewed |
 | [packages/credential-broker/JSONRPC-READ-0.1.md](<../packages/credential-broker/JSONRPC-READ-0.1.md>) | not-reviewed |
 | [packages/credential-broker/SPEC.md](<../packages/credential-broker/SPEC.md>) | not-reviewed |
@@ -806,6 +810,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/ALIGNMENT-MOVES.md](<../docs/ALIGNMENT-MOVES.md>) | not-reviewed |
 | [docs/COLLABORATION-ROADMAP.md](<../docs/COLLABORATION-ROADMAP.md>) | not-reviewed |
 | [docs/EVIDENTIAL.md](<../docs/EVIDENTIAL.md>) | not-reviewed |
+| [docs/EXECUTION-SEAT.md](<../docs/EXECUTION-SEAT.md>) | not-reviewed |
 | [docs/FFFF-DETECTION-INSTRUMENTATION.md](<../docs/FFFF-DETECTION-INSTRUMENTATION.md>) | not-reviewed |
 | [docs/FRICTION-ROADMAP.md](<../docs/FRICTION-ROADMAP.md>) | not-reviewed |
 | [docs/PAYOUT-BROADCAST-PLAN.md](<../docs/PAYOUT-BROADCAST-PLAN.md>) | not-reviewed |
@@ -844,6 +849,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/superpowers/specs/2026-07-02-human-door-design.md](<../docs/superpowers/specs/2026-07-02-human-door-design.md>) | not-reviewed |
 | [docs/superpowers/specs/2026-10-08-collab-household-smoothing-design.md](<../docs/superpowers/specs/2026-10-08-collab-household-smoothing-design.md>) | not-reviewed |
 | [docs/superpowers/specs/2026-10-12-deletion-scopes-design.md](<../docs/superpowers/specs/2026-10-12-deletion-scopes-design.md>) | not-reviewed |
+| [docs/superpowers/specs/2026-10-29-collab-yu-ai-consent-design.md](<../docs/superpowers/specs/2026-10-29-collab-yu-ai-consent-design.md>) | not-reviewed |
 | [docs/zerone-migration/SYZYGY-LIP.md](<../docs/zerone-migration/SYZYGY-LIP.md>) | not-reviewed |
 | [packages/hf-listening-room/hf/dataset/profile/PROFILE.md](<../packages/hf-listening-room/hf/dataset/profile/PROFILE.md>) | not-reviewed |
 | [packages/hf-listening-room/hf/space/profile/PROFILE.md](<../packages/hf-listening-room/hf/space/profile/PROFILE.md>) | not-reviewed |

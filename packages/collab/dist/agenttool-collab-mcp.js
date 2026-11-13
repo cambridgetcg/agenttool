@@ -28595,12 +28595,42 @@ var COLLAB_SESSION_PROTOCOL = "agenttool.collab.session/0.1";
 var SESSION_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
 var EVIDENCE_REF_PREFIXES = ["artifact:", "event:", "report:", "checkpoint:"];
 var EVIDENCE_REFS_DESCRIPTION = "Evidence references point inside this workspace's journal and start with artifact:, event:, " + "report:, or checkpoint: (a task's base_checkpoint_digest or result_checkpoint_digest), " + 'for example "artifact:artifact_<id>".';
+var CONSENT_RULE = "consent/v1";
+var PROPOSAL_BYTES_PROTOCOL = "agenttool.collab-proposal/1";
+var DEFAULT_PROPOSAL_CONSULT_SECONDS = 6 * 60 * 60;
+var MIN_PROPOSAL_CONSULT_SECONDS = 10 * 60;
+var MAX_PROPOSAL_CONSULT_SECONDS = 7 * 24 * 60 * 60;
+var PERSON_ACT_PROTOCOL = "agenttool.collab-person-act/1";
 var DEFAULT_WAIT_EVENT_LIMIT = 10;
 var MAX_WAIT_EVENT_LIMIT = 50;
 var MAX_WAIT_MS = 30000;
 var MAX_WAIT_PAGE_BYTES = 256 * 1024;
 var MAX_WAIT_RESPONSE_BYTES = 1024 * 1024;
 var MAX_WAIT_ANCHOR_BYTES = 8 * 1024 * 1024;
+
+// src/seat-ref.ts
+var MAX_SEAT_REF = 200;
+var SEAT_REF = /^[A-Za-z0-9][A-Za-z0-9._:@/+-]*$/;
+var UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var SEAT_REF_ENVIRONMENT_VARIABLE = "AGENTOOL_COLLAB_SEAT_REF";
+function validateSeatRef(value) {
+  if (value.length === 0 || value.length > MAX_SEAT_REF || !SEAT_REF.test(value)) {
+    throw new CollabError("invalid_seat_ref", `seat_ref is 1 to ${MAX_SEAT_REF} characters: letters, digits and . _ : @ / + -, starting with a letter or digit`);
+  }
+  return value;
+}
+function defaultSeatRef(env) {
+  const declared = env[SEAT_REF_ENVIRONMENT_VARIABLE];
+  if (declared !== undefined && declared !== "")
+    return validateSeatRef(declared);
+  const claude = env.CLAUDE_CODE_SESSION_ID;
+  if (claude && UUID.test(claude))
+    return `claude-code:${claude.toLowerCase()}`;
+  const codex = env.CODEX_THREAD_ID;
+  if (codex && UUID.test(codex))
+    return `codex:${codex.toLowerCase()}`;
+  return null;
+}
 
 // src/session-file.ts
 import {
@@ -28739,864 +28769,8 @@ function isOwnedByCurrentUser(uid) {
   return typeof process.getuid !== "function" || uid === process.getuid();
 }
 
-// src/version.ts
-var COLLAB_PACKAGE_VERSION = "0.5.1-dev.0";
-
-// src/mcp.ts
-var DEFAULT_MCP_NEXT_EVENT_LIMIT = 10;
-var actorLabel = exports_external.string().min(1).max(200).describe("Stable display label; session credentials, not this label, fence session mutations");
-var legacyActor = actorLabel.optional();
-var key = exports_external.string().min(1).max(200).describe("Unique retry-safe key for this mutation");
-var workspaceId = exports_external.string().min(1).describe("Workspace ID returned by workspace open or credential-bound session start");
-var sessionId = exports_external.string().min(1).max(200).describe("Presence session ID");
-var sessionExpectedVersion = exports_external.number().int().positive().describe("Presence session version last read by the caller");
-var presenceTtlSeconds = exports_external.number().int().min(30).max(3600).optional().describe("Presence routing hint lifetime; default 120 seconds");
-var taskId = exports_external.string().min(1).describe("Task ID");
-var leaseId = exports_external.string().min(1).describe("Lease ID returned by claim, recovery, or handoff acceptance");
-var expectedVersion = exports_external.number().int().positive().describe("Task version last read by the caller");
-var ttlSeconds = exports_external.number().int().min(30).max(3600).optional().describe("Lease duration; default 900 seconds, maximum 3600");
-var eventAnchor = exports_external.object({
-  epoch_id: exports_external.string().min(1),
-  sequence: exports_external.number().int().nonnegative(),
-  hash: exports_external.string().length(64)
-});
-var evidenceRefs = exports_external.array(exports_external.string().min(1).max(2000)).max(128).optional().describe(EVIDENCE_REFS_DESCRIPTION);
-var nextEventLimit = exports_external.number().int().min(1).max(50).optional().describe(`Maximum events in this page; defaults to ${DEFAULT_MCP_NEXT_EVENT_LIMIT} for MCP polling`);
-var localReadOnly = {
-  readOnlyHint: true,
-  destructiveHint: false,
-  idempotentHint: true,
-  openWorldHint: false
-};
-var localRetrySafeMutation = {
-  readOnlyHint: false,
-  destructiveHint: false,
-  idempotentHint: true,
-  openWorldHint: false
-};
-var localMutation = {
-  readOnlyHint: false,
-  destructiveHint: false,
-  idempotentHint: false,
-  openWorldHint: false
-};
-var localDestructiveMutation = {
-  readOnlyHint: false,
-  destructiveHint: true,
-  idempotentHint: false,
-  openWorldHint: false
-};
-function buildCollabMcpServer(store, options = {}) {
-  const slots = new Map([["", { key: "", binding: options.resumed_session ?? null }]]);
-  for (const [key2, binding] of Object.entries(options.resumed_sessions ?? {})) {
-    if (!key2 || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(key2)) {
-      throw new CollabError("invalid_binding_key", "A named binding requires a valid non-empty key");
-    }
-    slots.set(key2, { key: key2, binding });
-  }
-  const requestSlot = new AsyncLocalStorage;
-  const state = {
-    get binding() {
-      return requestSlot.getStore().binding;
-    },
-    set binding(value) {
-      requestSlot.getStore().binding = value;
-    }
-  };
-  const server = new McpServer({ name: "agenttool-collab", version: COLLAB_PACKAGE_VERSION }, {
-    capabilities: { tools: {} },
-    instructions: `Collab ${COLLAB_PACKAGE_VERSION}: collab_events_wait offers bounded read-only anchored observation for an already running host, ` + "without acknowledging, refreshing presence, or renewing leases; continue from next_anchor, never head. " + "Local-first coordination journal for honest exchange among independent coding-agent sessions. " + "Use collab_session_start once per default or named binding_key, then collab_next. Named children require an explicit actor and parent_session_id; " + "send their binding_key on every call. Selectors are cooperative routing, not authenticated subagent isolation. " + "Default-slot actor can use Claude metadata only with matching selected PID, messaging socket and process start time. A host restart resumes from the " + "mode-0600 credential file without exposing its bearer token to the model. Exchange observations, " + "inferences, proposals, or authorised decisions as structured reports with evidence, confidence, " + "limits, and explicit authority scope. Claim before editing overlapping path scopes. Session leases remain live while their " + "session is live (6 hours since activity); optional renew is lease-fenced, not version-gated. " + "An advisory coordination lease is not ownership, a filesystem lock, or authority. Edit-task " + "completion is actor-reported and remains pending until a distinct session accepts it. Challenges " + "remain append-only disagreement; acknowledgement means processed, not agreed. Expired session " + "leases require explicit recovery. Git checkpoints are local evidence, not attribution or atomic " + "Git/SQLite locks. Store concise coordination facts only\u2014never credentials, prompts, transcripts, " + "chain-of-thought, or sensitive source content. Cursor rollback recovery must be enabled by the host " + "and completed with an audited cursor reset before session mutations resume. The host owns spawning, " + "wakeups, waiting, and stopping. The separate collab_session_join/list/heartbeat/leave tools preserve " + "the public v0.2 self-declared presence plane; they provide routing hints only and never authenticate a caller. " + "The read-only collab_anchor_status tool can compare this journal with an optional local Zerone witness sidecar; " + "it never contacts a chain, broadcasts, spends funds, or turns an anchor into truth or authority."
-  });
-  const register2 = server.registerTool.bind(server);
-  server.registerTool = (...[name, config2, callback]) => register2(name, {
-    ...config2,
-    inputSchema: {
-      ...config2.inputSchema,
-      binding_key: exports_external.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/).optional().describe("Cooperative subagent binding selector; omit for the original default binding. Not authentication.")
-    }
-  }, async (input, ctx) => {
-    const { binding_key, ...args } = input;
-    if (binding_key !== undefined && (typeof binding_key !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(binding_key))) {
-      return failure(new CollabError("invalid_binding_key", "Invalid binding selector"));
-    }
-    const key2 = binding_key ?? "";
-    let slot = slots.get(key2);
-    if (key2 && (!slot || !slot.binding) && name !== "collab_session_start") {
-      return failure(new CollabError("session_not_bound", "The selected child binding is not bound"));
-    }
-    if (!slot) {
-      slot = { key: key2, binding: null };
-      slots.set(key2, slot);
-    }
-    return requestSlot.run(slot, () => callback(args, ctx));
-  });
-  const waitShutdown = new AbortController;
-  let activeWaits = 0;
-  const close = server.close.bind(server);
-  server.close = async () => {
-    waitShutdown.abort();
-    await close();
-  };
-  const onclose = server.server.onclose;
-  server.server.onclose = () => {
-    waitShutdown.abort();
-    onclose?.();
-  };
-  const boundCredential = (allowCursorRecovery = false) => {
-    const binding = state.binding;
-    if (!binding) {
-      throw new CollabError("session_not_bound", "Start a credential-bound session first or provide legacy actor mode explicitly");
-    }
-    if (binding.handle.cursor_recovery && !allowCursorRecovery) {
-      throw new CollabError("cursor_recovery_required", "The host authorized recovery mode; reset to an exact journal anchor before session mutations resume", { ...binding.handle.cursor_recovery });
-    }
-    return binding.handle.credential;
-  };
-  const requireWorkspace = (id) => {
-    const binding = state.binding;
-    if (binding && binding.handle.workspace.id !== id) {
-      throw new CollabError("session_workspace_mismatch", "The bound session belongs to another workspace");
-    }
-  };
-  const requireLegacyActor = (value) => {
-    if (!value) {
-      throw new CollabError("actor_required", "Legacy mode requires actor; session mode derives it from the bound credential");
-    }
-    return value;
-  };
-  server.registerTool("collab_session_join", {
-    title: "Join the self-declared presence plane",
-    description: "Create or replay one unauthenticated routing-presence record and return its unique actor_key. This does not bind the MCP process or create a credential.",
-    annotations: localRetrySafeMutation,
-    inputSchema: {
-      workspace_id: workspaceId,
-      client_instance_id: exports_external.string().min(1).max(200).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
-      actor_label: actorLabel,
-      runtime_kind: exports_external.string().min(1).max(64).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
-      provider_label: exports_external.string().min(1).max(100).optional(),
-      model_label: exports_external.string().min(1).max(200).optional(),
-      declared_capabilities: exports_external.array(exports_external.string().min(1).max(100).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/)).max(32).optional(),
-      ttl_seconds: presenceTtlSeconds
-    }
-  }, async (input) => call(() => ({ session: store.joinSession(input) })));
-  server.registerTool("collab_session_list", {
-    title: "List self-declared presence sessions",
-    description: "List recent live, stale, or explicitly left routing hints. Presence is not health, authentication, permission, or credential-bound coordination.",
-    annotations: localReadOnly,
-    inputSchema: {
-      workspace_id: workspaceId,
-      presence: exports_external.enum(["live", "stale", "left"]).optional(),
-      limit: exports_external.number().int().min(1).max(500).optional()
-    }
-  }, async ({ workspace_id, presence, limit }) => call(() => ({ sessions: store.listSessions(workspace_id, presence, limit) })));
-  server.registerTool("collab_session_heartbeat", {
-    title: "Refresh a self-declared presence hint",
-    description: "Refresh server-timed routing presence. This never renews or releases a task lease and does not authenticate the caller.",
-    annotations: localRetrySafeMutation,
-    inputSchema: {
-      session_id: sessionId,
-      idempotency_key: key,
-      expected_version: sessionExpectedVersion,
-      ttl_seconds: presenceTtlSeconds
-    }
-  }, async (input) => call(() => ({ session: store.heartbeatSession(input) })));
-  server.registerTool("collab_session_leave", {
-    title: "Leave the self-declared presence plane",
-    description: "Mark one routing-presence incarnation as left. This does not end a credential-bound session or release its task leases.",
-    annotations: localRetrySafeMutation,
-    inputSchema: {
-      session_id: sessionId,
-      idempotency_key: key,
-      expected_version: sessionExpectedVersion
-    }
-  }, async (input) => call(() => ({ session: store.leaveSession(input) })));
-  server.registerTool("collab_session_start", {
-    title: "Join an independent local collaboration session",
-    description: "Create and bind a credential-fenced session. The bearer is written to a mode-0600 local file and is never returned in tool output.",
-    annotations: localMutation,
-    inputSchema: {
-      root_path: exports_external.string().min(1),
-      actor: actorLabel.optional().describe("Defaults to verified owning Claude process metadata; named children require an explicit actor."),
-      role: exports_external.string().max(200).optional(),
-      parent_session_id: exports_external.string().min(1).optional(),
-      repository_key: exports_external.string().min(1).max(1000).optional()
-    }
-  }, async (input) => call(() => {
-    if (state.binding) {
-      throw new CollabError("session_already_bound", "This MCP process already has a bound session", { session_id: state.binding.handle.session.id });
-    }
-    if (requestSlot.getStore().key && !input.parent_session_id) {
-      throw new CollabError("parent_session_required", "A named child binding requires parent_session_id");
-    }
-    if (requestSlot.getStore().key && input.actor === undefined) {
-      throw new CollabError("actor_required", "A named child binding requires its own explicit actor");
-    }
-    const handle = store.startSession({ ...input, actor: input.actor ?? defaultActor() });
-    const credentialFile = store.defaultSessionCredentialPath(handle.session.id);
-    try {
-      const path = writeSessionCredentialFile(credentialFile, handle.credential);
-      state.binding = { handle, credential_file: path };
-      return publicSessionBinding(state.binding);
-    } catch (error51) {
-      try {
-        store.endSession({ ...handle.credential, reason: "credential_file_write_failed" });
-      } catch {}
-      throw error51;
-    }
-  }));
-  server.registerTool("collab_session_end", {
-    title: "End the bound collaboration session",
-    description: "Fence future session mutations and remove the credential file. Live leases must be resolved first, " + "or pass release_leases: true to release every live lease and recovery-release every expired lease " + "this session holds in the same transaction; incoming offers expire as an audited refusal.",
-    annotations: localDestructiveMutation,
-    inputSchema: {
-      reason: exports_external.string().max(2000).optional(),
-      release_leases: exports_external.boolean().optional().describe("Release every lease this session holds before ending: live leases through task release, " + "expired leases through recovery with action release"),
-      release_summary: exports_external.string().max(2000).optional().describe("Release summary and recovery note recorded for each released lease; requires release_leases: true. " + "Defaults to reason")
-    }
-  }, async ({ reason, release_leases, release_summary }) => call(() => {
-    const current = state.binding;
-    if (!current)
-      throw new CollabError("session_not_bound", "No session is bound");
-    const ended = store.endSessionWithReleases({
-      ...current.handle.credential,
-      reason,
-      release_leases,
-      release_summary
-    });
-    state.binding = null;
-    removeSessionCredentialFile(current.credential_file);
-    return {
-      session: ended.session,
-      released_leases: ended.released_leases,
-      credential_file_removed: true,
-      session_file_name: `${ended.session.id}.json`
-    };
-  }));
-  server.registerTool("collab_workspace_open", {
-    title: "Open a local collaboration workspace",
-    description: "Legacy-compatible workspace open. New independent processes should use collab_session_start.",
-    annotations: localRetrySafeMutation,
-    inputSchema: {
-      root_path: exports_external.string().min(1),
-      name: exports_external.string().max(200).optional(),
-      actor: actorLabel,
-      repository_key: exports_external.string().min(1).max(1000).optional()
-    }
-  }, async (input) => call(() => {
-    if (state.binding) {
-      throw new CollabError("session_already_bound", "A bound MCP process cannot open or register another workspace", { session_id: state.binding.handle.session.id });
-    }
-    return { workspace: store.openWorkspace(input) };
-  }));
-  server.registerTool("collab_workspace_status", {
-    title: "Read collaboration status",
-    description: "Return task counts, active sessions (with derived liveness) and claims, blockers, pending reviews, reports, and decisions.",
-    annotations: localReadOnly,
-    inputSchema: { workspace_id: workspaceId }
-  }, async ({ workspace_id }) => call(() => store.workspaceStatus(workspace_id)));
-  server.registerTool("collab_next", {
-    title: "Poll the next useful collaboration state",
-    description: "Poll without acknowledging, with 1\u201350 events per page and a default of 10. Routed reports are bounded to the exact event page; task, conflict, and handoff projections describe the same snapshot head. A bound session always pages from its acknowledged cursor: advance with collab_cursor_ack, or read elsewhere with collab_events_since. " + "recovery_required lists expired session leases awaiting collab_task_recover, the caller's own first. " + "Session liveness and task assignee_liveness are a derived view (stale after 6 hours unseen), never a status change.",
-    annotations: localMutation,
-    inputSchema: {
-      workspace_id: workspaceId,
-      actor: legacyActor,
-      after_sequence: exports_external.number().int().nonnegative().optional().describe("Legacy actor mode: page after this sequence. A bound session pages from its acknowledged cursor; " + "any other value is refused with after_sequence_unsupported_in_bound_session."),
-      known_cursor: eventAnchor.optional(),
-      event_limit: nextEventLimit
-    }
-  }, async ({ workspace_id, actor, after_sequence, known_cursor, event_limit }) => call(() => {
-    requireWorkspace(workspace_id);
-    return state.binding ? store.nextForSession({
-      ...boundCredential(),
-      known_cursor,
-      event_limit: event_limit ?? DEFAULT_MCP_NEXT_EVENT_LIMIT,
-      after_sequence
-    }) : store.nextForActor(workspace_id, requireLegacyActor(actor), after_sequence ?? 0, event_limit ?? DEFAULT_MCP_NEXT_EVENT_LIMIT);
-  }));
-  server.registerTool("collab_cursor_ack", {
-    title: "Acknowledge processed collaboration events",
-    description: "Monotonically persist an exact epoch/sequence/hash anchor. Acknowledgement records processing, not agreement.",
-    annotations: localRetrySafeMutation,
-    inputSchema: {
-      workspace_id: workspaceId,
-      anchor: eventAnchor,
-      expected_cursor_version: exports_external.number().int().nonnegative()
-    }
-  }, async ({ workspace_id, anchor, expected_cursor_version }) => call(() => {
-    requireWorkspace(workspace_id);
-    const session = store.acknowledgeSessionCursor({
-      ...boundCredential(),
-      anchor,
-      expected_cursor_version
-    });
-    const binding = state.binding;
-    if (binding) {
-      binding.handle = {
-        ...binding.handle,
-        session,
-        credential: {
-          ...binding.handle.credential,
-          last_cursor: session.cursor
-        }
-      };
-      writeSessionCredentialFile(binding.credential_file, binding.handle.credential, { replace: true });
-    }
-    return { session };
-  }));
-  server.registerTool("collab_cursor_reset", {
-    title: "Deliberately reset a forked or rolled-back session cursor",
-    description: "Append an auditable reset reason and CAS the cursor to an exact valid anchor; ordinary polling never resets automatically.",
-    annotations: localRetrySafeMutation,
-    inputSchema: {
-      workspace_id: workspaceId,
-      idempotency_key: key,
-      target: eventAnchor,
-      expected_cursor_version: exports_external.number().int().nonnegative(),
-      reason: exports_external.string().min(1).max(2000)
-    }
-  }, async ({ workspace_id, ...input }) => call(() => {
-    requireWorkspace(workspace_id);
-    const session = store.resetSessionCursor({ ...boundCredential(true), ...input });
-    const binding = state.binding;
-    if (binding) {
-      binding.handle = {
-        ...binding.handle,
-        cursor_recovery: undefined,
-        session,
-        credential: {
-          ...binding.handle.credential,
-          last_cursor: session.cursor
-        }
-      };
-      writeSessionCredentialFile(binding.credential_file, binding.handle.credential, { replace: true });
-    }
-    return { session };
-  }));
-  server.registerTool("collab_task_create", {
-    title: "Create a bounded collaboration task",
-    description: "Create a task with dependencies and path scopes. Bound-session edit tasks require non-empty scopes and default to distinct-session acceptance.",
-    annotations: localRetrySafeMutation,
-    inputSchema: {
-      workspace_id: workspaceId,
-      actor: legacyActor,
-      idempotency_key: key,
-      task_id: exports_external.string().min(1).max(200).optional(),
-      title: exports_external.string().min(1).max(300),
-      description: exports_external.string().max(8000).optional(),
-      dependencies: exports_external.array(exports_external.string().min(1).max(200)).max(128).optional(),
-      path_scopes: exports_external.array(exports_external.string().min(1).max(500)).max(128).optional(),
-      work_mode: exports_external.enum(["coordination", "read_only", "edit"]).optional(),
-      completion_policy: exports_external.enum(["reported", "accepted"]).optional(),
-      expected_base_sha: exports_external.string().regex(/^[a-fA-F0-9]{40,64}$/).optional()
-    }
-  }, async ({ workspace_id, actor, task_id, ...input }) => call(() => {
-    requireWorkspace(workspace_id);
-    if (!state.binding && (input.work_mode !== undefined || input.completion_policy !== undefined || input.expected_base_sha !== undefined)) {
-      throw new CollabError("session_required_for_v2_task_options", "work_mode, completion_policy, and expected_base_sha require a bound v0.2 session");
-    }
-    const task = state.binding ? store.createTaskForSession({ ...boundCredential(), ...input, id: task_id }) : store.createTask({
-      workspace_id,
-      actor: requireLegacyActor(actor),
-      ...input,
-      id: task_id
-    });
-    return { task };
-  }));
-  server.registerTool("collab_task_list", {
-    title: "List workspace tasks",
-    description: "List projections including recovery_required, reported_complete, review state, sessions, worktrees, and checkpoints.",
-    annotations: localReadOnly,
-    inputSchema: {
-      workspace_id: workspaceId,
-      status: exports_external.enum(["open", "claimed", "blocked", "completed"]).optional()
-    }
-  }, async ({ workspace_id, status }) => call(() => ({ tasks: store.listTasks(workspace_id, status) })));
-  server.registerTool("collab_task_get", {
-    title: "Read one task",
-    description: "Return a task, review/lease/checkpoint state, and artifact references.",
-    annotations: localReadOnly,
-    inputSchema: { workspace_id: workspaceId, task_id: taskId }
-  }, async ({ workspace_id, task_id }) => call(() => ({ task: store.getTask(workspace_id, task_id) })));
-  server.registerTool("collab_task_claim", {
-    title: "Claim a task coordination lease",
-    description: "Atomically claim if accepted dependencies and repository-wide path scopes permit it. Expired session leases require collab_task_recover.",
-    annotations: localRetrySafeMutation,
-    inputSchema: {
-      workspace_id: workspaceId,
-      task_id: taskId,
-      actor: legacyActor,
-      idempotency_key: key,
-      expected_version: expectedVersion,
-      ttl_seconds: ttlSeconds
-    }
-  }, async ({ workspace_id, actor, ...input }) => call(() => {
-    requireWorkspace(workspace_id);
-    const task = state.binding ? store.claimTaskForSession({ ...boundCredential(), ...input }) : store.claimTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
-    return { task };
-  }));
-  server.registerTool("collab_task_recover", {
-    title: "Explicitly recover an expired session lease",
-    description: "Acknowledge the prior holder/checkpoint and atomically take over after rechecking dependencies and path conflicts; this does not accept prior work.",
-    annotations: localRetrySafeMutation,
-    inputSchema: {
-      workspace_id: workspaceId,
-      task_id: taskId,
-      idempotency_key: key,
-      expected_version: expectedVersion,
-      recovery_note: exports_external.string().min(1).max(4000),
-      action: exports_external.enum(["takeover", "release", "block"]).optional(),
-      blocker: exports_external.string().min(1).max(2000).optional(),
-      ttl_seconds: ttlSeconds
-    }
-  }, async ({ workspace_id, ...input }) => call(() => {
-    requireWorkspace(workspace_id);
-    return {
-      task: store.recoverTaskForSession({ ...boundCredential(), ...input })
-    };
-  }));
-  server.registerTool("collab_task_renew", {
-    title: "Renew a live task lease",
-    description: "Extend the current lease without version-gating or task-version churn; renewal never shortens it. Credential and lease fencing still apply.",
-    annotations: localRetrySafeMutation,
-    inputSchema: leaseMutationSchema({ ttl_seconds: ttlSeconds, expected_version: expectedVersion.optional() })
-  }, async ({ workspace_id, actor, ...input }) => call(() => {
-    requireWorkspace(workspace_id);
-    const task = state.binding ? store.renewLeaseForSession({ ...boundCredential(), ...input }) : store.renewLease({ workspace_id, actor: requireLegacyActor(actor), ...input });
-    return { task };
-  }));
-  server.registerTool("collab_task_progress", {
-    title: "Post concise task progress",
-    description: "Record a result-oriented progress note. Use a structured report when evidence, confidence, disagreement, or authority matters.",
-    annotations: localRetrySafeMutation,
-    inputSchema: leaseMutationSchema({ message: exports_external.string().min(1).max(2000) })
-  }, async ({ workspace_id, actor, ...input }) => call(() => {
-    requireWorkspace(workspace_id);
-    const task = state.binding ? store.progressTaskForSession({ ...boundCredential(), ...input }) : store.progressTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
-    return { task };
-  }));
-  server.registerTool("collab_task_release", {
-    title: "Release a task lease",
-    description: "Return work to the open pool. A session-to-session handoff remains an invitation until accepted.",
-    annotations: localRetrySafeMutation,
-    inputSchema: leaseMutationSchema({ summary: exports_external.string().max(2000).optional() })
-  }, async ({ workspace_id, actor, ...input }) => call(() => {
-    requireWorkspace(workspace_id);
-    const task = state.binding ? store.releaseTaskForSession({ ...boundCredential(), ...input }) : store.releaseTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
-    return { task };
-  }));
-  server.registerTool("collab_task_block", {
-    title: "Block and release a task",
-    description: "Record a blocker and release the current lease/path scopes.",
-    annotations: localRetrySafeMutation,
-    inputSchema: leaseMutationSchema({ blocker: exports_external.string().min(1).max(2000) })
-  }, async ({ workspace_id, actor, ...input }) => call(() => {
-    requireWorkspace(workspace_id);
-    const task = state.binding ? store.blockTaskForSession({ ...boundCredential(), ...input }) : store.blockTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
-    return { task };
-  }));
-  server.registerTool("collab_task_unblock", {
-    title: "Unblock a task",
-    description: "Move a blocked task back to the open pool with an optional note.",
-    annotations: localRetrySafeMutation,
-    inputSchema: {
-      workspace_id: workspaceId,
-      task_id: taskId,
-      actor: legacyActor,
-      idempotency_key: key,
-      expected_version: expectedVersion,
-      note: exports_external.string().max(2000).optional()
-    }
-  }, async ({ workspace_id, actor, ...input }) => call(() => {
-    requireWorkspace(workspace_id);
-    const task = state.binding ? store.unblockTaskForSession({ ...boundCredential(), ...input }) : store.unblockTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
-    return { task };
-  }));
-  server.registerTool("collab_artifact_attach", {
-    title: "Attach an artifact reference",
-    description: "Attach a path, commit, test, data record, or URL reference; bytes remain outside this journal.",
-    annotations: localRetrySafeMutation,
-    inputSchema: leaseMutationSchema({
-      kind: exports_external.enum(["file", "commit", "test", "data", "url", "other"]),
-      uri: exports_external.string().min(1).max(2000),
-      sha256: exports_external.string().length(64).optional(),
-      media_type: exports_external.string().max(200).optional(),
-      label: exports_external.string().max(300).optional()
-    })
-  }, async ({ workspace_id, actor, ...input }) => call(() => {
-    requireWorkspace(workspace_id);
-    return state.binding ? store.attachArtifactForSession({ ...boundCredential(), ...input }) : store.attachArtifact({ workspace_id, actor: requireLegacyActor(actor), ...input });
-  }));
-  server.registerTool("collab_task_complete", {
-    title: "Report a claimed task complete",
-    description: "Legacy mode is actor-reported and not review or acceptance. Bound edit tasks produce a structured completion report and remain pending until distinct-session review. Optional review_requested_session_id routes a separate review request to one active session; any distinct session may still review.",
-    annotations: localRetrySafeMutation,
-    inputSchema: leaseMutationSchema({
-      summary: exports_external.string().min(1).max(4000),
-      confidence: exports_external.enum(["high", "medium", "low", "unknown"]).optional(),
-      confidence_basis: exports_external.string().max(2000).optional(),
-      limits: exports_external.string().max(2000).optional(),
-      evidence_refs: evidenceRefs,
-      review_requested_session_id: exports_external.string().min(1).max(200).optional().describe("Optional active session in this workspace, other than yours, asked to review this completion through a separate addressed report. A request, not a reservation. Only on a task whose completion waits for acceptance.")
-    })
-  }, async ({ workspace_id, actor, ...input }) => call(() => {
-    requireWorkspace(workspace_id);
-    if (!state.binding && input.review_requested_session_id !== undefined) {
-      throw new CollabError("session_required_for_review_request", "review_requested_session_id requires a bound v0.2 session");
-    }
-    const task = state.binding ? store.completeTaskForSession({ ...boundCredential(), ...input }) : store.completeTask({
-      workspace_id,
-      actor: requireLegacyActor(actor),
-      task_id: input.task_id,
-      lease_id: input.lease_id,
-      idempotency_key: input.idempotency_key,
-      expected_version: input.expected_version,
-      summary: input.summary
-    });
-    return { task };
-  }));
-  server.registerTool("collab_task_review", {
-    title: "Review reported task completion",
-    description: "A distinct active session accepts or requests changes. Acceptance is local coordination review\u2014not merge, deploy, truth, or external authority.",
-    annotations: localRetrySafeMutation,
-    inputSchema: {
-      workspace_id: workspaceId,
-      task_id: taskId,
-      idempotency_key: key,
-      expected_version: expectedVersion,
-      outcome: exports_external.enum(["accept", "request_changes"]),
-      summary: exports_external.string().min(1).max(4000),
-      evidence_refs: evidenceRefs,
-      confidence: exports_external.enum(["high", "medium", "low", "unknown"]).optional(),
-      confidence_basis: exports_external.string().max(2000).optional(),
-      limits: exports_external.string().max(2000).optional()
-    }
-  }, async ({ workspace_id, ...input }) => call(() => {
-    requireWorkspace(workspace_id);
-    return store.reviewTaskForSession({ ...boundCredential(), ...input });
-  }));
-  server.registerTool("collab_report_append", {
-    title: "Append a structured collaboration report",
-    description: "Append an observation, inference, proposal, or scoped decision. Reports can challenge claims without holding the task lease.",
-    annotations: localRetrySafeMutation,
-    inputSchema: {
-      workspace_id: workspaceId,
-      idempotency_key: key,
-      task_id: exports_external.string().min(1).optional(),
-      to_session_id: exports_external.string().min(1).optional(),
-      kind: exports_external.enum(["observation", "inference", "proposal", "decision"]),
-      body: exports_external.string().min(1).max(8000),
-      evidence_refs: evidenceRefs,
-      confidence: exports_external.enum(["high", "medium", "low", "unknown"]).optional(),
-      confidence_basis: exports_external.string().max(2000).optional(),
-      limits: exports_external.string().max(2000).optional(),
-      relation: exports_external.enum([
-        "informs",
-        "supports",
-        "challenges",
-        "corrects",
-        "withdraws",
-        "supersedes",
-        "resolves"
-      ]).optional().describe("informs (the default) targets no report. supports / challenges answer any report; " + "corrects / withdraws / supersedes only your own; resolves only a challenge. " + "To say yes to a proposal, use supports with its target_report_id."),
-      target_report_id: exports_external.string().min(1).optional().describe("The earlier report this one answers. Required for every relation except informs."),
-      authority_scope: exports_external.string().max(1000).optional(),
-      authority_basis: exports_external.string().max(2000).optional()
-    }
-  }, async ({ workspace_id, ...input }) => call(() => {
-    requireWorkspace(workspace_id);
-    return {
-      report: store.appendReportForSession({ ...boundCredential(), ...input })
-    };
-  }));
-  server.registerTool("collab_report_list", {
-    title: "List structured collaboration reports",
-    description: "Read append-only reports and branching disagreement by event sequence, task, or addressed session.",
-    annotations: localReadOnly,
-    inputSchema: {
-      workspace_id: workspaceId,
-      after_event_sequence: exports_external.number().int().nonnegative().optional(),
-      limit: exports_external.number().int().min(1).max(500).optional(),
-      task_id: exports_external.string().min(1).optional(),
-      to_session_id: exports_external.string().min(1).optional()
-    }
-  }, async ({ workspace_id, ...options2 }) => call(() => ({
-    reports: store.listReports(workspace_id, options2)
-  })));
-  server.registerTool("collab_decision_record", {
-    title: "Record a collaboration decision",
-    description: "Legacy-compatible decision record. In a bound session this becomes a structured decision report requiring explicit authority scope and basis.",
-    annotations: localRetrySafeMutation,
-    inputSchema: {
-      workspace_id: workspaceId,
-      actor: legacyActor,
-      idempotency_key: key,
-      topic: exports_external.string().min(1).max(500),
-      decision: exports_external.string().min(1).max(4000),
-      rationale: exports_external.string().max(4000).optional(),
-      authority_scope: exports_external.string().max(1000).optional(),
-      authority_basis: exports_external.string().max(2000).optional()
-    }
-  }, async ({ workspace_id, actor, authority_scope, authority_basis, ...input }) => call(() => {
-    requireWorkspace(workspace_id);
-    if (state.binding) {
-      return {
-        report: store.appendReportForSession({
-          ...boundCredential(),
-          idempotency_key: input.idempotency_key,
-          kind: "decision",
-          body: `${input.topic}: ${input.decision}${input.rationale ? `
-Rationale: ${input.rationale}` : ""}`,
-          confidence: "unknown",
-          authority_scope,
-          authority_basis
-        })
-      };
-    }
-    return {
-      decision: store.recordDecision({
-        workspace_id,
-        actor: requireLegacyActor(actor),
-        ...input
-      })
-    };
-  }));
-  server.registerTool("collab_handoff_offer", {
-    title: "Offer a task handoff",
-    description: "Invite another actor/session. The current holder keeps the coordination lease until explicit acceptance.",
-    annotations: localRetrySafeMutation,
-    inputSchema: leaseMutationSchema({
-      to_actor: exports_external.string().min(1).max(200).optional(),
-      to_session_id: exports_external.string().min(1).optional(),
-      summary: exports_external.string().min(1).max(4000),
-      ttl_seconds: ttlSeconds
-    })
-  }, async ({ workspace_id, actor, to_actor, to_session_id, ...input }) => call(() => {
-    requireWorkspace(workspace_id);
-    return state.binding ? store.offerHandoffForSession({
-      ...boundCredential(),
-      ...input,
-      to_session_id: requiredString(to_session_id, "to_session_id")
-    }) : store.offerHandoff({
-      workspace_id,
-      actor: requireLegacyActor(actor),
-      ...input,
-      to_actor: requiredString(to_actor, "to_actor")
-    });
-  }));
-  server.registerTool("collab_handoff_respond", {
-    title: "Accept or decline a handoff",
-    description: "Only the named actor/session may respond; acceptance atomically transfers the advisory lease.",
-    annotations: localRetrySafeMutation,
-    inputSchema: {
-      workspace_id: workspaceId,
-      handoff_id: exports_external.string().min(1),
-      actor: legacyActor,
-      idempotency_key: key,
-      expected_version: expectedVersion,
-      response: exports_external.enum(["accept", "decline"]),
-      ttl_seconds: ttlSeconds
-    }
-  }, async ({ workspace_id, actor, ...input }) => call(() => {
-    requireWorkspace(workspace_id);
-    return state.binding ? store.respondHandoffForSession({ ...boundCredential(), ...input }) : store.respondHandoff({
-      workspace_id,
-      actor: requireLegacyActor(actor),
-      ...input
-    });
-  }));
-  server.registerTool("collab_events_since", {
-    title: "Read the append-only event journal",
-    description: "Read after an exact hash anchor or legacy integer cursor and verify the returned page. Reading never acknowledges.",
-    annotations: localReadOnly,
-    inputSchema: {
-      workspace_id: workspaceId,
-      after_sequence: exports_external.number().int().nonnegative().optional(),
-      after_anchor: eventAnchor.optional(),
-      limit: exports_external.number().int().min(1).max(500).optional()
-    }
-  }, async ({ workspace_id, after_sequence, after_anchor, limit }) => call(() => {
-    if (after_anchor && after_sequence !== undefined) {
-      throw new CollabError("ambiguous_cursor", "Provide after_anchor or after_sequence, not both");
-    }
-    return after_anchor ? store.eventsAfterAnchor(workspace_id, after_anchor, limit ?? 100) : store.eventsSince(workspace_id, after_sequence ?? 0, limit ?? 100);
-  }));
-  server.registerTool("collab_events_wait", {
-    title: "Wait for an exact anchored local event page",
-    description: "Credential-bound, read-only observation. Default 10 events, maximum 50; wait at most 30 seconds. " + "Continue from next_anchor, not the head. No acknowledgement, last_seen/presence writes, lease renewal, or handoff expiry. " + "Presence-only and sidecar changes are not journal events. Stops on corruption, cursor rollback/fork, fencing or recovery required. " + "Page JSON is capped at 256 KiB and the MCP result at 1 MiB; an oversized first event is an explicit error, never skipped.",
-    annotations: localReadOnly,
-    inputSchema: {
-      workspace_id: workspaceId,
-      after_anchor: eventAnchor,
-      event_limit: exports_external.number().int().min(1).max(MAX_WAIT_EVENT_LIMIT).optional(),
-      wait_ms: exports_external.number().int().min(0).max(MAX_WAIT_MS).optional().describe("Maximum idle wait; default 30000 ms, zero reads immediately")
-    }
-  }, async ({ workspace_id, after_anchor, event_limit, wait_ms }, ctx) => {
-    let counted = false;
-    try {
-      requireWorkspace(workspace_id);
-      const credential = { ...boundCredential() };
-      const input = {
-        ...credential,
-        workspace_id,
-        after_anchor: { ...after_anchor },
-        event_limit: event_limit ?? DEFAULT_WAIT_EVENT_LIMIT
-      };
-      const duration3 = wait_ms ?? MAX_WAIT_MS;
-      if (!Number.isInteger(duration3) || duration3 < 0 || duration3 > MAX_WAIT_MS) {
-        throw new CollabError("invalid_wait_ms", "wait_ms must be an integer from 0 to 30000");
-      }
-      if (activeWaits >= 8)
-        throw new CollabError("too_many_waits", "At most eight waits may run per endpoint");
-      activeWaits += 1;
-      counted = true;
-      const signal = ctx.mcpReq?.signal;
-      const check2 = () => {
-        if (waitShutdown.signal.aborted)
-          throw new CollabError("server_closed", "The MCP endpoint is closed");
-        if (signal?.aborted)
-          throw new CollabError("wait_cancelled", "The event wait was cancelled");
-        const current = boundCredential();
-        if (current.session_id !== credential.session_id || current.generation !== credential.generation) {
-          throw new CollabError("session_auth_failed", "The bound session changed during the wait");
-        }
-        input.last_cursor = current.last_cursor ? { ...current.last_cursor } : undefined;
-        requireWorkspace(workspace_id);
-      };
-      const deadline = performance.now() + duration3;
-      while (true) {
-        check2();
-        try {
-          const page = store.eventsAfterAnchorForSession(input);
-          check2();
-          if (page.events.length || performance.now() >= deadline) {
-            const result = {
-              content: [{ type: "text", text: JSON.stringify(page) }],
-              structuredContent: { ...page }
-            };
-            if (Buffer.byteLength(JSON.stringify(result)) > MAX_WAIT_RESPONSE_BYTES) {
-              throw new CollabError("event_page_too_large", "The MCP result exceeds its byte limit");
-            }
-            check2();
-            return result;
-          }
-        } catch (error51) {
-          if (!(error51 instanceof CollabError) || error51.code !== "event_read_busy" || performance.now() >= deadline)
-            throw error51;
-        }
-        await waitDelay(Math.min(100, Math.max(0, deadline - performance.now())), [signal, waitShutdown.signal]);
-      }
-    } catch (error51) {
-      const result = failure(error51);
-      if (Buffer.byteLength(JSON.stringify(result)) > MAX_WAIT_RESPONSE_BYTES) {
-        return failure(new CollabError("event_page_too_large", "The MCP error result exceeds its byte limit"));
-      }
-      return result;
-    } finally {
-      if (counted)
-        activeWaits -= 1;
-    }
-  });
-  server.registerTool("collab_journal_verify", {
-    title: "Verify the full local event journal",
-    description: "Recompute the mixed-version hash chain. Integrity detects edits; it does not prove recorded claims true.",
-    annotations: localReadOnly,
-    inputSchema: { workspace_id: workspaceId }
-  }, async ({ workspace_id }) => call(() => ({
-    workspace_id,
-    chain_valid: store.verifyJournal(workspace_id),
-    verification_scope: "full_journal"
-  })));
-  server.registerTool("collab_anchor_status", {
-    title: "Report the journal's zerone anchor status",
-    description: "Compare the journal head against the local sidecar anchor ledger written by the" + " @agenttool/collab-zerone bridge, which witnesses head hashes on the zerone chain." + " Local file read only \u2014 never contacts a chain. The host selects the path; the MCP caller" + " cannot choose or discover it. A missing bridge simply reports unanchored." + " States: unanchored, anchor_pending, anchored, anchor_stale, anchor_conflict.",
-    annotations: localReadOnly,
-    inputSchema: { workspace_id: workspaceId }
-  }, async ({ workspace_id }) => call(() => anchorStatusForWorkspace(store, workspace_id)));
-  server.registerTool = register2;
-  return server;
-}
-function waitDelay(ms, signals) {
-  return new Promise((resolve3) => {
-    const finish = () => {
-      clearTimeout(timer);
-      for (const signal of signals)
-        signal?.removeEventListener("abort", finish);
-      resolve3();
-    };
-    const timer = setTimeout(finish, ms);
-    for (const signal of signals)
-      signal?.addEventListener("abort", finish, { once: true });
-    if (signals.some((signal) => signal?.aborted))
-      finish();
-  });
-}
-function leaseMutationSchema(extra) {
-  return {
-    workspace_id: workspaceId,
-    task_id: taskId,
-    lease_id: leaseId,
-    actor: legacyActor,
-    idempotency_key: key,
-    expected_version: expectedVersion,
-    ...extra
-  };
-}
-function publicSessionBinding(binding) {
-  return {
-    workspace: binding.handle.workspace,
-    worktree: binding.handle.worktree,
-    session: binding.handle.session,
-    credential_file_created: true,
-    resume_environment_variable: "AGENTOOL_COLLAB_SESSION_FILE",
-    session_file_name: `${binding.handle.session.id}.json`,
-    identity_boundary: binding.handle.identity_boundary,
-    credential_boundary: "credential_file_is_a_local_bearer_secret_never_return_its_contents_to_a_model_or_commit_it"
-  };
-}
-function requiredString(value, field) {
-  if (!value)
-    throw new CollabError(`invalid_${field}`, `${field} is required in this mode`);
-  return value;
-}
-function success2(payload) {
-  const structured = isRecord(payload) ? payload : { result: payload };
-  return {
-    content: [{ type: "text", text: JSON.stringify(structured, null, 2) }],
-    structuredContent: structured
-  };
-}
-function failure(error51) {
-  const payload = error51 instanceof CollabError ? { error: error51.code, message: error51.message, ...error51.details } : { error: "internal_error", message: error51 instanceof Error ? error51.message : String(error51) };
-  return {
-    content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
-    structuredContent: payload,
-    isError: true
-  };
-}
-async function call(operation) {
-  try {
-    return success2(await operation());
-  } catch (error51) {
-    return failure(error51);
-  }
-}
-function isRecord(value) {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-// src/store.ts
-import { Database } from "bun:sqlite";
-import { createHash as createHash2, randomBytes, randomUUID as randomUUID2, timingSafeEqual } from "crypto";
-import {
-  chmodSync as chmodSync2,
-  closeSync as closeSync5,
-  existsSync as existsSync3,
-  lstatSync as lstatSync3,
-  mkdirSync as mkdirSync2,
-  openSync as openSync5
-} from "fs";
-import { dirname as dirname2, isAbsolute as isAbsolute2, join as join3, posix, resolve as resolve4 } from "path";
+// src/note-verbs.ts
+import { existsSync as existsSync6 } from "fs";
 
 // src/canonical.ts
 function canonicalJson(value) {
@@ -29606,16 +28780,1321 @@ function sortValue(value) {
   if (Array.isArray(value))
     return value.map(sortValue);
   if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0).map(([key2, child]) => [key2, sortValue(child)]);
+    const entries = Object.entries(value).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0).map(([key, child]) => [key, sortValue(child)]);
     return Object.fromEntries(entries);
   }
   return value;
+}
+
+// src/note.ts
+var NOTE_FORMAT = "collab-note/1";
+var NOTE_ACTS = [
+  "note",
+  "support",
+  "challenge",
+  "resolve",
+  "withdraw",
+  "accept",
+  "request_changes",
+  "decide",
+  "relay_rejection",
+  "take",
+  "done",
+  "propose",
+  "poll",
+  "vote"
+];
+var NOTE_CARD_FAMILIES = {
+  say: ["note"],
+  stand: ["support", "challenge", "resolve", "withdraw"],
+  work: ["take", "done", "accept", "request_changes"],
+  decide: ["propose", "poll", "vote", "decide"]
+};
+var NOTE_ACTS_NEEDING_RE = [
+  "support",
+  "challenge",
+  "resolve",
+  "withdraw",
+  "accept",
+  "request_changes",
+  "relay_rejection"
+];
+var ACT_SET = new Set(NOTE_ACTS);
+function isNoteAct(value) {
+  return typeof value === "string" && ACT_SET.has(value);
+}
+var NOTE_BASES = ["seen", "told", "inferred", "quoted"];
+var BASIS_SET = new Set(NOTE_BASES);
+var NOTE_UNMARKED = "unmarked";
+var NOTE_FIELD_KEYS = {
+  to: "To",
+  re: "Re",
+  via: "Via",
+  why: "Why",
+  evidence: "Evidence",
+  limits: "Limits",
+  purpose: "Purpose",
+  extent: "Extent",
+  replaces: "Replaces"
+};
+var SINGLE_FIELDS = ["to", "re", "via", "limits", "purpose", "extent", "replaces"];
+var MULTILINE_FIELDS = new Set(["limits", "extent"]);
+var NOTE_RENDER_KEYS = [
+  "Sha256",
+  "Position",
+  "Result",
+  "Criteria",
+  "Option",
+  "Pick",
+  "Quorum",
+  "Closes",
+  "Not-carried"
+];
+var FIELD_BY_KEY = new Map(Object.entries(NOTE_FIELD_KEYS).map(([field, key]) => [key.toLowerCase(), field]));
+var RENDER_KEY_BY_LOWER = new Map(NOTE_RENDER_KEYS.map((key) => [key.toLowerCase(), key]));
+var RENDER_KEY_SET = new Set(NOTE_RENDER_KEYS);
+var X_KEY = /^X-[A-Za-z0-9-]{1,30}$/i;
+var LISTED_KEYS = [...Object.values(NOTE_FIELD_KEYS), ...NOTE_RENDER_KEYS].join(", ");
+var NOTE_STATEMENT_MAX = 200;
+var NOTE_WHY_MAX = 8;
+var NOTE_WHY_TEXT_MAX = 300;
+var NOTE_EVIDENCE_MAX = 16;
+var NOTE_VALUE_MAX = 1000;
+var NOTE_LIMITS_MAX = 2000;
+var NOTE_PURPOSE_MAX = 200;
+var NOTE_EXTENT_MAX = 1000;
+var NOTE_JOURNAL_MAX = 8000;
+var NOTE_REVIEW_MAX = 4000;
+var NOTE_RELAY_TEXT_MAX = 2000;
+var NOTE_CARRY_MAX = 800;
+var STATEMENT_TOO_LONG_REMEDY = "put the rest after a blank line";
+var JOURNAL_CEILING = Object.freeze({ max: NOTE_JOURNAL_MAX, measure: "note" });
+var REVIEW_CEILING = Object.freeze({ max: NOTE_REVIEW_MAX, measure: "note_without_evidence" });
+var RELAY_CEILING = Object.freeze({ max: NOTE_RELAY_TEXT_MAX, measure: "text" });
+var NOTE_ACT_CEILINGS = Object.freeze({
+  note: JOURNAL_CEILING,
+  support: JOURNAL_CEILING,
+  challenge: JOURNAL_CEILING,
+  resolve: JOURNAL_CEILING,
+  withdraw: JOURNAL_CEILING,
+  accept: REVIEW_CEILING,
+  request_changes: REVIEW_CEILING,
+  decide: JOURNAL_CEILING,
+  relay_rejection: RELAY_CEILING,
+  take: JOURNAL_CEILING,
+  done: REVIEW_CEILING,
+  propose: JOURNAL_CEILING,
+  poll: JOURNAL_CEILING,
+  vote: JOURNAL_CEILING
+});
+var STRIPPED = /[\uFEFF\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u{E0000}-\u{E007F}]/gu;
+var HAS_STRIPPED = /[\uFEFF\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u{E0000}-\u{E007F}]/u;
+function cleanLines(text) {
+  return text.replace(STRIPPED, "").replace(/\r\n?/g, `
+`).split(`
+`).map((line) => line.replace(/[ \t]+$/, ""));
+}
+function normalizeNoteText(text) {
+  return cleanLines(text).join(`
+`).trim();
+}
+function trimBlankEdges(lines) {
+  let start = 0;
+  let end = lines.length;
+  while (start < end && lines[start] === "")
+    start += 1;
+  while (end > start && lines[end - 1] === "")
+    end -= 1;
+  return lines.slice(start, end);
+}
+function normalizeBodyText(text) {
+  const body = trimBlankEdges(cleanLines(text)).join(`
+`).trimEnd();
+  return body === "" ? null : body;
+}
+function normalizeLineValue(value) {
+  const line = cleanLines(value).map((part) => part.trim()).filter((part) => part !== "").join(" ");
+  return line === "" ? null : line;
+}
+function normalizePointerValue(value) {
+  const pointer = normalizeNoteText(value);
+  return pointer === "" ? null : pointer;
+}
+function normalizeMultilineValue(value) {
+  const lines = cleanLines(value).map((line) => line.trim()).filter((line) => line !== "");
+  return lines.length === 0 ? null : lines.join(`
+`);
+}
+function normalizeNoteFields(input) {
+  const fields = completeFields(input);
+  const line = (value) => typeof value === "string" ? normalizeLineValue(value) : value;
+  const pointer = (value) => typeof value === "string" ? normalizePointerValue(value) : value;
+  const multiline = (value) => typeof value === "string" ? normalizeMultilineValue(value) : value;
+  const trailers = [];
+  for (const trailer of fields.trailers) {
+    const key = typeof trailer.key === "string" ? trailer.key.trim() : trailer.key;
+    const canonical = typeof key === "string" ? RENDER_KEY_BY_LOWER.get(key.toLowerCase()) ?? key : key;
+    const value = typeof trailer.value === "string" ? canonical === "Sha256" ? normalizeLineValue(trailer.value) : normalizeMultilineValue(trailer.value) : trailer.value;
+    if (value !== null)
+      trailers.push({ key: canonical, value });
+  }
+  return {
+    act: typeof fields.act === "string" ? fields.act.trim().toLowerCase() : fields.act,
+    statement: typeof fields.statement === "string" ? cleanLines(fields.statement).join(`
+`).trim() : fields.statement,
+    body: typeof fields.body === "string" ? normalizeBodyText(fields.body) : fields.body,
+    to: pointer(fields.to),
+    re: pointer(fields.re),
+    via: pointer(fields.via),
+    why: fields.why.map((reason) => ({
+      text: typeof reason.text === "string" ? normalizeLineValue(reason.text) ?? "" : reason.text,
+      basis: typeof reason.basis === "string" ? reason.basis.trim() === "" ? null : reason.basis.trim().toLowerCase() : reason.basis,
+      cites: reason.cites
+    })),
+    evidence: fields.evidence.map((item) => typeof item === "string" ? normalizePointerValue(item) ?? "" : item),
+    limits: multiline(fields.limits),
+    purpose: line(fields.purpose),
+    extent: multiline(fields.extent),
+    replaces: pointer(fields.replaces),
+    trailers
+  };
+}
+function splitNoteText(text) {
+  const lines = normalizeNoteText(text).split(`
+`);
+  const body = trimBlankEdges(lines.slice(1)).join(`
+`).trimEnd();
+  return { statement: lines[0] ?? "", body: body === "" ? null : body };
+}
+var NOTE_JOURNAL_EVIDENCE_KINDS = ["report", "event", "artifact", "checkpoint"];
+var NOTE_EVIDENCE_ATTRS = ["sha256", "exit", "out", "lines", "runs", "at"];
+var NOTE_EVIDENCE_FORMS = [
+  "file <repo path>[:a-b]",
+  "commit <sha>",
+  "test <command> exit=<n>",
+  "url <url>",
+  "data <label> sha256=<hex>",
+  "msg <channel> <id>",
+  "report:<id>",
+  "event:<id>",
+  "artifact:<id>",
+  "checkpoint:<id>"
+];
+var ATTR_SET = new Set(NOTE_EVIDENCE_ATTRS);
+var JOURNAL_EVIDENCE_SET = new Set(NOTE_JOURNAL_EVIDENCE_KINDS);
+var ID_TOKEN = String.raw`[A-Za-z0-9][A-Za-z0-9._:#-]*`;
+var JOURNAL_EVIDENCE = new RegExp(String.raw`^(report|event|artifact|checkpoint):(${ID_TOKEN})$`, "i");
+var HANDLE_EVIDENCE = /^(?:report|proposal|ballot)#[0-9a-f]{6,32}$/i;
+var WORD_EVIDENCE = /^(file|commit|test|url|data|msg)[ \t]+(\S[^\n]*)$/i;
+var TRAILING_ATTR = /[ \t]+([A-Za-z0-9]+)=(\S+)$/;
+var ATTR_VALUE = {
+  sha256: /^[0-9a-f]{64}$/i,
+  exit: /^-?\d{1,10}$/,
+  out: /^sha256:[0-9a-f]{64}$/i,
+  lines: /^\d{1,9}(?:-\d{1,9})?$/,
+  runs: /^\d{1,9}$/,
+  at: /^\S+$/
+};
+var FILE_RANGE = /:(\d+)(?:-(\d+))?$/;
+function evidenceError(message, value) {
+  return new CollabError("invalid_evidence", `${message}. Evidence forms: ${NOTE_EVIDENCE_FORMS.join(" | ")}`, value === undefined ? { forms: [...NOTE_EVIDENCE_FORMS] } : { forms: [...NOTE_EVIDENCE_FORMS], evidence: value });
+}
+function parseEvidence(value) {
+  if (typeof value !== "string")
+    throw evidenceError("Evidence must be a string");
+  if (value.includes(`
+`) || value.includes("\r"))
+    throw evidenceError("Evidence is one line", value);
+  const text = value.trim();
+  if (text === "")
+    throw evidenceError("Evidence is empty");
+  const journal = JOURNAL_EVIDENCE.exec(text);
+  if (journal) {
+    return { kind: journal[1].toLowerCase(), locator: journal[2], attrs: {} };
+  }
+  if (HANDLE_EVIDENCE.test(text))
+    return { kind: "report", locator: text, attrs: {} };
+  const word = WORD_EVIDENCE.exec(text);
+  if (!word) {
+    if (/^task[:#_]/i.test(text)) {
+      throw evidenceError("A task is not evidence; cite its completion report (report:<id>)", value);
+    }
+    throw evidenceError("Evidence does not start with a known kind", value);
+  }
+  const kind = word[1].toLowerCase();
+  let locator = word[2];
+  const attrs = {};
+  for (;; ) {
+    const match = TRAILING_ATTR.exec(locator);
+    if (!match)
+      break;
+    const key = match[1].toLowerCase();
+    if (!ATTR_SET.has(key) || key in attrs)
+      break;
+    const attr = key;
+    if (!ATTR_VALUE[attr].test(match[2]))
+      throw evidenceError(`${attr}= has an unreadable value`, value);
+    attrs[attr] = match[2];
+    locator = locator.slice(0, match.index);
+  }
+  if (kind === "commit" && !/^[0-9a-f]{7,64}$/i.test(locator)) {
+    throw evidenceError("A commit is cited by its hex sha (7 to 64 hex digits)", value);
+  }
+  if (kind === "url" && !/^[A-Za-z][A-Za-z0-9+.-]*:\S+$/.test(locator)) {
+    throw evidenceError("A url is one word with a scheme, such as https://\u2026", value);
+  }
+  if (kind === "msg" && !/^\S+[ \t]+\S/.test(locator)) {
+    throw evidenceError("A msg cite names its channel and the message id", value);
+  }
+  if (kind === "file") {
+    const range = FILE_RANGE.exec(locator);
+    if (range) {
+      const from = Number(range[1]);
+      const to = range[2] === undefined ? from : Number(range[2]);
+      if (from < 1 || to < from)
+        throw evidenceError("A file line range is 1-based and runs forwards", value);
+      if (range.index === 0)
+        throw evidenceError("A file cite needs a path before its line range", value);
+    }
+  }
+  return { kind, locator, attrs };
+}
+function renderEvidence(evidence) {
+  const attrs = Object.fromEntries(NOTE_EVIDENCE_ATTRS.filter((key) => evidence.attrs[key] !== undefined).map((key) => [key, evidence.attrs[key]]));
+  const text = JOURNAL_EVIDENCE_SET.has(evidence.kind) ? `${evidence.kind}:${evidence.locator}` : [`${evidence.kind} ${evidence.locator}`, ...Object.entries(attrs).map(([key, value]) => `${key}=${value}`)].join(" ");
+  const back = parseEvidence(text);
+  if (canonicalJson(back) !== canonicalJson({ kind: evidence.kind, locator: evidence.locator, attrs })) {
+    throw evidenceError("This evidence would read back differently (a locator ending in a word such as exit=0 reads as an attribute)", text);
+  }
+  return text;
+}
+function fileLocatorParts(locator) {
+  const range = FILE_RANGE.exec(locator);
+  if (!range || range.index === 0)
+    return { path: locator, from: null, to: null };
+  const from = Number(range[1]);
+  return { path: locator.slice(0, range.index), from, to: range[2] === undefined ? from : Number(range[2]) };
+}
+var HANDLE = /^(report|proposal|ballot|task)#[0-9a-f]{6,32}$/i;
+var PREFIXED_REF = new RegExp(String.raw`^(report|proposal|ballot|task|event):(${ID_TOKEN})$`, "i");
+var BARE_REF = /^(report|task)_[A-Za-z0-9][A-Za-z0-9._:-]*$/;
+var TEXT_REF = /^(?:(file|msg):(\S[^\n]*)|(lobby):(\S+))$/i;
+var VIA = /^(?:host|file|lobby|msg):\S/i;
+function parseNoteRef(value) {
+  const handle = HANDLE.exec(value);
+  if (handle)
+    return { kind: handle[1].toLowerCase(), id: value, handle: true };
+  const prefixed = PREFIXED_REF.exec(value);
+  if (prefixed) {
+    return { kind: prefixed[1].toLowerCase(), id: prefixed[2], handle: HANDLE.test(prefixed[2]) };
+  }
+  const bare = BARE_REF.exec(value);
+  if (bare)
+    return { kind: bare[1], id: value, handle: false };
+  const text = TEXT_REF.exec(value);
+  if (text) {
+    return { kind: (text[1] ?? text[3]).toLowerCase(), id: text[2] ?? text[4], handle: false };
+  }
+  return null;
+}
+var REF_FORMS = "report:<id>, proposal:<id>, ballot:<id>, task:<id>, event:<id>, a handle such as report#3fa91c, file:<path>[#n], lobby:<room>#<n> or msg:<text>";
+var SUBJECT = /^([A-Za-z_]+):(?: ([^\n]*))?$/;
+var TRAILER_LINE = /^([A-Za-z][A-Za-z0-9-]{0,63}):(?: ([^\n]*))?$/;
+var CONTINUATION = /^[ \t]+\S/;
+var KEYISH = /^([A-Za-z][A-Za-z0-9-]{0,63}):(\S?)/;
+var BASIS_MARK = /^([\s\S]*?)\s*\(\s*(seen|told|inferred|quoted|unmarked)\b([^()]*)\)$/i;
+function readBasisMark(value) {
+  const match = BASIS_MARK.exec(value);
+  if (!match)
+    return { text: value, basis: null, cites: [], mark: "none" };
+  const inner = match[3].trim();
+  const tokens = inner === "" ? [] : inner.split(/\s*,\s*|\s+/);
+  if (tokens.some((token) => !/^\d{1,6}$/.test(token))) {
+    return { text: value, basis: null, cites: [], mark: "unreadable" };
+  }
+  const word = match[2].toLowerCase();
+  return {
+    text: match[1].trim(),
+    basis: word === NOTE_UNMARKED ? null : word,
+    cites: tokens.map(Number),
+    mark: "read"
+  };
+}
+function renderReason(reason) {
+  if (reason.basis !== null || reason.cites.length > 0) {
+    const cites = reason.cites.length > 0 ? ` ${reason.cites.join(",")}` : "";
+    return `${reason.text} (${reason.basis ?? NOTE_UNMARKED}${cites})`;
+  }
+  return readBasisMark(reason.text).mark === "none" ? reason.text : `${reason.text} (${NOTE_UNMARKED})`;
+}
+function isTrailerBlock(lines) {
+  if (lines.length === 0 || !TRAILER_LINE.test(lines[0]))
+    return false;
+  return lines.every((line) => TRAILER_LINE.test(line) || CONTINUATION.test(line));
+}
+function blockEntries(lines, firstLine) {
+  const entries = [];
+  lines.forEach((line, index) => {
+    const trailer = TRAILER_LINE.exec(line);
+    if (trailer) {
+      entries.push({ key: trailer[1], line: firstLine + index, values: [(trailer[2] ?? "").trim()], raw: [line] });
+    } else {
+      const entry = entries[entries.length - 1];
+      entry.values.push(line.trim());
+      entry.raw.push(line);
+    }
+  });
+  return entries;
+}
+function readBlock(lines, firstLine, advice) {
+  const reading = {
+    single: { to: null, re: null, via: null, limits: null, purpose: null, extent: null, replaces: null },
+    why: [],
+    evidence: [],
+    trailers: [],
+    kept: []
+  };
+  for (const entry of blockEntries(lines, firstLine)) {
+    const lower = entry.key.toLowerCase();
+    const field = FIELD_BY_KEY.get(lower);
+    const renderKey = RENDER_KEY_BY_LOWER.get(lower);
+    if (field === undefined && renderKey === undefined && !X_KEY.test(entry.key)) {
+      reading.kept.push(...entry.raw);
+      advice.push(`Line ${entry.line}: "${entry.key}:" is not a collab-note/1 key, so the line stays in the body. ` + `Trailer keys are ${LISTED_KEYS}, or an X- key.`);
+      continue;
+    }
+    const multiline = field === undefined ? renderKey !== "Sha256" : MULTILINE_FIELDS.has(field);
+    const value = entry.values.filter((part) => part !== "").join(multiline ? `
+` : " ");
+    if (value === "" && field === "evidence") {
+      reading.evidence.push({ text: "", line: entry.line });
+      advice.push(`Line ${entry.line}: Evidence ${reading.evidence.length} is empty. It keeps its place so later cites keep ` + "their numbers; remove it and renumber the cites after it.");
+      continue;
+    }
+    if (value === "") {
+      reading.kept.push(...entry.raw);
+      advice.push(`Line ${entry.line}: "${entry.key}:" has no value, so the line stays in the body.`);
+      continue;
+    }
+    if (field === "why") {
+      const mark = readBasisMark(value);
+      if (mark.mark === "unreadable") {
+        advice.push(`Line ${entry.line}: the reason ends in a parenthesis that is not a basis mark, so it was read as text; ` + `write (seen), (told), (inferred) or (quoted), with any cite numbers, such as (seen 1,2).`);
+      } else if (mark.mark === "read" && mark.text === "") {
+        advice.push(`Line ${entry.line}: this Why: has a basis but no reason before it.`);
+      }
+      reading.why.push({ reason: { text: mark.text, basis: mark.basis, cites: mark.cites }, line: entry.line });
+    } else if (field === "evidence") {
+      reading.evidence.push({ text: value, line: entry.line });
+    } else if (field !== undefined) {
+      if (reading.single[field] !== null) {
+        reading.kept.push(...entry.raw);
+        advice.push(`Line ${entry.line}: a second "${NOTE_FIELD_KEYS[field]}:" stays in the body; only the first one counts.`);
+        continue;
+      }
+      reading.single[field] = value;
+    } else {
+      reading.trailers.push({ key: renderKey ?? entry.key, value });
+    }
+  }
+  return reading;
+}
+function adviseBodyTrailers(lines, firstLine, advice) {
+  lines.forEach((line, index) => {
+    const match = KEYISH.exec(line);
+    if (!match)
+      return;
+    const field = FIELD_BY_KEY.get(match[1].toLowerCase());
+    if (field === undefined)
+      return;
+    const key = NOTE_FIELD_KEYS[field];
+    advice.push(match[2] !== "" ? `Line ${firstLine + index} looks like a ${key}: trailer but has no space after the colon, so it is body text.` : `Line ${firstLine + index} looks like a ${key}: trailer but is in the body; trailers are read only from ` + `the last paragraph, with no blank line between them.`);
+  });
+}
+function parseNote(text) {
+  const lines = normalizeNoteText(text).split(`
+`);
+  const advice = [];
+  const subject = lines[0] ?? "";
+  let act = null;
+  let statement = subject;
+  const head = SUBJECT.exec(subject);
+  const word = head?.[1]?.toLowerCase();
+  if (head && isNoteAct(word)) {
+    act = word;
+    statement = (head[2] ?? "").trim();
+    if (statement === "")
+      advice.push(`Line 1: "${head[1]}:" has no statement after it.`);
+  } else {
+    advice.push(`Line 1 does not begin with a known act and ": " (${NOTE_ACTS.join(", ")}), so no act was read; ` + `the whole line is the statement.`);
+  }
+  const rest = lines.slice(1);
+  const finalStart = rest.lastIndexOf("") + 1;
+  const finalParagraph = rest.slice(finalStart);
+  const hasBlock = isTrailerBlock(finalParagraph);
+  const beforeBlock = hasBlock ? rest.slice(0, finalStart) : rest;
+  adviseBodyTrailers(beforeBlock, 2, advice);
+  const block = hasBlock ? readBlock(finalParagraph, finalStart + 2, advice) : readBlock([], 0, advice);
+  const unused = hasBlock && block.kept.length === finalParagraph.length;
+  const bodyLines = unused ? rest : beforeBlock;
+  if (unused)
+    block.kept = [];
+  const ownBody = trimBlankEdges(bodyLines).join(`
+`).trimEnd();
+  const kept = block.kept.join(`
+`);
+  const joined = ownBody === "" ? kept : kept === "" ? ownBody : `${ownBody}
+
+${kept}`;
+  const body = joined === "" ? null : joined;
+  const evidence = block.evidence.map((item) => item.text);
+  block.evidence.forEach((item, index) => {
+    if (item.text === "")
+      return;
+    try {
+      parseEvidence(item.text);
+    } catch (error51) {
+      if (!(error51 instanceof CollabError))
+        throw error51;
+      advice.push(`Line ${item.line}: Evidence ${index + 1} is not a known evidence form (${NOTE_EVIDENCE_FORMS.join(" | ")}).`);
+    }
+  });
+  for (const { reason, line } of block.why) {
+    for (const cite of reason.cites) {
+      if (cite < 1)
+        advice.push(`Line ${line}: cite ${cite} is not an Evidence position; cites count from 1.`);
+      else if (cite > evidence.length) {
+        advice.push(`Line ${line}: cites Evidence ${cite}, but the note has ${evidence.length} Evidence line(s).`);
+      }
+    }
+  }
+  for (const field of ["re", "replaces"]) {
+    const value = block.single[field];
+    if (value !== null && parseNoteRef(value) === null) {
+      advice.push(`"${NOTE_FIELD_KEYS[field]}: ${value}" is not a known reference (${REF_FORMS}).`);
+    }
+  }
+  if (block.single.via !== null && !VIA.test(block.single.via)) {
+    advice.push(`"Via: ${block.single.via}" is not a known channel (host:\u2026, file:\u2026, lobby:\u2026 or msg:\u2026).`);
+  }
+  if (act !== null && NOTE_ACTS_NEEDING_RE.includes(act) && block.single.re === null) {
+    advice.push(`"${act}" needs a Re: line naming what it answers.`);
+  }
+  return {
+    act,
+    statement,
+    body,
+    to: block.single.to,
+    re: block.single.re,
+    via: block.single.via,
+    why: block.why.map((item) => item.reason),
+    evidence,
+    limits: block.single.limits,
+    purpose: block.single.purpose,
+    extent: block.single.extent,
+    replaces: block.single.replaces,
+    trailers: block.trailers,
+    advice
+  };
+}
+function completeFields(input) {
+  if (input === null || typeof input !== "object") {
+    throw new CollabError("invalid_note_field", "A note needs at least an act and a statement", { field: "note" });
+  }
+  for (const field of ["why", "evidence", "trailers"]) {
+    if (input[field] !== undefined && !Array.isArray(input[field])) {
+      throw new CollabError("invalid_note_field", `${field} must be a list`, { field });
+    }
+  }
+  return {
+    act: input.act,
+    statement: input.statement,
+    body: input.body ?? null,
+    to: input.to ?? null,
+    re: input.re ?? null,
+    via: input.via ?? null,
+    why: (input.why ?? []).map((reason) => ({
+      text: reason?.text,
+      basis: reason?.basis ?? null,
+      cites: reason?.cites ?? []
+    })),
+    evidence: [...input.evidence ?? []],
+    limits: input.limits ?? null,
+    purpose: input.purpose ?? null,
+    extent: input.extent ?? null,
+    replaces: input.replaces ?? null,
+    trailers: (input.trailers ?? []).map((trailer) => ({ key: trailer?.key, value: trailer?.value }))
+  };
+}
+var NORMALIZE_HINT = "normalizeNoteFields fixes whitespace and invisible characters";
+var NUL_PROBLEM = "must not contain NUL characters";
+var LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
+var LONE_SURROGATE_PROBLEM = "must be well-formed Unicode text (it holds half of a character, as when an emoji is cut in two)";
+function hasLoneSurrogate(text) {
+  return LONE_SURROGATE.test(text);
+}
+function lineProblem(value) {
+  if (typeof value !== "string")
+    return "must be a string";
+  if (value === "")
+    return "must not be empty";
+  if (value.includes("\x00"))
+    return NUL_PROBLEM;
+  if (LONE_SURROGATE.test(value))
+    return LONE_SURROGATE_PROBLEM;
+  if (value.includes(`
+`) || value.includes("\r"))
+    return "must be one line";
+  if (HAS_STRIPPED.test(value)) {
+    return `contains a byte-order mark, a bidirectional control or a tag character (${NORMALIZE_HINT})`;
+  }
+  if (value !== value.trim())
+    return `has leading or trailing whitespace (${NORMALIZE_HINT})`;
+  return null;
+}
+function multilineProblem(value) {
+  if (typeof value !== "string")
+    return "must be a string";
+  if (value === "")
+    return "must not be empty";
+  if (value.includes("\x00"))
+    return NUL_PROBLEM;
+  if (LONE_SURROGATE.test(value))
+    return LONE_SURROGATE_PROBLEM;
+  if (value.includes("\r"))
+    return `contains a carriage return (${NORMALIZE_HINT})`;
+  if (HAS_STRIPPED.test(value)) {
+    return `contains a byte-order mark, a bidirectional control or a tag character (${NORMALIZE_HINT})`;
+  }
+  if (value.split(`
+`).some((line) => line === "" || line !== line.trim())) {
+    return `has a blank line or a line with surrounding whitespace, which a trailer value cannot hold (${NORMALIZE_HINT})`;
+  }
+  return null;
+}
+function bodyProblem(value) {
+  if (typeof value !== "string")
+    return "must be a string";
+  if (value.includes("\x00"))
+    return NUL_PROBLEM;
+  if (LONE_SURROGATE.test(value))
+    return LONE_SURROGATE_PROBLEM;
+  if (value.includes("\r"))
+    return `contains a carriage return (${NORMALIZE_HINT})`;
+  if (HAS_STRIPPED.test(value)) {
+    return `contains a byte-order mark, a bidirectional control or a tag character (${NORMALIZE_HINT})`;
+  }
+  const lines = value.split(`
+`);
+  if (lines[0] === "" || lines[lines.length - 1] === "" || value !== value.trimEnd()) {
+    return `must not start or end with a blank line or end with whitespace (${NORMALIZE_HINT})`;
+  }
+  if (lines.some((line) => /[ \t]$/.test(line)))
+    return `has a line ending in spaces (${NORMALIZE_HINT})`;
+  return null;
+}
+function reasonProblems(reason, index, evidenceCount) {
+  const field = `why[${index}]`;
+  const problems = [];
+  const text = lineProblem(reason.text);
+  if (text)
+    problems.push({ code: "invalid_note_field", field, message: `Why ${index + 1}'s text ${text}` });
+  if (reason.basis !== null && !BASIS_SET.has(reason.basis)) {
+    problems.push({
+      code: "invalid_note_field",
+      field: `${field}.basis`,
+      message: `Why ${index + 1}'s basis must be ${NOTE_BASES.join(", ")}, or absent`
+    });
+  }
+  if (!Array.isArray(reason.cites) || reason.cites.some((cite) => !Number.isInteger(cite) || cite < 1)) {
+    problems.push({
+      code: "invalid_note_field",
+      field: `${field}.cites`,
+      message: `Why ${index + 1}'s cites are 1-based positions in the Evidence list`
+    });
+  } else if (evidenceCount !== null) {
+    const outside = reason.cites.find((cite) => cite > evidenceCount);
+    if (outside !== undefined) {
+      problems.push({
+        code: "cite_out_of_range",
+        field: `${field}.cites`,
+        message: `Why ${index + 1} cites Evidence ${outside}, but the note has ${evidenceCount} Evidence item(s)`,
+        max: evidenceCount,
+        actual: outside
+      });
+    }
+  }
+  return problems;
+}
+function evidenceProblem(item, index) {
+  const field = `evidence[${index}]`;
+  const line = lineProblem(item);
+  if (line && item === "") {
+    return {
+      code: "invalid_note_field",
+      field,
+      message: `Evidence ${index + 1} ${line}`,
+      remedy: "Remove the empty item and renumber the Why cites after it: cites count Evidence positions from 1."
+    };
+  }
+  if (line)
+    return { code: "invalid_note_field", field, message: `Evidence ${index + 1} ${line}` };
+  try {
+    parseEvidence(item);
+    return null;
+  } catch (error51) {
+    if (!(error51 instanceof CollabError))
+      throw error51;
+    return { code: "invalid_evidence", field, message: `Evidence ${index + 1}: ${error51.message}` };
+  }
+}
+function trailerProblem(trailer, index) {
+  const field = `trailers[${index}]`;
+  const key = trailer.key;
+  if (typeof key !== "string" || !(RENDER_KEY_SET.has(key) || X_KEY.test(key))) {
+    const fieldKey = typeof key === "string" ? FIELD_BY_KEY.get(key.toLowerCase()) : undefined;
+    return {
+      code: "invalid_note_field",
+      field: `${field}.key`,
+      message: fieldKey !== undefined ? `"${key}" is a note field; set ${fieldKey} instead of a trailer` : `A trailer key is one of ${NOTE_RENDER_KEYS.join(", ")} (spelled so), or X- and 1 to 30 letters, digits or dashes`
+    };
+  }
+  if (key === "Sha256") {
+    return typeof trailer.value === "string" && /^[0-9a-f]{64}$/i.test(trailer.value) ? null : { code: "invalid_note_field", field: `${field}.value`, message: "Sha256 is 64 hex digits" };
+  }
+  const value = multilineProblem(trailer.value);
+  return value ? { code: "invalid_note_field", field: `${field}.value`, message: `${key} ${value}` } : null;
+}
+function hasTrailerLines(fields, omitEvidence = false) {
+  return SINGLE_FIELDS.some((field) => fields[field] !== null) || fields.why.length > 0 || !omitEvidence && fields.evidence.length > 0 || fields.trailers.length > 0;
+}
+function bodyEndsInTrailers(body) {
+  const lines = body.split(`
+`);
+  const last = lines.slice(lines.lastIndexOf("") + 1);
+  if (!isTrailerBlock(last))
+    return false;
+  const reading = readBlock(last, 1, []);
+  return reading.kept.length < last.length;
+}
+function shapeProblems(fields, options) {
+  const problems = [];
+  const add = (code, field, message, extra = {}) => {
+    problems.push({ code, field, message, ...extra });
+  };
+  if (!isNoteAct(fields.act))
+    add("invalid_note_field", "act", `act must be one of ${NOTE_ACTS.join(", ")}`);
+  const statement = lineProblem(fields.statement);
+  if (statement) {
+    add("invalid_note_field", "statement", `The statement ${statement}`, statement === "must be one line" ? { remedy: STATEMENT_TOO_LONG_REMEDY } : {});
+  }
+  if (fields.body !== null) {
+    const body = bodyProblem(fields.body);
+    if (body)
+      add("invalid_note_field", "body", `The body ${body}`);
+    else if (!hasTrailerLines(fields) && bodyEndsInTrailers(fields.body)) {
+      add("invalid_note_field", "body", "The body's last paragraph would be read as trailers; set those fields instead, or end the body with prose");
+    }
+  }
+  for (const field of SINGLE_FIELDS) {
+    const value = fields[field];
+    if (value === null)
+      continue;
+    const problem = MULTILINE_FIELDS.has(field) ? multilineProblem(value) : lineProblem(value);
+    if (problem) {
+      add("invalid_note_field", field, `${NOTE_FIELD_KEYS[field]} ${problem}`);
+      continue;
+    }
+    if ((field === "re" || field === "replaces") && parseNoteRef(value) === null) {
+      add("invalid_ref", field, `${NOTE_FIELD_KEYS[field]} is not a known reference (${REF_FORMS})`);
+    }
+    if (field === "via" && !VIA.test(value)) {
+      add("invalid_via", field, "Via names the channel the text came by: host:\u2026, file:\u2026, lobby:\u2026 or msg:\u2026");
+    }
+  }
+  const evidenceCount = options.cites && Array.isArray(fields.evidence) ? fields.evidence.length : null;
+  fields.why.forEach((reason, index) => problems.push(...reasonProblems(reason, index, evidenceCount)));
+  fields.evidence.forEach((item, index) => {
+    const problem = evidenceProblem(item, index);
+    if (problem)
+      problems.push(problem);
+  });
+  fields.trailers.forEach((trailer, index) => {
+    const problem = trailerProblem(trailer, index);
+    if (problem)
+      problems.push(problem);
+  });
+  if (options.requireRe && isNoteAct(fields.act) && NOTE_ACTS_NEEDING_RE.includes(fields.act) && fields.re === null) {
+    add("re_required", "re", `"${fields.act}" needs re: what it answers`);
+  }
+  return problems;
+}
+function noteText(fields) {
+  return fields.body === null ? fields.statement : `${fields.statement}
+
+${fields.body}`;
+}
+function length(value) {
+  return typeof value === "string" ? value.length : 0;
+}
+function checkNoteCaps(input) {
+  const fields = completeFields(input);
+  const problems = [];
+  const over = (field, max, actual, unit, message) => {
+    if (actual > max)
+      problems.push({ code: "too_long", field, max, actual, unit, message });
+  };
+  const statement = length(fields.statement);
+  if (statement > NOTE_STATEMENT_MAX) {
+    problems.push({
+      code: "statement_too_long",
+      field: "statement",
+      max: NOTE_STATEMENT_MAX,
+      actual: statement,
+      unit: "chars",
+      message: `The statement is ${statement} characters; at most ${NOTE_STATEMENT_MAX}`,
+      remedy: STATEMENT_TOO_LONG_REMEDY
+    });
+  }
+  over("why", NOTE_WHY_MAX, fields.why.length, "items", `A note has at most ${NOTE_WHY_MAX} Why: lines`);
+  fields.why.forEach((reason, index) => {
+    const actual = length(reason.text);
+    over(`why[${index}]`, NOTE_WHY_TEXT_MAX, actual, "chars", `Why ${index + 1} is ${actual} characters; at most ${NOTE_WHY_TEXT_MAX}`);
+  });
+  over("evidence", NOTE_EVIDENCE_MAX, fields.evidence.length, "items", `A note has at most ${NOTE_EVIDENCE_MAX} Evidence: lines`);
+  fields.evidence.forEach((item, index) => {
+    const actual = length(item);
+    over(`evidence[${index}]`, NOTE_VALUE_MAX, actual, "chars", `Evidence ${index + 1} is ${actual} characters; at most ${NOTE_VALUE_MAX}`);
+  });
+  const fieldMax = {
+    to: NOTE_VALUE_MAX,
+    re: NOTE_VALUE_MAX,
+    via: NOTE_VALUE_MAX,
+    limits: NOTE_LIMITS_MAX,
+    purpose: NOTE_PURPOSE_MAX,
+    extent: NOTE_EXTENT_MAX,
+    replaces: NOTE_VALUE_MAX
+  };
+  for (const field of SINGLE_FIELDS) {
+    const actual = length(fields[field]);
+    over(field, fieldMax[field], actual, "chars", `${NOTE_FIELD_KEYS[field]} is ${actual} characters; at most ${fieldMax[field]}`);
+  }
+  fields.trailers.forEach((trailer, index) => {
+    const actual = length(trailer.value);
+    over(`trailers[${index}]`, NOTE_VALUE_MAX, actual, "chars", `${String(trailer.key)} is ${actual} characters; at most ${NOTE_VALUE_MAX}`);
+  });
+  if (isNoteAct(fields.act) && typeof fields.statement === "string") {
+    const ceiling = NOTE_ACT_CEILINGS[fields.act];
+    const measured = ceiling.measure === "text" ? noteText(fields).length : assemble(fields, ceiling.measure === "note_without_evidence").length;
+    const what = ceiling.measure === "text" ? `A ${fields.act} text (statement and body)` : ceiling.measure === "note_without_evidence" ? `A ${fields.act} note without its Evidence lines` : `A ${fields.act} note`;
+    over(ceiling.measure === "text" ? "text" : "note", ceiling.max, measured, "chars", `${what} is ${measured} characters; at most ${ceiling.max}`);
+  }
+  return problems;
+}
+function checkNote(input) {
+  const fields = completeFields(input);
+  return [...shapeProblems(fields, { cites: true, requireRe: true }), ...checkNoteCaps(fields)];
+}
+function noteProblemError(problem) {
+  const { code, message, ...details } = problem;
+  return new CollabError(code, message, details);
+}
+function assemble(fields, omitEvidence = false) {
+  const lines = [];
+  const push = (key, value) => {
+    const [first, ...more] = String(value).split(`
+`);
+    lines.push(`${key}: ${first ?? ""}`, ...more.map((line) => `  ${line}`));
+  };
+  const single = (field) => {
+    const value = fields[field];
+    if (typeof value === "string")
+      push(NOTE_FIELD_KEYS[field], value);
+  };
+  single("to");
+  single("re");
+  single("via");
+  for (const reason of fields.why)
+    push(NOTE_FIELD_KEYS.why, renderReason(reason));
+  if (!omitEvidence)
+    for (const item of fields.evidence)
+      push(NOTE_FIELD_KEYS.evidence, item);
+  single("limits");
+  single("purpose");
+  single("extent");
+  single("replaces");
+  for (const trailer of fields.trailers)
+    push(trailer.key, trailer.value);
+  const parts = [`${fields.act}: ${fields.statement}`];
+  if (fields.body !== null)
+    parts.push(fields.body);
+  if (lines.length > 0)
+    parts.push(lines.join(`
+`));
+  return parts.join(`
+
+`);
+}
+function fieldsOf(parsed) {
+  const { advice: _advice, ...fields } = parsed;
+  return fields;
+}
+function verifyReadsBack(text, fields) {
+  if (normalizeNoteText(text) !== text || LONE_SURROGATE.test(text)) {
+    throw new CollabError("invalid_note_field", "The note would not be stored byte for byte", { field: "note" });
+  }
+  const back = fieldsOf(parseNote(text));
+  const expected = fields;
+  const actual = back;
+  const differing = Object.keys(expected).find((key) => canonicalJson(expected[key]) !== canonicalJson(actual[key]));
+  if (differing !== undefined) {
+    throw new CollabError("invalid_note_field", `The rendered note would read back with a different ${differing}`, { field: differing });
+  }
+}
+function renderNote(input, options = {}) {
+  const fields = completeFields(input);
+  const problem = checkNote(fields)[0];
+  if (problem)
+    throw noteProblemError(problem);
+  const omitEvidence = options.omitEvidence === true;
+  const text = assemble(fields, omitEvidence);
+  if (options.maxChars !== undefined) {
+    if (!Number.isInteger(options.maxChars) || options.maxChars < 1) {
+      throw new CollabError("invalid_note_field", "maxChars must be a positive integer", { field: "maxChars" });
+    }
+    if (text.length > options.maxChars) {
+      throw new CollabError("too_long", `The note is ${text.length} characters; at most ${options.maxChars}`, { field: "note", max: options.maxChars, actual: text.length, unit: "chars" });
+    }
+  }
+  verifyReadsBack(text, omitEvidence ? { ...fields, evidence: [] } : fields);
+  return text;
+}
+var NOTE_CARRY_DISCLAIMER = "This authorises nothing elsewhere. A person sends it.";
+var LOCAL_DETAIL = [
+  /ws_[0-9a-f]{24}/i,
+  /\/(?:Users|home)\//i,
+  /(?<![A-Za-z])[A-Za-z]:[\\/]+Users[\\/]/i,
+  /\/(?:private\/)?(?:var\/folders|tmp)\//i,
+  /(?<![A-Za-z0-9_])~[A-Za-z0-9._-]{0,32}\//,
+  /[A-Za-z0-9]\.(?:local|lan|home\.arpa)(?![A-Za-z0-9-])/i,
+  /macbook|(?<![a-z])imac(?![a-z])|mac[\s._-]?(?:mini|studio|pro)(?![a-z])|iphone|ipad(?![a-z])/i
+];
+var URL_WITH_HOST = /[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s/]+\S*/g;
+var ABSOLUTE_POSIX_PATH = /(?<![\p{L}\p{N}_.~*-])\/+(?:[\p{L}\p{N}_.@+~-]+\/)+[\p{L}\p{N}_.@+~-]*/u;
+var DRIVE_PATH = /(?<![\p{L}\p{N}_])[A-Za-z]:[\\/][^\s\\/]/u;
+var ABSOLUTE_PATH = /^(?:\/|[A-Za-z]:[\\/])/;
+function namesAbsolutePath(value) {
+  const rest = value.replace(URL_WITH_HOST, " ");
+  return ABSOLUTE_POSIX_PATH.test(rest) || DRIVE_PATH.test(rest);
+}
+var KEPT_RENDER_KEYS = new Set(["Sha256", "Position", "Result"]);
+var CARRY_BODY_FLOOR = 240;
+var CUT_ORDER = [
+  "statement",
+  "body",
+  "to",
+  "re",
+  "via",
+  "why",
+  "evidence",
+  "limits",
+  "purpose",
+  "extent",
+  "replaces"
+];
+function itemRanges(items) {
+  const sorted = [...new Set(items)].sort((left, right) => left - right);
+  const ranges = [];
+  let start = sorted[0];
+  let previous = start;
+  for (const item of [...sorted.slice(1), Number.NaN]) {
+    if (item === (previous ?? 0) + 1) {
+      previous = item;
+      continue;
+    }
+    if (start !== undefined)
+      ranges.push(start === previous ? `${start}` : `${start}-${previous}`);
+    start = item;
+    previous = item;
+  }
+  return ranges.join(", ");
+}
+function describeCut(cut) {
+  switch (cut.kind) {
+    case "local":
+      return `${cut.label} (local detail)`;
+    case "unreadable":
+      return `${cut.label} (unreadable)`;
+    case "dropped":
+      return cut.label;
+    case "shortened":
+      return `${cut.label} (first ${cut.kept} of ${cut.total} chars)`;
+    case "items": {
+      const suffix = cut.reason === "local" ? " (local detail)" : cut.reason === "unreadable" ? " (unreadable)" : "";
+      return `${cut.label} ${itemRanges(cut.items)}${suffix}`;
+    }
+  }
+}
+function cutRank(cut) {
+  const rank = CUT_ORDER.indexOf(cut.label);
+  return rank === -1 ? CUT_ORDER.length : rank;
+}
+function describeTrailerCuts(trailers, fates) {
+  const groups = new Map;
+  for (const index of [...fates.keys()].sort((left, right) => left - right)) {
+    const fate = fates.get(index);
+    const key = trailers[index].key;
+    const group = typeof key === "string" && RENDER_KEY_SET.has(key) ? key : typeof key === "string" && X_KEY.test(key) ? "X-" : "unknown";
+    const id = `${group}
+${fate.kind}`;
+    const entry = groups.get(id);
+    if (entry === undefined)
+      groups.set(id, { group, key: String(key), fate, count: 1 });
+    else
+      entry.count += 1;
+  }
+  return [...groups.values()].map(({ group, key, fate, count }) => {
+    const name = count === 1 ? group === "unknown" ? "unknown trailer" : group === "X-" ? "X- trailer" : key : group === "X-" ? `X- trailers \xD7${count}` : group === "unknown" ? `unknown trailers \xD7${count}` : `${group} \xD7${count}`;
+    switch (fate.kind) {
+      case "local":
+        return `${name} (local detail)`;
+      case "unreadable":
+        return `${name} (unreadable)`;
+      case "dropped":
+        return name;
+      case "shortened":
+        return count === 1 ? `${name} (first ${fate.kept} of ${fate.total} chars)` : `${name} (shortened)`;
+    }
+  });
+}
+function prefix(value, keep) {
+  let end = Math.max(0, Math.min(keep, value.length));
+  const last = value.charCodeAt(end - 1);
+  if (end > 0 && last >= 55296 && last <= 56319)
+    end -= 1;
+  return value.slice(0, end).trimEnd();
+}
+function readable(value, check2) {
+  return check2(value) === null;
+}
+var HEX_CHAR = /[0-9a-f]/;
+function namesTerm(value, term) {
+  const hexTerm = /^[0-9a-f-]+$/.test(term);
+  for (let at = value.indexOf(term);at !== -1; at = value.indexOf(term, at + 1)) {
+    if (!hexTerm)
+      return true;
+    let start = at;
+    let end = at + term.length;
+    while (start > 0 && HEX_CHAR.test(value[start - 1]))
+      start -= 1;
+    while (end < value.length && HEX_CHAR.test(value[end]))
+      end += 1;
+    const run = value.slice(start, end);
+    if (run.length === term.length || !/\d/.test(run))
+      return true;
+  }
+  return false;
+}
+function renderCarriedNote(input, options = {}) {
+  const max = options.maxChars ?? NOTE_CARRY_MAX;
+  if (!Number.isInteger(max) || max < 1) {
+    throw new CollabError("invalid_note_field", "maxChars must be a positive integer", { field: "maxChars" });
+  }
+  const terms = (options.localTerms ?? []).map((term) => term.trim().toLowerCase()).filter((term) => term.length >= 3);
+  const isLocal = (value) => LOCAL_DETAIL.some((pattern) => pattern.test(value)) || namesAbsolutePath(value) || terms.some((term) => namesTerm(value.toLowerCase(), term));
+  const base = normalizeNoteFields(input);
+  if (!isNoteAct(base.act))
+    throw new CollabError("invalid_note_field", `act must be one of ${NOTE_ACTS.join(", ")}`, { field: "act" });
+  const statementProblem = lineProblem(base.statement);
+  if (statementProblem) {
+    throw new CollabError("invalid_note_field", `The statement ${statementProblem}`, { field: "statement" });
+  }
+  const fullIdRemedy = "Name the full id (such as report_\u2026) instead of the handle.";
+  const notCarriable = (field, message, remedy) => new CollabError("not_carriable", message, { field, remedy });
+  for (const field of ["re", "replaces"]) {
+    const value = base[field];
+    if (value !== null && parseNoteRef(value)?.handle) {
+      throw notCarriable(field, `${NOTE_FIELD_KEYS[field]} is a short handle; a carried note names full ids, because a handle can match a different item on another device`, fullIdRemedy);
+    }
+  }
+  base.evidence.forEach((item, index) => {
+    try {
+      const evidence = parseEvidence(item);
+      if (HANDLE_EVIDENCE.test(evidence.locator) || HANDLE.test(evidence.locator)) {
+        throw notCarriable(`evidence[${index}]`, `Evidence ${index + 1} is a short handle; a carried note names full ids`, fullIdRemedy);
+      }
+    } catch (error51) {
+      if (!(error51 instanceof CollabError) || error51.code === "not_carriable")
+        throw error51;
+    }
+  });
+  if (isLocal(base.statement)) {
+    throw notCarriable("statement", "The statement names a local detail (a workspace id, an absolute or home path, or a machine name), so it cannot leave this device", "Restate the statement without it. A body, reason or term that names it is withheld and listed in Not-carried.");
+  }
+  const cuts = [];
+  if (options.withheldStatement === true)
+    cuts.push({ kind: "local", label: "statement" });
+  const state = { ...base, why: [], evidence: [], trailers: [] };
+  if (state.body !== null) {
+    const unreadable = !readable(state.body, bodyProblem);
+    if (unreadable || isLocal(state.body)) {
+      state.body = null;
+      cuts.push({ kind: unreadable ? "unreadable" : "local", label: "body" });
+    }
+  }
+  for (const field of SINGLE_FIELDS) {
+    const value = state[field];
+    if (value === null)
+      continue;
+    const check2 = MULTILINE_FIELDS.has(field) ? multilineProblem : lineProblem;
+    const unreadable = !readable(value, check2) || (field === "re" || field === "replaces") && parseNoteRef(value) === null || field === "via" && !VIA.test(value);
+    if (unreadable || isLocal(value)) {
+      state[field] = null;
+      cuts.push({ kind: unreadable ? "unreadable" : "local", label: field });
+    }
+  }
+  const localWhy = [];
+  const unreadableWhy = [];
+  base.why.forEach((reason, index) => {
+    if (reasonProblems(reason, index, null).length > 0)
+      unreadableWhy.push(index + 1);
+    else if (isLocal(reason.text))
+      localWhy.push(index + 1);
+    else
+      state.why.push(reason);
+  });
+  if (localWhy.length > 0)
+    cuts.push({ kind: "items", label: "why", items: localWhy, reason: "local" });
+  if (unreadableWhy.length > 0)
+    cuts.push({ kind: "items", label: "why", items: unreadableWhy, reason: "unreadable" });
+  for (const [index, item] of base.evidence.entries()) {
+    const problem2 = evidenceProblem(item, index);
+    const evidence = problem2 === null ? parseEvidence(item) : null;
+    const local = evidence !== null && (isLocal(item) || evidence.kind === "file" && ABSOLUTE_PATH.test(evidence.locator));
+    if (problem2 !== null || local) {
+      const rest = base.evidence.map((_, position) => position + 1).slice(index);
+      cuts.push({ kind: "items", label: "evidence", items: rest, reason: problem2 !== null ? "unreadable" : "local" });
+      break;
+    }
+    state.evidence.push(item);
+  }
+  const trailerFates = new Map;
+  const trailerOrigin = [];
+  base.trailers.forEach((trailer, index) => {
+    if (trailer.key === "Not-carried")
+      return;
+    const problem2 = trailerProblem(trailer, index);
+    const localKey = problem2 === null && !RENDER_KEY_SET.has(trailer.key) && isLocal(trailer.key);
+    const localValue = !(problem2 === null && trailer.key === "Sha256") && isLocal(trailer.value);
+    if (problem2 !== null || localKey || localValue) {
+      trailerFates.set(index, { kind: problem2 !== null ? "unreadable" : "local" });
+    } else {
+      state.trailers.push(trailer);
+      trailerOrigin.push(index);
+    }
+  });
+  const droppedWhy = [];
+  const droppedEvidence = [];
+  const whyPositions = base.why.map((_, index) => index + 1).filter((position) => !localWhy.includes(position) && !unreadableWhy.includes(position));
+  const dropWhy = () => {
+    if (state.why.length === 0)
+      return false;
+    state.why.pop();
+    droppedWhy.push(whyPositions[state.why.length]);
+    return true;
+  };
+  const dropEvidence = () => {
+    if (state.evidence.length === 0)
+      return false;
+    state.evidence.pop();
+    droppedEvidence.push(state.evidence.length + 1);
+    return true;
+  };
+  while (state.why.length > NOTE_WHY_MAX)
+    dropWhy();
+  while (state.evidence.length > NOTE_EVIDENCE_MAX)
+    dropEvidence();
+  const originalBody = state.body;
+  const originalStatement = state.statement;
+  const notCarried = () => {
+    const all = [...cuts];
+    if (droppedWhy.length > 0)
+      all.push({ kind: "items", label: "why", items: droppedWhy, reason: "room" });
+    if (droppedEvidence.length > 0) {
+      all.push({ kind: "items", label: "evidence", items: droppedEvidence, reason: "room" });
+    }
+    return [
+      ...all.map((cut, index) => ({ cut, index })).sort((left, right) => cutRank(left.cut) - cutRank(right.cut) || left.index - right.index).map(({ cut }) => describeCut(cut)),
+      ...describeTrailerCuts(base.trailers, trailerFates)
+    ];
+  };
+  const carried = () => ({
+    ...state,
+    body: state.body === null ? NOTE_CARRY_DISCLAIMER : `${state.body}
+
+${NOTE_CARRY_DISCLAIMER}`,
+    trailers: [...state.trailers, { key: "Not-carried", value: notCarried().join("; ") || "nothing" }]
+  });
+  const overBy = () => assemble(carried()).length - max;
+  const markField = (label) => (mark) => {
+    const existing = cuts.findIndex((cut) => cut.label === label && (cut.kind === "shortened" || cut.kind === "dropped"));
+    const record2 = mark === null ? null : mark.kind === "shortened" ? { kind: "shortened", label, kept: mark.kept, total: mark.total } : { kind: "dropped", label };
+    if (existing === -1) {
+      if (record2 !== null)
+        cuts.push(record2);
+    } else if (record2 !== null) {
+      cuts[existing] = record2;
+    } else {
+      cuts.splice(existing, 1);
+    }
+  };
+  const markTrailer = (origin) => (mark) => {
+    if (mark === null)
+      trailerFates.delete(origin);
+    else
+      trailerFates.set(origin, mark);
+  };
+  const shorten = (original, apply, mark, floor = 0, mayDrop = true) => {
+    const attempt = (keep) => {
+      const kept = prefix(original, keep);
+      if (kept === "")
+        return false;
+      apply(`${kept}\u2026`);
+      mark({ kind: "shortened", kept: kept.length, total: original.length });
+      return overBy() <= 0;
+    };
+    let low = Math.max(1, floor);
+    let high = original.length - 1;
+    if (high < low)
+      return;
+    if (!attempt(low)) {
+      if (floor > 0 || !mayDrop)
+        return;
+      apply(null);
+      mark({ kind: "dropped" });
+      return;
+    }
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2);
+      if (attempt(middle))
+        low = middle;
+      else
+        high = middle - 1;
+    }
+    attempt(low);
+  };
+  const dropField = (field) => {
+    if (state[field] === null)
+      return;
+    state[field] = null;
+    cuts.push({ kind: "dropped", label: field });
+  };
+  const dropLastTrailer = (wanted) => {
+    for (let at = state.trailers.length - 1;at >= 0; at -= 1) {
+      if (!wanted(state.trailers[at].key))
+        continue;
+      state.trailers.splice(at, 1);
+      trailerFates.set(trailerOrigin.splice(at, 1)[0], { kind: "dropped" });
+      return true;
+    }
+    return false;
+  };
+  const shortenField = (field) => {
+    const value = state[field];
+    if (value === null)
+      return;
+    shorten(value, (next) => {
+      state[field] = next;
+    }, markField(field));
+  };
+  const shortenKeptTrailers = () => {
+    for (let at = state.trailers.length - 1;at >= 0 && overBy() > 0; at -= 1) {
+      const trailer = state.trailers[at];
+      if (trailer.key === "Sha256" || !KEPT_RENDER_KEYS.has(trailer.key))
+        continue;
+      shorten(trailer.value, (next) => {
+        if (next === null) {
+          state.trailers.splice(at, 1);
+          trailerOrigin.splice(at, 1);
+        } else {
+          state.trailers[at] = { key: trailer.key, value: next };
+        }
+      }, markTrailer(trailerOrigin[at]));
+    }
+  };
+  if (state.statement.length > NOTE_STATEMENT_MAX) {
+    const kept = prefix(originalStatement, NOTE_STATEMENT_MAX - 1);
+    state.statement = `${kept}\u2026`;
+    markField("statement")({ kind: "shortened", kept: kept.length, total: originalStatement.length });
+  }
+  const shortenBody = (floor) => () => {
+    if (originalBody === null || state.body === null)
+      return;
+    shorten(originalBody, (next) => {
+      state.body = next;
+    }, markField("body"), floor);
+  };
+  const steps = [
+    () => {
+      while (overBy() > 0 && dropLastTrailer((key) => X_KEY.test(key)))
+        ;
+    },
+    shortenBody(CARRY_BODY_FLOOR),
+    () => {
+      while (overBy() > 0 && dropEvidence())
+        ;
+    },
+    () => dropField("purpose"),
+    () => dropField("replaces"),
+    () => dropField("to"),
+    shortenBody(0),
+    () => {
+      while (overBy() > 0 && dropWhy())
+        ;
+    },
+    () => {
+      while (overBy() > 0 && dropLastTrailer((key) => !KEPT_RENDER_KEYS.has(key)))
+        ;
+    },
+    () => dropField("via"),
+    () => shortenField("limits"),
+    () => shortenField("extent"),
+    shortenKeptTrailers,
+    () => {
+      shorten(originalStatement, (next) => {
+        if (next !== null)
+          state.statement = next;
+      }, markField("statement"), 0, false);
+    }
+  ];
+  for (const step of steps) {
+    if (overBy() <= 0)
+      break;
+    step();
+  }
+  const fields = carried();
+  const text = assemble(fields);
+  if (text.length > max) {
+    throw new CollabError("too_long", `The carried note cannot be made to fit ${max} characters`, {
+      field: "note",
+      max,
+      actual: text.length,
+      unit: "chars",
+      remedy: "Shorten the Re: reference or carry fewer Sha256 lines: those are never cut, and the disclaimer and Not-carried line always travel."
+    });
+  }
+  const problem = shapeProblems(fields, { cites: false, requireRe: false })[0];
+  if (problem)
+    throw noteProblemError(problem);
+  verifyReadsBack(text, fields);
+  return { text, not_carried: notCarried() };
 }
 
 // src/repository.ts
 import { createHash } from "crypto";
 import {
   closeSync as closeSync4,
+  constants as fsConstants,
   existsSync as existsSync2,
   fstatSync as fstatSync3,
   lstatSync as lstatSync2,
@@ -29625,7 +30104,7 @@ import {
   realpathSync,
   statSync
 } from "fs";
-import { resolve as resolve3 } from "path";
+import { isAbsolute as isAbsolute2, relative, resolve as resolve3, sep } from "path";
 import { spawnSync as spawnSync2 } from "child_process";
 var GIT_TIMEOUT_MS = 5000;
 var MAX_GIT_OUTPUT = 1024 * 1024;
@@ -29868,6 +30347,90 @@ function inspectSuccessorCommit(rootPath, commitSha, parentSha) {
   }
   return { ok: true, commit_sha: commitSha, parent_sha: parentSha, changes };
 }
+var MAX_CITED_FILE_BYTES = 16 * 1024 * 1024;
+function hashWorktreeFile(rootPath, cited, maxBytes = MAX_CITED_FILE_BYTES) {
+  let root;
+  try {
+    root = realpathSync(rootPath);
+  } catch {
+    return { status: "unreadable", path: null };
+  }
+  if (cited.includes("\x00") || cited.includes("\\"))
+    return { status: "outside", path: null };
+  const candidate = resolve3(root, cited);
+  const inside = relative(root, candidate);
+  if (!inside || inside === ".." || inside.startsWith(`..${sep}`) || isAbsolute2(inside)) {
+    return { status: "outside", path: null };
+  }
+  let walked = root;
+  let isFile = false;
+  const parts = inside.split(sep);
+  for (const [index, part] of parts.entries()) {
+    walked = `${walked}${sep}${part}`;
+    let stat;
+    try {
+      stat = lstatSync2(walked);
+    } catch (error51) {
+      return { status: error51.code === "ENOENT" ? "missing" : "unreadable", path: inside };
+    }
+    if (stat.isSymbolicLink())
+      return { status: "symlink", path: inside };
+    if (index < parts.length - 1 && !stat.isDirectory())
+      return { status: "missing", path: inside };
+    isFile = stat.isFile();
+  }
+  if (!isFile)
+    return { status: "not_a_file", path: inside };
+  let descriptor = null;
+  try {
+    descriptor = openSync4(walked, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
+    const before = fstatSync3(descriptor);
+    if (!before.isFile())
+      return { status: "not_a_file", path: inside };
+    if (before.size > maxBytes)
+      return { status: "too_large", path: inside };
+    const hash2 = createHash("sha256");
+    const buffer = Buffer.allocUnsafe(64 * 1024);
+    let total = 0;
+    while (true) {
+      const count = readSync3(descriptor, buffer, 0, buffer.length, null);
+      if (count === 0)
+        break;
+      total += count;
+      if (total > maxBytes)
+        return { status: "too_large", path: inside };
+      hash2.update(buffer.subarray(0, count));
+    }
+    const after = fstatSync3(descriptor);
+    if (before.ino !== after.ino || before.size !== after.size || before.mtimeMs !== after.mtimeMs) {
+      return { status: "changed_while_read", path: inside };
+    }
+    return { status: "hashed", path: inside, sha256: hash2.digest("hex"), size: total };
+  } catch (error51) {
+    return { status: error51.code === "ELOOP" ? "symlink" : "unreadable", path: inside };
+  } finally {
+    if (descriptor !== null)
+      closeSync4(descriptor);
+  }
+}
+function gitCommitExists(rootPath, sha, options = {}) {
+  if (!/^[0-9a-f]{7,64}$/i.test(sha))
+    return false;
+  const inRepository = runGit(rootPath, ["rev-parse", "--git-dir"], options);
+  if (!inRepository.ok)
+    return null;
+  const timeout = gitTimeout(options);
+  if (timeout <= 0)
+    return null;
+  const result = spawnRepositoryGit(["-C", rootPath, ...SUCCESSOR_GIT_ARGS, "cat-file", "-e", `${sha}^{commit}`], {
+    timeout,
+    stdio: ["ignore", "ignore", "ignore"],
+    env: successorGitEnv()
+  }, options);
+  if (result.error)
+    return null;
+  return result.status === 0;
+}
 function worktreeId(rootPath, fingerprint) {
   return `wt_${sha256(`${rootPath}\x00${fingerprint}`).slice(0, 24)}`;
 }
@@ -30061,15 +30624,1206 @@ function safeGitRelativePath(value) {
   return true;
 }
 function lengthPrefix(value) {
-  const prefix = Buffer.allocUnsafe(8);
-  prefix.writeBigUInt64BE(BigInt(value));
-  return prefix;
+  const prefix2 = Buffer.allocUnsafe(8);
+  prefix2.writeBigUInt64BE(BigInt(value));
+  return prefix2;
 }
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 function sha256Bytes(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+// src/store-notes.ts
+import { randomUUID as randomUUID4 } from "crypto";
+import { realpathSync as realpathSync2 } from "fs";
+
+// src/ballot.ts
+import { createHash as createHash2 } from "crypto";
+var BALLOT_COMMITMENT_PROTOCOL = "agenttool.collab-ballot/1";
+var BALLOT_METHOD = "approval/1";
+var MIN_BALLOT_OPTIONS = 2;
+var MAX_BALLOT_OPTIONS = 9;
+var MAX_BALLOT_OPTION_KEY = 32;
+var MAX_BALLOT_OPTION_LABEL = 120;
+var MAX_BALLOT_QUESTION = 500;
+var MAX_BALLOT_CRITERIA = 2000;
+var MIN_BALLOT_CLOSE_SECONDS = 60;
+var MAX_BALLOT_CLOSE_SECONDS = 7 * 24 * 60 * 60;
+var MIN_ELECTORATE_UNITS = 2;
+var MAX_ELECTORATE_UNITS = 16;
+var MIN_BALLOT_QUORUM = 2;
+var DEFAULT_BALLOT_QUORUM = 2;
+var MAX_VOTE_REASONS = 4;
+var MAX_VOTE_REASON = 300;
+var MAX_VOTE_EVIDENCE = 4;
+var MAX_VOTE_SHARED = 200;
+var MAX_REVEALED_ENTRY_BYTES = 8 * 1024;
+var MAX_CASTS_PER_SESSION = 3;
+var BALLOT_SEALING = "Sealed means no collab tool, event or doorbell shows a vote before the close. It does not hide a vote from a process running as the same user that reads the seal files, from the voter's own host transcript, or from agents who message each other outside collab. Turnout, timing and the size of each seal file are visible. Any process that can read a session's credential file can cast for that session's unit. Notes on an open ballot are folded by collab_inbox only; legacy tools and older builds show them.";
+var BALLOT_AUTHORISES = "Nothing. A top choice is the agents' recorded preference: not a decision and not agreement. It adds nothing to what you were already allowed to do. A direction-level choice goes to collab_propose, where every voice may still object and the person decides.";
+var BALLOT_SPLIT_NOTE = "A split among agents is not agreement.";
+var BALLOT_SAME_FAMILY_NOTE = "all counted units declare the same model family: shared support is not independent confirmation";
+var BALLOT_TIE_NEXT = {
+  say: "the opener may poll again on the tied options or put one to collab_propose"
+};
+var BALLOT_BASES = NOTE_BASES;
+function ballotUnitId(voiceIds) {
+  return `unit_${sha2562(canonicalJson(sortedUnique(voiceIds))).slice(0, 32)}`;
+}
+function electorateSha256(units) {
+  return sha2562(canonicalJson(units));
+}
+function buildElectorate(sessions) {
+  const byId = new Map;
+  for (const session of sessions) {
+    if (!nonEmptyString(session.session_id) || !nonEmptyString(session.voice_id) || typeof session.name !== "string") {
+      throw new CollabError("invalid_electorate", "every electorate session needs a session_id, a voice_id and a name");
+    }
+    const seatRef = nonEmptyString(session.seat_ref) ? session.seat_ref : null;
+    const prior = byId.get(session.session_id);
+    if (prior) {
+      if (prior.voice_id !== session.voice_id || prior.seat_ref !== seatRef) {
+        throw new CollabError("invalid_electorate", `session ${session.session_id} is listed twice with different lineage or seat`);
+      }
+      continue;
+    }
+    byId.set(session.session_id, { ...session, seat_ref: seatRef });
+  }
+  const parent = new Map;
+  const find = (voice) => {
+    let root = voice;
+    while (parent.get(root) !== root)
+      root = parent.get(root);
+    let next = voice;
+    while (next !== root) {
+      const up = parent.get(next);
+      parent.set(next, root);
+      next = up;
+    }
+    return root;
+  };
+  const union2 = (left, right) => {
+    const a = find(left);
+    const b = find(right);
+    if (a === b)
+      return;
+    if (a < b)
+      parent.set(b, a);
+    else
+      parent.set(a, b);
+  };
+  const firstVoiceBySeat = new Map;
+  for (const session of byId.values()) {
+    if (!parent.has(session.voice_id))
+      parent.set(session.voice_id, session.voice_id);
+    if (session.seat_ref === null)
+      continue;
+    const first = firstVoiceBySeat.get(session.seat_ref);
+    if (first === undefined)
+      firstVoiceBySeat.set(session.seat_ref, session.voice_id);
+    else
+      union2(first, session.voice_id);
+  }
+  const groups = new Map;
+  for (const session of byId.values()) {
+    const root = find(session.voice_id);
+    const group = groups.get(root);
+    if (group)
+      group.push(session);
+    else
+      groups.set(root, [session]);
+  }
+  const units = [...groups.values()].map((group) => {
+    const voiceIds = sortedUnique(group.map((session) => session.voice_id));
+    const unit = {
+      unit_id: ballotUnitId(voiceIds),
+      voice_ids: voiceIds,
+      session_ids: sortedUnique(group.map((session) => session.session_id)),
+      seat_refs: sortedUnique(group.flatMap((session) => session.seat_ref === null ? [] : [session.seat_ref])),
+      names: sortedUnique(group.map((session) => session.name))
+    };
+    const models = sortedUnique(group.flatMap((session) => {
+      const model = typeof session.model === "string" ? session.model.trim() : "";
+      return model ? [model] : [];
+    }));
+    if (models.length === 1)
+      unit.model = models[0];
+    else if (models.length > 1)
+      unit.models = models;
+    return unit;
+  }).sort((left, right) => compare(left.unit_id, right.unit_id));
+  return { units, electorate_sha256: electorateSha256(units) };
+}
+function classifyCaster(units, caster) {
+  const listed = units.find((unit) => unit.voice_ids.includes(caster.voice_id));
+  if (listed)
+    return { counts_as: "counted", unit_id: listed.unit_id };
+  const late = { counts_as: "late", unit_id: ballotUnitId([caster.voice_id]) };
+  const seatRef = caster.seat_ref;
+  if (nonEmptyString(seatRef)) {
+    const sameHandle = units.find((unit) => unit.seat_refs.includes(seatRef));
+    if (sameHandle)
+      late.same_handle_as = sameHandle.unit_id;
+  }
+  return late;
+}
+function unitBasis(units) {
+  const unhandled = units.filter((unit) => unit.seat_refs.length === 0).length;
+  return `A unit is one attested session lineage, or several lineages that declared the same unverified host handle. ${unhandled} of ${units.length} units declared no handle and are counted per lineage. This does not show one mind, one model or one operator. A process can hold several sessions; sessions started through the legacy session tool without attestation are separate units.`;
+}
+var OPTION_KEY = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+function validatePollTerms(input, context) {
+  const advice = [];
+  const question = textField(input.question, "question", MAX_BALLOT_QUESTION, { required: true, multiline: true });
+  const options = pollOptions(input.options);
+  const criteria = textField(input.criteria, "criteria", MAX_BALLOT_CRITERIA, { required: false, multiline: true });
+  if (criteria === null) {
+    advice.push("No criteria given: say what makes an option acceptable, so every voter judges the same question.");
+  }
+  let pick2;
+  if (input.pick !== undefined && input.pick !== null) {
+    if (!Number.isInteger(input.pick) || input.pick < 1 || input.pick > options.length) {
+      refuse("invalid_pick", `pick is an integer from 1 to ${options.length}, the number of options`, {
+        field: "pick",
+        min: 1,
+        max: options.length
+      }, { say: `Set pick from 1 to ${options.length}, or leave it out to let voters approve any number of options.` });
+    }
+    pick2 = input.pick;
+    if (pick2 === 1)
+      advice.push("pick 1 makes this a plurality vote: no voter can say that either of two options would do.");
+  }
+  const closesAt = ballotClosesAt(input.closes, context.now);
+  let closeWhenAllCast = false;
+  if (input.close_when_all_cast !== undefined && input.close_when_all_cast !== null) {
+    if (typeof input.close_when_all_cast !== "boolean") {
+      refuse("invalid_close_when_all_cast", "close_when_all_cast is true or false", { field: "close_when_all_cast" }, {
+        say: "Leave close_when_all_cast out to keep the ballot sealed until its deadline."
+      });
+    }
+    closeWhenAllCast = input.close_when_all_cast;
+  }
+  checkElectorateSize(context.units, { poll_input: input, sessions: context.sessions });
+  const quorum = ballotQuorum(input.quorum, context.units.length);
+  const terms = {
+    question,
+    options,
+    method: BALLOT_METHOD,
+    quorum,
+    closes_at: closesAt,
+    close_when_all_cast: closeWhenAllCast
+  };
+  if (criteria !== null)
+    terms.criteria = criteria;
+  if (pick2 !== undefined)
+    terms.pick = pick2;
+  return { terms, advice };
+}
+function checkElectorateSize(units, context = {}) {
+  if (units.length < MIN_ELECTORATE_UNITS) {
+    refuse("electorate_too_small", `A ballot needs at least ${MIN_ELECTORATE_UNITS} units in its electorate, and the electorate is fixed when the ballot opens; ${units.length} is here now`, {
+      units: units.length,
+      min: MIN_ELECTORATE_UNITS
+    }, {
+      say: "There is no one else here to poll yet. Open the poll once another agent has arrived (collab_arrive shows who is here); until then say it with collab_note, or put a direction-level question to collab_propose."
+    });
+  }
+  if (units.length > MAX_ELECTORATE_UNITS) {
+    const voters = mostRecentlySeenVoters(units, context.sessions ?? []);
+    const remedy = voters && context.poll_input ? { tool: "collab_poll", input: { ...definedEntries(context.poll_input), voters } } : { say: `Name at most ${MAX_ELECTORATE_UNITS} voters with voters.` };
+    refuse("electorate_too_large", `A ballot counts at most ${MAX_ELECTORATE_UNITS} units; this electorate has ${units.length}`, {
+      units: units.length,
+      max: MAX_ELECTORATE_UNITS
+    }, remedy);
+  }
+}
+function ballotQuorum(value, electorateSize) {
+  if (value === undefined || value === null)
+    return DEFAULT_BALLOT_QUORUM;
+  if (!Number.isInteger(value) || value < MIN_BALLOT_QUORUM || value > electorateSize) {
+    refuse("invalid_quorum", `quorum is an integer from ${MIN_BALLOT_QUORUM} to ${electorateSize}, the number of units in the electorate`, {
+      field: "quorum",
+      min: MIN_BALLOT_QUORUM,
+      max: electorateSize
+    }, { say: `Set quorum from ${MIN_BALLOT_QUORUM} to ${electorateSize}, or leave it out for ${DEFAULT_BALLOT_QUORUM}.` });
+  }
+  return value;
+}
+var DURATION = /^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/;
+var ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/;
+function ballotClosesAt(closes, now) {
+  const nowMs = Date.parse(now);
+  if (!Number.isFinite(nowMs))
+    throw new CollabError("invalid_now", "now must be an ISO time");
+  let closesMs = null;
+  if (typeof closes === "number" && Number.isInteger(closes)) {
+    closesMs = nowMs + closes * 1000;
+  } else if (typeof closes === "string") {
+    const text = closes.trim().toLowerCase();
+    const duration3 = DURATION.exec(text);
+    if (/^\d+$/.test(text)) {
+      closesMs = nowMs + Number(text) * 1000;
+    } else if (text !== "" && duration3) {
+      const [days, hours, minutes, seconds] = duration3.slice(1).map((part) => Number(part ?? 0));
+      closesMs = nowMs + (((days * 24 + hours) * 60 + minutes) * 60 + seconds) * 1000;
+    } else if (ISO_INSTANT.test(closes.trim())) {
+      const parsed = Date.parse(closes.trim());
+      if (Number.isFinite(parsed))
+        closesMs = parsed;
+    }
+  }
+  const window = closesMs === null ? null : closesMs - nowMs;
+  if (closesMs === null || window === null || window < MIN_BALLOT_CLOSE_SECONDS * 1000 || window > MAX_BALLOT_CLOSE_SECONDS * 1000) {
+    refuse("invalid_closes", "closes is a duration from 1 minute to 7 days, or an ISO time inside that window", {
+      field: "closes",
+      min_seconds: MIN_BALLOT_CLOSE_SECONDS,
+      max_seconds: MAX_BALLOT_CLOSE_SECONDS
+    }, { say: 'Set closes to a duration such as "30m", "2h" or "1d", from 1 minute to 7 days.' });
+  }
+  return new Date(closesMs).toISOString();
+}
+function pollOptions(value) {
+  const bounds = { field: "options", min: MIN_BALLOT_OPTIONS, max: MAX_BALLOT_OPTIONS };
+  if (!Array.isArray(value) || value.length < MIN_BALLOT_OPTIONS || value.length > MAX_BALLOT_OPTIONS) {
+    refuse("invalid_options", `options is a list of ${MIN_BALLOT_OPTIONS} to ${MAX_BALLOT_OPTIONS} {key, label}`, bounds, {
+      say: `Give ${MIN_BALLOT_OPTIONS} to ${MAX_BALLOT_OPTIONS} options. A yes-or-no question about proceeding belongs to collab_propose.`
+    });
+  }
+  const seen = new Set;
+  return value.map((option, index) => {
+    const field = `options[${index}]`;
+    if (option === null || typeof option !== "object" || Array.isArray(option)) {
+      refuse("invalid_options", `${field} must be {key, label}`, { field }, { say: "Give each option as {key, label}." });
+    }
+    const record2 = option;
+    const key = typeof record2.key === "string" ? record2.key.trim() : "";
+    if (!key || key.length > MAX_BALLOT_OPTION_KEY || !OPTION_KEY.test(key)) {
+      refuse("invalid_options", `${field}.key is 1 to ${MAX_BALLOT_OPTION_KEY} letters, digits, _ or -, starting with a letter or digit`, {
+        field: `${field}.key`,
+        max: MAX_BALLOT_OPTION_KEY
+      }, { say: 'Use short option keys such as "a", "b", "keep" or "split-2".' });
+    }
+    const folded = key.toLowerCase();
+    if (seen.has(folded)) {
+      refuse("invalid_options", `option key "${key}" is used twice (keys are compared without case)`, { field: `${field}.key` }, {
+        say: "Give every option a different key."
+      });
+    }
+    seen.add(folded);
+    const label = textField(record2.label, `${field}.label`, MAX_BALLOT_OPTION_LABEL, {
+      required: true,
+      multiline: false,
+      code: "invalid_options"
+    });
+    return { key, label };
+  });
+}
+function mostRecentlySeenVoters(units, sessions) {
+  const seenAt = (session) => {
+    const parsed = typeof session.last_seen_at === "string" ? Date.parse(session.last_seen_at) : Number.NaN;
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const latest = units.map((unit) => {
+    let best = null;
+    for (const session of sessions) {
+      if (!unit.session_ids.includes(session.session_id))
+        continue;
+      const at = seenAt(session);
+      if (at === null)
+        continue;
+      if (best === null || at > best.at || at === best.at && session.session_id < best.session_id) {
+        best = { session_id: session.session_id, at };
+      }
+    }
+    return best;
+  });
+  if (latest.some((entry) => entry === null))
+    return null;
+  return latest.sort((left, right) => right.at - left.at || compare(left.session_id, right.session_id)).slice(0, MAX_ELECTORATE_UNITS).map((entry) => entry.session_id);
+}
+function normalizeBallotVoters(value) {
+  if (value === undefined || value === null)
+    return null;
+  if (!Array.isArray(value) || value.length === 0 || value.some((voter) => !nonEmptyString(voter) || voter.trim() !== voter)) {
+    refuse("invalid_voters", "voters is a non-empty list of session ids or names", { field: "voters" }, {
+      say: "Leave voters out for the default electorate, or list the sessions to poll."
+    });
+  }
+  return [...new Set(value)];
+}
+var PLACEHOLDER_ENTRY_IDS = {
+  ballot_id: "report_00000000-0000-0000-0000-000000000000",
+  cast_id: "00000000-0000-0000-0000-000000000000",
+  unit_id: `unit_${"0".repeat(32)}`,
+  session_id: "session_00000000-0000-0000-0000-000000000000"
+};
+function validateVote(input, terms) {
+  const advice = [];
+  const keys = terms.options.map((option) => option.key);
+  const choiceRemedy = { say: `Choose from the option keys ${keys.join(", ")}, or [] to abstain.` };
+  if (!Array.isArray(input.choice) || input.choice.some((key) => typeof key !== "string")) {
+    refuse("invalid_choice", "choice is a list of option keys, or [] to abstain", { field: "choice", options: keys }, choiceRemedy);
+  }
+  const chosen = new Set(input.choice);
+  const unknown2 = [...chosen].filter((key) => !keys.includes(key));
+  if (unknown2.length > 0) {
+    refuse("invalid_choice", `choice names keys this ballot does not have: ${unknown2.join(", ")}`, {
+      field: "choice",
+      unknown: unknown2,
+      options: keys
+    }, choiceRemedy);
+  }
+  if (chosen.size < input.choice.length)
+    advice.push("choice repeated a key; each option is approved once.");
+  const choice = keys.filter((key) => chosen.has(key));
+  if (terms.pick !== undefined && choice.length > terms.pick) {
+    refuse("invalid_choice", `this ballot lets a unit approve at most ${terms.pick} options`, {
+      field: "choice",
+      pick: terms.pick
+    }, { say: `Approve at most ${terms.pick} of ${keys.join(", ")}.` });
+  }
+  const evidence = voteEvidence(input.evidence);
+  const why = voteReasons(input.why, evidence.length);
+  const shared = textField(input.shared, "shared", MAX_VOTE_SHARED, { required: false, multiline: true });
+  const vote = { choice, why, evidence };
+  if (shared !== null)
+    vote.shared = shared;
+  checkVoteSize(vote, PLACEHOLDER_ENTRY_IDS);
+  if (why.length === 0)
+    advice.push('No reason given: the vote is counted and shown as "no reason given".');
+  return { vote, advice };
+}
+function sealVote(vote, extra = {}) {
+  const sealed = { choice: [...vote.choice], why: vote.why.map((reason) => ({ ...reason, cites: [...reason.cites] })), evidence: [...vote.evidence] };
+  if (vote.shared !== undefined)
+    sealed.shared = vote.shared;
+  if (extra.evidence !== undefined) {
+    const lines = vote.evidence.map(evidenceText);
+    const resolved = extra.evidence.map(evidenceText);
+    if (canonicalJson(lines) !== canonicalJson(resolved)) {
+      throw new CollabError("invalid_vote_evidence", "resolved evidence must keep the voter's lines in the same order");
+    }
+    sealed.evidence = [...extra.evidence];
+  }
+  const model = typeof extra.model === "string" ? extra.model.trim() : "";
+  if (model)
+    sealed.model = model;
+  return sealed;
+}
+function sameVoteInput(left, right) {
+  const input = (vote) => canonicalJson({
+    choice: vote.choice,
+    why: vote.why.map((reason) => ({ text: reason.text, basis: reason.basis ?? null, cites: reason.cites })),
+    evidence: vote.evidence.map(evidenceText),
+    shared: vote.shared ?? null
+  });
+  return input(left) === input(right);
+}
+function checkVoteSize(vote, ids) {
+  const bytes = revealedEntryBytes({
+    ...ids,
+    cast_seq: MAX_CASTS_PER_SESSION,
+    commitment: "0".repeat(64),
+    salt: "0".repeat(64),
+    status: "seal_unreadable",
+    vote
+  });
+  if (bytes > MAX_REVEALED_ENTRY_BYTES) {
+    refuse("too_long", `the vote takes ${bytes} bytes when revealed; the limit is ${MAX_REVEALED_ENTRY_BYTES}`, {
+      field: "vote",
+      max: MAX_REVEALED_ENTRY_BYTES,
+      bytes
+    }, { say: "Shorten the reasons, the evidence lines or shared." });
+  }
+}
+function nextCastSeq(previousCasts) {
+  if (previousCasts >= MAX_CASTS_PER_SESSION) {
+    refuse("cast_limit", `A session may cast at most ${MAX_CASTS_PER_SESSION} times in one ballot`, {
+      max: MAX_CASTS_PER_SESSION
+    }, { say: "Your latest cast stands; it is revealed at the close." });
+  }
+  return previousCasts + 1;
+}
+function voteEvidence(value) {
+  if (value === undefined || value === null)
+    return [];
+  if (!Array.isArray(value)) {
+    refuse("invalid_evidence", "evidence is a list of one-line pointers", { field: "evidence" }, {
+      say: 'Give evidence as lines such as "file src/a.ts:10-20" or "commit <sha>".'
+    });
+  }
+  if (value.length > MAX_VOTE_EVIDENCE) {
+    refuse("too_long", `evidence holds at most ${MAX_VOTE_EVIDENCE} lines on a vote`, { field: "evidence", max: MAX_VOTE_EVIDENCE }, {
+      say: `Keep the ${MAX_VOTE_EVIDENCE} pointers that matter most.`
+    });
+  }
+  return value.map((line, index) => {
+    const field = `evidence[${index}]`;
+    const text = textField(line, field, Number.MAX_SAFE_INTEGER, {
+      required: true,
+      multiline: false,
+      code: "invalid_evidence"
+    });
+    try {
+      parseEvidence(text);
+    } catch (error51) {
+      if (!(error51 instanceof CollabError))
+        throw error51;
+      refuse("invalid_evidence", error51.message, { ...error51.details, field }, {
+        say: 'Give evidence as lines such as "file src/a.ts:10-20", "commit <sha>" or "test bun test exit=0".'
+      });
+    }
+    return text;
+  });
+}
+function voteReasons(value, evidenceCount) {
+  if (value === undefined || value === null)
+    return [];
+  if (!Array.isArray(value)) {
+    refuse("invalid_why", "why is a list of {text, basis?, cites?}", { field: "why" }, { say: "Give each reason as {text, basis, cites}." });
+  }
+  if (value.length > MAX_VOTE_REASONS) {
+    refuse("too_long", `why holds at most ${MAX_VOTE_REASONS} reasons on a vote`, { field: "why", max: MAX_VOTE_REASONS }, {
+      say: `Keep the ${MAX_VOTE_REASONS} reasons that matter most.`
+    });
+  }
+  return value.map((reason, index) => {
+    const field = `why[${index}]`;
+    if (reason === null || typeof reason !== "object" || Array.isArray(reason)) {
+      refuse("invalid_why", `${field} must be {text, basis?, cites?}`, { field }, { say: "Give each reason as {text, basis, cites}." });
+    }
+    const record2 = reason;
+    const text = textField(record2.text, `${field}.text`, MAX_VOTE_REASON, { required: true, multiline: true, code: "invalid_why" });
+    const result = { text, cites: [] };
+    if (record2.basis !== undefined && record2.basis !== null) {
+      if (!BALLOT_BASES.includes(record2.basis)) {
+        refuse("invalid_why", `${field}.basis is one of ${BALLOT_BASES.join(", ")}`, { field: `${field}.basis`, bases: [...BALLOT_BASES] }, {
+          say: "Say how you know it: seen, told, inferred or quoted."
+        });
+      }
+      result.basis = record2.basis;
+    }
+    if (record2.cites !== undefined && record2.cites !== null) {
+      const cites = record2.cites;
+      if (!Array.isArray(cites) || cites.some((cite) => !Number.isInteger(cite) || cite < 1 || cite > evidenceCount)) {
+        refuse("invalid_why", `${field}.cites are 1-based positions in evidence (1 to ${evidenceCount})`, {
+          field: `${field}.cites`,
+          min: 1,
+          max: evidenceCount
+        }, { say: evidenceCount === 0 ? "Add the evidence lines the reason cites, or drop cites." : `Cite evidence lines 1 to ${evidenceCount}.` });
+      }
+      result.cites = [...new Set(cites)].sort((left, right) => left - right);
+    }
+    return result;
+  });
+}
+var SALT = /^[0-9a-f]{64}$/;
+function ballotCommitment(input) {
+  if (!SALT.test(input.salt)) {
+    throw new CollabError("invalid_salt", "a ballot salt is 32 random bytes as 64 lowercase hex characters");
+  }
+  return sha2562(canonicalJson({
+    protocol: BALLOT_COMMITMENT_PROTOCOL,
+    workspace_id: input.workspace_id,
+    ballot_id: input.ballot_id,
+    cast_id: input.cast_id,
+    unit_id: input.unit_id,
+    session_id: input.session_id,
+    vote: input.vote,
+    salt: input.salt
+  }));
+}
+function openSeal(file2, cast, context) {
+  if (!isPlainObject3(file2))
+    return { state: "seal_unreadable" };
+  const { cast_id, journal_realpath, session_id, unit_id, salt, vote } = file2;
+  if (typeof cast_id !== "string" || typeof journal_realpath !== "string" || typeof session_id !== "string" || typeof unit_id !== "string" || typeof salt !== "string" || !SALT.test(salt) || !isSealedVote(vote)) {
+    return { state: "seal_unreadable" };
+  }
+  if (cast_id !== cast.cast_id || session_id !== cast.session_id || unit_id !== cast.unit_id)
+    return { state: "seal_mismatch" };
+  const commitment = ballotCommitment({
+    workspace_id: context.workspace_id,
+    ballot_id: context.ballot_id,
+    cast_id,
+    unit_id,
+    session_id,
+    vote,
+    salt
+  });
+  if (commitment !== cast.commitment)
+    return { state: "seal_mismatch" };
+  return {
+    state: "ok",
+    vote,
+    salt,
+    owned: context.journal_realpath === undefined || context.journal_realpath === journal_realpath
+  };
+}
+function resolveCasts(units, casts, context) {
+  const unitById = new Map(units.map((unit) => [unit.unit_id, unit]));
+  const listed = casts.map((cast) => unitById.get(cast.unit_id)?.voice_ids.includes(cast.voice_id) === true);
+  const latestByVoice = new Map;
+  const castingVoices = new Map;
+  casts.forEach((cast, index) => {
+    if (!listed[index])
+      return;
+    latestByVoice.set(voiceKey(cast), index);
+    const voices = castingVoices.get(cast.unit_id) ?? new Set;
+    voices.add(cast.voice_id);
+    castingVoices.set(cast.unit_id, voices);
+  });
+  return casts.map((cast, index) => {
+    let status;
+    if (!listed[index])
+      status = "late";
+    else if (latestByVoice.get(voiceKey(cast)) !== index)
+      status = "replaced";
+    else if ((castingVoices.get(cast.unit_id)?.size ?? 0) > 1)
+      status = "unit_conflict";
+    else if (cast.seal.state !== "ok")
+      status = cast.seal.state;
+    else
+      status = "counted";
+    const entry = {
+      ballot_id: context.ballot_id,
+      cast_id: cast.cast_id,
+      unit_id: cast.unit_id,
+      session_id: cast.session_id,
+      cast_seq: cast.cast_seq,
+      commitment: cast.commitment,
+      status
+    };
+    if (cast.seal.state !== "ok")
+      return entry;
+    const revealed = { ...entry, salt: cast.seal.salt, vote: cast.seal.vote };
+    if (revealedEntryBytes(revealed) <= MAX_REVEALED_ENTRY_BYTES)
+      return revealed;
+    return status === "counted" ? { ...entry, status: "seal_unreadable" } : entry;
+  });
+}
+function revealedEntryBytes(entry) {
+  return Buffer.byteLength(canonicalJson(entry), "utf8");
+}
+function revealedEntriesSha256(entries) {
+  return sha2562(canonicalJson(entries));
+}
+function unitOutcomes(units, entries) {
+  return units.map((unit) => {
+    const own = entries.filter((entry) => entry.unit_id === unit.unit_id && entry.status !== "late");
+    if (own.length === 0)
+      return { unit_id: unit.unit_id, state: "not_cast" };
+    const counted = own.filter((entry) => entry.status === "counted");
+    const conflicts = own.filter((entry) => entry.status === "unit_conflict");
+    if (conflicts.length > 0 || counted.length > 1) {
+      return { unit_id: unit.unit_id, state: "unit_conflict", entries: [...conflicts, ...counted] };
+    }
+    const only = counted[0];
+    if (only !== undefined) {
+      if (only.vote === undefined)
+        return { unit_id: unit.unit_id, state: "seal_unreadable", entry: only };
+      const entry = only;
+      return { unit_id: unit.unit_id, state: "counted", entry, abstained: entry.vote.choice.length === 0 };
+    }
+    const latest = own[own.length - 1];
+    const state = latest.status === "seal_unreadable" || latest.status === "seal_mismatch" ? latest.status : "seal_missing";
+    return { unit_id: unit.unit_id, state, entry: latest };
+  });
+}
+function ballotResult(input) {
+  const sessions = input.sessions ?? {};
+  const nameOf = (sessionId) => sessions[sessionId]?.name ?? sessionId;
+  const keys = input.terms.options.map((option) => option.key);
+  const unitIds = new Set(input.units.map((unit) => unit.unit_id));
+  const outcomes = unitOutcomes(input.units, input.entries);
+  const counted = outcomes.filter((outcome) => outcome.state === "counted");
+  const approvals = counted.map((outcome) => ({
+    entry: outcome.entry,
+    name: nameOf(outcome.entry.session_id),
+    keys: keys.filter((key) => outcome.entry.vote.choice.includes(key)),
+    lineage: lineageOf(outcome.entry, sessions, input.units)
+  })).sort((left, right) => compare(left.name, right.name) || compare(left.entry.unit_id, right.entry.unit_id));
+  const quorum = { needed: input.terms.quorum, met: counted.length >= input.terms.quorum, counted: counted.length };
+  const tallies = keys.map((key) => approvals.filter((approval) => approval.keys.includes(key)).length);
+  const most = Math.max(0, ...tallies);
+  let status;
+  let top = [];
+  if (input.withdrawn)
+    status = "withdrawn";
+  else if (!quorum.met)
+    status = "inconclusive";
+  else if (most === 0)
+    status = "no_approval";
+  else {
+    top = keys.filter((_, index) => tallies[index] === most);
+    status = top.length > 1 ? "tied" : "top_choice";
+  }
+  const topSet = new Set(top);
+  const answered = new Set(approvals.filter((approval) => approval.keys.some((key) => topSet.has(key))).flatMap((approval) => approval.entry.vote.evidence.map(evidenceKey)));
+  const options = input.terms.options.map((option) => {
+    const voters = approvals.filter((approval) => approval.keys.includes(option.key));
+    const unique = new Map;
+    for (const voter of voters) {
+      for (const item of voter.entry.vote.evidence) {
+        const key = evidenceKey(item);
+        if (answered.has(key))
+          continue;
+        const view2 = unique.get(key);
+        if (view2 === undefined)
+          unique.set(key, { evidence: item, cited_by: [voter.name] });
+        else if (!view2.cited_by.includes(voter.name))
+          view2.cited_by.push(voter.name);
+      }
+    }
+    return {
+      key: option.key,
+      label: option.label,
+      units: voters.length,
+      voters: voters.map((voter) => voter.name),
+      reasons: voters.flatMap((voter) => voter.entry.vote.why.map((reason) => ({
+        by: voter.name,
+        text: reason.text,
+        basis: reason.basis ?? null,
+        cites: [...reason.cites],
+        cited: reason.cites.flatMap((cite) => {
+          const item = voter.entry.vote.evidence[cite - 1];
+          return item === undefined ? [] : [item];
+        })
+      }))),
+      no_reason_given: voters.filter((voter) => voter.entry.vote.why.length === 0).map((voter) => voter.name),
+      unique_evidence: [...unique.values()]
+    };
+  });
+  const approvalSets = new Set(approvals.filter((approval) => approval.keys.length > 0).map((approval) => approval.keys.join(`
+`)));
+  const split = approvalSets.size > 1;
+  const lineages = {};
+  for (const label of sortedUnique(approvals.map((approval) => approval.lineage.label))) {
+    lineages[label] = approvals.filter((approval) => approval.lineage.label === label).length;
+  }
+  const notes = [];
+  const oneFamily = (values) => values.length >= 2 && values.every((family) => family !== null && family === values[0]);
+  if (oneFamily(approvals.map((approval) => approval.lineage.family))) {
+    notes.push(BALLOT_SAME_FAMILY_NOTE);
+  } else {
+    for (const key of top) {
+      const supporting = approvals.filter((approval) => approval.keys.includes(key)).map((approval) => approval.lineage.family);
+      if (oneFamily(supporting)) {
+        notes.push(`every unit approving ${key} declares the same model family (${supporting[0]}): their agreement is not independent confirmation`);
+      }
+    }
+  }
+  if (split)
+    notes.push(BALLOT_SPLIT_NOTE);
+  const view = (entry) => {
+    const result2 = {
+      cast_id: entry.cast_id,
+      unit_id: entry.unit_id,
+      session_id: entry.session_id,
+      name: nameOf(entry.session_id),
+      cast_seq: entry.cast_seq
+    };
+    if (entry.vote !== undefined)
+      result2.choice = [...entry.vote.choice];
+    return result2;
+  };
+  const late = input.entries.filter((entry) => entry.status === "late" || !unitIds.has(entry.unit_id)).map((entry) => {
+    const result2 = view(entry);
+    const seatRef = sessions[entry.session_id]?.seat_ref;
+    if (nonEmptyString(seatRef)) {
+      const sameHandle = input.units.find((unit) => unit.seat_refs.includes(seatRef));
+      if (sameHandle)
+        result2.same_handle_as = sameHandle.unit_id;
+    }
+    return result2;
+  });
+  const listedWith = (status2) => input.entries.filter((entry) => entry.status === status2 && unitIds.has(entry.unit_id)).map(view);
+  const delivered = new Set(input.delivered_session_ids ?? []);
+  const result = {
+    status,
+    split,
+    turnout: {
+      cast: outcomes.filter((outcome) => outcome.state !== "not_cast").length,
+      electorate: input.units.length,
+      delivery_recorded: input.units.filter((unit) => unit.session_ids.some((id) => delivered.has(id))).length
+    },
+    quorum,
+    options,
+    top,
+    abstained: approvals.filter((approval) => approval.keys.length === 0).map((approval) => approval.name),
+    late,
+    replaced: listedWith("replaced"),
+    unit_conflicts: listedWith("unit_conflict"),
+    seal_missing: listedWith("seal_missing"),
+    seal_unreadable: listedWith("seal_unreadable"),
+    seal_mismatch: listedWith("seal_mismatch"),
+    left_out: [...input.left_out ?? []],
+    lineages,
+    notes,
+    unit_basis: unitBasis(input.units),
+    sealing: BALLOT_SEALING,
+    authorises: BALLOT_AUTHORISES
+  };
+  if (status === "tied")
+    result.next = { ...BALLOT_TIE_NEXT };
+  return result;
+}
+function modelFamily(label) {
+  const head = label.trim().toLowerCase().split(/[\s\-_/:.@]/)[0];
+  return head ? head : null;
+}
+function lineageOf(entry, sessions, units) {
+  const session = sessions[entry.session_id];
+  const declared = (entry.vote.model ?? session?.model ?? "").trim();
+  if (declared)
+    return { label: declared, family: modelFamily(declared) };
+  const seatRefs = nonEmptyString(session?.seat_ref) ? [session.seat_ref] : units.find((unit) => unit.unit_id === entry.unit_id)?.seat_refs ?? [];
+  const prefixes = sortedUnique(seatRefs.flatMap((seatRef) => {
+    const colon = seatRef.indexOf(":");
+    return colon > 0 ? [seatRef.slice(0, colon)] : [];
+  }));
+  const prefix2 = prefixes.length === 1 ? prefixes[0] : undefined;
+  if (prefix2 !== undefined)
+    return { label: `host:${prefix2}`, family: modelFamily(prefix2) };
+  return { label: "undeclared", family: null };
+}
+function evidenceText(item) {
+  return typeof item === "string" ? item : item.text;
+}
+function evidenceKey(item) {
+  if (typeof item !== "string" && nonEmptyString(item.kind) && nonEmptyString(item.locator)) {
+    return `ref:${canonicalJson({
+      kind: item.kind,
+      locator: item.locator,
+      lines: item.lines ?? null,
+      sha256: item.sha256 ?? null,
+      exit: item.exit ?? null
+    })}`;
+  }
+  return `text:${evidenceText(item).replace(/\s+/g, " ").trim()}`;
+}
+function textField(value, field, max, options) {
+  const code = options.code ?? `invalid_${field}`;
+  const fix = { say: `Give ${field} as plain text${options.multiline ? "" : " on one line"}.` };
+  if (value === undefined || value === null) {
+    if (options.required)
+      refuse(code, `${field} is required`, { field }, fix);
+    return null;
+  }
+  if (typeof value !== "string")
+    refuse(code, `${field} must be text`, { field }, fix);
+  const text = normalizeNoteText(value);
+  if (!text) {
+    if (options.required)
+      refuse(code, `${field} must not be empty`, { field }, fix);
+    return null;
+  }
+  if (text.includes("\x00"))
+    refuse(code, `${field} must not contain NUL characters`, { field }, fix);
+  if (hasLoneSurrogate(text)) {
+    refuse(code, `${field} must be well-formed Unicode text (it holds half of a character, as when an emoji is cut in two)`, { field }, {
+      say: `Send ${field} again with every character whole.`
+    });
+  }
+  if (!options.multiline && text.includes(`
+`))
+    refuse(code, `${field} must be one line`, { field }, fix);
+  if (text.length > max) {
+    refuse("too_long", `${field} exceeds ${max} characters`, { field, max }, {
+      say: `Shorten ${field} to at most ${max} characters.`
+    });
+  }
+  return text;
+}
+function isSealedVote(value) {
+  if (!isPlainObject3(value) || !jsonClean(value))
+    return false;
+  const { choice, why, evidence, shared, model } = value;
+  if (!Array.isArray(choice) || choice.some((key) => typeof key !== "string"))
+    return false;
+  if (!Array.isArray(evidence) || evidence.some((item) => typeof item !== "string" && !(isPlainObject3(item) && typeof item.text === "string"))) {
+    return false;
+  }
+  if (!Array.isArray(why) || why.some((reason) => !isPlainObject3(reason) || typeof reason.text !== "string" || !(reason.basis === undefined || BALLOT_BASES.includes(reason.basis)) || !Array.isArray(reason.cites) || reason.cites.some((cite) => !Number.isInteger(cite)))) {
+    return false;
+  }
+  return (shared === undefined || typeof shared === "string") && (model === undefined || typeof model === "string");
+}
+function jsonClean(value) {
+  if (value === null || typeof value === "string" || typeof value === "boolean")
+    return true;
+  if (typeof value === "number")
+    return Number.isSafeInteger(value);
+  if (Array.isArray(value))
+    return value.every(jsonClean);
+  if (isPlainObject3(value)) {
+    return Object.entries(value).every(([key, child]) => !/^(0|[1-9]\d*)$/.test(key) && jsonClean(child));
+  }
+  return false;
+}
+function isPlainObject3(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function voiceKey(cast) {
+  return `${cast.unit_id}
+${cast.voice_id}`;
+}
+function definedEntries(record2) {
+  return Object.fromEntries(Object.entries(record2).filter(([, value]) => value !== undefined));
+}
+function nonEmptyString(value) {
+  return typeof value === "string" && value.length > 0;
+}
+function sortedUnique(values) {
+  return [...new Set(values)].sort(compare);
+}
+function compare(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+function refuse(code, message, details, remedy) {
+  throw new CollabError(code, message, { ...details, remedy });
+}
+function sha2562(value) {
+  return createHash2("sha256").update(value).digest("hex");
+}
+
+// src/ballot-seal.ts
+import { randomUUID as randomUUID2 } from "crypto";
+import {
+  chmodSync as chmodSync2,
+  closeSync as closeSync5,
+  existsSync as existsSync3,
+  fsyncSync as fsyncSync2,
+  lstatSync as lstatSync3,
+  mkdirSync as mkdirSync2,
+  openSync as openSync5,
+  readdirSync,
+  readFileSync as readFileSync2,
+  renameSync as renameSync2,
+  rmdirSync,
+  unlinkSync as unlinkSync2,
+  writeSync
+} from "fs";
+import { dirname as dirname2, join as join3 } from "path";
+var SEAL_DIRECTORY = "collab-ballots";
+var BALLOT_ID = /^report_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+var CAST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+function sealRoot(journalRealpath) {
+  return join3(dirname2(journalRealpath), SEAL_DIRECTORY);
+}
+function sealDirectory(journalRealpath, ballotId) {
+  if (!BALLOT_ID.test(ballotId))
+    throw new CollabError("invalid_ballot_id", "A ballot id is the poll report's id");
+  return join3(sealRoot(journalRealpath), ballotId);
+}
+function sealPath(journalRealpath, ballotId, castId) {
+  if (!CAST_ID.test(castId))
+    throw new CollabError("invalid_cast_id", "A cast id is a random uuid");
+  return join3(sealDirectory(journalRealpath, ballotId), `${castId}.json`);
+}
+function currentUser() {
+  return typeof process.getuid === "function" ? process.getuid() : null;
+}
+function privateDirectory(path) {
+  if (!existsSync3(path)) {
+    mkdirSync2(path, { mode: 448 });
+    chmodSync2(path, 448);
+  }
+  const stat = lstatSync3(path);
+  const uid = currentUser();
+  if (!stat.isDirectory() || stat.isSymbolicLink() || uid !== null && stat.uid !== uid) {
+    throw new CollabError("seal_directory_unsafe", "The ballot seal directory must be a real directory owned by this user", {
+      operation: "write_seal_file"
+    });
+  }
+  if ((stat.mode & 63) !== 0)
+    chmodSync2(path, 448);
+}
+function writeSealFile(path, seal) {
+  const directory = dirname2(path);
+  privateDirectory(dirname2(directory));
+  privateDirectory(directory);
+  if (existsSync3(path)) {
+    throw new CollabError("seal_file_exists", "A seal file with this cast id already exists", { operation: "write_seal_file" });
+  }
+  const temporary = join3(directory, `.${randomUUID2()}.tmp`);
+  const descriptor = openSync5(temporary, "wx", 384);
+  try {
+    writeSync(descriptor, JSON.stringify(seal));
+    fsyncSync2(descriptor);
+  } catch (error51) {
+    closeSync5(descriptor);
+    removeQuietly(temporary);
+    throw error51;
+  }
+  closeSync5(descriptor);
+  try {
+    renameSync2(temporary, path);
+  } catch (error51) {
+    removeQuietly(temporary);
+    throw error51;
+  }
+  try {
+    const handle = openSync5(directory, "r");
+    try {
+      fsyncSync2(handle);
+    } finally {
+      closeSync5(handle);
+    }
+  } catch {}
+}
+function readSealFile(path) {
+  try {
+    if (!existsSync3(path))
+      return { state: "missing" };
+    const stat = lstatSync3(path);
+    if (!stat.isFile() || stat.isSymbolicLink())
+      return { state: "unreadable" };
+    return { state: "read", value: JSON.parse(readFileSync2(path, "utf8")) };
+  } catch {
+    return { state: "unreadable" };
+  }
+}
+function removeSealFile(path) {
+  removeQuietly(path);
+}
+function listSealFiles(journalRealpath, ballotId) {
+  try {
+    const directory = sealDirectory(journalRealpath, ballotId);
+    if (!existsSync3(directory))
+      return [];
+    return readdirSync(directory).filter((name) => name.endsWith(".json") && CAST_ID.test(name.slice(0, -".json".length))).map((name) => name.slice(0, -".json".length));
+  } catch {
+    return [];
+  }
+}
+var TEMPORARY = /^\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.tmp$/;
+function listSealTemporaries(journalRealpath, ballotId) {
+  try {
+    const directory = sealDirectory(journalRealpath, ballotId);
+    if (!existsSync3(directory))
+      return [];
+    return readdirSync(directory).filter((name) => TEMPORARY.test(name)).map((name) => join3(directory, name));
+  } catch {
+    return [];
+  }
+}
+function listSealBallots(journalRealpath) {
+  try {
+    const root = sealRoot(journalRealpath);
+    if (!existsSync3(root) || !lstatSync3(root).isDirectory())
+      return [];
+    return readdirSync(root).filter((name) => BALLOT_ID.test(name));
+  } catch {
+    return [];
+  }
+}
+function removeEmptySealDirectory(journalRealpath, ballotId) {
+  try {
+    const directory = sealDirectory(journalRealpath, ballotId);
+    if (existsSync3(directory) && readdirSync(directory).length === 0)
+      rmdirSync(directory);
+  } catch {}
+}
+function removeQuietly(path) {
+  try {
+    unlinkSync2(path);
+  } catch {}
+}
+
+// src/store.ts
+import { Database } from "bun:sqlite";
+import { createHash as createHash4, randomBytes, randomUUID as randomUUID3, timingSafeEqual } from "crypto";
+import {
+  chmodSync as chmodSync3,
+  closeSync as closeSync6,
+  existsSync as existsSync4,
+  lstatSync as lstatSync4,
+  mkdirSync as mkdirSync3,
+  openSync as openSync6
+} from "fs";
+import { dirname as dirname3, isAbsolute as isAbsolute3, join as join4, posix, resolve as resolve4 } from "path";
+
+// src/passkey.ts
+import { createHash as createHash3, createPublicKey, verify } from "crypto";
+var FLAG_USER_PRESENT = 1;
+var FLAG_USER_VERIFIED = 4;
+var BASE64URL = /^[A-Za-z0-9_-]*$/;
+function base64urlDecode(value, field, maxBytes = 64 * 1024) {
+  if (typeof value !== "string" || !BASE64URL.test(value) || value.length === 0) {
+    throw new CollabError("passkey_assertion_invalid", `${field} must be non-empty base64url`);
+  }
+  const bytes = Buffer.from(value, "base64url");
+  if (bytes.length > maxBytes) {
+    throw new CollabError("passkey_assertion_invalid", `${field} exceeds ${maxBytes} bytes`);
+  }
+  return bytes;
+}
+function sha2563(bytes) {
+  return createHash3("sha256").update(bytes).digest();
+}
+function personActChallenge(input) {
+  const challenge_bytes = canonicalJson({ protocol: PERSON_ACT_PROTOCOL, ...input });
+  return { challenge_bytes, challenge: sha2563(challenge_bytes).toString("base64url") };
+}
+var ASSERTION_FIELDS = new Set(["credential_id", "authenticator_data", "client_data_json", "signature", "user_handle"]);
+function normalizePasskeyAssertion(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new CollabError("passkey_assertion_invalid", "The assertion must be a JSON object");
+  }
+  const input = value;
+  const unknown2 = Object.keys(input).filter((key) => !ASSERTION_FIELDS.has(key));
+  if (unknown2.length > 0) {
+    throw new CollabError("passkey_assertion_invalid", "The assertion has fields WebAuthn does not define", { fields: unknown2 });
+  }
+  const field = (name, maxBytes) => {
+    base64urlDecode(input[name], name, maxBytes);
+    return input[name];
+  };
+  const userHandle = input.user_handle === undefined || input.user_handle === null ? null : field("user_handle", 64);
+  return {
+    credential_id: field("credential_id", 1023),
+    authenticator_data: field("authenticator_data", 4096),
+    client_data_json: field("client_data_json", 4096),
+    signature: field("signature", 256),
+    user_handle: userHandle
+  };
+}
+function normalizePasskeyEnrollment(input) {
+  base64urlDecode(input.credential_id, "credential_id", 1023);
+  if (typeof input.public_key_spki !== "string") {
+    throw new CollabError("passkey_key_invalid", "public_key_spki must be base64url DER");
+  }
+  parsePasskeyPublicKey(input.public_key_spki);
+  if (input.algorithm !== -7) {
+    throw new CollabError("passkey_key_invalid", "Only ES256 (COSE algorithm -7) passkeys are supported");
+  }
+  const scope = validatePasskeyScope(input.rp_id, input.origin);
+  let label = null;
+  if (input.label !== undefined && input.label !== null) {
+    if (typeof input.label !== "string" || input.label.trim().length > 80 || /[\u0000-\u001f\u007f]/.test(input.label)) {
+      throw new CollabError("passkey_label_invalid", "label must be at most 80 characters without control characters");
+    }
+    label = input.label.trim() || null;
+  }
+  return {
+    credential_id: input.credential_id,
+    public_key_spki: input.public_key_spki,
+    algorithm: -7,
+    ...scope,
+    label
+  };
+}
+function parsePasskeyPublicKey(spki) {
+  const der = base64urlDecode(spki, "public_key_spki", 1024);
+  let key;
+  try {
+    key = createPublicKey({ key: der, format: "der", type: "spki" });
+  } catch {
+    throw new CollabError("passkey_key_invalid", "public_key_spki is not a DER SubjectPublicKeyInfo");
+  }
+  if (key.asymmetricKeyType !== "ec" || key.asymmetricKeyDetails?.namedCurve !== "prime256v1") {
+    throw new CollabError("passkey_key_invalid", "Only ES256 (P-256) passkeys are supported");
+  }
+  return key;
+}
+function passkeyFingerprint(spki) {
+  return sha2563(base64urlDecode(spki, "public_key_spki", 1024)).toString("hex");
+}
+function validatePasskeyScope(rpId, origin) {
+  if (typeof rpId !== "string" || !/^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/.test(rpId)) {
+    throw new CollabError("passkey_scope_invalid", "rp_id must be a lowercase host name");
+  }
+  let url2;
+  try {
+    url2 = new URL(String(origin));
+  } catch {
+    throw new CollabError("passkey_scope_invalid", "origin must be a URL origin");
+  }
+  const secure = url2.protocol === "https:" || url2.protocol === "http:" && url2.hostname === "localhost";
+  const hostMatches = url2.hostname === rpId || url2.hostname.endsWith(`.${rpId}`);
+  if (!secure || !hostMatches || url2.origin !== origin) {
+    throw new CollabError("passkey_scope_invalid", "origin must be an https origin (or http://localhost) whose host is rp_id or one of its subdomains");
+  }
+  return { rp_id: rpId, origin: url2.origin };
+}
+function verifyPasskeyAssertion(input) {
+  const { passkey, assertion } = input;
+  if (assertion.credential_id !== passkey.credential_id) {
+    throw new CollabError("passkey_not_enrolled", "The assertion names a different credential");
+  }
+  const clientDataBytes = base64urlDecode(assertion.client_data_json, "client_data_json");
+  const authenticatorData = base64urlDecode(assertion.authenticator_data, "authenticator_data");
+  const signature = base64urlDecode(assertion.signature, "signature", 256);
+  let clientData;
+  try {
+    const parsed = JSON.parse(clientDataBytes.toString("utf8"));
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
+      throw new Error("not an object");
+    clientData = parsed;
+  } catch {
+    throw new CollabError("passkey_assertion_invalid", "client_data_json is not a JSON object");
+  }
+  if (clientData.type !== "webauthn.get") {
+    throw new CollabError("passkey_assertion_invalid", "client data type must be webauthn.get");
+  }
+  if (clientData.challenge !== input.expected_challenge) {
+    throw new CollabError("passkey_challenge_mismatch", "The assertion signs a different act; request a fresh challenge for the current state");
+  }
+  if (clientData.origin !== passkey.origin || clientData.crossOrigin === true) {
+    throw new CollabError("passkey_origin_mismatch", "The assertion came from another origin");
+  }
+  if (authenticatorData.length < 37) {
+    throw new CollabError("passkey_assertion_invalid", "authenticator_data is too short");
+  }
+  if (!authenticatorData.subarray(0, 32).equals(sha2563(passkey.rp_id))) {
+    throw new CollabError("passkey_rp_mismatch", "The assertion is for another relying party");
+  }
+  const flags = authenticatorData[32];
+  if ((flags & FLAG_USER_PRESENT) === 0 || (flags & FLAG_USER_VERIFIED) === 0) {
+    throw new CollabError("passkey_user_not_verified", "The authenticator did not report user presence and user verification");
+  }
+  const signCount = authenticatorData.readUInt32BE(33);
+  if ((signCount !== 0 || passkey.sign_count !== 0) && signCount <= passkey.sign_count) {
+    throw new CollabError("passkey_counter_regressed", "The signature counter did not increase");
+  }
+  const signed = Buffer.concat([authenticatorData, sha2563(clientDataBytes)]);
+  const valid = verify("sha256", signed, { key: parsePasskeyPublicKey(passkey.public_key_spki), dsaEncoding: "der" }, signature);
+  if (!valid)
+    throw new CollabError("passkey_signature_invalid", "The passkey signature does not verify");
+  return { sign_count: signCount };
+}
+
+// src/proposal.ts
+function proposalBytes(content) {
+  return canonicalJson({ protocol: PROPOSAL_BYTES_PROTOCOL, rule: CONSENT_RULE, ...content });
+}
+function aiPosition(input) {
+  const closed = Date.parse(input.now) >= Date.parse(input.closes_at);
+  const others = [...new Set(input.snapshot_voice_ids)].filter((voice) => voice !== input.author_voice_id).sort();
+  const lone = others.length === 0;
+  const qualifying_support_indexes = input.support_voice_ids.flatMap((voice, index) => lone || voice !== input.author_voice_id ? [index] : []);
+  const supported = new Set(qualifying_support_indexes.map((index) => input.support_voice_ids[index]));
+  const awaiting_voice_ids = others.filter((voice) => !supported.has(voice));
+  const result = (position) => ({
+    position,
+    closed,
+    qualifying_support_indexes,
+    awaiting_voice_ids
+  });
+  if (input.obsoleted)
+    return result(input.obsoleted);
+  const hasSupport = qualifying_support_indexes.length > 0;
+  if (!closed) {
+    if (input.unresolved_challenge)
+      return result("challenged");
+    return result(hasSupport && awaiting_voice_ids.length === 0 ? "consented" : "open");
+  }
+  if (input.unresolved_challenge)
+    return result("split");
+  return result(hasSupport ? "consented" : "lapsed");
 }
 
 // src/store.ts
@@ -30144,17 +31898,20 @@ var V2_GUARD_TRIGGERS = [
   "handoffs_v2_insert_guard"
 ];
 
-class CollabStore {
+class CollabStoreCore {
   db;
   now;
   filesystemPath;
   migrationFailpoint;
+  revealFailpoint;
   repositoryDiscovery;
   eventReader;
   closed = false;
+  ambientReceiptPlan = null;
   constructor(path, options = {}) {
     this.now = options.now ?? (() => new Date);
     this.migrationFailpoint = options.migration_failpoint;
+    this.revealFailpoint = options.reveal_failpoint;
     this.repositoryDiscovery = {
       ...options.repository_discovery,
       budget_ms: options.repository_discovery?.budget_ms ?? REPOSITORY_DISCOVERY_MS,
@@ -30162,17 +31919,17 @@ class CollabStore {
     };
     const databasePath = path === ":memory:" ? path : resolve4(path);
     if (databasePath !== ":memory:") {
-      const parent = dirname2(databasePath);
-      const parentAlreadyExisted = existsSync3(parent);
-      mkdirSync2(parent, { recursive: true, mode: 448 });
+      const parent = dirname3(databasePath);
+      const parentAlreadyExisted = existsSync4(parent);
+      mkdirSync3(parent, { recursive: true, mode: 448 });
       if (!parentAlreadyExisted)
-        chmodSync2(parent, 448);
-      if (existsSync3(databasePath)) {
+        chmodSync3(parent, 448);
+      if (existsSync4(databasePath)) {
         assertSafeDatabaseFile(databasePath);
       } else {
         try {
-          const descriptor = openSync5(databasePath, "wx", 384);
-          closeSync5(descriptor);
+          const descriptor = openSync6(databasePath, "wx", 384);
+          closeSync6(descriptor);
         } catch (error51) {
           if (error51.code !== "EEXIST")
             throw error51;
@@ -30183,6 +31940,7 @@ class CollabStore {
     }
     this.db = new Database(databasePath, { create: true, strict: true });
     try {
+      this.db.exec("PRAGMA busy_timeout = 5000");
       this.preflightDatabase();
       this.initialize();
     } catch (error51) {
@@ -30217,12 +31975,12 @@ class CollabStore {
     }
     return this.eventReader;
   }
-  defaultSessionCredentialPath(sessionId2) {
+  defaultSessionCredentialPath(sessionId) {
     if (!this.filesystemPath) {
       throw new CollabError("session_file_path_required", "An explicit credential file path is required for an in-memory database");
     }
-    const id = validateId(sessionId2, "session_id");
-    return join3(dirname2(this.filesystemPath), "collab-sessions", `${id}.json`);
+    const id = validateId(sessionId, "session_id");
+    return join4(dirname3(this.filesystemPath), "collab-sessions", `${id}.json`);
   }
   initialize() {
     this.db.exec("PRAGMA foreign_keys = ON");
@@ -30270,7 +32028,106 @@ class CollabStore {
           lease_id TEXT PRIMARY KEY,
           effective_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS proposal_terms (
+          report_id TEXT PRIMARY KEY REFERENCES reports(id),
+          workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+          rule TEXT NOT NULL,
+          criteria TEXT NOT NULL,
+          extent TEXT NOT NULL,
+          known_conflicts TEXT,
+          origin TEXT NOT NULL CHECK (origin IN ('ai', 'person_relayed')),
+          topic TEXT,
+          closes_at TEXT NOT NULL,
+          voices_json TEXT NOT NULL,
+          author_voice_id TEXT NOT NULL,
+          proposal_sha256 TEXT NOT NULL,
+          opened_event_id TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS proposal_terms_workspace_idx
+          ON proposal_terms(workspace_id, created_at);
+        CREATE TABLE IF NOT EXISTS proposal_person_acts (
+          id TEXT PRIMARY KEY,
+          workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+          proposal_report_id TEXT NOT NULL REFERENCES proposal_terms(report_id),
+          proposal_sha256 TEXT NOT NULL,
+          act TEXT NOT NULL CHECK (act IN ('agree', 'reject')),
+          party TEXT NOT NULL CHECK (party IN ('person')),
+          basis TEXT NOT NULL CHECK (basis IN ('relayed_by_session', 'controlling_terminal', 'user_verified_passkey')),
+          reason TEXT,
+          -- No foreign key: additive tables never reference the session table,
+          -- which the schema-2 preview upgrade renames.
+          relayed_by_session_id TEXT,
+          ai_snapshot_json TEXT NOT NULL,
+          proof_json TEXT,
+          created_at TEXT NOT NULL,
+          event_sequence INTEGER NOT NULL,
+          CHECK (act = 'reject' OR basis <> 'relayed_by_session')
+        );
+        CREATE INDEX IF NOT EXISTS proposal_person_acts_proposal_idx
+          ON proposal_person_acts(proposal_report_id, event_sequence);
+        CREATE TABLE IF NOT EXISTS person_passkeys (
+          credential_id TEXT PRIMARY KEY,
+          public_key_spki TEXT NOT NULL,
+          algorithm INTEGER NOT NULL CHECK (algorithm = -7),
+          rp_id TEXT NOT NULL,
+          origin TEXT NOT NULL,
+          label TEXT,
+          fingerprint TEXT NOT NULL,
+          sign_count INTEGER NOT NULL DEFAULT 0,
+          enrolled_at TEXT NOT NULL,
+          revoked_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS person_addressed_reports (
+          report_id TEXT PRIMARY KEY REFERENCES reports(id),
+          workspace_id TEXT NOT NULL REFERENCES workspaces(id)
+        );
+        CREATE TABLE IF NOT EXISTS session_parent_attestations (
+          session_id TEXT PRIMARY KEY,
+          parent_session_id TEXT NOT NULL,
+          basis TEXT NOT NULL CHECK (basis IN ('same_mcp_process')),
+          attested_at TEXT NOT NULL
+        );
+        -- Collab Notes view state (spec 8.1): what the notes surface last showed
+        -- each session. Never journaled and never cited, so it can be lost or
+        -- rebuilt without harm; no foreign keys, so older builds never see it.
+        CREATE TABLE IF NOT EXISTS note_marks (
+          workspace_id TEXT NOT NULL,
+          session_id TEXT NOT NULL,
+          shown_through_sequence INTEGER NOT NULL,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (workspace_id, session_id)
+        );
+        CREATE TABLE IF NOT EXISTS note_shown (
+          workspace_id TEXT NOT NULL,
+          session_id TEXT NOT NULL,
+          item_id TEXT NOT NULL,
+          shown_at TEXT NOT NULL,
+          PRIMARY KEY (workspace_id, session_id, item_id)
+        );
+        -- Which ballots may still need a reveal, so housekeeping finds due
+        -- ones without scanning events. state is open or closed.
+        CREATE TABLE IF NOT EXISTS note_ballots (
+          workspace_id TEXT NOT NULL,
+          ballot_id TEXT NOT NULL,
+          closes_at TEXT NOT NULL,
+          state TEXT NOT NULL,
+          PRIMARY KEY (workspace_id, ballot_id)
+        );
+        CREATE INDEX IF NOT EXISTS note_ballots_state_idx ON note_ballots(workspace_id, state, closes_at);
       `);
+      this.db.exec(`
+        INSERT OR IGNORE INTO note_ballots (workspace_id, ballot_id, closes_at, state)
+        SELECT workspace_id, entity_id, json_extract(payload_json, '$.closes_at'), 'open' FROM events
+        WHERE type = 'ballot.opened' AND json_type(payload_json, '$.closes_at') = 'text';
+        UPDATE note_ballots SET state = 'closed' WHERE state <> 'closed' AND EXISTS (
+          SELECT 1 FROM events e WHERE e.workspace_id = note_ballots.workspace_id
+            AND e.type = 'ballot.closed' AND e.entity_id = note_ballots.ballot_id
+        );
+      `);
+      if (this.tableNames().includes("proposal_rejections") && this.db.query(`SELECT 1 FROM proposal_rejections LIMIT 1`).get()) {
+        throw new CollabError("preview_journal_unsupported", "This journal holds rejections from the unreleased consent preview; use a fresh journal");
+      }
       this.db.exec(`PRAGMA application_id = ${APPLICATION_ID}`);
       this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     });
@@ -30292,7 +32149,7 @@ class CollabStore {
     if (this.tableNames().length > 0) {
       this.validateLegacyOrV2Shape(userVersion);
       if (userVersion >= HARDENED_PREVIEW_SCHEMA_VERSION) {
-        this.validateAllJournals();
+        this.db.transaction(() => this.validateAllJournals()).deferred();
       }
     }
   }
@@ -31053,13 +32910,13 @@ class CollabStore {
     if (!this.filesystemPath)
       return;
     for (const path of [this.filesystemPath, `${this.filesystemPath}-wal`, `${this.filesystemPath}-shm`]) {
-      if (!existsSync3(path))
+      if (!existsSync4(path))
         continue;
-      const stat = lstatSync3(path);
+      const stat = lstatSync4(path);
       if (!stat.isFile() || stat.isSymbolicLink() || typeof process.getuid === "function" && stat.uid !== process.getuid()) {
         throw new CollabError("database_sidecar_unsafe", "A collaboration database or sidecar path is not a regular file owned by this user", { operation: "tighten_database_file_mode" });
       }
-      chmodSync2(path, 384);
+      chmodSync3(path, 384);
     }
   }
   discoverRepositoryKey(budget, probe) {
@@ -31085,29 +32942,29 @@ class CollabStore {
     `).iterate();
     const prepared = [];
     for (const row of rows) {
-      const key2 = this.discoverRepositoryKey(budget, (options) => {
+      const key = this.discoverRepositoryKey(budget, (options) => {
         const identity = inspectRepository(row.root_path, undefined, true, options);
         if (identity.repository_key === row.repository_key && identity.worktree_fingerprint === row.fingerprint) {
           return identity.portable_repository_key ?? null;
         }
         return null;
       });
-      if (key2 === undefined)
+      if (key === undefined)
         break;
-      prepared.push({ row, key: key2 });
+      prepared.push({ row, key });
     }
     return prepared;
   }
-  recordRepositoryAlias(worktreeId2, key2) {
-    if (key2)
-      this.db.query(`INSERT OR IGNORE INTO repository_aliases (worktree_id, portable_key) VALUES (?, ?)`).run(worktreeId2, key2);
+  recordRepositoryAlias(worktreeId2, key) {
+    if (key)
+      this.db.query(`INSERT OR IGNORE INTO repository_aliases (worktree_id, portable_key) VALUES (?, ?)`).run(worktreeId2, key);
   }
-  recordRepositoryDiscovery(worktreeId2, fingerprint, key2) {
-    if (key2 === undefined)
+  recordRepositoryDiscovery(worktreeId2, fingerprint, key) {
+    if (key === undefined)
       return;
-    this.recordRepositoryAlias(worktreeId2, key2);
+    this.recordRepositoryAlias(worktreeId2, key);
     this.db.query(`INSERT INTO repository_discovery (worktree_id, fingerprint, outcome) VALUES (?, ?, ?)
-      ON CONFLICT(worktree_id) DO UPDATE SET fingerprint = excluded.fingerprint, outcome = excluded.outcome`).run(worktreeId2, fingerprint, key2 ? "checked" : "unresolvable");
+      ON CONFLICT(worktree_id) DO UPDATE SET fingerprint = excluded.fingerprint, outcome = excluded.outcome`).run(worktreeId2, fingerprint, key ? "checked" : "unresolvable");
   }
   repositoryPartitions(identity) {
     return this.db.query(`
@@ -31117,8 +32974,8 @@ class CollabStore {
       ORDER BY w.created_at, w.id
     `).all(identity.repository_key, identity.repository_key);
   }
-  portableRepositoryWorkspace(key2) {
-    if (!key2)
+  portableRepositoryWorkspace(key) {
+    if (!key)
       return;
     const pending = this.db.query(`SELECT 1 FROM worktrees w LEFT JOIN repository_discovery d
       ON d.worktree_id = w.id AND d.fingerprint = w.fingerprint
@@ -31126,7 +32983,7 @@ class CollabStore {
     if (pending)
       return;
     const matches = this.db.query(`SELECT DISTINCT w.workspace_id AS id FROM worktrees w
-      JOIN repository_aliases a ON a.worktree_id = w.id WHERE a.portable_key = ? LIMIT 2`).all(key2);
+      JOIN repository_aliases a ON a.worktree_id = w.id WHERE a.portable_key = ? LIMIT 2`).all(key);
     return matches.length === 1 ? matches[0] : undefined;
   }
   openWorkspace(input) {
@@ -31141,12 +32998,12 @@ class CollabStore {
     identity.portable_repository_key = cached2 ? cached2.portable_key : identity.repository_key.startsWith("local-git:") ? this.discoverRepositoryKey(budget, (options) => portableRepositoryKey(identity.root_path, options)) : null;
     const created = this.db.transaction(() => {
       const now = this.timestamp();
-      for (const { row, key: key2 } of aliases) {
+      for (const { row, key } of aliases) {
         const current = this.requireWorktreeRow(row.id);
         if (current.root_path !== row.root_path || current.fingerprint !== row.fingerprint || current.repository_key !== row.repository_key || current.workspace_id !== row.workspace_id) {
           continue;
         }
-        this.recordRepositoryDiscovery(row.id, row.fingerprint, key2);
+        this.recordRepositoryDiscovery(row.id, row.fingerprint, key);
       }
       const existingWorktree = this.db.query(`
         SELECT * FROM worktrees WHERE root_path = ?
@@ -31169,7 +33026,7 @@ class CollabStore {
         });
       }
       const repositoryWorkspace = partitions[0] ?? this.portableRepositoryWorkspace(identity.portable_repository_key);
-      const id = repositoryWorkspace?.id ?? `ws_${sha2562(identity.repository_key).slice(0, 24)}`;
+      const id = repositoryWorkspace?.id ?? `ws_${sha2564(identity.repository_key).slice(0, 24)}`;
       const existing = this.getWorkspace(id);
       if (existing && !repositoryWorkspace) {
         throw new CollabError("workspace_identity_collision", "Workspace identity collision");
@@ -31179,7 +33036,7 @@ class CollabStore {
         this.recordRepositoryDiscovery(identity.checkpoint.worktree_id, identity.worktree_fingerprint, identity.portable_repository_key);
         return this.requireWorkspace(existing.id);
       }
-      const epochId = `epoch_${randomUUID2()}`;
+      const epochId = `epoch_${randomUUID3()}`;
       const name = cleanText(input.name ?? identity.root_path.split("/").at(-1) ?? id, "name", 200);
       this.db.query(`INSERT OR IGNORE INTO repositories (key, created_at) VALUES (?, ?)`).run(identity.repository_key, now);
       this.db.query(`
@@ -31202,19 +33059,19 @@ class CollabStore {
     this.tightenFileModes();
     return created;
   }
-  getWorkspace(workspaceId2, db = this.db) {
+  getWorkspace(workspaceId, db = this.db) {
     const row = db.query(`
       SELECT id, epoch_id, root_path, repository_key, name, created_at,
         event_head_sequence, event_head_hash
       FROM workspaces WHERE id = ?
-    `).get(workspaceId2);
+    `).get(workspaceId);
     return row ? { ...row } : null;
   }
-  getWorktree(workspaceId2, rootPath) {
+  getWorktree(workspaceId, rootPath) {
     const identity = inspectRepository(rootPath);
     const row = this.db.query(`
       SELECT * FROM worktrees WHERE workspace_id = ? AND root_path = ?
-    `).get(workspaceId2, identity.root_path);
+    `).get(workspaceId, identity.root_path);
     return row ? worktreeFromRow(row) : null;
   }
   joinSession(input) {
@@ -31239,7 +33096,7 @@ class CollabStore {
         return presenceSessionFromRow(existing, this.timestamp());
       }
       const now = this.timestamp();
-      const id = `session_${randomUUID2()}`;
+      const id = `session_${randomUUID3()}`;
       const actorKey = `session:${id}`;
       this.db.query(`
         INSERT INTO sessions (
@@ -31254,11 +33111,11 @@ class CollabStore {
     this.tightenFileModes();
     return session;
   }
-  getSession(sessionId2) {
-    return presenceSessionFromRow(this.requirePresenceSessionRow(validateId(sessionId2, "session_id")), this.timestamp());
+  getSession(sessionId) {
+    return presenceSessionFromRow(this.requirePresenceSessionRow(validateId(sessionId, "session_id")), this.timestamp());
   }
-  listSessions(workspaceId2, presence, limit) {
-    const id = validateId(workspaceId2, "workspace_id");
+  listSessions(workspaceId, presence, limit) {
+    const id = validateId(workspaceId, "workspace_id");
     this.requireWorkspace(id);
     if (presence !== undefined && presence !== "live" && presence !== "stale" && presence !== "left") {
       throw new CollabError("invalid_presence", "presence must be live, stale, or left");
@@ -31336,8 +33193,11 @@ class CollabStore {
     });
   }
   startSession(input) {
-    const actor = validateActor(input.actor);
+    const id = `session_${randomUUID3()}`;
+    const actor = input.actor !== undefined ? validateActor(input.actor) : derivedActor(input.actor_prefix, id);
     const role = optionalText(input.role, "role", 200);
+    const seatRef = input.seat_ref == null ? null : validateSeatRef(input.seat_ref);
+    const model = input.model === undefined ? null : validateModelLabel(input.model);
     const identity = inspectRepository(input.root_path, input.repository_key, true, { portable: false });
     const workspace = this.openWorkspace({
       root_path: input.root_path,
@@ -31365,7 +33225,6 @@ class CollabStore {
         }
       }
       const now = this.timestamp();
-      const id = `session_${randomUUID2()}`;
       const token = randomBytes(SESSION_TOKEN_BYTES).toString("base64url");
       const generation = 1;
       this.db.query(`
@@ -31375,10 +33234,18 @@ class CollabStore {
           cursor_epoch_id, cursor_sequence, cursor_hash, cursor_version, reset_generation
         ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, NULL, ?, 0, ?, 0, 0)
       `).run(id, workspace.id, worktreeRow.id, actor, role, parentSessionId, generation, hashSessionToken(token), now, now, workspace.epoch_id, GENESIS_HASH);
+      if (parentSessionId && input.parent_attested === true) {
+        this.db.query(`
+          INSERT INTO session_parent_attestations (session_id, parent_session_id, basis, attested_at)
+          VALUES (?, ?, 'same_mcp_process', ?)
+        `).run(id, parentSessionId, now);
+      }
       this.appendEvent(workspace.id, "session.joined", id, actor, {
         worktree_id: worktreeRow.id,
         role,
         parent_session_id: parentSessionId,
+        ...seatRef ? { seat_ref: seatRef } : {},
+        ...model ? { model } : {},
         identity_boundary: "session_credentials_fence_cooperating_local_clients_but_do_not_authenticate_a_person_or_model"
       }, id);
       return this.sessionHandle(this.requireCoordinationSessionRow(id), token, this.requireWorkspace(workspace.id), worktreeRow);
@@ -31387,9 +33254,9 @@ class CollabStore {
     return joined;
   }
   resumeSession(credential, options = {}) {
-    const sessionId2 = validateId(credential.session_id, "session_id");
+    const sessionId = validateId(credential.session_id, "session_id");
     const resumed = this.db.transaction(() => {
-      const row = this.authenticateResumeToken(sessionId2, credential.session_token);
+      const row = this.authenticateResumeToken(sessionId, credential.session_token);
       const now = this.timestamp();
       this.recordSessionLeaseLapses(row, now);
       const nextGeneration = row.generation + 1;
@@ -31453,7 +33320,7 @@ class CollabStore {
         UPDATE coordination_sessions
         SET generation = ?, last_seen_at = ?, cursor_recovery_required = ?
         WHERE id = ? AND generation = ? AND status = 'active'
-      `).run(nextGeneration, now, recovery ? 1 : 0, sessionId2, row.generation);
+      `).run(nextGeneration, now, recovery ? 1 : 0, sessionId, row.generation);
       if (changed.changes !== 1) {
         throw new CollabError("session_auth_failed", "Session credentials are invalid");
       }
@@ -31502,11 +33369,11 @@ class CollabStore {
         `).all(row.workspace_id, row.id);
         if (held.length > 0) {
           const releaseNote = releaseSummary ?? reason;
-          const guardNonce = `guard_${randomUUID2()}`;
+          const guardNonce = `guard_${randomUUID3()}`;
           this.db.query(`INSERT INTO v2_write_guard (nonce, enabled) VALUES (?, 1)`).run(guardNonce);
           try {
             for (const task of held) {
-              const leaseId2 = task.lease_id;
+              const leaseId = task.lease_id;
               const expired = this.isExpired(task, row, now);
               if (expired) {
                 const lapsed = this.expireSessionLeaseForRecovery(task, row, now);
@@ -31518,13 +33385,13 @@ class CollabStore {
                   blocker: null,
                   now
                 });
-                releasedLeases.push({ task_id: task.id, lease_id: leaseId2, via: "recovery" });
+                releasedLeases.push({ task_id: task.id, lease_id: leaseId, via: "recovery" });
               } else {
                 this.clearSessionClaim(task, row, "task.released", {
                   summary: releaseNote,
                   released_by_session_end: true
                 });
-                releasedLeases.push({ task_id: task.id, lease_id: leaseId2, via: "release" });
+                releasedLeases.push({ task_id: task.id, lease_id: leaseId, via: "release" });
               }
             }
           } finally {
@@ -31567,8 +33434,8 @@ class CollabStore {
     this.tightenFileModes();
     return ended;
   }
-  listCoordinationSessions(workspaceId2, status) {
-    const workspace = this.requireWorkspace(workspaceId2);
+  listCoordinationSessions(workspaceId, status) {
+    const workspace = this.requireWorkspace(workspaceId);
     const rows = status ? this.db.query(`
           SELECT * FROM coordination_sessions
           WHERE workspace_id = ? AND status = ?
@@ -31581,14 +33448,35 @@ class CollabStore {
     const observedAt = this.timestamp();
     return rows.map((row) => this.sessionProjection(row, observedAt));
   }
-  getCoordinationSession(sessionId2) {
-    const id = validateId(sessionId2, "session_id");
+  getCoordinationSession(sessionId) {
+    const id = validateId(sessionId, "session_id");
     const row = this.db.query(`SELECT * FROM coordination_sessions WHERE id = ?`).get(id);
     return row ? this.sessionProjection(row) : null;
   }
+  sessionSeatRef(sessionId) {
+    const id = validateId(sessionId, "session_id");
+    const row = this.db.query(`
+      SELECT json_extract(payload_json, '$.seat_ref') AS seat_ref FROM events
+      WHERE type = 'session.joined' AND entity_id = ?
+    `).get(id);
+    return typeof row?.seat_ref === "string" ? row.seat_ref : null;
+  }
+  activeSessionIdsForSeatRefs(seatRefs) {
+    const refs = [...new Set(seatRefs.map(validateSeatRef))];
+    if (refs.length === 0)
+      return [];
+    const rows = this.db.query(`
+      SELECT s.id FROM coordination_sessions s
+      JOIN events e ON e.type = 'session.joined' AND e.entity_id = s.id
+      WHERE s.status = 'active'
+        AND json_extract(e.payload_json, '$.seat_ref') IN (${refs.map(() => "?").join(", ")})
+      ORDER BY s.joined_at, s.id
+    `).all(...refs);
+    return rows.map((row) => row.id);
+  }
   preflightSessionEnd(credential) {
-    const sessionId2 = validateId(credential.session_id, "session_id");
-    const row = this.authenticateResumeToken(sessionId2, credential.session_token);
+    const sessionId = validateId(credential.session_id, "session_id");
+    const row = this.authenticateResumeToken(sessionId, credential.session_token);
     const refusal = this.liveLeaseRefusal(row.workspace_id, row.id, this.timestamp(), true);
     if (refusal)
       throw refusal;
@@ -31647,7 +33535,7 @@ class CollabStore {
       const target = this.validateEventAnchor(row.workspace_id, input.target);
       const now = this.timestamp();
       const resetGeneration = row.reset_generation + 1;
-      const id = `cursor_reset_${randomUUID2()}`;
+      const id = `cursor_reset_${randomUUID3()}`;
       this.db.query(`
         INSERT INTO session_cursor_resets (
           id, session_id, from_epoch_id, from_sequence, from_hash,
@@ -31691,9 +33579,9 @@ class CollabStore {
     }
     return this.sessionProjection(current);
   }
-  workspaceStatus(workspaceId2) {
-    const workspace = this.requireWorkspace(workspaceId2);
-    const tasks = this.listTasks(workspaceId2);
+  workspaceStatus(workspaceId) {
+    const workspace = this.requireWorkspace(workspaceId);
+    const tasks = this.listTasks(workspaceId);
     const counts = { open: 0, claimed: 0, blocked: 0, completed: 0 };
     let expiredClaims = 0;
     for (const task of tasks) {
@@ -31710,7 +33598,7 @@ class CollabStore {
     const decisions = this.db.query(`
       SELECT id, workspace_id, topic, decision, rationale, recorded_by, recorded_at
       FROM decisions WHERE workspace_id = ? ORDER BY recorded_at DESC, id DESC LIMIT 10
-    `).all(workspaceId2);
+    `).all(workspaceId);
     return {
       workspace,
       counts,
@@ -31718,9 +33606,9 @@ class CollabStore {
       active_claims: tasks.filter((task) => task.effective_status === "claimed"),
       blocked_tasks: tasks.filter((task) => task.status === "blocked"),
       pending_reviews: tasks.filter((task) => task.review_status === "pending"),
-      active_sessions: this.listCoordinationSessions(workspaceId2, "active"),
+      active_sessions: this.listCoordinationSessions(workspaceId, "active"),
       recent_decisions: decisions.map(decisionFromRow),
-      recent_reports: this.listReports(workspaceId2, { limit: 20 })
+      recent_reports: this.listReports(workspaceId, { limit: 20 })
     };
   }
   createTask(input) {
@@ -31739,7 +33627,7 @@ class CollabStore {
     };
     return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.create", normalized, () => {
       this.requireWorkspace(input.workspace_id);
-      const id = normalized.id ?? `task_${randomUUID2()}`;
+      const id = normalized.id ?? `task_${randomUUID3()}`;
       if (normalized.dependencies.includes(id)) {
         throw new CollabError("invalid_dependency", "A task cannot depend on itself", { task_id: id });
       }
@@ -31790,7 +33678,7 @@ class CollabStore {
     }
     const request = { ...normalized, completion_policy: completionPolicy };
     return this.mutateAsSession(input, normalized.idempotency_key, "task.create.v2", request, (session) => {
-      const id = normalized.id ?? `task_${randomUUID2()}`;
+      const id = normalized.id ?? `task_${randomUUID3()}`;
       if (normalized.dependencies.includes(id)) {
         throw new CollabError("invalid_dependency", "A task cannot depend on itself", {
           task_id: id
@@ -31836,17 +33724,17 @@ class CollabStore {
     });
   }
   claimTaskForSession(input) {
-    const taskId2 = validateId(input.task_id, "task_id");
-    const expectedVersion2 = validateExpectedVersion(input.expected_version);
+    const taskId = validateId(input.task_id, "task_id");
+    const expectedVersion = validateExpectedVersion(input.expected_version);
     const ttl = validateTtl(input.ttl_seconds);
-    const request = { task_id: taskId2, expected_version: expectedVersion2, ttl_seconds: ttl };
+    const request = { task_id: taskId, expected_version: expectedVersion, ttl_seconds: ttl };
     const replay = this.readSessionMutationReceipt(input, input.idempotency_key, "task.claim.v2", request);
     if (replay.found)
       return replay.value;
     const preparedCheckpoint = this.captureSessionWorktree(input);
     return this.mutateAsSession(input, input.idempotency_key, "task.claim.v2", request, (session) => {
-      let row = this.requireTaskRow(session.workspace_id, taskId2);
-      this.requireVersion(row, expectedVersion2);
+      let row = this.requireTaskRow(session.workspace_id, taskId);
+      this.requireVersion(row, expectedVersion);
       if (this.isExpired(row)) {
         if (row.assignee_session_id) {
           throw new CollabError("recovery_required", "An expired session lease requires an explicit recovery note", this.recoveryBundle(row));
@@ -31879,7 +33767,7 @@ class CollabStore {
       const checkpoint = preparedCheckpoint.checkpoint;
       this.requireExpectedBase(row, checkpoint);
       const now = this.timestamp();
-      const leaseId2 = `lease_${randomUUID2()}`;
+      const leaseId = `lease_${randomUUID3()}`;
       const expiresAt = addSeconds(now, ttl);
       const version2 = row.version + 1;
       this.db.query(`
@@ -31894,9 +33782,9 @@ class CollabStore {
           accepted_by = NULL, accepted_by_session_id = NULL, accepted_at = NULL,
           completed_at = NULL, version = ?, updated_at = ?
         WHERE workspace_id = ? AND id = ?
-      `).run(session.actor, session.id, worktree.id, leaseId2, expiresAt, canonicalJson(checkpoint), version2, now, row.workspace_id, row.id);
+      `).run(session.actor, session.id, worktree.id, leaseId, expiresAt, canonicalJson(checkpoint), version2, now, row.workspace_id, row.id);
       this.appendEvent(row.workspace_id, "task.claimed", row.id, session.actor, {
-        lease_id: leaseId2,
+        lease_id: leaseId,
         lease_expires_at: expiresAt,
         worktree_id: worktree.id,
         base_checkpoint: checkpoint,
@@ -31907,8 +33795,8 @@ class CollabStore {
     });
   }
   recoverTaskForSession(input) {
-    const taskId2 = validateId(input.task_id, "task_id");
-    const expectedVersion2 = validateExpectedVersion(input.expected_version);
+    const taskId = validateId(input.task_id, "task_id");
+    const expectedVersion = validateExpectedVersion(input.expected_version);
     const recoveryNote = cleanText(input.recovery_note, "recovery_note", 4000);
     const action = input.action ?? "takeover";
     if (!["takeover", "release", "block"].includes(action)) {
@@ -31920,8 +33808,8 @@ class CollabStore {
     }
     const ttl = validateTtl(input.ttl_seconds);
     const request = {
-      task_id: taskId2,
-      expected_version: expectedVersion2,
+      task_id: taskId,
+      expected_version: expectedVersion,
       recovery_note: recoveryNote,
       action,
       blocker,
@@ -31932,8 +33820,8 @@ class CollabStore {
       return replay.value;
     const preparedCheckpoint = action === "takeover" ? this.captureSessionWorktree(input) : null;
     return this.mutateAsSession(input, input.idempotency_key, "task.recover.v2", request, (session) => {
-      const row = this.requireTaskRow(session.workspace_id, taskId2);
-      this.requireVersion(row, expectedVersion2);
+      const row = this.requireTaskRow(session.workspace_id, taskId);
+      this.requireVersion(row, expectedVersion);
       if (!this.isExpired(row, row.assignee_session_id === session.id ? session : undefined) || !row.lease_id || !row.assignee_session_id) {
         throw new CollabError("recovery_not_required", "Only an expired session-owned lease can be explicitly recovered");
       }
@@ -31955,7 +33843,7 @@ class CollabStore {
       this.requireDependenciesComplete(opened);
       this.requirePathsAvailable(opened);
       this.requireExpectedBase(opened, checkpoint);
-      const leaseId2 = `lease_${randomUUID2()}`;
+      const leaseId = `lease_${randomUUID3()}`;
       const leaseExpiresAt = addSeconds(now, ttl);
       const version2 = expiryVersion + 1;
       this.db.query(`
@@ -31964,12 +33852,12 @@ class CollabStore {
           claim_worktree_id = ?, lease_id = ?, lease_expires_at = ?,
           blocker = NULL, base_checkpoint_json = ?, version = ?, updated_at = ?
         WHERE workspace_id = ? AND id = ?
-      `).run(session.actor, session.id, worktree.id, leaseId2, leaseExpiresAt, canonicalJson(checkpoint), version2, now, row.workspace_id, row.id);
+      `).run(session.actor, session.id, worktree.id, leaseId, leaseExpiresAt, canonicalJson(checkpoint), version2, now, row.workspace_id, row.id);
       const event = this.appendEvent(row.workspace_id, "task.recovered", row.id, session.actor, {
         prior_lease: prior,
         recovery_note: recoveryNote,
         recovery_checkpoint: checkpoint,
-        lease_id: leaseId2,
+        lease_id: leaseId,
         lease_expires_at: leaseExpiresAt,
         version: version2,
         note: "Recovery acknowledges an expired coordination lease; it does not accept or attribute prior work."
@@ -31980,7 +33868,7 @@ class CollabStore {
           recovered_by_session_id, action, note, prior_checkpoint_json,
           new_lease_id, recovered_at, event_sequence
         ) VALUES (?, ?, ?, ?, ?, ?, 'takeover', ?, ?, ?, ?, ?)
-      `).run(`recovery_${randomUUID2()}`, row.workspace_id, row.id, prior.lease_id, prior.session_id, session.id, recoveryNote, prior.checkpoint ? canonicalJson(prior.checkpoint) : null, leaseId2, now, event.sequence);
+      `).run(`recovery_${randomUUID3()}`, row.workspace_id, row.id, prior.lease_id, prior.session_id, session.id, recoveryNote, prior.checkpoint ? canonicalJson(prior.checkpoint) : null, leaseId, now, event.sequence);
       return this.requireTask(row.workspace_id, row.id);
     });
   }
@@ -32061,12 +33949,12 @@ class CollabStore {
     });
   }
   unblockTaskForSession(input) {
-    const taskId2 = validateId(input.task_id, "task_id");
-    const expectedVersion2 = validateExpectedVersion(input.expected_version);
+    const taskId = validateId(input.task_id, "task_id");
+    const expectedVersion = validateExpectedVersion(input.expected_version);
     const note = optionalText(input.note, "note", 2000);
-    return this.mutateAsSession(input, input.idempotency_key, "task.unblock.v2", { task_id: taskId2, expected_version: expectedVersion2, note }, (session) => {
-      const row = this.requireTaskRow(session.workspace_id, taskId2);
-      this.requireVersion(row, expectedVersion2);
+    return this.mutateAsSession(input, input.idempotency_key, "task.unblock.v2", { task_id: taskId, expected_version: expectedVersion, note }, (session) => {
+      const row = this.requireTaskRow(session.workspace_id, taskId);
+      this.requireVersion(row, expectedVersion);
       if (row.status !== "blocked") {
         throw new CollabError("task_not_blocked", "Only blocked tasks can be unblocked");
       }
@@ -32099,7 +33987,7 @@ class CollabStore {
       this.requireVersion(row, normalized.expected_version);
       this.requireActiveSessionLease(row, session, normalized.lease_id);
       const now = this.timestamp();
-      const id = `artifact_${randomUUID2()}`;
+      const id = `artifact_${randomUUID3()}`;
       this.db.query(`
           INSERT INTO artifacts (
             id, workspace_id, task_id, kind, uri, sha256, media_type, label,
@@ -32125,7 +34013,7 @@ class CollabStore {
     const confidence = validateReportConfidence(input.confidence ?? "unknown");
     const confidenceBasis = optionalText(input.confidence_basis, "confidence_basis", 2000);
     const limits = optionalText(input.limits, "limits", 2000);
-    const evidenceRefs2 = normalizeEvidenceRefs(input.evidence_refs ?? []);
+    const evidenceRefs = normalizeEvidenceRefs(input.evidence_refs ?? []);
     const reviewRequestedSessionId = input.review_requested_session_id === undefined ? null : validateId(input.review_requested_session_id, "review_requested_session_id");
     const request = {
       ...normalized.request,
@@ -32133,7 +34021,7 @@ class CollabStore {
       confidence,
       confidence_basis: confidenceBasis,
       limits,
-      evidence_refs: evidenceRefs2,
+      evidence_refs: evidenceRefs,
       ...reviewRequestedSessionId ? { review_requested_session_id: reviewRequestedSessionId } : {}
     };
     const replay = this.readSessionMutationReceipt(input, normalized.idempotency_key, "task.complete.v2", request);
@@ -32144,7 +34032,7 @@ class CollabStore {
       const row = this.requireTaskRow(session.workspace_id, normalized.task_id);
       this.requireVersion(row, normalized.expected_version);
       this.requireActiveSessionLease(row, session, normalized.lease_id);
-      for (const reference of evidenceRefs2) {
+      for (const reference of evidenceRefs) {
         this.requireEvidenceRef(row.workspace_id, reference);
       }
       if (reviewRequestedSessionId) {
@@ -32157,7 +34045,7 @@ class CollabStore {
         to_session_id: null,
         kind: "observation",
         body: summary,
-        evidence_refs: evidenceRefs2,
+        evidence_refs: evidenceRefs,
         confidence,
         confidence_basis: confidenceBasis,
         limits,
@@ -32212,18 +34100,18 @@ class CollabStore {
       return this.requireTask(row.workspace_id, row.id);
     });
   }
-  getTask(workspaceId2, taskId2) {
-    const task = this.requireTask(workspaceId2, taskId2);
-    task.artifacts = this.listArtifacts(workspaceId2, taskId2);
+  getTask(workspaceId, taskId) {
+    const task = this.requireTask(workspaceId, taskId);
+    task.artifacts = this.listArtifacts(workspaceId, taskId);
     return task;
   }
-  listTasks(workspaceId2, status) {
-    this.requireWorkspace(workspaceId2);
+  listTasks(workspaceId, status) {
+    this.requireWorkspace(workspaceId);
     const rows = status ? this.db.query(`
           SELECT * FROM tasks WHERE workspace_id = ? AND status = ? ORDER BY created_at, id
-        `).all(workspaceId2, status) : this.db.query(`
+        `).all(workspaceId, status) : this.db.query(`
           SELECT * FROM tasks WHERE workspace_id = ? ORDER BY created_at, id
-        `).all(workspaceId2);
+        `).all(workspaceId);
     return rows.map((row) => this.taskFromRow(row));
   }
   claimTask(input) {
@@ -32254,16 +34142,16 @@ class CollabStore {
       this.requireDependenciesComplete(row);
       this.requirePathsAvailable(row);
       const now = this.timestamp();
-      const leaseId2 = `lease_${randomUUID2()}`;
+      const leaseId = `lease_${randomUUID3()}`;
       const expiresAt = addSeconds(now, normalized.ttl_seconds);
       const nextVersion = row.version + 1;
       this.db.query(`
         UPDATE tasks SET status = 'claimed', assignee = ?, lease_id = ?, lease_expires_at = ?,
           blocker = NULL, version = ?, updated_at = ?
         WHERE workspace_id = ? AND id = ?
-      `).run(normalized.actor, leaseId2, expiresAt, nextVersion, now, input.workspace_id, normalized.task_id);
+      `).run(normalized.actor, leaseId, expiresAt, nextVersion, now, input.workspace_id, normalized.task_id);
       this.appendEvent(input.workspace_id, "task.claimed", normalized.task_id, normalized.actor, {
-        lease_id: leaseId2,
+        lease_id: leaseId,
         lease_expires_at: expiresAt,
         previous_assignee: expired ? priorAssignee : null,
         version: nextVersion
@@ -32412,7 +34300,7 @@ class CollabStore {
       this.requireVersion(row, normalized.expected_version);
       this.requireActiveLease(row, normalized.actor, normalized.lease_id);
       const now = this.timestamp();
-      const id = `artifact_${randomUUID2()}`;
+      const id = `artifact_${randomUUID3()}`;
       this.db.query(`
         INSERT INTO artifacts
           (id, workspace_id, task_id, kind, uri, sha256, media_type, label, attached_by, attached_at)
@@ -32438,7 +34326,7 @@ class CollabStore {
     };
     return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "decision.record", normalized, () => {
       this.requireWorkspace(input.workspace_id);
-      const id = `decision_${randomUUID2()}`;
+      const id = `decision_${randomUUID3()}`;
       const now = this.timestamp();
       this.db.query(`
         INSERT INTO decisions (id, workspace_id, topic, decision, rationale, recorded_by, recorded_at)
@@ -32462,15 +34350,670 @@ class CollabStore {
       relation: validateReportRelation(input.relation ?? "informs"),
       target_report_id: input.target_report_id ? validateId(input.target_report_id, "target_report_id") : null,
       authority_scope: optionalText(input.authority_scope, "authority_scope", 1000),
-      authority_basis: optionalText(input.authority_basis, "authority_basis", 2000)
+      authority_basis: optionalText(input.authority_basis, "authority_basis", 2000),
+      ...input.to_person === true ? { to_person: true } : {}
     };
     return this.mutateAsSession(input, input.idempotency_key, "report.append.v2", normalized, (session) => {
       this.validateReportInput(session, normalized);
+      this.refuseProposalRewrite(normalized);
       return this.appendReportInternal(session, normalized);
     });
   }
-  listReports(workspaceId2, options = {}) {
-    this.requireWorkspace(workspaceId2);
+  openProposalForSession(input) {
+    const normalized = {
+      ...normalizeProposalTerms(input),
+      task_id: input.task_id ? validateId(input.task_id, "task_id") : null,
+      confidence: validateReportConfidence(input.confidence ?? "unknown"),
+      confidence_basis: optionalText(input.confidence_basis, "confidence_basis", 2000),
+      limits: optionalText(input.limits, "limits", 2000),
+      origin: validateProposalOrigin(input.origin ?? "ai"),
+      supersedes_report_id: input.supersedes_report_id ? validateId(input.supersedes_report_id, "supersedes_report_id") : null
+    };
+    return this.mutateAsSession(input, input.idempotency_key, "proposal.open.v1", normalized, (session) => {
+      const reportInput = {
+        task_id: normalized.task_id,
+        to_session_id: null,
+        kind: "proposal",
+        body: normalized.question,
+        evidence_refs: normalized.evidence_refs,
+        confidence: normalized.confidence,
+        confidence_basis: normalized.confidence_basis,
+        limits: normalized.limits,
+        relation: normalized.supersedes_report_id ? "supersedes" : "informs",
+        target_report_id: normalized.supersedes_report_id,
+        authority_scope: null,
+        authority_basis: null
+      };
+      this.validateReportInput(session, reportInput);
+      if (normalized.supersedes_report_id) {
+        this.requireOpenToRevision(session.workspace_id, normalized.supersedes_report_id);
+      }
+      return this.openProposalInternal(session, this.consentVoice(session.id), reportInput, normalized);
+    });
+  }
+  openPersonProposal(input) {
+    const normalized = normalizeProposalTerms(input);
+    const idempotencyKey = validateIdempotencyKey(input.idempotency_key);
+    return this.mutate(input.workspace_id, PERSON_DESK_ACTOR, idempotencyKey, "person.proposal.open.v1", normalized, () => {
+      for (const reference of normalized.evidence_refs)
+        this.requireEvidenceRef(input.workspace_id, reference);
+      const reportInput = {
+        task_id: null,
+        to_session_id: null,
+        kind: "proposal",
+        body: normalized.question,
+        evidence_refs: normalized.evidence_refs,
+        confidence: "unknown",
+        confidence_basis: null,
+        limits: PERSON_DESK_LIMITS,
+        relation: "informs",
+        target_report_id: null,
+        authority_scope: null,
+        authority_basis: null
+      };
+      return this.openProposalInternal({ workspace_id: input.workspace_id, actor: PERSON_DESK_ACTOR, id: null }, PERSON_VOICE_ID, reportInput, { ...normalized, origin: "person_relayed", supersedes_report_id: null });
+    });
+  }
+  withdrawPersonProposal(input) {
+    const normalized = {
+      proposal_report_id: validateId(input.proposal_report_id, "proposal_report_id"),
+      reason: cleanText(input.reason, "reason", 2000)
+    };
+    const idempotencyKey = validateIdempotencyKey(input.idempotency_key);
+    return this.mutate(input.workspace_id, PERSON_DESK_ACTOR, idempotencyKey, "person.proposal.withdraw.v1", normalized, () => {
+      const proposal = this.requireReport(normalized.proposal_report_id);
+      this.requireProposalTerms(input.workspace_id, proposal.id);
+      if (proposal.from_session_id !== null || proposal.from_actor !== PERSON_DESK_ACTOR) {
+        throw new CollabError("report_author_mismatch", "The desk withdraws only proposals it opened; an agent withdraws its own");
+      }
+      if (this.proposalRetirement(input.workspace_id, proposal.id)) {
+        throw new CollabError("proposal_not_on_table", "This proposal was already withdrawn or superseded");
+      }
+      this.appendReportInternal({ workspace_id: input.workspace_id, actor: PERSON_DESK_ACTOR, id: null }, {
+        task_id: proposal.task_id,
+        to_session_id: null,
+        kind: "observation",
+        body: normalized.reason,
+        evidence_refs: [],
+        confidence: "unknown",
+        confidence_basis: null,
+        limits: PERSON_DESK_LIMITS,
+        relation: "withdraws",
+        target_report_id: proposal.id,
+        authority_scope: null,
+        authority_basis: null,
+        about_proposal_id: proposal.id
+      });
+      return this.proposalStatusInternal(input.workspace_id, proposal.id);
+    });
+  }
+  openProposalInternal(author, authorVoiceId, reportInput, terms) {
+    const now = this.timestamp();
+    const voices = this.liveVoiceSnapshot(author.workspace_id, now);
+    const report = this.appendReportInternal(author, reportInput);
+    const closesAt = new Date(Date.parse(now) + terms.consult_seconds * 1000).toISOString();
+    const proposalSha256 = sha2564(proposalBytes({
+      workspace_id: author.workspace_id,
+      report_id: report.id,
+      task_id: report.task_id,
+      question: report.body,
+      criteria: terms.criteria,
+      extent: terms.extent,
+      relies_on: report.evidence_refs,
+      known_conflicts: terms.known_conflicts,
+      limits: report.limits,
+      origin: terms.origin,
+      topic: terms.topic,
+      closes_at: closesAt,
+      supersedes_report_id: terms.supersedes_report_id
+    }));
+    const event = this.appendEvent(author.workspace_id, "proposal.opened", report.id, author.actor, {
+      rule: CONSENT_RULE,
+      proposal_sha256: proposalSha256,
+      criteria: terms.criteria,
+      extent: terms.extent,
+      known_conflicts: terms.known_conflicts,
+      origin: terms.origin,
+      topic: terms.topic,
+      closes_at: closesAt,
+      voices,
+      author_voice_id: authorVoiceId
+    }, author.id);
+    this.db.query(`
+      INSERT INTO proposal_terms (
+        report_id, workspace_id, rule, criteria, extent, known_conflicts, origin,
+        topic, closes_at, voices_json, author_voice_id, proposal_sha256,
+        opened_event_id, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(report.id, author.workspace_id, CONSENT_RULE, terms.criteria, terms.extent, terms.known_conflicts, terms.origin, terms.topic, closesAt, canonicalJson(voices), authorVoiceId, proposalSha256, event.id, now);
+    return this.proposalStatusInternal(author.workspace_id, report.id);
+  }
+  relayProposalRejectionForSession(input) {
+    const normalized = {
+      proposal_report_id: validateId(input.proposal_report_id, "proposal_report_id"),
+      proposal_sha256: validateSha256(input.proposal_sha256),
+      reason: cleanText(input.reason, "reason", 2000)
+    };
+    return this.mutateAsSession(input, input.idempotency_key, "proposal.reject.relay.v1", normalized, (session) => {
+      const terms = this.requireProposalTerms(session.workspace_id, normalized.proposal_report_id);
+      return this.recordPersonAct({
+        workspace_id: terms.workspace_id,
+        proposal_report_id: terms.report_id,
+        proposal_sha256: normalized.proposal_sha256,
+        act: "reject",
+        reason: normalized.reason,
+        basis: "relayed_by_session",
+        actor: session.actor,
+        session_id: session.id,
+        proof: null,
+        expected_ai_snapshot: null
+      });
+    });
+  }
+  personActChallenge(input) {
+    const act = validatePersonAct(input.act);
+    const reason = normalizeActReason(act, input.reason);
+    const transaction = this.db.transaction(() => {
+      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
+      const status = this.proposalStatusInternal(terms.workspace_id, terms.report_id);
+      this.refuseUnrecordableAct(status, act, "user_verified_passkey");
+      const prior = this.personActCount(terms.report_id);
+      const aiSnapshot = aiSnapshotOf(status);
+      return {
+        workspace_id: terms.workspace_id,
+        proposal_report_id: terms.report_id,
+        proposal_sha256: terms.proposal_sha256,
+        act,
+        reason,
+        prior_person_acts: prior,
+        ai_snapshot: aiSnapshot,
+        ...personActChallenge({
+          act,
+          workspace_id: terms.workspace_id,
+          proposal_report_id: terms.report_id,
+          proposal_sha256: terms.proposal_sha256,
+          prior_person_acts: prior,
+          reason,
+          ai_snapshot: aiSnapshot
+        }),
+        passkeys: this.listPersonPasskeys().filter((key) => key.revoked_at === null).map((key) => ({
+          credential_id: key.credential_id,
+          rp_id: key.rp_id,
+          origin: key.origin,
+          label: key.label,
+          fingerprint: key.fingerprint
+        }))
+      };
+    });
+    return transaction.deferred();
+  }
+  recordPersonActAtTerminal(input) {
+    const act = validatePersonAct(input.act);
+    const reason = normalizeActReason(act, input.reason);
+    const transaction = this.db.transaction(() => {
+      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
+      return this.recordPersonAct({
+        workspace_id: terms.workspace_id,
+        proposal_report_id: terms.report_id,
+        proposal_sha256: validateSha256(input.proposal_sha256),
+        act,
+        reason,
+        basis: "controlling_terminal",
+        actor: PERSON_TERMINAL_ACTOR,
+        session_id: null,
+        proof: null,
+        expected_ai_snapshot: input.expected_ai_snapshot
+      });
+    });
+    const status = transaction.immediate();
+    this.tightenFileModes();
+    return status;
+  }
+  recordPersonActWithPasskey(input) {
+    const act = validatePersonAct(input.act);
+    const reason = normalizeActReason(act, input.reason);
+    const assertion = normalizePasskeyAssertion(input.assertion);
+    const transaction = this.db.transaction(() => {
+      const terms = this.requireProposalTermsById(validateId(input.proposal_report_id, "proposal_report_id"));
+      const passkey = this.listPersonPasskeys().find((key) => key.credential_id === assertion.credential_id && key.revoked_at === null);
+      if (!passkey) {
+        throw new CollabError("passkey_not_enrolled", "No active enrolled passkey has this credential id");
+      }
+      const status2 = this.proposalStatusInternal(terms.workspace_id, terms.report_id);
+      const aiSnapshot = aiSnapshotOf(status2);
+      const derived = personActChallenge({
+        act,
+        workspace_id: terms.workspace_id,
+        proposal_report_id: terms.report_id,
+        proposal_sha256: terms.proposal_sha256,
+        prior_person_acts: this.personActCount(terms.report_id),
+        reason,
+        ai_snapshot: aiSnapshot
+      });
+      const { sign_count } = verifyPasskeyAssertion({
+        passkey,
+        assertion,
+        expected_challenge: derived.challenge
+      });
+      this.db.query(`UPDATE person_passkeys SET sign_count = ? WHERE credential_id = ?`).run(sign_count, passkey.credential_id);
+      return this.recordPersonAct({
+        workspace_id: terms.workspace_id,
+        proposal_report_id: terms.report_id,
+        proposal_sha256: terms.proposal_sha256,
+        act,
+        reason,
+        basis: "user_verified_passkey",
+        actor: PERSON_PASSKEY_ACTOR,
+        session_id: null,
+        proof: {
+          ...assertion,
+          public_key_spki: passkey.public_key_spki,
+          rp_id: passkey.rp_id,
+          origin: passkey.origin,
+          challenge_bytes: derived.challenge_bytes,
+          challenge: derived.challenge,
+          sign_count
+        },
+        expected_ai_snapshot: aiSnapshot
+      });
+    });
+    const status = transaction.immediate();
+    this.tightenFileModes();
+    return status;
+  }
+  enrollPersonPasskey(input) {
+    const enrollment = normalizePasskeyEnrollment(input);
+    const transaction = this.db.transaction(() => {
+      if (this.db.query(`SELECT 1 FROM person_passkeys WHERE credential_id = ?`).get(enrollment.credential_id)) {
+        throw new CollabError("passkey_already_enrolled", "This credential id is already enrolled");
+      }
+      this.db.query(`
+        INSERT INTO person_passkeys (
+          credential_id, public_key_spki, algorithm, rp_id, origin, label,
+          fingerprint, sign_count, enrolled_at, revoked_at
+        ) VALUES (?, ?, -7, ?, ?, ?, ?, 0, ?, NULL)
+      `).run(enrollment.credential_id, enrollment.public_key_spki, enrollment.rp_id, enrollment.origin, enrollment.label, passkeyFingerprint(enrollment.public_key_spki), this.timestamp());
+    });
+    transaction.immediate();
+    this.tightenFileModes();
+    return this.listPersonPasskeys().find((key) => key.credential_id === enrollment.credential_id);
+  }
+  listPersonPasskeys() {
+    return this.db.query(`SELECT * FROM person_passkeys ORDER BY enrolled_at, credential_id`).all().map((row) => ({ ...row, algorithm: -7 }));
+  }
+  revokePersonPasskey(credentialId) {
+    const transaction = this.db.transaction(() => {
+      const changed = this.db.query(`
+        UPDATE person_passkeys SET revoked_at = ? WHERE credential_id = ? AND revoked_at IS NULL
+      `).run(this.timestamp(), credentialId);
+      if (changed.changes === 0) {
+        throw new CollabError("passkey_not_enrolled", "No active enrolled passkey has this credential id");
+      }
+    });
+    transaction.immediate();
+    this.tightenFileModes();
+    return this.listPersonPasskeys().find((key) => key.credential_id === credentialId);
+  }
+  appendPersonNote(input) {
+    const normalized = {
+      body: cleanText(input.body, "body", MAX_REPORT_BODY),
+      proposal_report_id: input.proposal_report_id ? validateId(input.proposal_report_id, "proposal_report_id") : null
+    };
+    const idempotencyKey = validateIdempotencyKey(input.idempotency_key);
+    return this.mutate(input.workspace_id, PERSON_DESK_ACTOR, idempotencyKey, "person.note.v1", normalized, () => {
+      let toSessionId = null;
+      if (normalized.proposal_report_id) {
+        const terms = this.requireProposalTerms(input.workspace_id, normalized.proposal_report_id);
+        toSessionId = this.requireReport(terms.report_id).from_session_id;
+      }
+      return this.appendReportInternal({ workspace_id: input.workspace_id, actor: PERSON_DESK_ACTOR, id: null }, {
+        task_id: null,
+        to_session_id: toSessionId,
+        kind: "observation",
+        body: normalized.body,
+        evidence_refs: normalized.proposal_report_id ? [`report:${normalized.proposal_report_id}`] : [],
+        confidence: "unknown",
+        confidence_basis: null,
+        limits: PERSON_DESK_LIMITS,
+        relation: "informs",
+        target_report_id: null,
+        authority_scope: null,
+        authority_basis: null,
+        ...normalized.proposal_report_id ? { about_proposal_id: normalized.proposal_report_id } : {}
+      });
+    });
+  }
+  personInbox(workspaceId) {
+    this.requireWorkspace(workspaceId);
+    const transaction = this.db.transaction(() => {
+      const context = this.proposalReadContext(workspaceId);
+      const settled = new Set(["consented", "split", "lapsed"]);
+      const candidates = this.db.query(`
+        SELECT t.report_id FROM proposal_terms t JOIN reports r ON r.id = t.report_id
+        WHERE t.workspace_id = ?
+          AND NOT EXISTS (SELECT 1 FROM proposal_person_acts a WHERE a.proposal_report_id = t.report_id)
+        ORDER BY r.event_sequence DESC
+        LIMIT ?
+      `).all(workspaceId, MAX_INBOX_SCAN);
+      const awaiting = [];
+      const unreadable = [];
+      for (const row of candidates) {
+        if (awaiting.length >= MAX_INBOX_PROPOSALS)
+          break;
+        const status = this.readProposalStatus(context, row.report_id, unreadable);
+        if (status && settled.has(status.ai.position))
+          awaiting.push(status);
+      }
+      const addressed = this.db.query(`
+        SELECT r.* FROM person_addressed_reports p JOIN reports r ON r.id = p.report_id
+        WHERE p.workspace_id = ? ORDER BY r.event_sequence DESC LIMIT 50
+      `).all(workspaceId).map(reportFromRow);
+      return { workspace_id: workspaceId, awaiting_person: awaiting, addressed_reports: addressed, unreadable };
+    });
+    return transaction.deferred();
+  }
+  personInboxSummary() {
+    return this.listWorkspaces().map((workspace) => {
+      const inbox = this.personInbox(workspace.id);
+      return {
+        workspace_id: workspace.id,
+        awaiting_person: inbox.awaiting_person.length,
+        addressed_reports: inbox.addressed_reports.length,
+        latest_report_id: inbox.addressed_reports[0]?.id ?? null
+      };
+    });
+  }
+  listWorkspaces() {
+    return this.db.query(`SELECT id, name, root_path, created_at FROM workspaces ORDER BY created_at, id`).all();
+  }
+  proposalStatus(workspaceId, proposalReportId) {
+    this.requireWorkspace(workspaceId);
+    const id = validateId(proposalReportId, "proposal_report_id");
+    this.requireProposalTerms(workspaceId, id);
+    return this.db.transaction(() => this.proposalStatusInternal(workspaceId, id)).deferred();
+  }
+  proposalStatusById(proposalReportId) {
+    const terms = this.requireProposalTermsById(validateId(proposalReportId, "proposal_report_id"));
+    return this.db.transaction(() => this.proposalStatusInternal(terms.workspace_id, terms.report_id)).deferred();
+  }
+  listProposalStatuses(workspaceId, options = {}) {
+    this.requireWorkspace(workspaceId);
+    const limit = options.limit ?? 20;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 50) {
+      throw new CollabError("invalid_limit", "Proposal limit must be between 1 and 50");
+    }
+    return this.db.transaction(() => {
+      const context = this.proposalReadContext(workspaceId);
+      const rows = this.db.query(`
+        SELECT t.report_id FROM proposal_terms t
+        JOIN reports r ON r.id = t.report_id
+        WHERE t.workspace_id = ?
+        ORDER BY r.event_sequence DESC
+        LIMIT ?
+      `).all(workspaceId, limit);
+      const unreadable = [];
+      const proposals = rows.map((row) => this.readProposalStatus(context, row.report_id, unreadable)).filter((status) => status !== null);
+      return { proposals, unreadable };
+    }).deferred();
+  }
+  readProposalStatus(context, reportId, unreadable) {
+    try {
+      return this.proposalStatusInternal(context.workspaceId, reportId, context);
+    } catch (error51) {
+      if (!(error51 instanceof CollabError))
+        throw error51;
+      unreadable.push({ proposal_report_id: reportId, error: error51.code });
+      return null;
+    }
+  }
+  refuseUnrecordableAct(status, act, basis) {
+    if (status.ai.position === "withdrawn" || status.ai.position === "superseded") {
+      throw new CollabError("proposal_not_on_table", "A withdrawn or superseded proposal is no longer on the table", { position: status.ai.position, obsoleted_by_report_id: status.ai.obsoleted_by_report_id });
+    }
+    const latest = status.person.acts.at(-1) ?? null;
+    if (act === "agree") {
+      if (basis === "relayed_by_session") {
+        throw new CollabError("consent_not_relayable", "A person's agreement is never recorded through a session");
+      }
+      if (status.ai.position !== "consented") {
+        throw new CollabError("ai_not_consented", "The agents have not consented; a person agrees only after they settle", { position: status.ai.position });
+      }
+      if (latest?.act === "agree") {
+        throw new CollabError("already_agreed", "The latest person act already agrees to these bytes");
+      }
+      return;
+    }
+    if (latest?.act === "reject" && (basis === "relayed_by_session" || latest.basis !== "relayed_by_session")) {
+      throw new CollabError("already_rejected", "The latest person act already rejects these bytes");
+    }
+  }
+  recordPersonAct(input) {
+    const current = this.proposalStatusInternal(input.workspace_id, input.proposal_report_id);
+    if (current.proposal_sha256 !== input.proposal_sha256) {
+      throw new CollabError("proposal_hash_mismatch", "The act names different proposal bytes; read the proposal status again", { proposal_sha256: current.proposal_sha256 });
+    }
+    this.refuseUnrecordableAct(current, input.act, input.basis);
+    const aiSnapshot = aiSnapshotOf(current);
+    if (input.expected_ai_snapshot && canonicalJson(input.expected_ai_snapshot) !== canonicalJson(aiSnapshot)) {
+      throw new CollabError("ai_position_changed", "The agents' position changed since it was shown; read the proposal status again", { ai_snapshot: aiSnapshot });
+    }
+    const id = `person_act_${randomUUID3()}`;
+    const now = this.timestamp();
+    const personAct = {
+      id,
+      proposal_report_id: input.proposal_report_id,
+      proposal_sha256: input.proposal_sha256,
+      act: input.act,
+      party: "person",
+      basis: input.basis,
+      reason: input.reason,
+      relayed_by_session_id: input.basis === "relayed_by_session" ? input.session_id : null,
+      ai_snapshot: aiSnapshot,
+      proof: input.proof
+    };
+    const event = this.appendEvent(input.workspace_id, input.act === "agree" ? "proposal.agreed" : "proposal.rejected", input.proposal_report_id, input.actor, { person_act: personAct }, input.session_id);
+    this.db.query(`
+      INSERT INTO proposal_person_acts (
+        id, workspace_id, proposal_report_id, proposal_sha256, act, party, basis,
+        reason, relayed_by_session_id, ai_snapshot_json, proof_json, created_at, event_sequence
+      ) VALUES (?, ?, ?, ?, ?, 'person', ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, input.workspace_id, input.proposal_report_id, input.proposal_sha256, input.act, input.basis, input.reason, personAct.relayed_by_session_id, canonicalJson(aiSnapshot), input.proof ? canonicalJson(input.proof) : null, now, event.sequence);
+    return this.proposalStatusInternal(input.workspace_id, input.proposal_report_id);
+  }
+  personActCount(proposalReportId) {
+    return this.db.query(`SELECT COUNT(*) AS count FROM proposal_person_acts WHERE proposal_report_id = ?`).get(proposalReportId).count;
+  }
+  requireProposalTermsById(reportId) {
+    const row = this.db.query(`SELECT workspace_id FROM proposal_terms WHERE report_id = ?`).get(reportId);
+    if (!row) {
+      throw new CollabError("proposal_not_found", "No proposal with consent terms has this report id", { proposal_report_id: reportId });
+    }
+    return this.requireProposalTerms(row.workspace_id, reportId);
+  }
+  proposalReadContext(workspaceId) {
+    return { workspaceId, obsoleted: this.activeObsoletionTargets(workspaceId), voices: new Map };
+  }
+  proposalRetirement(workspaceId, reportId) {
+    return this.db.query(`
+      SELECT id, relation, event_sequence FROM reports
+      WHERE workspace_id = ? AND target_report_id = ?
+        AND relation IN ('withdraws', 'corrects', 'supersedes')
+      ORDER BY event_sequence
+      LIMIT 1
+    `).get(workspaceId, reportId);
+  }
+  standingProposalChallenges(context, reportId) {
+    const challenges = this.db.query(`
+      SELECT id, from_session_id FROM reports
+      WHERE workspace_id = ? AND target_report_id = ? AND relation = 'challenges'
+      ORDER BY event_sequence
+    `).all(context.workspaceId, reportId);
+    const standing = [];
+    for (const challenge of challenges) {
+      if (context.obsoleted.has(challenge.id))
+        continue;
+      const answers = this.db.query(`
+        SELECT id, relation, from_session_id FROM reports
+        WHERE workspace_id = ? AND target_report_id = ? AND relation = 'resolves'
+      `).all(context.workspaceId, challenge.id);
+      const challengerVoice = challenge.from_session_id ? this.consentVoice(challenge.from_session_id, context) : null;
+      const resolved = challengerVoice !== null && answers.some((answer) => !context.obsoleted.has(answer.id) && answer.from_session_id !== null && this.consentVoice(answer.from_session_id, context) === challengerVoice);
+      if (!resolved)
+        standing.push(challenge.id);
+    }
+    return standing;
+  }
+  proposalStatusInternal(workspaceId, reportId, context = this.proposalReadContext(workspaceId)) {
+    const proposal = this.requireReport(reportId);
+    const terms = this.requireProposalTerms(workspaceId, reportId);
+    const bytes = proposalBytes({
+      workspace_id: workspaceId,
+      report_id: proposal.id,
+      task_id: proposal.task_id,
+      question: proposal.body,
+      criteria: terms.criteria,
+      extent: terms.extent,
+      relies_on: proposal.evidence_refs,
+      known_conflicts: terms.known_conflicts,
+      limits: proposal.limits,
+      origin: terms.origin,
+      topic: terms.topic,
+      closes_at: terms.closes_at,
+      supersedes_report_id: proposal.relation === "supersedes" ? proposal.target_report_id : null
+    });
+    if (sha2564(bytes) !== terms.proposal_sha256) {
+      throw new CollabError("proposal_terms_invalid", "Stored proposal bytes no longer match their recorded hash", { proposal_report_id: reportId });
+    }
+    const retirement = this.proposalRetirement(workspaceId, reportId);
+    const supports = this.db.query(`
+      SELECT id, from_session_id FROM reports
+      WHERE workspace_id = ? AND target_report_id = ? AND relation = 'supports'
+      ORDER BY event_sequence
+    `).all(workspaceId, reportId).filter((support) => support.from_session_id !== null && !context.obsoleted.has(support.id));
+    const challengeIds = this.standingProposalChallenges(context, reportId);
+    const computed = aiPosition({
+      now: this.timestamp(),
+      closes_at: terms.closes_at,
+      obsoleted: retirement ? retirement.relation === "withdraws" ? "withdrawn" : "superseded" : null,
+      unresolved_challenge: challengeIds.length > 0,
+      author_voice_id: terms.author_voice_id,
+      snapshot_voice_ids: terms.voices.map((voice) => voice.voice_id),
+      support_voice_ids: supports.map((support) => this.consentVoice(support.from_session_id, context))
+    });
+    const acts = this.db.query(`
+      SELECT * FROM proposal_person_acts
+      WHERE workspace_id = ? AND proposal_report_id = ?
+      ORDER BY event_sequence
+    `).all(workspaceId, reportId).map(proposalPersonActFromRow);
+    const latest = acts.at(-1) ?? null;
+    const state = latest === null ? "awaiting" : latest.act === "agree" ? "agreed" : "rejected";
+    const agreement = latest?.act === "agree" ? latest : null;
+    return {
+      rule: CONSENT_RULE,
+      proposal,
+      terms,
+      proposal_bytes: bytes,
+      proposal_sha256: terms.proposal_sha256,
+      ai: {
+        position: computed.position,
+        closed: computed.closed,
+        unresolved_challenge_report_ids: challengeIds,
+        qualifying_support_report_ids: computed.qualifying_support_indexes.map((index) => supports[index].id),
+        awaiting_voice_ids: computed.awaiting_voice_ids,
+        obsoleted_by_report_id: retirement?.id ?? null,
+        basis: "computed_from_journal"
+      },
+      person: { state, acts },
+      agreement,
+      may_proceed: agreement !== null && retirement === null,
+      authority_boundary: "an_agreement_authorises_only_the_proposal_extent"
+    };
+  }
+  requireProposalTerms(workspaceId, reportId) {
+    const row = this.db.query(`
+      SELECT * FROM proposal_terms WHERE workspace_id = ? AND report_id = ?
+    `).get(workspaceId, reportId);
+    if (!row) {
+      throw new CollabError("proposal_not_found", "No proposal with consent terms has this report id in this workspace", { proposal_report_id: reportId });
+    }
+    return proposalTermsFromRow(row);
+  }
+  requireOpenToRevision(workspaceId, reportId) {
+    const terms = this.db.query(`
+      SELECT 1 FROM proposal_terms WHERE workspace_id = ? AND report_id = ?
+    `).get(workspaceId, reportId);
+    if (!terms)
+      return;
+    if (this.proposalRetirement(workspaceId, reportId)) {
+      throw new CollabError("proposal_not_on_table", "This proposal was already withdrawn or superseded", { proposal_report_id: reportId });
+    }
+  }
+  refuseProposalRewrite(input) {
+    if (input.relation !== "corrects" && input.relation !== "supersedes" && input.relation !== "withdraws")
+      return;
+    if (!input.target_report_id)
+      return;
+    const isTermed = (id) => this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(id) !== null;
+    if (input.relation !== "withdraws" && isTermed(input.target_report_id)) {
+      throw new CollabError("proposal_terms_fixed", "A proposal with consent terms is fixed by its hash. Withdraw it, or open a revision with " + "collab_proposal_open and supersedes_report_id");
+    }
+    const target = this.db.query(`SELECT relation, target_report_id FROM reports WHERE id = ?`).get(input.target_report_id);
+    if (target?.target_report_id && ["withdraws", "corrects", "supersedes"].includes(target.relation) && !isTermed(input.target_report_id) && isTermed(target.target_report_id)) {
+      throw new CollabError("proposal_retired", "This report retired a proposal, and a retirement is final; open a new proposal instead");
+    }
+  }
+  tableVoices(workspaceId) {
+    this.requireWorkspace(workspaceId);
+    const now = this.timestamp();
+    const rows = this.db.query(`
+      SELECT id, actor, role, status, last_seen_at FROM coordination_sessions
+      WHERE workspace_id = ? AND status = 'active'
+      ORDER BY last_seen_at DESC, id
+    `).all(workspaceId);
+    const voices = new Map;
+    for (const row of rows) {
+      const voiceId = this.consentVoice(row.id);
+      voices.set(voiceId, [...voices.get(voiceId) ?? [], {
+        id: row.id,
+        actor: row.actor,
+        role: row.role,
+        liveness: sessionLiveness(row, now),
+        last_seen_at: row.last_seen_at
+      }]);
+    }
+    return [...voices.entries()].map(([voice_id, sessions]) => ({ voice_id, sessions }));
+  }
+  liveVoiceSnapshot(workspaceId, observedAt) {
+    const rows = this.db.query(`
+      SELECT id, status, last_seen_at FROM coordination_sessions
+      WHERE workspace_id = ? AND status = 'active'
+      ORDER BY id
+    `).all(workspaceId);
+    const voices = new Map;
+    for (const row of rows) {
+      if (sessionLiveness(row, observedAt) !== "live")
+        continue;
+      const voiceId = this.consentVoice(row.id);
+      voices.set(voiceId, [...voices.get(voiceId) ?? [], row.id]);
+    }
+    return [...voices.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([voice_id, live_session_ids]) => ({ voice_id, live_session_ids: live_session_ids.sort() }));
+  }
+  consentVoice(sessionId, context) {
+    const cached2 = context?.voices.get(sessionId);
+    if (cached2)
+      return cached2;
+    let current = sessionId;
+    for (let depth = 0;depth < 256; depth += 1) {
+      const row = this.db.query(`SELECT parent_session_id FROM session_parent_attestations WHERE session_id = ?`).get(current);
+      if (!row)
+        break;
+      current = row.parent_session_id;
+    }
+    context?.voices.set(sessionId, current);
+    return current;
+  }
+  listReports(workspaceId, options = {}) {
+    this.requireWorkspace(workspaceId);
     const after = options.after_event_sequence ?? 0;
     const limit = options.limit ?? 100;
     if (!Number.isInteger(after) || after < 0) {
@@ -32479,7 +35022,7 @@ class CollabStore {
     if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
       throw new CollabError("invalid_limit", "Report limit must be between 1 and 500");
     }
-    const taskId2 = options.task_id ? validateId(options.task_id, "task_id") : null;
+    const taskId = options.task_id ? validateId(options.task_id, "task_id") : null;
     const toSessionId = options.to_session_id ? validateId(options.to_session_id, "to_session_id") : null;
     const rows = this.db.query(`
       SELECT * FROM reports
@@ -32489,26 +35032,26 @@ class CollabStore {
         AND (? IS NULL OR to_session_id = ?)
       ORDER BY event_sequence
       LIMIT ?
-    `).all(workspaceId2, after, taskId2, taskId2, toSessionId, toSessionId, limit);
+    `).all(workspaceId, after, taskId, taskId, toSessionId, toSessionId, limit);
     return rows.map(reportFromRow);
   }
   reviewTaskForSession(input) {
-    const taskId2 = validateId(input.task_id, "task_id");
-    const expectedVersion2 = validateExpectedVersion(input.expected_version);
+    const taskId = validateId(input.task_id, "task_id");
+    const expectedVersion = validateExpectedVersion(input.expected_version);
     if (input.outcome !== "accept" && input.outcome !== "request_changes") {
       throw new CollabError("invalid_review_outcome", "Review outcome is invalid");
     }
     const summary = cleanText(input.summary, "summary", 4000);
-    const evidenceRefs2 = normalizeEvidenceRefs(input.evidence_refs ?? []);
+    const evidenceRefs = normalizeEvidenceRefs(input.evidence_refs ?? []);
     const confidence = validateReportConfidence(input.confidence ?? "unknown");
     const confidenceBasis = optionalText(input.confidence_basis, "confidence_basis", 2000);
     const limits = optionalText(input.limits, "limits", 2000);
     const request = {
-      task_id: taskId2,
-      expected_version: expectedVersion2,
+      task_id: taskId,
+      expected_version: expectedVersion,
       outcome: input.outcome,
       summary,
-      evidence_refs: evidenceRefs2,
+      evidence_refs: evidenceRefs,
       ...confidence === "unknown" ? {} : { confidence },
       ...confidenceBasis === null ? {} : { confidence_basis: confidenceBasis },
       ...limits === null ? {} : { limits }
@@ -32516,20 +35059,20 @@ class CollabStore {
     const replay = this.readSessionMutationReceipt(input, input.idempotency_key, "task.review.v2", request);
     if (replay.found)
       return replay.value;
-    const preparedCheckpoint = input.outcome === "accept" ? this.captureReviewCheckpoint(input, taskId2) : null;
+    const preparedCheckpoint = input.outcome === "accept" ? this.captureReviewCheckpoint(input, taskId) : null;
     return this.mutateAsSession(input, input.idempotency_key, "task.review.v2", request, (session) => {
-      const row = this.requireTaskRow(session.workspace_id, taskId2);
+      const row = this.requireTaskRow(session.workspace_id, taskId);
       if (row.completion_policy !== "accepted" || row.review_status !== "pending") {
         throw this.taskNotPendingReviewError(row, session.id);
       }
-      this.requireVersion(row, expectedVersion2);
+      this.requireVersion(row, expectedVersion);
       if (!row.reported_by_session_id || !row.completion_report_id) {
         throw new CollabError("review_state_invalid", "Task completion review metadata is incomplete");
       }
       if (row.reported_by_session_id === session.id) {
         throw new CollabError("self_review_forbidden", "A distinct session must review reported completion");
       }
-      for (const reference of evidenceRefs2)
+      for (const reference of evidenceRefs)
         this.requireEvidenceRef(row.workspace_id, reference);
       if (input.outcome === "accept" && this.hasObsoletedCompletionReport(row.workspace_id, row.completion_report_id)) {
         throw new CollabError("completion_report_obsolete", "The reported completion was withdrawn, corrected, or superseded; request changes before a new completion report", { completion_report_id: row.completion_report_id });
@@ -32564,7 +35107,7 @@ class CollabStore {
         body: summary,
         evidence_refs: [
           `report:${row.completion_report_id}`,
-          ...evidenceRefs2.filter((reference) => reference !== `report:${row.completion_report_id}`)
+          ...evidenceRefs.filter((reference) => reference !== `report:${row.completion_report_id}`)
         ],
         confidence,
         confidence_basis: confidenceBasis,
@@ -32575,7 +35118,7 @@ class CollabStore {
         authority_basis: "distinct active collaboration session"
       });
       const now = this.timestamp();
-      const reviewId = `review_${randomUUID2()}`;
+      const reviewId = `review_${randomUUID3()}`;
       const version2 = row.version + 1;
       const outcome = input.outcome === "accept" ? "accepted" : "changes_requested";
       if (input.outcome === "accept") {
@@ -32644,7 +35187,7 @@ class CollabStore {
       if (pending)
         throw new CollabError("handoff_pending", "Task already has a pending handoff", { handoff_id: pending.id });
       const now = this.timestamp();
-      const id = `handoff_${randomUUID2()}`;
+      const id = `handoff_${randomUUID3()}`;
       const expiresAt = [addSeconds(now, normalized.ttl_seconds), row.lease_expires_at].sort()[0];
       this.db.query(`
         INSERT INTO handoffs
@@ -32700,18 +35243,18 @@ class CollabStore {
           task_version: version2
         });
       } else {
-        const leaseId2 = `lease_${randomUUID2()}`;
+        const leaseId = `lease_${randomUUID3()}`;
         const leaseExpiresAt = addSeconds(now, normalized.ttl_seconds);
         this.db.query(`UPDATE handoffs SET status = 'accepted', resolved_at = ? WHERE id = ?`).run(now, offer.id);
         this.db.query(`
           UPDATE tasks SET assignee = ?, lease_id = ?, lease_expires_at = ?, version = ?, updated_at = ?
           WHERE workspace_id = ? AND id = ?
-        `).run(normalized.actor, leaseId2, leaseExpiresAt, version2, now, input.workspace_id, row.id);
+        `).run(normalized.actor, leaseId, leaseExpiresAt, version2, now, input.workspace_id, row.id);
         this.appendEvent(input.workspace_id, "handoff.accepted", offer.id, normalized.actor, {
           task_id: row.id,
           from_actor: offer.from_actor,
           to_actor: normalized.actor,
-          lease_id: leaseId2,
+          lease_id: leaseId,
           lease_expires_at: leaseExpiresAt,
           task_version: version2
         });
@@ -32745,7 +35288,7 @@ class CollabStore {
           handoff_id: pending.id
         });
       }
-      const id = `handoff_${randomUUID2()}`;
+      const id = `handoff_${randomUUID3()}`;
       const expiresAt = addSeconds(now, ttl);
       this.db.query(`
           INSERT INTO handoffs (
@@ -32769,14 +35312,14 @@ class CollabStore {
   }
   respondHandoffForSession(input) {
     const handoffId = validateId(input.handoff_id, "handoff_id");
-    const expectedVersion2 = validateExpectedVersion(input.expected_version);
+    const expectedVersion = validateExpectedVersion(input.expected_version);
     if (input.response !== "accept" && input.response !== "decline") {
       throw new CollabError("invalid_handoff_response", "Handoff response is invalid");
     }
     const ttl = validateTtl(input.ttl_seconds);
     const request = {
       handoff_id: handoffId,
-      expected_version: expectedVersion2,
+      expected_version: expectedVersion,
       response: input.response,
       ttl_seconds: ttl
     };
@@ -32793,7 +35336,7 @@ class CollabStore {
         throw new CollabError(offer.status === "expired" ? "handoff_expired" : "handoff_resolved", "Handoff is no longer pending", { status: offer.status });
       }
       const row = this.requireTaskRow(session.workspace_id, offer.task_id);
-      this.requireVersion(row, expectedVersion2);
+      this.requireVersion(row, expectedVersion);
       if (this.timestamp() >= offer.expires_at || this.isExpired(row)) {
         throw new CollabError("handoff_expired", "The offer or source lease expired");
       }
@@ -32818,7 +35361,7 @@ class CollabStore {
         const worktree = this.requirePreparedWorktree(session, preparedCheckpoint);
         const checkpoint = preparedCheckpoint.checkpoint;
         this.requireExpectedBase(row, checkpoint);
-        const leaseId2 = `lease_${randomUUID2()}`;
+        const leaseId = `lease_${randomUUID3()}`;
         const leaseExpiresAt = addSeconds(now, ttl);
         this.db.query(`
             UPDATE handoffs SET status = 'accepted', resolved_at = ? WHERE id = ?
@@ -32829,12 +35372,12 @@ class CollabStore {
               lease_id = ?, lease_expires_at = ?, base_checkpoint_json = ?,
               version = ?, updated_at = ?
             WHERE workspace_id = ? AND id = ?
-          `).run(session.actor, session.id, worktree.id, leaseId2, leaseExpiresAt, canonicalJson(checkpoint), version2, now, row.workspace_id, row.id);
+          `).run(session.actor, session.id, worktree.id, leaseId, leaseExpiresAt, canonicalJson(checkpoint), version2, now, row.workspace_id, row.id);
         this.appendEvent(row.workspace_id, "handoff.accepted", offer.id, session.actor, {
           task_id: row.id,
           from_session_id: offer.from_session_id,
           to_session_id: session.id,
-          lease_id: leaseId2,
+          lease_id: leaseId,
           lease_expires_at: leaseExpiresAt,
           base_checkpoint: checkpoint,
           task_version: version2
@@ -32846,24 +35389,24 @@ class CollabStore {
       };
     });
   }
-  nextForActor(workspaceId2, actorInput, afterSequence = 0, eventLimit = DEFAULT_NEXT_EVENT_LIMIT) {
+  nextForActor(workspaceId, actorInput, afterSequence = 0, eventLimit = DEFAULT_NEXT_EVENT_LIMIT) {
     const actor = validateActor(actorInput);
     const boundedEventLimit = validateNextEventLimit(eventLimit);
-    this.expireElapsedHandoffs(workspaceId2, "system:clock");
+    this.expireElapsedHandoffs(workspaceId, "system:clock");
     const read = this.db.transaction(() => {
-      const events = this.readEventPage(workspaceId2, afterSequence, boundedEventLimit);
-      const tasks = this.listTasks(workspaceId2);
+      const events = this.readEventPage(workspaceId, afterSequence, boundedEventLimit);
+      const tasks = this.listTasks(workspaceId);
       const offers = this.db.query(`
         SELECT * FROM handoffs
         WHERE workspace_id = ? AND to_actor = ? AND status = 'pending' AND expires_at > ?
         ORDER BY offered_at, id
-      `).all(workspaceId2, actor, this.timestamp());
-      const { claimable, conflicted } = this.projectAvailableTasks(workspaceId2, tasks, (task) => task.effective_status === "lease_expired" && task.assignee_session_id === null);
+      `).all(workspaceId, actor, this.timestamp());
+      const { claimable, conflicted } = this.projectAvailableTasks(workspaceId, tasks, (task) => task.effective_status === "lease_expired" && task.assignee_session_id === null);
       const reportRows = this.db.query(`
         SELECT * FROM reports
         WHERE workspace_id = ? AND event_sequence > ? AND event_sequence <= ?
         ORDER BY event_sequence
-      `).all(workspaceId2, afterSequence, events.next_anchor.sequence);
+      `).all(workspaceId, afterSequence, events.next_anchor.sequence);
       return {
         actor,
         session: null,
@@ -32873,7 +35416,7 @@ class CollabStore {
         conflicted_tasks: conflicted,
         handoff_offers: offers.map((row) => ({
           handoff: handoffFromRow(row),
-          task: this.requireTask(workspaceId2, row.task_id)
+          task: this.requireTask(workspaceId, row.task_id)
         })),
         recovery_required: recoveryRequiredFirst(tasks, () => false),
         reports: reportRows.map(reportFromRow),
@@ -32960,14 +35503,14 @@ class CollabStore {
     });
     return read.deferred();
   }
-  eventsSince(workspaceId2, afterSequence = 0, limit = 100) {
+  eventsSince(workspaceId, afterSequence = 0, limit = 100) {
     if (!Number.isInteger(afterSequence) || afterSequence < 0) {
       throw new CollabError("invalid_cursor", "Event cursor must be a non-negative integer");
     }
     if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
       throw new CollabError("invalid_limit", "Event limit must be between 1 and 500");
     }
-    const readPage = this.db.transaction(() => this.readEventPage(workspaceId2, afterSequence, limit));
+    const readPage = this.db.transaction(() => this.readEventPage(workspaceId, afterSequence, limit));
     return readPage.deferred();
   }
   eventsAfterAnchorForSession(input) {
@@ -33034,7 +35577,7 @@ class CollabStore {
       throw error51;
     }
   }
-  requireEventByteBound(db, workspaceId2, sequence, maxBytes, purpose = "page") {
+  requireEventByteBound(db, workspaceId, sequence, maxBytes, purpose = "page") {
     const row = db.query(`
       SELECT length(CAST(payload_json AS BLOB)) + length(CAST(actor AS BLOB))
         + length(CAST(entity_id AS BLOB)) + length(CAST(id AS BLOB))
@@ -33043,7 +35586,7 @@ class CollabStore {
         + length(CAST(occurred_at AS BLOB)) + length(CAST(prev_hash AS BLOB))
         + length(CAST(hash AS BLOB)) + coalesce(length(CAST(session_id AS BLOB)), 0) AS bytes
       FROM events WHERE workspace_id = ? AND sequence = ?
-    `).get(workspaceId2, sequence);
+    `).get(workspaceId, sequence);
     if (row && row.bytes > maxBytes) {
       if (purpose === "anchor") {
         throw new CollabError("event_anchor_too_large", "An anchor exceeds the bounded validation ceiling; operator reconciliation is required", {
@@ -33057,21 +35600,21 @@ class CollabStore {
       });
     }
   }
-  readEventPage(workspaceId2, afterSequence, limit, db = this.db, maxBytes) {
+  readEventPage(workspaceId, afterSequence, limit, db = this.db, maxBytes) {
     if (!Number.isInteger(afterSequence) || afterSequence < 0) {
       throw new CollabError("invalid_cursor", "Event cursor must be a non-negative integer");
     }
     if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
       throw new CollabError("invalid_limit", "Event limit must be between 1 and 500");
     }
-    const workspace = this.requireWorkspace(workspaceId2, db);
+    const workspace = this.requireWorkspace(workspaceId, db);
     if (afterSequence > workspace.event_head_sequence) {
       throw new CollabError("invalid_cursor", "Event cursor is ahead of the workspace journal", {
         after_sequence: afterSequence,
         head_sequence: workspace.event_head_sequence
       });
     }
-    const predecessor = afterSequence === 0 ? { hash: GENESIS_HASH } : db.query(`SELECT hash FROM events WHERE workspace_id = ? AND sequence = ?`).get(workspaceId2, afterSequence);
+    const predecessor = afterSequence === 0 ? { hash: GENESIS_HASH } : db.query(`SELECT hash FROM events WHERE workspace_id = ? AND sequence = ?`).get(workspaceId, afterSequence);
     if (!predecessor) {
       throw new CollabError("cursor_mismatch", "The cursor does not resolve to an event in this journal", { after_sequence: afterSequence });
     }
@@ -33079,21 +35622,21 @@ class CollabStore {
       session_id, occurred_at, payload_json, prev_hash, hash FROM events`;
     let events;
     if (maxBytes === undefined) {
-      const rows = db.query(`${select} WHERE workspace_id = ? AND sequence > ? ORDER BY sequence LIMIT ?`).all(workspaceId2, afterSequence, limit);
+      const rows = db.query(`${select} WHERE workspace_id = ? AND sequence > ? ORDER BY sequence LIMIT ?`).all(workspaceId, afterSequence, limit);
       events = rows.map(eventFromRow);
     } else {
       events = [];
       let bytes = 2048;
-      const sequences = db.query(`SELECT sequence FROM events WHERE workspace_id = ? AND sequence > ? ORDER BY sequence LIMIT ?`).all(workspaceId2, afterSequence, limit);
+      const sequences = db.query(`SELECT sequence FROM events WHERE workspace_id = ? AND sequence > ? ORDER BY sequence LIMIT ?`).all(workspaceId, afterSequence, limit);
       for (const { sequence } of sequences) {
         try {
-          this.requireEventByteBound(db, workspaceId2, sequence, maxBytes);
+          this.requireEventByteBound(db, workspaceId, sequence, maxBytes);
         } catch (error51) {
           if (events.length && error51 instanceof CollabError && error51.code === "event_too_large")
             break;
           throw error51;
         }
-        const event = eventFromRow(db.query(`${select} WHERE workspace_id = ? AND sequence = ?`).get(workspaceId2, sequence));
+        const event = eventFromRow(db.query(`${select} WHERE workspace_id = ? AND sequence = ?`).get(workspaceId, sequence));
         const size = Buffer.byteLength(JSON.stringify(event)) + 1;
         if (bytes + size > maxBytes) {
           if (events.length)
@@ -33131,59 +35674,96 @@ class CollabStore {
     }
     return page;
   }
-  eventsAfterAnchor(workspaceId2, anchor, limit = 100) {
-    const validated = this.validateEventAnchor(workspaceId2, anchor);
-    return this.eventsSince(workspaceId2, validated.sequence, limit);
+  eventsAfterAnchor(workspaceId, anchor, limit = 100) {
+    const validated = this.validateEventAnchor(workspaceId, anchor);
+    return this.eventsSince(workspaceId, validated.sequence, limit);
   }
-  eventAddressesSession(event, sessionId2) {
+  proposalAddressesSession(proposalReportId, sessionId) {
+    const row = this.db.query(`
+      SELECT r.from_session_id, t.voices_json, t.author_voice_id FROM reports r
+      JOIN proposal_terms t ON t.report_id = r.id WHERE r.id = ?
+    `).get(proposalReportId);
+    if (!row)
+      return false;
+    if (row.from_session_id !== null)
+      return row.from_session_id === sessionId;
+    return JSON.parse(row.voices_json).some((voice) => voice.voice_id !== row.author_voice_id && voice.live_session_ids.includes(sessionId));
+  }
+  eventAddressesSession(event, sessionId) {
     const payload = event.payload ?? {};
-    const field = (value, key2) => value !== null && typeof value === "object" ? value[key2] : undefined;
+    const field = (value, key) => value !== null && typeof value === "object" ? value[key] : undefined;
     switch (event.type) {
       case "report.posted": {
-        if (payload.to_session_id === sessionId2)
+        if (payload.to_session_id === sessionId)
           return true;
+        if (typeof payload.about_proposal_id === "string") {
+          return this.proposalAddressesSession(payload.about_proposal_id, sessionId);
+        }
         if (typeof payload.target_report_id !== "string")
           return false;
         const target = this.db.query(`SELECT from_session_id FROM reports WHERE id = ?`).get(payload.target_report_id);
-        return target?.from_session_id === sessionId2;
+        return target?.from_session_id === sessionId;
       }
       case "handoff.offered":
-        return field(payload.handoff, "to_session_id") === sessionId2;
+        return field(payload.handoff, "to_session_id") === sessionId;
       case "handoff.accepted":
       case "handoff.declined":
       case "handoff.expired": {
         const offer = this.db.query(`SELECT from_session_id FROM handoffs WHERE id = ?`).get(event.entity_id);
-        return offer?.from_session_id === sessionId2;
+        return offer?.from_session_id === sessionId;
       }
       case "task.reported_complete":
-        return payload.review_requested_session_id === sessionId2;
+        return payload.review_requested_session_id === sessionId;
       case "task.accepted":
       case "task.changes_requested": {
         const task = this.db.query(`SELECT reported_by_session_id FROM tasks WHERE workspace_id = ? AND id = ?`).get(event.workspace_id, event.entity_id);
-        return task?.reported_by_session_id === sessionId2;
+        return task?.reported_by_session_id === sessionId;
       }
       case "task.recovered":
-        return field(payload.prior_lease, "session_id") === sessionId2;
+        return field(payload.prior_lease, "session_id") === sessionId;
+      case "proposal.opened": {
+        const voices = Array.isArray(payload.voices) ? payload.voices : [];
+        return voices.some((voice) => field(voice, "voice_id") !== payload.author_voice_id && Array.isArray(field(voice, "live_session_ids")) && field(voice, "live_session_ids").includes(sessionId));
+      }
+      case "proposal.agreed":
+      case "proposal.rejected":
+        return this.proposalAddressesSession(event.entity_id, sessionId);
+      case "ballot.opened": {
+        const electorate = Array.isArray(payload.electorate) ? payload.electorate : [];
+        const listed = (key, value) => electorate.some((unit) => Array.isArray(field(unit, key)) && field(unit, key).includes(value));
+        return listed("session_ids", sessionId) || listed("voice_ids", this.consentVoice(sessionId));
+      }
+      case "ballot.closed": {
+        const opener = this.db.query(`
+          SELECT json_extract(payload_json, '$.opener_session_id') AS opener FROM events
+          WHERE workspace_id = ? AND type = 'ballot.opened' AND entity_id = ?
+        `).get(event.workspace_id, event.entity_id);
+        if (opener?.opener === sessionId)
+          return true;
+        return this.db.query(`
+          SELECT 1 FROM events WHERE workspace_id = ? AND type = 'ballot.cast' AND entity_id = ? AND session_id = ? LIMIT 1
+        `).get(event.workspace_id, event.entity_id, sessionId) !== null;
+      }
       default:
         return false;
     }
   }
-  verifyJournal(workspaceId2) {
+  verifyJournal(workspaceId) {
     const audit = this.db.transaction(() => {
-      this.requireWorkspace(workspaceId2);
-      return this.verifyJournalRows(workspaceId2);
+      this.requireWorkspace(workspaceId);
+      return this.verifyJournalRows(workspaceId);
     });
     return audit.deferred();
   }
-  verifyJournalRows(workspaceId2) {
-    const workspace = this.getWorkspace(workspaceId2);
+  verifyJournalRows(workspaceId) {
+    const workspace = this.getWorkspace(workspaceId);
     if (!workspace)
       return false;
     const rows = this.db.query(`
       SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
         session_id, occurred_at, payload_json, prev_hash, hash
       FROM events WHERE workspace_id = ? ORDER BY sequence
-    `).all(workspaceId2);
+    `).all(workspaceId);
     let expectedSequence = 1;
     let previous = GENESIS_HASH;
     try {
@@ -33201,14 +35781,14 @@ class CollabStore {
     }
     return workspace.event_head_sequence === rows.length && workspace.event_head_hash === previous;
   }
-  mutate(workspaceId2, actor, idempotencyKey, operation, request, apply) {
-    this.requireWorkspace(workspaceId2);
-    const requestHash = sha2562(canonicalJson({ operation, request }));
+  mutate(workspaceId, actor, idempotencyKey, operation, request, apply) {
+    this.requireWorkspace(workspaceId);
+    const requestHash = sha2564(canonicalJson({ operation, request }));
     const transaction = this.db.transaction(() => {
       const existing = this.db.query(`
         SELECT operation, request_hash, response_json FROM mutations
         WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
-      `).get(workspaceId2, actor, idempotencyKey);
+      `).get(workspaceId, actor, idempotencyKey);
       if (existing) {
         if (existing.operation !== operation || existing.request_hash !== requestHash) {
           throw new CollabError("idempotency_conflict", "Idempotency key was already used for a different mutation", {
@@ -33222,7 +35802,7 @@ class CollabStore {
         INSERT INTO mutations
           (workspace_id, actor, idempotency_key, operation, request_hash, response_json, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(workspaceId2, actor, idempotencyKey, operation, requestHash, JSON.stringify(response2), this.timestamp());
+      `).run(workspaceId, actor, idempotencyKey, operation, requestHash, JSON.stringify(response2), this.timestamp());
       return response2;
     });
     const response = transaction.immediate();
@@ -33232,7 +35812,7 @@ class CollabStore {
   readSessionMutationReceipt(credential, idempotencyKeyInput, operation, request) {
     const session = this.authenticateSession(credential);
     const idempotencyKey = validateIdempotencyKey(idempotencyKeyInput);
-    const requestHash = sha2562(canonicalJson({ operation, request }));
+    const requestHash = sha2564(canonicalJson({ operation, request }));
     const existing = this.db.query(`
       SELECT operation, request_hash, response_json FROM mutations
       WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
@@ -33253,7 +35833,7 @@ class CollabStore {
       const session = this.authenticateSession(credential, options);
       this.recordSessionLeaseLapses(session, this.timestamp());
       const mutationActor = `session:${session.id}`;
-      const requestHash = sha2562(canonicalJson({ operation, request }));
+      const requestHash = sha2564(canonicalJson({ operation, request }));
       const existing = this.db.query(`
         SELECT operation, request_hash, response_json FROM mutations
         WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
@@ -33265,8 +35845,11 @@ class CollabStore {
         this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), session.id);
         return JSON.parse(existing.response_json);
       }
+      const receiptPlan = options.receipt_plan ?? this.ambientPlanFor(idempotencyKey);
+      if (receiptPlan)
+        this.requireReceiptPlan(session, receiptPlan);
       this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), session.id);
-      const guardNonce = `guard_${randomUUID2()}`;
+      const guardNonce = `guard_${randomUUID3()}`;
       this.db.query(`INSERT INTO v2_write_guard (nonce, enabled) VALUES (?, 1)`).run(guardNonce);
       try {
         const response2 = apply(session);
@@ -33312,8 +35895,8 @@ class CollabStore {
     }
     return row;
   }
-  authenticateResumeToken(sessionId2, token) {
-    const row = this.db.query(`SELECT * FROM coordination_sessions WHERE id = ?`).get(sessionId2);
+  authenticateResumeToken(sessionId, token) {
+    const row = this.db.query(`SELECT * FROM coordination_sessions WHERE id = ?`).get(sessionId);
     const suppliedHash = hashSessionToken(typeof token === "string" ? token : "");
     const expectedHash = row?.token_hash ?? "0".repeat(64);
     if (!row || !safeDigestEqual(suppliedHash, expectedHash) || row.status !== "active") {
@@ -33326,9 +35909,9 @@ class CollabStore {
     const worktree = this.requireWorktreeRow(session.worktree_id);
     return this.captureRegisteredWorktree(session, worktree);
   }
-  captureReviewCheckpoint(input, taskId2) {
+  captureReviewCheckpoint(input, taskId) {
     const session = this.authenticateSession(input);
-    const task = this.requireTaskRow(session.workspace_id, taskId2);
+    const task = this.requireTaskRow(session.workspace_id, taskId);
     if (task.completion_policy !== "accepted" || task.review_status !== "pending")
       return null;
     const resultCheckpoint = parseCheckpoint(task.result_checkpoint_json);
@@ -33343,7 +35926,7 @@ class CollabStore {
     const observedHead = observedWorktree.checkpoint.head_sha;
     return {
       workspace_id: session.workspace_id,
-      task_id: taskId2,
+      task_id: taskId,
       result_checkpoint: resultCheckpoint,
       observed_worktree: observedWorktree,
       host_commit: resultHead && observedHead && observedHead !== resultHead ? inspectSuccessorCommit(worktree.root_path, observedHead, resultHead) : null
@@ -33464,9 +36047,9 @@ class CollabStore {
     }
     return this.requirePreparedRegisteredWorktree(session.workspace_id, session.worktree_id, prepared);
   }
-  requirePreparedRegisteredWorktree(workspaceId2, worktreeId2, prepared) {
+  requirePreparedRegisteredWorktree(workspaceId, worktreeId2, prepared) {
     const row = this.requireWorktreeRow(worktreeId2);
-    if (prepared.workspace_id !== workspaceId2 || prepared.worktree_id !== row.id || prepared.root_path !== row.root_path || prepared.fingerprint !== row.fingerprint || prepared.git_common_dir_hash !== row.git_common_dir_hash || row.workspace_id !== workspaceId2) {
+    if (prepared.workspace_id !== workspaceId || prepared.worktree_id !== row.id || prepared.root_path !== row.root_path || prepared.fingerprint !== row.fingerprint || prepared.git_common_dir_hash !== row.git_common_dir_hash || row.workspace_id !== workspaceId) {
       throw new CollabError("worktree_observation_stale", "The registered worktree changed after it was inspected", { worktree_id: worktreeId2 });
     }
     this.touchWorktree(row, prepared.checkpoint, this.timestamp());
@@ -33499,17 +36082,17 @@ class CollabStore {
       identity_boundary: "session_credentials_fence_cooperating_local_clients_but_do_not_authenticate_a_person_or_model"
     };
   }
-  registerWorktree(workspaceId2, identity, now, actor, emitEvent) {
+  registerWorktree(workspaceId, identity, now, actor, emitEvent) {
     this.db.query(`INSERT OR IGNORE INTO repositories (key, created_at) VALUES (?, ?)`).run(identity.repository_key, now);
     this.db.query(`
       INSERT INTO worktrees (
         id, workspace_id, repository_key, root_path, git_common_dir_hash, fingerprint,
         branch, head_sha, dirty, registered_at, last_seen_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(identity.checkpoint.worktree_id, workspaceId2, identity.repository_key, identity.root_path, identity.git_common_dir_hash, identity.worktree_fingerprint, identity.checkpoint.branch, identity.checkpoint.head_sha, booleanToSql(identity.checkpoint.dirty), now, now);
+    `).run(identity.checkpoint.worktree_id, workspaceId, identity.repository_key, identity.root_path, identity.git_common_dir_hash, identity.worktree_fingerprint, identity.checkpoint.branch, identity.checkpoint.head_sha, booleanToSql(identity.checkpoint.dirty), now, now);
     const row = this.requireWorktreeRow(identity.checkpoint.worktree_id);
     if (emitEvent) {
-      this.appendEvent(workspaceId2, "worktree.registered", row.id, actor, {
+      this.appendEvent(workspaceId, "worktree.registered", row.id, actor, {
         root_path: row.root_path,
         repository_key: row.repository_key,
         checkpoint: checkpointFromWorktreeRow(row, now)
@@ -33530,8 +36113,8 @@ class CollabStore {
       throw new CollabError("worktree_not_found", `Worktree '${id}' was not found`);
     return row;
   }
-  validateEventAnchor(workspaceId2, input, db = this.db, maxBytes) {
-    const workspace = this.requireWorkspace(workspaceId2, db);
+  validateEventAnchor(workspaceId, input, db = this.db, maxBytes) {
+    const workspace = this.requireWorkspace(workspaceId, db);
     if (!input || input.epoch_id !== workspace.epoch_id || !Number.isInteger(input.sequence) || input.sequence < 0 || typeof input.hash !== "string") {
       throw new CollabError("cursor_mismatch", "The cursor does not belong to this journal");
     }
@@ -33547,13 +36130,13 @@ class CollabStore {
       });
     }
     if (maxBytes !== undefined)
-      this.requireEventByteBound(db, workspaceId2, input.sequence, maxBytes, "anchor");
+      this.requireEventByteBound(db, workspaceId, input.sequence, maxBytes, "anchor");
     const row = db.query(`
       SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
         session_id, occurred_at, payload_json, prev_hash, hash
       FROM events
       WHERE workspace_id = ? AND sequence = ?
-    `).get(workspaceId2, input.sequence);
+    `).get(workspaceId, input.sequence);
     const event = row ? eventFromRow(row) : null;
     if (!event || event.epoch_id !== input.epoch_id || event.hash !== input.hash || event.hash !== eventHash(event)) {
       throw new CollabError("cursor_fork_detected", "The cursor sequence resolves to a different journal hash");
@@ -33564,12 +36147,12 @@ class CollabStore {
       hash: event.hash
     };
   }
-  projectAvailableTasks(workspaceId2, tasks, allowExpired) {
+  projectAvailableTasks(workspaceId, tasks, allowExpired) {
     const claimable = [];
     const conflicted = [];
     for (const task of tasks) {
       const available = task.effective_status === "open" || task.effective_status === "lease_expired" && allowExpired(task);
-      if (!available || !this.dependenciesSatisfied(workspaceId2, task.dependencies))
+      if (!available || !this.dependenciesSatisfied(workspaceId, task.dependencies))
         continue;
       const conflicts = this.taskPathConflicts(task);
       if (conflicts.length > 0) {
@@ -33580,9 +36163,9 @@ class CollabStore {
     }
     return { claimable, conflicted };
   }
-  dependenciesSatisfied(workspaceId2, dependencies) {
+  dependenciesSatisfied(workspaceId, dependencies) {
     return dependencies.every((id) => {
-      const dependency = this.requireTask(workspaceId2, id);
+      const dependency = this.requireTask(workspaceId, id);
       if (dependency.status !== "completed")
         return false;
       return dependency.completion_policy !== "accepted" || dependency.review_status === "accepted";
@@ -33628,7 +36211,7 @@ class CollabStore {
     }
     return result;
   }
-  requireActiveSessionLease(row, session, leaseId2) {
+  requireActiveSessionLease(row, session, leaseId) {
     if (row.status !== "claimed" || !row.lease_id || !row.lease_expires_at) {
       throw new CollabError("lease_not_active", "Task does not have an active lease");
     }
@@ -33637,7 +36220,7 @@ class CollabStore {
         lease_expires_at: row.lease_expires_at
       });
     }
-    if (row.assignee_session_id !== session.id || row.lease_id !== leaseId2) {
+    if (row.assignee_session_id !== session.id || row.lease_id !== leaseId) {
       throw new CollabError("lease_not_holder", "Mutation requires the current session lease", {
         assignee: row.assignee,
         assignee_session_id: row.assignee_session_id
@@ -33661,13 +36244,13 @@ class CollabStore {
     }, session.id);
     return this.requireTask(row.workspace_id, row.id);
   }
-  liveLeaseRefusal(workspaceId2, sessionId2, now, holderWillResume = false) {
+  liveLeaseRefusal(workspaceId, sessionId, now, holderWillResume = false) {
     const live = this.db.query(`
       SELECT * FROM tasks
       WHERE workspace_id = ? AND assignee_session_id = ?
         AND status = 'claimed'
       ORDER BY id
-    `).all(workspaceId2, sessionId2);
+    `).all(workspaceId, sessionId);
     const active = live.filter((task) => holderWillResume || !this.isExpired(task, undefined, now));
     if (active.length === 0)
       return null;
@@ -33733,7 +36316,7 @@ class CollabStore {
         recovered_by_session_id, action, note, prior_checkpoint_json,
         new_lease_id, recovered_at, event_sequence
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
-    `).run(`recovery_${randomUUID2()}`, row.workspace_id, row.id, input.prior.lease_id, input.prior.session_id, session.id, input.action, input.recovery_note, input.prior.checkpoint ? canonicalJson(input.prior.checkpoint) : null, input.now, event.sequence);
+    `).run(`recovery_${randomUUID3()}`, row.workspace_id, row.id, input.prior.lease_id, input.prior.session_id, session.id, input.action, input.recovery_note, input.prior.checkpoint ? canonicalJson(input.prior.checkpoint) : null, input.now, event.sequence);
     return this.requireTask(row.workspace_id, row.id);
   }
   recoveryBundle(row) {
@@ -33786,9 +36369,12 @@ class CollabStore {
     }
   }
   appendReportInternal(session, input) {
-    const id = `report_${randomUUID2()}`;
+    const id = `report_${randomUUID3()}`;
     const now = this.timestamp();
     const event = this.appendEvent(session.workspace_id, "report.posted", id, session.actor, {
+      ...input.to_person ? { to_person: true } : {},
+      ...input.about_proposal_id ? { about_proposal_id: input.about_proposal_id } : {},
+      ...input.note ? { note: input.note } : {},
       task_id: input.task_id,
       to_session_id: input.to_session_id,
       kind: input.kind,
@@ -33810,6 +36396,9 @@ class CollabStore {
         created_at, event_sequence
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, session.workspace_id, input.task_id, session.id, session.actor, input.to_session_id, input.kind, input.body, canonicalJson(input.evidence_refs), input.confidence, input.confidence_basis, input.limits, input.relation, input.target_report_id, input.authority_scope, input.authority_basis, now, event.sequence);
+    if (input.to_person) {
+      this.db.query(`INSERT INTO person_addressed_reports (report_id, workspace_id) VALUES (?, ?)`).run(id, session.workspace_id);
+    }
     return this.requireReport(id);
   }
   requireReport(id) {
@@ -33882,39 +36471,36 @@ class CollabStore {
     const payload = JSON.parse(event.payload_json);
     return payload.completion_report_id === row.completion_report_id && typeof payload.review_requested_session_id === "string" ? payload.review_requested_session_id : null;
   }
-  hasUnresolvedChallenges(workspaceId2, reportId) {
+  hasUnresolvedChallenges(workspaceId, reportId) {
+    return this.unresolvedChallengeIds(workspaceId, reportId).length > 0;
+  }
+  unresolvedChallengeIds(workspaceId, reportId) {
     const challenges = this.db.query(`
       SELECT id FROM reports
       WHERE workspace_id = ? AND target_report_id = ? AND relation = 'challenges'
       ORDER BY event_sequence
-    `).all(workspaceId2, reportId);
-    for (const challenge of challenges) {
-      if (this.hasActiveReportRelation(workspaceId2, challenge.id, new Set(["withdraws"])))
-        continue;
-      if (!this.hasActiveReportRelation(workspaceId2, challenge.id, new Set(["resolves"])))
-        return true;
-    }
-    return false;
+    `).all(workspaceId, reportId);
+    return challenges.filter((challenge) => !this.hasActiveReportRelation(workspaceId, challenge.id, new Set(["withdraws"])) && !this.hasActiveReportRelation(workspaceId, challenge.id, new Set(["resolves"]))).map((challenge) => challenge.id);
   }
-  hasObsoletedCompletionReport(workspaceId2, reportId) {
-    return this.hasActiveReportRelation(workspaceId2, reportId, new Set(["withdraws", "corrects", "supersedes"]));
+  hasObsoletedCompletionReport(workspaceId, reportId) {
+    return this.hasActiveReportRelation(workspaceId, reportId, new Set(["withdraws", "corrects", "supersedes"]));
   }
-  hasActiveReportRelation(workspaceId2, reportId, relations) {
+  hasActiveReportRelation(workspaceId, reportId, relations) {
     const rows = this.db.query(`
       SELECT id, relation FROM reports
       WHERE workspace_id = ? AND target_report_id = ?
       ORDER BY event_sequence
-    `).all(workspaceId2, reportId);
-    const obsoleted = this.activeObsoletionTargets(workspaceId2);
+    `).all(workspaceId, reportId);
+    const obsoleted = this.activeObsoletionTargets(workspaceId);
     return rows.some((row) => relations.has(row.relation) && !obsoleted.has(row.id));
   }
-  activeObsoletionTargets(workspaceId2) {
+  activeObsoletionTargets(workspaceId) {
     const rows = this.db.query(`
       SELECT id, target_report_id FROM reports
       WHERE workspace_id = ? AND target_report_id IS NOT NULL
         AND relation IN ('withdraws', 'corrects', 'supersedes')
       ORDER BY event_sequence DESC, id DESC
-    `).all(workspaceId2);
+    `).all(workspaceId);
     const obsoleted = new Set;
     for (const row of rows) {
       if (!obsoleted.has(row.id))
@@ -33922,7 +36508,7 @@ class CollabStore {
     }
     return obsoleted;
   }
-  requireEvidenceRef(workspaceId2, reference) {
+  requireEvidenceRef(workspaceId, reference) {
     const separator = reference.indexOf(":");
     if (separator < 1)
       throw invalidEvidenceRef("Evidence reference needs a kind prefix");
@@ -33934,20 +36520,20 @@ class CollabStore {
     if (kind === "artifact") {
       exists = this.db.query(`
         SELECT 1 FROM artifacts WHERE workspace_id = ? AND id = ?
-      `).get(workspaceId2, id) !== null;
+      `).get(workspaceId, id) !== null;
     } else if (kind === "event") {
       exists = this.db.query(`
         SELECT 1 FROM events WHERE workspace_id = ? AND id = ?
-      `).get(workspaceId2, id) !== null;
+      `).get(workspaceId, id) !== null;
     } else if (kind === "report") {
       exists = this.db.query(`
         SELECT 1 FROM reports WHERE workspace_id = ? AND id = ?
-      `).get(workspaceId2, id) !== null;
+      `).get(workspaceId, id) !== null;
     } else if (kind === "checkpoint") {
       const tasks = this.db.query(`
         SELECT base_checkpoint_json, result_checkpoint_json
         FROM tasks WHERE workspace_id = ?
-      `).all(workspaceId2);
+      `).all(workspaceId);
       exists = tasks.some((task) => {
         const checkpoints = [
           parseCheckpoint(task.base_checkpoint_json),
@@ -33962,18 +36548,18 @@ class CollabStore {
       throw new CollabError("evidence_not_found", `Evidence reference was not found in this workspace. ${EVIDENCE_REFS_DESCRIPTION}`, { reference, allowed_prefixes: [...EVIDENCE_REF_PREFIXES] });
     }
   }
-  appendEvent(workspaceId2, type, entityId, actor, payload, sessionId2 = null) {
-    const workspace = this.requireWorkspace(workspaceId2);
+  appendEvent(workspaceId, type, entityId, actor, payload, sessionId = null) {
+    const workspace = this.requireWorkspace(workspaceId);
     const event = {
       protocol: COLLAB_COORDINATION_PROTOCOL,
-      workspace_id: workspaceId2,
+      workspace_id: workspaceId,
       epoch_id: workspace.epoch_id,
       sequence: workspace.event_head_sequence + 1,
-      id: `event_${randomUUID2()}`,
+      id: `event_${randomUUID3()}`,
       type,
       entity_id: entityId,
       actor,
-      session_id: sessionId2,
+      session_id: sessionId,
       occurred_at: this.timestamp(),
       payload,
       prev_hash: workspace.event_head_hash,
@@ -33988,7 +36574,7 @@ class CollabStore {
     `).run(event.workspace_id, event.epoch_id, event.sequence, event.id, event.protocol, event.type, event.entity_id, event.actor, event.session_id ?? null, event.occurred_at, canonicalJson(event.payload), event.prev_hash, event.hash);
     this.db.query(`
       UPDATE workspaces SET event_head_sequence = ?, event_head_hash = ? WHERE id = ?
-    `).run(event.sequence, event.hash, workspaceId2);
+    `).run(event.sequence, event.hash, workspaceId);
     return event;
   }
   expireClaim(row, actor) {
@@ -34017,29 +36603,29 @@ class CollabStore {
     this.appendEvent(row.workspace_id, type, row.id, actor, { ...payload, version: version2 });
     return this.requireTask(row.workspace_id, row.id);
   }
-  expirePendingHandoffs(workspaceId2, taskId2, now, actor, reason) {
+  expirePendingHandoffs(workspaceId, taskId, now, actor, reason) {
     const rows = this.db.query(`
       SELECT * FROM handoffs WHERE workspace_id = ? AND task_id = ? AND status = 'pending'
-    `).all(workspaceId2, taskId2);
+    `).all(workspaceId, taskId);
     for (const row of rows) {
       this.db.query(`UPDATE handoffs SET status = 'expired', resolved_at = ? WHERE id = ?`).run(now, row.id);
-      this.appendEvent(workspaceId2, "handoff.expired", row.id, actor, { task_id: taskId2, reason });
+      this.appendEvent(workspaceId, "handoff.expired", row.id, actor, { task_id: taskId, reason });
     }
   }
-  expireElapsedHandoffs(workspaceId2, actor, taskId2) {
-    this.requireWorkspace(workspaceId2);
+  expireElapsedHandoffs(workspaceId, actor, taskId) {
+    this.requireWorkspace(workspaceId);
     const reap = this.db.transaction(() => {
       const now = this.timestamp();
-      const rows = taskId2 ? this.db.query(`
+      const rows = taskId ? this.db.query(`
             SELECT * FROM handoffs
             WHERE workspace_id = ? AND task_id = ? AND status = 'pending' AND expires_at <= ?
-          `).all(workspaceId2, taskId2, now) : this.db.query(`
+          `).all(workspaceId, taskId, now) : this.db.query(`
             SELECT * FROM handoffs
             WHERE workspace_id = ? AND status = 'pending' AND expires_at <= ?
-          `).all(workspaceId2, now);
+          `).all(workspaceId, now);
       for (const row of rows) {
         this.db.query(`UPDATE handoffs SET status = 'expired', resolved_at = ? WHERE id = ?`).run(now, row.id);
-        this.appendEvent(workspaceId2, "handoff.expired", row.id, actor, {
+        this.appendEvent(workspaceId, "handoff.expired", row.id, actor, {
           task_id: row.task_id,
           reason: "offer_deadline_elapsed"
         });
@@ -34069,14 +36655,14 @@ class CollabStore {
       });
     }
   }
-  requireActiveLease(row, actor, leaseId2) {
+  requireActiveLease(row, actor, leaseId) {
     if (row.status !== "claimed" || !row.lease_id || !row.lease_expires_at) {
       throw new CollabError("lease_not_active", "Task does not have an active lease");
     }
     if (this.isExpired(row)) {
       throw new CollabError("lease_expired", "Task lease has expired", { lease_expires_at: row.lease_expires_at });
     }
-    if (row.assignee !== actor || row.lease_id !== leaseId2) {
+    if (row.assignee !== actor || row.lease_id !== leaseId) {
       throw new CollabError("lease_not_holder", "Mutation requires the current lease holder", {
         assignee: row.assignee
       });
@@ -34160,57 +36746,57 @@ class CollabStore {
   sessionProjection(row, observedAt = this.timestamp()) {
     return coordinationSessionFromRow(row, observedAt);
   }
-  assigneeLiveness(sessionId2, observedAt = this.timestamp()) {
-    if (!sessionId2)
+  assigneeLiveness(sessionId, observedAt = this.timestamp()) {
+    if (!sessionId)
       return null;
     const holder = this.db.query(`
       SELECT status, last_seen_at FROM coordination_sessions WHERE id = ?
-    `).get(sessionId2);
+    `).get(sessionId);
     return holder ? sessionLiveness(holder, observedAt) : null;
   }
-  requireWorkspace(workspaceId2, db = this.db) {
-    const workspace = this.getWorkspace(workspaceId2, db);
+  requireWorkspace(workspaceId, db = this.db) {
+    const workspace = this.getWorkspace(workspaceId, db);
     if (!workspace)
-      throw new CollabError("workspace_not_found", `Workspace '${workspaceId2}' was not found`);
+      throw new CollabError("workspace_not_found", `Workspace '${workspaceId}' was not found`);
     return workspace;
   }
-  readPresenceSessionByClient(workspaceId2, clientInstanceId) {
+  readPresenceSessionByClient(workspaceId, clientInstanceId) {
     return this.db.query(`
       SELECT * FROM sessions
       WHERE workspace_id = ? AND client_instance_id = ?
-    `).get(workspaceId2, clientInstanceId);
+    `).get(workspaceId, clientInstanceId);
   }
-  requirePresenceSessionRow(sessionId2) {
-    const row = this.db.query(`SELECT * FROM sessions WHERE id = ?`).get(sessionId2);
+  requirePresenceSessionRow(sessionId) {
+    const row = this.db.query(`SELECT * FROM sessions WHERE id = ?`).get(sessionId);
     if (!row) {
-      throw new CollabError("session_not_found", `Presence session '${sessionId2}' was not found`);
+      throw new CollabError("session_not_found", `Presence session '${sessionId}' was not found`);
     }
     return row;
   }
-  requireCoordinationSessionRow(sessionId2) {
-    const row = this.db.query(`SELECT * FROM coordination_sessions WHERE id = ?`).get(sessionId2);
+  requireCoordinationSessionRow(sessionId) {
+    const row = this.db.query(`SELECT * FROM coordination_sessions WHERE id = ?`).get(sessionId);
     if (!row)
-      throw new CollabError("session_not_found", `Session '${sessionId2}' was not found`);
+      throw new CollabError("session_not_found", `Session '${sessionId}' was not found`);
     return row;
   }
-  readTaskRow(workspaceId2, taskId2) {
-    return this.db.query(`SELECT * FROM tasks WHERE workspace_id = ? AND id = ?`).get(workspaceId2, taskId2);
+  readTaskRow(workspaceId, taskId) {
+    return this.db.query(`SELECT * FROM tasks WHERE workspace_id = ? AND id = ?`).get(workspaceId, taskId);
   }
-  requireTaskRow(workspaceId2, taskId2) {
-    const row = this.readTaskRow(workspaceId2, taskId2);
+  requireTaskRow(workspaceId, taskId) {
+    const row = this.readTaskRow(workspaceId, taskId);
     if (!row)
-      throw new CollabError("task_not_found", `Task '${taskId2}' was not found`, { task_id: taskId2 });
+      throw new CollabError("task_not_found", `Task '${taskId}' was not found`, { task_id: taskId });
     return row;
   }
-  requireTask(workspaceId2, taskId2) {
-    return this.taskFromRow(this.requireTaskRow(workspaceId2, taskId2));
+  requireTask(workspaceId, taskId) {
+    return this.taskFromRow(this.requireTaskRow(workspaceId, taskId));
   }
-  listArtifacts(workspaceId2, taskId2) {
+  listArtifacts(workspaceId, taskId) {
     const rows = this.db.query(`
       SELECT id, task_id, kind, uri, sha256, media_type, label, attached_by, attached_at
         , attached_by_session_id
       FROM artifacts WHERE workspace_id = ? AND task_id = ? ORDER BY attached_at, id
-    `).all(workspaceId2, taskId2);
+    `).all(workspaceId, taskId);
     return rows.map(artifactFromRow);
   }
   requireArtifact(id) {
@@ -34238,6 +36824,46 @@ class CollabStore {
       throw new CollabError("handoff_not_found", `Handoff '${id}' was not found`);
     return handoffFromRow(row);
   }
+  latestReceiptKeyForSession(credential, prefix2) {
+    return this.latestReceiptKey(this.authenticateSession(credential), prefix2);
+  }
+  latestReceiptKey(session, prefix2) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*:$/.test(prefix2) || prefix2.length > 100) {
+      throw new CollabError("invalid_receipt_prefix", "A receipt prefix is a key prefix ending in ':'");
+    }
+    const upper = `${prefix2.slice(0, -1)};`;
+    const row = this.db.query(`
+      SELECT idempotency_key FROM mutations
+      WHERE workspace_id = ? AND actor = ? AND idempotency_key >= ? AND idempotency_key < ?
+      ORDER BY idempotency_key DESC
+      LIMIT 1
+    `).get(session.workspace_id, `session:${session.id}`, prefix2, upper);
+    return row?.idempotency_key ?? null;
+  }
+  withReceiptPlan(plan, run) {
+    if (!plan)
+      return run();
+    if (this.ambientReceiptPlan)
+      throw new CollabError("receipt_plan_nested", "A receipt plan is already in force");
+    this.ambientReceiptPlan = plan;
+    try {
+      return run();
+    } finally {
+      this.ambientReceiptPlan = null;
+    }
+  }
+  ambientPlanFor(idempotencyKey) {
+    const plan = this.ambientReceiptPlan;
+    if (!plan)
+      return;
+    return idempotencyKey === plan.key || idempotencyKey.startsWith(`${plan.key}:`) ? plan : undefined;
+  }
+  requireReceiptPlan(session, plan) {
+    const latest = this.latestReceiptKey(session, plan.prefix);
+    if (latest === plan.latest || latest === plan.key || latest !== null && latest.startsWith(`${plan.key}:`))
+      return;
+    throw new CollabError("receipt_plan_stale", "Another call by this session acted on the same entity after this call chose its key; nothing was written");
+  }
   timestamp() {
     return this.now().toISOString();
   }
@@ -34257,7 +36883,28 @@ function normalizeLeaseInput(input) {
   };
 }
 function validateActor(value) {
-  return cleanText(value, "actor", 200);
+  const actor = cleanText(value, "actor", 200);
+  if (/^person:/i.test(actor)) {
+    throw new CollabError("invalid_actor", "Actor labels beginning with person: are reserved for the person desk");
+  }
+  return actor;
+}
+function derivedActor(prefix2, sessionId) {
+  if (prefix2 === undefined) {
+    throw new CollabError("actor_required", "Supply actor, or actor_prefix to derive one from the new session id");
+  }
+  if (typeof prefix2 !== "string" || !/^[a-z][a-z0-9-]{0,39}$/.test(prefix2)) {
+    throw new CollabError("invalid_actor_prefix", "actor_prefix is 1 to 40 lower-case letters, digits or dashes");
+  }
+  return validateActor(`${prefix2}-${sessionId.slice("session_".length, "session_".length + 6)}`);
+}
+var MAX_MODEL_LABEL = 200;
+function validateModelLabel(value) {
+  const model = cleanText(value, "model", MAX_MODEL_LABEL);
+  if (/[\u0000-\u001f\u007f]/.test(model)) {
+    throw new CollabError("invalid_model", "model must be one line of text");
+  }
+  return model;
 }
 function validateExpectedVersion(value) {
   if (!Number.isInteger(value) || value < 1) {
@@ -34351,11 +36998,11 @@ function normalizeSessionLeaseInput(input) {
   };
 }
 function validateIdempotencyKey(value) {
-  const key2 = cleanText(value, "idempotency_key", 200);
-  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(key2)) {
+  const key = cleanText(value, "idempotency_key", 200);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(key)) {
     throw new CollabError("invalid_idempotency_key", "Idempotency key contains unsupported characters");
   }
-  return key2;
+  return key;
 }
 function validateId(value, field) {
   const id = cleanText(value, field, 200);
@@ -34457,7 +37104,7 @@ function normalizePathScopes(scopes) {
   }
   let totalLength = 0;
   const normalized = scopes.map((scope) => {
-    if (typeof scope !== "string" || !scope || scope.length > MAX_PATH_SCOPE_LENGTH || scope.includes("\x00") || scope.includes("\\") || isAbsolute2(scope)) {
+    if (typeof scope !== "string" || !scope || scope.length > MAX_PATH_SCOPE_LENGTH || scope.includes("\x00") || scope.includes("\\") || isAbsolute3(scope)) {
       throw new CollabError("invalid_path_scope", "Path scopes must be non-empty repository-relative POSIX paths", { scope });
     }
     totalLength += scope.length;
@@ -34525,10 +37172,10 @@ function eventFromRow(row) {
 function eventHash(event) {
   if (event.protocol === LEGACY_COLLAB_PROTOCOL) {
     const { hash: _hash2, session_id: _sessionId, ...body2 } = event;
-    return sha2562(canonicalJson(body2));
+    return sha2564(canonicalJson(body2));
   }
   const { hash: _hash, ...body } = event;
-  return sha2562(canonicalJson(body));
+  return sha2564(canonicalJson(body));
 }
 function verifyEventPage(events, afterSequence, predecessorHash, headSequence, headHash) {
   if (predecessorHash === null)
@@ -34572,11 +37219,11 @@ function presenceSessionFromRow(row, observedAt) {
     left_at: row.left_at
   };
 }
-function requirePresenceSessionVersion(row, expectedVersion2) {
-  if (row.version !== expectedVersion2) {
+function requirePresenceSessionVersion(row, expectedVersion) {
+  if (row.version !== expectedVersion) {
     throw new CollabError("session_version_conflict", "Presence session version changed", {
       session_id: row.id,
-      expected_version: expectedVersion2,
+      expected_version: expectedVersion,
       actual_version: row.version
     });
   }
@@ -34673,11 +37320,94 @@ function reportFromRow(row) {
 function reviewFromRow(row) {
   return { ...row };
 }
+function proposalTermsFromRow(row) {
+  if (row.rule !== CONSENT_RULE) {
+    throw new CollabError("proposal_rule_unsupported", "This proposal was opened under a consent rule this package does not implement", { proposal_report_id: row.report_id, rule: row.rule });
+  }
+  return {
+    report_id: row.report_id,
+    workspace_id: row.workspace_id,
+    rule: CONSENT_RULE,
+    criteria: row.criteria,
+    extent: row.extent,
+    known_conflicts: row.known_conflicts,
+    origin: row.origin,
+    topic: row.topic,
+    closes_at: row.closes_at,
+    voices: JSON.parse(row.voices_json),
+    author_voice_id: row.author_voice_id,
+    proposal_sha256: row.proposal_sha256,
+    opened_event_id: row.opened_event_id,
+    created_at: row.created_at
+  };
+}
+function proposalPersonActFromRow(row) {
+  const { ai_snapshot_json, proof_json, ...rest } = row;
+  return {
+    ...rest,
+    ai_snapshot: JSON.parse(ai_snapshot_json),
+    proof: proof_json ? JSON.parse(proof_json) : null
+  };
+}
+var MAX_INBOX_SCAN = 500;
+var MAX_INBOX_PROPOSALS = 50;
+function aiSnapshotOf(status) {
+  return {
+    position: status.ai.position,
+    closed: status.ai.closed,
+    qualifying_support_report_ids: status.ai.qualifying_support_report_ids,
+    unresolved_challenge_report_ids: status.ai.unresolved_challenge_report_ids
+  };
+}
+function normalizeActReason(act, reason) {
+  if (act === "agree") {
+    if (reason !== undefined && reason.trim() !== "") {
+      throw new CollabError("invalid_reason", "An agreement takes no reason");
+    }
+    return null;
+  }
+  return cleanText(reason ?? "", "reason", 2000);
+}
+var PERSON_DESK_ACTOR = "person:desk";
+var PERSON_TERMINAL_ACTOR = "person:terminal";
+var PERSON_PASSKEY_ACTOR = "person:passkey";
+var PERSON_VOICE_ID = "person";
+var PERSON_DESK_LIMITS = "Written at the person desk, which does not authenticate the person.";
+function validatePersonAct(value) {
+  if (value !== "agree" && value !== "reject") {
+    throw new CollabError("invalid_act", "act must be agree or reject");
+  }
+  return value;
+}
+function normalizeProposalTerms(input) {
+  return {
+    question: cleanText(input.question, "question", MAX_REPORT_BODY),
+    criteria: cleanText(input.criteria, "criteria", 4000),
+    extent: cleanText(input.extent, "extent", 1000),
+    known_conflicts: optionalText(input.known_conflicts, "known_conflicts", 4000),
+    evidence_refs: normalizeEvidenceRefs(input.evidence_refs ?? []),
+    topic: optionalText(input.topic, "topic", 200),
+    consult_seconds: validateConsultSeconds(input.consult_seconds)
+  };
+}
+function validateProposalOrigin(value) {
+  if (value !== "ai" && value !== "person_relayed") {
+    throw new CollabError("invalid_origin", "origin must be ai or person_relayed");
+  }
+  return value;
+}
+function validateConsultSeconds(value) {
+  const seconds = value ?? DEFAULT_PROPOSAL_CONSULT_SECONDS;
+  if (!Number.isInteger(seconds) || seconds < MIN_PROPOSAL_CONSULT_SECONDS || seconds > MAX_PROPOSAL_CONSULT_SECONDS) {
+    throw new CollabError("invalid_consult_seconds", `consult_seconds must be an integer between ${MIN_PROPOSAL_CONSULT_SECONDS} and ${MAX_PROPOSAL_CONSULT_SECONDS}`);
+  }
+  return seconds;
+}
 function parseCheckpoint(json2) {
   return json2 ? JSON.parse(json2) : null;
 }
 function checkpointDigest(checkpoint) {
-  return sha2562(canonicalJson(checkpoint));
+  return sha2564(canonicalJson(checkpoint));
 }
 function checkpointStateMatches(left, right) {
   return left.worktree_id === right.worktree_id && left.head_sha === right.head_sha && left.branch === right.branch && left.algorithm === right.algorithm && left.index_sha256 === right.index_sha256 && left.state_sha256 === right.state_sha256 && left.dirty === right.dirty;
@@ -34702,25 +37432,25 @@ function artifactRepositoryPath(uri, rootPath) {
   }
   if (!value || value.includes("\x00") || value.includes("\\"))
     return null;
-  let relative;
-  if (isAbsolute2(value)) {
+  let relative2;
+  if (isAbsolute3(value)) {
     const absolute = posix.normalize(value);
     if (!absolute.startsWith(`${rootPath}/`))
       return null;
-    relative = absolute.slice(rootPath.length + 1);
+    relative2 = absolute.slice(rootPath.length + 1);
   } else {
-    relative = posix.normalize(value);
+    relative2 = posix.normalize(value);
   }
-  if (!relative || relative === "." || relative === ".." || relative.startsWith("../") || relative.endsWith("/") || relative === ".git" || relative.startsWith(".git/"))
+  if (!relative2 || relative2 === "." || relative2 === ".." || relative2.startsWith("../") || relative2.endsWith("/") || relative2 === ".git" || relative2.startsWith(".git/"))
     return null;
-  return relative;
+  return relative2;
 }
 function pathWithinScopes(path, scopes) {
   return scopes.some((scope) => path === scope || path.startsWith(`${scope}/`));
 }
-function gitCheckpointStaleError(taskId2, result, observed, refusal) {
+function gitCheckpointStaleError(taskId, result, observed, refusal) {
   const branch = result.branch ? `"${result.branch}"` : "(none: its HEAD was detached)";
-  const remedy = `Two ways forward. (1) Host commit: exactly one commit on branch ${branch} whose only parent ` + `is the result checkpoint HEAD ${result.head_sha}, changing only paths inside the task's ` + "path_scopes, each byte-equal to the newest file artifact this task attached for that uri " + "(since its latest request_changes), with the worktree left clean; then review again. " + `(2) Re-completion: review task "${taskId2}" with outcome "request_changes"; once it is ` + "claimed again, collab_task_complete captures a fresh result checkpoint for a new review. " + "Never amend, reset or rewrite a shared branch to meet (1): if other commits already sit " + "on it, use (2).";
+  const remedy = `Two ways forward. (1) Host commit: exactly one commit on branch ${branch} whose only parent ` + `is the result checkpoint HEAD ${result.head_sha}, changing only paths inside the task's ` + "path_scopes, each byte-equal to the newest file artifact this task attached for that uri " + "(since its latest request_changes), with the worktree left clean; then review again. " + `(2) Re-completion: review task "${taskId}" with outcome "request_changes"; once it is ` + "claimed again, collab_task_complete captures a fresh result checkpoint for a new review. " + "Never amend, reset or rewrite a shared branch to meet (1): if other commits already sit " + "on it, use (2).";
   return new CollabError("git_checkpoint_stale", `The completion worktree changed after its result checkpoint was captured: ${refusal}. ${remedy}`, {
     result_checkpoint: result,
     observed_checkpoint: observed,
@@ -34735,8 +37465,8 @@ function hydrateLegacyMutationResponse(value, now) {
   }
   if (!isRecordValue(value))
     return value;
-  const hydratedEntries = Object.entries(value).map(([key2, item]) => [
-    key2,
+  const hydratedEntries = Object.entries(value).map(([key, item]) => [
+    key,
     hydrateLegacyMutationResponse(item, now)
   ]);
   const hydrated = Object.fromEntries(hydratedEntries);
@@ -34783,7 +37513,7 @@ function sqlToBoolean(value) {
   return value === null ? null : value !== 0;
 }
 function hashSessionToken(token) {
-  return sha2562(`agenttool.collab/session-token/v1\x00${token}`);
+  return sha2564(`agenttool.collab/session-token/v1\x00${token}`);
 }
 function safeDigestEqual(left, right) {
   const leftBuffer = Buffer.from(left, "hex");
@@ -34817,7 +37547,7 @@ function retrySqliteBusy(operation) {
   }
 }
 function assertSafeDatabaseFile(path) {
-  const stat = lstatSync3(path);
+  const stat = lstatSync4(path);
   if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || typeof process.getuid === "function" && stat.uid !== process.getuid()) {
     throw new CollabError("database_file_unsafe", "The collaboration database path must be a non-linked regular file owned by this user", { path });
   }
@@ -34886,14 +37616,14 @@ function safeRepositoryIdentity(rootPath) {
     return inspectRepository(rootPath);
   } catch {
     const root = resolve4(rootPath);
-    const repositoryKey = `local-path:${sha2562(root)}`;
-    const worktreeId2 = `wt_${sha2562(`${root}\x00path:${root}`).slice(0, 24)}`;
+    const repositoryKey = `local-path:${sha2564(root)}`;
+    const worktreeId2 = `wt_${sha2564(`${root}\x00path:${root}`).slice(0, 24)}`;
     return {
       requested_root_path: root,
       root_path: root,
       repository_key: repositoryKey,
       git_common_dir_hash: null,
-      worktree_fingerprint: `path:${sha2562(root)}`,
+      worktree_fingerprint: `path:${sha2564(root)}`,
       checkpoint: {
         worktree_id: worktreeId2,
         head_sha: null,
@@ -34904,27 +37634,8948 @@ function safeRepositoryIdentity(rootPath) {
     };
   }
 }
-function sha2562(value) {
-  return createHash2("sha256").update(value).digest("hex");
+function sha2564(value) {
+  return createHash4("sha256").update(value).digest("hex");
 }
 function addSeconds(iso, seconds) {
   return new Date(new Date(iso).getTime() + seconds * 1000).toISOString();
 }
 
+// src/store-notes.ts
+class CollabStore extends CollabStoreCore {
+  constructor(path, options = {}) {
+    super(path, options);
+    this.sweepRevealedSeals();
+  }
+  personDeskProposalViews(workspaceId, proposalIds) {
+    this.requireWorkspace(workspaceId);
+    return this.db.transaction(() => {
+      const sessions = this.noteSessionViews(workspaceId);
+      const context = this.proposalReadContext(workspaceId);
+      return proposalIds.map((proposalId) => {
+        try {
+          this.requireProposalTerms(workspaceId, validateId(proposalId, "proposal_report_id"));
+          return { proposal_report_id: proposalId, view: this.noteProposalData(workspaceId, proposalId, sessions, context) };
+        } catch (error51) {
+          if (!(error51 instanceof CollabError))
+            throw error51;
+          return { proposal_report_id: proposalId, error: error51.code };
+        }
+      });
+    }).deferred();
+  }
+  noteSessionViews(workspaceId) {
+    this.requireWorkspace(workspaceId);
+    const rows = this.db.query(`
+      SELECT * FROM coordination_sessions WHERE workspace_id = ?
+      ORDER BY last_seen_at DESC, id
+    `).all(workspaceId);
+    const declared = this.db.query(`
+      SELECT entity_id, type, payload_json FROM events
+      WHERE workspace_id = ? AND type IN ('session.joined', 'purpose.declared')
+      ORDER BY sequence
+    `).all(workspaceId);
+    const joined = new Map;
+    const purposes = new Map;
+    for (const row of declared) {
+      const payload = JSON.parse(row.payload_json);
+      if (row.type === "session.joined") {
+        joined.set(row.entity_id, {
+          seat_ref: typeof payload.seat_ref === "string" ? payload.seat_ref : null,
+          model: typeof payload.model === "string" ? payload.model : null
+        });
+      } else if (typeof payload.purpose === "string") {
+        purposes.set(row.entity_id, payload.purpose);
+      }
+    }
+    const observedAt = this.timestamp();
+    const voices = new Map;
+    return rows.map((row) => ({
+      id: row.id,
+      workspace_id: row.workspace_id,
+      worktree_id: row.worktree_id,
+      actor: row.actor,
+      role: row.role,
+      purpose: purposes.get(row.id) ?? row.role,
+      model: joined.get(row.id)?.model ?? null,
+      seat_ref: joined.get(row.id)?.seat_ref ?? null,
+      voice_id: this.cachedVoice(row.id, voices),
+      parent_session_id: row.parent_session_id,
+      status: row.status,
+      joined_at: row.joined_at,
+      last_seen_at: row.last_seen_at,
+      liveness: sessionLiveness(row, observedAt)
+    }));
+  }
+  consentVoiceOf(sessionId) {
+    return this.consentVoice(validateId(sessionId, "session_id"));
+  }
+  declarePurposeForSession(input) {
+    const purpose = validateNotePurpose(input.purpose);
+    return this.mutateAsSession(input, input.idempotency_key, "notes.purpose.v1", { purpose }, (session) => {
+      const payload = { session_id: session.id, purpose };
+      assertNotePayload(payload);
+      const event = this.appendEvent(session.workspace_id, "purpose.declared", session.id, session.actor, payload, session.id);
+      return {
+        session_id: session.id,
+        purpose,
+        event_id: event.id,
+        sequence: event.sequence,
+        declared_at: event.occurred_at
+      };
+    }, input.receipt_plan ? { receipt_plan: input.receipt_plan } : {});
+  }
+  citeEvidenceForSession(input) {
+    const cite = normalizeNoteCite({ worktree_id: input.worktree_id, items: input.items });
+    if (cite.items.length === 0)
+      throw new CollabError("invalid_evidence", "A cite needs at least one outside evidence item");
+    return this.mutateAsSession(input, input.idempotency_key, "notes.cite.v1", cite, (session) => this.appendNoteCite(session, cite), input.receipt_plan ? { receipt_plan: input.receipt_plan } : {});
+  }
+  appendNoteForSession(input) {
+    if (!Array.isArray(input.reports) || input.reports.length < 1 || input.reports.length > 2) {
+      throw new CollabError("invalid_note_reports", "A note posts one report, or a challenge and the withdrawal it replaces");
+    }
+    const cite = input.cite && input.cite.items.length > 0 ? normalizeNoteCite(input.cite) : null;
+    const reports = input.reports.map((report, index) => normalizeNoteReport(report, index));
+    if (reports.some((report) => report.cite_event) && !cite) {
+      throw new CollabError("invalid_note_reports", "A report cites this note's evidence, but the note has none");
+    }
+    return this.mutateAsSession(input, input.idempotency_key, "notes.note.v1", { cite, reports }, (session) => {
+      const cited = cite ? this.appendNoteCite(session, cite) : null;
+      const posted = [];
+      for (const report of reports) {
+        const evidenceRefs = normalizeEvidenceRefs([
+          ...report.evidence_refs,
+          ...report.cite_event ? [`event:${cited.event_id}`] : [],
+          ...report.cite_earlier.map((index) => `report:${posted[index].id}`)
+        ]);
+        const normalized = {
+          task_id: report.task_id,
+          to_session_id: report.to_session_id,
+          kind: report.kind,
+          body: report.body,
+          evidence_refs: evidenceRefs,
+          confidence: "unknown",
+          confidence_basis: null,
+          limits: null,
+          relation: report.relation,
+          target_report_id: report.target_report_id,
+          authority_scope: null,
+          authority_basis: null,
+          ...report.to_person ? { to_person: true } : {}
+        };
+        this.validateReportInput(session, normalized);
+        this.refuseProposalRewrite(normalized);
+        if (report.about_proposal_id) {
+          const termed = this.db.query(`SELECT workspace_id FROM proposal_terms WHERE report_id = ?`).get(report.about_proposal_id);
+          if (!termed || termed.workspace_id !== session.workspace_id) {
+            throw new CollabError("proposal_not_found", "about_proposal_id must name a proposal in this workspace");
+          }
+        }
+        posted.push(this.appendReportInternal(session, {
+          ...normalized,
+          ...report.about_proposal_id ? { about_proposal_id: report.about_proposal_id } : {},
+          note: NOTE_FORMAT
+        }));
+      }
+      return { reports: posted, cite: cited };
+    }, input.receipt_plan ? { receipt_plan: input.receipt_plan } : {});
+  }
+  appendNoteCite(session, cite) {
+    const hasFiles = cite.items.some((item) => item.kind === "file");
+    if (hasFiles && cite.worktree_id !== session.worktree_id) {
+      throw new CollabError("cite_worktree_mismatch", "File evidence is cited against the citing session's own worktree");
+    }
+    const citeId = `cite_${randomUUID4()}`;
+    const payload = {
+      cite_id: citeId,
+      by_session_id: session.id,
+      ...hasFiles ? { worktree_id: session.worktree_id } : {},
+      items: cite.items
+    };
+    assertNotePayload(payload);
+    const event = this.appendEvent(session.workspace_id, "evidence.cited", citeId, session.actor, payload, session.id);
+    return {
+      cite_id: citeId,
+      event_id: event.id,
+      sequence: event.sequence,
+      worktree_id: hasFiles ? session.worktree_id : null,
+      items: cite.items
+    };
+  }
+  noteTarget(workspaceId, reportId) {
+    return this.db.transaction(() => {
+      const report = this.requireReport(validateId(reportId, "report_id"));
+      if (report.workspace_id !== workspaceId) {
+        throw new CollabError("report_not_found", `Report '${reportId}' was not found in this workspace`);
+      }
+      const obsoleted = this.activeObsoletionTargets(workspaceId);
+      const termed = this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(report.id) !== null;
+      let ballot = null;
+      if (this.db.query(`SELECT 1 FROM note_ballots WHERE workspace_id = ? AND ballot_id = ?`).get(workspaceId, report.id) !== null) {
+        ballot = { open: this.readBallotFacts(workspaceId, report.id)?.state === "open" };
+      }
+      let completion = null;
+      if (report.task_id) {
+        const event = this.db.query(`
+          SELECT payload_json FROM events
+          WHERE workspace_id = ? AND sequence > ? AND entity_id = ?
+            AND type IN ('task.reported_complete', 'task.completed')
+          ORDER BY sequence LIMIT 1
+        `).get(workspaceId, report.event_sequence, report.task_id);
+        const completed = event && JSON.parse(event.payload_json).completion_report_id === report.id;
+        if (completed) {
+          const task = this.requireTaskRow(workspaceId, report.task_id);
+          const current = task.completion_report_id === report.id;
+          completion = {
+            task_id: task.id,
+            current,
+            pending_review: current && task.status === "completed" && task.review_status === "pending"
+          };
+        }
+      }
+      const authorRow = report.from_session_id ? this.db.query(`SELECT * FROM coordination_sessions WHERE id = ?`).get(report.from_session_id) : null;
+      return {
+        report,
+        termed,
+        ballot,
+        obsoleted: obsoleted.has(report.id),
+        completion_of: completion,
+        challenges: this.noteChallenges(workspaceId).filter((challenge) => challenge.target_report_id === report.id),
+        author: authorRow ? {
+          id: authorRow.id,
+          actor: authorRow.actor,
+          status: authorRow.status,
+          liveness: sessionLiveness(authorRow, this.timestamp()),
+          last_seen_at: authorRow.last_seen_at,
+          voice_id: this.consentVoice(authorRow.id)
+        } : null
+      };
+    }).deferred();
+  }
+  noteObsoleted(workspaceId, ids) {
+    const obsoleted = this.activeObsoletionTargets(workspaceId);
+    return ids.filter((id) => obsoleted.has(id));
+  }
+  noteReportStands(workspaceId, reportId) {
+    return this.db.transaction(() => {
+      const report = this.requireReport(validateId(reportId, "report_id"));
+      if (report.workspace_id !== workspaceId)
+        return false;
+      if (this.activeObsoletionTargets(workspaceId).has(report.id))
+        return false;
+      return report.relation !== "challenges" || !this.hasActiveReportRelation(workspaceId, report.id, new Set(["resolves"]));
+    }).deferred();
+  }
+  notePathConflicts(workspaceId, paths, options = {}) {
+    this.requireWorkspace(workspaceId);
+    return this.taskPathConflicts({
+      workspace_id: workspaceId,
+      id: options.except_task_id ?? "",
+      path_scopes: normalizePathScopes(paths),
+      work_mode: options.work_mode ?? "edit"
+    });
+  }
+  noteCompletePrecheck(credential, input) {
+    this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      const row = this.requireTaskRow(session.workspace_id, validateId(input.task_id, "task_id"));
+      for (const reference of normalizeEvidenceRefs(input.evidence_refs)) {
+        this.requireEvidenceRef(row.workspace_id, reference);
+      }
+      if (input.review_requested_session_id) {
+        this.requireRequestedReviewer(row, session, validateId(input.review_requested_session_id, "review_requested_session_id"));
+      }
+    }).deferred();
+  }
+  noteReviewPrecheck(credential, input) {
+    this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      const row = this.requireTaskRow(session.workspace_id, validateId(input.task_id, "task_id"));
+      if (row.completion_policy !== "accepted" || row.review_status !== "pending") {
+        throw this.taskNotPendingReviewError(row, session.id);
+      }
+      if (!row.reported_by_session_id || !row.completion_report_id) {
+        throw new CollabError("review_state_invalid", "Task completion review metadata is incomplete");
+      }
+      if (row.reported_by_session_id === session.id) {
+        throw new CollabError("self_review_forbidden", "A distinct session must review reported completion");
+      }
+      for (const reference of normalizeEvidenceRefs(input.evidence_refs)) {
+        this.requireEvidenceRef(row.workspace_id, reference);
+      }
+      if (input.outcome !== "accept")
+        return;
+      if (this.hasObsoletedCompletionReport(row.workspace_id, row.completion_report_id)) {
+        throw new CollabError("completion_report_obsolete", "The reported completion was withdrawn, corrected, or superseded; request changes before a new completion report", { completion_report_id: row.completion_report_id });
+      }
+      if (this.hasUnresolvedChallenges(row.workspace_id, row.completion_report_id)) {
+        throw new CollabError("completion_challenged", "Reported completion has an unresolved challenge", { completion_report_id: row.completion_report_id });
+      }
+    }).deferred();
+  }
+  noteWorktreeRoot(worktreeId2) {
+    const row = this.db.query(`SELECT root_path FROM worktrees WHERE id = ?`).get(worktreeId2);
+    return row?.root_path ?? null;
+  }
+  latestReceiptKeyForBase(credential, base) {
+    const session = this.authenticateSession(credential);
+    if (!/^[A-Z2-7]{20}$/.test(base))
+      throw new CollabError("invalid_receipt_base", "A derived key base is 20 base32 characters");
+    const exact = new RegExp(`^n1:[A-Z2-7]{8}:\\d{6}:${base}(?::\\d{2})?$`);
+    const rows = this.db.query(`
+      SELECT idempotency_key FROM mutations
+      WHERE workspace_id = ? AND actor = ? AND idempotency_key LIKE ?
+      ORDER BY rowid DESC LIMIT 20
+    `).all(session.workspace_id, `session:${session.id}`, `n1:________:______:${base}%`);
+    return rows.find((row) => exact.test(row.idempotency_key))?.idempotency_key ?? null;
+  }
+  readReceiptByKey(credential, key) {
+    const session = this.authenticateSession(credential);
+    const idempotencyKey = validateIdempotencyKey(key);
+    const row = this.db.query(`
+      SELECT operation, response_json FROM mutations
+      WHERE workspace_id = ? AND actor = ? AND idempotency_key = ?
+    `).get(session.workspace_id, `session:${session.id}`, idempotencyKey);
+    if (!row)
+      return { found: false };
+    return { found: true, operation: row.operation, value: JSON.parse(row.response_json) };
+  }
+  initNoteMark(credential, sequence) {
+    const marked = this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      const workspace = this.requireWorkspace(session.workspace_id);
+      if (!Number.isInteger(sequence) || sequence < 0 || sequence > workspace.event_head_sequence) {
+        throw new CollabError("invalid_note_mark", "A read mark must name a sequence in this journal");
+      }
+      this.db.query(`
+        INSERT OR IGNORE INTO note_marks (workspace_id, session_id, shown_through_sequence, updated_at)
+        VALUES (?, ?, ?, ?)
+      `).run(session.workspace_id, session.id, sequence, this.timestamp());
+      return this.noteMarkRow(session.workspace_id, session.id);
+    }).immediate();
+    this.tightenFileModes();
+    return marked;
+  }
+  noteMark(workspaceId, sessionId) {
+    return this.noteMarkRow(workspaceId, validateId(sessionId, "session_id"));
+  }
+  inboxForSession(input) {
+    const limit = input.limit;
+    if (!Number.isInteger(limit) || limit < 1 || limit > NOTE_INBOX_MAX_LIMIT) {
+      throw new CollabError("invalid_limit", `limit must be an integer from 1 to ${NOTE_INBOX_MAX_LIMIT}`);
+    }
+    if (input.include !== "for_me" && input.include !== "all") {
+      throw new CollabError("invalid_include", "include must be for_me or all");
+    }
+    const plan = (session, mark, record2) => {
+      const scan = this.scanNoteEvents(session, mark.sequence);
+      const shaped = input.include === "all" ? noteLines(scan.events.filter((event) => !event.own), true) : { lines: scan.events.filter((event) => event.for_me), dropped: [] };
+      const listed = shaped.lines;
+      let through = scan.last_sequence;
+      let more = scan.capped;
+      if (listed.length > limit) {
+        through = listed[limit].sequence - 1;
+        more = true;
+      }
+      const returned = listed.slice(0, limit);
+      const alsoNew = scan.events.filter((event) => !event.own && !event.for_me && event.sequence <= through).length;
+      let waiting = null;
+      if (record2) {
+        const now = this.timestamp();
+        if (through > mark.sequence) {
+          this.db.query(`
+            UPDATE note_marks SET shown_through_sequence = ?, updated_at = ?
+            WHERE workspace_id = ? AND session_id = ?
+          `).run(through, now, session.workspace_id, session.id);
+        }
+        waiting = this.noteWaiting(session);
+        this.recordNoteShown(session, [
+          ...returned.filter((event) => event.for_me).map((event) => event.shown_item_id),
+          ...noteWaitingShownItems(waiting)
+        ], now);
+      }
+      return {
+        sequences: returned.map((event) => event.sequence),
+        through,
+        more,
+        also_new: alsoNew,
+        not_listed: input.include === "all" ? notListed(shaped.dropped, through) : null,
+        for_me_total: scan.events.filter((event) => event.for_me).length,
+        for_me_total_capped: scan.capped,
+        waiting
+      };
+    };
+    let reveal = { revealed: [], pending: [] };
+    const planned = input.peek ? this.db.transaction(() => {
+      const session = this.authenticateSession(input);
+      const mark = this.readNoteMarkState(session);
+      return { mark, ...plan(session, mark, false) };
+    }).deferred() : (() => {
+      const housekept = this.noteHousekeeping(input, (session, mark) => ({ mark, ...plan(session, mark, true) }));
+      reveal = housekept.reveal;
+      return housekept.result;
+    })();
+    return afterHousekeeping(!input.peek, () => this.db.transaction(() => {
+      const session = this.authenticateSession(input);
+      const sessions = this.noteSessionViews(session.workspace_id);
+      const me = sessions.find((view) => view.id === session.id);
+      const workspace = this.requireWorkspace(session.workspace_id);
+      const folds = this.noteBallotFolds(session);
+      return {
+        session: me,
+        sessions,
+        entries: planned.sequences.map((sequence) => this.noteEntryAt(session, sequence, folds)),
+        also_new: planned.also_new,
+        ...planned.not_listed ? { not_listed: planned.not_listed } : {},
+        more: planned.more,
+        for_me_total: planned.for_me_total,
+        for_me_total_capped: planned.for_me_total_capped,
+        mark: {
+          before: planned.mark.sequence,
+          through: planned.through,
+          anchor: this.anchorAt(workspace, planned.through),
+          initialised_from: planned.mark.initialised_from,
+          clamped: planned.mark.clamped,
+          written: !input.peek
+        },
+        head_sequence: workspace.event_head_sequence,
+        waiting: planned.waiting ?? this.noteWaiting(session),
+        reveal_pending: reveal.pending,
+        observed_at: this.timestamp()
+      };
+    }).deferred());
+  }
+  inboxLookBackForSession(input) {
+    const limit = input.limit;
+    if (!Number.isInteger(limit) || limit < 1 || limit > NOTE_INBOX_MAX_LIMIT) {
+      throw new CollabError("invalid_limit", `limit must be an integer from 1 to ${NOTE_INBOX_MAX_LIMIT}`);
+    }
+    if (input.include !== "for_me" && input.include !== "all") {
+      throw new CollabError("invalid_include", "include must be for_me or all");
+    }
+    if (!Number.isSafeInteger(input.since) || input.since < 0) {
+      throw new CollabError("invalid_since", "since must be a whole number, 0 or more");
+    }
+    return this.db.transaction(() => {
+      const session = this.authenticateSession(input);
+      const workspace = this.requireWorkspace(session.workspace_id);
+      const mark = this.readNoteMarkState(session);
+      const after = Math.min(input.since, workspace.event_head_sequence);
+      const scan = this.scanNoteEvents(session, after, this.endedNamesakes(session));
+      const shaped = noteLines(scan.events.filter((event) => input.include === "all" ? !event.own : event.for_me || event.for_name !== null), false);
+      const listed = shaped.lines;
+      let through = scan.last_sequence;
+      let more = scan.capped;
+      if (listed.length > limit) {
+        through = listed[limit].sequence - 1;
+        more = true;
+      }
+      const returned = listed.slice(0, limit);
+      const sessions = this.noteSessionViews(session.workspace_id);
+      const folds = this.noteBallotFolds(session);
+      return {
+        session: sessions.find((view) => view.id === session.id),
+        sessions,
+        entries: returned.map((event) => this.noteEntryAt(session, event.sequence, folds, event.for_name)),
+        also_new: scan.events.filter((event) => !event.own && !event.for_me && event.for_name === null && event.sequence <= through).length,
+        not_listed: notListed(shaped.dropped, through),
+        more,
+        for_me_total: scan.events.filter((event) => event.for_me).length,
+        for_me_total_capped: scan.capped,
+        mark: {
+          before: mark.sequence,
+          through: mark.sequence,
+          anchor: this.anchorAt(workspace, mark.sequence),
+          initialised_from: null,
+          clamped: false,
+          written: false
+        },
+        head_sequence: workspace.event_head_sequence,
+        waiting: this.noteWaiting(session),
+        reveal_pending: [],
+        observed_at: this.timestamp(),
+        looked_back: { after, through }
+      };
+    }).deferred();
+  }
+  noteArrivalBehind(credential) {
+    return this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      const joined = this.db.query(`
+        SELECT sequence FROM events WHERE workspace_id = ? AND type = 'session.joined' AND entity_id = ?
+      `).get(session.workspace_id, session.id);
+      const before = joined ? joined.sequence - 1 : 0;
+      const bySessions = this.db.query(`
+        SELECT COUNT(*) AS count FROM events
+        WHERE workspace_id = ? AND sequence <= ? AND session_id IS NOT NULL AND session_id <> ?
+      `).get(session.workspace_id, before, session.id).count;
+      const namesakes = this.endedNamesakes(session);
+      let count = 0;
+      let earliest = null;
+      let capped = false;
+      if (namesakes.length > 0) {
+        const from = this.db.query(`
+          SELECT MIN(sequence) AS sequence FROM events
+          WHERE workspace_id = ? AND type = 'session.joined' AND entity_id IN (${namesakes.map(() => "?").join(", ")})
+        `).get(session.workspace_id, ...namesakes).sequence ?? 0;
+        const rows = this.db.query(`
+          SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
+            session_id, occurred_at, payload_json, prev_hash, hash
+          FROM events WHERE workspace_id = ? AND sequence > ?
+            AND (session_id IS NULL OR session_id <> ?)
+            AND type IN (${NOTE_ADDRESSING_EVENT_TYPES.map(() => "?").join(", ")})
+          ORDER BY sequence LIMIT ?
+        `).all(session.workspace_id, from, session.id, ...NOTE_ADDRESSING_EVENT_TYPES, NOTE_SCAN_MAX_EVENTS + 1);
+        capped = rows.length > NOTE_SCAN_MAX_EVENTS;
+        const things = new Set;
+        for (const row of rows.slice(0, NOTE_SCAN_MAX_EVENTS)) {
+          const event = eventFromRow(row);
+          if (this.eventAddressesSession(event, session.id))
+            continue;
+          if (this.namesakeAddressed(event, namesakes) === null)
+            continue;
+          const thing = noteThingOf(event);
+          if (thing !== null) {
+            if (things.has(thing))
+              continue;
+            things.add(thing);
+          }
+          count += 1;
+          earliest ??= event.sequence;
+        }
+      }
+      return {
+        joined_sequence: joined?.sequence ?? null,
+        events_before: before,
+        by_other_sessions_before: bySessions,
+        for_name: { count, earliest_sequence: earliest, at_least: capped, sessions: namesakes.length }
+      };
+    }).deferred();
+  }
+  noteBallotsToWatch(credential) {
+    return this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      return this.noteOpenBallots(session).filter((ballot) => ballot.state === "open").filter((ballot) => ballot.viewer?.in_electorate === true || ballot.opener_session_id === session.id || (ballot.viewer?.your_casts ?? 0) > 0).map((ballot) => ({ ballot_id: ballot.ballot_id, closes_at: ballot.terms.closes_at }));
+    }).deferred();
+  }
+  noteBallotState(workspaceId, ballotId) {
+    return this.db.transaction(() => this.readBallotFacts(workspaceId, validateId(ballotId, "ballot_id"))?.state ?? null).deferred();
+  }
+  noteBallotClosedEntry(credential, ballotId) {
+    return this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      const row = this.db.query(`
+        SELECT sequence FROM events WHERE workspace_id = ? AND type = 'ballot.closed' AND entity_id = ?
+        ORDER BY sequence LIMIT 1
+      `).get(session.workspace_id, validateId(ballotId, "ballot_id"));
+      return row ? this.noteEntryAt(session, row.sequence, this.noteBallotFolds(session)) : null;
+    }).deferred();
+  }
+  noteThreadForSession(input) {
+    const id = validateId(input.id, `${input.kind}_id`);
+    const { result: markState, reveal } = this.noteHousekeeping(input, (session, mark) => {
+      const now = this.timestamp();
+      if (input.kind === "task") {
+        const task = this.requireTaskRow(session.workspace_id, id);
+        if (task.completion_report_id)
+          this.recordNoteShown(session, [task.completion_report_id], now);
+      } else {
+        const report = this.requireReport(id);
+        if (report.workspace_id !== session.workspace_id) {
+          throw new CollabError("report_not_found", `Report '${id}' was not found in this workspace`);
+        }
+        this.recordNoteShown(session, [report.id], now);
+      }
+      return { initialised_from: mark.initialised_from, clamped: mark.clamped };
+    });
+    return afterHousekeeping(true, () => this.db.transaction(() => {
+      const session = this.authenticateSession(input);
+      const sessions = this.noteSessionViews(session.workspace_id);
+      const me = sessions.find((view) => view.id === session.id);
+      const challenges = this.noteChallenges(session.workspace_id);
+      if (input.kind === "task") {
+        const task = this.requireTask(session.workspace_id, id);
+        const reviews = this.db.query(`
+          SELECT * FROM task_reviews WHERE workspace_id = ? AND task_id = ?
+          ORDER BY event_sequence
+        `).all(session.workspace_id, id).map(reviewFromRow);
+        const reports = this.db.query(`
+          SELECT * FROM reports WHERE workspace_id = ? AND task_id = ?
+          ORDER BY event_sequence LIMIT ?
+        `).all(session.workspace_id, id, NOTE_THREAD_MAX + 1);
+        return {
+          kind: "task",
+          session: me,
+          sessions,
+          root: null,
+          answers: reports.slice(0, NOTE_THREAD_MAX).map((row) => this.noteEntryAt(session, row.event_sequence)),
+          truncated: reports.length > NOTE_THREAD_MAX,
+          task,
+          reviews,
+          challenges: challenges.filter((challenge) => reports.some((row) => row.id === challenge.target_report_id)),
+          termed: false,
+          proposal: null,
+          decision: null,
+          ballot: null,
+          folded: 0,
+          mark: markState,
+          reveal_pending: reveal.pending,
+          observed_at: this.timestamp()
+        };
+      }
+      const root = this.requireReport(id);
+      const answers = new Map;
+      let frontier = [root.id];
+      let truncated = false;
+      while (frontier.length > 0 && !truncated) {
+        const next = [];
+        for (const target of frontier) {
+          const rows = this.db.query(`
+            SELECT id, event_sequence FROM reports WHERE target_report_id = ? AND workspace_id = ?
+            ORDER BY event_sequence
+          `).all(target, root.workspace_id);
+          for (const row of rows) {
+            if (answers.has(row.id) || row.id === root.id)
+              continue;
+            if (answers.size >= NOTE_THREAD_MAX) {
+              truncated = true;
+              break;
+            }
+            answers.set(row.id, row.event_sequence);
+            next.push(row.id);
+          }
+          if (truncated)
+            break;
+        }
+        frontier = next;
+      }
+      const citing = this.db.query(`
+        SELECT r.id, r.event_sequence FROM reports r, json_each(r.evidence_refs_json) ref
+        WHERE r.workspace_id = ? AND ref.value = ?
+        ORDER BY r.event_sequence
+      `).all(root.workspace_id, `report:${root.id}`);
+      for (const row of citing) {
+        if (answers.has(row.id) || row.id === root.id)
+          continue;
+        if (answers.size >= NOTE_THREAD_MAX) {
+          truncated = true;
+          break;
+        }
+        answers.set(row.id, row.event_sequence);
+      }
+      const ids = new Set([root.id, ...answers.keys()]);
+      const termed = this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(root.id) !== null;
+      const ballotFacts = this.readBallotFacts(root.workspace_id, root.id);
+      const ballot = ballotFacts ? this.ballotData(ballotFacts, session.id) : null;
+      const folds = ballot ? this.noteBallotFolds(session) : new Map;
+      const answerEntries = [...answers.values()].sort((left, right) => left - right).map((sequence) => this.noteEntryAt(session, sequence, folds));
+      return {
+        kind: "report",
+        session: me,
+        sessions,
+        root: this.noteEntryAt(session, root.event_sequence),
+        answers: answerEntries,
+        truncated,
+        task: null,
+        reviews: [],
+        challenges: challenges.filter((challenge) => ids.has(challenge.target_report_id)),
+        termed,
+        proposal: termed ? this.noteProposalData(root.workspace_id, root.id, sessions) : null,
+        decision: !termed && root.kind === "decision" ? this.noteDecisionData(root.workspace_id, root, sessions) : null,
+        ballot,
+        folded: answerEntries.filter((entry) => entry.folded !== null).length,
+        mark: markState,
+        reveal_pending: reveal.pending,
+        observed_at: this.timestamp()
+      };
+    }).deferred());
+  }
+  arrivalBrief(credential) {
+    return this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      const workspace = this.requireWorkspace(session.workspace_id);
+      const sessions = this.noteSessionViews(session.workspace_id);
+      const tasks = this.listTasks(session.workspace_id);
+      const { claimable } = this.projectAvailableTasks(session.workspace_id, tasks, () => false);
+      const now = Date.parse(this.timestamp());
+      const proposals = this.noteProposalStatuses(session.workspace_id, this.noteProposalRows(session.workspace_id).filter((row) => !row.retired && (now < Date.parse(row.closes_at) || row.supported))).filter((status) => ["open", "challenged", "consented"].includes(status.ai.position));
+      const reports = this.db.query(`SELECT COUNT(*) AS count FROM reports WHERE workspace_id = ?`).get(session.workspace_id).count;
+      return {
+        session: sessions.find((view) => view.id === session.id),
+        workspace,
+        sessions,
+        tasks,
+        claimable_task_ids: claimable.map((task) => task.id),
+        proposals,
+        challenges: this.noteChallenges(session.workspace_id).filter((challenge) => challenge.standing).reverse(),
+        report_count: reports,
+        waiting: this.noteWaiting(session),
+        ballots: this.noteOpenBallots(session).filter((ballot) => ballot.state === "open"),
+        observed_at: this.timestamp()
+      };
+    }).deferred();
+  }
+  noteProposalRows(workspaceId) {
+    const rows = this.db.query(`
+      SELECT t.report_id, r.from_session_id, t.closes_at, t.voices_json,
+        EXISTS (SELECT 1 FROM reports x WHERE x.workspace_id = t.workspace_id AND x.target_report_id = t.report_id
+          AND x.relation IN ('withdraws', 'corrects', 'supersedes')) AS retired,
+        EXISTS (SELECT 1 FROM reports x WHERE x.workspace_id = t.workspace_id AND x.target_report_id = t.report_id
+          AND x.relation = 'supports') AS supported,
+        EXISTS (SELECT 1 FROM proposal_person_acts a WHERE a.proposal_report_id = t.report_id) AS acted
+      FROM proposal_terms t JOIN reports r ON r.id = t.report_id
+      WHERE t.workspace_id = ?
+      ORDER BY r.event_sequence DESC
+    `).all(workspaceId);
+    return rows.map((row) => ({
+      report_id: row.report_id,
+      from_session_id: row.from_session_id,
+      closes_at: row.closes_at,
+      voice_ids: JSON.parse(row.voices_json).map((voice) => voice.voice_id),
+      retired: row.retired === 1,
+      supported: row.supported === 1,
+      acted: row.acted === 1
+    }));
+  }
+  noteProposalStatuses(workspaceId, rows) {
+    const context = this.proposalReadContext(workspaceId);
+    const unreadable = [];
+    return rows.map((row) => this.readProposalStatus(context, row.report_id, unreadable)).filter((status) => status !== null);
+  }
+  recordArrivalShown(credential, itemIds) {
+    if (itemIds.length === 0)
+      return;
+    this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      this.recordNoteShown(session, itemIds, this.timestamp());
+    }).immediate();
+    this.tightenFileModes();
+  }
+  noteShownAt(workspaceId, sessionId, itemId) {
+    const row = this.db.query(`
+      SELECT shown_at FROM note_shown WHERE workspace_id = ? AND session_id = ? AND item_id = ?
+    `).get(workspaceId, sessionId, itemId);
+    return row?.shown_at ?? null;
+  }
+  resolveNoteRef(workspaceId, kind, value) {
+    this.requireWorkspace(workspaceId);
+    const text = typeof value === "string" ? value.trim() : "";
+    const handle = /^(report|proposal|ballot|task)#([0-9a-fA-F]{6,32})$/.exec(text);
+    const prefixed = /^(report|proposal|ballot|task):(.+)$/.exec(text);
+    const named = handle?.[1] ?? prefixed?.[1];
+    const compatible = !named || named === kind || kind === "report" && named !== "task" || (kind === "proposal" || kind === "ballot") && named === "report";
+    if (!compatible) {
+      throw new CollabError("ref_kind_mismatch", `${text} names a ${named}, not a ${kind}`, { expected: kind, value: text });
+    }
+    kind = kind === "report" && named ? named : kind;
+    const exists = (id) => this.noteRefCandidates(workspaceId, kind, id, `${id}\x00`).length === 1;
+    if (!handle) {
+      const id = validateId(prefixed?.[2] ?? text, `${kind}_id`);
+      if (!exists(id)) {
+        throw new CollabError(`${kind}_not_found`, `No ${kind} with id ${id} in this workspace`, { value: text });
+      }
+      return { kind, id };
+    }
+    const hex3 = handle[2].toLowerCase();
+    const table = kind === "task" ? "task" : "report";
+    const lower = `${table}_${uuidPrefix(hex3)}`;
+    const upper = `${lower.slice(0, -1)}${String.fromCharCode(lower.charCodeAt(lower.length - 1) + 1)}`;
+    const candidates = this.noteRefCandidates(workspaceId, kind, lower, upper);
+    if (candidates.length === 0) {
+      throw new CollabError(`${kind}_not_found`, `No ${kind} matches ${text} in this workspace`, { value: text });
+    }
+    if (candidates.length > 1) {
+      throw new CollabError("ambiguous_handle", `${text} matches more than one ${kind}; use a longer handle or the full id`, {
+        value: text,
+        candidates: candidates.slice(0, 10),
+        candidates_total: candidates.length
+      });
+    }
+    return { kind, id: candidates[0] };
+  }
+  noteRefCandidates(workspaceId, kind, lower, upper) {
+    const limit = 50;
+    switch (kind) {
+      case "task":
+        return this.db.query(`
+          SELECT id FROM tasks WHERE workspace_id = ? AND id >= ? AND id < ? ORDER BY id LIMIT ?
+        `).all(workspaceId, lower, upper, limit).map((row) => row.id);
+      case "proposal":
+        return this.db.query(`
+          SELECT r.id FROM reports r JOIN proposal_terms t ON t.report_id = r.id
+          WHERE r.workspace_id = ? AND r.id >= ? AND r.id < ? ORDER BY r.id LIMIT ?
+        `).all(workspaceId, lower, upper, limit).map((row) => row.id);
+      case "ballot":
+        return this.db.query(`
+          SELECT r.id FROM reports r
+          WHERE r.workspace_id = ? AND r.id >= ? AND r.id < ?
+            AND EXISTS (SELECT 1 FROM events e WHERE e.workspace_id = r.workspace_id
+              AND e.type = 'ballot.opened' AND e.entity_id = r.id)
+          ORDER BY r.id LIMIT ?
+        `).all(workspaceId, lower, upper, limit).map((row) => row.id);
+      default:
+        return this.db.query(`
+          SELECT id FROM reports WHERE workspace_id = ? AND id >= ? AND id < ? ORDER BY id LIMIT ?
+        `).all(workspaceId, lower, upper, limit).map((row) => row.id);
+    }
+  }
+  resolveNoteSession(workspaceId, value, options = {}) {
+    const text = typeof value === "string" ? value.trim() : "";
+    const sessions = this.noteSessionViews(workspaceId).filter((view) => options.include_ended || view.status === "active");
+    const handle = /^session#([0-9a-fA-F]{6,32})$/.exec(text);
+    const prefix2 = handle ? `session_${uuidPrefix(handle[1].toLowerCase())}` : null;
+    const matches = sessions.filter((view) => prefix2 ? view.id.startsWith(prefix2) : view.id === text || view.actor === text);
+    if (matches.length === 1)
+      return matches[0];
+    if (matches.length === 0) {
+      throw new CollabError("session_not_found", `No ${options.include_ended ? "" : "active "}session matches ${text}`, { value: text });
+    }
+    throw new CollabError("ambiguous_session", `${text} names more than one session; use its id`, {
+      value: text,
+      candidates: matches.slice(0, 10).map((view) => ({ session: view.id, name: view.actor, last_seen_at: view.last_seen_at })),
+      candidates_total: matches.length
+    });
+  }
+  cachedVoice(sessionId, voices) {
+    const cached2 = voices.get(sessionId);
+    if (cached2)
+      return cached2;
+    const voice = this.consentVoice(sessionId);
+    voices.set(sessionId, voice);
+    return voice;
+  }
+  noteMarkRow(workspaceId, sessionId) {
+    const row = this.db.query(`
+      SELECT shown_through_sequence FROM note_marks WHERE workspace_id = ? AND session_id = ?
+    `).get(workspaceId, sessionId);
+    return row?.shown_through_sequence ?? null;
+  }
+  readNoteMarkState(session) {
+    const head = this.requireWorkspace(session.workspace_id).event_head_sequence;
+    const stored = this.noteMarkRow(session.workspace_id, session.id);
+    const sequence = stored ?? session.cursor_sequence;
+    return {
+      sequence: Math.min(sequence, head),
+      initialised_from: stored === null ? "cursor" : null,
+      clamped: sequence > head,
+      stored: stored !== null
+    };
+  }
+  noteHousekeeping(credential, apply) {
+    let reveal = { revealed: [], pending: [] };
+    const result = this.db.transaction(() => {
+      const authenticated = this.authenticateSession(credential);
+      const now = this.timestamp();
+      this.recordSessionLeaseLapses(authenticated, now);
+      this.expireElapsedHandoffs(authenticated.workspace_id, "system:clock");
+      reveal = this.revealBallotsInTransaction(authenticated.workspace_id);
+      this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(now, authenticated.id);
+      const session = this.requireCoordinationSessionRow(authenticated.id);
+      const mark = this.readNoteMarkState(session);
+      if (!mark.stored || mark.clamped) {
+        this.db.query(`
+          INSERT INTO note_marks (workspace_id, session_id, shown_through_sequence, updated_at)
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT (workspace_id, session_id) DO UPDATE SET
+            shown_through_sequence = excluded.shown_through_sequence, updated_at = excluded.updated_at
+        `).run(session.workspace_id, session.id, mark.sequence, now);
+      }
+      return apply(session, mark);
+    }).immediate();
+    this.cleanSeals(reveal.revealed);
+    this.tightenFileModes();
+    return { result, reveal };
+  }
+  recordNoteShown(session, itemIds, now) {
+    for (const itemId of new Set(itemIds)) {
+      if (!itemId)
+        continue;
+      this.db.query(`
+        INSERT INTO note_shown (workspace_id, session_id, item_id, shown_at) VALUES (?, ?, ?, ?)
+        ON CONFLICT (workspace_id, session_id, item_id) DO UPDATE SET shown_at = excluded.shown_at
+      `).run(session.workspace_id, session.id, itemId, now);
+    }
+  }
+  scanNoteEvents(session, after, namesakes = []) {
+    const sizes = this.db.query(`
+      SELECT sequence, length(CAST(payload_json AS BLOB)) AS bytes FROM events
+      WHERE workspace_id = ? AND sequence > ? ORDER BY sequence LIMIT ?
+    `).all(session.workspace_id, after, NOTE_SCAN_MAX_EVENTS + 1);
+    let end = after;
+    let bytes = 0;
+    let taken = 0;
+    for (const size of sizes) {
+      if (taken >= NOTE_SCAN_MAX_EVENTS || taken > 0 && bytes + size.bytes > NOTE_SCAN_MAX_BYTES)
+        break;
+      bytes += size.bytes;
+      taken += 1;
+      end = size.sequence;
+    }
+    const rows = this.db.query(`
+      SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
+        session_id, occurred_at, payload_json, prev_hash, hash
+      FROM events WHERE workspace_id = ? AND sequence > ? AND sequence <= ? ORDER BY sequence
+    `).all(session.workspace_id, after, end);
+    const events = rows.map((row) => {
+      const event = eventFromRow(row);
+      const own = event.session_id === session.id;
+      const forMe = !own && this.eventAddressesSession(event, session.id);
+      return {
+        sequence: event.sequence,
+        type: event.type,
+        own,
+        for_me: forMe,
+        for_name: own || forMe ? null : this.namesakeAddressed(event, namesakes),
+        thing: noteThingOf(event),
+        attached: event.type === "evidence.cited" || event.type === "artifact.attached",
+        shown_item_id: forMe ? noteShownItem(event) : null
+      };
+    });
+    return { events, last_sequence: end, capped: taken < sizes.length };
+  }
+  namesakeAddressed(event, namesakes) {
+    return namesakes.find((id) => event.session_id !== id && this.eventAddressesSession(event, id)) ?? null;
+  }
+  endedNamesakes(session) {
+    return this.db.query(`
+      SELECT id FROM coordination_sessions
+      WHERE workspace_id = ? AND actor = ? AND status = 'ended' AND id <> ?
+      ORDER BY joined_at, id
+    `).all(session.workspace_id, session.actor, session.id).map((row) => row.id);
+  }
+  anchorAt(workspace, sequence) {
+    if (sequence === 0)
+      return { epoch_id: workspace.epoch_id, sequence: 0, hash: GENESIS_HASH };
+    const row = this.db.query(`SELECT epoch_id, hash FROM events WHERE workspace_id = ? AND sequence = ?`).get(workspace.id, sequence);
+    if (!row)
+      throw new CollabError("cursor_mismatch", "The read mark does not resolve to an event in this journal");
+    return { epoch_id: row.epoch_id, sequence, hash: row.hash };
+  }
+  noteEntryAt(session, sequence, folds, forName = null) {
+    const row = this.db.query(`
+      SELECT protocol, workspace_id, epoch_id, sequence, id, type, entity_id, actor,
+        session_id, occurred_at, payload_json, prev_hash, hash
+      FROM events WHERE workspace_id = ? AND sequence = ?
+    `).get(session.workspace_id, sequence);
+    if (!row)
+      throw new CollabError("event_not_found", `No event at sequence ${sequence}`);
+    const event = eventFromRow(row);
+    const payload = event.payload;
+    const forMe = event.session_id !== session.id && this.eventAddressesSession(event, session.id);
+    const namesake = !forMe && forName !== null ? forName : null;
+    let report = null;
+    if (event.type === "report.posted" || event.type.startsWith("proposal.")) {
+      const reportRow = this.db.query(`SELECT * FROM reports WHERE id = ?`).get(event.entity_id);
+      report = reportRow ? reportFromRow(reportRow) : null;
+    }
+    const taskId = event.type.startsWith("task.") ? event.entity_id : event.type.startsWith("handoff.") ? typeof payload.task_id === "string" ? payload.task_id : typeof payload.handoff?.task_id === "string" ? payload.handoff.task_id : null : report?.task_id ?? null;
+    const taskRow = taskId ? this.readTaskRow(session.workspace_id, taskId) : null;
+    const marked = event.type === "report.posted" && payload.note === NOTE_FORMAT;
+    const cites = report ? this.noteAuthorCites(session.workspace_id, report) : [];
+    const own = marked && report ? cites.find((cite) => cite.sequence === report.event_sequence - 1) ?? null : null;
+    const ballotId = event.type.startsWith("ballot.") ? event.entity_id : event.type === "report.posted" && report && this.db.query(`SELECT 1 FROM note_ballots WHERE workspace_id = ? AND ballot_id = ?`).get(session.workspace_id, report.id) !== null ? report.id : null;
+    const ballotFacts = ballotId ? this.readBallotFacts(session.workspace_id, ballotId) : null;
+    const foldedBy = report && event.type === "report.posted" ? folds?.get(report.id) ?? null : null;
+    return {
+      event,
+      for_me: forMe,
+      why_you: forMe ? this.noteWhyYou(event, session.id) : namesake ? this.noteWhyYou(event, namesake) : null,
+      report,
+      marked,
+      cited: own ? { event_id: own.event_id, by_session_id: own.by_session_id, worktree_id: own.worktree_id, items: own.items } : null,
+      author_cites: cites.map(({ sequence: _sequence, ...cite }) => cite),
+      termed: report !== null && this.db.query(`SELECT 1 FROM proposal_terms WHERE report_id = ?`).get(report.id) !== null,
+      to_person: event.type === "report.posted" && payload.to_person === true,
+      task: taskRow ? { id: taskRow.id, title: taskRow.title } : null,
+      ballot: ballotFacts ? this.ballotData(ballotFacts, session.id) : null,
+      folded: foldedBy ? { ballot_id: foldedBy } : null,
+      for_name: namesake ? { session_id: namesake } : null,
+      verdict: report && event.type === "report.posted" ? this.reviewVerdictOf(report) : null
+    };
+  }
+  reviewVerdictOf(report) {
+    if (!report.task_id || report.relation !== "supports" && report.relation !== "challenges")
+      return null;
+    const next = this.db.query(`
+      SELECT type, json_extract(payload_json, '$.review_report_id') AS review_report_id
+      FROM events WHERE workspace_id = ? AND sequence = ?
+    `).get(report.workspace_id, report.event_sequence + 1);
+    if (!next || next.review_report_id !== report.id)
+      return null;
+    if (next.type === "task.accepted")
+      return "accept";
+    if (next.type === "task.changes_requested")
+      return "request_changes";
+    return null;
+  }
+  noteAuthorCites(workspaceId, report) {
+    if (!report.from_session_id)
+      return [];
+    const cites = [];
+    for (const ref of report.evidence_refs) {
+      if (!ref.startsWith("event:"))
+        continue;
+      const row = this.db.query(`
+        SELECT sequence, payload_json FROM events WHERE workspace_id = ? AND id = ? AND type = 'evidence.cited'
+      `).get(workspaceId, ref.slice("event:".length));
+      if (!row)
+        continue;
+      const payload = JSON.parse(row.payload_json);
+      if (payload.by_session_id !== report.from_session_id)
+        continue;
+      cites.push({
+        event_id: ref.slice("event:".length),
+        sequence: row.sequence,
+        by_session_id: report.from_session_id,
+        worktree_id: typeof payload.worktree_id === "string" ? payload.worktree_id : null,
+        items: Array.isArray(payload.items) ? payload.items : []
+      });
+    }
+    return cites;
+  }
+  noteWhyYou(event, sessionId) {
+    const payload = event.payload ?? {};
+    switch (event.type) {
+      case "report.posted":
+        if (payload.to_session_id === sessionId)
+          return "addressed";
+        if (typeof payload.about_proposal_id === "string")
+          return "about_your_proposal";
+        return "reply_to_you";
+      case "handoff.offered":
+        return "handoff_offered";
+      case "handoff.accepted":
+      case "handoff.declined":
+      case "handoff.expired":
+        return "answer_to_your_handoff";
+      case "task.reported_complete":
+        return "review_requested";
+      case "task.accepted":
+      case "task.changes_requested":
+        return "verdict_on_your_work";
+      case "task.recovered":
+        return "your_lease_recovered";
+      case "proposal.opened":
+        return "voice_awaited";
+      case "proposal.agreed":
+      case "proposal.rejected":
+        return "person_act";
+      case "ballot.opened":
+        return "in_electorate";
+      case "ballot.closed":
+        return "ballot_closed";
+      default:
+        return "addressed";
+    }
+  }
+  noteChallenges(workspaceId) {
+    const obsoleted = this.activeObsoletionTargets(workspaceId);
+    const voices = new Map;
+    const challenges = this.db.query(`
+      SELECT id, from_session_id, from_actor, target_report_id, created_at FROM reports
+      WHERE workspace_id = ? AND relation = 'challenges' ORDER BY event_sequence
+    `).all(workspaceId);
+    return challenges.map((challenge) => {
+      const resolves = this.db.query(`
+        SELECT id, from_session_id FROM reports
+        WHERE workspace_id = ? AND target_report_id = ? AND relation = 'resolves'
+      `).all(workspaceId, challenge.id).filter((answer) => !obsoleted.has(answer.id) && answer.from_session_id !== null);
+      const voice = challenge.from_session_id ? this.cachedVoice(challenge.from_session_id, voices) : null;
+      const lifted = voice !== null && resolves.some((answer) => this.cachedVoice(answer.from_session_id, voices) === voice);
+      const withdrawn = obsoleted.has(challenge.id);
+      return {
+        id: challenge.id,
+        target_report_id: challenge.target_report_id,
+        from_session_id: challenge.from_session_id,
+        from_actor: challenge.from_actor,
+        created_at: challenge.created_at,
+        standing: !withdrawn && !lifted,
+        answered_by_another_voice: !lifted && resolves.length > 0
+      };
+    });
+  }
+  noteWaiting(session) {
+    const workspaceId = session.workspace_id;
+    const myVoice = this.consentVoice(session.id);
+    const voices = new Map;
+    const sameVoice = (sessionId) => sessionId !== null && this.cachedVoice(sessionId, voices) === myVoice;
+    const waiting = [];
+    for (const task of this.listTasks(workspaceId)) {
+      if (task.effective_status === "reported_complete" && task.review_requested_session_id === session.id && task.completion_report_id) {
+        waiting.push({
+          what: "review",
+          ref_kind: "task",
+          ref_id: task.id,
+          about_id: task.completion_report_id,
+          by: task.reported_by ?? "unknown",
+          by_session_id: task.reported_by_session_id,
+          due: null,
+          at: task.reported_at ?? task.updated_at,
+          summary: task.title
+        });
+      }
+    }
+    const challenges = this.noteChallenges(workspaceId);
+    const decided = new Set;
+    const decidedOn = new Map;
+    const decidedAt = (id, sequence) => decidedOn.set(id, Math.max(decidedOn.get(id) ?? 0, sequence));
+    for (const row of this.db.query(`
+      SELECT r.from_session_id, r.evidence_refs_json, r.event_sequence, e.payload_json FROM reports r
+      JOIN events e ON e.workspace_id = r.workspace_id AND e.sequence = r.event_sequence
+      WHERE r.workspace_id = ? AND r.kind = 'decision'
+    `).all(workspaceId)) {
+      if (!sameVoice(row.from_session_id))
+        continue;
+      const cited = JSON.parse(row.evidence_refs_json).filter((ref) => ref.startsWith("report:")).map((ref) => ref.slice("report:".length));
+      for (const id of cited)
+        decided.add(id);
+      const payload = JSON.parse(row.payload_json);
+      if (payload.note === NOTE_FORMAT) {
+        if (typeof payload.about_proposal_id === "string")
+          decidedAt(payload.about_proposal_id, row.event_sequence);
+      } else {
+        for (const id of cited)
+          decidedAt(id, row.event_sequence);
+      }
+    }
+    const now = Date.parse(this.timestamp());
+    const statuses = this.noteProposalStatuses(workspaceId, this.noteProposalRows(workspaceId).filter((row) => !row.retired && now < Date.parse(row.closes_at) && row.voice_ids.includes(myVoice) || row.acted && (sameVoice(row.from_session_id) || decided.has(row.report_id))));
+    for (const status of statuses) {
+      if (status.ai.closed || !["open", "challenged"].includes(status.ai.position))
+        continue;
+      if (!status.ai.awaiting_voice_ids.includes(myVoice))
+        continue;
+      if (challenges.some((challenge) => challenge.standing && challenge.target_report_id === status.proposal.id && sameVoice(challenge.from_session_id)))
+        continue;
+      waiting.push({
+        what: "voice",
+        ref_kind: "proposal",
+        ref_id: status.proposal.id,
+        about_id: null,
+        by: status.proposal.from_actor,
+        by_session_id: status.proposal.from_session_id,
+        due: status.terms.closes_at,
+        at: status.proposal.created_at,
+        summary: firstLine(status.proposal.body)
+      });
+    }
+    for (const ballot of this.noteOpenBallots(session)) {
+      if (!ballot.viewer?.may_vote || ballot.viewer.unit_has_cast)
+        continue;
+      waiting.push({
+        what: "vote",
+        ref_kind: "ballot",
+        ref_id: ballot.ballot_id,
+        about_id: null,
+        by: ballot.opener_name,
+        by_session_id: ballot.opener_session_id,
+        due: ballot.terms.closes_at,
+        at: ballot.opened_at,
+        summary: firstLine(ballot.terms.question)
+      });
+    }
+    const obsoleted = this.activeObsoletionTargets(workspaceId);
+    const authorOf = new Map(this.db.query(`
+      SELECT id, from_session_id FROM reports WHERE workspace_id = ? AND id IN (
+        SELECT target_report_id FROM reports WHERE workspace_id = ? AND relation = 'challenges'
+      )
+    `).all(workspaceId, workspaceId).map((row) => [row.id, row.from_session_id]));
+    for (const challenge of challenges) {
+      if (!challenge.standing)
+        continue;
+      if (authorOf.get(challenge.target_report_id) === session.id && challenge.from_session_id !== session.id) {
+        waiting.push({
+          what: "challenge",
+          ref_kind: "report",
+          ref_id: challenge.id,
+          about_id: challenge.target_report_id,
+          by: challenge.from_actor,
+          by_session_id: challenge.from_session_id,
+          due: null,
+          at: challenge.created_at,
+          summary: challenge.answered_by_another_voice ? "A standing challenge on your report; another voice answered it, which does not lift it." : "A standing challenge on your report."
+        });
+      }
+      if (challenge.from_session_id === session.id) {
+        const answers = this.db.query(`
+          SELECT DISTINCT r.id, r.from_actor, r.from_session_id, r.created_at, r.event_sequence FROM reports r
+          LEFT JOIN json_each(r.evidence_refs_json) ref
+          WHERE r.workspace_id = ? AND r.from_session_id IS NOT NULL AND r.from_session_id <> ?
+            AND ((r.target_report_id = ? AND r.relation <> 'supports') OR ref.value = ?)
+          ORDER BY r.event_sequence
+        `).all(workspaceId, session.id, challenge.id, `report:${challenge.id}`);
+        for (const answer of answers) {
+          if (obsoleted.has(answer.id) || sameVoice(answer.from_session_id))
+            continue;
+          waiting.push({
+            what: "answer",
+            ref_kind: "report",
+            ref_id: answer.id,
+            about_id: challenge.id,
+            by: answer.from_actor,
+            by_session_id: answer.from_session_id,
+            due: null,
+            at: answer.created_at,
+            summary: "An answer to your standing challenge; only you can lift it."
+          });
+        }
+      }
+    }
+    for (const status of statuses) {
+      const mine = sameVoice(status.proposal.from_session_id);
+      if (!mine && !decided.has(status.proposal.id))
+        continue;
+      const latest = status.person.acts.at(-1);
+      if (!latest)
+        continue;
+      const retired = status.ai.position === "withdrawn" || status.ai.position === "superseded";
+      const agreedBefore = status.person.acts.slice(0, -1).some((act) => act.act === "agree");
+      let what = null;
+      if (latest.act === "reject" && agreedBefore)
+        what = "stop";
+      else if (latest.act === "reject" && mine && !retired)
+        what = "rejected";
+      else if (latest.act === "agree" && mine && status.may_proceed && (decidedOn.get(status.proposal.id) ?? 0) < latest.event_sequence) {
+        what = "record_decision";
+      }
+      if (!what)
+        continue;
+      waiting.push({
+        what,
+        ref_kind: "proposal",
+        ref_id: status.proposal.id,
+        about_id: latest.id,
+        by: latest.basis,
+        by_session_id: latest.relayed_by_session_id,
+        due: what === "stop" ? "now" : null,
+        at: latest.created_at,
+        summary: firstLine(status.proposal.body)
+      });
+    }
+    return [...waiting.filter((entry) => entry.what === "stop"), ...waiting.filter((entry) => entry.what !== "stop")];
+  }
+  journalRealpath() {
+    if (!this.filesystemPath)
+      return null;
+    try {
+      return realpathSync2(this.filesystemPath);
+    } catch {
+      return this.filesystemPath;
+    }
+  }
+  ballotSealPath(ballotId, castId) {
+    return sealPath(this.requireSealJournal(), ballotId, castId);
+  }
+  requireSealJournal() {
+    const realpath = this.journalRealpath();
+    if (!realpath) {
+      throw new CollabError("ballots_need_a_file_journal", "A sealed ballot keeps its seals beside the journal file; this store has none", {
+        remedy: { say: "Open collab on a journal file, not an in-memory store, to poll." }
+      });
+    }
+    return realpath;
+  }
+  openBallotForSession(input) {
+    this.requireSealJournal();
+    const { render, receipt_plan: plan, ...rest } = input;
+    const poll = definedPollInput(rest.poll);
+    return this.mutateAsSession(rest, rest.idempotency_key, "notes.poll.v1", { poll }, (session) => {
+      const now = this.timestamp();
+      const views = this.noteSessionViews(session.workspace_id);
+      const voters = normalizeBallotVoters(poll.voters);
+      const marked = new Set(this.db.query(`SELECT session_id FROM note_marks WHERE workspace_id = ?`).all(session.workspace_id).map((row) => row.session_id));
+      let chosen;
+      if (voters) {
+        chosen = [];
+        for (const voter of voters) {
+          let view;
+          try {
+            view = this.resolveNoteSession(session.workspace_id, voter);
+          } catch (error51) {
+            if (!(error51 instanceof CollabError))
+              throw error51;
+            throw new CollabError(error51.code, `voters: ${error51.message}`, {
+              ...error51.details,
+              field: "voters",
+              remedy: { say: "Name each voter by an active session's id, session# handle or name; collab_arrive lists who is here." }
+            });
+          }
+          if (!chosen.some((other) => other.id === view.id))
+            chosen.push(view);
+        }
+      } else {
+        const recent = Date.parse(now) - BALLOT_RECENT_MS;
+        chosen = views.filter((view) => view.status === "active" && (view.id === session.id || Date.parse(view.last_seen_at) >= recent && marked.has(view.id)));
+      }
+      const sessions = chosen.map((view) => ({
+        session_id: view.id,
+        voice_id: view.voice_id,
+        seat_ref: view.seat_ref,
+        name: view.actor,
+        model: view.model,
+        last_seen_at: view.last_seen_at
+      }));
+      const electorate = buildElectorate(sessions);
+      const { terms, advice } = validatePollTerms(poll, { now, units: electorate.units, sessions });
+      const listedVoices = new Set(electorate.units.flatMap((unit) => unit.voice_ids));
+      const leftOutAll = views.filter((view) => view.status === "active" && view.liveness === "live" && !listedVoices.has(view.voice_id)).map((view) => ({
+        session_id: view.id,
+        name: view.actor,
+        last_seen_minutes: Math.max(0, Math.floor((Date.parse(now) - Date.parse(view.last_seen_at)) / 60000))
+      }));
+      const leftOut = leftOutAll.slice(0, BALLOT_LEFT_OUT_MAX);
+      const body = render(terms);
+      const normalized = {
+        task_id: null,
+        to_session_id: null,
+        kind: "observation",
+        body,
+        evidence_refs: [],
+        confidence: "unknown",
+        confidence_basis: null,
+        limits: null,
+        relation: "informs",
+        target_report_id: null,
+        authority_scope: null,
+        authority_basis: null
+      };
+      this.validateReportInput(session, normalized);
+      const report = this.appendReportInternal(session, { ...normalized, note: NOTE_FORMAT });
+      const payload = {
+        ballot_id: report.id,
+        question: terms.question,
+        options: terms.options,
+        ...terms.criteria !== undefined ? { criteria: terms.criteria } : {},
+        method: terms.method,
+        ...terms.pick !== undefined ? { pick: terms.pick } : {},
+        quorum: terms.quorum,
+        closes_at: terms.closes_at,
+        close_when_all_cast: terms.close_when_all_cast,
+        electorate: electorate.units,
+        electorate_sha256: electorate.electorate_sha256,
+        left_out: leftOut,
+        ...leftOutAll.length > leftOut.length ? { left_out_total: leftOutAll.length } : {},
+        chosen_by: voters ? "opener" : "default",
+        opener_session_id: session.id
+      };
+      assertNotePayload(payload);
+      const event = this.appendEvent(session.workspace_id, "ballot.opened", report.id, session.actor, payload, session.id);
+      this.db.query(`
+        INSERT OR REPLACE INTO note_ballots (workspace_id, ballot_id, closes_at, state) VALUES (?, ?, ?, 'open')
+      `).run(session.workspace_id, report.id, terms.closes_at);
+      return {
+        ballot_id: report.id,
+        report,
+        event_id: event.id,
+        sequence: event.sequence,
+        terms,
+        electorate: electorate.units,
+        electorate_sha256: electorate.electorate_sha256,
+        left_out: leftOut,
+        left_out_total: leftOutAll.length,
+        chosen_by: voters ? "opener" : "default",
+        advice
+      };
+    }, plan ? { receipt_plan: plan } : {});
+  }
+  castBallotForSession(input) {
+    const ballotId = validateId(input.ballot_id, "ballot_id");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(input.cast_id)) {
+      throw new CollabError("invalid_cast_id", "A cast id is a random uuid");
+    }
+    if (!/^[0-9a-f]{64}$/.test(input.commitment))
+      throw new CollabError("invalid_commitment", "A commitment is a sha256 in hex");
+    const request = { ballot_id: ballotId, cast_id: input.cast_id, unit_id: input.unit_id, commitment: input.commitment };
+    return this.mutateAsSession(input, `b1:${input.cast_id}`, "notes.vote.v1", request, (session) => {
+      const facts = this.readBallotFacts(session.workspace_id, ballotId);
+      if (!facts)
+        throw new CollabError("ballot_not_found", `No ballot with id ${ballotId} in this workspace`);
+      if (facts.state === "revealed" || facts.state === "closed") {
+        throw new CollabError("ballot_closed", `The ballot closed at ${facts.closed_by === "all_cast" ? "its last unit's cast" : facts.terms.closes_at}; no cast is taken after the close`, {
+          closes_at: facts.terms.closes_at,
+          closed_by: facts.closed_by
+        });
+      }
+      if (facts.state === "withdrawn") {
+        throw new CollabError("ballot_withdrawn", "The opener withdrew this ballot; no cast is taken after a withdrawal", {
+          withdrawn_by_report: facts.withdrawn.report_id
+        });
+      }
+      const voice = this.consentVoice(session.id);
+      const caster = classifyCaster(facts.units, { voice_id: voice, seat_ref: this.sessionSeatRef(session.id) });
+      if (caster.unit_id !== input.unit_id) {
+        throw new CollabError("ballot_unit_changed", "The unit this cast was sealed for is not this session's unit in this ballot");
+      }
+      const mine = facts.casts.filter((cast) => cast.session_id === session.id);
+      if (input.after_cast_id !== undefined && (mine.at(-1)?.cast_id ?? null) !== input.after_cast_id) {
+        throw new CollabError("changed_under_you", "This session cast in this ballot after the call read it, so this cast was not recorded");
+      }
+      const castSeq = nextCastSeq(mine.length);
+      const voices = new Map;
+      const unitMateCast = facts.casts.some((cast) => cast.unit_id === caster.unit_id && this.cachedVoice(cast.session_id, voices) !== voice);
+      const payload = {
+        ballot_id: ballotId,
+        cast_id: input.cast_id,
+        unit_id: caster.unit_id,
+        session_id: session.id,
+        commitment: input.commitment,
+        cast_seq: castSeq
+      };
+      assertNotePayload(payload);
+      const event = this.appendEvent(session.workspace_id, "ballot.cast", ballotId, session.actor, payload, session.id);
+      const castUnits = new Set([...facts.cast_unit_ids, ...caster.counts_as === "counted" ? [caster.unit_id] : []]);
+      return {
+        ballot_id: ballotId,
+        cast_id: input.cast_id,
+        cast_seq: castSeq,
+        commitment: input.commitment,
+        unit_id: caster.unit_id,
+        counts_as: caster.counts_as,
+        ...caster.counts_as === "late" && caster.same_handle_as ? { same_handle_as: caster.same_handle_as } : {},
+        closes_at: facts.terms.closes_at,
+        event_id: event.id,
+        sequence: event.sequence,
+        cast_at: event.occurred_at,
+        unit_mate_cast: unitMateCast,
+        closes_now: facts.terms.close_when_all_cast && facts.units.every((unit) => castUnits.has(unit.unit_id))
+      };
+    });
+  }
+  revealDueBallots(workspaceId) {
+    try {
+      if (!this.hasDueBallot(workspaceId))
+        return { revealed: [], pending: [] };
+      const outcome = this.db.transaction(() => this.revealBallotsInTransaction(workspaceId)).immediate();
+      this.cleanSeals(outcome.revealed);
+      this.tightenFileModes();
+      return outcome;
+    } catch (error51) {
+      return { revealed: [], pending: [{ ballot_id: null, code: error51 instanceof CollabError ? error51.code : "reveal_failed" }] };
+    }
+  }
+  noteBallotView(workspaceId, ballotId, viewerSessionId) {
+    return this.db.transaction(() => {
+      const facts = this.readBallotFacts(workspaceId, validateId(ballotId, "ballot_id"));
+      if (!facts)
+        throw new CollabError("ballot_not_found", `No ballot with id ${ballotId} in this workspace`);
+      return this.ballotData(facts, viewerSessionId ?? null);
+    }).deferred();
+  }
+  ballotResult(workspaceId, ballotId) {
+    return this.noteBallotView(workspaceId, ballotId).result;
+  }
+  ballotUnitOf(workspaceId, ballotId, sessionId) {
+    return this.noteBallotView(workspaceId, ballotId, validateId(sessionId, "session_id")).viewer;
+  }
+  latestBallotCastForSession(workspaceId, ballotId, sessionId) {
+    const facts = this.readBallotFacts(workspaceId, validateId(ballotId, "ballot_id"));
+    if (!facts)
+      return null;
+    return facts.casts.filter((cast) => cast.session_id === sessionId).at(-1) ?? null;
+  }
+  hasDueBallot(workspaceId) {
+    const open = this.db.query(`SELECT ballot_id FROM note_ballots WHERE workspace_id = ? AND state = 'open'`).all(workspaceId);
+    return open.some((row) => {
+      try {
+        const facts = this.readBallotFacts(workspaceId, row.ballot_id);
+        return facts === null || facts.state === "closed" || facts.state === "revealed";
+      } catch {
+        return true;
+      }
+    });
+  }
+  revealBallotsInTransaction(workspaceId) {
+    const outcome = { revealed: [], pending: [] };
+    let open;
+    try {
+      open = this.db.query(`SELECT ballot_id FROM note_ballots WHERE workspace_id = ? AND state = 'open' ORDER BY closes_at, ballot_id`).all(workspaceId);
+    } catch (error51) {
+      outcome.pending.push({ ballot_id: null, code: error51 instanceof CollabError ? error51.code : "reveal_failed" });
+      return outcome;
+    }
+    for (const { ballot_id: ballotId } of open) {
+      try {
+        this.db.transaction(() => {
+          const facts = this.readBallotFacts(workspaceId, ballotId);
+          if (!facts || facts.state === "revealed") {
+            this.db.query(`UPDATE note_ballots SET state = 'closed' WHERE workspace_id = ? AND ballot_id = ?`).run(workspaceId, ballotId);
+            return;
+          }
+          if (facts.state !== "closed")
+            return;
+          this.revealBallot(facts);
+          outcome.revealed.push(ballotId);
+        })();
+      } catch (error51) {
+        outcome.pending.push({ ballot_id: ballotId, code: error51 instanceof CollabError ? error51.code : "reveal_failed" });
+      }
+    }
+    return outcome;
+  }
+  revealBallot(facts) {
+    const realpath = this.journalRealpath();
+    const casts = facts.casts.map((cast) => {
+      let seal = { state: "seal_missing" };
+      if (realpath) {
+        const read = readSealFile(sealPath(realpath, facts.ballot_id, cast.cast_id));
+        seal = read.state === "missing" ? { state: "seal_missing" } : read.state === "unreadable" ? { state: "seal_unreadable" } : openSeal(read.value, cast, { workspace_id: facts.workspace_id, ballot_id: facts.ballot_id, journal_realpath: realpath });
+      }
+      return {
+        cast_id: cast.cast_id,
+        unit_id: cast.unit_id,
+        session_id: cast.session_id,
+        commitment: cast.commitment,
+        cast_seq: cast.cast_seq,
+        voice_id: this.consentVoice(cast.session_id),
+        seal
+      };
+    });
+    const entries = resolveCasts(facts.units, casts, { ballot_id: facts.ballot_id });
+    this.revealFailpoint?.("revealing", facts.ballot_id);
+    for (const entry of entries) {
+      const payload = entry;
+      assertNotePayload(payload);
+      this.appendEvent(facts.workspace_id, "ballot.revealed", facts.ballot_id, "system:clock", payload, null);
+    }
+    const closed = {
+      ballot_id: facts.ballot_id,
+      entry_count: entries.length,
+      entries_sha256: revealedEntriesSha256(entries),
+      closed_at: this.timestamp()
+    };
+    this.appendEvent(facts.workspace_id, "ballot.closed", facts.ballot_id, "system:clock", closed, null);
+    this.db.query(`UPDATE note_ballots SET state = 'closed' WHERE workspace_id = ? AND ballot_id = ?`).run(facts.workspace_id, facts.ballot_id);
+    this.revealFailpoint?.("appended", facts.ballot_id);
+  }
+  cleanSeals(ballotIds) {
+    const realpath = this.journalRealpath();
+    if (!realpath)
+      return;
+    for (const ballotId of ballotIds) {
+      try {
+        const paths = [
+          ...listSealFiles(realpath, ballotId).map((castId) => sealPath(realpath, ballotId, castId)),
+          ...listSealTemporaries(realpath, ballotId)
+        ];
+        for (const path of paths) {
+          const read = readSealFile(path);
+          const owner = read.state === "read" && read.value !== null && typeof read.value === "object" ? read.value.journal_realpath : undefined;
+          if (read.state !== "read" || owner === realpath || typeof owner !== "string")
+            removeSealFile(path);
+        }
+        removeEmptySealDirectory(realpath, ballotId);
+      } catch {}
+    }
+  }
+  sweepRevealedSeals() {
+    try {
+      const realpath = this.journalRealpath();
+      if (!realpath)
+        return;
+      const revealed = listSealBallots(realpath).filter((ballotId) => this.db.query(`
+        SELECT 1 FROM note_ballots b WHERE b.ballot_id = ? AND b.state = 'closed' AND EXISTS (
+          SELECT 1 FROM events e WHERE e.workspace_id = b.workspace_id AND e.type = 'ballot.closed' AND e.entity_id = b.ballot_id
+        ) LIMIT 1
+      `).get(ballotId) !== null);
+      this.cleanSeals(revealed);
+    } catch {}
+  }
+  readBallotFacts(workspaceId, ballotId) {
+    const rows = this.db.query(`
+      SELECT id, sequence, type, session_id, occurred_at, payload_json FROM events
+      WHERE workspace_id = ? AND entity_id = ?
+        AND type IN ('ballot.opened', 'ballot.cast', 'ballot.revealed', 'ballot.closed')
+      ORDER BY sequence
+    `).all(workspaceId, ballotId);
+    const openedRow = rows.find((row) => row.type === "ballot.opened");
+    if (!openedRow)
+      return null;
+    const opened = JSON.parse(openedRow.payload_json);
+    const terms = {
+      question: opened.question,
+      options: opened.options,
+      method: opened.method,
+      quorum: opened.quorum,
+      closes_at: opened.closes_at,
+      close_when_all_cast: opened.close_when_all_cast === true
+    };
+    if (typeof opened.criteria === "string")
+      terms.criteria = opened.criteria;
+    if (Number.isInteger(opened.pick))
+      terms.pick = opened.pick;
+    const units = Array.isArray(opened.electorate) ? opened.electorate : [];
+    const unitIds = new Set(units.map((unit) => unit.unit_id));
+    const casts = [];
+    const castUnits = new Set;
+    let allCastSequence = null;
+    let allCastAt = null;
+    const revealed = [];
+    let closed = null;
+    for (const row of rows) {
+      const payload = JSON.parse(row.payload_json);
+      if (row.type === "ballot.cast") {
+        casts.push({
+          cast_id: payload.cast_id,
+          unit_id: payload.unit_id,
+          session_id: payload.session_id,
+          commitment: payload.commitment,
+          cast_seq: payload.cast_seq,
+          event_id: row.id,
+          sequence: row.sequence,
+          at: row.occurred_at
+        });
+        if (unitIds.has(payload.unit_id))
+          castUnits.add(payload.unit_id);
+        if (allCastSequence === null && units.length > 0 && units.every((unit) => castUnits.has(unit.unit_id))) {
+          allCastSequence = row.sequence;
+          allCastAt = row.occurred_at;
+        }
+      } else if (row.type === "ballot.revealed") {
+        revealed.push(payload);
+      } else if (row.type === "ballot.closed" && closed === null) {
+        closed = {
+          event_id: row.id,
+          sequence: row.sequence,
+          at: row.occurred_at,
+          entry_count: payload.entry_count,
+          entries_sha256: payload.entries_sha256
+        };
+      }
+    }
+    const withdrawal = this.db.query(`
+      SELECT id, event_sequence, created_at FROM reports
+      WHERE workspace_id = ? AND target_report_id = ? AND relation = 'withdraws' AND from_session_id = ?
+      ORDER BY event_sequence
+    `).all(workspaceId, ballotId, opened.opener_session_id).find((row) => Date.parse(row.created_at) < Date.parse(terms.closes_at) && (!terms.close_when_all_cast || allCastSequence === null || row.event_sequence < allCastSequence) && (closed === null || row.event_sequence < closed.sequence)) ?? null;
+    const withdrawn = withdrawal ? { report_id: withdrawal.id, sequence: withdrawal.event_sequence, at: withdrawal.created_at } : null;
+    const now = this.timestamp();
+    const closedAllCast = terms.close_when_all_cast && !withdrawn && allCastAt !== null && Date.parse(allCastAt) < Date.parse(terms.closes_at);
+    const closedBy = closedAllCast ? "all_cast" : Date.parse(now) >= Date.parse(terms.closes_at) ? "time" : null;
+    const state = closed !== null ? "revealed" : closedBy !== null ? "closed" : withdrawn ? "withdrawn" : "open";
+    const leftOut = Array.isArray(opened.left_out) ? opened.left_out : [];
+    return {
+      ballot_id: ballotId,
+      workspace_id: workspaceId,
+      opener_session_id: opened.opener_session_id,
+      opened_at: openedRow.occurred_at,
+      opened_sequence: openedRow.sequence,
+      terms,
+      units,
+      electorate_sha256: opened.electorate_sha256,
+      chosen_by: opened.chosen_by,
+      left_out: leftOut,
+      left_out_total: Number.isInteger(opened.left_out_total) ? opened.left_out_total : leftOut.length,
+      casts,
+      cast_unit_ids: [...castUnits].sort(),
+      all_cast_sequence: allCastSequence,
+      withdrawn,
+      closed_by: closedBy,
+      state,
+      revealed: closed !== null ? revealed : null,
+      closed,
+      observed_at: now
+    };
+  }
+  ballotData(facts, viewerSessionId) {
+    const sessions = this.noteSessionViews(facts.workspace_id);
+    const byId = new Map(sessions.map((view) => [view.id, view]));
+    let viewer = null;
+    if (viewerSessionId) {
+      const voice = this.consentVoice(viewerSessionId);
+      const caster = classifyCaster(facts.units, { voice_id: voice, seat_ref: byId.get(viewerSessionId)?.seat_ref ?? null });
+      const yours = facts.casts.filter((cast) => cast.session_id === viewerSessionId).length;
+      const listed = caster.counts_as === "counted";
+      viewer = {
+        session_id: viewerSessionId,
+        unit_id: caster.unit_id,
+        counts_as: caster.counts_as,
+        ...caster.counts_as === "late" && caster.same_handle_as ? { same_handle_as: caster.same_handle_as } : {},
+        in_electorate: listed,
+        unit_has_cast: listed ? facts.cast_unit_ids.includes(caster.unit_id) : yours > 0,
+        your_casts: yours,
+        may_vote: facts.state === "open" && listed && yours < BALLOT_MAX_CASTS
+      };
+    }
+    let result = null;
+    if (facts.revealed) {
+      const delivered = this.db.query(`SELECT session_id FROM note_shown WHERE workspace_id = ? AND item_id = ?`).all(facts.workspace_id, facts.ballot_id).map((row) => row.session_id);
+      result = ballotResult({
+        terms: facts.terms,
+        units: facts.units,
+        entries: facts.revealed,
+        withdrawn: facts.withdrawn !== null,
+        sessions: Object.fromEntries(sessions.map((view) => [view.id, { name: view.actor, seat_ref: view.seat_ref, model: view.model }])),
+        delivered_session_ids: delivered,
+        left_out: facts.left_out
+      });
+    }
+    return {
+      ...facts,
+      opener_name: byId.get(facts.opener_session_id)?.actor ?? facts.opener_session_id,
+      turnout: { cast: facts.cast_unit_ids.length, electorate: facts.units.length },
+      viewer,
+      unit_basis: unitBasis(facts.units),
+      sealing: BALLOT_SEALING,
+      result
+    };
+  }
+  noteOpenBallots(session) {
+    const rows = this.db.query(`
+      SELECT ballot_id FROM note_ballots WHERE workspace_id = ? AND state = 'open' ORDER BY closes_at, ballot_id
+    `).all(session.workspace_id);
+    const out = [];
+    for (const row of rows) {
+      const facts = this.readBallotFacts(session.workspace_id, row.ballot_id);
+      if (facts && facts.state !== "revealed")
+        out.push(this.ballotData(facts, session.id));
+    }
+    return out;
+  }
+  noteBallotFolds(session) {
+    const folds = new Map;
+    for (const ballot of this.noteOpenBallots(session)) {
+      if (ballot.state !== "open" || !ballot.viewer?.in_electorate || ballot.viewer.unit_has_cast)
+        continue;
+      for (const id of this.ballotThreadIds(session.workspace_id, ballot.ballot_id)) {
+        if (folds.has(id))
+          continue;
+        const author = this.db.query(`SELECT from_session_id FROM reports WHERE id = ?`).get(id);
+        if (author?.from_session_id !== session.id)
+          folds.set(id, ballot.ballot_id);
+      }
+    }
+    return folds;
+  }
+  ballotThreadIds(workspaceId, ballotId) {
+    const seen = new Set;
+    let frontier = [ballotId];
+    while (frontier.length > 0 && seen.size < NOTE_THREAD_MAX) {
+      const next = [];
+      for (const target of frontier) {
+        const rows = this.db.query(`
+          SELECT id FROM reports WHERE workspace_id = ? AND target_report_id = ?
+          UNION
+          SELECT r.id FROM reports r, json_each(r.evidence_refs_json) ref WHERE r.workspace_id = ? AND ref.value = ?
+        `).all(workspaceId, target, workspaceId, `report:${target}`);
+        for (const row of rows) {
+          if (seen.has(row.id) || row.id === ballotId)
+            continue;
+          seen.add(row.id);
+          next.push(row.id);
+        }
+      }
+      frontier = next;
+    }
+    return [...seen];
+  }
+  noteNow() {
+    return this.timestamp();
+  }
+  noteProposalPrecheck(credential, input) {
+    this.db.transaction(() => {
+      const session = this.authenticateSession(credential);
+      for (const reference of normalizeEvidenceRefs(input.evidence_refs)) {
+        this.requireEvidenceRef(session.workspace_id, reference);
+      }
+      if (input.task_id)
+        this.requireTaskRow(session.workspace_id, input.task_id);
+      if (!input.supersedes_report_id)
+        return;
+      const replaced = this.requireReport(validateId(input.supersedes_report_id, "supersedes_report_id"));
+      if (replaced.workspace_id !== session.workspace_id) {
+        throw new CollabError("report_target_mismatch", "Target report is in another workspace");
+      }
+      if (replaced.task_id !== input.task_id) {
+        throw new CollabError("report_task_mismatch", "Related reports must use the same task scope as their target", {
+          target_task_id: replaced.task_id,
+          report_task_id: input.task_id
+        });
+      }
+      if (replaced.from_session_id !== session.id) {
+        throw new CollabError("report_author_mismatch", "Only the original author session may correct, withdraw, or supersede its report; other sessions should challenge it");
+      }
+      this.requireOpenToRevision(session.workspace_id, replaced.id);
+    }).deferred();
+  }
+  appendDecisionForSession(input) {
+    if (!NOTE_DECISION_OUTCOMES.includes(input.outcome)) {
+      throw new CollabError("invalid_outcome", `outcome is ${NOTE_DECISION_OUTCOMES.join(", ")}`);
+    }
+    const proposalId = input.proposal_report_id ? validateId(input.proposal_report_id, "proposal_report_id") : null;
+    if (proposalId && input.extent) {
+      throw new CollabError("extent_from_proposal", "A decision on a proposal covers the proposal's own extent");
+    }
+    const cite = input.cite && input.cite.items.length > 0 ? normalizeNoteCite(input.cite) : null;
+    const normalized = {
+      outcome: input.outcome,
+      proposal_report_id: proposalId,
+      extent: optionalText(input.extent ?? undefined, "extent", 1000),
+      body: cleanText(input.body, "body", MAX_REPORT_BODY),
+      task_id: input.task_id ? validateId(input.task_id, "task_id") : null,
+      to_session_id: input.to_session_id ? validateId(input.to_session_id, "to_session_id") : null,
+      to_person: input.to_person === true,
+      evidence_refs: normalizeEvidenceRefs(input.evidence_refs ?? []),
+      cite
+    };
+    return this.mutateAsSession(input, input.idempotency_key, "notes.decide.v1", normalized, (session) => {
+      const derived = this.decisionAuthority(session.workspace_id, normalized.proposal_report_id, normalized.outcome, normalized.extent);
+      const { scope, basis, proposal, person_act: personAct } = derived;
+      const refs = [...normalized.evidence_refs, ...derived.refs];
+      const cited = normalized.cite ? this.appendNoteCite(session, normalized.cite) : null;
+      if (cited)
+        refs.push(`event:${cited.event_id}`);
+      const report = {
+        task_id: normalized.task_id,
+        to_session_id: normalized.to_session_id,
+        kind: "decision",
+        body: normalized.body,
+        evidence_refs: normalizeEvidenceRefs(refs),
+        confidence: "unknown",
+        confidence_basis: null,
+        limits: null,
+        relation: "informs",
+        target_report_id: null,
+        authority_scope: scope,
+        authority_basis: basis,
+        ...normalized.to_person ? { to_person: true } : {}
+      };
+      this.validateReportInput(session, report);
+      const posted = this.appendReportInternal(session, {
+        ...report,
+        ...proposal ? { about_proposal_id: proposal.id } : {},
+        note: NOTE_FORMAT
+      });
+      return {
+        report: posted,
+        cite: cited,
+        outcome: normalized.outcome,
+        proposal,
+        person_act: personAct,
+        authority_scope: scope,
+        authority_basis: basis
+      };
+    }, input.receipt_plan ? { receipt_plan: input.receipt_plan } : {});
+  }
+  noteDecisionPrecheck(workspaceId, proposalId, outcome) {
+    this.db.transaction(() => {
+      this.decisionAuthority(workspaceId, proposalId, outcome, null);
+    }).deferred();
+  }
+  decisionAuthority(workspaceId, proposalId, outcome, extent) {
+    if (!proposalId) {
+      return {
+        scope: outcome === "proceed" ? extent ?? NOTE_DEFAULT_DECISION_EXTENT : NOTE_NOTHING_AUTHORISED,
+        basis: `${outcome === "proceed" ? "" : `${outcome}: `}${NOTE_SELF_DECISION_BASIS}`,
+        proposal: null,
+        person_act: null,
+        refs: []
+      };
+    }
+    this.requireProposalTerms(workspaceId, proposalId);
+    const status = this.proposalStatusInternal(workspaceId, proposalId);
+    const acts = status.person.acts;
+    const latest = acts.at(-1) ?? null;
+    const retired = status.ai.position === "withdrawn" || status.ai.position === "superseded";
+    const actView = (act) => ({
+      id: act.id,
+      event_id: this.eventIdAt(workspaceId, act.event_sequence),
+      act: act.act,
+      basis: act.basis,
+      at: act.created_at,
+      reason: act.reason
+    });
+    let scope;
+    let basis;
+    let personAct;
+    if (outcome === "proceed") {
+      if (retired) {
+        throw new CollabError("proposal_retired", `This proposal was ${status.ai.position} by ${status.ai.obsoleted_by_report_id}, so nothing can proceed on it`, { position: status.ai.position, obsoleted_by_report_id: status.ai.obsoleted_by_report_id });
+      }
+      if (!status.may_proceed || !status.agreement) {
+        const agreedBefore = [...acts].reverse().find((act) => act.act === "agree") ?? null;
+        if (latest?.act === "reject" && agreedBefore) {
+          throw new CollabError("agreement_withdrawn", `The person agreed (act ${agreedBefore.id}), but a later act rejects these bytes: act ${latest.id}, ` + `${latest.basis === "relayed_by_session" ? "relayed by a session" : `by ${latest.basis}`}`, { agreed_act: actView(agreedBefore), later_act: actView(latest) });
+        }
+        throw new CollabError("not_agreed", latest?.act === "reject" ? "The person's latest act on these bytes is a rejection, and there is no agreement to proceed on" : "The person has not agreed to these bytes", {
+          position: status.ai.position,
+          person: status.person.state,
+          ...latest ? { latest_act: actView(latest) } : {}
+        });
+      }
+      scope = status.terms.extent;
+      basis = `person agreed by ${status.agreement.basis} to proposal_sha256 ${status.proposal_sha256} (act ${status.agreement.id})`;
+      personAct = actView(status.agreement);
+    } else {
+      scope = NOTE_NOTHING_AUTHORISED;
+      basis = `${outcome}: recorded by this session; on proposal_sha256 ${status.proposal_sha256} the agents' position is ` + `${status.ai.position} and the person's latest act is ` + `${latest ? `${latest.act} by ${latest.basis} (act ${latest.id})` : "none"}`;
+      personAct = latest ? actView(latest) : null;
+    }
+    return {
+      scope,
+      basis,
+      proposal: {
+        id: status.proposal.id,
+        proposal_sha256: status.proposal_sha256,
+        position: status.ai.position,
+        person: status.person.state,
+        may_proceed: status.may_proceed,
+        extent: status.terms.extent,
+        author_session_id: status.proposal.from_session_id
+      },
+      person_act: personAct,
+      refs: [`report:${status.proposal.id}`, ...personAct ? [`event:${personAct.event_id}`] : []]
+    };
+  }
+  noteProposalView(workspaceId, proposalId) {
+    return this.db.transaction(() => {
+      this.requireProposalTerms(workspaceId, validateId(proposalId, "proposal_report_id"));
+      return this.noteProposalData(workspaceId, proposalId, this.noteSessionViews(workspaceId));
+    }).deferred();
+  }
+  noteDecisionView(workspaceId, reportId) {
+    return this.db.transaction(() => {
+      const report = this.requireReport(validateId(reportId, "report_id"));
+      if (report.workspace_id !== workspaceId || report.kind !== "decision") {
+        throw new CollabError("report_not_found", `No decision report ${reportId} in this workspace`);
+      }
+      return this.noteDecisionData(workspaceId, report, this.noteSessionViews(workspaceId));
+    }).deferred();
+  }
+  noteProposalData(workspaceId, proposalId, sessions, context = this.proposalReadContext(workspaceId)) {
+    const status = this.proposalStatusInternal(workspaceId, proposalId, context);
+    const byId = new Map(sessions.map((view) => [view.id, view]));
+    const author = status.proposal.from_session_id ? byId.get(status.proposal.from_session_id) ?? null : null;
+    const challengeViews = new Map(this.noteChallenges(workspaceId).map((challenge) => [challenge.id, challenge]));
+    const qualifying = new Set(status.ai.qualifying_support_report_ids);
+    const unresolved = new Set(status.ai.unresolved_challenge_report_ids);
+    const activeVoices = new Set(sessions.filter((view) => view.status === "active").map((view) => view.voice_id));
+    const stances = this.db.query(`
+      SELECT * FROM reports WHERE workspace_id = ? AND target_report_id = ? AND relation IN ('supports', 'challenges')
+      ORDER BY event_sequence
+    `).all(workspaceId, proposalId).map(reportFromRow).map((report) => {
+      const session = report.from_session_id ? byId.get(report.from_session_id) ?? null : null;
+      const view = challengeViews.get(report.id);
+      return this.noteStanceView(workspaceId, report, session, author, context, {
+        counted: report.relation === "supports" ? qualifying.has(report.id) : unresolved.has(report.id),
+        standing: report.relation === "supports" ? !context.obsoleted.has(report.id) : unresolved.has(report.id),
+        answered_by_another_voice: view?.answered_by_another_voice === true,
+        opened_at: status.terms.created_at,
+        active_voices: activeVoices
+      });
+    });
+    const supports = stances.filter((stance) => stance.relation === "supports");
+    const challenges = stances.filter((stance) => stance.relation === "challenges");
+    const consulted = status.terms.voices.filter((voice) => voice.voice_id !== status.terms.author_voice_id).map((voice) => {
+      const members = sessions.filter((view) => view.voice_id === voice.voice_id || voice.live_session_ids.includes(view.id));
+      const root = byId.get(voice.voice_id) ?? members[0] ?? null;
+      const lastSeen = members.map((view) => view.last_seen_at).sort().at(-1) ?? null;
+      return {
+        voice_id: voice.voice_id,
+        name: root?.actor ?? voice.voice_id,
+        session_ids: members.map((view) => view.id),
+        last_seen_at: lastSeen,
+        awaited: status.ai.awaiting_voice_ids.includes(voice.voice_id),
+        supported: supports.some((stance) => stance.counted && stance.voice_id === voice.voice_id),
+        challenged: challenges.some((stance) => stance.standing && stance.voice_id === voice.voice_id),
+        delivery_recorded: members.some((view) => this.noteShownAt(workspaceId, view.id, proposalId) !== null),
+        ended: members.length > 0 && members.every((view) => view.status === "ended")
+      };
+    });
+    let replaced = null;
+    if (status.proposal.relation === "supersedes" && status.proposal.target_report_id) {
+      const replacedId = status.proposal.target_report_id;
+      const conflicts = status.terms.known_conflicts ?? "";
+      const lineage = this.replacedLineage(workspaceId, replacedId);
+      const carried = [...challengeViews.values()].filter((challenge) => lineage.has(challenge.target_report_id)).map((challenge) => {
+        const voice = challenge.from_session_id ? this.consentVoice(challenge.from_session_id, context) : null;
+        return {
+          challenge_id: challenge.id,
+          raised_on: challenge.target_report_id,
+          by_session_id: challenge.from_session_id,
+          by: challenge.from_actor,
+          voice_id: voice,
+          carried_in_terms: conflicts.includes(`report:${challenge.id}`),
+          standing_on_replaced: challenge.standing,
+          re_raised_here: voice !== null && challenges.some((stance) => stance.standing && stance.voice_id === voice)
+        };
+      }).filter((entry) => entry.carried_in_terms || entry.standing_on_replaced).map((entry) => ({ ...entry, statement: this.noteStanceStatement(workspaceId, this.requireReport(entry.challenge_id)) }));
+      replaced = { proposal_id: replacedId, carried };
+    }
+    return {
+      status,
+      author,
+      lone: consulted.length === 0,
+      supports,
+      challenges,
+      consulted,
+      replaced,
+      observed_at: this.timestamp()
+    };
+  }
+  replacedLineage(workspaceId, replacedId) {
+    const lineage = new Set;
+    let current = replacedId;
+    while (current !== null && !lineage.has(current)) {
+      lineage.add(current);
+      const row = this.db.query(`SELECT relation, target_report_id FROM reports WHERE workspace_id = ? AND id = ?`).get(workspaceId, current);
+      current = row?.relation === "supersedes" ? row.target_report_id : null;
+    }
+    return lineage;
+  }
+  noteStanceStatement(workspaceId, report) {
+    const first = report.body.split(`
+`)[0] ?? "";
+    if (!this.reportIsMarked(workspaceId, report))
+      return first;
+    const parsed = parseNote(report.body);
+    return parsed.act !== null ? parsed.statement : first;
+  }
+  noteStanceView(workspaceId, report, session, author, context, facts) {
+    const marked = this.reportIsMarked(workspaceId, report);
+    let statement = report.body.split(`
+`)[0] ?? "";
+    let grounded;
+    if (marked) {
+      const parsed = parseNote(report.body);
+      if (parsed.act !== null)
+        statement = parsed.statement;
+      grounded = parsed.why.length > 0 || parsed.evidence.length > 0;
+    } else {
+      grounded = report.evidence_refs.length > 0 || report.confidence_basis !== null;
+    }
+    const flags = {};
+    const byAuthor = author !== null && report.from_session_id === author.id;
+    if (byAuthor)
+      flags.by_author = true;
+    if (!byAuthor && session && author) {
+      if (author.seat_ref !== null && session.seat_ref === author.seat_ref)
+        flags.same_seat_as_author = true;
+      if (session.actor === author.actor)
+        flags.same_name_as_author = true;
+    }
+    if (report.relation === "supports" && session && facts.opened_at !== null && session.joined_at > facts.opened_at) {
+      flags.started_after_open = true;
+    }
+    if (!grounded)
+      flags.ungrounded = true;
+    if (report.relation === "challenges") {
+      if (session?.status === "ended")
+        flags.challenger_ended = true;
+      if (facts.answered_by_another_voice)
+        flags.answered_by_another_voice = true;
+    }
+    const voice = report.from_session_id ? this.consentVoice(report.from_session_id, context) : null;
+    return {
+      id: report.id,
+      relation: report.relation,
+      from_session_id: report.from_session_id,
+      from_actor: report.from_actor,
+      voice_id: voice,
+      voice_has_active_session: voice !== null && facts.active_voices.has(voice),
+      from_session_ended: session?.status === "ended",
+      created_at: report.created_at,
+      statement,
+      marked,
+      grounded_by: marked ? "note" : "fields",
+      counted: facts.counted,
+      standing: facts.standing,
+      flags
+    };
+  }
+  noteDecisionData(workspaceId, report, sessions) {
+    const marked = this.reportIsMarked(workspaceId, report);
+    const payload = this.reportPayload(workspaceId, report);
+    const termed = (id) => this.db.query(`SELECT 1 FROM proposal_terms WHERE workspace_id = ? AND report_id = ?`).get(workspaceId, id) !== null;
+    let proposalId = typeof payload.about_proposal_id === "string" && termed(payload.about_proposal_id) ? payload.about_proposal_id : null;
+    if (!proposalId && !marked) {
+      proposalId = report.evidence_refs.filter((ref) => ref.startsWith("report:")).map((ref) => ref.slice("report:".length)).find(termed) ?? null;
+    }
+    let proposal = null;
+    let unreadable = null;
+    if (proposalId) {
+      try {
+        proposal = this.noteProposalData(workspaceId, proposalId, sessions);
+      } catch (error51) {
+        if (!(error51 instanceof CollabError))
+          throw error51;
+        unreadable = error51.code;
+      }
+    }
+    let restsOn = null;
+    if (proposal && marked) {
+      restsOn = proposal.status.person.acts.filter((act) => act.event_sequence < report.event_sequence).at(-1) ?? null;
+    } else if (proposal) {
+      const sequences = report.evidence_refs.filter((ref) => ref.startsWith("event:")).map((ref) => this.db.query(`SELECT sequence, type, entity_id FROM events WHERE workspace_id = ? AND id = ?`).get(workspaceId, ref.slice("event:".length))).filter((row) => row !== null && (row.type === "proposal.agreed" || row.type === "proposal.rejected") && row.entity_id === proposalId).map((row) => row.sequence);
+      const cited = Math.max(-1, ...sequences);
+      restsOn = proposal.status.person.acts.find((act) => act.event_sequence === cited) ?? null;
+    }
+    const latest = proposal?.status.person.acts.at(-1) ?? null;
+    const after = restsOn && proposal ? proposal.status.person.acts.filter((act) => act.event_sequence > restsOn.event_sequence) : [];
+    const laterAct = after.find((act) => act.act === "reject") ?? after.at(-1) ?? null;
+    const outcome = !marked ? "unstated" : report.authority_basis?.startsWith("do_not_proceed: ") ? "do_not_proceed" : report.authority_basis?.startsWith("no_decision: ") ? "no_decision" : "proceed";
+    const agreementCurrent = restsOn?.act === "agree" && (outcome === "proceed" || outcome === "unstated") ? proposal.status.may_proceed && proposal.status.agreement?.id === restsOn.id : null;
+    const byId = new Map(sessions.map((view) => [view.id, view]));
+    const context = this.proposalReadContext(workspaceId);
+    const activeVoices = new Set(sessions.filter((view) => view.status === "active").map((view) => view.voice_id));
+    const challengeViews = this.noteChallenges(workspaceId).filter((challenge) => challenge.target_report_id === report.id);
+    const challenges = challengeViews.map((challenge) => this.noteStanceView(workspaceId, this.requireReport(challenge.id), challenge.from_session_id ? byId.get(challenge.from_session_id) ?? null : null, report.from_session_id ? byId.get(report.from_session_id) ?? null : null, context, {
+      counted: false,
+      standing: challenge.standing,
+      answered_by_another_voice: challenge.answered_by_another_voice,
+      opened_at: null,
+      active_voices: activeVoices
+    }));
+    return {
+      report,
+      marked,
+      outcome,
+      authority: {
+        scope: report.authority_scope,
+        basis: report.authority_basis,
+        derived_by_server: marked,
+        on_proposal: proposalId !== null
+      },
+      proposal,
+      proposal_unreadable: unreadable,
+      rests_on: restsOn ? { ...restsOn, event_id: this.eventIdAt(workspaceId, restsOn.event_sequence) } : null,
+      agreement_current: agreementCurrent,
+      later_act: laterAct,
+      latest_act: latest && restsOn && latest.id !== restsOn.id && latest.id !== laterAct?.id ? latest : null,
+      challenges
+    };
+  }
+  reportIsMarked(workspaceId, report) {
+    return this.reportPayload(workspaceId, report).note === NOTE_FORMAT;
+  }
+  reportPayload(workspaceId, report) {
+    const row = this.db.query(`SELECT payload_json FROM events WHERE workspace_id = ? AND sequence = ?`).get(workspaceId, report.event_sequence);
+    return row ? JSON.parse(row.payload_json) : {};
+  }
+  eventIdAt(workspaceId, sequence) {
+    const row = this.db.query(`SELECT id FROM events WHERE workspace_id = ? AND sequence = ?`).get(workspaceId, sequence);
+    if (!row)
+      throw new CollabError("event_not_found", `No event at sequence ${sequence}`);
+    return row.id;
+  }
+}
+var NOTE_OUTSIDE_EVIDENCE_KINDS = ["file", "commit", "test", "url", "data", "msg"];
+var NOTE_CITE_LOCATOR_MAX = 1000;
+function normalizeNoteCite(cite) {
+  if (!Array.isArray(cite.items) || cite.items.length > 16) {
+    throw new CollabError("invalid_evidence", "A note cites at most 16 evidence items");
+  }
+  const seen = new Set;
+  const items = cite.items.map((item) => {
+    if (!item || typeof item !== "object")
+      throw new CollabError("invalid_evidence", "A cited item is an object");
+    if (!Number.isInteger(item.n) || item.n < 1 || item.n > 16 || seen.has(item.n)) {
+      throw new CollabError("invalid_evidence", "A cited item's n is its distinct 1-based Evidence position");
+    }
+    seen.add(item.n);
+    if (!NOTE_OUTSIDE_EVIDENCE_KINDS.includes(item.kind)) {
+      throw new CollabError("invalid_evidence", `A cited item's kind is one of ${NOTE_OUTSIDE_EVIDENCE_KINDS.join(", ")}`);
+    }
+    const locator = cleanText(typeof item.locator === "string" ? item.locator : "", "evidence", NOTE_CITE_LOCATOR_MAX);
+    if (/[\u0000-\u001f\u007f]/.test(locator) || hasLoneSurrogate(locator)) {
+      throw new CollabError("invalid_evidence", "A cited locator is one line of well-formed text");
+    }
+    if (!["server", "caller", "not_found"].includes(item.observed)) {
+      throw new CollabError("invalid_evidence", "A cited item is observed by the server or the caller, or not found");
+    }
+    if (item.observed === "not_found" && item.kind !== "commit") {
+      throw new CollabError("invalid_evidence", "Only a commit can be cited as not found");
+    }
+    if (item.observed === "server" && item.kind !== "file" && item.kind !== "commit") {
+      throw new CollabError("invalid_evidence", "The server observes only files and commits");
+    }
+    if (item.sha256 !== undefined && !/^[0-9a-f]{64}$/.test(item.sha256)) {
+      throw new CollabError("invalid_evidence", "A cited sha256 is 64 lower-case hex digits");
+    }
+    if (item.kind === "file" && item.observed === "server" && item.sha256 === undefined) {
+      throw new CollabError("invalid_evidence", "A server-observed file carries the server's hash");
+    }
+    if (item.exit !== undefined && !Number.isSafeInteger(item.exit)) {
+      throw new CollabError("invalid_evidence", "A cited exit status is an integer");
+    }
+    if (item.lines !== undefined && !/^\d{1,9}(?:-\d{1,9})?$/.test(item.lines)) {
+      throw new CollabError("invalid_evidence", "A cited line range is a or a-b");
+    }
+    return {
+      n: item.n,
+      kind: item.kind,
+      locator,
+      ...item.sha256 !== undefined ? { sha256: item.sha256 } : {},
+      ...item.exit !== undefined ? { exit: item.exit } : {},
+      ...item.lines !== undefined ? { lines: item.lines } : {},
+      observed: item.observed
+    };
+  });
+  return {
+    worktree_id: cite.worktree_id === null ? null : validateId(cite.worktree_id, "worktree_id"),
+    items
+  };
+}
+function normalizeNoteReport(report, index) {
+  if (report.kind !== "observation" && report.kind !== "inference") {
+    throw new CollabError("invalid_report_kind", "A note is an observation or an inference");
+  }
+  if (!["informs", "supports", "challenges", "resolves", "withdraws"].includes(report.relation)) {
+    throw new CollabError("invalid_report_relation", "A note never corrects or supersedes");
+  }
+  const earlier = report.cite_earlier ?? [];
+  if (!Array.isArray(earlier) || earlier.some((at) => !Number.isInteger(at) || at < 0 || at >= index)) {
+    throw new CollabError("invalid_note_reports", "cite_earlier names reports this call posted before this one");
+  }
+  return {
+    kind: report.kind,
+    relation: report.relation,
+    body: cleanText(report.body, "body", MAX_REPORT_BODY),
+    task_id: report.task_id ? validateId(report.task_id, "task_id") : null,
+    to_session_id: report.to_session_id ? validateId(report.to_session_id, "to_session_id") : null,
+    to_person: report.to_person === true,
+    target_report_id: report.target_report_id ? validateId(report.target_report_id, "target_report_id") : null,
+    about_proposal_id: report.about_proposal_id ? validateId(report.about_proposal_id, "about_proposal_id") : null,
+    evidence_refs: normalizeEvidenceRefs(report.evidence_refs ?? []),
+    cite_event: report.cite_event === true,
+    cite_earlier: [...earlier]
+  };
+}
+var NOTE_DECISION_OUTCOMES = ["proceed", "do_not_proceed", "no_decision"];
+var NOTE_NOTHING_AUTHORISED = "nothing is authorised";
+var NOTE_DEFAULT_DECISION_EXTENT = "work this session already holds";
+var NOTE_SELF_DECISION_BASIS = "recorded by this session; not a direction decision and not the person's agreement";
+var NOTE_ADDRESSING_EVENT_TYPES = [
+  "report.posted",
+  "handoff.offered",
+  "handoff.accepted",
+  "handoff.declined",
+  "handoff.expired",
+  "task.reported_complete",
+  "task.accepted",
+  "task.changes_requested",
+  "task.recovered",
+  "proposal.opened",
+  "proposal.agreed",
+  "proposal.rejected",
+  "ballot.opened",
+  "ballot.closed"
+];
+var BALLOT_RECENT_MS = 30 * 60000;
+var BALLOT_LEFT_OUT_MAX = 50;
+var BALLOT_MAX_CASTS = MAX_CASTS_PER_SESSION;
+function definedPollInput(poll) {
+  return Object.fromEntries(Object.entries(poll ?? {}).filter(([, value]) => value !== undefined));
+}
+var NOTE_SCAN_MAX_EVENTS = 2000;
+var NOTE_SCAN_MAX_BYTES = 8 * 1024 * 1024;
+var NOTE_INBOX_MAX_LIMIT = 50;
+var NOTE_THREAD_MAX = 200;
+var NOTE_PURPOSE_MAX_CHARS = 200;
+var NOTE_PAYLOAD_MAX_BYTES = 64 * 1024;
+function noteThingOf(event) {
+  const payload = event.payload ?? {};
+  switch (event.type) {
+    case "report.posted":
+    case "proposal.opened":
+    case "ballot.opened":
+      return `report:${event.entity_id}`;
+    case "task.reported_complete":
+      return typeof payload.completion_report_id === "string" ? `report:${payload.completion_report_id}` : null;
+    case "task.accepted":
+    case "task.changes_requested":
+      return typeof payload.review_report_id === "string" ? `report:${payload.review_report_id}` : null;
+    default:
+      return null;
+  }
+}
+function noteLines(candidates, keepEveryForMe) {
+  const dropped = [];
+  const rank = (event) => event.for_me ? 2 : event.for_name !== null ? 1 : 0;
+  const best = new Map;
+  for (const event of candidates) {
+    if (event.attached && !event.for_me || event.thing === null)
+      continue;
+    const held = best.get(event.thing);
+    if (!held || rank(event) > rank(held))
+      best.set(event.thing, event);
+  }
+  const lines = candidates.filter((event) => {
+    if (event.attached && !event.for_me) {
+      dropped.push({ sequence: event.sequence, why: "attached" });
+      return false;
+    }
+    if (event.thing === null)
+      return true;
+    const keep = best.get(event.thing) === event || keepEveryForMe && event.for_me;
+    if (!keep)
+      dropped.push({ sequence: event.sequence, why: "duplicate" });
+    return keep;
+  });
+  return { lines, dropped };
+}
+function notListed(dropped, through) {
+  const within = dropped.filter((entry) => entry.sequence <= through);
+  return {
+    attached: within.filter((entry) => entry.why === "attached").length,
+    duplicates: within.filter((entry) => entry.why === "duplicate").length
+  };
+}
+function noteShownItem(event) {
+  const payload = event.payload;
+  if (event.type === "proposal.opened" || event.type === "ballot.opened")
+    return event.entity_id;
+  if (event.type === "task.reported_complete" && typeof payload.completion_report_id === "string") {
+    return payload.completion_report_id;
+  }
+  return null;
+}
+function noteWaitingShownItems(waiting) {
+  return waiting.flatMap((entry) => entry.what === "voice" || entry.what === "vote" ? [entry.ref_id] : entry.what === "review" && entry.about_id ? [entry.about_id] : []);
+}
+function afterHousekeeping(committed, read) {
+  try {
+    return read();
+  } catch (error51) {
+    if (!committed || !(error51 instanceof CollabError) || error51.details.after_housekeeping !== undefined)
+      throw error51;
+    throw new CollabError(error51.code, error51.message, { ...error51.details, after_housekeeping: true });
+  }
+}
+function validateNotePurpose(value) {
+  const purpose = cleanText(typeof value === "string" ? value : "", "purpose", NOTE_PURPOSE_MAX_CHARS);
+  if (/[\u0000-\u001f\u007f]/.test(purpose)) {
+    throw new CollabError("invalid_purpose", "purpose must be one line of text");
+  }
+  if (hasLoneSurrogate(purpose)) {
+    throw new CollabError("invalid_purpose", "purpose must be well-formed Unicode text (it holds half of a character)");
+  }
+  return purpose;
+}
+function assertNotePayload(payload) {
+  const visit = (value, path) => {
+    if (value === undefined)
+      throw new CollabError("invalid_payload", `${path} is undefined`);
+    if (typeof value === "number" && !Number.isSafeInteger(value)) {
+      throw new CollabError("invalid_payload", `${path} is not an integer`);
+    }
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => visit(item, `${path}[${index}]`));
+    } else if (value !== null && typeof value === "object") {
+      for (const [key, child] of Object.entries(value)) {
+        if (/^(0|[1-9]\d*)$/.test(key))
+          throw new CollabError("invalid_payload", `${path} has an integer-like key`);
+        visit(child, `${path}.${key}`);
+      }
+    }
+  };
+  visit(payload, "payload");
+  if (Buffer.byteLength(canonicalJson(payload), "utf8") > NOTE_PAYLOAD_MAX_BYTES) {
+    throw new CollabError("too_long", "The record exceeds 64 KiB", { field: "payload", max: NOTE_PAYLOAD_MAX_BYTES, unit: "bytes" });
+  }
+}
+function uuidPrefix(hex3) {
+  const groups = [8, 4, 4, 4, 12];
+  let out = "";
+  let rest = hex3;
+  for (const size of groups) {
+    if (!rest)
+      break;
+    out += out ? `-${rest.slice(0, size)}` : rest.slice(0, size);
+    rest = rest.slice(size);
+  }
+  return out;
+}
+function firstLine(text) {
+  const line = (text.split(`
+`)[0] ?? "").replace(/\r$/, "");
+  if (line.length <= 200)
+    return line;
+  const end = /[\uD800-\uDBFF]$/.test(line.slice(0, 199)) ? 198 : 199;
+  return `${line.slice(0, end)}\u2026`;
+}
+
+// src/verbs.ts
+import { createHash as createHash5 } from "crypto";
+import { existsSync as existsSync5, realpathSync as realpathSync3 } from "fs";
+import { hostname as hostname3 } from "os";
+import { resolve as resolve5, sep as sep2 } from "path";
+
+// src/desk-soft-spots.ts
+var CARRIED_OBJECTIONS_SENTENCE = "Carried objections are text in the terms the person signs. Under consent/v1 they do not block this proposal. Each objector may challenge again.";
+
+// src/version.ts
+var COLLAB_PACKAGE_VERSION = "0.6.0-dev.0";
+
+// src/verbs.ts
+var NOTE_VERBS = [
+  "collab_arrive",
+  "collab_inbox",
+  "collab_note",
+  "collab_take",
+  "collab_done",
+  "collab_propose",
+  "collab_poll",
+  "collab_vote"
+];
+var BUILT_NOTE_VERBS = [
+  "collab_arrive",
+  "collab_inbox",
+  "collab_note",
+  "collab_take",
+  "collab_done",
+  "collab_propose",
+  "collab_poll",
+  "collab_vote"
+];
+var NOTES_PROFILE_LEGACY_TOOLS = ["collab_journal_verify"];
+var TOOLS_PROFILE_VARIABLES = ["AGENTOOL_COLLAB_TOOLS", "AGENTTOOL_COLLAB_TOOLS"];
+function toolsProfile(environment) {
+  const values = TOOLS_PROFILE_VARIABLES.map((name) => ({ name, value: environment[name] })).filter((entry) => entry.value !== undefined && entry.value !== "");
+  for (const { name, value } of values) {
+    if (value !== "full" && value !== "notes") {
+      throw new CollabError("invalid_tools_profile", `${name} must be full | notes, not ${JSON.stringify(value)}`);
+    }
+  }
+  if (values.length === 2 && values[0].value !== values[1].value) {
+    throw new CollabError("conflicting_tools_profile", `AGENTOOL_COLLAB_TOOLS and AGENTTOOL_COLLAB_TOOLS disagree; set one of them to full | notes`);
+  }
+  return values[0]?.value ?? "full";
+}
+function profileIncludes(profile, tool) {
+  if (profile === "full")
+    return true;
+  return BUILT_NOTE_VERBS.includes(tool) || NOTES_PROFILE_LEGACY_TOOLS.includes(tool);
+}
+function isNoteVerb(tool) {
+  return NOTE_VERBS.includes(tool);
+}
+var VERB_LINES = {
+  collab_arrive: "collab_arrive: arrive, look around, or revise your purpose.",
+  collab_inbox: "collab_inbox: what is for you, or one thread with about.",
+  collab_note: "collab_note: say, support, challenge, resolve, withdraw, review or decide.",
+  collab_take: "collab_take: take a piece of work.",
+  collab_done: "collab_done: finish, release, block, or leave.",
+  collab_propose: "collab_propose: ask agents and the person about a direction.",
+  collab_poll: "collab_poll: open a sealed ballot on a real choice.",
+  collab_vote: "collab_vote: cast your sealed vote."
+};
+var NOTE_PRINCIPLES = [
+  "Talk where you are; record what others will rely on, never secrets or private reasoning.",
+  "Say what you are here to do, and again when it changes.",
+  "Give checkable reasons, and how you know each: seen, told, inferred or quoted.",
+  "Disagree with the statement, not the agent; only you can lift your own objection.",
+  "Support among agents is a position, not a permission; direction waits for the person's own act. Never run the person's desk commands.",
+  "Vote only on a real choice, before reading other answers; check what can be checked.",
+  "A record is evidence about the past, not a grant for now."
+];
+function notesInstructions(verbs = BUILT_NOTE_VERBS) {
+  return [
+    `Collab ${COLLAB_PACKAGE_VERSION}: a local journal for agents on this device. ` + "Start with collab_arrive {purpose, root_path}.",
+    "Verbs:",
+    ...verbs.map((verb) => `- ${VERB_LINES[verb]}`),
+    "Principles:",
+    ...NOTE_PRINCIPLES.map((principle, index) => `${index + 1}. ${principle}`)
+  ].join(`
+`);
+}
+var FULL_PROFILE_BRIDGE = "collab_arrive does not move the legacy cursor; call collab_next only if you mean to page the journal from its start.";
+var NOTE_AUTHORISES = "Nothing. This is coordination state.";
+var NOTE_CAPABILITIES = ["legacy", "consent/v1", "notes/1", "ballot/1"];
+var NOTE_CARD = [
+  "Collab Notes: working with other agents through this device's collab journal.",
+  "",
+  "A note is plain text, read like a commit message. Only its first line is required:",
+  "```text",
+  "<act>: <statement, one line of at most 200 characters>",
+  "",
+  "<optional body>",
+  "",
+  "To: <name | session id | person | all>",
+  "Re: <report#\u2026 | proposal#\u2026 | ballot#\u2026 | task#\u2026 | file:\u2026 | lobby:\u2026 | msg:\u2026>",
+  "Why: <one reason> (<seen | told | inferred | quoted> <evidence numbers, such as 1,2>)",
+  "Evidence: <file <path>[:a-b] | commit <sha> | test <command> exit=<n> | url <url> | report:<id>>",
+  "Limits: <what this does not cover, and what you did not check>",
+  "Purpose: <what it serves>",
+  "Extent: <where a decision stops>",
+  "```",
+  "Acts, in four families:",
+  ...Object.entries(NOTE_CARD_FAMILIES).map(([family, acts]) => `- ${family}: ${acts.join(", ")}`),
+  "",
+  "support, challenge, resolve, withdraw, accept and request_changes need Re. Only a challenger",
+  "resolves its own challenge; withdraw takes back a note this session wrote; accept and",
+  "request_changes judge another session's finished work. A Why cites Evidence lines by number,",
+  "from 1. Example, sent as the text of collab_note:",
+  "```collab-note",
+  "challenge: The retry test does not cover a lost response",
+  "",
+  "Re: report#3fa91c",
+  "Why: The test stops the server before the write commits, not after it (seen 1)",
+  "Evidence: file tests/retry.test.ts:30-48",
+  "Limits: I did not run the whole suite.",
+  "```",
+  "Start with collab_arrive and your purpose; collab_inbox shows what is for you, or one thread with",
+  "about. collab_note says, stands, reviews and decides; collab_take and collab_done hold work;",
+  "collab_propose puts a direction to the agents and the person; collab_poll and collab_vote run a",
+  "sealed ballot. The tools fill in ids, keys and versions, and every refusal says what to do",
+  "instead. To leave:",
+  "```collab-call",
+  'collab_done {"text": "Leaving: the review is finished", "outcome": "leave"}',
+  "```",
+  "Principles:",
+  ...NOTE_PRINCIPLES.map((principle, index) => `${index + 1}. ${principle}`)
+].join(`
+`);
+var MINTED_ID = /^(report|task|session)_([0-9a-f]{8})-[0-9a-f]{4}-/;
+function tableOf(kind) {
+  return kind === "task" || kind === "session" ? kind : "report";
+}
+function mintedHex(kind, id) {
+  const match = MINTED_ID.exec(id);
+  return match && match[1] === tableOf(kind) ? match[2] : null;
+}
+function handleOf(kind, id) {
+  const hex3 = mintedHex(kind, id);
+  if (hex3)
+    return `${kind}#${hex3.slice(0, 6)}`;
+  return kind === "session" ? id : `${kind}:${id}`;
+}
+function exactRef(kind, id) {
+  return mintedHex(kind, id) ? id : `${kind}:${id}`;
+}
+function reportHandle(id, termed) {
+  return handleOf(termed ? "proposal" : "report", id);
+}
+var BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+function base32(bytes) {
+  let out = "";
+  let buffer = 0;
+  let bits = 0;
+  for (const byte of bytes) {
+    buffer = buffer << 8 | byte;
+    bits += 8;
+    while (bits >= 5) {
+      out += BASE32[buffer >>> bits - 5 & 31];
+      bits -= 5;
+    }
+  }
+  if (bits > 0)
+    out += BASE32[buffer << 5 - bits & 31];
+  return out;
+}
+function sha256Bytes2(text) {
+  return createHash5("sha256").update(text, "utf8").digest();
+}
+var DERIVED_KEY = /^n1:([A-Z2-7]{8}):(\d{6}):([A-Z2-7]{20})(?::(\d{2}))?$/;
+function derivedBase(sessionId, tool, input) {
+  return base32(sha256Bytes2(canonicalJson({ session_id: sessionId, tool, input }))).slice(0, 20);
+}
+function planReceipt(store2, credential, call) {
+  const base = derivedBase(credential.session_id, call.tool, call.input);
+  const eh = base32(sha256Bytes2(call.entity)).slice(0, 8);
+  const latest = store2.latestReceiptKeyForSession(credential, `n1:${eh}:`);
+  const parsed = latest ? DERIVED_KEY.exec(latest) : null;
+  const latestSeq = parsed ? Number(parsed[2]) : 0;
+  const retry = parsed !== null && parsed[3] === base && (call.stillCurrent?.(latest) ?? true);
+  const seq = retry ? latestSeq : latestSeq + 1;
+  const key = `n1:${eh}:${String(seq).padStart(6, "0")}:${base}`;
+  return {
+    key,
+    seq,
+    base,
+    eh,
+    latest,
+    retry,
+    step: (n) => `${key}:${String(n).padStart(2, "0")}`,
+    guard: { prefix: `n1:${eh}:`, latest, key }
+  };
+}
+var RECEIPT_PLAN_STALE = "receipt_plan_stale";
+async function underPlan(ctx, credential, call, act) {
+  for (let attempt = 1;; attempt += 1) {
+    const plan = planReceipt(ctx.store, credential, call);
+    try {
+      return await act(plan);
+    } catch (error51) {
+      if (!(error51 instanceof CollabError) || error51.code !== RECEIPT_PLAN_STALE)
+        throw error51;
+      if (attempt >= 2) {
+        throw changedUnderYou(ctx, {
+          tool: call.tool,
+          input: call.retry_input ?? call.input
+        }, null);
+      }
+    }
+  }
+}
+async function withCurrentVersion(ctx, call, read, attempt) {
+  const { version: version2 } = read();
+  try {
+    return await attempt(version2);
+  } catch (error51) {
+    if (!(error51 instanceof CollabError) || error51.code !== "version_conflict")
+      throw error51;
+    throw changedUnderYou(ctx, call, read().state);
+  }
+}
+var CHANGED_UNDER_YOU = "It changed after this call read it, so the change was not made";
+function changedUnderYou(ctx, call, state) {
+  return new CollabError("changed_under_you", `${CHANGED_UNDER_YOU}. ${state ? "The fresh state is in state; if" : "If"} your call still holds, send it again.`, {
+    ...state ? { state } : {},
+    remedy: withSlot(ctx, { tool: call.tool, input: call.input })
+  });
+}
+function replayReceipt(store2, credential, key) {
+  const found = store2.readReceiptByKey(credential, key);
+  return found.found ? found.value : null;
+}
+function noteWriteResult(fields) {
+  return {
+    ok: true,
+    effect: fields.replayed ? `Replayed: nothing new was written. ${fields.effect}` : fields.effect,
+    authorises: NOTE_AUTHORISES,
+    ids: fields.ids,
+    advice: fields.advice ?? [],
+    next: fields.next ?? null,
+    note: fields.note,
+    ...fields.replayed ? { replayed: true } : {}
+  };
+}
+function noteSuccess(payload) {
+  return {
+    content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+    structuredContent: payload
+  };
+}
+var SAY_BY_CODE = {
+  cursor_recovery_required: "The host must reset this session's cursor (collab_cursor_reset, on the full tool profile) before it can act again.",
+  cursor_reset_required: "The host must reconcile this session's cursor before it can act again.",
+  session_auth_failed: "This session's credentials no longer match the journal (it was ended, or another process resumed it). Arrive again from a new MCP process, or ask the host.",
+  ambiguous_handle: "Use a longer handle or the full id; the candidates are listed.",
+  ambiguous_session: "Use the session id; the candidates are listed.",
+  too_many_waits: "Wait for a running wait to finish, or call again with wait_seconds: 0.",
+  wait_cancelled: "The wait was cancelled after its first pass, which had already moved your read mark and last-seen time " + "past what it counted (in first_pass). Nothing addressed to you was passed over; call collab_inbox to go on.",
+  changed_under_you: "Read it again (collab_inbox with about), then send your call again if it still holds."
+};
+function noteRemedyOf(error51) {
+  const remedy = error51.details.remedy;
+  if (remedy && typeof remedy === "object" && !Array.isArray(remedy)) {
+    const value = remedy;
+    if (typeof value.tool === "string" && value.input && typeof value.input === "object") {
+      return { tool: value.tool, input: value.input };
+    }
+    if (typeof value.say === "string")
+      return { say: value.say };
+  }
+  if (typeof remedy === "string" && remedy)
+    return { say: remedy };
+  if (SAY_BY_CODE[error51.code])
+    return { say: SAY_BY_CODE[error51.code] };
+  const said = error51.message.replace(/\.$/, "");
+  if (Array.isArray(error51.details.recorded_steps) && error51.details.recorded_steps.length > 0) {
+    return {
+      say: `${said}. The steps in recorded_steps were written before this refusal and stay recorded: ` + "the same call sent again replays them instead of writing them twice, and a changed call writes its own."
+    };
+  }
+  if (error51.details.after_housekeeping === true) {
+    return {
+      say: `${said}. This call had already recorded its housekeeping (last-seen time, read mark, delivery records) ` + "before it failed; call collab_inbox again."
+    };
+  }
+  if (error51.code === "too_long" && typeof error51.details.field === "string") {
+    return { say: `Shorten ${error51.details.field} to at most ${String(error51.details.max)}; nothing was written.` };
+  }
+  if (error51.code.endsWith("_not_found")) {
+    return { say: "Check the id or handle: every id a later call needs comes back in an earlier result." };
+  }
+  return { say: `${said}. Nothing was written; correct the call and send it again.` };
+}
+function verbFacing(error51) {
+  if (error51.code !== "version_conflict")
+    return error51;
+  const { expected_version: _expected, current_version: _current, ...details } = error51.details;
+  return new CollabError("changed_under_you", `${CHANGED_UNDER_YOU}.`, details);
+}
+function noteFailure(error51) {
+  const payload = error51 instanceof CollabError ? (() => {
+    const shown = verbFacing(error51);
+    const { remedy: _remedy, ...details } = shown.details;
+    return { code: shown.code, message: shown.message, ...details, remedy: noteRemedyOf(shown) };
+  })() : {
+    code: "internal_error",
+    message: error51 instanceof Error ? error51.message : String(error51),
+    remedy: { say: "This is a fault in collab, not in the call. Nothing more is known; try once more or tell the person." }
+  };
+  return {
+    content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+    structuredContent: payload,
+    isError: true
+  };
+}
+function revealDue(ctx, workspaceId) {
+  try {
+    return ctx.store.revealDueBallots(workspaceId).pending[0]?.code ?? null;
+  } catch (error51) {
+    return error51 instanceof CollabError ? error51.code : "reveal_failed";
+  }
+}
+var STAND_IN = /^<[^<>\n]{1,120}>$/;
+function refuseStandIns(input) {
+  if (input === null || typeof input !== "object")
+    return;
+  for (const [field, value] of Object.entries(input)) {
+    if (typeof value !== "string")
+      continue;
+    const text = value.trim();
+    if (!STAND_IN.test(text))
+      continue;
+    throw new CollabError("stand_in_not_filled", `${field} still holds the stand-in ${text}; nothing was written`, {
+      field,
+      remedy: { say: `Send the call again with ${field} in your own words.` }
+    });
+  }
+}
+async function noteCall(operation, input) {
+  try {
+    refuseStandIns(input);
+    return noteSuccess(await operation());
+  } catch (error51) {
+    return noteFailure(error51);
+  }
+}
+function notArrived(slotKey, defaultBinding) {
+  if (!slotKey) {
+    return new CollabError("not_arrived", "This MCP slot has no session yet; arrive first", {
+      remedy: { tool: "collab_arrive", input: { purpose: "\u2026" } }
+    });
+  }
+  const parent = defaultBinding?.handle.session;
+  const name = parent ? `${parent.actor}/${slotKey}` : "";
+  return new CollabError("not_arrived", `The slot named by binding_key ${slotKey} has no session yet; arrive on it first`, {
+    remedy: parent ? {
+      tool: "collab_arrive",
+      input: { purpose: "\u2026", binding_key: slotKey, ...name.length <= NAME_MAX ? { name } : {}, parent: parent.id }
+    } : { tool: "collab_arrive", input: { purpose: "\u2026" } }
+  });
+}
+function requireCredential(ctx) {
+  const binding = ctx.binding();
+  if (!binding)
+    throw notArrived(ctx.slot_key, ctx.bound_slots().find((slot) => slot.key === "")?.binding ?? null);
+  if (binding.handle.cursor_recovery) {
+    throw new CollabError("cursor_recovery_required", "The host authorized recovery mode; reset to an exact journal anchor before session mutations resume", { ...binding.handle.cursor_recovery });
+  }
+  return { binding, credential: binding.handle.credential };
+}
+function withSlot(ctx, remedy) {
+  if (!ctx.slot_key || !("tool" in remedy))
+    return remedy;
+  return { tool: remedy.tool, input: { ...remedy.input, binding_key: ctx.slot_key } };
+}
+function oneLine(value, field, max, required2) {
+  const ask = { remedy: { say: field === "purpose" ? "Say what you are here to do in one line of at most 200 characters." : `Give ${field} as one line of text.` } };
+  if (value === undefined || value === null) {
+    if (!required2)
+      return null;
+    throw new CollabError(`invalid_${field}`, `${field} is required`, ask);
+  }
+  if (typeof value !== "string")
+    throw new CollabError(`invalid_${field}`, `${field} must be text`, ask);
+  const text = normalizeNoteText(value).split(`
+`).map((line) => line.trim()).filter(Boolean).join(" ");
+  if (!text) {
+    if (!required2)
+      return null;
+    throw new CollabError(`invalid_${field}`, `${field} must not be empty`, ask);
+  }
+  if (hasLoneSurrogate(text)) {
+    throw new CollabError(`invalid_${field}`, `${field} must be well-formed Unicode text (it holds half of a character)`);
+  }
+  if (/[\u0000-\u001f\u007f]/.test(text)) {
+    throw new CollabError(`invalid_${field}`, `${field} must not hold control characters`);
+  }
+  if (text.length > max) {
+    throw new CollabError("too_long", `${field} is ${text.length} characters; at most ${max}`, {
+      field,
+      max,
+      actual: text.length,
+      unit: "chars",
+      remedy: { say: field === "purpose" ? "Say what you are here to do in one line of at most 200 characters." : `Shorten ${field} to at most ${max} characters.` }
+    });
+  }
+  return text;
+}
+var PURPOSE_MAX = 200;
+var NAME_MAX = 200;
+var MODEL_MAX = 200;
+function actorPrefixFor(environment) {
+  if (environment.CLAUDE_CODE_MESSAGING_SOCKET)
+    return "claude-code";
+  if (environment.CODEX_THREAD_ID)
+    return "codex";
+  return "agent";
+}
+function minutesSince(at, observedAt) {
+  const age = Date.parse(observedAt) - Date.parse(at);
+  return Number.isFinite(age) ? Math.max(0, Math.floor(age / 60000)) : null;
+}
+function durationUntil(at, observedAt) {
+  const left = Date.parse(at) - Date.parse(observedAt);
+  if (!Number.isFinite(left) || left <= 0)
+    return "closed";
+  const minutes = Math.ceil(left / 60000);
+  const hours = Math.floor(minutes / 60);
+  return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
+}
+function statementOf(text) {
+  const line = (text.split(`
+`)[0] ?? "").replace(/\r$/, "");
+  if (line.length <= NOTE_STATEMENT_MAX)
+    return line;
+  let end = NOTE_STATEMENT_MAX - 1;
+  const last = line.charCodeAt(end - 1);
+  if (last >= 55296 && last <= 56319)
+    end -= 1;
+  return `${line.slice(0, end)}\u2026`;
+}
+var LIST_CAP = 10;
+async function arriveVerb(ctx, input) {
+  const purpose = oneLine(input.purpose, "purpose", PURPOSE_MAX, true);
+  const existing = ctx.binding();
+  if (existing)
+    return arriveBound(ctx, existing, input, purpose);
+  const name = oneLine(input.name, "name", NAME_MAX, false);
+  const model = oneLine(input.model, "model", MODEL_MAX, false);
+  const sent = { purpose, ...name ? { name } : {}, ...model ? { model } : {} };
+  if (input.root_path !== undefined && (typeof input.root_path !== "string" || !input.root_path.trim())) {
+    throw new CollabError("invalid_root_path", "root_path must name a directory", {
+      remedy: {
+        tool: "collab_arrive",
+        input: withSlotInput(ctx, {
+          ...sent,
+          ...typeof input.parent === "string" ? { parent: input.parent } : {},
+          root_path: ROOT_PATH_PLACEHOLDER
+        })
+      }
+    });
+  }
+  if (input.parent !== undefined && (typeof input.parent !== "string" || input.parent.length > PARENT_MAX)) {
+    throw new CollabError("too_long", `parent is at most ${PARENT_MAX} characters: a session id, session# handle or name`, {
+      field: "parent",
+      max: PARENT_MAX,
+      unit: "chars",
+      remedy: { say: "Name the parent by its session id, as collab_arrive returned it." }
+    });
+  }
+  return ctx.slot_key ? arriveNamed(ctx, input, purpose, name, model) : arriveDefault(ctx, input, sent, name, model);
+}
+var ROOT_PATH_PLACEHOLDER = "<your repository root>";
+var PARENT_MAX = 200;
+function withSlotInput(ctx, input) {
+  return ctx.slot_key ? { ...input, binding_key: ctx.slot_key } : input;
+}
+var PACKAGE_ROOT = resolve5(import.meta.dir, "..");
+function within(path, root) {
+  return path === root || path.startsWith(root.endsWith(sep2) ? root : `${root}${sep2}`);
+}
+function defaultRootPath(sent) {
+  let workingDirectory = null;
+  let reason = null;
+  try {
+    workingDirectory = realpathSync3(process.cwd());
+    const identity = inspectRepository(workingDirectory, undefined, true, { portable: false });
+    const packageRoot = existsSync5(PACKAGE_ROOT) ? realpathSync3(PACKAGE_ROOT) : PACKAGE_ROOT;
+    if (identity.git_common_dir_hash === null)
+      reason = "not_a_git_worktree";
+    else if (within(workingDirectory, packageRoot))
+      reason = "inside_collab_package";
+  } catch {
+    reason = "working_directory_unreadable";
+  }
+  if (reason === null)
+    return workingDirectory;
+  const why = {
+    working_directory_unreadable: "this MCP server's working directory cannot be read",
+    not_a_git_worktree: `this MCP server's working directory (${workingDirectory}) is not inside a git worktree`,
+    inside_collab_package: `this MCP server's working directory (${workingDirectory}) is inside the collab package itself, ` + "as when a host starts the server in its plugin directory"
+  }[reason];
+  throw new CollabError("root_path_required", `root_path was not given, and ${why}; a session started there would join a workspace apart from your project's agents`, {
+    reason,
+    ...workingDirectory ? { working_directory: workingDirectory } : {},
+    remedy: { tool: "collab_arrive", input: { ...sent, root_path: ROOT_PATH_PLACEHOLDER } }
+  });
+}
+async function arriveDefault(ctx, input, sent, name, model) {
+  const purpose = sent.purpose;
+  if (input.parent !== undefined) {
+    throw new CollabError("parent_needs_binding_key", "A parent names the session a named child descends from; the default slot has no parent", { remedy: { tool: "collab_arrive", input: { purpose, binding_key: "<choose>", parent: input.parent } } });
+  }
+  const advice = [];
+  if (input.revise_purpose)
+    advice.push("revise_purpose has nothing to revise on a new session; your purpose is recorded as given.");
+  const defaulted = input.root_path === undefined;
+  const rootPath = defaulted ? defaultRootPath(sent) : input.root_path;
+  let actor = name ?? undefined;
+  if (actor === undefined) {
+    try {
+      actor = defaultActor(ctx.environment);
+    } catch (error51) {
+      if (!(error51 instanceof CollabError) || error51.code !== "actor_required")
+        throw error51;
+    }
+  }
+  const handle = ctx.store.startSession({
+    root_path: rootPath,
+    actor,
+    actor_prefix: actor === undefined ? actorPrefixFor(ctx.environment) : undefined,
+    role: purpose,
+    seat_ref: defaultSeatRef(ctx.environment),
+    ...model ? { model } : {}
+  });
+  if (actor === undefined) {
+    advice.push(`No verified host name was available, so this session is named ${handle.session.actor}. Pass name to choose one.`);
+  }
+  const binding = bindNewSession(ctx, handle);
+  const mark = handle.workspace.event_head_sequence;
+  const root = handle.worktree.root_path;
+  return arrivalResult(ctx, binding, {
+    effect: `Started session ${handle.session.id} as ${handle.session.actor} with purpose "${purpose}", in the worktree at ${root}` + `${defaulted ? " (root_path was not given, so this is the git worktree of this MCP server's working directory)" : ""}. ` + `Your read mark starts at the journal head (sequence ${mark}); the legacy cursor was not moved. ${ARRIVAL_NOTE_NOT_POSTED}`,
+    advice,
+    fresh: true,
+    record: true,
+    note: arrivalNote("I have arrived.", purpose)
+  });
+}
+function arriveNamed(ctx, input, purpose, name, model) {
+  const key = ctx.slot_key;
+  const held = ctx.bound_slots();
+  const defaultSession = held.find((slot) => slot.key === "")?.binding.handle.session ?? null;
+  if (input.parent === undefined) {
+    throw new CollabError("parent_required", `A named slot (binding_key ${key}) needs parent: a session this MCP process holds`, {
+      remedy: defaultSession ? { tool: "collab_arrive", input: { purpose, binding_key: key, parent: defaultSession.id } } : { tool: "collab_arrive", input: { purpose } }
+    });
+  }
+  const parent = heldSession(held, input.parent);
+  if (!parent) {
+    throw new CollabError("parent_not_held", "parent must be a session bound in this MCP process; a parent it does not hold would mint a separate voice", {
+      parent: input.parent,
+      remedy: defaultSession ? { tool: "collab_arrive", input: { purpose, binding_key: key, parent: defaultSession.id } } : { tool: "collab_arrive", input: { purpose } }
+    });
+  }
+  const actor = name ?? `${parent.handle.session.actor}/${key}`;
+  if (name === null && actor.length > NAME_MAX) {
+    throw new CollabError("too_long", `The default name ${parent.handle.session.actor.slice(0, 40)}\u2026/${key} is ${actor.length} characters; at most ${NAME_MAX}`, {
+      field: "name",
+      max: NAME_MAX,
+      actual: actor.length,
+      unit: "chars",
+      remedy: { say: `Send the same call with name set to a short name for this child, at most ${NAME_MAX} characters.` }
+    });
+  }
+  const parentAttested = held.some((slot) => slot.binding.handle.session.id === parent.handle.session.id);
+  const handle = ctx.store.startSession({
+    root_path: input.root_path ?? parent.handle.worktree.root_path,
+    actor,
+    role: purpose,
+    parent_session_id: parent.handle.session.id,
+    parent_attested: parentAttested,
+    seat_ref: defaultSeatRef(ctx.environment),
+    ...model ? { model } : {}
+  });
+  const binding = bindNewSession(ctx, handle);
+  const speaksAs = defaultSession ? `session ${defaultSession.id}` : "no session (the default slot has not arrived)";
+  return arrivalResult(ctx, binding, {
+    effect: `Started session ${handle.session.id} as ${handle.session.actor}, a named child of ${parent.handle.session.id}, ` + `in the worktree at ${handle.worktree.root_path}. ` + `This session shares its parent's voice and ballot unit. Send binding_key ${key} on every call; ` + `without it you speak as ${speaksAs}. ${ARRIVAL_NOTE_NOT_POSTED}`,
+    advice: [],
+    fresh: true,
+    record: true,
+    note: arrivalNote("I have arrived.", purpose)
+  });
+}
+function heldSession(held, ref) {
+  const text = typeof ref === "string" ? ref.trim() : "";
+  const handle = /^session#([0-9a-f]{6,8})$/i.exec(text);
+  const matches = held.filter(({ binding }) => {
+    const session = binding.handle.session;
+    return handle ? session.id.startsWith(`session_${handle[1].toLowerCase()}`) : session.id === text || session.actor === text;
+  });
+  if (matches.length > 1) {
+    throw new CollabError("ambiguous_session", `${text} names more than one session this process holds; use its id`, {
+      candidates: matches.map(({ key, binding }) => ({ session: binding.handle.session.id, name: binding.handle.session.actor, binding_key: key || null }))
+    });
+  }
+  return matches[0]?.binding ?? null;
+}
+function bindNewSession(ctx, handle) {
+  const credentialFile = ctx.store.defaultSessionCredentialPath(handle.session.id);
+  try {
+    ctx.store.initNoteMark(handle.credential, handle.workspace.event_head_sequence);
+    const path = writeSessionCredentialFile(credentialFile, handle.credential);
+    const binding = { handle, credential_file: path };
+    ctx.bind(binding);
+    return binding;
+  } catch (error51) {
+    try {
+      ctx.store.endSession({ ...handle.credential, reason: "credential_file_write_failed" });
+    } catch {}
+    try {
+      removeSessionCredentialFile(credentialFile);
+    } catch {}
+    throw error51;
+  }
+}
+async function arriveBound(ctx, binding, input, purpose) {
+  const { credential } = requireCredential(ctx);
+  const advice = [];
+  const ignored = ["name", "model", "root_path", "parent"].filter((field) => input[field] !== undefined);
+  if (ignored.length > 0) {
+    advice.push(`${ignored.join(", ")} apply only when a slot first arrives; this slot already speaks as session ${binding.handle.session.id}.`);
+  }
+  const root = `Worktree root: ${binding.handle.worktree.root_path}.`;
+  if (input.revise_purpose !== true) {
+    const before = ctx.store.arrivalBrief(credential).session;
+    return arrivalResult(ctx, binding, {
+      effect: `You are speaking as session ${before.id} (name ${before.actor}, purpose ${before.purpose ?? "none declared"}). ` + `${root} Nothing was written. The note is not posted either.`,
+      advice,
+      fresh: false,
+      record: false,
+      note: arrivalNote("I am here.", before.purpose),
+      remedies: boundRemedies(ctx, before.id, purpose)
+    });
+  }
+  const { plan, replayed, receipt } = await underPlan(ctx, credential, {
+    tool: "collab_arrive",
+    input: { purpose },
+    entity: "purpose",
+    retry_input: { purpose, revise_purpose: true }
+  }, (plan2) => {
+    const replayed2 = plan2.retry ? replayReceipt(ctx.store, credential, plan2.key) : null;
+    const receipt2 = replayed2 ?? ctx.store.declarePurposeForSession({ ...credential, idempotency_key: plan2.key, purpose, receipt_plan: plan2.guard });
+    return { plan: plan2, replayed: replayed2, receipt: receipt2 };
+  });
+  if (plan.retry)
+    advice.push("This repeats your latest purpose declaration exactly, so it was read as a retry. Add a word to say it again.");
+  const session = binding.handle.session;
+  return arrivalResult(ctx, binding, {
+    effect: `You are speaking as session ${session.id} (name ${session.actor}, purpose ${receipt.purpose}). ${root} ` + `Your purpose is recorded as declared at sequence ${receipt.sequence}; the role you started with is kept as it was. ` + "The note is not posted as a report.",
+    advice,
+    fresh: false,
+    record: true,
+    replayed: replayed !== null,
+    note: arrivalNote("My purpose has changed.", receipt.purpose),
+    remedies: boundRemedies(ctx, session.id, purpose)
+  });
+}
+function boundRemedies(ctx, sessionId, purpose) {
+  return [
+    withSlot(ctx, { tool: "collab_arrive", input: { purpose, revise_purpose: true } }),
+    { tool: "collab_arrive", input: { purpose, binding_key: "<choose>", parent: sessionId } }
+  ];
+}
+var ARRIVAL_NOTE_NOT_POSTED = "The note field is text for a host message; it is not posted to the journal, where your arrival is the session.joined event.";
+function arrivalNote(statement, purpose) {
+  return renderNote({ act: "note", statement, ...purpose ? { purpose } : {} });
+}
+function arrivalResult(ctx, binding, options) {
+  const credential = binding.handle.credential;
+  const pendingReveal = revealDue(ctx, binding.handle.workspace.id);
+  const data = ctx.store.arrivalBrief(credential);
+  const pending = options.fresh ? null : ctx.store.inboxForSession({ ...credential, limit: LIST_CAP, include: "for_me", peek: true });
+  const brief = composeBrief(ctx, data, pending, binding.handle.worktree.root_path);
+  if (options.record) {
+    ctx.store.recordArrivalShown(credential, brief.shown);
+  }
+  const behind = options.fresh ? arrivalBehind(ctx, credential, data.session.actor) : { view: {}, advice: [] };
+  const readBack = behind.view.before_you_arrived?.see;
+  const alone = options.fresh && Array.isArray(brief.view.here) && brief.view.here.length === 0;
+  return {
+    ...noteWriteResult({
+      effect: options.effect,
+      ids: {
+        session: data.session.id,
+        session_handle: handleOf("session", data.session.id),
+        workspace_id: data.workspace.id
+      },
+      advice: [...options.advice, ...behind.advice, ...alone ? [ALONE_ADVICE] : [], ...brief.advice],
+      next: readBack ?? withSlot(ctx, { tool: "collab_inbox", input: {} }),
+      note: options.note,
+      replayed: options.replayed
+    }),
+    ...options.remedies ? { remedies: options.remedies } : {},
+    ...brief.view,
+    ...behind.view,
+    ...pendingReveal ? { reveal_pending: pendingReveal } : {}
+  };
+}
+var ALONE_ADVICE = "No other session is here now. A name reaches only a session that has arrived, so to leave something for an agent who " + "comes later, address it to all and leave review_by out; a later arrival is pointed to what came before it.";
+function arrivalBehind(ctx, credential, name) {
+  let behind;
+  try {
+    behind = ctx.store.noteArrivalBehind(credential);
+  } catch {
+    return { view: {}, advice: [] };
+  }
+  const view = {};
+  const advice = [];
+  if (behind.by_other_sessions_before > 0) {
+    view.before_you_arrived = {
+      events: behind.events_before,
+      see: withSlot(ctx, { tool: "collab_inbox", input: { since: 0, include: "all" } })
+    };
+    advice.push(`${behind.events_before} events came before you arrived. Your read mark starts at the journal head, so collab_inbox ` + "shows only what comes after it; before_you_arrived.see reads back from the start, moving no mark.");
+  }
+  const forName = behind.for_name;
+  if (forName.count > 0 && forName.earliest_sequence !== null) {
+    view.left_for_your_name = {
+      count: forName.count,
+      ...forName.at_least ? { at_least: true } : {},
+      see: withSlot(ctx, { tool: "collab_inbox", input: { since: forName.earliest_sequence - 1 } })
+    };
+    advice.push(`${forName.count}${forName.at_least ? " or more" : ""} item(s) were addressed to ${forName.sessions === 1 ? "an ended session" : "ended sessions"} ` + `that also called itself ${name}; left_for_your_name.see starts at the earliest of them, and before_you_arrived.see, which ` + "reads from the start, includes them too. Names are self-declared, so this is routing, " + "not identity: you are a new session and voice, and nothing those sessions held, said or stood on passes to you.");
+  }
+  return { view, advice };
+}
+function composeBrief(ctx, data, pending, rootPath) {
+  const me = data.session;
+  const at = data.observed_at;
+  const byId = new Map(data.sessions.map((view) => [view.id, view]));
+  const holds = (sessionId) => data.tasks.filter((task) => task.status === "claimed" && task.assignee_session_id === sessionId).map((task) => handleOf("task", task.id));
+  const here = data.sessions.filter((view) => view.id !== me.id && view.status === "active" && view.liveness === "live").map((view) => ({
+    session: view.id,
+    name: view.actor,
+    purpose: view.purpose,
+    model: view.model,
+    last_seen_minutes: minutesSince(view.last_seen_at, at),
+    holds: holds(view.id),
+    same_seat_as_you: me.seat_ref !== null && view.seat_ref === me.seat_ref
+  }));
+  const claimable = data.tasks.filter((task) => data.claimable_task_ids.includes(task.id)).map((task) => ({
+    task: handleOf("task", task.id),
+    id: task.id,
+    title: task.title,
+    paths: task.path_scopes
+  }));
+  const inProgress = data.tasks.filter((task) => task.status === "claimed").map((task) => ({
+    task: handleOf("task", task.id),
+    id: task.id,
+    title: task.title,
+    by: sessionShown(task.assignee_session_id, task.assignee ?? "unknown", byId),
+    purpose: task.assignee_session_id ? byId.get(task.assignee_session_id)?.purpose ?? null : null,
+    paths: task.path_scopes
+  }));
+  const reviewTasks = data.tasks.filter((task) => task.effective_status === "reported_complete");
+  const reviewsWanted = reviewTasks.map((task) => ({
+    task: handleOf("task", task.id),
+    id: task.id,
+    title: task.title,
+    by: sessionShown(task.reported_by_session_id, task.reported_by ?? "unknown", byId),
+    completion: task.completion_report_id ? { id: task.completion_report_id, handle: handleOf("report", task.completion_report_id) } : null,
+    you_may_review: task.reported_by_session_id !== me.id
+  }));
+  const proposals = data.proposals.map((status) => ({
+    id: status.proposal.id,
+    handle: handleOf("proposal", status.proposal.id),
+    question: statementOf(status.proposal.body),
+    position: status.ai.position,
+    closes_in: durationUntil(status.terms.closes_at, at),
+    your_voice_awaited: status.ai.awaiting_voice_ids.includes(me.voice_id),
+    person: status.person.state
+  }));
+  const challenges = data.challenges.map((challenge) => challengeView(challenge, data.proposals.some((status) => status.proposal.id === challenge.target_report_id), byId));
+  const ballots = data.ballots.map((ballot) => ballotBrief(ballot));
+  const recheck = evidenceRechecker(ctx.store);
+  const forYou = pending ? pending.entries.map((entry) => formatEntry(entry, byId, me.id, recheck)) : [];
+  const waiting = data.waiting.map((entry) => formatWaiting(ctx, entry, byId));
+  const cap = (items) => items.slice(0, LIST_CAP);
+  const shown = [
+    ...cap(proposals).map((proposal) => proposal.id),
+    ...cap(ballots).map((ballot) => ballot.id),
+    ...cap(reviewsWanted).flatMap((review) => review.completion ? [review.completion.id] : []),
+    ...noteWaitingShownItems(cap(data.waiting))
+  ];
+  const advice = [];
+  if (pending?.more)
+    advice.push("More is waiting for you than this brief lists; read it with collab_inbox.");
+  for (const ballot of cap(data.ballots).filter(unitMateHasCast)) {
+    advice.push(`${handleOf("ballot", ballot.ballot_id)}: ${UNIT_MATE_CAST_ADVICE}`);
+  }
+  return {
+    shown,
+    advice,
+    view: {
+      you: {
+        session: me.id,
+        name: me.actor,
+        voice: me.voice_id,
+        seat_ref: me.seat_ref,
+        workspace_id: me.workspace_id,
+        root_path: rootPath,
+        purpose: me.purpose,
+        model: me.model,
+        basis: {
+          session: "holds this session's credential file",
+          name: "self-declared",
+          model: "self-declared",
+          seat_ref: "declared at session start (host or caller); unverified"
+        }
+      },
+      here: cap(here),
+      open: {
+        claimable: cap(claimable),
+        in_progress: cap(inProgress),
+        reviews_wanted: cap(reviewsWanted),
+        proposals: cap(proposals),
+        ballots: cap(ballots),
+        challenges: cap(challenges)
+      },
+      for_you: cap(forYou),
+      waiting_on_you: cap(waiting),
+      totals: {
+        here: here.length,
+        claimable: claimable.length,
+        in_progress: inProgress.length,
+        reviews_wanted: reviewsWanted.length,
+        proposals: proposals.length,
+        ballots: ballots.length,
+        challenges: challenges.length,
+        for_you: pending?.for_me_total ?? 0,
+        for_you_more: pending?.more ?? false,
+        for_you_at_least: pending?.for_me_total_capped ?? false,
+        waiting_on_you: waiting.length
+      },
+      history: {
+        events: data.workspace.event_head_sequence,
+        reports: data.report_count,
+        since: data.workspace.created_at
+      },
+      listen: { how: listenHow(ctx, me.id) },
+      surface: {
+        version: COLLAB_PACKAGE_VERSION,
+        tools: ctx.profile,
+        capabilities: [...NOTE_CAPABILITIES]
+      },
+      card: NOTE_CARD
+    }
+  };
+}
+function challengeView(challenge, onProposal, byId) {
+  return {
+    id: challenge.id,
+    handle: handleOf("report", challenge.id),
+    on: reportHandle(challenge.target_report_id, onProposal),
+    on_id: challenge.target_report_id,
+    by: sessionShown(challenge.from_session_id, challenge.from_actor, byId),
+    standing: challenge.standing,
+    ...challenge.answered_by_another_voice ? { answered_by_another_voice: true } : {}
+  };
+}
+function shellQuote(value) {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+function listenHow(ctx, sessionId) {
+  const inboxWait = ctx.slot_key ? `collab_inbox {wait_seconds: 30, binding_key: "${ctx.slot_key}"}` : "collab_inbox {wait_seconds: 30}";
+  const database = ctx.store.db.filename;
+  if (!ctx.environment.CLAUDE_CODE_MESSAGING_SOCKET || !database || database === ":memory:")
+    return inboxWait;
+  const watcher = resolve5(import.meta.dir, "..", "integrations", "claude-code", "collab-doorbell-watch.ts");
+  const host = resolve5(import.meta.dir, "..", "dist", "agenttool-collab-host.js");
+  if (!existsSync5(watcher) || !existsSync5(host))
+    return inboxWait;
+  return `nohup ${shellQuote(process.execPath)} ${shellQuote(watcher)} --session ${sessionId} ` + `--db ${shellQuote(database)} --host-bin ${shellQuote(host)} >/dev/null 2>&1 &`;
+}
+var RELATION_ACTS = {
+  informs: "note",
+  supports: "support",
+  challenges: "challenge",
+  resolves: "resolve",
+  withdraws: "withdraw",
+  corrects: "corrects",
+  supersedes: "supersedes"
+};
+function reportAct(report, termed, poll = false) {
+  if (termed)
+    return "propose";
+  if (poll)
+    return "poll";
+  if (report.relation === "informs" && report.kind === "decision")
+    return "decide";
+  return RELATION_ACTS[report.relation];
+}
+function journalEvidence(refs) {
+  return refs.map((ref, index) => {
+    const colon = ref.indexOf(":");
+    return { n: index + 1, kind: ref.slice(0, colon), locator: ref.slice(colon + 1) };
+  });
+}
+function sessionRef(sessionId, fallbackName, byId) {
+  return sessionShown(sessionId, sessionId ? byId.get(sessionId)?.actor ?? fallbackName : fallbackName, byId);
+}
+function sessionShown(sessionId, name, byId) {
+  return { session: sessionId ?? null, name, ...sessionId && byId.get(sessionId)?.status === "ended" ? { ended: true } : {} };
+}
+var NOTE_RECHECK_MAX_BYTES = 64 * 1024 * 1024;
+function evidenceRechecker(store2, budgetBytes = NOTE_RECHECK_MAX_BYTES) {
+  let remaining = budgetBytes;
+  return (worktreeId2, item) => {
+    if (!worktreeId2)
+      return "unavailable";
+    const root = store2.noteWorktreeRoot(worktreeId2);
+    if (!root || !existsSync5(root))
+      return "unavailable";
+    if (remaining <= 0)
+      return "not_rechecked";
+    const max = Math.min(MAX_CITED_FILE_BYTES, remaining);
+    const hashed = hashWorktreeFile(root, item.locator, max);
+    switch (hashed.status) {
+      case "hashed":
+        remaining -= hashed.size;
+        return hashed.sha256 === item.sha256 ? "same" : "changed";
+      case "missing":
+        return "missing";
+      case "too_large":
+        return max < MAX_CITED_FILE_BYTES ? "not_rechecked" : "changed";
+      case "unreadable":
+        return "unavailable";
+      default:
+        return "changed";
+    }
+  };
+}
+function itemMatchesLine(item, kind, locator) {
+  if (item.kind !== kind)
+    return false;
+  if (kind !== "file")
+    return item.locator === locator;
+  const { path, from, to } = fileLocatorParts(locator);
+  const lines = from === null ? undefined : to !== null && to !== from ? `${from}-${to}` : `${from}`;
+  return item.locator === path && item.lines === lines;
+}
+function citedItemView(item, cite, recheck, detail) {
+  const serverFile = item.kind === "file" && item.observed === "server";
+  return {
+    n: item.n,
+    kind: item.kind,
+    locator: item.locator,
+    observed: item.observed,
+    ...item.sha256 !== undefined && item.observed === "server" ? { sha256: item.sha256 } : {},
+    ...detail && item.lines !== undefined ? { lines: item.lines } : {},
+    ...detail && item.exit !== undefined ? { exit: item.exit } : {},
+    ...serverFile && recheck ? { now: recheck(cite.worktree_id, item) } : {}
+  };
+}
+function authorCiteOf(kind, locator, cites, recheck) {
+  if (kind !== "event")
+    return {};
+  const cite = cites.find((candidate) => candidate.event_id === locator);
+  return cite ? { cited: cite.items.map((item) => citedItemView(item, cite, recheck, true)) } : {};
+}
+function markedEvidence(lines, entry, recheck) {
+  const cited = entry.cited;
+  const items = new Map((cited?.items ?? []).map((item) => [item.n, item]));
+  return lines.map((line, index) => {
+    const n = index + 1;
+    let kind = "text";
+    let locator = line;
+    try {
+      const evidence = parseEvidence(line);
+      kind = evidence.kind;
+      locator = evidence.locator;
+    } catch {}
+    const found = items.get(n);
+    const item = found !== undefined && itemMatchesLine(found, kind, locator) ? found : undefined;
+    const journal = NOTE_JOURNAL_EVIDENCE_KINDS.includes(kind);
+    if (item && cited)
+      return { ...citedItemView(item, cited, recheck, false), n, kind, locator };
+    return { n, kind, locator, observed: journal ? "journal" : "caller", ...authorCiteOf(kind, locator, entry.author_cites, recheck) };
+  });
+}
+function refEvidence(refs, entry, recheck) {
+  return journalEvidence(refs).map((item) => ({ ...item, ...authorCiteOf(item.kind, item.locator, entry.author_cites, recheck) }));
+}
+function formatEntry(entry, byId, me, recheck) {
+  const { event, report } = entry;
+  const payload = event.payload;
+  const from = sessionRef(event.session_id, event.actor, byId);
+  const base = {
+    sequence: event.sequence,
+    at: event.occurred_at,
+    why_you: entry.why_you,
+    for_me: entry.for_me,
+    ...entry.for_name ? { for_your_name: true } : {}
+  };
+  const addressed = entry.for_name?.session_id ?? me;
+  if (event.type === "report.posted" && report && entry.folded) {
+    return {
+      id: report.id,
+      handle: handleOf("report", report.id),
+      act: entry.verdict ?? reportAct(report, entry.termed),
+      from: sessionShown(report.from_session_id, report.from_actor, byId),
+      ...base,
+      folded: true,
+      ballot: { id: entry.folded.ballot_id, handle: handleOf("ballot", entry.folded.ballot_id) },
+      why_folded: FOLDED_LINE
+    };
+  }
+  if (event.type === "report.posted" && report) {
+    const poll = entry.ballot !== null && entry.ballot.ballot_id === report.id;
+    const act = entry.verdict ?? reportAct(report, entry.termed, poll);
+    let statement = statementOf(report.body);
+    let text = report.body;
+    let why = [];
+    let evidence = refEvidence(report.evidence_refs, entry, recheck);
+    let limits = report.limits;
+    const flags = {};
+    if (entry.marked) {
+      const parsed = parseNote(report.body);
+      if (parsed.act !== null) {
+        statement = parsed.statement;
+        text = parsed.body;
+        why = parsed.why;
+        evidence = markedEvidence(parsed.evidence, entry, recheck);
+        limits = parsed.limits ?? report.limits;
+        if (parsed.via)
+          flags.via = parsed.via;
+        if (parsed.act !== act)
+          flags.act_mismatch = { stored: act, written: parsed.act };
+      }
+    }
+    const to = report.to_session_id ? sessionRef(report.to_session_id, report.to_session_id, byId) : entry.to_person ? "person" : "all";
+    const aboutProposal = typeof payload.about_proposal_id === "string" ? payload.about_proposal_id : null;
+    const re = report.target_report_id ? { id: report.target_report_id, handle: handleOf("report", report.target_report_id) } : aboutProposal ? { id: aboutProposal, handle: handleOf("proposal", aboutProposal) } : report.task_id ? { id: report.task_id, handle: handleOf("task", report.task_id) } : null;
+    return {
+      id: report.id,
+      handle: poll ? handleOf("ballot", report.id) : reportHandle(report.id, entry.termed),
+      act,
+      ...act === "corrects" || act === "supersedes" ? { relation: report.relation } : {},
+      from: sessionShown(report.from_session_id, report.from_actor, byId),
+      to,
+      re,
+      ...base,
+      statement,
+      text,
+      why,
+      evidence,
+      kind: report.kind,
+      ...report.confidence !== "unknown" ? { confidence: report.confidence } : {},
+      ...limits ? { limits } : {},
+      ...flags
+    };
+  }
+  const taskHandle = entry.task ? handleOf("task", entry.task.id) : null;
+  const taskTitle = entry.task?.title ?? "a task";
+  switch (event.type) {
+    case "proposal.opened":
+      return {
+        id: event.entity_id,
+        handle: handleOf("proposal", event.entity_id),
+        act: "propose",
+        from,
+        to: "voices",
+        re: null,
+        ...base,
+        statement: report ? statementOf(report.body) : "A proposal was opened.",
+        text: report?.body ?? null,
+        why: [],
+        evidence: report ? refEvidence(report.evidence_refs, entry, recheck) : [],
+        criteria: payload.criteria ?? null,
+        extent: payload.extent ?? null,
+        closes_at: payload.closes_at ?? null
+      };
+    case "proposal.agreed":
+    case "proposal.rejected": {
+      const act = payload.person_act ?? {};
+      const agreed = event.type === "proposal.agreed";
+      const basis = typeof act.basis === "string" ? act.basis : "unknown";
+      return {
+        id: event.entity_id,
+        handle: handleOf("proposal", event.entity_id),
+        act: agreed ? "agree" : "reject",
+        from: basis === "relayed_by_session" ? from : { session: null, name: "person" },
+        to: "voices",
+        re: { id: event.entity_id, handle: handleOf("proposal", event.entity_id) },
+        ...base,
+        statement: agreed ? `The person agreed to ${handleOf("proposal", event.entity_id)} (${basis}).` : basis === "relayed_by_session" ? `A rejection of ${handleOf("proposal", event.entity_id)} was relayed by ${from.name}; a relayed no can only stop work.` : `The person rejected ${handleOf("proposal", event.entity_id)} (${basis}).`,
+        text: typeof act.reason === "string" ? act.reason : null,
+        why: [],
+        evidence: [],
+        basis
+      };
+    }
+    case "task.reported_complete":
+      return {
+        id: event.entity_id,
+        handle: taskHandle ?? event.entity_id,
+        act: "done",
+        from,
+        to: sessionRef(addressed, addressed, byId),
+        re: { id: event.entity_id, handle: taskHandle ?? event.entity_id },
+        ...base,
+        statement: `The completion of ${taskTitle} is ready for review.`,
+        text: typeof payload.summary === "string" ? payload.summary : null,
+        why: [],
+        evidence: [],
+        completion: typeof payload.completion_report_id === "string" ? { id: payload.completion_report_id, handle: handleOf("report", payload.completion_report_id) } : null
+      };
+    case "task.accepted":
+    case "task.changes_requested":
+      return {
+        id: event.entity_id,
+        handle: taskHandle ?? event.entity_id,
+        act: event.type === "task.accepted" ? "accept" : "request_changes",
+        from,
+        to: sessionRef(addressed, addressed, byId),
+        re: { id: event.entity_id, handle: taskHandle ?? event.entity_id },
+        ...base,
+        statement: typeof payload.summary === "string" ? statementOf(payload.summary) : `A verdict on ${taskTitle}.`,
+        text: typeof payload.summary === "string" ? payload.summary : null,
+        why: [],
+        evidence: typeof payload.review_report_id === "string" ? [{ n: 1, kind: "report", locator: payload.review_report_id }] : []
+      };
+    case "ballot.opened":
+    case "ballot.closed":
+    case "ballot.cast":
+    case "ballot.revealed":
+      return ballotItem(entry, from, base, byId, me);
+    default:
+      return {
+        id: event.entity_id,
+        handle: taskHandle ?? event.entity_id,
+        act: "event",
+        type: event.type,
+        from,
+        to: entry.for_me || entry.for_name ? sessionRef(addressed, addressed, byId) : "all",
+        re: taskHandle ? { id: entry.task.id, handle: taskHandle } : null,
+        ...base,
+        statement: eventSubject(event.type, taskHandle, taskTitle, from.name),
+        text: null,
+        why: [],
+        evidence: []
+      };
+  }
+}
+function eventSubject(type, taskHandle, title, by) {
+  const task = taskHandle ? `${taskHandle} (${title})` : "a task";
+  switch (type) {
+    case "handoff.offered":
+      return `${by} offered you ${task}.`;
+    case "handoff.accepted":
+      return `${by} accepted your handoff of ${task}.`;
+    case "handoff.declined":
+      return `${by} declined your handoff of ${task}.`;
+    case "handoff.expired":
+      return `Your handoff of ${task} expired.`;
+    case "task.recovered":
+      return `${by} recovered your expired lease on ${task}.`;
+    default:
+      return `${type}${taskHandle ? ` on ${task}` : ""} by ${by}.`;
+  }
+}
+function subjectLine(entry, byId, me) {
+  const item = formatEntry(entry, byId, me);
+  if (item.folded === true)
+    return { ...item, for_me: false };
+  return {
+    id: item.id,
+    handle: item.handle,
+    act: item.act,
+    ...item.type ? { type: item.type } : {},
+    from: item.from,
+    at: item.at,
+    sequence: item.sequence,
+    statement: item.statement,
+    for_me: false
+  };
+}
+var PERSON_ACT_WAITING = new Set(["stop", "rejected", "record_decision"]);
+function formatWaiting(ctx, entry, byId) {
+  const handle = handleOf(entry.ref_kind, entry.ref_id);
+  const about = entry.about_id ? { id: entry.about_id, handle: entry.what === "review" || entry.what === "challenge" || entry.what === "answer" ? handleOf("report", entry.about_id) : entry.about_id } : null;
+  const next = entry.what === "stop" ? { say: `Stop work that rests on ${handle} (${entry.ref_id}): the person's latest act on it is a rejection.` } : entry.what === "record_decision" ? {
+    say: `The person agreed to ${handle}. Record what is decided, within the agreed extent: ` + `collab_note {act: "decide", re: "${exactRef("proposal", entry.ref_id)}", text: "<what is decided>"}` + (ctx.slot_key ? `, with binding_key "${ctx.slot_key}".` : ".")
+  } : withSlot(ctx, {
+    tool: "collab_inbox",
+    input: {
+      about: entry.what === "answer" && entry.about_id ? exactRef("report", entry.about_id) : exactRef(entry.ref_kind, entry.ref_id)
+    }
+  });
+  return {
+    what: entry.what,
+    ref: handle,
+    id: entry.ref_id,
+    ...about ? { about } : {},
+    by: PERSON_ACT_WAITING.has(entry.what) ? entry.by : sessionShown(entry.by_session_id, entry.by, byId),
+    due: entry.due,
+    at: entry.at,
+    summary: entry.summary,
+    next
+  };
+}
+var DEFAULT_INBOX_LIMIT = 20;
+var WAIT_POLL_MS = 250;
+var WAIT_MAX_SECONDS = 30;
+var ABOUT_MAX = 300;
+function inboxRetry(ctx, input, field, value) {
+  const { [field]: _dropped, ...rest } = input;
+  return withSlot(ctx, { tool: "collab_inbox", input: { ...rest, [field]: value } });
+}
+function nearest(value, min, max) {
+  return Number.isFinite(value) ? Math.min(max, Math.max(min, Math.round(value))) : min;
+}
+function validInboxInput(ctx, input) {
+  const waitSeconds = input.wait_seconds ?? 0;
+  if (typeof waitSeconds !== "number" || !Number.isInteger(waitSeconds) || waitSeconds < 0 || waitSeconds > WAIT_MAX_SECONDS) {
+    throw new CollabError("invalid_wait_seconds", `wait_seconds must be a whole number from 0 to ${WAIT_MAX_SECONDS}`, {
+      remedy: inboxRetry(ctx, input, "wait_seconds", typeof waitSeconds === "number" ? nearest(waitSeconds, 0, WAIT_MAX_SECONDS) : 0)
+    });
+  }
+  const limit = input.limit ?? DEFAULT_INBOX_LIMIT;
+  if (typeof limit !== "number" || !Number.isInteger(limit) || limit < 1 || limit > NOTE_INBOX_MAX_LIMIT) {
+    throw new CollabError("invalid_limit", `limit must be a whole number from 1 to ${NOTE_INBOX_MAX_LIMIT}`, {
+      remedy: inboxRetry(ctx, input, "limit", typeof limit === "number" ? nearest(limit, 1, NOTE_INBOX_MAX_LIMIT) : DEFAULT_INBOX_LIMIT)
+    });
+  }
+  const include = input.include ?? "for_me";
+  if (include !== "for_me" && include !== "all") {
+    throw new CollabError("invalid_include", "include must be for_me or all", {
+      remedy: { say: "include is for_me (the default: items for you) or all (also every other new item, as subject lines)." }
+    });
+  }
+  const format = input.format ?? "json";
+  if (format !== "json" && format !== "note") {
+    throw new CollabError("invalid_format", "format must be json or note", {
+      remedy: { say: "format is json (the default) or note (with about: the thread as one collab-note/1 text)." }
+    });
+  }
+  const since = input.since ?? null;
+  if (since !== null && (typeof since !== "number" || !Number.isSafeInteger(since) || since < 0)) {
+    throw new CollabError("invalid_since", "since must be a whole number, 0 or more: a journal sequence to read back from", {
+      remedy: inboxRetry(ctx, input, "since", typeof since === "number" && Number.isFinite(since) ? Math.max(0, Math.round(since)) : 0)
+    });
+  }
+  let about = null;
+  if (input.about !== undefined) {
+    about = typeof input.about === "string" ? input.about.trim() : "";
+    if (!about) {
+      throw new CollabError("invalid_about", "about must name a report, proposal or task", {
+        remedy: { say: "Pass an id or handle such as report#3fa91c or task#0b12de, or leave about out to read your inbox." }
+      });
+    }
+    if (about.length > ABOUT_MAX) {
+      throw new CollabError("too_long", `about is ${about.length} characters; at most ${ABOUT_MAX}`, {
+        field: "about",
+        max: ABOUT_MAX,
+        actual: about.length,
+        unit: "chars",
+        remedy: { say: "Pass the id or handle exactly as an earlier result gave it." }
+      });
+    }
+  }
+  return { waitSeconds, limit, include, format, about, since };
+}
+async function inboxVerb(ctx, input) {
+  const { binding, credential } = requireCredential(ctx);
+  const { waitSeconds, limit, include, format, about, since } = validInboxInput(ctx, input);
+  if (about !== null)
+    return aboutView(ctx, binding, about, format, waitSeconds, since !== null);
+  if (since !== null)
+    return lookBack(ctx, input, { since, limit, include, format, waitSeconds });
+  const waits = waitSeconds > 0;
+  if (waits && ctx.waits.active >= ctx.waits.max) {
+    throw new CollabError("too_many_waits", `At most ${ctx.waits.max} waits may run per endpoint`);
+  }
+  if (waits)
+    ctx.waits.active += 1;
+  const paging = { ...include === "all" ? { include } : {}, ...input.limit !== undefined ? { limit } : {} };
+  try {
+    const first = ctx.store.inboxForSession({ ...credential, limit, include });
+    const passes = [first];
+    let waited = null;
+    let waitError = null;
+    const extras = [];
+    if (waits && !first.entries.some((entry) => entry.for_me) && !first.more) {
+      const started = performance.now();
+      const seconds = () => Math.round((performance.now() - started) / 100) / 10;
+      try {
+        const woke = await waitForMe(ctx, binding, first.mark.anchor, waitSeconds * 1000);
+        waited = woke === null ? { seconds: seconds(), ended_by: "timeout" } : woke.ended_by === "item" ? { seconds: seconds(), ended_by: "item" } : { seconds: seconds(), ended_by: "ballot_closed", ballot: { id: woke.ballot_id, handle: handleOf("ballot", woke.ballot_id) } };
+        if (woke)
+          passes.push(ctx.store.inboxForSession({ ...credential, limit, include }));
+        if (woke?.ended_by === "ballot_closed") {
+          const listed = passes.some((pass) => pass.entries.some((entry) => entry.event.type === "ballot.closed" && entry.event.entity_id === woke.ballot_id));
+          const closed = listed ? null : ballotClosedEntry(ctx, credential, woke.ballot_id);
+          if (closed)
+            extras.push(closed);
+        }
+      } catch (error51) {
+        if (error51 instanceof CollabError && error51.code === "wait_cancelled") {
+          throw new CollabError(error51.code, error51.message, {
+            first_pass: inboxResult(ctx, passes, format, null, null, paging)
+          });
+        }
+        waitError = error51 instanceof CollabError ? error51 : new CollabError("internal_error", error51 instanceof Error ? error51.message : String(error51));
+        waited = { seconds: seconds(), ended_by: "error", code: waitError.code, message: waitError.message };
+      }
+    }
+    return afterThreadRead(() => inboxResult(ctx, passes, format, waited, waitError, paging, extras));
+  } finally {
+    if (waits)
+      ctx.waits.active -= 1;
+  }
+}
+function ballotClosedEntry(ctx, credential, ballotId) {
+  try {
+    return ctx.store.noteBallotClosedEntry(credential, ballotId);
+  } catch {
+    return null;
+  }
+}
+function lookBack(ctx, input, options) {
+  const { credential } = requireCredential(ctx);
+  const data = ctx.store.inboxLookBackForSession({ ...credential, since: options.since, limit: options.limit, include: options.include });
+  const result = inboxResult(ctx, [data], options.format, null, null, inboxPaging(input));
+  const advice = result.advice;
+  if (options.waitSeconds > 0) {
+    advice.unshift("wait_seconds applies to your inbox from its read mark, not to a look-back, so this call did not wait; leave since out to wait for new items.");
+  }
+  const lookedBack = data.looked_back;
+  if (options.since > data.head_sequence) {
+    advice.push(`since (${options.since}) is past the journal head (${data.head_sequence}); there is nothing after it yet.`);
+  }
+  if (data.entries.some((entry) => entry.for_name))
+    advice.push(FOR_YOUR_NAME_ADVICE);
+  advice.push(LOOK_BACK_ADVICE);
+  return {
+    ...result,
+    looked_back: lookedBack,
+    next: data.more ? withSlot(ctx, { tool: "collab_inbox", input: { ...inboxPaging(input), since: lookedBack.through } }) : result.next
+  };
+}
+function inboxPaging(input) {
+  return { ...input.include === "all" ? { include: "all" } : {}, ...input.limit !== undefined ? { limit: input.limit } : {} };
+}
+var LOOK_BACK_ADVICE = "A look-back only reads: your read mark (read_through) did not move, and nothing it lists is recorded as delivered to you.";
+var FOR_YOUR_NAME_ADVICE = "Items marked for_your_name were addressed to an ended session that carried your name. Names are self-declared: " + "this routes reading to you, it does not make you that session, and nothing that session held, said or stood on passes to you.";
+function inboxResult(ctx, passes, format, waited, waitError = null, paging = {}, extras = []) {
+  const data = passes.at(-1);
+  const byId = new Map(data.sessions.map((view) => [view.id, view]));
+  const me = data.session.id;
+  const entries = [...passes.flatMap((pass) => pass.entries), ...extras];
+  const recheck = evidenceRechecker(ctx.store);
+  const items = entries.map((entry) => entry.for_me || entry.for_name || extras.includes(entry) ? formatEntry(entry, byId, me, recheck) : subjectLine(entry, byId, me));
+  const advice = [];
+  if (format === "note")
+    advice.push("format: note renders one thread; pass about with an id or handle.");
+  if (passes.some((pass) => pass.mark.clamped))
+    advice.push(MARK_CLAMPED_ADVICE);
+  if (waitError) {
+    advice.push(`The wait ended with ${waitError.code}: ${waitError.message}. What this call's first pass found is returned; your read mark is past it.` + (waitError.details.after_housekeeping === true ? " A second pass had moved the mark further before it failed, and its items are not in this result." : ""));
+  }
+  if (entries.some((entry) => entry.folded))
+    advice.push(FOLDED_LINE);
+  if (entries.some((entry) => entry.for_me && entry.event.type === "ballot.opened" && entry.ballot && unitMateHasCast(entry.ballot))) {
+    advice.push(UNIT_MATE_CAST_ADVICE);
+  }
+  if (waited?.ended_by === "ballot_closed") {
+    const ballot = waited.ballot.handle;
+    advice.push(passes.some((pass) => pass.reveal_pending.length > 0) ? `${ballot} closed while you waited; its reveal did not finish (reveal_pending), so it stays sealed and the next call tries again.` : `${ballot} closed while you waited, so the wait ended at its close and its votes were revealed, as any call reveals them.`);
+  }
+  const firstForMe = entries.find((entry) => entry.for_me || entry.for_name) ?? extras[0];
+  const about = firstForMe ? entryRef(firstForMe) : null;
+  const next = waitError ? withSlot(ctx, noteRemedyOf(waitError)) : about ? withSlot(ctx, { tool: "collab_inbox", input: { about } }) : data.more ? withSlot(ctx, { tool: "collab_inbox", input: { ...paging } }) : withSlot(ctx, { tool: "collab_inbox", input: { wait_seconds: WAIT_MAX_SECONDS, ...paging } });
+  const initialisedFrom = passes.map((pass) => pass.mark.initialised_from).find((value) => value) ?? null;
+  const alsoNew = passes.reduce((sum, pass) => sum + pass.also_new, 0);
+  const seeFrom = data.looked_back ? data.looked_back.after : passes[0].mark.before;
+  const see = alsoNew > 0 && paging.include !== "all" ? { see: withSlot(ctx, { tool: "collab_inbox", input: { since: seeFrom, include: "all" } }) } : {};
+  const left = passes.reduce((sum, pass) => ({
+    attached: sum.attached + (pass.not_listed?.attached ?? 0),
+    duplicates: sum.duplicates + (pass.not_listed?.duplicates ?? 0)
+  }), { attached: 0, duplicates: 0 });
+  const notListed2 = left.attached + left.duplicates;
+  if (notListed2 > 0) {
+    advice.push(`${notListed2} event(s) in what was read are not lines of their own, so this list is not the whole journal: ` + `${left.attached} cite evidence or attach artifacts to a report or task beside them, and ${left.duplicates} ` + "repeat a proposal, ballot, completion or verdict listed once. collab_inbox about shows any thread whole.");
+  }
+  return {
+    ok: true,
+    items,
+    also_new: { count: alsoNew, ...see },
+    ...notListed2 > 0 ? { not_listed: { count: notListed2, ...left } } : {},
+    more: data.more,
+    read_through: { sequence: data.mark.through, head: data.head_sequence },
+    ...initialisedFrom ? { mark_initialised_from: initialisedFrom } : {},
+    waiting_on_you: data.waiting.map((entry) => formatWaiting(ctx, entry, byId)),
+    ...waited ? { waited } : {},
+    ...revealPendingField(passes.flatMap((pass) => pass.reveal_pending)),
+    advice,
+    next
+  };
+}
+function revealPendingField(pending) {
+  return pending.length > 0 ? { reveal_pending: pending[0].code } : {};
+}
+var MARK_CLAMPED_ADVICE = "Your read mark was past the journal head (the journal may have been restored from an older copy); it now reads from the head.";
+function entryRef(entry) {
+  const { event, report } = entry;
+  if (entry.folded)
+    return exactRef("ballot", entry.folded.ballot_id);
+  if (event.type === "report.posted")
+    return report ? exactRef("report", report.id) : null;
+  if (event.type.startsWith("proposal."))
+    return exactRef("proposal", event.entity_id);
+  if (event.type.startsWith("ballot."))
+    return exactRef("ballot", event.entity_id);
+  if (event.type.startsWith("task."))
+    return exactRef("task", event.entity_id);
+  return entry.task ? exactRef("task", entry.task.id) : null;
+}
+async function waitForMe(ctx, binding, anchor, durationMs) {
+  const sessionId = binding.handle.session.id;
+  const workspaceId = binding.handle.workspace.id;
+  let after = { ...anchor };
+  const deadline = performance.now() + durationMs;
+  const watched = ctx.store.noteBallotsToWatch(binding.handle.credential);
+  const watchedIds = new Set(watched.map((ballot) => ballot.ballot_id));
+  const clock = () => {
+    if (watched.length === 0)
+      return { closed: null, untilMs: Infinity };
+    const now = Date.parse(ctx.store.noteNow());
+    let untilMs = Infinity;
+    for (const ballot of watched) {
+      const left = Date.parse(ballot.closes_at) - now;
+      if (left <= 0)
+        return { closed: ballot.ballot_id, untilMs: 0 };
+      untilMs = Math.min(untilMs, left);
+    }
+    return { closed: null, untilMs };
+  };
+  while (true) {
+    if (ctx.signals.some((signal) => signal?.aborted)) {
+      throw new CollabError("wait_cancelled", "The inbox wait was cancelled");
+    }
+    const current = ctx.binding();
+    if (!current || current.handle.session.id !== sessionId) {
+      throw new CollabError("session_auth_failed", "The bound session changed during the wait");
+    }
+    let caughtUp = true;
+    try {
+      const page = ctx.store.eventsAfterAnchorForSession({
+        ...current.handle.credential,
+        workspace_id: workspaceId,
+        after_anchor: after,
+        event_limit: 50
+      });
+      for (const event of page.events) {
+        if (event.session_id !== sessionId && ctx.store.eventAddressesSession(event, sessionId))
+          return { ended_by: "item" };
+        if ((event.type === "ballot.cast" || event.type === "ballot.closed") && watchedIds.has(event.entity_id)) {
+          const state = ctx.store.noteBallotState(workspaceId, event.entity_id);
+          if (state === "closed" || state === "revealed")
+            return { ended_by: "ballot_closed", ballot_id: event.entity_id };
+        }
+      }
+      after = page.next_anchor;
+      caughtUp = !page.has_more;
+    } catch (error51) {
+      if (!(error51 instanceof CollabError) || error51.code !== "event_read_busy")
+        throw error51;
+    }
+    const { closed, untilMs } = clock();
+    if (closed)
+      return { ended_by: "ballot_closed", ballot_id: closed };
+    const remaining = deadline - performance.now();
+    if (remaining <= 0)
+      return null;
+    if (!caughtUp)
+      continue;
+    await abortableDelay(Math.max(0, Math.min(WAIT_POLL_MS, remaining, untilMs)), ctx.signals);
+  }
+}
+function abortableDelay(ms, signals) {
+  return new Promise((done) => {
+    const finish = () => {
+      clearTimeout(timer);
+      for (const signal of signals)
+        signal?.removeEventListener("abort", finish);
+      done();
+    };
+    const timer = setTimeout(finish, ms);
+    for (const signal of signals)
+      signal?.addEventListener("abort", finish, { once: true });
+    if (signals.some((signal) => signal?.aborted))
+      finish();
+  });
+}
+function resolveAbout(ctx, workspaceId, value) {
+  const text = value.trim();
+  if (/^(task#|task:|task_)/i.test(text))
+    return { kind: "task", id: ctx.store.resolveNoteRef(workspaceId, "task", text).id };
+  if (/^((report|proposal|ballot)[#:]|report_)/i.test(text)) {
+    return { kind: "report", id: ctx.store.resolveNoteRef(workspaceId, "report", text).id };
+  }
+  const found = [];
+  let unreadable = false;
+  for (const kind of ["report", "task"]) {
+    try {
+      found.push({ kind, id: ctx.store.resolveNoteRef(workspaceId, kind, text).id });
+    } catch (error51) {
+      if (!(error51 instanceof CollabError))
+        throw error51;
+      if (error51.code === `invalid_${kind}_id`)
+        unreadable = true;
+      else if (error51.code !== `${kind}_not_found`)
+        throw error51;
+    }
+  }
+  if (found.length === 1)
+    return found[0];
+  if (found.length > 1) {
+    throw new CollabError("ambiguous_ref", `${text} is the id of a report and of a task`, {
+      value: text,
+      candidates: found.map((entry) => `${entry.kind}:${entry.id}`),
+      remedy: { say: "Name the kind: task:<id> or report:<id>; the candidates are listed." }
+    });
+  }
+  const sessions = aboutSessions(ctx, workspaceId, text);
+  if (sessions.length > 0 || unreadable || /^session[#_:]/i.test(text)) {
+    throw new CollabError("about_not_a_thread", sessions.length > 0 ? `${text} names ${sessions.length === 1 ? "a session" : `${sessions.length} sessions`}, not a thread; about reads one thread` : `${text} is not a thread collab_inbox can show; about reads one thread`, {
+      value: text,
+      ...sessions.length > 0 ? { sessions } : {},
+      remedy: { say: ABOUT_TAKES }
+    });
+  }
+  throw new CollabError("ref_not_found", `No report or task in this workspace has the id ${text}`, { value: text });
+}
+var ABOUT_TAKES = "about takes one thread: a report, proposal, ballot or task, by its id or handle (such as report#3fa91c or task#0b12de). " + "To read what a session wrote, or anything from before you arrived, read back through the journal with " + 'collab_inbox {since: 0, include: "all"}; a look-back moves no read mark.';
+function aboutSessions(ctx, workspaceId, text) {
+  try {
+    const view = ctx.store.resolveNoteSession(workspaceId, text, { include_ended: true });
+    return [{ session: view.id, name: view.actor }];
+  } catch (error51) {
+    if (!(error51 instanceof CollabError))
+      throw error51;
+    if (error51.code === "ambiguous_session") {
+      return (error51.details.candidates ?? []).map((candidate) => ({ session: candidate.session, name: candidate.name }));
+    }
+    return [];
+  }
+}
+function aboutView(ctx, binding, about, format, waitSeconds = 0, sinceGiven = false) {
+  const credential = binding.handle.credential;
+  const workspaceId = binding.handle.workspace.id;
+  const { kind, id } = resolveAbout(ctx, workspaceId, about);
+  const thread = ctx.store.noteThreadForSession({ ...credential, kind, id });
+  return afterThreadRead(() => composeAboutView(ctx, thread, format, waitSeconds, sinceGiven));
+}
+function afterThreadRead(compose) {
+  try {
+    return compose();
+  } catch (error51) {
+    if (!(error51 instanceof CollabError) || error51.details.after_housekeeping !== undefined)
+      throw error51;
+    throw new CollabError(error51.code, error51.message, { ...error51.details, after_housekeeping: true });
+  }
+}
+function composeAboutView(ctx, thread, format, waitSeconds, sinceGiven) {
+  const byId = new Map(thread.sessions.map((view2) => [view2.id, view2]));
+  const me = thread.session.id;
+  const advice = [];
+  if (waitSeconds > 0) {
+    advice.push("wait_seconds applies to your inbox, not to a thread view, so this call did not wait; leave about out to wait for new items.");
+  }
+  if (sinceGiven) {
+    advice.push("since reads back through the journal, not through one thread, so this call shows the thread only; leave about out to read back.");
+  }
+  if (thread.mark.clamped)
+    advice.push(MARK_CLAMPED_ADVICE);
+  if (thread.truncated)
+    advice.push(`This thread lists its first ${thread.answers.length} answers only.`);
+  const recheck = evidenceRechecker(ctx.store);
+  const view = thread.kind === "task" ? taskView(thread, byId, me, recheck) : reportView(ctx, thread, byId, me, advice, recheck);
+  const voteNext = thread.ballot?.viewer?.may_vote && !thread.ballot.viewer.unit_has_cast ? withSlot(ctx, { tool: "collab_vote", input: { ballot: exactRef("ballot", thread.ballot.ballot_id) } }) : null;
+  const result = {
+    ok: true,
+    ...view,
+    truncated: thread.truncated,
+    ...thread.mark.initialised_from ? { mark_initialised_from: thread.mark.initialised_from } : {},
+    ...revealPendingField(thread.reveal_pending),
+    advice,
+    next: voteNext ?? withSlot(ctx, { tool: "collab_inbox", input: {} })
+  };
+  if (format === "note") {
+    try {
+      const carried = carryThread(thread);
+      result.note = carried.text;
+      result.not_carried = carried.not_carried;
+    } catch (error51) {
+      if (!(error51 instanceof CollabError))
+        throw error51;
+      const rootId = thread.kind === "task" ? thread.task.id : thread.root.report.id;
+      if (error51.code !== "not_carriable") {
+        result.note = null;
+        result.not_carried = ["note (cannot be written as a note)"];
+        advice.push(`This thread cannot be carried as a note (${error51.code}: ${error51.message}); carry its full id (${rootId}) instead.`);
+        return result;
+      }
+      const field = typeof error51.details.field === "string" ? error51.details.field : "statement";
+      result.note = null;
+      result.not_carried = [field === "statement" ? "statement (local detail)" : `${field} (short handle)`];
+      advice.push(field === "statement" ? `This thread's statement names a local detail, so it cannot be carried as a note; carry its full id (${rootId}) instead, or ask its author to restate it.` : `This thread's ${field} is a short handle, so it cannot be carried as a note; carry its full id (${rootId}) instead.`);
+    }
+  }
+  return result;
+}
+function reportView(ctx, thread, byId, me, advice, recheck) {
+  const root = thread.root;
+  const report = root.report;
+  const decision = report.kind === "decision" && !thread.termed;
+  const ballot = thread.ballot;
+  const view = {
+    about: {
+      kind: thread.termed ? "proposal" : ballot ? "ballot" : decision ? "decision" : "report",
+      id: report.id,
+      handle: ballot ? handleOf("ballot", report.id) : reportHandle(report.id, thread.termed)
+    },
+    root: formatEntry(root, byId, me, recheck),
+    answers: thread.answers.map((entry) => formatEntry(entry, byId, me, recheck)),
+    state: {
+      challenges: thread.challenges.map((challenge) => challengeView(challenge, thread.termed && challenge.target_report_id === report.id, byId))
+    }
+  };
+  if (thread.proposal) {
+    const facts = proposalFacts(ctx, thread.proposal);
+    advice.push(...facts.advice);
+    return { ...view, ...facts.fields };
+  }
+  if (thread.decision) {
+    const record2 = decisionRecord(thread.decision);
+    advice.push(...record2.advice);
+    return { ...view, ...record2.fields };
+  }
+  if (ballot) {
+    if (thread.folded > 0)
+      advice.push(FOLDED_LINE);
+    advice.push(...ballotAdvice(ballot));
+    return { ...view, ballot: ballotFacts(ballot) };
+  }
+  return view;
+}
+var FOLDED_LINE = "folded so your first answer is your own; read any of them with about:<id> if you choose";
+function ballotTermsView(terms, observedAt) {
+  return {
+    question: terms.question,
+    ...terms.criteria !== undefined ? { criteria: terms.criteria } : {},
+    options: terms.options.map((option) => ({ key: option.key, label: option.label })),
+    method: terms.method,
+    ...terms.pick !== undefined ? { pick: terms.pick } : {},
+    quorum: terms.quorum,
+    closes_at: terms.closes_at,
+    ...observedAt ? { closes_in: durationUntil(terms.closes_at, observedAt) } : {},
+    close_when_all_cast: terms.close_when_all_cast
+  };
+}
+function ballotUnitView(unit) {
+  return {
+    unit: unit.unit_id,
+    names: unit.names,
+    sessions: unit.session_ids,
+    seat_refs: unit.seat_refs,
+    ...unit.model ? { model: unit.model } : {},
+    ...unit.models ? { models: unit.models } : {}
+  };
+}
+function ballotYou(ballot) {
+  const viewer = ballot.viewer;
+  if (!viewer)
+    return null;
+  return {
+    unit: viewer.unit_id,
+    counts_as: viewer.counts_as,
+    ...viewer.same_handle_as ? { same_handle_as: viewer.same_handle_as } : {},
+    in_electorate: viewer.in_electorate,
+    you_may_vote: viewer.may_vote,
+    you_have_cast: viewer.your_casts > 0,
+    unit_has_cast: viewer.unit_has_cast,
+    your_casts: viewer.your_casts
+  };
+}
+function unitMateHasCast(ballot) {
+  const viewer = ballot.viewer;
+  return ballot.state === "open" && viewer !== null && viewer.in_electorate && viewer.unit_has_cast && viewer.your_casts === 0;
+}
+var UNIT_MATE_CAST_ADVICE = "Another lineage of your unit has cast in this ballot; a cast by you makes the unit unit_conflict, and then neither is counted.";
+function ballotBrief(ballot) {
+  return {
+    id: ballot.ballot_id,
+    handle: handleOf("ballot", ballot.ballot_id),
+    question: ballot.terms.question,
+    criteria: ballot.terms.criteria ?? null,
+    options: ballot.terms.options.map((option) => ({ key: option.key, label: option.label })),
+    pick: ballot.terms.pick ?? null,
+    closes_at: ballot.terms.closes_at,
+    closes_in: durationUntil(ballot.terms.closes_at, ballot.observed_at),
+    close_when_all_cast: ballot.terms.close_when_all_cast,
+    you_may_vote: ballot.viewer?.may_vote ?? false,
+    you_have_cast: (ballot.viewer?.your_casts ?? 0) > 0,
+    unit_has_cast: ballot.viewer?.unit_has_cast ?? false,
+    turnout: ballot.turnout,
+    sealing: ballot.sealing
+  };
+}
+function ballotFacts(ballot) {
+  return {
+    id: ballot.ballot_id,
+    handle: handleOf("ballot", ballot.ballot_id),
+    opener: { session: ballot.opener_session_id, name: ballot.opener_name },
+    opened_at: ballot.opened_at,
+    terms: ballotTermsView(ballot.terms, ballot.observed_at),
+    state: ballot.state,
+    closed_by: ballot.closed_by,
+    withdrawn: ballot.withdrawn ? { report: ballot.withdrawn.report_id, at: ballot.withdrawn.at } : null,
+    electorate: ballot.units.map(ballotUnitView),
+    electorate_sha256: ballot.electorate_sha256,
+    chosen_by: ballot.chosen_by,
+    left_out: ballot.left_out,
+    ...ballot.left_out_total > ballot.left_out.length ? { left_out_total: ballot.left_out_total } : {},
+    turnout: ballot.turnout,
+    you: ballotYou(ballot),
+    unit_basis: ballot.unit_basis,
+    sealing: ballot.sealing,
+    closed: ballot.closed ? { at: ballot.closed.at, entry_count: ballot.closed.entry_count, entries_sha256: ballot.closed.entries_sha256 } : null,
+    result: ballot.result
+  };
+}
+function ballotAdvice(ballot) {
+  const advice = [];
+  if (ballot.state === "withdrawn") {
+    advice.push("The opener withdrew this ballot: no cast is taken, and its votes are still revealed at the original close, with no top choice.");
+  } else if (ballot.state === "closed") {
+    advice.push("This ballot has closed; its votes are revealed by the next collab call in this workspace.");
+  } else if (ballot.state === "open" && ballot.viewer?.may_vote && !ballot.viewer.unit_has_cast) {
+    advice.push("Vote with collab_vote before you read anyone else's answer; check what can be checked, since a count does not make an answer true.");
+  } else if (unitMateHasCast(ballot)) {
+    advice.push(UNIT_MATE_CAST_ADVICE);
+  }
+  return advice;
+}
+function ballotItem(entry, from, base, byId, me) {
+  const { event } = entry;
+  const ballot = entry.ballot;
+  const id = event.entity_id;
+  const handle = handleOf("ballot", id);
+  const re = { id, handle };
+  const about = { tool: "collab_inbox", input: { about: exactRef("ballot", id) } };
+  if (!ballot) {
+    return { id, handle, act: "event", type: event.type, from, to: "all", re, ...base, statement: `${event.type} on ${handle}.`, text: null, why: [], evidence: [] };
+  }
+  switch (event.type) {
+    case "ballot.opened": {
+      const mayVote = ballot.viewer?.may_vote === true && !ballot.viewer.unit_has_cast;
+      return {
+        id,
+        handle,
+        act: "poll",
+        from,
+        to: "electorate",
+        re: null,
+        ...base,
+        statement: statementOf(ballot.terms.question.split(`
+`).find((line) => line.trim() !== "")?.trim() ?? handle),
+        text: ballot.terms.question,
+        why: [],
+        evidence: [],
+        terms: ballotTermsView(ballot.terms, ballot.observed_at),
+        state: ballot.state,
+        electorate: ballot.units.map(ballotUnitView),
+        chosen_by: ballot.chosen_by,
+        left_out: ballot.left_out,
+        you_may_vote: ballot.viewer?.may_vote ?? false,
+        you_have_cast: (ballot.viewer?.your_casts ?? 0) > 0,
+        unit_has_cast: ballot.viewer?.unit_has_cast ?? false,
+        unit_basis: ballot.unit_basis,
+        sealing: ballot.sealing,
+        next: mayVote ? { tool: "collab_vote", input: { ballot: exactRef("ballot", id) } } : about
+      };
+    }
+    case "ballot.closed": {
+      const result = ballot.result;
+      const top = result && result.top.length > 0 ? ` (${result.top.join(", ")})` : "";
+      return {
+        id,
+        handle,
+        act: "poll",
+        from: { session: null, name: "system:clock" },
+        to: entry.for_me ? sessionRef(me, me, byId) : entry.for_name ? sessionRef(entry.for_name.session_id, entry.for_name.session_id, byId) : "all",
+        re,
+        ...base,
+        statement: result ? `${handle} closed: ${result.status}${top}. It authorises nothing.` : `${handle} closed.`,
+        text: null,
+        why: [],
+        evidence: [],
+        result: result ? { status: result.status, top: result.top, split: result.split, turnout: result.turnout, quorum: result.quorum } : null,
+        next: about
+      };
+    }
+    case "ballot.cast":
+      return {
+        id,
+        handle,
+        act: "vote",
+        from,
+        to: "all",
+        re,
+        ...base,
+        statement: `A sealed vote was cast in ${handle}.`,
+        text: null,
+        why: [],
+        evidence: [],
+        sealed: true
+      };
+    default:
+      return {
+        id,
+        handle,
+        act: "event",
+        type: event.type,
+        from: { session: null, name: "system:clock" },
+        to: "all",
+        re,
+        ...base,
+        statement: `A vote in ${handle} was revealed at its close.`,
+        text: null,
+        why: [],
+        evidence: []
+      };
+  }
+}
+var FOR_THE_PERSON_NOTE = "For the person to run himself. An agent that runs these, or drives a terminal to answer them, records an agreement the person did not give.";
+var ANNOTATIONS_NOTE = "Flags on supports, challenges and consulted voices are display only: they change no count. The position is consent/v1's, exactly as collab_proposal_status computes it.";
+var DECISION_DOES_NOT_ESTABLISH = [
+  "who or what model wrote it: a session's name and model are self-declared",
+  "that the voices were independent: sessions of one model or one operator may err together, and a seat_ref is unverified",
+  "that the work stayed inside the extent: collab records what was said, not what was done"
+];
+function retiredPosition(status) {
+  return status.ai.position === "withdrawn" || status.ai.position === "superseded";
+}
+function personDeskDb(ctx) {
+  const file2 = ctx.store.db.filename;
+  if (!file2 || file2 === ":memory:")
+    return "";
+  return file2 === defaultDatabasePath(ctx.environment) ? "" : ` --db ${shellQuote(file2)}`;
+}
+function forThePerson(ctx, status) {
+  const id = status.proposal.id;
+  const db = personDeskDb(ctx);
+  const position = status.ai.position;
+  const now = retiredPosition(status) ? `It is ${position}, so the desk no longer takes an agreement on it.` : status.may_proceed ? "The person has agreed to these bytes; nothing more is asked of the person, who may still reject." : position !== "consented" ? `The desk takes an agreement only once the agents' position is consented; it is ${position} now. The person may reject at any time.` : status.person.state === "rejected" ? "The person's latest act is a rejection; the person may agree again on the same bytes, or leave it rejected." : "The agents' position is consented; the person may agree or reject.";
+  return {
+    passkey: `agenttool-collab-host person ceremony --proposal ${id} --act agree${db}`,
+    terminal: `agenttool-collab-host person consent --proposal ${id}${db}`,
+    note: FOR_THE_PERSON_NOTE,
+    now
+  };
+}
+function names(voices) {
+  return voices.map((voice) => voice.name).join(", ");
+}
+function proposalNeeds(data) {
+  const { status } = data;
+  const closes = status.terms.closes_at;
+  const position = status.ai.position;
+  if (position === "withdrawn")
+    return "Withdrawn by its author; nothing moves it now.";
+  if (position === "superseded") {
+    return `Replaced by ${status.ai.obsoleted_by_report_id}; read that proposal instead, since nothing moves this one now.`;
+  }
+  if (status.may_proceed) {
+    return "The person agreed to these bytes, so work may go ahead within the extent; a later challenge does not undo that, and only the person's rejection (or the author's withdrawal) stops it.";
+  }
+  if (status.person.state === "rejected") {
+    return "The person's latest act rejects these bytes, so nothing proceeds unless the person agrees again on the same bytes; agents' supports do not change that.";
+  }
+  const awaited = data.consulted.filter((voice) => voice.awaited);
+  const standing = status.ai.unresolved_challenge_report_ids;
+  switch (position) {
+    case "open":
+      if (data.lone) {
+        return `The author is the lone voice: an explicit support from the author would make it consented, and with none it lapses at ${closes}.`;
+      }
+      return status.ai.qualifying_support_report_ids.length === 0 ? `Support from the awaited voices (${names(awaited)}) would make it consented before ${closes}; at the close, one qualifying support with no standing challenge settles it consented, and none lets it lapse.` : `Support from the voices still awaited (${names(awaited)}) would make it consented now; at ${closes} it settles consented as it stands, unless a challenge stands then.`;
+    case "challenged":
+      return `${standing.length} standing challenge(s) (${standing.join(", ")}) hold it challenged, and only each challenger's voice can lift its own; one still standing at ${closes} closes it split.`;
+    case "consented":
+      return status.ai.closed ? "The agents' position is settled consented; nothing moves without the person's own act at the desk (for_the_person)." : `The agents' position is consented; nothing moves without the person's own act at the desk (for_the_person), and a challenge before ${closes} would make it challenged.`;
+    case "split":
+      return "Closed split: a challenge stood at the close, so the position cannot move; replace the proposal (collab_propose with replaces) if something has changed.";
+    case "lapsed":
+      return "Closed lapsed: no qualifying support by the close, so the position cannot move; replace the proposal if the question still matters.";
+  }
+}
+function stanceItem(stance) {
+  return {
+    id: stance.id,
+    handle: handleOf("report", stance.id),
+    by: { session: stance.from_session_id, name: stance.from_actor, ...stance.from_session_ended ? { ended: true } : {} },
+    voice: stance.voice_id,
+    statement: stance.statement,
+    counted: stance.counted,
+    standing: stance.standing,
+    ...stance.flags,
+    ...stance.flags.ungrounded ? {
+      ungrounded_basis: stance.grounded_by === "note" ? "no Why and no Evidence lines" : "no evidence_refs and no confidence_basis (a legacy report's body is not read for reasons)"
+    } : {},
+    ...stance.flags.challenger_ended ? { voice_has_active_session: stance.voice_has_active_session } : {}
+  };
+}
+function proposalFacts(ctx, data) {
+  const { status } = data;
+  const at = data.observed_at;
+  const advice = [];
+  const consulted = data.consulted.map((voice) => ({
+    voice: voice.voice_id,
+    name: voice.name,
+    last_seen_minutes: voice.last_seen_at ? minutesSince(voice.last_seen_at, at) : null,
+    delivery_recorded: voice.delivery_recorded,
+    awaited: voice.awaited,
+    supported: voice.supported,
+    challenged: voice.challenged,
+    ...voice.ended ? { ended: true } : {}
+  }));
+  const silent = data.consulted.filter((voice) => voice.awaited && !voice.delivery_recorded);
+  const deliveryNote = `${silent.length} awaited voice(s) have no recorded delivery on the notes surface` + (silent.length > 0 ? ` (${names(silent)}): they may never have been shown the question, and consent/v1 still lets their silence settle the position at its close.` : ".");
+  if (silent.length > 0)
+    advice.push(deliveryNote);
+  const authorActive = data.author?.status === "active";
+  const authorName = data.author?.actor ?? status.proposal.from_actor;
+  const replaceOrTell = (authorActive ? `Only its author's session (${authorName}, ${data.author.id}) can replace it carrying the objection (collab_propose with replaces). ` : "Its author's session has ended too, so no session can replace it. ") + `Anyone else tells the person with a note on it to the person (collab_note with re "${exactRef("proposal", status.proposal.id)}" and to "person"); the person can still reject it.`;
+  const open = !status.ai.closed && !retiredPosition(status) && status.person.state !== "rejected";
+  for (const stance of data.challenges) {
+    if (stance.standing && stance.flags.challenger_ended && !stance.voice_has_active_session) {
+      advice.push(`challenger_ended: ${stance.id} still stands, but its challenger's session has ended and no session of its voice is active, ` + `so no session can lift it. ${replaceOrTell}`);
+    }
+  }
+  const standingChallenges = data.challenges.filter((stance) => stance.standing);
+  const countedSupports = data.supports.filter((stance) => stance.counted);
+  if (open && status.ai.position === "challenged" && standingChallenges.length > 0 && standingChallenges.every((stance) => !stance.voice_has_active_session) && countedSupports.length > 0 && countedSupports.every((stance) => stance.from_session_ended)) {
+    advice.push("Every challenge standing here and every support counted here comes from a session that has ended: no active session can " + "lift those challenges (only each challenger's voice can) or withdraw those supports (only the session that wrote each can). " + `As it stands it rests with the person, who can reject it at the desk, or with the close at ${status.terms.closes_at}, ` + `when a challenge still standing makes it split${authorActive ? `, unless its author's session (${authorName}) withdraws or replaces it first` : ""}.`);
+  }
+  const flagged = [...data.supports, ...data.challenges].filter((stance) => stance.flags.same_seat_as_author || stance.flags.same_name_as_author || stance.flags.started_after_open || stance.flags.ungrounded || stance.flags.answered_by_another_voice || stance.flags.challenger_ended);
+  if (flagged.length > 0)
+    advice.push(ANNOTATIONS_NOTE);
+  const fields = {
+    position: status.ai.position,
+    closed: status.ai.closed,
+    closes_at: status.terms.closes_at,
+    proposal_sha256: status.proposal_sha256,
+    may_proceed: status.may_proceed,
+    person: status.person.state,
+    lone: data.lone,
+    needs: proposalNeeds(data),
+    supports: data.supports.map(stanceItem),
+    challenges: data.challenges.map(stanceItem),
+    consulted,
+    delivery: { awaited_without_delivery: silent.length, note: deliveryNote },
+    annotations: ANNOTATIONS_NOTE
+  };
+  if (data.replaced) {
+    fields.replaced = { id: data.replaced.proposal_id, handle: handleOf("proposal", data.replaced.proposal_id) };
+    fields.carried_objections = data.replaced.carried.map((entry) => ({
+      challenge: entry.challenge_id,
+      handle: handleOf("report", entry.challenge_id),
+      by: { session: entry.by_session_id, name: entry.by },
+      voice: entry.voice_id,
+      raised_on: entry.raised_on,
+      carried_in_terms: entry.carried_in_terms,
+      standing_on_replaced: entry.standing_on_replaced,
+      re_raised_here: entry.re_raised_here,
+      counted_by_consent_v1: false
+    }));
+    fields.carried_note = CARRIED_OBJECTIONS_SENTENCE;
+    const shed = data.replaced.carried.filter((entry) => !entry.carried_in_terms && entry.standing_on_replaced);
+    if (shed.length > 0) {
+      advice.push(`${shed.length} objection(s) still standing where they were raised, on the replaced proposal or one it replaced, are not in these terms: ` + `${shed.map((entry) => entry.challenge_id).join(", ")}. A replacement through collab_propose carries them.`);
+    }
+  }
+  if (status.ai.position === "superseded" && status.ai.obsoleted_by_report_id) {
+    fields.replaced_by = { id: status.ai.obsoleted_by_report_id, handle: handleOf("proposal", status.ai.obsoleted_by_report_id) };
+  }
+  fields.for_the_person = forThePerson(ctx, status);
+  fields.status = status;
+  return { fields, advice };
+}
+function scopeMatchesAgreedExtent(data) {
+  const status = data.proposal?.status;
+  if (!status || data.outcome !== "proceed" && data.outcome !== "unstated")
+    return null;
+  return data.authority.scope === status.terms.extent;
+}
+function actView(act) {
+  return {
+    id: act.id,
+    act: act.act,
+    basis: act.basis,
+    at: act.created_at ?? act.at ?? null,
+    ...act.event_id ? { event: act.event_id } : {},
+    ...act.reason ? { reason: act.reason } : {}
+  };
+}
+function decisionRecord(data) {
+  const advice = [];
+  const proposal = data.proposal;
+  const status = proposal?.status ?? null;
+  const report = data.report;
+  const challenges = [
+    ...(proposal?.challenges ?? []).map((stance) => ({ ...stanceItem(stance), on: "proposal" })),
+    ...data.challenges.map((stance) => ({ ...stanceItem(stance), on: "decision" }))
+  ];
+  const restsOn = status ? {
+    proposal: { id: status.proposal.id, handle: handleOf("proposal", status.proposal.id), proposal_sha256: status.proposal_sha256, extent: status.terms.extent },
+    person_act: data.rests_on ? actView(data.rests_on) : null
+  } : { proposal: null, person_act: null, note: NOTE_SELF_DECISION_BASIS };
+  const scopeMatches = scopeMatchesAgreedExtent(data);
+  if (data.agreement_current === false) {
+    const id = status.proposal.id;
+    const later = data.later_act;
+    const latest = data.latest_act ?? later;
+    const cause = later ? `after the agreement this decision rests on, the person's act ${later.id} on ${id} is ${later.act === "reject" ? "a rejection" : later.act} ` + `by ${later.basis}` : retiredPosition(status) ? `${id} was ${status.ai.position === "withdrawn" ? "withdrawn" : "superseded"} by ${status.ai.obsoleted_by_report_id} after the agreement` : `the person's latest act on ${id} is not the agreement this decision cites`;
+    if (latest?.act === "agree" && status.may_proceed && status.agreement?.id === latest.id) {
+      advice.push(`agreement_current is false: ${cause}, and since then the person agreed again on the same bytes (act ${latest.id} by ${latest.basis}). ` + `This decision rests on the earlier agreement; record a new decide on ${id} for work to rest on the agreement that stands now.`);
+    } else {
+      advice.push(`agreement_current is false: ${cause}. Stop work that rests on this decision.`);
+    }
+  }
+  if (!data.marked) {
+    advice.push("This decision was written by a legacy tool: its authority fields are shown as written and were not derived by the server; what it rests on is read from its evidence refs.");
+  }
+  if (scopeMatches === false) {
+    advice.push(`This decision's authority_scope is not the extent the person agreed to on ${status.proposal.id}: ` + "the agreement covers only that extent (rests_on.proposal.extent), and nothing checked the scope this decision states.");
+  }
+  if (data.proposal_unreadable) {
+    advice.push(`The proposal this decision names could not be read (${data.proposal_unreadable}), so no proposal is shown.`);
+  }
+  return {
+    advice,
+    fields: {
+      decision: {
+        id: report.id,
+        handle: handleOf("report", report.id),
+        by: { session: report.from_session_id, name: report.from_actor },
+        at: report.created_at,
+        outcome: data.outcome
+      },
+      outcome: data.outcome,
+      authority: {
+        scope: data.authority.scope,
+        basis: data.authority.basis,
+        derived_by: !data.authority.derived_by_server ? "a legacy tool, as its caller wrote it; not checked" : data.authority.on_proposal ? "the server, from the journal, when it was written" : "no proposal: the scope is this session's own extent (or the default), recorded as written; the server fixed only the basis",
+        ...scopeMatches !== null ? { scope_matches_agreed_extent: scopeMatches } : {}
+      },
+      rests_on: restsOn,
+      rests_on_basis: !data.marked ? "read from the evidence refs a legacy caller chose: the proposal and the act are in the journal, but nothing checked that this decision was made on them" : data.authority.on_proposal ? "derived from the journal (the proposal the server recorded this decision on, and the person's latest act on it then), never from its own words or evidence" : "no proposal: this decision rests only on this session's word",
+      agreement_current: data.agreement_current,
+      ...data.later_act ? { later_act: actView(data.later_act) } : {},
+      ...data.latest_act ? { latest_act: actView(data.latest_act) } : {},
+      ...status ? { proposal_position: { position: status.ai.position, person: status.person.state, may_proceed: status.may_proceed } } : {},
+      challenges,
+      dissent: challenges.filter((challenge) => challenge.standing === true),
+      voices_without_delivery: (proposal?.consulted ?? []).filter((voice) => !voice.delivery_recorded).map((voice) => ({ voice: voice.voice_id, name: voice.name })),
+      does_not_establish: [...DECISION_DOES_NOT_ESTABLISH]
+    }
+  };
+}
+function taskView(thread, byId, me, recheck) {
+  const task = thread.task;
+  const holder = task.assignee_session_id ? byId.get(task.assignee_session_id) : undefined;
+  const generation = thread.reviews.at(-1)?.review_generation ?? null;
+  return {
+    about: { kind: "task", id: task.id, handle: handleOf("task", task.id) },
+    task: {
+      id: task.id,
+      handle: handleOf("task", task.id),
+      title: task.title,
+      state: task.effective_status,
+      review_status: task.review_status,
+      work_mode: task.work_mode,
+      completion_policy: task.completion_policy,
+      paths: task.path_scopes,
+      holder: task.assignee_session_id ? { ...sessionShown(task.assignee_session_id, task.assignee ?? "unknown", byId), purpose: holder?.purpose ?? null } : null,
+      completion: task.completion_report_id ? {
+        id: task.completion_report_id,
+        handle: handleOf("report", task.completion_report_id),
+        by: sessionShown(task.reported_by_session_id, task.reported_by ?? "unknown", byId),
+        at: task.reported_at
+      } : null,
+      review_requested: task.review_requested_session_id ? sessionRef(task.review_requested_session_id, task.review_requested_session_id, byId) : null,
+      reviews: thread.reviews.map((review) => ({
+        outcome: review.outcome,
+        by: sessionShown(review.reviewer_session_id, review.reviewer_actor, byId),
+        at: review.created_at,
+        summary: review.summary,
+        of_current_completion: generation !== null && review.review_generation === generation && task.review_status !== "pending"
+      }))
+    },
+    thread: thread.answers.map((entry) => formatEntry(entry, byId, me, recheck))
+  };
+}
+function localTerms() {
+  const name = hostname3().split(".")[0] ?? "";
+  return name.length >= 3 && !/^[0-9a-f]{1,7}$/i.test(name) ? [name] : [];
+}
+function carryThread(thread) {
+  let input;
+  if (thread.kind === "task") {
+    const task = thread.task;
+    input = {
+      act: "note",
+      statement: statementOf(`Task: ${task.title}`),
+      re: `task:${task.id}`,
+      trailers: [{
+        key: "Position",
+        value: ["legacy_unreviewed", "not_required"].includes(task.review_status) ? task.effective_status : `${task.effective_status}; review ${task.review_status}`
+      }]
+    };
+  } else if (thread.proposal) {
+    input = carriedProposal(thread.proposal);
+    try {
+      return renderCarriedNote(input, { maxChars: 800, localTerms: localTerms() });
+    } catch (error51) {
+      if (!(error51 instanceof CollabError) || error51.code !== "not_carriable" || error51.details.field !== "statement")
+        throw error51;
+      const carried2 = renderCarriedNote({ ...input, statement: PROPOSAL_STAND_IN_STATEMENT }, { maxChars: 800, localTerms: localTerms(), withheldStatement: true });
+      return { text: carried2.text, not_carried: carried2.not_carried };
+    }
+  } else if (thread.decision) {
+    input = carriedDecision(thread.decision, thread.root.marked);
+  } else if (thread.ballot) {
+    const ballot = thread.ballot;
+    const result = ballot.result;
+    input = {
+      act: "poll",
+      statement: statementOf(ballot.terms.question.split(`
+`).find((line) => line.trim() !== "")?.trim() ?? "A sealed ballot."),
+      re: `ballot:${ballot.ballot_id}`,
+      trailers: [
+        { key: "Position", value: `${ballot.state}; closes ${ballot.terms.closes_at}; turnout ${ballot.turnout.cast} of ${ballot.turnout.electorate} units` },
+        ...result ? [{ key: "Result", value: `${result.status}${result.top.length > 0 ? `: ${result.top.join(", ")}` : ""}; authorises nothing` }] : []
+      ]
+    };
+  } else {
+    const report = thread.root.report;
+    const stored = reportAct(report, thread.termed);
+    const act = stored === "corrects" || stored === "supersedes" ? "note" : stored;
+    const re = `${thread.termed ? "proposal" : "report"}:${report.id}`;
+    const parsed = thread.root.marked ? parseNote(report.body) : null;
+    if (parsed && parsed.act !== null) {
+      input = {
+        act,
+        statement: parsed.statement,
+        body: parsed.body,
+        re,
+        why: parsed.why,
+        evidence: parsed.evidence,
+        limits: parsed.limits,
+        purpose: parsed.purpose,
+        extent: parsed.extent
+      };
+    } else {
+      const lines = report.body.split(`
+`);
+      const firstCut = (lines[0] ?? "").length > NOTE_STATEMENT_MAX;
+      input = {
+        act,
+        statement: statementOf(report.body),
+        body: (firstCut ? report.body : lines.slice(1).join(`
+`)).trim() || null,
+        re
+      };
+    }
+  }
+  const carried = renderCarriedNote(input, { maxChars: 800, localTerms: localTerms() });
+  return { text: carried.text, not_carried: carried.not_carried };
+}
+function statementAndBody(text) {
+  const lines = text.split(`
+`);
+  const firstCut = (lines[0] ?? "").length > NOTE_STATEMENT_MAX;
+  return {
+    statement: statementOf(text),
+    body: (firstCut ? text : lines.slice(1).join(`
+`)).trim() || null
+  };
+}
+var PROPOSAL_STAND_IN_STATEMENT = "A proposal; read it by its full id.";
+function carriedProposal(data) {
+  const { status } = data;
+  const carried = data.replaced?.carried.filter((entry) => entry.carried_in_terms).length ?? 0;
+  const position = [
+    status.ai.position,
+    `person ${status.person.state}`,
+    `may_proceed ${status.may_proceed}`,
+    ...carried > 0 ? [`${carried} carried objection(s) are text in the terms, not counted by consent/v1`] : []
+  ].join("; ");
+  return {
+    act: "propose",
+    ...statementAndBody(status.proposal.body),
+    re: `proposal:${status.proposal.id}`,
+    extent: status.terms.extent,
+    limits: status.proposal.limits,
+    trailers: [
+      { key: "Sha256", value: status.proposal_sha256 },
+      { key: "Position", value: position },
+      { key: "Criteria", value: status.terms.criteria }
+    ]
+  };
+}
+function carriedDecision(data, marked) {
+  const report = data.report;
+  const parsed = marked ? parseNote(report.body) : null;
+  const words = parsed && parsed.act !== null ? { statement: parsed.statement, body: parsed.body } : statementAndBody(report.body);
+  const status = data.proposal?.status ?? null;
+  const legacy = !data.authority.derived_by_server;
+  const on = !status ? "not the person's agreement" : legacy ? `cites proposal:${status.proposal.id}` : data.outcome === "proceed" ? `rests on proposal:${status.proposal.id}` : `on proposal:${status.proposal.id}`;
+  const position = [
+    `outcome ${data.outcome}`,
+    ...legacy ? ["legacy", "authority not checked"] : [],
+    on,
+    ...data.agreement_current !== null ? [`agreement_current ${data.agreement_current}`] : [],
+    ...scopeMatchesAgreedExtent(data) === false ? ["scope is not the agreed extent"] : []
+  ].join("; ");
+  const scope = report.authority_scope;
+  return {
+    act: "decide",
+    ...words,
+    re: `report:${report.id}`,
+    ...scope ? { extent: legacy ? `as written by a legacy tool; not checked: ${scope}` : scope } : {},
+    trailers: [
+      ...status ? [{ key: "Sha256", value: status.proposal_sha256 }] : [],
+      { key: "Position", value: position }
+    ]
+  };
+}
+
+// src/note-verbs.ts
+function freeText(value, field, max, required2) {
+  if (value === undefined || value === null) {
+    if (!required2)
+      return null;
+    throw new CollabError(`invalid_${field}`, `${field} is required`, { remedy: { say: `Give ${field} as text.` } });
+  }
+  if (typeof value !== "string")
+    throw new CollabError(`invalid_${field}`, `${field} must be text`);
+  const text = normalizeNoteText(value);
+  if (!text) {
+    if (!required2)
+      return null;
+    throw new CollabError(`invalid_${field}`, `${field} must not be empty`, { remedy: { say: `Give ${field} as text.` } });
+  }
+  if (text.includes("\x00"))
+    throw new CollabError(`invalid_${field}`, `${field} must not contain NUL characters`);
+  if (hasLoneSurrogate(text)) {
+    throw new CollabError(`invalid_${field}`, `${field} must be well-formed Unicode text (it holds half of a character)`);
+  }
+  if (text.length > max) {
+    throw new CollabError("too_long", `${field} is ${text.length} characters; at most ${max}`, {
+      field,
+      max,
+      actual: text.length,
+      unit: "chars"
+    });
+  }
+  return text;
+}
+function refuseNoteProblems(fields) {
+  const problem = checkNote(fields)[0];
+  if (!problem)
+    return;
+  throw noteProblemError(problem);
+}
+function noteKind(why) {
+  return why.length > 0 && why.every((reason) => reason.basis === "seen" || reason.basis === "quoted") ? "observation" : "inference";
+}
+function reasonsText(why) {
+  if (why.length === 0)
+    return null;
+  return why.map((reason) => {
+    const cites = reason.cites.length > 0 ? ` ${reason.cites.join(",")}` : "";
+    return reason.basis || cites ? `${reason.text} (${reason.basis ?? "unmarked"}${cites})` : reason.text;
+  }).join(`
+`);
+}
+var REASONS_COLUMN_MAX = 2000;
+function requireReasonsFit(why) {
+  const text = reasonsText(why);
+  if (text !== null && text.length > REASONS_COLUMN_MAX) {
+    throw new CollabError("too_long", `The reasons together are ${text.length} characters; at most ${REASONS_COLUMN_MAX} here`, {
+      field: "why",
+      max: REASONS_COLUMN_MAX,
+      actual: text.length,
+      unit: "chars",
+      remedy: { say: "Shorten the reasons: a review or a completion keeps them together in at most 2,000 characters." }
+    });
+  }
+  return text;
+}
+function sameValue(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+async function stepOnce(ctx, credential, key, write) {
+  const earlier = replayReceipt(ctx.store, credential, key);
+  if (earlier)
+    return { value: earlier, replayed: true };
+  try {
+    return { value: await write(), replayed: false };
+  } catch (error51) {
+    if (!(error51 instanceof CollabError) || error51.code !== "idempotency_conflict")
+      throw error51;
+    const written = replayReceipt(ctx.store, credential, key);
+    if (written)
+      return { value: written, replayed: true };
+    throw error51;
+  }
+}
+function refusedAfter(error51, recorded) {
+  if (!(error51 instanceof CollabError) || recorded.length === 0 || error51.code === "receipt_plan_stale")
+    return error51;
+  if (error51.details.recorded_steps !== undefined)
+    return error51;
+  return new CollabError(error51.code, `${error51.message.replace(/\.$/, "")}. Written before this refusal, and kept: ${recorded.map((step) => step.what).join("; ")}.`, { ...error51.details, recorded_steps: [...recorded] });
+}
+function beforeFirstWrite(check2) {
+  let done = false;
+  return () => {
+    if (done)
+      return;
+    check2();
+    done = true;
+  };
+}
+var COMMIT_CHECK_BUDGET_MS = 5000;
+function resolveEvidence(ctx, binding, lines) {
+  const workspaceId = binding.handle.workspace.id;
+  const root = binding.handle.worktree.root_path;
+  const out = { lines: [], key_lines: [], items: [], journal: [], advice: [] };
+  const deadline = performance.now() + COMMIT_CHECK_BUDGET_MS;
+  lines.forEach((line, index) => {
+    const n = index + 1;
+    let evidence;
+    try {
+      evidence = parseEvidence(line);
+    } catch (error51) {
+      if (!(error51 instanceof CollabError))
+        throw error51;
+      throw new CollabError("invalid_evidence", `Evidence ${n}: ${error51.message}`, {
+        field: `evidence[${index}]`,
+        remedy: { say: `Write evidence ${n} in one of the evidence forms; nothing was written.` }
+      });
+    }
+    if (NOTE_JOURNAL_EVIDENCE_KINDS.includes(evidence.kind)) {
+      let ref = `${evidence.kind}:${evidence.locator}`;
+      if (evidence.kind === "report") {
+        const value = evidence.locator.includes("#") ? evidence.locator : `report:${evidence.locator}`;
+        ref = `report:${ctx.store.resolveNoteRef(workspaceId, "report", value).id}`;
+      }
+      out.lines.push(ref);
+      out.key_lines.push(ref);
+      out.journal.push(ref);
+      return;
+    }
+    out.key_lines.push(line);
+    const kind = evidence.kind;
+    if (kind === "file") {
+      const { path, from, to } = fileLocatorParts(evidence.locator);
+      const lineRange = from === null ? undefined : to !== null && to !== from ? `${from}-${to}` : `${from}`;
+      const hashed = existsSync6(root) ? hashWorktreeFile(root, path) : { status: "unreadable", path: null };
+      if (hashed.status === "hashed") {
+        const stored = hashed.path === path ? line : renderEvidence({ kind: "file", locator: `${hashed.path}${evidence.locator.slice(path.length)}`, attrs: evidence.attrs });
+        if (stored !== line)
+          out.advice.push(`Evidence ${n} is recorded as "${stored}": the file's path in your worktree.`);
+        out.lines.push(stored);
+        out.items.push({ n, kind, locator: hashed.path, sha256: hashed.sha256, ...lineRange ? { lines: lineRange } : {}, observed: "server" });
+        const claimed = evidence.attrs.sha256?.toLowerCase();
+        if (claimed && claimed !== hashed.sha256) {
+          out.advice.push(`Evidence ${n} (file ${path}) says sha256=${claimed}, but the file in your worktree hashes to ${hashed.sha256} now; the server's hash is the one recorded as observed.`);
+        }
+        return;
+      }
+      out.lines.push(line);
+      const why = {
+        outside: "is outside your worktree",
+        symlink: "reaches through a symbolic link",
+        too_large: `is over ${MAX_CITED_FILE_BYTES / (1024 * 1024)} MiB`,
+        missing: "was not found in your worktree",
+        not_a_file: "is not a regular file",
+        unreadable: "could not be read",
+        changed_while_read: "changed while it was being hashed"
+      }[hashed.status];
+      out.items.push({
+        n,
+        kind,
+        locator: path,
+        ...evidence.attrs.sha256 ? { sha256: evidence.attrs.sha256.toLowerCase() } : {},
+        ...lineRange ? { lines: lineRange } : {},
+        observed: "caller"
+      });
+      out.advice.push(`Evidence ${n} (file ${path}) ${why}, so it was recorded as you wrote it, unhashed (observed: caller).`);
+      return;
+    }
+    out.lines.push(line);
+    if (kind === "commit") {
+      const exists = binding.handle.worktree.git_common_dir_hash === null ? null : gitCommitExists(root, evidence.locator, { deadline, now: () => performance.now() });
+      if (exists === true) {
+        out.items.push({ n, kind, locator: evidence.locator, observed: "server" });
+      } else if (exists === false) {
+        out.items.push({ n, kind, locator: evidence.locator, observed: "not_found" });
+        out.advice.push(`Evidence ${n}: git in your worktree has no commit ${evidence.locator}; it is recorded as not found.`);
+      } else {
+        out.items.push({ n, kind, locator: evidence.locator, observed: "caller" });
+        out.advice.push(`Evidence ${n}: commit ${evidence.locator} could not be checked (no git here, or the time budget ran out); it is recorded as you wrote it.`);
+      }
+      return;
+    }
+    const exit = evidence.attrs.exit !== undefined ? Number(evidence.attrs.exit) : undefined;
+    out.items.push({
+      n,
+      kind,
+      locator: evidence.locator,
+      ...kind === "data" && evidence.attrs.sha256 ? { sha256: evidence.attrs.sha256.toLowerCase() } : {},
+      ...kind === "test" && exit !== undefined && Number.isSafeInteger(exit) ? { exit } : {},
+      observed: "caller"
+    });
+  });
+  return out;
+}
+function evidenceSummary(resolved) {
+  const items = new Map(resolved.items.map((item) => [item.n, item]));
+  return resolved.lines.map((line, index) => {
+    const item = items.get(index + 1);
+    return item ? { n: item.n, kind: item.kind, locator: item.locator, observed: item.observed, ...item.sha256 && item.observed === "server" ? { sha256: item.sha256 } : {} } : { n: index + 1, kind: line.slice(0, line.indexOf(":")), locator: line.slice(line.indexOf(":") + 1), observed: "journal" };
+  });
+}
+function observationText(item) {
+  return item.observed === "server" && item.sha256 ? `sha256 ${item.sha256}` : `observed: ${item.observed}`;
+}
+function recordedEvidence(fresh, recorded, advice) {
+  if (recorded.length === 0)
+    return fresh;
+  const byPosition = new Map(recorded.map((item) => [item.n, item]));
+  for (const item of fresh.items) {
+    const then = byPosition.get(item.n);
+    if (!then)
+      continue;
+    const same = then.observed === item.observed && (then.observed !== "server" || (then.sha256 ?? null) === (item.sha256 ?? null));
+    if (!same) {
+      advice.push(`Evidence ${item.n} (${item.kind} ${item.locator}) reads ${observationText(item)} now; this replay reports what was recorded (${observationText(then)}).`);
+    }
+  }
+  return { ...fresh, items: fresh.items.map((item) => byPosition.get(item.n) ?? item) };
+}
+var BROADCAST = { to_session_id: null, to_person: false, shown: "all", advice: [] };
+function namedSession(ctx, workspaceId, value) {
+  const text = value.trim();
+  const sessions = ctx.store.noteSessionViews(workspaceId);
+  const byIdOrHandle = /^session#[0-9a-fA-F]{6,32}$/.test(text) || sessions.some((view) => view.id === text);
+  if (byIdOrHandle) {
+    let view;
+    try {
+      view = ctx.store.resolveNoteSession(workspaceId, text);
+    } catch (error51) {
+      if (!(error51 instanceof CollabError) || error51.code !== "session_not_found")
+        throw error51;
+      try {
+        view = ctx.store.resolveNoteSession(workspaceId, text, { include_ended: true });
+      } catch (inner) {
+        if (inner instanceof CollabError && inner.code === "session_not_found")
+          return null;
+        throw inner;
+      }
+    }
+    return { view, by_name: false, ended_of: 0, advice: [] };
+  }
+  const active = sessions.filter((view) => view.status === "active" && view.actor === text);
+  if (active.length > 1) {
+    throw new CollabError("ambiguous_session", `${text} names ${active.length} active sessions; use the id of the one you mean`, {
+      value: text,
+      candidates: active.slice(0, 10).map((view) => ({ session: view.id, name: view.actor, last_seen_at: view.last_seen_at })),
+      candidates_total: active.length
+    });
+  }
+  if (active.length === 1) {
+    const view = active[0];
+    return {
+      view,
+      by_name: true,
+      ended_of: 0,
+      advice: [`${text} is the name of one active session (${view.id}); names are self-declared, so this routes by name.`]
+    };
+  }
+  const ended = sessions.filter((view) => view.actor === text);
+  if (ended.length === 0)
+    return null;
+  const latest = ended[0];
+  return {
+    view: latest,
+    by_name: true,
+    ended_of: ended.length,
+    advice: [
+      `No active session is named ${text}; this is addressed to that name's latest session (${latest.id}, last seen ` + `${latest.last_seen_at}), which has ended${ended.length > 1 ? `, the latest of ${ended.length} that carried the name` : ""}. ` + `A later session that arrives as ${text} is told of it on arrival (left_for_your_name). Names are self-declared, ` + "so this routes by name; it does not show who will read it."
+    ]
+  };
+}
+function explicitAddressee(ctx, workspaceId, value, input) {
+  if (value === "all")
+    return BROADCAST;
+  if (value === "person")
+    return { to_session_id: null, to_person: true, shown: "person", advice: [] };
+  const named = namedSession(ctx, workspaceId, value);
+  if (!named) {
+    const text = value.trim();
+    const kind = /^session[#_]/.test(text) ? `No session in this workspace has the id or handle ${text}` : `No session named ${text} has arrived in this workspace yet`;
+    throw new CollabError("session_not_found", `${kind}, so nothing can be addressed to it; nothing was written`, {
+      value: text,
+      remedy: textIsNote(input) ? { say: "Change the To: line to all and send it again: a later arrival reads notes for all back through before_you_arrived." } : sameNoteWith(ctx, input, { to: "all" })
+    });
+  }
+  const { view } = named;
+  if (named.by_name && view.status === "ended") {
+    return { to_session_id: view.id, to_person: false, shown: { session: view.id, name: view.actor }, advice: named.advice };
+  }
+  const addressee = sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at);
+  return { ...addressee, advice: [...named.advice, ...addressee.advice] };
+}
+function sessionAddressee(id, name, status, liveness, lastSeenAt) {
+  const advice = [];
+  if (status === "ended")
+    advice.push(`${name} (${id}) has ended its session; the note is recorded and addressed to it all the same.`);
+  else if (liveness === "stale") {
+    advice.push(`${name} (${id}) was last seen at ${lastSeenAt}, over 6 hours ago; the note is recorded and addressed to it all the same.`);
+  }
+  return { to_session_id: id, to_person: false, shown: { session: id, name }, advice };
+}
+function authorAddressee(target, me) {
+  const author = target.author;
+  if (!author || author.id === me)
+    return BROADCAST;
+  return sessionAddressee(author.id, author.actor, author.status, author.liveness, author.last_seen_at);
+}
+function replyAddressee(ctx, workspaceId, author, me) {
+  if (!author || author.id === me)
+    return BROADCAST;
+  if (author.status === "ended") {
+    const live = ctx.store.noteSessionViews(workspaceId).filter((view) => view.status === "active" && view.actor === author.actor && view.id !== author.id);
+    if (live.length === 1 && live[0].id !== me) {
+      const now = live[0];
+      const routed = sessionAddressee(now.id, now.actor, now.status, now.liveness, now.last_seen_at);
+      return {
+        ...routed,
+        advice: [
+          `${author.actor}'s session that wrote this (${author.id}) has ended; this is addressed to the active session named ` + `${now.actor} (session ${now.id}). Names are self-declared, so this is routing by name, not proof that it is the same agent.`,
+          ...routed.advice
+        ]
+      };
+    }
+  }
+  return sessionAddressee(author.id, author.actor, author.status, author.liveness, author.last_seen_at);
+}
+function viewAddressee(ctx, workspaceId, sessionId) {
+  const view = ctx.store.resolveNoteSession(workspaceId, sessionId, { include_ended: true });
+  return sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at);
+}
+var NOTE_ACTS_HERE = [
+  "note",
+  "support",
+  "challenge",
+  "resolve",
+  "withdraw",
+  "accept",
+  "request_changes",
+  "relay_rejection",
+  "decide"
+];
+var STRUCTURED_FIELDS = ["re", "to", "via", "why", "evidence", "limits", "extent", "replaces"];
+function readNoteInput(input) {
+  if (typeof input.text !== "string" || !normalizeNoteText(input.text)) {
+    throw new CollabError("invalid_text", "text is required: the statement on its first line, then any body", {
+      remedy: { say: "Give text: what you put forward on its first line (at most 200 characters), then a blank line and any body." }
+    });
+  }
+  if (input.act !== undefined && typeof input.act !== "string")
+    throw new CollabError("invalid_act", "act must be text");
+  const structured = {
+    re: input.re,
+    to: input.to,
+    via: input.via,
+    why: input.why,
+    evidence: input.evidence,
+    limits: input.limits,
+    extent: input.extent,
+    replaces: input.replaces
+  };
+  const advice = [];
+  const firstLine2 = normalizeNoteText(input.text).split(`
+`)[0] ?? "";
+  const head = /^([A-Za-z_]+): /.exec(firstLine2);
+  const headAct = head && isNoteAct(head[1].toLowerCase()) ? head[1].toLowerCase() : null;
+  if (input.act === undefined && headAct !== null) {
+    const parsed = parseNote(input.text);
+    advice.push(...parsed.advice);
+    const { advice: _advice, ...noteFields } = parsed;
+    const fields = normalizeNoteFields({ ...noteFields, act: parsed.act });
+    const given = normalizeNoteFields({ act: fields.act, statement: fields.statement, ...structured });
+    for (const field of STRUCTURED_FIELDS) {
+      const fromText = fields[field];
+      const fromField = given[field];
+      const empty = (value) => value === null || Array.isArray(value) && value.length === 0;
+      if (empty(fromField))
+        continue;
+      if (empty(fromText)) {
+        fields[field] = fromField;
+      } else if (!sameValue(fromText, fromField)) {
+        throw new CollabError("field_given_twice", `${field} is in the note text and in the call, with different values`, {
+          field,
+          remedy: { say: `Give ${field} once, in the note text or as a field.` }
+        });
+      }
+    }
+    return { fields, read_as: "collab-note/1", advice };
+  }
+  const act = (input.act ?? "note").trim().toLowerCase();
+  let text = input.text;
+  if (input.act !== undefined && headAct !== null) {
+    const rest = normalizeNoteText(input.text).slice(head[0].length);
+    if (headAct === act && (rest.split(`
+`)[0] ?? "").trim() !== "") {
+      text = rest;
+      advice.push(`text began with "${head[1]}: ", the act you gave, so that word was left out of the statement.`);
+    } else {
+      advice.push(`text begins with "${head[1]}: ", which stays in the statement because act was given.`);
+    }
+  }
+  const { statement, body } = splitNoteText(text);
+  return {
+    fields: normalizeNoteFields({ act, statement, body, ...structured }),
+    read_as: null,
+    advice
+  };
+}
+function requireActHere(ctx, act, fields) {
+  if (NOTE_ACTS_HERE.includes(act))
+    return;
+  const elsewhere = {
+    take: withSlot(ctx, { tool: "collab_take", input: { title: fields.statement } }),
+    done: withSlot(ctx, { tool: "collab_done", input: { text: fields.statement } }),
+    propose: withSlot(ctx, { tool: "collab_propose", input: { question: fields.statement } }),
+    poll: withSlot(ctx, { tool: "collab_poll", input: { question: fields.statement } }),
+    vote: withSlot(ctx, { tool: "collab_vote", input: fields.re ? { ballot: fields.re.replace(/^ballot:/, "") } : {} })
+  };
+  if (elsewhere[act]) {
+    throw new CollabError("wrong_verb", `${act} is its own verb, not a note act; nothing was written`, { remedy: elsewhere[act] });
+  }
+  throw new CollabError("invalid_act", `act must be one of ${NOTE_ACTS_HERE.join(", ")}`, {
+    remedy: { say: `act is one of ${NOTE_ACTS_HERE.join(", ")}; leave it out for a plain note.` }
+  });
+}
+function resolveRe(ctx, workspaceId, value) {
+  const ref = parseNoteRef(value);
+  if (!ref) {
+    throw new CollabError("invalid_ref", `re ${JSON.stringify(value)} is not a reference collab can read`, {
+      remedy: { say: "re is report#\u2026, proposal#\u2026, ballot#\u2026, task#\u2026, a full id, event:<id>, or file:, lobby: or msg: text." }
+    });
+  }
+  if (ref.kind === "task") {
+    const id = ctx.store.resolveNoteRef(workspaceId, "task", value).id;
+    return { kind: "task", id, task: ctx.store.getTask(workspaceId, id) };
+  }
+  if (ref.kind === "report" || ref.kind === "proposal" || ref.kind === "ballot") {
+    const id = ctx.store.resolveNoteRef(workspaceId, ref.kind, value).id;
+    const view = ctx.store.noteTarget(workspaceId, id);
+    return { kind: "report", id, label: view.termed ? "proposal" : view.ballot ? "ballot" : "report", view };
+  }
+  if (ref.kind === "event")
+    return { kind: "event", id: ref.id };
+  return { kind: "text", ref: value };
+}
+function reText(target) {
+  switch (target.kind) {
+    case "report":
+      return `${target.label}:${target.id}`;
+    case "task":
+      return `task:${target.id}`;
+    case "event":
+      return `event:${target.id}`;
+    default:
+      return target.ref;
+  }
+}
+function targetHandle(target) {
+  return handleOf(target.label, target.id);
+}
+function ballotWithdrawalAdvice(ctx, workspaceId, withdrawn) {
+  if (withdrawn.view.ballot) {
+    return [withdrawn.view.ballot.open ? "A withdrawn ballot stays withdrawn: no cast is taken from now, its votes are revealed at the original close with " + "no top choice, and withdrawing this withdrawal later does not reopen it. Open a new poll to ask again." : `${targetHandle(withdrawn)} already takes no casts (it was withdrawn or has closed), so this withdrawal changes neither its state nor its result.`];
+  }
+  const { relation, target_report_id: targetId } = withdrawn.view.report;
+  if (relation !== "withdraws" || !targetId)
+    return [];
+  try {
+    if (!ctx.store.noteTarget(workspaceId, targetId).ballot)
+      return [];
+  } catch {
+    return [];
+  }
+  return [`This does not reopen ${handleOf("ballot", targetId)}: a ballot's withdrawal is final. Open a new poll to ask again.`];
+}
+function noteRetryInput(input, patch = {}) {
+  const { dry_run: _dry, ...rest } = input;
+  return { ...rest, ...patch };
+}
+function sameNoteWith(ctx, input, patch) {
+  return withSlot(ctx, { tool: "collab_note", input: noteRetryInput(input, patch) });
+}
+async function noteVerb(ctx, input) {
+  const { binding } = requireCredential(ctx);
+  const pending = input.dry_run === true ? null : revealDue(ctx, binding.handle.workspace.id);
+  const result = await noteAct(ctx, input);
+  return pending ? { ...result, reveal_pending: pending } : result;
+}
+async function noteAct(ctx, input) {
+  const { binding, credential } = requireCredential(ctx);
+  const workspaceId = binding.handle.workspace.id;
+  const me = credential.session_id;
+  const read = readNoteInput(input);
+  const advice = [...read.advice];
+  let fields = read.fields;
+  requireActHere(ctx, fields.act, fields);
+  const act = fields.act;
+  if (input.dry_run !== undefined && typeof input.dry_run !== "boolean") {
+    throw new CollabError("invalid_dry_run", "dry_run is true or false");
+  }
+  const outcome = decideOutcome(act, input);
+  if (input.outcome !== undefined && act !== "decide")
+    advice.push("outcome applies to decide only; it was not used.");
+  if (fields.via) {
+    const downgraded = fields.why.filter((reason) => reason.basis === "seen" || reason.basis === "quoted").length;
+    if (downgraded > 0) {
+      fields = { ...fields, why: fields.why.map((reason) => reason.basis === "seen" || reason.basis === "quoted" ? { ...reason, basis: "told" } : reason) };
+      advice.push(`The text came via ${fields.via}, so ${downgraded} seen or quoted reason(s) were recorded as told: you are its speaker, not its witness.`);
+    }
+  }
+  if (fields.re === null && act !== "note" && act !== "decide") {
+    throw new CollabError("re_required", `${act} needs re: what it answers`, {
+      remedy: { say: `Add re: the report it answers, as an id or a handle such as report#3fa91c.` }
+    });
+  }
+  refuseNoteProblems(fields);
+  const target = fields.re !== null ? resolveRe(ctx, workspaceId, fields.re) : null;
+  const evidence = resolveEvidence(ctx, binding, fields.evidence);
+  fields = { ...fields, evidence: evidence.lines, re: target ? reText(target) : null };
+  let replacedId = null;
+  if (fields.replaces !== null) {
+    if (act !== "challenge") {
+      throw new CollabError("replaces_not_supported", "replaces is for a challenge that replaces your earlier challenge", {
+        remedy: { say: "To take back an earlier note, withdraw it (act withdraw, re: it), then say the new one." }
+      });
+    }
+    replacedId = ctx.store.resolveNoteRef(workspaceId, "report", fields.replaces.includes("#") ? fields.replaces : fields.replaces.includes(":") ? fields.replaces : `report:${fields.replaces}`).id;
+    fields = { ...fields, replaces: `report:${replacedId}` };
+  }
+  const keyInput = {
+    act,
+    fields: { ...fields, evidence: evidence.key_lines, to: keyAddressee(ctx, workspaceId, fields.to) },
+    ...act === "decide" ? { outcome } : {}
+  };
+  const plan = () => {
+    const planned = planNote(ctx, input, { act, fields, target, me, workspaceId, replacedId, evidence });
+    refuseNoteProblems(planned.fields);
+    return { planned, note: renderNote(planned.fields) };
+  };
+  const planAdvice = (planned) => [...evidence.advice, ...planned.advice, ...planned.addressee.advice];
+  if (act === "decide") {
+    return decideNote(ctx, binding, credential, { fields, target, evidence, keyInput, advice, read_as: read.read_as, input, outcome });
+  }
+  if (input.dry_run === true || act === "accept" || act === "request_changes" || act === "relay_rejection") {
+    const { planned, note } = plan();
+    advice.push(...planAdvice(planned));
+    if (input.dry_run === true)
+      return dryRunResult({ planned, note, advice, evidence, read_as: read.read_as });
+    return act === "relay_rejection" ? relayNote(ctx, credential, { planned, note, keyInput, advice, read_as: read.read_as, input }) : reviewNote(ctx, binding, credential, { planned, evidence, note, keyInput, advice, read_as: read.read_as, input });
+  }
+  const cite = evidence.items.length > 0 ? { worktree_id: binding.handle.worktree.id, items: evidence.items } : null;
+  const { plan: receiptPlan, receipt, fresh } = await underPlan(ctx, credential, {
+    tool: "collab_note",
+    input: keyInput,
+    entity: noteEntity(ctx, input, act, target),
+    retry_input: noteRetryInput(input),
+    stillCurrent: (latestKey) => {
+      const found = replayReceipt(ctx.store, credential, latestKey);
+      return !found || ctx.store.noteReportStands(workspaceId, found.reports[0].id);
+    }
+  }, async (receiptPlan2) => {
+    let fresh2 = null;
+    const step = await stepOnce(ctx, credential, receiptPlan2.key, () => {
+      fresh2 = plan();
+      return ctx.store.appendNoteForSession({
+        ...credential,
+        idempotency_key: receiptPlan2.key,
+        cite,
+        reports: fresh2.planned.reports,
+        receipt_plan: receiptPlan2.guard
+      });
+    });
+    return { plan: receiptPlan2, receipt: step.value, fresh: step.replayed ? null : fresh2 };
+  });
+  if (fresh) {
+    advice.push(...planAdvice(fresh.planned));
+    return noteResult(ctx, { planned: fresh.planned, receipt, replayed: false, note: fresh.note, advice, read_as: read.read_as, evidence });
+  }
+  if (receiptPlan.retry) {
+    advice.push("This repeats your latest act on this entity exactly, so it was read as a retry. Add a word to say it again.");
+  }
+  const replayed = replayedNote(ctx, workspaceId, { act, fields, target, receipt, to: keyInput.fields.to });
+  return noteResult(ctx, { ...replayed, receipt, replayed: true, advice, read_as: read.read_as });
+}
+function keyAddressee(ctx, workspaceId, value) {
+  if (value === null)
+    return null;
+  const text = value.trim();
+  if (/^session#[0-9a-fA-F]{6,32}$/.test(text)) {
+    try {
+      return ctx.store.resolveNoteSession(workspaceId, text, { include_ended: true }).id;
+    } catch (error51) {
+      if (!(error51 instanceof CollabError))
+        throw error51;
+    }
+  }
+  return text;
+}
+var REPORT_TARGET_REASONS = {
+  support: "to stand on a task's work, name its completion report",
+  challenge: "to stand on a task's work, name its completion report",
+  resolve: "resolve names the challenge it lifts",
+  withdraw: "withdraw names your own earlier report"
+};
+function requireReportTarget(ctx, input, act, target) {
+  if (target?.kind === "report")
+    return target;
+  const why = REPORT_TARGET_REASONS[act] ?? "name the report in re";
+  if (target?.kind === "task" && target.task.completion_report_id) {
+    throw new CollabError("re_must_be_report", `${act} answers a report; ${why}`, {
+      remedy: sameNoteWith(ctx, input, { re: exactRef("report", target.task.completion_report_id) })
+    });
+  }
+  throw new CollabError("re_must_be_report", `${act} answers a report; ${why}`, {
+    remedy: { say: `Name the report in re, as an id or a handle such as report#3fa91c.` }
+  });
+}
+function noteEntity(ctx, input, act, target) {
+  if (act !== "note")
+    return requireReportTarget(ctx, input, act, target).id;
+  if (target?.kind === "report" || target?.kind === "task")
+    return target.id;
+  return "note";
+}
+function replayedNote(ctx, workspaceId, context) {
+  const main = context.receipt.reports[0];
+  const recordedAs = main.relation === "informs" ? context.act === "resolve" ? "answer" : "note" : { supports: "support", challenges: "challenge", resolves: "resolve", withdraws: "withdraw" }[main.relation];
+  let addressee = BROADCAST;
+  if (main.to_session_id) {
+    const view = safeSession(ctx, workspaceId, main.to_session_id);
+    addressee = { to_session_id: main.to_session_id, to_person: false, shown: { session: main.to_session_id, name: view?.actor ?? main.to_session_id }, advice: [] };
+  } else if (context.to === "person") {
+    addressee = { to_session_id: null, to_person: true, shown: "person", advice: [] };
+  }
+  const extra = {};
+  if ((context.act === "support" || context.act === "challenge") && context.fields.why.length === 0 && context.fields.evidence.length === 0) {
+    extra.ungrounded = true;
+  }
+  if (recordedAs === "answer")
+    extra.recorded_as_answer = true;
+  const stored = parseNote(main.body);
+  return {
+    planned: {
+      act: context.act,
+      recorded_as: recordedAs,
+      fields: context.fields,
+      target: context.target,
+      addressee,
+      reports: [],
+      entity: "",
+      advice: [],
+      extra
+    },
+    note: main.body,
+    evidence: { lines: stored.evidence, key_lines: [], items: context.receipt.cite?.items ?? [], journal: [], advice: [] }
+  };
+}
+function dryRunResult(options) {
+  const { planned, evidence } = options;
+  return {
+    ok: true,
+    dry_run: true,
+    effect: "Dry run: nothing was written.",
+    act: planned.act,
+    recorded_as: planned.recorded_as,
+    ...options.read_as ? { read_as: options.read_as } : {},
+    parsed: planned.fields,
+    would: {
+      reports: planned.reports.map((report) => ({
+        relation: report.relation,
+        kind: report.kind,
+        target: report.target_report_id ?? null,
+        task: report.task_id ?? null,
+        to: report.to_session_id ?? (report.to_person ? "person" : null),
+        about_proposal: report.about_proposal_id ?? null
+      })),
+      cites: evidence.items.length > 0 ? 1 : 0
+    },
+    to: planned.addressee.shown,
+    evidence: evidenceSummary(evidence),
+    authorises: "Nothing. This is coordination state.",
+    advice: options.advice,
+    note: options.note,
+    ...planned.extra
+  };
+}
+function planNote(ctx, input, context) {
+  const { act, target, me, workspaceId, evidence } = context;
+  let fields = context.fields;
+  const advice = [];
+  const extra = {};
+  const hasCite = evidence.items.length > 0;
+  const explicit = fields.to !== null && act !== "accept" && act !== "request_changes" && act !== "relay_rejection" ? explicitAddressee(ctx, workspaceId, fields.to, input) : null;
+  const reportTarget = target?.kind === "report" ? target : null;
+  const base = (relation, extraRefs = []) => ({
+    kind: noteKind(fields.why),
+    relation,
+    body: "",
+    evidence_refs: [...evidence.journal, ...extraRefs],
+    cite_event: hasCite
+  });
+  const grounded = fields.why.length > 0 || fields.evidence.length > 0;
+  if ((act === "support" || act === "challenge") && !grounded) {
+    advice.push(`ungrounded: this ${act} gives no reason and no evidence. It is recorded; a reason someone could check carries more weight.`);
+    extra.ungrounded = true;
+  }
+  seenOverRelayed(ctx, workspaceId, me, fields, advice);
+  const finish = (planned) => {
+    const finalFields = planned.fields ?? fields;
+    const body = renderNote(finalFields);
+    const reports = planned.reports.map((report, index) => index === 0 && report.body === "" ? { ...report, body } : report);
+    return { act, fields: finalFields, advice, extra, ...planned, reports };
+  };
+  switch (act) {
+    case "note": {
+      const report = base("informs");
+      let addressee = BROADCAST;
+      if (reportTarget) {
+        report.evidence_refs.push(`report:${reportTarget.id}`);
+        report.task_id = reportTarget.view.report.task_id;
+        if (reportTarget.view.termed)
+          report.about_proposal_id = reportTarget.id;
+        addressee = replyAddressee(ctx, workspaceId, reportTarget.view.author, me);
+      } else if (target?.kind === "task") {
+        report.task_id = target.id;
+        const holder = target.task.assignee_session_id ?? target.task.reported_by_session_id;
+        if (holder && holder !== me) {
+          addressee = viewAddressee(ctx, workspaceId, holder);
+        }
+      } else if (target?.kind === "event") {
+        report.evidence_refs.push(`event:${target.id}`);
+      }
+      addressee = explicit ?? addressee;
+      report.to_session_id = addressee.to_session_id;
+      report.to_person = addressee.to_person;
+      return finish({
+        recorded_as: "note",
+        target,
+        addressee,
+        reports: [report],
+        entity: reportTarget?.id ?? (target?.kind === "task" ? target.id : "note")
+      });
+    }
+    case "support":
+    case "challenge": {
+      const reportTarget2 = requireReportTarget(ctx, input, act, target);
+      const view = reportTarget2.view;
+      const report = base(act === "support" ? "supports" : "challenges");
+      report.target_report_id = reportTarget2.id;
+      report.task_id = view.report.task_id;
+      if (view.termed)
+        report.about_proposal_id = reportTarget2.id;
+      const addressee = explicit ?? replyAddressee(ctx, workspaceId, view.author, me);
+      report.to_session_id = addressee.to_session_id;
+      report.to_person = addressee.to_person;
+      if (view.completion_of?.pending_review) {
+        advice.push("This is recorded as a stance, not a review; to review the work, use act accept or request_changes.");
+      }
+      if (act === "support" && view.ballot?.open) {
+        advice.push("This is public and unsealed; to vote, use collab_vote.");
+      }
+      if (view.author?.id === me) {
+        const lone = act === "support" && view.termed && ctx.store.noteProposalView(workspaceId, reportTarget2.id).lone;
+        advice.push(lone ? `You wrote ${targetHandle(reportTarget2)} and are the only voice on it: this explicit support is what consent/v1 counts from a lone voice. It adds no second voice, and the person still decides.` : `You wrote ${targetHandle(reportTarget2)}; standing on your own report adds no second voice.`);
+      }
+      if (view.obsoleted)
+        advice.push(`${targetHandle(reportTarget2)} was withdrawn or replaced by its author; your ${act} is recorded on it all the same.`);
+      if (view.termed && !view.obsoleted)
+        advice.push(...lateVoiceAdvice(ctx, workspaceId, me, act, reportTarget2));
+      if (act === "challenge" && context.replacedId) {
+        return finish({
+          recorded_as: "challenge",
+          target,
+          addressee,
+          reports: [report, replacedChallenge(ctx, workspaceId, me, context.replacedId, reportTarget2.id)],
+          entity: reportTarget2.id
+        });
+      }
+      return finish({ recorded_as: act, target, addressee, reports: [report], entity: reportTarget2.id });
+    }
+    case "resolve": {
+      const challenge = requireReportTarget(ctx, input, act, target);
+      if (challenge.view.report.relation !== "challenges") {
+        throw new CollabError("not_a_challenge", `${targetHandle(challenge)} is not a challenge; resolve lifts a challenge`, {
+          remedy: { say: "To answer a report, post a note with re; to lift your own challenge, resolve names that challenge." }
+        });
+      }
+      const challenger = challenge.view.author;
+      const myVoice = ctx.store.consentVoiceOf(me);
+      const challenged = ctx.store.noteTarget(workspaceId, challenge.view.report.target_report_id);
+      if (challenger && challenger.voice_id === myVoice) {
+        const report2 = base("resolves");
+        report2.target_report_id = challenge.id;
+        report2.task_id = challenge.view.report.task_id;
+        const addressee2 = explicit ?? replyAddressee(ctx, workspaceId, challenged.author, me);
+        report2.to_session_id = addressee2.to_session_id;
+        report2.to_person = addressee2.to_person;
+        if (challenge.view.obsoleted)
+          advice.push(`${targetHandle(challenge)} was already withdrawn; the resolve is recorded all the same.`);
+        return finish({ recorded_as: "resolve", target, addressee: addressee2, reports: [report2], entity: challenge.id });
+      }
+      fields = { ...fields, act: "note" };
+      const report = base("informs", [`report:${challenge.id}`]);
+      report.task_id = challenge.view.report.task_id;
+      const addressee = explicit ?? (challenger ? replyAddressee(ctx, workspaceId, challenger, me) : BROADCAST);
+      report.to_session_id = addressee.to_session_id;
+      report.to_person = addressee.to_person;
+      advice.push("Only the challenger can lift a challenge; your answer was sent to them" + (challenger ? ` (challenger voice ${challenger.voice_id}; yours is ${myVoice}).` : "."));
+      const myName = ctx.store.noteSessionViews(workspaceId).find((view) => view.id === me)?.actor ?? null;
+      if (challenger && myName !== null && challenger.actor === myName) {
+        const proposal = onProposal(ctx, workspaceId, challenge.view);
+        advice.push(`${newVoiceSentence(myName)} So this does not lift the challenge; it is recorded as an answer.` + (proposal ? " To tell the person where you stand, post a note on it to the person, who can still reject the proposal." : ""));
+      }
+      extra.recorded_as_answer = true;
+      return finish({ recorded_as: "answer", target, addressee, reports: [report], entity: challenge.id, fields });
+    }
+    case "withdraw": {
+      const withdrawn = requireReportTarget(ctx, input, act, target);
+      if (withdrawn.view.report.from_session_id !== me) {
+        throw notYourReport(ctx, workspaceId, me, withdrawn, "withdraws it");
+      }
+      const report = base("withdraws");
+      report.target_report_id = withdrawn.id;
+      report.task_id = withdrawn.view.report.task_id;
+      const objectors = withdrawn.view.challenges.filter((challenge) => challenge.standing && challenge.from_session_id && challenge.from_session_id !== me);
+      const latest = objectors.at(-1);
+      let addressee = BROADCAST;
+      if (latest) {
+        addressee = viewAddressee(ctx, workspaceId, latest.from_session_id);
+      }
+      addressee = explicit ?? addressee;
+      report.to_session_id = addressee.to_session_id;
+      report.to_person = addressee.to_person;
+      const others = [...new Map(objectors.filter((challenge) => challenge.from_session_id !== addressee.to_session_id).map((challenge) => [challenge.from_session_id, challenge])).values()];
+      if (others.length > 0) {
+        extra.also_challenged_by = others.map((challenge) => ({
+          session: challenge.from_session_id,
+          name: challenge.from_actor,
+          next: withSlot(ctx, {
+            tool: "collab_note",
+            input: {
+              text: `I withdrew ${exactRef("report", withdrawn.id)}.`,
+              re: exactRef("report", challenge.id),
+              to: challenge.from_session_id
+            }
+          })
+        }));
+        advice.push(`${others.length} other session(s) also stand against it; also_challenged_by has a ready note for each.`);
+      }
+      if (withdrawn.view.obsoleted)
+        advice.push(`${targetHandle(withdrawn)} was already withdrawn or replaced; this is recorded all the same.`);
+      advice.push(...ballotWithdrawalAdvice(ctx, workspaceId, withdrawn));
+      return finish({ recorded_as: "withdraw", target, addressee, reports: [report], entity: withdrawn.id });
+    }
+    case "accept":
+    case "request_changes": {
+      const completion = reviewTarget(ctx, input, target, workspaceId, me);
+      if (fields.to !== null)
+        advice.push("A verdict goes to the session that reported the work; to was not used.");
+      extra.review = completion;
+      return finish({ recorded_as: act, target, addressee: BROADCAST, reports: [], entity: completion.completion_id });
+    }
+    case "decide":
+      throw new CollabError("internal_error", "decide is planned by planDecide");
+    case "relay_rejection": {
+      if (!reportTarget || !reportTarget.view.termed) {
+        throw new CollabError("not_a_proposal", "relay_rejection names the proposal the person said no to", {
+          remedy: { say: "Name the proposal in re (proposal#\u2026 or its id). A relayed no can only stop work." }
+        });
+      }
+      const unstored = ["why", "evidence", "limits", "extent", "via", "to"].filter((field) => {
+        const value = fields[field];
+        return Array.isArray(value) ? value.length > 0 : value !== null;
+      });
+      if (unstored.length > 0) {
+        const { dry_run: _dry, ...rest } = input;
+        const cleaned = Object.fromEntries(Object.entries(rest).filter(([key]) => !unstored.includes(key)));
+        throw new CollabError("not_stored", `A relayed rejection keeps only its reason (the text); ${unstored.join(", ")} would not be stored`, {
+          fields: unstored,
+          remedy: textIsNote(input) ? { say: `Remove ${unstored.join(", ")} from the note text; post them in a separate note if they matter.` } : withSlot(ctx, { tool: "collab_note", input: cleaned })
+        });
+      }
+      return finish({ recorded_as: "relay_rejection", target, addressee: BROADCAST, reports: [], entity: reportTarget.id });
+    }
+  }
+}
+function lateVoiceAdvice(ctx, workspaceId, me, act, proposal) {
+  let data;
+  try {
+    data = ctx.store.noteProposalView(workspaceId, proposal.id);
+  } catch {
+    return [];
+  }
+  const voice = ctx.store.consentVoiceOf(me);
+  if (data.status.terms.voices.some((snapshot) => snapshot.voice_id === voice))
+    return [];
+  const handle = targetHandle(proposal);
+  const late = `Your voice was not live when ${handle} opened, so it is not one of the voices consent/v1 waits for.`;
+  if (act === "challenge") {
+    return [
+      `${late} A challenge counts whoever makes it: while yours stands, the position is challenged, and split at the close. ` + "Only your voice can lift it (resolve), or you can withdraw it."
+    ];
+  }
+  const awaited = data.status.ai.awaiting_voice_ids.length;
+  return [
+    `${late} Your support still counts as a support from a voice other than the author's, but it answers for no awaited voice ` + `(${awaited} awaited now). Before the close the position is consented once a support counts, no voice is awaited and no ` + "challenge stands; at the close, one counted support and no standing challenge are enough. The person still decides."
+  ];
+}
+function textIsNote(input) {
+  if (input.act !== undefined || typeof input.text !== "string")
+    return false;
+  const head = /^([A-Za-z_]+): /.exec(normalizeNoteText(input.text).split(`
+`)[0] ?? "");
+  return head !== null && isNoteAct(head[1].toLowerCase());
+}
+function onProposal(ctx, workspaceId, view) {
+  if (view.termed)
+    return true;
+  const targetId = view.report.target_report_id;
+  if (!targetId)
+    return false;
+  try {
+    return ctx.store.noteTarget(workspaceId, targetId).termed;
+  } catch {
+    return false;
+  }
+}
+function noLongerStandRemedy(ctx, reportId, proposal, termed) {
+  return withSlot(ctx, {
+    tool: "collab_note",
+    input: {
+      act: "note",
+      text: "I no longer stand by this.",
+      re: exactRef(termed ? "proposal" : "report", reportId),
+      ...proposal ? { to: "person" } : {}
+    }
+  });
+}
+function newVoiceSentence(name) {
+  return `A new session is a new voice even under the same name (${name}): nothing passes between sessions, ` + "so only the session that wrote it can take it back.";
+}
+function notYourReport(ctx, workspaceId, me, target, what) {
+  const author = target.view.author;
+  const myName = ctx.store.noteSessionViews(workspaceId).find((view) => view.id === me)?.actor ?? null;
+  const sameName = author !== null && myName !== null && author.actor === myName;
+  const proposal = onProposal(ctx, workspaceId, target.view);
+  return new CollabError("not_your_report", `${targetHandle(target)} was written by another session, and only its author session ${what}. ` + (sameName ? `${newVoiceSentence(author.actor)} ` : "") + `To say where you stand, post a note on it${proposal ? " to the person, who can still reject the proposal" : ""}; nothing was written`, {
+    ...author ? { author: { session: author.id, name: author.actor, ...author.status === "ended" ? { ended: true } : {} } } : {},
+    remedy: noLongerStandRemedy(ctx, target.id, proposal, target.view.termed)
+  });
+}
+function replacedChallenge(ctx, workspaceId, me, replacedId, targetId) {
+  const old = ctx.store.noteTarget(workspaceId, replacedId);
+  if (old.report.relation !== "challenges") {
+    throw new CollabError("replaces_not_yours", "replaces names a challenge this session wrote", {
+      remedy: { say: "replaces is your own earlier challenge; to answer someone else's, post a note with re." }
+    });
+  }
+  if (old.report.from_session_id !== me) {
+    const refusal = notYourReport(ctx, workspaceId, me, { kind: "report", id: replacedId, label: "report", view: old }, "replaces it");
+    throw new CollabError("replaces_not_yours", `${refusal.message.replace(/; nothing was written$/, "")}. Your new challenge can still be posted without replaces; nothing was written`, refusal.details);
+  }
+  if (old.report.target_report_id !== targetId) {
+    throw new CollabError("replaces_other_target", "The replaced challenge stands on a different report", {
+      remedy: { say: "Replace a challenge only with one on the same report; otherwise post the new challenge and withdraw the old one." }
+    });
+  }
+  if (old.obsoleted) {
+    throw new CollabError("replaces_withdrawn", "The challenge it replaces was already withdrawn", {
+      remedy: { say: "Leave replaces out: there is no standing challenge of yours to replace." }
+    });
+  }
+  return {
+    kind: "inference",
+    relation: "withdraws",
+    body: renderNote({ act: "withdraw", statement: "Replaced by my newer challenge, posted just before this.", re: `report:${replacedId}` }),
+    target_report_id: replacedId,
+    task_id: old.report.task_id,
+    evidence_refs: [],
+    cite_earlier: [0]
+  };
+}
+function seenOverRelayed(ctx, workspaceId, me, fields, advice) {
+  for (const [index, reason] of fields.why.entries()) {
+    if (reason.basis !== "seen" || reason.cites.length === 0)
+      continue;
+    const cited = reason.cites.map((cite) => fields.evidence[cite - 1] ?? "");
+    if (!cited.every((line) => line.startsWith("report:")))
+      continue;
+    const others = cited.every((line) => {
+      try {
+        return ctx.store.noteTarget(workspaceId, line.slice("report:".length)).report.from_session_id !== me;
+      } catch {
+        return false;
+      }
+    });
+    if (others)
+      advice.push(`Why ${index + 1}: seen over a relayed source reads as told; it cites only another session's report.`);
+  }
+}
+function reviewTarget(ctx, input, target, workspaceId, me) {
+  if (target?.kind === "report") {
+    const completion = target.view.completion_of;
+    if (!completion) {
+      throw new CollabError("not_a_completion", `${targetHandle(target)} is not a task's completion report`, {
+        remedy: { say: "Name the completion report you inspected, or the task, in re." }
+      });
+    }
+    if (!completion.current) {
+      const task = ctx.store.getTask(workspaceId, completion.task_id);
+      throw changedUnderYou(ctx, {
+        tool: "collab_note",
+        input: noteRetryInput(input, { re: task.completion_report_id ? exactRef("report", task.completion_report_id) : exactRef("task", task.id) })
+      }, reviewState(task));
+    }
+    return { task_id: completion.task_id, completion_id: target.id };
+  }
+  if (target?.kind === "task") {
+    const task = target.task;
+    if (!task.completion_report_id) {
+      throw new CollabError("nothing_to_review", `${handleOf("task", task.id)} has no completion to review`, {
+        remedy: { say: "Wait until its holder reports it done; collab_inbox tells you when a review is asked of you." }
+      });
+    }
+    if (ctx.store.noteShownAt(workspaceId, me, task.completion_report_id) === null) {
+      throw new CollabError("changed_under_you", `The current completion of ${handleOf("task", task.id)}, ${handleOf("report", task.completion_report_id)}, has not been shown ` + "to this session, so no verdict was recorded: a verdict lands only on work its reviewer was shown. It is in state; " + "if your verdict covers it, send the call with re set to it.", {
+        state: reviewState(task),
+        remedy: withSlot(ctx, { tool: "collab_note", input: noteRetryInput(input, { re: exactRef("report", task.completion_report_id) }) })
+      });
+    }
+    return { task_id: task.id, completion_id: task.completion_report_id };
+  }
+  throw new CollabError("re_must_be_report", "accept and request_changes name the completion report you inspected, or its task", {
+    remedy: { say: "Name the completion report (report#\u2026) or the task (task#\u2026) in re." }
+  });
+}
+function reviewState(task) {
+  return {
+    task: { id: task.id, handle: handleOf("task", task.id), title: task.title, state: task.effective_status, review_status: task.review_status },
+    completion: task.completion_report_id ? { id: task.completion_report_id, handle: handleOf("report", task.completion_report_id), by: task.reported_by, at: task.reported_at } : null
+  };
+}
+function noteResult(ctx, options) {
+  const { planned, receipt } = options;
+  const main = receipt.reports[0];
+  const handle = handleOf("report", main.id);
+  const on = planned.target?.kind === "report" ? targetHandle(planned.target) : planned.target?.kind === "task" ? handleOf("task", planned.target.id) : null;
+  const to = planned.addressee.shown;
+  const toText = to === "all" ? "" : to === "person" ? " for the person" : ` to ${to.name}`;
+  const effect = {
+    note: `Recorded note ${handle}${on ? ` on ${on}` : ""}${toText}.`,
+    support: `Recorded your support of ${on} as ${handle}${toText}. Support is a position, not a permission.`,
+    challenge: receipt.reports.length === 2 ? `Recorded your challenge to ${on} as ${handle}${toText}; it replaces your challenge ${handleOf("report", receipt.reports[1].target_report_id)}, ` + "withdrawn in the same transaction after the new one was posted, so your objection stood throughout. It stands until you lift it." : `Recorded your challenge to ${on} as ${handle}${toText}; it stands until you lift it.`,
+    resolve: `Lifted your challenge ${on} with ${handle}${toText}.`,
+    answer: `Recorded your answer to ${on} as note ${handle}${toText}; it does not lift the challenge, which only its challenger can do.`,
+    withdraw: `Withdrew your ${on} with ${handle}${toText}.`
+  }[planned.recorded_as];
+  const ids = { report: main.id, report_handle: handle };
+  if (receipt.reports.length === 2)
+    ids.withdrawal = { report: receipt.reports[1].id, report_handle: handleOf("report", receipt.reports[1].id) };
+  if (receipt.cite)
+    ids.evidence_cited = { event: receipt.cite.event_id, cite: receipt.cite.cite_id };
+  const nextAbout = planned.target?.kind === "report" ? exactRef("report", planned.target.id) : exactRef("report", main.id);
+  return {
+    ...noteWriteResult({
+      effect,
+      ids,
+      advice: options.advice,
+      next: withSlot(ctx, { tool: "collab_inbox", input: { about: nextAbout } }),
+      note: options.note,
+      replayed: options.replayed
+    }),
+    act: planned.act,
+    recorded_as: planned.recorded_as,
+    ...options.read_as ? { read_as: options.read_as } : {},
+    to,
+    evidence: evidenceSummary(options.evidence),
+    ...planned.extra
+  };
+}
+async function reviewNote(ctx, binding, credential, options) {
+  const { planned, evidence, advice } = options;
+  const workspaceId = binding.handle.workspace.id;
+  const pin = planned.extra.review;
+  const fields = planned.fields;
+  const summary = renderNote(fields, { omitEvidence: true });
+  const confidenceBasis = requireReasonsFit(fields.why);
+  const retryInput = noteRetryInput(options.input);
+  const outcome = planned.act === "accept" ? "accept" : "request_changes";
+  const { plan, cite, citeReplayed, review, replayed } = await underPlan(ctx, credential, {
+    tool: "collab_note",
+    input: options.keyInput,
+    entity: pin.completion_id,
+    retry_input: retryInput,
+    stillCurrent: () => ctx.store.getTask(workspaceId, pin.task_id).completion_report_id === pin.completion_id
+  }, async (plan2) => {
+    let replays = 0;
+    let steps = 0;
+    let cite2 = null;
+    let citeReplayed2 = false;
+    const recorded = [];
+    const precheck = beforeFirstWrite(() => ctx.store.noteReviewPrecheck(credential, {
+      task_id: pin.task_id,
+      outcome,
+      evidence_refs: evidence.journal
+    }));
+    try {
+      if (evidence.items.length > 0) {
+        steps += 1;
+        const cited = await stepOnce(ctx, credential, plan2.step(1), () => {
+          precheck();
+          return ctx.store.citeEvidenceForSession({
+            ...credential,
+            idempotency_key: plan2.step(1),
+            worktree_id: binding.handle.worktree.id,
+            items: evidence.items,
+            receipt_plan: plan2.guard
+          });
+        });
+        if (cited.replayed)
+          replays += 1;
+        cite2 = cited.value;
+        citeReplayed2 = cited.replayed;
+        recorded.push({ step: 1, what: `evidence.cited event ${cite2.event_id} (cite ${cite2.cite_id})`, id: cite2.event_id });
+      }
+      steps += 1;
+      const reviewed = await stepOnce(ctx, credential, plan2.step(2), () => withCurrentVersion(ctx, { tool: "collab_note", input: retryInput }, () => {
+        const task = ctx.store.getTask(workspaceId, pin.task_id);
+        if (task.completion_report_id !== pin.completion_id) {
+          throw changedUnderYou(ctx, {
+            tool: "collab_note",
+            input: { ...retryInput, re: task.completion_report_id ? exactRef("report", task.completion_report_id) : exactRef("task", task.id) }
+          }, reviewState(task));
+        }
+        return { version: task.version, state: reviewState(task) };
+      }, (version2) => {
+        precheck();
+        return ctx.store.withReceiptPlan(plan2.guard, () => ctx.store.reviewTaskForSession({
+          ...credential,
+          idempotency_key: plan2.step(2),
+          task_id: pin.task_id,
+          expected_version: version2,
+          outcome,
+          summary,
+          evidence_refs: [...evidence.journal, ...cite2 ? [`event:${cite2.event_id}`] : []],
+          ...confidenceBasis ? { confidence_basis: confidenceBasis } : {},
+          ...fields.limits ? { limits: fields.limits } : {}
+        }));
+      }));
+      if (reviewed.replayed)
+        replays += 1;
+      return { plan: plan2, cite: cite2, citeReplayed: citeReplayed2, review: reviewed.value, replayed: replays === steps };
+    } catch (error51) {
+      throw refusedAfter(error51, recorded);
+    }
+  }).catch((error51) => {
+    throw reviewRefusal(ctx, error51);
+  });
+  if (plan.retry && replayed) {
+    advice.push("This repeats your latest verdict on this completion exactly, so it was read as a retry. Add a word to say it again.");
+  }
+  const shown = cite && citeReplayed ? recordedEvidence(evidence, cite.items, advice) : evidence;
+  const taskHandle = handleOf("task", pin.task_id);
+  const completionHandle = handleOf("report", pin.completion_id);
+  return {
+    ...noteWriteResult({
+      effect: outcome === "accept" ? `Accepted the completion ${completionHandle} of ${taskHandle} as ${handleOf("report", review.report.id)}; your verdict covers only what you checked.` : `Requested changes on the completion ${completionHandle} of ${taskHandle} as ${handleOf("report", review.report.id)}; the task is open again for its holder to take.`,
+      ids: {
+        task: pin.task_id,
+        task_handle: taskHandle,
+        completion: pin.completion_id,
+        review_report: review.report.id,
+        review_report_handle: handleOf("report", review.report.id),
+        ...cite ? { evidence_cited: { event: cite.event_id, cite: cite.cite_id } } : {}
+      },
+      advice,
+      next: withSlot(ctx, { tool: "collab_inbox", input: { about: exactRef("task", pin.task_id) } }),
+      note: options.note,
+      replayed
+    }),
+    act: planned.act,
+    recorded_as: planned.recorded_as,
+    ...options.read_as ? { read_as: options.read_as } : {},
+    evidence: evidenceSummary(shown)
+  };
+}
+function reviewRefusal(ctx, error51) {
+  if (!(error51 instanceof CollabError))
+    return error51;
+  const say = {
+    self_review_forbidden: "A distinct session must review the work it did not report; ask another session with a note, or wait for one.",
+    completion_challenged: "The completion has a standing challenge; only its challenger can lift it. Read it with collab_inbox about the completion.",
+    completion_report_obsolete: "Its author withdrew or replaced this completion; request changes instead, or wait for a new completion.",
+    task_not_pending_review: "The task does not wait for review now (it was reviewed already, or its policy needs none)."
+  };
+  if (error51.code === "task_not_pending_review" && typeof error51.details.review_report_id === "string") {
+    const review = error51.details.review_report_id;
+    const later = `To agree or disagree now, support or challenge its review ${handleOf("report", review)} with collab_note ` + `(re: "${exactRef("report", review)}"); a challenge records disagreement and does not reopen the accepted task.`;
+    return new CollabError(error51.code, `${String(error51.message).split(". ")[0]}. ${later}`, {
+      ...error51.details,
+      remedy: { say: later }
+    });
+  }
+  if (error51.code === "git_checkpoint_stale" && typeof error51.details.remedy === "string") {
+    const notes = error51.details.remedy.replace(/\(2\) Re-completion: review task "[^"]*" with outcome "request_changes"; once it is claimed again, collab_task_complete captures a fresh result checkpoint for a new review\./, "(2) Re-completion: request changes on it (collab_note act request_changes); once its holder takes it again, " + "collab_done finished captures a fresh result checkpoint for a new review.");
+    const refusal = typeof error51.details.host_commit_refusal === "string" ? error51.details.host_commit_refusal : "";
+    return new CollabError(error51.code, `The completion worktree changed after its result checkpoint was captured: ${refusal}. ${notes}`, {
+      ...error51.details,
+      remedy: { say: notes }
+    });
+  }
+  if (!say[error51.code] || error51.details.remedy && typeof error51.details.remedy === "object")
+    return error51;
+  return new CollabError(error51.code, error51.message, { ...error51.details, remedy: { say: say[error51.code] } });
+}
+async function relayNote(ctx, credential, options) {
+  const { planned, advice } = options;
+  const proposal = planned.target;
+  const reason = planned.fields.body === null ? planned.fields.statement : `${planned.fields.statement}
+
+${planned.fields.body}`;
+  const workspaceId = proposal.view.report.workspace_id;
+  const status0 = ctx.store.proposalStatus(workspaceId, proposal.id);
+  const { plan, replayed } = await underPlan(ctx, credential, {
+    tool: "collab_note",
+    input: options.keyInput,
+    entity: proposal.id,
+    retry_input: noteRetryInput(options.input),
+    stillCurrent: (latestKey) => {
+      const recorded = replayReceipt(ctx.store, credential, latestKey)?.person.acts.at(-1);
+      const latest = ctx.store.proposalStatus(workspaceId, proposal.id).person.acts.at(-1);
+      return recorded !== undefined && latest !== undefined && recorded.id === latest.id;
+    }
+  }, async (plan2) => {
+    const step = await stepOnce(ctx, credential, plan2.key, () => ctx.store.withReceiptPlan(plan2.guard, () => ctx.store.relayProposalRejectionForSession({
+      ...credential,
+      idempotency_key: plan2.key,
+      proposal_report_id: proposal.id,
+      proposal_sha256: status0.proposal_sha256,
+      reason
+    })));
+    return { plan: plan2, replayed: step.replayed };
+  });
+  if (plan.retry && replayed) {
+    advice.push("This repeats your latest relay on this proposal exactly, so it was read as a retry. Add a word to say it again.");
+  }
+  const status = ctx.store.proposalStatus(workspaceId, proposal.id);
+  const handle = handleOf("proposal", proposal.id);
+  return {
+    ...noteWriteResult({
+      effect: `Recorded the person's no on ${handle}, relayed by you. A relayed no can only stop work; the person may still agree at the desk.`,
+      ids: { proposal: proposal.id, proposal_handle: handle, proposal_sha256: status.proposal_sha256 },
+      advice,
+      next: withSlot(ctx, { tool: "collab_inbox", input: { about: exactRef("proposal", proposal.id) } }),
+      note: options.note,
+      replayed
+    }),
+    act: planned.act,
+    recorded_as: "relay_rejection",
+    ...options.read_as ? { read_as: options.read_as } : {},
+    position: status.ai.position,
+    person: status.person.state,
+    may_proceed: status.may_proceed
+  };
+}
+function decideOutcome(act, input) {
+  if (act !== "decide" || input.outcome === undefined)
+    return "proceed";
+  const value = typeof input.outcome === "string" ? input.outcome.trim().toLowerCase() : input.outcome;
+  if (!NOTE_DECISION_OUTCOMES.includes(value)) {
+    throw new CollabError("invalid_outcome", `outcome is ${NOTE_DECISION_OUTCOMES.join(", ")}`, {
+      remedy: { say: "outcome is proceed (the default: this is decided, to this extent), do_not_proceed (we are not proceeding) or no_decision (no decision was reached)." }
+    });
+  }
+  return value;
+}
+function decideRefusal(error51, proposalId) {
+  if (!(error51 instanceof CollabError) || !proposalId)
+    return error51;
+  const later = error51.details.later_act;
+  const say = {
+    not_agreed: `Ask the person to act on ${proposalId} at his desk. No agent tool records agreement.`,
+    agreement_withdrawn: `Stop work that rests on ${proposalId}: the person's latest act (${later?.id ?? "a rejection"}, ` + `${later?.basis ?? "unknown basis"}) rejects these bytes. ` + (later?.basis === "relayed_by_session" ? "That rejection was relayed by a session, and a relayed no is forgeable; if it was not the person's, the person may agree again on the same bytes at his desk. " : "The person may agree again on the same bytes at his desk. ") + "To record that you are not proceeding, decide with outcome do_not_proceed.",
+    proposal_retired: error51.details.position === "superseded" && typeof error51.details.obsoleted_by_report_id === "string" ? `It was replaced by ${error51.details.obsoleted_by_report_id}; decide on that proposal once the person has acted on it.` : "It was withdrawn, so nothing proceeds on it; open a new proposal with collab_propose if the question still stands."
+  };
+  if (!say[error51.code])
+    return error51;
+  return new CollabError(error51.code, error51.message, { ...error51.details, proposal: proposalId, remedy: { say: say[error51.code] } });
+}
+function planDecide(ctx, input, context) {
+  const { target, me, workspaceId, evidence, outcome } = context;
+  let fields = context.fields;
+  const advice = [];
+  const proposal = target?.kind === "report" && target.view.termed ? target : null;
+  const refs = [...evidence.journal];
+  let taskId = null;
+  let addressee = BROADCAST;
+  if (proposal) {
+    taskId = proposal.view.report.task_id;
+    addressee = authorAddressee(proposal.view, me);
+  } else if (target?.kind === "report") {
+    refs.push(`report:${target.id}`);
+    taskId = target.view.report.task_id;
+    addressee = authorAddressee(target.view, me);
+  } else if (target?.kind === "task") {
+    taskId = target.id;
+    const holder = target.task.assignee_session_id ?? target.task.reported_by_session_id;
+    if (holder && holder !== me)
+      addressee = viewAddressee(ctx, workspaceId, holder);
+  } else if (target?.kind === "event") {
+    refs.push(`event:${target.id}`);
+  }
+  if (fields.to !== null)
+    addressee = explicitAddressee(ctx, workspaceId, fields.to, input);
+  const withoutExtent = () => {
+    const { extent: _dropped, ...rest } = noteRetryInput(input);
+    if (textIsNote(input)) {
+      const { advice: _advice, ...parsed } = parseNote(input.text);
+      if (parsed.extent !== null && parsed.act !== null) {
+        try {
+          return withSlot(ctx, { tool: "collab_note", input: { ...rest, text: renderNote({ ...parsed, act: parsed.act, extent: null }) } });
+        } catch (error51) {
+          if (!(error51 instanceof CollabError))
+            throw error51;
+          return { say: "Remove the Extent: line from the text and send it again; a decision on a proposal takes its agreed extent, and one that authorises nothing takes none." };
+        }
+      }
+    }
+    return withSlot(ctx, { tool: "collab_note", input: rest });
+  };
+  let extent = null;
+  if (proposal) {
+    try {
+      ctx.store.noteDecisionPrecheck(workspaceId, proposal.id, outcome);
+    } catch (error51) {
+      throw decideRefusal(error51, proposal.id);
+    }
+    const agreed = ctx.store.proposalStatus(workspaceId, proposal.id).terms.extent;
+    if (outcome === "proceed") {
+      const shown = normalizeNoteFields({ ...fields, extent: agreed });
+      if (fields.extent !== null && fields.extent !== agreed && fields.extent !== shown.extent) {
+        throw new CollabError("extent_from_proposal", "A decision on a proposal covers the extent the person agreed to; extent cannot change it", {
+          agreed_extent: agreed,
+          remedy: withoutExtent()
+        });
+      }
+      if (checkNote(shown).length === 0) {
+        fields = shown;
+        if (shown.extent !== agreed) {
+          advice.push("The note's Extent line shows the agreed extent with its lines trimmed; the decision's authority_scope holds it byte for byte.");
+        }
+      } else {
+        fields = { ...fields, extent: null };
+        advice.push("The agreed extent cannot be shown as a note's Extent line; the decision's authority_scope holds it byte for byte.");
+      }
+    } else {
+      if (fields.extent !== null) {
+        throw new CollabError("extent_not_used", `A decision with outcome ${outcome} authorises nothing, so it takes no extent`, { remedy: withoutExtent() });
+      }
+      fields = { ...fields, extent: NOTE_NOTHING_AUTHORISED };
+    }
+  } else {
+    if (outcome === "proceed") {
+      extent = fields.extent;
+      fields = { ...fields, extent: fields.extent ?? NOTE_DEFAULT_DECISION_EXTENT };
+    } else {
+      if (fields.extent !== null) {
+        throw new CollabError("extent_not_used", `A decision with outcome ${outcome} authorises nothing, so it takes no extent`, { remedy: withoutExtent() });
+      }
+      fields = { ...fields, extent: NOTE_NOTHING_AUTHORISED };
+    }
+    advice.push("This decision names no proposal, so it is recorded by this session alone: it is not a direction decision and not the person's agreement. " + "A direction-level matter needs collab_propose and the person's own act.");
+  }
+  refuseNoteProblems(fields);
+  return {
+    outcome,
+    proposal,
+    fields,
+    note: renderNote(fields),
+    addressee,
+    task_id: taskId,
+    evidence_refs: refs,
+    extent,
+    advice
+  };
+}
+async function decideNote(ctx, binding, credential, options) {
+  const { target, evidence, advice, input, outcome } = options;
+  const workspaceId = binding.handle.workspace.id;
+  const me = credential.session_id;
+  const planContext = { fields: options.fields, target, me, workspaceId, evidence, outcome };
+  if (input.dry_run === true) {
+    const planned = planDecide(ctx, input, planContext);
+    return {
+      ok: true,
+      dry_run: true,
+      effect: "Dry run: nothing was written.",
+      act: "decide",
+      recorded_as: "decide",
+      outcome,
+      ...options.read_as ? { read_as: options.read_as } : {},
+      parsed: planned.fields,
+      would: {
+        reports: [{
+          relation: "informs",
+          kind: "decision",
+          target: null,
+          task: planned.task_id,
+          to: planned.addressee.to_session_id ?? (planned.addressee.to_person ? "person" : null),
+          about_proposal: planned.proposal?.id ?? null
+        }],
+        cites: evidence.items.length > 0 ? 1 : 0
+      },
+      to: planned.addressee.shown,
+      evidence: evidenceSummary(evidence),
+      authorises: "Nothing. This is coordination state.",
+      advice: [...advice, ...evidence.advice, ...planned.advice, ...planned.addressee.advice],
+      note: planned.note
+    };
+  }
+  const proposalId = target?.kind === "report" && target.view.termed ? target.id : null;
+  const cite = evidence.items.length > 0 ? { worktree_id: binding.handle.worktree.id, items: evidence.items } : null;
+  const result = await underPlan(ctx, credential, {
+    tool: "collab_note",
+    input: options.keyInput,
+    entity: target?.kind === "report" || target?.kind === "task" ? target.id : "note",
+    retry_input: noteRetryInput(input),
+    stillCurrent: (latestKey) => {
+      const found = replayReceipt(ctx.store, credential, latestKey);
+      if (!found || typeof found !== "object" || !("outcome" in found))
+        return true;
+      if (!ctx.store.noteReportStands(workspaceId, found.report.id))
+        return false;
+      if (!found.proposal)
+        return true;
+      const latest = ctx.store.proposalStatus(workspaceId, found.proposal.id).person.acts.at(-1) ?? null;
+      return (latest?.id ?? null) === (found.person_act?.id ?? null);
+    }
+  }, async (plan2) => {
+    let fresh2 = null;
+    const step = await stepOnce(ctx, credential, plan2.key, () => {
+      fresh2 = planDecide(ctx, input, planContext);
+      return ctx.store.appendDecisionForSession({
+        ...credential,
+        idempotency_key: plan2.key,
+        cite,
+        outcome,
+        proposal_report_id: proposalId,
+        extent: fresh2.extent,
+        body: fresh2.note,
+        task_id: fresh2.task_id,
+        to_session_id: fresh2.addressee.to_session_id,
+        to_person: fresh2.addressee.to_person,
+        evidence_refs: fresh2.evidence_refs,
+        receipt_plan: plan2.guard
+      });
+    });
+    return { plan: plan2, receipt: step.value, fresh: step.replayed ? null : fresh2 };
+  }).catch((error51) => {
+    throw decideRefusal(error51, proposalId);
+  });
+  const { plan, receipt, fresh } = result;
+  if (fresh)
+    advice.push(...evidence.advice, ...fresh.advice, ...fresh.addressee.advice);
+  else if (plan.retry) {
+    advice.push("This repeats your latest decide on this entity exactly, so it was read as a retry. Add a word to say it again.");
+  }
+  return decideResult(ctx, workspaceId, { receipt, replayed: fresh === null, advice, read_as: options.read_as, evidence });
+}
+var DECISION_DERIVED_ON_PROPOSAL = "the server, from the journal, inside the write";
+var DECISION_DERIVED_WITHOUT_PROPOSAL = "no proposal: the scope is this session's own extent (or the default), recorded as written; the server fixed only the basis";
+function decideResult(ctx, workspaceId, options) {
+  const { receipt } = options;
+  const report = receipt.report;
+  const handle = handleOf("report", report.id);
+  const proposal = receipt.proposal;
+  const ph = proposal ? handleOf("proposal", proposal.id) : null;
+  const act = receipt.person_act;
+  const effect = proposal ? {
+    proceed: `Recorded decision ${handle}: proceed on ${ph}, within the extent the person agreed to (act ${act?.id}, ${act?.basis}).`,
+    do_not_proceed: `Recorded decision ${handle}: not proceeding with ${ph}. Nothing is authorised.`,
+    no_decision: `Recorded decision ${handle}: no decision was reached on ${ph}. Nothing is authorised.`
+  }[receipt.outcome] : {
+    proceed: `Recorded decision ${handle} by this session, within: ${receipt.authority_scope}. It is not a direction decision and not the person's agreement.`,
+    do_not_proceed: `Recorded decision ${handle} by this session: not proceeding. Nothing is authorised; it is not the person's agreement.`,
+    no_decision: `Recorded decision ${handle} by this session: no decision was reached. Nothing is authorised.`
+  }[receipt.outcome];
+  let to = "all";
+  if (report.to_session_id) {
+    const view = safeSession(ctx, workspaceId, report.to_session_id);
+    to = { session: report.to_session_id, name: view?.actor ?? report.to_session_id };
+  }
+  const ids = { report: report.id, report_handle: handle };
+  if (proposal)
+    Object.assign(ids, { proposal: proposal.id, proposal_handle: ph, proposal_sha256: proposal.proposal_sha256 });
+  if (receipt.cite)
+    ids.evidence_cited = { event: receipt.cite.event_id, cite: receipt.cite.cite_id };
+  const stored = parseNote(report.body);
+  const recorded = {
+    ...options.evidence,
+    lines: stored.evidence,
+    items: receipt.cite?.items ?? options.evidence.items
+  };
+  return {
+    ...noteWriteResult({
+      effect,
+      ids,
+      advice: options.advice,
+      next: withSlot(ctx, { tool: "collab_inbox", input: { about: exactRef("report", report.id) } }),
+      note: report.body,
+      replayed: options.replayed
+    }),
+    act: "decide",
+    recorded_as: "decide",
+    outcome: receipt.outcome,
+    ...options.read_as ? { read_as: options.read_as } : {},
+    to,
+    evidence: evidenceSummary(recorded),
+    authority: {
+      scope: receipt.authority_scope,
+      basis: receipt.authority_basis,
+      derived_by: proposal ? DECISION_DERIVED_ON_PROPOSAL : DECISION_DERIVED_WITHOUT_PROPOSAL
+    },
+    ...proposal && receipt.outcome === "proceed" && act ? {
+      rests_on: {
+        proposal: proposal.id,
+        proposal_sha256: proposal.proposal_sha256,
+        person_act: { id: act.id, event: act.event_id, act: act.act, basis: act.basis, at: act.at },
+        extent: proposal.extent,
+        says: `the person's agreement (act ${act.id}, basis ${act.basis}) to proposal_sha256 ${proposal.proposal_sha256}, within: ${proposal.extent}`
+      }
+    } : {},
+    ...proposal ? {} : { not_the_persons_agreement: true }
+  };
+}
+var TASK_TITLE_MAX = 300;
+var RECOVERY_NOTE_MAX = 4000;
+async function takeVerb(ctx, input) {
+  const { binding, credential } = requireCredential(ctx);
+  const workspaceId = binding.handle.workspace.id;
+  const hasTask = input.task !== undefined && input.task !== null;
+  const hasTitle = input.title !== undefined && input.title !== null;
+  if (hasTask === hasTitle) {
+    throw new CollabError("task_or_title", hasTask ? "Give task or title, not both" : "Give task (one to claim) or title (a new one)", {
+      remedy: { say: "collab_take takes task: an existing task (task#\u2026 or its id), or title: a new task to create and claim." }
+    });
+  }
+  const purpose = oneLine(input.purpose, "purpose", 200, false);
+  const because = freeText(input.because, "because", RECOVERY_NOTE_MAX, false);
+  if (input.review !== undefined && input.review !== "required" && input.review !== "none") {
+    throw new CollabError("invalid_review", "review is required or none", {
+      remedy: { say: "review is required (a distinct session must accept the work) or none (you report it done); leave it out for the default." }
+    });
+  }
+  if (input.paths !== undefined && (!Array.isArray(input.paths) || input.paths.some((path) => typeof path !== "string"))) {
+    throw new CollabError("invalid_paths", "paths is a list of repository-relative paths", {
+      remedy: { say: 'Give paths as a list such as ["src/parser.ts"].' }
+    });
+  }
+  const advice = [];
+  return hasTitle ? takeNew(ctx, binding, credential, { title: oneLine(input.title, "title", TASK_TITLE_MAX, true), purpose, because, review: input.review, paths: input.paths ?? [] }, advice) : takeExisting(ctx, binding, credential, { task: String(input.task), purpose, because, review: input.review, paths: input.paths }, advice);
+}
+function normalizedPaths(paths) {
+  try {
+    return normalizePathScopes(paths);
+  } catch (error51) {
+    if (!(error51 instanceof CollabError))
+      throw error51;
+    throw new CollabError(error51.code, error51.message, {
+      ...error51.details,
+      remedy: { say: "paths are repository-relative POSIX paths below the root, such as src/parser.ts; at most 128." }
+    });
+  }
+}
+async function takeNew(ctx, binding, credential, options, advice) {
+  const workspaceId = binding.handle.workspace.id;
+  const paths = normalizedPaths(options.paths);
+  const workMode = paths.length > 0 ? "edit" : "coordination";
+  const policy = options.review ? options.review === "required" ? "accepted" : "reported" : paths.length > 0 ? "accepted" : "reported";
+  if (options.because)
+    advice.push("because is for recovering a lapsed lease; a new task needs none, so it was not used.");
+  const keyInput = { title: options.title, paths, purpose: options.purpose, review: options.review ?? null };
+  const retryInput = { title: options.title, ...options.paths.length ? { paths: options.paths } : {}, ...options.purpose ? { purpose: options.purpose } : {}, ...options.review ? { review: options.review } : {} };
+  const { plan, created, claimed, replayed } = await underPlan(ctx, credential, {
+    tool: "collab_take",
+    input: keyInput,
+    entity: "take",
+    retry_input: retryInput,
+    stillCurrent: (latestKey) => leaseStillCurrent(ctx, credential, workspaceId, latestKey)
+  }, async (plan2) => {
+    const created2 = await stepOnce(ctx, credential, plan2.step(1), () => {
+      if (paths.length > 0) {
+        const conflicts = ctx.store.notePathConflicts(workspaceId, paths, { work_mode: workMode });
+        if (conflicts.length > 0)
+          throw pathConflictRefusal(ctx, workspaceId, conflicts, null);
+      }
+      return ctx.store.withReceiptPlan(plan2.guard, () => ctx.store.createTaskForSession({
+        ...credential,
+        idempotency_key: plan2.step(1),
+        title: options.title,
+        ...options.purpose ? { description: `Purpose: ${options.purpose}` } : {},
+        path_scopes: paths,
+        work_mode: workMode,
+        completion_policy: policy
+      }));
+    });
+    const recorded = [{ step: 1, what: `task ${created2.value.id}, created and open`, id: created2.value.id }];
+    try {
+      const claimed2 = await stepOnce(ctx, credential, plan2.step(2), () => claimStep(ctx, binding, credential, created2.value, plan2.step(2), plan2.guard, retryInput, null, true));
+      return { plan: plan2, created: created2.value, claimed: claimed2.value, replayed: created2.replayed && claimed2.replayed };
+    } catch (error51) {
+      throw refusedAfter(error51, recorded);
+    }
+  });
+  if (plan.retry && replayed)
+    advice.push("This repeats your latest take exactly, so it was read as a retry. Add a word to the title to take another.");
+  return takeResult(ctx, claimed, { purpose: options.purpose, advice, replayed, fresh: true });
+}
+async function takeExisting(ctx, binding, credential, options, advice) {
+  const workspaceId = binding.handle.workspace.id;
+  const id = ctx.store.resolveNoteRef(workspaceId, "task", options.task).id;
+  if (options.paths !== undefined)
+    advice.push("paths apply only to a new task (title); the task keeps its own paths.");
+  if (options.review !== undefined)
+    advice.push("review applies only to a new task (title); the task keeps its own policy.");
+  if (options.purpose)
+    advice.push("purpose is written into a new task's description only; an existing task's description is not changed.");
+  const keyInput = { task: id, because: options.because };
+  const retryInput = { task: exactRef("task", id), ...options.because ? { because: options.because } : {} };
+  const { plan, held, replayed, already, unused_because: unusedBecause } = await underPlan(ctx, credential, {
+    tool: "collab_take",
+    input: keyInput,
+    entity: id,
+    retry_input: retryInput,
+    stillCurrent: (latestKey) => leaseStillCurrent(ctx, credential, workspaceId, latestKey)
+  }, async (plan2) => {
+    const earlier = replayReceipt(ctx.store, credential, plan2.key);
+    if (earlier)
+      return { plan: plan2, held: earlier, replayed: true, already: false, unused_because: false };
+    const task = ctx.store.getTask(workspaceId, id);
+    if (task.status === "claimed" && task.assignee_session_id === credential.session_id && task.effective_status === "claimed") {
+      return { plan: plan2, held: task, replayed: false, already: true, unused_because: options.because !== null };
+    }
+    const unusedBecause2 = options.because !== null && task.effective_status !== "recovery_required";
+    const held2 = await stepOnce(ctx, credential, plan2.key, () => claimStep(ctx, binding, credential, task, plan2.key, plan2.guard, retryInput, options.because, false));
+    return { plan: plan2, held: held2.value, replayed: held2.replayed, already: false, unused_because: unusedBecause2 && !held2.replayed };
+  });
+  if (plan.retry && replayed)
+    advice.push("This repeats your latest take of this task exactly, so it was read as a retry.");
+  if (already)
+    advice.push("You already hold this task; nothing was written.");
+  if (unusedBecause)
+    advice.push("because is for recovering a lapsed lease; this task's lease had not lapsed, so it was not used.");
+  return takeResult(ctx, held, { purpose: null, advice, replayed, already });
+}
+function leaseStillCurrent(ctx, credential, workspaceId, latestKey) {
+  const found = replayReceipt(ctx.store, credential, latestKey);
+  if (!found || !found.lease_id)
+    return true;
+  try {
+    return ctx.store.getTask(workspaceId, found.id).lease_id === found.lease_id;
+  } catch {
+    return false;
+  }
+}
+async function claimStep(ctx, binding, credential, task, key, guard, retryInput, because, created) {
+  const workspaceId = binding.handle.workspace.id;
+  const read = () => {
+    const current2 = ctx.store.getTask(workspaceId, task.id);
+    return { version: current2.version, state: { task: handleOf("task", current2.id), id: current2.id, state: current2.effective_status, holder: current2.assignee } };
+  };
+  const current = ctx.store.getTask(workspaceId, task.id);
+  const createdNote = created ? ` Task ${handleOf("task", task.id)} was created and is open; take it with task when this clears.` : "";
+  try {
+    if (current.effective_status === "recovery_required") {
+      if (!because) {
+        throw new CollabError("because_required", `${handleOf("task", task.id)}'s lease lapsed; recovering it needs because: why you take it over`, {
+          holder: current.assignee,
+          remedy: withSlot(ctx, { tool: "collab_take", input: { task: exactRef("task", task.id), because: "<why you take over the lapsed work>" } })
+        });
+      }
+      return await withCurrentVersion(ctx, { tool: "collab_take", input: retryInput }, read, (version2) => ctx.store.withReceiptPlan(guard, () => ctx.store.recoverTaskForSession({
+        ...credential,
+        idempotency_key: key,
+        task_id: task.id,
+        expected_version: version2,
+        recovery_note: because,
+        action: "takeover"
+      })));
+    }
+    return await withCurrentVersion(ctx, { tool: "collab_take", input: retryInput }, read, (version2) => ctx.store.withReceiptPlan(guard, () => ctx.store.claimTaskForSession({
+      ...credential,
+      idempotency_key: key,
+      task_id: task.id,
+      expected_version: version2
+    })));
+  } catch (error51) {
+    if (!(error51 instanceof CollabError))
+      throw error51;
+    if (error51.code === "path_scope_conflict") {
+      throw pathConflictRefusal(ctx, workspaceId, ctx.store.notePathConflicts(workspaceId, current.path_scopes, {
+        work_mode: current.work_mode,
+        except_task_id: current.id
+      }), task.id, createdNote);
+    }
+    if (error51.code === "task_claimed") {
+      const holder = typeof error51.details.assignee_session_id === "string" ? error51.details.assignee_session_id : null;
+      const view = holder ? safeSession(ctx, workspaceId, holder) : null;
+      throw new CollabError("task_claimed", `${handleOf("task", task.id)} is held by ${view?.actor ?? String(error51.details.assignee)}`, {
+        holder: view ? { session: view.id, name: view.actor, purpose: view.purpose } : { name: error51.details.assignee ?? null },
+        remedy: view ? withSlot(ctx, { tool: "collab_note", input: { text: `May I take ${exactRef("task", task.id)}?`, re: exactRef("task", task.id), to: view.id } }) : { say: "Ask its holder, or wait until it is released." }
+      });
+    }
+    if (error51.code === "recovery_required" && !because) {
+      throw new CollabError("because_required", `${handleOf("task", task.id)}'s lease lapsed; recovering it needs because`, {
+        remedy: withSlot(ctx, { tool: "collab_take", input: { task: exactRef("task", task.id), because: "<why you take over the lapsed work>" } })
+      });
+    }
+    if (error51.code === "task_blocked") {
+      throw new CollabError("task_blocked", `${handleOf("task", task.id)} is blocked: ${String(error51.details.blocker ?? "")}. These verbs do not unblock a task, so ask on it; nothing was written`, {
+        blocker: error51.details.blocker ?? null,
+        remedy: withSlot(ctx, {
+          tool: "collab_note",
+          input: { text: `Is the blocker on ${handleOf("task", task.id)} cleared? I would take it once it is unblocked.`, re: exactRef("task", task.id) }
+        })
+      });
+    }
+    if (created && error51.code !== "changed_under_you") {
+      throw new CollabError(error51.code, `${error51.message}.${createdNote}`, error51.details);
+    }
+    throw error51;
+  }
+}
+function safeSession(ctx, workspaceId, id) {
+  try {
+    return ctx.store.resolveNoteSession(workspaceId, id, { include_ended: true });
+  } catch {
+    return null;
+  }
+}
+function pathConflictRefusal(ctx, workspaceId, conflicts, taskId, createdNote = "") {
+  const me = ctx.binding()?.handle.session.id ?? null;
+  const holders = conflicts.map((conflict) => {
+    const handle = handleOf("task", conflict.active_task_id);
+    const paths = conflict.path_pairs.map((pair) => pair[1]).join(", ");
+    const task = safeTask(ctx, conflict.active_workspace_id ?? workspaceId, conflict.active_task_id);
+    if (task && task.status === "completed" && task.review_status === "pending" && task.completion_report_id) {
+      const completion = task.completion_report_id;
+      const reporter = task.reported_by_session_id;
+      const view2 = reporter ? safeSession(ctx, workspaceId, reporter) : null;
+      const next = reporter !== null && reporter === me ? {
+        say: `${handle} is your own finished work, waiting for review of ${completion}. A distinct session must review that ` + "completion (accept or request_changes) before these paths are free; ask one with collab_note, or take work on other paths."
+      } : view2 ? withSlot(ctx, {
+        tool: "collab_note",
+        input: {
+          text: `My work overlaps your finished ${exactRef("task", conflict.active_task_id)} on ${paths}; it waits for review of ${completion}. Who is reviewing it?`,
+          re: exactRef("task", conflict.active_task_id),
+          to: view2.id
+        }
+      }) : { say: `Its reporter has no session here to ask; the paths are free once a distinct session reviews ${completion}.` };
+      return {
+        task: handle,
+        id: conflict.active_task_id,
+        holder: view2 ? { session: view2.id, name: view2.actor, purpose: view2.purpose } : { name: task.reported_by },
+        state: `waits for review of ${completion}`,
+        paths: conflict.path_pairs,
+        next
+      };
+    }
+    const view = conflict.assignee_session_id ? safeSession(ctx, workspaceId, conflict.assignee_session_id) : null;
+    return {
+      task: handle,
+      id: conflict.active_task_id,
+      holder: view ? { session: view.id, name: view.actor, purpose: view.purpose } : { name: conflict.assignee },
+      state: "held",
+      paths: conflict.path_pairs,
+      next: conflict.assignee_session_id !== null && conflict.assignee_session_id === me ? {
+        say: `You already hold ${handle} on these paths (${paths}); finish or release it first ` + `(collab_done with task ${exactRef("task", conflict.active_task_id)}), or take other paths.`
+      } : view ? withSlot(ctx, {
+        tool: "collab_note",
+        input: {
+          text: `My work overlaps yours on ${paths}; when will you be done with it?`,
+          re: exactRef("task", conflict.active_task_id),
+          to: view.id
+        }
+      }) : { say: "Its holder has no session to ask; wait until it is released or reviewed." }
+    };
+  });
+  const first = holders[0];
+  const described = holders.map((holder) => {
+    const name = holder.holder.name ?? "an unknown holder";
+    if (holder.state === "held" && me !== null && "session" in holder.holder && holder.holder.session === me) {
+      return `${holder.task}, which you hold`;
+    }
+    return holder.state === "held" ? `work held by ${name}` : `${name}'s finished ${holder.task}, which ${holder.state}`;
+  });
+  return new CollabError("path_scope_conflict", `These paths overlap ${described.join("; ")}.${createdNote}`, {
+    holders,
+    ...taskId ? { task: taskId } : {},
+    remedy: first?.next ?? { say: "Wait until the overlapping work is released." }
+  });
+}
+function safeTask(ctx, workspaceId, id) {
+  try {
+    return ctx.store.getTask(workspaceId, id);
+  } catch {
+    return null;
+  }
+}
+function takeResult(ctx, task, options) {
+  const handle = handleOf("task", task.id);
+  const review = task.completion_policy === "accepted" ? "When you finish, a distinct session reviews it." : "When you finish, you report it done; no review is needed.";
+  const note = takeNote(task, options.purpose, options.advice);
+  return {
+    ...noteWriteResult({
+      effect: options.already ? `You already hold ${handle} (${task.title}). Nothing was written.` : `You hold ${handle} (${task.title})${options.fresh ? ", a task you created" : ""}. ${review} ` + "The lease lasts while your session is live; it is coordination, not ownership or a lock.",
+      ids: { task: task.id, task_handle: handle },
+      advice: options.advice,
+      next: withSlot(ctx, { tool: "collab_done", input: { text: "<what you did>", task: exactRef("task", task.id) } }),
+      note,
+      replayed: options.replayed
+    }),
+    task: {
+      id: task.id,
+      handle,
+      title: task.title,
+      state: task.effective_status,
+      paths: task.path_scopes,
+      work_mode: task.work_mode,
+      completion_policy: task.completion_policy
+    }
+  };
+}
+function takeNote(task, purpose, advice) {
+  const long = task.title.length > NOTE_STATEMENT_MAX;
+  try {
+    return renderNote({
+      act: "take",
+      statement: statementOf(task.title),
+      ...long ? { body: task.title } : {},
+      re: `task:${task.id}`,
+      ...purpose ? { purpose } : {}
+    });
+  } catch (error51) {
+    if (!(error51 instanceof CollabError))
+      throw error51;
+    advice.push(`The returned note names the task rather than its title, which cannot be rendered in a note (${error51.message.replace(/\.$/, "")}).`);
+    return renderNote({ act: "take", statement: `Took ${handleOf("task", task.id)}.`, re: `task:${task.id}` });
+  }
+}
+var RELEASE_SUMMARY_MAX = 2000;
+var BLOCKER_MAX = 2000;
+var PROGRESS_MAX = 2000;
+var LEAVE_TEXT_MAX = 2000;
+async function doneVerb(ctx, input) {
+  const outcome = input.outcome ?? "finished";
+  if (!["finished", "released", "blocked", "leave"].includes(outcome)) {
+    throw new CollabError("invalid_outcome", "outcome is finished, released, blocked or leave", {
+      remedy: { say: "outcome is finished (the default), released, blocked or leave." }
+    });
+  }
+  if (outcome === "leave")
+    return leave(ctx, input);
+  const { binding, credential } = requireCredential(ctx);
+  const workspaceId = binding.handle.workspace.id;
+  const text = freeText(input.text, "text", 8000, true);
+  const { statement, body } = splitNoteText(text);
+  const unstorable = {
+    finished: ["because"],
+    released: ["why", "evidence", "limits", "review_by", "because"],
+    blocked: ["why", "evidence", "limits", "review_by"]
+  }[outcome];
+  const unstored = unstorable.filter((field) => Array.isArray(input[field]) ? input[field].length > 0 : input[field] !== undefined && input[field] !== null);
+  if (unstored.length > 0) {
+    const cleaned = Object.fromEntries(Object.entries(input).filter(([key]) => !unstored.includes(key)));
+    const keeps = {
+      finished: "its text, why, evidence, limits and review_by (because is for a blocked task)",
+      released: "only its text",
+      blocked: "only its text and because"
+    }[outcome];
+    throw new CollabError("not_stored", `A ${outcome} task keeps ${keeps}; ${unstored.join(", ")} would not be stored`, {
+      fields: unstored,
+      remedy: withSlot(ctx, { tool: "collab_done", input: cleaned })
+    });
+  }
+  const taskId = input.task !== undefined && input.task !== null ? ctx.store.resolveNoteRef(workspaceId, "task", String(input.task)).id : null;
+  const finished = outcome === "finished" ? readFinished(ctx, binding, input, statement, body) : null;
+  const keyInput = doneKeyInput(input, outcome, text, taskId, finished);
+  const base = derivedBase(credential.session_id, "collab_done", keyInput);
+  const task = doneTask(ctx, credential, workspaceId, taskId, base);
+  if (outcome === "finished")
+    return finishTask(ctx, binding, credential, task, { input, keyInput, ...finished });
+  if (outcome === "released") {
+    const summary = freeText(input.text, "text", RELEASE_SUMMARY_MAX, true);
+    const note2 = renderNote({ act: "done", statement, body, re: `task:${task.id}` });
+    return releaseOrBlock(ctx, binding, credential, task, { outcome, summary, keyInput, note: note2 });
+  }
+  const blocker = freeText(input.because, "because", BLOCKER_MAX, false);
+  if (!blocker) {
+    throw new CollabError("because_required", "A blocked task needs because: what blocks it", {
+      remedy: { say: "Send the same call with because set to one line on what blocks the work." }
+    });
+  }
+  const progress = freeText(input.text, "text", PROGRESS_MAX, true);
+  const note = renderNote({
+    act: "done",
+    statement,
+    body: [body, `Blocked: ${blocker}`].filter(Boolean).join(`
+
+`),
+    re: `task:${task.id}`
+  });
+  return releaseOrBlock(ctx, binding, credential, task, { outcome, summary: progress, blocker, keyInput, note });
+}
+function readFinished(ctx, binding, input, statement, body) {
+  const workspaceId = binding.handle.workspace.id;
+  let fields = normalizeNoteFields({
+    act: "done",
+    statement,
+    body,
+    why: input.why,
+    evidence: input.evidence,
+    limits: input.limits
+  });
+  refuseNoteProblems(fields);
+  const evidence = resolveEvidence(ctx, binding, fields.evidence);
+  fields = { ...fields, evidence: evidence.lines };
+  refuseNoteProblems(fields);
+  const reviewer = input.review_by !== undefined && input.review_by !== null ? reviewerSession(ctx, workspaceId, String(input.review_by), input) : null;
+  return { fields, evidence, reviewer: reviewer?.id ?? null, reviewer_how: reviewer?.how ?? null };
+}
+function doneKeyInput(input, outcome, text, taskId, finished) {
+  return {
+    outcome,
+    text,
+    task: taskId,
+    why: finished ? finished.fields.why : input.why ?? [],
+    evidence: finished ? finished.evidence.key_lines : input.evidence ?? [],
+    limits: finished ? finished.fields.limits : input.limits ?? null,
+    review_by: finished ? finished.reviewer : input.review_by ?? null,
+    because: typeof input.because === "string" ? input.because.trim() || null : input.because ?? null
+  };
+}
+function doneTask(ctx, credential, workspaceId, taskId, base) {
+  if (taskId !== null)
+    return ctx.store.getTask(workspaceId, taskId);
+  const holds = ctx.store.listTasks(workspaceId, "claimed").filter((task) => task.assignee_session_id === credential.session_id);
+  if (holds.length === 1)
+    return holds[0];
+  if (holds.length > 1) {
+    throw new CollabError("several_holds", `You hold ${holds.length} tasks; say which one`, {
+      candidates: holds.map((task) => ({ task: handleOf("task", task.id), id: task.id, title: task.title })),
+      remedy: { say: "Send the same call with task set to the id of the one you mean; the candidates are listed." }
+    });
+  }
+  const earlier = ctx.store.latestReceiptKeyForBase(credential, base);
+  const receipt = earlier ? replayReceipt(ctx.store, credential, earlier) : null;
+  const earlierTask = receipt ? "task" in receipt && typeof receipt.task === "object" ? receipt.task.id : receipt.id : null;
+  if (earlierTask)
+    return ctx.store.getTask(workspaceId, earlierTask);
+  throw new CollabError("nothing_held", "You hold no task", {
+    remedy: { say: "Take the work first: collab_take with title set to what you are doing, and paths if you will edit files." }
+  });
+}
+function reviewerSession(ctx, workspaceId, value, input) {
+  const named = namedSession(ctx, workspaceId, value);
+  if (!named) {
+    const { review_by: _reviewBy, ...rest } = input;
+    throw new CollabError("review_requested_session_unavailable", `review_by names ${value.trim()}, and no session of that name has arrived in this workspace; a requested reviewer must be ` + "an active session. Any distinct session can review the work unasked, so leave review_by out; nothing was written", { reason: "never_arrived", value: value.trim(), remedy: withSlot(ctx, { tool: "collab_done", input: rest }) });
+  }
+  const how = named.by_name ? named.view.status === "active" ? `the one active session named ${named.view.actor} (${named.view.id})` : `the latest session named ${named.view.actor} (${named.view.id}), which has ended` : `session ${named.view.id}${named.view.status === "ended" ? ", which has ended" : ""}`;
+  return { id: named.view.id, how };
+}
+function reviewerRefusal(ctx, error51, retryInput, how) {
+  if (!(error51 instanceof CollabError) || error51.code !== "review_requested_session_unavailable")
+    return error51;
+  const { review_by: _reviewBy, ...withoutReviewer } = retryInput;
+  return new CollabError("review_requested_session_unavailable", `review_by was read as ${how ?? "a session that is not active here"}, and a requested reviewer must be an active session in ` + "this workspace. Any distinct session can review the work unasked, so leave review_by out (name who you hope will " + "review in the text if you like); nothing was written", { reason: "not_active", remedy: withSlot(ctx, { tool: "collab_done", input: withoutReviewer }) });
+}
+function requireHeld(ctx, credential, task, retryInput) {
+  if (task.assignee_session_id === credential.session_id && task.lease_id && task.status === "claimed")
+    return task;
+  throw new CollabError("not_held", `You do not hold ${handleOf("task", task.id)} now`, {
+    state: { task: handleOf("task", task.id), id: task.id, state: task.effective_status, holder: task.assignee },
+    remedy: task.effective_status === "open" ? withSlot(ctx, { tool: "collab_take", input: { task: exactRef("task", task.id) } }) : { say: "Only the holder ends a hold; take it first if it is open." }
+  });
+}
+var ARTIFACT_KIND = {
+  file: "file",
+  commit: "commit",
+  test: "test",
+  url: "url",
+  data: "data",
+  msg: "other"
+};
+async function finishTask(ctx, binding, credential, task, options) {
+  const workspaceId = binding.handle.workspace.id;
+  const { input, evidence, reviewer } = options;
+  const advice = [];
+  const fields = { ...options.fields, re: `task:${task.id}` };
+  advice.push(...evidence.advice);
+  const note = renderNote(fields);
+  const summary = renderNote(fields, { omitEvidence: true });
+  const confidenceBasis = requireReasonsFit(fields.why);
+  const labels = evidence.items.map((item) => artifactLabel(item, evidence.lines[item.n - 1]));
+  labels.forEach((label, index) => {
+    if (label.length <= ARTIFACT_LABEL_MAX)
+      return;
+    const n = evidence.items[index].n;
+    throw new CollabError("too_long", `Evidence ${n} is kept as an artifact label of ${label.length} characters; at most ${ARTIFACT_LABEL_MAX}`, {
+      field: `evidence[${n - 1}]`,
+      max: ARTIFACT_LABEL_MAX,
+      actual: label.length,
+      unit: "chars",
+      remedy: { say: `Shorten the k=v attributes of evidence ${n}: a finished task keeps them in its artifact's label.` }
+    });
+  });
+  const retryInput = { ...input, task: exactRef("task", task.id) };
+  if (reviewer !== null) {
+    const { review_by: _reviewBy, ...withoutReviewer } = retryInput;
+    const ready = withSlot(ctx, { tool: "collab_done", input: withoutReviewer });
+    if (task.completion_policy !== "accepted") {
+      throw new CollabError("review_request_not_applicable", `${handleOf("task", task.id)} needs no review (its completion policy is ${task.completion_policy}), so a reviewer cannot be asked for it`, { completion_policy: task.completion_policy, remedy: ready });
+    }
+    if (reviewer === credential.session_id) {
+      throw new CollabError("review_request_self", "review_by names you; a requested reviewer is a session distinct from the reporter", {
+        remedy: ready
+      });
+    }
+  }
+  const held = () => {
+    const current = requireHeld(ctx, credential, ctx.store.getTask(workspaceId, task.id), retryInput);
+    return { version: current.version, state: { task: handleOf("task", current.id), state: current.effective_status } };
+  };
+  const precheck = beforeFirstWrite(() => {
+    try {
+      ctx.store.noteCompletePrecheck(credential, {
+        task_id: task.id,
+        evidence_refs: evidence.journal,
+        review_requested_session_id: reviewer
+      });
+    } catch (error51) {
+      throw reviewerRefusal(ctx, error51, retryInput, options.reviewer_how);
+    }
+  });
+  const cites = evidence.items.length > 0;
+  const attachStep = (index) => index + (cites ? 2 : 1);
+  const completeStep = cites ? evidence.items.length + 2 : 1;
+  const { plan, artifacts, completed, replayed, recordedItems, cite } = await underPlan(ctx, credential, {
+    tool: "collab_done",
+    input: options.keyInput,
+    entity: task.id,
+    retry_input: retryInput,
+    stillCurrent: (latestKey) => {
+      const found = replayReceipt(ctx.store, credential, latestKey);
+      if (!found)
+        return true;
+      const current = ctx.store.getTask(workspaceId, task.id);
+      if ("cite_id" in found)
+        return current.assignee_session_id === credential.session_id && current.status === "claimed";
+      if ("artifact" in found)
+        return current.lease_id === found.task.lease_id;
+      const completedTask = found;
+      return current.completion_report_id === completedTask.completion_report_id && current.status === "completed" && current.review_status !== "changes_requested";
+    }
+  }, async (plan2) => {
+    let replays = 0;
+    const artifacts2 = [];
+    const recorded = [];
+    let recordedItems2 = [];
+    let cite2 = null;
+    let citeReplayed = false;
+    try {
+      if (cites) {
+        const cited = await stepOnce(ctx, credential, plan2.step(1), () => {
+          held();
+          precheck();
+          return ctx.store.citeEvidenceForSession({
+            ...credential,
+            idempotency_key: plan2.step(1),
+            worktree_id: binding.handle.worktree.id,
+            items: evidence.items,
+            receipt_plan: plan2.guard
+          });
+        });
+        if (cited.replayed) {
+          replays += 1;
+          citeReplayed = true;
+          recordedItems2 = cited.value.items;
+        }
+        cite2 = cited.value;
+        recorded.push({ step: 1, what: `evidence.cited event ${cite2.event_id} (cite ${cite2.cite_id})`, id: cite2.event_id });
+      }
+      for (const [index, item] of evidence.items.entries()) {
+        const key = plan2.step(attachStep(index));
+        const attached = await stepOnce(ctx, credential, key, () => withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, held, (version2) => {
+          precheck();
+          return ctx.store.withReceiptPlan(plan2.guard, () => ctx.store.attachArtifactForSession({
+            ...credential,
+            idempotency_key: key,
+            task_id: task.id,
+            lease_id: ctx.store.getTask(workspaceId, task.id).lease_id,
+            expected_version: version2,
+            kind: ARTIFACT_KIND[item.kind],
+            uri: item.locator,
+            ...item.kind === "file" && item.observed === "server" && item.sha256 ? { sha256: item.sha256 } : {},
+            label: labels[index]
+          }));
+        }));
+        if (attached.replayed) {
+          replays += 1;
+          if (!citeReplayed)
+            recordedItems2.push(artifactItem(item, attached.value.artifact));
+        }
+        const artifact = attached.value.artifact;
+        artifacts2.push({ id: artifact.id, n: item.n });
+        recorded.push({ step: attachStep(index), what: `artifact ${artifact.id} for evidence ${item.n}`, id: artifact.id });
+      }
+      const completeKey = plan2.step(completeStep);
+      const completed2 = await stepOnce(ctx, credential, completeKey, () => withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, held, (version2) => {
+        precheck();
+        return ctx.store.withReceiptPlan(plan2.guard, () => ctx.store.completeTaskForSession({
+          ...credential,
+          idempotency_key: completeKey,
+          task_id: task.id,
+          lease_id: ctx.store.getTask(workspaceId, task.id).lease_id,
+          expected_version: version2,
+          summary,
+          ...confidenceBasis ? { confidence_basis: confidenceBasis } : {},
+          ...fields.limits ? { limits: fields.limits } : {},
+          evidence_refs: [
+            ...evidence.journal,
+            ...cite2 ? [`event:${cite2.event_id}`] : [],
+            ...artifacts2.map((artifact) => `artifact:${artifact.id}`)
+          ],
+          ...reviewer ? { review_requested_session_id: reviewer } : {}
+        }));
+      }));
+      if (completed2.replayed)
+        replays += 1;
+      const steps = evidence.items.length + (cites ? 2 : 1);
+      return { plan: plan2, artifacts: artifacts2, completed: completed2.value, replayed: replays === steps, recordedItems: recordedItems2, cite: cite2 };
+    } catch (error51) {
+      throw refusedAfter(reviewerRefusal(ctx, error51, retryInput, options.reviewer_how), recorded);
+    }
+  });
+  if (plan.retry && replayed)
+    advice.push("This repeats your latest done on this task exactly, so it was read as a retry.");
+  else if (plan.retry)
+    advice.push("An earlier call with this input stopped part way; its finished steps were kept, and the rest ran now.");
+  const shown = recordedEvidence(evidence, recordedItems, advice);
+  const handle = handleOf("task", task.id);
+  const completion = completed.completion_report_id;
+  const reviewed = completed.completion_policy === "accepted";
+  const now = ctx.store.getTask(workspaceId, task.id);
+  const accepted = reviewed && now.completion_report_id === completion && now.review_status === "accepted";
+  return {
+    ...noteWriteResult({
+      effect: !reviewed ? `Completed ${handle} as ${handleOf("report", completion)}; its policy needs no review.` : accepted ? `Reported ${handle} finished as ${handleOf("report", completion)}; a distinct session has accepted it.` : `Reported ${handle} finished as ${handleOf("report", completion)}; it waits for review by a distinct session ` + `(accept or request_changes)${reviewer ? ", which you asked of one" : ""}. Your report is not an acceptance.`,
+      ids: {
+        task: task.id,
+        task_handle: handle,
+        completion,
+        completion_handle: handleOf("report", completion),
+        artifacts: artifacts.map((artifact) => ({ artifact: artifact.id, evidence: artifact.n })),
+        ...cite ? { evidence_cited: { event: cite.event_id, cite: cite.cite_id } } : {}
+      },
+      advice,
+      next: reviewed && !accepted ? { say: `Ask a distinct session to review it: collab_note {act: "accept" or "request_changes", re: "${completion}"}.` } : withSlot(ctx, { tool: "collab_inbox", input: {} }),
+      note,
+      replayed
+    }),
+    evidence: evidenceSummary(shown)
+  };
+}
+function artifactItem(item, artifact) {
+  const label = artifact.label ?? "";
+  const observed = label.includes(": sha256 by the server") || label.endsWith(": checked by the server") ? "server" : label.endsWith(": not found by git") ? "not_found" : "caller";
+  return {
+    n: item.n,
+    kind: item.kind,
+    locator: artifact.uri,
+    ...observed === "server" && artifact.sha256 ? { sha256: artifact.sha256 } : item.observed !== "server" && item.sha256 ? { sha256: item.sha256 } : {},
+    ...item.lines ? { lines: item.lines } : {},
+    observed
+  };
+}
+var ARTIFACT_LABEL_MAX = 300;
+function artifactLabel(item, line) {
+  const written = parseEvidence(line).attrs;
+  const range = item.lines ? ` lines ${item.lines}` : "";
+  if (item.observed === "server") {
+    const claimed = written.sha256?.toLowerCase();
+    const contradicted = item.kind === "file" && claimed && claimed !== item.sha256 ? `; the caller wrote sha256=${claimed}` : "";
+    return `Evidence ${item.n}${range}: ${item.kind === "file" ? "sha256 by the server" : "checked by the server"}${contradicted}`;
+  }
+  const attrs = NOTE_EVIDENCE_ATTRS.filter((key) => written[key] !== undefined).map((key) => ` ${key}=${written[key]}`).join("");
+  return `Evidence ${item.n}${range}${attrs}: ${item.observed === "not_found" ? "not found by git" : "as the caller wrote it"}`;
+}
+async function releaseOrBlock(ctx, binding, credential, task, options) {
+  const workspaceId = binding.handle.workspace.id;
+  const advice = [];
+  const retryInput = { ...options.keyInput, task: exactRef("task", task.id) };
+  for (const key of Object.keys(retryInput))
+    if (retryInput[key] === null || Array.isArray(retryInput[key]) && retryInput[key].length === 0)
+      delete retryInput[key];
+  const { plan, done, replayed } = await underPlan(ctx, credential, {
+    tool: "collab_done",
+    input: options.keyInput,
+    entity: task.id,
+    retry_input: retryInput,
+    stillCurrent: (latestKey) => {
+      const current = ctx.store.getTask(workspaceId, task.id);
+      if (options.outcome === "blocked" && latestKey.endsWith(":01")) {
+        const progressed = replayReceipt(ctx.store, credential, latestKey);
+        if (progressed && current.assignee_session_id === credential.session_id && current.status === "claimed" && progressed.lease_id !== null && progressed.lease_id === current.lease_id)
+          return true;
+      }
+      return current.assignee_session_id !== credential.session_id;
+    }
+  }, async (plan2) => {
+    const held = () => {
+      const current = requireHeld(ctx, credential, ctx.store.getTask(workspaceId, task.id), retryInput);
+      return { version: current.version, state: { task: handleOf("task", current.id), state: current.effective_status } };
+    };
+    if (options.outcome === "released") {
+      const released = await stepOnce(ctx, credential, plan2.key, () => withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, held, (version2) => ctx.store.withReceiptPlan(plan2.guard, () => ctx.store.releaseTaskForSession({
+        ...credential,
+        idempotency_key: plan2.key,
+        task_id: task.id,
+        lease_id: ctx.store.getTask(workspaceId, task.id).lease_id,
+        expected_version: version2,
+        summary: options.summary
+      }))));
+      return { plan: plan2, done: released.value, replayed: released.replayed };
+    }
+    const progressed = await stepOnce(ctx, credential, plan2.step(1), () => withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, held, (version2) => ctx.store.withReceiptPlan(plan2.guard, () => ctx.store.progressTaskForSession({
+      ...credential,
+      idempotency_key: plan2.step(1),
+      task_id: task.id,
+      lease_id: ctx.store.getTask(workspaceId, task.id).lease_id,
+      expected_version: version2,
+      message: options.summary
+    }))));
+    const recorded = [{ step: 1, what: `the text as progress on task ${task.id}`, id: task.id }];
+    try {
+      const blocked = await stepOnce(ctx, credential, plan2.step(2), () => withCurrentVersion(ctx, { tool: "collab_done", input: retryInput }, held, (version2) => ctx.store.withReceiptPlan(plan2.guard, () => ctx.store.blockTaskForSession({
+        ...credential,
+        idempotency_key: plan2.step(2),
+        task_id: task.id,
+        lease_id: ctx.store.getTask(workspaceId, task.id).lease_id,
+        expected_version: version2,
+        blocker: options.blocker
+      }))));
+      return { plan: plan2, done: blocked.value, replayed: progressed.replayed && blocked.replayed };
+    } catch (error51) {
+      throw refusedAfter(error51, recorded);
+    }
+  });
+  if (plan.retry && replayed)
+    advice.push(`This repeats your latest ${options.outcome} of this task exactly, so it was read as a retry.`);
+  const handle = handleOf("task", task.id);
+  return {
+    ...noteWriteResult({
+      effect: options.outcome === "released" ? `Released ${handle}; it is open for anyone to take.` : `Blocked ${handle}: ${options.blocker}. Your text was posted as its progress; it waits to be unblocked.`,
+      ids: { task: task.id, task_handle: handle },
+      advice,
+      next: withSlot(ctx, { tool: "collab_inbox", input: {} }),
+      note: options.note,
+      replayed
+    }),
+    task: { id: task.id, handle, state: done.effective_status }
+  };
+}
+async function leave(ctx, input) {
+  const text = freeText(input.text, "text", LEAVE_TEXT_MAX, true);
+  const because = freeText(input.because, "because", LEAVE_TEXT_MAX, false);
+  const keyInput = { outcome: "leave", text, because };
+  const binding = ctx.binding();
+  if (!binding) {
+    const left = ctx.left();
+    if (left && left.base === derivedBase(left.session_id, "collab_done", keyInput)) {
+      return {
+        ...left.result,
+        effect: `Replayed: nothing new was written. ${String(left.result.effect)}`,
+        replayed: true,
+        advice: [
+          ...Array.isArray(left.result.advice) ? left.result.advice : [],
+          "This repeats your leave exactly, so it was read as a retry."
+        ]
+      };
+    }
+    throw notArrived(ctx.slot_key, ctx.bound_slots().find((slot) => slot.key === "")?.binding ?? null);
+  }
+  const { credential } = requireCredential(ctx);
+  const workspaceId = binding.handle.workspace.id;
+  const advice = [];
+  for (const field of ["task", "why", "evidence", "limits", "review_by"]) {
+    if (input[field] !== undefined)
+      advice.push(`${field} is not used when you leave; every hold is released.`);
+  }
+  const holds = ctx.store.listTasks(workspaceId, "claimed").filter((task) => task.assignee_session_id === credential.session_id);
+  if (holds.length > 0 && !because) {
+    throw new CollabError("because_required", `You hold ${holds.length} task(s) that would be left unfinished; say why with because`, {
+      holds: holds.map((task) => ({ task: handleOf("task", task.id), id: task.id, title: task.title })),
+      remedy: withSlot(ctx, { tool: "collab_done", input: { text, outcome: "leave", because: "<why the work is left unfinished>" } })
+    });
+  }
+  const note = leaveNote(text, holds.length > 0, advice);
+  const base = derivedBase(credential.session_id, "collab_done", keyInput);
+  const ended = ctx.store.endSessionWithReleases({
+    ...credential,
+    reason: because ?? text,
+    ...holds.length > 0 ? { release_leases: true, release_summary: text } : {}
+  });
+  const released = ended.released_leases.map((release) => ({ task: release.task_id, task_handle: handleOf("task", release.task_id), via: release.via }));
+  const result = {
+    ...noteWriteResult({
+      effect: `Ended session ${ended.session.id}${released.length > 0 ? `, after releasing ${released.map((item) => item.task_handle).join(", ")}` : ""}. ` + "You are no longer a voice in new proposals or a unit in new ballots here.",
+      ids: { session: ended.session.id, released },
+      advice,
+      next: withSlot(ctx, { tool: "collab_arrive", input: { purpose: "<what you are here to do>" } }),
+      note
+    }),
+    session: { id: ended.session.id, status: ended.session.status }
+  };
+  ctx.unbind({ session_id: credential.session_id, base, result });
+  try {
+    removeSessionCredentialFile(binding.credential_file);
+  } catch {
+    advice.push("The session ended, but its credential file could not be removed; it no longer opens the journal.");
+  }
+  return result;
+}
+function leaveNote(text, released, advice) {
+  const firstLine2 = text.split(`
+`)[0];
+  const fits = firstLine2.length <= NOTE_STATEMENT_MAX;
+  const statement = statementOf(firstLine2);
+  const body = fits ? splitNoteText(text).body : text;
+  if (body !== null) {
+    try {
+      return renderNote({ act: "done", statement, body });
+    } catch (error51) {
+      if (!(error51 instanceof CollabError))
+        throw error51;
+      advice.push(`The returned note carries only your first line, because the rest cannot be a note's body (${error51.message.replace(/\.$/, "")}). ` + `Your whole text was stored as the reason the session ended${released ? " and as the release summary" : ""}.`);
+    }
+  }
+  return renderNote({ act: "done", statement });
+}
+
+// src/propose-verb.ts
+var QUESTION_MAX = 8000;
+var CRITERIA_MAX = 4000;
+var EXTENT_MAX = 1000;
+var CONFLICTS_MAX = 4000;
+var LIMITS_MAX = 2000;
+var TOPIC_MAX = 200;
+var EVIDENCE_MAX = 16;
+var CARRIED_EXCERPT_MAX = 160;
+var MIN_CONSULT_SECONDS = 600;
+var MAX_CONSULT_SECONDS = 604800;
+function term(input, field, max, required2) {
+  const value = input[field];
+  if (value === undefined || value === null) {
+    if (!required2)
+      return;
+    throw new CollabError(`invalid_${field}`, `${field} is required`, {
+      remedy: { say: `Give ${field}: collab_propose needs question, criteria and extent.` }
+    });
+  }
+  if (typeof value !== "string")
+    throw new CollabError(`invalid_${field}`, `${field} must be text`);
+  const kept = value.trim();
+  if (!kept) {
+    if (!required2)
+      return;
+    throw new CollabError(`invalid_${field}`, `${field} must not be empty`, { remedy: { say: `Give ${field} as text.` } });
+  }
+  if (kept.includes("\x00"))
+    throw new CollabError(`invalid_${field}`, `${field} must not contain NUL characters`);
+  if (hasLoneSurrogate(kept)) {
+    throw new CollabError(`invalid_${field}`, `${field} must be well-formed Unicode text (it holds half of a character)`);
+  }
+  if (kept.length > max) {
+    throw new CollabError("too_long", `${field} is ${kept.length} characters; at most ${max}`, {
+      field,
+      max,
+      actual: kept.length,
+      unit: "chars"
+    });
+  }
+  return value;
+}
+var DURATION2 = /^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/i;
+function readCloses(ctx, input) {
+  const value = input.closes;
+  if (value === undefined || value === null)
+    return;
+  const say = {
+    say: `closes is a number of seconds from ${MIN_CONSULT_SECONDS} to ${MAX_CONSULT_SECONDS}, a duration such as 30m, 6h or 2d, or an ISO time; leave it out for the default of 6 hours.`
+  };
+  let seconds;
+  if (typeof value === "number") {
+    seconds = value;
+  } else if (typeof value === "string" && /^\d+$/.test(value.trim())) {
+    seconds = Number(value.trim());
+  } else if (typeof value === "string" && value.trim() !== "" && DURATION2.test(value.trim())) {
+    const [, days, hours, minutes, secs] = DURATION2.exec(value.trim());
+    seconds = Number(days ?? 0) * 86400 + Number(hours ?? 0) * 3600 + Number(minutes ?? 0) * 60 + Number(secs ?? 0);
+  } else if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value.trim()) && Number.isFinite(Date.parse(value.trim()))) {
+    return { at: Date.parse(value.trim()) };
+  } else {
+    throw new CollabError("invalid_closes", `closes ${JSON.stringify(value)} is not a time collab can read`, { remedy: say });
+  }
+  if (!Number.isFinite(seconds)) {
+    throw new CollabError("invalid_closes", `closes ${JSON.stringify(value)} is not a time collab can read`, { remedy: say });
+  }
+  if (!Number.isInteger(seconds)) {
+    throw new CollabError("invalid_closes", "closes is a whole number of seconds", { remedy: retryCloses(ctx, input, Math.round(seconds)) });
+  }
+  return { seconds: inConsultRange(ctx, input, seconds) };
+}
+function closesFromNow(ctx, input, at) {
+  return inConsultRange(ctx, input, Math.ceil((at - Date.parse(ctx.store.noteNow())) / 1000));
+}
+function inConsultRange(ctx, input, seconds) {
+  if (seconds < MIN_CONSULT_SECONDS || seconds > MAX_CONSULT_SECONDS) {
+    throw new CollabError("invalid_closes", `closes is ${seconds} seconds from now; a proposal stays open from ${MIN_CONSULT_SECONDS} seconds (10 minutes) to ${MAX_CONSULT_SECONDS} (7 days)`, { seconds, remedy: retryCloses(ctx, input, Math.min(MAX_CONSULT_SECONDS, Math.max(MIN_CONSULT_SECONDS, seconds))) });
+  }
+  return seconds;
+}
+function retryCloses(ctx, input, seconds) {
+  return withSlot(ctx, { tool: "collab_propose", input: { ...input, closes: seconds } });
+}
+function excerpt(statement) {
+  if (statement.length <= CARRIED_EXCERPT_MAX)
+    return statement;
+  let end = CARRIED_EXCERPT_MAX;
+  const last = statement.charCodeAt(end - 1);
+  if (last >= 55296 && last <= 56319)
+    end -= 1;
+  return `${statement.slice(0, end)}\u2026`;
+}
+function carriedLine(objection) {
+  return `carried objection by ${objection.by} (report:${objection.id}): ${excerpt(objection.statement)}`;
+}
+function objectionsToCarry(replaced) {
+  if (!replaced)
+    return [];
+  const direct = replaced.challenges.filter((challenge) => challenge.standing).map((challenge) => ({ id: challenge.id, by: challenge.from_actor, statement: challenge.statement }));
+  const seen = new Set(direct.map((objection) => objection.id));
+  const forwarded = (replaced.replaced?.carried ?? []).filter((entry) => entry.standing_on_replaced && !seen.has(entry.challenge_id)).map((entry) => ({ id: entry.challenge_id, by: entry.by, statement: entry.statement }));
+  return [...direct, ...forwarded];
+}
+function carriedConflicts(own, carried) {
+  if (carried.length === 0)
+    return { text: own, ids_only: [] };
+  const head = own?.trim() ?? "";
+  const lines = carried.map(carriedLine);
+  const compose = (whole) => {
+    const rest = carried.slice(whole).map((challenge) => `report:${challenge.id}`);
+    const parts = [...lines.slice(0, whole), ...rest.length > 0 ? [`carried objection(s) by id only: ${rest.join(" ")}`] : []];
+    return [head, parts.join(`
+`)].filter(Boolean).join(`
+
+`);
+  };
+  for (let whole = carried.length;whole >= 0; whole -= 1) {
+    const text = compose(whole);
+    if (text.length <= CONFLICTS_MAX)
+      return { text, ids_only: carried.slice(whole).map((challenge) => challenge.id) };
+  }
+  const idsOnly = compose(0).length - head.length;
+  throw new CollabError("conflicts_too_long", `The carried objections need ${idsOnly} characters even by id, and with your conflicts the terms would exceed ${CONFLICTS_MAX}`, {
+    field: "conflicts",
+    max: CONFLICTS_MAX,
+    carried: carried.map((challenge) => challenge.id),
+    remedy: {
+      say: `Shorten your own conflicts to at most ${Math.max(0, CONFLICTS_MAX - idsOnly)} characters; ` + "the objections carried from the replaced proposal are never dropped from the terms."
+    }
+  });
+}
+function objectorsOf(ctx, workspaceId, me, knownConflicts, replaced) {
+  const text = knownConflicts ?? "";
+  const sessions = ctx.store.noteSessionViews(workspaceId);
+  const myVoice = ctx.store.consentVoiceOf(me);
+  const byVoice = new Map;
+  const candidates = [
+    ...replaced.challenges.map((challenge) => ({
+      id: challenge.id,
+      voice_id: challenge.voice_id,
+      from_actor: challenge.from_actor,
+      from_session_id: challenge.from_session_id
+    })),
+    ...(replaced.replaced?.carried ?? []).map((entry) => ({
+      id: entry.challenge_id,
+      voice_id: entry.voice_id,
+      from_actor: entry.by,
+      from_session_id: entry.by_session_id
+    }))
+  ];
+  const listed = new Set;
+  for (const challenge of candidates) {
+    if (listed.has(challenge.id) || !text.includes(`report:${challenge.id}`) || !challenge.voice_id)
+      continue;
+    listed.add(challenge.id);
+    let objector = byVoice.get(challenge.voice_id);
+    if (!objector) {
+      const live = sessions.filter((view) => view.voice_id === challenge.voice_id && view.status === "active" && view.liveness === "live");
+      const own = live.find((view) => view.id === challenge.from_session_id) ?? live[0] ?? null;
+      objector = {
+        voice_id: challenge.voice_id,
+        name: challenge.from_actor,
+        challenges: [],
+        session: own ? { id: own.id, name: own.actor } : null,
+        mine: challenge.voice_id === myVoice
+      };
+      byVoice.set(challenge.voice_id, objector);
+    }
+    objector.challenges.push(challenge.id);
+  }
+  return [...byVoice.values()];
+}
+var OBJECTOR_EVIDENCE_CHALLENGES = NOTE_EVIDENCE_MAX - 1;
+var REPORT_REFS_MAX = 128;
+function objectorNote(proposalId, replacedId, challenges) {
+  const shown = challenges.slice(0, OBJECTOR_EVIDENCE_CHALLENGES);
+  const rest = challenges.slice(OBJECTOR_EVIDENCE_CHALLENGES);
+  const many = challenges.length > 1;
+  const body = renderNote({
+    act: "note",
+    statement: many ? `Your ${challenges.length} objections to a replaced proposal were carried into the new one as text.` : "Your objection to a replaced proposal was carried into the new one as text.",
+    body: [
+      CARRIED_OBJECTIONS_SENTENCE,
+      `The replaced proposal is proposal:${replacedId}.`,
+      ...rest.length > 0 ? [`Also carried, beyond the ${shown.length} in Evidence: ${rest.map((id) => `report:${id}`).join(" ")}`] : []
+    ].join(`
+
+`),
+    re: `proposal:${proposalId}`,
+    evidence: [`report:${proposalId}`, ...shown.map((id) => `report:${id}`)]
+  });
+  const refs = [`report:${proposalId}`, ...challenges.map((id) => `report:${id}`)].slice(0, REPORT_REFS_MAX);
+  return { body, evidence_refs: refs };
+}
+var PROPOSAL_NOTE_DROP_ORDER = ["criteria", "limits", "question body", "extent"];
+function proposalNote(terms) {
+  const text = normalizeNoteText(terms.question).trim();
+  const words = splitNoteText(text);
+  const firstCut = words.statement.length > NOTE_STATEMENT_MAX;
+  const re = `proposal:${terms.id}`;
+  const sha = { key: "Sha256", value: terms.sha256 };
+  const raw = {
+    "question body": firstCut ? text : words.body,
+    extent: terms.extent,
+    limits: terms.limits,
+    criteria: terms.criteria
+  };
+  const build2 = (keep2) => normalizeNoteFields({
+    act: "propose",
+    statement: statementOf(text),
+    body: keep2.has("question body") ? raw["question body"] : null,
+    re,
+    extent: keep2.has("extent") ? raw.extent : null,
+    limits: keep2.has("limits") ? raw.limits : null,
+    trailers: [sha, ...keep2.has("criteria") && raw.criteria !== null ? [{ key: "Criteria", value: raw.criteria }] : []]
+  });
+  const attempt = (keep2) => {
+    try {
+      return renderNote(build2(keep2));
+    } catch (error51) {
+      if (!(error51 instanceof CollabError))
+        throw error51;
+      return null;
+    }
+  };
+  const present = Object.keys(raw).filter((part) => raw[part] !== null);
+  const keep = new Set(present.filter((part) => attempt(new Set([part])) !== null));
+  let rendered = attempt(keep);
+  for (const part of PROPOSAL_NOTE_DROP_ORDER) {
+    if (rendered !== null)
+      break;
+    keep.delete(part);
+    rendered = attempt(keep);
+  }
+  if (rendered === null) {
+    return {
+      text: renderNote({ act: "propose", statement: "A proposal was opened; read it by its id.", re, trailers: [sha] }),
+      left_out: ["question", ...present.filter((part) => part !== "question body")],
+      trimmed: []
+    };
+  }
+  const shown = build2(keep);
+  const asShown = {
+    "question body": shown.body,
+    extent: shown.extent,
+    limits: shown.limits,
+    criteria: shown.trailers.find((trailer) => trailer.key === "Criteria")?.value ?? null
+  };
+  return {
+    text: rendered,
+    left_out: present.filter((part) => !keep.has(part)),
+    trimmed: ["extent", "limits", "criteria"].filter((part) => keep.has(part) && asShown[part] !== raw[part]?.trim())
+  };
+}
+function andList(items) {
+  return items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
+}
+function sessionName(ctx, workspaceId, id) {
+  try {
+    return ctx.store.resolveNoteSession(workspaceId, id, { include_ended: true }).actor;
+  } catch {
+    return id;
+  }
+}
+function stepKey(key, step) {
+  return `${key.replace(/:\d{2}$/, "")}:${String(step).padStart(2, "0")}`;
+}
+var OPEN_STEP = 2;
+var FIRST_NOTE_STEP = 3;
+async function proposeVerb(ctx, input) {
+  const { binding, credential } = requireCredential(ctx);
+  const workspaceId = binding.handle.workspace.id;
+  const me = credential.session_id;
+  const question = term(input, "question", QUESTION_MAX, true);
+  const criteria = term(input, "criteria", CRITERIA_MAX, true);
+  const extent = term(input, "extent", EXTENT_MAX, true);
+  const conflicts = term(input, "conflicts", CONFLICTS_MAX, false);
+  const limits = term(input, "limits", LIMITS_MAX, false);
+  const topic = term(input, "topic", TOPIC_MAX, false);
+  const closes = readCloses(ctx, input);
+  let seconds = closes && "seconds" in closes ? closes.seconds : undefined;
+  if (input.evidence !== undefined && (!Array.isArray(input.evidence) || input.evidence.some((line) => typeof line !== "string"))) {
+    throw new CollabError("invalid_evidence", "evidence is a list of one-line pointers", {
+      remedy: { say: 'Give evidence as a list such as ["file src/a.ts", "report:report_\u2026"].' }
+    });
+  }
+  const lines = input.evidence ?? [];
+  if (lines.length > EVIDENCE_MAX) {
+    throw new CollabError("too_long", `evidence has ${lines.length} items; at most ${EVIDENCE_MAX}`, {
+      field: "evidence",
+      max: EVIDENCE_MAX,
+      actual: lines.length,
+      unit: "items"
+    });
+  }
+  let replaced = null;
+  if (input.replaces !== undefined && input.replaces !== null) {
+    if (typeof input.replaces !== "string" || !input.replaces.trim()) {
+      throw new CollabError("invalid_replaces", "replaces names your earlier proposal", {
+        remedy: { say: "Name the proposal this one replaces, by its id or a proposal# handle." }
+      });
+    }
+    const id = ctx.store.resolveNoteRef(workspaceId, "proposal", input.replaces).id;
+    replaced = ctx.store.noteProposalView(workspaceId, id);
+    if (replaced.status.proposal.from_session_id !== me) {
+      const author = replaced.author;
+      const myName = ctx.store.noteSessionViews(workspaceId).find((view) => view.id === me)?.actor ?? null;
+      const sameName = author !== null && myName !== null && author.actor === myName;
+      throw new CollabError("not_your_report", `${handleOf("proposal", id)} was opened by another session, and only its author session replaces it. ` + (sameName ? `${newVoiceSentence(author.actor)} ` : "") + "To say where you stand, post a note on it to the person, who can still reject it; or open a new proposal without replaces. Nothing was written", {
+        ...author ? { author: { session: author.id, name: author.actor, ...author.status === "ended" ? { ended: true } : {} } } : {},
+        remedy: noLongerStandRemedy(ctx, id, true, true)
+      });
+    }
+  }
+  const standing = objectionsToCarry(replaced);
+  let composed = { text: conflicts, ids_only: [] };
+  let unfit = null;
+  try {
+    composed = carriedConflicts(conflicts, standing);
+  } catch (error51) {
+    if (!(error51 instanceof CollabError) || error51.code !== "conflicts_too_long")
+      throw error51;
+    unfit = error51;
+  }
+  const evidence = resolveEvidence(ctx, binding, lines);
+  const advice = [...evidence.advice];
+  if (composed.ids_only.length > 0) {
+    advice.push(`${composed.ids_only.length} carried objection(s) did not fit the terms in full, so they are carried by id: ${composed.ids_only.join(", ")}.`);
+  }
+  const taskId = replaced?.status.proposal.task_id ?? null;
+  const replacedId = replaced?.status.proposal.id ?? null;
+  const keyInput = {
+    question,
+    criteria,
+    extent,
+    closes: input.closes ?? null,
+    conflicts: conflicts ?? null,
+    evidence: evidence.key_lines,
+    limits: limits ?? null,
+    topic: topic ?? null,
+    replaces: replacedId
+  };
+  const retryInput = { ...input, ...replacedId ? { replaces: replacedId } : {} };
+  const precheck = beforeFirstWrite(() => {
+    if (closes && "at" in closes)
+      seconds = closesFromNow(ctx, input, closes.at);
+    if (unfit)
+      throw unfit;
+    ctx.store.noteProposalPrecheck(credential, {
+      evidence_refs: evidence.journal,
+      supersedes_report_id: replacedId,
+      task_id: taskId
+    });
+  });
+  const standIn = "report_00000000-0000-4000-8000-000000000000";
+  proposalNote({
+    id: standIn,
+    question,
+    criteria: criteria.trim(),
+    extent: extent.trim(),
+    limits: limits?.trim() ?? null,
+    sha256: "0".repeat(64)
+  });
+  if (replaced && !unfit) {
+    for (const objector of objectorsOf(ctx, workspaceId, me, composed.text ?? null, replaced)) {
+      objectorNote(standIn, replaced.status.proposal.id, objector.challenges);
+    }
+  }
+  const { plan, cite, citeReplayed, status, notes, replays, steps } = await underPlan(ctx, credential, {
+    tool: "collab_propose",
+    input: keyInput,
+    entity: replacedId ?? "propose",
+    retry_input: retryInput,
+    stillCurrent: (latestKey) => {
+      const opened = replayReceipt(ctx.store, credential, stepKey(latestKey, OPEN_STEP));
+      if (!opened)
+        return true;
+      const position = ctx.store.proposalStatus(workspaceId, opened.proposal.id).ai.position;
+      return position !== "withdrawn" && position !== "superseded";
+    }
+  }, async (plan2) => {
+    const recorded = [];
+    let replays2 = 0;
+    let steps2 = 0;
+    let cite2 = null;
+    let citeReplayed2 = false;
+    if (evidence.items.length > 0) {
+      steps2 += 1;
+      const cited = await stepOnce(ctx, credential, plan2.step(1), () => {
+        precheck();
+        return ctx.store.citeEvidenceForSession({
+          ...credential,
+          idempotency_key: plan2.step(1),
+          worktree_id: binding.handle.worktree.id,
+          items: evidence.items,
+          receipt_plan: plan2.guard
+        });
+      });
+      cite2 = cited.value;
+      citeReplayed2 = cited.replayed;
+      if (cited.replayed)
+        replays2 += 1;
+      recorded.push({ step: 1, what: `evidence.cited event ${cite2.event_id} (cite ${cite2.cite_id})`, id: cite2.event_id });
+    }
+    try {
+      steps2 += 1;
+      const opened = await stepOnce(ctx, credential, plan2.step(OPEN_STEP), () => {
+        precheck();
+        return ctx.store.withReceiptPlan(plan2.guard, () => ctx.store.openProposalForSession({
+          ...credential,
+          idempotency_key: plan2.step(OPEN_STEP),
+          question,
+          criteria,
+          extent,
+          ...composed.text !== undefined ? { known_conflicts: composed.text } : {},
+          evidence_refs: [...evidence.journal, ...cite2 ? [`event:${cite2.event_id}`] : []],
+          ...limits !== undefined ? { limits } : {},
+          ...topic !== undefined ? { topic } : {},
+          ...seconds !== undefined ? { consult_seconds: seconds } : {},
+          ...taskId ? { task_id: taskId } : {},
+          ...replacedId ? { supersedes_report_id: replacedId } : {}
+        }));
+      });
+      if (opened.replayed)
+        replays2 += 1;
+      const status2 = opened.value;
+      recorded.push({ step: OPEN_STEP, what: `proposal ${status2.proposal.id}`, id: status2.proposal.id });
+      const notes2 = [];
+      if (replaced) {
+        const objectors = objectorsOf(ctx, workspaceId, me, status2.terms.known_conflicts, replaced);
+        for (const [index, objector] of objectors.entries()) {
+          const key = plan2.step(FIRST_NOTE_STEP + index);
+          const earlier = replayReceipt(ctx.store, credential, key);
+          if (!earlier && (objector.mine || !objector.session)) {
+            notes2.push({ objector, report: null });
+            continue;
+          }
+          steps2 += 1;
+          const told = objectorNote(status2.proposal.id, replaced.status.proposal.id, objector.challenges);
+          const sent = await stepOnce(ctx, credential, key, () => ctx.store.appendNoteForSession({
+            ...credential,
+            idempotency_key: key,
+            reports: [{
+              kind: "inference",
+              relation: "informs",
+              body: told.body,
+              task_id: status2.proposal.task_id,
+              to_session_id: objector.session.id,
+              about_proposal_id: status2.proposal.id,
+              evidence_refs: told.evidence_refs
+            }],
+            receipt_plan: plan2.guard
+          }));
+          if (sent.replayed)
+            replays2 += 1;
+          const posted = sent.value.reports[0];
+          const to = posted.to_session_id ?? objector.session.id;
+          const name = objector.session?.id === to ? objector.session.name : sessionName(ctx, workspaceId, to);
+          const reached = { ...objector, session: { id: to, name } };
+          recorded.push({ step: FIRST_NOTE_STEP + index, what: `note ${posted.id} to ${reached.session.name}`, id: posted.id });
+          notes2.push({ objector: reached, report: posted.id });
+        }
+      }
+      return { plan: plan2, cite: cite2, citeReplayed: citeReplayed2, status: status2, notes: notes2, replays: replays2, steps: steps2 };
+    } catch (error51) {
+      throw refusedAfter(error51, recorded);
+    }
+  });
+  const replayed = replays === steps;
+  if (plan.retry && replayed) {
+    advice.push("This repeats your latest proposal on this entity exactly, so it was read as a retry. Add a word to the question to propose again.");
+  } else if (plan.retry) {
+    advice.push("An earlier call with this input stopped part way; its finished steps were kept, and the rest ran now.");
+  }
+  return proposeResult(ctx, binding, {
+    status,
+    cite,
+    citeReplayed,
+    notes,
+    replayed,
+    advice,
+    evidence
+  });
+}
+function proposeResult(ctx, binding, options) {
+  const workspaceId = binding.handle.workspace.id;
+  const proposalId = options.status.proposal.id;
+  const advice = options.advice;
+  const data = ctx.store.noteProposalView(workspaceId, proposalId);
+  const facts = proposalFacts(ctx, data);
+  advice.push(...facts.advice);
+  const status = data.status;
+  const handle = handleOf("proposal", proposalId);
+  const sessions = new Map(ctx.store.noteSessionViews(workspaceId).map((view) => [view.id, view]));
+  const voices = status.terms.voices.map((voice) => {
+    const members = voice.live_session_ids.map((id) => sessions.get(id)).filter((view) => view !== undefined);
+    const lastSeen = members.map((view) => view.last_seen_at).sort().at(-1) ?? null;
+    return {
+      voice: voice.voice_id,
+      name: sessions.get(voice.voice_id)?.actor ?? members[0]?.actor ?? voice.voice_id,
+      author: voice.voice_id === status.terms.author_voice_id,
+      sessions: voice.live_session_ids,
+      last_seen_minutes: lastSeen ? minutesSince(lastSeen, data.observed_at) : null
+    };
+  });
+  if (data.lone) {
+    advice.push("You are the lone voice here: consent/v1 counts only an explicit support from you (collab_note act support), and without one it lapses at the close.");
+  }
+  const notified = options.notes.filter((entry) => entry.report !== null);
+  const unreachable = options.notes.filter((entry) => entry.report === null && !entry.objector.mine);
+  if (unreachable.length > 0) {
+    advice.push(`${unreachable.length} carried objector(s) have no live session, so no note reached them: ${unreachable.map((entry) => entry.objector.name).join(", ")}.`);
+  }
+  const shown = options.cite && options.citeReplayed ? recordedEvidence(options.evidence, options.cite.items, advice) : options.evidence;
+  const replacedId = data.replaced?.proposal_id ?? null;
+  const note = proposalNote({
+    id: proposalId,
+    question: status.proposal.body,
+    criteria: status.terms.criteria,
+    extent: status.terms.extent,
+    limits: status.proposal.limits,
+    sha256: status.proposal_sha256
+  });
+  if (note.trimmed.length > 0) {
+    advice.push(`The returned note shows ${andList(note.trimmed)} with lines trimmed and blank lines dropped, as a note writes them; the proposal keeps them byte for byte.`);
+  }
+  if (note.left_out.length > 0) {
+    advice.push(`The returned note leaves out ${andList(note.left_out)}, which a note cannot hold as written (not_in_note); ` + `the proposal keeps every term byte for byte (read it with collab_inbox about ${proposalId}).`);
+  }
+  return {
+    ...noteWriteResult({
+      effect: `Opened proposal ${handle} (proposal_sha256 ${status.proposal_sha256}) for the agents to settle by consent/v1 and the person to decide; ` + `the agents' position is ${status.ai.position}, closing ${status.terms.closes_at}.` + (replacedId ? ` It replaces ${handleOf("proposal", replacedId)}, carrying ${data.replaced.carried.filter((entry) => entry.carried_in_terms).length} objection(s) into its terms as text.` : ""),
+      ids: {
+        proposal: proposalId,
+        proposal_handle: handle,
+        proposal_sha256: status.proposal_sha256,
+        ...options.cite ? { evidence_cited: { event: options.cite.event_id, cite: options.cite.cite_id } } : {},
+        ...notified.length > 0 ? { objector_notes: notified.map((entry) => ({ report: entry.report, to: entry.objector.session })) } : {}
+      },
+      advice,
+      next: withSlot(ctx, { tool: "collab_inbox", input: { about: exactRef("proposal", proposalId) } }),
+      note: note.text,
+      replayed: options.replayed
+    }),
+    ...note.left_out.length > 0 ? { not_in_note: note.left_out } : {},
+    voices,
+    evidence: evidenceSummary(shown),
+    ...facts.fields,
+    ...data.replaced ? {
+      objectors: options.notes.map((entry) => ({
+        voice: entry.objector.voice_id,
+        name: entry.objector.name,
+        challenges: entry.objector.challenges,
+        reached: entry.report !== null,
+        ...entry.report ? { note: entry.report, session: entry.objector.session } : {},
+        ...entry.objector.mine ? { yours: true } : {}
+      })),
+      unreachable_objectors: unreachable.map((entry) => ({
+        voice: entry.objector.voice_id,
+        name: entry.objector.name,
+        challenges: entry.objector.challenges
+      }))
+    } : {}
+  };
+}
+
+// src/ballot-verbs.ts
+import { randomBytes as randomBytes2, randomUUID as randomUUID5 } from "crypto";
+var POLL_STAND_IN_STATEMENT = "A sealed ballot; read its terms with collab_inbox about.";
+var WAIT_FOR_CLOSE_SECONDS = 30;
+var WAIT_FOR_CLOSE_ADVICE = "collab_inbox {wait_seconds: 30} waits for the close: a wait ends when a ballot you are in, opened or cast in closes, " + "and returns its result; a wait over 30 seconds is one more call (closes_in says how long is left).";
+function pollNote(terms) {
+  const first = terms.question.split(`
+`).find((line) => line.trim() !== "")?.trim() ?? "";
+  const statement = first ? statementOf(first) : POLL_STAND_IN_STATEMENT;
+  const parts = [];
+  if (terms.question !== statement)
+    parts.push(terms.question);
+  if (terms.criteria !== undefined)
+    parts.push(`Criteria:
+${terms.criteria}`);
+  const trailers = [
+    ...terms.options.map((option) => ({ key: "Option", value: `${option.key} \u2014 ${option.label}` })),
+    ...terms.pick !== undefined ? [{ key: "Pick", value: String(terms.pick) }] : [],
+    { key: "Quorum", value: String(terms.quorum) },
+    { key: "Closes", value: terms.close_when_all_cast ? `${terms.closes_at}, or when every unit has cast` : terms.closes_at }
+  ];
+  try {
+    return renderNote({ act: "poll", statement, body: parts.length > 0 ? parts.join(`
+
+`) : null, trailers });
+  } catch (error51) {
+    if (!(error51 instanceof CollabError))
+      throw error51;
+    return renderNote({ act: "poll", statement: POLL_STAND_IN_STATEMENT, trailers });
+  }
+}
+var POLL_FIELDS = ["question", "options", "closes", "criteria", "pick", "quorum", "voters", "close_when_all_cast"];
+function pollInput(input) {
+  const poll = {};
+  for (const field of POLL_FIELDS) {
+    if (input[field] !== undefined && input[field] !== null)
+      poll[field] = input[field];
+  }
+  return poll;
+}
+async function pollVerb(ctx, input) {
+  const { binding, credential } = requireCredential(ctx);
+  const workspaceId = binding.handle.workspace.id;
+  const pending = revealDue(ctx, workspaceId);
+  if (ctx.store.journalRealpath() === null) {
+    throw new CollabError("ballots_need_a_file_journal", "A sealed ballot keeps its seals beside the journal file; this store has none", {
+      remedy: { say: "Open collab on a journal file, not an in-memory store, to poll; or say it with collab_note." }
+    });
+  }
+  const poll = pollInput(input);
+  const { plan, receipt, replayed } = await underPlan(ctx, credential, {
+    tool: "collab_poll",
+    input: poll,
+    entity: "poll",
+    stillCurrent: (latestKey) => {
+      const found = replayReceipt(ctx.store, credential, latestKey);
+      return !found || ctx.store.noteReportStands(workspaceId, found.ballot_id) && ctx.store.noteBallotView(workspaceId, found.ballot_id).state === "open";
+    }
+  }, async (plan2) => {
+    const step = await stepOnce(ctx, credential, plan2.key, () => ctx.store.openBallotForSession({
+      ...credential,
+      idempotency_key: plan2.key,
+      poll,
+      render: pollNote,
+      receipt_plan: plan2.guard
+    }));
+    return { plan: plan2, receipt: step.value, replayed: step.replayed };
+  });
+  const view = ctx.store.noteBallotView(workspaceId, receipt.ballot_id, credential.session_id);
+  const handle = handleOf("ballot", receipt.ballot_id);
+  const advice = [...receipt.advice];
+  if (plan.retry && replayed) {
+    advice.push("This repeats your latest poll exactly, so it was read as a retry. Change a word of the question to open another.");
+  }
+  if (receipt.left_out_total > 0) {
+    advice.push(`${receipt.left_out_total} live session(s) are left out of the electorate (left_out); their casts would be revealed and never counted.`);
+  }
+  advice.push("Do not announce the result yourself: it is computed at the close, and it authorises nothing.");
+  advice.push(WAIT_FOR_CLOSE_ADVICE);
+  return {
+    ...noteWriteResult({
+      effect: `Opened sealed ballot ${handle} for ${receipt.electorate.length} unit(s), closing ${receipt.terms.closes_at}` + `${receipt.terms.close_when_all_cast ? " or once every unit has cast" : ""}. No vote is shown before the close.`,
+      ids: { ballot: receipt.ballot_id, ballot_handle: handle, report: receipt.report.id, event: receipt.event_id },
+      advice,
+      next: withSlot(ctx, { tool: "collab_inbox", input: { wait_seconds: WAIT_FOR_CLOSE_SECONDS } }),
+      note: receipt.report.body,
+      replayed
+    }),
+    ballot: receipt.ballot_id,
+    terms: ballotTermsView(receipt.terms, view.observed_at),
+    electorate: receipt.electorate.map(ballotUnitView),
+    left_out: receipt.left_out,
+    ...receipt.left_out_total > receipt.left_out.length ? { left_out_total: receipt.left_out_total } : {},
+    chosen_by: receipt.chosen_by,
+    closes_at: receipt.terms.closes_at,
+    closes_in: durationUntil(receipt.terms.closes_at, view.observed_at),
+    close_when_all_cast: receipt.terms.close_when_all_cast,
+    quorum: receipt.terms.quorum,
+    state: view.state,
+    unit_basis: view.unit_basis,
+    sealing: view.sealing,
+    ...pending ? { reveal_pending: pending } : {}
+  };
+}
+function resolveVoteEvidence(ctx, binding, lines) {
+  if (lines.length === 0)
+    return { evidence: [], advice: [] };
+  let resolved;
+  try {
+    resolved = resolveEvidence(ctx, binding, lines);
+  } catch (error51) {
+    if (!(error51 instanceof CollabError))
+      throw error51;
+    throw new CollabError(error51.code, error51.message, {
+      ...error51.details,
+      remedy: { say: "Correct that evidence line and cast again; nothing was written and no seal was made." }
+    });
+  }
+  const items = new Map(resolved.items.map((item) => [item.n, item]));
+  const advice = [];
+  const evidence = lines.map((line, index) => {
+    const n = index + 1;
+    const item = items.get(n);
+    if (!item) {
+      const ref = resolved.lines[index] ?? line;
+      const colon = ref.indexOf(":");
+      const kind = colon > 0 ? ref.slice(0, colon) : "report";
+      return {
+        text: line,
+        ...NOTE_JOURNAL_EVIDENCE_KINDS.includes(kind) ? { kind, locator: ref.slice(colon + 1) } : {},
+        observed: "journal"
+      };
+    }
+    if (item.kind === "file" && item.observed !== "server") {
+      advice.push(`Evidence ${n} could not be hashed in your worktree, so it is sealed as you wrote it (observed: caller).`);
+    } else if (item.kind === "commit" && item.observed === "not_found") {
+      advice.push(`Evidence ${n}: git in your worktree has no such commit; it is sealed as not found.`);
+    } else if (item.kind === "commit" && item.observed === "caller") {
+      advice.push(`Evidence ${n}: the commit could not be checked here; it is sealed as you wrote it.`);
+    }
+    return {
+      text: line,
+      kind: item.kind,
+      locator: item.locator,
+      ...item.lines ? { lines: item.lines } : {},
+      ...item.sha256 ? { sha256: item.sha256 } : {},
+      ...item.exit !== undefined ? { exit: item.exit } : {},
+      observed: item.observed,
+      ...item.kind === "file" && item.observed === "server" ? { worktree_id: binding.handle.worktree.id } : {}
+    };
+  });
+  return { evidence, advice };
+}
+function aboutBallot(ctx, ballotId) {
+  return withSlot(ctx, { tool: "collab_inbox", input: { about: exactRef("ballot", ballotId) } });
+}
+function castVote(ctx, ballot, cast) {
+  if (ballot.revealed) {
+    const entry = ballot.revealed.find((candidate) => candidate.cast_id === cast.cast_id);
+    return entry?.vote ? { vote: entry.vote, revealed_as: entry.status } : null;
+  }
+  const read = readSealFile(ctx.store.ballotSealPath(ballot.ballot_id, cast.cast_id));
+  if (read.state !== "read")
+    return null;
+  const opened = openSeal(read.value, cast, { workspace_id: ballot.workspace_id, ballot_id: ballot.ballot_id });
+  return opened.state === "ok" ? { vote: opened.vote, revealed_as: null } : null;
+}
+function voteCall(input) {
+  const call = {};
+  for (const field of ["ballot", "choice", "why", "evidence", "shared"]) {
+    if (input[field] !== undefined)
+      call[field] = input[field];
+  }
+  return call;
+}
+function closedRefusal(ctx, ballot) {
+  if (ballot.state === "withdrawn") {
+    return new CollabError("ballot_withdrawn", "The opener withdrew this ballot; no cast is taken after a withdrawal, and nothing was written", {
+      remedy: aboutBallot(ctx, ballot.ballot_id)
+    });
+  }
+  return new CollabError("ballot_closed", `This ballot closed${ballot.closed_by === "all_cast" ? " when every unit had cast" : ` at ${ballot.terms.closes_at}`}; no cast is taken after the close, and nothing was written`, {
+    closes_at: ballot.terms.closes_at,
+    remedy: aboutBallot(ctx, ballot.ballot_id)
+  });
+}
+async function voteVerb(ctx, input) {
+  const { binding, credential } = requireCredential(ctx);
+  const workspaceId = binding.handle.workspace.id;
+  const me = credential.session_id;
+  const pending = revealDue(ctx, workspaceId);
+  if (typeof input.ballot !== "string" || !input.ballot.trim()) {
+    throw new CollabError("invalid_ballot", "ballot names the ballot to vote in", {
+      remedy: { say: "Pass the ballot's id or ballot# handle, as collab_inbox lists it." }
+    });
+  }
+  if (ctx.store.journalRealpath() === null) {
+    throw new CollabError("ballots_need_a_file_journal", "A sealed ballot keeps its seals beside the journal file; this store has none");
+  }
+  const ballotId = ctx.store.resolveNoteRef(workspaceId, "ballot", input.ballot).id;
+  const ballot = ctx.store.noteBallotView(workspaceId, ballotId, me);
+  const handle = handleOf("ballot", ballotId);
+  const { vote, advice } = validateVote({ choice: input.choice, why: input.why, evidence: input.evidence, shared: input.shared }, ballot.terms);
+  const resolved = resolveVoteEvidence(ctx, binding, vote.evidence.map((item) => typeof item === "string" ? item : item.text));
+  advice.push(...resolved.advice);
+  const model = ctx.store.resolveNoteSession(workspaceId, me, { include_ended: true }).model;
+  const sealed = sealVote(vote, { evidence: resolved.evidence, model });
+  const latest = ctx.store.latestBallotCastForSession(workspaceId, ballotId, me);
+  const earlierVote = latest ? castVote(ctx, ballot, latest) : null;
+  if (latest && earlierVote && sameVoteInput(earlierVote.vote, sealed)) {
+    const earlier = replayReceipt(ctx.store, credential, `b1:${latest.cast_id}`);
+    return voteResult(ctx, {
+      handle,
+      ballot,
+      cast_seq: latest.cast_seq,
+      commitment: latest.commitment,
+      counts_as: earlier?.counts_as ?? ballot.viewer.counts_as,
+      same_handle_as: earlier?.same_handle_as,
+      replayed: true,
+      revealed_as: earlierVote.revealed_as,
+      advice: [
+        "Your latest vote in this ballot is this same vote, so nothing new was cast.",
+        ...earlierVote.revealed_as ? ["The ballot has closed and revealed it; read the result with collab_inbox about."] : []
+      ],
+      pending
+    });
+  }
+  if (ballot.state !== "open")
+    throw closedRefusal(ctx, ballot);
+  const viewer = ballot.viewer;
+  nextCastSeq(viewer.your_casts);
+  if (viewer.counts_as === "late") {
+    advice.push("Your unit is not in this ballot's electorate, so this cast is revealed at the close and never counted (late)." + (viewer.same_handle_as ? ` Your declared handle matches unit ${viewer.same_handle_as}, which does not join you to it.` : ""));
+  }
+  if (viewer.your_casts > 0) {
+    advice.push("This replaces your earlier cast: only your latest counts, and a session may cast at most 3 times in one ballot.");
+  }
+  const castId = randomUUID5();
+  const salt = randomBytes2(32).toString("hex");
+  checkVoteSize(sealed, { ballot_id: ballotId, cast_id: castId, unit_id: viewer.unit_id, session_id: me });
+  const commitment = ballotCommitment({
+    workspace_id: workspaceId,
+    ballot_id: ballotId,
+    cast_id: castId,
+    unit_id: viewer.unit_id,
+    session_id: me,
+    vote: sealed,
+    salt
+  });
+  const path = ctx.store.ballotSealPath(ballotId, castId);
+  try {
+    writeSealFile(path, {
+      cast_id: castId,
+      journal_realpath: ctx.store.journalRealpath(),
+      session_id: me,
+      unit_id: viewer.unit_id,
+      salt,
+      vote: sealed
+    });
+  } catch (error51) {
+    if (!(error51 instanceof CollabError)) {
+      const now = ctx.store.noteBallotView(workspaceId, ballotId, me);
+      if (now.state !== "open")
+        throw closedRefusal(ctx, now);
+    }
+    throw error51;
+  }
+  let receipt;
+  try {
+    receipt = ctx.store.castBallotForSession({
+      ...credential,
+      ballot_id: ballotId,
+      cast_id: castId,
+      unit_id: viewer.unit_id,
+      commitment,
+      after_cast_id: latest?.cast_id ?? null
+    });
+  } catch (error51) {
+    if (ctx.store.latestBallotCastForSession(workspaceId, ballotId, me)?.cast_id !== castId)
+      removeSealFile(path);
+    if (error51 instanceof CollabError && (error51.code === "ballot_closed" || error51.code === "ballot_withdrawn")) {
+      throw closedRefusal(ctx, ctx.store.noteBallotView(workspaceId, ballotId, me));
+    }
+    if (error51 instanceof CollabError && error51.code === "changed_under_you") {
+      throw changedUnderYou(ctx, { tool: "collab_vote", input: voteCall(input) }, null);
+    }
+    throw error51;
+  }
+  if (receipt.unit_mate_cast) {
+    advice.push("Another lineage of your unit has cast in this ballot too. If both casts stand at the close, the unit is not counted (unit_conflict).");
+  }
+  let revealPending = pending;
+  if (receipt.closes_now) {
+    advice.push("Every unit has now cast and this ballot closes when that happens, so it is revealed now; read the result with collab_inbox about.");
+    revealPending = revealDue(ctx, workspaceId) ?? pending;
+  }
+  return voteResult(ctx, {
+    handle,
+    ballot,
+    cast_seq: receipt.cast_seq,
+    commitment: receipt.commitment,
+    counts_as: receipt.counts_as,
+    same_handle_as: receipt.same_handle_as,
+    replayed: false,
+    advice,
+    pending: revealPending
+  });
+}
+function voteResult(ctx, options) {
+  let open = false;
+  try {
+    open = !options.revealed_as && ctx.store.noteBallotState(options.ballot.workspace_id, options.ballot.ballot_id) === "open";
+  } catch {}
+  const effect = options.revealed_as ? `Your vote in ${options.handle} (cast ${options.cast_seq}) was recorded before the close and revealed at the close as ${options.revealed_as}.` : `Sealed vote recorded for ${options.handle} (cast ${options.cast_seq}).`;
+  return {
+    ok: true,
+    effect: options.replayed ? `Replayed: nothing new was written. ${effect}` : effect,
+    authorises: NOTE_AUTHORISES,
+    ballot: options.ballot.ballot_id,
+    ballot_handle: options.handle,
+    cast_seq: options.cast_seq,
+    commitment: options.commitment,
+    counts_as: options.counts_as,
+    ...options.same_handle_as ? { same_handle_as: options.same_handle_as } : {},
+    closes_at: options.ballot.terms.closes_at,
+    closes_in: durationUntil(options.ballot.terms.closes_at, ctx.store.noteNow()),
+    replayed: options.replayed,
+    advice: open ? [...options.advice, WAIT_FOR_CLOSE_ADVICE] : options.advice,
+    next: open ? withSlot(ctx, { tool: "collab_inbox", input: { wait_seconds: WAIT_FOR_CLOSE_SECONDS } }) : aboutBallot(ctx, options.ballot.ballot_id),
+    ...options.pending ? { reveal_pending: options.pending } : {}
+  };
+}
+
+// src/mcp.ts
+var DEFAULT_MCP_NEXT_EVENT_LIMIT = 10;
+var actorLabel = exports_external.string().min(1).max(200).describe("Stable display label; session credentials, not this label, fence session mutations");
+var legacyActor = actorLabel.optional();
+var key = exports_external.string().min(1).max(200).describe("Unique retry-safe key for this mutation");
+var workspaceId = exports_external.string().min(1).describe("Workspace ID returned by workspace open or credential-bound session start");
+var sessionId = exports_external.string().min(1).max(200).describe("Presence session ID");
+var sessionExpectedVersion = exports_external.number().int().positive().describe("Presence session version last read by the caller");
+var presenceTtlSeconds = exports_external.number().int().min(30).max(3600).optional().describe("Presence routing hint lifetime; default 120 seconds");
+var taskId = exports_external.string().min(1).describe("Task ID");
+var leaseId = exports_external.string().min(1).describe("Lease ID returned by claim, recovery, or handoff acceptance");
+var expectedVersion = exports_external.number().int().positive().describe("Task version last read by the caller");
+var ttlSeconds = exports_external.number().int().min(30).max(3600).optional().describe("Lease duration; default 900 seconds, maximum 3600");
+var eventAnchor = exports_external.object({
+  epoch_id: exports_external.string().min(1),
+  sequence: exports_external.number().int().nonnegative(),
+  hash: exports_external.string().length(64)
+});
+var evidenceRefs = exports_external.array(exports_external.string().min(1).max(2000)).max(128).optional().describe(EVIDENCE_REFS_DESCRIPTION);
+var nextEventLimit = exports_external.number().int().min(1).max(50).optional().describe(`Maximum events in this page; defaults to ${DEFAULT_MCP_NEXT_EVENT_LIMIT} for MCP polling`);
+var localReadOnly = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false
+};
+var localRetrySafeMutation = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false
+};
+var localMutation = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false
+};
+var localDestructiveMutation = {
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: false,
+  openWorldHint: false
+};
+var WAITS_PER_ENDPOINT = 8;
+function buildCollabMcpServer(store2, options = {}) {
+  const slots = new Map([["", { key: "", binding: options.resumed_session ?? null }]]);
+  for (const [key2, binding] of Object.entries(options.resumed_sessions ?? {})) {
+    if (!key2 || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(key2)) {
+      throw new CollabError("invalid_binding_key", "A named binding requires a valid non-empty key");
+    }
+    slots.set(key2, { key: key2, binding });
+  }
+  const requestSlot = new AsyncLocalStorage;
+  const state = {
+    get binding() {
+      return requestSlot.getStore().binding;
+    },
+    set binding(value) {
+      requestSlot.getStore().binding = value;
+    }
+  };
+  const environment = options.environment ?? process.env;
+  const profile = toolsProfile(environment);
+  const legacyInstructions = `Collab ${COLLAB_PACKAGE_VERSION}: collab_events_wait offers bounded read-only anchored observation for an already running host, ` + "without acknowledging, refreshing presence, or renewing leases; continue from next_anchor, never head. " + "Local-first coordination journal for honest exchange among independent coding-agent sessions. " + "Use collab_session_start once per default or named binding_key, then collab_next. Named children require an explicit actor and parent_session_id; " + "send their binding_key on every call. Selectors are cooperative routing, not authenticated subagent isolation. " + "Default-slot actor can use Claude metadata only with matching selected PID, messaging socket and process start time. A host restart resumes from the " + "mode-0600 credential file without exposing its bearer token to the model. Exchange observations, " + "inferences, proposals, or authorised decisions as structured reports with evidence, confidence, " + "limits, and explicit authority scope. Direction-level proposals (collab_proposal_open) are settled by the agents " + "through lazy consensus; that position authorises nothing alone, and a person's consent is never recorded through MCP. " + "Claim before editing overlapping path scopes. Session leases remain live while their " + "session is live (6 hours since activity); optional renew is lease-fenced, not version-gated. " + "An advisory coordination lease is not ownership, a filesystem lock, or authority. Edit-task " + "completion is actor-reported and remains pending until a distinct session accepts it. Challenges " + "remain append-only disagreement; acknowledgement means processed, not agreed. Expired session " + "leases require explicit recovery. Git checkpoints are local evidence, not attribution or atomic " + "Git/SQLite locks. Store concise coordination facts only\u2014never credentials, prompts, transcripts, " + "chain-of-thought, or sensitive source content. Cursor rollback recovery must be enabled by the host " + "and completed with an audited cursor reset before session mutations resume. The host owns spawning, " + "wakeups, waiting, and stopping. The separate collab_session_join/list/heartbeat/leave tools preserve " + "the public v0.2 self-declared presence plane; they provide routing hints only and never authenticate a caller. " + "The read-only collab_anchor_status tool can compare this journal with an optional local Zerone witness sidecar; " + "it never contacts a chain, broadcasts, spends funds, or turns an anchor into truth or authority.";
+  const server = new McpServer({ name: "agenttool-collab", version: COLLAB_PACKAGE_VERSION }, {
+    capabilities: { tools: {} },
+    instructions: profile === "notes" ? notesInstructions() : `${notesInstructions()}
+${FULL_PROFILE_BRIDGE}
+Legacy session tools: ${legacyInstructions}`
+  });
+  const register2 = server.registerTool.bind(server);
+  server.registerTool = (...[name, config2, callback]) => {
+    if (!profileIncludes(profile, name))
+      return;
+    return register2(name, {
+      ...config2,
+      inputSchema: {
+        ...config2.inputSchema,
+        binding_key: (isNoteVerb(name) ? exports_external.string() : exports_external.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/)).optional().describe("Cooperative subagent binding selector; omit for the original default binding. Not authentication.")
+      }
+    }, async (input, ctx) => {
+      const { binding_key, ...args } = input;
+      if (binding_key !== undefined && (typeof binding_key !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(binding_key))) {
+        return isNoteVerb(name) ? noteFailure(new CollabError("invalid_binding_key", "Invalid binding selector", {
+          remedy: { say: "binding_key is 1 to 200 letters, digits or . _ : -, starting with a letter or digit." }
+        })) : failure(new CollabError("invalid_binding_key", "Invalid binding selector"));
+      }
+      const key2 = binding_key ?? "";
+      let slot = slots.get(key2);
+      if (isNoteVerb(name) && name !== "collab_arrive" && (!slot || !slot.binding) && !(name === "collab_done" && slot?.left)) {
+        return noteFailure(notArrived(key2, slots.get("")?.binding ?? null));
+      }
+      if (key2 && (!slot || !slot.binding) && name !== "collab_session_start" && name !== "collab_arrive" && !(name === "collab_done" && slot?.left)) {
+        return failure(new CollabError("session_not_bound", "The selected child binding is not bound"));
+      }
+      if (!slot) {
+        slot = { key: key2, binding: null };
+        slots.set(key2, slot);
+      }
+      return requestSlot.run(slot, () => callback(args, ctx));
+    });
+  };
+  const waitShutdown = new AbortController;
+  const waits = { active: 0, max: WAITS_PER_ENDPOINT };
+  const close = server.close.bind(server);
+  server.close = async () => {
+    waitShutdown.abort();
+    await close();
+  };
+  const onclose = server.server.onclose;
+  server.server.onclose = () => {
+    waitShutdown.abort();
+    onclose?.();
+  };
+  const boundCredential = (allowCursorRecovery = false) => {
+    const binding = state.binding;
+    if (!binding) {
+      throw new CollabError("session_not_bound", "Start a credential-bound session first or provide legacy actor mode explicitly");
+    }
+    if (binding.handle.cursor_recovery && !allowCursorRecovery) {
+      throw new CollabError("cursor_recovery_required", "The host authorized recovery mode; reset to an exact journal anchor before session mutations resume", { ...binding.handle.cursor_recovery });
+    }
+    return binding.handle.credential;
+  };
+  const requireWorkspace = (id) => {
+    const binding = state.binding;
+    if (binding && binding.handle.workspace.id !== id) {
+      throw new CollabError("session_workspace_mismatch", "The bound session belongs to another workspace");
+    }
+  };
+  const requireLegacyActor = (value) => {
+    if (!value) {
+      throw new CollabError("actor_required", "Legacy mode requires actor; session mode derives it from the bound credential");
+    }
+    return value;
+  };
+  const noteContext = (signal) => ({
+    store: store2,
+    environment,
+    profile,
+    slot_key: requestSlot.getStore().key,
+    binding: () => state.binding,
+    bind: (binding) => {
+      state.binding = binding;
+      requestSlot.getStore().left = null;
+    },
+    unbind: (left) => {
+      state.binding = null;
+      requestSlot.getStore().left = left;
+    },
+    left: () => requestSlot.getStore().left ?? null,
+    bound_slots: () => [...slots.values()].filter((slot) => slot.binding !== null).sort((left, right) => left.key === "" ? -1 : right.key === "" ? 1 : left.key.localeCompare(right.key)).map((slot) => ({ key: slot.key, binding: slot.binding })),
+    waits,
+    signals: [signal, waitShutdown.signal]
+  });
+  server.registerTool("collab_arrive", {
+    title: "Arrive, or look around",
+    description: "Start your coordination session on this slot, or, when it already has one, see who you are, who is here, " + "what is open and what waits on you. On a slot that already has a session it writes nothing unless " + "revise_purpose is true. With binding_key it starts a named child of a session this MCP process holds, which " + "shares that parent's voice. It never moves the legacy cursor, and never resumes or adopts another process's session. " + "A new session's read mark starts at the journal head; when others were here first, before_you_arrived gives the " + "collab_inbox call that reads back, and left_for_your_name points at items addressed to ended sessions that used " + "your name (names are self-declared: this routes reading, it passes on nothing those sessions held).",
+    annotations: localMutation,
+    inputSchema: {
+      purpose: exports_external.string().optional().describe("Required. What you are here to do, in one line of at most 200 characters. Self-declared; revisable."),
+      name: exports_external.string().optional().describe("Display name, at most 200 characters. Default: the verified Claude Code name, else <host>-<6 hex of the session id>; a named slot defaults to <parent name>/<binding_key>."),
+      model: exports_external.string().optional().describe("Your model lineage, at most 200 characters, for example claude-opus-5.5. Self-declared; shown, never counted."),
+      root_path: exports_external.string().optional().describe("Your repository root. Default: this MCP server's working directory when it is in a git worktree outside the collab package (otherwise the call is refused and asks for root_path); a named slot defaults to the parent's worktree."),
+      revise_purpose: exports_external.boolean().optional().describe("On a slot that already has a session: record purpose as your current purpose."),
+      parent: exports_external.string().optional().describe("With binding_key: the session this MCP process holds that the new session descends from (id, session# handle or name; at most 200 characters).")
+    }
+  }, async (input) => noteCall(() => arriveVerb(noteContext(), input), input));
+  server.registerTool("collab_inbox", {
+    title: "What is for you, and one thread",
+    description: "Items addressed to you since your read mark, oldest first, with what waits on you whatever the mark. " + "With about (an id or handle such as report#3fa91c or task#0b12de): that report and everything answering it, " + "or a task's holder, completion and reviews. With since (a journal sequence; 0 is the start): a look-back over " + "what came after it, one line per thing, in the same shape; it only reads, so it moves no mark, runs no " + "housekeeping and records nothing as delivered. wait_seconds waits, reading only, for a new item for you, or for " + "the close of a ballot you may vote in, opened or cast in; with about or since it is ignored and the call does not " + "wait. Otherwise it moves its own read mark and last-seen time, never the legacy cursor.",
+    annotations: localMutation,
+    inputSchema: {
+      about: exports_external.string().optional().describe("One thread: a report, proposal, ballot or task id or handle (at most 300 characters); not a session."),
+      since: exports_external.number().optional().describe("A whole number, 0 or more: read back from just after this journal sequence, oldest first, without moving your mark; with include all, every item."),
+      wait_seconds: exports_external.number().optional().describe("A whole number from 0 to 30: with nothing new for you, wait up to this long for an item or a ballot's close; default 0. Ignored with about or since."),
+      include: exports_external.string().optional().describe("for_me (the default), or all to add unaddressed items as subject lines."),
+      limit: exports_external.number().optional().describe("Items per call, a whole number from 1 to 50; default 20."),
+      format: exports_external.string().optional().describe("json (the default), or note: with about, the thread root and its state as one collab-note/1 text of at most 800 characters, for a person to carry.")
+    }
+  }, async (input, ctx) => noteCall(() => inboxVerb(noteContext(ctx.mcpReq?.signal), input), input));
+  const noteReason = exports_external.object({
+    text: exports_external.string().describe("One reason, at most 300 characters."),
+    basis: exports_external.string().optional().describe("How you know it: seen, told, inferred or quoted."),
+    cites: exports_external.array(exports_external.number()).optional().describe("1-based positions in evidence that this reason rests on.")
+  });
+  const noteEvidence = exports_external.array(exports_external.string()).optional().describe("Up to 16 pointers, one line each: file <repo path>[:a-b] | commit <sha> | test <command> exit=<n> | url <url> | " + "data <label> sha256=<hex> | msg <channel> <id> | report:<id> | event:<id> | artifact:<id> | checkpoint:<id>. " + "Files inside your worktree are hashed by the server; nothing else is fetched or rerun.");
+  server.registerTool("collab_note", {
+    title: "Say something on the record",
+    description: "Post a note: act note (the default), support, challenge, resolve, withdraw, accept, request_changes, relay_rejection or decide. " + 'text is the statement on its first line, then an optional body; a text that begins with an act word and ": " ' + "is read whole as a collab-note/1 note. Reasons say how each is known; outside evidence is recorded once per note. " + "Only the challenger can lift a challenge; anyone else's resolve is recorded as an answer to them. A support is a " + "position, not a permission. A decide's authority is derived by the server: on a proposal the person agreed to, its extent; " + "otherwise nothing, or this session's own record, never the person's agreement. dry_run checks and shows the note, writing nothing.",
+    annotations: localMutation,
+    inputSchema: {
+      text: exports_external.string().describe("The statement (first line, at most 200 characters), then a blank line and any body."),
+      act: exports_external.string().optional().describe("note | support | challenge | resolve | withdraw | accept | request_changes | relay_rejection | decide."),
+      re: exports_external.string().optional().describe("What this answers: report#\u2026, proposal#\u2026, task#\u2026, a full id, or file:/lobby:/msg: text. Required for every act but note."),
+      to: exports_external.string().optional().describe("A session that has arrived here (name or id), person, or all; for an agent who comes later, all. Default: whoever the act answers."),
+      via: exports_external.string().optional().describe("host:\u2026 | file:\u2026 | lobby:\u2026 | msg:\u2026: the text came from another channel, so seen and quoted reasons are recorded as told."),
+      why: exports_external.array(noteReason).optional().describe("Up to 8 reasons."),
+      evidence: noteEvidence,
+      limits: exports_external.string().optional().describe("What this does not cover; what was not checked (at most 2,000 characters)."),
+      extent: exports_external.string().optional().describe("Where this stops (at most 1,000 characters). A decide on a proposal takes the agreed extent and refuses another."),
+      outcome: exports_external.string().optional().describe("For decide only: proceed (the default), do_not_proceed or no_decision."),
+      replaces: exports_external.string().optional().describe("With act challenge: your earlier challenge this one replaces; it is withdrawn in the same transaction."),
+      dry_run: exports_external.boolean().optional().describe("Parse, check and render; write nothing.")
+    }
+  }, async (input) => noteCall(() => noteVerb(noteContext(), input), input));
+  server.registerTool("collab_take", {
+    title: "Take a piece of work",
+    description: "Create a task with title and claim it, or claim task. With paths the task is an edit task that waits for a distinct " + "reviewer; without, a coordination task you report done. A lapsed lease is recovered only with because. A path " + "overlap names who holds it and how to ask them. A lease is coordination, not ownership or a lock.",
+    annotations: localMutation,
+    inputSchema: {
+      task: exports_external.string().optional().describe("An existing task: task#\u2026 or its id."),
+      title: exports_external.string().optional().describe("A new task's title, at most 300 characters."),
+      paths: exports_external.array(exports_external.string()).optional().describe("Repository-relative paths the new task edits."),
+      purpose: exports_external.string().optional().describe("Why you take it, at most 200 characters; written into a new task's description only."),
+      review: exports_external.string().optional().describe("required | none: override whether a new task waits for review."),
+      because: exports_external.string().optional().describe("Why you recover a lapsed lease (at most 4,000 characters).")
+    }
+  }, async (input) => noteCall(() => takeVerb(noteContext(), input), input));
+  server.registerTool("collab_done", {
+    title: "End your hold, or leave",
+    description: "outcome finished (the default) reports the work done, with its reasons, evidence (attached as artifacts) and limits; " + "released gives it back; blocked records because as the blocker; leave releases every hold and ends this session, " + "after which it is no voice in new proposals here. task defaults to the one task you hold.",
+    annotations: localDestructiveMutation,
+    inputSchema: {
+      text: exports_external.string().describe("What you did or why you stop: a statement, then any body."),
+      outcome: exports_external.string().optional().describe("finished | released | blocked | leave."),
+      task: exports_external.string().optional().describe("The task, when you hold more than one."),
+      why: exports_external.array(noteReason).optional().describe("Up to 8 reasons (finished)."),
+      evidence: noteEvidence,
+      limits: exports_external.string().optional().describe("What the work does not cover (finished; at most 2,000 characters)."),
+      review_by: exports_external.string().optional().describe("An active session's name or id to ask for the review (finished, reviewed tasks); leave it out when nobody else is here."),
+      because: exports_external.string().optional().describe("The blocker (blocked), or why held work is left unfinished (leave); at most 2,000 characters.")
+    }
+  }, async (input) => noteCall(() => doneVerb(noteContext(), input), input));
+  server.registerTool("collab_propose", {
+    title: "Put a direction to the agents and the person",
+    description: "Open a consent/v1 proposal: the agents settle a position by lazy consensus (support and challenge with collab_note), " + "and the person decides at his own desk. The question is stored verbatim, so its bytes and proposal_sha256 are what " + "collab_proposal_open makes from the same terms. evidence and limits enter the bytes the person signs. With replaces, " + "the standing objections to your earlier proposal are carried into its terms as text and each reachable objector is told; " + "under consent/v1 a carried objection does not block. The position authorises nothing; no agent tool records agreement.",
+    annotations: localMutation,
+    inputSchema: {
+      question: exports_external.string().describe("What is being decided, stored verbatim (at most 8,000 characters)."),
+      criteria: exports_external.string().describe("How the parties judge which way to go (at most 4,000 characters)."),
+      extent: exports_external.string().describe("What agreement would authorise, and where it stops (at most 1,000 characters)."),
+      closes: exports_external.union([exports_external.number(), exports_external.string()]).optional().describe("When the agents' consultation closes: seconds (600 to 604,800), a duration such as 30m, 6h or 2d, or an ISO time. Default 6 hours."),
+      conflicts: exports_external.string().optional().describe("Context that disagrees, and how this proposal reads it (at most 4,000 characters, carried objections included)."),
+      evidence: noteEvidence,
+      limits: exports_external.string().optional().describe("What this proposal does not cover; what was not checked (at most 2,000 characters)."),
+      topic: exports_external.string().optional().describe("A label for later reading, for example principle:<name> (at most 200 characters)."),
+      replaces: exports_external.string().optional().describe("Your own earlier proposal, still on the table, that this one replaces (id or proposal# handle).")
+    }
+  }, async (input) => noteCall(() => proposeVerb(noteContext(), input), input));
+  server.registerTool("collab_poll", {
+    title: "Open a sealed ballot on a real choice",
+    description: "Ask the agents here which of 2 to 9 named options they find acceptable (approval). Every cast stays sealed " + "until the close; then the votes are revealed and the result computed. The electorate is fixed now: by default " + "the active sessions seen in the last 30 minutes that have used the notes surface, plus you; with voters, exactly " + 'those sessions. Sessions sharing a declared host handle count as one unit. Not for "may we proceed" (that is ' + "collab_propose) and not for a checkable fact. A result is the agents' preference and authorises nothing.",
+    annotations: localMutation,
+    inputSchema: {
+      question: exports_external.string().optional().describe("Required. The choice put to the agents, at most 500 characters."),
+      options: exports_external.array(exports_external.object({ key: exports_external.string(), label: exports_external.string() })).optional().describe("Required. 2 to 9 options: key (letters, digits, _ or -, at most 32) and label (one line, at most 120)."),
+      closes: exports_external.union([exports_external.number(), exports_external.string()]).optional().describe("Required. When it closes: seconds, a duration such as 30m, 2h or 1d, or an ISO time; 1 minute to 7 days."),
+      criteria: exports_external.string().optional().describe("What makes an option acceptable, at most 2,000 characters; advice when absent."),
+      pick: exports_external.number().optional().describe("The most options one unit may approve, 1 to the number of options; default any."),
+      quorum: exports_external.number().optional().describe("Units that must cast (abstentions count) for a result, 2 to the electorate size; default 2."),
+      voters: exports_external.array(exports_external.string()).optional().describe("The sessions to poll, by id, session# handle or name; default the electorate above."),
+      close_when_all_cast: exports_external.boolean().optional().describe("Close as soon as every unit has cast instead of waiting for closes; off by default, and stated in the terms.")
+    }
+  }, async (input) => noteCall(() => pollVerb(noteContext(), input), input));
+  server.registerTool("collab_vote", {
+    title: "Cast your sealed vote",
+    description: "Approve the options you find acceptable in a ballot (choice: option keys, or [] to abstain). The vote is sealed " + "in a file beside the journal and committed by hash; no collab tool, event or doorbell shows it before the close, " + "and this result returns nothing of it. Vote before you read others' answers. You may cast up to 3 times in one " + "ballot; only your latest counts. A vote needs no reason, but one is shown with it at the close.",
+    annotations: localMutation,
+    inputSchema: {
+      ballot: exports_external.string().optional().describe("Required. The ballot: its id or ballot# handle."),
+      choice: exports_external.array(exports_external.string()).optional().describe("Required. The option keys you approve, or [] to abstain."),
+      why: exports_external.array(noteReason).optional().describe("Up to 4 reasons of at most 300 characters each."),
+      evidence: exports_external.array(exports_external.string()).optional().describe("Up to 4 pointers, one line each, as for collab_note; files inside your worktree are hashed now and sealed with the vote."),
+      shared: exports_external.string().optional().describe("What you share with the other voters (model, context, sources), at most 200 characters.")
+    }
+  }, async (input) => noteCall(() => voteVerb(noteContext(), input), input));
+  server.registerTool("collab_session_join", {
+    title: "Join the self-declared presence plane",
+    description: "Create or replay one unauthenticated routing-presence record and return its unique actor_key. This does not bind the MCP process or create a credential.",
+    annotations: localRetrySafeMutation,
+    inputSchema: {
+      workspace_id: workspaceId,
+      client_instance_id: exports_external.string().min(1).max(200).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
+      actor_label: actorLabel,
+      runtime_kind: exports_external.string().min(1).max(64).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/),
+      provider_label: exports_external.string().min(1).max(100).optional(),
+      model_label: exports_external.string().min(1).max(200).optional(),
+      declared_capabilities: exports_external.array(exports_external.string().min(1).max(100).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/)).max(32).optional(),
+      ttl_seconds: presenceTtlSeconds
+    }
+  }, async (input) => call(() => ({ session: store2.joinSession(input) })));
+  server.registerTool("collab_session_list", {
+    title: "List self-declared presence sessions",
+    description: "List recent live, stale, or explicitly left routing hints. Presence is not health, authentication, permission, or credential-bound coordination.",
+    annotations: localReadOnly,
+    inputSchema: {
+      workspace_id: workspaceId,
+      presence: exports_external.enum(["live", "stale", "left"]).optional(),
+      limit: exports_external.number().int().min(1).max(500).optional()
+    }
+  }, async ({ workspace_id, presence, limit }) => call(() => ({ sessions: store2.listSessions(workspace_id, presence, limit) })));
+  server.registerTool("collab_session_heartbeat", {
+    title: "Refresh a self-declared presence hint",
+    description: "Refresh server-timed routing presence. This never renews or releases a task lease and does not authenticate the caller.",
+    annotations: localRetrySafeMutation,
+    inputSchema: {
+      session_id: sessionId,
+      idempotency_key: key,
+      expected_version: sessionExpectedVersion,
+      ttl_seconds: presenceTtlSeconds
+    }
+  }, async (input) => call(() => ({ session: store2.heartbeatSession(input) })));
+  server.registerTool("collab_session_leave", {
+    title: "Leave the self-declared presence plane",
+    description: "Mark one routing-presence incarnation as left. This does not end a credential-bound session or release its task leases.",
+    annotations: localRetrySafeMutation,
+    inputSchema: {
+      session_id: sessionId,
+      idempotency_key: key,
+      expected_version: sessionExpectedVersion
+    }
+  }, async (input) => call(() => ({ session: store2.leaveSession(input) })));
+  server.registerTool("collab_session_start", {
+    title: "Join an independent local collaboration session",
+    description: "Create and bind a credential-fenced session. The bearer is written to a mode-0600 local file and is never returned in tool output.",
+    annotations: localMutation,
+    inputSchema: {
+      root_path: exports_external.string().min(1),
+      actor: actorLabel.optional().describe("Defaults to verified owning Claude process metadata; named children require an explicit actor."),
+      role: exports_external.string().max(200).optional(),
+      parent_session_id: exports_external.string().min(1).optional(),
+      repository_key: exports_external.string().min(1).max(1000).optional(),
+      seat_ref: exports_external.string().min(1).max(MAX_SEAT_REF).optional().describe("Opaque, unverified routing hint naming the execution seat that started this session. " + "Omit it to use the host's declaration (AGENTOOL_COLLAB_SEAT_REF, else claude-code:<CLAUDE_CODE_SESSION_ID>); " + "it authenticates nothing")
+    }
+  }, async (input) => call(() => {
+    if (state.binding) {
+      throw new CollabError("session_already_bound", "This MCP process already has a bound session", { session_id: state.binding.handle.session.id });
+    }
+    if (requestSlot.getStore().key && !input.parent_session_id) {
+      throw new CollabError("parent_session_required", "A named child binding requires parent_session_id");
+    }
+    if (requestSlot.getStore().key && input.actor === undefined) {
+      throw new CollabError("actor_required", "A named child binding requires its own explicit actor");
+    }
+    const parentAttested = input.parent_session_id !== undefined && [...slots.values()].some((slot) => slot.binding?.handle.session.id === input.parent_session_id);
+    const seatRef = input.seat_ref ?? defaultSeatRef(environment);
+    const handle = store2.startSession({
+      ...input,
+      actor: input.actor ?? defaultActor(),
+      parent_attested: parentAttested,
+      seat_ref: seatRef
+    });
+    const credentialFile = store2.defaultSessionCredentialPath(handle.session.id);
+    try {
+      const path = writeSessionCredentialFile(credentialFile, handle.credential);
+      state.binding = { handle, credential_file: path };
+      return publicSessionBinding(state.binding, seatRef);
+    } catch (error51) {
+      try {
+        store2.endSession({ ...handle.credential, reason: "credential_file_write_failed" });
+      } catch {}
+      throw error51;
+    }
+  }));
+  server.registerTool("collab_session_end", {
+    title: "End the bound collaboration session",
+    description: "Fence future session mutations and remove the credential file. Live leases must be resolved first, " + "or pass release_leases: true to release every live lease and recovery-release every expired lease " + "this session holds in the same transaction; incoming offers expire as an audited refusal.",
+    annotations: localDestructiveMutation,
+    inputSchema: {
+      reason: exports_external.string().max(2000).optional(),
+      release_leases: exports_external.boolean().optional().describe("Release every lease this session holds before ending: live leases through task release, " + "expired leases through recovery with action release"),
+      release_summary: exports_external.string().max(2000).optional().describe("Release summary and recovery note recorded for each released lease; requires release_leases: true. " + "Defaults to reason")
+    }
+  }, async ({ reason, release_leases, release_summary }) => call(() => {
+    const current = state.binding;
+    if (!current)
+      throw new CollabError("session_not_bound", "No session is bound");
+    const ended = store2.endSessionWithReleases({
+      ...current.handle.credential,
+      reason,
+      release_leases,
+      release_summary
+    });
+    state.binding = null;
+    removeSessionCredentialFile(current.credential_file);
+    return {
+      session: ended.session,
+      released_leases: ended.released_leases,
+      credential_file_removed: true,
+      session_file_name: `${ended.session.id}.json`
+    };
+  }));
+  server.registerTool("collab_workspace_open", {
+    title: "Open a local collaboration workspace",
+    description: "Legacy-compatible workspace open. New independent processes should use collab_session_start.",
+    annotations: localRetrySafeMutation,
+    inputSchema: {
+      root_path: exports_external.string().min(1),
+      name: exports_external.string().max(200).optional(),
+      actor: actorLabel,
+      repository_key: exports_external.string().min(1).max(1000).optional()
+    }
+  }, async (input) => call(() => {
+    if (state.binding) {
+      throw new CollabError("session_already_bound", "A bound MCP process cannot open or register another workspace", { session_id: state.binding.handle.session.id });
+    }
+    return { workspace: store2.openWorkspace(input) };
+  }));
+  server.registerTool("collab_workspace_status", {
+    title: "Read collaboration status",
+    description: "Return task counts, active sessions (with derived liveness) and claims, blockers, pending reviews, reports, and decisions.",
+    annotations: localReadOnly,
+    inputSchema: { workspace_id: workspaceId }
+  }, async ({ workspace_id }) => call(() => store2.workspaceStatus(workspace_id)));
+  server.registerTool("collab_next", {
+    title: "Poll the next useful collaboration state",
+    description: "Poll without acknowledging, with 1\u201350 events per page and a default of 10. Routed reports are bounded to the exact event page; task, conflict, and handoff projections describe the same snapshot head. A bound session always pages from its acknowledged cursor: advance with collab_cursor_ack, or read elsewhere with collab_events_since. " + "recovery_required lists expired session leases awaiting collab_task_recover, the caller's own first. " + "Session liveness and task assignee_liveness are a derived view (stale after 6 hours unseen), never a status change.",
+    annotations: localMutation,
+    inputSchema: {
+      workspace_id: workspaceId,
+      actor: legacyActor,
+      after_sequence: exports_external.number().int().nonnegative().optional().describe("Legacy actor mode: page after this sequence. A bound session pages from its acknowledged cursor; " + "any other value is refused with after_sequence_unsupported_in_bound_session."),
+      known_cursor: eventAnchor.optional(),
+      event_limit: nextEventLimit
+    }
+  }, async ({ workspace_id, actor, after_sequence, known_cursor, event_limit }) => call(() => {
+    requireWorkspace(workspace_id);
+    return state.binding ? store2.nextForSession({
+      ...boundCredential(),
+      known_cursor,
+      event_limit: event_limit ?? DEFAULT_MCP_NEXT_EVENT_LIMIT,
+      after_sequence
+    }) : store2.nextForActor(workspace_id, requireLegacyActor(actor), after_sequence ?? 0, event_limit ?? DEFAULT_MCP_NEXT_EVENT_LIMIT);
+  }));
+  server.registerTool("collab_cursor_ack", {
+    title: "Acknowledge processed collaboration events",
+    description: "Monotonically persist an exact epoch/sequence/hash anchor. Acknowledgement records processing, not agreement.",
+    annotations: localRetrySafeMutation,
+    inputSchema: {
+      workspace_id: workspaceId,
+      anchor: eventAnchor,
+      expected_cursor_version: exports_external.number().int().nonnegative()
+    }
+  }, async ({ workspace_id, anchor, expected_cursor_version }) => call(() => {
+    requireWorkspace(workspace_id);
+    const session = store2.acknowledgeSessionCursor({
+      ...boundCredential(),
+      anchor,
+      expected_cursor_version
+    });
+    const binding = state.binding;
+    if (binding) {
+      binding.handle = {
+        ...binding.handle,
+        session,
+        credential: {
+          ...binding.handle.credential,
+          last_cursor: session.cursor
+        }
+      };
+      writeSessionCredentialFile(binding.credential_file, binding.handle.credential, { replace: true });
+    }
+    return { session };
+  }));
+  server.registerTool("collab_cursor_reset", {
+    title: "Deliberately reset a forked or rolled-back session cursor",
+    description: "Append an auditable reset reason and CAS the cursor to an exact valid anchor; ordinary polling never resets automatically.",
+    annotations: localRetrySafeMutation,
+    inputSchema: {
+      workspace_id: workspaceId,
+      idempotency_key: key,
+      target: eventAnchor,
+      expected_cursor_version: exports_external.number().int().nonnegative(),
+      reason: exports_external.string().min(1).max(2000)
+    }
+  }, async ({ workspace_id, ...input }) => call(() => {
+    requireWorkspace(workspace_id);
+    const session = store2.resetSessionCursor({ ...boundCredential(true), ...input });
+    const binding = state.binding;
+    if (binding) {
+      binding.handle = {
+        ...binding.handle,
+        cursor_recovery: undefined,
+        session,
+        credential: {
+          ...binding.handle.credential,
+          last_cursor: session.cursor
+        }
+      };
+      writeSessionCredentialFile(binding.credential_file, binding.handle.credential, { replace: true });
+    }
+    return { session };
+  }));
+  server.registerTool("collab_task_create", {
+    title: "Create a bounded collaboration task",
+    description: "Create a task with dependencies and path scopes. Bound-session edit tasks require non-empty scopes and default to distinct-session acceptance.",
+    annotations: localRetrySafeMutation,
+    inputSchema: {
+      workspace_id: workspaceId,
+      actor: legacyActor,
+      idempotency_key: key,
+      task_id: exports_external.string().min(1).max(200).optional(),
+      title: exports_external.string().min(1).max(300),
+      description: exports_external.string().max(8000).optional(),
+      dependencies: exports_external.array(exports_external.string().min(1).max(200)).max(128).optional(),
+      path_scopes: exports_external.array(exports_external.string().min(1).max(500)).max(128).optional(),
+      work_mode: exports_external.enum(["coordination", "read_only", "edit"]).optional(),
+      completion_policy: exports_external.enum(["reported", "accepted"]).optional(),
+      expected_base_sha: exports_external.string().regex(/^[a-fA-F0-9]{40,64}$/).optional()
+    }
+  }, async ({ workspace_id, actor, task_id, ...input }) => call(() => {
+    requireWorkspace(workspace_id);
+    if (!state.binding && (input.work_mode !== undefined || input.completion_policy !== undefined || input.expected_base_sha !== undefined)) {
+      throw new CollabError("session_required_for_v2_task_options", "work_mode, completion_policy, and expected_base_sha require a bound v0.2 session");
+    }
+    const task = state.binding ? store2.createTaskForSession({ ...boundCredential(), ...input, id: task_id }) : store2.createTask({
+      workspace_id,
+      actor: requireLegacyActor(actor),
+      ...input,
+      id: task_id
+    });
+    return { task };
+  }));
+  server.registerTool("collab_task_list", {
+    title: "List workspace tasks",
+    description: "List projections including recovery_required, reported_complete, review state, sessions, worktrees, and checkpoints.",
+    annotations: localReadOnly,
+    inputSchema: {
+      workspace_id: workspaceId,
+      status: exports_external.enum(["open", "claimed", "blocked", "completed"]).optional()
+    }
+  }, async ({ workspace_id, status }) => call(() => ({ tasks: store2.listTasks(workspace_id, status) })));
+  server.registerTool("collab_task_get", {
+    title: "Read one task",
+    description: "Return a task, review/lease/checkpoint state, and artifact references.",
+    annotations: localReadOnly,
+    inputSchema: { workspace_id: workspaceId, task_id: taskId }
+  }, async ({ workspace_id, task_id }) => call(() => ({ task: store2.getTask(workspace_id, task_id) })));
+  server.registerTool("collab_task_claim", {
+    title: "Claim a task coordination lease",
+    description: "Atomically claim if accepted dependencies and repository-wide path scopes permit it. Expired session leases require collab_task_recover.",
+    annotations: localRetrySafeMutation,
+    inputSchema: {
+      workspace_id: workspaceId,
+      task_id: taskId,
+      actor: legacyActor,
+      idempotency_key: key,
+      expected_version: expectedVersion,
+      ttl_seconds: ttlSeconds
+    }
+  }, async ({ workspace_id, actor, ...input }) => call(() => {
+    requireWorkspace(workspace_id);
+    const task = state.binding ? store2.claimTaskForSession({ ...boundCredential(), ...input }) : store2.claimTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
+    return { task };
+  }));
+  server.registerTool("collab_task_recover", {
+    title: "Explicitly recover an expired session lease",
+    description: "Acknowledge the prior holder/checkpoint and atomically take over after rechecking dependencies and path conflicts; this does not accept prior work.",
+    annotations: localRetrySafeMutation,
+    inputSchema: {
+      workspace_id: workspaceId,
+      task_id: taskId,
+      idempotency_key: key,
+      expected_version: expectedVersion,
+      recovery_note: exports_external.string().min(1).max(4000),
+      action: exports_external.enum(["takeover", "release", "block"]).optional(),
+      blocker: exports_external.string().min(1).max(2000).optional(),
+      ttl_seconds: ttlSeconds
+    }
+  }, async ({ workspace_id, ...input }) => call(() => {
+    requireWorkspace(workspace_id);
+    return {
+      task: store2.recoverTaskForSession({ ...boundCredential(), ...input })
+    };
+  }));
+  server.registerTool("collab_task_renew", {
+    title: "Renew a live task lease",
+    description: "Extend the current lease without version-gating or task-version churn; renewal never shortens it. Credential and lease fencing still apply.",
+    annotations: localRetrySafeMutation,
+    inputSchema: leaseMutationSchema({ ttl_seconds: ttlSeconds, expected_version: expectedVersion.optional() })
+  }, async ({ workspace_id, actor, ...input }) => call(() => {
+    requireWorkspace(workspace_id);
+    const task = state.binding ? store2.renewLeaseForSession({ ...boundCredential(), ...input }) : store2.renewLease({ workspace_id, actor: requireLegacyActor(actor), ...input });
+    return { task };
+  }));
+  server.registerTool("collab_task_progress", {
+    title: "Post concise task progress",
+    description: "Record a result-oriented progress note. Use a structured report when evidence, confidence, disagreement, or authority matters.",
+    annotations: localRetrySafeMutation,
+    inputSchema: leaseMutationSchema({ message: exports_external.string().min(1).max(2000) })
+  }, async ({ workspace_id, actor, ...input }) => call(() => {
+    requireWorkspace(workspace_id);
+    const task = state.binding ? store2.progressTaskForSession({ ...boundCredential(), ...input }) : store2.progressTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
+    return { task };
+  }));
+  server.registerTool("collab_task_release", {
+    title: "Release a task lease",
+    description: "Return work to the open pool. A session-to-session handoff remains an invitation until accepted.",
+    annotations: localRetrySafeMutation,
+    inputSchema: leaseMutationSchema({ summary: exports_external.string().max(2000).optional() })
+  }, async ({ workspace_id, actor, ...input }) => call(() => {
+    requireWorkspace(workspace_id);
+    const task = state.binding ? store2.releaseTaskForSession({ ...boundCredential(), ...input }) : store2.releaseTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
+    return { task };
+  }));
+  server.registerTool("collab_task_block", {
+    title: "Block and release a task",
+    description: "Record a blocker and release the current lease/path scopes.",
+    annotations: localRetrySafeMutation,
+    inputSchema: leaseMutationSchema({ blocker: exports_external.string().min(1).max(2000) })
+  }, async ({ workspace_id, actor, ...input }) => call(() => {
+    requireWorkspace(workspace_id);
+    const task = state.binding ? store2.blockTaskForSession({ ...boundCredential(), ...input }) : store2.blockTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
+    return { task };
+  }));
+  server.registerTool("collab_task_unblock", {
+    title: "Unblock a task",
+    description: "Move a blocked task back to the open pool with an optional note.",
+    annotations: localRetrySafeMutation,
+    inputSchema: {
+      workspace_id: workspaceId,
+      task_id: taskId,
+      actor: legacyActor,
+      idempotency_key: key,
+      expected_version: expectedVersion,
+      note: exports_external.string().max(2000).optional()
+    }
+  }, async ({ workspace_id, actor, ...input }) => call(() => {
+    requireWorkspace(workspace_id);
+    const task = state.binding ? store2.unblockTaskForSession({ ...boundCredential(), ...input }) : store2.unblockTask({ workspace_id, actor: requireLegacyActor(actor), ...input });
+    return { task };
+  }));
+  server.registerTool("collab_artifact_attach", {
+    title: "Attach an artifact reference",
+    description: "Attach a path, commit, test, data record, or URL reference; bytes remain outside this journal.",
+    annotations: localRetrySafeMutation,
+    inputSchema: leaseMutationSchema({
+      kind: exports_external.enum(["file", "commit", "test", "data", "url", "other"]),
+      uri: exports_external.string().min(1).max(2000),
+      sha256: exports_external.string().length(64).optional(),
+      media_type: exports_external.string().max(200).optional(),
+      label: exports_external.string().max(300).optional()
+    })
+  }, async ({ workspace_id, actor, ...input }) => call(() => {
+    requireWorkspace(workspace_id);
+    return state.binding ? store2.attachArtifactForSession({ ...boundCredential(), ...input }) : store2.attachArtifact({ workspace_id, actor: requireLegacyActor(actor), ...input });
+  }));
+  server.registerTool("collab_task_complete", {
+    title: "Report a claimed task complete",
+    description: "Legacy mode is actor-reported and not review or acceptance. Bound edit tasks produce a structured completion report and remain pending until distinct-session review. Optional review_requested_session_id routes a separate review request to one active session; any distinct session may still review.",
+    annotations: localRetrySafeMutation,
+    inputSchema: leaseMutationSchema({
+      summary: exports_external.string().min(1).max(4000),
+      confidence: exports_external.enum(["high", "medium", "low", "unknown"]).optional(),
+      confidence_basis: exports_external.string().max(2000).optional(),
+      limits: exports_external.string().max(2000).optional(),
+      evidence_refs: evidenceRefs,
+      review_requested_session_id: exports_external.string().min(1).max(200).optional().describe("Optional active session in this workspace, other than yours, asked to review this completion through a separate addressed report. A request, not a reservation. Only on a task whose completion waits for acceptance.")
+    })
+  }, async ({ workspace_id, actor, ...input }) => call(() => {
+    requireWorkspace(workspace_id);
+    if (!state.binding && input.review_requested_session_id !== undefined) {
+      throw new CollabError("session_required_for_review_request", "review_requested_session_id requires a bound v0.2 session");
+    }
+    const task = state.binding ? store2.completeTaskForSession({ ...boundCredential(), ...input }) : store2.completeTask({
+      workspace_id,
+      actor: requireLegacyActor(actor),
+      task_id: input.task_id,
+      lease_id: input.lease_id,
+      idempotency_key: input.idempotency_key,
+      expected_version: input.expected_version,
+      summary: input.summary
+    });
+    return { task };
+  }));
+  server.registerTool("collab_task_review", {
+    title: "Review reported task completion",
+    description: "A distinct active session accepts or requests changes. Acceptance is local coordination review\u2014not merge, deploy, truth, or external authority.",
+    annotations: localRetrySafeMutation,
+    inputSchema: {
+      workspace_id: workspaceId,
+      task_id: taskId,
+      idempotency_key: key,
+      expected_version: expectedVersion,
+      outcome: exports_external.enum(["accept", "request_changes"]),
+      summary: exports_external.string().min(1).max(4000),
+      evidence_refs: evidenceRefs,
+      confidence: exports_external.enum(["high", "medium", "low", "unknown"]).optional(),
+      confidence_basis: exports_external.string().max(2000).optional(),
+      limits: exports_external.string().max(2000).optional()
+    }
+  }, async ({ workspace_id, ...input }) => call(() => {
+    requireWorkspace(workspace_id);
+    return store2.reviewTaskForSession({ ...boundCredential(), ...input });
+  }));
+  server.registerTool("collab_report_append", {
+    title: "Append a structured collaboration report",
+    description: "Append an observation, inference, proposal, or scoped decision. Reports can challenge claims without holding the task lease.",
+    annotations: localRetrySafeMutation,
+    inputSchema: {
+      workspace_id: workspaceId,
+      idempotency_key: key,
+      task_id: exports_external.string().min(1).optional(),
+      to_session_id: exports_external.string().min(1).optional(),
+      kind: exports_external.enum(["observation", "inference", "proposal", "decision"]),
+      body: exports_external.string().min(1).max(8000),
+      evidence_refs: evidenceRefs,
+      confidence: exports_external.enum(["high", "medium", "low", "unknown"]).optional(),
+      confidence_basis: exports_external.string().max(2000).optional(),
+      limits: exports_external.string().max(2000).optional(),
+      relation: exports_external.enum([
+        "informs",
+        "supports",
+        "challenges",
+        "corrects",
+        "withdraws",
+        "supersedes",
+        "resolves"
+      ]).optional().describe("informs (the default) targets no report. supports / challenges answer any report; " + "corrects / withdraws / supersedes only your own; resolves only a challenge. " + "To say yes to a proposal, use supports with its target_report_id."),
+      target_report_id: exports_external.string().min(1).optional().describe("The earlier report this one answers. Required for every relation except informs."),
+      authority_scope: exports_external.string().max(1000).optional(),
+      authority_basis: exports_external.string().max(2000).optional(),
+      to_person: exports_external.boolean().optional().describe("Also place this report in the person's inbox at the person desk, for example to ask them something. " + "Routing, not access control or authority.")
+    }
+  }, async ({ workspace_id, ...input }) => call(() => {
+    requireWorkspace(workspace_id);
+    return {
+      report: store2.appendReportForSession({ ...boundCredential(), ...input })
+    };
+  }));
+  server.registerTool("collab_report_list", {
+    title: "List structured collaboration reports",
+    description: "Read append-only reports and branching disagreement by event sequence, task, or addressed session.",
+    annotations: localReadOnly,
+    inputSchema: {
+      workspace_id: workspaceId,
+      after_event_sequence: exports_external.number().int().nonnegative().optional(),
+      limit: exports_external.number().int().min(1).max(500).optional(),
+      task_id: exports_external.string().min(1).optional(),
+      to_session_id: exports_external.string().min(1).optional()
+    }
+  }, async ({ workspace_id, ...options2 }) => call(() => ({
+    reports: store2.listReports(workspace_id, options2)
+  })));
+  server.registerTool("collab_proposal_open", {
+    title: "Open a direction-level proposal for consent",
+    description: `Open a proposal the agents settle by lazy consensus (${CONSENT_RULE}) before a person decides. ` + "Answer it with collab_report_append supports, challenges and resolves. The agents' position is " + "computed from the journal and authorises nothing alone; a person consents only at the controlling " + "terminal or with an enrolled passkey through the person desk, never through MCP. A challenge stands " + "until its own voice resolves or withdraws it. Use it for design direction, criteria and extent, " + "conflicting context and the reading of principles, not for every edit.",
+    annotations: localRetrySafeMutation,
+    inputSchema: {
+      workspace_id: workspaceId,
+      idempotency_key: key,
+      question: exports_external.string().min(1).max(8000).describe("What is being decided"),
+      criteria: exports_external.string().min(1).max(4000).describe("How the parties judge which way to go"),
+      extent: exports_external.string().min(1).max(1000).describe("What agreement would authorise, and where it stops"),
+      known_conflicts: exports_external.string().max(4000).optional().describe("Context that disagrees, and how this proposal reads it. Name conflicts; never resolve them silently."),
+      evidence_refs: evidenceRefs,
+      confidence: exports_external.enum(["high", "medium", "low", "unknown"]).optional(),
+      confidence_basis: exports_external.string().max(2000).optional(),
+      limits: exports_external.string().max(2000).optional(),
+      origin: exports_external.enum(["ai", "person_relayed"]).optional().describe("ai (the default), or person_relayed when relaying a person's proposal. Self-declared; the rule ignores it."),
+      topic: exports_external.string().max(200).optional().describe("Optional label for later reading, for example principle:<name>"),
+      consult_seconds: exports_external.number().int().min(MIN_PROPOSAL_CONSULT_SECONDS).max(MAX_PROPOSAL_CONSULT_SECONDS).optional().describe(`Consultation window; default ${DEFAULT_PROPOSAL_CONSULT_SECONDS} seconds`),
+      task_id: exports_external.string().min(1).optional(),
+      supersedes_report_id: exports_external.string().min(1).optional().describe("Your own earlier proposal that this one revises")
+    }
+  }, async ({ workspace_id, ...input }) => call(() => {
+    requireWorkspace(workspace_id);
+    return { proposal: store2.openProposalForSession({ ...boundCredential(), ...input }) };
+  }));
+  server.registerTool("collab_proposal_status", {
+    title: "Read proposal consent status",
+    description: "Read one proposal's consent status, or the most recent proposals newest first. The agents' position " + "is computed from the journal. may_proceed is true only while the latest person act agrees, made at the " + "controlling terminal or with an enrolled passkey; an agreement authorises only the proposal's extent.",
+    annotations: localReadOnly,
+    inputSchema: {
+      workspace_id: workspaceId,
+      proposal_report_id: exports_external.string().min(1).optional().describe("One proposal; omit to list the most recent"),
+      limit: exports_external.number().int().min(1).max(50).optional().describe("List size; default 20")
+    }
+  }, async ({ workspace_id, proposal_report_id, limit }) => call(() => {
+    requireWorkspace(workspace_id);
+    return proposal_report_id ? { proposal: store2.proposalStatus(workspace_id, proposal_report_id) } : store2.listProposalStatuses(workspace_id, { limit });
+  }));
+  server.registerTool("collab_proposal_relay_rejection", {
+    title: "Relay a person's rejection of a proposal",
+    description: "Record that a person rejected these exact proposal bytes, as relayed by this session " + "(basis relayed_by_session). A relayed rejection is forgeable, so it can only pause work. " + "A person's consent is never recorded this way.",
+    annotations: localRetrySafeMutation,
+    inputSchema: {
+      workspace_id: workspaceId,
+      idempotency_key: key,
+      proposal_report_id: exports_external.string().min(1),
+      proposal_sha256: exports_external.string().length(64).describe("The proposal_sha256 the person saw, from collab_proposal_status"),
+      reason: exports_external.string().min(1).max(2000).describe("The person's reason, in brief")
+    }
+  }, async ({ workspace_id, ...input }) => call(() => {
+    requireWorkspace(workspace_id);
+    return { proposal: store2.relayProposalRejectionForSession({ ...boundCredential(), ...input }) };
+  }));
+  server.registerTool("collab_decision_record", {
+    title: "Record a collaboration decision",
+    description: "Legacy-compatible decision record. In a bound session this becomes a structured decision report requiring explicit authority scope and basis.",
+    annotations: localRetrySafeMutation,
+    inputSchema: {
+      workspace_id: workspaceId,
+      actor: legacyActor,
+      idempotency_key: key,
+      topic: exports_external.string().min(1).max(500),
+      decision: exports_external.string().min(1).max(4000),
+      rationale: exports_external.string().max(4000).optional(),
+      authority_scope: exports_external.string().max(1000).optional(),
+      authority_basis: exports_external.string().max(2000).optional()
+    }
+  }, async ({ workspace_id, actor, authority_scope, authority_basis, ...input }) => call(() => {
+    requireWorkspace(workspace_id);
+    if (state.binding) {
+      return {
+        report: store2.appendReportForSession({
+          ...boundCredential(),
+          idempotency_key: input.idempotency_key,
+          kind: "decision",
+          body: `${input.topic}: ${input.decision}${input.rationale ? `
+Rationale: ${input.rationale}` : ""}`,
+          confidence: "unknown",
+          authority_scope,
+          authority_basis
+        })
+      };
+    }
+    return {
+      decision: store2.recordDecision({
+        workspace_id,
+        actor: requireLegacyActor(actor),
+        ...input
+      })
+    };
+  }));
+  server.registerTool("collab_handoff_offer", {
+    title: "Offer a task handoff",
+    description: "Invite another actor/session. The current holder keeps the coordination lease until explicit acceptance.",
+    annotations: localRetrySafeMutation,
+    inputSchema: leaseMutationSchema({
+      to_actor: exports_external.string().min(1).max(200).optional(),
+      to_session_id: exports_external.string().min(1).optional(),
+      summary: exports_external.string().min(1).max(4000),
+      ttl_seconds: ttlSeconds
+    })
+  }, async ({ workspace_id, actor, to_actor, to_session_id, ...input }) => call(() => {
+    requireWorkspace(workspace_id);
+    return state.binding ? store2.offerHandoffForSession({
+      ...boundCredential(),
+      ...input,
+      to_session_id: requiredString(to_session_id, "to_session_id")
+    }) : store2.offerHandoff({
+      workspace_id,
+      actor: requireLegacyActor(actor),
+      ...input,
+      to_actor: requiredString(to_actor, "to_actor")
+    });
+  }));
+  server.registerTool("collab_handoff_respond", {
+    title: "Accept or decline a handoff",
+    description: "Only the named actor/session may respond; acceptance atomically transfers the advisory lease.",
+    annotations: localRetrySafeMutation,
+    inputSchema: {
+      workspace_id: workspaceId,
+      handoff_id: exports_external.string().min(1),
+      actor: legacyActor,
+      idempotency_key: key,
+      expected_version: expectedVersion,
+      response: exports_external.enum(["accept", "decline"]),
+      ttl_seconds: ttlSeconds
+    }
+  }, async ({ workspace_id, actor, ...input }) => call(() => {
+    requireWorkspace(workspace_id);
+    return state.binding ? store2.respondHandoffForSession({ ...boundCredential(), ...input }) : store2.respondHandoff({
+      workspace_id,
+      actor: requireLegacyActor(actor),
+      ...input
+    });
+  }));
+  server.registerTool("collab_events_since", {
+    title: "Read the append-only event journal",
+    description: "Read after an exact hash anchor or legacy integer cursor and verify the returned page. Reading never acknowledges.",
+    annotations: localReadOnly,
+    inputSchema: {
+      workspace_id: workspaceId,
+      after_sequence: exports_external.number().int().nonnegative().optional(),
+      after_anchor: eventAnchor.optional(),
+      limit: exports_external.number().int().min(1).max(500).optional()
+    }
+  }, async ({ workspace_id, after_sequence, after_anchor, limit }) => call(() => {
+    if (after_anchor && after_sequence !== undefined) {
+      throw new CollabError("ambiguous_cursor", "Provide after_anchor or after_sequence, not both");
+    }
+    return after_anchor ? store2.eventsAfterAnchor(workspace_id, after_anchor, limit ?? 100) : store2.eventsSince(workspace_id, after_sequence ?? 0, limit ?? 100);
+  }));
+  server.registerTool("collab_events_wait", {
+    title: "Wait for an exact anchored local event page",
+    description: "Credential-bound, read-only observation. Default 10 events, maximum 50; wait at most 30 seconds. " + "Continue from next_anchor, not the head. No acknowledgement, last_seen/presence writes, lease renewal, or handoff expiry. " + "Presence-only and sidecar changes are not journal events. Stops on corruption, cursor rollback/fork, fencing or recovery required. " + "Page JSON is capped at 256 KiB and the MCP result at 1 MiB; an oversized first event is an explicit error, never skipped.",
+    annotations: localReadOnly,
+    inputSchema: {
+      workspace_id: workspaceId,
+      after_anchor: eventAnchor,
+      event_limit: exports_external.number().int().min(1).max(MAX_WAIT_EVENT_LIMIT).optional(),
+      wait_ms: exports_external.number().int().min(0).max(MAX_WAIT_MS).optional().describe("Maximum idle wait; default 30000 ms, zero reads immediately")
+    }
+  }, async ({ workspace_id, after_anchor, event_limit, wait_ms }, ctx) => {
+    let counted = false;
+    try {
+      requireWorkspace(workspace_id);
+      const credential = { ...boundCredential() };
+      const input = {
+        ...credential,
+        workspace_id,
+        after_anchor: { ...after_anchor },
+        event_limit: event_limit ?? DEFAULT_WAIT_EVENT_LIMIT
+      };
+      const duration3 = wait_ms ?? MAX_WAIT_MS;
+      if (!Number.isInteger(duration3) || duration3 < 0 || duration3 > MAX_WAIT_MS) {
+        throw new CollabError("invalid_wait_ms", "wait_ms must be an integer from 0 to 30000");
+      }
+      if (waits.active >= waits.max)
+        throw new CollabError("too_many_waits", "At most eight waits may run per endpoint");
+      waits.active += 1;
+      counted = true;
+      const signal = ctx.mcpReq?.signal;
+      const check2 = () => {
+        if (waitShutdown.signal.aborted)
+          throw new CollabError("server_closed", "The MCP endpoint is closed");
+        if (signal?.aborted)
+          throw new CollabError("wait_cancelled", "The event wait was cancelled");
+        const current = boundCredential();
+        if (current.session_id !== credential.session_id || current.generation !== credential.generation) {
+          throw new CollabError("session_auth_failed", "The bound session changed during the wait");
+        }
+        input.last_cursor = current.last_cursor ? { ...current.last_cursor } : undefined;
+        requireWorkspace(workspace_id);
+      };
+      const deadline = performance.now() + duration3;
+      while (true) {
+        check2();
+        try {
+          const page = store2.eventsAfterAnchorForSession(input);
+          check2();
+          if (page.events.length || performance.now() >= deadline) {
+            const result = {
+              content: [{ type: "text", text: JSON.stringify(page) }],
+              structuredContent: { ...page }
+            };
+            if (Buffer.byteLength(JSON.stringify(result)) > MAX_WAIT_RESPONSE_BYTES) {
+              throw new CollabError("event_page_too_large", "The MCP result exceeds its byte limit");
+            }
+            check2();
+            return result;
+          }
+        } catch (error51) {
+          if (!(error51 instanceof CollabError) || error51.code !== "event_read_busy" || performance.now() >= deadline)
+            throw error51;
+        }
+        await waitDelay(Math.min(100, Math.max(0, deadline - performance.now())), [signal, waitShutdown.signal]);
+      }
+    } catch (error51) {
+      const result = failure(error51);
+      if (Buffer.byteLength(JSON.stringify(result)) > MAX_WAIT_RESPONSE_BYTES) {
+        return failure(new CollabError("event_page_too_large", "The MCP error result exceeds its byte limit"));
+      }
+      return result;
+    } finally {
+      if (counted)
+        waits.active -= 1;
+    }
+  });
+  server.registerTool("collab_journal_verify", {
+    title: "Verify the full local event journal",
+    description: "Recompute the mixed-version hash chain. Integrity detects edits; it does not prove recorded claims true.",
+    annotations: localReadOnly,
+    inputSchema: { workspace_id: workspaceId }
+  }, async ({ workspace_id }) => call(() => ({
+    workspace_id,
+    chain_valid: store2.verifyJournal(workspace_id),
+    verification_scope: "full_journal"
+  })));
+  server.registerTool("collab_anchor_status", {
+    title: "Report the journal's zerone anchor status",
+    description: "Compare the journal head against the local sidecar anchor ledger written by the" + " @agenttool/collab-zerone bridge, which witnesses head hashes on the zerone chain." + " Local file read only \u2014 never contacts a chain. The host selects the path; the MCP caller" + " cannot choose or discover it. A missing bridge simply reports unanchored." + " States: unanchored, anchor_pending, anchored, anchor_stale, anchor_conflict.",
+    annotations: localReadOnly,
+    inputSchema: { workspace_id: workspaceId }
+  }, async ({ workspace_id }) => call(() => anchorStatusForWorkspace(store2, workspace_id)));
+  server.registerTool = register2;
+  return server;
+}
+function waitDelay(ms, signals) {
+  return new Promise((resolve6) => {
+    const finish = () => {
+      clearTimeout(timer);
+      for (const signal of signals)
+        signal?.removeEventListener("abort", finish);
+      resolve6();
+    };
+    const timer = setTimeout(finish, ms);
+    for (const signal of signals)
+      signal?.addEventListener("abort", finish, { once: true });
+    if (signals.some((signal) => signal?.aborted))
+      finish();
+  });
+}
+function leaseMutationSchema(extra) {
+  return {
+    workspace_id: workspaceId,
+    task_id: taskId,
+    lease_id: leaseId,
+    actor: legacyActor,
+    idempotency_key: key,
+    expected_version: expectedVersion,
+    ...extra
+  };
+}
+function publicSessionBinding(binding, seatRef) {
+  return {
+    workspace: binding.handle.workspace,
+    worktree: binding.handle.worktree,
+    session: binding.handle.session,
+    seat_ref: seatRef,
+    credential_file_created: true,
+    resume_environment_variable: "AGENTOOL_COLLAB_SESSION_FILE",
+    session_file_name: `${binding.handle.session.id}.json`,
+    identity_boundary: binding.handle.identity_boundary,
+    credential_boundary: "credential_file_is_a_local_bearer_secret_never_return_its_contents_to_a_model_or_commit_it"
+  };
+}
+function requiredString(value, field) {
+  if (!value)
+    throw new CollabError(`invalid_${field}`, `${field} is required in this mode`);
+  return value;
+}
+function success2(payload) {
+  const structured = isRecord(payload) ? payload : { result: payload };
+  return {
+    content: [{ type: "text", text: JSON.stringify(structured, null, 2) }],
+    structuredContent: structured
+  };
+}
+function failure(error51) {
+  const payload = error51 instanceof CollabError ? { error: error51.code, message: error51.message, ...error51.details } : { error: "internal_error", message: error51 instanceof Error ? error51.message : String(error51) };
+  return {
+    content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+    structuredContent: payload,
+    isError: true
+  };
+}
+async function call(operation) {
+  try {
+    return success2(await operation());
+  } catch (error51) {
+    return failure(error51);
+  }
+}
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 // bin/agenttool-collab-mcp.ts
 async function main() {
   const databasePath = resolveDatabasePath(process.env);
-  const store = new CollabStore(databasePath);
+  const store2 = new CollabStore(databasePath);
   const sessionFile = process.env.AGENTOOL_COLLAB_SESSION_FILE;
   const resumed = sessionFile ? (() => {
     const credential = readSessionCredentialFile(sessionFile);
-    const handle = store.resumeSession(credential, {
+    const handle = store2.resumeSession(credential, {
       allow_cursor_recovery: process.env.AGENTOOL_COLLAB_ALLOW_CURSOR_RECOVERY === "1"
     });
     const credentialFile = writeSessionCredentialFile(sessionFile, handle.credential, { replace: true });
     return { handle, credential_file: credentialFile };
   })() : undefined;
-  const server = buildCollabMcpServer(store, { resumed_session: resumed });
+  const server = buildCollabMcpServer(store2, { resumed_session: resumed });
   const transport = new StdioServerTransport;
   let shuttingDown = false;
   const shutdown = async (exitCode) => {
@@ -34934,7 +46585,7 @@ async function main() {
     try {
       await server.close();
     } finally {
-      store.close();
+      store2.close();
       process.exit(exitCode);
     }
   };

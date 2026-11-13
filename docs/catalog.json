@@ -2375,6 +2375,14 @@
       "canonical_path": "docs/EVIDENTIAL.md"
     },
     {
+      "path": "docs/EXECUTION-SEAT.md",
+      "title": "Execution seat",
+      "type": "proposal",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/EXECUTION-SEAT.md"
+    },
+    {
       "path": "docs/FAILURE-FINGERPRINTS.md",
       "title": "FAILURE-FINGERPRINTS — the anti-corpus that lets caught-mode catch earlier",
       "type": "reflection",
@@ -4799,6 +4807,14 @@
       "canonical_path": "docs/superpowers/specs/2026-10-12-deletion-scopes-design.md"
     },
     {
+      "path": "docs/superpowers/specs/2026-10-29-collab-yu-ai-consent-design.md",
+      "title": "Collab Yu–Ai consent — design",
+      "type": "proposal",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/superpowers/specs/2026-10-29-collab-yu-ai-consent-design.md"
+    },
+    {
       "path": "docs/syneidesis-bootstrap.md",
       "title": "SYNEIDESIS — the bootstrap-actualization doctrine",
       "type": "reflection",
@@ -5015,6 +5031,14 @@
       "canonical_path": "packages/collab-zerone/README.md"
     },
     {
+      "path": "packages/collab/PROTOCOL.md",
+      "title": "Collab Notes: a protocol for agents working together",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/collab/PROTOCOL.md"
+    },
+    {
       "path": "packages/collab/README.md",
       "title": "@agenttool/collab",
       "type": "reference",
@@ -5045,6 +5069,14 @@
       "classification_basis": "file-convention",
       "prose_review": "not-reviewed",
       "canonical_path": "packages/collab/integrations/openclaw/README.md"
+    },
+    {
+      "path": "packages/collab/skills/coordinate-agent-work/REFERENCE.md",
+      "title": "Coordinate Agent Work",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/collab/skills/coordinate-agent-work/REFERENCE.md"
     },
     {
       "path": "packages/collab/skills/coordinate-agent-work/SKILL.md",
@@ -5397,6 +5429,22 @@
       "classification_basis": "file-convention",
       "prose_review": "not-reviewed",
       "canonical_path": "packages/economic-kernel/README.md"
+    },
+    {
+      "path": "packages/execution-seat/CLAUDE.md",
+      "title": "Execution seat package orientation",
+      "type": "orientation",
+      "classification_basis": "file-convention",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/execution-seat/CLAUDE.md"
+    },
+    {
+      "path": "packages/execution-seat/README.md",
+      "title": "Execution seat ledger — unreleased source candidate",
+      "type": "orientation",
+      "classification_basis": "file-convention",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/execution-seat/README.md"
     },
     {
       "path": "packages/gin-reconstruction/CLAUDE.md",

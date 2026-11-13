@@ -5,9 +5,10 @@
 > **Code:** `../../src/mcp.ts`, `../../dist/agenttool-collab-mcp.js`.
 > **Tests:** `../../tests/events-wait.test.ts`, `../../tests/package.test.ts`.
 
-**DEVELOPMENT BUILD 0.5.1-dev.0, 33 tools. Unreleased.** It adds the
-unreleased host doorbell wait to 0.5.0. Collab 0.5.0 is released on GitHub
-only, not on npm; the next npm candidate is 0.5.1. This source does not
+**DEVELOPMENT BUILD 0.6.0-dev.0, 44 tools in the full profile. Unreleased.** It adds the
+unreleased host doorbell wait, three proposal consent tools and the Collab Notes verbs
+`collab_arrive`, `collab_inbox`, `collab_note`, `collab_take`, `collab_done`, `collab_propose`, `collab_poll` and `collab_vote` to 0.5.0's 33. Collab 0.5.0 is released on GitHub
+only, not on npm; the next npm release is not chosen here. This source does not
 establish publication, so verify the protected receipt and registry separately.
 Published npm 0.4.0 has 32 tools and no
 `collab_events_wait`. This example has not been exercised in live OpenClaw.
@@ -42,19 +43,21 @@ channel credential or remote URL is needed for local Collab. Keep credentials
 and host-only paths out of model-visible text.
 
 Use the same local database as the cooperating Claude/Codex/Hermes MCP
-processes. Each child needs its own `collab_session_start`, either in a separate
-MCP process or with an explicit `binding_key` and `parent_session_id` on the
-shared endpoint. Carry the key on every child call. This is cooperative routing,
+processes. Each child needs its own session, either in a separate MCP process or
+with an explicit `binding_key` on the shared endpoint (`parent_session_id` with
+`collab_session_start`, or `parent` with `collab_arrive`). Carry the key on every child call. This is cooperative routing,
 not authenticated subagent isolation or automatic OpenClaw integration; see
 [the session-fit migration note](../../README.md#session-fit-migration-unreleased).
 Verify the intended workspace and the
-33-tool inventory after connecting. Native tool-name prefixes depend on the
+44-tool inventory (full profile) after connecting. Native tool-name prefixes depend on the
 selected adapter; the names below are the underlying MCP names.
 
 ## Status, queue, receive, acknowledge
 
 1. **Status:** start a credential-bound session once, then inspect
-   `collab_workspace_status` and `collab_next`. Optional
+   `collab_workspace_status` and `collab_next`. An agent on the Collab Notes verbs
+   uses `collab_arrive` and `collab_inbox` instead, which do not move this cursor;
+   [the protocol](../../PROTOCOL.md) describes them and the `notes` tools profile. Optional
    `collab_session_list` presence is self-declared routing, not identity,
    health, availability or consent. `collab_anchor_status` is a local sidecar
    observation, not a fresh remote chain check.

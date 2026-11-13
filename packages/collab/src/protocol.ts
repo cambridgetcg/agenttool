@@ -305,6 +305,156 @@ export interface CollabReport {
   event_sequence: number;
 }
 
+/**
+ * Person–agent consent for direction-level proposals. The agents settle one
+ * position by lazy consensus; a person consents separately, never through MCP.
+ * Contract: docs/superpowers/specs/2026-10-29-collab-yu-ai-consent-design.md
+ * in the AgentTool source repository.
+ */
+export const CONSENT_RULE = "consent/v1" as const;
+export const PROPOSAL_BYTES_PROTOCOL = "agenttool.collab-proposal/1" as const;
+export const DEFAULT_PROPOSAL_CONSULT_SECONDS = 6 * 60 * 60;
+export const MIN_PROPOSAL_CONSULT_SECONDS = 10 * 60;
+export const MAX_PROPOSAL_CONSULT_SECONDS = 7 * 24 * 60 * 60;
+
+export type ProposalOrigin = "ai" | "person_relayed";
+
+export type AiPosition =
+  | "open"
+  | "challenged"
+  | "consented"
+  | "split"
+  | "lapsed"
+  | "withdrawn"
+  | "superseded";
+
+/** A lineage group: a root session and every session descending from it. */
+export interface ProposalVoice {
+  voice_id: string;
+  live_session_ids: string[];
+}
+
+export interface ProposalTerms {
+  report_id: string;
+  workspace_id: string;
+  rule: typeof CONSENT_RULE;
+  criteria: string;
+  extent: string;
+  known_conflicts: string | null;
+  origin: ProposalOrigin;
+  topic: string | null;
+  closes_at: string;
+  voices: ProposalVoice[];
+  author_voice_id: string;
+  proposal_sha256: string;
+  opened_event_id: string;
+  created_at: string;
+}
+
+export const PERSON_ACT_PROTOCOL = "agenttool.collab-person-act/1" as const;
+
+/** How a person's act reached the journal. Only a rejection may be relayed. */
+export type PersonActBasis = "relayed_by_session" | "controlling_terminal" | "user_verified_passkey";
+
+/** A platform passkey a person enrolled at the controlling terminal. */
+export interface PersonPasskey {
+  credential_id: string;
+  /** Base64url DER SubjectPublicKeyInfo; ES256 (P-256) only. */
+  public_key_spki: string;
+  algorithm: -7;
+  rp_id: string;
+  origin: string;
+  label: string | null;
+  /** SHA-256 of the public key DER, hex. */
+  fingerprint: string;
+  sign_count: number;
+  enrolled_at: string;
+  revoked_at: string | null;
+}
+
+/** A WebAuthn assertion as the browser returns it, base64url-encoded. */
+export interface PasskeyAssertion {
+  credential_id: string;
+  authenticator_data: string;
+  client_data_json: string;
+  signature: string;
+  user_handle?: string | null;
+}
+
+/** Everything needed to re-verify a passkey act without this database. */
+export interface PasskeyProof extends PasskeyAssertion {
+  public_key_spki: string;
+  rp_id: string;
+  origin: string;
+  /** The canonical act bytes whose SHA-256 is the WebAuthn challenge. */
+  challenge_bytes: string;
+  challenge: string;
+  sign_count: number;
+}
+
+export interface ProposalPersonAct {
+  id: string;
+  workspace_id: string;
+  proposal_report_id: string;
+  proposal_sha256: string;
+  act: "agree" | "reject";
+  party: "person";
+  basis: PersonActBasis;
+  reason: string | null;
+  relayed_by_session_id: string | null;
+  /** The agents' position the person saw when acting. */
+  ai_snapshot: {
+    position: AiPosition;
+    closed: boolean;
+    qualifying_support_report_ids: string[];
+    unresolved_challenge_report_ids: string[];
+  };
+  proof: PasskeyProof | null;
+  created_at: string;
+  event_sequence: number;
+}
+
+export interface ProposalStatus {
+  rule: typeof CONSENT_RULE;
+  proposal: CollabReport;
+  terms: ProposalTerms;
+  /** The exact canonical bytes both parties agree to; proposal_sha256 hashes them. */
+  proposal_bytes: string;
+  proposal_sha256: string;
+  ai: {
+    position: AiPosition;
+    closed: boolean;
+    unresolved_challenge_report_ids: string[];
+    qualifying_support_report_ids: string[];
+    awaiting_voice_ids: string[];
+    obsoleted_by_report_id: string | null;
+    basis: "computed_from_journal";
+  };
+  person: {
+    /** The latest person act decides; a later act may change an earlier one. */
+    state: "awaiting" | "agreed" | "rejected";
+    acts: ProposalPersonAct[];
+  };
+  agreement: ProposalPersonAct | null;
+  /** True only while the latest person act agrees and the author has not withdrawn or superseded it. */
+  may_proceed: boolean;
+  authority_boundary: "an_agreement_authorises_only_the_proposal_extent";
+}
+
+/** A proposal row whose stored terms could not be read; listed instead of failing the read. */
+export interface UnreadableProposal {
+  proposal_report_id: string;
+  error: string;
+}
+
+/** A person's view across one workspace: what waits on them, and what was addressed to them. */
+export interface PersonInbox {
+  workspace_id: string;
+  awaiting_person: ProposalStatus[];
+  addressed_reports: CollabReport[];
+  unreadable: UnreadableProposal[];
+}
+
 export interface TaskReview {
   id: string;
   workspace_id: string;
@@ -341,10 +491,20 @@ export type CollabEventType =
   | "artifact.attached"
   | "report.posted"
   | "decision.recorded"
+  | "proposal.opened"
+  | "proposal.agreed"
+  | "proposal.rejected"
   | "handoff.offered"
   | "handoff.accepted"
   | "handoff.declined"
-  | "handoff.expired";
+  | "handoff.expired"
+  // Collab Notes (spec 8.2). Older builds route none of these to anyone.
+  | "purpose.declared"
+  | "evidence.cited"
+  | "ballot.opened"
+  | "ballot.cast"
+  | "ballot.revealed"
+  | "ballot.closed";
 
 export interface CollabEvent {
   protocol: CollabProtocol;

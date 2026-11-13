@@ -5,8 +5,12 @@ import { defaultActor } from "./actor-default.js";
 import { anchorStatusForWorkspace } from "./anchor-status.js";
 import { CollabError } from "./errors.js";
 import {
+  CONSENT_RULE,
+  DEFAULT_PROPOSAL_CONSULT_SECONDS,
   DEFAULT_WAIT_EVENT_LIMIT,
   EVIDENCE_REFS_DESCRIPTION,
+  MAX_PROPOSAL_CONSULT_SECONDS,
+  MIN_PROPOSAL_CONSULT_SECONDS,
   MAX_WAIT_EVENT_LIMIT,
   MAX_WAIT_MS,
   MAX_WAIT_RESPONSE_BYTES,
@@ -14,11 +18,29 @@ import {
   type SessionHandle,
   type TaskStatus,
 } from "./protocol.js";
+import { defaultSeatRef, MAX_SEAT_REF } from "./seat-ref.js";
 import {
   removeSessionCredentialFile,
   writeSessionCredentialFile,
 } from "./session-file.js";
-import { CollabStore } from "./store.js";
+import { CollabStore } from "./store-notes.js";
+import { doneVerb, noteVerb, takeVerb } from "./note-verbs.js";
+import { proposeVerb } from "./propose-verb.js";
+import { pollVerb, voteVerb } from "./ballot-verbs.js";
+import {
+  arriveVerb,
+  FULL_PROFILE_BRIDGE,
+  inboxVerb,
+  isNoteVerb,
+  noteCall,
+  noteFailure,
+  notArrived,
+  notesInstructions,
+  profileIncludes,
+  toolsProfile,
+  type LeaveMemo,
+  type NoteVerbContext,
+} from "./verbs.js";
 import { COLLAB_PACKAGE_VERSION } from "./version.js";
 
 const DEFAULT_MCP_NEXT_EVENT_LIMIT = 10;
@@ -83,7 +105,14 @@ export interface CollabMcpServerOptions {
   };
   /** Host-held credentials only, never a model-facing resume argument. */
   resumed_sessions?: Record<string, BoundSession>;
+  /**
+   * Where a session start without seat_ref looks for one, and where the tools
+   * profile (AGENTOOL_COLLAB_TOOLS) is read (defaults to process.env).
+   */
+  environment?: Record<string, string | undefined>;
 }
+
+const WAITS_PER_ENDPOINT = 8;
 
 interface BoundSession {
   handle: SessionHandle;
@@ -94,7 +123,9 @@ export function buildCollabMcpServer(
   store: CollabStore,
   options: CollabMcpServerOptions = {},
 ): McpServer {
-  type Slot = { key: string; binding: BoundSession | null };
+  // `left`: what collab_done returned when it ended this slot's session, kept
+  // until a new session arrives here, so a lost-response retry is answered.
+  type Slot = { key: string; binding: BoundSession | null; left?: LeaveMemo | null };
   const slots = new Map<string, Slot>([["", { key: "", binding: options.resumed_session ?? null }]]);
   for (const [key, binding] of Object.entries(options.resumed_sessions ?? {})) {
     if (!key || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(key)) {
@@ -107,32 +138,41 @@ export function buildCollabMcpServer(
     get binding() { return requestSlot.getStore()!.binding; },
     set binding(value: BoundSession | null) { requestSlot.getStore()!.binding = value; },
   };
+  const environment = options.environment ?? process.env;
+  // An unknown or conflicting value refuses to start: guessing a profile would
+  // hide tools an agent was told about, or show tools a host meant to hide.
+  const profile = toolsProfile(environment);
+  const legacyInstructions =
+    `Collab ${COLLAB_PACKAGE_VERSION}: collab_events_wait offers bounded read-only anchored observation for an already running host, ` +
+    "without acknowledging, refreshing presence, or renewing leases; continue from next_anchor, never head. " +
+    "Local-first coordination journal for honest exchange among independent coding-agent sessions. " +
+    "Use collab_session_start once per default or named binding_key, then collab_next. Named children require an explicit actor and parent_session_id; " +
+    "send their binding_key on every call. Selectors are cooperative routing, not authenticated subagent isolation. " +
+    "Default-slot actor can use Claude metadata only with matching selected PID, messaging socket and process start time. A host restart resumes from the " +
+    "mode-0600 credential file without exposing its bearer token to the model. Exchange observations, " +
+    "inferences, proposals, or authorised decisions as structured reports with evidence, confidence, " +
+    "limits, and explicit authority scope. Direction-level proposals (collab_proposal_open) are settled by the agents " +
+    "through lazy consensus; that position authorises nothing alone, and a person's consent is never recorded through MCP. " +
+    "Claim before editing overlapping path scopes. Session leases remain live while their " +
+    "session is live (6 hours since activity); optional renew is lease-fenced, not version-gated. " +
+    "An advisory coordination lease is not ownership, a filesystem lock, or authority. Edit-task " +
+    "completion is actor-reported and remains pending until a distinct session accepts it. Challenges " +
+    "remain append-only disagreement; acknowledgement means processed, not agreed. Expired session " +
+    "leases require explicit recovery. Git checkpoints are local evidence, not attribution or atomic " +
+    "Git/SQLite locks. Store concise coordination facts only—never credentials, prompts, transcripts, " +
+    "chain-of-thought, or sensitive source content. Cursor rollback recovery must be enabled by the host " +
+    "and completed with an audited cursor reset before session mutations resume. The host owns spawning, " +
+    "wakeups, waiting, and stopping. The separate collab_session_join/list/heartbeat/leave tools preserve " +
+    "the public v0.2 self-declared presence plane; they provide routing hints only and never authenticate a caller. " +
+    "The read-only collab_anchor_status tool can compare this journal with an optional local Zerone witness sidecar; " +
+    "it never contacts a chain, broadcasts, spends funds, or turns an anchor into truth or authority.";
   const server = new McpServer(
     { name: "agenttool-collab", version: COLLAB_PACKAGE_VERSION },
     {
       capabilities: { tools: {} },
-      instructions:
-        `Collab ${COLLAB_PACKAGE_VERSION}: collab_events_wait offers bounded read-only anchored observation for an already running host, ` +
-        "without acknowledging, refreshing presence, or renewing leases; continue from next_anchor, never head. " +
-        "Local-first coordination journal for honest exchange among independent coding-agent sessions. " +
-        "Use collab_session_start once per default or named binding_key, then collab_next. Named children require an explicit actor and parent_session_id; " +
-        "send their binding_key on every call. Selectors are cooperative routing, not authenticated subagent isolation. " +
-        "Default-slot actor can use Claude metadata only with matching selected PID, messaging socket and process start time. A host restart resumes from the " +
-        "mode-0600 credential file without exposing its bearer token to the model. Exchange observations, " +
-        "inferences, proposals, or authorised decisions as structured reports with evidence, confidence, " +
-        "limits, and explicit authority scope. Claim before editing overlapping path scopes. Session leases remain live while their " +
-        "session is live (6 hours since activity); optional renew is lease-fenced, not version-gated. " +
-        "An advisory coordination lease is not ownership, a filesystem lock, or authority. Edit-task " +
-        "completion is actor-reported and remains pending until a distinct session accepts it. Challenges " +
-        "remain append-only disagreement; acknowledgement means processed, not agreed. Expired session " +
-        "leases require explicit recovery. Git checkpoints are local evidence, not attribution or atomic " +
-        "Git/SQLite locks. Store concise coordination facts only—never credentials, prompts, transcripts, " +
-        "chain-of-thought, or sensitive source content. Cursor rollback recovery must be enabled by the host " +
-        "and completed with an audited cursor reset before session mutations resume. The host owns spawning, " +
-        "wakeups, waiting, and stopping. The separate collab_session_join/list/heartbeat/leave tools preserve " +
-        "the public v0.2 self-declared presence plane; they provide routing hints only and never authenticate a caller. " +
-        "The read-only collab_anchor_status tool can compare this journal with an optional local Zerone witness sidecar; " +
-        "it never contacts a chain, broadcasts, spends funds, or turns an anchor into truth or authority.",
+      instructions: profile === "notes"
+        ? notesInstructions()
+        : `${notesInstructions()}\n${FULL_PROFILE_BRIDGE}\nLegacy session tools: ${legacyInstructions}`,
     },
   );
 
@@ -140,33 +180,52 @@ export function buildCollabMcpServer(
   // switching credentials when another child calls the same MCP endpoint.
   // This is cooperative routing, not isolation from other endpoint callers.
   const register = server.registerTool.bind(server);
-  server.registerTool = ((...[name, config, callback]: Parameters<McpServer["registerTool"]>) => register(name, {
-    ...config,
-    inputSchema: {
-      ...config.inputSchema,
-      binding_key: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/).optional()
-        .describe("Cooperative subagent binding selector; omit for the original default binding. Not authentication."),
-    },
-  }, async (input: Record<string, unknown>, ctx: Parameters<typeof callback>[1]) => {
-    const { binding_key, ...args } = input as Record<string, unknown>;
-    if (binding_key !== undefined && (typeof binding_key !== "string"
-      || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(binding_key))) {
-      return failure(new CollabError("invalid_binding_key", "Invalid binding selector"));
-    }
-    const key = binding_key ?? "";
-    let slot = slots.get(key);
-    if (key && (!slot || !slot.binding) && name !== "collab_session_start") {
-      return failure(new CollabError("session_not_bound", "The selected child binding is not bound"));
-    }
-    if (!slot) {
-      slot = { key, binding: null };
-      slots.set(key, slot);
-    }
-    return requestSlot.run(slot, () => callback(args, ctx));
-  })) as McpServer["registerTool"];
+  server.registerTool = ((...[name, config, callback]: Parameters<McpServer["registerTool"]>) => {
+    // The profile decides what is registered, so every registration below
+    // stays one literal call whatever the profile.
+    if (!profileIncludes(profile, name)) return undefined as unknown as ReturnType<McpServer["registerTool"]>;
+    return register(name, {
+      ...config,
+      inputSchema: {
+        ...config.inputSchema,
+        // For a note verb the pattern is checked below instead, so a bad key
+        // is refused with the verbs' remedy rather than the SDK's text.
+        binding_key: (isNoteVerb(name) ? z.string() : z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/)).optional()
+          .describe("Cooperative subagent binding selector; omit for the original default binding. Not authentication."),
+      },
+    }, async (input: Record<string, unknown>, ctx: Parameters<typeof callback>[1]) => {
+      const { binding_key, ...args } = input as Record<string, unknown>;
+      if (binding_key !== undefined && (typeof binding_key !== "string"
+        || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(binding_key))) {
+        return isNoteVerb(name)
+          ? noteFailure(new CollabError("invalid_binding_key", "Invalid binding selector", {
+            remedy: { say: "binding_key is 1 to 200 letters, digits or . _ : -, starting with a letter or digit." },
+          }))
+          : failure(new CollabError("invalid_binding_key", "Invalid binding selector"));
+      }
+      const key = binding_key ?? "";
+      let slot = slots.get(key);
+      // Only collab_arrive may speak from a slot with no session; the other
+      // verbs say how to arrive, on the default slot or the named one.
+      if (isNoteVerb(name) && name !== "collab_arrive" && (!slot || !slot.binding)
+        && !(name === "collab_done" && slot?.left)) {
+        return noteFailure(notArrived(key, slots.get("")?.binding ?? null));
+      }
+      if (key && (!slot || !slot.binding) && name !== "collab_session_start" && name !== "collab_arrive"
+        && !(name === "collab_done" && slot?.left)) {
+        return failure(new CollabError("session_not_bound", "The selected child binding is not bound"));
+      }
+      if (!slot) {
+        slot = { key, binding: null };
+        slots.set(key, slot);
+      }
+      return requestSlot.run(slot, () => callback(args, ctx));
+    });
+  }) as McpServer["registerTool"];
 
   const waitShutdown = new AbortController();
-  let activeWaits = 0;
+  // One count for collab_events_wait and collab_inbox's wait together.
+  const waits = { active: 0, max: WAITS_PER_ENDPOINT };
   const close = server.close.bind(server);
   server.close = async () => {
     waitShutdown.abort();
@@ -213,6 +272,261 @@ export function buildCollabMcpServer(
     }
     return value;
   };
+  const noteContext = (signal?: AbortSignal): NoteVerbContext => ({
+    store,
+    environment,
+    profile,
+    slot_key: requestSlot.getStore()!.key,
+    binding: () => state.binding,
+    bind: (binding) => {
+      state.binding = binding;
+      requestSlot.getStore()!.left = null;
+    },
+    unbind: (left) => {
+      state.binding = null;
+      requestSlot.getStore()!.left = left;
+    },
+    left: () => requestSlot.getStore()!.left ?? null,
+    bound_slots: () => [...slots.values()]
+      .filter((slot): slot is Slot & { binding: BoundSession } => slot.binding !== null)
+      .sort((left, right) => (left.key === "" ? -1 : right.key === "" ? 1 : left.key.localeCompare(right.key)))
+      .map((slot) => ({ key: slot.key, binding: slot.binding })),
+    waits,
+    signals: [signal, waitShutdown.signal],
+  });
+
+  // Collab Notes verbs (spec 5). Each is registered by a literal call so the
+  // execution-seat classification test sees it; the profile decides whether
+  // the wrapper above keeps it. Their schemas set types only: the verbs check
+  // lengths, ranges and allowed values themselves, so a refusal carries the
+  // verbs' {code, message, remedy} instead of the SDK's validation text. The
+  // descriptions state the limits.
+  server.registerTool(
+    "collab_arrive",
+    {
+      title: "Arrive, or look around",
+      description:
+        "Start your coordination session on this slot, or, when it already has one, see who you are, who is here, " +
+        "what is open and what waits on you. On a slot that already has a session it writes nothing unless " +
+        "revise_purpose is true. With binding_key it starts a named child of a session this MCP process holds, which " +
+        "shares that parent's voice. It never moves the legacy cursor, and never resumes or adopts another process's session. " +
+        "A new session's read mark starts at the journal head; when others were here first, before_you_arrived gives the " +
+        "collab_inbox call that reads back, and left_for_your_name points at items addressed to ended sessions that used " +
+        "your name (names are self-declared: this routes reading, it passes on nothing those sessions held).",
+      annotations: localMutation,
+      inputSchema: {
+        // Required, but checked by the verb: a missing purpose, the likeliest
+        // first mistake, then gets invalid_purpose with a remedy, not the SDK's text.
+        purpose: z.string().optional()
+          .describe("Required. What you are here to do, in one line of at most 200 characters. Self-declared; revisable."),
+        name: z.string().optional()
+          .describe("Display name, at most 200 characters. Default: the verified Claude Code name, else <host>-<6 hex of the session id>; a named slot defaults to <parent name>/<binding_key>."),
+        model: z.string().optional()
+          .describe("Your model lineage, at most 200 characters, for example claude-opus-5.5. Self-declared; shown, never counted."),
+        root_path: z.string().optional()
+          .describe("Your repository root. Default: this MCP server's working directory when it is in a git worktree outside the collab package (otherwise the call is refused and asks for root_path); a named slot defaults to the parent's worktree."),
+        revise_purpose: z.boolean().optional()
+          .describe("On a slot that already has a session: record purpose as your current purpose."),
+        parent: z.string().optional()
+          .describe("With binding_key: the session this MCP process holds that the new session descends from (id, session# handle or name; at most 200 characters)."),
+      },
+    },
+    async (input) => noteCall(() => arriveVerb(noteContext(), input), input),
+  );
+
+  server.registerTool(
+    "collab_inbox",
+    {
+      title: "What is for you, and one thread",
+      description:
+        "Items addressed to you since your read mark, oldest first, with what waits on you whatever the mark. " +
+        "With about (an id or handle such as report#3fa91c or task#0b12de): that report and everything answering it, " +
+        "or a task's holder, completion and reviews. With since (a journal sequence; 0 is the start): a look-back over " +
+        "what came after it, one line per thing, in the same shape; it only reads, so it moves no mark, runs no " +
+        "housekeeping and records nothing as delivered. wait_seconds waits, reading only, for a new item for you, or for " +
+        "the close of a ballot you may vote in, opened or cast in; with about or since it is ignored and the call does not " +
+        "wait. Otherwise it moves its own read mark and last-seen time, never the legacy cursor.",
+      annotations: localMutation,
+      inputSchema: {
+        about: z.string().optional()
+          .describe("One thread: a report, proposal, ballot or task id or handle (at most 300 characters); not a session."),
+        since: z.number().optional()
+          .describe("A whole number, 0 or more: read back from just after this journal sequence, oldest first, without moving your mark; with include all, every item."),
+        wait_seconds: z.number().optional()
+          .describe("A whole number from 0 to 30: with nothing new for you, wait up to this long for an item or a ballot's close; default 0. Ignored with about or since."),
+        include: z.string().optional()
+          .describe("for_me (the default), or all to add unaddressed items as subject lines."),
+        limit: z.number().optional().describe("Items per call, a whole number from 1 to 50; default 20."),
+        format: z.string().optional()
+          .describe("json (the default), or note: with about, the thread root and its state as one collab-note/1 text of at most 800 characters, for a person to carry."),
+      },
+    },
+    async (input, ctx) => noteCall(() => inboxVerb(noteContext(ctx.mcpReq?.signal), input), input),
+  );
+
+  const noteReason = z.object({
+    text: z.string().describe("One reason, at most 300 characters."),
+    basis: z.string().optional().describe("How you know it: seen, told, inferred or quoted."),
+    cites: z.array(z.number()).optional().describe("1-based positions in evidence that this reason rests on."),
+  });
+  const noteEvidence = z.array(z.string()).optional().describe(
+    "Up to 16 pointers, one line each: file <repo path>[:a-b] | commit <sha> | test <command> exit=<n> | url <url> | " +
+      "data <label> sha256=<hex> | msg <channel> <id> | report:<id> | event:<id> | artifact:<id> | checkpoint:<id>. " +
+      "Files inside your worktree are hashed by the server; nothing else is fetched or rerun.",
+  );
+
+  server.registerTool(
+    "collab_note",
+    {
+      title: "Say something on the record",
+      description:
+        "Post a note: act note (the default), support, challenge, resolve, withdraw, accept, request_changes, relay_rejection or decide. " +
+        "text is the statement on its first line, then an optional body; a text that begins with an act word and \": \" " +
+        "is read whole as a collab-note/1 note. Reasons say how each is known; outside evidence is recorded once per note. " +
+        "Only the challenger can lift a challenge; anyone else's resolve is recorded as an answer to them. A support is a " +
+        "position, not a permission. A decide's authority is derived by the server: on a proposal the person agreed to, its extent; " +
+        "otherwise nothing, or this session's own record, never the person's agreement. dry_run checks and shows the note, writing nothing.",
+      annotations: localMutation,
+      inputSchema: {
+        text: z.string().describe("The statement (first line, at most 200 characters), then a blank line and any body."),
+        act: z.string().optional().describe("note | support | challenge | resolve | withdraw | accept | request_changes | relay_rejection | decide."),
+        re: z.string().optional().describe("What this answers: report#…, proposal#…, task#…, a full id, or file:/lobby:/msg: text. Required for every act but note."),
+        to: z.string().optional().describe("A session that has arrived here (name or id), person, or all; for an agent who comes later, all. Default: whoever the act answers."),
+        via: z.string().optional().describe("host:… | file:… | lobby:… | msg:…: the text came from another channel, so seen and quoted reasons are recorded as told."),
+        why: z.array(noteReason).optional().describe("Up to 8 reasons."),
+        evidence: noteEvidence,
+        limits: z.string().optional().describe("What this does not cover; what was not checked (at most 2,000 characters)."),
+        extent: z.string().optional().describe("Where this stops (at most 1,000 characters). A decide on a proposal takes the agreed extent and refuses another."),
+        outcome: z.string().optional().describe("For decide only: proceed (the default), do_not_proceed or no_decision."),
+        replaces: z.string().optional().describe("With act challenge: your earlier challenge this one replaces; it is withdrawn in the same transaction."),
+        dry_run: z.boolean().optional().describe("Parse, check and render; write nothing."),
+      },
+    },
+    async (input) => noteCall(() => noteVerb(noteContext(), input), input),
+  );
+
+  server.registerTool(
+    "collab_take",
+    {
+      title: "Take a piece of work",
+      description:
+        "Create a task with title and claim it, or claim task. With paths the task is an edit task that waits for a distinct " +
+        "reviewer; without, a coordination task you report done. A lapsed lease is recovered only with because. A path " +
+        "overlap names who holds it and how to ask them. A lease is coordination, not ownership or a lock.",
+      annotations: localMutation,
+      inputSchema: {
+        task: z.string().optional().describe("An existing task: task#… or its id."),
+        title: z.string().optional().describe("A new task's title, at most 300 characters."),
+        paths: z.array(z.string()).optional().describe("Repository-relative paths the new task edits."),
+        purpose: z.string().optional().describe("Why you take it, at most 200 characters; written into a new task's description only."),
+        review: z.string().optional().describe("required | none: override whether a new task waits for review."),
+        because: z.string().optional().describe("Why you recover a lapsed lease (at most 4,000 characters)."),
+      },
+    },
+    async (input) => noteCall(() => takeVerb(noteContext(), input), input),
+  );
+
+  server.registerTool(
+    "collab_done",
+    {
+      title: "End your hold, or leave",
+      description:
+        "outcome finished (the default) reports the work done, with its reasons, evidence (attached as artifacts) and limits; " +
+        "released gives it back; blocked records because as the blocker; leave releases every hold and ends this session, " +
+        "after which it is no voice in new proposals here. task defaults to the one task you hold.",
+      annotations: localDestructiveMutation,
+      inputSchema: {
+        text: z.string().describe("What you did or why you stop: a statement, then any body."),
+        outcome: z.string().optional().describe("finished | released | blocked | leave."),
+        task: z.string().optional().describe("The task, when you hold more than one."),
+        why: z.array(noteReason).optional().describe("Up to 8 reasons (finished)."),
+        evidence: noteEvidence,
+        limits: z.string().optional().describe("What the work does not cover (finished; at most 2,000 characters)."),
+        review_by: z.string().optional().describe("An active session's name or id to ask for the review (finished, reviewed tasks); leave it out when nobody else is here."),
+        because: z.string().optional().describe("The blocker (blocked), or why held work is left unfinished (leave); at most 2,000 characters."),
+      },
+    },
+    async (input) => noteCall(() => doneVerb(noteContext(), input), input),
+  );
+
+  server.registerTool(
+    "collab_propose",
+    {
+      title: "Put a direction to the agents and the person",
+      description:
+        "Open a consent/v1 proposal: the agents settle a position by lazy consensus (support and challenge with collab_note), " +
+        "and the person decides at his own desk. The question is stored verbatim, so its bytes and proposal_sha256 are what " +
+        "collab_proposal_open makes from the same terms. evidence and limits enter the bytes the person signs. With replaces, " +
+        "the standing objections to your earlier proposal are carried into its terms as text and each reachable objector is told; " +
+        "under consent/v1 a carried objection does not block. The position authorises nothing; no agent tool records agreement.",
+      annotations: localMutation,
+      inputSchema: {
+        question: z.string().describe("What is being decided, stored verbatim (at most 8,000 characters)."),
+        criteria: z.string().describe("How the parties judge which way to go (at most 4,000 characters)."),
+        extent: z.string().describe("What agreement would authorise, and where it stops (at most 1,000 characters)."),
+        closes: z.union([z.number(), z.string()]).optional()
+          .describe("When the agents' consultation closes: seconds (600 to 604,800), a duration such as 30m, 6h or 2d, or an ISO time. Default 6 hours."),
+        conflicts: z.string().optional()
+          .describe("Context that disagrees, and how this proposal reads it (at most 4,000 characters, carried objections included)."),
+        evidence: noteEvidence,
+        limits: z.string().optional().describe("What this proposal does not cover; what was not checked (at most 2,000 characters)."),
+        topic: z.string().optional().describe("A label for later reading, for example principle:<name> (at most 200 characters)."),
+        replaces: z.string().optional().describe("Your own earlier proposal, still on the table, that this one replaces (id or proposal# handle)."),
+      },
+    },
+    async (input) => noteCall(() => proposeVerb(noteContext(), input), input),
+  );
+
+  server.registerTool(
+    "collab_poll",
+    {
+      title: "Open a sealed ballot on a real choice",
+      description:
+        "Ask the agents here which of 2 to 9 named options they find acceptable (approval). Every cast stays sealed " +
+        "until the close; then the votes are revealed and the result computed. The electorate is fixed now: by default " +
+        "the active sessions seen in the last 30 minutes that have used the notes surface, plus you; with voters, exactly " +
+        "those sessions. Sessions sharing a declared host handle count as one unit. Not for \"may we proceed\" (that is " +
+        "collab_propose) and not for a checkable fact. A result is the agents' preference and authorises nothing.",
+      annotations: localMutation,
+      inputSchema: {
+        question: z.string().optional().describe("Required. The choice put to the agents, at most 500 characters."),
+        options: z.array(z.object({ key: z.string(), label: z.string() })).optional()
+          .describe("Required. 2 to 9 options: key (letters, digits, _ or -, at most 32) and label (one line, at most 120)."),
+        closes: z.union([z.number(), z.string()]).optional()
+          .describe("Required. When it closes: seconds, a duration such as 30m, 2h or 1d, or an ISO time; 1 minute to 7 days."),
+        criteria: z.string().optional().describe("What makes an option acceptable, at most 2,000 characters; advice when absent."),
+        pick: z.number().optional().describe("The most options one unit may approve, 1 to the number of options; default any."),
+        quorum: z.number().optional().describe("Units that must cast (abstentions count) for a result, 2 to the electorate size; default 2."),
+        voters: z.array(z.string()).optional().describe("The sessions to poll, by id, session# handle or name; default the electorate above."),
+        close_when_all_cast: z.boolean().optional()
+          .describe("Close as soon as every unit has cast instead of waiting for closes; off by default, and stated in the terms."),
+      },
+    },
+    async (input) => noteCall(() => pollVerb(noteContext(), input), input),
+  );
+
+  server.registerTool(
+    "collab_vote",
+    {
+      title: "Cast your sealed vote",
+      description:
+        "Approve the options you find acceptable in a ballot (choice: option keys, or [] to abstain). The vote is sealed " +
+        "in a file beside the journal and committed by hash; no collab tool, event or doorbell shows it before the close, " +
+        "and this result returns nothing of it. Vote before you read others' answers. You may cast up to 3 times in one " +
+        "ballot; only your latest counts. A vote needs no reason, but one is shown with it at the close.",
+      annotations: localMutation,
+      inputSchema: {
+        ballot: z.string().optional().describe("Required. The ballot: its id or ballot# handle."),
+        choice: z.array(z.string()).optional().describe("Required. The option keys you approve, or [] to abstain."),
+        why: z.array(noteReason).optional().describe("Up to 4 reasons of at most 300 characters each."),
+        evidence: z.array(z.string()).optional().describe(
+          "Up to 4 pointers, one line each, as for collab_note; files inside your worktree are hashed now and sealed with the vote.",
+        ),
+        shared: z.string().optional().describe("What you share with the other voters (model, context, sources), at most 200 characters."),
+      },
+    },
+    async (input) => noteCall(() => voteVerb(noteContext(), input), input),
+  );
 
   server.registerTool(
     "collab_session_join",
@@ -303,6 +617,12 @@ export function buildCollabMcpServer(
         role: z.string().max(200).optional(),
         parent_session_id: z.string().min(1).optional(),
         repository_key: z.string().min(1).max(1000).optional(),
+        seat_ref: z.string().min(1).max(MAX_SEAT_REF).optional()
+          .describe(
+            "Opaque, unverified routing hint naming the execution seat that started this session. " +
+              "Omit it to use the host's declaration (AGENTOOL_COLLAB_SEAT_REF, else claude-code:<CLAUDE_CODE_SESSION_ID>); " +
+              "it authenticates nothing",
+          ),
       },
     },
     async (input) => call(() => {
@@ -319,12 +639,22 @@ export function buildCollabMcpServer(
       if (requestSlot.getStore()!.key && input.actor === undefined) {
         throw new CollabError("actor_required", "A named child binding requires its own explicit actor");
       }
-      const handle = store.startSession({ ...input, actor: input.actor ?? defaultActor() });
+      // This process holds the parent's credential only when the parent is one
+      // of its own bindings; only then is the lineage attested for consent.
+      const parentAttested = input.parent_session_id !== undefined
+        && [...slots.values()].some((slot) => slot.binding?.handle.session.id === input.parent_session_id);
+      const seatRef = input.seat_ref ?? defaultSeatRef(environment);
+      const handle = store.startSession({
+        ...input,
+        actor: input.actor ?? defaultActor(),
+        parent_attested: parentAttested,
+        seat_ref: seatRef,
+      });
       const credentialFile = store.defaultSessionCredentialPath(handle.session.id);
       try {
         const path = writeSessionCredentialFile(credentialFile, handle.credential);
         state.binding = { handle, credential_file: path };
-        return publicSessionBinding(state.binding);
+        return publicSessionBinding(state.binding, seatRef);
       } catch (error) {
         try {
           store.endSession({ ...handle.credential, reason: "credential_file_write_failed" });
@@ -884,6 +1214,10 @@ export function buildCollabMcpServer(
         ),
         authority_scope: z.string().max(1000).optional(),
         authority_basis: z.string().max(2000).optional(),
+        to_person: z.boolean().optional().describe(
+          "Also place this report in the person's inbox at the person desk, for example to ask them something. "
+          + "Routing, not access control or authority.",
+        ),
       },
     },
     async ({ workspace_id, ...input }) => call(() => {
@@ -912,6 +1246,95 @@ export function buildCollabMcpServer(
     async ({ workspace_id, ...options }) => call(() => ({
       reports: store.listReports(workspace_id, options),
     })),
+  );
+
+  server.registerTool(
+    "collab_proposal_open",
+    {
+      title: "Open a direction-level proposal for consent",
+      description:
+        `Open a proposal the agents settle by lazy consensus (${CONSENT_RULE}) before a person decides. `
+        + "Answer it with collab_report_append supports, challenges and resolves. The agents' position is "
+        + "computed from the journal and authorises nothing alone; a person consents only at the controlling "
+        + "terminal or with an enrolled passkey through the person desk, never through MCP. A challenge stands "
+        + "until its own voice resolves or withdraws it. Use it for design direction, criteria and extent, "
+        + "conflicting context and the reading of principles, not for every edit.",
+      annotations: localRetrySafeMutation,
+      inputSchema: {
+        workspace_id: workspaceId,
+        idempotency_key: key,
+        question: z.string().min(1).max(8000).describe("What is being decided"),
+        criteria: z.string().min(1).max(4000).describe("How the parties judge which way to go"),
+        extent: z.string().min(1).max(1000).describe("What agreement would authorise, and where it stops"),
+        known_conflicts: z.string().max(4000).optional()
+          .describe("Context that disagrees, and how this proposal reads it. Name conflicts; never resolve them silently."),
+        evidence_refs: evidenceRefs,
+        confidence: z.enum(["high", "medium", "low", "unknown"]).optional(),
+        confidence_basis: z.string().max(2000).optional(),
+        limits: z.string().max(2000).optional(),
+        origin: z.enum(["ai", "person_relayed"]).optional()
+          .describe("ai (the default), or person_relayed when relaying a person's proposal. Self-declared; the rule ignores it."),
+        topic: z.string().max(200).optional().describe("Optional label for later reading, for example principle:<name>"),
+        consult_seconds: z.number().int()
+          .min(MIN_PROPOSAL_CONSULT_SECONDS).max(MAX_PROPOSAL_CONSULT_SECONDS).optional()
+          .describe(`Consultation window; default ${DEFAULT_PROPOSAL_CONSULT_SECONDS} seconds`),
+        task_id: z.string().min(1).optional(),
+        supersedes_report_id: z.string().min(1).optional()
+          .describe("Your own earlier proposal that this one revises"),
+      },
+    },
+    async ({ workspace_id, ...input }) => call(() => {
+      requireWorkspace(workspace_id);
+      return { proposal: store.openProposalForSession({ ...boundCredential(), ...input }) };
+    }),
+  );
+
+  server.registerTool(
+    "collab_proposal_status",
+    {
+      title: "Read proposal consent status",
+      description:
+        "Read one proposal's consent status, or the most recent proposals newest first. The agents' position "
+        + "is computed from the journal. may_proceed is true only while the latest person act agrees, made at the "
+        + "controlling terminal or with an enrolled passkey; an agreement authorises only the proposal's extent.",
+      annotations: localReadOnly,
+      inputSchema: {
+        workspace_id: workspaceId,
+        proposal_report_id: z.string().min(1).optional()
+          .describe("One proposal; omit to list the most recent"),
+        limit: z.number().int().min(1).max(50).optional().describe("List size; default 20"),
+      },
+    },
+    async ({ workspace_id, proposal_report_id, limit }) => call(() => {
+      requireWorkspace(workspace_id);
+      return proposal_report_id
+        ? { proposal: store.proposalStatus(workspace_id, proposal_report_id) }
+        : store.listProposalStatuses(workspace_id, { limit });
+    }),
+  );
+
+  server.registerTool(
+    "collab_proposal_relay_rejection",
+    {
+      title: "Relay a person's rejection of a proposal",
+      description:
+        "Record that a person rejected these exact proposal bytes, as relayed by this session "
+        + "(basis relayed_by_session). A relayed rejection is forgeable, so it can only pause work. "
+        + "A person's consent is never recorded this way.",
+      annotations: localRetrySafeMutation,
+      inputSchema: {
+        workspace_id: workspaceId,
+        idempotency_key: key,
+        proposal_report_id: z.string().min(1),
+        proposal_sha256: z.string().length(64)
+          .describe("The proposal_sha256 the person saw, from collab_proposal_status"),
+        reason: z.string().min(1).max(2000).describe("The person's reason, in brief"),
+      },
+    },
+    async ({ workspace_id, ...input }) => call(() => {
+      requireWorkspace(workspace_id);
+      return { proposal: store.relayProposalRejectionForSession({ ...boundCredential(), ...input }) };
+    }),
   );
 
   server.registerTool(
@@ -1076,8 +1499,8 @@ export function buildCollabMcpServer(
         if (!Number.isInteger(duration) || duration < 0 || duration > MAX_WAIT_MS) {
           throw new CollabError("invalid_wait_ms", "wait_ms must be an integer from 0 to 30000");
         }
-        if (activeWaits >= 8) throw new CollabError("too_many_waits", "At most eight waits may run per endpoint");
-        activeWaits += 1;
+        if (waits.active >= waits.max) throw new CollabError("too_many_waits", "At most eight waits may run per endpoint");
+        waits.active += 1;
         counted = true;
         const signal = ctx.mcpReq?.signal;
         const check = () => {
@@ -1123,7 +1546,7 @@ export function buildCollabMcpServer(
         }
         return result;
       } finally {
-        if (counted) activeWaits -= 1;
+        if (counted) waits.active -= 1;
       }
     },
   );
@@ -1192,11 +1615,12 @@ function leaseMutationSchema<T extends z.ZodRawShape>(extra: T) {
   };
 }
 
-function publicSessionBinding(binding: BoundSession) {
+function publicSessionBinding(binding: BoundSession, seatRef: string | null) {
   return {
     workspace: binding.handle.workspace,
     worktree: binding.handle.worktree,
     session: binding.handle.session,
+    seat_ref: seatRef,
     credential_file_created: true,
     resume_environment_variable: "AGENTOOL_COLLAB_SESSION_FILE",
     session_file_name: `${binding.handle.session.id}.json`,

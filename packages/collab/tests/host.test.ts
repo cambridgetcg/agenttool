@@ -4,9 +4,10 @@ import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { defaultDatabasePath, resolveDatabasePath } from "../src/database-path.js";
 import { MAX_HOST_WAIT_MS, runCollabHostCli, waitForSessionEvents } from "../src/host.js";
+import { PERSON_DESK_USAGE } from "../src/person-desk.js";
 import type { EventCursor, SessionHandle } from "../src/protocol.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 const packageRoot = resolve(import.meta.dir, "..");
 const hostEntry = join(packageRoot, "bin", "agenttool-collab-host.ts");
@@ -216,9 +217,12 @@ describe("agenttool-collab-host end", () => {
       expect(JSON.parse(run.line)).toEqual({
         protocol: "agenttool.collab-host/1",
         status: "help",
-        usage: "usage: agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]"
+        usage: "usage: agenttool-collab-host end (--session-file <path> | --seat-ref <ref> [--seat-ref <ref>...])"
+          + " --reason <text> [--release-leases] [--db <path>]"
           + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]"
-          + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]",
+          + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]"
+          + ` | agenttool-collab-host person ... (${PERSON_DESK_USAGE})`
+          + " | agenttool-collab-host person-remote (SSH forced command; reads a JSON argv from SSH_ORIGINAL_COMMAND)",
       });
     }
   });

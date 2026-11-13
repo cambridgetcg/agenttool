@@ -99,7 +99,8 @@ first, because their source is already merged, and new design work after them.
    and the exit-door client; the prepared 0.23.0 candidate is skipped
    ([#496](https://github.com/cambridgetcg/agenttool/pull/496)). Then Collab
    0.5.1 on npm with the doorbell, from a main labelled 0.5.1-dev.0
-   ([#495](https://github.com/cambridgetcg/agenttool/pull/495)). Both wait on
+   ([#495](https://github.com/cambridgetcg/agenttool/pull/495)); the Collab Notes
+   source relabels it 0.6.0-dev.0, and the release's number is not chosen here. Both wait on
    npm trust for the public lane, which is not in place yet. Since npm's
    48-hour expiry rule, each package's stage-only trust is created just before
    its own release, not once for all (corrected 2026-10-28; see the

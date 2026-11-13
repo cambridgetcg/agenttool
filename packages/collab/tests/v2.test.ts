@@ -22,7 +22,7 @@ import { spawnSync } from "node:child_process";
 import { canonicalJson } from "../src/canonical.js";
 import { CollabError } from "../src/errors.js";
 import type { SessionHandle } from "../src/protocol.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 const GENESIS_HASH = "0".repeat(64);
 const APPLICATION_ID = 0x4154434c;
