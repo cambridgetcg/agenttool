@@ -122,6 +122,13 @@ export interface SetAsideChallengeInput {
   challenge_report_id: string;
   /** challengeContentSha256 of the challenge report: the objection's text is the text shown. */
   challenge_sha256: string;
+  /**
+   * The latest activity of any session of the challenger's voice, as the
+   * person is shown it (null for a challenge with no session). Only the
+   * voice's own sessions move it, so an assertion refused because the
+   * challenger came back can never record after it leaves again, unseen.
+   */
+  challenger_last_seen_at: string | null;
   reason: string;
   /** Person acts and set-asides on the proposal before this one, so one assertion records one act once. */
   prior_person_acts: number;
@@ -151,6 +158,7 @@ export type SetAsideRefusal =
   | "challenge_not_standing"
   | "already_set_aside"
   | "challenger_present"
+  | "challenger_changed"
   | "invalid_reason"
   | "proposal_hash_mismatch"
   | "challenge_hash_mismatch"
@@ -179,6 +187,10 @@ const REFUSALS: Record<SetAsideRefusal, { message: string; remedy: string }> = {
     message: "A session of the challenger's voice is live, so it can answer and lift its own challenge",
     remedy: "Ask that session to resolve or withdraw it (a desk note: `person say --workspace <id> --proposal <id> --body <text>`), "
       + "or reject the proposal. A session stops being live 6 hours after its last activity, or when it ends.",
+  },
+  challenger_changed: {
+    message: "A session of the challenger's voice was active after the objection was shown, so it may have said more",
+    remedy: "Run the command again, so the challenger's latest activity and what it wrote are shown before you confirm.",
   },
   invalid_reason: {
     message: `A set-aside needs a reason of 1 to ${MAX_SET_ASIDE_REASON} characters`,

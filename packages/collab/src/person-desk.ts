@@ -287,6 +287,7 @@ function runVerb(
           proposal_sha256: challenge.proposal_sha256,
           challenge_report_id: challenge.challenge_report_id,
           challenge_sha256: challenge.challenge_sha256,
+          challenger_last_seen_at: challenge.challenger_last_seen_at,
           reason: challenge.reason,
           expected_ai_snapshot: challenge.ai_snapshot,
         }),

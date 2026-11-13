@@ -1629,6 +1629,10 @@ var REFUSALS = {
     message: "A session of the challenger's voice is live, so it can answer and lift its own challenge",
     remedy: "Ask that session to resolve or withdraw it (a desk note: `person say --workspace <id> --proposal <id> --body <text>`), " + "or reject the proposal. A session stops being live 6 hours after its last activity, or when it ends."
   },
+  challenger_changed: {
+    message: "A session of the challenger's voice was active after the objection was shown, so it may have said more",
+    remedy: "Run the command again, so the challenger's latest activity and what it wrote are shown before you confirm."
+  },
   invalid_reason: {
     message: `A set-aside needs a reason of 1 to ${MAX_SET_ASIDE_REASON} characters`,
     remedy: "Give --reason with why this objection should no longer block; it is signed with the act and shown beside the challenge."
@@ -4971,6 +4975,7 @@ class CollabStoreCore {
         proof: null,
         proposal_sha256: validateSha256(input.proposal_sha256),
         challenge_sha256: validateSha256(input.challenge_sha256),
+        challenger_last_seen_at: input.challenger_last_seen_at,
         expected_ai_snapshot: input.expected_ai_snapshot
       });
     });
@@ -5006,6 +5011,7 @@ class CollabStoreCore {
         },
         proposal_sha256: facts.bytes.proposal_sha256,
         challenge_sha256: facts.bytes.challenge_sha256,
+        challenger_last_seen_at: facts.bytes.challenger_last_seen_at,
         expected_ai_snapshot: facts.bytes.ai_snapshot
       });
     });
@@ -5260,6 +5266,7 @@ class CollabStoreCore {
         proposal_sha256: terms.proposal_sha256,
         challenge_report_id: challengeId,
         challenge_sha256: challengeContentSha256(challenge),
+        challenger_last_seen_at: presence.last_seen_at,
         reason,
         prior_person_acts: this.personActCount(terms.report_id),
         prior_set_asides: this.setAsideCount(terms.workspace_id, terms.report_id),
@@ -5312,6 +5319,13 @@ class CollabStoreCore {
     const facts = this.setAsideFacts(terms, challengeId, reason);
     if (act.challenge_sha256 !== facts.bytes.challenge_sha256) {
       throw setAsideRefusal("challenge_hash_mismatch", { challenge_sha256: facts.bytes.challenge_sha256 });
+    }
+    if (act.challenger_last_seen_at !== facts.bytes.challenger_last_seen_at) {
+      throw setAsideRefusal("challenger_changed", {
+        challenge_report_id: challengeId,
+        shown_last_seen_at: act.challenger_last_seen_at,
+        last_seen_at: facts.bytes.challenger_last_seen_at
+      });
     }
     if (canonicalJson(act.expected_ai_snapshot) !== canonicalJson(facts.bytes.ai_snapshot)) {
       throw setAsideRefusal("ai_position_changed", { ai_snapshot: facts.bytes.ai_snapshot });
@@ -11129,6 +11143,7 @@ function runVerb(store2, verb, values, deps, rule) {
           proposal_sha256: challenge.proposal_sha256,
           challenge_report_id: challenge.challenge_report_id,
           challenge_sha256: challenge.challenge_sha256,
+          challenger_last_seen_at: challenge.challenger_last_seen_at,
           reason: challenge.reason,
           expected_ai_snapshot: challenge.ai_snapshot
         })

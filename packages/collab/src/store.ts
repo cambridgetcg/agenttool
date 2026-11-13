@@ -4146,6 +4146,7 @@ export class CollabStoreCore {
     act: "set_aside";
     challenge_report_id: string;
     challenge_sha256: string;
+    challenger_last_seen_at: string | null;
     reason: string;
     prior_person_acts: number;
     prior_set_asides: number;
@@ -4183,13 +4184,16 @@ export class CollabStoreCore {
    * Record a set-aside after the host CLI showed the objection in full, the
    * reason and the exact bytes on the controlling terminal and read "yes"
    * there. Everything is checked again inside the transaction, the
-   * challenger's absence included, so a change since the display refuses.
+   * challenger's absence and its latest activity included, so a change
+   * since the display refuses.
    */
   recordSetAsideAtTerminal(input: {
     proposal_report_id: string;
     proposal_sha256: string;
     challenge_report_id: string;
     challenge_sha256: string;
+    /** The challenger's latest activity as the terminal showed it. */
+    challenger_last_seen_at: string | null;
     reason: unknown;
     expected_ai_snapshot: AiSnapshot;
   }): ProposalStatus {
@@ -4203,6 +4207,7 @@ export class CollabStoreCore {
         proof: null,
         proposal_sha256: validateSha256(input.proposal_sha256),
         challenge_sha256: validateSha256(input.challenge_sha256),
+        challenger_last_seen_at: input.challenger_last_seen_at,
         expected_ai_snapshot: input.expected_ai_snapshot,
       });
     });
@@ -4249,6 +4254,7 @@ export class CollabStoreCore {
         },
         proposal_sha256: facts.bytes.proposal_sha256,
         challenge_sha256: facts.bytes.challenge_sha256,
+        challenger_last_seen_at: facts.bytes.challenger_last_seen_at,
         expected_ai_snapshot: facts.bytes.ai_snapshot,
       });
     });
@@ -4643,6 +4649,7 @@ export class CollabStoreCore {
         proposal_sha256: terms.proposal_sha256,
         challenge_report_id: challengeId,
         challenge_sha256: challengeContentSha256(challenge!),
+        challenger_last_seen_at: presence.last_seen_at,
         reason,
         prior_person_acts: this.personActCount(terms.report_id),
         prior_set_asides: this.setAsideCount(terms.workspace_id, terms.report_id),
@@ -4715,6 +4722,7 @@ export class CollabStoreCore {
       proof: PasskeyProof | null;
       proposal_sha256: string;
       challenge_sha256: string;
+      challenger_last_seen_at: string | null;
       expected_ai_snapshot: AiSnapshot;
     },
   ): ProposalStatus {
@@ -4724,6 +4732,14 @@ export class CollabStoreCore {
     const facts = this.setAsideFacts(terms, challengeId, reason);
     if (act.challenge_sha256 !== facts.bytes.challenge_sha256) {
       throw setAsideRefusal("challenge_hash_mismatch", { challenge_sha256: facts.bytes.challenge_sha256 });
+    }
+    // Absent now is not enough: a voice that came and went since the display may have said more.
+    if (act.challenger_last_seen_at !== facts.bytes.challenger_last_seen_at) {
+      throw setAsideRefusal("challenger_changed", {
+        challenge_report_id: challengeId,
+        shown_last_seen_at: act.challenger_last_seen_at,
+        last_seen_at: facts.bytes.challenger_last_seen_at,
+      });
     }
     if (canonicalJson(act.expected_ai_snapshot) !== canonicalJson(facts.bytes.ai_snapshot)) {
       throw setAsideRefusal("ai_position_changed", { ai_snapshot: facts.bytes.ai_snapshot });

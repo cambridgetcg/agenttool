@@ -934,6 +934,7 @@ export const FIXTURE_STEPS: FixtureStep[] = [
         proposal_sha256: shown.proposal_sha256,
         challenge_report_id: challengeId,
         challenge_sha256: shown.challenge_sha256,
+        challenger_last_seen_at: shown.challenger_last_seen_at,
         reason,
         expected_ai_snapshot: shown.ai_snapshot,
       });

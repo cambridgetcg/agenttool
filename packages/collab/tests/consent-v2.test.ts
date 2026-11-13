@@ -168,6 +168,7 @@ function setAsideAtTerminal(proposalId: string, challengeId: string, reason = "I
     proposal_sha256: shown.proposal_sha256,
     challenge_report_id: challengeId,
     challenge_sha256: shown.challenge_sha256,
+    challenger_last_seen_at: shown.challenger_last_seen_at,
     reason,
     expected_ai_snapshot: shown.ai_snapshot,
   });
@@ -366,6 +367,7 @@ describe("the set-aside clause", () => {
       proposal_sha256: shown.proposal_sha256,
       challenge_report_id: other.id,
       challenge_sha256: shown.challenge_sha256,
+      challenger_last_seen_at: shown.challenger_last_seen_at,
       reason: "Gone.",
       expected_ai_snapshot: shown.ai_snapshot,
       ...overrides,
@@ -511,6 +513,7 @@ describe("an agreement binds the set-asides it rests on", () => {
       proposal_sha256: proposal.proposal_sha256,
       challenge_report_id: challenge.id,
       challenge_sha256: createHash("sha256").update(challengeContentBytes(challenge)).digest("hex"),
+      challenger_last_seen_at: shown.challenger.last_seen_at,
       reason: "Gone.",
       prior_person_acts: 0,
       prior_set_asides: 0,
@@ -572,6 +575,50 @@ describe("a set-aside with a passkey", () => {
       proposal_report_id: proposal.proposal.id, challenge_report_id: challenge.id, reason: "Gone.",
       assertion: assert(passkey, issued.challenge),
     }))).toBe("challenger_present");
+  });
+
+  test("an assertion refused while the challenger was present never records after it leaves again", () => {
+    const passkey = makePasskey();
+    enrol(passkey);
+    const { proposal, challenge, challenger } = orphanedChallenge({ end: false });
+    const id = proposal.proposal.id;
+    advance(6 * HOUR + 1_000);
+    const issued = store.personSetAsideChallenge({ proposal_report_id: id, challenge_report_id: challenge.id, reason: "Its author left." });
+    expect(JSON.parse(issued.challenge_bytes).challenger_last_seen_at).toBe(issued.challenger.last_seen_at);
+    const assertion = assert(passkey, issued.challenge);
+    // The challenger comes back before the assertion is used, so it is refused.
+    const back = store.resumeSession(challenger.credential);
+    expect(codeOf(() => store.recordSetAsideWithPasskey({ proposal_report_id: id, challenge_report_id: challenge.id, reason: "Its author left.", assertion })))
+      .toBe("challenger_present");
+    // While present it writes more, keeps its challenge, and leaves.
+    advance(60_000);
+    store.appendReportForSession({
+      ...back.credential, idempotency_key: key("more"), kind: "observation", body: "New evidence: the rollout broke staging.",
+      relation: "supports", target_report_id: challenge.id,
+    });
+    store.endSession({ ...back.credential, reason: "done" });
+    // The same assertion, submitted again, signed a challenger the person no longer sees: refused.
+    expect(codeOf(() => store.recordSetAsideWithPasskey({ proposal_report_id: id, challenge_report_id: challenge.id, reason: "Its author left.", assertion })))
+      .toBe("passkey_challenge_mismatch");
+    expect(store.proposalStatusById(id).set_asides).toEqual([]);
+  });
+
+  test("the terminal refuses when the challenger was active between the display and the yes", () => {
+    const { proposal, challenge, challenger } = orphanedChallenge({ end: false });
+    const id = proposal.proposal.id;
+    advance(6 * HOUR + 1_000);
+    const shown = store.personSetAsideChallenge({ proposal_report_id: id, challenge_report_id: challenge.id, reason: "Gone." });
+    const back = store.resumeSession(challenger.credential);
+    store.endSession({ ...back.credential, reason: "came and went" });
+    expect(errorOf(() => store.recordSetAsideAtTerminal({
+      proposal_report_id: id,
+      proposal_sha256: shown.proposal_sha256,
+      challenge_report_id: challenge.id,
+      challenge_sha256: shown.challenge_sha256,
+      challenger_last_seen_at: shown.challenger_last_seen_at,
+      reason: "Gone.",
+      expected_ai_snapshot: shown.ai_snapshot,
+    }))).toMatchObject({ code: "challenger_changed", details: { remedy: expect.any(String) } });
   });
 });
 
