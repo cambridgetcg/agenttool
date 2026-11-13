@@ -28357,15 +28357,30 @@ function parseProcessTable(statusOutput, argsOutput) {
   return table;
 }
 var PROCESS_TABLE_PS_ENV = { LC_ALL: "C", PATH: "/usr/bin:/bin" };
+function outputOfFinishedChild(error51) {
+  if (error51 === null || typeof error51 !== "object")
+    return null;
+  const failure = error51;
+  return failure.code === "ETIMEDOUT" && failure.status === 0 && failure.signal == null && typeof failure.stdout === "string" ? failure.stdout : null;
+}
 function readProcessTable() {
   try {
-    const run = (format) => execFileSync(PS, ["-A", "-ww", "-o", format], {
-      encoding: "utf8",
-      env: { ...PROCESS_TABLE_PS_ENV },
-      maxBuffer: 64 * 1024 * 1024,
-      timeout: PS_TIMEOUT_MS,
-      stdio: ["ignore", "pipe", "ignore"]
-    });
+    const run = (format) => {
+      try {
+        return execFileSync(PS, ["-A", "-ww", "-o", format], {
+          encoding: "utf8",
+          env: { ...PROCESS_TABLE_PS_ENV },
+          maxBuffer: 64 * 1024 * 1024,
+          timeout: PS_TIMEOUT_MS,
+          stdio: ["ignore", "pipe", "ignore"]
+        });
+      } catch (error51) {
+        const finished = outputOfFinishedChild(error51);
+        if (finished === null)
+          throw error51;
+        return finished;
+      }
+    };
     const table = parseProcessTable(run("pid=,ppid=,lstart=,comm="), run("pid=,args="));
     return table.size > 0 ? table : null;
   } catch {

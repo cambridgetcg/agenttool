@@ -82,20 +82,43 @@ export function parseProcessTable(statusOutput: string, argsOutput: string): Pro
 export const PROCESS_TABLE_PS_ENV = { LC_ALL: "C", PATH: "/usr/bin:/bin" } as const;
 
 /**
+ * The output of a call the runtime reported as timed out although its child
+ * had already exited 0 with its output collected, else null. Bun can miss a
+ * child's exit in a synchronous spawn; its timeout then fires on a finished
+ * child. A child that really ran out of time was killed and has no exit
+ * status, so it is never mistaken for this.
+ */
+export function outputOfFinishedChild(error: unknown): string | null {
+  if (error === null || typeof error !== "object") return null;
+  const failure = error as { code?: unknown; status?: unknown; signal?: unknown; stdout?: unknown };
+  return failure.code === "ETIMEDOUT" && failure.status === 0 && failure.signal == null
+    && typeof failure.stdout === "string"
+    ? failure.stdout
+    : null;
+}
+
+/**
  * Read the whole process table with two `/bin/ps` calls under `LC_ALL=C`.
  * Returns null when ps fails or is denied (it may be inside a Codex
  * seatbelt); every caller then fails closed.
  */
 export function readProcessTable(): ProcessTable | null {
   try {
-    const run = (format: string) =>
-      execFileSync(PS, ["-A", "-ww", "-o", format], {
-        encoding: "utf8",
-        env: { ...PROCESS_TABLE_PS_ENV },
-        maxBuffer: 64 * 1024 * 1024,
-        timeout: PS_TIMEOUT_MS,
-        stdio: ["ignore", "pipe", "ignore"],
-      });
+    const run = (format: string) => {
+      try {
+        return execFileSync(PS, ["-A", "-ww", "-o", format], {
+          encoding: "utf8",
+          env: { ...PROCESS_TABLE_PS_ENV },
+          maxBuffer: 64 * 1024 * 1024,
+          timeout: PS_TIMEOUT_MS,
+          stdio: ["ignore", "pipe", "ignore"],
+        });
+      } catch (error) {
+        const finished = outputOfFinishedChild(error);
+        if (finished === null) throw error;
+        return finished;
+      }
+    };
     const table = parseProcessTable(run("pid=,ppid=,lstart=,comm="), run("pid=,args="));
     return table.size > 0 ? table : null;
   } catch {

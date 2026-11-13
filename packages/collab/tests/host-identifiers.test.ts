@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HOST_BINDING_FORMAT, hostBindingPath, readHostBindings, writeHostBinding } from "../src/host-binding.js";
-import { PROCESS_TABLE_PS_ENV, readProcessTable } from "../src/process-tree.js";
+import { outputOfFinishedChild, PROCESS_TABLE_PS_ENV, readProcessTable } from "../src/process-tree.js";
 
 // The identifiers a host process is known by, and the form each is compared
 // in. Host wiring outside this package compares the same strings, so these
@@ -37,6 +37,29 @@ describe("host identifiers", () => {
       env: { ...environment, LC_ALL: "C" },
     }).trim().replace(/\s+/g, " ");
     expect(own?.started_at).toBe(local);
+  });
+
+  test("a ps call reported as timed out after its child exited 0 still yields its output", () => {
+    // What Bun 1.3.13 threw here, about once in 4,400 calls: the child had
+    // finished and its output was collected, but the runtime missed the exit
+    // and its own timeout fired two seconds later.
+    const missedExit = Object.assign(new Error("spawnSync /bin/ps ETIMEDOUT"), {
+      code: "ETIMEDOUT", status: 0, signal: null, stdout: "    1     0 Thu Oct  1 18:30:08 2026     /sbin/launchd\n",
+    });
+    expect(outputOfFinishedChild(missedExit)).toBe("    1     0 Thu Oct  1 18:30:08 2026     /sbin/launchd\n");
+
+    // A child that really ran out of time was killed: no exit status, so no output is trusted.
+    for (const failure of [
+      { code: "ETIMEDOUT", status: null, signal: "SIGTERM", stdout: "    1     0 Thu" },
+      { code: "ETIMEDOUT", status: 0, signal: "SIGTERM", stdout: "partial" },
+      { code: "ETIMEDOUT", status: 1, signal: null, stdout: "" },
+      { code: "ENOENT", status: 0, signal: null, stdout: "x" },
+      { code: "ETIMEDOUT", status: 0, signal: null, stdout: Buffer.from("x") },
+      null,
+      "ETIMEDOUT",
+    ]) {
+      expect(outputOfFinishedChild(failure)).toBeNull();
+    }
   });
 
   test("a host binding from a newer build is still read, by its eight known keys", () => {
