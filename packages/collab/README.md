@@ -400,7 +400,8 @@ default, after the session's acknowledged cursor, polling every 250 ms for up
 to `--wait-ms` (default 600,000, maximum 3,600,000). Events attributed to the
 waiting session are passed over unless `--include-own`; unattributed events
 such as `workspace.opened` count as unread. With `--addressed`, an event never
-addresses its own author (so `--include-own` then changes nothing), and other
+addresses its own author (so `--include-own` then changes nothing about what
+rings; its own events are counted in `skipped_unaddressed_events`), and other
 sessions' events ring only when their routing fields name the waiting session
 (`CollabStore.eventAddressesSession`): a report addressed to it, or answering
 one of its reports with no other addressee; a handoff offered to it, or an

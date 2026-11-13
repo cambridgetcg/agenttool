@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
@@ -193,36 +193,100 @@ describe("Claude Code collab doorbell watcher against a declared rest", () => {
     mail(peer, own, "fresh");
     await until(() => rings.length === 1);
     expect(rings[0]).toContain("[collab doorbell] ready");
-    expect(rings[0]).toContain("1 event(s) before that anchor were passed over");
+    expect(rings[0]).toContain("1 earlier event(s) before that anchor went without a ring");
     expect(rings[0]).toContain("collab_next");
     expect(rings[0]).not.toContain("body-held-during-rest");
     watcher.kill("SIGTERM");
     await watcher.exited;
   }, 30_000);
 
+  test("a ring that was waiting out the gap is delivered before the watcher's life ends", async () => {
+    const own = listener("gap-at-expiry");
+    const peer = store.startSession({ root_path: root, actor: "peer" });
+    const watcher = startWatcher(own.session.id, 3_000, ["--min-gap-ms", "4000"]);
+    await until(() => logOf(own.session.id).includes('"start"'));
+
+    mail(peer, own, "first");
+    await until(() => rings.length === 1);
+    // Ready inside the gap; the lifetime runs out before the gap does.
+    mail(peer, own, "second");
+    expect(await watcher.exited).toBe(0);
+    expect(rings).toHaveLength(3);
+    expect(rings[1]).toContain("[collab doorbell] ready");
+    expect(rings[2]).toContain("expired after");
+  }, 30_000);
+
+  test("a rest declared in that last gap silences both the delayed ring and the expiry line", async () => {
+    const own = listener("rest-at-expiry");
+    const peer = store.startSession({ root_path: root, actor: "peer" });
+    const watcher = startWatcher(own.session.id, 3_000, ["--min-gap-ms", "4000"]);
+    await until(() => logOf(own.session.id).includes('"start"'));
+
+    mail(peer, own, "first");
+    await until(() => rings.length === 1);
+    mail(peer, own, "second");
+    await Bun.sleep(800);
+    store.restSessionForSession({ ...own.credential, idempotency_key: "rest-in-last-gap", mode: "resting" });
+    expect(await watcher.exited).toBe(0);
+    expect(rings).toHaveLength(1);
+    expect(logOf(own.session.id)).toContain("expired_in_held_rest");
+  }, 30_000);
+
+  test("a ring that fails keeps the count, so the next ring still points at collab_next", async () => {
+    const own = listener("failed-ring");
+    const peer = store.startSession({ root_path: root, actor: "peer" });
+    store.restSessionForSession({
+      ...own.credential, idempotency_key: "short-rest", mode: "resting",
+      until: new Date(Date.now() + 2_000).toISOString(),
+    });
+    const watcher = startWatcher(own.session.id, 60_000);
+    await until(() => logOf(own.session.id).includes('"start"'));
+    mail(peer, own, "held-during-rest");
+    await until(() => logOf(own.session.id).includes('"held"'));
+    await until(() => store.getCoordinationSession(own.session.id)?.rest === null, 6_000);
+    await Bun.sleep(1_200);
+
+    // The inbox path is still there but nothing answers: the next ring cannot get through.
+    await new Promise<void>((closed) => server.close(() => closed()));
+    expect(existsSync(socketPath)).toBe(true);
+    mail(peer, own, "ring-fails");
+    await until(() => logOf(own.session.id).includes('"ring_failed"'));
+    // Listen again without the path ever being absent (the watcher would read that as its owner gone).
+    await new Promise<void>((ready) => server.listen(`${socketPath}.next`, ready));
+    renameSync(`${socketPath}.next`, socketPath);
+
+    mail(peer, own, "ring-arrives");
+    await until(() => rings.length === 1);
+    // One note held by the rest, one whose ring failed: both lie before this ring's anchor.
+    expect(rings[0]).toContain("2 earlier event(s) before that anchor went without a ring");
+    expect(rings[0]).toContain("collab_next");
+    watcher.kill("SIGTERM");
+    await watcher.exited;
+  }, 30_000);
+
   test("the stopped notice asks the journal, not its memory, whether the session rests", async () => {
-    // Rested when the watcher last heard, returned since: it must be told.
+    // Two sessions, one watcher each, running side by side.
+    // returned: rested when its watcher last heard, returned since. It must be told.
     const returned = listener("returned-rester");
     store.restSessionForSession({ ...returned.credential, idempotency_key: "rest", mode: "resting" });
     const first = startWatcher(returned.session.id, 60_000);
-    await until(() => logOf(returned.session.id).includes('"held"'));
-    store.restSessionForSession({ ...returned.credential, idempotency_key: "return", mode: "ready" });
-    // A resume elsewhere raises the generation; the credential file the watcher reads is now stale for good.
-    store.resumeSession(returned.credential);
-    expect(await first.exited).toBe(1);
-    expect(rings).toHaveLength(1);
-    expect(rings[0]).toContain("[collab doorbell] stopped: session_auth_failed");
-    expect(logOf(returned.session.id)).not.toContain("stopped_in_held_rest");
-
-    // Awake when the watcher last heard, resting since: it must be left alone.
-    rings.length = 0;
+    // resting: awake when its watcher last heard, resting since. It must be left alone.
     const resting = listener("late-rester");
     const second = startWatcher(resting.session.id, 60_000);
+    await until(() => logOf(returned.session.id).includes('"held"'));
     await until(() => logOf(resting.session.id).includes('"idle"'));
+
+    store.restSessionForSession({ ...returned.credential, idempotency_key: "return", mode: "ready" });
     store.restSessionForSession({ ...resting.credential, idempotency_key: "rest", mode: "resting" });
+    // A resume elsewhere raises the generation; the credential files the watchers read are now stale for good.
+    store.resumeSession(returned.credential);
     store.resumeSession(resting.credential);
+
+    expect(await first.exited).toBe(1);
     expect(await second.exited).toBe(1);
-    expect(rings).toEqual([]);
+    expect(rings).toHaveLength(1);
+    expect(rings[0]).toContain(`[collab doorbell] stopped: session_auth_failed for session ${returned.session.id}`);
+    expect(logOf(returned.session.id)).not.toContain("stopped_in_held_rest");
     expect(logOf(resting.session.id)).toContain("stopped_in_held_rest");
   }, 60_000);
 });

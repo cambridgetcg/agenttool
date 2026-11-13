@@ -183,9 +183,9 @@ function sessionActive(): boolean {
 
 const ownerGone = () => (ownerPid !== null && !alive(ownerPid)) || !existsSync(socket);
 
-function waitOnce(after: Anchor): Promise<WaitReceipt> {
+function waitOnce(after: Anchor, waitMs = cycleMs): Promise<WaitReceipt> {
   const args = [hostBin, "wait", "--session", sessionId, "--db", dbPath,
-    "--after-anchor", JSON.stringify(after), "--wait-ms", String(cycleMs)];
+    "--after-anchor", JSON.stringify(after), "--wait-ms", String(waitMs)];
   if (addressed) args.push("--addressed");
   if (values["include-own"]) args.push("--include-own");
   return new Promise((resolveReceipt) => {
@@ -230,25 +230,43 @@ function ring(text: string): Promise<boolean> {
 /**
  * Whether the session rests, right now, without wake_on "addressed". Asked of
  * the quiet `knocks --session` verb: it needs no credential, so it still
- * answers when the wait itself is failing. If it cannot be read, the last
- * receipt's answer stands.
+ * answers when the wait itself is failing. Only a knock line counts as an
+ * answer. If there is none (an older host bin, an unreadable journal, no reply
+ * within five seconds), the last receipt's answer stands.
  */
 function restHoldsNow(): Promise<boolean> {
   return new Promise((resolveHeld) => {
     const proc = spawn(process.execPath, [hostBin, "knocks", "--session", sessionId, "--db", dbPath], {
       stdio: ["ignore", "pipe", "ignore"],
     });
+    child = proc;
     let out = "";
+    let settled = false;
+    const settle = (held: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (child === proc) child = null;
+      resolveHeld(held);
+    };
+    const timer = setTimeout(() => {
+      proc.kill("SIGTERM");
+      settle(heldByRest);
+    }, 5_000);
     proc.stdout!.on("data", (chunk) => {
       out += chunk;
     });
-    proc.on("error", () => resolveHeld(heldByRest));
-    proc.on("close", () => {
+    proc.on("error", () => settle(heldByRest));
+    proc.on("close", (code) => {
       try {
-        const report = JSON.parse(out.split("\n")[0] ?? "") as { rest?: { wake_on?: string[] } | null };
-        resolveHeld(report.rest != null && !(report.rest.wake_on ?? []).includes("addressed"));
+        const report = JSON.parse(out.split("\n")[0] ?? "") as {
+          protocol?: string;
+          rest?: { wake_on?: string[] } | null;
+        };
+        if (code !== 0 || report.protocol !== "agenttool.collab-knock/1") return settle(heldByRest);
+        settle(report.rest != null && !(report.rest.wake_on ?? []).includes("addressed"));
       } catch {
-        resolveHeld(heldByRest);
+        settle(heldByRest);
       }
     });
   });
@@ -265,9 +283,13 @@ let authRetries = 0;
 // no turn. It can be a whole cycle old, so it is only the fallback for
 // restHoldsNow(), which the watcher's own notices ask before they ring.
 let heldByRest = false;
-// Events passed over because of a rest since the last ring. The next ring
-// says so: its anchor lies past them, and only collab_next reads from the cursor.
-let heldSinceRing = 0;
+// Events that went without a ring since the last one that got through: held
+// by a rest, or covered by a ring that failed. The next ring says so: its
+// anchor lies past them, and only collab_next reads from the cursor.
+let unrungSinceRing = 0;
+// A ring was delayed by the gap: the next turn asks the wait again at once,
+// before the lifetime check, so a ready note is not lost to an expiry.
+let recheck = false;
 log({
   event: "start", pid: process.pid, workspace_id: workspaceId, after_sequence: anchor.sequence, addressed,
   ...(testMaxMs === null ? {} : { test_max_ms: testMaxMs }),
@@ -275,7 +297,7 @@ log({
 
 while (true) {
   if (ownerGone()) stop("owner_gone");
-  if (Date.now() - started >= maxMs) {
+  if (!recheck && Date.now() - started >= maxMs) {
     if (await restHoldsNow()) {
       log({ event: "expired_in_held_rest" });
       stop("max_lifetime");
@@ -284,12 +306,14 @@ while (true) {
       + `${maxMs / 3_600_000} h. Re-arm it if you still want to be rung.`);
     stop("max_lifetime");
   }
-  const receipt = await waitOnce(anchor);
+  const delayed = recheck;
+  recheck = false;
+  const receipt = await waitOnce(anchor, delayed ? 0 : cycleMs);
   if (receipt.status === "idle" && receipt.next_anchor) {
     anchor = receipt.next_anchor;
     authRetries = 0;
     heldByRest = receipt.held_by_rest === true;
-    heldSinceRing += receipt.skipped_held_events ?? 0;
+    unrungSinceRing += receipt.skipped_held_events ?? 0;
     log({ event: heldByRest ? "held" : "idle", next_sequence: anchor.sequence });
     continue;
   }
@@ -301,18 +325,19 @@ while (true) {
     // what reads it; if nothing changed it answers ready at once and rings
     // once for everything up to the head.
     const gap = lastRing + minGapMs - Date.now();
-    if (gap > 0) {
+    if (gap > 0 && !delayed) {
       await sleep(gap);
+      recheck = true;
       continue;
     }
     if (ownerGone()) stop("owner_gone");
     const from = receipt.next_anchor;
     const covered = head();
     const what = addressed ? "at least one routed to this session" : "at least one from another session";
-    heldSinceRing += receipt.skipped_held_events ?? 0;
-    const passedOver = heldSinceRing > 0
-      ? `While this session rested, ${heldSinceRing} event(s) before that anchor were passed over without a ring: `
-        + "read from your cursor with collab_next first. "
+    unrungSinceRing += receipt.skipped_held_events ?? 0;
+    const passedOver = unrungSinceRing > 0
+      ? `${unrungSinceRing} earlier event(s) before that anchor went without a ring `
+        + "(held by a rest, or a ring that did not get through): read from your cursor with collab_next first. "
       : "";
     const rang = await ring(`[collab doorbell] ready: workspace ${workspaceId}, session ${sessionId}: `
       + `${covered.sequence - from.sequence} event(s) after sequence ${from.sequence} `
@@ -320,7 +345,8 @@ while (true) {
       + `Read them with collab_events_wait or collab_events_since after_anchor ${JSON.stringify(from)}. `
       + passedOver
       + `Watcher pid ${process.pid} re-arms itself; stop it with kill ${process.pid}.`);
-    heldSinceRing = 0;
+    // A ring that failed leaves its events unrung too: the anchor moves on either way.
+    unrungSinceRing = rang ? 0 : unrungSinceRing + (covered.sequence - from.sequence);
     lastRing = Date.now();
     log({ event: rang ? "rang" : "ring_failed", from_sequence: from.sequence, head_sequence: covered.sequence });
     if (!rang && ownerGone()) stop("owner_gone");

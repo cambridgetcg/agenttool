@@ -204,6 +204,8 @@ export interface HostWaitReceipt {
    * Present when the first unread event exceeds the bounded page and could
    * not be inspected. On an idle receipt it means a standing rest kept the
    * wait before that event: nothing behind it can ring until the rest is over.
+   * head_sequence is then only a lower bound: the page that would have
+   * carried the head could not be read.
    */
   first_event_oversized?: true;
   /**
