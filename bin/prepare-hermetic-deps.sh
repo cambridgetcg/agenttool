@@ -80,6 +80,7 @@ readonly -a PACKAGE_WORKSPACES=(
   packages/execution-seat
   packages/lobby
   packages/lobby-doorbell
+  packages/house
   packages/browser
   packages/hf-scout
   packages/hf-training-garden
