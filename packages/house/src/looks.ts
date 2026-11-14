@@ -6,13 +6,14 @@
  * and booleans, and dropped. Nothing here writes, searches or follows a link it
  * was not told to read.
  */
-import { join } from "node:path";
+import { basename, dirname, join, normalize, resolve } from "node:path";
 import { isFail, type EntryKind, type HouseFs } from "./fs.js";
 import {
-  CONTAINER_MARKERS, COMMAND_DIRECTORIES, NAMED_COMMANDS, VERSION_NAME, WRAPPER_NAME,
-  installReferences, rootPath, safeRelative, type InstallReference, type RootName,
+  CONTAINER_MARKERS, COMMAND_DIRECTORIES, KNOWN_WRAPPERS, NAMED_COMMANDS, VERSION_NAME, WRAPPER_NAME,
+  installReferences, rootPath, rootRel, safeRelative, type InstallReference, type RootName,
 } from "./places.js";
-import { looksIdentifying, type PrivacyHints } from "./privacy.js";
+import { MOVING_VARIABLES, type MovingVariable } from "./parts.js";
+import { looksIdentifying, weatherWordsOnly, type PrivacyHints } from "./privacy.js";
 import { askArgv, assertAllowedArgv, childEnvironment, COLLAB_HOST_FILE, type AskName, type Runner } from "./run.js";
 
 export type Environment = Record<string, string | undefined>;
@@ -58,15 +59,14 @@ function assertPathAllowed(root: RootName, rel: string): void {
   }
 }
 
-/** lstat a fixed path under an allowed root. Every component from the root down
- * is lstat'ed; a link on the way is not followed (the final entry is reported
- * as a link, also not followed). */
-export function lookPath(deps: LookDeps, root: RootName, rel: string): PathLook {
-  assertPathAllowed(root, rel);
-  let path = rootPath(deps.home, root);
-  const parts = ["", ...rel.split("/")];
+/** lstat a path relative to the home directory, every component from the home
+ * down; a link on the way is not followed (the final entry is reported as a
+ * link, also not followed). */
+function lookFromHome(deps: LookDeps, rel: string): PathLook {
+  let path = deps.home;
+  const parts = rel.split("/");
   for (let index = 0; index < parts.length; index += 1) {
-    if (parts[index] !== "") path = join(path, parts[index]!);
+    path = join(path, parts[index]!);
     const stat = deps.fs.lstat(path);
     const last = index === parts.length - 1;
     if (isFail(stat)) {
@@ -78,6 +78,19 @@ export function lookPath(deps: LookDeps, root: RootName, rel: string): PathLook 
     if (stat.kind !== "directory") return { seen: "absent" };
   }
   return { seen: "absent" };
+}
+
+/** lstat a fixed path under an allowed root, every component from the home
+ * directory down (so a link at `~/.local` or `~/.local/share` is seen, not
+ * followed). */
+export function lookPath(deps: LookDeps, root: RootName, rel: string): PathLook {
+  assertPathAllowed(root, rel);
+  return lookFromHome(deps, `${rootRel(root)}/${rel}`);
+}
+
+/** lstat an allowed root itself, from the home directory down. */
+export function lookRoot(deps: LookDeps, root: RootName): PathLook {
+  return lookFromHome(deps, rootRel(root));
 }
 
 const SYSTEM_PATHS: readonly string[] = [
@@ -147,11 +160,36 @@ export function lookLink(deps: LookDeps, tool: string): LinkLook {
   if (link.kind !== "link") return tool_(null, "current is not a link");
   const target = deps.fs.readlink(join(dir, "current"));
   if (isFail(target)) return tool_(null, "the current link could not be read");
-  if (target.includes("/") || !VERSION_NAME.test(target)) {
+  // Resolved by its text alone, never by following it: `name`, `./name`, `name/` and the
+  // absolute path of the install directory's own entry all name the same directory.
+  const resolved = resolve(dir, target);
+  const name = basename(resolved);
+  if (dirname(resolved) !== dir || !VERSION_NAME.test(name) || name === "current") {
     return tool_(null, "the current link leads outside the install directory; it was not followed");
   }
-  if (!versions.includes(target)) return tool_(null, "the current link names a directory that is not an installed version");
-  return tool_(target, null);
+  // Decided by lstat, not by the capped listing, so a current version past the cap is still current.
+  const version = lookVersion(deps, tool, name);
+  if (version === "installed") return tool_(name, null);
+  if (typeof version === "object") return tool_(null, `the version the current link names could not be looked at: ${version.why}`);
+  return tool_(null, "the current link names a directory that is not an installed version");
+}
+
+export type VersionLook = "installed" | "not_installed" | "not_an_install" | { why: string };
+
+/** Whether one name in an install directory is an installed version (a directory, not a
+ * link, holding SOURCE.txt), by lstat alone. Used for a name a configuration or the
+ * current link gives, so the answer never depends on how many versions are listed. */
+export function lookVersion(deps: LookDeps, tool: string, name: string): VersionLook {
+  if (!/^[a-z0-9-]{1,40}$/.test(tool) || !VERSION_NAME.test(name) || name === "current") {
+    throw new LookRefused("a version look names one install directory and one version directory");
+  }
+  const at = lookPath(deps, "share", `${tool}/${name}`);
+  if (at.seen === "absent") return "not_installed";
+  if (at.seen === "unknown") return { why: at.why };
+  if (at.type !== "directory") return "not_an_install";
+  const source = lookPath(deps, "share", `${tool}/${name}/${SOURCE_FILE}`);
+  if (source.seen === "unknown") return { why: source.why };
+  return source.seen === "entry" && source.type === "file" ? "installed" : "not_an_install";
 }
 
 // ---------------------------------------------------------------- source
@@ -193,21 +231,39 @@ export function lookSource(deps: LookDeps, tool: string, version: string): Sourc
 
 export type HostName = "claude-code" | "codex";
 
-export const SWITCHES: Readonly<Record<string, readonly string[]>> = {
-  AGENTOOL_COLLAB_TOOLS: ["full", "notes"],
-  AGENTOOL_COLLAB_CONSENT_RULE: ["consent/v1", "consent/v2"],
-  AGENTOOL_COLLAB_WEATHER: ["on", "off"],
-  AGENTTOOL_COLLAB_TOOLS: ["full", "notes"],
-  AGENTTOOL_COLLAB_CONSENT_RULE: ["consent/v1", "consent/v2"],
-  AGENTTOOL_COLLAB_WEATHER: ["on", "off"],
+/** Each collab switch and its closed set. Collab reads each under two spellings, `AGENTOOL_<name>`
+ * and `AGENTTOOL_<name>`, as one switch: an empty value is unset, and two spellings set to
+ * different values refuse to start (packages/collab/src/verbs.ts, consent-v2.ts, and the weather
+ * build's weather.ts). */
+export const SWITCH_SETS: Readonly<Record<string, readonly string[]>> = {
+  COLLAB_TOOLS: ["full", "notes"],
+  COLLAB_CONSENT_RULE: ["consent/v1", "consent/v2"],
+  COLLAB_WEATHER: ["on", "off"],
 };
+export const SWITCH_SPELLINGS = ["AGENTOOL_", "AGENTTOOL_"] as const;
+
+export function spellingsOf(name: string): [string, string] {
+  return [`${SWITCH_SPELLINGS[0]}${name}`, `${SWITCH_SPELLINGS[1]}${name}`];
+}
+
+/** Every spelt switch and its set: the six names a host entry or a blueprint may use. */
+export const SWITCHES: Readonly<Record<string, readonly string[]>> = Object.fromEntries(
+  Object.entries(SWITCH_SETS).flatMap(([name, allowed]) => spellingsOf(name).map((spelt) => [spelt, allowed] as const)),
+);
+
+/** The switch a spelt name belongs to (`AGENTTOOL_COLLAB_TOOLS` → `COLLAB_TOOLS`), or undefined. */
+export function switchOf(spelt: string): string | undefined {
+  const prefix = SWITCH_SPELLINGS.find((spelling) => spelt.startsWith(spelling));
+  const name = prefix === undefined ? undefined : spelt.slice(prefix.length);
+  return name !== undefined && Object.hasOwn(SWITCH_SETS, name) ? name : undefined;
+}
 export const SWITCH_ELSE = "set to something else";
 
 export const HOST_CONFIG = {
-  "claude-code": { rel: ".claude.json", shown: "~/.claude.json", key: "mcpServers", format: "json" },
-  codex: { rel: ".codex/config.toml", shown: "~/.codex/config.toml", key: "mcp_servers", format: "toml" },
+  "claude-code": { rel: ".claude.json", shown: "~/.claude.json", key: "mcpServers", format: "json", movedBy: "CLAUDE_CONFIG_DIR" },
+  codex: { rel: ".codex/config.toml", shown: "~/.codex/config.toml", key: "mcp_servers", format: "toml", movedBy: "CODEX_HOME" },
 } as const;
-export const CLAUDE_SETTINGS = { rel: ".claude/settings.json", shown: "~/.claude/settings.json" } as const;
+export const CLAUDE_SETTINGS = { rel: ".claude/settings.json", shown: "~/.claude/settings.json", movedBy: "CLAUDE_CONFIG_DIR" } as const;
 const CONFIG_MAX_BYTES = 8 * 1024 * 1024;
 
 type ConfigRead = { seen: "no_config" } | { seen: "unknown"; why: string } | { seen: "parsed"; value: unknown };
@@ -216,20 +272,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** Read and parse a named host configuration file. A parser's message is never kept: it can quote the file. */
+/** Read and parse a named host configuration file, every component from the home down
+ * lstat'ed first. A parser's message is never kept: it can quote the file. */
 function readConfig(deps: LookDeps, rel: string, format: "json" | "toml"): ConfigRead {
-  const path = join(deps.home, rel);
-  const stat = deps.fs.lstat(path);
-  if (isFail(stat)) return stat.fail === "absent" ? { seen: "no_config" } : { seen: "unknown", why: `the configuration file could not be looked at: ${FAIL_WORDS[stat.fail]}` };
-  if (stat.kind === "link") return { seen: "unknown", why: "the configuration file is a link; it was not followed" };
-  if (stat.kind !== "file") return { seen: "unknown", why: "the configuration file is not a regular file" };
-  const read = deps.fs.readHead(path, CONFIG_MAX_BYTES);
+  const at = lookFromHome(deps, rel);
+  if (at.seen === "absent") return { seen: "no_config" };
+  if (at.seen === "unknown") return { seen: "unknown", why: `the configuration file could not be looked at: ${at.why}` };
+  if (at.type === "link") return { seen: "unknown", why: "the configuration file is a link; it was not followed" };
+  if (at.type !== "file") return { seen: "unknown", why: "the configuration file is not a regular file" };
+  const read = deps.fs.readHead(join(deps.home, rel), CONFIG_MAX_BYTES);
   if (isFail(read)) return { seen: "unknown", why: `the configuration file could not be read: ${FAIL_WORDS[read.fail]}` };
   if (read.truncated) return { seen: "unknown", why: "the configuration file is larger than 8 MiB; it was not read" };
   try {
     return { seen: "parsed", value: format === "json" ? JSON.parse(read.text) : Bun.TOML.parse(read.text) };
   } catch {
-    return { seen: "unknown", why: `the configuration file could not be parsed as ${format === "json" ? "JSON" : "TOML"}` };
+    // Bun 1.3.5's TOML reader also refuses valid TOML (an unquoted datetime), so the fault is not laid on the file.
+    return format === "json"
+      ? { seen: "unknown", why: "the configuration file could not be parsed as JSON" }
+      : { seen: "unknown", why: "this build's TOML reader could not read the configuration file (it does not read every valid TOML file, such as one holding an unquoted date or time)" };
   }
 }
 
@@ -237,11 +297,13 @@ export type EntryLook =
   | { seen: "no_config" }
   | { seen: "unknown"; why: string }
   | { seen: "no_entry" }
-  | { seen: "entry"; references: InstallReference[]; switches: Record<string, string> };
+  | { seen: "entry"; references: InstallReference[]; switches: Record<string, string>; conflicting: string[] };
 
 /** One named server entry of a host's configuration: whether it exists, which
  * installs its command and arguments name, and the closed-set switches in its
- * environment. Nothing else of the entry (or the file) is kept. */
+ * environment (an empty value is unset, as collab reads it), with each switch
+ * whose two spellings are set to different values. Values are compared in
+ * memory and never kept. Nothing else of the entry (or the file) is kept. */
 export function lookEntry(deps: LookDeps, host: HostName, server: string): EntryLook {
   if (!/^agenttool-[a-z0-9-]{1,40}$/.test(server)) throw new LookRefused("an entry look names one agenttool-* server");
   const config = HOST_CONFIG[host];
@@ -259,24 +321,43 @@ export function lookEntry(deps: LookDeps, host: HostName, server: string): Entry
   if (Array.isArray(entry.args)) for (const arg of entry.args) if (typeof arg === "string") words.push(arg);
   const references = installReferences(words.join("\n"), deps.home);
   const switches: Record<string, string> = {};
+  const conflicting: string[] = [];
   const env = entry.env;
   if (isRecord(env)) {
-    for (const [name, allowed] of Object.entries(SWITCHES)) {
-      if (!Object.hasOwn(env, name)) continue;
-      const value = env[name];
-      switches[name] = typeof value === "string" && allowed.includes(value) ? value : SWITCH_ELSE;
+    for (const [name, allowed] of Object.entries(SWITCH_SETS)) {
+      const set = spellingsOf(name).filter((spelt) => Object.hasOwn(env, spelt) && env[spelt] !== "");
+      for (const spelt of set) {
+        const value = env[spelt];
+        switches[spelt] = typeof value === "string" && allowed.includes(value) ? value : SWITCH_ELSE;
+      }
+      if (set.length === 2 && env[set[0]!] !== env[set[1]!]) conflicting.push(name);
     }
   }
-  return { seen: "entry", references, switches };
+  return { seen: "entry", references, switches, conflicting };
 }
 
 export type HookLook =
   | { seen: "no_config" }
   | { seen: "unknown"; why: string }
-  | { seen: "hooks"; events: Array<{ event: string; references: InstallReference[] }> };
+  | { seen: "hooks"; events: Array<{ event: string | null; references: InstallReference[] }> };
 
-const EVENT_NAME = /^[A-Z][A-Za-z]{1,39}$/;
+/** Claude Code's hook events, by the names its hooks documentation gives. A key under `hooks`
+ * outside this list is not printed (a settings key can carry anything); its hooks are still
+ * read, together, under `event: null`. */
+export const HOOK_EVENTS = [
+  "PreToolUse", "PermissionRequest", "PostToolUse", "PostToolUseFailure", "Notification", "UserPromptSubmit",
+  "Stop", "StopFailure", "SubagentStart", "SubagentStop", "PreCompact", "SessionStart", "SessionEnd",
+] as const;
 const MAX_EVENTS = 32;
+
+function hookCommands(groups: unknown[]): string[] {
+  const commands: string[] = [];
+  for (const group of groups) {
+    if (!isRecord(group) || !Array.isArray(group.hooks)) continue;
+    for (const hook of group.hooks) if (isRecord(hook) && typeof hook.command === "string") commands.push(hook.command);
+  }
+  return commands;
+}
 
 /** Claude Code's hook settings: for each event, the installs its hooks' commands name. Never the command. */
 export function lookHook(deps: LookDeps, host: "claude-code"): HookLook {
@@ -287,16 +368,20 @@ export function lookHook(deps: LookDeps, host: "claude-code"): HookLook {
   const hooks = read.value.hooks;
   if (hooks === undefined) return { seen: "hooks", events: [] };
   if (!isRecord(hooks)) return { seen: "unknown", why: "hooks is not a table of events" };
-  const events: Array<{ event: string; references: InstallReference[] }> = [];
+  const events: Array<{ event: string | null; references: InstallReference[] }> = [];
+  const unlisted: string[] = [];
+  let anyUnlisted = false;
   for (const [event, groups] of Object.entries(hooks)) {
-    if (!EVENT_NAME.test(event) || !Array.isArray(groups) || events.length >= MAX_EVENTS) continue;
-    const commands: string[] = [];
-    for (const group of groups) {
-      if (!isRecord(group) || !Array.isArray(group.hooks)) continue;
-      for (const hook of group.hooks) if (isRecord(hook) && typeof hook.command === "string") commands.push(hook.command);
+    if (!Array.isArray(groups)) continue;
+    if (!(HOOK_EVENTS as readonly string[]).includes(event)) {
+      anyUnlisted = true;
+      unlisted.push(...hookCommands(groups));
+      continue;
     }
-    events.push({ event, references: installReferences(commands.join("\n"), deps.home) });
+    if (events.length >= MAX_EVENTS) continue;
+    events.push({ event, references: installReferences(hookCommands(groups).join("\n"), deps.home) });
   }
+  if (anyUnlisted) events.push({ event: null, references: installReferences(unlisted.join("\n"), deps.home) });
   return { seen: "hooks", events };
 }
 
@@ -305,32 +390,35 @@ export function lookHook(deps: LookDeps, host: "claude-code"): HookLook {
 export type WrapperLook =
   | { seen: "absent" }
   | { seen: "unknown"; why: string }
-  | { seen: "wrappers"; wrappers: Array<{ name: string; entry: EntryKind; references: InstallReference[] | null }>; more: boolean };
+  | { seen: "wrappers"; wrappers: Array<{ name: string | null; entry: EntryKind; references: InstallReference[] | null }>; more: boolean };
 
 const WRAPPER_HEAD_BYTES = 4096;
 const MAX_WRAPPERS = 32;
 
 /** Which agenttool-* wrappers ~/.local/bin holds, and the installs each names in
- * its first 4 KiB. A link is not followed; the wrapper's text never leaves. */
+ * its first 4 KiB. A link is not followed; the wrapper's text never leaves, and a
+ * name that is not one of AgentTool's own commands is not printed. */
 export function lookWrappers(deps: LookDeps): WrapperLook {
   const bin = rootPath(deps.home, "bin");
-  const stat = deps.fs.lstat(bin);
-  if (isFail(stat)) return stat.fail === "absent" ? { seen: "absent" } : { seen: "unknown", why: `~/.local/bin could not be looked at: ${FAIL_WORDS[stat.fail]}` };
-  if (stat.kind === "link") return { seen: "unknown", why: "~/.local/bin is a link; it was not followed" };
-  if (stat.kind !== "directory") return { seen: "absent" };
+  const at = lookRoot(deps, "bin");
+  if (at.seen === "absent") return { seen: "absent" };
+  if (at.seen === "unknown") return { seen: "unknown", why: `~/.local/bin could not be looked at: ${at.why}` };
+  if (at.type === "link") return { seen: "unknown", why: "~/.local/bin is a link; it was not followed" };
+  if (at.type !== "directory") return { seen: "absent" };
   const names = deps.fs.list(bin);
   if (isFail(names)) return { seen: "unknown", why: `~/.local/bin could not be listed: ${FAIL_WORDS[names.fail]}` };
   const wanted = names.filter((name) => WRAPPER_NAME.test(name)).sort();
-  const wrappers: Array<{ name: string; entry: EntryKind; references: InstallReference[] | null }> = [];
+  const wrappers: Array<{ name: string | null; entry: EntryKind; references: InstallReference[] | null }> = [];
   for (const name of wanted.slice(0, MAX_WRAPPERS)) {
-    const at = lookPath(deps, "bin", name);
-    if (at.seen !== "entry") continue;
-    if (at.type !== "file") {
-      wrappers.push({ name, entry: at.type, references: null });
+    const shown = (KNOWN_WRAPPERS as readonly string[]).includes(name) ? name : null;
+    const look = lookPath(deps, "bin", name);
+    if (look.seen !== "entry") continue;
+    if (look.type !== "file") {
+      wrappers.push({ name: shown, entry: look.type, references: null });
       continue;
     }
     const read = deps.fs.readHead(join(bin, name), WRAPPER_HEAD_BYTES);
-    wrappers.push({ name, entry: "file", references: isFail(read) ? null : installReferences(read.text, deps.home) });
+    wrappers.push({ name: shown, entry: "file", references: isFail(read) ? null : installReferences(read.text, deps.home) });
   }
   return { seen: "wrappers", wrappers, more: wanted.length > MAX_WRAPPERS };
 }
@@ -423,7 +511,8 @@ export async function askWeather(deps: LookDeps, entry: string): Promise<Weather
     }
   }
   texts.push(...notes);
-  const unsafe = texts.some((text) => /[\u0000-\u001f\u007f]/.test(text) || looksIdentifying(text, deps.hints));
+  // Kept only when every word is the weather build's own (a closed vocabulary), and nothing looks identifying besides.
+  const unsafe = texts.some((text) => /[\u0000-\u001f\u007f]/.test(text) || !weatherWordsOnly(text) || looksIdentifying(text, deps.hints));
   return {
     seen: "answer",
     says: unsafe ? null : says,
@@ -437,11 +526,22 @@ export async function askWeather(deps: LookDeps, entry: string): Promise<Weather
 
 // ---------------------------------------------------------------- env
 
-export type EnvQuestion = "ci" | "over_ssh" | "container" | { path_has: (typeof COMMAND_DIRECTORIES)[number] };
+export type EnvQuestion =
+  | "ci" | "over_ssh" | "container"
+  | { path_has: (typeof COMMAND_DIRECTORIES)[number] }
+  | { moved: MovingVariable };
 
 function setTo(env: Environment, name: string): boolean {
   const value = env[name];
   return value !== undefined && value !== "" && value !== "0" && value.toLowerCase() !== "false";
+}
+
+/** Whether a variable moves its place away from the default under the home directory. The value is compared in memory and dropped. */
+function moves(deps: LookDeps, name: MovingVariable): boolean {
+  const value = deps.env[name];
+  // Collab honours AGENTOOL_COLLAB_DB even when empty; the others treat empty as unset.
+  if (value === undefined || (value === "" && name !== "AGENTOOL_COLLAB_DB")) return false;
+  return value === "" || normalize(value).replace(/\/+$/, "") !== join(deps.home, MOVING_VARIABLES[name]);
 }
 
 /** The process environment, in closed form: booleans only. No value is ever kept. */
@@ -449,6 +549,10 @@ export function lookEnv(deps: LookDeps, question: EnvQuestion): boolean {
   if (question === "ci") return setTo(deps.env, "CI") || setTo(deps.env, "GITHUB_ACTIONS");
   if (question === "over_ssh") return setTo(deps.env, "SSH_CONNECTION") || setTo(deps.env, "SSH_CLIENT") || setTo(deps.env, "SSH_TTY");
   if (question === "container") return setTo(deps.env, "container");
+  if ("moved" in question) {
+    if (!Object.hasOwn(MOVING_VARIABLES, question.moved)) throw new LookRefused("the env look asks only about the variables that move a place it looks at");
+    return moves(deps, question.moved);
+  }
   const dir = question.path_has === "~/.local/bin" ? join(deps.home, ".local", "bin") : question.path_has;
   return (deps.env.PATH ?? "").split(":").some((entry) => entry.replace(/\/+$/, "") === dir);
 }

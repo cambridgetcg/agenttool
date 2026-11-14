@@ -1,22 +1,23 @@
 /** Each look, present and absent, and each refusal. */
 import { describe, expect, test } from "bun:test";
 import {
-  askHelp, askWeather, lookEntry, lookEnv, lookHook, lookLink, lookPath, lookSource, lookSystemPath, lookWrappers,
-  runnableHostEntry, LookRefused,
+  askHelp, askWeather, lookEntry, lookEnv, lookHook, lookLink, lookPath, lookSource, lookSystemPath, lookVersion, lookWrappers,
+  runnableHostEntry, LookRefused, HOOK_EVENTS,
 } from "../src/looks.js";
 import { installReferences } from "../src/places.js";
 import { ArgvRefused, askArgv, assertAllowedArgv, childEnvironment } from "../src/run.js";
 import {
   BIN, CLAUDE_SERVERS, COLLAB_NEW, COLLAB_OLD, COMMIT_NEW, FakeFs, FakeRunner, HELP_WITHOUT_WEATHER, HELP_WITH_WEATHER, HOME,
-  LOBBY_COMMIT, LOBBY_VERSION, NOW, SHARE, claudeJson, claudeSettings, codexToml, fullHouse, makeDeps, weatherReceipt,
+  INSTALLED_NEW, LOBBY_COMMIT, LOBBY_VERSION, NOW, SHARE, claudeJson, claudeSettings, codexToml, fakeEnv, fullHouse, makeDeps, weatherReceipt,
 } from "./helpers.js";
 
 const entryPath = `${SHARE}/collab/${COLLAB_NEW}/agenttool-collab-host.js`;
+const TOML_WHY = "this build's TOML reader could not read the configuration file (it does not read every valid TOML file, such as one holding an unquoted date or time)";
 
 describe("path", () => {
   test("present: type and age from mtime, by this device's clock", () => {
     expect(lookPath(makeDeps(), "share", "collab.sqlite-wal")).toEqual({ seen: "entry", type: "file", age_seconds: 60 });
-    expect(lookPath(makeDeps(), "bin", "timewitness")).toEqual({ seen: "entry", type: "link", age_seconds: 86_400 });
+    expect(lookPath(makeDeps(), "bin", "timewitness")).toEqual({ seen: "entry", type: "file", age_seconds: 86_400 });
   });
 
   test("absent, and absent below a missing root", () => {
@@ -46,6 +47,15 @@ describe("path", () => {
     const seen = lookPath(makeDeps({ fs }), "share", "collab.sqlite");
     expect(seen).toEqual({ seen: "unknown", why: "a link stands on the way to it; the link was not followed" });
     expect(fs.calls.map((call) => call.path)).not.toContain(`${HOME}/.local/share/agenttool/collab.sqlite`);
+  });
+
+  test("a link above the root (~/.local, ~/.local/share) is seen from the home down, and not followed", () => {
+    for (const above of [`${HOME}/.local`, `${HOME}/.local/share`]) {
+      const fs = new FakeFs({ [`${HOME}/elsewhere/agenttool/collab.sqlite`]: { type: "file", text: "" }, [`${HOME}/elsewhere/share/agenttool/collab.sqlite`]: { type: "file", text: "" } })
+        .put(above, { type: "link", target: above.endsWith("share") ? `${HOME}/elsewhere/share` : `${HOME}/elsewhere` });
+      expect({ above, seen: lookPath(makeDeps({ fs }), "share", "collab.sqlite") })
+        .toEqual({ above, seen: { seen: "unknown", why: "a link stands on the way to it; the link was not followed" } });
+    }
   });
 
   test("permission refused is unknown, with that reason", () => {
@@ -83,11 +93,52 @@ describe("link", () => {
     const seen = lookLink(makeDeps({ fs }), "collab");
     expect(seen.seen === "tool" && seen.current_problem).toBe("the current link names a directory that is not an installed version");
   });
+
+  test("a current link written as ./name, name/, ../<tool>/name or the absolute path of the entry names that version", () => {
+    for (const target of [`./${COLLAB_NEW}`, `${COLLAB_NEW}/`, `../collab/${COLLAB_NEW}`, `${SHARE}/collab/${COLLAB_NEW}`, `${SHARE}/collab/./${COLLAB_NEW}/`]) {
+      const fs = fullHouse().put(`${SHARE}/collab/current`, { type: "link", target });
+      const seen = lookLink(makeDeps({ fs }), "collab");
+      expect({ target, current: seen.seen === "tool" && seen.current, problem: seen.seen === "tool" && seen.current_problem })
+        .toEqual({ target, current: COLLAB_NEW, problem: null });
+    }
+    // Still refused when it does leave: another install directory, or the install directory itself.
+    for (const target of [`../lobby/${LOBBY_VERSION}`, ".", `${SHARE}/collab`]) {
+      const fs = fullHouse().put(`${SHARE}/collab/current`, { type: "link", target });
+      const seen = lookLink(makeDeps({ fs }), "collab");
+      expect({ target, problem: seen.seen === "tool" && seen.current_problem })
+        .toEqual({ target, problem: "the current link leads outside the install directory; it was not followed" });
+    }
+  });
+
+  test("more than 32 versions: the list is capped, but the current one is decided by lstat, not by the list", () => {
+    const fs = fullHouse();
+    for (let index = 10; index < 52; index += 1) fs.put(`${SHARE}/collab/0.9.${index}-abcdef${index}/SOURCE.txt`, { type: "file", text: "commit: 1234567\n" });
+    fs.put(`${SHARE}/collab/current`, { type: "link", target: "0.9.51-abcdef51" });
+    const seen = lookLink(makeDeps({ fs }), "collab");
+    expect(seen.seen === "tool" && { listed: seen.versions.length, more: seen.more, current: seen.current, problem: seen.current_problem })
+      .toEqual({ listed: 32, more: true, current: "0.9.51-abcdef51", problem: null });
+    expect(seen.seen === "tool" && seen.versions.includes("0.9.51-abcdef51")).toBe(false);
+  });
+});
+
+describe("version (one name in an install directory, by lstat)", () => {
+  test("installed, not installed, and not an install", () => {
+    const fs = fullHouse().put(`${SHARE}/collab/0.7.0-linked`, { type: "link", target: COLLAB_NEW });
+    expect(lookVersion(makeDeps({ fs }), "collab", COLLAB_NEW)).toBe("installed");
+    expect(lookVersion(makeDeps({ fs }), "collab", "0.4.0-gone")).toBe("not_installed");
+    expect(lookVersion(makeDeps({ fs }), "collab", "doorbell")).toBe("not_an_install");
+    expect(lookVersion(makeDeps({ fs }), "collab", "0.7.0-linked")).toBe("not_an_install");
+  });
+
+  test("refused: current, or a name that is not a version name", () => {
+    expect(() => lookVersion(makeDeps(), "collab", "current")).toThrow(LookRefused);
+    expect(() => lookVersion(makeDeps(), "collab", "../x")).toThrow(LookRefused);
+  });
 });
 
 describe("source", () => {
   test("only the commit and installed lines; the rest of the line after the time is dropped", () => {
-    expect(lookSource(makeDeps(), "collab", COLLAB_NEW)).toEqual({ seen: "read", commit: COMMIT_NEW, installed: "2026-11-13T16:25:50Z" });
+    expect(lookSource(makeDeps(), "collab", COLLAB_NEW)).toEqual({ seen: "read", commit: COMMIT_NEW, installed: INSTALLED_NEW });
   });
 
   test("a SOURCE.txt with extra lines and no installed line", () => {
@@ -125,11 +176,13 @@ describe("entry", () => {
       seen: "entry",
       references: [{ tool: "collab", version: "current" }],
       switches: { AGENTOOL_COLLAB_TOOLS: "full", AGENTOOL_COLLAB_CONSENT_RULE: "set to something else" },
+      conflicting: [],
     });
     expect(lookEntry(makeDeps(), "codex", "agenttool-collab")).toEqual({
       seen: "entry",
       references: [{ tool: "collab", version: "current" }],
       switches: { AGENTOOL_COLLAB_TOOLS: "notes" },
+      conflicting: [],
     });
   });
 
@@ -144,6 +197,24 @@ describe("entry", () => {
     const fs = fullHouse().put(`${HOME}/.claude.json`, { type: "file", text: claudeJson(servers) });
     const seen = lookEntry(makeDeps({ fs }), "claude-code", "agenttool-collab");
     expect(seen.seen === "entry" && seen.switches).toEqual({ AGENTOOL_COLLAB_WEATHER: "on", AGENTTOOL_COLLAB_TOOLS: "set to something else", AGENTTOOL_COLLAB_WEATHER: "set to something else" });
+    expect(seen.seen === "entry" && seen.conflicting).toEqual(["COLLAB_WEATHER"]);
+  });
+
+  test("the two spellings are one switch, as collab reads them: empty is unset, and two different values conflict", () => {
+    const entry = (env: Record<string, unknown>) => {
+      const fs = fullHouse().put(`${HOME}/.claude.json`, { type: "file", text: claudeJson({ "agenttool-collab": { command: "bun", args: [], env } }) });
+      const seen = lookEntry(makeDeps({ fs }), "claude-code", "agenttool-collab");
+      return seen.seen === "entry" ? { switches: seen.switches, conflicting: seen.conflicting } : seen;
+    };
+    expect(entry({ AGENTOOL_COLLAB_TOOLS: "full", AGENTTOOL_COLLAB_TOOLS: "notes" }))
+      .toEqual({ switches: { AGENTOOL_COLLAB_TOOLS: "full", AGENTTOOL_COLLAB_TOOLS: "notes" }, conflicting: ["COLLAB_TOOLS"] });
+    expect(entry({ AGENTOOL_COLLAB_CONSENT_RULE: "consent/v2", AGENTTOOL_COLLAB_CONSENT_RULE: "consent/v2" }))
+      .toEqual({ switches: { AGENTOOL_COLLAB_CONSENT_RULE: "consent/v2", AGENTTOOL_COLLAB_CONSENT_RULE: "consent/v2" }, conflicting: [] });
+    // Two out-of-set values are compared in memory too; neither is kept.
+    expect(entry({ AGENTOOL_COLLAB_TOOLS: "secret-a", AGENTTOOL_COLLAB_TOOLS: "secret-b" }))
+      .toEqual({ switches: { AGENTOOL_COLLAB_TOOLS: "set to something else", AGENTTOOL_COLLAB_TOOLS: "set to something else" }, conflicting: ["COLLAB_TOOLS"] });
+    expect(entry({ AGENTOOL_COLLAB_TOOLS: "", AGENTTOOL_COLLAB_TOOLS: "notes" })).toEqual({ switches: { AGENTTOOL_COLLAB_TOOLS: "notes" }, conflicting: [] });
+    expect(entry({ AGENTOOL_COLLAB_TOOLS: "" })).toEqual({ switches: {}, conflicting: [] });
   });
 
   test("a configuration that does not parse is unknown, and the parser's message (which can quote the file) is not kept", () => {
@@ -151,7 +222,22 @@ describe("entry", () => {
       .put(`${HOME}/.claude.json`, { type: "file", text: '{"mcpServers": {"x": "atcm_SECRET_IN_BROKEN_JSON' })
       .put(`${HOME}/.codex/config.toml`, { type: "file", text: 'token = "xoxb-SECRET\n[[[' });
     expect(lookEntry(makeDeps({ fs }), "claude-code", "agenttool-collab")).toEqual({ seen: "unknown", why: "the configuration file could not be parsed as JSON" });
-    expect(lookEntry(makeDeps({ fs }), "codex", "agenttool-collab")).toEqual({ seen: "unknown", why: "the configuration file could not be parsed as TOML" });
+    expect(lookEntry(makeDeps({ fs }), "codex", "agenttool-collab")).toEqual({ seen: "unknown", why: TOML_WHY });
+  });
+
+  test("valid TOML this build's reader refuses (an unquoted datetime) is unknown, without blaming the file", () => {
+    const fs = fullHouse().put(`${HOME}/.codex/config.toml`, { type: "file", text: `${codexToml()}\n[projects.example]\ntrusted_at = 2026-11-14T12:00:00Z\n` });
+    expect(lookEntry(makeDeps({ fs }), "codex", "agenttool-collab")).toEqual({ seen: "unknown", why: TOML_WHY });
+  });
+
+  test("a link above the configuration file (~/.claude or ~/.codex) is not followed", () => {
+    const fs = fullHouse().remove(`${HOME}/.codex`)
+      .put(`${HOME}/dotfiles/codex/config.toml`, { type: "file", text: codexToml() })
+      .put(`${HOME}/.codex`, { type: "link", target: `${HOME}/dotfiles/codex` });
+    expect(lookEntry(makeDeps({ fs }), "codex", "agenttool-collab")).toEqual({
+      seen: "unknown", why: "the configuration file could not be looked at: a link stands on the way to it; the link was not followed",
+    });
+    expect(fs.calls.some((call) => call.op === "readHead")).toBe(false);
   });
 
   test("a configuration file that is a link or too large is not read", () => {
@@ -163,7 +249,7 @@ describe("entry", () => {
 
   test("an entry that runs something outside the installs names none", () => {
     const fs = fullHouse().put(`${HOME}/.claude.json`, { type: "file", text: claudeJson({ "agenttool-collab": { command: "bun", args: [`${HOME}/agenttool/packages/collab/dist/agenttool-collab-mcp.js`] } }) });
-    expect(lookEntry(makeDeps({ fs }), "claude-code", "agenttool-collab")).toEqual({ seen: "entry", references: [], switches: {} });
+    expect(lookEntry(makeDeps({ fs }), "claude-code", "agenttool-collab")).toEqual({ seen: "entry", references: [], switches: {}, conflicting: [] });
   });
 
   test("refused: a server name that is not agenttool-*", () => {
@@ -197,6 +283,21 @@ describe("hook", () => {
     });
     expect(JSON.stringify(lookHook(makeDeps({ fs }), "claude-code"))).toBe(JSON.stringify({ seen: "hooks", events: [{ event: "SessionEnd", references: [{ tool: "collab", version: COLLAB_OLD }] }] }));
   });
+
+  test("an event key that is not one of Claude Code's hook events is not printed; its hooks are read together under null", () => {
+    const fs = fullHouse().put(`${HOME}/.claude/settings.json`, {
+      type: "file",
+      text: claudeSettings({
+        Annabel: [{ hooks: [{ type: "command", command: "echo hi" }] }],
+        QuillonsLaptop: [{ hooks: [{ type: "command", command: `bun ${SHARE}/collab/${COLLAB_OLD}/agenttool-collab-host.js end` }] }],
+        Stop: [{ hooks: [{ type: "command", command: "true" }] }],
+      }),
+    });
+    const seen = lookHook(makeDeps({ fs }), "claude-code");
+    expect(seen).toEqual({ seen: "hooks", events: [{ event: "Stop", references: [] }, { event: null, references: [{ tool: "collab", version: COLLAB_OLD }] }] });
+    expect(JSON.stringify(seen)).not.toMatch(/Annabel|Quillon/);
+    expect(HOOK_EVENTS).toContain("SessionEnd");
+  });
 });
 
 describe("wrapper (agenttool-* in ~/.local/bin)", () => {
@@ -215,6 +316,13 @@ describe("wrapper (agenttool-* in ~/.local/bin)", () => {
 
   test("absent", () => {
     expect(lookWrappers(makeDeps({ fs: fullHouse().remove(BIN) }))).toEqual({ seen: "absent" });
+  });
+
+  test("a wrapper name that is not one of AgentTool's own commands is not printed", () => {
+    const fs = fullHouse().put(`${BIN}/agenttool-quillons-notes`, { type: "file", text: `exec bun ${SHARE}/lobby/current/agenttool-lobby.js` });
+    const seen = lookWrappers(makeDeps({ fs }));
+    expect(seen.seen === "wrappers" && seen.wrappers.map((wrapper) => wrapper.name)).toEqual(["agenttool-collab-host", "agenttool-lobby", null]);
+    expect(seen.seen === "wrappers" && seen.wrappers[2]!.references).toEqual([{ tool: "lobby", version: "current" }]);
   });
 
   test("a wrapper that is a link is not followed", () => {
@@ -241,11 +349,11 @@ describe("ask", () => {
     await askHelp(makeDeps({ run }), entryPath);
     await askWeather(makeDeps({ run }), entryPath);
     expect(run.calls.map((call) => call.argv)).toEqual([
-      [process.execPath, "--no-env-file", "--config=/dev/null", entryPath, "--help"],
-      [process.execPath, "--no-env-file", "--config=/dev/null", entryPath, "weather"],
+      [process.execPath, "--no-install", "--no-env-file", "--config=/dev/null", entryPath, "--help"],
+      [process.execPath, "--no-install", "--no-env-file", "--config=/dev/null", entryPath, "weather"],
     ]);
     for (const call of run.calls) {
-      expect(call.options.env).toEqual({ PATH: "/usr/bin:/bin", HOME });
+      expect(call.options.env).toEqual({ PATH: "/usr/bin:/bin", HOME, BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0" });
       expect(call.options.timeoutMs).toBeLessThanOrEqual(8000);
       expect(call.options.maxBytes).toBe(64 * 1024);
     }
@@ -254,17 +362,21 @@ describe("ask", () => {
   test("refused before anything runs: any argv off the allowlist", () => {
     const allowed = askArgv(entryPath, "help");
     expect(() => assertAllowedArgv(allowed, HOME)).not.toThrow();
+    const flags = ["--no-install", "--no-env-file", "--config=/dev/null"];
     for (const argv of [
-      [process.execPath, "--no-env-file", "--config=/dev/null", entryPath, "end", "--session-file", "x"],
-      [process.execPath, "--no-env-file", "--config=/dev/null", entryPath, "weather", "--db", "x"],
-      [process.execPath, "--no-env-file", "--config=/dev/null", `${SHARE}/collab/current/agenttool-collab-host.js`, "weather"],
-      [process.execPath, "--no-env-file", "--config=/dev/null", `${SHARE}/collab/${COLLAB_NEW}/agenttool-collab-mcp.js`, "--help"],
-      [process.execPath, "--no-env-file", "--config=/dev/null", `${SHARE}/collab/../../../evil/agenttool-collab-host.js`, "weather"],
+      [process.execPath, ...flags, entryPath, "end", "--session-file", "x"],
+      [process.execPath, ...flags, entryPath, "weather", "--db", "x"],
+      [process.execPath, ...flags, `${SHARE}/collab/current/agenttool-collab-host.js`, "weather"],
+      [process.execPath, ...flags, `${SHARE}/collab/${COLLAB_NEW}/agenttool-collab-mcp.js`, "--help"],
+      [process.execPath, ...flags, `${SHARE}/collab/../../../evil/agenttool-collab-host.js`, "weather"],
+      // Without --no-install, or with the flags in another order: the allowlist is exact.
+      [process.execPath, "--no-env-file", "--config=/dev/null", entryPath, "weather"],
+      [process.execPath, "--no-env-file", "--config=/dev/null", "--no-install", entryPath, "weather"],
       [process.execPath, entryPath, "weather"],
       ["/bin/sh", "-c", "agenttool-collab-host weather"],
-      ["/opt/homebrew/bin/bun", "--no-env-file", "--config=/dev/null", entryPath, "weather"],
+      ["/opt/homebrew/bin/bun", ...flags, entryPath, "weather"],
     ]) expect(() => assertAllowedArgv(argv, HOME)).toThrow(ArgvRefused);
-    expect(childEnvironment(HOME)).toEqual({ PATH: "/usr/bin:/bin", HOME });
+    expect(childEnvironment(HOME)).toEqual({ PATH: "/usr/bin:/bin", HOME, BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0" });
   });
 
   test("slow, flooding, failing, two-line, non-JSON, foreign or unstartable answers are unknown with the reason", async () => {
@@ -311,6 +423,20 @@ describe("env", () => {
     expect(lookEnv(deps, { path_has: "/opt/homebrew/bin" })).toBe(false);
     const quiet = makeDeps({ env: { HOME, CI: "false", SSH_CONNECTION: "" } });
     expect([lookEnv(quiet, "ci"), lookEnv(quiet, "over_ssh"), lookEnv(quiet, "container"), lookEnv(quiet, { path_has: "~/.local/bin" })]).toEqual([false, false, false, false]);
+  });
+
+  test("whether a variable moves a place away from its default: set elsewhere is true; unset, empty or the default itself is false", () => {
+    const moved = (env: Record<string, string>, name: Parameters<typeof lookEnv>[1]) => lookEnv(makeDeps({ env: fakeEnv(env) }), name);
+    expect(moved({ CODEX_HOME: "/srv/codex-home" }, { moved: "CODEX_HOME" })).toBe(true);
+    expect(moved({ CODEX_HOME: `${HOME}/.codex/` }, { moved: "CODEX_HOME" })).toBe(false);
+    expect(moved({ CODEX_HOME: "" }, { moved: "CODEX_HOME" })).toBe(false);
+    expect(moved({}, { moved: "CLAUDE_CONFIG_DIR" })).toBe(false);
+    expect(moved({ CLAUDE_CONFIG_DIR: "relative/dir" }, { moved: "CLAUDE_CONFIG_DIR" })).toBe(true);
+    expect(moved({ XDG_STATE_HOME: `${HOME}/.local/state` }, { moved: "XDG_STATE_HOME" })).toBe(false);
+    // Collab uses AGENTOOL_COLLAB_DB verbatim even when empty.
+    expect(moved({ AGENTOOL_COLLAB_DB: "" }, { moved: "AGENTOOL_COLLAB_DB" })).toBe(true);
+    expect(moved({ AGENTOOL_COLLAB_DB: `${SHARE}/collab.sqlite` }, { moved: "AGENTOOL_COLLAB_DB" })).toBe(false);
+    expect(() => lookEnv(makeDeps(), { moved: "PATH" as never })).toThrow(LookRefused);
   });
 });
 

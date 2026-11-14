@@ -29,6 +29,16 @@ export const KNOWN_INSTALL_NAMES = ["collab", "lobby", "execution-seat", "lobby-
 export const VERSION_NAME = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,79}$/;
 /** A wrapper the survey may look at. */
 export const WRAPPER_NAME = /^agenttool-[a-z0-9][a-z0-9-]{0,63}$/;
+/** The agenttool-* commands this repository's packages declare (their package.json `bin`, less one whose name
+ * carries a project's own name). Only these names are
+ * printed; any other agenttool-* file is shown without its name, since a file name on the device can carry anything. */
+export const KNOWN_WRAPPERS = [
+  "agenttool-browser", "agenttool-codex-usage", "agenttool-collab-courier", "agenttool-collab-host", "agenttool-collab-mcp",
+  "agenttool-constructive", "agenttool-data", "agenttool-execution-seat",
+  "agenttool-exit-door", "agenttool-hf-scout", "agenttool-house", "agenttool-kingdom", "agenttool-lobby", "agenttool-lobby-doorbell",
+  "agenttool-lobby-mcp", "agenttool-local-starter", "agenttool-local-starter-mcp", "agenttool-research-commons", "agenttool-rhizome",
+  "agenttool-skill", "agenttool-telescope", "agenttool-telescope-mcp", "agenttool-wake-return-mcp",
+] as const;
 /** The two names outside `agenttool-*` the survey may lstat in a command directory. */
 export const NAMED_COMMANDS = ["timewitness", "lobby-netcheck"] as const;
 export type NamedCommand = (typeof NAMED_COMMANDS)[number];
@@ -38,7 +48,11 @@ export const COMMAND_DIRECTORIES = ["~/.local/bin", "/opt/homebrew/bin", "/usr/l
 export const CONTAINER_MARKERS = ["/.dockerenv", "/run/.containerenv"] as const;
 
 export function rootPath(home: string, root: RootName): string {
-  return join(home, root === "share" ? SHARE_REL : root === "state" ? STATE_REL : BIN_REL);
+  return join(home, rootRel(root));
+}
+
+export function rootRel(root: RootName): string {
+  return root === "share" ? SHARE_REL : root === "state" ? STATE_REL : BIN_REL;
 }
 
 export function commandDirectory(home: string, shown: (typeof COMMAND_DIRECTORIES)[number]): string {

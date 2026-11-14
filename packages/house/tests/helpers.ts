@@ -105,10 +105,17 @@ export class FakeFs implements HouseFs {
 
   list(path: string): string[] | Fail {
     this.calls.push({ op: "list", path });
-    const node = this.node(path);
+    // As the kernel opens a directory: every link on the way, the last one included, is followed.
+    let at = path;
+    let node = this.node(at);
+    for (let hops = 0; hops < 8 && !("fail" in node) && node.type === "link"; hops += 1) {
+      at = node.target.startsWith("/") ? node.target : join(dirname(at), node.target);
+      node = this.node(at);
+    }
     if ("fail" in node) return node;
     if (node.type !== "dir") return { fail: "failed" };
-    const prefix = `${path}/`;
+    const resolved = this.resolveParent(`${at}/x`);
+    const prefix = typeof resolved === "string" ? `${dirname(resolved)}/` : `${at}/`;
     return [...this.nodes.keys()].filter((key) => key.startsWith(prefix) && !key.slice(prefix.length).includes("/")).map((key) => key.slice(prefix.length));
   }
 
@@ -204,6 +211,10 @@ export const LOBBY_VERSION = "0.1.0-dev.0-5e6f7a8b";
 export const LOBBY_COMMIT = "5e6f7a8b9c0d1e2f3a4b5c6d7e8f901234567890";
 export const SEAT_VERSION = "main-9a8b7c6d";
 export const SEAT_COMMIT = "9a8b7c6d5e4f30211203f4e5d6c7b8a998877665";
+/** Install times, plainly invented. */
+export const INSTALLED_OLD = "2026-10-01T09:00:00Z";
+export const INSTALLED_NEW = "2026-11-02T09:15:00Z";
+export const SEAT_INSTALLED = "2026-11-03T10:30:00Z";
 
 export function claudeJson(servers: Record<string, unknown>): string {
   return JSON.stringify({
@@ -301,9 +312,9 @@ export function fullHouse(): FakeFs {
   return new FakeFs({
     [SHARE]: { type: "dir", mode: 0o40700 },
     [`${SHARE}/collab`]: { type: "dir" },
-    [`${SHARE}/collab/${COLLAB_OLD}/SOURCE.txt`]: { type: "file", text: source(COMMIT_OLD, "2026-10-29T12:54:29Z") },
+    [`${SHARE}/collab/${COLLAB_OLD}/SOURCE.txt`]: { type: "file", text: source(COMMIT_OLD, INSTALLED_OLD) },
     [`${SHARE}/collab/${COLLAB_OLD}/agenttool-collab-host.js`]: { type: "file", text: "// host bundle", mode: 0o100755 },
-    [`${SHARE}/collab/${COLLAB_NEW}/SOURCE.txt`]: { type: "file", text: source(COMMIT_NEW, "2026-11-13T16:25:50Z") },
+    [`${SHARE}/collab/${COLLAB_NEW}/SOURCE.txt`]: { type: "file", text: source(COMMIT_NEW, INSTALLED_NEW) },
     [`${SHARE}/collab/${COLLAB_NEW}/agenttool-collab-host.js`]: { type: "file", text: "// host bundle", mode: 0o100755 },
     [`${SHARE}/collab/${COLLAB_NEW}/agenttool-collab-mcp.js`]: { type: "file", text: "// mcp bundle", mode: 0o100755 },
     [`${SHARE}/collab/${COLLAB_NEW}/dist`]: { type: "link", target: "." },
@@ -314,18 +325,18 @@ export function fullHouse(): FakeFs {
     [`${SHARE}/collab.sqlite-wal`]: { type: "file", text: "wal hunter2", mtime: minutesAgo(1), mode: 0o100600 },
     [`${SHARE}/collab-sessions/credential.json`]: { type: "file", text: '{"bearer":"atcm_FAKEFAKEFAKEFAKE5555"}', mode: 0o100600 },
     [`${SHARE}/backups/claude-settings.json`]: { type: "file", text: "hunter2" },
-    [`${SHARE}/execution-seat/${SEAT_VERSION}/SOURCE.txt`]: { type: "file", text: source(SEAT_COMMIT, "2026-11-13T14:18:37Z") },
+    [`${SHARE}/execution-seat/${SEAT_VERSION}/SOURCE.txt`]: { type: "file", text: source(SEAT_COMMIT, SEAT_INSTALLED) },
     [`${SHARE}/execution-seat/current`]: { type: "link", target: SEAT_VERSION },
     [`${SHARE}/lobby/${LOBBY_VERSION}/SOURCE.txt`]: { type: "file", text: `commit:      ${LOBBY_COMMIT}\nbuilt by quillon\n` },
     [`${SHARE}/lobby/current`]: { type: "link", target: LOBBY_VERSION },
-    [`${SHARE}/lobby/RUNBOOK-lab-hub.md`]: { type: "file", text: "hub at 192.168.7.40, project ws_FAKEFAKEFAKE" },
+    [`${SHARE}/lobby/RUNBOOK-hub.md`]: { type: "file", text: "hub at 192.168.7.40, project ws_FAKEFAKEFAKE" },
     [`${STATE}/lobby/lobby.sqlite`]: { type: "file", text: "SQLite", mtime: minutesAgo(60), mode: 0o100600 },
     [`${STATE}/lobby/secrets/desk.key`]: { type: "file", text: "-----BEGIN PRIVATE KEY-----", mode: 0o100600 },
     [`${STATE}/execution-seat/seats.sqlite`]: { type: "file", text: "SQLite", mtime: minutesAgo(5), mode: 0o100600 },
     [`${STATE}/lobby-mail/packet.json`]: { type: "file", text: "{}" },
     [`${BIN}/agenttool-collab-host`]: { type: "file", mode: 0o100755, text: `#!/bin/bash\nexport SECRET=hunter2\ncd /\nexec /opt/homebrew/bin/bun --config=/dev/null ${SHARE}/collab/current/agenttool-collab-host.js "$@"\n` },
     [`${BIN}/agenttool-lobby`]: { type: "file", mode: 0o100755, text: '#!/bin/bash\numask 077\ncd /\nexec bun "$HOME/.local/share/agenttool/lobby/current/agenttool-lobby.js" "$@"\n' },
-    [`${BIN}/timewitness`]: { type: "link", target: `${HOME}/Desktop/timewitness/timewitness.py` },
+    [`${BIN}/timewitness`]: { type: "file", mode: 0o100755, text: `#!/bin/bash\nexec python3 ${HOME}/Desktop/timewitness/timewitness.py "$@"\n` },
     [`${BIN}/carry`]: { type: "file", text: "#!/bin/bash\nexport TOKEN=atcm_FAKEFAKEFAKEFAKE7777\n" },
     [`${BIN}/private-tool`]: { type: "file", text: "hunter2" },
     [`${HOME}/Desktop/timewitness/timewitness.py`]: { type: "file", text: "# quillon's script" },

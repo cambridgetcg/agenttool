@@ -1,18 +1,23 @@
 /** blueprint: a house described as data, written by hand or taken from a survey.
  *
  * A blueprint names parts by id, a room's wanted commit, and a door's wanted
- * switches. Its schema is closed: an unknown part, key or value is refused,
- * naming what was refused when it is well formed, and never quoting the file.
+ * switches. Its schema is closed: an unknown part, key or value is refused.
+ * A refusal quotes nothing of the file except an unknown part's id, which the
+ * spec asks to be named, and that only when it is shaped like a part id of this
+ * vocabulary and looks like nothing identifying.
  */
 import { RefusalError } from "./errors.js";
-import { SWITCHES, SWITCH_ELSE } from "./looks.js";
+import { SWITCHES, SWITCH_ELSE, spellingsOf, switchOf } from "./looks.js";
 import { partSpec } from "./parts.js";
+import { looksIdentifying, type PrivacyHints } from "./privacy.js";
 import { BLUEPRINT_PROTOCOL, DEFAULT_BLUEPRINT_NAME, type BlueprintPart, type HouseBlueprint, type HouseSurvey } from "./shapes.js";
 
 const COMMIT = /^[0-9a-f]{7,40}$/;
-const PART_ID_SHAPE = /^[a-z][a-z0-9.-]{0,63}$/;
+/** A part id of this vocabulary: a kind, then one to three plain words. */
+const PART_ID_SHAPE = /^(?:ground|clock|room|door|hand)(?:\.[a-z0-9]+(?:-[a-z0-9]+)*){1,3}$/;
 const MAX_PARTS = 64;
 const MAX_NAME = 120;
+const NO_HINTS: PrivacyHints = { home: "", user: null, host: null };
 
 /** A name the person gives: printable, one line, at most 120 characters. */
 export function checkName(name: string): string {
@@ -33,9 +38,14 @@ export function blueprintFromSurvey(survey: HouseSurvey, name: string = DEFAULT_
     if (spec.wants.commit && typeof part.detail.commit === "string" && COMMIT.test(part.detail.commit)) out.commit = part.detail.commit;
     if (spec.wants.switches && typeof part.detail.switches === "object" && part.detail.switches !== null) {
       const switches: Record<string, string> = {};
+      const names = new Set<string>();
       for (const [key, value] of Object.entries(part.detail.switches as Record<string, unknown>)) {
-        // "set to something else" cannot be built from, so it is not carried.
-        if (typeof value === "string" && SWITCHES[key]?.includes(value)) switches[key] = value;
+        const name = switchOf(key);
+        // "set to something else" cannot be built from, so it is not carried; a switch set under both
+        // spellings (to the same value, or the door would be unknown) is carried once.
+        if (name === undefined || names.has(name) || typeof value !== "string" || !SWITCHES[key]!.includes(value)) continue;
+        names.add(name);
+        switches[key] = value;
       }
       if (Object.keys(switches).length > 0) out.switches = switches;
     }
@@ -44,16 +54,14 @@ export function blueprintFromSurvey(survey: HouseSurvey, name: string = DEFAULT_
   return { protocol: BLUEPRINT_PROTOCOL, name: checkName(name), parts };
 }
 
-function named(id: unknown): string {
-  return typeof id === "string" && PART_ID_SHAPE.test(id) ? id : "a part id that is not well formed";
+function named(id: unknown, hints: PrivacyHints): string | undefined {
+  return typeof id === "string" && PART_ID_SHAPE.test(id) && !looksIdentifying(id, hints) ? id : undefined;
 }
 
+/** An unknown key is refused without being named: a key in a file carried from another device can hold anything. */
 function onlyKeys(value: Record<string, unknown>, keys: readonly string[], where: string): void {
   for (const key of Object.keys(value)) {
-    if (!keys.includes(key)) {
-      const shown = /^[a-z_]{1,32}$/.test(key) ? key : "a key that is not well formed";
-      throw new RefusalError("unknown_key", `${where} has a key this build does not know: ${shown}`);
-    }
+    if (!keys.includes(key)) throw new RefusalError("unknown_key", `${where} has a key this build does not know (keys are ${keys.join(", ")})`);
   }
 }
 
@@ -61,8 +69,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** Parse and check a blueprint's text. Throws RefusalError; never echoes the text. */
-export function parseBlueprint(text: string): HouseBlueprint {
+/** Parse and check a blueprint's text. Throws RefusalError; quotes nothing of the text but a checked part id. */
+export function parseBlueprint(text: string, hints: PrivacyHints = NO_HINTS): HouseBlueprint {
   let value: unknown;
   try {
     value = JSON.parse(text);
@@ -81,7 +89,10 @@ export function parseBlueprint(text: string): HouseBlueprint {
     if (!isRecord(raw)) throw new RefusalError("bad_part", "a blueprint part is not a JSON object");
     const id = raw.id;
     const spec = typeof id === "string" ? partSpec(id) : undefined;
-    if (spec === undefined) throw new RefusalError("unknown_part", `the blueprint names a part this build does not know: ${named(id)}`);
+    if (spec === undefined) {
+      const shown = named(id, hints);
+      throw new RefusalError("unknown_part", `the blueprint names a part this build does not know: ${shown ?? "one whose id is not shown"}`, shown);
+    }
     onlyKeys(raw, ["id", "commit", "switches"], `part ${spec.id}`);
     if (seen.has(spec.id)) throw new RefusalError("duplicate_part", `the blueprint names ${spec.id} twice`);
     seen.add(spec.id);
@@ -95,9 +106,16 @@ export function parseBlueprint(text: string): HouseBlueprint {
       if (!spec.wants.switches) throw new RefusalError("switches_not_wanted", `${spec.id} has no switches a blueprint can want`);
       if (!isRecord(raw.switches)) throw new RefusalError("bad_switches", `${spec.id}'s switches are not a JSON object`);
       const switches: Record<string, string> = {};
+      const names = new Set<string>();
       for (const [key, wanted] of Object.entries(raw.switches)) {
-        const allowed = SWITCHES[key];
-        if (allowed === undefined) throw new RefusalError("unknown_switch", `${spec.id} wants a switch this build does not know: ${/^[A-Z_]{1,48}$/.test(key) ? key : "a name that is not well formed"}`);
+        const allowed = Object.hasOwn(SWITCHES, key) ? SWITCHES[key] : undefined;
+        const name = switchOf(key);
+        if (allowed === undefined || name === undefined) {
+          throw new RefusalError("unknown_switch", `${spec.id} wants a switch this build does not know (switches are ${Object.keys(SWITCHES).join(", ")})`);
+        }
+        // Collab reads the two spellings as one switch; wanting both could only want a conflict or say the same thing twice.
+        if (names.has(name)) throw new RefusalError("both_spellings", `${spec.id} wants ${spellingsOf(name).join(" and ")}, which are one switch; a blueprint names it once`);
+        names.add(name);
         if (typeof wanted !== "string" || !allowed.includes(wanted)) {
           throw new RefusalError("bad_switch_value", `${spec.id} wants ${key} set to something outside ${allowed.join(" or ")}${wanted === SWITCH_ELSE ? " (a blueprint can only want a value in the set)" : ""}`);
         }

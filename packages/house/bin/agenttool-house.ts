@@ -1,4 +1,6 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S bun --no-install --no-env-file --config=/dev/null
+// The flags keep the working directory's .env and bunfig.toml (with any preload it names) out of this process,
+// and Bun's auto-install off. Run it the same way by hand: bun --no-install --no-env-file --config=/dev/null <this file> ...
 import { homedir, hostname, userInfo } from "node:os";
 import { runCli } from "../src/cli.js";
 import { realFs } from "../src/fs.js";
@@ -19,6 +21,7 @@ function quietly<T>(read: () => T): T | null {
 const code = await runCli(process.argv.slice(2), {
   stdout: (text) => process.stdout.write(text),
   stderr: (text) => process.stderr.write(text),
+  cwd: () => process.cwd(),
   deps: () => {
     const home = usableHome(process.env.HOME) ?? usableHome(quietly(homedir) ?? undefined);
     if (home === null) throw new Error("no home directory");

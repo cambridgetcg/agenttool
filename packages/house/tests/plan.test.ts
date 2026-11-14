@@ -1,6 +1,6 @@
 /** Blueprint and plan: the round trip, one changed fact changing exactly one step, refusals, documents, and no score. */
 import { describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { blueprintFromSurvey, parseBlueprint } from "../src/blueprint.js";
 import { RefusalError } from "../src/errors.js";
@@ -9,7 +9,7 @@ import { plan } from "../src/plan.js";
 import { BLUEPRINT_PROTOCOL, PLAN_PROTOCOL, type HouseBlueprint, type HousePlan, type HouseSurvey } from "../src/shapes.js";
 import { survey } from "../src/survey.js";
 import {
-  CLAUDE_SERVERS, COLLAB_OLD, COMMIT_NEW, FakeFs, FakeRunner, HOME, LOBBY_COMMIT, NOW, SEAT_COMMIT, SHARE,
+  CLAUDE_SERVERS, COLLAB_OLD, COMMIT_NEW, FakeFs, FakeRunner, HOME, INSTALLED_NEW, LOBBY_COMMIT, NOW, SEAT_COMMIT, SHARE,
   claudeJson, codexToml, fullHouse, makeDeps, repoRoot,
 } from "./helpers.js";
 
@@ -73,8 +73,8 @@ describe("the round trip", () => {
     const after = plan(await survey(makeDeps({ fs })), blueprint, NOW);
     expect(changed(before, after)).toEqual([["door.codex.collab", "to_switch"]]);
     expect(after.steps.find((step) => step.id === "door.codex.collab")).toEqual({
-      id: "door.codex.collab", is: "to_switch", because: "AGENTOOL_COLLAB_TOOLS is full here; the blueprint wants notes.",
-      whose_act: "the person", see: "packages/collab/PROTOCOL.md",
+      id: "door.codex.collab", is: "to_switch", because: "AGENTOOL_COLLAB_TOOLS is full here; the blueprint wants notes. No document in this repository says how yet.",
+      whose_act: "the person", see: null,
     });
   });
 
@@ -86,7 +86,7 @@ describe("the round trip", () => {
     const after = plan(await survey(makeDeps({ fs })), blueprint, NOW);
     expect(changed(before, after)).toEqual([["door.claude-code.lobby", "to_build"]]);
     expect(after.steps.find((step) => step.id === "door.claude-code.lobby")).toMatchObject({
-      because: "Not on this device: ~/.claude.json has no agenttool-lobby entry.", see: "packages/lobby/README.md",
+      because: "Not on this device: ~/.claude.json has no agenttool-lobby entry. No document in this repository says how yet.", see: null,
     });
   });
 
@@ -95,10 +95,9 @@ describe("the round trip", () => {
     const servers = { ...CLAUDE_SERVERS, "agenttool-collab": { command: "bun", args: [`${SHARE}/collab/${COLLAB_OLD}/agenttool-collab-mcp.js`] } };
     const fs = fullHouse().put(`${HOME}/.claude.json`, { type: "file", text: claudeJson(servers) }).put(`${HOME}/.codex/config.toml`, { type: "file", text: "[[[" });
     const steps = plan(await survey(makeDeps({ fs })), blueprint, NOW).steps;
-    expect(steps.find((step) => step.id === "door.claude-code.collab")).toMatchObject({ is: "to_repoint", see: "packages/collab/README.md" });
-    expect(steps.find((step) => step.id === "door.codex.collab")).toMatchObject({
-      is: "cannot_tell", because: "Could not be told here: the configuration file could not be parsed as TOML.", see: null,
-    });
+    expect(steps.find((step) => step.id === "door.claude-code.collab")).toMatchObject({ is: "to_repoint", see: null });
+    expect(steps.find((step) => step.id === "door.codex.collab")).toMatchObject({ is: "cannot_tell", see: null });
+    expect(steps.find((step) => step.id === "door.codex.collab")!.because).toStartWith("Could not be told here: this build's TOML reader could not read");
   });
 });
 
@@ -130,7 +129,28 @@ describe("refusals", () => {
 
   test("a blueprint naming a part this build does not know is refused, naming the part", () => {
     expect(refused({ ...base, parts: [{ id: "room.kitchen" }] }, "unknown_part")).toBe("the blueprint names a part this build does not know: room.kitchen");
-    expect(refused({ ...base, parts: [{ id: "atcm_SECRET quillon /Users/x" }] }, "unknown_part")).toBe("the blueprint names a part this build does not know: a part id that is not well formed");
+    expect(refused({ ...base, parts: [{ id: "atcm_SECRET quillon /Users/x" }] }, "unknown_part")).toBe("the blueprint names a part this build does not know: one whose id is not shown");
+    // Shaped like an id but not one of this vocabulary's kinds, or holding something identifying: not shown.
+    expect(refused({ ...base, parts: [{ id: "quillon" }] }, "unknown_part")).toBe("the blueprint names a part this build does not know: one whose id is not shown");
+    expect(refused({ ...base, parts: [{ id: "door.quillons-laptop.local" }] }, "unknown_part")).toBe("the blueprint names a part this build does not know: one whose id is not shown");
+    const hinted = () => parseBlueprint(JSON.stringify({ ...base, parts: [{ id: "room.quillon" }] }), { home: HOME, user: "quillon", host: null });
+    expect(hinted).toThrow("the blueprint names a part this build does not know: one whose id is not shown");
+  });
+
+  test("an unknown key or switch is refused without being named", () => {
+    for (const [value, code] of [
+      [{ ...base, parts: [], quillon: 1 }, "unknown_key"],
+      [{ ...base, parts: [{ id: "door.codex.collab", quillons_laptop: true }] }, "unknown_key"],
+      [{ ...base, parts: [{ id: "door.codex.collab", switches: { QUILLON_TOKEN: "x" } }] }, "unknown_switch"],
+    ] as const) {
+      const message = refused(value, code);
+      expect({ code, message, quotes: /quillon/i.test(message) }).toEqual({ code, message, quotes: false });
+    }
+  });
+
+  test("both spellings of one switch in one part are refused", () => {
+    expect(refused({ ...base, parts: [{ id: "door.codex.collab", switches: { AGENTOOL_COLLAB_TOOLS: "full", AGENTTOOL_COLLAB_TOOLS: "full" } }] }, "both_spellings"))
+      .toBe("door.codex.collab wants AGENTOOL_COLLAB_TOOLS and AGENTTOOL_COLLAB_TOOLS, which are one switch; a blueprint names it once");
   });
 
   test("every other closed-schema refusal, never quoting the file", () => {
@@ -156,12 +176,30 @@ describe("refusals", () => {
 });
 
 describe("documents", () => {
-  test("every document a step can name exists in this repository; a part with none says so plainly", () => {
+  /** Each document a step may name, and the places its part looks that the document's own recipe must name, so that
+   * following it gives a house the survey recognises. A new `see` needs a row here. */
+  const RECIPES: Record<string, { document: string; names: string[] }> = {
+    "clock.netcheck": { document: "packages/lobby-doorbell/README.md", names: ["~/.local/bin", "lobby-netcheck"] },
+  };
+
+  test("every document a step can name exists in this repository, and its recipe names the places the part looks; a part with none says so plainly", () => {
     for (const spec of PARTS) {
       for (const see of [spec.see.build, spec.see.repoint, spec.see.switch]) {
-        if (see !== null) expect({ see, exists: existsSync(join(repoRoot, see)) }).toEqual({ see, exists: true });
+        if (see === null) continue;
+        expect({ see, exists: existsSync(join(repoRoot, see)) }).toEqual({ see, exists: true });
+        const recipe = RECIPES[spec.id];
+        expect({ id: spec.id, see, recipe: recipe?.document }).toEqual({ id: spec.id, see, recipe: see });
+        const text = readFileSync(join(repoRoot, see), "utf8");
+        for (const name of recipe!.names) expect({ see, name, named: text.includes(name) }).toEqual({ see, name, named: true });
       }
     }
+  });
+
+  test("the README's plan rule and example agree with the build: the no-commit case, and plainly invented times", () => {
+    const readme = readFileSync(join(repoRoot, "packages/house/README.md"), "utf8");
+    expect(readme).toContain("a present\nroom whose `SOURCE.txt` names no commit, when the blueprint wants one, plans\n`cannot_tell`");
+    const times = [...readme.matchAll(/"installed":"([^"]+)"/g)].map((match) => match[1]);
+    expect(times).toEqual([INSTALLED_NEW]);
   });
 
   test("a step never carries a command to paste", async () => {
@@ -209,5 +247,67 @@ describe("no score", () => {
     expect(text.indexOf("100%")).toBeGreaterThan(text.indexOf('"id":"ground.weather"'));
     expect(text.indexOf("100%")).toBeLessThan(text.indexOf('"id":"room.collab"'));
     expect(text.split("100%")).toHaveLength(2);
+  });
+});
+
+describe("switches are compared as collab reads them: one switch under two spellings", () => {
+  const door = (env: Record<string, string>) => fullHouse().put(`${HOME}/.claude.json`, {
+    type: "file", text: claudeJson({ ...CLAUDE_SERVERS, "agenttool-collab": { command: "bun", args: [`${SHARE}/collab/current/x.js`], env } }),
+  });
+  const wants = (switches: Record<string, string>) => parseBlueprint(JSON.stringify({
+    protocol: BLUEPRINT_PROTOCOL, name: "a house", parts: [{ id: "door.claude-code.collab", switches }],
+  }));
+  const stepFor = async (env: Record<string, string>, switches: Record<string, string>) =>
+    plan(await survey(makeDeps({ fs: door(env) })), wants(switches), NOW).steps[0]!;
+
+  test("disagreeing spellings: cannot_tell, never as_wanted", async () => {
+    expect(await stepFor({ AGENTOOL_COLLAB_TOOLS: "full", AGENTTOOL_COLLAB_TOOLS: "notes" }, { AGENTOOL_COLLAB_TOOLS: "full" }))
+      .toMatchObject({ is: "cannot_tell" });
+  });
+
+  test("the same value under the other spelling is as wanted", async () => {
+    expect(await stepFor({ AGENTTOOL_COLLAB_TOOLS: "notes" }, { AGENTOOL_COLLAB_TOOLS: "notes" })).toMatchObject({ is: "as_wanted" });
+  });
+
+  test("another value under the other spelling: to_switch names the spelling set here, so the change does not add a conflict", async () => {
+    expect((await stepFor({ AGENTTOOL_COLLAB_TOOLS: "notes" }, { AGENTOOL_COLLAB_TOOLS: "full" })).because).toBe(
+      "AGENTTOOL_COLLAB_TOOLS is notes here; the blueprint wants full (as AGENTOOL_COLLAB_TOOLS, the same switch: change AGENTTOOL_COLLAB_TOOLS rather than adding the other spelling). "
+      + "No document in this repository says how yet.",
+    );
+  });
+
+  test("not set, or set empty: not set in this entry under either spelling", async () => {
+    for (const env of [{}, { AGENTOOL_COLLAB_TOOLS: "" }] as Array<Record<string, string>>) {
+      expect((await stepFor(env, { AGENTOOL_COLLAB_TOOLS: "full" })).because)
+        .toBe("AGENTOOL_COLLAB_TOOLS is not set in this entry under either spelling; the blueprint wants full. No document in this repository says how yet.");
+    }
+  });
+
+  test("blueprint --from-survey carries a switch set under both spellings once, and the plan of it is as wanted", async () => {
+    const seen = await survey(makeDeps({ fs: door({ AGENTOOL_COLLAB_TOOLS: "notes", AGENTTOOL_COLLAB_TOOLS: "notes" }) }));
+    const carried = parseBlueprint(JSON.stringify(blueprintFromSurvey(seen)));
+    expect(carried.parts.find((part) => part.id === "door.claude-code.collab")).toEqual({ id: "door.claude-code.collab", switches: { AGENTOOL_COLLAB_TOOLS: "notes" } });
+    expect(plan(seen, carried, NOW).steps.every((step) => step.is === "as_wanted")).toBe(true);
+  });
+});
+
+describe("commits in a step's sentence", () => {
+  const wanting = (commit: string) => parseBlueprint(JSON.stringify({ protocol: BLUEPRINT_PROTOCOL, name: "a house", parts: [{ id: "room.collab", commit }] }));
+
+  test("two commits that agree for eight characters are shown to where they part, never as the same", async () => {
+    const seen = await survey(makeDeps());
+    expect(plan(seen, wanting("0f1e2d3c0"), NOW).steps[0]!.because)
+      .toBe("The current install is commit 0f1e2d3c4; the blueprint wants 0f1e2d3c0. No document in this repository says how yet.");
+    expect(plan(seen, wanting("0f1e2d3c4b5a69788796a5b4c3d2e1f0a9b8c7d0"), NOW).steps[0]!.because)
+      .toBe("The current install is commit 0f1e2d3c4b5a69788796a5b4c3d2e1f0a9b8c7d6; the blueprint wants 0f1e2d3c4b5a69788796a5b4c3d2e1f0a9b8c7d0. No document in this repository says how yet.");
+    expect(plan(seen, wanting("0f1e2d3c4"), NOW).steps[0]!.is).toBe("as_wanted");
+  });
+
+  test("a room with no commit in SOURCE.txt plans cannot_tell, naming the wanted commit whole", async () => {
+    const fs = fullHouse().put(`${SHARE}/collab/${COLLAB_OLD}/SOURCE.txt`, { type: "file", text: "no commit here\n" })
+      .put(`${SHARE}/collab/current`, { type: "link", target: COLLAB_OLD });
+    expect(plan(await survey(makeDeps({ fs })), wanting("0f1e2d3c0"), NOW).steps[0]).toMatchObject({
+      is: "cannot_tell", because: "The current install's SOURCE.txt names no commit, so whether it is 0f1e2d3c0 cannot be told.",
+    });
   });
 });

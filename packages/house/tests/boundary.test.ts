@@ -1,7 +1,7 @@
 /** Package boundaries (CLAUDE.md, Non-negotiables):
  *
  * - No network of any kind, no listening, no shell.
- * - One process module: src/run.ts, spawning once, after its allowlist check.
+ * - One process module: src/run.ts, spawning once, after its allowlist check; only it signals a process (SIGKILL included, to bound the ask).
  * - One file-system module: src/fs.ts, read-only (open flags O_RDONLY, O_NOFOLLOW, O_NONBLOCK only).
  * - Nothing anywhere creates, changes or removes a file.
  * - No journal, database or key is opened: the journal names appear only in
@@ -57,7 +57,6 @@ const NEVER: RegExp[] = [
   /["'`/]backups\b/,
   /\.kingdom\/keys/,
   /lobby-mail/,
-  /\bkill\s*\(\s*[^)]*(?:9|SIGKILL)/,
   /\bBun\.\$/,
   /\bBun\.env\b/,
   /\bBun\.(?:write|file)\b/,
@@ -76,12 +75,14 @@ const WRITE = new RegExp([
 /** Allowed in exactly one file each. */
 const ONLY_IN: Array<{ pattern: RegExp; file: string }> = [
   { pattern: /\bBun\.spawn\b/, file: "src/run.ts" },
+  { pattern: /\bSIGKILL\b|\bkill\s*\(\s*[^)]*\b9\b/, file: "src/run.ts" },
+  { pattern: /\bprocess\.kill\b|\bdetached\b/, file: "src/run.ts" },
   { pattern: /\b(?:openSync|readSync|lstatSync|readlinkSync|readdirSync|fstatSync)\b/, file: "src/fs.ts" },
   { pattern: /\.sqlite\b/, file: "src/parts.ts" },
   { pattern: /\bBun\.TOML\b/, file: "src/looks.ts" },
 ];
 /** Allowed only in bin/. */
-const BIN_ONLY: RegExp[] = [/\bprocess\.env\b/, /\bnew Date\(\s*\)/, /\bDate\.now\b/, /\bhostname\b/, /\buserInfo\b/, /\bhomedir\b/, /\bprocess\.getuid\b/, /\bprocess\.platform\b/];
+const BIN_ONLY: RegExp[] = [/\bprocess\.env\b/, /\bprocess\.cwd\b/, /\bnew Date\(\s*\)/, /\bDate\.now\b/, /\bhostname\b/, /\buserInfo\b/, /\bhomedir\b/, /\bprocess\.getuid\b/, /\bprocess\.platform\b/];
 
 describe("network, process, file and secret boundary", () => {
   test("the scan sees every source file", () => {
@@ -126,8 +127,9 @@ describe("network, process, file and secret boundary", () => {
     const fs = text(join(packageRoot, "src", "fs.ts"));
     expect(fs.match(/\bopenSync\(/g)).toHaveLength(1);
     expect(fs).toContain("const READ_FLAGS = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK;");
-    expect(fs).toContain("const CHOSEN_FLAGS = constants.O_RDONLY | constants.O_NONBLOCK;");
-    expect(fs.match(/constants\.O_[A-Z]+/g)?.sort()).toEqual(["constants.O_NOFOLLOW", "constants.O_NONBLOCK", "constants.O_NONBLOCK", "constants.O_RDONLY", "constants.O_RDONLY"]);
+    // The person's blueprint file is opened with the same flags: one set, never following a final link.
+    expect(fs.match(/constants\.O_[A-Z]+/g)?.sort()).toEqual(["constants.O_NOFOLLOW", "constants.O_NONBLOCK", "constants.O_RDONLY"]);
+    expect(fs.match(/readBounded\(path, maxBytes, READ_FLAGS\)/g)).toHaveLength(2);
   });
 
   test("the one process module spawns once, after the allowlist, with a fixed small environment", () => {
@@ -136,14 +138,18 @@ describe("network, process, file and secret boundary", () => {
     expect(run).toContain("assertAllowedArgv(argv, home);");
     expect(run.indexOf("assertAllowedArgv(argv, home);")).toBeLessThan(run.indexOf("Bun.spawn("));
     expect(run).toContain('export const ASK_ARGS = { help: ["--help"], weather: ["weather"] } as const;');
-    expect(run).toContain("return { PATH: CHILD_PATH, HOME: home };");
+    expect(run).toContain('return { PATH: CHILD_PATH, HOME: home, BUN_RUNTIME_TRANSPILER_CACHE_PATH: "0" };');
+    expect(run).toContain('export const BUN_CHILD_FLAGS = ["--no-install", "--no-env-file", "--config=/dev/null"] as const;');
+    expect(run).toContain("detached: true");
     expect(run).toContain('const CHILD_PATH = "/usr/bin:/bin";');
   });
 
   test("the journal, cache and ledger are named only as lstat targets in the parts table", () => {
     const parts = text(join(packageRoot, "src", "parts.ts"));
-    // Per room: the relative path, its write-ahead log, and the path as shown in words.
+    // Per room: the relative path, its write-ahead log, and the path as shown in words; and one default for a variable.
     expect(parts.match(/"[^"]*\.sqlite(?:-wal)?"/g)?.sort()).toEqual([
+      // AGENTOOL_COLLAB_DB's default, compared with the variable's value as text and never looked at.
+      '".local/share/agenttool/collab.sqlite"',
       '"collab.sqlite"', '"collab.sqlite-wal"',
       '"execution-seat/seats.sqlite"', '"execution-seat/seats.sqlite-wal"',
       '"lobby/lobby.sqlite"', '"lobby/lobby.sqlite-wal"',

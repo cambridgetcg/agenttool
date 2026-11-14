@@ -36,7 +36,7 @@ export interface HouseFs {
   list(path: string): string[] | Fail;
   /** At most `maxBytes` of a regular file, never through a link. */
   readHead(path: string, maxBytes: number): HeadRead | Fail;
-  /** A file the person named on the command line (a blueprint); a link to it is followed. */
+  /** A file the person named on the command line (a blueprint); like readHead, never through a final link. */
   readChosen(path: string, maxBytes: number): HeadRead | Fail;
 }
 
@@ -62,10 +62,8 @@ function statOf(stat: Stats): EntryStat {
   return { kind: kindOf(stat), mtimeMs: stat.mtimeMs, size: stat.size, uid: stat.uid, mode: stat.mode };
 }
 
-/** Read-only, never through a final link, and never blocking on a pipe someone left in place of a file. */
+/** Read-only, never through a final link, and never blocking on a pipe someone left in place of a file. The person's own blueprint file is opened the same way. */
 const READ_FLAGS = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK;
-/** For the person's own blueprint file: read-only, links followed. */
-const CHOSEN_FLAGS = constants.O_RDONLY | constants.O_NONBLOCK;
 
 function readBounded(path: string, maxBytes: number, flags: number): HeadRead | Fail {
   let fd: number;
@@ -118,6 +116,6 @@ export const realFs: HouseFs = {
     return readBounded(path, maxBytes, READ_FLAGS);
   },
   readChosen(path, maxBytes) {
-    return readBounded(path, maxBytes, CHOSEN_FLAGS);
+    return readBounded(path, maxBytes, READ_FLAGS);
   },
 };

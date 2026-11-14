@@ -5,7 +5,7 @@
  * or says plainly that none exists yet; it never carries a command to paste,
  * because a generated command invites running it.
  */
-import { SWITCH_ELSE } from "./looks.js";
+import { SWITCH_ELSE, spellingsOf, switchOf } from "./looks.js";
 import { partSpec } from "./parts.js";
 import {
   GOOD_FOR_SECONDS, PLAN_AUTHORISES, PLAN_BASIS, PLAN_PROTOCOL,
@@ -21,6 +21,29 @@ function short(commit: string): string {
 function sameCommit(have: string, want: string): boolean {
   const length = Math.min(have.length, want.length);
   return length >= 7 && have.slice(0, length) === want.slice(0, length);
+}
+
+/** Two different commits, each cut to eight characters or, when they agree that far, to just past where they part. */
+function distinct(have: string, want: string): [string, string] {
+  let index = 0;
+  while (index < have.length && index < want.length && have[index] === want[index]) index += 1;
+  const length = Math.max(8, index + 1);
+  return [have.slice(0, length), want.slice(0, length)];
+}
+
+/** A wanted switch against the entry's effective value: collab reads both spellings as one switch. Null when they agree. */
+function switchDifference(have: Record<string, unknown>, key: string, value: string): string | null {
+  const name = switchOf(key);
+  const set = name === undefined ? [key] : spellingsOf(name).filter((spelt) => typeof have[spelt] === "string");
+  if (set.length === 0 || typeof have[set[0]!] !== "string") {
+    return `${key} is not set in this entry under either spelling; the blueprint wants ${value}`;
+  }
+  const found = set[0]!;
+  const now = have[found];
+  if (now === value) return null; // Both spellings set agree, or the door would be unknown, not present.
+  const here = now === SWITCH_ELSE ? "is set to something else here" : `is ${String(now)} here`;
+  const spelling = found === key ? "" : ` (as ${key}, the same switch: change ${found} rather than adding the other spelling)`;
+  return `${found} ${here}; the blueprint wants ${value}${spelling}`;
 }
 
 function step(id: string, is: StepIs, because: string): PlanStep {
@@ -61,23 +84,20 @@ export function plan(survey: HouseSurvey, blueprint: HouseBlueprint, now: Date):
     if (wanted.commit !== undefined) {
       const have = part.detail.commit;
       if (typeof have !== "string") {
-        steps.push(step(part.id, "cannot_tell", `The current install's SOURCE.txt names no commit, so whether it is ${short(wanted.commit)} cannot be told.`));
+        steps.push(step(part.id, "cannot_tell", `The current install's SOURCE.txt names no commit, so whether it is ${wanted.commit} cannot be told.`));
         continue;
       }
       if (!sameCommit(have, wanted.commit)) {
-        steps.push(step(part.id, "to_build", `The current install is commit ${short(have)}; the blueprint wants ${short(wanted.commit)}.`));
+        const [shownHave, shownWant] = distinct(have, wanted.commit);
+        steps.push(step(part.id, "to_build", `The current install is commit ${shownHave}; the blueprint wants ${shownWant}.`));
         continue;
       }
     }
     if (wanted.switches !== undefined) {
       const have = (typeof part.detail.switches === "object" && part.detail.switches !== null ? part.detail.switches : {}) as Record<string, unknown>;
       const differences = Object.entries(wanted.switches)
-        .filter(([key, value]) => have[key] !== value)
-        .map(([key, value]) => {
-          const now_ = have[key];
-          const here = typeof now_ !== "string" ? "is not set here" : now_ === SWITCH_ELSE ? "is set to something else here" : `is ${now_} here`;
-          return `${key} ${here}; the blueprint wants ${value}`;
-        });
+        .map(([key, value]) => switchDifference(have, key, value))
+        .filter((difference): difference is string => difference !== null);
       if (differences.length > 0) {
         steps.push(step(part.id, "to_switch", `${differences.join("; ")}.`));
         continue;

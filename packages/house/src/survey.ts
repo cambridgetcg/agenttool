@@ -7,9 +7,9 @@
  * Nothing here judges the house: no score, no fraction, no grade.
  */
 import {
-  askHelp, askWeather, lookEntry, lookEnv, lookHook, lookLink, lookPath, lookSource, lookSystemPath, lookWrappers,
-  runnableHostEntry, HOST_CONFIG, CLAUDE_SETTINGS,
-  type EnvQuestion, type HostName, type LinkLook, type LookDeps, type PathLook, type SourceLook,
+  askHelp, askWeather, lookEntry, lookEnv, lookHook, lookLink, lookPath, lookSource, lookSystemPath, lookVersion, lookWrappers,
+  runnableHostEntry, spellingsOf, HOST_CONFIG, CLAUDE_SETTINGS,
+  type EnvQuestion, type HostName, type LinkLook, type LookDeps, type PathLook, type SourceLook, type VersionLook,
 } from "./looks.js";
 import { PARTS, type LookName, type PartSpec } from "./parts.js";
 import { COMMAND_DIRECTORIES, CONTAINER_MARKERS, type InstallReference, type RootName } from "./places.js";
@@ -36,6 +36,7 @@ interface Looks {
   path(root: RootName, rel: string): PathLook;
   systemPath(path: string): PathLook;
   room(tool: string): LinkLook;
+  version(tool: string, name: string): VersionLook;
   source(tool: string, version: string): SourceLook;
   entry(host: HostName, server: string): ReturnType<typeof lookEntry>;
   hook(): ReturnType<typeof lookHook>;
@@ -68,6 +69,7 @@ function looksFor(spec: PartSpec, deps: LookDeps, shared: Shared): Looks {
     path: (root, rel) => (allow("path"), lookPath(deps, root, rel)),
     systemPath: (path) => (allow("path"), lookSystemPath(deps, path)),
     room,
+    version: (tool, name) => (allow("link"), lookVersion(deps, tool, name)),
     source: (tool, version) => (allow("source"), lookSource(deps, tool, version)),
     entry: (host, server) => (allow("entry"), lookEntry(deps, host, server)),
     hook: () => (allow("hook"), lookHook(deps, "claude-code")),
@@ -118,12 +120,17 @@ function fileFacts(looks: Looks, root: RootName, rel: string, sidecar: string): 
 function readRoom(spec: PartSpec, looks: Looks): Reading {
   if (spec.of.shape !== "room") throw new Error("not a room");
   const { tool, file } = spec.of;
-  const facts = fileFacts(looks, file.root, file.rel, file.sidecar);
+  // A variable in this process's environment that puts the file elsewhere: the default place is not read as if it were the one in use.
+  const moved = file.movedBy.filter((name) => looks.env({ moved: name }));
+  const facts = moved.length > 0 ? { exists: null, age_seconds: null } : fileFacts(looks, file.root, file.rel, file.sidecar);
   const ageWords = file.label === "cache"
     ? "its file time on this device's own clock; any write updates it, so the picture of the other devices is at least that old"
     : "its file time (and its write-ahead log's) on this device's own clock";
+  const fileWords = moved.length > 0
+    ? `${moved.join(" and ")} ${moved.length === 1 ? "is" : "are"} set in this process's environment to another place, so the ${file.label} may be elsewhere: ${file.shown} was not looked at, and whether the ${file.label} is there could not be told.`
+    : `lstat ${file.shown} for whether the ${file.label} is there and ${ageWords}.`;
   const how = `Listed ~/.local/share/agenttool/${tool} for version directories (each holding SOURCE.txt), read its current link `
-    + `and the commit and installed lines of the current SOURCE.txt; lstat ${file.shown} for whether the ${file.label} is there and ${ageWords}. Nothing was opened besides SOURCE.txt.`;
+    + `and the commit and installed lines of the current SOURCE.txt; ${fileWords} Nothing was opened besides SOURCE.txt.`;
   const detail: Record<string, unknown> = { versions: [], current: null, commit: null, installed: null, [file.label]: facts };
   const link = looks.room(tool);
   if (link.seen === "absent") return { state: "missing", detail, how, why: `there is no ~/.local/share/agenttool/${tool}` };
@@ -147,36 +154,48 @@ function readRoom(spec: PartSpec, looks: Looks): Reading {
 
 interface Classified {
   tool: string;
-  version: string;
+  /** The version as printed: `current`, or the name of a version directory installed on this device; null otherwise. */
+  version: string | null;
   names_current: boolean | null;
   /** stale: names an install other than the current one; untold: which is current could not be told. */
   standing: "current" | "stale" | "untold";
   why: string;
 }
 
+/**
+ * Where an entry, hook or wrapper points. The version it names is text from a
+ * configuration file or a script, so it is printed only when it is `current` or
+ * the name of a version directory that is installed here (checked by lstat); any
+ * other text in that place, which could be a token, an address or a name, is
+ * neither printed nor repeated in the reason.
+ */
 function classify(looks: Looks, reference: InstallReference): Classified | null {
-  const { tool, version } = reference;
+  const { tool } = reference;
   const room = looks.room(tool);
-  if (room.seen === "unknown") return { tool, version, names_current: null, standing: "untold", why: `which ${tool} install is current could not be told: ${room.why}` };
-  if (room.seen === "absent") return { tool, version, names_current: false, standing: "stale", why: `it names a ${tool} install, but there is no ~/.local/share/agenttool/${tool}` };
-  if (version === "current") {
+  if (reference.version === "current") {
+    const version = "current";
+    if (room.seen === "unknown") return { tool, version, names_current: null, standing: "untold", why: `which ${tool} install is current could not be told: ${room.why}` };
+    if (room.seen === "absent") return { tool, version, names_current: false, standing: "stale", why: `it names a ${tool} install, but there is no ~/.local/share/agenttool/${tool}` };
     if (room.current !== null) return { tool, version, names_current: true, standing: "current", why: "" };
     return room.current_problem !== null
       ? { tool, version, names_current: null, standing: "untold", why: `it follows the ${tool} current link, which could not be used: ${room.current_problem}` }
       : { tool, version, names_current: false, standing: "stale", why: `it follows the ${tool} current link, but there is none` };
   }
-  if (room.versions.includes(version)) {
-    if (room.current === null) return { tool, version, names_current: null, standing: "untold", why: `it names ${tool} ${version}, and which ${tool} install is current could not be told` };
-    return room.current === version
-      ? { tool, version, names_current: true, standing: "current", why: "" }
-      : { tool, version, names_current: false, standing: "stale", why: `it names ${tool} ${version}, but the current ${tool} install is ${room.current}` };
-  }
-  // Not an installed version: another entry in the install area (a doorbell's state, a check directory) is not an install and is ignored.
-  if (room.others.includes(version)) return null;
-  return { tool, version, names_current: false, standing: "stale", why: `it names ${tool} ${version}, which is not installed on this device` };
+  if (room.seen === "unknown") return { tool, version: null, names_current: null, standing: "untold", why: `which ${tool} install it names could not be told: ${room.why}` };
+  if (room.seen === "absent") return { tool, version: null, names_current: false, standing: "stale", why: `it names a ${tool} install, but there is no ~/.local/share/agenttool/${tool}` };
+  const seen = room.versions.includes(reference.version) ? "installed" : looks.version(tool, reference.version);
+  // Another entry in the install area (a doorbell's state, a check directory) is not an install and is ignored.
+  if (seen === "not_an_install") return null;
+  if (seen === "not_installed") return { tool, version: null, names_current: false, standing: "stale", why: `it names a ${tool} directory that is not installed on this device` };
+  if (typeof seen === "object") return { tool, version: null, names_current: null, standing: "untold", why: `which ${tool} install it names could not be looked at: ${seen.why}` };
+  const version = reference.version;
+  if (room.current === null) return { tool, version, names_current: null, standing: "untold", why: `it names ${tool} ${version}, and which ${tool} install is current could not be told` };
+  return room.current === version
+    ? { tool, version, names_current: true, standing: "current", why: "" }
+    : { tool, version, names_current: false, standing: "stale", why: `it names ${tool} ${version}, but the current ${tool} install is ${room.current}` };
 }
 
-function installsOf(classified: Classified[]): Array<{ tool: string; version: string; names_current: boolean | null }> {
+function installsOf(classified: Classified[]): Array<{ tool: string; version: string | null; names_current: boolean | null }> {
   return classified.map(({ tool, version, names_current }) => ({ tool, version, names_current }));
 }
 
@@ -194,13 +213,27 @@ function readDoor(spec: PartSpec, looks: Looks): Reading {
   const config = HOST_CONFIG[host];
   const how = `Read ${config.shown} and kept only its ${config.key}.${server} command and arguments (for the AgentTool install they name) `
     + "and the closed-set switches in its environment; no other key, and no environment value outside those switches.";
-  const entry = looks.entry(host, server);
   const detail: Record<string, unknown> = { entry: false, names_install: null, version: null, names_current: null, switches: {} };
+  if (looks.env({ moved: config.movedBy })) {
+    return {
+      state: "unknown", detail,
+      how: `${config.movedBy} is set in this process's environment to another place, so ${config.shown} was not read.`,
+      why: `${config.movedBy} is set in this process's environment to another place, so which configuration this host reads here could not be told`,
+    };
+  }
+  const entry = looks.entry(host, server);
   if (entry.seen === "no_config") return { state: "missing", detail, how, why: `there is no ${config.shown}` };
   if (entry.seen === "unknown") return { state: "unknown", detail, how, why: entry.why };
   if (entry.seen === "no_entry") return { state: "missing", detail, how, why: `${config.shown} has no ${server} entry` };
   detail.entry = true;
   detail.switches = entry.switches;
+  if (entry.conflicting.length > 0) {
+    const pairs = entry.conflicting.map((name) => spellingsOf(name).join(" and ")).join("; ");
+    return {
+      state: "unknown", detail, how,
+      why: `the entry sets ${pairs} to different values; collab reads the two spellings as one switch and refuses to start when they disagree`,
+    };
+  }
   const mine = entry.references.filter((reference) => reference.tool === tool);
   if (mine.length === 0) {
     detail.names_install = false;
@@ -219,12 +252,20 @@ function readDoor(spec: PartSpec, looks: Looks): Reading {
 }
 
 function readHooks(spec: PartSpec, looks: Looks): Reading {
-  const how = `Read ${CLAUDE_SETTINGS.shown} and kept only, for each hook event, the AgentTool installs its hooks' commands name; never a command, a matcher or any other setting.`;
+  const how = `Read ${CLAUDE_SETTINGS.shown} and kept only, for each hook event, the AgentTool installs its hooks' commands name; never a command, a matcher or any other setting. `
+    + "An event this build does not know by name is shown as null.";
+  if (looks.env({ moved: CLAUDE_SETTINGS.movedBy })) {
+    return {
+      state: "unknown", detail: { events: [] },
+      how: `${CLAUDE_SETTINGS.movedBy} is set in this process's environment to another place, so ${CLAUDE_SETTINGS.shown} was not read.`,
+      why: `${CLAUDE_SETTINGS.movedBy} is set in this process's environment to another place, so which settings Claude Code reads here could not be told`,
+    };
+  }
   const hooks = looks.hook();
   if (hooks.seen === "no_config") return { state: "missing", detail: { events: [] }, how, why: `there is no ${CLAUDE_SETTINGS.shown}` };
   if (hooks.seen === "unknown") return { state: "unknown", detail: { events: [] }, how, why: hooks.why };
-  const events: Array<{ event: string; names_install: boolean; installs: ReturnType<typeof installsOf> }> = [];
-  const all: Array<{ event: string; item: Classified }> = [];
+  const events: Array<{ event: string | null; names_install: boolean; installs: ReturnType<typeof installsOf> }> = [];
+  const all: Array<{ event: string | null; item: Classified }> = [];
   for (const { event, references } of hooks.events) {
     const classified = references.map((reference) => classify(looks, reference)).filter((item): item is Classified => item !== null);
     events.push({ event, names_install: classified.length > 0, installs: installsOf(classified) });
@@ -233,17 +274,21 @@ function readHooks(spec: PartSpec, looks: Looks): Reading {
   const detail = { events };
   if (all.length === 0) return { state: "missing", detail, how, why: `no hook in ${CLAUDE_SETTINGS.shown} names an AgentTool install` };
   const byItem = new Map(all.map(({ event, item }) => [item, event]));
-  const standing = standingOf(all.map(({ item }) => item), (item) => `a ${byItem.get(item)} hook`);
+  const standing = standingOf(all.map(({ item }) => item), (item) => {
+    const event = byItem.get(item);
+    return typeof event === "string" ? `a ${event} hook` : "a hook under an event this build does not know by name";
+  });
   return { ...standing, detail, how };
 }
 
 function readWrappers(spec: PartSpec, looks: Looks): Reading {
-  const how = "Listed ~/.local/bin and kept only the agenttool-* names, then read the first 4 KiB of each for the AgentTool install it names; a link was not followed, and no wrapper's text was kept.";
+  const how = "Listed ~/.local/bin and kept only the agenttool-* names, then read the first 4 KiB of each for the AgentTool install it names; "
+    + "a link was not followed, no wrapper's text was kept, and a name that is not one of AgentTool's own commands is shown as null.";
   const seen = looks.wrappers();
   if (seen.seen === "absent") return { state: "missing", detail: { wrappers: [] }, how, why: "there is no ~/.local/bin" };
   if (seen.seen === "unknown") return { state: "unknown", detail: { wrappers: [] }, how, why: seen.why };
   const wrappers: Array<Record<string, unknown>> = [];
-  const all: Array<{ name: string; item: Classified }> = [];
+  const all: Array<{ name: string | null; item: Classified }> = [];
   for (const wrapper of seen.wrappers) {
     if (wrapper.references === null) {
       wrappers.push({ name: wrapper.name, entry: wrapper.entry, names_install: null, installs: [] });
@@ -256,45 +301,70 @@ function readWrappers(spec: PartSpec, looks: Looks): Reading {
   const detail: Record<string, unknown> = { wrappers };
   if (seen.more) detail.more_wrappers = true;
   if (wrappers.length === 0) return { state: "missing", detail, how, why: "~/.local/bin holds no agenttool-* wrapper" };
+  // Unknown is not present: wrappers that are all links (not followed) or unreadable say nothing about what runs.
+  if (wrappers.every((wrapper) => wrapper.names_install === null)) {
+    return { state: "unknown", detail, how, why: "no agenttool-* wrapper could be read: each is a link, which was not followed, or not a regular file that could be read" };
+  }
   const byItem = new Map(all.map(({ name, item }) => [item, name]));
-  const standing = standingOf(all.map(({ item }) => item), (item) => `${byItem.get(item)}`);
+  const standing = standingOf(all.map(({ item }) => item), (item) => byItem.get(item) ?? "an agenttool-* file this build does not know by name");
   return { ...standing, detail, how };
 }
 
 function readWitness(spec: PartSpec, looks: Looks): Reading {
   const how = `lstat timewitness in ${COMMAND_DIRECTORIES.join(", ")} (a link is not followed), and whether that directory is on this process's PATH. The survey never runs it.`;
   const unknown: string[] = [];
+  let linked: { dir: (typeof COMMAND_DIRECTORIES)[number] } | null = null;
   for (const dir of COMMAND_DIRECTORIES) {
     const seen = dir === "~/.local/bin" ? looks.path("bin", "timewitness") : looks.systemPath(`${dir}/timewitness`);
     if (seen.seen === "unknown") unknown.push(`${dir}: ${seen.why}`);
     if (seen.seen !== "entry") continue;
+    if (seen.type === "link") {
+      // Not followed, so whether it leads to timewitness cannot be told; a regular file further on still counts.
+      linked ??= { dir };
+      unknown.push(`${dir}/timewitness is a link, which was not followed, so whether it leads to timewitness could not be told`);
+      continue;
+    }
+    if (seen.type !== "file") {
+      unknown.push(`${dir}/timewitness is not a regular file`);
+      continue;
+    }
     return {
       state: "present",
       detail: { found_in: dir, entry: seen.type, on_process_path: looks.env({ path_has: dir }), run_by_survey: false },
       how: `${how} Running it gives a tied clock; until then this device's clock is its own word.`,
     };
   }
-  const detail = { found_in: null, entry: null, on_process_path: null, run_by_survey: false };
+  const detail = linked === null
+    ? { found_in: null, entry: null, on_process_path: null, run_by_survey: false }
+    : { found_in: linked.dir, entry: "link", on_process_path: looks.env({ path_has: linked.dir }), run_by_survey: false };
   if (unknown.length > 0) return { state: "unknown", detail, how, why: unknown.join("; ") };
   return { state: "missing", detail, how, why: "timewitness is in none of those directories" };
 }
 
 function readNetcheck(spec: PartSpec, looks: Looks): Reading {
-  const how = "lstat ~/.local/bin/agenttool-lobby-doorbell and ~/.local/bin/lobby-netcheck, and read ~/.local/share/agenttool/lobby-doorbell's current link. The survey never runs netcheck.";
+  const how = "lstat ~/.local/bin/agenttool-lobby-doorbell and ~/.local/bin/lobby-netcheck (a link is not followed), and read ~/.local/share/agenttool/lobby-doorbell's current link. The survey never runs netcheck.";
   const found: string[] = [];
   const unknown: string[] = [];
   for (const name of ["agenttool-lobby-doorbell", "lobby-netcheck"]) {
     const seen = looks.path("bin", name);
-    if (seen.seen === "entry") found.push(`~/.local/bin/${name}`);
     if (seen.seen === "unknown") unknown.push(`~/.local/bin/${name}: ${seen.why}`);
+    if (seen.seen !== "entry") continue;
+    if (seen.type === "file") found.push(`~/.local/bin/${name}`);
+    else if (seen.type === "link") unknown.push(`~/.local/bin/${name} is a link, which was not followed, so whether it leads to the doorbell could not be told`);
+    else unknown.push(`~/.local/bin/${name} is not a regular file`);
   }
   const room = looks.room("lobby-doorbell");
-  if (room.seen === "tool" && (room.versions.length > 0 || room.current !== null)) found.push("~/.local/share/agenttool/lobby-doorbell");
   if (room.seen === "unknown") unknown.push(`~/.local/share/agenttool/lobby-doorbell: ${room.why}`);
+  if (room.seen === "tool") {
+    if (room.current !== null) found.push("~/.local/share/agenttool/lobby-doorbell");
+    // The rooms' rule: versions without a usable current link do not say which one is in use.
+    else if (room.current_problem !== null) unknown.push(`~/.local/share/agenttool/lobby-doorbell: ${room.current_problem}`);
+    else if (room.versions.length > 0) unknown.push("~/.local/share/agenttool/lobby-doorbell: versions are installed, but no current link says which is in use");
+  }
   const detail = { found, current: room.seen === "tool" ? room.current : null, run_by_survey: false };
   if (found.length > 0) return { state: "present", detail, how };
   if (unknown.length > 0) return { state: "unknown", detail, how, why: unknown.join("; ") };
-  return { state: "missing", detail, how, why: "the doorbell is in none of those places (its own README installs it under ~/.kingdom/tools, which this survey does not look in)" };
+  return { state: "missing", detail, how, why: "the doorbell's netcheck was not found in those places" };
 }
 
 async function readWeatherPart(spec: PartSpec, looks: Looks): Promise<Reading> {
