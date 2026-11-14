@@ -891,6 +891,41 @@ describe("device weather at arrival (AGENTOOL_COLLAB_WEATHER)", () => {
     expect(rest.advice).toEqual(plain.advice);
   });
 
+  test("on Linux the supply files are read without blocking, and one that never answers does not hold the arrival", async () => {
+    const files: Record<string, string> = {
+      "AC/type": "Mains", "AC/online": "0", "BAT0/type": "Battery", "BAT0/capacity": "31", "BAT0/status": "Discharging",
+    };
+    let stalled = false;
+    const j = journal();
+    const server = j.server({ AGENTOOL_COLLAB_WEATHER: "on" }, () => readWeather({
+      platform: "linux",
+      now: () => new Date("2026-11-12T10:00:00.000Z"),
+      os: { loadavg: () => [3.2, 2, 1], totalmem: () => 8 * 1024 ** 3, cpus: () => [{}, {}] },
+      list_dir: async () => ["AC", "BAT0"],
+      read_file: (path) => stalled
+        ? new Promise<string>(() => {})
+        : new Promise<string>((resolve, reject) => {
+          setTimeout(() => {
+            const value = files[path.replace("/sys/class/power_supply/", "")];
+            if (value === undefined) reject(new Error("ENOENT"));
+            else resolve(`${value}\n`);
+          }, 5);
+        }),
+      deadline_ms: stalled ? 50 : 2_000,
+    }));
+    // Files that answer asynchronously in time are read.
+    const arrived = await ok(server, "collab_arrive", { purpose: "on a laptop", root_path: j.root, name: "lin" });
+    expect(arrived.weather.says).toStartWith("On battery at 31%; load 3.2 on 2 cores. ");
+    // A file that never answers costs the power fields at the reading's deadline, and the look-around returns.
+    stalled = true;
+    const started = performance.now();
+    const looked = await ok(server, "collab_arrive", { purpose: "on a laptop" });
+    expect(performance.now() - started).toBeLessThan(2_000);
+    expect(looked.you.name).toBe("lin");
+    expect(looked.weather.says).toStartWith("Load 3.2 on 2 cores. ");
+    expect(looked.weather.notes.some((note: string) => note.startsWith("On battery"))).toBe(false);
+  });
+
   test("an unknown value or two spellings that disagree refuse to start", () => {
     const j = journal();
     const codeOf = (environment: Record<string, string>) => {

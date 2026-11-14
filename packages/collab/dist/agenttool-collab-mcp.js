@@ -40469,7 +40469,7 @@ var COLLAB_PACKAGE_VERSION = "0.6.0-dev.0";
 
 // src/weather.ts
 import { spawn } from "child_process";
-import { readdirSync as readdirSync2, readFileSync as readFileSync3 } from "fs";
+import { readdir, readFile } from "fs/promises";
 import { cpus, loadavg, totalmem } from "os";
 var WEATHER_PROTOCOL = "agenttool.collab-weather/1";
 var WEATHER_GOOD_FOR_SECONDS = 60;
@@ -40569,7 +40569,7 @@ async function readWeather(deps = {}) {
       await readDarwin(reading, ledger, deps);
     } else if (platform === "linux") {
       elsewhere = "not read on Linux by this build";
-      readLinuxPower(reading, ledger, deps);
+      await readLinuxPower(reading, ledger, deps);
     }
   } catch {
     elsewhere = "this build failed while reading it";
@@ -40766,7 +40766,7 @@ function applyBattery(reading, ledger, result) {
   else
     ledger.miss("power.source", "pmset -g batt named no power source this build recognises");
   if (!facts.battery) {
-    missAll(ledger, BATTERY_FIELDS.slice(1), "pmset -g batt reports no internal battery");
+    missAll(ledger, BATTERY_FIELDS.slice(1), facts.drawing_from_line ? "pmset -g batt reports no internal battery" : "pmset -g batt printed nothing this build recognises");
     return;
   }
   const battery = facts.battery;
@@ -40902,10 +40902,10 @@ function applyNetwork(reading, ledger, routeResult, portsResult, reachResult) {
     ledger.miss("network.os_reports", reach.why);
   else {
     const reported = parseReach(reach.text);
-    if (reported)
+    if (reported === "reachable" || reported === "not_reachable")
       reading.network.os_reports = reported;
     else
-      ledger.miss("network.os_reports", "scutil --nwi printed no REACH line");
+      ledger.miss("network.os_reports", reported === "connection_required" ? "scutil --nwi reports a route only once a connection is brought up (Connection Required), which says nothing about now" : "scutil --nwi printed no REACH line");
   }
   const label = DARWIN_WEATHER_COMMANDS.route.label;
   let route = null;
@@ -40929,15 +40929,18 @@ function applyNetwork(reading, ledger, routeResult, portsResult, reachResult) {
   if (route.kind === "none") {
     reading.network.default_route = false;
     reading.network.kind = "none";
-    ledger.miss("network.metered", "there is no default route, so there is no connection to judge");
+    ledger.miss("network.metered", "the IPv4 table has no default route, so no link or gateway was there to judge");
     return;
   }
   reading.network.default_route = true;
   const ports = textOf("ports", portsResult);
-  const kind = interfaceKind(route.interface, "why" in ports ? null : parseHardwarePorts(ports.text));
-  if (kind !== null)
+  const judged = interfaceKind(route.interface, "why" in ports ? null : parseHardwarePorts(ports.text));
+  const kind = judged.kind;
+  if (kind !== null) {
     reading.network.kind = kind;
-  else
+    if (judged.from !== undefined)
+      ledger.infer("network.kind", judged.from);
+  } else
     ledger.miss("network.kind", route.interface === null ? "route -n get default named no interface" : ("why" in ports) ? ports.why : "networksetup printed nothing this build recognises");
   let metered = false;
   if (kind === "phone_usb") {
@@ -41013,10 +41016,11 @@ var STATES = {
 function parsePmsetBattery(text) {
   const named = /Now drawing from '([^'\n]*)'/.exec(text)?.[1];
   const source = named !== undefined ? SOURCES[named] ?? null : null;
+  const drawing_from_line = named !== undefined;
   const line = text.split(`
 `).find((entry) => /^\s*-InternalBattery-\d+/.test(entry));
   if (!line)
-    return { source, battery: null };
+    return { source, drawing_from_line, battery: null };
   const fields = /(\d{1,3})%;\s*([^;]*?)\s*(?:;\s*(.*))?$/.exec(line);
   const percent = fields ? Number(fields[1]) : Number.NaN;
   const stateWord = fields?.[2]?.trim().toLowerCase() ?? "";
@@ -41024,6 +41028,7 @@ function parsePmsetBattery(text) {
   const remaining = /(\d+):(\d{2}) remaining/.exec(rest);
   return {
     source,
+    drawing_from_line,
     battery: {
       percent: Number.isInteger(percent) && percent >= 0 && percent <= 100 ? percent : null,
       state: STATES[stateWord] ?? null,
@@ -41128,19 +41133,31 @@ function portKind(port) {
 }
 function interfaceKind(iface, ports) {
   if (iface === null)
-    return null;
+    return { kind: null };
   if (/^(?:utun|ipsec|ppp|wg)\d*$/.test(iface))
-    return "tunnel";
-  if (ports === null)
-    return null;
+    return { kind: "tunnel" };
+  if (ports === null || ports.size === 0)
+    return { kind: null };
   const port = ports.get(iface);
-  return port === undefined ? "other" : portKind(port);
+  if (port === undefined) {
+    return { kind: "other", from: "networksetup lists no hardware port for the default route's interface" };
+  }
+  const kind = portKind(port);
+  return kind === "other" ? {
+    kind,
+    from: "networksetup names the default route's port with none of the names this build reads as Wi-Fi, Ethernet " + "or iPhone USB; a port named in another language reads as other too"
+  } : { kind };
 }
+var REACH_REACHABLE = 2;
+var REACH_CONNECTION_REQUIRED = 4;
 function parseReach(text) {
   const flags = [...text.matchAll(/REACH\s*:\s*flags\s+0x([0-9a-f]+)/gi)].map((match) => Number.parseInt(match[1], 16));
   if (flags.length === 0)
     return null;
-  return flags.some((value) => (value & 2) !== 0) ? "reachable" : "not_reachable";
+  const reachable = flags.filter((value) => (value & REACH_REACHABLE) !== 0);
+  if (reachable.some((value) => (value & REACH_CONNECTION_REQUIRED) === 0))
+    return "reachable";
+  return reachable.length > 0 ? "connection_required" : "not_reachable";
 }
 function isHotspotGateway(gateway) {
   const parts = gateway === null ? null : /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(gateway);
@@ -41151,47 +41168,78 @@ function isHotspotGateway(gateway) {
 }
 var POWER_SUPPLY = "/sys/class/power_supply";
 var LINUX_STATES = { Charging: "charging", Discharging: "discharging", Full: "full" };
-function readLinuxPower(reading, ledger, deps) {
-  const list = deps.list_dir ?? ((path) => readdirSync2(path));
-  const readFile = deps.read_file ?? ((path) => readFileSync3(path, "utf8").slice(0, 4096));
-  const read = (path) => {
+var OUTSIDE_POWER_TYPES = /^(?:Mains|USB(?:_[A-Z0-9_]+)?)$/;
+var SYSFS_READ_CAP = 4096;
+var LINUX_FILE_READERS = {
+  read_file: async (path) => (await readFile(path, "utf8")).slice(0, SYSFS_READ_CAP),
+  list_dir: (path) => readdir(path)
+};
+async function readLinuxPower(reading, ledger, deps) {
+  const deadlineMs = deps.deadline_ms ?? WEATHER_DEADLINE_MS;
+  let timer;
+  const late = new Promise((resolve5) => {
+    timer = setTimeout(() => resolve5({ late: true }), deadlineMs);
+  });
+  try {
+    const outcome = await Promise.race([
+      readLinuxSupplies(deps).then((supplies) => ({ supplies }), () => ({ failed: true })),
+      late
+    ]);
+    if ("late" in outcome)
+      missAll(ledger, BATTERY_FIELDS, `${POWER_SUPPLY} was still being read at the ${deadlineMs} ms deadline`);
+    else if ("failed" in outcome)
+      missAll(ledger, BATTERY_FIELDS, `${POWER_SUPPLY} could not be read`);
+    else
+      applyLinuxPower(reading, ledger, outcome.supplies);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+async function readLinuxSupplies(deps) {
+  const list = deps.list_dir ?? LINUX_FILE_READERS.list_dir;
+  const readFile2 = deps.read_file ?? LINUX_FILE_READERS.read_file;
+  const read = async (name, file2) => {
     try {
-      return readFile(path).trim();
+      const value = await readFile2(`${POWER_SUPPLY}/${name}/${file2}`);
+      return typeof value === "string" ? value.trim() : null;
     } catch {
       return null;
     }
   };
-  let names;
-  try {
-    names = list(POWER_SUPPLY).filter((name) => /^[A-Za-z0-9_.:-]{1,64}$/.test(name)).sort();
-  } catch {
-    missAll(ledger, BATTERY_FIELDS, `${POWER_SUPPLY} could not be read`);
-    return;
-  }
-  const mains = [];
-  const batteries = [];
-  for (const name of names) {
-    const type = read(`${POWER_SUPPLY}/${name}/type`);
-    if (type === "Mains")
-      mains.push(read(`${POWER_SUPPLY}/${name}/online`));
-    if (type === "Battery") {
-      batteries.push({ capacity: read(`${POWER_SUPPLY}/${name}/capacity`), status: read(`${POWER_SUPPLY}/${name}/status`) });
+  const names = [...await list(POWER_SUPPLY)].filter((name) => /^[A-Za-z0-9_.:-]{1,64}$/.test(name)).sort();
+  return Promise.all(names.map(async (name) => {
+    const [type, scope] = await Promise.all([read(name, "type"), read(name, "scope")]);
+    const supply = { type, scope, present: null, online: null, capacity: null, status: null };
+    if (type === null || scope === "Device")
+      return supply;
+    if (OUTSIDE_POWER_TYPES.test(type)) {
+      supply.online = await read(name, "online");
+    } else if (type === "Battery") {
+      supply.present = await read(name, "present");
+      if (supply.present !== "0")
+        [supply.capacity, supply.status] = await Promise.all([read(name, "capacity"), read(name, "status")]);
     }
-  }
-  const battery = batteries.length === 1 ? batteries[0] : null;
-  if (mains.includes("1"))
+    return supply;
+  }));
+}
+function applyLinuxPower(reading, ledger, supplies) {
+  const own = supplies.filter((supply) => supply.type !== null && supply.scope !== "Device");
+  const outside = own.filter((supply) => OUTSIDE_POWER_TYPES.test(supply.type));
+  const batteries = own.filter((supply) => supply.type === "Battery" && supply.present !== "0");
+  if (outside.some((supply) => supply.online === "1"))
     reading.power.source = "ac";
-  else if (battery?.status === "Discharging" || mains.length > 0 && mains.every((online) => online === "0") && batteries.length > 0) {
+  else if (batteries.some((supply) => supply.status === "Discharging"))
     reading.power.source = "battery";
-  } else {
-    ledger.miss("power.source", `${POWER_SUPPLY} shows no online mains supply and no discharging battery`);
+  else {
+    ledger.miss("power.source", `${POWER_SUPPLY} shows no online mains or USB supply and no battery of this device's own discharging`);
   }
   if (batteries.length === 0) {
-    missAll(ledger, BATTERY_FIELDS.slice(1), `${POWER_SUPPLY} lists no battery`);
+    missAll(ledger, BATTERY_FIELDS.slice(1), supplies.some((supply) => supply.type === null) ? `${POWER_SUPPLY} lists no battery of this device's own that could be read` : `${POWER_SUPPLY} lists no battery of this device's own`);
     return;
   }
+  const battery = batteries.length === 1 ? batteries[0] : null;
   if (battery === null) {
-    missAll(ledger, ["power.battery_percent", "power.battery_state"], `${POWER_SUPPLY} lists more than one battery; this build does not combine them`);
+    missAll(ledger, ["power.battery_percent", "power.battery_state"], `${POWER_SUPPLY} lists more than one battery of this device's own; this build does not combine them`);
     return;
   }
   const capacity = wholeOf(battery.capacity ?? undefined);
@@ -41207,7 +41255,7 @@ function readLinuxPower(reading, ledger, deps) {
 }
 var WEATHER_NOTE_ON_BATTERY = "On battery: work here spends the person's charge, and a closed lid stops every session on this device at once.";
 var WEATHER_NOTE_LOW_POWER = "Low Power Mode is on: the person has asked this device to be frugal.";
-var WEATHER_NOTE_NO_ROUTE = "No default route: the local journal still works; anything hosted or on another device will not answer, " + "which is not the same as a peer staying silent.";
+var WEATHER_NOTE_NO_ROUTE = "No default route: the local journal still works; anything reached through a router, hosted services among them, " + "will not answer, which is not the same as a peer staying silent.";
 var WEATHER_NOTE_METERED = "The connection is likely metered: large downloads spend the person's data.";
 function weatherNotes(reading) {
   const notes = [];
@@ -41279,8 +41327,10 @@ function weatherSays(reading) {
   if (memory.pressure !== null)
     parts.push(`memory pressure ${memory.pressure}`);
   const busy = gpu.devices.map((device) => device.utilisation_percent).filter((value) => value !== null);
+  const unread = gpu.devices.length - busy.length;
   if (busy.length > 0) {
-    parts.push(busy.every((value) => value === 0) ? "graphics idle" : `graphics ${busy.map((value) => `${value}%`).join(", ")} busy`);
+    const words = unread === 0 && busy.every((value) => value === 0) ? "graphics idle" : `graphics ${busy.map((value) => `${value}%`).join(", ")} busy`;
+    parts.push(unread > 0 ? `${words}, use of ${unread} other ${unread === 1 ? "device" : "devices"} not read` : words);
   }
   const networkWords = [];
   if (network.kind !== null)

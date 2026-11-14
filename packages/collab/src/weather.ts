@@ -13,7 +13,7 @@
  * verb behaves differently because of it.
  */
 import { spawn, type ChildProcess } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { readdir, readFile } from "node:fs/promises";
 import { cpus, loadavg, totalmem } from "node:os";
 import { CollabError } from "./errors.js";
 import { MIN_PROPOSAL_CONSULT_SECONDS } from "./protocol.js";
@@ -236,10 +236,10 @@ export interface WeatherDeps {
   now?: () => Date;
   run?: WeatherRunner;
   os?: WeatherOs;
-  /** Linux power: read one small file; throws when it cannot. */
-  read_file?: (path: string) => string;
-  /** Linux power: list a directory; throws when it cannot. */
-  list_dir?: (path: string) => string[];
+  /** Linux power: read one small file; throws or rejects when it cannot. */
+  read_file?: (path: string) => string | Promise<string>;
+  /** Linux power: list a directory; throws or rejects when it cannot. */
+  list_dir?: (path: string) => string[] | Promise<string[]>;
   command_timeout_ms?: number;
   deadline_ms?: number;
 }
@@ -249,7 +249,8 @@ const SYSTEM_OS: WeatherOs = { loadavg, totalmem, cpus };
 /**
  * Read the device now. Async, never throws, never contacts a network: on
  * darwin it runs fixed local commands in parallel under one deadline; on Linux
- * it reads node:os and /sys/class/power_supply; elsewhere node:os alone.
+ * it reads node:os and, under the same deadline, /sys/class/power_supply;
+ * elsewhere node:os alone.
  */
 export async function readWeather(deps: WeatherDeps = {}): Promise<WeatherReading> {
   let at: Date;
@@ -270,7 +271,7 @@ export async function readWeather(deps: WeatherDeps = {}): Promise<WeatherReadin
       await readDarwin(reading, ledger, deps);
     } else if (platform === "linux") {
       elsewhere = "not read on Linux by this build";
-      readLinuxPower(reading, ledger, deps);
+      await readLinuxPower(reading, ledger, deps);
     }
   } catch {
     // A fault in this build's own parsing: what was read stands, the rest is explained.
@@ -481,7 +482,10 @@ function applyBattery(reading: WeatherReading, ledger: Ledger, result: CommandRe
   if (facts.source) reading.power.source = facts.source;
   else ledger.miss("power.source", "pmset -g batt named no power source this build recognises");
   if (!facts.battery) {
-    missAll(ledger, BATTERY_FIELDS.slice(1), "pmset -g batt reports no internal battery");
+    // Only a recognised report can say there is no battery; silence says nothing about the hardware.
+    missAll(ledger, BATTERY_FIELDS.slice(1), facts.drawing_from_line
+      ? "pmset -g batt reports no internal battery"
+      : "pmset -g batt printed nothing this build recognises");
     return;
   }
   const battery = facts.battery;
@@ -609,8 +613,10 @@ function applyNetwork(
   if ("why" in reach) ledger.miss("network.os_reports", reach.why);
   else {
     const reported = parseReach(reach.text);
-    if (reported) reading.network.os_reports = reported;
-    else ledger.miss("network.os_reports", "scutil --nwi printed no REACH line");
+    if (reported === "reachable" || reported === "not_reachable") reading.network.os_reports = reported;
+    else ledger.miss("network.os_reports", reported === "connection_required"
+      ? "scutil --nwi reports a route only once a connection is brought up (Connection Required), which says nothing about now"
+      : "scutil --nwi printed no REACH line");
   }
 
   const label = DARWIN_WEATHER_COMMANDS.route.label;
@@ -637,14 +643,18 @@ function applyNetwork(
   if (route.kind === "none") {
     reading.network.default_route = false;
     reading.network.kind = "none";
-    ledger.miss("network.metered", "there is no default route, so there is no connection to judge");
+    // Only the IPv4 table was read: an uplink with IPv6 alone may still carry a connection.
+    ledger.miss("network.metered", "the IPv4 table has no default route, so no link or gateway was there to judge");
     return;
   }
   reading.network.default_route = true;
   const ports = textOf("ports", portsResult);
-  const kind = interfaceKind(route.interface, "why" in ports ? null : parseHardwarePorts(ports.text));
-  if (kind !== null) reading.network.kind = kind;
-  else ledger.miss("network.kind", route.interface === null
+  const judged = interfaceKind(route.interface, "why" in ports ? null : parseHardwarePorts(ports.text));
+  const kind = judged.kind;
+  if (kind !== null) {
+    reading.network.kind = kind;
+    if (judged.from !== undefined) ledger.infer("network.kind", judged.from);
+  } else ledger.miss("network.kind", route.interface === null
     ? "route -n get default named no interface"
     : "why" in ports ? ports.why : "networksetup printed nothing this build recognises");
   let metered = false;
@@ -721,6 +731,8 @@ export const spawnWeatherCommand: WeatherRunner = (file, args, limits) => new Pr
 
 export interface PmsetBatteryFacts {
   source: PowerSource | null;
+  /** pmset printed its "Now drawing from '…'" line, so a missing battery line means there is none. */
+  drawing_from_line: boolean;
   battery: null | {
     percent: number | null;
     state: BatteryState | null;
@@ -742,8 +754,9 @@ const STATES: Record<string, BatteryState> = {
 export function parsePmsetBattery(text: string): PmsetBatteryFacts {
   const named = /Now drawing from '([^'\n]*)'/.exec(text)?.[1];
   const source = named !== undefined ? SOURCES[named] ?? null : null;
+  const drawing_from_line = named !== undefined;
   const line = text.split("\n").find((entry) => /^\s*-InternalBattery-\d+/.test(entry));
-  if (!line) return { source, battery: null };
+  if (!line) return { source, drawing_from_line, battery: null };
   const fields = /(\d{1,3})%;\s*([^;]*?)\s*(?:;\s*(.*))?$/.exec(line);
   const percent = fields ? Number(fields[1]) : Number.NaN;
   const stateWord = fields?.[2]?.trim().toLowerCase() ?? "";
@@ -751,6 +764,7 @@ export function parsePmsetBattery(text: string): PmsetBatteryFacts {
   const remaining = /(\d+):(\d{2}) remaining/.exec(rest);
   return {
     source,
+    drawing_from_line,
     battery: {
       percent: Number.isInteger(percent) && percent >= 0 && percent <= 100 ? percent : null,
       state: STATES[stateWord] ?? null,
@@ -875,20 +889,51 @@ export function portKind(port: string): Exclude<NetworkKind, "tunnel" | "none"> 
   return "other";
 }
 
-/** null only when the interface needs the port list and there is none to consult. */
-export function interfaceKind(iface: string | null, ports: Map<string, string> | null): NetworkKind | null {
-  if (iface === null) return null;
-  if (/^(?:utun|ipsec|ppp|wg)\d*$/.test(iface)) return "tunnel";
-  if (ports === null) return null;
+/**
+ * The default route's interface as a kind. A tunnel is known by its name, and
+ * a port this build names is read directly. `other` is reached by exclusion,
+ * so it comes with `from`, what it was inferred from: a port named in another
+ * language (a German Mac calls its Wi-Fi port "WLAN") reads as other too. The
+ * kind is null when there is nothing to judge: no interface, or no port list
+ * with anything this build recognises.
+ */
+export function interfaceKind(
+  iface: string | null,
+  ports: Map<string, string> | null,
+): { kind: NetworkKind | null; from?: string } {
+  if (iface === null) return { kind: null };
+  if (/^(?:utun|ipsec|ppp|wg)\d*$/.test(iface)) return { kind: "tunnel" };
+  if (ports === null || ports.size === 0) return { kind: null };
   const port = ports.get(iface);
-  return port === undefined ? "other" : portKind(port);
+  if (port === undefined) {
+    return { kind: "other", from: "networksetup lists no hardware port for the default route's interface" };
+  }
+  const kind = portKind(port);
+  return kind === "other"
+    ? {
+      kind,
+      from: "networksetup names the default route's port with none of the names this build reads as Wi-Fi, Ethernet " +
+        "or iPhone USB; a port named in another language reads as other too",
+    }
+    : { kind };
 }
 
-/** The reach flags' Reachable bit (0x2) in any REACH line; nothing was contacted. */
-export function parseReach(text: string): "reachable" | "not_reachable" | null {
+/** SCNetworkReachability flags, as scutil --nwi prints them. */
+const REACH_REACHABLE = 0x2;
+const REACH_CONNECTION_REQUIRED = 0x4;
+
+/**
+ * The system's own reach flags; nothing was contacted. Reachable without
+ * Connection Required is reachable now. Reachable with it means only once a
+ * connection (an on-demand VPN, a PPP link) is brought up, which says nothing
+ * about now, so it is reported apart and read as unknown.
+ */
+export function parseReach(text: string): "reachable" | "not_reachable" | "connection_required" | null {
   const flags = [...text.matchAll(/REACH\s*:\s*flags\s+0x([0-9a-f]+)/gi)].map((match) => Number.parseInt(match[1]!, 16));
   if (flags.length === 0) return null;
-  return flags.some((value) => (value & 0x2) !== 0) ? "reachable" : "not_reachable";
+  const reachable = flags.filter((value) => (value & REACH_REACHABLE) !== 0);
+  if (reachable.some((value) => (value & REACH_CONNECTION_REQUIRED) === 0)) return "reachable";
+  return reachable.length > 0 ? "connection_required" : "not_reachable";
 }
 
 export function isHotspotGateway(gateway: string | null): boolean {
@@ -903,46 +948,110 @@ export function isHotspotGateway(gateway: string | null): boolean {
 
 const POWER_SUPPLY = "/sys/class/power_supply";
 const LINUX_STATES: Record<string, BatteryState> = { Charging: "charging", Discharging: "discharging", Full: "full" };
+/** Supplies that bring power from outside: a mains adapter, or a USB or USB-C charger the kernel lists as USB. */
+const OUTSIDE_POWER_TYPES = /^(?:Mains|USB(?:_[A-Z0-9_]+)?)$/;
+/** A power_supply attribute is at most one page. */
+const SYSFS_READ_CAP = 4096;
 
-function readLinuxPower(reading: WeatherReading, ledger: Ledger, deps: WeatherDeps): void {
-  const list = deps.list_dir ?? ((path: string) => readdirSync(path));
-  const readFile = deps.read_file ?? ((path: string) => readFileSync(path, "utf8").slice(0, 4096));
-  const read = (path: string): string | null => {
+/**
+ * The default Linux readers. They are asynchronous because reading a supply
+ * calls its driver, which can stall (an embedded controller, a fuel gauge); a
+ * synchronous read would hold the event loop, and with it every session on
+ * this server, past every deadline.
+ */
+export const LINUX_FILE_READERS = {
+  read_file: async (path: string): Promise<string> => (await readFile(path, "utf8")).slice(0, SYSFS_READ_CAP),
+  list_dir: (path: string): Promise<string[]> => readdir(path),
+};
+
+/** One supply's files, as read; null where a file could not be read or was not asked for. */
+interface LinuxSupply {
+  type: string | null;
+  scope: string | null;
+  present: string | null;
+  online: string | null;
+  capacity: string | null;
+  status: string | null;
+}
+
+/**
+ * The power fields, from /sys/class/power_supply, under the reading's
+ * deadline. The supplies are read first and applied only if they all answered
+ * in time, so a late file costs the power fields and never changes a reading
+ * after it was returned.
+ */
+async function readLinuxPower(reading: WeatherReading, ledger: Ledger, deps: WeatherDeps): Promise<void> {
+  const deadlineMs = deps.deadline_ms ?? WEATHER_DEADLINE_MS;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<{ late: true }>((resolve) => {
+    timer = setTimeout(() => resolve({ late: true }), deadlineMs);
+  });
+  try {
+    const outcome = await Promise.race([
+      readLinuxSupplies(deps).then((supplies) => ({ supplies }), () => ({ failed: true as const })),
+      late,
+    ]);
+    if ("late" in outcome) missAll(ledger, BATTERY_FIELDS, `${POWER_SUPPLY} was still being read at the ${deadlineMs} ms deadline`);
+    else if ("failed" in outcome) missAll(ledger, BATTERY_FIELDS, `${POWER_SUPPLY} could not be read`);
+    else applyLinuxPower(reading, ledger, outcome.supplies);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function readLinuxSupplies(deps: WeatherDeps): Promise<LinuxSupply[]> {
+  const list = deps.list_dir ?? LINUX_FILE_READERS.list_dir;
+  const readFile = deps.read_file ?? LINUX_FILE_READERS.read_file;
+  const read = async (name: string, file: string): Promise<string | null> => {
     try {
-      return readFile(path).trim();
+      const value = await readFile(`${POWER_SUPPLY}/${name}/${file}`);
+      return typeof value === "string" ? value.trim() : null;
     } catch {
       return null;
     }
   };
-  let names: string[];
-  try {
-    names = list(POWER_SUPPLY).filter((name) => /^[A-Za-z0-9_.:-]{1,64}$/.test(name)).sort();
-  } catch {
-    missAll(ledger, BATTERY_FIELDS, `${POWER_SUPPLY} could not be read`);
-    return;
-  }
-  const mains: Array<string | null> = [];
-  const batteries: Array<{ capacity: string | null; status: string | null }> = [];
-  for (const name of names) {
-    const type = read(`${POWER_SUPPLY}/${name}/type`);
-    if (type === "Mains") mains.push(read(`${POWER_SUPPLY}/${name}/online`));
-    if (type === "Battery") {
-      batteries.push({ capacity: read(`${POWER_SUPPLY}/${name}/capacity`), status: read(`${POWER_SUPPLY}/${name}/status`) });
+  const names = [...await list(POWER_SUPPLY)].filter((name) => /^[A-Za-z0-9_.:-]{1,64}$/.test(name)).sort();
+  return Promise.all(names.map(async (name): Promise<LinuxSupply> => {
+    const [type, scope] = await Promise.all([read(name, "type"), read(name, "scope")]);
+    const supply: LinuxSupply = { type, scope, present: null, online: null, capacity: null, status: null };
+    // A peripheral's battery (a mouse, a keyboard, a headset) has scope Device: it is
+    // not this device's power, and its files are not read, since asking it can wait.
+    if (type === null || scope === "Device") return supply;
+    if (OUTSIDE_POWER_TYPES.test(type)) {
+      supply.online = await read(name, "online");
+    } else if (type === "Battery") {
+      supply.present = await read(name, "present");
+      if (supply.present !== "0") [supply.capacity, supply.status] = await Promise.all([read(name, "capacity"), read(name, "status")]);
     }
-  }
-  const battery = batteries.length === 1 ? batteries[0]! : null;
-  if (mains.includes("1")) reading.power.source = "ac";
-  else if (battery?.status === "Discharging" || (mains.length > 0 && mains.every((online) => online === "0") && batteries.length > 0)) {
-    reading.power.source = "battery";
-  } else {
-    ledger.miss("power.source", `${POWER_SUPPLY} shows no online mains supply and no discharging battery`);
+    return supply;
+  }));
+}
+
+function applyLinuxPower(reading: WeatherReading, ledger: Ledger, supplies: LinuxSupply[]): void {
+  const own = supplies.filter((supply) => supply.type !== null && supply.scope !== "Device");
+  const outside = own.filter((supply) => OUTSIDE_POWER_TYPES.test(supply.type!));
+  // An empty slot (present 0) holds no battery.
+  const batteries = own.filter((supply) => supply.type === "Battery" && supply.present !== "0");
+  // Mains offline is not on its own a reading of battery power: a charger the
+  // kernel does not list would leave it so. Only the battery saying so is.
+  if (outside.some((supply) => supply.online === "1")) reading.power.source = "ac";
+  else if (batteries.some((supply) => supply.status === "Discharging")) reading.power.source = "battery";
+  else {
+    ledger.miss("power.source", `${POWER_SUPPLY} shows no online mains or USB supply and no battery of this device's own discharging`);
   }
   if (batteries.length === 0) {
-    missAll(ledger, BATTERY_FIELDS.slice(1), `${POWER_SUPPLY} lists no battery`);
+    missAll(ledger, BATTERY_FIELDS.slice(1), supplies.some((supply) => supply.type === null)
+      ? `${POWER_SUPPLY} lists no battery of this device's own that could be read`
+      : `${POWER_SUPPLY} lists no battery of this device's own`);
     return;
   }
+  const battery = batteries.length === 1 ? batteries[0]! : null;
   if (battery === null) {
-    missAll(ledger, ["power.battery_percent", "power.battery_state"], `${POWER_SUPPLY} lists more than one battery; this build does not combine them`);
+    missAll(
+      ledger,
+      ["power.battery_percent", "power.battery_state"],
+      `${POWER_SUPPLY} lists more than one battery of this device's own; this build does not combine them`,
+    );
     return;
   }
   const capacity = wholeOf(battery.capacity ?? undefined);
@@ -961,9 +1070,11 @@ function readLinuxPower(reading: WeatherReading, ledger: Ledger, deps: WeatherDe
 export const WEATHER_NOTE_ON_BATTERY =
   "On battery: work here spends the person's charge, and a closed lid stops every session on this device at once.";
 export const WEATHER_NOTE_LOW_POWER = "Low Power Mode is on: the person has asked this device to be frugal.";
+// A peer on the same link (a Thunderbolt Bridge, a switch with no router) needs
+// no default route and can still answer, so the note names only what does.
 export const WEATHER_NOTE_NO_ROUTE =
-  "No default route: the local journal still works; anything hosted or on another device will not answer, " +
-  "which is not the same as a peer staying silent.";
+  "No default route: the local journal still works; anything reached through a router, hosted services among them, " +
+  "will not answer, which is not the same as a peer staying silent.";
 export const WEATHER_NOTE_METERED = "The connection is likely metered: large downloads spend the person's data.";
 
 /** Each note states a consequence and its reason; none tells an agent what to do. */
@@ -1040,8 +1151,13 @@ export function weatherSays(reading: WeatherReading): string {
   if (cpu.thermal_warning === "recorded") parts.push("a thermal warning recorded");
   if (memory.pressure !== null) parts.push(`memory pressure ${memory.pressure}`);
   const busy = gpu.devices.map((device) => device.utilisation_percent).filter((value): value is number => value !== null);
+  const unread = gpu.devices.length - busy.length;
   if (busy.length > 0) {
-    parts.push(busy.every((value) => value === 0) ? "graphics idle" : `graphics ${busy.map((value) => `${value}%`).join(", ")} busy`);
+    // "Idle" only when every device's use was read: an unread one is not idle.
+    const words = unread === 0 && busy.every((value) => value === 0)
+      ? "graphics idle"
+      : `graphics ${busy.map((value) => `${value}%`).join(", ")} busy`;
+    parts.push(unread > 0 ? `${words}, use of ${unread} other ${unread === 1 ? "device" : "devices"} not read` : words);
   }
   const networkWords: string[] = [];
   if (network.kind !== null) networkWords.push(KIND_WORDS[network.kind]);

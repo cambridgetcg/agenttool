@@ -514,8 +514,10 @@ with the reason), a one-line `says` and consequence `notes`. It holds kinds,
 never an address, network name, host name, serial, user name or program name.
 On macOS it runs fixed local commands (`pmset`, `sysctl`, `ioreg`, `route`,
 `networksetup`, `scutil`) by absolute path with a minimal environment, within
-2.5 seconds; on Linux it reads `node:os` and `/sys/class/power_supply`. It
-contacts no network, opens no journal, and takes no option but `--help`.
+2.5 seconds; on Linux it reads `node:os` and the device's own supplies in
+`/sys/class/power_supply` (a peripheral's battery is not counted), without
+blocking and within the same 2.5 seconds. It contacts no network, opens no
+journal, and takes no option but `--help`.
 
 `AGENTOOL_COLLAB_WEATHER` (also spelled `AGENTTOOL_COLLAB_WEATHER`), `on` or
 `off` in the MCP server's environment, decides whether `collab_arrive` adds a

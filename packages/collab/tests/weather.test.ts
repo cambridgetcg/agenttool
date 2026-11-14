@@ -8,6 +8,7 @@ import {
   GPU_BUSY_NOTE_PERCENT,
   interfaceKind,
   isHotspotGateway,
+  LINUX_FILE_READERS,
   LOAD_PER_CORE_NOTE_ABOVE,
   parseHardwarePorts,
   parseIoreg,
@@ -185,7 +186,7 @@ describe("a reading from output captured on a Mac", () => {
 
 describe("pmset -g batt", () => {
   test("a desktop on mains with no battery", async () => {
-    expect(parsePmsetBattery("Now drawing from 'AC Power'\n")).toEqual({ source: "ac", battery: null });
+    expect(parsePmsetBattery("Now drawing from 'AC Power'\n")).toEqual({ source: "ac", drawing_from_line: true, battery: null });
     const reading = await darwin({ battery: { stdout: "Now drawing from 'AC Power'\n" } });
     expect(reading.power).toMatchObject({ source: "ac", battery_percent: null, battery_state: null, minutes_remaining: null });
     for (const field of ["power.battery_percent", "power.battery_state", "power.minutes_remaining"]) {
@@ -193,6 +194,16 @@ describe("pmset -g batt", () => {
     }
     expect(reading.says).toStartWith("On mains power; ");
     expect(reading.notes).not.toContain(WEATHER_NOTE_ON_BATTERY);
+  });
+
+  test("output with nothing recognised says nothing about the hardware", async () => {
+    for (const stdout of ["", "Battery status: unavailable\n"]) {
+      const reading = await darwin({ battery: { stdout } });
+      expect(reading.power).toMatchObject({ source: null, battery_percent: null, battery_state: null });
+      for (const field of ["power.battery_percent", "power.battery_state", "power.minutes_remaining"]) {
+        expect(unknownOf(reading, field)).toBe("pmset -g batt printed nothing this build recognises");
+      }
+    }
   });
 
   test("charging, with no estimate, charged, held at a limit, and on a UPS", async () => {
@@ -339,8 +350,25 @@ describe("ioreg", () => {
     expect(unknownOf(reading, "gpu.shares_system_memory")).toContain("only Apple silicon graphics");
     expect(unknownOf(reading, "gpu.devices[0].model")).toBe('ioreg showed no "model" for this device');
     expect(unknownOf(reading, "gpu.devices[1].memory_in_use_bytes")).toBe('ioreg showed no "In use system memory" for this device');
-    expect(reading.says).toContain("graphics 12%, 85% busy");
+    expect(reading.says).toContain("graphics 12%, 85% busy;");
     expect(reading.notes).toContain(`A graphics device is 85% busy: a local model or render started now shares it.`);
+  });
+
+  test("a device whose use was not read is never counted as idle", async () => {
+    const idleAndUnread =
+      accelerator("IntelAccelerator", "IntelAccelerator", `      "PerformanceStatistics" = {"Device Utilization %"=0}\n`) +
+      accelerator("AMDRadeonX6000", "AMDRadeonX6000_AMDNavi14GraphicsAccelerator",
+        `      "model" = <"AMD Radeon Pro 5500M">\n      "PerformanceStatistics" = {"vramUsedBytes"=1073741824}\n`);
+    const reading = await darwin({ graphics: { stdout: idleAndUnread } });
+    expect(reading.gpu.devices.map((device) => device.utilisation_percent)).toEqual([0, null]);
+    expect(unknownOf(reading, "gpu.devices[1].utilisation_percent")).toBe('ioreg showed no "Device Utilization %" for this device');
+    expect(reading.says).not.toContain("idle");
+    expect(reading.says).toContain("; graphics 0% busy, use of 1 other device not read; ");
+    // Every device read and at nought is idle.
+    const idle = await darwin({
+      graphics: { stdout: accelerator("IntelAccelerator", "IntelAccelerator", `      "PerformanceStatistics" = {"Device Utilization %"=0}\n`) },
+    });
+    expect(idle.says).toContain("; graphics idle; ");
   });
 
   test("the legend's channel name is not read as a value", () => {
@@ -376,6 +404,7 @@ describe("the network", () => {
     expect(off.network).toEqual({ default_route: false, kind: "none", os_reports: "not_reachable", metered: null });
     expect(off.notes).toContain(WEATHER_NOTE_NO_ROUTE);
     expect(off.says).toContain("no default route, route reported not reachable");
+    expect(unknownOf(off, "network.metered")).toBe("the IPv4 table has no default route, so no link or gateway was there to judge");
     // An IPv6-only uplink has no IPv4 default route, and the OS's own reach report says so.
     const v6 = await darwin({
       route: { stderr: "route: writing to routing socket: not in table\n" },
@@ -383,6 +412,27 @@ describe("the network", () => {
     });
     expect(v6.network.default_route).toBe(false);
     expect(v6.notes).not.toContain(WEATHER_NOTE_NO_ROUTE);
+    // Its metered reason claims no more than the IPv4 table showed.
+    expect(unknownOf(v6, "network.metered")).not.toContain("no connection");
+    expect(unknownOf(v6, "network.metered")).toContain("IPv4 table");
+  });
+
+  test("the no-route note claims only what a missing default route stops", () => {
+    // A peer on the same link needs no default route, so "another device" is not in it.
+    expect(WEATHER_NOTE_NO_ROUTE).not.toContain("another device");
+    expect(WEATHER_NOTE_NO_ROUTE).toContain("anything reached through a router");
+    expect(WEATHER_NOTE_NO_ROUTE).toContain("the local journal still works");
+  });
+
+  test("Reachable with Connection Required is not reachable now: unknown, and the no-route note stands", async () => {
+    const onDemand = await darwin({
+      route: { stderr: "route: writing to routing socket: not in table\n" },
+      reach: { stdout: reach("0x00000007 (Reachable,Transient Connection,Connection Required)", "0x00000000 (Not Reachable)") },
+    });
+    expect(onDemand.network).toEqual({ default_route: false, kind: "none", os_reports: null, metered: null });
+    expect(unknownOf(onDemand, "network.os_reports")).toContain("Connection Required");
+    expect(onDemand.notes).toContain(WEATHER_NOTE_NO_ROUTE);
+    expect(onDemand.says).toContain("; no default route. Read");
   });
 
   test("each hardware port kind", async () => {
@@ -400,7 +450,11 @@ describe("the network", () => {
     for (const [iface, kind] of Object.entries(kinds)) {
       const reading = await darwin({ route: { stdout: route(iface) }, ports: { stdout: list } });
       expect(reading.network.kind).toBe(kind as WeatherReading["network"]["kind"]);
+      // A named kind is a direct read; other is reached by exclusion and says so.
+      expect(inferredOf(reading, "network.kind")).toHaveLength(kind === "other" ? 1 : 0);
     }
+    const unlisted = await darwin({ route: { stdout: route("en5") }, ports: { stdout: list } });
+    expect(inferredOf(unlisted, "network.kind")[0]!.from).toBe("networksetup lists no hardware port for the default route's interface");
     const phone = await darwin({ route: { stdout: route("en9") }, ports: { stdout: list } });
     expect(phone.network.metered).toBe("likely");
     expect(inferredOf(phone, "network.metered")[0]!.from).toContain("iPhone USB");
@@ -408,8 +462,24 @@ describe("the network", () => {
     expect(phone.says).toContain("iPhone USB, route reported reachable, likely metered");
   });
 
+  test("a port name in another language, or a list with nothing recognised, is not read as a kind", async () => {
+    // A German Mac names its Wi-Fi port WLAN: other, as an inference that says how it was reached.
+    const german = await darwin({ route: { stdout: route("en0") }, ports: { stdout: ports(["WLAN", "en0"]) } });
+    expect(german.network.kind).toBe("other");
+    expect(inferredOf(german, "network.kind")[0]!.from).toContain("a port named in another language reads as other too");
+    expect(JSON.stringify(german)).not.toContain("WLAN");
+    // networksetup exits 0 but prints nothing this build parses: unknown, never other.
+    for (const stdout of ["", "An asterisk (*) denotes that a network service is disabled.\n"]) {
+      const empty = await darwin({ route: { stdout: route("en0") }, ports: { stdout } });
+      expect(empty.network.kind).toBeNull();
+      expect(unknownOf(empty, "network.kind")).toBe("networksetup printed nothing this build recognises");
+      expect(inferredOf(empty, "network.kind")).toEqual([]);
+      expect(empty.says).toContain("; a default route, route reported reachable. Read");
+    }
+  });
+
   test("a tunnel as the default route needs no port list", async () => {
-    for (const iface of ["utun4", "ipsec0", "ppp0", "wg0"]) expect(interfaceKind(iface, null)).toBe("tunnel");
+    for (const iface of ["utun4", "ipsec0", "ppp0", "wg0"]) expect(interfaceKind(iface, null)).toEqual({ kind: "tunnel" });
     const reading = await darwin({ route: { stdout: route("utun4") }, ports: { fail: "could not be started (ENOENT)" } });
     expect(reading.network).toMatchObject({ default_route: true, kind: "tunnel" });
     const unlisted = await darwin({ route: { stdout: route("en0") }, ports: { fail: "could not be started (ENOENT)" } });
@@ -436,7 +506,10 @@ describe("the network", () => {
     expect(parseReach(reach("0x00000002 (Reachable)", "0x00000000 (Not Reachable)"))).toBe("reachable");
     expect(parseReach(reach("0x00000000 (Not Reachable)", "0x00000000 (Not Reachable)"))).toBe("not_reachable");
     expect(parseReach(reach("0x00000000 (Not Reachable)", "0x00000002 (Reachable)"))).toBe("reachable");
-    expect(parseReach(reach("0x00000007 (Reachable,Transient Connection,Connection Required)", "0x00000000 (Not Reachable)"))).toBe("reachable");
+    // Connection Required (0x4): reachable only once a connection is brought up.
+    expect(parseReach(reach("0x00000007 (Reachable,Transient Connection,Connection Required)", "0x00000000 (Not Reachable)")))
+      .toBe("connection_required");
+    expect(parseReach(reach("0x00000006 (Reachable,Connection Required)", "0x00000002 (Reachable)"))).toBe("reachable");
     expect(parseReach("Network information\n")).toBeNull();
   });
 });
@@ -714,6 +787,130 @@ describe("Linux and other platforms", () => {
     });
     expect(two.power.battery_percent).toBeNull();
     expect(unknownOf(two, "power.battery_percent")).toContain("more than one battery");
+  });
+
+  // The kernel lists a wireless mouse's, keyboard's or headset's battery with scope Device.
+  const MOUSE = {
+    "hidpp_battery_0/type": "Battery", "hidpp_battery_0/scope": "Device",
+    "hidpp_battery_0/capacity": "35", "hidpp_battery_0/status": "Discharging",
+  };
+
+  test("a peripheral's battery is not the device's, and its files are not read", async () => {
+    const asked: string[] = [];
+    const files = sys(MOUSE);
+    const desktop = await readWeather({
+      platform: "linux", now: () => AT, os: OS,
+      list_dir: files.list_dir,
+      read_file: (path) => { asked.push(path); return files.read_file(path); },
+    });
+    expect(desktop.power).toMatchObject({ source: null, battery_percent: null, battery_state: null });
+    expect(unknownOf(desktop, "power.source")).toBe(
+      "/sys/class/power_supply shows no online mains or USB supply and no battery of this device's own discharging",
+    );
+    expect(unknownOf(desktop, "power.battery_percent")).toBe("/sys/class/power_supply lists no battery of this device's own");
+    expect(desktop.notes).not.toContain(WEATHER_NOTE_ON_BATTERY);
+    expect(desktop.says).toStartWith("Load 8.4 on 8 cores. ");
+    // Asking a wireless device for its charge can wait, so only type and scope are read.
+    expect(asked.sort()).toEqual(["/sys/class/power_supply/hidpp_battery_0/scope", "/sys/class/power_supply/hidpp_battery_0/type"]);
+
+    // A laptop on mains with a Bluetooth keyboard keeps its own battery.
+    const laptop = await readWeather({
+      platform: "linux", now: () => AT, os: OS,
+      ...sys({ ...MOUSE, "AC/type": "Mains", "AC/online": "1", "BAT0/type": "Battery", "BAT0/scope": "System", "BAT0/capacity": "64", "BAT0/status": "Charging" }),
+    });
+    expect(laptop.power).toMatchObject({ source: "ac", battery_percent: 64, battery_state: "charging" });
+  });
+
+  test("a USB-C charger is outside power; mains offline alone is not battery power", async () => {
+    const usbC = await readWeather({
+      platform: "linux", now: () => AT, os: OS,
+      ...sys({
+        "ADP1/type": "Mains", "ADP1/online": "0",
+        "ucsi-source-psy-USBC000:001/type": "USB", "ucsi-source-psy-USBC000:001/online": "1",
+        "BAT0/type": "Battery", "BAT0/capacity": "64", "BAT0/status": "Charging",
+      }),
+    });
+    expect(usbC.power).toMatchObject({ source: "ac", battery_percent: 64, battery_state: "charging" });
+    expect(usbC.notes).not.toContain(WEATHER_NOTE_ON_BATTERY);
+    expect(usbC.says).toStartWith("On mains power, battery 64% and charging; ");
+    // A charger the kernel does not list leaves mains offline while the battery is not discharging.
+    const unlisted = await readWeather({
+      platform: "linux", now: () => AT, os: OS,
+      ...sys({ "ADP1/type": "Mains", "ADP1/online": "0", "BAT0/type": "Battery", "BAT0/capacity": "80", "BAT0/status": "Not charging" }),
+    });
+    expect(unlisted.power).toMatchObject({ source: null, battery_percent: 80, battery_state: null });
+    expect(unlisted.notes).not.toContain(WEATHER_NOTE_ON_BATTERY);
+  });
+
+  test("an empty battery slot is not a second battery", async () => {
+    const reading = await readWeather({
+      platform: "linux", now: () => AT, os: OS,
+      ...sys({
+        "BAT0/type": "Battery", "BAT0/present": "1", "BAT0/capacity": "42", "BAT0/status": "Discharging",
+        "BAT1/type": "Battery", "BAT1/present": "0",
+      }),
+    });
+    expect(reading.power).toMatchObject({ source: "battery", battery_percent: 42, battery_state: "discharging" });
+  });
+
+  test("files are read asynchronously, so a slow one that answers in time is read", async () => {
+    const files = sys({ "AC/type": "Mains", "AC/online": "1", "BAT0/type": "Battery", "BAT0/capacity": "57", "BAT0/status": "Charging" });
+    const reading = await readWeather({
+      platform: "linux", now: () => AT, os: OS,
+      list_dir: async (path) => files.list_dir(path),
+      read_file: (path) => new Promise((resolve, reject) => {
+        setTimeout(() => { try { resolve(files.read_file(path)); } catch (error) { reject(error); } }, 15);
+      }),
+      deadline_ms: 2_000,
+    });
+    expect(reading.power).toMatchObject({ source: "ac", battery_percent: 57, battery_state: "charging" });
+  });
+
+  test("a file that never answers is cut off by the deadline, costs only the power fields, and changes nothing later", async () => {
+    let answer: (value: string) => void = () => {};
+    const started = performance.now();
+    const reading = await readWeather({
+      platform: "linux", now: () => AT, os: OS,
+      list_dir: async () => ["BAT0"],
+      read_file: () => new Promise<string>((resolve) => { answer = resolve; }),
+      deadline_ms: 40,
+    });
+    expect(performance.now() - started).toBeLessThan(1_000);
+    for (const field of ["power.source", "power.battery_percent", "power.battery_state", "power.minutes_remaining"]) {
+      expect(unknownOf(reading, field)).toBe("/sys/class/power_supply was still being read at the 40 ms deadline");
+    }
+    expect(reading.cpu).toMatchObject({ cores: 8, load_1m: 8.4 });
+    const returned = JSON.stringify(reading);
+    answer("Battery");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(JSON.stringify(reading)).toBe(returned);
+  });
+
+  test("an arrival is not held by a Linux read that never answers", async () => {
+    let ticks = 0;
+    const interval = setInterval(() => { ticks += 1; }, 5);
+    const started = performance.now();
+    const block = await arrivalWeather(() => readWeather({
+      platform: "linux", now: () => AT, os: OS,
+      list_dir: async () => ["BAT0"],
+      read_file: () => new Promise<string>(() => {}),
+      deadline_ms: 60_000,
+    }), 50);
+    clearInterval(interval);
+    expect(block).toEqual({ unavailable: "the reading took longer than 50 ms" });
+    expect(performance.now() - started).toBeLessThan(1_000);
+    expect(ticks).toBeGreaterThan(0);
+  });
+
+  test("the default Linux readers are asynchronous, and this build holds no synchronous file read", async () => {
+    const listed = LINUX_FILE_READERS.list_dir(FIXTURES);
+    expect(listed).toBeInstanceOf(Promise);
+    expect(await listed).toContain("darwin-route.txt");
+    const read = LINUX_FILE_READERS.read_file(join(FIXTURES, "darwin-route.txt"));
+    expect(read).toBeInstanceOf(Promise);
+    expect(await read).toBe(fixture("darwin-route.txt"));
+    const source = readFileSync(join(import.meta.dir, "..", "src", "weather.ts"), "utf8");
+    expect(source).not.toMatch(/\b(?:readFileSync|readdirSync|openSync|readSync)\b/);
   });
 
   test("other platforms: node:os only; Windows keeps no load average", async () => {
