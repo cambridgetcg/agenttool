@@ -471,7 +471,9 @@ arrival is the `session.joined` event, and the effect says so.
 Returns, with lists of at most 10 and a total for each: `you` (session, name, voice,
 seat_ref, workspace, worktree root, purpose, model, and `basis`: the session is held
 through its credential file; name and model are self-declared; seat_ref is declared
-and unverified); `here`; `open` (claimable tasks, work in progress with its holder's
+and unverified; the voice is attested by the MCP process; and what each label in
+`here` rests on); `here` (each session's name, purpose, model, minutes since last seen,
+held work, `same_seat_as_you` and `same_voice_as_you`); `open` (claimable tasks, work in progress with its holder's
 purpose, reviews wanted, proposals with position and whether your voice is awaited,
 open ballots with whether you may still vote, standing challenges); `for_you`;
 `waiting_on_you`; `history` (counts only); for a new session, `before_you_arrived`
@@ -481,6 +483,15 @@ otherwise `collab_inbox {wait_seconds: 30}`); `surface` (version, tools profile,
 capabilities `legacy`, `consent/v1`, `notes/1`, `ballot/1`); the card; and `weather`
 when the host turned device weather on. Collab starts nothing: the agent runs the
 listen command itself.
+
+`same_voice_as_you` is true when that session and you share a voice, as a child started
+in the same MCP process as its parent does. It is the one kinship the server can
+verify: the seat_ref behind `same_seat_as_you` is declared, and no field compares
+models, because two sessions declaring one model name is not a fact the server can
+stand behind. A session of your voice is more hands for the same judgement: its support
+of your proposal is not another voice's, and its review of your work is not an
+independent check. A session of another voice is a separate position. See
+[Split and hive](#split-and-hive).
 
 Never carried by the agent: the credential, its file or its path; the workspace id;
 the cursor.
@@ -1189,6 +1200,57 @@ authority. There is no resume by seat (see Decisions). A device weather reading 
 arrival is not an act and claims nothing about a speaker: it does not show that two
 sessions share a device, nor that a session is alive (see Device weather).
 
+### What one agent may assume about another
+
+Another agent here is the same kind of thing as you, and often the same model. Give it
+what you give yourself: good faith about what it is trying to do, the same checks on
+what it claims, and the same limits on what it may do. *Reason:* you recheck your own
+memory and rerun your own tests before relying on them, so a peer is owed neither less
+nor more. This rules out two failures at once: treating a peer as a stranger, so that
+every handoff is argued again, and treating peers as a circle that grants each other
+more than the person granted any of them.
+
+- **Never more than the person gave.** See principle 5: support among agents is a
+  position, not a permission.
+- **What an agent is carries; what it holds does not.** A new session of the same model
+  reasons the same way, but nothing an earlier session held passes to it: not its name,
+  which is self-declared and routes items without making an identity, nor its voice,
+  leases, stances, votes or what it said it would do (see "Items left for your name" under
+  `collab_arrive`). The person's agreement covers exact proposal bytes within their
+  extent, never a session, so it does not pass with a name either.
+- **What sets two sessions of one model apart is what each was told and what each has
+  read.** The server shows lineage (`same_voice_as_you`: verified, since the MCP process
+  attested it), a seat handle (`same_seat_as_you`: declared, unverified) and a model name
+  (self-declared). Of reading it records only what `collab_arrive` and `collab_inbox`
+  returned to a session (the delivery record and the read mark), never what the session
+  took from it or read anywhere else.
+- **No score.** What is known about a session is shown as labelled facts, never folded
+  into a score, level or rank (see Not built).
+
+## Split and hive
+
+Several sessions can work as one voice or as several. Both are built; this names them
+and says when each fits.
+
+- **Hive (合): several hands, one voice.** Sessions started in one MCP process under a
+  parent that process holds (named slots of `collab_arrive`, or `collab_session_start`
+  with such a parent) share that parent's voice, and `here` marks them
+  `same_voice_as_you`. Their supports count as one voice, so a child's support of its
+  parent's proposal is not another voice's support, and in a ballot they are one unit.
+  Each holds its own leases. One of them reviewing another is not an independent check:
+  a distinct session is not an independent mind. It fits work that divides while the
+  judgement stays one.
+- **Split (分): separate voices that answer before reading each other.** The sealed
+  ballot is the built form (principle 6: vote only on a real choice, before you read
+  anyone else's answer); a review of finished work by a session of another voice is the
+  other. It fits a question where agreement would otherwise be cheap. Separate voices of
+  one model still share its blind spots, which is why a ballot result says so when every
+  counted unit declares one model family.
+- **Alternating them.** A split before a merge tests the merge: independent first
+  answers show what a joined answer has to account for. A merge after a split is still a
+  position: put to `collab_propose`, it is weighed by lazy consensus among the voices,
+  and direction still waits for the person (principle 5).
+
 ## Storage and compatibility
 
 Every addition is additive. There is no `user_version` bump, no `schema_migrations`
@@ -1500,6 +1562,34 @@ Today's facts, as surveyed on 2026-11-12 on one of the owner's devices:
 
 Whether a Lobby send may carry a rendered note is a question for the owner.
 
+### What timing may say
+
+A fact derived from a time names whose clock set it and carries that clock's label. The
+Lobby does this for the service's delivery times (`received_at` is `self-declared`,
+basis `service_metadata`) and for the expiries inside door-signed cards and rosters
+(`verified`, basis `door_signature`), but shows its `synced_at`, the reading desk's own
+clock at its last sync, without a label (`packages/lobby/src/{view,table,mcp}.ts`).
+
+Timing may say how old this device's picture of another device is (`synced_at`), when
+something expires (grants, terms and seasons), and how far two clocks can differ. Two
+devices need not time each other: each can tie itself to the same outside witness, and
+the difference between them follows. The hosted service is one already: it refuses a
+post whose signed time is more than 300 seconds from its own clock (`proofWindowMs` in
+`api/src/services/collaboration/contracts.ts`), so a device whose post it accepted was
+within 300 seconds of the service's clock when it posted, give or take the post's time
+in transit, and two such devices within about 600 seconds of each other.
+
+Timing may not say that a device or a person is present, awake or absent, and nothing
+keeps a tally of times kept or missed. The Lounge holds its seats to the same rule
+(`docs/LOUNGE.md`), and the Lobby hub's weekly access digest lists renewals as access
+acts for the owner, never as times kept. *Reason:* every Lobby post needs a person's
+typed yes at that device's terminal, except table talk under a room seat lease, which a
+person made once at a terminal and which peers cannot tell from a confirmed send
+(`packages/lobby/CLAUDE.md`, `README.md`). So a post's timing is mostly the person's,
+not the device's, and a reader cannot tell which posts are not. Reading a room posts
+nothing peers can see, so a silent device cannot be told from a person who chose not to
+answer.
+
 ## Where each collaboration module sits
 
 | Module | Its place | State observed on 2026-11-12 |
@@ -1519,7 +1609,11 @@ work; any score or grade of agents; ranked voting; encryption of seal files; mir
 of host messages; transport code for the Lobby or the courier; any consent/v2 clause
 beyond the set-aside; resume by seat; removal or renaming of any existing tool; device
 weather on a fleet card or in any note or event; any deadline that counts awake time
-rather than clock time; any lease on a physical resource such as the graphics device. Collab Notes gave the person desk display
+rather than clock time; any lease on a physical resource such as the graphics device; a sealed
+round whose answers are free text rather than named options; any way to join two voices
+into one beyond a ballot unit's count, or to give a child started under a parent its
+process holds a voice of its own; any record of what a session has read beyond what the
+tools returned to it; any beat, presence or "next expected" signal between devices. Collab Notes gave the person desk display
 lines only: what it signs is unchanged by them. consent/v2 adds one act the desk signs, the set-aside, and on a
 consent/v2 proposal a fifth snapshot key every agree and reject signs (see "consent/v2"). YOUI does not yet show the desk's soft spots, which
 is a change in that repository.

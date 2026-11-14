@@ -155,6 +155,9 @@ describe("collab_arrive on an unbound default slot", () => {
         name: "self-declared",
         model: "self-declared",
         seat_ref: "declared at session start (host or caller); unverified",
+        voice: "attested by the MCP process: a child started in the same process as its parent shares its parent's voice",
+        same_voice_as_you: "verified: the same voice, from lineage the MCP process attested",
+        same_seat_as_you: "the same declared seat_ref; unverified",
       },
     });
     expect(arrived.here).toEqual([{
@@ -165,6 +168,7 @@ describe("collab_arrive on an unbound default slot", () => {
       last_seen_minutes: 0,
       holds: [handleOf("task", task.task.id)],
       same_seat_as_you: false,
+      same_voice_as_you: false,
     }]);
     expect(arrived.open.in_progress).toEqual([{
       task: handleOf("task", task.task.id),
@@ -565,8 +569,11 @@ describe("the arrive brief's values", () => {
       resumed_session: { handle, credential_file: writeSessionCredentialFile(j.store.defaultSessionCredentialPath(handle.session.id), handle.credential) },
     }) as any;
     const brief = await ok(serve(me), "collab_arrive", { purpose: "look" });
-    expect(brief.here.find((entry: any) => entry.session === twin.session.id)).toMatchObject({ name: "twin", same_seat_as_you: true, last_seen_minutes: 5 });
-    expect(brief.here.find((entry: any) => entry.session === peer.session.id)).toMatchObject({ name: "peer", same_seat_as_you: false });
+    // A shared seat is a declared handle, not a shared voice: neither session started the other.
+    expect(brief.here.find((entry: any) => entry.session === twin.session.id))
+      .toMatchObject({ name: "twin", same_seat_as_you: true, same_voice_as_you: false, last_seen_minutes: 5 });
+    expect(brief.here.find((entry: any) => entry.session === peer.session.id))
+      .toMatchObject({ name: "peer", same_seat_as_you: false, same_voice_as_you: false });
     expect(brief.open.proposals).toEqual([{
       id: proposal.proposal.id,
       handle: handleOf("proposal", proposal.proposal.id),
@@ -604,6 +611,60 @@ describe("the arrive brief's values", () => {
     const peerBrief = await ok(serve(peer), "collab_arrive", { purpose: "look" });
     expect(peerBrief.open.reviews_wanted).toEqual([{ ...review, you_may_review: true }]);
     expect(peerBrief.open.proposals[0].your_voice_awaited).toBe(false);
+  });
+});
+
+describe("same_voice_as_you", () => {
+  test("true for children of one MCP process and for the parent seen from a child; false across processes, however alike", async () => {
+    const j = journal();
+    // One seat handle for every process, so the seat cannot tell them apart.
+    const environment = { CODEX_THREAD_ID: CODEX_THREAD };
+    const server = j.server(environment);
+    const lead = await ok(server, "collab_arrive", { purpose: "lead", root_path: j.root, name: "lead", model: "test-model-1" });
+    const leadId = lead.you.session as string;
+    const child = await ok(server, "collab_arrive", { purpose: "check one file", binding_key: "k1", parent: leadId, model: "test-model-1" });
+    const sibling = await ok(server, "collab_arrive", { purpose: "check another", binding_key: "k2", parent: leadId });
+    // Another process declaring the same name, model and seat handle.
+    const twinServer = j.server(environment);
+    const twin = await ok(twinServer, "collab_arrive", { purpose: "lead", root_path: j.root, name: "lead", model: "test-model-1" });
+    // A delegate in its own process naming the lead as parent: that process does not hold the lead, so nothing is attested.
+    const delegate = await ok(j.server(environment), "collab_session_start", {
+      root_path: j.root, actor: "lead/delegate", parent_session_id: leadId,
+    });
+    const entry = (brief: any, sessionId: string) => brief.here.find((item: any) => item.session === sessionId);
+
+    const look = await ok(server, "collab_arrive", { purpose: "lead" });
+    expect(entry(look, child.you.session)).toMatchObject({ same_voice_as_you: true, same_seat_as_you: true });
+    expect(entry(look, sibling.you.session)).toMatchObject({ same_voice_as_you: true });
+    expect(entry(look, twin.you.session))
+      .toMatchObject({ name: "lead", model: "test-model-1", same_seat_as_you: true, same_voice_as_you: false });
+    expect(entry(look, delegate.session.id)).toMatchObject({ same_seat_as_you: true, same_voice_as_you: false });
+
+    const fromChild = await ok(server, "collab_arrive", { purpose: "check one file", binding_key: "k1" });
+    expect(entry(fromChild, leadId)).toMatchObject({ same_voice_as_you: true });
+    expect(entry(fromChild, sibling.you.session)).toMatchObject({ same_voice_as_you: true });
+    expect(entry(fromChild, twin.you.session)).toMatchObject({ same_voice_as_you: false });
+    expect(entry(fromChild, delegate.session.id)).toMatchObject({ same_voice_as_you: false });
+
+    const fromTwin = await ok(twinServer, "collab_arrive", { purpose: "lead" });
+    expect(fromTwin.you.session).toBe(twin.you.session);
+    for (const sessionId of [leadId, child.you.session, sibling.you.session, delegate.session.id]) {
+      expect(entry(fromTwin, sessionId)).toMatchObject({ same_seat_as_you: true, same_voice_as_you: false });
+    }
+
+    // Each label states what it rests on; no field compares models.
+    expect(look.you.basis).toEqual({
+      session: "holds this session's credential file",
+      name: "self-declared",
+      model: "self-declared",
+      seat_ref: "declared at session start (host or caller); unverified",
+      voice: "attested by the MCP process: a child started in the same process as its parent shares its parent's voice",
+      same_voice_as_you: "verified: the same voice, from lineage the MCP process attested",
+      same_seat_as_you: "the same declared seat_ref; unverified",
+    });
+    expect(Object.keys(entry(look, twin.you.session)).sort()).toEqual([
+      "holds", "last_seen_minutes", "model", "name", "purpose", "same_seat_as_you", "same_voice_as_you", "session",
+    ]);
   });
 });
 

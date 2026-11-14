@@ -42185,7 +42185,8 @@ function composeBrief(ctx, data, pending, rootPath) {
     model: view.model,
     last_seen_minutes: minutesSince(view.last_seen_at, at),
     holds: holds(view.id),
-    same_seat_as_you: me.seat_ref !== null && view.seat_ref === me.seat_ref
+    same_seat_as_you: me.seat_ref !== null && view.seat_ref === me.seat_ref,
+    same_voice_as_you: view.voice_id === me.voice_id
   }));
   const claimable = data.tasks.filter((task) => data.claimable_task_ids.includes(task.id)).map((task) => ({
     task: handleOf("task", task.id),
@@ -42254,7 +42255,10 @@ function composeBrief(ctx, data, pending, rootPath) {
           session: "holds this session's credential file",
           name: "self-declared",
           model: "self-declared",
-          seat_ref: "declared at session start (host or caller); unverified"
+          seat_ref: "declared at session start (host or caller); unverified",
+          voice: "attested by the MCP process: a child started in the same process as its parent shares its parent's voice",
+          same_voice_as_you: "verified: the same voice, from lineage the MCP process attested",
+          same_seat_as_you: "the same declared seat_ref; unverified"
         }
       },
       here: cap(here),
