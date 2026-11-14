@@ -986,6 +986,7 @@ describe("boring test spine", () => {
       "packages/execution-seat",
       "packages/lobby",
       "packages/lobby-doorbell",
+      "packages/house",
       "packages/browser",
       "packages/hf-scout",
       "packages/hf-training-garden",
@@ -1057,6 +1058,7 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/execution-seat && bun run ci");
     expect(preflight).toContain("cd packages/lobby && bun run ci");
     expect(preflight).toContain("cd packages/lobby-doorbell && bun run ci");
+    expect(preflight).toContain("cd packages/house && bun run ci");
     expect(preflight).toContain("cd packages/browser && bun run ci");
     expect(preflight).toContain(
       "local read-only Hugging Face metadata and provenance scout",
@@ -1533,9 +1535,9 @@ exit 94
       const result = run(prepareCommand, narrowedEnv);
       expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
       const calls = (await readFile(capture, "utf8")).trim().split("\n");
-      expect(calls).toHaveLength(69);
+      expect(calls).toHaveLength(70);
       expect(calls.filter((line) => line.includes("\tinstall "))).toHaveLength(
-        59,
+        60,
       );
       expect(calls.filter((line) => line.endsWith("\trun build"))).toHaveLength(
         10,
