@@ -22,6 +22,7 @@ import {
   runPersonRemoteCli,
   type PersonDeskDeps,
 } from "./person-desk.js";
+import { readWeather, type WeatherReader, type WeatherReading } from "./weather.js";
 
 export const COLLAB_HOST_PROTOCOL = "agenttool.collab-host/1" as const;
 
@@ -30,6 +31,7 @@ export const COLLAB_HOST_USAGE =
   + " [--release-leases] [--db <path>]"
   + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]"
   + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]"
+  + " | agenttool-collab-host weather (this device's power, processors, memory, graphics and uplink now; no journal)"
   + ` | agenttool-collab-host person ... (${PERSON_DESK_USAGE})`
   + " | agenttool-collab-host person-remote (SSH forced command; reads a JSON argv from SSH_ORIGINAL_COMMAND)";
 
@@ -93,6 +95,13 @@ export interface HostHelpReceipt {
   protocol: typeof COLLAB_HOST_PROTOCOL;
   status: "help";
   usage: string;
+}
+
+/** Every field of one reading; a reading is about now and is not stored anywhere. */
+export interface HostWeatherReceipt {
+  protocol: typeof COLLAB_HOST_PROTOCOL;
+  status: "weather";
+  weather: WeatherReading;
 }
 
 export interface HostEndOptions {
@@ -333,6 +342,15 @@ export function runCollabHostCli(
     const help: HostHelpReceipt = { protocol: COLLAB_HOST_PROTOCOL, status: "help", usage: COLLAB_HOST_USAGE };
     return { exit_code: 0, line: JSON.stringify(help) };
   }
+  if (argv[0] === "weather") {
+    return {
+      exit_code: 1,
+      line: JSON.stringify(errorReceipt(new CollabError(
+        "usage_error",
+        "weather reads the device asynchronously; runCollabHostCliAsync, the agenttool-collab-host bin entry, answers it",
+      ))),
+    };
+  }
   const emit = (
     payload: HostEndReceipt | HostSeatRefEndReceipt | HostWaitReceipt | HostErrorReceipt,
     exitCode: 0 | 1,
@@ -425,12 +443,47 @@ export async function runCollabHostCliAsync(
     open: openInBrowser,
   },
   personDeps: PersonDeskDeps = {},
+  weatherRead: WeatherReader = () => readWeather(),
 ): Promise<{ exit_code: 0 | 1 | 3; line: string }> {
+  // Weather needs no session and no journal, so it is routed before anything opens one.
+  if (argv[0] === "weather") return runWeatherCommand(argv.slice(1), weatherRead);
   const ceremony = argv[0] === "person"
     && !argv.some((arg) => arg === "--help" || arg === "-h")
     && (argv[1] === "ceremony" || (argv[1] === "passkey-enroll" && argv.includes("--ceremony")));
   if (ceremony) return runCeremonyCli(argv.slice(1), env, personDeps, io);
   return runCollabHostCli(argv, env, systemClock, personDeps);
+}
+
+/**
+ * `agenttool-collab-host weather`: one reading of this device, every field,
+ * exit 0 even when parts are unknown. Running it is an act someone chose, so
+ * it does not read AGENTOOL_COLLAB_WEATHER (that switch governs only what
+ * collab_arrive volunteers), and it opens no journal.
+ */
+async function runWeatherCommand(
+  args: string[],
+  read: WeatherReader,
+): Promise<{ exit_code: 0 | 1; line: string }> {
+  if (args.some((arg) => arg === "--help" || arg === "-h")) {
+    const help: HostHelpReceipt = { protocol: COLLAB_HOST_PROTOCOL, status: "help", usage: COLLAB_HOST_USAGE };
+    return { exit_code: 0, line: JSON.stringify(help) };
+  }
+  if (args.length > 0) {
+    return {
+      exit_code: 1,
+      line: JSON.stringify(errorReceipt(new CollabError("usage_error", `weather takes no argument but --help; ${COLLAB_HOST_USAGE}`))),
+    };
+  }
+  try {
+    const receipt: HostWeatherReceipt = { protocol: COLLAB_HOST_PROTOCOL, status: "weather", weather: await read() };
+    return { exit_code: 0, line: JSON.stringify(receipt) };
+  } catch {
+    // readWeather never throws; an injected reader might, and its text is not echoed.
+    return {
+      exit_code: 1,
+      line: JSON.stringify(errorReceipt(new CollabError("weather_unavailable", "The device reading failed"))),
+    };
+  }
 }
 
 type HostArgs =

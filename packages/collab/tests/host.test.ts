@@ -3,7 +3,8 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { defaultDatabasePath, resolveDatabasePath } from "../src/database-path.js";
-import { MAX_HOST_WAIT_MS, runCollabHostCli, waitForSessionEvents } from "../src/host.js";
+import { COLLAB_HOST_USAGE, MAX_HOST_WAIT_MS, runCollabHostCli, runCollabHostCliAsync, waitForSessionEvents } from "../src/host.js";
+import { readWeather, type WeatherReading } from "../src/weather.js";
 import { PERSON_DESK_USAGE } from "../src/person-desk.js";
 import type { EventCursor, SessionHandle } from "../src/protocol.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
@@ -221,6 +222,7 @@ describe("agenttool-collab-host end", () => {
           + " --reason <text> [--release-leases] [--db <path>]"
           + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]"
           + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]"
+          + " | agenttool-collab-host weather (this device's power, processors, memory, graphics and uplink now; no journal)"
           + ` | agenttool-collab-host person ... (${PERSON_DESK_USAGE})`
           + " | agenttool-collab-host person-remote (SSH forced command; reads a JSON argv from SSH_ORIGINAL_COMMAND)",
       });
@@ -724,5 +726,78 @@ describe("checked-in host bundle", () => {
       status: "error",
       error: "usage_error",
     });
+  });
+});
+
+describe("agenttool-collab-host weather", () => {
+  // Read through node:os alone, so no command runs and nothing depends on this machine.
+  async function fixedReading(): Promise<WeatherReading> {
+    return readWeather({
+      platform: "freebsd",
+      now: () => new Date("2026-11-12T10:00:00.000Z"),
+      os: { loadavg: () => [0.5, 0.4, 0.3], totalmem: () => 1024 ** 3, cpus: () => [{}, {}, {}, {}] },
+    });
+  }
+
+  test("answers with every field and no journal on disk, whatever the arrival switch says", async () => {
+    const reading = await fixedReading();
+    let calls = 0;
+    const reader = async () => {
+      calls += 1;
+      return reading;
+    };
+    const nowhere = join(directory, "no-such-state", "collab.sqlite");
+    for (const env of [
+      { AGENTOOL_COLLAB_DB: nowhere, HOME: join(directory, "empty-home") },
+      { AGENTOOL_COLLAB_DB: nowhere, AGENTOOL_COLLAB_WEATHER: "not-a-value" },
+      { AGENTOOL_COLLAB_DB: nowhere, AGENTOOL_COLLAB_WEATHER: "off" },
+    ]) {
+      const run = await runCollabHostCliAsync(["weather"], env, undefined, {}, reader);
+      expect(run.exit_code).toBe(0);
+      expect(JSON.parse(run.line)).toEqual({ protocol: "agenttool.collab-host/1", status: "weather", weather: reading });
+    }
+    expect(calls).toBe(3);
+    expect(existsSync(nowhere)).toBe(false);
+    expect(existsSync(join(directory, "no-such-state"))).toBe(false);
+  });
+
+  test("refuses any argument but --help, before reading", async () => {
+    let calls = 0;
+    const reader = async () => {
+      calls += 1;
+      return fixedReading();
+    };
+    for (const argv of [["weather", "now"], ["weather", "--db", databasePath], ["weather", "--json"]]) {
+      const run = await runCollabHostCliAsync(argv, {}, undefined, {}, reader);
+      expect(run.exit_code).toBe(1);
+      const receipt = JSON.parse(run.line);
+      expect(receipt).toMatchObject({ protocol: "agenttool.collab-host/1", status: "error", error: "usage_error" });
+      expect(receipt.message).toContain("weather takes no argument but --help");
+    }
+    const help = await runCollabHostCliAsync(["weather", "--help"], {}, undefined, {}, reader);
+    expect(help.exit_code).toBe(0);
+    expect(JSON.parse(help.line)).toEqual({ protocol: "agenttool.collab-host/1", status: "help", usage: COLLAB_HOST_USAGE });
+    expect(calls).toBe(0);
+    // The synchronous entry cannot read the device and says which entry does.
+    const sync = runCollabHostCli(["weather"], {});
+    expect(sync.exit_code).toBe(1);
+    expect(JSON.parse(sync.line)).toMatchObject({ error: "usage_error" });
+    expect(JSON.parse(sync.line).message).toContain("runCollabHostCliAsync");
+  });
+
+  test("is in the usage text, and the bin routes it before any journal", async () => {
+    expect(COLLAB_HOST_USAGE).toContain("| agenttool-collab-host weather (");
+    // An extra argument is refused before any reading, so this runs no device command.
+    const refused = runHost(["weather", "extra"], { AGENTOOL_COLLAB_DB: join(directory, "absent.sqlite") });
+    expect(refused.exitCode).toBe(1);
+    expect(refused.lines).toHaveLength(1);
+    expect(refused.receipt).toMatchObject({ status: "error", error: "usage_error" });
+    expect(refused.receipt.error).not.toBe("journal_not_found");
+    const failure = await runCollabHostCliAsync(["weather"], {}, undefined, {}, async () => {
+      throw new Error("a secret detail");
+    });
+    expect(failure.exit_code).toBe(1);
+    expect(failure.line).not.toContain("secret");
+    expect(JSON.parse(failure.line)).toMatchObject({ status: "error", error: "weather_unavailable" });
   });
 });

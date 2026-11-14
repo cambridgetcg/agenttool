@@ -66,6 +66,7 @@ import {
   type ReceiptPlanGuard,
 } from "./store-notes.js";
 import { COLLAB_PACKAGE_VERSION } from "./version.js";
+import { arrivalWeather, type WeatherReader } from "./weather.js";
 
 // ---------------------------------------------------------------------------
 // The surface
@@ -650,6 +651,11 @@ export interface NoteVerbContext {
   profile: ToolsProfile;
   /** The rule new proposals open under (AGENTOOL_COLLAB_CONSENT_RULE); consent/v1 when absent. */
   consent_rule?: ConsentRule;
+  /**
+   * Device weather for collab_arrive, present only when the host turned it on
+   * (AGENTOOL_COLLAB_WEATHER=on). A reading is shown, never written or kept.
+   */
+  weather?: WeatherReader;
   /** "" for the default slot, else the call's binding_key. */
   slot_key: string;
   binding(): NoteBinding | null;
@@ -814,7 +820,25 @@ const LIST_CAP = 10;
 export async function arriveVerb(ctx: NoteVerbContext, input: ArriveInput): Promise<Record<string, unknown>> {
   const purpose = oneLine(input.purpose, "purpose", PURPOSE_MAX, true)!;
   const existing = ctx.binding();
-  if (existing) return arriveBound(ctx, existing, input, purpose);
+  if (existing) {
+    const result = await arriveBound(ctx, existing, input, purpose);
+    // A look-around shows the weather; a purpose revision is a write and does not.
+    return input.revise_purpose === true ? result : withWeather(ctx, result);
+  }
+  return withWeather(ctx, await arriveUnbound(ctx, input, purpose));
+}
+
+/**
+ * Add the device weather to an arrival that has already succeeded, when the
+ * host turned it on. It is read after the arrival, so a reading that fails or
+ * overruns changes nothing but its own block.
+ */
+async function withWeather(ctx: NoteVerbContext, result: Record<string, unknown>): Promise<Record<string, unknown>> {
+  if (!ctx.weather) return result;
+  return { ...result, weather: await arrivalWeather(ctx.weather) };
+}
+
+async function arriveUnbound(ctx: NoteVerbContext, input: ArriveInput, purpose: string): Promise<Record<string, unknown>> {
   const name = oneLine(input.name, "name", NAME_MAX, false);
   const model = oneLine(input.model, "model", MODEL_MAX, false);
   const sent = { purpose, ...(name ? { name } : {}), ...(model ? { model } : {}) };

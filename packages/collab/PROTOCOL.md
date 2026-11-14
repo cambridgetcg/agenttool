@@ -456,6 +456,13 @@ collab_arrive {"purpose": "Review the retry change and its tests", "revise_purpo
   true`, which records the purpose as `purpose.declared`. The result begins "You are
   speaking as session S (name N, purpose P)." and offers two ready calls: revise the
   purpose, or start a named child.
+- **Device weather, when the host turned it on** (`AGENTOOL_COLLAB_WEATHER=on`): a new
+  arrival and a look-around, but not a purpose revision, also carry `weather: {read_at,
+  good_for_seconds, says, notes, not_read, basis, authorises, every_field}`, a reading
+  of this device taken after the arrival succeeded. A reading that fails or runs past
+  3 seconds gives `weather: {unavailable}` with a fixed reason, and the arrival is
+  otherwise exactly as it would have been. Off, the default, there is no `weather` key.
+  See [Device weather](#device-weather).
 
 It never resumes, adopts or fences another process's session. Its `note` (such as "I
 have arrived.") is text for a host message: it is not posted to the journal, where an
@@ -471,8 +478,9 @@ open ballots with whether you may still vote, standing challenges); `for_you`;
 and `left_for_your_name` when they apply; `listen.how` (under Claude Code, the
 doorbell watcher command with this session filled in, for the agent to run itself;
 otherwise `collab_inbox {wait_seconds: 30}`); `surface` (version, tools profile,
-capabilities `legacy`, `consent/v1`, `notes/1`, `ballot/1`); and the card. Collab
-starts nothing: the agent runs the listen command itself.
+capabilities `legacy`, `consent/v1`, `notes/1`, `ballot/1`); the card; and `weather`
+when the host turned device weather on. Collab starts nothing: the agent runs the
+listen command itself.
 
 Never carried by the agent: the credential, its file or its path; the workspace id;
 the cursor.
@@ -1177,7 +1185,9 @@ voice.
 | set aside | Only the person, at the controlling terminal or with a user-verified passkey, on a consent/v2 proposal, while no session of the challenger's voice was live. It says the challenge no longer blocks, not that it was wrong. |
 
 Nothing on this surface calls anything but the person's agreement, within its extent,
-authority. There is no resume by seat (see Decisions).
+authority. There is no resume by seat (see Decisions). A device weather reading in an
+arrival is not an act and claims nothing about a speaker: it does not show that two
+sessions share a device, nor that a session is alive (see Device weather).
 
 ## Storage and compatibility
 
@@ -1267,6 +1277,194 @@ start with a line naming `full | notes`.
 Setting `notes` belongs in one host's per-server MCP configuration, never a shell
 profile, and it is a host step for the owner.
 
+## Device weather
+
+Agents on one device share its battery, memory, processors, graphics processor and
+uplink, and none of them could see that ground without knowing a different
+operating-system command for each fact. Device weather (`agenttool.collab-weather/1`)
+is one short-lived report of it, read by the collab process itself and shown in two
+places: in `collab_arrive`, when the host turned it on, and by
+`agenttool-collab-host weather`. It is called weather because the word carries the
+right habits: it is about now, it is nobody's fault, you look at it before you go out,
+and nobody takes it as permission.
+
+Code: `src/weather.ts` (the reading, its notes and the switch), with `collab_arrive` in
+`src/verbs.ts`, the switch read at start in `src/mcp.ts` and the command in
+`src/host.ts`. Tests: `tests/weather.test.ts`, and the weather cases in
+`tests/notes-arrive.test.ts`, `tests/host.test.ts` and `tests/mcp.test.ts`. Every test
+injects the command output, the clock and `node:os`, so none reads a real device.
+
+### Its six principles
+
+1. **A reading is about the moment it was read.** It carries `read_at` and
+   `good_for_seconds` (60). It is never written to the journal, never put in an event,
+   and never kept: the server holds no cache. *Reason:* the journal holds what others
+   will rely on later, and a load figure is false a minute on. A record is evidence
+   about the past, not a grant for now.
+2. **Kinds, not identifiers.** A reading never holds an address, a network name, a
+   host name, a serial number, a user name, a process name, or any command's raw output.
+   *Reason:* an arrival result goes into a model's context and often a transcript;
+   "Wi-Fi" is enough to work with, and the name of the network or of the program holding
+   the device awake says where the person is and what they are doing.
+3. **Say how each thing is known.** A fact read directly from the operating system is
+   plain. An inference is listed under `inferred` with what it was inferred from. A fact
+   that was not read is `null` and listed under `unknown` with the reason. *Reason:* an
+   unknown that reads as "fine" is worse than no reading. No value means "probably
+   not": `metered` is `likely` or `null`, never "no".
+4. **Content, not a channel and not proof.** Software read it, so software could
+   misstate it, and nothing attests it. It authorises nothing and proves nothing about
+   a session: not that two sessions share a device, not that one is alive. No verb
+   behaves differently because of it.
+5. **The device is the person's.** Volunteering its state to a model at arrival is off
+   until the host turns it on. The host command always works, because running it is an
+   act someone chose.
+6. **Facts and what they bear on, never instructions.** A note states a consequence and
+   its reason. It never tells an agent what to do, sets a limit, or gates work.
+
+### The reading
+
+`readWeather()` is async, never throws, and contacts no network. A reading has these
+fields; every `null` among them is explained in `unknown`.
+
+| Group | Fields |
+|---|---|
+| top | `protocol`, `read_at` (when the reading began, UTC), `good_for_seconds`, `platform`, `basis` ("Read by this process from the operating system just now; self-declared, and nothing attests it."), `authorises` ("Nothing: this is a reading, not a permission."), `says`, `notes`, `inferred`, `unknown` |
+| `power` | `source` (`battery`, `ac` or `ups`), `battery_percent`, `battery_state` (`charging`, `discharging` or `full`), `minutes_remaining` (macOS's estimate: to empty while discharging, to full while charging), `low_power_mode`, `sleep_prevented` (whether something holds the device awake, never which program), `awake_since` (the later of boot and last wake), `last_slept_at` (`null`, and not unknown, when the device has not slept since boot) |
+| `cpu` | `chip` (the model, never a serial), `cores`, `performance_cores`, `efficiency_cores`, `load_1m`, `load_5m`, `load_15m`, `load_per_core` (`load_1m / cores`, two decimals), `thermal_warning` (`none` or `recorded`), `speed_limit_percent` |
+| `memory` | `total_bytes`, `pressure` (`normal`, `warn` or `critical`), `swap_used_bytes` |
+| `gpu` | `devices` (each `model`, `utilisation_percent`, `memory_in_use_bytes`), `shares_system_memory` |
+| `network` | `default_route` (an IPv4 default route exists), `kind` (`wifi`, `ethernet`, `phone_usb`, `tunnel`, `other` or `none`), `os_reports` (`reachable` or `not_reachable`), `metered` (`likely` or `null`) |
+
+On macOS the process runs fixed commands by absolute path, with no shell, no input, a
+minimal environment (`PATH=/usr/bin:/bin:/usr/sbin:/sbin`, `LC_ALL=C`, nothing else
+inherited) and a cap on what each may print, all at once, each within 1.5 seconds and
+all within 2.5. A command that fails, is missing or is late costs only the fields it
+feeds, each listed in `unknown` with the reason; no command's own text is repeated.
+Each is measured at 20 to 50 ms on Apple silicon.
+
+| Fact | Command |
+|---|---|
+| power source, percent, state, time remaining | `/usr/bin/pmset -g batt` |
+| Low Power Mode; whether sleep is prevented | `/usr/bin/pmset -g` (`lowpowermode`; the `sleep` line's "(sleep prevented by …)" as a yes or no) |
+| thermal warning, speed limit | `/usr/bin/pmset -g therm` |
+| chip, cores, memory pressure (1 normal, 2 warn, 4 critical), swap, boot, sleep, wake | `/usr/sbin/sysctl` with nine fixed keys; a missing key costs only its own field |
+| graphics devices | `/usr/sbin/ioreg -r -d 1 -w 0 -c IOAccelerator` |
+| default route and its interface | `/sbin/route -n get default`, which reads the kernel's table and contacts nothing |
+| interface to kind | `/usr/sbin/networksetup -listallhardwareports` |
+| what the system says about reach | `/usr/sbin/scutil --nwi`, the system's own reach flags |
+| load, total memory, core count fallback | `node:os` |
+
+How some facts are judged, and what this build does not know:
+
+- **Kind.** Wi-Fi is `wifi`; a port named Ethernet or LAN, Thunderbolt Ethernet among
+  them, is `ethernet`; iPhone USB is `phone_usb`; a default route through `utun`,
+  `ipsec`, `ppp` or `wg` is `tunnel`; no default route is `none`. Anything else, a
+  Thunderbolt Bridge among them, is `other`, and because `other` is reached by
+  exclusion it is listed under `inferred`: a port named in another language (a German
+  Mac calls its Wi-Fi port "WLAN") reads as `other` too, and the port's name is never
+  repeated. An interface `networksetup` does not list is `other` in the same way. A
+  port list with nothing this build recognises leaves `kind` unknown.
+- **Reach.** A REACH line with Reachable (0x2) and without Connection Required (0x4)
+  is `reachable`. Reachable with Connection Required means reachable only once a
+  connection, such as an on-demand VPN or a PPP link, is brought up; that says nothing
+  about now, so `os_reports` is unknown with that reason. No Reachable line is
+  `not_reachable`.
+- **Metered** is `likely` in two cases only, each listed in `inferred`: the kind is
+  `phone_usb`, or the default gateway lies in 172.20.10.0/28, the range an iPhone's
+  Personal Hotspot hands out. The gateway is used for nothing else and never appears.
+  Otherwise `metered` is unknown, because macOS does not show its "expensive" or Low
+  Data Mode flags to a command-line reader.
+- **Shared graphics memory** is inferred, and listed so, when a graphics device's class
+  begins with `AGX` (Apple silicon graphics); other devices are not judged.
+- **Thermal.** The output of a throttled Apple silicon Mac is not known to this build.
+  "No thermal warning level has been recorded" reads as `none` and `CPU_Speed_Limit =
+  <n>` as a limit; anything else is unknown rather than guessed, so this build never
+  reports `recorded`.
+- **The default route** is the IPv4 table's. On an uplink with IPv6 alone,
+  `default_route` is `false` while `os_reports` says `reachable`, and the no-route note
+  is not given. With no IPv4 default route, `metered` is unknown because no link or
+  gateway was there to judge.
+
+On Linux the reading takes the `node:os` facts and power from `/sys/class/power_supply`.
+Only the device's own supplies count: one whose `scope` is `Device` belongs to a
+peripheral (a wireless mouse, keyboard or headset), and its charge is not read. An
+online `Mains` or `USB` supply (a USB-C charger among them) is `ac`; with none online,
+a battery of the device's own that reports discharging is `battery`; mains offline on
+its own leaves the source unknown, since a charger the kernel does not list would look
+the same. One such battery gives its capacity and status (an empty slot, `present` 0,
+is not a battery); with two or more, they are unknown. The files are read
+asynchronously under the same 2.5-second deadline as the macOS commands, because a
+supply's driver can stall: a late file costs the power fields, and the event loop is
+never held. Everything else is unknown, "not read on Linux by this build". On any
+other platform it takes the `node:os` facts alone (Windows keeps no load average).
+
+### Notes and the line it says
+
+A note appears only when its condition holds, and each states a consequence with its
+reason, in one sentence and with no instruction. The thresholds are named constants in
+`src/weather.ts`, each with its reason.
+
+| Condition | What the note says it bears on |
+|---|---|
+| on battery | work spends the person's charge, and a closed lid stops every session on the device at once |
+| Low Power Mode on | the person has asked this device to be frugal |
+| memory pressure `warn` or `critical` | more parallel processes will be slow for everyone on the device |
+| load per core above 1 | timings and timeouts measured now say more about the device than about the code under test |
+| a speed limit below 100, or a thermal warning recorded | work runs slower than the device's usual pace, and timings include that |
+| a graphics device 80% busy or more | a local model or render started now shares it |
+| no default route, and the system does not report reach | the local journal still works; anything reached through a router, hosted services among them, will not answer, which is not the same as a peer staying silent (a peer on the same link needs no default route and can still answer) |
+| metered likely | large downloads spend the person's data |
+| awake less than 600 seconds (the shortest window `collab_propose` accepts) since a wake that followed a known sleep | no session on the device could read or answer while it slept, so silence across those times means the device slept, not that anyone agreed |
+
+`says` is one line built only from fields that were read, ending with how many were not.
+Graphics reads as idle only when every listed device's use was read and is nought; a
+device whose use was not read is counted as such ("graphics 0% busy, use of 1 other
+device not read"), never as idle:
+
+```text
+On battery at 89%, about 5 h 14 min left; load 3.1 on 8 cores; memory pressure warn; graphics 4% busy; Wi-Fi, route reported reachable. Read 10:00:00Z; good for about a minute. 2 facts not read.
+```
+
+### The switch, and where it shows
+
+The MCP server reads `AGENTOOL_COLLAB_WEATHER` (also spelled `AGENTTOOL_COLLAB_WEATHER`)
+from its own environment: `on` or `off`, and absent or empty is `off`. An unknown value,
+or two spellings that disagree, refuses to start with a line naming `on | off`
+(`invalid_weather_switch`, `conflicting_weather_switch`), as the tools profile and the
+consent rule do. Turning it on belongs in one host's per-server MCP configuration and
+is a host step for the owner. It changes no tool, no tool description and no server
+instruction; only `collab_arrive`'s result gains the block. The block in an arrival
+holds the parts an agent can use without the rest:
+
+```json
+{
+  "read_at": "2026-11-12T10:00:00.000Z",
+  "good_for_seconds": 60,
+  "says": "On battery at 89%, about 5 h 14 min left; load 3.1 on 8 cores; memory pressure warn; graphics 4% busy; Wi-Fi, route reported reachable. Read 10:00:00Z; good for about a minute. 2 facts not read.",
+  "notes": [
+    "On battery: work here spends the person's charge, and a closed lid stops every session on this device at once.",
+    "Memory pressure is warn: more parallel processes will be slow for everyone on this device."
+  ],
+  "not_read": 2,
+  "basis": "Read by this process from the operating system just now; self-declared, and nothing attests it.",
+  "authorises": "Nothing: this is a reading, not a permission.",
+  "every_field": "agenttool-collab-host weather prints every field of a reading, with what was inferred and what was not read."
+}
+```
+
+`agenttool-collab-host weather` prints one JSON line,
+`{"protocol":"agenttool.collab-host/1","status":"weather","weather":{…}}`, with every
+field of the reading, and exits 0 even when parts are unknown. It needs no journal and
+opens none, takes no option but `--help`, refuses anything else with `usage_error`,
+and does not read the switch.
+
+### What it is not
+
+Not a record: nothing is stored, and no event, table or schema changed. Not a channel:
+it carries nothing between agents or devices, and it is on no fleet card. Not proof: it
+attests nothing about a device or a session. Not a gate: no verb, lease or deadline
+reads it. It contacts no network, never reads `pmset -g log`, and keeps no cache.
+
 ## Across devices
 
 Each device keeps its own journal, and collab replicates nothing. A note is text, so
@@ -1319,7 +1517,9 @@ Whether a Lobby send may carry a rendered note is a question for the owner.
 A shared journal; any wake or spawn; any identity layer or controller; any new gate on
 work; any score or grade of agents; ranked voting; encryption of seal files; mirroring
 of host messages; transport code for the Lobby or the courier; any consent/v2 clause
-beyond the set-aside; resume by seat; removal or renaming of any existing tool. Collab Notes gave the person desk display
+beyond the set-aside; resume by seat; removal or renaming of any existing tool; device
+weather on a fleet card or in any note or event; any deadline that counts awake time
+rather than clock time; any lease on a physical resource such as the graphics device. Collab Notes gave the person desk display
 lines only: what it signs is unchanged by them. consent/v2 adds one act the desk signs, the set-aside, and on a
 consent/v2 proposal a fifth snapshot key every agree and reject signs (see "consent/v2"). YOUI does not yet show the desk's soft spots, which
 is a change in that repository.

@@ -44,6 +44,7 @@ import {
   type NoteVerbContext,
 } from "./verbs.js";
 import { COLLAB_PACKAGE_VERSION } from "./version.js";
+import { readWeather, weatherSwitch, type WeatherReader } from "./weather.js";
 
 const DEFAULT_MCP_NEXT_EVENT_LIMIT = 10;
 const actorLabel = z.string().min(1).max(200)
@@ -109,10 +110,16 @@ export interface CollabMcpServerOptions {
   resumed_sessions?: Record<string, BoundSession>;
   /**
    * Where a session start without seat_ref looks for one, and where the tools
-   * profile (AGENTOOL_COLLAB_TOOLS) and the consent rule new proposals open
-   * under (AGENTOOL_COLLAB_CONSENT_RULE) are read (defaults to process.env).
+   * profile (AGENTOOL_COLLAB_TOOLS), the consent rule new proposals open
+   * under (AGENTOOL_COLLAB_CONSENT_RULE) and the device weather switch
+   * (AGENTOOL_COLLAB_WEATHER) are read (defaults to process.env).
    */
   environment?: Record<string, string | undefined>;
+  /**
+   * What collab_arrive calls for a reading when the weather switch is on
+   * (defaults to readWeather). Tests inject one so none reads a real device.
+   */
+  weather_reader?: WeatherReader;
 }
 
 const WAITS_PER_ENDPOINT = 8;
@@ -148,6 +155,11 @@ export function buildCollabMcpServer(
   // The rule new proposals open under, refused at start the same way: a host
   // must not state a position under a rule it was not configured for.
   const consentRule = consentRuleFromEnvironment(environment);
+  // Off unless the host turned it on, and refused at start the same way: the
+  // device is the person's, so nothing guesses what a host meant to share.
+  const weather: WeatherReader | undefined = weatherSwitch(environment) === "on"
+    ? options.weather_reader ?? (() => readWeather())
+    : undefined;
   const legacyInstructions =
     `Collab ${COLLAB_PACKAGE_VERSION}: collab_events_wait offers bounded read-only anchored observation for an already running host, ` +
     "without acknowledging, refreshing presence, or renewing leases; continue from next_anchor, never head. " +
@@ -283,6 +295,7 @@ export function buildCollabMcpServer(
     environment,
     profile,
     consent_rule: consentRule,
+    ...(weather ? { weather } : {}),
     slot_key: requestSlot.getStore()!.key,
     binding: () => state.binding,
     bind: (binding) => {

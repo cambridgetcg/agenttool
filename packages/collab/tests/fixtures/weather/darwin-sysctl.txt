@@ -1,0 +1,9 @@
+machdep.cpu.brand_string: Apple M2
+hw.ncpu: 8
+hw.perflevel0.physicalcpu: 4
+hw.perflevel1.physicalcpu: 4
+kern.memorystatus_vm_pressure_level: 2
+vm.swapusage: total = 5120.00M  used = 4278.62M  free = 841.38M  (encrypted)
+kern.boottime: { sec = 1793520000, usec = 211581 } Sun Nov  1 08:00:00 2026
+kern.sleeptime: { sec = 1794463200, usec = 562139 } Thu Nov 12 06:00:00 2026
+kern.waketime: { sec = 1794468600, usec = 167504 } Thu Nov 12 07:30:00 2026

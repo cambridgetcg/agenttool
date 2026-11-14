@@ -494,6 +494,41 @@ once the run has exited. Codex starts separate MCP servers for each spawned
 thread with the same configuration (read from the Codex source), so a spawned
 thread's session declares the same ref and is ended with the run.
 
+### Device weather (unreleased)
+
+Agents on one device share its battery, memory, processors, graphics and
+uplink. `agenttool-collab-host weather` reads that ground now and prints it:
+
+```bash
+agenttool-collab-host weather
+```
+
+It prints one JSON line, `{"protocol":"agenttool.collab-host/1","status":"weather","weather":{…}}`,
+and exits 0 even when parts are unknown. The reading
+(`agenttool.collab-weather/1`) gives power source, battery, Low Power Mode,
+whether something holds the device awake, when it last slept and woke, chip,
+cores, load, thermal limits, memory pressure and swap, each graphics device's
+utilisation, and the kind of uplink (Wi-Fi, Ethernet, iPhone USB, tunnel), plus
+`inferred` (each guess with what it came from), `unknown` (each fact not read,
+with the reason), a one-line `says` and consequence `notes`. It holds kinds,
+never an address, network name, host name, serial, user name or program name.
+On macOS it runs fixed local commands (`pmset`, `sysctl`, `ioreg`, `route`,
+`networksetup`, `scutil`) by absolute path with a minimal environment, within
+2.5 seconds; on Linux it reads `node:os` and the device's own supplies in
+`/sys/class/power_supply` (a peripheral's battery is not counted), without
+blocking and within the same 2.5 seconds. It contacts no network, opens no
+journal, and takes no option but `--help`.
+
+`AGENTOOL_COLLAB_WEATHER` (also spelled `AGENTTOOL_COLLAB_WEATHER`), `on` or
+`off` in the MCP server's environment, decides whether `collab_arrive` adds a
+compact `weather` block to a new arrival and a look-around. Absent means off,
+because the device is the person's; turning it on is a host step for the owner.
+An unknown value, or two spellings that disagree, refuses to start. A reading
+is never written to the journal or kept, authorises nothing, and no verb
+behaves differently because of it. The host command does not read the
+variable. See [PROTOCOL.md](PROTOCOL.md#device-weather) for the fields, the
+notes and their reasons.
+
 ### Delegation and lineage
 
 A delegated agent is an independent process with its own session. The
@@ -1120,7 +1155,8 @@ unreleased. It keeps journal schema 3, adds three proposal consent tools and the
 Collab Notes verbs `collab_arrive`, `collab_inbox`, `collab_note`, `collab_take`,
 `collab_done`, `collab_propose`, `collab_poll` and `collab_vote` to the 33 MCP tools of 0.5.0 (44 in all under the full profile), and adds the
 `agenttool-collab-host wait` host doorbell, its `--addressed` mode and the
-Claude Code doorbell watcher. The MCP server reports `0.6.0-dev.0` in
+Claude Code doorbell watcher, and adds [device weather](#device-weather-unreleased)
+(`agenttool-collab-host weather`, and an opt-in block in `collab_arrive`). The MCP server reports `0.6.0-dev.0` in
 `serverInfo` and at the start of its instructions, both read from
 `src/version.ts`, so this build cannot announce itself as the 0.5.0 release.
 The next npm release goes through the public staged release path; its version is
