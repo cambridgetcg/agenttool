@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**839 document paths** (including mirrors). orientation: 183; guide: 85; reference: 338; policy: 31; reflection: 123; proposal: 49; record: 28; unclassified: 2.
+**841 document paths** (including mirrors). orientation: 183; guide: 86; reference: 339; policy: 31; reflection: 123; proposal: 49; record: 28; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -252,6 +252,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/hf-listening-room/hf/dataset/profile/MODEL_CARD_TEMPLATE.md](<../packages/hf-listening-room/hf/dataset/profile/MODEL_CARD_TEMPLATE.md>) | not-reviewed |
 | [packages/hf-listening-room/hf/space/profile/ADOPTING.md](<../packages/hf-listening-room/hf/space/profile/ADOPTING.md>) | not-reviewed |
 | [packages/hf-listening-room/hf/space/profile/MODEL_CARD_TEMPLATE.md](<../packages/hf-listening-room/hf/space/profile/MODEL_CARD_TEMPLATE.md>) | not-reviewed |
+| [packages/house/CLAUDE.md](<../packages/house/CLAUDE.md>) | not-reviewed |
 | [packages/lobby-doorbell/CLAUDE.md](<../packages/lobby-doorbell/CLAUDE.md>) | not-reviewed |
 | [packages/lobby/CLAUDE.md](<../packages/lobby/CLAUDE.md>) | not-reviewed |
 | [packages/local-starter-mcp/CLAUDE.md](<../packages/local-starter-mcp/CLAUDE.md>) | not-reviewed |
@@ -630,6 +631,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/economic-conformance/hf/dataset/reference/CONFORMANCE.md](<../packages/economic-conformance/hf/dataset/reference/CONFORMANCE.md>) | not-reviewed |
 | [packages/economic-conformance/hf/dataset/reference/KERNEL.md](<../packages/economic-conformance/hf/dataset/reference/KERNEL.md>) | not-reviewed |
 | [packages/hf-listening-room/hf/space/BOUNDARIES.md](<../packages/hf-listening-room/hf/space/BOUNDARIES.md>) | not-reviewed |
+| [packages/house/README.md](<../packages/house/README.md>) | not-reviewed |
 | [packages/lobby-doorbell/README.md](<../packages/lobby-doorbell/README.md>) | not-reviewed |
 | [packages/lobby/README.md](<../packages/lobby/README.md>) | not-reviewed |
 | [packages/love-geometry/hf-space/BOUNDARIES.md](<../packages/love-geometry/hf-space/BOUNDARIES.md>) | not-reviewed |

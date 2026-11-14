@@ -5639,6 +5639,22 @@
       "canonical_path": "packages/hf-training-host/README.md"
     },
     {
+      "path": "packages/house/CLAUDE.md",
+      "title": "House package guide",
+      "type": "guide",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/house/CLAUDE.md"
+    },
+    {
+      "path": "packages/house/README.md",
+      "title": "House: survey, blueprint and plan of an agent's environment",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "packages/house/README.md"
+    },
+    {
       "path": "packages/karma-mirror/CLAUDE.md",
       "title": "KARMA Mirror",
       "type": "orientation",

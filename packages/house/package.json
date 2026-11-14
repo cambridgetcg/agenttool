@@ -1,0 +1,28 @@
+{
+  "name": "@agenttool/house",
+  "version": "0.1.0-dev.0",
+  "description": "Read-only survey, blueprint and plan of an agent's AgentTool environment on one device: looks at fixed places only, opens no journal, database or key, runs only the collab host's --help and weather, and builds nothing",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "agenttool-house": "./bin/agenttool-house.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun --no-env-file test tests",
+    "ci": "bun --no-env-file run typecheck && bun --no-env-file run test"
+  },
+  "engines": {
+    "bun": ">=1.3.5"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.5",
+    "typescript": "5.9.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cambridgetcg/agenttool.git",
+    "directory": "packages/house"
+  }
+}
