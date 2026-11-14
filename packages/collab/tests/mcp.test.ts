@@ -1470,3 +1470,34 @@ describe("MCP surface", () => {
     });
   }, 30_000);
 });
+
+describe("device weather switch", () => {
+  test("turning it on changes no tool, description or instruction; only collab_arrive's result", () => {
+    const surface = (environment: Record<string, string>) => {
+      const directory = mkdtempSync(join(tmpdir(), "agenttool-collab-weather-surface-"));
+      const store = new CollabStore(join(directory, "collab.sqlite"));
+      try {
+        const server = buildCollabMcpServer(store, {
+          environment,
+          weather_reader: async () => {
+            throw new Error("not called while the surface is listed");
+          },
+        }) as any;
+        const tools = Object.fromEntries(Object.entries(server._registeredTools).map(([name, tool]: [string, any]) => [
+          name,
+          JSON.stringify({ title: tool.title, description: tool.description, annotations: tool.annotations }),
+        ]));
+        return { tools, instructions: server.server._instructions as string };
+      } finally {
+        store.close();
+        rmSync(directory, { recursive: true, force: true });
+      }
+    };
+    const profiles: Array<Record<string, string>> = [{}, { AGENTOOL_COLLAB_TOOLS: "notes" }];
+    for (const profile of profiles) {
+      const off = surface(profile);
+      expect(surface({ ...profile, AGENTOOL_COLLAB_WEATHER: "on" })).toEqual(off);
+      expect(off.instructions).not.toContain("weather");
+    }
+  });
+});

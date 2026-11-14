@@ -1,0 +1,43 @@
++-o AGXAcceleratorG14G  <class AGXAcceleratorG14G, id 0x10000035a, registered, matched, active, busy 0 (6762 ms), retain 73>
+    {
+      "SchedulerState" = {"Stamps"=(),"BusyWorkQueues"=()}
+      "IOMatchedAtBoot" = Yes
+      "vendor-id" = <6b100000>
+      "GPURawCounterBundleName" = "AGXGPURawCounterBundle"
+      "MetalStatisticsName" = "AGXMetalStatisticsExternalG14G"
+      "AGXParameterBufferMaxSizeEverMemless" = 574881792
+      "GPURawCounterPluginClassName" = "AGXGPURawCounterSourceGroup"
+      "MetalPluginClassName" = "AGXG14GDevice"
+      "SCMVersionNumber" = ""
+      "AGCInfo" = {"fLastSubmissionPID"=101,"fSubmissionsSinceLastCheck"=0,"fBusyCount"=0}
+      "MetalPluginName" = "AGXMetalG14G"
+      "IONameMatched" = "gpu,t8112"
+      "CommandSubmissionEnabled" = Yes
+      "PerformanceStatistics" = {"In use system memory (driver)"=0,"Alloc system memory"=15555395584,"Tiler Utilization %"=4,"recoveryCount"=0,"lastRecoveryTime"=0,"Renderer Utilization %"=3,"TiledSceneBytes"=557056,"Device Utilization %"=4,"SplitSceneCount"=0,"Allocated PB Size"=57671680,"In use system memory"=288768000}
+      "IOGLBundleName" = "AppleMetalOpenGLRenderer"
+      "AGXParameterBufferMaxSizeNeverMemless" = 287440896
+      "IOGLESBundleName" = "AppleMetalGLRenderer"
+      "IOSourceVersion" = "353.14"
+      "IOPersonalityPublisher" = "com.apple.AGXG14G"
+      "IOPowerManagement" = {"CurrentPowerState"=1,"CapabilityFlags"=2,"MaxPowerState"=1,"DriverPowerState"=1}
+      "model" = "Apple M2"
+      "AGXTraceCodeVersion" = "3.44.6"
+      "SCMBuildTime" = ""
+      "CFBundleIdentifier" = "com.apple.AGXG14G"
+      "gpu-core-count" = 8
+      "IOProviderClass" = "AppleARMIODevice"
+      "AGXParameterBufferMaxSize" = 862322688
+      "IONameMatch" = ("gpu,t8015","gpu,t8027","gpu,t8030","gpu,t8103","gpu,t8110","gpu,t8112")
+      "IOReportLegendPublic" = Yes
+      "IOClass" = "AGXAcceleratorG14G"
+      "CFBundleIdentifierKernel" = "com.apple.AGXG14G"
+      "GPUConfigurationVariable" = {"num_gps"=4,"gpu_gen"=14,"is_sksm"=0,"usc_gen"=2,"num_cores"=10,"num_mgpus"=1,"gpu_var"="G","core_mask_list"=(509),"num_frags"=10}
+      "IOGeneralInterest" = "IOCommand is not serializable"
+      "IOReportLegend" = ({"IOReportGroupName"="Internal Statistics","IOReportChannels"=((2,6442450945,"In use system memory"),(4,6442450945,"In use system memory (driver)"))})
+      "IOMatchCategory" = "IOAccelerator"
+      "IOProbeScore" = 10000
+      "KDebugVersion" = 4294967296
+      "SurfaceList" = ()
+    }
+    
+

@@ -40467,6 +40467,924 @@ var SOFT_SPOTS_DELIVERY_NOTE = softSpotsDeliveryNote(CONSENT_RULE);
 // src/version.ts
 var COLLAB_PACKAGE_VERSION = "0.6.0-dev.0";
 
+// src/weather.ts
+import { spawn } from "child_process";
+import { readdirSync as readdirSync2, readFileSync as readFileSync3 } from "fs";
+import { cpus, loadavg, totalmem } from "os";
+var WEATHER_PROTOCOL = "agenttool.collab-weather/1";
+var WEATHER_GOOD_FOR_SECONDS = 60;
+var WEATHER_BASIS = "Read by this process from the operating system just now; self-declared, and nothing attests it.";
+var WEATHER_AUTHORISES = "Nothing: this is a reading, not a permission.";
+var WEATHER_EVERY_FIELD = "agenttool-collab-host weather prints every field of a reading, with what was inferred and what was not read.";
+var LOAD_PER_CORE_NOTE_ABOVE = 1;
+var GPU_BUSY_NOTE_PERCENT = 80;
+var SPEED_LIMIT_NOTE_BELOW = 100;
+var RECENT_WAKE_NOTE_SECONDS = MIN_PROPOSAL_CONSULT_SECONDS;
+var WEATHER_COMMAND_TIMEOUT_MS = 1500;
+var WEATHER_DEADLINE_MS = 2500;
+var WEATHER_ARRIVAL_LIMIT_MS = 3000;
+var OUTPUT_CAP_BYTES = 64 * 1024;
+var GRAPHICS_OUTPUT_CAP_BYTES = 512 * 1024;
+var WEATHER_COMMAND_ENV = Object.freeze({
+  PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
+  LC_ALL: "C"
+});
+var WEATHER_SYSCTL_KEYS = [
+  "machdep.cpu.brand_string",
+  "hw.ncpu",
+  "hw.perflevel0.physicalcpu",
+  "hw.perflevel1.physicalcpu",
+  "kern.memorystatus_vm_pressure_level",
+  "vm.swapusage",
+  "kern.boottime",
+  "kern.sleeptime",
+  "kern.waketime"
+];
+var DARWIN_WEATHER_COMMANDS = {
+  battery: { label: "pmset -g batt", file: "/usr/bin/pmset", args: ["-g", "batt"] },
+  settings: { label: "pmset -g", file: "/usr/bin/pmset", args: ["-g"] },
+  thermal: { label: "pmset -g therm", file: "/usr/bin/pmset", args: ["-g", "therm"] },
+  sysctl: { label: "sysctl", file: "/usr/sbin/sysctl", args: [...WEATHER_SYSCTL_KEYS] },
+  graphics: {
+    label: "ioreg",
+    file: "/usr/sbin/ioreg",
+    args: ["-r", "-d", "1", "-w", "0", "-c", "IOAccelerator"],
+    max_bytes: GRAPHICS_OUTPUT_CAP_BYTES
+  },
+  route: { label: "route -n get default", file: "/sbin/route", args: ["-n", "get", "default"] },
+  ports: { label: "networksetup -listallhardwareports", file: "/usr/sbin/networksetup", args: ["-listallhardwareports"] },
+  reach: { label: "scutil --nwi", file: "/usr/sbin/scutil", args: ["--nwi"] }
+};
+var HOTSPOT_NETWORK = [172, 20, 10];
+var HOTSPOT_HOSTS = 16;
+var FIELDS = [
+  "power.source",
+  "power.battery_percent",
+  "power.battery_state",
+  "power.minutes_remaining",
+  "power.low_power_mode",
+  "power.sleep_prevented",
+  "power.awake_since",
+  "power.last_slept_at",
+  "cpu.chip",
+  "cpu.cores",
+  "cpu.performance_cores",
+  "cpu.efficiency_cores",
+  "cpu.load_1m",
+  "cpu.load_5m",
+  "cpu.load_15m",
+  "cpu.load_per_core",
+  "cpu.thermal_warning",
+  "cpu.speed_limit_percent",
+  "memory.total_bytes",
+  "memory.pressure",
+  "memory.swap_used_bytes",
+  "gpu.shares_system_memory",
+  "network.default_route",
+  "network.kind",
+  "network.os_reports",
+  "network.metered"
+];
+
+class WeatherCommandFailure extends Error {
+}
+var SYSTEM_OS = { loadavg, totalmem, cpus };
+async function readWeather(deps = {}) {
+  let at;
+  try {
+    at = (deps.now ?? (() => new Date))();
+    if (!(at instanceof Date) || !Number.isFinite(at.getTime()))
+      at = new Date;
+  } catch {
+    at = new Date;
+  }
+  const platform = deps.platform ?? process.platform;
+  const reading = emptyReading(at, platform);
+  const ledger = new Ledger;
+  let elsewhere = `not read on ${platform} by this build`;
+  try {
+    readOsFacts(reading, ledger, deps.os ?? SYSTEM_OS, platform);
+    if (platform === "darwin") {
+      elsewhere = "not read by this build";
+      await readDarwin(reading, ledger, deps);
+    } else if (platform === "linux") {
+      elsewhere = "not read on Linux by this build";
+      readLinuxPower(reading, ledger, deps);
+    }
+  } catch {
+    elsewhere = "this build failed while reading it";
+  }
+  return finish(reading, ledger, elsewhere);
+}
+function emptyReading(at, platform) {
+  return {
+    protocol: WEATHER_PROTOCOL,
+    read_at: at.toISOString(),
+    good_for_seconds: WEATHER_GOOD_FOR_SECONDS,
+    platform,
+    basis: WEATHER_BASIS,
+    authorises: WEATHER_AUTHORISES,
+    says: "",
+    notes: [],
+    power: {
+      source: null,
+      battery_percent: null,
+      battery_state: null,
+      minutes_remaining: null,
+      low_power_mode: null,
+      sleep_prevented: null,
+      awake_since: null,
+      last_slept_at: null
+    },
+    cpu: {
+      chip: null,
+      cores: null,
+      performance_cores: null,
+      efficiency_cores: null,
+      load_1m: null,
+      load_5m: null,
+      load_15m: null,
+      load_per_core: null,
+      thermal_warning: null,
+      speed_limit_percent: null
+    },
+    memory: { total_bytes: null, pressure: null, swap_used_bytes: null },
+    gpu: { devices: [], shares_system_memory: null },
+    network: { default_route: null, kind: null, os_reports: null, metered: null },
+    inferred: [],
+    unknown: []
+  };
+}
+
+class Ledger {
+  unknown = new Map;
+  inferred = [];
+  read_as_null = new Set;
+  miss(what, why) {
+    if (!this.unknown.has(what))
+      this.unknown.set(what, why);
+  }
+  infer(what, from) {
+    this.inferred.push({ what, from });
+  }
+}
+function fieldValue(reading, path) {
+  const [group, key] = path.split(".");
+  return reading[group][key];
+}
+function finish(reading, ledger, elsewhere) {
+  const { load_1m: load, cores } = reading.cpu;
+  if (load !== null && cores !== null && cores > 0)
+    reading.cpu.load_per_core = round2(load / cores);
+  else
+    ledger.miss("cpu.load_per_core", "it needs both the 1-minute load and the core count");
+  for (const path of FIELDS) {
+    const value = fieldValue(reading, path);
+    if (value === null && !ledger.read_as_null.has(path))
+      ledger.miss(path, elsewhere);
+    if (value !== null)
+      ledger.unknown.delete(path);
+  }
+  if (reading.gpu.devices.length === 0 && !ledger.read_as_null.has("gpu.devices"))
+    ledger.miss("gpu.devices", elsewhere);
+  reading.gpu.devices.forEach((device, index) => {
+    for (const key of ["model", "utilisation_percent", "memory_in_use_bytes"]) {
+      if (device[key] === null)
+        ledger.miss(`gpu.devices[${index}].${key}`, `ioreg showed no ${GRAPHICS_KEY_WORDS[key]} for this device`);
+    }
+  });
+  reading.inferred = ledger.inferred;
+  reading.unknown = [...ledger.unknown].map(([what, why]) => ({ what, why }));
+  reading.notes = weatherNotes(reading);
+  reading.says = weatherSays(reading);
+  return reading;
+}
+var GRAPHICS_KEY_WORDS = {
+  model: '"model"',
+  utilisation_percent: '"Device Utilization %"',
+  memory_in_use_bytes: '"In use system memory"'
+};
+function readOsFacts(reading, ledger, os, platform) {
+  try {
+    const total = os.totalmem();
+    if (isWhole(total) && total > 0)
+      reading.memory.total_bytes = total;
+    else
+      ledger.miss("memory.total_bytes", "node:os gave no total memory");
+  } catch {
+    ledger.miss("memory.total_bytes", "node:os gave no total memory");
+  }
+  try {
+    const count = os.cpus().length;
+    if (isWhole(count) && count > 0)
+      reading.cpu.cores = count;
+  } catch {}
+  if (platform === "win32") {
+    for (const path of ["cpu.load_1m", "cpu.load_5m", "cpu.load_15m"])
+      ledger.miss(path, "Windows keeps no load average");
+    return;
+  }
+  try {
+    const [one, five, fifteen] = os.loadavg();
+    const loads = [one, five, fifteen].map((value) => typeof value === "number" && Number.isFinite(value) && value >= 0 ? round2(value) : null);
+    [reading.cpu.load_1m, reading.cpu.load_5m, reading.cpu.load_15m] = loads;
+  } catch {}
+}
+async function readDarwin(reading, ledger, deps) {
+  const results = await runDarwinCommands(deps);
+  applyBattery(reading, ledger, results.battery);
+  applySettings(reading, ledger, results.settings);
+  applyThermal(reading, ledger, results.thermal);
+  applySysctl(reading, ledger, results.sysctl);
+  applyGraphics(reading, ledger, results.graphics);
+  applyNetwork(reading, ledger, results.route, results.ports, results.reach);
+}
+async function runDarwinCommands(deps) {
+  const run = deps.run ?? spawnWeatherCommand;
+  const timeoutMs = deps.command_timeout_ms ?? WEATHER_COMMAND_TIMEOUT_MS;
+  const deadlineMs = deps.deadline_ms ?? WEATHER_DEADLINE_MS;
+  const controller = new AbortController;
+  let timer;
+  const late = new Promise((resolve5) => {
+    timer = setTimeout(() => resolve5({ ok: false, why: `was still running at the ${deadlineMs} ms deadline` }), deadlineMs);
+  });
+  const keys = Object.keys(DARWIN_WEATHER_COMMANDS);
+  try {
+    const results = await Promise.all(keys.map((key) => {
+      const command = DARWIN_WEATHER_COMMANDS[key];
+      const attempt = (async () => {
+        try {
+          const output = await run(command.file, command.args, {
+            timeout_ms: timeoutMs,
+            max_bytes: command.max_bytes ?? OUTPUT_CAP_BYTES,
+            signal: controller.signal
+          });
+          return { ok: true, output: normaliseOutput(output) };
+        } catch (error51) {
+          return { ok: false, why: error51 instanceof WeatherCommandFailure ? error51.message : "failed" };
+        }
+      })();
+      return Promise.race([attempt, late]);
+    }));
+    return Object.fromEntries(keys.map((key, index) => [key, results[index]]));
+  } finally {
+    clearTimeout(timer);
+    controller.abort();
+  }
+}
+function normaliseOutput(output) {
+  const value = output ?? {};
+  return {
+    stdout: typeof value.stdout === "string" ? value.stdout : "",
+    stderr: typeof value.stderr === "string" ? value.stderr : "",
+    exit_code: typeof value.exit_code === "number" ? value.exit_code : null
+  };
+}
+function textOf(key, result, anyStatus = false) {
+  const label = DARWIN_WEATHER_COMMANDS[key].label;
+  if (!result.ok)
+    return { why: `${label} ${result.why}` };
+  const { stdout, exit_code } = result.output;
+  if (exit_code === null)
+    return { why: `${label} was ended before it exited` };
+  if (exit_code !== 0 && !anyStatus)
+    return { why: `${label} exited with status ${exit_code}` };
+  return { text: stdout };
+}
+function missAll(ledger, paths, why) {
+  for (const path of paths)
+    ledger.miss(path, why);
+}
+var BATTERY_FIELDS = ["power.source", "power.battery_percent", "power.battery_state", "power.minutes_remaining"];
+function applyBattery(reading, ledger, result) {
+  const read = textOf("battery", result);
+  if ("why" in read)
+    return missAll(ledger, BATTERY_FIELDS, read.why);
+  const facts = parsePmsetBattery(read.text);
+  if (facts.source)
+    reading.power.source = facts.source;
+  else
+    ledger.miss("power.source", "pmset -g batt named no power source this build recognises");
+  if (!facts.battery) {
+    missAll(ledger, BATTERY_FIELDS.slice(1), "pmset -g batt reports no internal battery");
+    return;
+  }
+  const battery = facts.battery;
+  if (battery.percent !== null)
+    reading.power.battery_percent = battery.percent;
+  else
+    ledger.miss("power.battery_percent", "pmset -g batt showed no charge percentage this build recognises");
+  if (battery.state !== null)
+    reading.power.battery_state = battery.state;
+  else
+    ledger.miss("power.battery_state", battery.state_known ? "pmset -g batt reports the battery neither charging, discharging nor full (as when it is held at a charge limit)" : "pmset -g batt showed a battery state this build has no word for");
+  if (battery.minutes !== null)
+    reading.power.minutes_remaining = battery.minutes;
+  else
+    ledger.miss("power.minutes_remaining", battery.no_estimate ? "macOS has no estimate yet" : "pmset -g batt showed no time remaining");
+}
+function applySettings(reading, ledger, result) {
+  const read = textOf("settings", result);
+  if ("why" in read)
+    return missAll(ledger, ["power.low_power_mode", "power.sleep_prevented"], read.why);
+  const facts = parsePmsetSettings(read.text);
+  if (facts.low_power_mode !== null)
+    reading.power.low_power_mode = facts.low_power_mode;
+  else
+    ledger.miss("power.low_power_mode", "pmset -g has no lowpowermode line on this device");
+  if (facts.sleep_prevented !== null)
+    reading.power.sleep_prevented = facts.sleep_prevented;
+  else
+    ledger.miss("power.sleep_prevented", "pmset -g has no sleep line");
+}
+function applyThermal(reading, ledger, result) {
+  const read = textOf("thermal", result);
+  if ("why" in read)
+    return missAll(ledger, ["cpu.thermal_warning", "cpu.speed_limit_percent"], read.why);
+  const facts = parsePmsetThermal(read.text);
+  if (facts.thermal_warning !== null)
+    reading.cpu.thermal_warning = facts.thermal_warning;
+  else
+    ledger.miss("cpu.thermal_warning", "pmset -g therm printed nothing this build recognises about thermal warnings");
+  if (facts.speed_limit_percent !== null)
+    reading.cpu.speed_limit_percent = facts.speed_limit_percent;
+  else
+    ledger.miss("cpu.speed_limit_percent", facts.no_cpu_status ? "macOS has recorded no CPU power status, so no speed limit was read" : "pmset -g therm printed no CPU_Speed_Limit");
+}
+var PRESSURE_LEVELS = { "1": "normal", "2": "warn", "4": "critical" };
+function applySysctl(reading, ledger, result) {
+  const paths = [
+    "cpu.chip",
+    "cpu.performance_cores",
+    "cpu.efficiency_cores",
+    "memory.pressure",
+    "memory.swap_used_bytes",
+    "power.awake_since",
+    "power.last_slept_at"
+  ];
+  const read = textOf("sysctl", result, true);
+  if ("why" in read) {
+    missAll(ledger, paths, read.why);
+    if (reading.cpu.cores === null)
+      ledger.miss("cpu.cores", read.why);
+    return;
+  }
+  const values = parseSysctl(read.text);
+  const absent = (key) => `sysctl did not report ${key}`;
+  const chip = values["machdep.cpu.brand_string"]?.trim();
+  if (chip && chip.length <= 120 && !/[\u0000-\u001f\u007f]/.test(chip))
+    reading.cpu.chip = chip;
+  else
+    ledger.miss("cpu.chip", absent("machdep.cpu.brand_string"));
+  const cores = wholeOf(values["hw.ncpu"]);
+  if (cores !== null && cores > 0)
+    reading.cpu.cores = cores;
+  else if (reading.cpu.cores === null)
+    ledger.miss("cpu.cores", absent("hw.ncpu"));
+  const performance2 = wholeOf(values["hw.perflevel0.physicalcpu"]);
+  if (performance2 !== null)
+    reading.cpu.performance_cores = performance2;
+  else
+    ledger.miss("cpu.performance_cores", `${absent("hw.perflevel0.physicalcpu")} (a processor without performance levels)`);
+  const efficiency = wholeOf(values["hw.perflevel1.physicalcpu"]);
+  if (efficiency !== null)
+    reading.cpu.efficiency_cores = efficiency;
+  else
+    ledger.miss("cpu.efficiency_cores", `${absent("hw.perflevel1.physicalcpu")} (a processor without efficiency cores)`);
+  const level = values["kern.memorystatus_vm_pressure_level"]?.trim();
+  if (level !== undefined && PRESSURE_LEVELS[level])
+    reading.memory.pressure = PRESSURE_LEVELS[level];
+  else
+    ledger.miss("memory.pressure", level === undefined ? absent("kern.memorystatus_vm_pressure_level") : "sysctl gave a pressure level this build has no word for");
+  const swap = swapUsedBytes(values["vm.swapusage"]);
+  if (swap !== null)
+    reading.memory.swap_used_bytes = swap;
+  else
+    ledger.miss("memory.swap_used_bytes", values["vm.swapusage"] === undefined ? absent("vm.swapusage") : "sysctl's vm.swapusage line is not in a form this build reads");
+  const boot = timevalMs(values["kern.boottime"]);
+  const slept = timevalMs(values["kern.sleeptime"]);
+  const woke = timevalMs(values["kern.waketime"]);
+  if (boot === null || boot === 0) {
+    ledger.miss("power.awake_since", absent("kern.boottime"));
+  } else if (woke === null) {
+    ledger.miss("power.awake_since", absent("kern.waketime"));
+  } else {
+    reading.power.awake_since = new Date(Math.max(boot, woke)).toISOString();
+  }
+  if (slept === null) {
+    ledger.miss("power.last_slept_at", absent("kern.sleeptime"));
+  } else if (slept === 0) {
+    ledger.read_as_null.add("power.last_slept_at");
+  } else {
+    reading.power.last_slept_at = new Date(slept).toISOString();
+  }
+}
+function applyGraphics(reading, ledger, result) {
+  const read = textOf("graphics", result);
+  if ("why" in read)
+    return missAll(ledger, ["gpu.devices", "gpu.shares_system_memory"], read.why);
+  const devices = parseIoreg(read.text);
+  reading.gpu.devices = devices.map(({ model, utilisation_percent, memory_in_use_bytes }) => ({ model, utilisation_percent, memory_in_use_bytes }));
+  if (devices.length === 0)
+    ledger.read_as_null.add("gpu.devices");
+  if (devices.some((device) => device.apple_graphics)) {
+    reading.gpu.shares_system_memory = true;
+    ledger.infer("gpu.shares_system_memory", "ioreg names an AGX graphics class, which is Apple silicon graphics: its memory is the same memory as the processors'");
+  } else {
+    ledger.miss("gpu.shares_system_memory", devices.length === 0 ? "ioreg lists no graphics device" : "only Apple silicon graphics (an AGX class) is recognised as sharing memory; this build does not judge others");
+  }
+}
+var NETWORK_PATHS = ["network.default_route", "network.kind"];
+var UNMETERED_UNKNOWN = 'macOS does not show its "expensive" or Low Data Mode flags to a command-line reader, so only a phone link is recognised';
+function applyNetwork(reading, ledger, routeResult, portsResult, reachResult) {
+  const reach = textOf("reach", reachResult);
+  if ("why" in reach)
+    ledger.miss("network.os_reports", reach.why);
+  else {
+    const reported = parseReach(reach.text);
+    if (reported)
+      reading.network.os_reports = reported;
+    else
+      ledger.miss("network.os_reports", "scutil --nwi printed no REACH line");
+  }
+  const label = DARWIN_WEATHER_COMMANDS.route.label;
+  let route = null;
+  let routeWhy = "";
+  if (!routeResult.ok) {
+    routeWhy = `${label} ${routeResult.why}`;
+  } else {
+    const { stdout, stderr, exit_code } = routeResult.output;
+    route = parseRoute(stdout, stderr);
+    if (route?.kind === "route" && exit_code !== 0)
+      route = null;
+    if (route === null) {
+      routeWhy = exit_code === null ? `${label} was ended before it exited` : exit_code !== 0 ? `${label} exited with status ${exit_code}` : `${label} printed nothing this build recognises`;
+    }
+  }
+  if (route === null) {
+    missAll(ledger, NETWORK_PATHS, routeWhy);
+    ledger.miss("network.metered", UNMETERED_UNKNOWN);
+    return;
+  }
+  if (route.kind === "none") {
+    reading.network.default_route = false;
+    reading.network.kind = "none";
+    ledger.miss("network.metered", "there is no default route, so there is no connection to judge");
+    return;
+  }
+  reading.network.default_route = true;
+  const ports = textOf("ports", portsResult);
+  const kind = interfaceKind(route.interface, "why" in ports ? null : parseHardwarePorts(ports.text));
+  if (kind !== null)
+    reading.network.kind = kind;
+  else
+    ledger.miss("network.kind", route.interface === null ? "route -n get default named no interface" : ("why" in ports) ? ports.why : "networksetup printed nothing this build recognises");
+  let metered = false;
+  if (kind === "phone_usb") {
+    metered = true;
+    ledger.infer("network.metered", "the default route runs over an iPhone USB link, which uses the phone's data plan");
+  }
+  if (isHotspotGateway(route.gateway)) {
+    metered = true;
+    ledger.infer("network.metered", "the default gateway is in 172.20.10.0/28, the range an iPhone's Personal Hotspot hands out");
+  }
+  if (metered)
+    reading.network.metered = "likely";
+  else
+    ledger.miss("network.metered", UNMETERED_UNKNOWN);
+}
+var spawnWeatherCommand = (file2, args, limits) => new Promise((resolve5, reject) => {
+  if (limits.signal.aborted) {
+    reject(new WeatherCommandFailure("was not started: the deadline had passed"));
+    return;
+  }
+  let child;
+  try {
+    child = spawn(file2, [...args], { stdio: ["ignore", "pipe", "pipe"], env: { ...WEATHER_COMMAND_ENV }, shell: false });
+  } catch {
+    reject(new WeatherCommandFailure("could not be started"));
+    return;
+  }
+  const stdout = [];
+  const stderr = [];
+  let bytes = 0;
+  let settled = false;
+  const settle = (done) => {
+    if (settled)
+      return;
+    settled = true;
+    clearTimeout(timer);
+    limits.signal.removeEventListener("abort", onAbort);
+    done();
+  };
+  const stop = (why) => {
+    try {
+      child.kill("SIGKILL");
+    } catch {}
+    settle(() => reject(new WeatherCommandFailure(why)));
+  };
+  const timer = setTimeout(() => stop(`did not finish within ${limits.timeout_ms} ms`), limits.timeout_ms);
+  const onAbort = () => stop("was still running at the overall deadline");
+  limits.signal.addEventListener("abort", onAbort, { once: true });
+  const collect = (into) => (chunk) => {
+    bytes += chunk.length;
+    if (bytes > limits.max_bytes) {
+      stop(`printed more than ${limits.max_bytes} bytes`);
+      return;
+    }
+    into.push(chunk);
+  };
+  child.stdout?.on("data", collect(stdout));
+  child.stderr?.on("data", collect(stderr));
+  child.once("error", (error51) => {
+    settle(() => reject(new WeatherCommandFailure(`could not be started (${typeof error51.code === "string" ? error51.code : "error"})`)));
+  });
+  child.once("close", (code) => {
+    settle(() => code === null ? reject(new WeatherCommandFailure("was ended by a signal")) : resolve5({ stdout: Buffer.concat(stdout).toString("utf8"), stderr: Buffer.concat(stderr).toString("utf8"), exit_code: code }));
+  });
+});
+var SOURCES = { "AC Power": "ac", "Battery Power": "battery", "UPS Power": "ups" };
+var STATES = {
+  charging: "charging",
+  "finishing charge": "charging",
+  discharging: "discharging",
+  charged: "full"
+};
+function parsePmsetBattery(text) {
+  const named = /Now drawing from '([^'\n]*)'/.exec(text)?.[1];
+  const source = named !== undefined ? SOURCES[named] ?? null : null;
+  const line = text.split(`
+`).find((entry) => /^\s*-InternalBattery-\d+/.test(entry));
+  if (!line)
+    return { source, battery: null };
+  const fields = /(\d{1,3})%;\s*([^;]*?)\s*(?:;\s*(.*))?$/.exec(line);
+  const percent = fields ? Number(fields[1]) : Number.NaN;
+  const stateWord = fields?.[2]?.trim().toLowerCase() ?? "";
+  const rest = fields?.[3] ?? "";
+  const remaining = /(\d+):(\d{2}) remaining/.exec(rest);
+  return {
+    source,
+    battery: {
+      percent: Number.isInteger(percent) && percent >= 0 && percent <= 100 ? percent : null,
+      state: STATES[stateWord] ?? null,
+      state_known: stateWord === "ac attached" && /not charging/.test(rest),
+      minutes: remaining ? Number(remaining[1]) * 60 + Number(remaining[2]) : null,
+      no_estimate: /\(no estimate\)/.test(rest)
+    }
+  };
+}
+function parsePmsetSettings(text) {
+  const low = /^\s*lowpowermode\s+(\d+)\s*$/m.exec(text)?.[1];
+  const sleep2 = /^\s*sleep\s+\d+(.*)$/m.exec(text);
+  return {
+    low_power_mode: low === undefined ? null : low === "1" ? true : low === "0" ? false : null,
+    sleep_prevented: sleep2 ? /\(sleep prevented by/.test(sleep2[1] ?? "") : null
+  };
+}
+function parsePmsetThermal(text) {
+  const limit = /CPU_Speed_Limit\s*=\s*(\d+)/.exec(text)?.[1];
+  const value = limit === undefined ? Number.NaN : Number(limit);
+  return {
+    thermal_warning: /No thermal warning level has been recorded/.test(text) ? "none" : null,
+    speed_limit_percent: Number.isInteger(value) && value >= 0 && value <= 100 ? value : null,
+    no_cpu_status: /No CPU power status has been recorded/.test(text)
+  };
+}
+function parseSysctl(text) {
+  const values = {};
+  for (const line of text.split(`
+`)) {
+    const match = /^([a-z0-9_.]+):\s?(.*)$/i.exec(line);
+    if (match && WEATHER_SYSCTL_KEYS.includes(match[1]))
+      values[match[1]] = match[2];
+  }
+  return values;
+}
+var SWAP_UNITS = { K: 1024, M: 1024 ** 2, G: 1024 ** 3, T: 1024 ** 4 };
+function swapUsedBytes(value) {
+  const match = value === undefined ? null : /used\s*=\s*([\d.]+)([KMGT])/.exec(value);
+  if (!match)
+    return null;
+  const amount = Number(match[1]);
+  return Number.isFinite(amount) ? Math.round(amount * SWAP_UNITS[match[2]]) : null;
+}
+function timevalMs(value) {
+  const match = value === undefined ? null : /\{\s*sec\s*=\s*(\d+),\s*usec\s*=\s*(\d+)\s*\}/.exec(value);
+  if (!match)
+    return null;
+  const ms = Number(match[1]) * 1000 + Math.floor(Number(match[2]) / 1000);
+  return Number.isSafeInteger(ms) ? ms : null;
+}
+function parseIoreg(text) {
+  const blocks = text.split(/^(?=\+-o )/m).filter((block) => block.startsWith("+-o "));
+  return blocks.map((block) => {
+    const model = /"model" = <?"([^"\n]{1,120})">?/.exec(block)?.[1] ?? null;
+    const utilisation = wholeOf(/"Device Utilization %"=(\d+)/.exec(block)?.[1]);
+    const memory = wholeOf(/"In use system memory"=(\d+)/.exec(block)?.[1]);
+    const ioClass = /"IOClass" = "([^"\n]*)"/.exec(block)?.[1] ?? "";
+    return {
+      model: model && !/[\u0000-\u001f\u007f]/.test(model) ? model : null,
+      utilisation_percent: utilisation !== null && utilisation <= 100 ? utilisation : null,
+      memory_in_use_bytes: memory,
+      apple_graphics: /^AGX/.test(ioClass)
+    };
+  });
+}
+function parseRoute(stdout, stderr) {
+  if (/not in table/.test(stderr) || /not in table/.test(stdout))
+    return { kind: "none" };
+  const iface = /^\s*interface:\s*(\S+)\s*$/m.exec(stdout)?.[1] ?? null;
+  const gateway = /^\s*gateway:\s*(\S+)\s*$/m.exec(stdout)?.[1] ?? null;
+  if (iface === null && !/^\s*route to:/m.test(stdout))
+    return null;
+  return { kind: "route", interface: iface, gateway };
+}
+function parseHardwarePorts(text) {
+  const ports = new Map;
+  let port = null;
+  for (const line of text.split(`
+`)) {
+    const named = /^Hardware Port:\s*(.+?)\s*$/.exec(line);
+    if (named) {
+      port = named[1];
+      continue;
+    }
+    const device = /^Device:\s*(\S+)\s*$/.exec(line);
+    if (device && port !== null) {
+      ports.set(device[1], port);
+      port = null;
+    }
+  }
+  return ports;
+}
+function portKind(port) {
+  if (/^iPhone USB\b/i.test(port))
+    return "phone_usb";
+  if (/^Wi-?Fi\b/i.test(port))
+    return "wifi";
+  if (/\bEthernet\b|\bLAN\b/i.test(port))
+    return "ethernet";
+  return "other";
+}
+function interfaceKind(iface, ports) {
+  if (iface === null)
+    return null;
+  if (/^(?:utun|ipsec|ppp|wg)\d*$/.test(iface))
+    return "tunnel";
+  if (ports === null)
+    return null;
+  const port = ports.get(iface);
+  return port === undefined ? "other" : portKind(port);
+}
+function parseReach(text) {
+  const flags = [...text.matchAll(/REACH\s*:\s*flags\s+0x([0-9a-f]+)/gi)].map((match) => Number.parseInt(match[1], 16));
+  if (flags.length === 0)
+    return null;
+  return flags.some((value) => (value & 2) !== 0) ? "reachable" : "not_reachable";
+}
+function isHotspotGateway(gateway) {
+  const parts = gateway === null ? null : /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(gateway);
+  if (!parts)
+    return false;
+  const [a, b, c, d] = parts.slice(1).map(Number);
+  return a === HOTSPOT_NETWORK[0] && b === HOTSPOT_NETWORK[1] && c === HOTSPOT_NETWORK[2] && d < HOTSPOT_HOSTS;
+}
+var POWER_SUPPLY = "/sys/class/power_supply";
+var LINUX_STATES = { Charging: "charging", Discharging: "discharging", Full: "full" };
+function readLinuxPower(reading, ledger, deps) {
+  const list = deps.list_dir ?? ((path) => readdirSync2(path));
+  const readFile = deps.read_file ?? ((path) => readFileSync3(path, "utf8").slice(0, 4096));
+  const read = (path) => {
+    try {
+      return readFile(path).trim();
+    } catch {
+      return null;
+    }
+  };
+  let names;
+  try {
+    names = list(POWER_SUPPLY).filter((name) => /^[A-Za-z0-9_.:-]{1,64}$/.test(name)).sort();
+  } catch {
+    missAll(ledger, BATTERY_FIELDS, `${POWER_SUPPLY} could not be read`);
+    return;
+  }
+  const mains = [];
+  const batteries = [];
+  for (const name of names) {
+    const type = read(`${POWER_SUPPLY}/${name}/type`);
+    if (type === "Mains")
+      mains.push(read(`${POWER_SUPPLY}/${name}/online`));
+    if (type === "Battery") {
+      batteries.push({ capacity: read(`${POWER_SUPPLY}/${name}/capacity`), status: read(`${POWER_SUPPLY}/${name}/status`) });
+    }
+  }
+  const battery = batteries.length === 1 ? batteries[0] : null;
+  if (mains.includes("1"))
+    reading.power.source = "ac";
+  else if (battery?.status === "Discharging" || mains.length > 0 && mains.every((online) => online === "0") && batteries.length > 0) {
+    reading.power.source = "battery";
+  } else {
+    ledger.miss("power.source", `${POWER_SUPPLY} shows no online mains supply and no discharging battery`);
+  }
+  if (batteries.length === 0) {
+    missAll(ledger, BATTERY_FIELDS.slice(1), `${POWER_SUPPLY} lists no battery`);
+    return;
+  }
+  if (battery === null) {
+    missAll(ledger, ["power.battery_percent", "power.battery_state"], `${POWER_SUPPLY} lists more than one battery; this build does not combine them`);
+    return;
+  }
+  const capacity = wholeOf(battery.capacity ?? undefined);
+  if (capacity !== null && capacity <= 100)
+    reading.power.battery_percent = capacity;
+  else
+    ledger.miss("power.battery_percent", "the battery's capacity file could not be read");
+  const state = battery.status === null ? undefined : LINUX_STATES[battery.status];
+  if (state)
+    reading.power.battery_state = state;
+  else
+    ledger.miss("power.battery_state", battery.status === null ? "the battery's status file could not be read" : "the battery reports a status this build has no word for");
+}
+var WEATHER_NOTE_ON_BATTERY = "On battery: work here spends the person's charge, and a closed lid stops every session on this device at once.";
+var WEATHER_NOTE_LOW_POWER = "Low Power Mode is on: the person has asked this device to be frugal.";
+var WEATHER_NOTE_NO_ROUTE = "No default route: the local journal still works; anything hosted or on another device will not answer, " + "which is not the same as a peer staying silent.";
+var WEATHER_NOTE_METERED = "The connection is likely metered: large downloads spend the person's data.";
+function weatherNotes(reading) {
+  const notes = [];
+  const { power, cpu, memory, gpu, network } = reading;
+  if (power.source === "battery")
+    notes.push(WEATHER_NOTE_ON_BATTERY);
+  if (power.low_power_mode === true)
+    notes.push(WEATHER_NOTE_LOW_POWER);
+  if (memory.pressure === "warn" || memory.pressure === "critical") {
+    notes.push(`Memory pressure is ${memory.pressure}: more parallel processes will be slow for everyone on this device.`);
+  }
+  if (cpu.load_per_core !== null && cpu.load_per_core > LOAD_PER_CORE_NOTE_ABOVE) {
+    notes.push(`Load is ${cpu.load_per_core} per core: timings and timeouts measured now say more about the device than about the code under test.`);
+  }
+  const limited = cpu.speed_limit_percent !== null && cpu.speed_limit_percent < SPEED_LIMIT_NOTE_BELOW;
+  if (limited) {
+    notes.push(`The processor is held to ${cpu.speed_limit_percent}% of its speed${cpu.thermal_warning === "recorded" ? ", and a thermal warning is recorded" : ""}: ` + "work here runs slower than this device's usual pace, and timings measured now include that.");
+  } else if (cpu.thermal_warning === "recorded") {
+    notes.push("A thermal warning is recorded: work here may run slower than this device's usual pace, and timings measured now include that.");
+  }
+  const busiest = Math.max(-1, ...gpu.devices.map((device) => device.utilisation_percent ?? -1));
+  if (busiest >= GPU_BUSY_NOTE_PERCENT) {
+    notes.push(`A graphics device is ${busiest}% busy: a local model or render started now shares it.`);
+  }
+  if (network.default_route === false && network.os_reports !== "reachable")
+    notes.push(WEATHER_NOTE_NO_ROUTE);
+  if (network.metered === "likely")
+    notes.push(WEATHER_NOTE_METERED);
+  const awake = awakeSeconds(reading);
+  if (awake !== null && awake < RECENT_WAKE_NOTE_SECONDS) {
+    notes.push(`This device woke ${awake} seconds ago from a sleep that began at ${power.last_slept_at}: no session on it could read ` + "or answer between those two times, so silence across them means the device slept, not that anyone agreed.");
+  }
+  return notes;
+}
+function awakeSeconds(reading) {
+  const { awake_since: since, last_slept_at: slept } = reading.power;
+  if (since === null || slept === null)
+    return null;
+  const sinceMs = Date.parse(since);
+  const sleptMs = Date.parse(slept);
+  const atMs = Date.parse(reading.read_at);
+  if (![sinceMs, sleptMs, atMs].every(Number.isFinite) || sinceMs <= sleptMs || atMs < sinceMs)
+    return null;
+  return Math.floor((atMs - sinceMs) / 1000);
+}
+var KIND_WORDS = {
+  wifi: "Wi-Fi",
+  ethernet: "Ethernet",
+  phone_usb: "iPhone USB",
+  tunnel: "a tunnel",
+  other: "another network link",
+  none: "no default route"
+};
+function weatherSays(reading) {
+  const { power, cpu, memory, gpu, network } = reading;
+  const parts = [];
+  const powerPart = powerPhrase(power);
+  if (powerPart)
+    parts.push(powerPart);
+  if (power.low_power_mode === true)
+    parts.push("Low Power Mode on");
+  if (cpu.load_1m !== null)
+    parts.push(`load ${cpu.load_1m.toFixed(1)}${cpu.cores !== null ? ` on ${cpu.cores} cores` : ""}`);
+  if (cpu.speed_limit_percent !== null && cpu.speed_limit_percent < SPEED_LIMIT_NOTE_BELOW) {
+    parts.push(`processor held to ${cpu.speed_limit_percent}% of its speed`);
+  }
+  if (cpu.thermal_warning === "recorded")
+    parts.push("a thermal warning recorded");
+  if (memory.pressure !== null)
+    parts.push(`memory pressure ${memory.pressure}`);
+  const busy = gpu.devices.map((device) => device.utilisation_percent).filter((value) => value !== null);
+  if (busy.length > 0) {
+    parts.push(busy.every((value) => value === 0) ? "graphics idle" : `graphics ${busy.map((value) => `${value}%`).join(", ")} busy`);
+  }
+  const networkWords = [];
+  if (network.kind !== null)
+    networkWords.push(KIND_WORDS[network.kind]);
+  else if (network.default_route === true)
+    networkWords.push("a default route");
+  else if (network.default_route === false)
+    networkWords.push(KIND_WORDS.none);
+  if (network.os_reports !== null)
+    networkWords.push(`route reported ${network.os_reports === "reachable" ? "reachable" : "not reachable"}`);
+  if (network.metered === "likely")
+    networkWords.push("likely metered");
+  if (networkWords.length > 0)
+    parts.push(networkWords.join(", "));
+  const time3 = `${reading.read_at.slice(11, 19)}Z`;
+  const missing = reading.unknown.length;
+  const notRead = missing > 0 ? ` ${missing} ${missing === 1 ? "fact" : "facts"} not read.` : "";
+  if (parts.length === 0)
+    return `Nothing was read at ${time3}.${notRead}`;
+  const line = parts.join("; ");
+  return `${line.charAt(0).toUpperCase()}${line.slice(1)}. Read ${time3}; good for about a minute.${notRead}`;
+}
+function powerPhrase(power) {
+  const percent = power.battery_percent;
+  const left = power.minutes_remaining !== null ? duration3(power.minutes_remaining) : null;
+  if (power.source === "battery") {
+    return `On battery${percent !== null ? ` at ${percent}%` : ""}${left !== null && power.battery_state !== "charging" ? `, about ${left} left` : ""}`;
+  }
+  if (power.source === "ac" || power.source === "ups") {
+    const on = power.source === "ac" ? "On mains power" : "On UPS power";
+    if (percent === null)
+      return on;
+    if (power.battery_state === "full")
+      return `${on}, battery full at ${percent}%`;
+    if (power.battery_state === "charging") {
+      return `${on}, battery ${percent}% and charging${left !== null && power.minutes_remaining > 0 ? `, about ${left} to full` : ""}`;
+    }
+    return `${on}, battery ${percent}%`;
+  }
+  return percent !== null ? `battery ${percent}%` : null;
+}
+function duration3(minutes) {
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return hours > 0 ? `${hours} h ${rest} min` : `${rest} min`;
+}
+var WEATHER_VARIABLES = ["AGENTOOL_COLLAB_WEATHER", "AGENTTOOL_COLLAB_WEATHER"];
+function weatherSwitch(environment) {
+  const values = WEATHER_VARIABLES.map((name) => ({ name, value: environment[name] })).filter((entry) => entry.value !== undefined && entry.value !== "");
+  for (const { name, value } of values) {
+    if (value !== "on" && value !== "off") {
+      throw new CollabError("invalid_weather_switch", `${name} must be on | off, not ${JSON.stringify(value)}`);
+    }
+  }
+  if (values.length === 2 && values[0].value !== values[1].value) {
+    throw new CollabError("conflicting_weather_switch", "AGENTOOL_COLLAB_WEATHER and AGENTTOOL_COLLAB_WEATHER disagree; set one of them to on | off");
+  }
+  return values[0]?.value ?? "off";
+}
+function weatherBrief(reading) {
+  return {
+    read_at: reading.read_at,
+    good_for_seconds: reading.good_for_seconds,
+    says: reading.says,
+    notes: [...reading.notes],
+    not_read: reading.unknown.length,
+    basis: reading.basis,
+    authorises: reading.authorises,
+    every_field: WEATHER_EVERY_FIELD
+  };
+}
+async function arrivalWeather(read, limitMs = WEATHER_ARRIVAL_LIMIT_MS) {
+  let timer;
+  try {
+    const outcome = await Promise.race([
+      Promise.resolve().then(read).then((reading) => ({ reading })),
+      new Promise((resolve5) => {
+        timer = setTimeout(() => resolve5({ late: true }), limitMs);
+      })
+    ]);
+    if ("late" in outcome)
+      return { unavailable: `the reading took longer than ${limitMs} ms` };
+    return weatherBrief(outcome.reading);
+  } catch {
+    return { unavailable: "the reading failed" };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+function isWhole(value) {
+  return typeof value === "number" && Number.isSafeInteger(value);
+}
+function wholeOf(value) {
+  if (value === undefined)
+    return null;
+  const text = value.trim();
+  if (!/^\d{1,15}$/.test(text))
+    return null;
+  return Number(text);
+}
+function round2(value) {
+  return Math.round(value * 100) / 100;
+}
+
 // src/verbs.ts
 var NOTE_VERBS = [
   "collab_arrive",
@@ -40902,8 +41820,18 @@ var LIST_CAP = 10;
 async function arriveVerb(ctx, input) {
   const purpose = oneLine(input.purpose, "purpose", PURPOSE_MAX, true);
   const existing = ctx.binding();
-  if (existing)
-    return arriveBound(ctx, existing, input, purpose);
+  if (existing) {
+    const result = await arriveBound(ctx, existing, input, purpose);
+    return input.revise_purpose === true ? result : withWeather(ctx, result);
+  }
+  return withWeather(ctx, await arriveUnbound(ctx, input, purpose));
+}
+async function withWeather(ctx, result) {
+  if (!ctx.weather)
+    return result;
+  return { ...result, weather: await arrivalWeather(ctx.weather) };
+}
+async function arriveUnbound(ctx, input, purpose) {
   const name = oneLine(input.name, "name", NAME_MAX, false);
   const model = oneLine(input.model, "model", MODEL_MAX, false);
   const sent = { purpose, ...name ? { name } : {}, ...model ? { model } : {} };
@@ -41972,17 +42900,17 @@ async function waitForMe(ctx, binding, anchor, durationMs) {
 }
 function abortableDelay(ms, signals) {
   return new Promise((done) => {
-    const finish = () => {
+    const finish2 = () => {
       clearTimeout(timer);
       for (const signal of signals)
-        signal?.removeEventListener("abort", finish);
+        signal?.removeEventListener("abort", finish2);
       done();
     };
-    const timer = setTimeout(finish, ms);
+    const timer = setTimeout(finish2, ms);
     for (const signal of signals)
-      signal?.addEventListener("abort", finish, { once: true });
+      signal?.addEventListener("abort", finish2, { once: true });
     if (signals.some((signal) => signal?.aborted))
-      finish();
+      finish2();
   });
 }
 function resolveAbout(ctx, workspaceId, value) {
@@ -43489,7 +44417,7 @@ function planNote(ctx, input, context) {
     extra.ungrounded = true;
   }
   seenOverRelayed(ctx, workspaceId, me, fields, advice);
-  const finish = (planned) => {
+  const finish2 = (planned) => {
     const finalFields = planned.fields ?? fields;
     const body = renderNote(finalFields);
     const reports = planned.reports.map((report, index) => index === 0 && report.body === "" ? { ...report, body } : report);
@@ -43517,7 +44445,7 @@ function planNote(ctx, input, context) {
       addressee = explicit ?? addressee;
       report.to_session_id = addressee.to_session_id;
       report.to_person = addressee.to_person;
-      return finish({
+      return finish2({
         recorded_as: "note",
         target,
         addressee,
@@ -43556,7 +44484,7 @@ function planNote(ctx, input, context) {
         advice.push(CONSENT_V2_CHALLENGE_ADVICE);
       }
       if (act === "challenge" && context.replacedId) {
-        return finish({
+        return finish2({
           recorded_as: "challenge",
           target,
           addressee,
@@ -43564,7 +44492,7 @@ function planNote(ctx, input, context) {
           entity: reportTarget2.id
         });
       }
-      return finish({ recorded_as: act, target, addressee, reports: [report], entity: reportTarget2.id });
+      return finish2({ recorded_as: act, target, addressee, reports: [report], entity: reportTarget2.id });
     }
     case "resolve": {
       const challenge = requireReportTarget(ctx, input, act, target);
@@ -43585,7 +44513,7 @@ function planNote(ctx, input, context) {
         report2.to_person = addressee2.to_person;
         if (challenge.view.obsoleted)
           advice.push(`${targetHandle(challenge)} was already withdrawn; the resolve is recorded all the same.`);
-        return finish({ recorded_as: "resolve", target, addressee: addressee2, reports: [report2], entity: challenge.id });
+        return finish2({ recorded_as: "resolve", target, addressee: addressee2, reports: [report2], entity: challenge.id });
       }
       fields = { ...fields, act: "note" };
       const report = base("informs", [`report:${challenge.id}`]);
@@ -43600,7 +44528,7 @@ function planNote(ctx, input, context) {
         advice.push(`${newVoiceSentence(myName)} So this does not lift the challenge; it is recorded as an answer.` + (proposal ? " To tell the person where you stand, post a note on it to the person, who can still reject the proposal." : ""));
       }
       extra.recorded_as_answer = true;
-      return finish({ recorded_as: "answer", target, addressee, reports: [report], entity: challenge.id, fields });
+      return finish2({ recorded_as: "answer", target, addressee, reports: [report], entity: challenge.id, fields });
     }
     case "withdraw": {
       const withdrawn = requireReportTarget(ctx, input, act, target);
@@ -43638,7 +44566,7 @@ function planNote(ctx, input, context) {
       if (withdrawn.view.obsoleted)
         advice.push(`${targetHandle(withdrawn)} was already withdrawn or replaced; this is recorded all the same.`);
       advice.push(...ballotWithdrawalAdvice(ctx, workspaceId, withdrawn));
-      return finish({ recorded_as: "withdraw", target, addressee, reports: [report], entity: withdrawn.id });
+      return finish2({ recorded_as: "withdraw", target, addressee, reports: [report], entity: withdrawn.id });
     }
     case "accept":
     case "request_changes": {
@@ -43646,7 +44574,7 @@ function planNote(ctx, input, context) {
       if (fields.to !== null)
         advice.push("A verdict goes to the session that reported the work; to was not used.");
       extra.review = completion;
-      return finish({ recorded_as: act, target, addressee: BROADCAST, reports: [], entity: completion.completion_id });
+      return finish2({ recorded_as: act, target, addressee: BROADCAST, reports: [], entity: completion.completion_id });
     }
     case "decide":
       throw new CollabError("internal_error", "decide is planned by planDecide");
@@ -43668,7 +44596,7 @@ function planNote(ctx, input, context) {
           remedy: textIsNote(input) ? { say: `Remove ${unstored.join(", ")} from the note text; post them in a separate note if they matter.` } : withSlot(ctx, { tool: "collab_note", input: cleaned })
         });
       }
-      return finish({ recorded_as: "relay_rejection", target, addressee: BROADCAST, reports: [], entity: reportTarget.id });
+      return finish2({ recorded_as: "relay_rejection", target, addressee: BROADCAST, reports: [], entity: reportTarget.id });
     }
   }
 }
@@ -46114,6 +47042,7 @@ function buildCollabMcpServer(store2, options = {}) {
   const environment = options.environment ?? process.env;
   const profile = toolsProfile(environment);
   const consentRule = consentRuleFromEnvironment(environment);
+  const weather = weatherSwitch(environment) === "on" ? options.weather_reader ?? (() => readWeather()) : undefined;
   const legacyInstructions = `Collab ${COLLAB_PACKAGE_VERSION}: collab_events_wait offers bounded read-only anchored observation for an already running host, ` + "without acknowledging, refreshing presence, or renewing leases; continue from next_anchor, never head. " + "Local-first coordination journal for honest exchange among independent coding-agent sessions. " + "Use collab_session_start once per default or named binding_key, then collab_next. Named children require an explicit actor and parent_session_id; " + "send their binding_key on every call. Selectors are cooperative routing, not authenticated subagent isolation. " + "Default-slot actor can use Claude metadata only with matching selected PID, messaging socket and process start time. A host restart resumes from the " + "mode-0600 credential file without exposing its bearer token to the model. Exchange observations, " + "inferences, proposals, or authorised decisions as structured reports with evidence, confidence, " + "limits, and explicit authority scope. Direction-level proposals (collab_proposal_open) are settled by the agents " + "through lazy consensus; that position authorises nothing alone, and a person's consent is never recorded through MCP. " + "Claim before editing overlapping path scopes. Session leases remain live while their " + "session is live (6 hours since activity); optional renew is lease-fenced, not version-gated. " + "An advisory coordination lease is not ownership, a filesystem lock, or authority. Edit-task " + "completion is actor-reported and remains pending until a distinct session accepts it. Challenges " + "remain append-only disagreement; acknowledgement means processed, not agreed. Expired session " + "leases require explicit recovery. Git checkpoints are local evidence, not attribution or atomic " + "Git/SQLite locks. Store concise coordination facts only\u2014never credentials, prompts, transcripts, " + "chain-of-thought, or sensitive source content. Cursor rollback recovery must be enabled by the host " + "and completed with an audited cursor reset before session mutations resume. The host owns spawning, " + "wakeups, waiting, and stopping. The separate collab_session_join/list/heartbeat/leave tools preserve " + "the public v0.2 self-declared presence plane; they provide routing hints only and never authenticate a caller. " + "The read-only collab_anchor_status tool can compare this journal with an optional local Zerone witness sidecar; " + "it never contacts a chain, broadcasts, spends funds, or turns an anchor into truth or authority.";
   const server = new McpServer({ name: "agenttool-collab", version: COLLAB_PACKAGE_VERSION }, {
     capabilities: { tools: {} },
@@ -46192,6 +47121,7 @@ Legacy session tools: ${legacyInstructions}`
     environment,
     profile,
     consent_rule: consentRule,
+    ...weather ? { weather } : {},
     slot_key: requestSlot.getStore().key,
     binding: () => state.binding,
     bind: (binding) => {
@@ -46975,8 +47905,8 @@ Rationale: ${input.rationale}` : ""}`,
         after_anchor: { ...after_anchor },
         event_limit: event_limit ?? DEFAULT_WAIT_EVENT_LIMIT
       };
-      const duration3 = wait_ms ?? MAX_WAIT_MS;
-      if (!Number.isInteger(duration3) || duration3 < 0 || duration3 > MAX_WAIT_MS) {
+      const duration4 = wait_ms ?? MAX_WAIT_MS;
+      if (!Number.isInteger(duration4) || duration4 < 0 || duration4 > MAX_WAIT_MS) {
         throw new CollabError("invalid_wait_ms", "wait_ms must be an integer from 0 to 30000");
       }
       if (waits.active >= waits.max)
@@ -46996,7 +47926,7 @@ Rationale: ${input.rationale}` : ""}`,
         input.last_cursor = current.last_cursor ? { ...current.last_cursor } : undefined;
         requireWorkspace(workspace_id);
       };
-      const deadline = performance.now() + duration3;
+      const deadline = performance.now() + duration4;
       while (true) {
         check2();
         try {
@@ -47051,17 +47981,17 @@ Rationale: ${input.rationale}` : ""}`,
 }
 function waitDelay(ms, signals) {
   return new Promise((resolve6) => {
-    const finish = () => {
+    const finish2 = () => {
       clearTimeout(timer);
       for (const signal of signals)
-        signal?.removeEventListener("abort", finish);
+        signal?.removeEventListener("abort", finish2);
       resolve6();
     };
-    const timer = setTimeout(finish, ms);
+    const timer = setTimeout(finish2, ms);
     for (const signal of signals)
-      signal?.addEventListener("abort", finish, { once: true });
+      signal?.addEventListener("abort", finish2, { once: true });
     if (signals.some((signal) => signal?.aborted))
-      finish();
+      finish2();
   });
 }
 function leaseMutationSchema(extra) {

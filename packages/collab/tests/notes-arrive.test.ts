@@ -8,6 +8,16 @@ import { CollabStore } from "../src/store-notes.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
 import { ALONE_ADVICE, exactRef, handleOf, NOTE_AUTHORISES, NOTE_CARD, NOTE_CAPABILITIES } from "../src/verbs.js";
 import { COLLAB_PACKAGE_VERSION } from "../src/version.js";
+import { CollabError } from "../src/errors.js";
+import {
+  readWeather,
+  WEATHER_AUTHORISES,
+  WEATHER_BASIS,
+  WEATHER_EVERY_FIELD,
+  weatherBrief,
+  type WeatherReader,
+  type WeatherReading,
+} from "../src/weather.js";
 
 // collab_arrive (Collab Notes spec 5.1) and the verb kernel's common rules (spec 5).
 
@@ -34,8 +44,8 @@ function journal() {
     advance(ms: number) {
       now += ms;
     },
-    server(environment: Record<string, string> = {}) {
-      return buildCollabMcpServer(store, { environment }) as any;
+    server(environment: Record<string, string> = {}, weather_reader?: WeatherReader) {
+      return buildCollabMcpServer(store, { environment, ...(weather_reader ? { weather_reader } : {}) }) as any;
     },
     events() {
       return store.db.query(`SELECT sequence, type, entity_id, session_id, payload_json FROM events ORDER BY sequence`)
@@ -790,5 +800,151 @@ describe("what arrival writes", () => {
     expect(revised.effect).toContain("The note is not posted as a report.");
     expect(NOTE_CARD).toContain("withdraw takes back a note this session wrote");
     expect(NOTE_CARD).not.toContain("your own note");
+  });
+});
+
+describe("device weather at arrival (AGENTOOL_COLLAB_WEATHER)", () => {
+  // A reading of a platform this build reads through node:os alone, so no
+  // command runs and nothing depends on the machine running the test.
+  async function fixedReading(): Promise<WeatherReading> {
+    return readWeather({
+      platform: "freebsd",
+      now: () => new Date("2026-11-12T10:00:00.000Z"),
+      os: { loadavg: () => [3.2, 2, 1], totalmem: () => 8 * 1024 ** 3, cpus: () => [{}, {}] },
+    });
+  }
+
+  function counted(reading: WeatherReading) {
+    const reader = { calls: 0, read: (async () => { reader.calls += 1; return reading; }) as WeatherReader };
+    return reader;
+  }
+
+  const BLOCK_KEYS = ["authorises", "basis", "every_field", "good_for_seconds", "not_read", "notes", "read_at", "says"];
+
+  test("off by default and when off: no weather key, and the reader is never called", async () => {
+    const reader = counted(await fixedReading());
+    const environments: Array<Record<string, string>> = [
+      {}, { AGENTOOL_COLLAB_WEATHER: "off" }, { AGENTTOOL_COLLAB_WEATHER: "off" }, { AGENTOOL_COLLAB_WEATHER: "" },
+    ];
+    for (const environment of environments) {
+      const j = journal();
+      const server = j.server(environment, reader.read);
+      const arrived = await ok(server, "collab_arrive", { purpose: "plain", root_path: j.root, name: "plain" });
+      expect("weather" in arrived).toBe(false);
+      const looked = await ok(server, "collab_arrive", { purpose: "plain" });
+      expect("weather" in looked).toBe(false);
+    }
+    expect(reader.calls).toBe(0);
+  });
+
+  test("on: the compact block on a new arrival, a look-around and a named child; not on a purpose revision", async () => {
+    const reading = await fixedReading();
+    const reader = counted(reading);
+    const j = journal();
+    const server = j.server({ AGENTOOL_COLLAB_WEATHER: "on" }, reader.read);
+    const arrived = await ok(server, "collab_arrive", { purpose: "with weather", root_path: j.root, name: "ada" });
+    expect(Object.keys(arrived.weather).sort()).toEqual(BLOCK_KEYS);
+    expect(arrived.weather).toEqual(weatherBrief(reading));
+    expect(arrived.weather).toMatchObject({
+      read_at: "2026-11-12T10:00:00.000Z",
+      good_for_seconds: 60,
+      not_read: reading.unknown.length,
+      basis: WEATHER_BASIS,
+      authorises: WEATHER_AUTHORISES,
+      every_field: WEATHER_EVERY_FIELD,
+    });
+    expect(arrived.weather.says).toStartWith("Load 3.2 on 2 cores. ");
+    expect(arrived.weather.notes).toEqual([
+      "Load is 1.6 per core: timings and timeouts measured now say more about the device than about the code under test.",
+    ]);
+    // The rest of the result is what it is with weather off.
+    expect(arrived.you.name).toBe("ada");
+    const looked = await ok(server, "collab_arrive", { purpose: "with weather" });
+    expect(looked.weather).toEqual(weatherBrief(reading));
+    const revised = await ok(server, "collab_arrive", { purpose: "a revised purpose", revise_purpose: true });
+    expect("weather" in revised).toBe(false);
+    const child = await ok(server, "collab_arrive", { purpose: "review", binding_key: "reviewer", parent: arrived.you.session });
+    expect(child.weather).toEqual(weatherBrief(reading));
+    expect(reader.calls).toBe(3);
+    // The other spelling turns it on too.
+    const k = journal();
+    const other = await ok(k.server({ AGENTTOOL_COLLAB_WEATHER: "on" }, reader.read), "collab_arrive", { purpose: "p", root_path: k.root, name: "bo" });
+    expect(other.weather).toEqual(weatherBrief(reading));
+  });
+
+  test("a reader that throws gives unavailable, and the arrival succeeds exactly as it would have", async () => {
+    const j = journal();
+    const broken = j.server({ AGENTOOL_COLLAB_WEATHER: "on" }, async () => {
+      throw new Error("ioreg exploded near a secret path");
+    });
+    const arrived = await ok(broken, "collab_arrive", { purpose: "despite the weather", root_path: j.root, name: "cy" });
+    expect(arrived.weather).toEqual({ unavailable: "the reading failed" });
+    expect(arrived.you.name).toBe("cy");
+    expect(j.events().filter((event) => event.type === "session.joined")).toHaveLength(1);
+    // Apart from the block, the result has the shape and words it has with weather off.
+    const k = journal();
+    const plain = await ok(k.server(), "collab_arrive", { purpose: "despite the weather", root_path: k.root, name: "cy" });
+    const { weather: _weather, ...rest } = arrived;
+    expect(Object.keys(rest).sort()).toEqual(Object.keys(plain).sort());
+    const words = (result: Record<string, any>) => result.effect.split(result.you.session).join("S").split(j.root).join("R").split(k.root).join("R");
+    expect(words(rest)).toBe(words(plain));
+    expect(rest.advice).toEqual(plain.advice);
+  });
+
+  test("an unknown value or two spellings that disagree refuse to start", () => {
+    const j = journal();
+    const codeOf = (environment: Record<string, string>) => {
+      try {
+        j.server(environment);
+        return null;
+      } catch (error) {
+        return error instanceof CollabError ? error.code : String(error);
+      }
+    };
+    expect(codeOf({ AGENTOOL_COLLAB_WEATHER: "true" })).toBe("invalid_weather_switch");
+    expect(codeOf({ AGENTTOOL_COLLAB_WEATHER: "1" })).toBe("invalid_weather_switch");
+    expect(codeOf({ AGENTOOL_COLLAB_WEATHER: "on", AGENTTOOL_COLLAB_WEATHER: "off" })).toBe("conflicting_weather_switch");
+    expect(() => j.server({ AGENTOOL_COLLAB_WEATHER: "yes" })).toThrow("on | off");
+  });
+
+  test("nothing is written: a look-around adds the same events with weather on as off, and no table holds the reading", async () => {
+    const reading = await fixedReading();
+    const j = journal();
+    const handle = j.store.startSession({ root_path: j.root, actor: "watcher", role: "look" });
+    const resumed = {
+      handle,
+      credential_file: writeSessionCredentialFile(j.store.defaultSessionCredentialPath(handle.session.id), handle.credential),
+    };
+    const off = buildCollabMcpServer(j.store, { environment: {}, resumed_session: resumed }) as any;
+    const on = buildCollabMcpServer(j.store, {
+      environment: { AGENTOOL_COLLAB_WEATHER: "on" },
+      weather_reader: async () => reading,
+      resumed_session: resumed,
+    }) as any;
+    const count = () => j.events().length;
+    const before = count();
+    await ok(off, "collab_arrive", { purpose: "look" });
+    const afterOff = count();
+    const looked = await ok(on, "collab_arrive", { purpose: "look" });
+    const afterOn = count();
+    expect(looked.weather.says).toBe(reading.says);
+    expect(afterOff - before).toBe(0);
+    expect(afterOn - afterOff).toBe(afterOff - before);
+    // A new arrival writes the same event types with weather on as off.
+    const plainJournal = journal();
+    await ok(plainJournal.server(), "collab_arrive", { purpose: "new", root_path: plainJournal.root, name: "n" });
+    const weatherJournal = journal();
+    await ok(weatherJournal.server({ AGENTOOL_COLLAB_WEATHER: "on" }, async () => reading), "collab_arrive", {
+      purpose: "new", root_path: weatherJournal.root, name: "n",
+    });
+    expect(weatherJournal.events().map((event) => event.type)).toEqual(plainJournal.events().map((event) => event.type));
+    for (const store of [j.store, weatherJournal.store]) {
+      const tables = store.db.query(`SELECT name FROM sqlite_master WHERE type = 'table'`).all() as Array<{ name: string }>;
+      for (const { name } of tables) {
+        const rows = JSON.stringify(store.db.query(`SELECT * FROM "${name}"`).all());
+        expect(rows).not.toContain("good for about a minute");
+        expect(rows).not.toContain(WEATHER_BASIS);
+      }
+    }
   });
 });
