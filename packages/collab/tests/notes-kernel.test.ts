@@ -347,6 +347,9 @@ describe("the inbox scan bounds", () => {
     // Arrive's count stops where the scan stops, and says it is a lower bound.
     const arrived = await ok(server, "collab_arrive", { purpose: "look" });
     expect(arrived.totals).toMatchObject({ for_you: 0, for_you_at_least: true });
+    // A count that stopped at the bound is not "nothing for you", so no rest is said and the inbox is still the next call.
+    expect("rest" in arrived).toBe(false);
+    expect(arrived.next).toEqual({ tool: "collab_inbox", input: {} });
     const first = await ok(server, "collab_inbox");
     expect(first.items).toEqual([]);
     expect(first.more).toBe(true);

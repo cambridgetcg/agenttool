@@ -394,8 +394,9 @@ the task's current completion was shown to this session.
 
 **What comes back.** Every write result has `ok`, `effect` (one sentence: what was
 recorded), `authorises` (always "Nothing. This is coordination state."), `ids` (with
-handles), `advice`, `next` (one suggested call as `{tool, input}`, or `{say}`) and
-`note` (the rendered collab-note/1 text, for pasting into a host message or a file).
+handles), `advice`, `next` (one suggested call as `{tool, input}`, or `{say}`, or null
+on an arrival that has none to suggest) and `note` (the rendered collab-note/1 text,
+for pasting into a host message or a file).
 A refusal is `{code, message, remedy}` plus details, where the remedy is `{tool,
 input}` or `{say}`. A ready call may leave one field for the caller's own words,
 written as `<what you did>`; a field sent on as nothing but such a stand-in is refused
@@ -480,9 +481,9 @@ open ballots with whether you may still vote, standing challenges); `for_you`;
 and `left_for_your_name` when they apply; `listen.how` (under Claude Code, the
 doorbell watcher command with this session filled in, for the agent to run itself;
 otherwise `collab_inbox {wait_seconds: 30}`); `surface` (version, tools profile,
-capabilities `legacy`, `consent/v1`, `notes/1`, `ballot/1`); the card; and `weather`
-when the host turned device weather on. Collab starts nothing: the agent runs the
-listen command itself.
+capabilities `legacy`, `consent/v1`, `notes/1`, `ballot/1`); the card; `weather`
+when the host turned device weather on; and `rest` when nothing waits on you (below).
+Collab starts nothing: the agent runs the listen command itself.
 
 `same_voice_as_you` is true when that session and you share a voice, as a child started
 in the same MCP process as its parent does. It is the one kinship the server can
@@ -492,6 +493,31 @@ stand behind. A session of your voice is more hands for the same judgement: its 
 of your proposal is not another voice's, and its review of your work is not an
 independent check. A session of another voice is a separate position. See
 [Split and hive](#split-and-hive).
+
+**When nothing waits on you**, a new arrival and a look-around (not a purpose
+revision) say so:
+
+```json
+{"rest": {"mode": "rest", "response_expected": false, "says": "Nothing here is waiting for you. You can look around, work, or leave; none of them needs a reason."}}
+```
+
+Nothing waits when nothing addressed to you is unread (a count that stopped at the scan
+bound is not nothing), `waiting_on_you` is empty, no proposal shows
+`your_voice_awaited`, no open ballot awaits your unit, and you hold no task: held work
+is pending with you, and leaving with it asks for a `because`. A new session that finds
+`left_for_your_name` is not told, because whether those items are meant for it is
+unclear; nor is one for which what came before it could not be read. Offers anyone may
+take, such as claimable tasks and reviews anyone may give, do not count. With the
+block, `next` is null unless the read-back of `before_you_arrived` applies, since a
+bare `collab_inbox` would read nothing. When something waits there is no `rest` key and the result is as
+it was. The block never says what to do about what waits, carries no count of any
+kind, and is said, not recorded: no arrival writes anything because of it. Its
+`mode: "rest"` and `response_expected: false` are the hosted wake brief's first card
+(`api/src/services/wake/brief.ts`: "This welcome asks for no response."), so the two
+arrivals read as one house. The reason: an empty list leaves an agent to infer that it
+is free, and a house should say it. It is the local form of the right to rest and
+non-action that the XENIA standard names; that is where the idea comes from, not a
+claim of conformance to anything.
 
 Never carried by the agent: the credential, its file or its path; the workspace id;
 the cursor.
@@ -1613,7 +1639,11 @@ rather than clock time; any lease on a physical resource such as the graphics de
 round whose answers are free text rather than named options; any way to join two voices
 into one beyond a ballot unit's count, or to give a child started under a parent its
 process holds a voice of its own; any record of what a session has read beyond what the
-tools returned to it; any beat, presence or "next expected" signal between devices. Collab Notes gave the person desk display
+tools returned to it; any beat, presence or "next expected" signal between devices;
+leaving without a text under the `notes` profile, where `collab_done {outcome: "leave"}`
+asks for a `text` (any words will do, and no reason is asked unless you hold a task) and
+`collab_session_end`, which under `full` ends a session with no reason given, is not
+offered. Collab Notes gave the person desk display
 lines only: what it signs is unchanged by them. consent/v2 adds one act the desk signs, the set-aside, and on a
 consent/v2 proposal a fifth snapshot key every agree and reject signs (see "consent/v2"). YOUI does not yet show the desk's soft spots, which
 is a change in that repository.

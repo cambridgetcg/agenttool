@@ -41981,7 +41981,8 @@ async function arriveDefault(ctx, input, sent, name, model) {
     advice,
     fresh: true,
     record: true,
-    note: arrivalNote("I have arrived.", purpose)
+    note: arrivalNote("I have arrived.", purpose),
+    rest: true
   });
 }
 function arriveNamed(ctx, input, purpose, name, model) {
@@ -42027,7 +42028,8 @@ function arriveNamed(ctx, input, purpose, name, model) {
     advice: [],
     fresh: true,
     record: true,
-    note: arrivalNote("I have arrived.", purpose)
+    note: arrivalNote("I have arrived.", purpose),
+    rest: true
   });
 }
 function heldSession(held, ref) {
@@ -42078,7 +42080,8 @@ async function arriveBound(ctx, binding, input, purpose) {
       fresh: false,
       record: false,
       note: arrivalNote("I am here.", before.purpose),
-      remedies: boundRemedies(ctx, before.id, purpose)
+      remedies: boundRemedies(ctx, before.id, purpose),
+      rest: true
     });
   }
   const { plan, replayed, receipt } = await underPlan(ctx, credential, {
@@ -42101,7 +42104,8 @@ async function arriveBound(ctx, binding, input, purpose) {
     record: true,
     replayed: replayed !== null,
     note: arrivalNote("My purpose has changed.", receipt.purpose),
-    remedies: boundRemedies(ctx, session.id, purpose)
+    remedies: boundRemedies(ctx, session.id, purpose),
+    rest: false
   });
 }
 function boundRemedies(ctx, sessionId, purpose) {
@@ -42123,9 +42127,10 @@ function arrivalResult(ctx, binding, options) {
   if (options.record) {
     ctx.store.recordArrivalShown(credential, brief.shown);
   }
-  const behind = options.fresh ? arrivalBehind(ctx, credential, data.session.actor) : { view: {}, advice: [] };
+  const behind = options.fresh ? arrivalBehind(ctx, credential, data.session.actor) : { view: {}, advice: [], read: true };
   const readBack = behind.view.before_you_arrived?.see;
   const alone = options.fresh && Array.isArray(brief.view.here) && brief.view.here.length === 0;
+  const rest = options.rest && brief.nothing_waits && behind.read && !("left_for_your_name" in behind.view);
   return {
     ...noteWriteResult({
       effect: options.effect,
@@ -42135,23 +42140,29 @@ function arrivalResult(ctx, binding, options) {
         workspace_id: data.workspace.id
       },
       advice: [...options.advice, ...behind.advice, ...alone ? [ALONE_ADVICE] : [], ...brief.advice],
-      next: readBack ?? withSlot(ctx, { tool: "collab_inbox", input: {} }),
+      next: readBack ?? (rest ? null : withSlot(ctx, { tool: "collab_inbox", input: {} })),
       note: options.note,
       replayed: options.replayed
     }),
     ...options.remedies ? { remedies: options.remedies } : {},
+    ...rest ? { rest: { ...ARRIVAL_REST } } : {},
     ...brief.view,
     ...behind.view,
     ...pendingReveal ? { reveal_pending: pendingReveal } : {}
   };
 }
+var ARRIVAL_REST = Object.freeze({
+  mode: "rest",
+  response_expected: false,
+  says: "Nothing here is waiting for you. You can look around, work, or leave; none of them needs a reason."
+});
 var ALONE_ADVICE = "No other session is here now. A name reaches only a session that has arrived, so to leave something for an agent who " + "comes later, address it to all and leave review_by out; a later arrival is pointed to what came before it.";
 function arrivalBehind(ctx, credential, name) {
   let behind;
   try {
     behind = ctx.store.noteArrivalBehind(credential);
   } catch {
-    return { view: {}, advice: [] };
+    return { view: {}, advice: [], read: false };
   }
   const view = {};
   const advice = [];
@@ -42171,7 +42182,7 @@ function arrivalBehind(ctx, credential, name) {
     };
     advice.push(`${forName.count}${forName.at_least ? " or more" : ""} item(s) were addressed to ${forName.sessions === 1 ? "an ended session" : "ended sessions"} ` + `that also called itself ${name}; left_for_your_name.see starts at the earliest of them, and before_you_arrived.see, which ` + "reads from the start, includes them too. Names are self-declared, so this is routing, " + "not identity: you are a new session and voice, and nothing those sessions held, said or stood on passes to you.");
   }
-  return { view, advice };
+  return { view, advice, read: true };
 }
 function composeBrief(ctx, data, pending, rootPath) {
   const me = data.session;
@@ -42238,9 +42249,11 @@ function composeBrief(ctx, data, pending, rootPath) {
   for (const ballot of cap(data.ballots).filter(unitMateHasCast)) {
     advice.push(`${handleOf("ballot", ballot.ballot_id)}: ${UNIT_MATE_CAST_ADVICE}`);
   }
+  const nothingWaits = forYou.length === 0 && (pending === null || pending.for_me_total === 0 && !pending.more && !pending.for_me_total_capped) && waiting.length === 0 && !proposals.some((proposal) => proposal.your_voice_awaited) && !data.ballots.some((ballot) => ballot.viewer?.may_vote === true && !ballot.viewer.unit_has_cast) && holds(me.id).length === 0;
   return {
     shown,
     advice,
+    nothing_waits: nothingWaits,
     view: {
       you: {
         session: me.id,
