@@ -63,6 +63,32 @@ describe("a note stops waiting once the session has read past it, by either posi
     expect(first).toBeLessThan(second);
   });
 
+  test("a cursor acknowledged past the read mark wins: what it passed no longer waits", async () => {
+    const { j, reader, readerServer, knock, send, counted } = setup();
+    await send("Shown by the inbox.");
+    await ok(readerServer, "collab_inbox", {});
+    await send("Acknowledged, never shown.");
+    const page = j.store.nextForSession({ ...reader.credential, event_limit: 50 });
+    j.store.acknowledgeSessionCursor({ ...reader.credential, anchor: page.events.next_anchor, expected_cursor_version: page.session.cursor_version });
+    expect(knock()).toMatchObject({ waiting: 0, new: [] });
+    expect(counted()).toBe(0);
+  });
+
+  test("a tap ledger entry is dropped once the cursor passes it, while a read mark runs ahead", async () => {
+    const { j, databasePath, reader, readerServer, knock, send } = setup();
+    const tapped = () => (JSON.parse(readFileSync(knockLedgerPath(databasePath), "utf8")) as { tapped: Record<string, number[]> })
+      .tapped[reader.session.id];
+    const first = await send("Tapped, then acknowledged.");
+    expect(knock({ mark_tapped: true }).new.map((item) => item.seq)).toEqual([first]);
+    const page = j.store.nextForSession({ ...reader.credential, event_limit: 50 });
+    j.store.acknowledgeSessionCursor({ ...reader.credential, anchor: page.events.next_anchor, expected_cursor_version: page.session.cursor_version });
+    await send("Shown by the inbox, so the mark runs ahead of the cursor.");
+    await ok(readerServer, "collab_inbox", {});
+    const third = await send("Tapped while the mark is ahead.");
+    expect(knock({ mark_tapped: true }).new.map((item) => item.seq)).toEqual([third]);
+    expect(tapped()).toEqual([third]);
+  });
+
   test("a read mark past the journal head is not trusted", async () => {
     const { j, reader, readerServer, knock, send, counted } = setup();
     await ok(readerServer, "collab_inbox", {});

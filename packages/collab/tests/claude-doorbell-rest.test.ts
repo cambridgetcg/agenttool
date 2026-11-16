@@ -270,6 +270,33 @@ describe("Claude Code collab doorbell watcher against a declared rest", () => {
     await watcher.exited;
   }, 30_000);
 
+  test("one pass's held events are counted once, however many times its ring is tried", async () => {
+    const own = listener("retried-pass");
+    const peer = store.startSession({ root_path: root, actor: "peer" });
+    const report = store.appendReportForSession({ ...own.credential, idempotency_key: "own-report", kind: "observation", body: "mine" });
+    store.restSessionForSession({ ...own.credential, idempotency_key: "wake-rest", mode: "resting", wake_on: ["addressed"] });
+    const watcher = startWatcher(own.session.id, 60_000, ["--retry-base-ms", "300"]);
+    await until(() => logOf(own.session.id).includes('"start"'));
+    await new Promise<void>((closed) => server.close(() => closed()));
+    expect(existsSync(socketPath)).toBe(true);
+
+    // In one pass: an answer to its report sent without to_session_id (routed,
+    // but not a note the rest asked to be woken for, so held), then an explicit note.
+    store.appendReportForSession({
+      ...peer.credential, idempotency_key: "answer", kind: "observation", body: "agreed",
+      relation: "supports", target_report_id: report.id,
+    });
+    mail(peer, own, "explicit");
+    await until(() => (logOf(own.session.id).match(/"ring_retry"/g) ?? []).length >= 2, 15_000);
+    await new Promise<void>((ready) => server.listen(`${socketPath}.next`, ready));
+    renameSync(`${socketPath}.next`, socketPath);
+
+    await until(() => rings.length === 1, 15_000);
+    expect(rings[0]).toContain("1 earlier event(s) before that anchor were held by a rest and went without a ring");
+    watcher.kill("SIGTERM");
+    await watcher.exited;
+  }, 40_000);
+
   test("the stopped notice asks the journal, not its memory, whether the session rests", async () => {
     // Two sessions, one watcher each, running side by side.
     // returned: rested when its watcher last heard, returned since. It must be told.

@@ -52,6 +52,8 @@ const repositoryRoot = spawnSync("git", ["-C", packageRoot, "rev-parse", "--show
 const worker = join(import.meta.dir, "compat", "old-store-worker.ts");
 const DEFAULT_REVISIONS = ["collab-v0.4.0", "collab-v0.5.0", "1ec5ab4b", "cdf54b68", "a8799aad", "24ba2300"];
 const GOLDEN_REVISION = "a8799aad";
+/** The rest-and-knocks line, label 0.5.0 (not the tag): the build a household runs. */
+const REST_AND_KNOCKS_REVISION = "cdf54b6895da2dcbe86d0a7aec0ef7d9c5d59626";
 const WORKER_TIMEOUT_MS = 60_000;
 const HOST_TIMEOUT_MS = 20_000;
 const MCP_REQUEST_TIMEOUT_MS = 20_000;
@@ -98,7 +100,7 @@ const KNOWN_REVISIONS: Record<string, {
   // The rest-and-knocks line (label 0.5.0, not the tag): the build a household
   // has run since 2026-10-15. Its host has end, knocks and doorbell-scan, no
   // wait and no --seat-ref, and it already knows the two rest event types.
-  cdf54b6895da2dcbe86d0a7aec0ef7d9c5d59626: {
+  [REST_AND_KNOCKS_REVISION]: {
     ships: { mcp: true, host: true, host_wait: false, host_seat_ref: false },
     store: { event_addresses_session: false, proposal_status: false },
     knows_new_types: REST_EVENT_TYPES,
@@ -866,6 +868,30 @@ for (const revision of revisions) {
     }, TEST_TIMEOUT_MS);
 
     const host = (source: string) => join(source, "dist", "agenttool-collab-host.js");
+
+    // The rest-and-knocks build is the only older one with the quiet host
+    // verbs, and the one a household runs beside this build. On sessions that
+    // never read through collab_inbox the two must print the same bytes.
+    test.skipIf(revision.sha !== REST_AND_KNOCKS_REVISION)("old host `knocks` and `doorbell-scan` print what this build prints", async () => {
+      const [source, { directory: state, manifest }] = [await archive(revision), await fixture()];
+      const databasePath = copyJournal(state, join(directory, "quiet-verbs"));
+      const rest = manifest.declared_rest;
+      const both = async (args: string[]) => {
+        const [old, mine] = await Promise.all([source, packageRoot].map((root) =>
+          run([process.execPath, host(root), ...args, "--db", databasePath], { timeout_ms: HOST_TIMEOUT_MS })));
+        expect(old!.exit_code).toBe(0);
+        expect(mine!.exit_code).toBe(0);
+        expect(mine!.stdout).toBe(old!.stdout);
+        return mine!.stdout;
+      };
+      for (const sessionId of [rest.rester, rest.sleeper, rest.waker]) {
+        expect(JSON.parse(await both(["knocks", "--session", sessionId]))).toMatchObject({ session_id: sessionId });
+      }
+      const scan = JSON.parse(await both(["doorbell-scan"])) as { sessions: Array<{ session_id: string; new: Array<{ seq: number }> }> };
+      // Not a vacuous agreement: the waker is listed, with its note.
+      expect(scan.sessions.map((entry) => [entry.session_id, entry.new.map((item) => item.seq)]))
+        .toEqual([[rest.waker, [rest.waker_note_sequence]]]);
+    }, TEST_TIMEOUT_MS);
     // Every step writes to the same copy, in this order: the old store, the old
     // host, the old MCP, and then this build reads the result back. A failed
     // step is reported by its own test; the later steps still run.

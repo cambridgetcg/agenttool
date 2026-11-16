@@ -97,6 +97,13 @@ export interface FixtureManifest {
    * list them as unreadable, and keep every other call working.
    */
   v2_proposals: string[];
+  /**
+   * Sessions the declared-rest step left for the quiet host verbs: one that
+   * rested and returned, one resting without a wake, and one resting with a
+   * wake asked for and an addressed note waiting. None reads through
+   * collab_inbox, so every build counts the same for them.
+   */
+  declared_rest: { rester: string; sleeper: string; waker: string; waker_note_sequence: number };
 }
 
 type ManifestDraft = Partial<Omit<FixtureManifest, "format" | "steps" | "produced_types" | "event_types" | "head_sequence">> & {
@@ -1004,6 +1011,35 @@ export const FIXTURE_STEPS: FixtureStep[] = [
         role: "is left resting",
       }));
       context.store.restSessionForSession({ ...sleeper.credential, idempotency_key: context.key("sleep"), mode: "resting" });
+      const waker = context.addSession("waker", context.store.startSession({
+        root_path: context.root,
+        actor: "fixture-waker",
+        role: "rests with a wake asked for, with a note waiting",
+      }));
+      context.store.restSessionForSession({
+        ...waker.credential, idempotency_key: context.key("wake-rest"), mode: "resting", wake_on: ["addressed"],
+      });
+      const note = context.store.appendReportForSession({
+        ...context.session("peer").credential,
+        idempotency_key: context.key("to-waker"),
+        kind: "observation",
+        body: "A note waiting for a session that rests and asked to be woken.",
+        to_session_id: waker.session.id,
+      });
+      // The step checks its own work, so a later edit cannot quietly lose what it is for.
+      const restOf = (id: string) => context.store.getCoordinationSession(id)?.rest ?? null;
+      if (restOf(rester.session.id) !== null) throw new Error("declared-rest: the rester did not return");
+      if (restOf(sleeper.session.id)?.wake_on.length !== 0) throw new Error("declared-rest: the sleeper is not resting without a wake");
+      if (!restOf(waker.session.id)?.wake_on.includes("addressed")) throw new Error("declared-rest: the waker asked for no wake");
+      const noteSequence = (context.store.db.query(`SELECT sequence FROM events WHERE type = 'report.posted' AND entity_id = ?`)
+        .get(note.id) as { sequence: number } | null)?.sequence;
+      if (note.to_session_id !== waker.session.id || noteSequence === undefined) throw new Error("declared-rest: the note is not addressed to the waker");
+      context.manifest.declared_rest = {
+        rester: rester.session.id,
+        sleeper: sleeper.session.id,
+        waker: waker.session.id,
+        waker_note_sequence: noteSequence,
+      };
     },
   },
   // Later slices append their steps here.
@@ -1118,7 +1154,7 @@ export async function exerciseFixture(
   if (workspaces.length !== 1 || workspaces[0]!.id !== manifest.workspace_id) {
     throw new Error("the fixture must write exactly one workspace");
   }
-  for (const field of ["workspace_id", "root_path", "waiter", "end_by_seat_ref", "end_by_session_file", "review_task_id"] as const) {
+  for (const field of ["workspace_id", "root_path", "waiter", "end_by_seat_ref", "end_by_session_file", "review_task_id", "declared_rest"] as const) {
     if (!manifest[field]) throw new Error(`fixture manifest is missing ${field}`);
   }
   if (!manifest.waiter!.addressed_report_id) throw new Error("fixture manifest has no addressed report");
@@ -1141,6 +1177,7 @@ export async function exerciseFixture(
     decisions: manifest.decisions,
     ballots: manifest.ballots,
     v2_proposals: manifest.v2_proposals,
+    declared_rest: manifest.declared_rest!,
   };
 }
 
