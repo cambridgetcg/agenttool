@@ -83,6 +83,8 @@ import {
   type ReceiptPlanGuard,
   reportFromRow,
   type ReportRow,
+  restFromDeclaration,
+  type RestDeclarationRow,
   reviewFromRow,
   type ReviewRow,
   sessionLiveness,
@@ -138,16 +140,23 @@ export class CollabStore extends CollabStoreCore {
       SELECT * FROM coordination_sessions WHERE workspace_id = ?
       ORDER BY last_seen_at DESC, id
     `).all(workspaceId) as CoordinationSessionRow[];
-    // One pass over the two event types that carry self-declared facts; the
-    // events table has no index on type, so this is cheaper than one per session.
+    // One pass over the event types that carry self-declared facts (a rest
+    // among them); the events table has no index on type, so this is cheaper
+    // than one per session.
     const declared = this.db.query(`
-      SELECT entity_id, type, payload_json FROM events
-      WHERE workspace_id = ? AND type IN ('session.joined', 'purpose.declared')
+      SELECT entity_id, type, sequence, occurred_at, payload_json FROM events
+      WHERE workspace_id = ? AND type IN ('session.joined', 'purpose.declared', 'session.rested', 'session.returned')
       ORDER BY sequence
-    `).all(workspaceId) as Array<{ entity_id: string; type: string; payload_json: string }>;
+    `).all(workspaceId) as Array<{ entity_id: string; type: string; sequence: number; occurred_at: string; payload_json: string }>;
     const joined = new Map<string, { seat_ref: string | null; model: string | null }>();
     const purposes = new Map<string, string>();
+    // Journal order, so each session's latest declaration wins, as latestRest reads it.
+    const rests = new Map<string, RestDeclarationRow>();
     for (const row of declared) {
+      if (row.type === "session.rested" || row.type === "session.returned") {
+        rests.set(row.entity_id, { type: row.type, sequence: row.sequence, occurred_at: row.occurred_at, payload_json: row.payload_json });
+        continue;
+      }
       const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
       if (row.type === "session.joined") {
         joined.set(row.entity_id, {
@@ -176,7 +185,7 @@ export class CollabStore extends CollabStoreCore {
       joined_at: row.joined_at,
       last_seen_at: row.last_seen_at,
       liveness: sessionLiveness(row, observedAt),
-      rest: row.status === "active" ? this.latestRest(row.id, observedAt) : null,
+      rest: row.status === "active" && rests.has(row.id) ? restFromDeclaration(rests.get(row.id)!, observedAt) : null,
     }));
   }
 

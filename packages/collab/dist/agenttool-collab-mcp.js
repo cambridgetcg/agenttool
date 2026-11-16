@@ -38547,13 +38547,18 @@ class CollabStore extends CollabStoreCore {
       ORDER BY last_seen_at DESC, id
     `).all(workspaceId);
     const declared = this.db.query(`
-      SELECT entity_id, type, payload_json FROM events
-      WHERE workspace_id = ? AND type IN ('session.joined', 'purpose.declared')
+      SELECT entity_id, type, sequence, occurred_at, payload_json FROM events
+      WHERE workspace_id = ? AND type IN ('session.joined', 'purpose.declared', 'session.rested', 'session.returned')
       ORDER BY sequence
     `).all(workspaceId);
     const joined = new Map;
     const purposes = new Map;
+    const rests = new Map;
     for (const row of declared) {
+      if (row.type === "session.rested" || row.type === "session.returned") {
+        rests.set(row.entity_id, { type: row.type, sequence: row.sequence, occurred_at: row.occurred_at, payload_json: row.payload_json });
+        continue;
+      }
       const payload = JSON.parse(row.payload_json);
       if (row.type === "session.joined") {
         joined.set(row.entity_id, {
@@ -38581,7 +38586,7 @@ class CollabStore extends CollabStoreCore {
       joined_at: row.joined_at,
       last_seen_at: row.last_seen_at,
       liveness: sessionLiveness(row, observedAt),
-      rest: row.status === "active" ? this.latestRest(row.id, observedAt) : null
+      rest: row.status === "active" && rests.has(row.id) ? restFromDeclaration(rests.get(row.id), observedAt) : null
     }));
   }
   consentVoiceOf(sessionId) {
@@ -43542,14 +43547,23 @@ function explicitAddressee(ctx, workspaceId, value, input) {
   const addressee = sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at, view.rest);
   return { ...addressee, advice: [...named.advice, ...addressee.advice] };
 }
+function restAdvice(name, id, rest, what = "the note") {
+  const resting = `${name} (${id}) is resting${rest.until ? ` until ${rest.until}` : ""}`;
+  return rest.wake_on.includes("addressed") ? `${resting} and asked to be woken for notes addressed to it; a host may wake it for this one, and none is promised.` : `${resting} and asked not to be woken; ${what} is recorded and waits for its return.`;
+}
+function restAdviceFor(ctx, workspaceId, sessionId, what) {
+  if (!sessionId)
+    return [];
+  const view = ctx.store.noteSessionViews(workspaceId).find((candidate) => candidate.id === sessionId);
+  return view?.status === "active" && view.rest ? [restAdvice(view.actor, view.id, view.rest, what)] : [];
+}
 function sessionAddressee(id, name, status, liveness, lastSeenAt, rest = null) {
   const advice = [];
   if (status === "ended")
     advice.push(`${name} (${id}) has ended its session; the note is recorded and addressed to it all the same.`);
-  else if (rest) {
-    const resting = `${name} (${id}) is resting${rest.until ? ` until ${rest.until}` : ""}`;
-    advice.push(rest.wake_on.includes("addressed") ? `${resting} and asked to be woken for notes addressed to it; a host may wake it for this one, and none is promised.` : `${resting} and asked not to be woken; the note is recorded and waits for its return.`);
-  } else if (liveness === "stale") {
+  else if (rest)
+    advice.push(restAdvice(name, id, rest));
+  else if (liveness === "stale") {
     advice.push(`${name} (${id}) was last seen at ${lastSeenAt}, over 6 hours ago; the note is recorded and addressed to it all the same.`);
   }
   return { to_session_id: id, to_person: false, shown: { session: id, name }, advice };
@@ -44115,6 +44129,7 @@ function planNote(ctx, input, context) {
       const completion = reviewTarget(ctx, input, target, workspaceId, me);
       if (fields.to !== null)
         advice.push("A verdict goes to the session that reported the work; to was not used.");
+      advice.push(...restAdviceFor(ctx, workspaceId, ctx.store.getTask(workspaceId, completion.task_id).reported_by_session_id, "the verdict"));
       extra.review = completion;
       return finish({ recorded_as: act, target, addressee: BROADCAST, reports: [], entity: completion.completion_id });
     }
@@ -45416,6 +45431,7 @@ async function finishTask(ctx, binding, credential, task, options) {
   else if (plan.retry)
     advice.push("An earlier call with this input stopped part way; its finished steps were kept, and the rest ran now.");
   const shown = recordedEvidence(evidence, recordedItems, advice);
+  advice.push(...restAdviceFor(ctx, workspaceId, reviewer, "the review request"));
   const handle = handleOf("task", task.id);
   const completion = completed.completion_report_id;
   const reviewed = completed.completion_policy === "accepted";
@@ -46132,6 +46148,11 @@ function proposeResult(ctx, binding, options) {
   const unreachable = options.notes.filter((entry) => entry.report === null && !entry.objector.mine);
   if (unreachable.length > 0) {
     advice.push(`${unreachable.length} carried objector(s) have no live session, so no note reached them: ${unreachable.map((entry) => entry.objector.name).join(", ")}.`);
+  }
+  for (const entry of notified) {
+    const view = entry.objector.session ? sessions.get(entry.objector.session.id) : undefined;
+    if (view?.status === "active" && view.rest)
+      advice.push(restAdvice(view.actor, view.id, view.rest));
   }
   const shown = options.cite && options.citeReplayed ? recordedEvidence(options.evidence, options.cite.items, advice) : options.evidence;
   const replacedId = data.replaced?.proposal_id ?? null;

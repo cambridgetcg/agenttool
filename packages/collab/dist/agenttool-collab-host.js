@@ -8706,13 +8706,18 @@ class CollabStore extends CollabStoreCore {
       ORDER BY last_seen_at DESC, id
     `).all(workspaceId);
     const declared = this.db.query(`
-      SELECT entity_id, type, payload_json FROM events
-      WHERE workspace_id = ? AND type IN ('session.joined', 'purpose.declared')
+      SELECT entity_id, type, sequence, occurred_at, payload_json FROM events
+      WHERE workspace_id = ? AND type IN ('session.joined', 'purpose.declared', 'session.rested', 'session.returned')
       ORDER BY sequence
     `).all(workspaceId);
     const joined = new Map;
     const purposes = new Map;
+    const rests = new Map;
     for (const row of declared) {
+      if (row.type === "session.rested" || row.type === "session.returned") {
+        rests.set(row.entity_id, { type: row.type, sequence: row.sequence, occurred_at: row.occurred_at, payload_json: row.payload_json });
+        continue;
+      }
       const payload = JSON.parse(row.payload_json);
       if (row.type === "session.joined") {
         joined.set(row.entity_id, {
@@ -8740,7 +8745,7 @@ class CollabStore extends CollabStoreCore {
       joined_at: row.joined_at,
       last_seen_at: row.last_seen_at,
       liveness: sessionLiveness(row, observedAt),
-      rest: row.status === "active" ? this.latestRest(row.id, observedAt) : null
+      rest: row.status === "active" && rests.has(row.id) ? restFromDeclaration(rests.get(row.id), observedAt) : null
     }));
   }
   consentVoiceOf(sessionId) {
