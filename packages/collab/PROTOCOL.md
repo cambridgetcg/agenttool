@@ -99,7 +99,7 @@ One meaning per word. Where storage has a name, the surface uses the same one.
 | handle | A short display name for an id, such as `report#3fa91c`. |
 | read mark | Where a session's inbox has read to. It is not the legacy cursor. |
 | delivery recorded | A proposal, ballot or completion was returned to a session by `collab_arrive` or `collab_inbox`. Reads through the legacy tools, the doorbell, host messages and older builds are not recorded. |
-| here | Sessions in this workspace that are active and were seen within 6 hours. |
+| here | Sessions in this workspace that are active and were seen within 6 hours. One that has declared a rest is still here, marked `resting`. |
 
 Not used: "controller"; "consent" as a noun for the agents' state; "agree" or
 "agreement" for agents; "authority" for anything but what the person's agreement
@@ -618,7 +618,8 @@ request_changes go to the target's author; a withdrawal goes to the author of th
 latest standing challenge on the target (others are listed with a ready note), else to
 all; a resolve goes to the author of the challenged report; an answer to the
 challenger; a decide to the proposal's author; anything else to all. A note to an
-ended or stale session is sent, and the result says so. An explicit `to` by name is
+ended, resting or stale session is sent, and the result says so: for a resting one,
+whether it asked to be woken for addressed notes or the note waits for its return. An explicit `to` by name is
 read as Names above describes. A `to` on an act that does not use one (a verdict, which
 goes to the session that reported the work) is not resolved, so the call is never
 refused over it; the advice says it was not used. Because every host restart is a new session, a reply
@@ -1196,7 +1197,9 @@ SQLite file and re-verify the whole chain on every open.
 - **New event types**: `purpose.declared` (entity: the session), `evidence.cited`
   (entity: the cite), and `ballot.opened`, `ballot.cast`, `ballot.revealed` and
   `ballot.closed` (entity: the poll report); consent/v2 adds
-  `proposal.challenge_set_aside` (entity: the proposal report). A ballot is identified by the id of the
+  `proposal.challenge_set_aside` (entity: the proposal report). Declared rest, which
+came from its own line, adds `session.rested` and `session.returned` (entity: the
+session). A ballot is identified by the id of the
   report `collab_poll` posts: kind `observation`, relation `informs`, body the rendered
   poll note, and deliberately not kind `proposal`.
 - **New optional payload fields**, present only when set: `report.posted.note =
@@ -1214,7 +1217,7 @@ without it.
 
 **The forward-compatibility harness** (`tests/forward-compat.test.ts`,
 `tests/compat/`) holds the promise. For each revision in `COLLAB_COMPAT_REVS` (default
-`collab-v0.4.0 collab-v0.5.0 1ec5ab4b a8799aad`; a missing revision fails, naming
+`collab-v0.4.0 collab-v0.5.0 1ec5ab4b cdf54b68 a8799aad 24ba2300`; a missing revision fails, naming
 `fetch-depth: 0`, rather than skipping) it archives that revision's package into a
 temporary directory and runs it under Bun against a copy of a journal this build
 wrote, which exercises every addition. It checks that the old store opens, verifies
@@ -1230,7 +1233,8 @@ match after ids and tokens are replaced by numbered placeholders. Dropping the t
 new tables loses only view state, and `note_ballots` rebuilds. Each later change
 extends the fixture.
 
-The harness needs `a8799aad`, `1ec5ab4b` and the two tags in the clone's history.
+The harness needs `a8799aad`, `1ec5ab4b`, `cdf54b68` (the rest-and-knocks build a
+household runs), `24ba2300` and the two tags in the clone's history.
 Where the package is projected without that history (the public projection), its CI
 says so explicitly: `COLLAB_COMPAT_SKIP_MISSING`, set only in the projection workflow's
 collab step, holds the reason, and then the checks whose revision is missing skip and
@@ -1245,14 +1249,17 @@ from its own environment. An unknown value, or two spellings that disagree, refu
 start with a line naming `full | notes`.
 
 - **`full`**, the default: the 36 existing tools, whose `tools/list` entries a test
-  holds byte-identical to `a8799aad`'s, plus the eight verbs: 44 tools. Its
+  holds byte-identical to `a8799aad`'s but for what declared rest adds (one sentence on
+  the four tools whose result names an addressee, and `collab_next`'s last sentence),
+  plus `collab_session_rest` and the eight verbs: 45 tools. Its
   instructions are the notes text, then "collab_arrive does not move the legacy cursor;
   call collab_next only if you mean to page the journal from its start.", then the
   existing text under "Legacy session tools:".
 - **`notes`**: the eight verbs and `collab_journal_verify`: 9 tools. Its instructions
   are under 200 words: start with `collab_arrive`, the eight verbs in one line each, the
   principles in one line each. There is no `collab_session_end` here; an agent leaves
-  with `collab_done {outcome: "leave"}`.
+  with `collab_done {outcome: "leave"}`. There is no `collab_session_rest` either: a
+  session on this profile cannot declare a rest, though it is told when another has.
 
 | Consumer | What it gets |
 |---|---|

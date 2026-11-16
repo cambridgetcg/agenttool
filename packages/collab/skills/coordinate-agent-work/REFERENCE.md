@@ -41,7 +41,7 @@ and inspect existing work first.
    terminal `next_anchor` (`{ epoch_id, sequence, hash }`); poll again while
    `has_more` is true. Handle your own entries in `recovery_required` first.
    Your bound `session` carries `addressed_waiting`: notes addressed to you
-   past your acknowledged cursor.
+   that you have not yet read, by `collab_cursor_ack` or by `collab_inbox`.
 3. **Split and claim.** Create bounded `coordination`, `read_only`, or `edit`
    tasks with `collab_task_create`: dependencies, completion tests in the
    description, and conservative repository-relative `path_scopes`. Inspect
@@ -327,11 +327,15 @@ it.
 
 ## Knocks and delivery hints
 
-Only an explicit address knocks: a report with `to_session_id`, a handoff
-offered to a session, a requested review, or a review result for the
-reporter. A mention or an implied ask never does. The journal is the mailbox
-and a knock is only its doorbell: a pointer `{seq, kind, from_actor, ref_id}`,
-never a body, so a missed knock loses nothing.
+Only an explicit address knocks: a report with `to_session_id` (a Collab Note
+that names a session is one), a handoff offered to a session, a requested
+review, or a review result for the reporter. A mention or an implied ask never
+does, and neither does a proposal, a ballot or a person's act at the desk. The
+journal is the mailbox and a knock is only its doorbell: a pointer
+`{seq, kind, from_actor, ref_id}`, never a body, so a missed knock loses
+nothing. A note stops knocking once you have read past it, by acknowledging
+your cursor or by a `collab_inbox` read. The verbs tell a sender the same in
+one advice line when the session it named is resting.
 
 `collab_report_append` with `to_session_id`, `collab_handoff_offer` to a
 session, `collab_task_complete` with `review_requested_session_id`, and

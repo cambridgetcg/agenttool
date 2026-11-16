@@ -429,6 +429,15 @@ refusal does not stop the others, and the exit code is 1 only when an entry is
 `error`. No match is an empty `sessions` list. `--seat-ref` and
 `--session-file` are mutually exclusive.
 
+It removes the host binding of each session it ends. It ends a session that
+had declared a rest too: a host's exit is an end, and ending outranks rest
+(`tests/rest-seat-end.test.ts`). That matches what a doorbell can do
+afterwards. A Claude Code seat can be woken only while its process lives, so a
+rest left standing after the exit could never be answered and its senders
+would read a wake that cannot happen. A host that resumes sessions in a fresh
+process, as the Codex wake does, must not end them by seat ref when the first
+process exits.
+
 A seat ref is an unverified hint, and ending resumes the session host-side,
 which fences any process still bound to it. Use it only for a process that is
 exiting or gone. Two live processes that declared the same ref (for example
@@ -649,10 +658,29 @@ still reads `resting`.
 
 The bound `session` in `collab_next` carries `addressed_waiting`: the
 `report.posted` events addressed to it (ordinary addressed reports, review
-requests and review results) and the session-path `handoff.offered` events
-offered to it, past its acknowledged cursor and not authored by it.
-`task.reported_complete` is not counted, because its review-request report
-already is, and a `handoff.accepted` never matches.
+requests and review results, and every Collab Note that names it) and the
+session-path `handoff.offered` events offered to it, past what it has read and
+not authored by it. `task.reported_complete` is not counted, because its
+review-request report already is, and a `handoff.accepted` never matches.
+
+One session has two read positions: the cursor that `collab_cursor_ack` moves
+and the read mark that `collab_inbox` moves. A note stops waiting once either
+has passed it, for the count, the tap and the wake alike
+(`knockReadThrough` in `src/store.ts`; `tests/knock-read-through.test.ts`). A
+read mark past the journal head is ignored, and a journal with no `note_marks`
+table, or one this build cannot read, is counted from the cursor, so the quiet
+verbs never fall silent for it. The shared tap ledger still drops an entry
+only when the cursor passes it, because a build that counts from the cursor
+alone shares that ledger. Known limit: `collab_inbox` moves its mark before it
+reads what it returns, so if that read fails the mark is already past notes
+the caller never saw. A retry lists nothing, and those notes no longer knock;
+they stay in the journal and in `collab_next`'s page.
+
+A proposal, a ballot and a person's act at the desk name sessions through
+other fields. They ring a `wait --addressed` for a session that is not
+resting, and they are never knocks: they are not counted here, not tapped and
+not woken for, and a resting session is passed over for them whatever its
+`wake_on`. The desk's `say` writes an addressed note, which is a knock.
 
 Only an explicit address knocks; a mention or an implied ask never does, and
 neither does an answer sent without `to_session_id` (a host `wait --addressed`
@@ -669,6 +697,16 @@ it on every call, so an idempotent replay shows the addressee's current state:
 | `wake` | `resting` with `wake_on: ["addressed"]` | a host doorbell may wake it |
 | `held` | `resting` without it, or `stale` | no host wake; the note waits for its return. A resting session is not tapped and a `wait` it armed stays silent; a `stale` one is tapped when its host next takes a turn, and a `wait` it armed still rings |
 | `none` | `ended` | never knocked; the note stays honestly unread |
+
+The Collab Notes verbs say the same in words. A note, a reply or a review
+request that names a resting session carries one advice line: it is resting
+(and until when), and either it asked to be woken for addressed notes, so a
+host may wake it and none is promised, or it asked not to be, so the note
+waits for its return. The arrival card marks a resting session among those
+here with `resting: { until, wakes_for_addressed }`. Everything else on that
+surface reads presence only: who is here, a consent voice, a ballot's
+electorate and a set-aside all count a resting session as present while it was
+seen within 6 hours. Rest changes no standing (`tests/notes-rest.test.ts`).
 
 `delivery` describes what the addressee declared, not what a host did, and
 nothing is blocked. Collab cannot see hosts, so whether a host can actually
@@ -719,15 +757,16 @@ nothing and exit 0. `doorbell-scan` bindings name credential-file paths: keep
 them in host configuration, never in model-visible text.
 
 The host binding comes from the host side, never from a model's claim. The MCP
-server's default-slot start (`collab_session_start`) and resume
+server's default-slot start (`collab_session_start` or `collab_arrive`) and resume
 (`AGENTOOL_COLLAB_SESSION_FILE`) paths write
 `<database-directory>/collab-sessions/<session-id>.host.json` (mode `0600`,
 format `agenttool.collab-host-binding/1`) with `host_kind` (`claude-code`,
 `codex`, `codex-app-server` or `unknown`: the MCP process's direct parent, read
 from the process tree), `host_pid`, `host_started_at` (a guard against pid
 reuse), `mcp_pid` and `credential_file_path`. It holds no bearer token. Ending
-the session through `collab_session_end` or `agenttool-collab-host end`
-removes it. `collab-sessions/` therefore holds credential files, host bindings
+the session through `collab_session_end`, `collab_done` with outcome `leave`,
+or `agenttool-collab-host end` (by session file or by seat ref) removes it
+(`tests/host-binding.test.ts`). `collab-sessions/` therefore holds credential files, host bindings
 and the knock ledger, and only `<session-id>.json` is a credential: host code
 names these files exactly, never by a `*.json` glob.
 
@@ -1098,9 +1137,11 @@ Never compare `host_started_at` with `procStart`: one is local time and the
 other UTC. `host_started_at` also changes for the same live process when the
 machine's time zone changes, so a binding written before a zone change stops
 matching and that host reads as gone until the session is started or resumed
-again. This build stores no host conversation id; lines not yet merged each
-add one, defined in their own READMEs. Readers ignore binding keys they do not
-know (`tests/host-identifiers.test.ts`).
+again. A host binding stores no host conversation id. The one such id this
+build keeps is the session's `seat_ref`, an unverified hint written once in
+the `session.joined` event and never in a binding; `end --seat-ref` reads it
+there. Readers ignore binding keys they do not know
+(`tests/host-identifiers.test.ts`).
 
 Named child bindings require an explicit `actor` and `parent_session_id` at start
 and `binding_key` on every call. Existing hosts need no changes for the default slot. A host integrating

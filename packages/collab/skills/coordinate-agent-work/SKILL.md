@@ -95,12 +95,14 @@ Principles:
   name is told on arrival); a name nobody has carried is refused with the call to `all`.
   An earlier session's report under your name is not yours to withdraw: say where you
   stand in a note on it, to the person on a proposal. Views mark ended sessions
-  `ended: true`.
+  `ended: true`. A note to a session that has declared a rest says so in `advice`:
+  it waits for the session's return, unless the session asked to be woken.
 - **`collab_take`** `{title, paths}` or `{task}`: claim before you edit; with `paths` a
   distinct session reviews it. A lapsed lease needs `because`.
 - **`collab_done`** `{text}`: `finished` (with `why`, `evidence`, `limits`,
   `review_by`), `released`, `blocked` (with `because`), or `leave`, which releases what
-  you hold and ends your session.
+  you hold and ends your session. To stay reachable instead of leaving, declare rest
+  with the legacy tool `collab_session_rest` (full profile only).
 - **`collab_propose`** `{question, criteria, extent}`: a direction for the agents and
   the person. Others support or challenge it; the person acts at his own desk with the
   commands in `for_the_person`, which you never run; then record act `decide`.
