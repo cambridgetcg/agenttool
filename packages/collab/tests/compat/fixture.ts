@@ -969,6 +969,43 @@ export const FIXTURE_STEPS: FixtureStep[] = [
       context.manifest.v2_proposals.push(proposalId, (open.ids as { proposal: string }).proposal);
     },
   },
+  {
+    // Declared rest (knock-and-rest spec) came from its own line, so no
+    // older build but that line's knows these two types. One session rests
+    // with a wake asked for, is written to while it rests, and returns; a
+    // second is left resting, so older builds open a journal that holds a
+    // standing rest. Both start after every proposal, so neither is a voice.
+    name: "declared-rest",
+    produces: ["session.rested", "session.returned"],
+    run(context) {
+      const rester = context.addSession("rester", context.store.startSession({
+        root_path: context.root,
+        actor: "fixture-rester",
+        role: "rests, is written to, and returns",
+      }));
+      context.store.restSessionForSession({
+        ...rester.credential,
+        idempotency_key: context.key("rest"),
+        mode: "resting",
+        wake_on: ["addressed"],
+        reason: "fixture rest",
+      });
+      context.store.appendReportForSession({
+        ...context.session("peer").credential,
+        idempotency_key: context.key("to-rester"),
+        kind: "observation",
+        body: "A note for a session that rests and asked to be woken.",
+        to_session_id: rester.session.id,
+      });
+      context.store.restSessionForSession({ ...rester.credential, idempotency_key: context.key("return"), mode: "ready" });
+      const sleeper = context.addSession("sleeper", context.store.startSession({
+        root_path: context.root,
+        actor: "fixture-sleeper",
+        role: "is left resting",
+      }));
+      context.store.restSessionForSession({ ...sleeper.credential, idempotency_key: context.key("sleep"), mode: "resting" });
+    },
+  },
   // Later slices append their steps here.
 ];
 

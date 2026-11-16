@@ -50,7 +50,7 @@ const packageRoot = resolve(import.meta.dir, "..");
 const repositoryRoot = spawnSync("git", ["-C", packageRoot, "rev-parse", "--show-toplevel"], { encoding: "utf8" })
   .stdout?.trim() || packageRoot;
 const worker = join(import.meta.dir, "compat", "old-store-worker.ts");
-const DEFAULT_REVISIONS = ["collab-v0.4.0", "collab-v0.5.0", "1ec5ab4b", "a8799aad", "24ba2300"];
+const DEFAULT_REVISIONS = ["collab-v0.4.0", "collab-v0.5.0", "1ec5ab4b", "cdf54b68", "a8799aad", "24ba2300"];
 const GOLDEN_REVISION = "a8799aad";
 const WORKER_TIMEOUT_MS = 60_000;
 const HOST_TIMEOUT_MS = 20_000;
@@ -94,6 +94,14 @@ const KNOWN_REVISIONS: Record<string, {
   "1ec5ab4bebda3009e38633ce0d0f60d1ceff24dd": {
     ships: { mcp: true, host: true, host_wait: true, host_seat_ref: false },
     store: { event_addresses_session: true, proposal_status: false },
+  },
+  // The rest-and-knocks line (label 0.5.0, not the tag): the build a household
+  // has run since 2026-10-15. Its host has end, knocks and doorbell-scan, no
+  // wait and no --seat-ref, and it already knows the two rest event types.
+  cdf54b6895da2dcbe86d0a7aec0ef7d9c5d59626: {
+    ships: { mcp: true, host: true, host_wait: false, host_seat_ref: false },
+    store: { event_addresses_session: false, proposal_status: false },
+    knows_new_types: REST_EVENT_TYPES,
   },
   // consent S1+S2 and seat_ref
   a8799aad9f8d9774b6c966b970d4219a222fad22: {
@@ -513,7 +521,7 @@ describe("forward-compatibility fixture", () => {
   test("covers every Collab Notes event type this build defines", async () => {
     const { manifest } = await fixture();
     const current = eventTypeUnion(readFileSync(join(packageRoot, "src", "protocol.ts"), "utf8"));
-    const notes = new Set<string>(COLLAB_NOTES_EVENT_TYPES);
+    const notes = new Set<string>([...COLLAB_NOTES_EVENT_TYPES, ...REST_EVENT_TYPES]);
     // A type this build can write must be in the fixture, so older builds meet it.
     for (const type of current.filter((type) => notes.has(type))) expect(manifest.event_types).toContain(type);
     for (const type of manifest.produced_types) expect(manifest.event_types).toContain(type);
@@ -730,7 +738,7 @@ for (const revision of revisions) {
     // The types this build has never seen: every type added since a8799aad, less the ones it knows.
     const knownNewTypes = new Set<string>(known?.knows_new_types ?? []);
     const unknownToIt = (type: string) =>
-      (COLLAB_NOTES_EVENT_TYPES as readonly string[]).includes(type) && !knownNewTypes.has(type);
+      ([...COLLAB_NOTES_EVENT_TYPES, ...REST_EVENT_TYPES] as readonly string[]).includes(type) && !knownNewTypes.has(type);
     const directory = join(work, "revisions", revision.sha!);
     const copy = lazy(async () => copyJournal((await fixture()).directory, join(directory, "journal")));
 
