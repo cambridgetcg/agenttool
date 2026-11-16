@@ -330,10 +330,15 @@ export function buildCollabMcpServer(
     bind: (binding) => {
       state.binding = binding;
       requestSlot.getStore()!.left = null;
+      // As collab_session_start does, so the session can be tapped and woken
+      // whichever tool started it. Best effort, never throws, default slot only.
+      options.host_binding?.record(binding.handle.session.id, binding.credential_file);
     },
     unbind: (left) => {
       state.binding = null;
       requestSlot.getStore()!.left = left;
+      // An ended session is never knocked or woken; its host binding goes with it.
+      options.host_binding?.forget(left.session_id);
     },
     left: () => requestSlot.getStore()!.left ?? null,
     bound_slots: () => [...slots.values()]

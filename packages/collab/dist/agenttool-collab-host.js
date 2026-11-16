@@ -12638,6 +12638,11 @@ function runEndOrWait(argv, env, clock) {
       const store3 = new CollabStore(databasePath);
       try {
         const receipt = endSessionsForSeatRefs(store3, args, secrets);
+        for (const session of receipt.sessions) {
+          if (session.status === "ended" || session.status === "already_ended") {
+            removeHostBinding(databasePath, session.session_id);
+          }
+        }
         return emit(receipt, receipt.sessions.some((session) => session.status === "error") ? 1 : 0);
       } finally {
         store3.close();

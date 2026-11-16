@@ -214,6 +214,41 @@ describe("binding lifecycle through the MCP server and the host CLI", () => {
     expect(existsSync(store.defaultSessionCredentialPath(sessionId))).toBe(false);
   });
 
+  test("collab_arrive records the host as collab_session_start does, a named child writes none, and leaving removes it", async () => {
+    const recorder = hostBindingRecorder(databasePath, {
+      mcp_pid: 4101,
+      process_table: () => fakeTable(
+        { pid: 4100, ppid: 1, comm: "codex", args: "codex" },
+        { pid: 4101, ppid: 4100, args: "bun dist/agenttool-collab-mcp.js" },
+      ),
+      env: {},
+    });
+    const server = buildCollabMcpServer(store, { host_binding: recorder, environment: {} });
+    const arrived = await callTool(server, "collab_arrive", { purpose: "arrive by the front door", root_path: root, name: "arriver" });
+    expect(arrived.isError).toBeUndefined();
+    const sessionId = arrived.structuredContent.ids.session as string;
+    // The session a host's own conversation holds can be tapped and woken, whichever tool started it.
+    expect(readHostBindings(databasePath)).toEqual([expect.objectContaining({
+      session_id: sessionId,
+      host_kind: "codex",
+      host_pid: 4100,
+      mcp_pid: 4101,
+      credential_file_path: store.defaultSessionCredentialPath(sessionId),
+    })]);
+
+    const child = await callTool(server, "collab_arrive", { purpose: "check one file", binding_key: "k1", parent: sessionId });
+    expect(child.isError).toBeUndefined();
+    expect(readHostBindings(databasePath).map((entry) => entry.session_id)).toEqual([sessionId]);
+
+    const left = await callTool(server, "collab_done", { text: "Leaving.", outcome: "leave", binding_key: "k1" });
+    expect(left.isError).toBeUndefined();
+    expect(readHostBindings(databasePath).map((entry) => entry.session_id)).toEqual([sessionId]);
+    const gone = await callTool(server, "collab_done", { text: "Leaving.", outcome: "leave" });
+    expect(gone.isError).toBeUndefined();
+    expect(readHostBindings(databasePath)).toEqual([]);
+    expect(existsSync(store.defaultSessionCredentialPath(sessionId))).toBe(false);
+  });
+
   test("a server built without a recorder writes no binding", async () => {
     const server = buildCollabMcpServer(store);
     const started = await callTool(server, "collab_session_start", { root_path: root, actor: "binding-none" });
@@ -237,6 +272,37 @@ describe("binding lifecycle through the MCP server and the host CLI", () => {
       expect(JSON.parse(run.line!).status).toBe(alreadyEnded ? "already_ended" : "ended");
       expect(existsSync(hostBindingPath(databasePath, handle.session.id))).toBe(false);
     }
+  });
+
+  test("agenttool-collab-host end --seat-ref removes the binding of each session it ends, and of no other", () => {
+    const seated = (actor: string, seatRef: string) => {
+      const handle = store.startSession({ root_path: root, actor, seat_ref: seatRef });
+      const file = writeSessionCredentialFile(store.defaultSessionCredentialPath(handle.session.id), handle.credential);
+      writeHostBinding(databasePath, binding(handle.session.id, { credential_file_path: file }));
+      return handle;
+    };
+    const leaving = seated("binding-seat-leaving", "run:leaving");
+    const second = seated("binding-seat-second", "run:leaving");
+    const staying = seated("binding-seat-staying", "run:staying");
+    // A session of the seat whose credential file is gone stays open, and so does its binding.
+    const stranded = seated("binding-seat-stranded", "run:leaving");
+    rmSync(store.defaultSessionCredentialPath(stranded.session.id));
+
+    const run = runCollabHostCli(
+      ["end", "--seat-ref", "run:leaving", "--reason", "host exit", "--db", databasePath],
+      {},
+    );
+    expect(run.exit_code).toBe(0);
+    const receipt = JSON.parse(run.line!) as { sessions: Array<{ session_id: string; status: string }> };
+    expect(Object.fromEntries(receipt.sessions.map((session) => [session.session_id, session.status]))).toEqual({
+      [leaving.session.id]: "ended",
+      [second.session.id]: "ended",
+      [stranded.session.id]: "credential_missing",
+    });
+    expect(existsSync(hostBindingPath(databasePath, leaving.session.id))).toBe(false);
+    expect(existsSync(hostBindingPath(databasePath, second.session.id))).toBe(false);
+    expect(existsSync(hostBindingPath(databasePath, stranded.session.id))).toBe(true);
+    expect(existsSync(hostBindingPath(databasePath, staying.session.id))).toBe(true);
   });
 
   test("the bin's resume path records its real parent, and its session end removes the binding", async () => {

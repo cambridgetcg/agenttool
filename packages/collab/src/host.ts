@@ -623,6 +623,13 @@ function runEndOrWait(
       const store = new CollabStore(databasePath);
       try {
         const receipt = endSessionsForSeatRefs(store, args, secrets);
+        // As for `end --session-file`: an ended session's host binding goes
+        // with it. A session left open (no credential file, or an error) keeps its own.
+        for (const session of receipt.sessions) {
+          if (session.status === "ended" || session.status === "already_ended") {
+            removeHostBinding(databasePath, session.session_id);
+          }
+        }
         return emit(receipt, receipt.sessions.some((session) => session.status === "error") ? 1 : 0);
       } finally {
         store.close();

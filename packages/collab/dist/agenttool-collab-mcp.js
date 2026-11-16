@@ -46665,10 +46665,12 @@ Legacy session tools: ${legacyInstructions}`
     bind: (binding) => {
       state.binding = binding;
       requestSlot.getStore().left = null;
+      options.host_binding?.record(binding.handle.session.id, binding.credential_file);
     },
     unbind: (left) => {
       state.binding = null;
       requestSlot.getStore().left = left;
+      options.host_binding?.forget(left.session_id);
     },
     left: () => requestSlot.getStore().left ?? null,
     bound_slots: () => [...slots.values()].filter((slot) => slot.binding !== null).sort((left, right) => left.key === "" ? -1 : right.key === "" ? 1 : left.key.localeCompare(right.key)).map((slot) => ({ key: slot.key, binding: slot.binding })),
