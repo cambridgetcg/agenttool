@@ -171,7 +171,7 @@ describe("Claude Code collab doorbell watcher against a declared rest", () => {
     await watcher.exited;
   }, 30_000);
 
-  test("the first ring after a rest says mail was passed over and points at collab_next", async () => {
+  test("the first ring after a rest says mail was passed over and names both ways to read it", async () => {
     const own = listener("until-rester");
     const peer = store.startSession({ root_path: root, actor: "peer" });
     store.restSessionForSession({
@@ -194,7 +194,8 @@ describe("Claude Code collab doorbell watcher against a declared rest", () => {
     await until(() => rings.length === 1);
     expect(rings[0]).toContain("[collab doorbell] ready");
     expect(rings[0]).toContain("1 earlier event(s) before that anchor were held by a rest and went without a ring");
-    expect(rings[0]).toContain("collab_next");
+    // Both readers are named: a session on the notes profile has no collab_next.
+    expect(rings[0]).toContain("with collab_inbox or with collab_next from your cursor");
     expect(rings[0]).not.toContain("body-held-during-rest");
     watcher.kill("SIGTERM");
     await watcher.exited;

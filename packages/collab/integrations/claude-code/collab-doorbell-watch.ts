@@ -293,7 +293,8 @@ let ringFailures = 0;
 // restHoldsNow(), which the watcher's own notices ask before they ring.
 let heldByRest = false;
 // Events a rest held back since the last ring that got through. The next ring
-// says so: its anchor lies past them, and only the cursor still covers them.
+// says so: its anchor lies past them, and only the session's own read
+// position (its inbox read mark or its cursor) still covers them.
 let unrungSinceRing = 0;
 // A ring was delayed by the gap: the next turn asks the wait again at once,
 // before the lifetime check, so a ready note is not lost to an expiry.
@@ -347,7 +348,7 @@ while (true) {
     const unrung = unrungSinceRing + (receipt.skipped_held_events ?? 0);
     const passedOver = unrung > 0
       ? `${unrung} earlier event(s) before that anchor were held by a rest and went without a ring: `
-        + "read from your cursor with collab_next first. "
+        + "read them first, with collab_inbox or with collab_next from your cursor. "
       : "";
     const rang = await ring(`[collab doorbell] ready: workspace ${workspaceId}, session ${sessionId}: `
       + `${covered.sequence - from.sequence} event(s) after sequence ${from.sequence} `
