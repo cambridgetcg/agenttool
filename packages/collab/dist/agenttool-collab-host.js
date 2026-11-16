@@ -8726,7 +8726,8 @@ class CollabStore extends CollabStoreCore {
       status: row.status,
       joined_at: row.joined_at,
       last_seen_at: row.last_seen_at,
-      liveness: sessionLiveness(row, observedAt)
+      liveness: sessionLiveness(row, observedAt),
+      rest: row.status === "active" ? this.latestRest(row.id, observedAt) : null
     }));
   }
   consentVoiceOf(sessionId) {
@@ -8869,6 +8870,7 @@ class CollabStore extends CollabStoreCore {
           actor: authorRow.actor,
           status: authorRow.status,
           liveness: sessionLiveness(authorRow, this.timestamp()),
+          rest: authorRow.status === "active" ? this.latestRest(authorRow.id, this.timestamp()) : null,
           last_seen_at: authorRow.last_seen_at,
           voice_id: this.consentVoice(authorRow.id)
         } : null

@@ -30,7 +30,7 @@ import {
   type NoteInput,
   type NoteReason,
 } from "./note.js";
-import { CONSENT_RULE_V2, type CollabReport, type ProposalStatus, type Task } from "./protocol.js";
+import { CONSENT_RULE_V2, type CollabReport, type ProposalStatus, type SessionRest, type Task } from "./protocol.js";
 import { gitCommitExists, hashWorktreeFile, MAX_CITED_FILE_BYTES } from "./repository.js";
 import { removeSessionCredentialFile } from "./session-file.js";
 import {
@@ -473,7 +473,7 @@ function explicitAddressee(ctx: NoteVerbContext, workspaceId: string, value: str
     // The advice already says it has ended, and how the name was read.
     return { to_session_id: view.id, to_person: false, shown: { session: view.id, name: view.actor }, advice: named.advice };
   }
-  const addressee = sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at);
+  const addressee = sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at, view.rest);
   return { ...addressee, advice: [...named.advice, ...addressee.advice] };
 }
 
@@ -483,11 +483,19 @@ export function sessionAddressee(
   status: "active" | "ended",
   liveness: "live" | "stale",
   lastSeenAt: string,
+  rest: SessionRest | null = null,
 ): Addressee {
   const advice: string[] = [];
   // Sent all the same: the record is for whoever reads it later.
   if (status === "ended") advice.push(`${name} (${id}) has ended its session; the note is recorded and addressed to it all the same.`);
-  else if (liveness === "stale") {
+  else if (rest) {
+    // A declared rest outranks how long ago the session was seen, as the
+    // legacy tools' delivery hint reads it: wake when it asked for one, else held.
+    const resting = `${name} (${id}) is resting${rest.until ? ` until ${rest.until}` : ""}`;
+    advice.push(rest.wake_on.includes("addressed")
+      ? `${resting} and asked to be woken for notes addressed to it; a host may wake it for this one, and none is promised.`
+      : `${resting} and asked not to be woken; the note is recorded and waits for its return.`);
+  } else if (liveness === "stale") {
     advice.push(`${name} (${id}) was last seen at ${lastSeenAt}, over 6 hours ago; the note is recorded and addressed to it all the same.`);
   }
   return { to_session_id: id, to_person: false, shown: { session: id, name }, advice };
@@ -496,7 +504,7 @@ export function sessionAddressee(
 export function authorAddressee(target: NoteTargetView, me: string): Addressee {
   const author = target.author;
   if (!author || author.id === me) return BROADCAST;
-  return sessionAddressee(author.id, author.actor, author.status, author.liveness, author.last_seen_at);
+  return sessionAddressee(author.id, author.actor, author.status, author.liveness, author.last_seen_at, author.rest);
 }
 
 /**
@@ -515,7 +523,7 @@ function replyAddressee(ctx: NoteVerbContext, workspaceId: string, author: NoteT
       .filter((view) => view.status === "active" && view.actor === author.actor && view.id !== author.id);
     if (live.length === 1 && live[0]!.id !== me) {
       const now = live[0]!;
-      const routed = sessionAddressee(now.id, now.actor, now.status, now.liveness, now.last_seen_at);
+      const routed = sessionAddressee(now.id, now.actor, now.status, now.liveness, now.last_seen_at, now.rest);
       return {
         ...routed,
         advice: [
@@ -526,12 +534,12 @@ function replyAddressee(ctx: NoteVerbContext, workspaceId: string, author: NoteT
       };
     }
   }
-  return sessionAddressee(author.id, author.actor, author.status, author.liveness, author.last_seen_at);
+  return sessionAddressee(author.id, author.actor, author.status, author.liveness, author.last_seen_at, author.rest);
 }
 
 function viewAddressee(ctx: NoteVerbContext, workspaceId: string, sessionId: string): Addressee {
   const view = ctx.store.resolveNoteSession(workspaceId, sessionId, { include_ended: true });
-  return sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at);
+  return sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at, view.rest);
 }
 
 // ---------------------------------------------------------------------------

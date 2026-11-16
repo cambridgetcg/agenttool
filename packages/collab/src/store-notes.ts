@@ -59,6 +59,7 @@ import {
   type ProposalStatus,
   type ProposalVoice,
   type CoordinationPresence,
+  type SessionRest,
   type Task,
   type TaskConflict,
   type TaskReview,
@@ -175,6 +176,7 @@ export class CollabStore extends CollabStoreCore {
       joined_at: row.joined_at,
       last_seen_at: row.last_seen_at,
       liveness: sessionLiveness(row, observedAt),
+      rest: row.status === "active" ? this.latestRest(row.id, observedAt) : null,
     }));
   }
 
@@ -380,6 +382,7 @@ export class CollabStore extends CollabStoreCore {
             actor: authorRow.actor,
             status: authorRow.status,
             liveness: sessionLiveness(authorRow, this.timestamp()),
+            rest: authorRow.status === "active" ? this.latestRest(authorRow.id, this.timestamp()) : null,
             last_seen_at: authorRow.last_seen_at,
             voice_id: this.consentVoice(authorRow.id),
           }
@@ -3011,7 +3014,10 @@ export interface NoteSessionView {
   status: "active" | "ended";
   joined_at: string;
   last_seen_at: string;
+  /** Presence only: a declared rest is in `rest`, never here. */
   liveness: CoordinationPresence;
+  /** The session's own declared rest while it stands, else null (always null once ended). */
+  rest: SessionRest | null;
 }
 
 export interface NotePurposeReceipt {
@@ -3179,6 +3185,7 @@ export interface NoteTargetView {
     actor: string;
     status: "active" | "ended";
     liveness: CoordinationPresence;
+    rest: SessionRest | null;
     last_seen_at: string;
     voice_id: string;
   } | null;

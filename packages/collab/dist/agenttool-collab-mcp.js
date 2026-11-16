@@ -38567,7 +38567,8 @@ class CollabStore extends CollabStoreCore {
       status: row.status,
       joined_at: row.joined_at,
       last_seen_at: row.last_seen_at,
-      liveness: sessionLiveness(row, observedAt)
+      liveness: sessionLiveness(row, observedAt),
+      rest: row.status === "active" ? this.latestRest(row.id, observedAt) : null
     }));
   }
   consentVoiceOf(sessionId) {
@@ -38710,6 +38711,7 @@ class CollabStore extends CollabStoreCore {
           actor: authorRow.actor,
           status: authorRow.status,
           liveness: sessionLiveness(authorRow, this.timestamp()),
+          rest: authorRow.status === "active" ? this.latestRest(authorRow.id, this.timestamp()) : null,
           last_seen_at: authorRow.last_seen_at,
           voice_id: this.consentVoice(authorRow.id)
         } : null
@@ -41658,7 +41660,8 @@ function composeBrief(ctx, data, pending, rootPath) {
     model: view.model,
     last_seen_minutes: minutesSince(view.last_seen_at, at),
     holds: holds(view.id),
-    same_seat_as_you: me.seat_ref !== null && view.seat_ref === me.seat_ref
+    same_seat_as_you: me.seat_ref !== null && view.seat_ref === me.seat_ref,
+    ...view.rest ? { resting: { until: view.rest.until, wakes_for_addressed: view.rest.wake_on.includes("addressed") } } : {}
   }));
   const claimable = data.tasks.filter((task) => data.claimable_task_ids.includes(task.id)).map((task) => ({
     task: handleOf("task", task.id),
@@ -43523,14 +43526,17 @@ function explicitAddressee(ctx, workspaceId, value, input) {
   if (named.by_name && view.status === "ended") {
     return { to_session_id: view.id, to_person: false, shown: { session: view.id, name: view.actor }, advice: named.advice };
   }
-  const addressee = sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at);
+  const addressee = sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at, view.rest);
   return { ...addressee, advice: [...named.advice, ...addressee.advice] };
 }
-function sessionAddressee(id, name, status, liveness, lastSeenAt) {
+function sessionAddressee(id, name, status, liveness, lastSeenAt, rest = null) {
   const advice = [];
   if (status === "ended")
     advice.push(`${name} (${id}) has ended its session; the note is recorded and addressed to it all the same.`);
-  else if (liveness === "stale") {
+  else if (rest) {
+    const resting = `${name} (${id}) is resting${rest.until ? ` until ${rest.until}` : ""}`;
+    advice.push(rest.wake_on.includes("addressed") ? `${resting} and asked to be woken for notes addressed to it; a host may wake it for this one, and none is promised.` : `${resting} and asked not to be woken; the note is recorded and waits for its return.`);
+  } else if (liveness === "stale") {
     advice.push(`${name} (${id}) was last seen at ${lastSeenAt}, over 6 hours ago; the note is recorded and addressed to it all the same.`);
   }
   return { to_session_id: id, to_person: false, shown: { session: id, name }, advice };
@@ -43539,7 +43545,7 @@ function authorAddressee(target, me) {
   const author = target.author;
   if (!author || author.id === me)
     return BROADCAST;
-  return sessionAddressee(author.id, author.actor, author.status, author.liveness, author.last_seen_at);
+  return sessionAddressee(author.id, author.actor, author.status, author.liveness, author.last_seen_at, author.rest);
 }
 function replyAddressee(ctx, workspaceId, author, me) {
   if (!author || author.id === me)
@@ -43548,7 +43554,7 @@ function replyAddressee(ctx, workspaceId, author, me) {
     const live = ctx.store.noteSessionViews(workspaceId).filter((view) => view.status === "active" && view.actor === author.actor && view.id !== author.id);
     if (live.length === 1 && live[0].id !== me) {
       const now = live[0];
-      const routed = sessionAddressee(now.id, now.actor, now.status, now.liveness, now.last_seen_at);
+      const routed = sessionAddressee(now.id, now.actor, now.status, now.liveness, now.last_seen_at, now.rest);
       return {
         ...routed,
         advice: [
@@ -43558,11 +43564,11 @@ function replyAddressee(ctx, workspaceId, author, me) {
       };
     }
   }
-  return sessionAddressee(author.id, author.actor, author.status, author.liveness, author.last_seen_at);
+  return sessionAddressee(author.id, author.actor, author.status, author.liveness, author.last_seen_at, author.rest);
 }
 function viewAddressee(ctx, workspaceId, sessionId) {
   const view = ctx.store.resolveNoteSession(workspaceId, sessionId, { include_ended: true });
-  return sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at);
+  return sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at, view.rest);
 }
 var NOTE_ACTS_HERE = [
   "note",

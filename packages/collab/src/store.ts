@@ -7827,7 +7827,7 @@ export class CollabStoreCore {
   }
 
   /** The declared rest in force at observedAt; null when returned, expired, ended or never declared. */
-  private latestRest(sessionId: string, observedAt: string): SessionRest | null {
+  protected latestRest(sessionId: string, observedAt: string): SessionRest | null {
     const declaration = this.latestRestDeclaration(sessionId);
     return declaration ? restFromDeclaration(declaration, observedAt) : null;
   }
