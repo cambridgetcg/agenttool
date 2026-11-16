@@ -7645,7 +7645,7 @@ class CollabStoreCore {
       WHERE workspace_id = ? AND sequence > ?
         AND type IN ('report.posted', 'handoff.offered')
       ORDER BY sequence
-    `).all(session.workspace_id, session.cursor_sequence);
+    `).all(session.workspace_id, knockReadThrough(this.db, session.workspace_id, session.id, session.cursor_sequence));
     return rows.filter((row) => isAddressedTo(row, session.id)).length;
   }
   requireWorkspace(workspaceId, db = this.db) {
@@ -8231,6 +8231,19 @@ function isAddressedTo(event, sessionId) {
   if (event.type === "report.posted")
     return payload.to_session_id === sessionId;
   return isRecordValue(payload.handoff) && payload.handoff.to_session_id === sessionId;
+}
+function knockReadThrough(db, workspaceId, sessionId, cursorSequence) {
+  try {
+    const row = db.query(`
+      SELECT m.shown_through_sequence AS mark, w.event_head_sequence AS head
+      FROM note_marks m JOIN workspaces w ON w.id = m.workspace_id
+      WHERE m.workspace_id = ? AND m.session_id = ?
+    `).get(workspaceId, sessionId);
+    if (row && Number.isInteger(row.mark) && Number.isInteger(row.head) && row.mark <= row.head) {
+      return Math.max(cursorSequence, row.mark);
+    }
+  } catch {}
+  return cursorSequence;
 }
 function knockDelivery(liveness, rest) {
   if (liveness === "live")
@@ -12989,7 +13002,7 @@ function doorbellScan(databasePath, options = {}) {
         const rest = restAt(db, row, now);
         if (!rest || !rest.wake_on.includes("addressed"))
           continue;
-        const waiting = addressedItems(db, row);
+        const waiting = addressedItems(db, row, false, knockReadThrough(db, row.workspace_id, row.id, row.cursor_sequence));
         const fresh = untapped(ledger, row.id, waiting);
         if (fresh.length === 0)
           continue;
@@ -13012,12 +13025,15 @@ function doorbellScan(databasePath, options = {}) {
   }
 }
 function readKnockAt(db, session, now, includeSender) {
-  return { session, rest: restAt(db, session, now), waiting: addressedItems(db, session, includeSender) };
+  const readThrough = knockReadThrough(db, session.workspace_id, session.id, session.cursor_sequence);
+  const waiting = addressedItems(db, session, includeSender, readThrough);
+  const pastCursor = readThrough === session.cursor_sequence ? waiting : addressedItems(db, session, false, session.cursor_sequence);
+  return { session, rest: restAt(db, session, now), waiting, past_cursor: pastCursor.map((item) => item.seq) };
 }
 function knockReport(databasePath, found, now, markTappedItems) {
   const { session, rest, waiting } = found;
   const held = rest !== null && !rest.wake_on.includes("addressed");
-  const fresh = markTappedItems && !held ? markTapped(databasePath, session.id, waiting) : untapped(readKnockLedger(databasePath), session.id, waiting);
+  const fresh = markTappedItems && !held ? markTapped(databasePath, session.id, waiting, found.past_cursor) : untapped(readKnockLedger(databasePath), session.id, waiting);
   return {
     protocol: COLLAB_KNOCK_PROTOCOL,
     session_id: session.id,
@@ -13072,13 +13088,13 @@ function livenessAt(session, rest, now) {
   const age = now.getTime() - Date.parse(session.last_seen_at);
   return age <= SESSION_STALE_AFTER_MS ? "live" : "stale";
 }
-function addressedItems(db, session, includeSender = false) {
+function addressedItems(db, session, includeSender, after) {
   const rows = db.query(`
     SELECT sequence, type, actor, entity_id, session_id, payload_json FROM events
     WHERE workspace_id = ? AND sequence > ?
       AND type IN ('report.posted', 'handoff.offered')
     ORDER BY sequence
-  `).all(session.workspace_id, session.cursor_sequence);
+  `).all(session.workspace_id, after);
   const addressed = rows.filter((row) => isAddressedTo(row, session.id));
   const item = (row) => ({
     seq: row.sequence,
@@ -13117,7 +13133,7 @@ function readKnockLedger(databasePath) {
   }
   return parsed;
 }
-function markTapped(databasePath, sessionId, waiting) {
+function markTapped(databasePath, sessionId, waiting, pastCursor) {
   if (untapped(readKnockLedger(databasePath), sessionId, waiting).length === 0)
     return [];
   return withLedgerLock(databasePath, () => {
@@ -13125,7 +13141,7 @@ function markTapped(databasePath, sessionId, waiting) {
     const fresh = untapped(ledger, sessionId, waiting);
     if (fresh.length === 0)
       return [];
-    const stillWaiting = new Set(waiting.map((item) => item.seq));
+    const stillWaiting = new Set(pastCursor);
     const kept = (ledger.tapped[sessionId] ?? []).filter((seq) => stillWaiting.has(seq));
     const tapped = [...new Set([...kept, ...fresh.map((item) => item.seq)])].sort((left, right) => left - right);
     writeKnockLedger(databasePath, {

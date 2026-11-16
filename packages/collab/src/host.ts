@@ -50,6 +50,7 @@ import {
 import { CollabStore } from "./store-notes.js";
 import {
   isAddressedTo,
+  knockReadThrough,
   restFromDeclaration,
   type AddressedEventRow,
   type RestDeclarationRow,
@@ -1088,7 +1089,7 @@ export function doorbellScan(
       for (const row of rows) {
         const rest = restAt(db, row, now);
         if (!rest || !rest.wake_on.includes("addressed")) continue;
-        const waiting = addressedItems(db, row);
+        const waiting = addressedItems(db, row, false, knockReadThrough(db, row.workspace_id, row.id, row.cursor_sequence));
         const fresh = untapped(ledger, row.id, waiting);
         if (fresh.length === 0) continue;
         found.push({
@@ -1124,6 +1125,12 @@ interface KnockRead {
   session: ReadOnlySessionRow;
   rest: SessionRest | null;
   waiting: KnockItem[] | SenderKnockItem[];
+  /**
+   * Sequences of addressed items past the acknowledged cursor alone: what a
+   * build without the read mark still counts as waiting. The shared tap
+   * ledger keeps an entry for as long as that, so no build announces it twice.
+   */
+  past_cursor: number[];
 }
 
 /**
@@ -1132,7 +1139,12 @@ interface KnockRead {
  * from one snapshot.
  */
 function readKnockAt(db: Database, session: ReadOnlySessionRow, now: Date, includeSender: boolean): KnockRead {
-  return { session, rest: restAt(db, session, now), waiting: addressedItems(db, session, includeSender) };
+  const readThrough = knockReadThrough(db, session.workspace_id, session.id, session.cursor_sequence);
+  const waiting = addressedItems(db, session, includeSender, readThrough);
+  const pastCursor = readThrough === session.cursor_sequence
+    ? waiting
+    : addressedItems(db, session, false, session.cursor_sequence);
+  return { session, rest: restAt(db, session, now), waiting, past_cursor: pastCursor.map((item) => item.seq) };
 }
 
 /** Build the report from one read; mark the new items unless the rest is held. */
@@ -1142,7 +1154,7 @@ function knockReport(databasePath: string, found: KnockRead, now: Date, markTapp
   // stay unmarked, so they tap at the first turn after the session returns.
   const held = rest !== null && !rest.wake_on.includes("addressed");
   const fresh = markTappedItems && !held
-    ? markTapped(databasePath, session.id, waiting)
+    ? markTapped(databasePath, session.id, waiting, found.past_cursor)
     : untapped(readKnockLedger(databasePath), session.id, waiting);
   return {
     protocol: COLLAB_KNOCK_PROTOCOL,
@@ -1222,22 +1234,23 @@ function livenessAt(session: ReadOnlySessionRow, rest: SessionRest | null, now: 
 }
 
 /**
- * Addressed items past the session's acknowledged cursor, judged by the
- * store's own isAddressedTo, so `waiting` always equals collab_next's
- * addressed_waiting. The sender's session id (`events.session_id`) is added
- * last, and only when asked for.
+ * Addressed items past `after` (what the session has read: the store's own
+ * knockReadThrough), judged by the store's own isAddressedTo, so `waiting`
+ * always equals collab_next's addressed_waiting. The sender's session id
+ * (`events.session_id`) is added last, and only when asked for.
  */
 function addressedItems(
   db: Database,
   session: ReadOnlySessionRow,
-  includeSender = false,
+  includeSender: boolean,
+  after: number,
 ): KnockItem[] | SenderKnockItem[] {
   const rows = db.query(`
     SELECT sequence, type, actor, entity_id, session_id, payload_json FROM events
     WHERE workspace_id = ? AND sequence > ?
       AND type IN ('report.posted', 'handoff.offered')
     ORDER BY sequence
-  `).all(session.workspace_id, session.cursor_sequence) as Array<
+  `).all(session.workspace_id, after) as Array<
     AddressedEventRow & { sequence: number; actor: string; entity_id: string }
   >;
   const addressed = rows.filter((row) => isAddressedTo(row, session.id));
@@ -1293,14 +1306,17 @@ function readKnockLedger(databasePath: string): KnockLedger {
  * A held lock means another tap is in progress: refuse (silence) rather than
  * risk announcing an item twice; the next turn taps it.
  */
-function markTapped(databasePath: string, sessionId: string, waiting: KnockItem[]): KnockItem[] {
+function markTapped(databasePath: string, sessionId: string, waiting: KnockItem[], pastCursor: number[]): KnockItem[] {
   if (untapped(readKnockLedger(databasePath), sessionId, waiting).length === 0) return [];
   return withLedgerLock(databasePath, () => {
     const ledger = readKnockLedger(databasePath);
     const fresh = untapped(ledger, sessionId, waiting);
     if (fresh.length === 0) return [];
-    // Keep only sequences still waiting: acknowledged items never return.
-    const stillWaiting = new Set(waiting.map((item) => item.seq));
+    // Keep only sequences past the acknowledged cursor: acknowledged items
+    // never return. An item the read mark has passed is kept until the cursor
+    // passes it too, because a build that counts from the cursor alone shares
+    // this ledger and would otherwise announce it again.
+    const stillWaiting = new Set(pastCursor);
     const kept = (ledger.tapped[sessionId] ?? []).filter((seq) => stillWaiting.has(seq));
     const tapped = [...new Set([...kept, ...fresh.map((item) => item.seq)])].sort((left, right) => left - right);
     writeKnockLedger(databasePath, {

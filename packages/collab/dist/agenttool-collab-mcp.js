@@ -37486,7 +37486,7 @@ class CollabStoreCore {
       WHERE workspace_id = ? AND sequence > ?
         AND type IN ('report.posted', 'handoff.offered')
       ORDER BY sequence
-    `).all(session.workspace_id, session.cursor_sequence);
+    `).all(session.workspace_id, knockReadThrough(this.db, session.workspace_id, session.id, session.cursor_sequence));
     return rows.filter((row) => isAddressedTo(row, session.id)).length;
   }
   requireWorkspace(workspaceId, db = this.db) {
@@ -38072,6 +38072,19 @@ function isAddressedTo(event, sessionId) {
   if (event.type === "report.posted")
     return payload.to_session_id === sessionId;
   return isRecordValue(payload.handoff) && payload.handoff.to_session_id === sessionId;
+}
+function knockReadThrough(db, workspaceId, sessionId, cursorSequence) {
+  try {
+    const row = db.query(`
+      SELECT m.shown_through_sequence AS mark, w.event_head_sequence AS head
+      FROM note_marks m JOIN workspaces w ON w.id = m.workspace_id
+      WHERE m.workspace_id = ? AND m.session_id = ?
+    `).get(workspaceId, sessionId);
+    if (row && Number.isInteger(row.mark) && Number.isInteger(row.head) && row.mark <= row.head) {
+      return Math.max(cursorSequence, row.mark);
+    }
+  } catch {}
+  return cursorSequence;
 }
 function knockDelivery(liveness, rest) {
   if (liveness === "live")

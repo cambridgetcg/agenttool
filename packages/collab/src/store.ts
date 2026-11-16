@@ -7833,8 +7833,9 @@ export class CollabStoreCore {
   }
 
   /**
-   * Notes addressed to this session past its acknowledged cursor (the whole
-   * backlog, not one event page). See isAddressedTo for what counts.
+   * Notes addressed to this session past what it has read (the whole backlog,
+   * not one event page). See isAddressedTo for what counts and
+   * knockReadThrough for what "read" means.
    */
   private addressedWaiting(session: CoordinationSessionRow): number {
     const rows = this.db.query(`
@@ -7842,7 +7843,10 @@ export class CollabStoreCore {
       WHERE workspace_id = ? AND sequence > ?
         AND type IN ('report.posted', 'handoff.offered')
       ORDER BY sequence
-    `).all(session.workspace_id, session.cursor_sequence) as AddressedEventRow[];
+    `).all(
+      session.workspace_id,
+      knockReadThrough(this.db, session.workspace_id, session.id, session.cursor_sequence),
+    ) as AddressedEventRow[];
     return rows.filter((row) => isAddressedTo(row, session.id)).length;
   }
 
@@ -8708,6 +8712,33 @@ export function isAddressedTo(event: AddressedEventRow, sessionId: string): bool
   if (!isRecordValue(payload)) return false;
   if (event.type === "report.posted") return payload.to_session_id === sessionId;
   return isRecordValue(payload.handoff) && payload.handoff.to_session_id === sessionId;
+}
+
+/**
+ * How far a session has read, for the count in collab_next, the tap and the
+ * wake alike: its acknowledged cursor, or its Collab Notes read mark (what
+ * collab_inbox has shown it) when that is further. One session has both
+ * positions, and a note stops waiting once either has passed it.
+ *
+ * The mark is trusted only inside the journal. One past the head (a journal
+ * restored from an older copy) is ignored, and so is a note_marks table that
+ * is missing or that this build cannot read: the reader then counts from the
+ * cursor, as every build before this one does, and never falls silent.
+ */
+export function knockReadThrough(db: Database, workspaceId: string, sessionId: string, cursorSequence: number): number {
+  try {
+    const row = db.query(`
+      SELECT m.shown_through_sequence AS mark, w.event_head_sequence AS head
+      FROM note_marks m JOIN workspaces w ON w.id = m.workspace_id
+      WHERE m.workspace_id = ? AND m.session_id = ?
+    `).get(workspaceId, sessionId) as { mark: unknown; head: unknown } | null;
+    if (row && Number.isInteger(row.mark) && Number.isInteger(row.head) && (row.mark as number) <= (row.head as number)) {
+      return Math.max(cursorSequence, row.mark as number);
+    }
+  } catch {
+    // No note_marks table yet, or one another build shaped: the cursor alone.
+  }
+  return cursorSequence;
 }
 
 /** live: tap; resting with wake_on addressed: wake; resting otherwise or stale: held; ended: none. */
