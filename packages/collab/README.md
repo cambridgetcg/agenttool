@@ -431,7 +431,9 @@ refusal does not stop the others, and the exit code is 1 only when an entry is
 
 It removes the host binding of each session it ends. It ends a session that
 had declared a rest too: a host's exit is an end, and ending outranks rest
-(`tests/rest-seat-end.test.ts`). That matches what a doorbell can do
+(`tests/rest-seat-end.test.ts`). A session that holds a live lease is refused
+(`session_has_active_leases`) and stays open, resting or not, unless the host
+passes `--release-leases`; the execution-seat hook does not. That matches what a doorbell can do
 afterwards. A Claude Code seat can be woken only while its process lives, so a
 rest left standing after the exit could never be answered and its senders
 would read a wake that cannot happen. A host that resumes sessions in a fresh
@@ -477,7 +479,7 @@ addresses its own author (so `--include-own` then changes nothing about what
 rings; its own events are counted in `skipped_unaddressed_events`), and other
 sessions' events ring only when their routing fields name the waiting session
 (`CollabStore.eventAddressesSession`): a report addressed to it, or answering
-one of its reports with no other addressee; a handoff offered to it, or an
+one of its reports with no other session named; a handoff offered to it, or an
 answer to its own offer (accepted, declined, or lost because the target left
 or the deadline passed); a review requested of it; a verdict on its own
 completion; or recovery of its expired lease. A review request and a verdict
@@ -671,16 +673,22 @@ read mark past the journal head is ignored, and a journal with no `note_marks`
 table, or one this build cannot read, is counted from the cursor, so the quiet
 verbs never fall silent for it. The shared tap ledger still drops an entry
 only when the cursor passes it, because a build that counts from the cursor
-alone shares that ledger. Known limit: `collab_inbox` moves its mark before it
-reads what it returns, so if that read fails the mark is already past notes
-the caller never saw. A retry lists nothing, and those notes no longer knock;
-they stay in the journal and in `collab_next`'s page.
+alone shares that ledger. Two known limits. `collab_inbox` moves its mark
+before it reads what it returns, so if that read fails the mark is already
+past notes the caller never saw. A retry lists nothing, and those notes no
+longer knock; the read-only look-back `collab_inbox {since: <sequence>}` lists
+them again without moving the mark (and on the full profile `collab_next`
+pages them from the cursor). And a mark past the head is ignored only while it
+is past the head: once the head reaches it, notes that landed in between read
+as read. A mark is past the head only when the journal was restored from an
+older copy, and the session's next `collab_inbox` moves it back to the head.
 
 A proposal, a ballot and a person's act at the desk name sessions through
 other fields. They ring a `wait --addressed` for a session that is not
 resting, and they are never knocks: they are not counted here, not tapped and
 not woken for, and a resting session is passed over for them whatever its
-`wake_on`. The desk's `say` writes an addressed note, which is a knock.
+`wake_on`. The desk's `say --proposal` on a proposal an agent opened is
+addressed to that agent, so it is a knock; any other `say` names no session.
 
 Only an explicit address knocks; a mention or an implied ask never does, and
 neither does an answer sent without `to_session_id` (a host `wait --addressed`
@@ -698,15 +706,18 @@ it on every call, so an idempotent replay shows the addressee's current state:
 | `held` | `resting` without it, or `stale` | no host wake; the note waits for its return. A resting session is not tapped and a `wait` it armed stays silent; a `stale` one is tapped when its host next takes a turn, and a `wait` it armed still rings |
 | `none` | `ended` | never knocked; the note stays honestly unread |
 
-The Collab Notes verbs say the same in words. A note, a reply or a review
-request that names a resting session carries one advice line: it is resting
-(and until when), and either it asked to be woken for addressed notes, so a
-host may wake it and none is promised, or it asked not to be, so the note
-waits for its return. The arrival card marks a resting session among those
-here with `resting: { until, wakes_for_addressed }`. Everything else on that
-surface reads presence only: who is here, a consent voice, a ballot's
-electorate and a set-aside all count a resting session as present while it was
-seen within 6 hours. Rest changes no standing (`tests/notes-rest.test.ts`).
+The Collab Notes verbs say the same in words. A note, a reply, a decide, a
+withdrawal, a review request (`collab_done` with `review_by`), a verdict and
+the note `collab_propose` sends a carried objector each carry one advice line
+when the session they name is resting: it is resting (and until when), and
+either it asked to be woken for addressed notes, so a host may wake it and
+none is promised, or it asked not to be, so what was sent waits for its
+return. The arrival card marks a resting session among those here with
+`resting: { until, wakes_for_addressed }` (`tests/notes-rest.test.ts`).
+Everything else on that surface reads presence only, and a rest changes none
+of it: who is here, a consent voice and a set-aside count a session as present
+while it was seen within 6 hours, and a ballot's default electorate takes the
+sessions seen within 30 minutes, resting or not (`tests/rest-standing.test.ts`).
 
 `delivery` describes what the addressee declared, not what a host did, and
 nothing is blocked. Collab cannot see hosts, so whether a host can actually

@@ -128,8 +128,9 @@ advice, one suggested `next` call and the `note` text; every refusal carries a r
 
 ## The ordinary loop with the legacy tools
 
-The full profile keeps the 36 earlier tools byte for byte; [REFERENCE.md](REFERENCE.md)
-has each step in full.
+The full profile keeps the 36 earlier tools byte for byte, but for one sentence on each
+of five of them (delivery hints and the waiting count), and adds `collab_session_rest`;
+[REFERENCE.md](REFERENCE.md) has each step in full.
 
 1. **Start**: `collab_session_start` with `root_path`, `actor` and `role`. A delegate
    adds `parent_session_id` (declared lineage) and, when a local job runner started it,

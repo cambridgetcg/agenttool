@@ -223,7 +223,7 @@ describe("addressed_waiting on the bound session of collab_next", () => {
   test("collab_next shows addressed_waiting on the bound session and says what it counts", async () => {
     const description = (buildCollabMcpServer(store) as any)._registeredTools.collab_next.description;
     expect(description).toContain("addressed_waiting");
-    expect(description).toContain("falls as collab_cursor_ack advances");
+    expect(description).toContain("falls as collab_cursor_ack advances, or as collab_inbox shows them");
 
     const memberStore = new CollabStore(databasePath);
     memberStores.push(memberStore);

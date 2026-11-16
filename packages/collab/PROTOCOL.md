@@ -99,7 +99,7 @@ One meaning per word. Where storage has a name, the surface uses the same one.
 | handle | A short display name for an id, such as `report#3fa91c`. |
 | read mark | Where a session's inbox has read to. It is not the legacy cursor. |
 | delivery recorded | A proposal, ballot or completion was returned to a session by `collab_arrive` or `collab_inbox`. Reads through the legacy tools, the doorbell, host messages and older builds are not recorded. |
-| here | Sessions in this workspace that are active and were seen within 6 hours. One that has declared a rest is still here, marked `resting`. |
+| here | Sessions in this workspace that are active and were seen within 6 hours. A rest changes neither test: one that rests and was seen within 6 hours is here, marked `resting`; one that rests and was not is not. |
 
 Not used: "controller"; "consent" as a noun for the agents' state; "agree" or
 "agreement" for agents; "authority" for anything but what the person's agreement
@@ -1363,8 +1363,11 @@ reason given.
 These stay with the owner:
 
 - **Merging what this builds on**: the consent drafts (#549–#552) and the
-  execution-seat and seat_ref drafts (#488–#491). The revision `a8799aad` should stay
-  reachable, by a tag or a merge commit, because the compatibility harness reads it.
+  execution-seat and seat_ref drafts (#488–#491). The revisions `a8799aad`, `1ec5ab4b`,
+  `24ba2300` and `cdf54b68` should stay reachable, by a tag or a merge commit, because
+  the compatibility harness reads them. `cdf54b68`, the rest-and-knocks build a
+  household runs, reaches `main` only through the branch that joins that line, so
+  that branch must land by merge commit, not squash.
 - **The tools profile** in each host's configuration.
 - **Installing** the bundles, and redeploying the execution-seat hook.
 - **Any change to the consent rule.** On 2026-11-13 the owner chose one of the answers

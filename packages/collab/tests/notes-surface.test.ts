@@ -47,9 +47,9 @@ const REST_DESCRIPTIONS: Record<string, (base: string) => string> = {
   collab_task_review: (base) => `${base} The review result is addressed to the reporter: ${ADDRESSEE_HINT}`,
   collab_next: (base) => base.replace(
     BASE_LIVENESS_SENTENCE,
-    "A bound session's addressed_waiting counts notes addressed to it past its acknowledged cursor "
+    "A bound session's addressed_waiting counts notes addressed to it that it has not read "
       + "(addressed reports, review requests and results, session handoff offers; never its own); "
-      + "it falls as collab_cursor_ack advances. Session liveness and task assignee_liveness are a derived view, "
+      + "it falls as collab_cursor_ack advances, or as collab_inbox shows them. Session liveness and task assignee_liveness are a derived view, "
       + "never a status change: ended, else resting while a declared rest is unexpired, else stale after 6 hours unseen, else live.",
   ),
 };

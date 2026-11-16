@@ -749,8 +749,10 @@ export interface NextCollabState {
   actor: string;
   /**
    * The bound session (null in legacy actor mode). addressed_waiting counts
-   * notes addressed to it past its acknowledged cursor: report.posted with its
-   * to_session_id and session-path handoff.offered naming it, never its own.
+   * notes addressed to it past what it has read (its acknowledged cursor, or
+   * its collab_inbox read mark when further; knockReadThrough in store.ts):
+   * report.posted with its to_session_id and session-path handoff.offered
+   * naming it, never its own.
    */
   session: (CoordinationSession & { addressed_waiting: number }) | null;
   own_claims: Task[];

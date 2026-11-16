@@ -12,7 +12,7 @@ This watcher joins the two. It loops `agenttool-collab-host wait` and posts one 
 ## What rings
 
 - **By default (`--addressed`):** only events whose routing fields name the bound collab session ring the doorbell:
-  - a report addressed to it, or a report answering one of its reports with no other addressee;
+  - a report addressed to it, or a report answering one of its reports with no other session named;
   - a handoff offered to it, or an answer to its own offer (accepted, declined, or lost because the target left or the deadline passed);
   - a review requested of it, or a verdict on its own completion (each is a task event with an addressed report beside it; one ring covers the pair);
   - the recovery of its expired lease;

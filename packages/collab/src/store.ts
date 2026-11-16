@@ -6161,19 +6161,6 @@ export class CollabStoreCore {
     return this.eventsSince(workspaceId, validated.sequence, limit);
   }
 
-  /**
-   * Whether an event's routing fields name this session: a report addressed to
-   * it, or answering one of its reports with no other addressee; a handoff
-   * offered to it, or an answer to its own offer (accepted, declined, or lost
-   * through no act of its own); or the recovery of its expired lease. This is
-   * the set `wait --addressed` rings for. It contains isAddressedTo's explicit
-   * set, which alone feeds addressed_waiting, the tap and the wake. A review
-   * request or verdict rings through the addressed report written beside its
-   * task event, so the task events themselves name nobody. Never an event this
-   * session wrote. Report bodies and other free text are never inspected.
-   * Addressing is routing, not access control: every session can still read
-   * the event.
-   */
   /** Whether a proposal's routing names this session: its author, or a consulted voice of a desk proposal. */
   private proposalAddressesSession(proposalReportId: string, sessionId: string): boolean {
     const row = this.db.query(`
@@ -6195,6 +6182,23 @@ export class CollabStoreCore {
     return typeof voice === "string" && this.consentVoice(sessionId) === voice;
   }
 
+  /**
+   * Whether an event's routing fields name this session: a report addressed to
+   * it, or answering one of its reports with no other session named; a
+   * handoff offered to it, or an answer to its own offer (accepted, declined,
+   * or lost through no act of its own); a review requested of it, or a verdict
+   * on its own completion; the recovery of its expired lease; and a proposal
+   * or ballot event that names it (its author, a consulted voice, an elector,
+   * an objector whose challenge was set aside). This is the set
+   * `wait --addressed` rings for and collab_inbox reads to say why an item is
+   * for you. It contains isAddressedTo's explicit set, which alone feeds
+   * addressed_waiting, the tap and the wake. A review request and a verdict
+   * are each a task event and an addressed report beside it; both name the
+   * same session, and a wait from before the pair rings once. Never an event
+   * this session wrote. Report bodies and other free text are never
+   * inspected. Addressing is routing, not access control: every session can
+   * still read the event.
+   */
   eventAddressesSession(event: CollabEvent, sessionId: string): boolean {
     if (event.session_id === sessionId) return false;
     const payload = (event.payload ?? {}) as Record<string, unknown>;
