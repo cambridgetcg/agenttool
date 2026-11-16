@@ -459,7 +459,11 @@ export function waitForSessionEvents(
         const rings = (options.include_own || !own) && routed;
         if (rings && restAllows(event)) return receipt("ready", headSequence);
         observed = { epoch_id: event.epoch_id, sequence: event.sequence, hash: event.hash };
-        if (rings) held += 1;
+        // Under a rest, the task event beside a review request or a verdict is
+        // not held mail: the addressed report written beside it is judged on its
+        // own, rung or held, so one request or verdict counts once.
+        if (rings && options.addressed && ADDRESS_CARRIED_BY_REPORT.has(event.type)) unaddressed += 1;
+        else if (rings) held += 1;
         else if (own && !options.include_own) skipped += 1;
         else unaddressed += 1;
       }
@@ -482,6 +486,16 @@ export function waitForSessionEvents(
     clock.sleep(Math.min(HOST_WAIT_POLL_MS, remaining));
   }
 }
+
+/**
+ * Task events whose address the routed rule reads but whose explicit address
+ * is the report written beside them (a review request, a verdict).
+ */
+const ADDRESS_CARRIED_BY_REPORT: ReadonlySet<string> = new Set([
+  "task.reported_complete",
+  "task.accepted",
+  "task.changes_requested",
+]);
 
 /** The session is ended either way; a leftover revoked file is a warning, not a failure. */
 function removeRevokedFile(sessionFile: string, receipt: HostEndReceipt): HostEndReceipt {

@@ -327,6 +327,57 @@ describe("host wait against a rest with wake_on addressed", () => {
   });
 });
 
+describe("host wait, a rest, and the pair a review request or a verdict writes", () => {
+  // A review request and a verdict are each a task event and an addressed
+  // report. The report decides whether a resting session is rung, and the
+  // pair counts once: the task event is never counted as held mail.
+  function reviewable(worker: SessionHandle, key: string) {
+    const created = store.createTaskForSession({
+      ...worker.credential, idempotency_key: `${key}-create`, title: key, work_mode: "coordination",
+      completion_policy: "accepted",
+    });
+    return store.claimTaskForSession({
+      ...worker.credential, idempotency_key: `${key}-claim`, task_id: created.id, expected_version: created.version, ttl_seconds: 3600,
+    });
+  }
+
+  test("a review request rings a reviewer resting with a wake asked for, and says nothing was held", () => {
+    const reviewer = start("reviewer");
+    const worker = start("worker");
+    const task = reviewable(worker, "wake");
+    rest(reviewer, "rest", { wake_on: ["addressed"] });
+    const anchor = head(reviewer);
+    store.completeTaskForSession({
+      ...worker.credential, idempotency_key: "complete", task_id: task.id, lease_id: task.lease_id!,
+      expected_version: task.version, summary: "done", review_requested_session_id: reviewer.session.id,
+    });
+    const rung = wait(reviewer, anchor, { addressed: true });
+    expect(rung.status).toBe("ready");
+    expect(rung.skipped_held_events).toBeUndefined();
+  });
+
+  test("under a rest that asked for no wake, one request and one verdict are one held item each", () => {
+    const reviewer = start("reviewer");
+    const worker = start("worker");
+    const task = reviewable(worker, "hold");
+    rest(reviewer, "rest-reviewer");
+    rest(worker, "rest-worker");
+    const reviewerAnchor = head(reviewer);
+    const reported = store.completeTaskForSession({
+      ...worker.credential, idempotency_key: "complete", task_id: task.id, lease_id: task.lease_id!,
+      expected_version: task.version, summary: "done", review_requested_session_id: reviewer.session.id,
+    });
+    expect(wait(reviewer, reviewerAnchor, { addressed: true })).toMatchObject({ status: "idle", skipped_held_events: 1 });
+
+    const workerAnchor = head(worker);
+    store.reviewTaskForSession({
+      ...reviewer.credential, idempotency_key: "verdict", task_id: reported.id,
+      expected_version: reported.version, outcome: "request_changes", summary: "one more pass",
+    });
+    expect(wait(worker, workerAnchor, { addressed: true })).toMatchObject({ status: "idle", skipped_held_events: 1 });
+  });
+});
+
 describe("host wait without a standing rest", () => {
   test("keeps exactly the receipt it had", () => {
     const own = start("listener");

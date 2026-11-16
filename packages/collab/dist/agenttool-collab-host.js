@@ -12542,7 +12542,9 @@ function waitForSessionEvents(store2, credential, options, clock = systemClock) 
         if (rings && restAllows(event))
           return receipt("ready", headSequence);
         observed = { epoch_id: event.epoch_id, sequence: event.sequence, hash: event.hash };
-        if (rings)
+        if (rings && options.addressed && ADDRESS_CARRIED_BY_REPORT.has(event.type))
+          unaddressed += 1;
+        else if (rings)
           held += 1;
         else if (own && !options.include_own)
           skipped += 1;
@@ -12567,6 +12569,11 @@ function waitForSessionEvents(store2, credential, options, clock = systemClock) 
     clock.sleep(Math.min(HOST_WAIT_POLL_MS, remaining));
   }
 }
+var ADDRESS_CARRIED_BY_REPORT = new Set([
+  "task.reported_complete",
+  "task.accepted",
+  "task.changes_requested"
+]);
 function removeRevokedFile(sessionFile, receipt) {
   try {
     removeSessionCredentialFile(sessionFile);
