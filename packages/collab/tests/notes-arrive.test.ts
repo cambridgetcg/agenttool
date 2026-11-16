@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import { CollabStore } from "../src/store-notes.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
-import { ALONE_ADVICE, exactRef, handleOf, NOTE_AUTHORISES, NOTE_CARD, NOTE_CAPABILITIES } from "../src/verbs.js";
+import { ALONE_ADVICE, ARRIVAL_REST, exactRef, handleOf, NOTE_AUTHORISES, NOTE_CARD, NOTE_CAPABILITIES } from "../src/verbs.js";
 import { COLLAB_PACKAGE_VERSION } from "../src/version.js";
 import { CollabError } from "../src/errors.js";
 import {
@@ -18,6 +18,7 @@ import {
   type WeatherReader,
   type WeatherReading,
 } from "../src/weather.js";
+import { journal as notesJournal, runCleanup } from "./notes-helpers.js";
 
 // collab_arrive (Collab Notes spec 5.1) and the verb kernel's common rules (spec 5).
 
@@ -771,8 +772,9 @@ describe("arriving after others", () => {
     // Only the journal's own opening came before: nobody was here.
     expect(first.before_you_arrived).toBeUndefined();
     expect(first.left_for_your_name).toBeUndefined();
-    // Alone on a fresh journal: the inbox is the next call, and the agent is told how to leave something for a later one.
-    expect(first.next).toEqual({ tool: "collab_inbox", input: {} });
+    // Alone on a fresh journal: nothing waits, so no call is suggested, and the agent is told how to leave something for a later one.
+    expect(first.rest).toEqual(ARRIVAL_REST);
+    expect(first.next).toBeNull();
     expect(first.advice).toContain(ALONE_ADVICE);
     const peerServer = j.server();
     await ok(peerServer, "collab_arrive", { purpose: "second here", root_path: j.root, name: "ben" });
@@ -1040,6 +1042,257 @@ describe("device weather at arrival (AGENTOOL_COLLAB_WEATHER)", () => {
         const rows = JSON.stringify(store.db.query(`SELECT * FROM "${name}"`).all());
         expect(rows).not.toContain("good for about a minute");
         expect(rows).not.toContain(WEATHER_BASIS);
+      }
+    }
+  });
+});
+
+describe("rest: an arrival says so when nothing waits on it", () => {
+  afterEach(runCleanup);
+
+  // Pinned as literals, so a change to the words is a change to this test.
+  const REST = {
+    mode: "rest",
+    response_expected: false,
+    says: "Nothing here is waiting for you. You can look around, work, or leave; none of them needs a reason.",
+  };
+  const INBOX = { tool: "collab_inbox", input: {} };
+
+  /** A session served by its own MCP process, with a read mark (it has called collab_inbox once). */
+  async function arrived(j: ReturnType<typeof notesJournal>, name: string) {
+    const handle = j.start(name);
+    const server = j.serve(handle);
+    await ok(server, "collab_inbox");
+    return { handle, server };
+  }
+
+  /** A look-around, which must write nothing whatever it says. */
+  async function look(j: ReturnType<typeof notesJournal>, server: any) {
+    const events = j.count();
+    const marks = JSON.stringify(j.store.db.query(`SELECT * FROM note_marks ORDER BY session_id`).all());
+    const result = await ok(server, "collab_arrive", { purpose: "look around" });
+    expect(j.count()).toBe(events);
+    expect(JSON.stringify(j.store.db.query(`SELECT * FROM note_marks ORDER BY session_id`).all())).toBe(marks);
+    return result;
+  }
+
+  function absentAsToday(result: Record<string, any>) {
+    expect("rest" in result).toBe(false);
+    expect(result.next).toEqual(INBOX);
+  }
+
+  test("the block's three fields and words are fixed, and no count goes with it", async () => {
+    expect(REST).toEqual({ ...ARRIVAL_REST });
+    expect(Object.isFrozen(ARRIVAL_REST)).toBe(true);
+    const j = journal();
+    const first = await ok(j.server(), "collab_arrive", { purpose: "be here", root_path: j.root, name: "ada" });
+    expect(first.rest).toEqual(REST);
+    expect(Object.keys(first.rest).sort()).toEqual(["mode", "response_expected", "says"]);
+    // PROTOCOL.md quotes the block as it is returned.
+    const protocol = await Bun.file(resolve(import.meta.dir, "..", "PROTOCOL.md")).text();
+    const quoted = protocol.split("\n").filter((line) => line.startsWith(`{"rest": `));
+    expect(quoted.map((line) => JSON.parse(line))).toEqual([{ rest: REST }]);
+  });
+
+  test("present on a new arrival that finds nothing for it; the read-back stays the next call where others came first", async () => {
+    const j = journal();
+    const alone = await ok(j.server(), "collab_arrive", { purpose: "first here", root_path: j.root, name: "ada" });
+    expect(alone.rest).toEqual(REST);
+    expect(alone.next).toBeNull();
+    const peerServer = j.server();
+    await ok(peerServer, "collab_arrive", { purpose: "second here", root_path: j.root, name: "ben" });
+    await ok(peerServer, "collab_note", { text: "Ben was here first." });
+    const server = j.server();
+    const later = await ok(server, "collab_arrive", { purpose: "third here", root_path: j.root, name: "cy" });
+    expect(later.rest).toEqual(REST);
+    expect(later.next).toEqual({ tool: "collab_inbox", input: { since: 0, include: "all" } });
+    // A named child is a new arrival too.
+    const child = await ok(server, "collab_arrive", { purpose: "check one file", binding_key: "k1", parent: later.you.session });
+    expect(child.rest).toEqual(REST);
+    expect(child.next).toEqual({ tool: "collab_inbox", input: { since: 0, include: "all", binding_key: "k1" } });
+  });
+
+  test("present on a look-around with nothing unread and nothing waiting, with no call suggested", async () => {
+    const j = notesJournal();
+    const me = await arrived(j, "me");
+    const peer = j.start("peer");
+    // A note for all is not addressed to this session.
+    j.store.appendReportForSession({ ...peer.credential, idempotency_key: "all", kind: "observation", body: "For everyone." });
+    const result = await look(j, me.server);
+    expect(result.for_you).toEqual([]);
+    expect(result.waiting_on_you).toEqual([]);
+    expect(result.rest).toEqual(REST);
+    expect(result.next).toBeNull();
+    // Not on a purpose revision, which is a write.
+    const revised = await ok(me.server, "collab_arrive", { purpose: "a new purpose", revise_purpose: true });
+    absentAsToday(revised);
+  });
+
+  test("absent while a note addressed to this session is unread", async () => {
+    const j = notesJournal();
+    const me = await arrived(j, "me");
+    const peer = j.start("peer");
+    j.store.appendReportForSession({
+      ...peer.credential, idempotency_key: "to-me", kind: "observation", body: "A question for you.", to_session_id: me.handle.session.id,
+    });
+    const unread = await look(j, me.server);
+    expect(unread.totals.for_you).toBe(1);
+    absentAsToday(unread);
+    // Read, and nothing else waits: it is said.
+    await ok(me.server, "collab_inbox");
+    expect((await look(j, me.server)).rest).toEqual(REST);
+  });
+
+  test("absent while something waits on this session", async () => {
+    const j = notesJournal();
+    const me = await arrived(j, "me");
+    const peer = j.start("peer");
+    const claim = await ok(me.server, "collab_note", { text: "The build is green." });
+    j.store.appendReportForSession({
+      ...peer.credential, idempotency_key: "ch", kind: "inference", body: "It is not.", relation: "challenges", target_report_id: claim.ids.report,
+    });
+    // Read, so nothing is unread; the challenge still waits on its target's author.
+    await ok(me.server, "collab_inbox");
+    const result = await look(j, me.server);
+    expect(result.for_you).toEqual([]);
+    expect(result.waiting_on_you.map((entry: any) => entry.what)).toEqual(["challenge"]);
+    absentAsToday(result);
+  });
+
+  test("absent while an open proposal awaits this session's voice", async () => {
+    const j = notesJournal();
+    const me = await arrived(j, "me");
+    const peer = j.start("peer");
+    const proposal = j.store.openProposalForSession({
+      ...peer.credential, idempotency_key: "p", question: "Ship it?", criteria: "Green.", extent: "This repo.",
+    });
+    await ok(me.server, "collab_inbox");
+    const awaited = await look(j, me.server);
+    expect(awaited.for_you).toEqual([]);
+    expect(awaited.open.proposals[0].your_voice_awaited).toBe(true);
+    absentAsToday(awaited);
+    // The voice's support answers it.
+    j.store.appendReportForSession({
+      ...me.handle.credential, idempotency_key: "s", kind: "inference", body: "Yes.", relation: "supports", target_report_id: proposal.proposal.id,
+    });
+    expect((await look(j, me.server)).rest).toEqual(REST);
+  });
+
+  test("absent while a proposal says this voice is awaited, even where its own standing challenge keeps it off the waiting list", async () => {
+    const j = notesJournal();
+    const me = await arrived(j, "me");
+    const peer = j.start("peer");
+    const proposal = j.store.openProposalForSession({
+      ...peer.credential, idempotency_key: "p", question: "Ship it?", criteria: "Green.", extent: "This repo.",
+    });
+    j.store.appendReportForSession({
+      ...me.handle.credential, idempotency_key: "ch", kind: "inference", body: "Not yet.", relation: "challenges", target_report_id: proposal.proposal.id,
+    });
+    await ok(me.server, "collab_inbox");
+    const result = await look(j, me.server);
+    expect(result.waiting_on_you).toEqual([]);
+    expect(result.open.proposals[0].your_voice_awaited).toBe(true);
+    absentAsToday(result);
+  });
+
+  test("absent while an open ballot awaits this session's unit", async () => {
+    const j = notesJournal();
+    const me = await arrived(j, "me");
+    const opener = await arrived(j, "opener");
+    const opened = await ok(opener.server, "collab_poll", {
+      question: "Which cache layout?", options: [{ key: "keep", label: "Keep it" }, { key: "drop", label: "Drop it" }], closes: "30m",
+    });
+    await ok(me.server, "collab_inbox");
+    const awaited = await look(j, me.server);
+    expect(awaited.for_you).toEqual([]);
+    expect(awaited.open.ballots[0]).toMatchObject({ id: opened.ballot, you_may_vote: true, unit_has_cast: false });
+    absentAsToday(awaited);
+    // Once its unit has cast, the open ballot no longer waits on it.
+    await ok(me.server, "collab_vote", { ballot: opened.ballot, choice: ["keep"] });
+    const cast = await look(j, me.server);
+    expect(cast.open.ballots[0]).toMatchObject({ you_have_cast: true, unit_has_cast: true });
+    expect(cast.rest).toEqual(REST);
+  });
+
+  test("still present when the only open things are offers anyone may take and others' work", async () => {
+    const j = notesJournal();
+    const peer = j.start("peer");
+    // Opened before this session arrived, so its voice is not among those consulted.
+    j.store.openProposalForSession({ ...peer.credential, idempotency_key: "p", question: "Ship it?", criteria: "Green.", extent: "This repo." });
+    const me = await arrived(j, "me");
+    j.store.createTaskForSession({ ...peer.credential, idempotency_key: "open", title: "Anyone's", work_mode: "coordination" });
+    const held = j.store.createTaskForSession({ ...peer.credential, idempotency_key: "held", title: "The peer's", work_mode: "coordination" });
+    j.store.claimTaskForSession({ ...peer.credential, idempotency_key: "claim", task_id: held.id, expected_version: held.version });
+    const edit = j.store.createTaskForSession({
+      ...peer.credential, idempotency_key: "edit", title: "Edit", work_mode: "edit", completion_policy: "accepted", path_scopes: ["a.txt"],
+    });
+    const claimed = j.store.claimTaskForSession({ ...peer.credential, idempotency_key: "claim-edit", task_id: edit.id, expected_version: edit.version });
+    j.store.completeTaskForSession({
+      ...peer.credential, idempotency_key: "done", task_id: claimed.id, lease_id: claimed.lease_id!, expected_version: claimed.version, summary: "Done.",
+    });
+    await ok(me.server, "collab_inbox");
+    const result = await look(j, me.server);
+    expect(result.open.claimable.map((task: any) => task.title)).toEqual(["Anyone's"]);
+    expect(result.open.in_progress.map((task: any) => task.title)).toEqual(["The peer's"]);
+    expect(result.open.reviews_wanted).toEqual([expect.objectContaining({ title: "Edit", you_may_review: true })]);
+    expect(result.open.proposals[0].your_voice_awaited).toBe(false);
+    expect(result.rest).toEqual(REST);
+    expect(result.next).toBeNull();
+  });
+
+  test("absent while this session holds a task, and on a new arrival that finds items left for its name", async () => {
+    const j = notesJournal();
+    const me = await arrived(j, "me");
+    await ok(me.server, "collab_take", { title: "My own work" });
+    absentAsToday(await look(j, me.server));
+    await ok(me.server, "collab_done", { text: "Done." });
+    expect((await look(j, me.server)).rest).toEqual(REST);
+
+    // Items addressed to an ended session that carried this name: whether they wait on the new one is unclear.
+    const k = journal();
+    const adaServer = k.server();
+    await ok(adaServer, "collab_arrive", { purpose: "fix the slug", root_path: k.root, name: "ada" });
+    const benServer = k.server();
+    await ok(benServer, "collab_arrive", { purpose: "review", root_path: k.root, name: "ben" });
+    await ok(benServer, "collab_note", { text: "A question for ada.", to: "ada" });
+    await ok(adaServer, "collab_done", { text: "Leaving: back later", outcome: "leave" });
+    const again = await ok(k.server(), "collab_arrive", { purpose: "back to the slug", root_path: k.root, name: "ada" });
+    expect(again.left_for_your_name).toBeDefined();
+    expect("rest" in again).toBe(false);
+    expect(again.next).toEqual(again.before_you_arrived.see);
+  });
+
+  test("said, not recorded: an arrival that shows it writes what one that does not writes, and no table holds its words", async () => {
+    // Two look-arounds of one session, with and without the block: neither adds an event (look() checks).
+    const j = notesJournal();
+    const me = await arrived(j, "me");
+    expect((await look(j, me.server)).rest).toEqual(REST);
+    const peer = j.start("peer");
+    j.store.appendReportForSession({ ...peer.credential, idempotency_key: "to-me", kind: "observation", body: "For you.", to_session_id: me.handle.session.id });
+    expect("rest" in (await look(j, me.server))).toBe(false);
+    // New arrivals with and without the block write the same events: the session's own session.joined.
+    const shows = journal();
+    // Another session first, so the workspace is open before the arrival measured.
+    shows.store.startSession({ root_path: shows.root, actor: "earlier", role: "here first" });
+    const before = shows.events().length;
+    const shown = await ok(shows.server(), "collab_arrive", { purpose: "new", root_path: shows.root, name: "n" });
+    expect(shown.rest).toEqual(REST);
+    expect(shows.events().slice(before).map((event) => event.type)).toEqual(["session.joined"]);
+    const k = journal();
+    const adaServer = k.server();
+    await ok(adaServer, "collab_arrive", { purpose: "first", root_path: k.root, name: "ada" });
+    const benServer = k.server();
+    await ok(benServer, "collab_arrive", { purpose: "second", root_path: k.root, name: "ben" });
+    await ok(benServer, "collab_note", { text: "For ada.", to: "ada" });
+    await ok(adaServer, "collab_done", { text: "Leaving.", outcome: "leave" });
+    const withoutBefore = k.events().length;
+    const withoutBlock = await ok(k.server(), "collab_arrive", { purpose: "again", root_path: k.root, name: "ada" });
+    expect("rest" in withoutBlock).toBe(false);
+    expect(k.events().slice(withoutBefore).map((event) => event.type)).toEqual(["session.joined"]);
+    for (const store of [j.store, shows.store, k.store]) {
+      const tables = store.db.query(`SELECT name FROM sqlite_master WHERE type = 'table'`).all() as Array<{ name: string }>;
+      for (const { name } of tables) {
+        expect(JSON.stringify(store.db.query(`SELECT * FROM "${name}"`).all())).not.toContain("Nothing here is waiting for you");
       }
     }
   });

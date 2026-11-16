@@ -971,6 +971,7 @@ async function arriveDefault(
     fresh: true,
     record: true,
     note: arrivalNote("I have arrived.", purpose),
+    rest: true,
   });
 }
 
@@ -1040,6 +1041,7 @@ function arriveNamed(
     fresh: true,
     record: true,
     note: arrivalNote("I have arrived.", purpose),
+    rest: true,
   });
 }
 
@@ -1115,6 +1117,7 @@ async function arriveBound(
       record: false,
       note: arrivalNote("I am here.", before.purpose),
       remedies: boundRemedies(ctx, before.id, purpose),
+      rest: true,
     });
   }
   const { plan, replayed, receipt } = await underPlan(ctx, credential, {
@@ -1141,6 +1144,8 @@ async function arriveBound(
     replayed: replayed !== null,
     note: arrivalNote("My purpose has changed.", receipt.purpose),
     remedies: boundRemedies(ctx, session.id, purpose),
+    // A purpose revision is a write, as with the weather.
+    rest: false,
   });
 }
 
@@ -1170,6 +1175,8 @@ function arrivalResult(
     note: string;
     replayed?: boolean;
     remedies?: NoteRemedy[];
+    /** Whether this call may say that nothing waits: a new arrival and a look-around, not a purpose revision. */
+    rest: boolean;
   },
 ): Record<string, unknown> {
   const credential = binding.handle.credential;
@@ -1184,12 +1191,16 @@ function arrivalResult(
   if (options.record) {
     ctx.store.recordArrivalShown(credential, brief.shown);
   }
-  const behind = options.fresh ? arrivalBehind(ctx, credential, data.session.actor) : { view: {}, advice: [] };
+  const behind = options.fresh ? arrivalBehind(ctx, credential, data.session.actor) : { view: {}, advice: [], read: true };
   // A new session's inbox starts empty, so where others wrote before it the
   // useful next call is the read-back, which also covers what was left for
   // its name.
   const readBack = (behind.view.before_you_arrived as { see?: NoteRemedy } | undefined)?.see;
   const alone = options.fresh && Array.isArray(brief.view.here) && brief.view.here.length === 0;
+  // Items left for an ended session of this name may be meant for this one,
+  // so whether they wait on it is unclear; then, and when that could not be
+  // read, nothing is said. Saying so writes nothing.
+  const rest = options.rest && brief.nothing_waits && behind.read && !("left_for_your_name" in behind.view);
   return {
     ...noteWriteResult({
       effect: options.effect,
@@ -1199,16 +1210,32 @@ function arrivalResult(
         workspace_id: data.workspace.id,
       },
       advice: [...options.advice, ...behind.advice, ...(alone ? [ALONE_ADVICE] : []), ...brief.advice],
-      next: readBack ?? withSlot(ctx, { tool: "collab_inbox", input: {} }),
+      // With nothing for this session, the inbox would read nothing, so no
+      // call is suggested; a read-back of what came before still is.
+      next: readBack ?? (rest ? null : withSlot(ctx, { tool: "collab_inbox", input: {} })),
       note: options.note,
       replayed: options.replayed,
     }),
     ...(options.remedies ? { remedies: options.remedies } : {}),
+    ...(rest ? { rest: { ...ARRIVAL_REST } } : {}),
     ...brief.view,
     ...behind.view,
     ...(pendingReveal ? { reveal_pending: pendingReveal } : {}),
   };
 }
+
+/**
+ * Said on an arrival or a look-around when nothing in the journal waits on
+ * the session (PROTOCOL.md, collab_arrive). `mode` and `response_expected`
+ * are the hosted wake brief's first card (api/src/services/wake/brief.ts),
+ * so the two arrivals read as one house; `says` is collab's own. It carries
+ * no count, never says what to do about anything, and is never recorded.
+ */
+export const ARRIVAL_REST = Object.freeze({
+  mode: "rest",
+  response_expected: false,
+  says: "Nothing here is waiting for you. You can look around, work, or leave; none of them needs a reason.",
+} as const);
 
 /** Said to a new session that finds nobody else here: how to leave something for an agent who comes later. */
 export const ALONE_ADVICE =
@@ -1226,13 +1253,13 @@ function arrivalBehind(
   ctx: NoteVerbContext,
   credential: SessionHandle["credential"],
   name: string,
-): { view: Record<string, unknown>; advice: string[] } {
+): { view: Record<string, unknown>; advice: string[]; read: boolean } {
   let behind;
   try {
     behind = ctx.store.noteArrivalBehind(credential);
   } catch {
     // The session has started and is bound; a hint that cannot be read never fails its arrival.
-    return { view: {}, advice: [] };
+    return { view: {}, advice: [], read: false };
   }
   const view: Record<string, unknown> = {};
   const advice: string[] = [];
@@ -1260,7 +1287,7 @@ function arrivalBehind(
         "not identity: you are a new session and voice, and nothing those sessions held, said or stood on passes to you.",
     );
   }
-  return { view, advice };
+  return { view, advice, read: true };
 }
 
 function composeBrief(
@@ -1268,7 +1295,7 @@ function composeBrief(
   data: NoteArrivalData,
   pending: NoteInboxData | null,
   rootPath: string,
-): { view: Record<string, unknown>; shown: string[]; advice: string[] } {
+): { view: Record<string, unknown>; shown: string[]; advice: string[]; nothing_waits: boolean } {
   const me = data.session;
   const at = data.observed_at;
   const byId = new Map(data.sessions.map((view) => [view.id, view]));
@@ -1344,9 +1371,24 @@ function composeBrief(
   for (const ballot of cap(data.ballots).filter(unitMateHasCast)) {
     advice.push(`${handleOf("ballot", ballot.ballot_id)}: ${UNIT_MATE_CAST_ADVICE}`);
   }
+  // Whether nothing here waits on this session, from what this brief already
+  // read, each list whole rather than as capped for display: nothing for it
+  // unread (a scan that stopped at its bound is not "nothing"), nothing on its
+  // waiting list, no proposal saying its voice is awaited, no open ballot its
+  // unit may still cast in, and no task it holds. A proposal flag counts even
+  // where the waiting list leaves it out (closed, or answered by this voice's
+  // standing challenge), so one result never says both. Offers anyone may
+  // take (claimable tasks, reviews anyone may give) are not waiting on it.
+  const nothingWaits = forYou.length === 0
+    && (pending === null || (pending.for_me_total === 0 && !pending.more && !pending.for_me_total_capped))
+    && waiting.length === 0
+    && !proposals.some((proposal) => proposal.your_voice_awaited)
+    && !data.ballots.some((ballot) => ballot.viewer?.may_vote === true && !ballot.viewer.unit_has_cast)
+    && holds(me.id).length === 0;
   return {
     shown,
     advice,
+    nothing_waits: nothingWaits,
     view: {
       you: {
         session: me.id,
