@@ -14,7 +14,7 @@ import { HOST_BINDING_FORMAT, hostBindingPath, writeHostBinding, type HostBindin
 import type { ProcessRecord, ProcessTable } from "../src/process-tree.js";
 import type { SessionHandle } from "../src/protocol.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 // The helpers below are copied from tests/host-knocks.test.ts:1-151, never
 // imported from it: bun re-runs every test in an imported test file.

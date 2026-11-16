@@ -26,7 +26,7 @@ import {
 import { buildCollabMcpServer } from "../src/mcp.js";
 import { readProcessTable, type ProcessRecord, type ProcessTable } from "../src/process-tree.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 const packageRoot = resolve(import.meta.dir, "..");
 const mcpEntry = join(packageRoot, "bin", "agenttool-collab-mcp.ts");

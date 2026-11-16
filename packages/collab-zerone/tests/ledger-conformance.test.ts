@@ -11,7 +11,7 @@ import {
   anchorStatusForWorkspace,
   defaultAnchorLedgerPath,
 } from "../../collab/src/anchor-status.js";
-import { CollabStore } from "../../collab/src/store.js";
+import { CollabStore } from "../../collab/src/store-notes.js";
 import { anchorSaltPath, ensureAnchorSalt, epochAlias, workspaceAlias } from "../src/alias.js";
 import {
   ANCHOR_MEMO_PROTOCOL,

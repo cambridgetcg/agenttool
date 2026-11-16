@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { CollabError } from "../src/errors.js";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import type { CollabEvent, SessionHandle, SessionRest } from "../src/protocol.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 const HOUR_MS = 60 * 60 * 1000;
 

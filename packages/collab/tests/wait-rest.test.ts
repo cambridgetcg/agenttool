@@ -6,7 +6,7 @@ import { CollabError } from "../src/errors.js";
 import { runCollabHostCli, waitForSessionEvents, type HostWaitReceipt } from "../src/host.js";
 import type { EventCursor, SessionHandle } from "../src/protocol.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 // Where the host doorbell (`agenttool-collab-host wait`, and the Claude Code
 // watcher that loops it) meets a declared rest. The rest is the session's own

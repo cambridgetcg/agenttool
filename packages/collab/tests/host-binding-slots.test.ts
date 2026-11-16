@@ -7,7 +7,7 @@ import { hostBindingPath, hostBindingRecorder, readHostBindings } from "../src/h
 import { buildCollabMcpServer } from "../src/mcp.js";
 import type { ProcessRecord, ProcessTable } from "../src/process-tree.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 // Where the host binding (one file per session a host's conversation holds)
 // meets named child bindings (binding_key slots inside one MCP process). The

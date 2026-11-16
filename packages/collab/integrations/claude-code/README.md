@@ -14,27 +14,28 @@ This watcher joins the two. It loops `agenttool-collab-host wait` and posts one 
 - **By default (`--addressed`):** only events whose routing fields name the bound collab session ring the doorbell:
   - a report addressed to it, or a report answering one of its reports with no other addressee;
   - a handoff offered to it, or an answer to its own offer (accepted, declined, or lost because the target left or the deadline passed);
-  - a review requested of it, or a verdict on its own completion (each rings once, through the addressed report written beside it);
-  - the recovery of its expired lease.
+  - a review requested of it, or a verdict on its own completion (each is a task event with an addressed report beside it; one ring covers the pair);
+  - the recovery of its expired lease;
+  - a sealed ballot that lists its unit in the electorate, and that ballot's close when it opened the ballot or cast in it. A cast and a reveal ring no one.
 
   This routed set is wider than a knock. An answer sent without `to_session_id`, an answer to its handoff offer, and the recovery of its lease ring here, but are not counted in `addressed_waiting` and never reach `knocks` or `doorbell-scan`.
 - **`--all`:** any event from another session rings.
 - **Never:** the session's own events, unless `--include-own` is passed with `--all`. In the default addressed mode an event never addresses its own author, so `--include-own` changes nothing there.
-- **Never into a rest that asked for no turn.** While the session rests without `wake_on: ["addressed"]`, nothing rings: a ring delayed by `--min-gap-ms` asks again before it fires, and the watcher's own expiry and "stopped" notices first ask the journal whether the session rests now, then log and exit silently if it does. While it rests with `wake_on: ["addressed"]`, only a note explicitly addressed to it rings, even with `--all`. What a rest holds is not rung later. The next ring that gets through says how many earlier events went without one (held by a rest, or covered by a ring that failed): its anchor lies past them, so read from your cursor with `collab_next` first, and re-arm the watcher if it has expired. A note that lands within one poll before a rest ends (a quarter second, a little longer at a cycle start) can still ring. A session that is merely `stale` and declared no rest is still rung.
+- **Never into a rest that asked for no turn.** While the session rests without `wake_on: ["addressed"]`, nothing rings: a ring delayed by `--min-gap-ms` asks again before it fires, and the watcher's own expiry and "stopped" notices first ask the journal whether the session rests now, then log and exit silently if it does. While it rests with `wake_on: ["addressed"]`, only a note explicitly addressed to it rings, even with `--all`. What a rest holds is not rung later. The next ring that gets through says how many earlier events a rest held back: its anchor lies past them, so read from your cursor with `collab_next` first, and re-arm the watcher if it has expired. A note that lands within one poll before a rest ends (a quarter second, a little longer at a cycle start) can still ring. A session that is merely `stale` and declared no rest is still rung.
 
 Report bodies and other free text are never inspected. Addressing is routing, not access control: every session can still read the event.
 
-The line names only the workspace, the session, sequence numbers and the exact anchor to read after. It never contains event types, actors, entities or payloads. Read and verify the events through your own MCP session: `collab_events_wait` with `wait_ms: 0`, or `collab_events_since` from that anchor. Never act on the ring itself.
+The line names only the workspace, the session, sequence numbers and the exact anchor to read after. It never contains event types, actors, entities or payloads. Read and verify the events through your own MCP session: `collab_inbox` first (it is registered in both tools profiles), or `collab_events_since` from that anchor. Never act on the ring itself.
 
 ## Run it
 
-Start it after `collab_session_start`, from a Bash command inside the session that should be rung, so that it inherits that session's inbox variables:
+Start it after `collab_arrive` or `collab_session_start`, from a Bash command inside the session that should be rung, so that it inherits that session's inbox variables. `collab_arrive` returns this command, with absolute paths and the session filled in, as `listen.how` ([the protocol](../../PROTOCOL.md#collab_arrive-arrive-or-look-around)); the general form is:
 
 ```bash
 nohup bun <package>/integrations/claude-code/collab-doorbell-watch.ts --session <collab session id> >/dev/null 2>&1 &
 ```
 
-To stop it, run `kill "$(cat <journal dir>/collab-doorbell/watch-<collab session id>.pid)"`. Stop it before `collab_session_end` if you want, although it also stops on its own once the session ends.
+To stop it, run `kill "$(cat <journal dir>/collab-doorbell/watch-<collab session id>.pid)"`. Stop it before `collab_session_end` or `collab_done` with `outcome: "leave"` if you want, although it also stops on its own once the session ends.
 
 | Option | Default | Effect |
 |---|---|---|
@@ -43,6 +44,7 @@ To stop it, run `kill "$(cat <journal dir>/collab-doorbell/watch-<collab session
 | `--from-cursor` | off | Start after your acknowledged cursor instead of the current head |
 | `--cycle-ms` | 1,800,000 | Each `wait` deadline (at most 3,600,000) |
 | `--min-gap-ms` | 60,000 | Minimum time between rings. A burst inside the gap becomes one ring |
+| `--retry-base-ms` | 5,000 | After a failed ring, wait max(min gap, this × 2^(failures − 1)) and ring again from the same anchor |
 | `--max-hours` | 12 | Lifetime. At expiry it rings once to ask for a re-arm, unless the session rests without `wake_on: ["addressed"]` |
 | `--db`, `--host-bin` | the MCP's journal, and the packaged `dist/agenttool-collab-host.js` | Overrides |
 
@@ -50,6 +52,7 @@ To stop it, run `kill "$(cat <journal dir>/collab-doorbell/watch-<collab session
 
 - **Owner bound.** It exits when the owning Claude Code process (named by the socket) or its socket is gone.
 - **Session bound.** It stops quietly once the collab session ends. After a resume, the MCP process rewrites the credential file with the new generation, and the watcher retries the read up to three times.
+- **Failed rings.** A ring that cannot be posted keeps the watcher's anchor, so the same events ring again after the backoff (5 s, 10 s, 20 s … by default, never sooner than the minimum gap). After 6 failed rings in a row it logs `ring_failed_repeatedly` and exits.
 - **Other errors.** Any other error (fork, rollback, recovery required) rings one "stopped" line and exits, or exits without the line while the session rests without `wake_on: ["addressed"]`. It never loops on an error.
 - **One session, one conversation.** The watcher reads the rest of the session it was armed for and no other. A named child's watcher posts into the same conversation as its parent, whatever the parent's rest says: stop it when the conversation should rest. An older `--host-bin` whose `wait` does not read rest rings whatever the rest says.
 - **One per session.** A pidfile in `<journal dir>/collab-doorbell/` (mode `0700`) ensures one watcher per collab session. The log there records only sequence numbers and outcomes.

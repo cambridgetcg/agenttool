@@ -15,7 +15,7 @@ import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { canonicalJson } from "../src/canonical.js";
 import { CollabError } from "../src/errors.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 const APPLICATION_ID = 0x4154434c;
 const GENESIS_HASH = "0".repeat(64);

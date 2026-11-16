@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import * as protocol from "../src/protocol.js";
 import type { SessionHandle } from "../src/protocol.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 // Local copy of the 6-hour threshold so the clock arithmetic below does not
 // depend on the export under test; the first test pins the export to it.

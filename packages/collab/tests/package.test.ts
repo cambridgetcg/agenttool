@@ -187,7 +187,7 @@ describe("cross-host package", () => {
     const codex = await json(".codex-plugin/plugin.json");
     const claude = await json(".claude-plugin/plugin.json");
 
-    expect(COLLAB_PACKAGE_VERSION).toBe("0.5.1-dev.0");
+    expect(COLLAB_PACKAGE_VERSION).toBe("0.6.0-dev.0");
     expect(packageManifest.version).toBe(COLLAB_PACKAGE_VERSION);
     expect(codex.version).toBe(packageManifest.version);
     expect(claude.version).toBe(packageManifest.version);
@@ -267,12 +267,12 @@ describe("cross-host package", () => {
     const version = (await json("package.json")).version as string;
     for (const path of GUIDANCE_FILES) {
       const text = await Bun.file(join(packageRoot, path)).text();
-      for (const term of ["0.5.0", "0.4.0", "34", "33", "32", "collab_events_wait",
+      for (const term of ["0.5.0", "0.4.0", "45", "33", "32", "collab_events_wait",
         "next_anchor", "256 KiB", "1 MiB", "8 MiB", "event_anchor_too_large", "stdin EOF",
         "event_too_large", "event_read_busy", "last_seen", "persona"]) {
         expect(text).toContain(term);
       }
-      expect(text).toMatch(/\b34(?: local)?(?: MCP)? tools\b/);
+      expect(text).toMatch(/\b45(?: local)?(?: MCP)? tools\b/);
       expect({ path, problems: guidanceLabelProblems(text, version) }).toEqual({ path, problems: [] });
     }
     const openclaw = await Bun.file(join(packageRoot, "integrations/openclaw/README.md")).text();
@@ -331,8 +331,10 @@ describe("cross-host package", () => {
 
   test("teaches declared rest, four-state liveness, knocks as pointers and delivery hints", async () => {
     const read = async (path: string) => await Bun.file(join(packageRoot, path)).text();
+    // The skill's card is the Collab Notes one; the legacy tools, rest and
+    // knocks among them, are taught in the reference beside it.
     for (const path of [
-      "skills/coordinate-agent-work/SKILL.md",
+      "skills/coordinate-agent-work/REFERENCE.md",
       "integrations/hermes/skills/coordinate-agent-work-hermes/SKILL.md",
       "README.md",
     ]) {
@@ -359,9 +361,15 @@ describe("cross-host package", () => {
       "{workspace_id?, idempotency_key, mode: \"resting\" | \"ready\", until?, reason?, wake_on?}",
     ]) expect(readme).toContain(term);
 
+    const reference = flat(await read("skills/coordinate-agent-work/REFERENCE.md"));
+    expect(reference).toContain(DELIVERY_TABLE_HEADER);
+    expect(reference).toContain("### Rest and return");
+    // The skill itself names the tool, the four hints and where both are taught.
     const rawSkill = await read("skills/coordinate-agent-work/SKILL.md");
-    expect(flat(rawSkill)).toContain(DELIVERY_TABLE_HEADER);
-    expect(flat(rawSkill)).toContain("### Rest and return");
+    for (const term of ["collab_session_rest", "`tap`", "`wake`", "`held`", "`none`", "`resting`",
+      "[REFERENCE.md](REFERENCE.md)", "Rest and return", "Knocks and delivery hints"]) {
+      expect(flat(rawSkill)).toContain(term);
+    }
     const description = /^description: (.+)$/m.exec(rawSkill)?.[1] ?? "";
     expect(description).toContain("declared rest and return");
     expect(description).toContain("knocks");
@@ -379,7 +387,7 @@ describe("cross-host package", () => {
     expect(yaml).toContain("knocks as pointers");
     expect(yaml).toContain("silence as a complete answer");
     const codex = await json(".codex-plugin/plugin.json");
-    expect(codex.interface.longDescription).toContain(": 34 tools");
+    expect(codex.interface.longDescription).toContain(": 45 tools");
     expect(codex.interface.longDescription).toContain("declared rest");
   });
 

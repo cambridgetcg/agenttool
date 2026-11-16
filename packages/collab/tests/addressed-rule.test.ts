@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { waitForSessionEvents } from "../src/host.js";
 import type { CollabEvent, EventCursor, SessionHandle } from "../src/protocol.js";
-import { CollabStore, isAddressedTo } from "../src/store.js";
+import { CollabStore, isAddressedTo } from "../src/store-notes.js";
 
 // Two rules say an event is "addressed" to a session, and they are meant to
 // differ. isAddressedTo is the explicit set: a report or a session handoff
@@ -12,7 +12,9 @@ import { CollabStore, isAddressedTo } from "../src/store.js";
 // (knocks) and the wake (doorbell-scan). CollabStore.eventAddressesSession is
 // the routed set that `wait --addressed` rings for: the explicit set plus
 // answers to something this session did (a reply to its report, a response to
-// or loss of its offer, the recovery of its lease). These tests pin the routed
+// or loss of its offer, the recovery of its lease) and the task event beside a
+// review request or verdict. collab_inbox reads the same set to say why an
+// item is for you; its proposal and ballot cases are pinned by the Notes tests. These tests pin the routed
 // set, and that it always contains the explicit one.
 let directory: string;
 let root: string;
@@ -201,7 +203,7 @@ describe("the routed set that wait --addressed rings for", () => {
     expect(waitAddressed(b, before)).toMatchObject({ status: "idle" });
   });
 
-  test("review requests and verdicts ring once, through their addressed reports", () => {
+  test("a review request and a verdict each name one session, in the task event and in the report beside it", () => {
     const reviewer = session("reviewer");
     const worker = session("worker");
     const other = session("other");
@@ -212,8 +214,10 @@ describe("the routed set that wait --addressed rings for", () => {
       ...worker.credential, idempotency_key: "complete", task_id: task.id, lease_id: task.lease_id!,
       expected_version: task.version, summary: "done", review_requested_session_id: reviewer.session.id,
     });
-    // The task event has an addressed report written beside it; only the report rings.
-    expect(routed("task.reported_complete", reviewer, worker, other)).toEqual([]);
+    // The task event has an addressed report written beside it. Both name the
+    // reviewer (collab_inbox reads the task event to say why), and one wait
+    // from before them rings once for the pair.
+    expect(routed("task.reported_complete", reviewer, worker, other)).toEqual(["reviewer"]);
     expect(routed("report.posted", reviewer, worker, other)).toEqual(["reviewer"]);
     const request = waitAddressed(reviewer, beforeRequest);
     expect(request.status).toBe("ready");
@@ -224,14 +228,15 @@ describe("the routed set that wait --addressed rings for", () => {
       ...reviewer.credential, idempotency_key: "request-changes", task_id: reported.id,
       expected_version: reported.version, outcome: "request_changes", summary: "one more pass",
     });
-    expect(routed("task.changes_requested", reviewer, worker, other)).toEqual([]);
+    expect(routed("task.changes_requested", reviewer, worker, other)).toEqual(["worker"]);
     expect(routed("report.posted", reviewer, worker, other)).toEqual(["worker"]);
     expect(waitAddressed(worker, beforeVerdict).status).toBe("ready");
+    expect(waitAddressed(worker, headAnchor(worker))).toMatchObject({ status: "idle" });
     // Nothing after the request addressed the reviewer again.
     expect(waitAddressed(reviewer, afterRequest)).toMatchObject({ status: "idle" });
 
-    // The verdict report keeps naming the worker whoever reports the task
-    // next: the answer is read from the event, never from the task's current state.
+    // The verdict keeps naming the worker whoever reports the task next: the
+    // answer is read from the event, never from the task's current state.
     const verdictReport = lastOf(worker, "report.posted");
     const reclaimed = store.claimTaskForSession({
       ...other.credential, idempotency_key: "other-claims", task_id: verdict.task.id,
@@ -243,7 +248,7 @@ describe("the routed set that wait --addressed rings for", () => {
     });
     expect(store.eventAddressesSession(verdictReport, worker.session.id)).toBe(true);
     expect(store.eventAddressesSession(verdictReport, other.session.id)).toBe(false);
-    expect(routed("task.changes_requested", reviewer, worker, other)).toEqual([]);
+    expect(routed("task.changes_requested", reviewer, worker, other)).toEqual(["worker"]);
   });
 
   test("the recovery of a lease names the session that held it", () => {
@@ -315,7 +320,8 @@ describe("the routed set that wait --addressed rings for", () => {
     }
     // to-a, the note for c, the offer, the review request and the verdict.
     expect(explicit).toBe(5);
-    // b's unaddressed answer to a's proposal, and a's decline of b's offer.
-    expect(answers).toBe(2);
+    // b's unaddressed answer to a's proposal, a's decline of b's offer, and the
+    // two task events that sit beside the review request and the verdict.
+    expect(answers).toBe(4);
   });
 });

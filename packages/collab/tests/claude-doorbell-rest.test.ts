@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import type { SessionHandle } from "../src/protocol.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 // The Claude Code watcher against a declared rest. Every line the watcher
 // posts starts a turn, its own notices included, so a rest that asked for no
@@ -193,7 +193,7 @@ describe("Claude Code collab doorbell watcher against a declared rest", () => {
     mail(peer, own, "fresh");
     await until(() => rings.length === 1);
     expect(rings[0]).toContain("[collab doorbell] ready");
-    expect(rings[0]).toContain("1 earlier event(s) before that anchor went without a ring");
+    expect(rings[0]).toContain("1 earlier event(s) before that anchor were held by a rest and went without a ring");
     expect(rings[0]).toContain("collab_next");
     expect(rings[0]).not.toContain("body-held-during-rest");
     watcher.kill("SIGTERM");
@@ -232,14 +232,14 @@ describe("Claude Code collab doorbell watcher against a declared rest", () => {
     expect(logOf(own.session.id)).toContain("expired_in_held_rest");
   }, 30_000);
 
-  test("a ring that fails keeps the count, so the next ring still points at collab_next", async () => {
+  test("a ring that fails is retried from the same anchor and still says what a rest held", async () => {
     const own = listener("failed-ring");
     const peer = store.startSession({ root_path: root, actor: "peer" });
     store.restSessionForSession({
       ...own.credential, idempotency_key: "short-rest", mode: "resting",
       until: new Date(Date.now() + 2_000).toISOString(),
     });
-    const watcher = startWatcher(own.session.id, 60_000);
+    const watcher = startWatcher(own.session.id, 60_000, ["--retry-base-ms", "500"]);
     await until(() => logOf(own.session.id).includes('"start"'));
     mail(peer, own, "held-during-rest");
     await until(() => logOf(own.session.id).includes('"held"'));
@@ -250,16 +250,21 @@ describe("Claude Code collab doorbell watcher against a declared rest", () => {
     await new Promise<void>((closed) => server.close(() => closed()));
     expect(existsSync(socketPath)).toBe(true);
     mail(peer, own, "ring-fails");
-    await until(() => logOf(own.session.id).includes('"ring_failed"'));
+    await until(() => logOf(own.session.id).includes('"ring_retry"'));
+    expect(rings).toEqual([]);
     // Listen again without the path ever being absent (the watcher would read that as its owner gone).
     await new Promise<void>((ready) => server.listen(`${socketPath}.next`, ready));
     renameSync(`${socketPath}.next`, socketPath);
 
-    mail(peer, own, "ring-arrives");
-    await until(() => rings.length === 1);
-    // One note held by the rest, one whose ring failed: both lie before this ring's anchor.
-    expect(rings[0]).toContain("2 earlier event(s) before that anchor went without a ring");
+    // No new mail is needed: the failed ring kept its anchor, so the retry
+    // covers the same note. The note the rest held lies before that anchor,
+    // counted once however many times the ring was tried.
+    await until(() => rings.length === 1, 12_000);
+    expect(rings[0]).toContain("1 event(s) after sequence");
+    expect(rings[0]).toContain("1 earlier event(s) before that anchor were held by a rest and went without a ring");
     expect(rings[0]).toContain("collab_next");
+    await Bun.sleep(1_500);
+    expect(rings).toHaveLength(1);
     watcher.kill("SIGTERM");
     await watcher.exited;
   }, 30_000);

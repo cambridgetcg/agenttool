@@ -1,6 +1,6 @@
 import { closeSync, constants, fstatSync, openSync, readSync } from "node:fs";
 import { CollabError } from "./errors.js";
-import type { CollabStore } from "./store.js";
+import type { CollabStore } from "./store-notes.js";
 
 /**
  * Read-only view over the sidecar anchor ledger maintained by

@@ -20,7 +20,7 @@ import { buildCollabMcpServer } from "../src/mcp.js";
 import { readProcessTable, type ProcessRecord, type ProcessTable } from "../src/process-tree.js";
 import type { SessionHandle } from "../src/protocol.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 const packageRoot = resolve(import.meta.dir, "..");
 const hostEntry = join(packageRoot, "bin", "agenttool-collab-host.ts");
@@ -491,7 +491,7 @@ describe("a journal whose last connection closed cleanly", () => {
     const script = join(closed, "fixture.ts");
     writeFileSync(script, `
       import { Database } from "bun:sqlite";
-      import { CollabStore } from ${JSON.stringify(join(packageRoot, "src", "store.ts"))};
+      import { CollabStore } from ${JSON.stringify(join(packageRoot, "src", "store-notes.ts"))};
       import { writeHostBinding } from ${JSON.stringify(join(packageRoot, "src", "host-binding.ts"))};
       const journal = ${JSON.stringify(journal)};
       const store = new CollabStore(journal);

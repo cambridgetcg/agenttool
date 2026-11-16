@@ -1,6 +1,6 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { CollabError } from "../src/errors.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 const [databasePath, barrierPath, readyPath] = Bun.argv.slice(2);
 

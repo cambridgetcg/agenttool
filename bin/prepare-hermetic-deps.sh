@@ -77,6 +77,7 @@ readonly -a PACKAGE_WORKSPACES=(
   packages/codex-usage
   packages/collab-zerone
   packages/collab-courier
+  packages/execution-seat
   packages/lobby
   packages/lobby-doorbell
   packages/browser

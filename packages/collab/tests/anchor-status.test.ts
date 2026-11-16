@@ -9,7 +9,7 @@ import {
   defaultAnchorLedgerPath,
 } from "../src/anchor-status.js";
 import { CollabError } from "../src/errors.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 function freshRepoDir(): string {
   const dir = mkdtempSync(join(tmpdir(), "collab-anchor-status-"));

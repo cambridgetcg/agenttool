@@ -5,7 +5,7 @@ import { Database } from "bun:sqlite";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 // Cross-package source import mirrors conformance.test.ts.
-import { CollabStore } from "../../collab/src/store.js";
+import { CollabStore } from "../../collab/src/store-notes.js";
 import { anchorSaltPath, epochAlias, readAnchorSalt, workspaceAlias } from "../src/alias.js";
 import { ANCHOR_MEMO_PROTOCOL, LEGACY_ANCHOR_MEMO_PROTOCOL } from "../src/constants.js";
 import { JournalReader } from "../src/journal.js";

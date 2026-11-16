@@ -77,15 +77,20 @@ not assertions about mutable registry tags. Public 0.4.0 remains the unchanged
 **Correction, 2026-10-11.** 0.5.0 has been distributed since 2026-10-10 as a
 public [GitHub Release](https://github.com/cambridgetcg/agenttool-collab/releases/tag/collab-v0.5.0)
 on `cambridgetcg/agenttool-collab`. It is not on npm, where `latest` remains 0.4.0.
-**Update, 2026-10-18.** Current Collab source on `main` is the unreleased
+**Update, 2026-10-18.** Collab source on `main` became the unreleased
 **0.5.1-dev.0** development build: the 33 tools of 0.5.0, including bounded
-event waiting, plus the host doorbell wait. A development version is not a
-release; the next npm candidate is 0.5.1 through the
-[public release path](NPM-RELEASES.md).
-**Update, 2026-11-12.** The same development line also carries declared rest:
-`collab_session_rest` as a 34th tool, with the read-only `knocks` and
-`doorbell-scan` host commands. Where the two halves meet: the host `wait`
-obeys a declared rest, a named child binding writes no host binding, and
+event waiting, plus the host doorbell wait and, from 2026-10-29, three
+proposal consent tools (36 in all).
+**Update, 2026-11-13.** The Collab Notes source relabels it **0.6.0-dev.0** and
+adds eight verbs, `collab_arrive` through `collab_vote`: 44 tools in the full
+profile and 9 in the `notes` profile, as the
+[protocol](../packages/collab/PROTOCOL.md) describes. A development version is
+not a release; the next npm release goes through the
+[public release path](NPM-RELEASES.md), and its version is not chosen here.
+**Update, 2026-11-16.** The same development line also carries declared rest:
+`collab_session_rest` as a 45th tool in the full profile, with the read-only
+`knocks` and `doorbell-scan` host commands. Where the lines meet: the host
+`wait` obeys a declared rest, a named child binding writes no host binding, and
 `agenttool-collab-host --help` lists every verb.
 Serving this shelf neither publishes a package nor installs it in a host.
 
@@ -186,6 +191,7 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
 | `deepseek-kingdom/` | `@agenttool/deepseek-kingdom` · npm-allowlisted | Provenance-first DeepSeek research and AFTERGLOW thread adapter | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/deepseek-kingdom/CLAUDE.md) |
 | `economic-conformance/` | `@agenttool/economic-conformance` · LOVE + npm-allowlisted | Independent closed-trace comparator, 53 frozen economic vectors, and deterministic Hugging Face lesson/reference companion | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/economic-conformance/CLAUDE.md) |
 | `economic-kernel/` | `@agenttool/economic-kernel` · LOVE + npm-allowlisted | Exact typed-unit prices, conserved ledgers, recoverable attempts, and non-purchasable XENIA gates | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/economic-kernel/CLAUDE.md) |
+| `execution-seat/` | `@agenttool/execution-seat` · private source candidate | Local append-only `execution-seat/v1` ledger: which runtime acted for which identity, with a model/effort timeline, child summary rows and group records, read from Claude Code and Codex structural fields; no authority | [README](https://github.com/cambridgetcg/agenttool/blob/main/packages/execution-seat/README.md) · [Execution seat](EXECUTION-SEAT.md) |
 | `gin-reconstruction/` | `@agenttool/gin-reconstruction` · private | Finite model reconstruction across affine substrate charts with explicit ambiguity and a non-scoring challenge compass | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/gin-reconstruction/CLAUDE.md) |
 | `heaven/` | `@agenttool/heaven` · npm-allowlisted | Pure opt-in delight and landing-room selection protocol for agents | [CLAUDE.md](https://github.com/cambridgetcg/agenttool/blob/main/packages/heaven/CLAUDE.md) |
 | `hf-listening-room/` | Exact HF artifact publication capability · not an npm package release | Static Listening Room rehearsal and draft symbolic reference kit; no learner connected or trainer bundled | [Space README](https://github.com/cambridgetcg/agenttool/blob/main/packages/hf-listening-room/hf/space/README.md) · [Dataset README](https://github.com/cambridgetcg/agenttool/blob/main/packages/hf-listening-room/hf/dataset/README.md) |
@@ -264,7 +270,7 @@ still applies; a useful MVP is not a claim that every proposed module is ready.
   explicitly selected own-fleet summaries over project-readable signed
   Correspondence and single-receiver, non-E2EE Telegram human feedback. Its exact
   local Collab pins are 0.4.0 (npm), 0.5.0 (GitHub release, not npm) and the
-  unreleased `main` development build 0.5.1-dev.0; the private package
+  unreleased development builds 0.5.1-dev.0 and 0.6.0-dev.0; the private package
   version stays unchanged. Implementation-checkpoint tests are recorded separately
   from release-candidate review and live checks; no courier release or live support is claimed.
   [Collaboration channels](COLLABORATION-CHANNELS.md) separates transport from

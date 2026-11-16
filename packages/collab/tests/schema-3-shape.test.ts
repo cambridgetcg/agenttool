@@ -11,7 +11,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { doorbellScan, knockForSession } from "../src/host.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 const ADDITIVE = ["repository_aliases", "repository_discovery", "session_lease_lapses"];
 const COORDINATION_SESSIONS = [

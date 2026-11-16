@@ -10,9 +10,11 @@
  * the agent reads and verifies the events through its own MCP session.
  *
  * It exits when the owning Claude Code process or its socket is gone, when the
- * collab session ends, on SIGTERM/SIGINT, or after --max-hours. One watcher
- * per collab session (pidfile). It changes no event, cursor or session row
- * (the wait it runs opens the journal through the store) and never prints the
+ * collab session ends, on SIGTERM/SIGINT, after --max-hours, or after
+ * RING_FAILURE_LIMIT rings in a row fail. A failed ring keeps its anchor and
+ * is retried with backoff, so nothing routed is passed over. One watcher per
+ * collab session (pidfile). It changes no event, cursor or session row (the
+ * wait it runs opens the journal through the store) and never prints the
  * inbox token. Every line it posts starts a turn, so it obeys a declared rest:
  * see "What rings" in README.md beside this file.
  */
@@ -41,7 +43,10 @@ interface WaitReceipt {
 }
 
 const USAGE = "usage: collab-doorbell-watch --session <id> [--db <path>] [--host-bin <path>] [--all] "
-  + "[--from-cursor] [--include-own] [--cycle-ms <ms>] [--min-gap-ms <ms>] [--max-hours <h>] [--once]";
+  + "[--from-cursor] [--include-own] [--cycle-ms <ms>] [--min-gap-ms <ms>] [--retry-base-ms <ms>] [--max-hours <h>] [--once]";
+
+/** Consecutive failed rings after which the watcher stops (spec 9). */
+const RING_FAILURE_LIMIT = 6;
 
 const { values } = parseArgs({
   args: process.argv.slice(2),
@@ -55,6 +60,7 @@ const { values } = parseArgs({
     "include-own": { type: "boolean" },
     "cycle-ms": { type: "string" },
     "min-gap-ms": { type: "string" },
+    "retry-base-ms": { type: "string" },
     "max-hours": { type: "string" },
     once: { type: "boolean" },
   },
@@ -83,6 +89,8 @@ const hostBin = resolve(values["host-bin"] ?? process.env.AGENTTOOL_COLLAB_HOST_
   ?? join(import.meta.dir, "..", "..", "dist", "agenttool-collab-host.js"));
 const cycleMs = integer("cycle-ms", 1_800_000, 1_000, 3_600_000);
 const minGapMs = integer("min-gap-ms", 60_000, 0, 3_600_000);
+// The first retry after a failed ring waits this long, doubling each time.
+const retryBaseMs = integer("retry-base-ms", 5_000, 1, 600_000);
 const maxHoursMs = integer("max-hours", 12, 1, 72) * 3_600_000;
 // AGENTTOOL_COLLAB_DOORBELL_TEST_MAX_MS is a test hook for the lifetime, not
 // an interface: whole milliseconds only, and the start log entry says so.
@@ -279,13 +287,13 @@ let anchor: Anchor = values["from-cursor"]
   : head();
 let lastRing = 0;
 let authRetries = 0;
+let ringFailures = 0;
 // Whether the last idle receipt found the session at a rest that asked for
 // no turn. It can be a whole cycle old, so it is only the fallback for
 // restHoldsNow(), which the watcher's own notices ask before they ring.
 let heldByRest = false;
-// Events that went without a ring since the last one that got through: held
-// by a rest, or covered by a ring that failed. The next ring says so: its
-// anchor lies past them, and only collab_next reads from the cursor.
+// Events a rest held back since the last ring that got through. The next ring
+// says so: its anchor lies past them, and only the cursor still covers them.
 let unrungSinceRing = 0;
 // A ring was delayed by the gap: the next turn asks the wait again at once,
 // before the lifetime check, so a ready note is not lost to an expiry.
@@ -334,22 +342,36 @@ while (true) {
     const from = receipt.next_anchor;
     const covered = head();
     const what = addressed ? "at least one routed to this session" : "at least one from another session";
-    unrungSinceRing += receipt.skipped_held_events ?? 0;
-    const passedOver = unrungSinceRing > 0
-      ? `${unrungSinceRing} earlier event(s) before that anchor went without a ring `
-        + "(held by a rest, or a ring that did not get through): read from your cursor with collab_next first. "
+    // Not added to the running count yet: a failed ring keeps its anchor, and
+    // the retry's wait counts this pass's held events again.
+    const unrung = unrungSinceRing + (receipt.skipped_held_events ?? 0);
+    const passedOver = unrung > 0
+      ? `${unrung} earlier event(s) before that anchor were held by a rest and went without a ring: `
+        + "read from your cursor with collab_next first. "
       : "";
     const rang = await ring(`[collab doorbell] ready: workspace ${workspaceId}, session ${sessionId}: `
       + `${covered.sequence - from.sequence} event(s) after sequence ${from.sequence} `
       + `(head ${covered.sequence}), ${what}. This line carries no event content. `
-      + `Read them with collab_events_wait or collab_events_since after_anchor ${JSON.stringify(from)}. `
+      + `Read them with collab_inbox, or with collab_events_since after_anchor ${JSON.stringify(from)}. `
       + passedOver
       + `Watcher pid ${process.pid} re-arms itself; stop it with kill ${process.pid}.`);
-    // A ring that failed leaves its events unrung too: the anchor moves on either way.
-    unrungSinceRing = rang ? 0 : unrungSinceRing + (covered.sequence - from.sequence);
+    if (rang) unrungSinceRing = 0;
     lastRing = Date.now();
     log({ event: rang ? "rang" : "ring_failed", from_sequence: from.sequence, head_sequence: covered.sequence });
-    if (!rang && ownerGone()) stop("owner_gone");
+    if (!rang) {
+      if (ownerGone()) stop("owner_gone");
+      // Keep the anchor: the next wait finds the same events and rings again.
+      ringFailures += 1;
+      if (ringFailures >= RING_FAILURE_LIMIT) {
+        log({ event: "ring_failed_repeatedly", failures: ringFailures, from_sequence: from.sequence });
+        stop("ring_failed_repeatedly", 1);
+      }
+      const backoff = Math.max(minGapMs, retryBaseMs * 2 ** (ringFailures - 1));
+      log({ event: "ring_retry", attempt: ringFailures, after_ms: backoff });
+      await sleep(backoff);
+      continue;
+    }
+    ringFailures = 0;
     anchor = covered;
     if (values.once) stop("once");
     continue;

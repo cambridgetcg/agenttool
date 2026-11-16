@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { canonicalRepositoryRemote, inspectRepository, portableRepositoryKey, RepositoryProbeTimeout, type RepositoryProbeOptions } from "../src/repository.js";
 import { CollabError } from "../src/errors.js";
-import { CollabStore, type CollabStoreOptions } from "../src/store.js";
+import { CollabStore, type CollabStoreOptions } from "../src/store-notes.js";
 
 let directory: string;
 let root: string;

@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { canonicalJson } from "../src/canonical.js";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import { MAX_WAIT_ANCHOR_BYTES, MAX_WAIT_PAGE_BYTES, MAX_WAIT_RESPONSE_BYTES, type EventCursor, type JournalPage } from "../src/protocol.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 import { COLLAB_PACKAGE_VERSION } from "../src/version.js";
 
 const cleanup: Array<() => void | Promise<void>> = [];

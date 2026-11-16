@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildCollabMcpServer } from "../src/mcp.js";
 import type { CollabReport, SessionHandle, Task } from "../src/protocol.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 // Namespace import, so a missing export fails only the test that uses it.
-import * as storeModule from "../src/store.js";
+import * as storeModule from "../src/store-notes.js";
 
 let directory: string;
 let root: string;

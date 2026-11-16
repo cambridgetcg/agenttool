@@ -3,11 +3,11 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
-// Deliberate cross-package source import (store.js, not index.js, so the MCP
+// Deliberate cross-package source import (store-notes.js, not index.js, so the MCP
 // layer's external deps stay out): this test exists to prove that
 // collab-zerone's independent hash walk is byte-identical to the real
 // @agenttool/collab store writing the same journal.
-import { CollabStore } from "../../collab/src/store.js";
+import { CollabStore } from "../../collab/src/store-notes.js";
 import { JournalReader } from "../src/journal.js";
 
 function freshRepoDir(): string {

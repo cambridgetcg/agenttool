@@ -13,14 +13,15 @@ import {
   runCollabHostCli,
 } from "../src/host.js";
 import { writeSessionCredentialFile } from "../src/session-file.js";
-import { CollabStore } from "../src/store.js";
+import { CollabStore } from "../src/store-notes.js";
 
 // What agenttool-collab-host says about itself. Wiring on another Mac may run
 // a build that lacks a verb; the answer has to be loud and machine-readable
 // without ever disturbing the quiet verbs that hooks and timers call.
 const packageRoot = resolve(import.meta.dir, "..");
-const VERBS = ["end", "wait", "knocks", "doorbell-scan"];
+const VERBS = ["end", "wait", "knocks", "doorbell-scan", "person", "person-remote"];
 const QUIET = ["knocks", "doorbell-scan"];
+const DESK = ["person", "person-remote"];
 const usageLines = [COLLAB_KNOCKS_USAGE, COLLAB_KNOCKS_SESSION_USAGE, COLLAB_DOORBELL_SCAN_USAGE]
   .map((line) => line.slice("usage: ".length));
 
@@ -116,7 +117,12 @@ describe("agenttool-collab-host verbs and help", () => {
   test("every listed verb is answered by this build, quiet verbs silently", () => {
     for (const verb of VERBS) {
       const bare = run([verb, "--bogus"]);
-      if (QUIET.includes(verb)) {
+      if (DESK.includes(verb)) {
+        // The person's desk answers with its own receipts; it is only shown to be reached here.
+        expect(bare.receipt).not.toBeNull();
+        expect(bare.receipt!.message ?? "").not.toStartWith("Unknown verb");
+        expect(bare.receipt).not.toHaveProperty("verbs");
+      } else if (QUIET.includes(verb)) {
         // A quiet verb prints its own protocol's line or nothing, and never exits non-zero.
         expect(bare).toMatchObject({ exit_code: 0, line: null });
         expect(run([verb, "--help"])).toMatchObject({ exit_code: 0, line: null });
@@ -141,9 +147,19 @@ describe("agenttool-collab-host verbs and help", () => {
 
   test("the README documents every verb's usage and how to tell a missing verb", async () => {
     const readme = (await Bun.file(join(packageRoot, "README.md")).text()).replace(/\s+/g, " ");
-    for (const line of [COLLAB_HOST_USAGE, COLLAB_KNOCKS_USAGE, COLLAB_KNOCKS_SESSION_USAGE, COLLAB_DOORBELL_SCAN_USAGE]) {
+    for (const line of [COLLAB_KNOCKS_USAGE, COLLAB_KNOCKS_SESSION_USAGE, COLLAB_DOORBELL_SCAN_USAGE]) {
       for (const part of line.slice("usage: ".length).split(" | ")) expect(readme).toContain(part);
     }
+    // end and wait as the README writes them: one line per form of end.
+    for (const usage of [
+      "agenttool-collab-host end --session-file <path> --reason <text> [--release-leases] [--db <path>]",
+      "agenttool-collab-host end --seat-ref <ref> [--seat-ref <ref>...] --reason <text> [--release-leases] [--db <path>]",
+      "agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]",
+      "[--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]",
+      "`agenttool-collab-host person`",
+      "person-remote`",
+    ]) expect(readme).toContain(usage);
+    for (const verb of VERBS) expect(readme).toContain(`\`${verb}\``);
     expect(readme).toContain("`verbs`");
     expect(readme).toContain("`quiet_verbs`");
     expect(readme).toContain("exit 1 with a `usage_error` receipt means the verb is absent");
