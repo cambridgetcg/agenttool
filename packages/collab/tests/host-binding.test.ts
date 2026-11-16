@@ -151,7 +151,7 @@ describe("host binding files", () => {
 describe("hostBindingRecorder", () => {
   const seat = fakeTable(
     { pid: 1, ppid: 0, comm: "/sbin/launchd" },
-    { pid: 4100, ppid: 1, comm: "/Users/someone/.local/bin/claude", args: "claude", started_at: "Thu Oct 8 21:50:55 2026" },
+    { pid: 4100, ppid: 1, comm: "/Users/person/.local/bin/claude", args: "claude", started_at: "Thu Oct 8 21:50:55 2026" },
     { pid: 4101, ppid: 4100, args: "bun /opt/homebrew/bin/agenttool-collab-mcp" },
   );
 

@@ -50,7 +50,7 @@ function proc(pid: number, ppid: number, comm: string, args = comm, started_at =
 function seat(...extra: ProcessRecord[]): ProcessTable {
   return new Map([
     proc(1, 0, "/sbin/launchd"),
-    proc(4100, 1, "/Users/someone/.local/bin/claude", "claude"),
+    proc(4100, 1, "/Users/person/.local/bin/claude", "claude"),
     proc(4101, 4100, "bun", "bun /opt/homebrew/bin/agenttool-collab-mcp"),
     proc(4150, 4100, "/bin/zsh", "/bin/zsh -c knock-tap"),
     ...extra,

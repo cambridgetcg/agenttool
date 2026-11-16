@@ -58,7 +58,7 @@ describe("process table parsing", () => {
 
 describe("host classification (S2 rules)", () => {
   test("claude needs the MCP's CLAUDE_CODE_SESSION_ID; codex splits TUI/exec, app-server and its supervisor", () => {
-    const claude = record(100, 1, "/Users/someone/.local/bin/claude", "claude");
+    const claude = record(100, 1, "/Users/person/.local/bin/claude", "claude");
     expect(hostKindOf(claude, { CLAUDE_CODE_SESSION_ID: "abc" })).toBe("claude-code");
     expect(hostKindOf(claude, {})).toBe("unknown");
     expect(hostKindOf(claude, { CLAUDE_CODE_SESSION_ID: "" })).toBe("unknown");
