@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
+  chmodSync,
   cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -1737,6 +1739,14 @@ describe("MCP surface", () => {
     const [oldCopy, newCopy] = ["old", "new"].map((name) => {
       const copy = join(directory, `state-${name}`);
       cpSync(state, copy, { recursive: true });
+      // A copy need not keep modes (Bun's cpSync on Linux does not), and both
+      // builds write the knock ledger only into a private directory.
+      for (const directory of [copy, join(copy, "collab-sessions")]) {
+        chmodSync(directory, 0o700);
+        for (const entry of readdirSync(directory, { withFileTypes: true })) {
+          if (entry.isFile()) chmodSync(join(directory, entry.name), 0o600);
+        }
+      }
       return copy;
     });
     const oldTapped = knock(knockBranchBundle, join(oldCopy!, "collab.sqlite"), ["--mark-tapped"]);
