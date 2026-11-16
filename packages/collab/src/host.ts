@@ -547,10 +547,15 @@ const HOST_VERBS = {
   person: { quiet: false, run: (rest, _argv, env, _dependencies, personDeps) => runPersonDeskCli(rest, env, personDeps) },
   "person-remote": {
     quiet: false,
-    // The SSH forced command takes no argument of its own; with one it is answered as end and wait are.
-    run: (rest, argv, env, dependencies, personDeps) => rest.length === 0
-      ? runPersonRemoteCli(env, personDeps)
-      : runEndOrWait(argv, env, dependencies.wait_clock ?? systemClock),
+    // The SSH forced command reads its argv from SSH_ORIGINAL_COMMAND and takes none of its own.
+    run: (rest, argv, env, dependencies, personDeps) => {
+      if (rest.length === 0) return runPersonRemoteCli(env, personDeps);
+      if (rest.some((arg) => arg === "--help" || arg === "-h")) {
+        return runEndOrWait(argv, env, dependencies.wait_clock ?? systemClock);
+      }
+      const refusal = new CollabError("usage_error", `person-remote takes no arguments; ${COLLAB_HOST_USAGE}`);
+      return { exit_code: 1, line: JSON.stringify(errorReceipt(refusal)) };
+    },
   },
 } satisfies Record<string, { quiet: boolean; run: HostVerbRun }>;
 type HostVerb = keyof typeof HOST_VERBS;

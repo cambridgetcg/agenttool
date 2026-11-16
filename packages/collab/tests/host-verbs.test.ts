@@ -136,6 +136,17 @@ describe("agenttool-collab-host verbs and help", () => {
     }
   });
 
+  test("person-remote with an argument is told it takes none, not that the verb comes first", () => {
+    const refused = run(["person-remote", "extra-TOKEN123"]);
+    expect(refused.exit_code).toBe(1);
+    expect(refused.receipt).toMatchObject({ status: "error", error: "usage_error" });
+    expect(refused.receipt!.message).toStartWith("person-remote takes no arguments");
+    expect(refused.receipt!.message).not.toContain("first argument");
+    expect(refused.line).not.toContain("TOKEN123");
+    // Help is still help, and names every verb.
+    expect(run(["person-remote", "--help"]).receipt).toMatchObject({ status: "help", verbs: VERBS });
+  });
+
   test("end and wait still accept an option before the verb", () => {
     const handle = store.startSession({ root_path: join(directory, "repo"), actor: "option-first" });
     writeSessionCredentialFile(store.defaultSessionCredentialPath(handle.session.id), handle.credential);
