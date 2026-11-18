@@ -9,6 +9,7 @@ import {
   closeSync as closeSync8,
   existsSync as existsSync7,
   fsyncSync as fsyncSync4,
+  linkSync as linkSync2,
   lstatSync as lstatSync6,
   openSync as openSync8,
   readFileSync as readFileSync4,
@@ -13040,12 +13041,19 @@ function readKnockAt(db, session, now, includeSender) {
   const readThrough = knockReadThrough(db, session.workspace_id, session.id, session.cursor_sequence);
   const waiting = addressedItems(db, session, includeSender, readThrough);
   const pastCursor = readThrough === session.cursor_sequence ? waiting : addressedItems(db, session, false, session.cursor_sequence);
-  return { session, rest: restAt(db, session, now), waiting, past_cursor: pastCursor.map((item) => item.seq) };
+  const head = db.query("SELECT event_head_sequence FROM workspaces WHERE id = ?").get(session.workspace_id);
+  return {
+    session,
+    rest: restAt(db, session, now),
+    waiting,
+    past_cursor: pastCursor.map((item) => item.seq),
+    head: head?.event_head_sequence ?? 0
+  };
 }
 function knockReport(databasePath, found, now, markTappedItems) {
   const { session, rest, waiting } = found;
   const held = rest !== null && !rest.wake_on.includes("addressed");
-  const fresh = markTappedItems && !held ? markTapped(databasePath, session.id, waiting, found.past_cursor) : untapped(readKnockLedger(databasePath), session.id, waiting);
+  const fresh = markTappedItems && !held ? markTapped(databasePath, session.id, waiting, found.past_cursor, found.head) : untapped(readKnockLedger(databasePath), session.id, waiting);
   return {
     protocol: COLLAB_KNOCK_PROTOCOL,
     session_id: session.id,
@@ -13145,7 +13153,7 @@ function readKnockLedger(databasePath) {
   }
   return parsed;
 }
-function markTapped(databasePath, sessionId, waiting, pastCursor) {
+function markTapped(databasePath, sessionId, waiting, pastCursor, head) {
   if (untapped(readKnockLedger(databasePath), sessionId, waiting).length === 0)
     return [];
   return withLedgerLock(databasePath, () => {
@@ -13154,7 +13162,7 @@ function markTapped(databasePath, sessionId, waiting, pastCursor) {
     if (fresh.length === 0)
       return [];
     const stillWaiting = new Set(pastCursor);
-    const kept = (ledger.tapped[sessionId] ?? []).filter((seq) => stillWaiting.has(seq));
+    const kept = (ledger.tapped[sessionId] ?? []).filter((seq) => stillWaiting.has(seq) || seq > head);
     const tapped = [...new Set([...kept, ...fresh.map((item) => item.seq)])].sort((left, right) => left - right);
     writeKnockLedger(databasePath, {
       format: KNOCK_LEDGER_FORMAT,
@@ -13163,27 +13171,74 @@ function markTapped(databasePath, sessionId, waiting, pastCursor) {
     return fresh;
   });
 }
+function ledgerBusy() {
+  return new CollabError("knock_ledger_busy", "Another tap holds the knock ledger");
+}
+function sameLockFile(left, right) {
+  return left.dev === right.dev && left.ino === right.ino && left.mtimeMs === right.mtimeMs;
+}
 function withLedgerLock(databasePath, run) {
   const lock = `${knockLedgerPath(databasePath)}.lock`;
-  const acquire = () => closeSync8(openSync8(lock, "wx", 384));
+  const acquire = () => {
+    closeSync8(openSync8(lock, "wx", 384));
+    return lstatSync6(lock);
+  };
+  let ours;
   try {
-    acquire();
+    ours = acquire();
   } catch (error) {
     if (error.code !== "EEXIST")
       throw error;
-    if (Date.now() - lstatSync6(lock).mtimeMs < LEDGER_LOCK_STALE_MS) {
-      throw new CollabError("knock_ledger_busy", "Another tap holds the knock ledger");
+    let judged;
+    try {
+      judged = lstatSync6(lock);
+    } catch {
+      throw ledgerBusy();
     }
-    unlinkSync4(lock);
-    acquire();
+    if (Date.now() - judged.mtimeMs < LEDGER_LOCK_STALE_MS)
+      throw ledgerBusy();
+    breakStaleLedgerLock(lock, judged);
+    try {
+      ours = acquire();
+    } catch (retry) {
+      if (retry.code === "EEXIST")
+        throw ledgerBusy();
+      throw retry;
+    }
   }
   try {
     return run();
   } finally {
+    releaseLedgerLock(lock, ours);
+  }
+}
+function breakStaleLedgerLock(lock, judged) {
+  const aside = `${lock}.broken-${randomUUID3()}`;
+  try {
+    renameSync4(lock, aside);
+  } catch (error) {
+    if (error.code === "ENOENT")
+      throw ledgerBusy();
+    throw error;
+  }
+  try {
+    if (sameLockFile(lstatSync6(aside), judged))
+      return;
     try {
-      unlinkSync4(lock);
+      linkSync2(aside, lock);
+    } catch {}
+    throw ledgerBusy();
+  } finally {
+    try {
+      unlinkSync4(aside);
     } catch {}
   }
+}
+function releaseLedgerLock(lock, ours) {
+  try {
+    if (sameLockFile(lstatSync6(lock), ours))
+      unlinkSync4(lock);
+  } catch {}
 }
 function writeKnockLedger(databasePath, ledger) {
   const directory = collabSessionsDirectory(databasePath);

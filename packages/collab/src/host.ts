@@ -5,6 +5,7 @@ import {
   closeSync,
   existsSync,
   fsyncSync,
+  linkSync,
   lstatSync,
   openSync,
   readFileSync,
@@ -1145,6 +1146,11 @@ interface KnockRead {
    * ledger keeps an entry for as long as that, so no build announces it twice.
    */
   past_cursor: number[];
+  /**
+   * The workspace's event head in this snapshot. A ledger entry above it was
+   * written by a tap that read a newer snapshot, so this read cannot judge it.
+   */
+  head: number;
 }
 
 /**
@@ -1158,7 +1164,15 @@ function readKnockAt(db: Database, session: ReadOnlySessionRow, now: Date, inclu
   const pastCursor = readThrough === session.cursor_sequence
     ? waiting
     : addressedItems(db, session, false, session.cursor_sequence);
-  return { session, rest: restAt(db, session, now), waiting, past_cursor: pastCursor.map((item) => item.seq) };
+  const head = db.query("SELECT event_head_sequence FROM workspaces WHERE id = ?")
+    .get(session.workspace_id) as { event_head_sequence: number } | null;
+  return {
+    session,
+    rest: restAt(db, session, now),
+    waiting,
+    past_cursor: pastCursor.map((item) => item.seq),
+    head: head?.event_head_sequence ?? 0,
+  };
 }
 
 /** Build the report from one read; mark the new items unless the rest is held. */
@@ -1168,7 +1182,7 @@ function knockReport(databasePath: string, found: KnockRead, now: Date, markTapp
   // stay unmarked, so they tap at the first turn after the session returns.
   const held = rest !== null && !rest.wake_on.includes("addressed");
   const fresh = markTappedItems && !held
-    ? markTapped(databasePath, session.id, waiting, found.past_cursor)
+    ? markTapped(databasePath, session.id, waiting, found.past_cursor, found.head)
     : untapped(readKnockLedger(databasePath), session.id, waiting);
   return {
     protocol: COLLAB_KNOCK_PROTOCOL,
@@ -1320,7 +1334,13 @@ function readKnockLedger(databasePath: string): KnockLedger {
  * A held lock means another tap is in progress: refuse (silence) rather than
  * risk announcing an item twice; the next turn taps it.
  */
-function markTapped(databasePath: string, sessionId: string, waiting: KnockItem[], pastCursor: number[]): KnockItem[] {
+function markTapped(
+  databasePath: string,
+  sessionId: string,
+  waiting: KnockItem[],
+  pastCursor: number[],
+  head: number,
+): KnockItem[] {
   if (untapped(readKnockLedger(databasePath), sessionId, waiting).length === 0) return [];
   return withLedgerLock(databasePath, () => {
     const ledger = readKnockLedger(databasePath);
@@ -1329,9 +1349,11 @@ function markTapped(databasePath: string, sessionId: string, waiting: KnockItem[
     // Keep only sequences past the acknowledged cursor: acknowledged items
     // never return. An item the read mark has passed is kept until the cursor
     // passes it too, because a build that counts from the cursor alone shares
-    // this ledger and would otherwise announce it again.
+    // this ledger and would otherwise announce it again. A sequence above this
+    // snapshot's head was recorded by a tap that read a newer snapshot; this
+    // read cannot judge it, so it is kept for a later tap to trim.
     const stillWaiting = new Set(pastCursor);
-    const kept = (ledger.tapped[sessionId] ?? []).filter((seq) => stillWaiting.has(seq));
+    const kept = (ledger.tapped[sessionId] ?? []).filter((seq) => stillWaiting.has(seq) || seq > head);
     const tapped = [...new Set([...kept, ...fresh.map((item) => item.seq)])].sort((left, right) => left - right);
     writeKnockLedger(databasePath, {
       format: KNOCK_LEDGER_FORMAT,
@@ -1341,27 +1363,88 @@ function markTapped(databasePath: string, sessionId: string, waiting: KnockItem[
   });
 }
 
+function ledgerBusy(): CollabError {
+  return new CollabError("knock_ledger_busy", "Another tap holds the knock ledger");
+}
+
+/** The same lock file: device, inode and mtime (a lock is never written after it is created). */
+function sameLockFile(left: Stats, right: Stats): boolean {
+  return left.dev === right.dev && left.ino === right.ino && left.mtimeMs === right.mtimeMs;
+}
+
 function withLedgerLock<T>(databasePath: string, run: () => T): T {
   const lock = `${knockLedgerPath(databasePath)}.lock`;
-  const acquire = () => closeSync(openSync(lock, "wx", 0o600));
+  const acquire = (): Stats => {
+    closeSync(openSync(lock, "wx", 0o600));
+    return lstatSync(lock);
+  };
+  let ours: Stats;
   try {
-    acquire();
+    ours = acquire();
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-    if (Date.now() - lstatSync(lock).mtimeMs < LEDGER_LOCK_STALE_MS) {
-      throw new CollabError("knock_ledger_busy", "Another tap holds the knock ledger");
+    let judged: Stats;
+    try {
+      judged = lstatSync(lock);
+    } catch {
+      throw ledgerBusy(); // released in between: the next turn taps
     }
-    unlinkSync(lock);
-    acquire();
+    if (Date.now() - judged.mtimeMs < LEDGER_LOCK_STALE_MS) throw ledgerBusy();
+    breakStaleLedgerLock(lock, judged);
+    try {
+      ours = acquire();
+    } catch (retry) {
+      if ((retry as NodeJS.ErrnoException).code === "EEXIST") throw ledgerBusy();
+      throw retry;
+    }
   }
   try {
     return run();
   } finally {
+    releaseLedgerLock(lock, ours);
+  }
+}
+
+/**
+ * Break a lock judged stale (left by a crashed tap). Two taps can judge the
+ * same lock stale; if the other breaks it and takes a fresh lock first, an
+ * unlink here would remove that live lock. So the lock is moved aside first
+ * and checked: only the very file judged stale is removed. Anything else is
+ * put back (a hard link cannot replace a lock taken meanwhile) and this tap is
+ * busy. Exported for tests.
+ */
+export function breakStaleLedgerLock(lock: string, judged: Stats): void {
+  const aside = `${lock}.broken-${randomUUID()}`;
+  try {
+    renameSync(lock, aside);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") throw ledgerBusy();
+    throw error;
+  }
+  try {
+    if (sameLockFile(lstatSync(aside), judged)) return;
     try {
-      unlinkSync(lock);
+      linkSync(aside, lock);
     } catch {
-      // A lock that cannot be removed expires after LEDGER_LOCK_STALE_MS.
+      // A lock taken in the meantime stands; the moved one's holder finds a
+      // different file at release and leaves it alone.
     }
+    throw ledgerBusy();
+  } finally {
+    try {
+      unlinkSync(aside);
+    } catch {
+      // Nothing more to remove.
+    }
+  }
+}
+
+/** Remove the lock only if it is still the one this tap created. Exported for tests. */
+export function releaseLedgerLock(lock: string, ours: Stats): void {
+  try {
+    if (sameLockFile(lstatSync(lock), ours)) unlinkSync(lock);
+  } catch {
+    // A lock that cannot be removed expires after LEDGER_LOCK_STALE_MS.
   }
 }
 
