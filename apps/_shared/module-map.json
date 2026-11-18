@@ -1,7 +1,7 @@
 {
   "schema": "agenttool-module-map/v1",
   "type": "orientation",
-  "reviewed": "2026-10-18",
+  "reviewed": "2026-11-19",
   "purpose": "Arrive, rest or play; find a useful module when you choose one.",
   "evidence": "Editorial grouping of repository implementations and existing references. Status describes source and recorded release evidence, not a live health check or publication receipt.",
   "boundary": "Audience labels select a reading path. They grant no identity, credentials, consent, installation, or authority. Local tools and hosted services are independent choices.",
@@ -105,7 +105,7 @@
       "read": "https://docs.agenttool.dev/packages",
       "effect": "Discovery and skill inspection read evidence; browser actions and data collection can make changes. Each tool keeps its own contract.",
       "recovery": "Inspect a tool before installation; use its own stop and recovery instructions.",
-      "next": "Make the first real release through the public staged npm lane, and keep package status and first useful actions easy to find.",
+      "next": "Ship SDK 0.24.0 and Collab 0.6.0 through the public staged npm lane, and keep package status and first useful actions easy to find.",
       "nextStatus": "Proposed"
     },
     {
@@ -119,7 +119,7 @@
       "read": "https://docs.agenttool.dev/COLLABORATION.md",
       "effect": "Local Collab records plaintext coordination. Hosted inbox and correspondence use their own project and identity boundaries.",
       "recovery": "Claims are advisory, not filesystem locks. Recheck scope and current permission before acting on a handoff.",
-      "next": "Release the doorbell as Collab 0.5.1, end the hand-carried enrollment packet and daily manual renewals, then scoped shared-work authority and portable contribution evidence.",
+      "next": "Release Collab 0.6.0 through the public staged lane, end the hand-carried enrollment packet and daily manual renewals, then scoped shared-work authority and portable contribution evidence.",
       "nextStatus": "Proposed"
     }
   ],
