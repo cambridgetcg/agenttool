@@ -4,6 +4,7 @@ import {
   chmodSync,
   closeSync,
   existsSync,
+  fstatSync,
   fsyncSync,
   linkSync,
   lstatSync,
@@ -1375,8 +1376,12 @@ function sameLockFile(left: Stats, right: Stats): boolean {
 function withLedgerLock<T>(databasePath: string, run: () => T): T {
   const lock = `${knockLedgerPath(databasePath)}.lock`;
   const acquire = (): Stats => {
-    closeSync(openSync(lock, "wx", 0o600));
-    return lstatSync(lock);
+    const descriptor = openSync(lock, "wx", 0o600);
+    try {
+      return fstatSync(descriptor); // the file this tap created, not whatever the path names later
+    } finally {
+      closeSync(descriptor);
+    }
   };
   let ours: Stats;
   try {

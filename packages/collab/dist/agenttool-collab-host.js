@@ -8,6 +8,7 @@ import {
   chmodSync as chmodSync5,
   closeSync as closeSync8,
   existsSync as existsSync7,
+  fstatSync as fstatSync2,
   fsyncSync as fsyncSync4,
   linkSync as linkSync2,
   lstatSync as lstatSync6,
@@ -13180,8 +13181,12 @@ function sameLockFile(left, right) {
 function withLedgerLock(databasePath, run) {
   const lock = `${knockLedgerPath(databasePath)}.lock`;
   const acquire = () => {
-    closeSync8(openSync8(lock, "wx", 384));
-    return lstatSync6(lock);
+    const descriptor = openSync8(lock, "wx", 384);
+    try {
+      return fstatSync2(descriptor);
+    } finally {
+      closeSync8(descriptor);
+    }
   };
   let ours;
   try {
