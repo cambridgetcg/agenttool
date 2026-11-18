@@ -41,6 +41,8 @@ export function defaultActor(env: NodeJS.ProcessEnv = process.env, parentPid = p
       || typeof value.procStart !== "string" || !value.procStart) throw unavailable();
     // Claude records `ps -o lstart=` in the C locale and UTC. Recheck the OS
     // birth time, not just PID existence, so stale metadata cannot survive reuse.
+    // This pid only selects whose display name is borrowed. It never moves the
+    // host binding, whose own start time is local (process-tree.ts).
     const started = spawnSync("ps", ["-o", "lstart=", "-p", pid], {
       encoding: "utf8", timeout: 1000, maxBuffer: 1024,
       stdio: ["ignore", "pipe", "ignore"], env: { PATH: process.env.PATH, LC_ALL: "C", TZ: "UTC" },

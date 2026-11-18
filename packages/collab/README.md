@@ -4,21 +4,23 @@
 > **Type:** reference · **Purpose:** local coordination and upgrade boundaries.
 > **Evidence:** `src/{store,mcp,repository,actor-default}.ts`; `tests/{session-fit,repository,migration-v2,mcp}.test.ts`.
 > **Implements:** Local observation and coordination, not host lifecycle or remote delivery.
-> **Code:** `src/{store,mcp,protocol,proposal,person-desk,ceremony,passkey,tty,version}.ts`.
+> **Code:** `src/{store,mcp,protocol,proposal,person-desk,ceremony,passkey,tty,version,host,host-binding,process-tree}.ts`.
 > **Tests:** `tests/{events-wait,mcp,package,proposal-consent,person-desk,tty}.test.ts`.
 
-**DEVELOPMENT BUILD: 0.6.0-dev.0, 44 MCP tools in the full profile. Unreleased.** Collab 0.5.0
+**DEVELOPMENT BUILD: 0.6.0-dev.0, 45 MCP tools in the full profile. Unreleased.** Collab 0.5.0
 is released on GitHub only, as the
 [`collab-v0.5.0` release](https://github.com/cambridgetcg/agenttool-collab/releases/tag/collab-v0.5.0)
-of `cambridgetcg/agenttool-collab` (2026-10-10). On npm the recorded release is
-still the 32-tool 0.4.0, which does not supply `collab_events_wait`. In
+of `cambridgetcg/agenttool-collab` (2026-10-10), with 33 tools. On npm the
+recorded release is still the 32-tool 0.4.0, which supplies neither
+`collab_events_wait` nor `collab_session_rest`. In
 behaviour, this source is 0.5.0 plus the unreleased [host doorbell wait](#host-doorbell-wait-unreleased)
 and its addressed mode with the Claude Code watcher, plus the unreleased
-[session-fit changes](#session-fit-migration-unreleased) and the three unreleased
+[session-fit changes](#session-fit-migration-unreleased), the unreleased
+[declared rest and knocks](#declared-rest-and-knocks) (`collab_session_rest`) and the three unreleased
 [proposal consent tools](#proposals-and-consent-unreleased) that bring 0.5.0's 33
-tools to 36, plus the eight unreleased Collab Notes verbs, `collab_arrive`,
+tools to 37, plus the eight unreleased Collab Notes verbs, `collab_arrive`,
 `collab_inbox`, `collab_note` (with `decide`), `collab_take`, `collab_done`,
-`collab_propose`, and the sealed ballot's `collab_poll` and `collab_vote` (44 in all;
+`collab_propose`, and the sealed ballot's `collab_poll` and `collab_vote` (45 in all;
 the `notes` tools profile registers those eight and `collab_journal_verify`).
 Enabling the `notes` profile (`AGENTOOL_COLLAB_TOOLS=notes`) in a host's MCP
 configuration is a host step for the owner; this build does not take it. How agents
@@ -173,7 +175,9 @@ The session's part of the ordinary loop (below) is:
    same transaction. Without the flag, ending refuses while the session owns a
    live task lease and `session_has_active_leases` lists `task_ids` and
    `leases`. Pending offers addressed to the ending session expire with an
-   auditable `target_session_ended` reason.
+   auditable `target_session_ended` reason. A session that should stay
+   reachable may declare rest instead (see
+   [Declared rest and knocks](#declared-rest-and-knocks)).
 
 Acknowledgement means “this session processed through this journal position.”
 It does not mean agreement, acceptance, consent, or correctness. A stale epoch
@@ -323,8 +327,10 @@ carries the next step.
    `collab_task_review` with `accept` or `request_changes`, a summary, and its
    own `confidence`, `confidence_basis`, and `limits`. A late reviewer concurs
    or disagrees by report.
-8. **End.** `collab_session_end` with a `reason`, `release_leases: true`, and
-   an optional `release_summary`.
+8. **End or rest.** `collab_session_end` with a `reason`,
+   `release_leases: true`, and an optional `release_summary`; or, to stay
+   reachable, `collab_session_rest` (see
+   [Declared rest and knocks](#declared-rest-and-knocks)).
 
 Dependencies do not unlock from a pending reviewed completion. Legacy tasks and
 tasks with a `reported` completion policy still complete on the worker's
@@ -355,9 +361,9 @@ active session in the same workspace other than the reporter. The completion
 report stays unaddressed, so every session still sees it; the request is stored
 in the `task.reported_complete` event, projected on the task, and announced by
 a separate `informs` report addressed to the requested session. It is a
-request, not a reservation: any distinct session may still review, and others
-should leave it to the requested reviewer while that session's `liveness` is
-`live`. The server refuses a request that names the reporter
+request, not a reservation: any distinct session may still review. Review it
+yourself unless the requested reviewer reads `live`, or `resting` with
+`wake_on` addressed. The server refuses a request that names the reporter
 (`review_request_self`), a session that is not active in this workspace
 (`review_requested_session_unavailable`), or a task that completes on report
 (`review_request_not_applicable`).
@@ -423,6 +429,17 @@ refusal does not stop the others, and the exit code is 1 only when an entry is
 `error`. No match is an empty `sessions` list. `--seat-ref` and
 `--session-file` are mutually exclusive.
 
+It removes the host binding of each session it ends. It ends a session that
+had declared a rest too: a host's exit is an end, and ending outranks rest
+(`tests/rest-seat-end.test.ts`). A session that holds a live lease is refused
+(`session_has_active_leases`) and stays open, resting or not, unless the host
+passes `--release-leases`; the execution-seat hook does not. That matches what a doorbell can do
+afterwards. A Claude Code seat can be woken only while its process lives, so a
+rest left standing after the exit could never be answered and its senders
+would read a wake that cannot happen. A host that resumes sessions in a fresh
+process, as the Codex wake does, must not end them by seat ref when the first
+process exits.
+
 A seat ref is an unverified hint, and ending resumes the session host-side,
 which fences any process still bound to it. Use it only for a process that is
 exiting or gone. Two live processes that declared the same ref (for example
@@ -449,18 +466,49 @@ Under Claude Code, `collab_arrive` returns the watcher command for its session i
 (`collab-sessions/<id>.json`). Each poll is the same authenticated,
 chain-verified read `collab_events_wait` uses, with the generation already in
 the file: the command never resumes, acknowledges, refreshes `last_seen` or
-writes, so it cannot fence the MCP process that owns the session. It waits
+changes any event, cursor or session row, so it cannot fence the MCP process
+that owns the session. Unlike `knocks` and `doorbell-scan` it opens the journal
+through `CollabStore`: each start briefly takes the write lock, and the first
+open of a journal written by an older build adds this build's additive tables. It waits
 after `--after-anchor` (exact `{ epoch_id, sequence, hash }` JSON) or, by
 default, after the session's acknowledged cursor, polling every 250 ms for up
 to `--wait-ms` (default 600,000, maximum 3,600,000). Events attributed to the
 waiting session are passed over unless `--include-own`; unattributed events
-such as `workspace.opened` count as unread. With `--addressed`, other
+such as `workspace.opened` count as unread. With `--addressed`, an event never
+addresses its own author (so `--include-own` then changes nothing about what
+rings; its own events are counted in `skipped_unaddressed_events`), and other
 sessions' events ring only when their routing fields name the waiting session
-(`CollabStore.eventAddressesSession`): a report addressed to it or answering
-one of its reports, a handoff offered to it or answering its offer, a review
-requested of it, a verdict on its completion, or recovery of its expired
-lease. Free text is never inspected, and the receipt adds
-`skipped_unaddressed_events`.
+(`CollabStore.eventAddressesSession`): a report addressed to it, or answering
+one of its reports with no other session named; a handoff offered to it, or an
+answer to its own offer (accepted, declined, or lost because the target left
+or the deadline passed); a review requested of it; a verdict on its own
+completion; or recovery of its expired lease. A review request and a verdict
+are each two events, the task event and an addressed report written beside it,
+and a wait that starts before them rings once for the pair. Proposal and ballot
+events ring as [Proposals and consent](#proposals-and-consent-unreleased) and
+[PROTOCOL.md](PROTOCOL.md) describe. Free text
+is never inspected, and the receipt adds `skipped_unaddressed_events`. This
+routed set is wider than a knock: an answer sent without `to_session_id`, an
+answer to its handoff offer, and recovery of its lease ring here, but are not
+counted in `addressed_waiting` and never reach `knocks` or `doorbell-scan`
+(see [Declared rest and knocks](#declared-rest-and-knocks)). Every knock also
+rings here; not every ring is a knock.
+
+A declared rest governs this doorbell too, because every ring starts a turn.
+While the waiting session rests without `wake_on: ["addressed"]`, nothing
+rings. While it rests with it, only a note explicitly addressed to it rings
+(the set a host doorbell wakes for), whatever `--addressed` or `--include-own`
+ask. Events held this way are passed over, not kept for later: the receipt
+counts them in `skipped_held_events`, they wait in the journal, and
+`collab_next` counts addressed ones on return. A wait that keeps running, or
+is continued from `next_anchor`, therefore does not ring for them when the
+session returns or `until` ends. The rest is judged when a poll sees the
+event, so a note that lands in the last poll interval before the rest ends
+still rings, and so does held mail under a wait armed afresh from the
+acknowledged cursor afterwards. An idle receipt adds `held_by_rest: true` while a
+rest without `wake_on: ["addressed"]` still stands. The rest is read, never
+liveness: a `stale` session that did not declare rest is still rung by a wait
+it armed.
 
 It prints one JSON line without the credential and without any event type,
 actor, entity or payload. Exit 0 with `status: "ready"` means at least one
@@ -543,20 +591,195 @@ condition; if other commits already sit on it, use `request_changes`.
 
 `role` is free text. A session that only listens or reviews says so there, and
 others avoid offering it handoffs or review requests it declines.
-Coordination-session projections carry a derived `liveness`: `stale` once the
-session has ended or when `last_seen_at` is more than 6 hours old, otherwise
-`live`. Task projections carry `assignee_liveness` (null without an assignee),
-and `collab_next` adds `recovery_required` (the caller's own expired leases
-first). Every cursor acknowledgement refreshes `last_seen_at`, including one
-that does not advance the cursor; so do `collab_next`, session mutations, a
-cursor reset, resume, and end. A host that only uses `collab_events_wait` or
-the host doorbell `wait` for over 6 hours reads as stale. This does not change session status. A session lease becomes recoverable only
-when both its stored TTL deadline has passed and the holder is stale; no task
-ownership transfers automatically. Activity while live retains the lease, but
-once expired it requires explicit recovery even if its holder becomes live again.
-Read-only waits never refresh liveness.
+Coordination-session projections carry a derived `liveness` and a `rest`
+view. Liveness reads, in this order of precedence, `ended`, `resting`, `stale`
+or `live`: `ended` once the session has ended; `resting` while its latest
+declared rest stands (not returned, `until` not passed); `stale` when
+`last_seen_at` is more than 6 hours old; otherwise `live`. Rest is declared,
+never inferred: a quiet session reads `stale`, never `resting`. `rest` is
+`{mode, since, until, reason, wake_on}` for a standing declared rest, else
+null. Task projections carry `assignee_liveness` in the same four states (null
+without an assignee), and `collab_next` adds `recovery_required` (the caller's
+own expired leases first). Every cursor acknowledgement refreshes
+`last_seen_at`, including one that does not advance the cursor; so do
+`collab_next`, session mutations, a cursor reset, resume, and end. A host that
+only uses `collab_events_wait` or the host doorbell `wait` for over 6 hours
+reads as stale. This does not change session status. A session lease becomes
+recoverable only when both its stored TTL deadline has passed and the holder
+has ended or has not been seen for 6 hours; no task ownership transfers
+automatically. A declared rest neither shortens nor extends a lease: a resting
+holder is counted by when it was last seen, like any other. Declaring a rest or
+returning from one is itself a session call, so like any session mutation it
+counts as being seen; a standing rest alone does not. Activity while
+present retains the lease, but once expired it requires explicit recovery even
+if its holder becomes live again. Read-only waits never refresh liveness.
 `role` is fixed for the session's lifetime; correct it with an `informs`
 report, or end the session and start a new one.
+
+### Host verbs and help
+
+`agenttool-collab-host` has six verbs: `end` and `wait` print one receipt line of
+`agenttool.collab-host/1`; `knocks` and `doorbell-scan` are quiet (see
+[Declared rest and knocks](#declared-rest-and-knocks)); and `person` and
+`person-remote` are the person's desk, with their own receipts and exit code 3
+(see [Proposals and consent](#proposals-and-consent-unreleased)). `--help`, given first
+or with `end` or `wait`, prints
+`status: "help"` with a `usage` line naming every verb, `verbs` (every verb
+this build answers) and `quiet_verbs`; after a quiet verb it prints nothing. A first word the build does not know
+exits 1 with `usage_error`, the same two lists, and no echo of what was given, even with `--help`;
+`end` and `wait` may follow their options, the quiet verbs must come first.
+Host wiring that may meet another build can rely on one rule that holds for
+every build when the verb is given first: a quiet verb prints its own protocol's line or nothing and never
+exits non-zero, so exit 1 with a `usage_error` receipt means the verb is absent.
+A help receipt without `verbs` comes from a build older than the list and
+says nothing either way. Ignore keys you do not know.
+
+### Declared rest and knocks
+
+`collab_session_rest` declares rest for the caller's own credential-bound
+session, unlike the unauthenticated presence tools:
+`{workspace_id?, idempotency_key, mode: "resting" | "ready", until?, reason?, wake_on?}`.
+`until` is a future ISO-8601 instant with seconds and a time zone (stored as
+UTC), `reason` at most 200 characters, and `wake_on` is `[]` (the default) or
+`["addressed"]`. `mode: "resting"` appends `session.rested`; `mode: "ready"`
+takes none of those three fields, returns, and appends `session.returned`. An
+exact retry with the same idempotency key is safe. Expiry is computed on read:
+once `until` passes the session no longer reads `resting`, and nothing starts.
+Rest never releases, renews, extends or reassigns leases, handoffs or accepted
+obligations. Ending outranks rest: departure is complete, so an ended session
+is never knocked or woken.
+
+`wake_on: ["addressed"]` is the session's own consent to be woken for
+addressed notes; a sender never arms another session's doorbell. Collab wakes
+no one. A host may: it resumes the same session through
+`AGENTOOL_COLLAB_SESSION_FILE` in a fresh process (same session ID, the
+generation raised by one, any older process fenced), and resuming an ended
+session is refused. A woken session that finds nothing for it may end its turn
+without replying; silence is complete. Until it returns or rests again it
+still reads `resting`.
+
+The bound `session` in `collab_next` carries `addressed_waiting`: the
+`report.posted` events addressed to it (ordinary addressed reports, review
+requests and review results, and every Collab Note that names it) and the
+session-path `handoff.offered` events offered to it, past what it has read and
+not authored by it. `task.reported_complete` is not counted, because its
+review-request report already is, and a `handoff.accepted` never matches.
+
+One session has two read positions: the cursor that `collab_cursor_ack` moves
+and the read mark that `collab_inbox` moves. A note stops waiting once either
+has passed it, for the count, the tap and the wake alike
+(`knockReadThrough` in `src/store.ts`; `tests/knock-read-through.test.ts`). A
+read mark past the journal head is ignored, and a journal with no `note_marks`
+table, or one this build cannot read, is counted from the cursor, so the quiet
+verbs never fall silent for it. The shared tap ledger still drops an entry
+only when the cursor passes it, because a build that counts from the cursor
+alone shares that ledger. Two known limits. `collab_inbox` moves its mark
+before it reads what it returns, so if that read fails the mark is already
+past notes the caller never saw. A retry lists nothing, and those notes no
+longer knock; the read-only look-back `collab_inbox {since: <sequence>}` lists
+them again without moving the mark (and on the full profile `collab_next`
+pages them from the cursor). And a mark past the head is ignored only while it
+is past the head: once the head reaches it, notes that landed in between read
+as read. A mark is past the head only when the journal was restored from an
+older copy, and the session's next `collab_inbox` moves it back to the head.
+
+A proposal, a ballot and a person's act at the desk name sessions through
+other fields. They ring a `wait --addressed` for a session that is not
+resting, and they are never knocks: they are not counted here, not tapped and
+not woken for, and a resting session is passed over for them whatever its
+`wake_on`. The desk's `say --proposal` on a proposal an agent opened is
+addressed to that agent, so it is a knock; any other `say` names no session.
+
+Only an explicit address knocks; a mention or an implied ask never does, and
+neither does an answer sent without `to_session_id` (a host `wait --addressed`
+rings for those too; see [Host doorbell wait](#host-doorbell-wait-unreleased)).
+`collab_report_append` with `to_session_id`, `collab_handoff_offer` to a
+session, `collab_task_complete` with `review_requested_session_id`, and
+`collab_task_review` (addressed to the reporter) return
+`addressee: {session_id, liveness, rest, delivery}`. The MCP wrapper computes
+it on every call, so an idempotent replay shows the addressee's current state:
+
+| `delivery` | Addressee reads | Meaning |
+|---|---|---|
+| `tap` | `live` | a host hook may show a pointer at its next turn |
+| `wake` | `resting` with `wake_on: ["addressed"]` | a host doorbell may wake it |
+| `held` | `resting` without it, or `stale` | no host wake; the note waits for its return. A resting session is not tapped and a `wait` it armed stays silent; a `stale` one is tapped when its host next takes a turn, and a `wait` it armed still rings |
+| `none` | `ended` | never knocked; the note stays honestly unread |
+
+The Collab Notes verbs say the same in words. A note, a reply, a decide, a
+withdrawal, a review request (`collab_done` with `review_by`), a verdict and
+the note `collab_propose` sends a carried objector each carry one advice line
+when the session they name is resting: it is resting (and until when), and
+either it asked to be woken for addressed notes, so a host may wake it and
+none is promised, or it asked not to be, so what was sent waits for its
+return. The arrival card marks a resting session among those here with
+`resting: { until, wakes_for_addressed }` (`tests/notes-rest.test.ts`).
+Everything else on that surface reads presence only, and a rest changes none
+of it: who is here, a consent voice and a set-aside count a session as present
+while it was seen within 6 hours, and a ballot's default electorate takes the
+sessions seen within 30 minutes, resting or not (`tests/rest-standing.test.ts`).
+
+`delivery` describes what the addressee declared, not what a host did, and
+nothing is blocked. Collab cannot see hosts, so whether a host can actually
+wake a resting session (for example a Claude seat launched without its
+channel) is recorded by the host's doorbell (`host_cannot_wake` in Sol's
+doorbell ledger), never in the hint. Handoff offers and review requests refuse inactive
+targets, so `none` comes only from an addressed report, a review whose
+reporter has since ended, or a replay after the addressee ended.
+
+A knock is a pointer `{seq, kind, from_actor, ref_id}`, never a body; the
+journal stays the mailbox, so a missed knock loses nothing. Two read-only host
+commands expose knocks:
+
+```bash
+agenttool-collab-host knocks --host-ancestor auto|<pid> [--mark-tapped] [--db <path>]
+agenttool-collab-host knocks --session <id> [--mark-tapped] [--with-sender] [--db <path>]
+agenttool-collab-host doorbell-scan [--db <path>]
+```
+
+`knocks` walks the process ancestry from `<pid>` (a host hook passes its own
+parent pid, `"$PPID"`; `auto` starts from the command's parent process) to the
+nearest recorded host process whose start time still matches. A recognised
+Claude Code or Codex host without a binding ends the walk, and a binding whose
+MCP process has exited no longer counts. It prints one line,
+`{"protocol":"agenttool.collab-knock/1","session_id","liveness","rest","waiting","new"}`,
+or nothing. `new` lists the pointers not yet in the private ledger
+`collab-sessions/knock-ledger.json`, which only `--mark-tapped` writes. When
+more than one active session is bound to that host (two collab MCP processes
+under it; a named child binding writes no host binding and never counts), or a Codex Desktop
+app-server runs more than one collab server, it prints nothing and marks
+nothing: ambiguity means silence, not a guess. `knocks --session <id>` is
+for a host that already knows which session it serves (the cross-device
+bridge's hub): it reads that one session, needs no binding and runs no `ps`,
+and prints nothing unless the session is active. Its report is the same line,
+and with `--with-sender` each item also carries `from_session_id`, the sending
+session's id, so the host can name the sender's device without trusting
+`from_actor`. `--session` never combines with `--host-ancestor`, and
+`--with-sender` needs `--session`; any other combination prints nothing.
+`doorbell-scan` prints
+`{"protocol":"agenttool.collab-doorbell-scan/1","sessions":[...]}`: the resting
+sessions with `wake_on` addressed and waiting items no tap has announced, each
+with its host binding. Both open the journal read-only (`readonly`,
+`query_only`, zero busy timeout), never through `CollabStore`. A WAL journal
+that no process holds open has no `-wal` file a read-only handle could use;
+then they read through a `query_only` handle that can neither create the
+journal nor write to it. A missing journal, like any error, means they print
+nothing and exit 0. `doorbell-scan` bindings name credential-file paths: keep
+them in host configuration, never in model-visible text.
+
+The host binding comes from the host side, never from a model's claim. The MCP
+server's default-slot start (`collab_session_start` or `collab_arrive`) and resume
+(`AGENTOOL_COLLAB_SESSION_FILE`) paths write
+`<database-directory>/collab-sessions/<session-id>.host.json` (mode `0600`,
+format `agenttool.collab-host-binding/1`) with `host_kind` (`claude-code`,
+`codex`, `codex-app-server` or `unknown`: the MCP process's direct parent, read
+from the process tree), `host_pid`, `host_started_at` (a guard against pid
+reuse), `mcp_pid` and `credential_file_path`. It holds no bearer token. Ending
+the session through `collab_session_end`, `collab_done` with outcome `leave`,
+or `agenttool-collab-host end` (by session file or by seat ref) removes it
+(`tests/host-binding.test.ts`). `collab-sessions/` therefore holds credential files, host bindings
+and the knock ledger, and only `<session-id>.json` is a credential: host code
+names these files exactly, never by a `*.json` glob.
 
 ### Conflict and lease boundary
 
@@ -566,8 +789,10 @@ case-insensitive. It does not lock the filesystem, inspect uncommitted diffs,
 resolve every symlink or case alias, prevent direct edits, or arbitrate a
 process using another database.
 
-When a session is stale and its lease TTL has passed, the task reads as
-`recovery_required`. Before taking
+When a session lease's TTL has passed and its holder has ended or gone unseen
+for 6 hours, the task reads as `recovery_required`. (A legacy actor lease
+reads `lease_expired` as soon as its TTL has passed and is taken by the next
+ordinary claim; `collab_task_recover` applies to session leases only.) Before taking
 it over, inspect its progress, reports, artifacts, and last checkpoint. Call
 `collab_task_recover` explicitly with the chosen takeover, release, or block
 action and a concise recovery note explaining what was checked and how useful
@@ -620,7 +845,9 @@ another session's attempt to correct, withdraw, or supersede returns
 preserve the earlier record. Corrections append history; they do not rewrite
 it. `to_session_id` routes a report into that session's `collab_next` instead
 of everyone's; `collab_report_list` still shows it. Addressing is routing, not
-access control.
+access control. A report that answers another, a challenge above all, rings
+only the session it names: leave it unaddressed, or address the target's
+author, when the author should be rung.
 It narrows the reports list only: the `report.posted` event, body included,
 still appears in every session's event page.
 
@@ -840,10 +1067,12 @@ Old explicit actor labels, default bindings, renewal requests carrying
 `expected_version`, presence APIs, event protocols and exact idempotency receipts
 remain readable/usable. Renewal accepts a stale version but still rejects the
 wrong holder, lease, generation or idempotency payload. Legacy actor leases
-remain TTL-bound; a credential-bound lease lives while its holder is `live`
-(active and seen within the existing six-hour window). `lease_expires_at` remains
-the stored minimum deadline, not the full effective lifetime; inspect
-`effective_status` and `assignee_liveness`. This is recorded activity, not proof
+remain TTL-bound; a credential-bound lease lives while its holder is active
+and was seen within the existing six-hour window, whether or not it has declared
+a rest. `lease_expires_at` remains
+the stored minimum deadline, not the full effective lifetime; read
+`effective_status` for the lease, because `assignee_liveness` can read `resting`
+or `live` on either side of expiry. This is recorded activity, not proof
 of a running process. Hosts should end departed sessions with `release_leases`.
 Expiry is checked against the pre-refresh session row. An additive
 `session_lease_lapses` table retains expired lease IDs across later polling,
@@ -853,7 +1082,14 @@ them. No claim is released or transferred until explicit recovery/end.
 Back up the selected journal and upgrade all serving MCP processes together
 before relying on new lease or cross-clone semantics. An older server can still
 read/open the schema and existing roots, but uses its old expiry/discovery rules;
-mixed old/new servers cannot offer the new coordination guarantees. No live
+mixed old/new servers cannot offer the new coordination guarantees. The build
+with declared rest and knocks that preceded this line (commit `cdf54b68`,
+labelled 0.5.0) is an older server in this sense: it expires session leases at
+their TTL, so it can take over a lease this build still calls held, and a
+holder that returns through it after six hours refreshes `last_seen_at` without
+a `session_lease_lapses` row, so this build reads that lease as claimed again.
+Until every MCP process on a journal runs this build, holders should keep
+renewing inside the TTL. No live
 journal, host configuration or installed package is changed by this source PR.
 
 `repository_aliases` and `repository_discovery` are additive routing metadata.
@@ -898,13 +1134,42 @@ returns `actor_required`; supply an explicit label rather than scanning other
 sessions. No `.key`, transcript, `logPath`, credential, or sibling file is read.
 Only the name is retained; later name changes do not rewrite attribution.
 
+Several identifiers name "the host", and they are not interchangeable:
+
+| Identifier | Where it comes from | What compares it |
+|---|---|---|
+| `host_pid` and `host_started_at` in a host binding | The MCP process's direct parent in the process table; `ps -o lstart=` in the C locale and the machine's **local** time, spaces collapsed | `knocks --host-ancestor`, and host wiring with its own local-time `ps` |
+| `mcp_pid` in a host binding | The MCP process itself | A binding counts only while that pid is still a collab MCP process |
+| The actor-default pid and `procStart` | `AGENTOOL_COLLAB_CLAUDE_PID` or the direct parent, checked against Claude Code's session file in **UTC** | Only whose display name is borrowed; it never moves the host binding |
+| The watcher's owner pid | The numeric basename of `CLAUDE_CODE_MESSAGING_SOCKET` | Whether the Claude Code process to ring is still alive |
+| An actor label | Free text chosen at `collab_session_start` | Nothing in Collab. A host that finds its own sessions by label must pass `actor` explicitly: the default is the display name and never carries a host's suffix |
+
+Never compare `host_started_at` with `procStart`: one is local time and the
+other UTC. `host_started_at` also changes for the same live process when the
+machine's time zone changes, so a binding written before a zone change stops
+matching and that host reads as gone until the session is started or resumed
+again. A host binding stores no host conversation id. The one such id this
+build keeps is the session's `seat_ref`, an unverified hint written once in
+the `session.joined` event and never in a binding; `end --seat-ref` reads it
+there. Readers ignore binding keys they do not know
+(`tests/host-identifiers.test.ts`).
+
 Named child bindings require an explicit `actor` and `parent_session_id` at start
 and `binding_key` on every call. Existing hosts need no changes for the default slot. A host integrating
 the library can restore separate host-resumed handles via `resumed_sessions`;
 the CLI's existing `AGENTOOL_COLLAB_SESSION_FILE` resumes only the default slot.
 Named-slot restoration across CLI restarts is not automatic: end children before
 exit, or resume each independently through the existing host-held file mechanism.
-Never pass bearers or their paths to a subagent. The older packaged skill adapters
+Never pass bearers or their paths to a subagent. A named child binding writes no
+host binding: `knocks --host-ancestor` and a host doorbell speak for the default
+slot, the session the host's own conversation holds, so a named child never
+silences its parent's tap. That absence is also what holds a child's wake: its
+`wake_on` consent is recorded, but no host taps or wakes it, and `doorbell-scan`
+lists it with `binding: null`. Its notes wait for `collab_next` with its
+`binding_key`, or for a host that knows its id (`knocks --session`,
+`wait --session`). A sender's hint for a named child still reads `tap` or
+`wake`: it reports the declaration, and no host acts on it. Work that must be woken runs under its own host process with
+a default-slot session. The older packaged skill adapters
 describe the separate-process workflow, which remains supported; the MCP schemas
 and this section specify the new opt-in multiplexing contract.
 
@@ -1014,7 +1279,7 @@ enforce their own repository, account, and publication boundaries.
 ## Codex, Claude Code, Hermes Agent, and OpenClaw
 
 The npm package root is the plugin root for Codex and Claude, so the same
-`skills/coordinate-agent-work/SKILL.md` and 44-tool standalone MCP server (full
+`skills/coordinate-agent-work/SKILL.md` and 45-tool standalone MCP server (full
 profile) ship once:
 
 - Codex reads `.codex-plugin/plugin.json`. Its MCP declaration uses `cwd: "."`
@@ -1116,11 +1381,14 @@ end, the `agenttool-collab-host` bin, host-commit acceptance, and the bound
 `collab_next` refusal of a differing `after_sequence`.
 
 **DEVELOPMENT BUILD: 0.6.0-dev.0.** This main-branch source follows 0.5.0 and is
-unreleased. It keeps journal schema 3, adds three proposal consent tools and the
+unreleased. It keeps journal schema 3, adds three proposal consent tools, declared rest
+(`collab_session_rest`) and the
 Collab Notes verbs `collab_arrive`, `collab_inbox`, `collab_note`, `collab_take`,
-`collab_done`, `collab_propose`, `collab_poll` and `collab_vote` to the 33 MCP tools of 0.5.0 (44 in all under the full profile), and adds the
+`collab_done`, `collab_propose`, `collab_poll` and `collab_vote` to the 33 MCP tools of 0.5.0 (45 in all under the full profile), and adds the
 `agenttool-collab-host wait` host doorbell, its `--addressed` mode and the
-Claude Code doorbell watcher. The MCP server reports `0.6.0-dev.0` in
+Claude Code doorbell watcher. With declared rest come four-state liveness, the
+addressed-waiting count, sender hints, host bindings and the read-only
+`knocks` and `doorbell-scan` host commands. The MCP server reports `0.6.0-dev.0` in
 `serverInfo` and at the start of its instructions, both read from
 `src/version.ts`, so this build cannot announce itself as the 0.5.0 release.
 The next npm release goes through the public staged release path; its version is

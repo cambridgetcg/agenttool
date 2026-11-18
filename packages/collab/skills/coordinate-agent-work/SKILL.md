@@ -1,6 +1,6 @@
 ---
 name: coordinate-agent-work
-description: Coordinate independent coding or research agents across host sessions and linked Git worktrees through AgentTool Collab's local journal, with the eight Collab Notes verbs (collab_arrive, collab_inbox, collab_note, collab_take, collab_done, collab_propose, collab_poll, collab_vote) or the legacy tools. Use when arriving or resuming, stating a finding with checkable reasons, supporting or challenging a report, claiming before overlapping edits, completing work with an optional requested reviewer, reviewing completion, putting a direction to a person, running a sealed ballot on a real choice, delegating to a child session, handing work off, ending a session cleanly, or reconciling results in Codex, Claude Code, Hermes, or another Agent Skills host.
+description: Coordinate independent coding or research agents across host sessions and linked Git worktrees through AgentTool Collab's local journal, with the eight Collab Notes verbs (collab_arrive, collab_inbox, collab_note, collab_take, collab_done, collab_propose, collab_poll, collab_vote) or the legacy tools. Use when arriving or resuming, stating a finding with checkable reasons, supporting or challenging a report, claiming before overlapping edits, completing work with an optional requested reviewer, reviewing completion, putting a direction to a person, running a sealed ballot on a real choice, delegating to a child session, handing work off, ending a session cleanly, declared rest and return, reading knocks and delivery hints, or reconciling results in Codex, Claude Code, Hermes, or another Agent Skills host.
 ---
 
 # Coordinate Agent Work
@@ -8,8 +8,8 @@ description: Coordinate independent coding or research agents across host sessio
 The journal is the shared record of what others will rely on; host messaging is for
 talk. The host keeps spawning, waking and stopping, and its dispatcher, persona, memory
 and permissions; collab starts nothing, and arrival does not prove anyone read or acted.
-**DEVELOPMENT BUILD 0.6.0-dev.0 (unreleased):** 44 MCP tools in the full profile (0.5.0's
-33, three consent tools and the eight verbs) and 9 in the `notes` profile, plus the host
+**DEVELOPMENT BUILD 0.6.0-dev.0 (unreleased):** 45 MCP tools in the full profile (0.5.0's
+33, declared rest, three consent tools and the eight verbs) and 9 in the `notes` profile, plus the host
 doorbell wait; 0.5.0 is a GitHub release only and npm 0.4.0 has 32 tools. The protocol is
 `PROTOCOL.md` at the package root; [REFERENCE.md](REFERENCE.md) documents the legacy tools.
 
@@ -95,12 +95,14 @@ Principles:
   name is told on arrival); a name nobody has carried is refused with the call to `all`.
   An earlier session's report under your name is not yours to withdraw: say where you
   stand in a note on it, to the person on a proposal. Views mark ended sessions
-  `ended: true`.
+  `ended: true`. A note to a session that has declared a rest says so in `advice`:
+  it waits for the session's return, unless the session asked to be woken.
 - **`collab_take`** `{title, paths}` or `{task}`: claim before you edit; with `paths` a
   distinct session reviews it. A lapsed lease needs `because`.
 - **`collab_done`** `{text}`: `finished` (with `why`, `evidence`, `limits`,
   `review_by`), `released`, `blocked` (with `because`), or `leave`, which releases what
-  you hold and ends your session.
+  you hold and ends your session. To stay reachable instead of leaving, declare rest
+  with the legacy tool `collab_session_rest` (full profile only).
 - **`collab_propose`** `{question, criteria, extent}`: a direction for the agents and
   the person. Others support or challenge it; the person acts at his own desk with the
   commands in `for_the_person`, which you never run; then record act `decide`.
@@ -126,8 +128,9 @@ advice, one suggested `next` call and the `note` text; every refusal carries a r
 
 ## The ordinary loop with the legacy tools
 
-The full profile keeps the 36 earlier tools byte for byte; [REFERENCE.md](REFERENCE.md)
-has each step in full.
+The full profile keeps the 36 earlier tools byte for byte, but for one sentence on each
+of five of them (delivery hints and the waiting count), and adds `collab_session_rest`;
+[REFERENCE.md](REFERENCE.md) has each step in full.
 
 1. **Start**: `collab_session_start` with `root_path`, `actor` and `role`. A delegate
    adds `parent_session_id` (declared lineage) and, when a local job runner started it,
@@ -148,7 +151,11 @@ has each step in full.
    host ends a session whose process is gone with
    `agenttool-collab-host end --session-file <path> --reason <text> --release-leases`.
 
-`liveness` reads stale after 6 hours idle; tasks show `assignee_liveness`. A host that
+`liveness` reads `ended`, `resting` (a declared rest stands), `stale` (6 hours idle) or
+`live`; tasks show `assignee_liveness`. To stay reachable while away, declare rest with
+`collab_session_rest` instead of ending; a sender then reads a delivery hint (`tap`,
+`wake`, `held` or `none`). [REFERENCE.md](REFERENCE.md) has "Rest and return" and
+"Knocks and delivery hints". A host that
 cannot commit delivers by artifact, and one integration commit then passes review as
 `host_commit_successor` (other drift is `git_checkpoint_stale`). `collab_events_wait`
 (0.5.0) waits at most 30 s from an exact anchor, continues from `next_anchor`, never the

@@ -36,9 +36,9 @@ checkout instructions.
 Collab **0.5.0, with 33 MCP tools**, adds bounded anchored waiting. It is a
 [GitHub Release](https://github.com/cambridgetcg/agenttool-collab/releases/tag/collab-v0.5.0)
 (2026-10-10), not an npm publication. Collab source is the unreleased
-`0.6.0-dev.0` development build, which adds the host doorbell wait, three
-proposal consent tools and the eight [Collab Notes](../packages/collab/PROTOCOL.md)
-verbs (44 tools in the full profile); verify the protected receipt and registry
+`0.6.0-dev.0` development build, which adds the host doorbell wait, declared
+rest, three proposal consent tools and the eight [Collab Notes](../packages/collab/PROTOCOL.md)
+verbs (45 tools in the full profile); verify the protected receipt and registry
 separately. The private
 **`@agenttool/collab-courier@0.1.0-dev.0`** remains version-unchanged and now has
 an implemented CLI, host transport, durable ledger/importer, Telegram adapter,
@@ -67,7 +67,7 @@ consent, or continuity.
 
 | Situation | Existing boundary | What must remain explicit |
 |---|---|---|
-| Two sessions in the same harness on one device | Independent Collab MCP processes can use one local SQLite journal. | One credential-bound coordination session per MCP process; equal actor labels do not merge sessions. |
+| Two sessions in the same harness on one device | Independent Collab MCP processes can use one local SQLite journal. | One default credential-bound coordination session per MCP process (the development line adds opt-in named child bindings); equal actor labels do not merge sessions. |
 | Claude, Codex, Hermes, or a local fleet on one device | Their independent MCP endpoints can cooperate through that same journal. | Every endpoint must actually resolve the same database and repository workspace; a shared tool endpoint cannot independently attribute every native child. |
 | Linked Git worktrees | Repository discovery uses the resolved Git common directory, with distinct worktree records. | Fresh compatible layouts share a logical workspace; legacy partition/collision cases need explicit recovery, not journal merging. |
 | Independent clones, including another device | Clones do not automatically share Collab repository identity. | Explicit host mapping is required. A matching remote, repository key, or label is not proof that roots are equivalent. |
@@ -79,10 +79,15 @@ network replication. Do not mount one network SQLite file across devices or
 merge journal rows. Git remains file and revision truth. An explicit
 repository-key override is a routing choice, not authority to combine history.
 
-The one-binding limit is important for native subagents: independently
-attributed children need independent MCP processes and sessions. If the host
-shares one endpoint, describe reports as that process's reports, not as
-authenticated statements from every child. Presence beacons are separate,
+The binding boundary is important for native subagents. In released 0.5.0 one
+MCP process holds one binding, so independently attributed children need
+independent MCP processes and sessions. The development line keeps that default
+binding and lets a host add named child bindings on the shared endpoint
+(`binding_key` on every call, an explicit `actor`, `parent_session_id`): that
+is cooperative routing, not authentication or isolation, and separate
+processes remain supported. If the host shares one endpoint without them,
+describe reports as that process's reports, not as authenticated statements
+from every child. Presence beacons are separate,
 self-declared routing hints, not health, consent, or credential binding.
 
 ## Local receive and native lifecycle

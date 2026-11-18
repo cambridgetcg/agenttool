@@ -3,7 +3,7 @@
 > **Compass:** [Collab boundary](../../README.md), [coordination skill](../../skills/coordinate-agent-work/SKILL.md).
 > **Implements:** A host-side watcher that wakes one Claude Code session when collab mail arrives for it. It is not a native lifecycle adapter.
 > **Code:** `collab-doorbell-watch.ts`, `../../src/host.ts` (`agenttool-collab-host wait`), `../../src/store.ts` (`eventAddressesSession`).
-> **Tests:** `../../tests/claude-doorbell-watch.test.ts`, `../../tests/host.test.ts`.
+> **Tests:** `../../tests/claude-doorbell-watch.test.ts`, `../../tests/claude-doorbell-rest.test.ts`, `../../tests/wait-rest.test.ts`, `../../tests/host.test.ts`.
 
 Collab never wakes an agent. The host does. Claude Code gives every session a per-session inbox socket. Its path is in `CLAUDE_CODE_MESSAGING_SOCKET` and its token is in `CLAUDE_CODE_MESSAGING_TOKEN`. A line posted there starts a new turn in an idle session, or is read between tool calls in a busy one.
 
@@ -12,14 +12,16 @@ This watcher joins the two. It loops `agenttool-collab-host wait` and posts one 
 ## What rings
 
 - **By default (`--addressed`):** only events whose routing fields name the bound collab session ring the doorbell:
-  - a report addressed to it, or a report answering one of its reports;
-  - a handoff offered to it, or an answer to its own offer;
-  - a review requested of it;
-  - a verdict on its own completion;
+  - a report addressed to it, or a report answering one of its reports with no other session named;
+  - a handoff offered to it, or an answer to its own offer (accepted, declined, or lost because the target left or the deadline passed);
+  - a review requested of it, or a verdict on its own completion (each is a task event with an addressed report beside it; one ring covers the pair);
   - the recovery of its expired lease;
   - a sealed ballot that lists its unit in the electorate, and that ballot's close when it opened the ballot or cast in it. A cast and a reveal ring no one.
+
+  This routed set is wider than a knock. An answer sent without `to_session_id`, an answer to its handoff offer, and the recovery of its lease ring here, but are not counted in `addressed_waiting` and never reach `knocks` or `doorbell-scan`.
 - **`--all`:** any event from another session rings.
-- **Never:** the session's own events, unless `--include-own` is passed.
+- **Never:** the session's own events, unless `--include-own` is passed with `--all`. In the default addressed mode an event never addresses its own author, so `--include-own` changes nothing there.
+- **Never into a rest that asked for no turn.** While the session rests without `wake_on: ["addressed"]`, nothing rings: a ring delayed by `--min-gap-ms` asks again before it fires, and the watcher's own expiry and "stopped" notices first ask the journal whether the session rests now, then log and exit silently if it does. While it rests with `wake_on: ["addressed"]`, only a note explicitly addressed to it rings, even with `--all`. What a rest holds is not rung later. The next ring that gets through says how many earlier events a rest held back: its anchor lies past them, so read them first, with `collab_inbox` or with `collab_next` from your cursor, and re-arm the watcher if it has expired. A note that lands within one poll before a rest ends (a quarter second, a little longer at a cycle start) can still ring. A session that is merely `stale` and declared no rest is still rung.
 
 Report bodies and other free text are never inspected. Addressing is routing, not access control: every session can still read the event.
 
@@ -38,12 +40,12 @@ To stop it, run `kill "$(cat <journal dir>/collab-doorbell/watch-<collab session
 | Option | Default | Effect |
 |---|---|---|
 | `--addressed` / `--all` | addressed | Which events ring |
-| `--include-own` | off | Also ring for your own events |
+| `--include-own` | off | Also ring for your own events (with `--all` only) |
 | `--from-cursor` | off | Start after your acknowledged cursor instead of the current head |
 | `--cycle-ms` | 1,800,000 | Each `wait` deadline (at most 3,600,000) |
 | `--min-gap-ms` | 60,000 | Minimum time between rings. A burst inside the gap becomes one ring |
 | `--retry-base-ms` | 5,000 | After a failed ring, wait max(min gap, this × 2^(failures − 1)) and ring again from the same anchor |
-| `--max-hours` | 12 | Lifetime. At expiry it rings once to ask for a re-arm |
+| `--max-hours` | 12 | Lifetime. At expiry it rings once to ask for a re-arm, unless the session rests without `wake_on: ["addressed"]` |
 | `--db`, `--host-bin` | the MCP's journal, and the packaged `dist/agenttool-collab-host.js` | Overrides |
 
 ## Lifecycle and boundaries
@@ -51,9 +53,10 @@ To stop it, run `kill "$(cat <journal dir>/collab-doorbell/watch-<collab session
 - **Owner bound.** It exits when the owning Claude Code process (named by the socket) or its socket is gone.
 - **Session bound.** It stops quietly once the collab session ends. After a resume, the MCP process rewrites the credential file with the new generation, and the watcher retries the read up to three times.
 - **Failed rings.** A ring that cannot be posted keeps the watcher's anchor, so the same events ring again after the backoff (5 s, 10 s, 20 s … by default, never sooner than the minimum gap). After 6 failed rings in a row it logs `ring_failed_repeatedly` and exits.
-- **Other errors.** Any other error (fork, rollback, recovery required) rings one "stopped" line and exits. It never loops on an error.
+- **Other errors.** Any other error (fork, rollback, recovery required) rings one "stopped" line and exits, or exits without the line while the session rests without `wake_on: ["addressed"]`. It never loops on an error.
+- **One session, one conversation.** The watcher reads the rest of the session it was armed for and no other. A named child's watcher posts into the same conversation as its parent, whatever the parent's rest says: stop it when the conversation should rest. An older `--host-bin` whose `wait` does not read rest rings whatever the rest says.
 - **One per session.** A pidfile in `<journal dir>/collab-doorbell/` (mode `0700`) ensures one watcher per collab session. The log there records only sequence numbers and outcomes.
-- **Read-only.** It never writes to the journal, never acknowledges, never resumes, and cannot fence the MCP process. The verified read is `agenttool-collab-host wait`. The watcher itself reads only the session's workspace id, status and journal head.
+- **Read-only.** It changes no event, cursor or session row, never acknowledges, never resumes, and cannot fence the MCP process. The verified read is `agenttool-collab-host wait`, which opens the journal through the store (a brief write lock at each start, and this build's additive tables on a journal from an older build). The watcher itself reads only the session's workspace id, status and journal head.
 - **Token.** Each ring opens with an auth line carrying `CLAUDE_CODE_MESSAGING_TOKEN`. On macOS this lets Claude Code verify the post as the session's own child, so a session that bypasses permission prompts still delivers it rather than holding it. The token is never printed or logged.
 - **Not a contract.** The message line `{"type":"user","message":{"role":"user","content":…}}` is the shape Claude Code 2.1.302 prints in its own `[uds-messaging]` debug hint. It is **not a documented contract** and may change. Claude Code still applies its normal peer-message handling and rate limits.
 - **Cost.** Each ring is one model turn. Idle cycles cost nothing. Waiting writes no `last_seen`, so a quiet listener reads `stale` after 6 hours until its next `collab_next` or acknowledgement.

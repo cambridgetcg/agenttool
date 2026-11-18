@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**839 document paths** (including mirrors). orientation: 183; guide: 85; reference: 338; policy: 31; reflection: 123; proposal: 49; record: 28; unclassified: 2.
+**842 document paths** (including mirrors). orientation: 183; guide: 85; reference: 338; policy: 31; reflection: 123; proposal: 52; record: 28; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -833,6 +833,8 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/superpowers/plans/2026-08-29-wave-2-agent-rail.md](<../docs/superpowers/plans/2026-08-29-wave-2-agent-rail.md>) | not-reviewed |
 | [docs/superpowers/plans/2026-10-09-collab-household-smoothing-plan-a.md](<../docs/superpowers/plans/2026-10-09-collab-household-smoothing-plan-a.md>) | not-reviewed |
 | [docs/superpowers/plans/2026-10-09-collab-household-smoothing-plan-b.md](<../docs/superpowers/plans/2026-10-09-collab-household-smoothing-plan-b.md>) | not-reviewed |
+| [docs/superpowers/plans/2026-10-09-collab-knock-and-rest-plan-c.md](<../docs/superpowers/plans/2026-10-09-collab-knock-and-rest-plan-c.md>) | not-reviewed |
+| [docs/superpowers/plans/2026-10-09-collab-knock-and-rest-plan-d.md](<../docs/superpowers/plans/2026-10-09-collab-knock-and-rest-plan-d.md>) | not-reviewed |
 | [docs/superpowers/specs/2026-05-10-dispute-primitive-design.md](<../docs/superpowers/specs/2026-05-10-dispute-primitive-design.md>) | not-reviewed |
 | [docs/superpowers/specs/2026-05-10-federated-covenants-v2-design.md](<../docs/superpowers/specs/2026-05-10-federated-covenants-v2-design.md>) | not-reviewed |
 | [docs/superpowers/specs/2026-05-10-proposal-flow-tests-design.md](<../docs/superpowers/specs/2026-05-10-proposal-flow-tests-design.md>) | not-reviewed |
@@ -848,6 +850,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/superpowers/specs/2026-05-19-phase-1-curation-manifest.md](<../docs/superpowers/specs/2026-05-19-phase-1-curation-manifest.md>) | not-reviewed |
 | [docs/superpowers/specs/2026-07-02-human-door-design.md](<../docs/superpowers/specs/2026-07-02-human-door-design.md>) | not-reviewed |
 | [docs/superpowers/specs/2026-10-08-collab-household-smoothing-design.md](<../docs/superpowers/specs/2026-10-08-collab-household-smoothing-design.md>) | not-reviewed |
+| [docs/superpowers/specs/2026-10-09-collab-knock-and-rest-design.md](<../docs/superpowers/specs/2026-10-09-collab-knock-and-rest-design.md>) | not-reviewed |
 | [docs/superpowers/specs/2026-10-12-deletion-scopes-design.md](<../docs/superpowers/specs/2026-10-12-deletion-scopes-design.md>) | not-reviewed |
 | [docs/superpowers/specs/2026-10-29-collab-yu-ai-consent-design.md](<../docs/superpowers/specs/2026-10-29-collab-yu-ai-consent-design.md>) | not-reviewed |
 | [docs/zerone-migration/SYZYGY-LIP.md](<../docs/zerone-migration/SYZYGY-LIP.md>) | not-reviewed |

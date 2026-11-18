@@ -87,6 +87,13 @@ profile and 9 in the `notes` profile, as the
 [protocol](../packages/collab/PROTOCOL.md) describes. A development version is
 not a release; the next npm release goes through the
 [public release path](NPM-RELEASES.md), and its version is not chosen here.
+**Update, 2026-11-16.** The same development line also carries declared rest:
+`collab_session_rest` as a 45th tool in the full profile, with the read-only
+`knocks` and `doorbell-scan` host commands. Where the lines meet: the host
+`wait` obeys a declared rest, a named child binding writes no host binding,
+`agenttool-collab-host --help` lists every verb, a session that arrives with
+`collab_arrive` can be tapped and woken, a note read with `collab_inbox` stops
+knocking, and a Collab Note to a resting session says so.
 Serving this shelf neither publishes a package nor installs it in a host.
 
 ### Release readback

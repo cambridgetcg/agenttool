@@ -26,6 +26,34 @@ const BASE_REVISION = "a8799aad";
 const BASE_VERSION = "0.5.1-dev.0";
 const LEGACY_TOOLS = 36;
 
+/**
+ * What declared rest and knocks change in those 36, and nothing else: one
+ * tool more, one closing sentence on the four tools whose result names an
+ * addressee, and collab_next's last sentence (the addressed-waiting count and
+ * four-state liveness). Every other field of every legacy tool, and every
+ * other description, stays byte for byte.
+ */
+const REST_TOOLS = ["collab_session_rest"];
+const ADDRESSEE_HINT =
+  "The result's addressee is the addressed session's state at this call, replays included: delivery tap (live), "
+  + "wake (resting with wake_on addressed), held (resting otherwise, or stale) or none (ended). "
+  + "A hint: it blocks nothing and promises no delivery.";
+const BASE_LIVENESS_SENTENCE =
+  "Session liveness and task assignee_liveness are a derived view (stale after 6 hours unseen), never a status change.";
+const REST_DESCRIPTIONS: Record<string, (base: string) => string> = {
+  collab_handoff_offer: (base) => `${base} A bound session's offer names to_session_id: ${ADDRESSEE_HINT}`,
+  collab_report_append: (base) => `${base} With to_session_id: ${ADDRESSEE_HINT}`,
+  collab_task_complete: (base) => `${base} With review_requested_session_id: ${ADDRESSEE_HINT}`,
+  collab_task_review: (base) => `${base} The review result is addressed to the reporter: ${ADDRESSEE_HINT}`,
+  collab_next: (base) => base.replace(
+    BASE_LIVENESS_SENTENCE,
+    "A bound session's addressed_waiting counts notes addressed to it that it has not read "
+      + "(addressed reports, review requests and results, session handoff offers; never its own); "
+      + "it falls as collab_cursor_ack advances, or as collab_inbox shows them. Session liveness and task assignee_liveness are a derived view, "
+      + "never a status change: ended, else resting while a declared rest is unexpired, else stale after 6 hours unseen, else live.",
+  ),
+};
+
 const work = mkdtempSync(join(tmpdir(), "agenttool-collab-surface-"));
 afterAll(() => rmSync(work, { recursive: true, force: true }));
 
@@ -140,15 +168,19 @@ function baseBundle(): string {
 const source = join(packageRoot, "bin", "agenttool-collab-mcp.ts");
 
 describe("the tools profile", () => {
-  test.skipIf(skipBase)("full keeps every existing tool byte for byte and adds the verbs built so far", async () => {
+  test.skipIf(skipBase)("full keeps every existing tool byte for byte but for declared rest, and adds the verbs built so far", async () => {
     const [base, mine] = await Promise.all([stdio(baseBundle()), stdio(source)]);
     expect(base.tools.length).toBe(LEGACY_TOOLS);
     const mineByName = new Map(mine.tools.map((tool) => [tool.name, tool]));
     for (const tool of base.tools) {
-      expect(JSON.stringify(mineByName.get(tool.name))).toBe(JSON.stringify(tool));
+      const rest = REST_DESCRIPTIONS[tool.name];
+      const expected = rest ? { ...tool, description: rest(tool.description as string) } : tool;
+      // Each listed change is really one: a rule that changed nothing would hide a drift.
+      if (rest) expect(expected.description).not.toBe(tool.description);
+      expect(JSON.stringify(mineByName.get(tool.name))).toBe(JSON.stringify(expected));
     }
     expect(mine.tools.map((tool) => tool.name).sort())
-      .toEqual([...base.tools.map((tool) => tool.name), ...BUILT_NOTE_VERBS].sort());
+      .toEqual([...base.tools.map((tool) => tool.name), ...REST_TOOLS, ...BUILT_NOTE_VERBS].sort());
   }, 60_000);
 
   test("notes lists exactly the verbs built so far and collab_journal_verify", async () => {
@@ -156,8 +188,8 @@ describe("the tools profile", () => {
     expect(inProcess({ AGENTOOL_COLLAB_TOOLS: "notes" }).tools).toEqual(expected);
     expect(inProcess({ AGENTTOOL_COLLAB_TOOLS: "notes" }).tools).toEqual(expected);
     expect(inProcess({ AGENTOOL_COLLAB_TOOLS: "notes", AGENTTOOL_COLLAB_TOOLS: "notes" }).tools).toEqual(expected);
-    expect(inProcess({}).tools.length).toBe(LEGACY_TOOLS + BUILT_NOTE_VERBS.length);
-    expect(inProcess({ AGENTOOL_COLLAB_TOOLS: "full" }).tools.length).toBe(LEGACY_TOOLS + BUILT_NOTE_VERBS.length);
+    expect(inProcess({}).tools.length).toBe(LEGACY_TOOLS + REST_TOOLS.length + BUILT_NOTE_VERBS.length);
+    expect(inProcess({ AGENTOOL_COLLAB_TOOLS: "full" }).tools.length).toBe(LEGACY_TOOLS + REST_TOOLS.length + BUILT_NOTE_VERBS.length);
     const listed = await stdio(source, { AGENTOOL_COLLAB_TOOLS: "notes" });
     expect(listed.tools.map((tool) => tool.name).sort()).toEqual(expected);
     // The verbs write (a session, a purpose, view state), so they are not read-only;

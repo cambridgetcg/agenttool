@@ -13,8 +13,10 @@
  * collab session ends, on SIGTERM/SIGINT, after --max-hours, or after
  * RING_FAILURE_LIMIT rings in a row fail. A failed ring keeps its anchor and
  * is retried with backoff, so nothing routed is passed over. One watcher per
- * collab session (pidfile). It never writes to the journal and never prints
- * the inbox token. See README.md beside this file.
+ * collab session (pidfile). It changes no event, cursor or session row (the
+ * wait it runs opens the journal through the store) and never prints the
+ * inbox token. Every line it posts starts a turn, so it obeys a declared rest:
+ * see "What rings" in README.md beside this file.
  */
 import { Database } from "bun:sqlite";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -34,6 +36,10 @@ interface WaitReceipt {
   status: "ready" | "idle" | "error";
   error?: string;
   next_anchor?: Anchor;
+  /** Idle only: the session rests without wake_on "addressed", so nothing may start a turn in it. */
+  held_by_rest?: true;
+  /** Events this wait passed over for good because of the session's declared rest. */
+  skipped_held_events?: number;
 }
 
 const USAGE = "usage: collab-doorbell-watch --session <id> [--db <path>] [--host-bin <path>] [--all] "
@@ -85,7 +91,12 @@ const cycleMs = integer("cycle-ms", 1_800_000, 1_000, 3_600_000);
 const minGapMs = integer("min-gap-ms", 60_000, 0, 3_600_000);
 // The first retry after a failed ring waits this long, doubling each time.
 const retryBaseMs = integer("retry-base-ms", 5_000, 1, 600_000);
-const maxMs = integer("max-hours", 12, 1, 72) * 3_600_000;
+const maxHoursMs = integer("max-hours", 12, 1, 72) * 3_600_000;
+// AGENTTOOL_COLLAB_DOORBELL_TEST_MAX_MS is a test hook for the lifetime, not
+// an interface: whole milliseconds only, and the start log entry says so.
+const testMaxRaw = process.env.AGENTTOOL_COLLAB_DOORBELL_TEST_MAX_MS ?? "";
+const testMaxMs = /^[1-9]\d{0,8}$/.test(testMaxRaw) ? Number(testMaxRaw) : null;
+const maxMs = testMaxMs ?? maxHoursMs;
 const addressed = values.all !== true;
 const socket = process.env.CLAUDE_CODE_MESSAGING_SOCKET ?? "";
 const token = process.env.CLAUDE_CODE_MESSAGING_TOKEN;
@@ -180,9 +191,9 @@ function sessionActive(): boolean {
 
 const ownerGone = () => (ownerPid !== null && !alive(ownerPid)) || !existsSync(socket);
 
-function waitOnce(after: Anchor): Promise<WaitReceipt> {
+function waitOnce(after: Anchor, waitMs = cycleMs): Promise<WaitReceipt> {
   const args = [hostBin, "wait", "--session", sessionId, "--db", dbPath,
-    "--after-anchor", JSON.stringify(after), "--wait-ms", String(cycleMs)];
+    "--after-anchor", JSON.stringify(after), "--wait-ms", String(waitMs)];
   if (addressed) args.push("--addressed");
   if (values["include-own"]) args.push("--include-own");
   return new Promise((resolveReceipt) => {
@@ -224,6 +235,51 @@ function ring(text: string): Promise<boolean> {
   });
 }
 
+/**
+ * Whether the session rests, right now, without wake_on "addressed". Asked of
+ * the quiet `knocks --session` verb: it needs no credential, so it still
+ * answers when the wait itself is failing. Only a knock line counts as an
+ * answer. If there is none (an older host bin, an unreadable journal, no reply
+ * within five seconds), the last receipt's answer stands.
+ */
+function restHoldsNow(): Promise<boolean> {
+  return new Promise((resolveHeld) => {
+    const proc = spawn(process.execPath, [hostBin, "knocks", "--session", sessionId, "--db", dbPath], {
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    child = proc;
+    let out = "";
+    let settled = false;
+    const settle = (held: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (child === proc) child = null;
+      resolveHeld(held);
+    };
+    const timer = setTimeout(() => {
+      proc.kill("SIGTERM");
+      settle(heldByRest);
+    }, 5_000);
+    proc.stdout!.on("data", (chunk) => {
+      out += chunk;
+    });
+    proc.on("error", () => settle(heldByRest));
+    proc.on("close", (code) => {
+      try {
+        const report = JSON.parse(out.split("\n")[0] ?? "") as {
+          protocol?: string;
+          rest?: { wake_on?: string[] } | null;
+        };
+        if (code !== 0 || report.protocol !== "agenttool.collab-knock/1") return settle(heldByRest);
+        settle(report.rest != null && !(report.rest.wake_on ?? []).includes("addressed"));
+      } catch {
+        settle(heldByRest);
+      }
+    });
+  });
+}
+
 const sleep = (ms: number) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
 const started = Date.now();
 let anchor: Anchor = values["from-cursor"]
@@ -232,36 +288,75 @@ let anchor: Anchor = values["from-cursor"]
 let lastRing = 0;
 let authRetries = 0;
 let ringFailures = 0;
-log({ event: "start", pid: process.pid, workspace_id: workspaceId, after_sequence: anchor.sequence, addressed });
+// Whether the last idle receipt found the session at a rest that asked for
+// no turn. It can be a whole cycle old, so it is only the fallback for
+// restHoldsNow(), which the watcher's own notices ask before they ring.
+let heldByRest = false;
+// Events a rest held back since the last ring that got through. The next ring
+// says so: its anchor lies past them, and only the session's own read
+// position (its inbox read mark or its cursor) still covers them.
+let unrungSinceRing = 0;
+// A ring was delayed by the gap: the next turn asks the wait again at once,
+// before the lifetime check, so a ready note is not lost to an expiry.
+let recheck = false;
+log({
+  event: "start", pid: process.pid, workspace_id: workspaceId, after_sequence: anchor.sequence, addressed,
+  ...(testMaxMs === null ? {} : { test_max_ms: testMaxMs }),
+});
 
 while (true) {
   if (ownerGone()) stop("owner_gone");
-  if (Date.now() - started >= maxMs) {
+  if (!recheck && Date.now() - started >= maxMs) {
+    if (await restHoldsNow()) {
+      log({ event: "expired_in_held_rest" });
+      stop("max_lifetime");
+    }
     await ring(`[collab doorbell] The watcher for session ${sessionId} expired after `
       + `${maxMs / 3_600_000} h. Re-arm it if you still want to be rung.`);
     stop("max_lifetime");
   }
-  const receipt = await waitOnce(anchor);
+  const delayed = recheck;
+  recheck = false;
+  const receipt = await waitOnce(anchor, delayed ? 0 : cycleMs);
   if (receipt.status === "idle" && receipt.next_anchor) {
     anchor = receipt.next_anchor;
     authRetries = 0;
-    log({ event: "idle", next_sequence: anchor.sequence });
+    heldByRest = receipt.held_by_rest === true;
+    unrungSinceRing += receipt.skipped_held_events ?? 0;
+    log({ event: heldByRest ? "held" : "idle", next_sequence: anchor.sequence });
     continue;
   }
   if (receipt.status === "ready" && receipt.next_anchor) {
     authRetries = 0;
-    // Coalesce a burst: wait out the gap, then ring once for everything up to the head.
+    heldByRest = false;
+    // Coalesce a burst: wait out the gap, then ask again from the same
+    // anchor. The session may have declared a rest meanwhile, and the wait is
+    // what reads it; if nothing changed it answers ready at once and rings
+    // once for everything up to the head.
     const gap = lastRing + minGapMs - Date.now();
-    if (gap > 0) await sleep(gap);
+    if (gap > 0 && !delayed) {
+      await sleep(gap);
+      recheck = true;
+      continue;
+    }
     if (ownerGone()) stop("owner_gone");
     const from = receipt.next_anchor;
     const covered = head();
     const what = addressed ? "at least one routed to this session" : "at least one from another session";
+    // Not added to the running count yet: a failed ring keeps its anchor, and
+    // the retry's wait counts this pass's held events again.
+    const unrung = unrungSinceRing + (receipt.skipped_held_events ?? 0);
+    const passedOver = unrung > 0
+      ? `${unrung} earlier event(s) before that anchor were held by a rest and went without a ring: `
+        + "read them first, with collab_inbox or with collab_next from your cursor. "
+      : "";
     const rang = await ring(`[collab doorbell] ready: workspace ${workspaceId}, session ${sessionId}: `
       + `${covered.sequence - from.sequence} event(s) after sequence ${from.sequence} `
       + `(head ${covered.sequence}), ${what}. This line carries no event content. `
       + `Read them with collab_inbox, or with collab_events_since after_anchor ${JSON.stringify(from)}. `
+      + passedOver
       + `Watcher pid ${process.pid} re-arms itself; stop it with kill ${process.pid}.`);
+    if (rang) unrungSinceRing = 0;
     lastRing = Date.now();
     log({ event: rang ? "rang" : "ring_failed", from_sequence: from.sequence, head_sequence: covered.sequence });
     if (!rang) {
@@ -295,6 +390,10 @@ while (true) {
     log({ event: "busy_retry" });
     await sleep(5_000);
     continue;
+  }
+  if (await restHoldsNow()) {
+    log({ event: "stopped_in_held_rest", error: receipt.error ?? "unknown_error" });
+    stop(`error:${receipt.error ?? "unknown"}`, 1);
   }
   await ring(`[collab doorbell] stopped: ${receipt.error ?? "unknown_error"} for session ${sessionId}. `
     + "The watcher exited; check the session before re-arming.");

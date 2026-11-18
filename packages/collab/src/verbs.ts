@@ -1261,6 +1261,10 @@ function composeBrief(
       last_seen_minutes: minutesSince(view.last_seen_at, at),
       holds: holds(view.id),
       same_seat_as_you: me.seat_ref !== null && view.seat_ref === me.seat_ref,
+      // Present only while a declared rest stands: here by presence, but away by its own word.
+      ...(view.rest
+        ? { resting: { until: view.rest.until, wakes_for_addressed: view.rest.wake_on.includes("addressed") } }
+        : {}),
     }));
   const claimable = data.tasks.filter((task) => data.claimable_task_ids.includes(task.id)).map((task) => ({
     task: handleOf("task", task.id),

@@ -241,6 +241,8 @@ describe("a subagent's collab write", () => {
       "collab_events_wait", "collab_journal_verify", "collab_anchor_status", "collab_proposal_status",
       // A purpose revision is self-declared state; the inbox writes view state and clock housekeeping only.
       "collab_arrive", "collab_inbox",
+      // A declared rest or return is session lifecycle, like start and end: nothing another party cites.
+      "collab_session_rest",
     ];
     expect(tools.length).toBeGreaterThan(30);
     expect([...tools].sort()).toEqual([...COLLAB_WRITES, ...notCited].sort());

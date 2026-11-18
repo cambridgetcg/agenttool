@@ -22,6 +22,7 @@ import type { CollabEvent, EventCursor } from "../src/protocol.js";
 import { CollabStore } from "../src/store-notes.js";
 import {
   COLLAB_NOTES_EVENT_TYPES,
+  REST_EVENT_TYPES,
   exerciseFixture,
   FIXTURE_VIEWS,
   FixtureClock,
@@ -49,8 +50,10 @@ const packageRoot = resolve(import.meta.dir, "..");
 const repositoryRoot = spawnSync("git", ["-C", packageRoot, "rev-parse", "--show-toplevel"], { encoding: "utf8" })
   .stdout?.trim() || packageRoot;
 const worker = join(import.meta.dir, "compat", "old-store-worker.ts");
-const DEFAULT_REVISIONS = ["collab-v0.4.0", "collab-v0.5.0", "1ec5ab4b", "a8799aad", "24ba2300"];
+const DEFAULT_REVISIONS = ["collab-v0.4.0", "collab-v0.5.0", "1ec5ab4b", "cdf54b68", "a8799aad", "24ba2300"];
 const GOLDEN_REVISION = "a8799aad";
+/** The rest-and-knocks line, label 0.5.0 (not the tag): the build a household runs. */
+const REST_AND_KNOCKS_REVISION = "cdf54b6895da2dcbe86d0a7aec0ef7d9c5d59626";
 const WORKER_TIMEOUT_MS = 60_000;
 const HOST_TIMEOUT_MS = 20_000;
 const MCP_REQUEST_TIMEOUT_MS = 20_000;
@@ -93,6 +96,14 @@ const KNOWN_REVISIONS: Record<string, {
   "1ec5ab4bebda3009e38633ce0d0f60d1ceff24dd": {
     ships: { mcp: true, host: true, host_wait: true, host_seat_ref: false },
     store: { event_addresses_session: true, proposal_status: false },
+  },
+  // The rest-and-knocks line (label 0.5.0, not the tag): the build a household
+  // has run since 2026-10-15. Its host has end, knocks and doorbell-scan, no
+  // wait and no --seat-ref, and it already knows the two rest event types.
+  [REST_AND_KNOCKS_REVISION]: {
+    ships: { mcp: true, host: true, host_wait: false, host_seat_ref: false },
+    store: { event_addresses_session: false, proposal_status: false },
+    knows_new_types: REST_EVENT_TYPES,
   },
   // consent S1+S2 and seat_ref
   a8799aad9f8d9774b6c966b970d4219a222fad22: {
@@ -512,7 +523,7 @@ describe("forward-compatibility fixture", () => {
   test("covers every Collab Notes event type this build defines", async () => {
     const { manifest } = await fixture();
     const current = eventTypeUnion(readFileSync(join(packageRoot, "src", "protocol.ts"), "utf8"));
-    const notes = new Set<string>(COLLAB_NOTES_EVENT_TYPES);
+    const notes = new Set<string>([...COLLAB_NOTES_EVENT_TYPES, ...REST_EVENT_TYPES]);
     // A type this build can write must be in the fixture, so older builds meet it.
     for (const type of current.filter((type) => notes.has(type))) expect(manifest.event_types).toContain(type);
     for (const type of manifest.produced_types) expect(manifest.event_types).toContain(type);
@@ -528,7 +539,10 @@ describe("forward-compatibility fixture", () => {
     const base = eventTypeUnion(git(["show", `${golden.sha}:packages/collab/src/protocol.ts`]).stdout);
     const current = eventTypeUnion(readFileSync(join(packageRoot, "src", "protocol.ts"), "utf8"));
     const added = current.filter((type) => !base.includes(type));
-    for (const type of added) expect(COLLAB_NOTES_EVENT_TYPES as readonly string[]).toContain(type);
+    // The spec's types, and the two that declared rest brought from its own line.
+    const allowed: readonly string[] = [...COLLAB_NOTES_EVENT_TYPES, ...REST_EVENT_TYPES];
+    for (const type of added) expect(allowed).toContain(type);
+    for (const type of REST_EVENT_TYPES) expect(added).toContain(type);
     for (const type of base) expect(current).toContain(type);
   }, TEST_TIMEOUT_MS);
 
@@ -726,7 +740,7 @@ for (const revision of revisions) {
     // The types this build has never seen: every type added since a8799aad, less the ones it knows.
     const knownNewTypes = new Set<string>(known?.knows_new_types ?? []);
     const unknownToIt = (type: string) =>
-      (COLLAB_NOTES_EVENT_TYPES as readonly string[]).includes(type) && !knownNewTypes.has(type);
+      ([...COLLAB_NOTES_EVENT_TYPES, ...REST_EVENT_TYPES] as readonly string[]).includes(type) && !knownNewTypes.has(type);
     const directory = join(work, "revisions", revision.sha!);
     const copy = lazy(async () => copyJournal((await fixture()).directory, join(directory, "journal")));
 
@@ -854,6 +868,30 @@ for (const revision of revisions) {
     }, TEST_TIMEOUT_MS);
 
     const host = (source: string) => join(source, "dist", "agenttool-collab-host.js");
+
+    // The rest-and-knocks build is the only older one with the quiet host
+    // verbs, and the one a household runs beside this build. On sessions that
+    // never read through collab_inbox the two must print the same bytes.
+    test.skipIf(revision.sha !== REST_AND_KNOCKS_REVISION)("old host `knocks` and `doorbell-scan` print what this build prints", async () => {
+      const [source, { directory: state, manifest }] = [await archive(revision), await fixture()];
+      const databasePath = copyJournal(state, join(directory, "quiet-verbs"));
+      const rest = manifest.declared_rest;
+      const both = async (args: string[]) => {
+        const [old, mine] = await Promise.all([source, packageRoot].map((root) =>
+          run([process.execPath, host(root), ...args, "--db", databasePath], { timeout_ms: HOST_TIMEOUT_MS })));
+        expect(old!.exit_code).toBe(0);
+        expect(mine!.exit_code).toBe(0);
+        expect(mine!.stdout).toBe(old!.stdout);
+        return mine!.stdout;
+      };
+      for (const sessionId of [rest.rester, rest.sleeper, rest.waker]) {
+        expect(JSON.parse(await both(["knocks", "--session", sessionId]))).toMatchObject({ session_id: sessionId });
+      }
+      const scan = JSON.parse(await both(["doorbell-scan"])) as { sessions: Array<{ session_id: string; new: Array<{ seq: number }> }> };
+      // Not a vacuous agreement: the waker is listed, with its note.
+      expect(scan.sessions.map((entry) => [entry.session_id, entry.new.map((item) => item.seq)]))
+        .toEqual([[rest.waker, [rest.waker_note_sequence]]]);
+    }, TEST_TIMEOUT_MS);
     // Every step writes to the same copy, in this order: the old store, the old
     // host, the old MCP, and then this build reads the result back. A failed
     // step is reported by its own test; the later steps still run.

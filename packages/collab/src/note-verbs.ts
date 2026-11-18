@@ -30,7 +30,7 @@ import {
   type NoteInput,
   type NoteReason,
 } from "./note.js";
-import { CONSENT_RULE_V2, type CollabReport, type ProposalStatus, type Task } from "./protocol.js";
+import { CONSENT_RULE_V2, type CollabReport, type ProposalStatus, type SessionRest, type Task } from "./protocol.js";
 import { gitCommitExists, hashWorktreeFile, MAX_CITED_FILE_BYTES } from "./repository.js";
 import { removeSessionCredentialFile } from "./session-file.js";
 import {
@@ -473,8 +473,27 @@ function explicitAddressee(ctx: NoteVerbContext, workspaceId: string, value: str
     // The advice already says it has ended, and how the name was read.
     return { to_session_id: view.id, to_person: false, shown: { session: view.id, name: view.actor }, advice: named.advice };
   }
-  const addressee = sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at);
+  const addressee = sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at, view.rest);
   return { ...addressee, advice: [...named.advice, ...addressee.advice] };
+}
+
+/**
+ * What a sender is told when the session it names has declared a rest. A rest
+ * outranks how long ago the session was seen, as the legacy tools' delivery
+ * hint reads it: wake when it asked for one, else held until it returns.
+ */
+export function restAdvice(name: string, id: string, rest: SessionRest, what = "the note"): string {
+  const resting = `${name} (${id}) is resting${rest.until ? ` until ${rest.until}` : ""}`;
+  return rest.wake_on.includes("addressed")
+    ? `${resting} and asked to be woken for notes addressed to it; a host may wake it for this one, and none is promised.`
+    : `${resting} and asked not to be woken; ${what} is recorded and waits for its return.`;
+}
+
+/** restAdvice for a session named by id, when it rests now; else nothing. */
+function restAdviceFor(ctx: NoteVerbContext, workspaceId: string, sessionId: string | null, what: string): string[] {
+  if (!sessionId) return [];
+  const view = ctx.store.noteSessionViews(workspaceId).find((candidate) => candidate.id === sessionId);
+  return view?.status === "active" && view.rest ? [restAdvice(view.actor, view.id, view.rest, what)] : [];
 }
 
 export function sessionAddressee(
@@ -483,10 +502,12 @@ export function sessionAddressee(
   status: "active" | "ended",
   liveness: "live" | "stale",
   lastSeenAt: string,
+  rest: SessionRest | null = null,
 ): Addressee {
   const advice: string[] = [];
   // Sent all the same: the record is for whoever reads it later.
   if (status === "ended") advice.push(`${name} (${id}) has ended its session; the note is recorded and addressed to it all the same.`);
+  else if (rest) advice.push(restAdvice(name, id, rest));
   else if (liveness === "stale") {
     advice.push(`${name} (${id}) was last seen at ${lastSeenAt}, over 6 hours ago; the note is recorded and addressed to it all the same.`);
   }
@@ -496,7 +517,7 @@ export function sessionAddressee(
 export function authorAddressee(target: NoteTargetView, me: string): Addressee {
   const author = target.author;
   if (!author || author.id === me) return BROADCAST;
-  return sessionAddressee(author.id, author.actor, author.status, author.liveness, author.last_seen_at);
+  return sessionAddressee(author.id, author.actor, author.status, author.liveness, author.last_seen_at, author.rest);
 }
 
 /**
@@ -515,7 +536,7 @@ function replyAddressee(ctx: NoteVerbContext, workspaceId: string, author: NoteT
       .filter((view) => view.status === "active" && view.actor === author.actor && view.id !== author.id);
     if (live.length === 1 && live[0]!.id !== me) {
       const now = live[0]!;
-      const routed = sessionAddressee(now.id, now.actor, now.status, now.liveness, now.last_seen_at);
+      const routed = sessionAddressee(now.id, now.actor, now.status, now.liveness, now.last_seen_at, now.rest);
       return {
         ...routed,
         advice: [
@@ -526,12 +547,12 @@ function replyAddressee(ctx: NoteVerbContext, workspaceId: string, author: NoteT
       };
     }
   }
-  return sessionAddressee(author.id, author.actor, author.status, author.liveness, author.last_seen_at);
+  return sessionAddressee(author.id, author.actor, author.status, author.liveness, author.last_seen_at, author.rest);
 }
 
 function viewAddressee(ctx: NoteVerbContext, workspaceId: string, sessionId: string): Addressee {
   const view = ctx.store.resolveNoteSession(workspaceId, sessionId, { include_ended: true });
-  return sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at);
+  return sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at, view.rest);
 }
 
 // ---------------------------------------------------------------------------
@@ -1228,6 +1249,8 @@ function planNote(
     case "request_changes": {
       const completion = reviewTarget(ctx, input, target, workspaceId, me);
       if (fields.to !== null) advice.push("A verdict goes to the session that reported the work; to was not used.");
+      // The store addresses the verdict to the task's reporter; say so when that session rests.
+      advice.push(...restAdviceFor(ctx, workspaceId, ctx.store.getTask(workspaceId, completion.task_id).reported_by_session_id, "the verdict"));
       extra.review = completion;
       return finish({ recorded_as: act, target, addressee: BROADCAST, reports: [], entity: completion.completion_id });
     }
@@ -2960,6 +2983,7 @@ async function finishTask(
   if (plan.retry && replayed) advice.push("This repeats your latest done on this task exactly, so it was read as a retry.");
   else if (plan.retry) advice.push("An earlier call with this input stopped part way; its finished steps were kept, and the rest ran now.");
   const shown = recordedEvidence(evidence, recordedItems, advice);
+  advice.push(...restAdviceFor(ctx, workspaceId, reviewer, "the review request"));
   const handle = handleOf("task", task.id);
   const completion = completed.completion_report_id!;
   const reviewed = completed.completion_policy === "accepted";

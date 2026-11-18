@@ -28292,13 +28292,23 @@ function resolveDatabasePath(env = process.env) {
   return env.AGENTOOL_COLLAB_DB ?? defaultDatabasePath(env);
 }
 
-// src/mcp.ts
-import { AsyncLocalStorage } from "async_hooks";
-// src/actor-default.ts
-import { closeSync, constants, fstatSync, openSync, readSync } from "fs";
-import { homedir as homedir2 } from "os";
-import { basename, join as join2 } from "path";
-import { spawnSync } from "child_process";
+// src/host-binding.ts
+import { randomUUID } from "crypto";
+import {
+  chmodSync,
+  closeSync,
+  existsSync,
+  fsyncSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync
+} from "fs";
+import { dirname, isAbsolute as isAbsolute2, join as join2, resolve as resolve2 } from "path";
 
 // src/errors.ts
 class CollabError extends Error {
@@ -28312,17 +28322,254 @@ class CollabError extends Error {
   }
 }
 
+// src/process-tree.ts
+import { execFileSync } from "child_process";
+import { basename } from "path";
+var PS = "/bin/ps";
+var PS_TIMEOUT_MS = 2000;
+var STATUS_LINE = /^\s*(\d+)\s+(\d+)\s+(\S+\s+\S+\s+\S+\s+\S+\s+\S+)\s+(.+)$/;
+var ARGS_LINE = /^\s*(\d+)\s+(.*)$/;
+function parseProcessTable(statusOutput, argsOutput) {
+  const table = new Map;
+  for (const line of statusOutput.split(`
+`)) {
+    const match = STATUS_LINE.exec(line);
+    if (!match)
+      continue;
+    const pid = Number(match[1]);
+    table.set(pid, {
+      pid,
+      ppid: Number(match[2]),
+      started_at: match[3].replace(/\s+/g, " "),
+      comm: match[4].trim(),
+      args: ""
+    });
+  }
+  for (const line of argsOutput.split(`
+`)) {
+    const match = ARGS_LINE.exec(line);
+    if (!match)
+      continue;
+    const record2 = table.get(Number(match[1]));
+    if (record2)
+      record2.args = match[2].trim();
+  }
+  return table;
+}
+var PROCESS_TABLE_PS_ENV = { LC_ALL: "C", PATH: "/usr/bin:/bin" };
+function outputOfFinishedChild(error51) {
+  if (error51 === null || typeof error51 !== "object")
+    return null;
+  const failure = error51;
+  return failure.code === "ETIMEDOUT" && failure.status === 0 && failure.signal == null && typeof failure.stdout === "string" ? failure.stdout : null;
+}
+function readProcessTable() {
+  try {
+    const run = (format) => {
+      try {
+        return execFileSync(PS, ["-A", "-ww", "-o", format], {
+          encoding: "utf8",
+          env: { ...PROCESS_TABLE_PS_ENV },
+          maxBuffer: 64 * 1024 * 1024,
+          timeout: PS_TIMEOUT_MS,
+          stdio: ["ignore", "pipe", "ignore"]
+        });
+      } catch (error51) {
+        const finished = outputOfFinishedChild(error51);
+        if (finished === null)
+          throw error51;
+        return finished;
+      }
+    };
+    const table = parseProcessTable(run("pid=,ppid=,lstart=,comm="), run("pid=,args="));
+    return table.size > 0 ? table : null;
+  } catch {
+    return null;
+  }
+}
+function hostKindOf(record2, env) {
+  const name = basename(record2.comm);
+  if (name === "claude")
+    return env.CLAUDE_CODE_SESSION_ID ? "claude-code" : "unknown";
+  if (name !== "codex")
+    return "unknown";
+  const argv = record2.args.split(/\s+/).slice(1);
+  if (!argv.includes("app-server"))
+    return "codex";
+  return argv.includes("daemon") ? "unknown" : "codex-app-server";
+}
+function nearestHost(pid, options = {}) {
+  const table = (options.process_table ?? readProcessTable)();
+  if (!table)
+    return null;
+  const self = table.get(pid);
+  if (!self)
+    return null;
+  const parent = table.get(self.ppid);
+  if (!parent || parent.pid <= 1)
+    return null;
+  return {
+    pid: parent.pid,
+    started_at: parent.started_at,
+    kind: hostKindOf(parent, options.env ?? process.env)
+  };
+}
+
+// src/host-binding.ts
+var HOST_BINDING_FORMAT = "agenttool.collab-host-binding/1";
+var HOST_KINDS = ["claude-code", "codex", "codex-app-server", "unknown"];
+var SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
+var BINDING_SUFFIX = ".host.json";
+function collabSessionsDirectory(dbPath) {
+  return join2(dirname(resolve2(dbPath)), "collab-sessions");
+}
+function hostBindingPath(dbPath, sessionId) {
+  if (!isSessionId(sessionId)) {
+    throw new CollabError("invalid_session_id", "session_id contains unsupported characters");
+  }
+  return join2(collabSessionsDirectory(dbPath), `${sessionId}${BINDING_SUFFIX}`);
+}
+function writeHostBinding(dbPath, binding) {
+  if (!isHostBinding(binding)) {
+    throw new CollabError("host_binding_invalid", "The host binding is malformed", {
+      operation: "write_host_binding"
+    });
+  }
+  const directory = collabSessionsDirectory(dbPath);
+  const path = hostBindingPath(dbPath, binding.session_id);
+  let temporary = null;
+  try {
+    const existed = existsSync(directory);
+    mkdirSync(directory, { recursive: true, mode: 448 });
+    if (!existed)
+      chmodSync(directory, 448);
+    if (!isPrivateDirectory(directory)) {
+      throw new CollabError("session_directory_not_private", "Session credential directory must be a private non-symlink directory owned by this user", { operation: "write_host_binding" });
+    }
+    if (pathExists(path) && !isPrivateFile(path)) {
+      throw new CollabError("host_binding_unsafe", "Refusing to replace a host binding path that is not a private regular file", { operation: "write_host_binding" });
+    }
+    temporary = `${path}.tmp-${randomUUID()}`;
+    const descriptor = openSync(temporary, "wx", 384);
+    try {
+      writeFileSync(descriptor, `${JSON.stringify(binding)}
+`, "utf8");
+      fsyncSync(descriptor);
+    } finally {
+      closeSync(descriptor);
+    }
+    renameSync(temporary, path);
+    temporary = null;
+    chmodSync(path, 384);
+    return path;
+  } catch (error51) {
+    if (temporary) {
+      try {
+        unlinkSync(temporary);
+      } catch {}
+    }
+    if (error51 instanceof CollabError)
+      throw error51;
+    throw new CollabError("host_binding_write_failed", "Could not write the local host binding file", {
+      operation: "write_host_binding"
+    });
+  }
+}
+function removeHostBinding(dbPath, sessionId) {
+  try {
+    const path = hostBindingPath(dbPath, sessionId);
+    if (!pathExists(path))
+      return true;
+    const stat = lstatSync(path);
+    if (!stat.isFile() || stat.isSymbolicLink() || !isOwnedByCurrentUser(stat.uid))
+      return false;
+    unlinkSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function hostBindingRecorder(dbPath, options = {}) {
+  const mcpPid = options.mcp_pid ?? process.pid;
+  const now = options.now ?? (() => new Date);
+  return {
+    record(sessionId, credentialFilePath) {
+      try {
+        const host = nearestHost(mcpPid, options);
+        if (!host) {
+          removeHostBinding(dbPath, sessionId);
+          return false;
+        }
+        writeHostBinding(dbPath, {
+          format: HOST_BINDING_FORMAT,
+          session_id: sessionId,
+          host_kind: host.kind,
+          host_pid: host.pid,
+          host_started_at: host.started_at,
+          mcp_pid: mcpPid,
+          credential_file_path: resolve2(credentialFilePath),
+          written_at: now().toISOString()
+        });
+        return true;
+      } catch {
+        removeHostBinding(dbPath, sessionId);
+        return false;
+      }
+    },
+    forget(sessionId) {
+      removeHostBinding(dbPath, sessionId);
+    }
+  };
+}
+function isHostBinding(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value))
+    return false;
+  const record2 = value;
+  return record2.format === HOST_BINDING_FORMAT && typeof record2.session_id === "string" && isSessionId(record2.session_id) && typeof record2.host_kind === "string" && HOST_KINDS.includes(record2.host_kind) && isProcessId(record2.host_pid) && typeof record2.host_started_at === "string" && record2.host_started_at.trim() !== "" && isProcessId(record2.mcp_pid) && typeof record2.credential_file_path === "string" && isAbsolute2(record2.credential_file_path) && typeof record2.written_at === "string" && !Number.isNaN(Date.parse(record2.written_at));
+}
+function isSessionId(value) {
+  return value.length <= 200 && SESSION_ID.test(value);
+}
+function isProcessId(value) {
+  return Number.isInteger(value) && value > 1;
+}
+function pathExists(path) {
+  try {
+    lstatSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function isPrivateDirectory(path) {
+  const stat = lstatSync(path);
+  return stat.isDirectory() && !stat.isSymbolicLink() && isOwnedByCurrentUser(stat.uid) && (stat.mode & 63) === 0;
+}
+function isPrivateFile(path) {
+  const stat = lstatSync(path);
+  return stat.isFile() && !stat.isSymbolicLink() && isOwnedByCurrentUser(stat.uid) && (stat.mode & 63) === 0;
+}
+function isOwnedByCurrentUser(uid) {
+  return typeof process.getuid !== "function" || uid === process.getuid();
+}
+
+// src/mcp.ts
+import { AsyncLocalStorage } from "async_hooks";
 // src/actor-default.ts
+import { closeSync as closeSync2, constants, fstatSync, openSync as openSync2, readSync } from "fs";
+import { homedir as homedir2 } from "os";
+import { basename as basename2, join as join3 } from "path";
+import { spawnSync } from "child_process";
 function defaultActor(env = process.env, parentPid = process.ppid) {
-  const socketPid = env.CLAUDE_CODE_MESSAGING_SOCKET ? /^(\d+)\.sock$/.exec(basename(env.CLAUDE_CODE_MESSAGING_SOCKET))?.[1] : undefined;
+  const socketPid = env.CLAUDE_CODE_MESSAGING_SOCKET ? /^(\d+)\.sock$/.exec(basename2(env.CLAUDE_CODE_MESSAGING_SOCKET))?.[1] : undefined;
   const pid = env.AGENTOOL_COLLAB_CLAUDE_PID ?? String(parentPid);
   const unavailable = () => new CollabError("actor_required", "Supply actor explicitly or configure the owning Claude session PID with a valid display name");
   if (!/^[1-9]\d{0,9}$/.test(pid) || socketPid !== pid)
     throw unavailable();
   let fd;
   try {
-    const path = join2(env.CLAUDE_CONFIG_DIR ?? join2(homedir2(), ".claude"), "sessions", `${pid}.json`);
-    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const path = join3(env.CLAUDE_CONFIG_DIR ?? join3(homedir2(), ".claude"), "sessions", `${pid}.json`);
+    fd = openSync2(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     const stat = fstatSync(fd);
     if (!stat.isFile() || stat.size > 64 * 1024 || process.getuid && stat.uid !== process.getuid()) {
       throw unavailable();
@@ -28357,12 +28604,12 @@ function defaultActor(env = process.env, parentPid = process.ppid) {
     throw unavailable();
   } finally {
     if (fd !== undefined)
-      closeSync(fd);
+      closeSync2(fd);
   }
 }
 
 // src/anchor-status.ts
-import { closeSync as closeSync2, constants as constants2, fstatSync as fstatSync2, openSync as openSync2, readSync as readSync2 } from "fs";
+import { closeSync as closeSync3, constants as constants2, fstatSync as fstatSync2, openSync as openSync3, readSync as readSync2 } from "fs";
 var ANCHOR_LEDGER_PROTOCOL = "agenttool.collab-zerone-ledger/0.1";
 var SCOPE_NOTE = "Anchor status reflects the local sidecar ledger only; it never proves remote chain state." + " Use @agenttool/collab-zerone `verify --workspace <id> --check-chain` for on-chain confirmation.";
 var MAX_LEDGER_BYTES = 4 * 1024 * 1024;
@@ -28400,7 +28647,7 @@ function toAnchorRef(entry) {
 function readLedgerFile(path) {
   let fd;
   try {
-    fd = openSync2(path, constants2.O_RDONLY | constants2.O_NONBLOCK);
+    fd = openSync3(path, constants2.O_RDONLY | constants2.O_NONBLOCK);
   } catch {
     return null;
   }
@@ -28420,7 +28667,7 @@ function readLedgerFile(path) {
   } catch {
     return null;
   } finally {
-    closeSync2(fd);
+    closeSync3(fd);
   }
 }
 function anchorStatusForWorkspace(store, workspaceId, ledgerPath) {
@@ -28610,6 +28857,7 @@ var LEGACY_COLLAB_PROTOCOL = COLLAB_PROTOCOL;
 var COLLAB_COORDINATION_PROTOCOL = "agenttool.collab/0.2";
 var COLLAB_SESSION_PROTOCOL = "agenttool.collab.session/0.1";
 var SESSION_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
+var MAX_REST_REASON_LENGTH = 200;
 var EVIDENCE_REF_PREFIXES = ["artifact:", "event:", "report:", "checkpoint:"];
 var EVIDENCE_REFS_DESCRIPTION = "Evidence references point inside this workspace's journal and start with artifact:, event:, " + "report:, or checkpoint: (a task's base_checkpoint_digest or result_checkpoint_digest), " + 'for example "artifact:artifact_<id>".';
 var CONSENT_RULE = "consent/v1";
@@ -28760,33 +29008,33 @@ function defaultSeatRef(env) {
 
 // src/session-file.ts
 import {
-  chmodSync,
-  closeSync as closeSync3,
-  existsSync,
-  fsyncSync,
+  chmodSync as chmodSync2,
+  closeSync as closeSync4,
+  existsSync as existsSync2,
+  fsyncSync as fsyncSync2,
   linkSync,
-  lstatSync,
-  mkdirSync,
-  openSync as openSync3,
-  readFileSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync
+  lstatSync as lstatSync2,
+  mkdirSync as mkdirSync2,
+  openSync as openSync4,
+  readFileSync as readFileSync2,
+  renameSync as renameSync2,
+  unlinkSync as unlinkSync2,
+  writeFileSync as writeFileSync2
 } from "fs";
-import { dirname, resolve as resolve2 } from "path";
-import { randomUUID } from "crypto";
+import { dirname as dirname2, resolve as resolve3 } from "path";
+import { randomUUID as randomUUID2 } from "crypto";
 function readSessionCredentialFile(pathInput) {
-  const path = resolve2(pathInput);
+  const path = resolve3(pathInput);
   try {
-    assertPrivateDirectory(dirname(path));
-    const stat = lstatSync(path);
-    if (!stat.isFile() || stat.isSymbolicLink() || !isOwnedByCurrentUser(stat.uid)) {
+    assertPrivateDirectory(dirname2(path));
+    const stat = lstatSync2(path);
+    if (!stat.isFile() || stat.isSymbolicLink() || !isOwnedByCurrentUser2(stat.uid)) {
       throw new CollabError("session_file_unsafe", "Session credential path must be a private regular file owned by this user", { operation: "read_session_credential_file" });
     }
     if ((stat.mode & 63) !== 0) {
       throw new CollabError("session_file_not_private", "Session credential file must not be accessible by group or other users", { operation: "read_session_credential_file" });
     }
-    const parsed = JSON.parse(readFileSync(path, "utf8"));
+    const parsed = JSON.parse(readFileSync2(path, "utf8"));
     if (parsed.format !== "agenttool.collab/session-file/1" || typeof parsed.session_id !== "string" || typeof parsed.session_token !== "string" || !Number.isInteger(parsed.generation) || parsed.generation < 1 || parsed.last_cursor !== undefined && (typeof parsed.last_cursor?.epoch_id !== "string" || !Number.isInteger(parsed.last_cursor?.sequence) || parsed.last_cursor.sequence < 0 || typeof parsed.last_cursor?.hash !== "string" || !/^[a-f0-9]{64}$/.test(parsed.last_cursor.hash))) {
       throw new CollabError("session_file_invalid", "Session credential file has an unsupported or malformed format", { operation: "read_session_credential_file" });
     }
@@ -28803,19 +29051,19 @@ function readSessionCredentialFile(pathInput) {
   }
 }
 function writeSessionCredentialFile(pathInput, credential, options = {}) {
-  const path = resolve2(pathInput);
-  const parent = dirname(path);
-  const parentExisted = existsSync(parent);
+  const path = resolve3(pathInput);
+  const parent = dirname2(path);
+  const parentExisted = existsSync2(parent);
   let temporary = null;
   let linkedFinal = false;
   try {
-    mkdirSync(parent, { recursive: true, mode: 448 });
+    mkdirSync2(parent, { recursive: true, mode: 448 });
     if (!parentExisted)
-      chmodSync(parent, 448);
+      chmodSync2(parent, 448);
     assertPrivateDirectory(parent);
-    if (existsSync(path)) {
-      const stat = lstatSync(path);
-      if (!options.replace || !stat.isFile() || stat.isSymbolicLink() || !isOwnedByCurrentUser(stat.uid) || (stat.mode & 63) !== 0) {
+    if (existsSync2(path)) {
+      const stat = lstatSync2(path);
+      if (!options.replace || !stat.isFile() || stat.isSymbolicLink() || !isOwnedByCurrentUser2(stat.uid) || (stat.mode & 63) !== 0) {
         throw new CollabError(options.replace ? "session_file_unsafe" : "session_file_exists", options.replace ? "Replacement requires a private regular credential file owned by this user" : "Refusing to overwrite an existing session credential path", { operation: "write_session_credential_file" });
       }
     }
@@ -28826,22 +29074,22 @@ function writeSessionCredentialFile(pathInput, credential, options = {}) {
       generation: credential.generation,
       last_cursor: credential.last_cursor
     };
-    temporary = `${path}.tmp-${randomUUID()}`;
-    const descriptor = openSync3(temporary, "wx", 384);
+    temporary = `${path}.tmp-${randomUUID2()}`;
+    const descriptor = openSync4(temporary, "wx", 384);
     try {
-      writeFileSync(descriptor, `${JSON.stringify(payload)}
+      writeFileSync2(descriptor, `${JSON.stringify(payload)}
 `, "utf8");
-      fsyncSync(descriptor);
+      fsyncSync2(descriptor);
     } finally {
-      closeSync3(descriptor);
+      closeSync4(descriptor);
     }
     if (options.replace) {
-      renameSync(temporary, path);
+      renameSync2(temporary, path);
     } else {
       try {
         linkSync(temporary, path);
         linkedFinal = true;
-        unlinkSync(temporary);
+        unlinkSync2(temporary);
       } catch (error51) {
         if (error51.code === "EEXIST") {
           throw new CollabError("session_file_exists", "Refusing to overwrite an existing session credential path", { operation: "write_session_credential_file" });
@@ -28850,17 +29098,17 @@ function writeSessionCredentialFile(pathInput, credential, options = {}) {
       }
     }
     temporary = null;
-    chmodSync(path, 384);
+    chmodSync2(path, 384);
     return path;
   } catch (error51) {
-    if (linkedFinal && existsSync(path)) {
+    if (linkedFinal && existsSync2(path)) {
       try {
-        unlinkSync(path);
+        unlinkSync2(path);
       } catch {}
     }
-    if (temporary && existsSync(temporary)) {
+    if (temporary && existsSync2(temporary)) {
       try {
-        unlinkSync(temporary);
+        unlinkSync2(temporary);
       } catch {}
     }
     if (error51 instanceof CollabError)
@@ -28869,16 +29117,16 @@ function writeSessionCredentialFile(pathInput, credential, options = {}) {
   }
 }
 function removeSessionCredentialFile(pathInput) {
-  const path = resolve2(pathInput);
+  const path = resolve3(pathInput);
   try {
-    if (!existsSync(path))
+    if (!existsSync2(path))
       return;
-    assertPrivateDirectory(dirname(path));
-    const stat = lstatSync(path);
-    if (!stat.isFile() || stat.isSymbolicLink() || !isOwnedByCurrentUser(stat.uid)) {
+    assertPrivateDirectory(dirname2(path));
+    const stat = lstatSync2(path);
+    if (!stat.isFile() || stat.isSymbolicLink() || !isOwnedByCurrentUser2(stat.uid)) {
       throw new CollabError("session_file_unsafe", "Refusing to remove a non-regular session credential path", { operation: "remove_session_credential_file" });
     }
-    unlinkSync(path);
+    unlinkSync2(path);
   } catch (error51) {
     if (error51 instanceof CollabError)
       throw error51;
@@ -28886,17 +29134,17 @@ function removeSessionCredentialFile(pathInput) {
   }
 }
 function assertPrivateDirectory(path) {
-  const stat = lstatSync(path);
-  if (!stat.isDirectory() || stat.isSymbolicLink() || !isOwnedByCurrentUser(stat.uid) || (stat.mode & 63) !== 0) {
+  const stat = lstatSync2(path);
+  if (!stat.isDirectory() || stat.isSymbolicLink() || !isOwnedByCurrentUser2(stat.uid) || (stat.mode & 63) !== 0) {
     throw new CollabError("session_directory_not_private", "Session credential directory must be a private non-symlink directory owned by this user", { operation: "validate_session_credential_directory" });
   }
 }
-function isOwnedByCurrentUser(uid) {
+function isOwnedByCurrentUser2(uid) {
   return typeof process.getuid !== "function" || uid === process.getuid();
 }
 
 // src/note-verbs.ts
-import { existsSync as existsSync6 } from "fs";
+import { existsSync as existsSync7 } from "fs";
 
 // src/note.ts
 var NOTE_FORMAT = "collab-note/1";
@@ -30205,18 +30453,18 @@ ${NOTE_CARRY_DISCLAIMER}`,
 // src/repository.ts
 import { createHash as createHash2 } from "crypto";
 import {
-  closeSync as closeSync4,
+  closeSync as closeSync5,
   constants as fsConstants,
-  existsSync as existsSync2,
+  existsSync as existsSync3,
   fstatSync as fstatSync3,
-  lstatSync as lstatSync2,
-  openSync as openSync4,
+  lstatSync as lstatSync3,
+  openSync as openSync5,
   readlinkSync,
   readSync as readSync3,
   realpathSync,
   statSync
 } from "fs";
-import { isAbsolute as isAbsolute2, relative, resolve as resolve3, sep } from "path";
+import { isAbsolute as isAbsolute3, relative, resolve as resolve4, sep } from "path";
 import { spawnSync as spawnSync2 } from "child_process";
 var GIT_TIMEOUT_MS = 5000;
 var MAX_GIT_OUTPUT = 1024 * 1024;
@@ -30235,13 +30483,13 @@ class RepositoryProbeTimeout extends Error {
   }
 }
 function inspectRepository(rootInput, explicitRepositoryKey, metadataOnly = false, options = {}) {
-  const requested = resolve3(rootInput);
-  if (!existsSync2(requested) || !statSync(requested).isDirectory()) {
+  const requested = resolve4(rootInput);
+  if (!existsSync3(requested) || !statSync(requested).isDirectory()) {
     throw new CollabError("workspace_not_directory", "Workspace root must be an existing directory", { root_path: requested });
   }
   const requestedRoot = realpathSync(requested);
   const topLevel = gitOutput(requestedRoot, ["rev-parse", "--show-toplevel"], options);
-  const rootPath = topLevel && existsSync2(topLevel) ? realpathSync(topLevel) : requestedRoot;
+  const rootPath = topLevel && existsSync3(topLevel) ? realpathSync(topLevel) : requestedRoot;
   const explicitKey = explicitRepositoryKey?.trim();
   if (!topLevel) {
     const repositoryKey2 = explicitKey ? `explicit:${sha256(explicitKey)}` : `local-path:${sha256(rootPath)}`;
@@ -30469,9 +30717,9 @@ function hashWorktreeFile(rootPath, cited, maxBytes = MAX_CITED_FILE_BYTES) {
   }
   if (cited.includes("\x00") || cited.includes("\\"))
     return { status: "outside", path: null };
-  const candidate = resolve3(root, cited);
+  const candidate = resolve4(root, cited);
   const inside = relative(root, candidate);
-  if (!inside || inside === ".." || inside.startsWith(`..${sep}`) || isAbsolute2(inside)) {
+  if (!inside || inside === ".." || inside.startsWith(`..${sep}`) || isAbsolute3(inside)) {
     return { status: "outside", path: null };
   }
   let walked = root;
@@ -30481,7 +30729,7 @@ function hashWorktreeFile(rootPath, cited, maxBytes = MAX_CITED_FILE_BYTES) {
     walked = `${walked}${sep}${part}`;
     let stat;
     try {
-      stat = lstatSync2(walked);
+      stat = lstatSync3(walked);
     } catch (error51) {
       return { status: error51.code === "ENOENT" ? "missing" : "unreadable", path: inside };
     }
@@ -30495,7 +30743,7 @@ function hashWorktreeFile(rootPath, cited, maxBytes = MAX_CITED_FILE_BYTES) {
     return { status: "not_a_file", path: inside };
   let descriptor = null;
   try {
-    descriptor = openSync4(walked, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
+    descriptor = openSync5(walked, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
     const before = fstatSync3(descriptor);
     if (!before.isFile())
       return { status: "not_a_file", path: inside };
@@ -30522,7 +30770,7 @@ function hashWorktreeFile(rootPath, cited, maxBytes = MAX_CITED_FILE_BYTES) {
     return { status: error51.code === "ELOOP" ? "symlink" : "unreadable", path: inside };
   } finally {
     if (descriptor !== null)
-      closeSync4(descriptor);
+      closeSync5(descriptor);
   }
 }
 function gitCommitExists(rootPath, sha, options = {}) {
@@ -30547,10 +30795,10 @@ function worktreeId(rootPath, fingerprint) {
   return `wt_${sha256(`${rootPath}\x00${fingerprint}`).slice(0, 24)}`;
 }
 function resolveGitPath(rootPath, value) {
-  return value.startsWith("/") ? value : resolve3(rootPath, value);
+  return value.startsWith("/") ? value : resolve4(rootPath, value);
 }
 function realpathIfPresent(path) {
-  return existsSync2(path) ? realpathSync(path) : resolve3(path);
+  return existsSync3(path) ? realpathSync(path) : resolve4(path);
 }
 function gitOutput(rootPath, args, options = {}) {
   const result = runGit(rootPath, args, options);
@@ -30649,7 +30897,7 @@ function digestUntrackedContent(rootPath, paths) {
     ]);
     let stat;
     try {
-      stat = lstatSync2(absolute);
+      stat = lstatSync3(absolute);
       aggregate.update(lengthPrefix(entry.length));
       aggregate.update(entry);
       if (stat.isSymbolicLink()) {
@@ -30680,7 +30928,7 @@ function digestUntrackedContent(rootPath, paths) {
 function digestStableFile(path, budget) {
   let descriptor = null;
   try {
-    descriptor = openSync4(path, "r");
+    descriptor = openSync5(path, "r");
     const before = fstatSync3(descriptor);
     if (!before.isFile() || before.size > budget.remainingBytes || Date.now() > budget.deadline)
       return null;
@@ -30703,7 +30951,7 @@ function digestStableFile(path, budget) {
     return null;
   } finally {
     if (descriptor !== null)
-      closeSync4(descriptor);
+      closeSync5(descriptor);
   }
 }
 function splitNul(value) {
@@ -30748,7 +30996,7 @@ function sha256Bytes(value) {
 }
 
 // src/store-notes.ts
-import { randomUUID as randomUUID4 } from "crypto";
+import { randomUUID as randomUUID5 } from "crypto";
 import { realpathSync as realpathSync2 } from "fs";
 
 // src/ballot.ts
@@ -31602,48 +31850,48 @@ function sha2562(value) {
 }
 
 // src/ballot-seal.ts
-import { randomUUID as randomUUID2 } from "crypto";
+import { randomUUID as randomUUID3 } from "crypto";
 import {
-  chmodSync as chmodSync2,
-  closeSync as closeSync5,
-  existsSync as existsSync3,
-  fsyncSync as fsyncSync2,
-  lstatSync as lstatSync3,
-  mkdirSync as mkdirSync2,
-  openSync as openSync5,
-  readdirSync,
-  readFileSync as readFileSync2,
-  renameSync as renameSync2,
+  chmodSync as chmodSync3,
+  closeSync as closeSync6,
+  existsSync as existsSync4,
+  fsyncSync as fsyncSync3,
+  lstatSync as lstatSync4,
+  mkdirSync as mkdirSync3,
+  openSync as openSync6,
+  readdirSync as readdirSync2,
+  readFileSync as readFileSync3,
+  renameSync as renameSync3,
   rmdirSync,
-  unlinkSync as unlinkSync2,
+  unlinkSync as unlinkSync3,
   writeSync
 } from "fs";
-import { dirname as dirname2, join as join3 } from "path";
+import { dirname as dirname3, join as join4 } from "path";
 var SEAL_DIRECTORY = "collab-ballots";
 var BALLOT_ID = /^report_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 var CAST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 function sealRoot(journalRealpath) {
-  return join3(dirname2(journalRealpath), SEAL_DIRECTORY);
+  return join4(dirname3(journalRealpath), SEAL_DIRECTORY);
 }
 function sealDirectory(journalRealpath, ballotId) {
   if (!BALLOT_ID.test(ballotId))
     throw new CollabError("invalid_ballot_id", "A ballot id is the poll report's id");
-  return join3(sealRoot(journalRealpath), ballotId);
+  return join4(sealRoot(journalRealpath), ballotId);
 }
 function sealPath(journalRealpath, ballotId, castId) {
   if (!CAST_ID.test(castId))
     throw new CollabError("invalid_cast_id", "A cast id is a random uuid");
-  return join3(sealDirectory(journalRealpath, ballotId), `${castId}.json`);
+  return join4(sealDirectory(journalRealpath, ballotId), `${castId}.json`);
 }
 function currentUser() {
   return typeof process.getuid === "function" ? process.getuid() : null;
 }
 function privateDirectory(path) {
-  if (!existsSync3(path)) {
-    mkdirSync2(path, { mode: 448 });
-    chmodSync2(path, 448);
+  if (!existsSync4(path)) {
+    mkdirSync3(path, { mode: 448 });
+    chmodSync3(path, 448);
   }
-  const stat = lstatSync3(path);
+  const stat = lstatSync4(path);
   const uid = currentUser();
   if (!stat.isDirectory() || stat.isSymbolicLink() || uid !== null && stat.uid !== uid) {
     throw new CollabError("seal_directory_unsafe", "The ballot seal directory must be a real directory owned by this user", {
@@ -31651,49 +31899,49 @@ function privateDirectory(path) {
     });
   }
   if ((stat.mode & 63) !== 0)
-    chmodSync2(path, 448);
+    chmodSync3(path, 448);
 }
 function writeSealFile(path, seal) {
-  const directory = dirname2(path);
-  privateDirectory(dirname2(directory));
+  const directory = dirname3(path);
+  privateDirectory(dirname3(directory));
   privateDirectory(directory);
-  if (existsSync3(path)) {
+  if (existsSync4(path)) {
     throw new CollabError("seal_file_exists", "A seal file with this cast id already exists", { operation: "write_seal_file" });
   }
-  const temporary = join3(directory, `.${randomUUID2()}.tmp`);
-  const descriptor = openSync5(temporary, "wx", 384);
+  const temporary = join4(directory, `.${randomUUID3()}.tmp`);
+  const descriptor = openSync6(temporary, "wx", 384);
   try {
     writeSync(descriptor, JSON.stringify(seal));
-    fsyncSync2(descriptor);
+    fsyncSync3(descriptor);
   } catch (error51) {
-    closeSync5(descriptor);
+    closeSync6(descriptor);
     removeQuietly(temporary);
     throw error51;
   }
-  closeSync5(descriptor);
+  closeSync6(descriptor);
   try {
-    renameSync2(temporary, path);
+    renameSync3(temporary, path);
   } catch (error51) {
     removeQuietly(temporary);
     throw error51;
   }
   try {
-    const handle = openSync5(directory, "r");
+    const handle = openSync6(directory, "r");
     try {
-      fsyncSync2(handle);
+      fsyncSync3(handle);
     } finally {
-      closeSync5(handle);
+      closeSync6(handle);
     }
   } catch {}
 }
 function readSealFile(path) {
   try {
-    if (!existsSync3(path))
+    if (!existsSync4(path))
       return { state: "missing" };
-    const stat = lstatSync3(path);
+    const stat = lstatSync4(path);
     if (!stat.isFile() || stat.isSymbolicLink())
       return { state: "unreadable" };
-    return { state: "read", value: JSON.parse(readFileSync2(path, "utf8")) };
+    return { state: "read", value: JSON.parse(readFileSync3(path, "utf8")) };
   } catch {
     return { state: "unreadable" };
   }
@@ -31704,9 +31952,9 @@ function removeSealFile(path) {
 function listSealFiles(journalRealpath, ballotId) {
   try {
     const directory = sealDirectory(journalRealpath, ballotId);
-    if (!existsSync3(directory))
+    if (!existsSync4(directory))
       return [];
-    return readdirSync(directory).filter((name) => name.endsWith(".json") && CAST_ID.test(name.slice(0, -".json".length))).map((name) => name.slice(0, -".json".length));
+    return readdirSync2(directory).filter((name) => name.endsWith(".json") && CAST_ID.test(name.slice(0, -".json".length))).map((name) => name.slice(0, -".json".length));
   } catch {
     return [];
   }
@@ -31715,9 +31963,9 @@ var TEMPORARY = /^\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 function listSealTemporaries(journalRealpath, ballotId) {
   try {
     const directory = sealDirectory(journalRealpath, ballotId);
-    if (!existsSync3(directory))
+    if (!existsSync4(directory))
       return [];
-    return readdirSync(directory).filter((name) => TEMPORARY.test(name)).map((name) => join3(directory, name));
+    return readdirSync2(directory).filter((name) => TEMPORARY.test(name)).map((name) => join4(directory, name));
   } catch {
     return [];
   }
@@ -31725,9 +31973,9 @@ function listSealTemporaries(journalRealpath, ballotId) {
 function listSealBallots(journalRealpath) {
   try {
     const root = sealRoot(journalRealpath);
-    if (!existsSync3(root) || !lstatSync3(root).isDirectory())
+    if (!existsSync4(root) || !lstatSync4(root).isDirectory())
       return [];
-    return readdirSync(root).filter((name) => BALLOT_ID.test(name));
+    return readdirSync2(root).filter((name) => BALLOT_ID.test(name));
   } catch {
     return [];
   }
@@ -31735,28 +31983,28 @@ function listSealBallots(journalRealpath) {
 function removeEmptySealDirectory(journalRealpath, ballotId) {
   try {
     const directory = sealDirectory(journalRealpath, ballotId);
-    if (existsSync3(directory) && readdirSync(directory).length === 0)
+    if (existsSync4(directory) && readdirSync2(directory).length === 0)
       rmdirSync(directory);
   } catch {}
 }
 function removeQuietly(path) {
   try {
-    unlinkSync2(path);
+    unlinkSync3(path);
   } catch {}
 }
 
 // src/store.ts
 import { Database } from "bun:sqlite";
-import { createHash as createHash5, randomBytes, randomUUID as randomUUID3, timingSafeEqual } from "crypto";
+import { createHash as createHash5, randomBytes, randomUUID as randomUUID4, timingSafeEqual } from "crypto";
 import {
-  chmodSync as chmodSync3,
-  closeSync as closeSync6,
-  existsSync as existsSync4,
-  lstatSync as lstatSync4,
-  mkdirSync as mkdirSync3,
-  openSync as openSync6
+  chmodSync as chmodSync4,
+  closeSync as closeSync7,
+  existsSync as existsSync5,
+  lstatSync as lstatSync5,
+  mkdirSync as mkdirSync4,
+  openSync as openSync7
 } from "fs";
-import { dirname as dirname3, isAbsolute as isAbsolute3, join as join4, posix, resolve as resolve4 } from "path";
+import { dirname as dirname4, isAbsolute as isAbsolute4, join as join5, posix, resolve as resolve5 } from "path";
 
 // src/passkey.ts
 import { createHash as createHash4, createPublicKey, verify } from "crypto";
@@ -32029,19 +32277,19 @@ class CollabStoreCore {
       budget_ms: options.repository_discovery?.budget_ms ?? REPOSITORY_DISCOVERY_MS,
       now: options.repository_discovery?.now ?? (() => performance.now())
     };
-    const databasePath = path === ":memory:" ? path : resolve4(path);
+    const databasePath = path === ":memory:" ? path : resolve5(path);
     if (databasePath !== ":memory:") {
-      const parent = dirname3(databasePath);
-      const parentAlreadyExisted = existsSync4(parent);
-      mkdirSync3(parent, { recursive: true, mode: 448 });
+      const parent = dirname4(databasePath);
+      const parentAlreadyExisted = existsSync5(parent);
+      mkdirSync4(parent, { recursive: true, mode: 448 });
       if (!parentAlreadyExisted)
-        chmodSync3(parent, 448);
-      if (existsSync4(databasePath)) {
+        chmodSync4(parent, 448);
+      if (existsSync5(databasePath)) {
         assertSafeDatabaseFile(databasePath);
       } else {
         try {
-          const descriptor = openSync6(databasePath, "wx", 384);
-          closeSync6(descriptor);
+          const descriptor = openSync7(databasePath, "wx", 384);
+          closeSync7(descriptor);
         } catch (error51) {
           if (error51.code !== "EEXIST")
             throw error51;
@@ -32092,7 +32340,7 @@ class CollabStoreCore {
       throw new CollabError("session_file_path_required", "An explicit credential file path is required for an in-memory database");
     }
     const id = validateId(sessionId, "session_id");
-    return join4(dirname3(this.filesystemPath), "collab-sessions", `${id}.json`);
+    return join5(dirname4(this.filesystemPath), "collab-sessions", `${id}.json`);
   }
   initialize() {
     this.db.exec("PRAGMA foreign_keys = ON");
@@ -33048,13 +33296,13 @@ class CollabStoreCore {
     if (!this.filesystemPath)
       return;
     for (const path of [this.filesystemPath, `${this.filesystemPath}-wal`, `${this.filesystemPath}-shm`]) {
-      if (!existsSync4(path))
+      if (!existsSync5(path))
         continue;
-      const stat = lstatSync4(path);
+      const stat = lstatSync5(path);
       if (!stat.isFile() || stat.isSymbolicLink() || typeof process.getuid === "function" && stat.uid !== process.getuid()) {
         throw new CollabError("database_sidecar_unsafe", "A collaboration database or sidecar path is not a regular file owned by this user", { operation: "tighten_database_file_mode" });
       }
-      chmodSync3(path, 384);
+      chmodSync4(path, 384);
     }
   }
   discoverRepositoryKey(budget, probe) {
@@ -33174,7 +33422,7 @@ class CollabStoreCore {
         this.recordRepositoryDiscovery(identity.checkpoint.worktree_id, identity.worktree_fingerprint, identity.portable_repository_key);
         return this.requireWorkspace(existing.id);
       }
-      const epochId = `epoch_${randomUUID3()}`;
+      const epochId = `epoch_${randomUUID4()}`;
       const name = cleanText(input.name ?? identity.root_path.split("/").at(-1) ?? id, "name", 200);
       this.db.query(`INSERT OR IGNORE INTO repositories (key, created_at) VALUES (?, ?)`).run(identity.repository_key, now);
       this.db.query(`
@@ -33234,7 +33482,7 @@ class CollabStoreCore {
         return presenceSessionFromRow(existing, this.timestamp());
       }
       const now = this.timestamp();
-      const id = `session_${randomUUID3()}`;
+      const id = `session_${randomUUID4()}`;
       const actorKey = `session:${id}`;
       this.db.query(`
         INSERT INTO sessions (
@@ -33331,7 +33579,7 @@ class CollabStoreCore {
     });
   }
   startSession(input) {
-    const id = `session_${randomUUID3()}`;
+    const id = `session_${randomUUID4()}`;
     const actor = input.actor !== undefined ? validateActor(input.actor) : derivedActor(input.actor_prefix, id);
     const role = optionalText(input.role, "role", 200);
     const seatRef = input.seat_ref == null ? null : validateSeatRef(input.seat_ref);
@@ -33507,7 +33755,7 @@ class CollabStoreCore {
         `).all(row.workspace_id, row.id);
         if (held.length > 0) {
           const releaseNote = releaseSummary ?? reason;
-          const guardNonce = `guard_${randomUUID3()}`;
+          const guardNonce = `guard_${randomUUID4()}`;
           this.db.query(`INSERT INTO v2_write_guard (nonce, enabled) VALUES (?, 1)`).run(guardNonce);
           try {
             for (const task of held) {
@@ -33612,6 +33860,57 @@ class CollabStoreCore {
     `).all(...refs);
     return rows.map((row) => row.id);
   }
+  addresseeHint(workspaceId, sessionId) {
+    const id = validateId(sessionId, "session_id");
+    const read = this.db.transaction(() => {
+      const row = this.requireCoordinationSessionRow(id);
+      if (row.workspace_id !== workspaceId) {
+        throw new CollabError("session_workspace_mismatch", "The addressed session belongs to another workspace", { session_id: id });
+      }
+      const session = this.sessionProjection(row);
+      return {
+        session_id: session.id,
+        liveness: session.liveness,
+        rest: session.rest,
+        delivery: knockDelivery(session.liveness, session.rest)
+      };
+    });
+    return read.deferred();
+  }
+  restSessionForSession(input) {
+    const mode = validateRestMode(input.mode);
+    if (mode === "ready") {
+      for (const field of ["until", "reason", "wake_on"]) {
+        if (input[field] !== undefined) {
+          throw new CollabError(`invalid_${field}`, `${field} applies only to mode "resting"`);
+        }
+      }
+    }
+    const until = input.until === undefined ? null : validateRestUntil(input.until);
+    const reason = optionalText(input.reason, "reason", MAX_REST_REASON_LENGTH);
+    const wakeOn = validateRestWakeOn(input.wake_on);
+    const request = mode === "resting" ? { mode, until, reason, wake_on: wakeOn } : { mode };
+    return this.mutateAsSession(input, input.idempotency_key, "session.rest.v2", request, (session) => {
+      if (mode === "resting") {
+        if (until !== null && Date.parse(until) <= Date.parse(this.timestamp())) {
+          throw new CollabError("invalid_until", "until must be a future instant");
+        }
+        this.appendEvent(session.workspace_id, "session.rested", session.id, session.actor, {
+          mode: "resting",
+          until,
+          reason,
+          wake_on: wakeOn
+        }, session.id);
+      } else {
+        const open = this.latestRestDeclaration(session.id);
+        this.appendEvent(session.workspace_id, "session.returned", session.id, session.actor, {
+          mode: "ready",
+          prior_rest_sequence: open?.type === "session.rested" ? open.sequence : null
+        }, session.id);
+      }
+      return this.sessionProjection(this.requireCoordinationSessionRow(session.id));
+    });
+  }
   preflightSessionEnd(credential) {
     const sessionId = validateId(credential.session_id, "session_id");
     const row = this.authenticateResumeToken(sessionId, credential.session_token);
@@ -33673,7 +33972,7 @@ class CollabStoreCore {
       const target = this.validateEventAnchor(row.workspace_id, input.target);
       const now = this.timestamp();
       const resetGeneration = row.reset_generation + 1;
-      const id = `cursor_reset_${randomUUID3()}`;
+      const id = `cursor_reset_${randomUUID4()}`;
       this.db.query(`
         INSERT INTO session_cursor_resets (
           id, session_id, from_epoch_id, from_sequence, from_hash,
@@ -33765,7 +34064,7 @@ class CollabStoreCore {
     };
     return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "task.create", normalized, () => {
       this.requireWorkspace(input.workspace_id);
-      const id = normalized.id ?? `task_${randomUUID3()}`;
+      const id = normalized.id ?? `task_${randomUUID4()}`;
       if (normalized.dependencies.includes(id)) {
         throw new CollabError("invalid_dependency", "A task cannot depend on itself", { task_id: id });
       }
@@ -33816,7 +34115,7 @@ class CollabStoreCore {
     }
     const request = { ...normalized, completion_policy: completionPolicy };
     return this.mutateAsSession(input, normalized.idempotency_key, "task.create.v2", request, (session) => {
-      const id = normalized.id ?? `task_${randomUUID3()}`;
+      const id = normalized.id ?? `task_${randomUUID4()}`;
       if (normalized.dependencies.includes(id)) {
         throw new CollabError("invalid_dependency", "A task cannot depend on itself", {
           task_id: id
@@ -33905,7 +34204,7 @@ class CollabStoreCore {
       const checkpoint = preparedCheckpoint.checkpoint;
       this.requireExpectedBase(row, checkpoint);
       const now = this.timestamp();
-      const leaseId = `lease_${randomUUID3()}`;
+      const leaseId = `lease_${randomUUID4()}`;
       const expiresAt = addSeconds(now, ttl);
       const version2 = row.version + 1;
       this.db.query(`
@@ -33981,7 +34280,7 @@ class CollabStoreCore {
       this.requireDependenciesComplete(opened);
       this.requirePathsAvailable(opened);
       this.requireExpectedBase(opened, checkpoint);
-      const leaseId = `lease_${randomUUID3()}`;
+      const leaseId = `lease_${randomUUID4()}`;
       const leaseExpiresAt = addSeconds(now, ttl);
       const version2 = expiryVersion + 1;
       this.db.query(`
@@ -34006,7 +34305,7 @@ class CollabStoreCore {
           recovered_by_session_id, action, note, prior_checkpoint_json,
           new_lease_id, recovered_at, event_sequence
         ) VALUES (?, ?, ?, ?, ?, ?, 'takeover', ?, ?, ?, ?, ?)
-      `).run(`recovery_${randomUUID3()}`, row.workspace_id, row.id, prior.lease_id, prior.session_id, session.id, recoveryNote, prior.checkpoint ? canonicalJson(prior.checkpoint) : null, leaseId, now, event.sequence);
+      `).run(`recovery_${randomUUID4()}`, row.workspace_id, row.id, prior.lease_id, prior.session_id, session.id, recoveryNote, prior.checkpoint ? canonicalJson(prior.checkpoint) : null, leaseId, now, event.sequence);
       return this.requireTask(row.workspace_id, row.id);
     });
   }
@@ -34125,7 +34424,7 @@ class CollabStoreCore {
       this.requireVersion(row, normalized.expected_version);
       this.requireActiveSessionLease(row, session, normalized.lease_id);
       const now = this.timestamp();
-      const id = `artifact_${randomUUID3()}`;
+      const id = `artifact_${randomUUID4()}`;
       this.db.query(`
           INSERT INTO artifacts (
             id, workspace_id, task_id, kind, uri, sha256, media_type, label,
@@ -34280,7 +34579,7 @@ class CollabStoreCore {
       this.requireDependenciesComplete(row);
       this.requirePathsAvailable(row);
       const now = this.timestamp();
-      const leaseId = `lease_${randomUUID3()}`;
+      const leaseId = `lease_${randomUUID4()}`;
       const expiresAt = addSeconds(now, normalized.ttl_seconds);
       const nextVersion = row.version + 1;
       this.db.query(`
@@ -34438,7 +34737,7 @@ class CollabStoreCore {
       this.requireVersion(row, normalized.expected_version);
       this.requireActiveLease(row, normalized.actor, normalized.lease_id);
       const now = this.timestamp();
-      const id = `artifact_${randomUUID3()}`;
+      const id = `artifact_${randomUUID4()}`;
       this.db.query(`
         INSERT INTO artifacts
           (id, workspace_id, task_id, kind, uri, sha256, media_type, label, attached_by, attached_at)
@@ -34464,7 +34763,7 @@ class CollabStoreCore {
     };
     return this.mutate(input.workspace_id, normalized.actor, normalized.idempotency_key, "decision.record", normalized, () => {
       this.requireWorkspace(input.workspace_id);
-      const id = `decision_${randomUUID3()}`;
+      const id = `decision_${randomUUID4()}`;
       const now = this.timestamp();
       this.db.query(`
         INSERT INTO decisions (id, workspace_id, topic, decision, rationale, recorded_by, recorded_at)
@@ -35048,7 +35347,7 @@ class CollabStoreCore {
     if (input.expected_ai_snapshot && canonicalJson(input.expected_ai_snapshot) !== canonicalJson(aiSnapshot)) {
       throw new CollabError("ai_position_changed", "The agents' position changed since it was shown; read the proposal status again", { ai_snapshot: aiSnapshot });
     }
-    const id = `person_act_${randomUUID3()}`;
+    const id = `person_act_${randomUUID4()}`;
     const now = this.timestamp();
     const personAct = {
       id,
@@ -35152,7 +35451,7 @@ class CollabStoreCore {
       throw setAsideRefusal("ai_position_changed", { ai_snapshot: facts.bytes.ai_snapshot });
     }
     const record2 = {
-      id: `set_aside_${randomUUID3()}`,
+      id: `set_aside_${randomUUID4()}`,
       proposal_report_id: terms.report_id,
       proposal_sha256: terms.proposal_sha256,
       challenge_report_id: challengeId,
@@ -35500,7 +35799,7 @@ class CollabStoreCore {
         authority_basis: "distinct active collaboration session"
       });
       const now = this.timestamp();
-      const reviewId = `review_${randomUUID3()}`;
+      const reviewId = `review_${randomUUID4()}`;
       const version2 = row.version + 1;
       const outcome = input.outcome === "accept" ? "accepted" : "changes_requested";
       if (input.outcome === "accept") {
@@ -35569,7 +35868,7 @@ class CollabStoreCore {
       if (pending)
         throw new CollabError("handoff_pending", "Task already has a pending handoff", { handoff_id: pending.id });
       const now = this.timestamp();
-      const id = `handoff_${randomUUID3()}`;
+      const id = `handoff_${randomUUID4()}`;
       const expiresAt = [addSeconds(now, normalized.ttl_seconds), row.lease_expires_at].sort()[0];
       this.db.query(`
         INSERT INTO handoffs
@@ -35625,7 +35924,7 @@ class CollabStoreCore {
           task_version: version2
         });
       } else {
-        const leaseId = `lease_${randomUUID3()}`;
+        const leaseId = `lease_${randomUUID4()}`;
         const leaseExpiresAt = addSeconds(now, normalized.ttl_seconds);
         this.db.query(`UPDATE handoffs SET status = 'accepted', resolved_at = ? WHERE id = ?`).run(now, offer.id);
         this.db.query(`
@@ -35670,7 +35969,7 @@ class CollabStoreCore {
           handoff_id: pending.id
         });
       }
-      const id = `handoff_${randomUUID3()}`;
+      const id = `handoff_${randomUUID4()}`;
       const expiresAt = addSeconds(now, ttl);
       this.db.query(`
           INSERT INTO handoffs (
@@ -35743,7 +36042,7 @@ class CollabStoreCore {
         const worktree = this.requirePreparedWorktree(session, preparedCheckpoint);
         const checkpoint = preparedCheckpoint.checkpoint;
         this.requireExpectedBase(row, checkpoint);
-        const leaseId = `lease_${randomUUID3()}`;
+        const leaseId = `lease_${randomUUID4()}`;
         const leaseExpiresAt = addSeconds(now, ttl);
         this.db.query(`
             UPDATE handoffs SET status = 'accepted', resolved_at = ? WHERE id = ?
@@ -35867,7 +36166,10 @@ class CollabStoreCore {
       `).all(current.workspace_id, current.cursor_sequence, events.next_anchor.sequence, current.id);
       return {
         actor: current.actor,
-        session: this.sessionProjection(current),
+        session: {
+          ...this.sessionProjection(current),
+          addressed_waiting: this.addressedWaiting(current)
+        },
         own_claims: tasks.filter((task) => task.effective_status === "claimed" && task.assignee_session_id === current.id),
         ready_tasks: claimable,
         claimable_tasks: claimable,
@@ -36080,6 +36382,8 @@ class CollabStoreCore {
     return typeof voice === "string" && this.consentVoice(sessionId) === voice;
   }
   eventAddressesSession(event, sessionId) {
+    if (event.session_id === sessionId)
+      return false;
     const payload = event.payload ?? {};
     const field = (value, key) => value !== null && typeof value === "object" ? value[key] : undefined;
     switch (event.type) {
@@ -36092,13 +36396,15 @@ class CollabStoreCore {
         if (typeof payload.target_report_id !== "string")
           return false;
         const target = this.db.query(`SELECT from_session_id FROM reports WHERE id = ?`).get(payload.target_report_id);
-        return target?.from_session_id === sessionId;
+        return target?.from_session_id === sessionId && typeof payload.to_session_id !== "string";
       }
       case "handoff.offered":
         return field(payload.handoff, "to_session_id") === sessionId;
       case "handoff.accepted":
       case "handoff.declined":
       case "handoff.expired": {
+        if (event.type === "handoff.expired" && !handoffExpiryIsNewsToOfferer(payload.reason))
+          return false;
         const offer = this.db.query(`SELECT from_session_id FROM handoffs WHERE id = ?`).get(event.entity_id);
         return offer?.from_session_id === sessionId;
       }
@@ -36106,6 +36412,10 @@ class CollabStoreCore {
         return payload.review_requested_session_id === sessionId;
       case "task.accepted":
       case "task.changes_requested": {
+        if (typeof payload.completion_report_id === "string") {
+          const completion = this.db.query(`SELECT from_session_id FROM reports WHERE id = ?`).get(payload.completion_report_id);
+          return completion?.from_session_id === sessionId;
+        }
         const task = this.db.query(`SELECT reported_by_session_id FROM tasks WHERE workspace_id = ? AND id = ?`).get(event.workspace_id, event.entity_id);
         return task?.reported_by_session_id === sessionId;
       }
@@ -36241,7 +36551,7 @@ class CollabStoreCore {
       if (receiptPlan)
         this.requireReceiptPlan(session, receiptPlan);
       this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), session.id);
-      const guardNonce = `guard_${randomUUID3()}`;
+      const guardNonce = `guard_${randomUUID4()}`;
       this.db.query(`INSERT INTO v2_write_guard (nonce, enabled) VALUES (?, 1)`).run(guardNonce);
       try {
         const response2 = apply(session);
@@ -36708,7 +37018,7 @@ class CollabStoreCore {
         recovered_by_session_id, action, note, prior_checkpoint_json,
         new_lease_id, recovered_at, event_sequence
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
-    `).run(`recovery_${randomUUID3()}`, row.workspace_id, row.id, input.prior.lease_id, input.prior.session_id, session.id, input.action, input.recovery_note, input.prior.checkpoint ? canonicalJson(input.prior.checkpoint) : null, input.now, event.sequence);
+    `).run(`recovery_${randomUUID4()}`, row.workspace_id, row.id, input.prior.lease_id, input.prior.session_id, session.id, input.action, input.recovery_note, input.prior.checkpoint ? canonicalJson(input.prior.checkpoint) : null, input.now, event.sequence);
     return this.requireTask(row.workspace_id, row.id);
   }
   recoveryBundle(row) {
@@ -36761,7 +37071,7 @@ class CollabStoreCore {
     }
   }
   appendReportInternal(session, input) {
-    const id = `report_${randomUUID3()}`;
+    const id = `report_${randomUUID4()}`;
     const now = this.timestamp();
     const event = this.appendEvent(session.workspace_id, "report.posted", id, session.actor, {
       ...input.to_person ? { to_person: true } : {},
@@ -36947,7 +37257,7 @@ class CollabStoreCore {
       workspace_id: workspaceId,
       epoch_id: workspace.epoch_id,
       sequence: workspace.event_head_sequence + 1,
-      id: `event_${randomUUID3()}`,
+      id: `event_${randomUUID4()}`,
       type,
       entity_id: entityId,
       actor,
@@ -37069,7 +37379,7 @@ class CollabStoreCore {
     }
   }
   recordSessionLeaseLapses(session, now) {
-    if (sessionLiveness(session, now) === "live")
+    if (leaseHolderPresent(session, now))
       return;
     const staleAt = new Date(Date.parse(session.last_seen_at) + SESSION_STALE_AFTER_MS + 1).toISOString();
     this.db.query(`INSERT OR IGNORE INTO session_lease_lapses (lease_id, effective_at)
@@ -37083,7 +37393,8 @@ class CollabStoreCore {
       return true;
     if (this.db.query(`SELECT 1 FROM session_lease_lapses WHERE lease_id = ?`).get(row.lease_id))
       return true;
-    return (priorHolder ? sessionLiveness(priorHolder, observedAt) : this.assigneeLiveness(row.assignee_session_id, observedAt)) !== "live";
+    const holder = priorHolder ?? this.leaseHolderRow(row.assignee_session_id);
+    return !holder || !leaseHolderPresent(holder, observedAt);
   }
   taskFromRow(row) {
     let effectiveStatus = row.status;
@@ -37136,15 +37447,47 @@ class CollabStoreCore {
     };
   }
   sessionProjection(row, observedAt = this.timestamp()) {
-    return coordinationSessionFromRow(row, observedAt);
+    const rest = row.status === "active" ? this.latestRest(row.id, observedAt) : null;
+    return coordinationSessionFromRow(row, observedAt, rest);
   }
   assigneeLiveness(sessionId, observedAt = this.timestamp()) {
     if (!sessionId)
       return null;
-    const holder = this.db.query(`
+    const holder = this.leaseHolderRow(sessionId);
+    if (!holder)
+      return null;
+    const rest = holder.status === "active" ? this.latestRest(sessionId, observedAt) : null;
+    return sessionLivenessWithRest(holder, observedAt, rest);
+  }
+  leaseHolderRow(sessionId) {
+    return this.db.query(`
       SELECT status, last_seen_at FROM coordination_sessions WHERE id = ?
     `).get(sessionId);
-    return holder ? sessionLiveness(holder, observedAt) : null;
+  }
+  latestRestDeclaration(sessionId) {
+    return this.db.query(`
+      SELECT type, sequence, occurred_at, payload_json FROM events
+      WHERE workspace_id = (
+          SELECT workspace_id FROM coordination_sessions WHERE id = ?1 AND status = 'active'
+        )
+        AND entity_id = ?1
+        AND type IN ('session.rested', 'session.returned')
+      ORDER BY sequence DESC
+      LIMIT 1
+    `).get(sessionId);
+  }
+  latestRest(sessionId, observedAt) {
+    const declaration = this.latestRestDeclaration(sessionId);
+    return declaration ? restFromDeclaration(declaration, observedAt) : null;
+  }
+  addressedWaiting(session) {
+    const rows = this.db.query(`
+      SELECT type, session_id, payload_json FROM events
+      WHERE workspace_id = ? AND sequence > ?
+        AND type IN ('report.posted', 'handoff.offered')
+      ORDER BY sequence
+    `).all(session.workspace_id, knockReadThrough(this.db, session.workspace_id, session.id, session.cursor_sequence));
+    return rows.filter((row) => isAddressedTo(row, session.id)).length;
   }
   requireWorkspace(workspaceId, db = this.db) {
     const workspace = this.getWorkspace(workspaceId, db);
@@ -37418,6 +37761,36 @@ function optionalText(value, field, max) {
     return null;
   return cleanText(value, field, max);
 }
+var REST_UNTIL_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/;
+function validateRestMode(value) {
+  if (value !== "resting" && value !== "ready") {
+    throw new CollabError("invalid_mode", 'mode must be "resting" or "ready"');
+  }
+  return value;
+}
+function validateRestUntil(value) {
+  const text = typeof value === "string" ? value.trim() : "";
+  const match = REST_UNTIL_PATTERN.exec(text);
+  if (match) {
+    const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number);
+    const offsetHours = Number(match[7] ?? 0);
+    const offsetMinutes = Number(match[8] ?? 0);
+    const calendar = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+    const parsed = Date.parse(text);
+    if (year >= 1970 && calendar.getUTCFullYear() === year && calendar.getUTCMonth() === month - 1 && calendar.getUTCDate() === day && calendar.getUTCHours() === hour && calendar.getUTCMinutes() === minute && calendar.getUTCSeconds() === second && offsetHours <= 23 && offsetMinutes <= 59 && Number.isFinite(parsed)) {
+      return new Date(parsed).toISOString();
+    }
+  }
+  throw new CollabError("invalid_until", "until must be an ISO-8601 instant with seconds and a time zone, for example 2026-10-09T18:00:00Z");
+}
+function validateRestWakeOn(value) {
+  if (value === undefined)
+    return [];
+  if (!Array.isArray(value) || value.length > 1 || value.length === 1 && value[0] !== "addressed") {
+    throw new CollabError("invalid_wake_on", 'wake_on accepts [] or ["addressed"] in this version');
+  }
+  return value.length === 1 ? ["addressed"] : [];
+}
 function validateTtl(value) {
   const ttl = value ?? DEFAULT_LEASE_SECONDS;
   if (!Number.isInteger(ttl) || ttl < 30 || ttl > MAX_LEASE_SECONDS) {
@@ -37496,7 +37869,7 @@ function normalizePathScopes(scopes) {
   }
   let totalLength = 0;
   const normalized = scopes.map((scope) => {
-    if (typeof scope !== "string" || !scope || scope.length > MAX_PATH_SCOPE_LENGTH || scope.includes("\x00") || scope.includes("\\") || isAbsolute3(scope)) {
+    if (typeof scope !== "string" || !scope || scope.length > MAX_PATH_SCOPE_LENGTH || scope.includes("\x00") || scope.includes("\\") || isAbsolute4(scope)) {
       throw new CollabError("invalid_path_scope", "Path scopes must be non-empty repository-relative POSIX paths", { scope });
     }
     totalLength += scope.length;
@@ -37626,11 +37999,101 @@ function requireMatchingPresenceSessionJoin(row, input) {
     throw new CollabError("session_instance_conflict", "client_instance_id was already joined with different self-declared metadata", { session_id: row.id });
   }
 }
+function restFromDeclaration(row, observedAt) {
+  if (row.type !== "session.rested")
+    return null;
+  let payload;
+  try {
+    payload = JSON.parse(row.payload_json);
+  } catch {
+    return null;
+  }
+  if (!isRecordValue(payload) || payload.mode !== "resting")
+    return null;
+  const until = typeof payload.until === "string" ? payload.until : payload.until === null ? null : undefined;
+  const reason = typeof payload.reason === "string" ? payload.reason : payload.reason === null ? null : undefined;
+  const wakeOn = payload.wake_on;
+  if (until === undefined || reason === undefined)
+    return null;
+  if (!Array.isArray(wakeOn) || wakeOn.length > 1 || !wakeOn.every((item) => item === "addressed")) {
+    return null;
+  }
+  if (until !== null && !(Date.parse(observedAt) < Date.parse(until)))
+    return null;
+  return {
+    mode: "resting",
+    since: row.occurred_at,
+    until,
+    reason,
+    wake_on: wakeOn.length === 1 ? ["addressed"] : []
+  };
+}
+function leaseHolderPresent(row, observedAt) {
+  return sessionLiveness(row, observedAt) === "live";
+}
 function sessionLiveness(row, observedAt) {
   if (row.status !== "active")
     return "stale";
   const age = Date.parse(observedAt) - Date.parse(row.last_seen_at);
   return age <= SESSION_STALE_AFTER_MS ? "live" : "stale";
+}
+function sessionLivenessWithRest(row, observedAt, rest) {
+  if (row.status !== "active")
+    return "ended";
+  if (rest)
+    return "resting";
+  return sessionLiveness(row, observedAt);
+}
+var HANDOFF_EXPIRY_IS_NEWS_TO_OFFERER = {
+  target_session_ended: true,
+  offer_deadline_elapsed: true,
+  task_released: false,
+  task_reported_complete: false,
+  task_blocked: false,
+  task_completed: false,
+  source_lease_expired: false
+};
+function handoffExpiryIsNewsToOfferer(reason) {
+  return typeof reason === "string" && Object.hasOwn(HANDOFF_EXPIRY_IS_NEWS_TO_OFFERER, reason) && HANDOFF_EXPIRY_IS_NEWS_TO_OFFERER[reason];
+}
+function isAddressedTo(event, sessionId) {
+  if (event.session_id === sessionId)
+    return false;
+  if (event.type !== "report.posted" && event.type !== "handoff.offered")
+    return false;
+  let payload;
+  try {
+    payload = JSON.parse(event.payload_json);
+  } catch {
+    return false;
+  }
+  if (!isRecordValue(payload))
+    return false;
+  if (event.type === "report.posted")
+    return payload.to_session_id === sessionId;
+  return isRecordValue(payload.handoff) && payload.handoff.to_session_id === sessionId;
+}
+function knockReadThrough(db, workspaceId, sessionId, cursorSequence) {
+  try {
+    const row = db.query(`
+      SELECT m.shown_through_sequence AS mark, w.event_head_sequence AS head
+      FROM note_marks m JOIN workspaces w ON w.id = m.workspace_id
+      WHERE m.workspace_id = ? AND m.session_id = ?
+    `).get(workspaceId, sessionId);
+    if (row && Number.isInteger(row.mark) && Number.isInteger(row.head) && row.mark <= row.head) {
+      return Math.max(cursorSequence, row.mark);
+    }
+  } catch {}
+  return cursorSequence;
+}
+function knockDelivery(liveness, rest) {
+  if (liveness === "live")
+    return "tap";
+  if (liveness === "ended")
+    return "none";
+  if (liveness === "resting" && rest?.wake_on.includes("addressed"))
+    return "wake";
+  return "held";
 }
 function recoveryRequiredFirst(tasks, isOwn) {
   const byExpiry = (left, right) => (left.lease_expires_at ?? "").localeCompare(right.lease_expires_at ?? "") || left.id.localeCompare(right.id);
@@ -37640,7 +38103,7 @@ function recoveryRequiredFirst(tasks, isOwn) {
     ...pending.filter((task) => !isOwn(task)).sort(byExpiry)
   ];
 }
-function coordinationSessionFromRow(row, observedAt) {
+function coordinationSessionFromRow(row, observedAt, rest) {
   return {
     id: row.id,
     workspace_id: row.workspace_id,
@@ -37661,7 +38124,8 @@ function coordinationSessionFromRow(row, observedAt) {
     cursor_version: row.cursor_version,
     reset_generation: row.reset_generation,
     cursor_recovery_required: row.cursor_recovery_required !== 0,
-    liveness: sessionLiveness(row, observedAt)
+    liveness: sessionLivenessWithRest(row, observedAt, rest),
+    rest
   };
 }
 function worktreeFromRow(row) {
@@ -37845,7 +38309,7 @@ function artifactRepositoryPath(uri, rootPath) {
   if (!value || value.includes("\x00") || value.includes("\\"))
     return null;
   let relative2;
-  if (isAbsolute3(value)) {
+  if (isAbsolute4(value)) {
     const absolute = posix.normalize(value);
     if (!absolute.startsWith(`${rootPath}/`))
       return null;
@@ -37959,7 +38423,7 @@ function retrySqliteBusy(operation) {
   }
 }
 function assertSafeDatabaseFile(path) {
-  const stat = lstatSync4(path);
+  const stat = lstatSync5(path);
   if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || typeof process.getuid === "function" && stat.uid !== process.getuid()) {
     throw new CollabError("database_file_unsafe", "The collaboration database path must be a non-linked regular file owned by this user", { path });
   }
@@ -38027,7 +38491,7 @@ function safeRepositoryIdentity(rootPath) {
   try {
     return inspectRepository(rootPath);
   } catch {
-    const root = resolve4(rootPath);
+    const root = resolve5(rootPath);
     const repositoryKey = `local-path:${sha2564(root)}`;
     const worktreeId2 = `wt_${sha2564(`${root}\x00path:${root}`).slice(0, 24)}`;
     return {
@@ -38083,13 +38547,18 @@ class CollabStore extends CollabStoreCore {
       ORDER BY last_seen_at DESC, id
     `).all(workspaceId);
     const declared = this.db.query(`
-      SELECT entity_id, type, payload_json FROM events
-      WHERE workspace_id = ? AND type IN ('session.joined', 'purpose.declared')
+      SELECT entity_id, type, sequence, occurred_at, payload_json FROM events
+      WHERE workspace_id = ? AND type IN ('session.joined', 'purpose.declared', 'session.rested', 'session.returned')
       ORDER BY sequence
     `).all(workspaceId);
     const joined = new Map;
     const purposes = new Map;
+    const rests = new Map;
     for (const row of declared) {
+      if (row.type === "session.rested" || row.type === "session.returned") {
+        rests.set(row.entity_id, { type: row.type, sequence: row.sequence, occurred_at: row.occurred_at, payload_json: row.payload_json });
+        continue;
+      }
       const payload = JSON.parse(row.payload_json);
       if (row.type === "session.joined") {
         joined.set(row.entity_id, {
@@ -38116,7 +38585,8 @@ class CollabStore extends CollabStoreCore {
       status: row.status,
       joined_at: row.joined_at,
       last_seen_at: row.last_seen_at,
-      liveness: sessionLiveness(row, observedAt)
+      liveness: sessionLiveness(row, observedAt),
+      rest: row.status === "active" && rests.has(row.id) ? restFromDeclaration(rests.get(row.id), observedAt) : null
     }));
   }
   consentVoiceOf(sessionId) {
@@ -38198,7 +38668,7 @@ class CollabStore extends CollabStoreCore {
     if (hasFiles && cite.worktree_id !== session.worktree_id) {
       throw new CollabError("cite_worktree_mismatch", "File evidence is cited against the citing session's own worktree");
     }
-    const citeId = `cite_${randomUUID4()}`;
+    const citeId = `cite_${randomUUID5()}`;
     const payload = {
       cite_id: citeId,
       by_session_id: session.id,
@@ -38259,6 +38729,7 @@ class CollabStore extends CollabStoreCore {
           actor: authorRow.actor,
           status: authorRow.status,
           liveness: sessionLiveness(authorRow, this.timestamp()),
+          rest: authorRow.status === "active" ? this.latestRest(authorRow.id, this.timestamp()) : null,
           last_seen_at: authorRow.last_seen_at,
           voice_id: this.consentVoice(authorRow.id)
         } : null
@@ -40449,9 +40920,9 @@ function firstLine(text) {
 
 // src/verbs.ts
 import { createHash as createHash6 } from "crypto";
-import { existsSync as existsSync5, realpathSync as realpathSync3 } from "fs";
+import { existsSync as existsSync6, realpathSync as realpathSync3 } from "fs";
 import { hostname as hostname3 } from "os";
-import { resolve as resolve5, sep as sep2 } from "path";
+import { resolve as resolve6, sep as sep2 } from "path";
 
 // src/desk-soft-spots.ts
 function carriedObjectionsSentence(rule = CONSENT_RULE) {
@@ -40934,7 +41405,7 @@ var PARENT_MAX = 200;
 function withSlotInput(ctx, input) {
   return ctx.slot_key ? { ...input, binding_key: ctx.slot_key } : input;
 }
-var PACKAGE_ROOT = resolve5(import.meta.dir, "..");
+var PACKAGE_ROOT = resolve6(import.meta.dir, "..");
 function within(path, root) {
   return path === root || path.startsWith(root.endsWith(sep2) ? root : `${root}${sep2}`);
 }
@@ -40944,7 +41415,7 @@ function defaultRootPath(sent) {
   try {
     workingDirectory = realpathSync3(process.cwd());
     const identity = inspectRepository(workingDirectory, undefined, true, { portable: false });
-    const packageRoot = existsSync5(PACKAGE_ROOT) ? realpathSync3(PACKAGE_ROOT) : PACKAGE_ROOT;
+    const packageRoot = existsSync6(PACKAGE_ROOT) ? realpathSync3(PACKAGE_ROOT) : PACKAGE_ROOT;
     if (identity.git_common_dir_hash === null)
       reason = "not_a_git_worktree";
     else if (within(workingDirectory, packageRoot))
@@ -41207,7 +41678,8 @@ function composeBrief(ctx, data, pending, rootPath) {
     model: view.model,
     last_seen_minutes: minutesSince(view.last_seen_at, at),
     holds: holds(view.id),
-    same_seat_as_you: me.seat_ref !== null && view.seat_ref === me.seat_ref
+    same_seat_as_you: me.seat_ref !== null && view.seat_ref === me.seat_ref,
+    ...view.rest ? { resting: { until: view.rest.until, wakes_for_addressed: view.rest.wake_on.includes("addressed") } } : {}
   }));
   const claimable = data.tasks.filter((task) => data.claimable_task_ids.includes(task.id)).map((task) => ({
     task: handleOf("task", task.id),
@@ -41338,9 +41810,9 @@ function listenHow(ctx, sessionId) {
   const database = ctx.store.db.filename;
   if (!ctx.environment.CLAUDE_CODE_MESSAGING_SOCKET || !database || database === ":memory:")
     return inboxWait;
-  const watcher = resolve5(import.meta.dir, "..", "integrations", "claude-code", "collab-doorbell-watch.ts");
-  const host = resolve5(import.meta.dir, "..", "dist", "agenttool-collab-host.js");
-  if (!existsSync5(watcher) || !existsSync5(host))
+  const watcher = resolve6(import.meta.dir, "..", "integrations", "claude-code", "collab-doorbell-watch.ts");
+  const host = resolve6(import.meta.dir, "..", "dist", "agenttool-collab-host.js");
+  if (!existsSync6(watcher) || !existsSync6(host))
     return inboxWait;
   return `nohup ${shellQuote(process.execPath)} ${shellQuote(watcher)} --session ${sessionId} ` + `--db ${shellQuote(database)} --host-bin ${shellQuote(host)} >/dev/null 2>&1 &`;
 }
@@ -41381,7 +41853,7 @@ function evidenceRechecker(store2, budgetBytes = NOTE_RECHECK_MAX_BYTES) {
     if (!worktreeId2)
       return "unavailable";
     const root = store2.noteWorktreeRoot(worktreeId2);
-    if (!root || !existsSync5(root))
+    if (!root || !existsSync6(root))
       return "unavailable";
     if (remaining <= 0)
       return "not_rechecked";
@@ -42917,7 +43389,7 @@ function resolveEvidence(ctx, binding, lines) {
     if (kind === "file") {
       const { path, from, to } = fileLocatorParts(evidence.locator);
       const lineRange = from === null ? undefined : to !== null && to !== from ? `${from}-${to}` : `${from}`;
-      const hashed = existsSync6(root) ? hashWorktreeFile(root, path) : { status: "unreadable", path: null };
+      const hashed = existsSync7(root) ? hashWorktreeFile(root, path) : { status: "unreadable", path: null };
       if (hashed.status === "hashed") {
         const stored = hashed.path === path ? line : renderEvidence({ kind: "file", locator: `${hashed.path}${evidence.locator.slice(path.length)}`, attrs: evidence.attrs });
         if (stored !== line)
@@ -43072,13 +43544,25 @@ function explicitAddressee(ctx, workspaceId, value, input) {
   if (named.by_name && view.status === "ended") {
     return { to_session_id: view.id, to_person: false, shown: { session: view.id, name: view.actor }, advice: named.advice };
   }
-  const addressee = sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at);
+  const addressee = sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at, view.rest);
   return { ...addressee, advice: [...named.advice, ...addressee.advice] };
 }
-function sessionAddressee(id, name, status, liveness, lastSeenAt) {
+function restAdvice(name, id, rest, what = "the note") {
+  const resting = `${name} (${id}) is resting${rest.until ? ` until ${rest.until}` : ""}`;
+  return rest.wake_on.includes("addressed") ? `${resting} and asked to be woken for notes addressed to it; a host may wake it for this one, and none is promised.` : `${resting} and asked not to be woken; ${what} is recorded and waits for its return.`;
+}
+function restAdviceFor(ctx, workspaceId, sessionId, what) {
+  if (!sessionId)
+    return [];
+  const view = ctx.store.noteSessionViews(workspaceId).find((candidate) => candidate.id === sessionId);
+  return view?.status === "active" && view.rest ? [restAdvice(view.actor, view.id, view.rest, what)] : [];
+}
+function sessionAddressee(id, name, status, liveness, lastSeenAt, rest = null) {
   const advice = [];
   if (status === "ended")
     advice.push(`${name} (${id}) has ended its session; the note is recorded and addressed to it all the same.`);
+  else if (rest)
+    advice.push(restAdvice(name, id, rest));
   else if (liveness === "stale") {
     advice.push(`${name} (${id}) was last seen at ${lastSeenAt}, over 6 hours ago; the note is recorded and addressed to it all the same.`);
   }
@@ -43088,7 +43572,7 @@ function authorAddressee(target, me) {
   const author = target.author;
   if (!author || author.id === me)
     return BROADCAST;
-  return sessionAddressee(author.id, author.actor, author.status, author.liveness, author.last_seen_at);
+  return sessionAddressee(author.id, author.actor, author.status, author.liveness, author.last_seen_at, author.rest);
 }
 function replyAddressee(ctx, workspaceId, author, me) {
   if (!author || author.id === me)
@@ -43097,7 +43581,7 @@ function replyAddressee(ctx, workspaceId, author, me) {
     const live = ctx.store.noteSessionViews(workspaceId).filter((view) => view.status === "active" && view.actor === author.actor && view.id !== author.id);
     if (live.length === 1 && live[0].id !== me) {
       const now = live[0];
-      const routed = sessionAddressee(now.id, now.actor, now.status, now.liveness, now.last_seen_at);
+      const routed = sessionAddressee(now.id, now.actor, now.status, now.liveness, now.last_seen_at, now.rest);
       return {
         ...routed,
         advice: [
@@ -43107,11 +43591,11 @@ function replyAddressee(ctx, workspaceId, author, me) {
       };
     }
   }
-  return sessionAddressee(author.id, author.actor, author.status, author.liveness, author.last_seen_at);
+  return sessionAddressee(author.id, author.actor, author.status, author.liveness, author.last_seen_at, author.rest);
 }
 function viewAddressee(ctx, workspaceId, sessionId) {
   const view = ctx.store.resolveNoteSession(workspaceId, sessionId, { include_ended: true });
-  return sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at);
+  return sessionAddressee(view.id, view.actor, view.status, view.liveness, view.last_seen_at, view.rest);
 }
 var NOTE_ACTS_HERE = [
   "note",
@@ -43645,6 +44129,7 @@ function planNote(ctx, input, context) {
       const completion = reviewTarget(ctx, input, target, workspaceId, me);
       if (fields.to !== null)
         advice.push("A verdict goes to the session that reported the work; to was not used.");
+      advice.push(...restAdviceFor(ctx, workspaceId, ctx.store.getTask(workspaceId, completion.task_id).reported_by_session_id, "the verdict"));
       extra.review = completion;
       return finish({ recorded_as: act, target, addressee: BROADCAST, reports: [], entity: completion.completion_id });
     }
@@ -44946,6 +45431,7 @@ async function finishTask(ctx, binding, credential, task, options) {
   else if (plan.retry)
     advice.push("An earlier call with this input stopped part way; its finished steps were kept, and the rest ran now.");
   const shown = recordedEvidence(evidence, recordedItems, advice);
+  advice.push(...restAdviceFor(ctx, workspaceId, reviewer, "the review request"));
   const handle = handleOf("task", task.id);
   const completion = completed.completion_report_id;
   const reviewed = completed.completion_policy === "accepted";
@@ -45663,6 +46149,11 @@ function proposeResult(ctx, binding, options) {
   if (unreachable.length > 0) {
     advice.push(`${unreachable.length} carried objector(s) have no live session, so no note reached them: ${unreachable.map((entry) => entry.objector.name).join(", ")}.`);
   }
+  for (const entry of notified) {
+    const view = entry.objector.session ? sessions.get(entry.objector.session.id) : undefined;
+    if (view?.status === "active" && view.rest)
+      advice.push(restAdvice(view.actor, view.id, view.rest));
+  }
   const shown = options.cite && options.citeReplayed ? recordedEvidence(options.evidence, options.cite.items, advice) : options.evidence;
   const replacedId = data.replaced?.proposal_id ?? null;
   const note = proposalNote({
@@ -45717,7 +46208,7 @@ function proposeResult(ctx, binding, options) {
 }
 
 // src/ballot-verbs.ts
-import { randomBytes as randomBytes2, randomUUID as randomUUID5 } from "crypto";
+import { randomBytes as randomBytes2, randomUUID as randomUUID6 } from "crypto";
 var POLL_STAND_IN_STATEMENT = "A sealed ballot; read its terms with collab_inbox about.";
 var WAIT_FOR_CLOSE_SECONDS = 30;
 var WAIT_FOR_CLOSE_ADVICE = "collab_inbox {wait_seconds: 30} waits for the close: a wait ends when a ballot you are in, opened or cast in closes, " + "and returns its result; a wait over 30 seconds is one more call (closes_in says how long is left).";
@@ -45953,7 +46444,7 @@ async function voteVerb(ctx, input) {
   if (viewer.your_casts > 0) {
     advice.push("This replaces your earlier cast: only your latest counts, and a session may cast at most 3 times in one ballot.");
   }
-  const castId = randomUUID5();
+  const castId = randomUUID6();
   const salt = randomBytes2(32).toString("hex");
   checkVoteSize(sealed, { ballot_id: ballotId, cast_id: castId, unit_id: viewer.unit_id, session_id: me });
   const commitment = ballotCommitment({
@@ -46068,6 +46559,7 @@ var eventAnchor = exports_external.object({
   hash: exports_external.string().length(64)
 });
 var evidenceRefs = exports_external.array(exports_external.string().min(1).max(2000)).max(128).optional().describe(EVIDENCE_REFS_DESCRIPTION);
+var addresseeNote = "The result's addressee is the addressed session's state at this call, replays included: delivery tap (live), " + "wake (resting with wake_on addressed), held (resting otherwise, or stale) or none (ended). " + "A hint: it blocks nothing and promises no delivery.";
 var nextEventLimit = exports_external.number().int().min(1).max(50).optional().describe(`Maximum events in this page; defaults to ${DEFAULT_MCP_NEXT_EVENT_LIMIT} for MCP polling`);
 var localReadOnly = {
   readOnlyHint: true,
@@ -46094,15 +46586,22 @@ var localDestructiveMutation = {
   openWorldHint: false
 };
 var WAITS_PER_ENDPOINT = 8;
-function buildCollabMcpServer(store2, options = {}) {
-  const slots = new Map([["", { key: "", binding: options.resumed_session ?? null }]]);
-  for (const [key2, binding] of Object.entries(options.resumed_sessions ?? {})) {
+function buildCollabMcpServer(store2, given = {}) {
+  const slots = new Map([["", { key: "", binding: given.resumed_session ?? null }]]);
+  for (const [key2, binding] of Object.entries(given.resumed_sessions ?? {})) {
     if (!key2 || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(key2)) {
       throw new CollabError("invalid_binding_key", "A named binding requires a valid non-empty key");
     }
     slots.set(key2, { key: key2, binding });
   }
   const requestSlot = new AsyncLocalStorage;
+  const options = {
+    ...given,
+    host_binding: given.host_binding && {
+      record: (sessionId2, credentialFile) => requestSlot.getStore()?.key === "" ? given.host_binding.record(sessionId2, credentialFile) : false,
+      forget: (sessionId2) => given.host_binding.forget(sessionId2)
+    }
+  };
   const state = {
     get binding() {
       return requestSlot.getStore().binding;
@@ -46181,6 +46680,15 @@ Legacy session tools: ${legacyInstructions}`
       throw new CollabError("session_workspace_mismatch", "The bound session belongs to another workspace");
     }
   };
+  const withAddressee = (result, workspace, addressedSessionId) => {
+    if (!addressedSessionId)
+      return result;
+    try {
+      return { ...result, addressee: store2.addresseeHint(workspace, addressedSessionId) };
+    } catch {
+      return result;
+    }
+  };
   const requireLegacyActor = (value) => {
     if (!value) {
       throw new CollabError("actor_required", "Legacy mode requires actor; session mode derives it from the bound credential");
@@ -46197,10 +46705,12 @@ Legacy session tools: ${legacyInstructions}`
     bind: (binding) => {
       state.binding = binding;
       requestSlot.getStore().left = null;
+      options.host_binding?.record(binding.handle.session.id, binding.credential_file);
     },
     unbind: (left) => {
       state.binding = null;
       requestSlot.getStore().left = left;
+      options.host_binding?.forget(left.session_id);
     },
     left: () => requestSlot.getStore().left ?? null,
     bound_slots: () => [...slots.values()].filter((slot) => slot.binding !== null).sort((left, right) => left.key === "" ? -1 : right.key === "" ? 1 : left.key.localeCompare(right.key)).map((slot) => ({ key: slot.key, binding: slot.binding })),
@@ -46406,16 +46916,19 @@ Legacy session tools: ${legacyInstructions}`
       seat_ref: seatRef
     });
     const credentialFile = store2.defaultSessionCredentialPath(handle.session.id);
+    let path;
     try {
-      const path = writeSessionCredentialFile(credentialFile, handle.credential);
-      state.binding = { handle, credential_file: path };
-      return publicSessionBinding(state.binding, seatRef);
+      path = writeSessionCredentialFile(credentialFile, handle.credential);
     } catch (error51) {
       try {
         store2.endSession({ ...handle.credential, reason: "credential_file_write_failed" });
       } catch {}
       throw error51;
     }
+    const bound = { handle, credential_file: path };
+    state.binding = bound;
+    options.host_binding?.record(handle.session.id, path);
+    return publicSessionBinding(bound, seatRef);
   }));
   server.registerTool("collab_session_end", {
     title: "End the bound collaboration session",
@@ -46437,6 +46950,7 @@ Legacy session tools: ${legacyInstructions}`
       release_summary
     });
     state.binding = null;
+    options.host_binding?.forget(ended.session.id);
     removeSessionCredentialFile(current.credential_file);
     return {
       session: ended.session,
@@ -46444,6 +46958,27 @@ Legacy session tools: ${legacyInstructions}`
       credential_file_removed: true,
       session_file_name: `${ended.session.id}.json`
     };
+  }));
+  server.registerTool("collab_session_rest", {
+    title: "Declare rest or return for the bound session",
+    description: "Declare that the bound session is resting, or return with mode ready. Rest is declared, never inferred: " + "until (a future ISO-8601 instant with a time zone) bounds it and is checked on read, and wake_on " + '["addressed"] consents to a host wake for notes explicitly addressed to this session; with the default [] ' + "they wait until you return. Rest changes no status and never releases, extends, or reassigns leases, " + "handoffs, or accepted obligations.",
+    annotations: localRetrySafeMutation,
+    inputSchema: {
+      workspace_id: workspaceId.optional(),
+      idempotency_key: key,
+      mode: exports_external.enum(["resting", "ready"]),
+      until: exports_external.string().min(1).max(64).optional().describe("Mode resting only: a future ISO-8601 instant with a time zone; omit to rest until you return"),
+      reason: exports_external.string().max(MAX_REST_REASON_LENGTH).optional().describe(`Mode resting only: a short reason, at most ${MAX_REST_REASON_LENGTH} characters`),
+      wake_on: exports_external.array(exports_external.enum(["addressed"])).max(1).optional().describe('Mode resting only: [] (default) or ["addressed"] to consent to a wake for addressed notes')
+    }
+  }, async ({ workspace_id, ...input }) => call(() => {
+    if (workspace_id !== undefined)
+      requireWorkspace(workspace_id);
+    const session = store2.restSessionForSession({ ...boundCredential(), ...input });
+    const current = state.binding;
+    if (current)
+      current.handle = { ...current.handle, session };
+    return { session };
   }));
   server.registerTool("collab_workspace_open", {
     title: "Open a local collaboration workspace",
@@ -46469,7 +47004,7 @@ Legacy session tools: ${legacyInstructions}`
   }, async ({ workspace_id }) => call(() => store2.workspaceStatus(workspace_id)));
   server.registerTool("collab_next", {
     title: "Poll the next useful collaboration state",
-    description: "Poll without acknowledging, with 1\u201350 events per page and a default of 10. Routed reports are bounded to the exact event page; task, conflict, and handoff projections describe the same snapshot head. A bound session always pages from its acknowledged cursor: advance with collab_cursor_ack, or read elsewhere with collab_events_since. " + "recovery_required lists expired session leases awaiting collab_task_recover, the caller's own first. " + "Session liveness and task assignee_liveness are a derived view (stale after 6 hours unseen), never a status change.",
+    description: "Poll without acknowledging, with 1\u201350 events per page and a default of 10. Routed reports are bounded to the exact event page; task, conflict, and handoff projections describe the same snapshot head. A bound session always pages from its acknowledged cursor: advance with collab_cursor_ack, or read elsewhere with collab_events_since. " + "recovery_required lists expired session leases awaiting collab_task_recover, the caller's own first. " + "A bound session's addressed_waiting counts notes addressed to it that it has not read (addressed reports, " + "review requests and results, session handoff offers; never its own); it falls as collab_cursor_ack advances, " + "or as collab_inbox shows them. " + "Session liveness and task assignee_liveness are a derived view, never a status change: ended, else resting " + "while a declared rest is unexpired, else stale after 6 hours unseen, else live.",
     annotations: localMutation,
     inputSchema: {
       workspace_id: workspaceId,
@@ -46702,7 +47237,7 @@ Legacy session tools: ${legacyInstructions}`
   }));
   server.registerTool("collab_task_complete", {
     title: "Report a claimed task complete",
-    description: "Legacy mode is actor-reported and not review or acceptance. Bound edit tasks produce a structured completion report and remain pending until distinct-session review. Optional review_requested_session_id routes a separate review request to one active session; any distinct session may still review.",
+    description: "Legacy mode is actor-reported and not review or acceptance. Bound edit tasks produce a structured completion report and remain pending until distinct-session review. Optional review_requested_session_id routes a separate review request to one active session; any distinct session may still review. " + `With review_requested_session_id: ${addresseeNote}`,
     annotations: localRetrySafeMutation,
     inputSchema: leaseMutationSchema({
       summary: exports_external.string().min(1).max(4000),
@@ -46726,11 +47261,11 @@ Legacy session tools: ${legacyInstructions}`
       expected_version: input.expected_version,
       summary: input.summary
     });
-    return { task };
+    return withAddressee({ task }, task.workspace_id, input.review_requested_session_id);
   }));
   server.registerTool("collab_task_review", {
     title: "Review reported task completion",
-    description: "A distinct active session accepts or requests changes. Acceptance is local coordination review\u2014not merge, deploy, truth, or external authority.",
+    description: "A distinct active session accepts or requests changes. Acceptance is local coordination review\u2014not merge, deploy, truth, or external authority. " + `The review result is addressed to the reporter: ${addresseeNote}`,
     annotations: localRetrySafeMutation,
     inputSchema: {
       workspace_id: workspaceId,
@@ -46746,11 +47281,12 @@ Legacy session tools: ${legacyInstructions}`
     }
   }, async ({ workspace_id, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    return store2.reviewTaskForSession({ ...boundCredential(), ...input });
+    const reviewed = store2.reviewTaskForSession({ ...boundCredential(), ...input });
+    return withAddressee(reviewed, reviewed.report.workspace_id, reviewed.report.to_session_id);
   }));
   server.registerTool("collab_report_append", {
     title: "Append a structured collaboration report",
-    description: "Append an observation, inference, proposal, or scoped decision. Reports can challenge claims without holding the task lease.",
+    description: "Append an observation, inference, proposal, or scoped decision. Reports can challenge claims without holding the task lease. " + `With to_session_id: ${addresseeNote}`,
     annotations: localRetrySafeMutation,
     inputSchema: {
       workspace_id: workspaceId,
@@ -46779,9 +47315,8 @@ Legacy session tools: ${legacyInstructions}`
     }
   }, async ({ workspace_id, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    return {
-      report: store2.appendReportForSession({ ...boundCredential(), ...input })
-    };
+    const report = store2.appendReportForSession({ ...boundCredential(), ...input });
+    return withAddressee({ report }, report.workspace_id, report.to_session_id);
   }));
   server.registerTool("collab_report_list", {
     title: "List structured collaboration reports",
@@ -46896,7 +47431,7 @@ Rationale: ${input.rationale}` : ""}`,
   }));
   server.registerTool("collab_handoff_offer", {
     title: "Offer a task handoff",
-    description: "Invite another actor/session. The current holder keeps the coordination lease until explicit acceptance.",
+    description: "Invite another actor/session. The current holder keeps the coordination lease until explicit acceptance. " + `A bound session's offer names to_session_id: ${addresseeNote}`,
     annotations: localRetrySafeMutation,
     inputSchema: leaseMutationSchema({
       to_actor: exports_external.string().min(1).max(200).optional(),
@@ -46906,11 +47441,15 @@ Rationale: ${input.rationale}` : ""}`,
     })
   }, async ({ workspace_id, actor, to_actor, to_session_id, ...input }) => call(() => {
     requireWorkspace(workspace_id);
-    return state.binding ? store2.offerHandoffForSession({
-      ...boundCredential(),
-      ...input,
-      to_session_id: requiredString(to_session_id, "to_session_id")
-    }) : store2.offerHandoff({
+    if (state.binding) {
+      const offered = store2.offerHandoffForSession({
+        ...boundCredential(),
+        ...input,
+        to_session_id: requiredString(to_session_id, "to_session_id")
+      });
+      return withAddressee(offered, offered.handoff.workspace_id, offered.handoff.to_session_id);
+    }
+    return store2.offerHandoff({
       workspace_id,
       actor: requireLegacyActor(actor),
       ...input,
@@ -47050,12 +47589,12 @@ Rationale: ${input.rationale}` : ""}`,
   return server;
 }
 function waitDelay(ms, signals) {
-  return new Promise((resolve6) => {
+  return new Promise((resolve7) => {
     const finish = () => {
       clearTimeout(timer);
       for (const signal of signals)
         signal?.removeEventListener("abort", finish);
-      resolve6();
+      resolve7();
     };
     const timer = setTimeout(finish, ms);
     for (const signal of signals)
@@ -47123,6 +47662,7 @@ function isRecord(value) {
 async function main() {
   const databasePath = resolveDatabasePath(process.env);
   const store2 = new CollabStore(databasePath);
+  const hostBinding = databasePath === ":memory:" ? undefined : hostBindingRecorder(databasePath);
   const sessionFile = process.env.AGENTOOL_COLLAB_SESSION_FILE;
   const resumed = sessionFile ? (() => {
     const credential = readSessionCredentialFile(sessionFile);
@@ -47130,9 +47670,13 @@ async function main() {
       allow_cursor_recovery: process.env.AGENTOOL_COLLAB_ALLOW_CURSOR_RECOVERY === "1"
     });
     const credentialFile = writeSessionCredentialFile(sessionFile, handle.credential, { replace: true });
+    hostBinding?.record(handle.session.id, credentialFile);
     return { handle, credential_file: credentialFile };
   })() : undefined;
-  const server = buildCollabMcpServer(store2, { resumed_session: resumed });
+  const server = buildCollabMcpServer(store2, {
+    resumed_session: resumed,
+    host_binding: hostBinding
+  });
   const transport = new StdioServerTransport;
   let shuttingDown = false;
   const shutdown = async (exitCode) => {

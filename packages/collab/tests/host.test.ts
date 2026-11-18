@@ -214,7 +214,7 @@ describe("agenttool-collab-host end", () => {
     for (const argv of [["--help"], ["-h"], ["end", "--help"]]) {
       const run = runCollabHostCli(argv, {});
       expect(run.exit_code).toBe(0);
-      expect(JSON.parse(run.line)).toEqual({
+      expect(JSON.parse(run.line!)).toEqual({
         protocol: "agenttool.collab-host/1",
         status: "help",
         usage: "usage: agenttool-collab-host end (--session-file <path> | --seat-ref <ref> [--seat-ref <ref>...])"
@@ -222,7 +222,12 @@ describe("agenttool-collab-host end", () => {
           + " | agenttool-collab-host wait (--session <id> | --session-file <path>) [--after-anchor <json>]"
           + " [--wait-ms <ms>] [--include-own] [--addressed] [--db <path>]"
           + ` | agenttool-collab-host person ... (${PERSON_DESK_USAGE})`
-          + " | agenttool-collab-host person-remote (SSH forced command; reads a JSON argv from SSH_ORIGINAL_COMMAND)",
+          + " | agenttool-collab-host person-remote (SSH forced command; reads a JSON argv from SSH_ORIGINAL_COMMAND)"
+          + " | agenttool-collab-host knocks --host-ancestor auto|<pid> [--mark-tapped] [--db <path>]"
+          + " | agenttool-collab-host knocks --session <id> [--mark-tapped] [--with-sender] [--db <path>]"
+          + " | agenttool-collab-host doorbell-scan [--db <path>]",
+        verbs: ["end", "wait", "knocks", "doorbell-scan", "person", "person-remote"],
+        quiet_verbs: ["knocks", "doorbell-scan"],
       });
     }
   });
@@ -271,7 +276,7 @@ describe("agenttool-collab-host end", () => {
       {},
     );
     expect(nul.exit_code).toBe(1);
-    expect(JSON.parse(nul.line)).toMatchObject({ status: "error", error: "usage_error" });
+    expect(JSON.parse(nul.line!)).toMatchObject({ status: "error", error: "usage_error" });
     expectUnchanged();
 
     // Exactly 2,000 characters once trimmed is still accepted, as endSession accepts it.
@@ -644,12 +649,16 @@ describe("addressed doorbell", () => {
       ...b.credential, idempotency_key: "review-complete", task_id: claimed.id, lease_id: claimed.lease_id!,
       expected_version: claimed.version, summary: "done", review_requested_session_id: a.session.id,
     });
+    // A review request and its verdict are each a task event with an
+    // addressed report written beside it; both name the same session.
     expect(routes("task.reported_complete")).toEqual({ a: true, b: false });
+    expect(routes("report.posted")).toEqual({ a: true, b: false });
     store.reviewTaskForSession({
       ...a.credential, idempotency_key: "review-accept", task_id: reported.id,
       expected_version: reported.version, outcome: "accept", summary: "accepted",
     });
     expect(routes("task.accepted")).toEqual({ a: false, b: true });
+    expect(routes("report.posted")).toEqual({ a: false, b: true });
     expect(routes("session.joined")).toEqual({ a: false, b: false });
   });
 

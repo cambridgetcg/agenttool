@@ -438,8 +438,8 @@ describe("the person desk and inbox", () => {
     session("anyone");
     const listed = runCollabHostCli(["person", "workspaces", "--db", databasePath], {}, undefined, { storeNow: () => clock });
     expect(listed.exit_code).toBe(0);
-    expect(JSON.parse(listed.line)).toMatchObject({ status: "ok", command: "person workspaces" });
-    expect(JSON.parse(runCollabHostCli(["person", "--help"], {}).line)).toMatchObject({ status: "help" });
+    expect(JSON.parse(listed.line!)).toMatchObject({ status: "ok", command: "person workspaces" });
+    expect(JSON.parse(runCollabHostCli(["person", "--help"], {}).line!)).toMatchObject({ status: "help" });
     expect(desk(["inbox", "--workspace", "ws_x", "--reason", "stray"]).receipt.error).toBe("usage_error");
     expect(desk(["consent"]).receipt.error).toBe("usage_error");
   });

@@ -51,7 +51,7 @@ function startWithFile(seatRef: string | null, actor = "seat-ref-worker"): { han
 
 function host(args: string[]) {
   const run = runCollabHostCli([...args, "--db", databasePath], {});
-  return { exitCode: run.exit_code, line: run.line, receipt: JSON.parse(run.line) as Record<string, any> };
+  return { exitCode: run.exit_code, line: run.line, receipt: JSON.parse(run.line!) as Record<string, any> };
 }
 
 describe("collab_session_start seat_ref", () => {

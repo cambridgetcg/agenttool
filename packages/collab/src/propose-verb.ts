@@ -32,6 +32,7 @@ import {
   recordedEvidence,
   refusedAfter,
   resolveEvidence,
+  restAdvice,
   stepOnce,
   type Credential,
   type RecordedStep,
@@ -732,6 +733,11 @@ function proposeResult(
   const unreachable = options.notes.filter((entry) => entry.report === null && !entry.objector.mine);
   if (unreachable.length > 0) {
     advice.push(`${unreachable.length} carried objector(s) have no live session, so no note reached them: ${unreachable.map((entry) => entry.objector.name).join(", ")}.`);
+  }
+  for (const entry of notified) {
+    // An objector reached by presence may still have declared a rest; its note waits or wakes as any note does.
+    const view = entry.objector.session ? sessions.get(entry.objector.session.id) : undefined;
+    if (view?.status === "active" && view.rest) advice.push(restAdvice(view.actor, view.id, view.rest));
   }
   const shown = options.cite && options.citeReplayed ? recordedEvidence(options.evidence, options.cite.items, advice) : options.evidence;
   const replacedId = data.replaced?.proposal_id ?? null;
