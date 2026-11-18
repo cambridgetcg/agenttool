@@ -107,6 +107,11 @@ export interface CreateWakeThreadOfferInput {
 
 export interface ResolveWakeThreadOfferInput extends WakeThreadResponse {}
 
+export interface WakeThreadPosition {
+  readonly thread_ref: Sha256Id;
+  readonly parent_receipt: WakeThreadReceipt;
+}
+
 export interface WakeThreadChainAssessment {
   readonly valid: true;
   readonly length: number;

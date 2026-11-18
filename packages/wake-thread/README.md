@@ -159,6 +159,13 @@ parent receipt when it is created:
   validation rejects reuse of an ancestor thread reference;
 - after `refuse`, the package rejects parentage.
 
+`nextThreadPosition(parentReceipt, observedAt?)` derives only `{ thread_ref, parent_receipt }`
+from a validated non-ephemeral, non-refused receipt (and, when `observedAt` is
+supplied, checks canonical UTC chronology and `until` retention up front). It
+never carries forward prior `facts`, `omissions`, `wake`, `purpose`,
+`artifact_retention`, or timestamps: every child offer still names its own fresh
+bounded selection.
+
 `validateWakeThreadChain()` verifies one ordered root-to-head path. It checks
 content IDs, parent links, thread transitions, declared chronology, and refusal
 terminality. This is artifact causality only. It does not prove source truth,

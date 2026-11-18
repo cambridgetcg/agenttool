@@ -24,6 +24,7 @@ export {
 } from "./constants.js";
 export {
   createWakeThreadOffer,
+  nextThreadPosition,
   resolveWakeThreadOffer,
   validateWakeThreadChain,
   validateWakeThreadOffer,
@@ -45,6 +46,7 @@ export type {
   WakeThreadOffer,
   WakeThreadOmission,
   WakeThreadOutcome,
+  WakeThreadPosition,
   WakeThreadReceipt,
   WakeThreadRetention,
   WakeThreadRetentionMode,

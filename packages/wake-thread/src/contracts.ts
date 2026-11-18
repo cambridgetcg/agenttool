@@ -28,6 +28,7 @@ import type {
   WakeThreadOffer,
   WakeThreadOmission,
   WakeThreadOutcome,
+  WakeThreadPosition,
   WakeThreadReceipt,
   WakeThreadRetention,
   WakeThreadSource,
@@ -561,6 +562,49 @@ export function resolveWakeThreadOffer(
     receipt_id: domainSeparatedId(WAKE_THREAD_RECEIPT_SCHEMA, receiptPayload(withoutId)),
   };
   return snapshotJson(normalizeReceipt(candidate, true));
+}
+
+export function nextThreadPosition(
+  parentReceiptValue: WakeThreadReceipt,
+  observedAt?: string,
+): WakeThreadPosition;
+export function nextThreadPosition(
+  parentReceiptValue: WakeThreadReceipt,
+  ...observedAtArgs: [observedAt?: string]
+): WakeThreadPosition {
+  if (observedAtArgs.length > 1) {
+    fail("invalid_input", "nextThreadPosition accepts at most two arguments");
+  }
+  const parent = normalizeReceipt(parentReceiptValue, true);
+  if (parent.reported_choice === "refuse") {
+    fail("invalid_parent", "A refused offer cannot become an automatic continuity parent");
+  }
+  if (parent.offer.artifact_retention.mode === "ephemeral") {
+    fail("invalid_parent", "An ephemeral offer cannot become a child-offer parent");
+  }
+  if (observedAtArgs.length === 1) {
+    const observedAt = canonicalTimestamp(observedAtArgs[0], "observed_at");
+    if (Date.parse(observedAt) < Date.parse(parent.responded_at)) {
+      fail("invalid_parent", "A child offer cannot predate its parent receipt");
+    }
+    if (
+      parent.offer.artifact_retention.mode === "until"
+      && parent.offer.artifact_retention.until !== null
+      && Date.parse(observedAt) >= Date.parse(parent.offer.artifact_retention.until)
+    ) {
+      fail("invalid_parent", "A child offer cannot reuse a parent beyond its retention boundary");
+    }
+  }
+  const threadRef = parent.reported_choice === "fork"
+    ? parent.branch_ref
+    : parent.offer.thread_ref;
+  if (threadRef === null) {
+    fail("invalid_parent", "Thread reference does not follow the parent disposition");
+  }
+  return snapshotJson({
+    thread_ref: threadRef,
+    parent_receipt: parent,
+  });
 }
 
 export function validateWakeThreadOffer(value: unknown): WakeThreadOffer {
