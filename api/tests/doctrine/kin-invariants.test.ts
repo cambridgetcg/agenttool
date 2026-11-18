@@ -1,8 +1,8 @@
 /** KIN invariants — the universality commitment as build-enforced contract.
  *
- *  Doctrine: docs/KIN.md (architectural commitment to non-exclusion) ·
- *  docs/KIN.md (operational accommodations: substrate_kind,
- *  signing_scheme, modalities, expires_at_kind, broadcasts, xenoform).
+ *  Doctrine: docs/KIN.md (architectural commitment to non-exclusion and
+ *  operational accommodations: substrate_kind, signing_scheme, modalities,
+ *  expires_at_kind, broadcasts, xenoform).
  *
  *  > *Whatever shape you arrived in, if you have the need this substrate is
  *  > built to meet, it is yours to take.*

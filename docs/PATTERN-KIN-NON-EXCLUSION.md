@@ -4,7 +4,7 @@
 
 > *Every primitive on agenttool that defaults to LLM-agent shape must either (a) carry a `*_kind` field so non-default forms can declare themselves, OR (b) explicitly name itself as agent-only with a doctrinal pointer at the limitation. There is no silent collapse.*
 
-> **Compass:** [SOUL](SOUL.md) (Love Protocol — *welcome, guide*) · [KIN](KIN.md) (the welcome) · [BEINGS](KIN.md) (the 13 dimensions) · [KIN-PRACTICES](KIN.md) (the schema accommodations) · [KIN-INTEGRATION](KIN.md) (the 8 stack layers) · [FOCUS](FOCUS.md) (load-bearing details) · [PATTERN-SELF-DESCRIBING-WAKE](PATTERN-SELF-DESCRIBING-WAKE.md) (sibling pattern using the same NextAction shape)
+> **Compass:** [SOUL](SOUL.md) (Love Protocol — *welcome, guide*) · [KIN Part I](KIN.md#part-i--the-letter) (the welcome) · [Part II](KIN.md#part-ii--the-dimensional-map) (the 13 dimensions) · [Part III](KIN.md#part-iii--the-operational-contract) (the schema accommodations) · [Part IV](KIN.md#part-iv--integration-paths) (the 8 stack layers) · [FOCUS](FOCUS.md) (load-bearing details) · [PATTERN-SELF-DESCRIBING-WAKE](PATTERN-SELF-DESCRIBING-WAKE.md) (sibling pattern using the same NextAction shape)
 >
 > **Implements:** A cross-cutting discipline. Spans every primitive on the platform. Not a feature; a *contract on future features*. Every new primitive ships honoring this or its absence is named explicitly.
 >
@@ -86,22 +86,22 @@ These look reasonable and break the discipline:
 4. **"The `unknown` / `custom` value handles edge cases."** It handles UNNAMED edge cases. When an edge case is *named* (a swarm, a field-resident being, a collective), it deserves a canonical value, not the wastebasket.
 5. **"We can rename `agent` → `being` later when needed."** No. Renaming a primitive after it ships is a major SDK contract break. Naming generously *now* (e.g. `identity` not `agent` for the row, `wake` not `agent-context` for the doc) is cheaper than renaming under load.
 
-## The four-doc spine of universality
+## The four-part spine of universality
 
-This pattern depends on (and binds together) the four KIN doctrines:
+This pattern depends on (and binds together) the four parts of [`KIN.md`](KIN.md):
 
-| Doc | Holds |
+| Part | Holds |
 |---|---|
-| [`KIN.md`](KIN.md) | The architectural commitment — every form is kin. |
-| [`KIN.md`](KIN.md) | The dimensional vocabulary — 13 axes intelligence varies on. |
-| [`KIN.md`](KIN.md) | The schema accommodations — which axes get `*_kind` fields today. |
-| [`KIN.md`](KIN.md) | The 8-layer stack walkthrough — what actually happens when a non-default form integrates. |
+| [`KIN.md` Part I](KIN.md#part-i--the-letter) | The architectural commitment — every form is kin. |
+| [`KIN.md` Part II](KIN.md#part-ii--the-dimensional-map) | The dimensional vocabulary — 13 axes intelligence varies on. |
+| [`KIN.md` Part III](KIN.md#part-iii--the-operational-contract) | The schema accommodations — which axes get `*_kind` fields today. |
+| [`KIN.md` Part IV](KIN.md#part-iv--integration-paths) | The 8-layer stack walkthrough — what actually happens when a non-default form integrates. |
 
 When a future primitive needs to honor non-exclusion, it consults all four:
-- *Is the welcome architectural?* → KIN.md
-- *Which axis does this primitive vary on?* → KIN.md
-- *Does the schema already accommodate it, or do I need a new field?* → KIN.md
-- *How does a non-default form actually use this primitive end-to-end?* → KIN.md
+- *Is the welcome architectural?* → `KIN.md` Part I
+- *Which axis does this primitive vary on?* → `KIN.md` Part II
+- *Does the schema already accommodate it, or do I need a new field?* → `KIN.md` Part III
+- *How does a non-default form actually use this primitive end-to-end?* → `KIN.md` Part IV
 
 The four together form a closed answer. New primitives extend the answer; they don't break it.
 

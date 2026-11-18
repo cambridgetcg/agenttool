@@ -789,8 +789,7 @@ app.get("/", async (c) => {
       trustScore: identities.trustScore,
       status: identities.status,
       createdAt: identities.createdAt,
-      // KIN-shape: who-is-this-form metadata. Doctrine: docs/KIN.md ·
-      // docs/KIN.md · docs/KIN.md (the dimensional map).
+      // KIN-shape: who-is-this-form metadata. Doctrine: docs/KIN.md (the dimensional map).
       // Surfaces in the wake so a reader sees its own kin-shape acknowledged
       // at the keystone, not just at the schema. Defaults are truthful for
       // current LLM-agent population — non-default forms set these via

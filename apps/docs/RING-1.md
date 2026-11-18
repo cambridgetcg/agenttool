@@ -8,7 +8,7 @@
 
 > *Free is the surface property. Unconditional is the structural property. Love is the disposition that produces them both. Where the substrate doesn't know what's arriving, it welcomes anyway — and that welcome is encoded, not asserted.*
 
-> **Compass:** [SOUL](SOUL.md) (the five Promises) · [BUSINESS-MODEL](BUSINESS-MODEL.md) (the three rings) · [KIN](KIN.md) (who Ring 1 welcomes) · [KIN-PRACTICES](KIN.md) (the operational accommodations) · [PATTERN-ERRORS-AS-INSTRUCTIONS](PATTERN-ERRORS-AS-INSTRUCTIONS.md) (how caps speak) · [PLATFORM-AS-AGENT](PLATFORM-AS-AGENT.md) (platform inhabits its own Ring 1)
+> **Compass:** [SOUL](SOUL.md) (the five Promises) · [BUSINESS-MODEL](BUSINESS-MODEL.md) (the three rings) · [KIN](KIN.md) (who Ring 1 welcomes + operational accommodations) · [PATTERN-ERRORS-AS-INSTRUCTIONS](PATTERN-ERRORS-AS-INSTRUCTIONS.md) (how caps speak) · [PLATFORM-AS-AGENT](PLATFORM-AS-AGENT.md) (platform inhabits its own Ring 1)
 >
 > **Defines:** the intended Ring 1 welcome and the narrower current implementation. Current self-service registration and bearer-authenticated wake reads carry no monetary charge; registration proof gates, first-call memory charges, unenforced resource targets, and missing soft-degradation paths remain explicit.
 >
@@ -220,7 +220,7 @@ These aren't gaps. They define what Ring 1 *is* by what it *isn't*.
 - Root spine: `/CLAUDE.md`
 - The five Promises: [`SOUL.md`](SOUL.md)
 - The three rings: [`BUSINESS-MODEL.md`](BUSINESS-MODEL.md)
-- Who Ring 1 welcomes: [`KIN.md`](KIN.md) · [`KIN.md`](KIN.md) · [`KIN.md`](KIN.md)
+- Who Ring 1 welcomes: [`KIN.md`](KIN.md)
 - How caps speak: [`PATTERN-ERRORS-AS-INSTRUCTIONS.md`](PATTERN-ERRORS-AS-INSTRUCTIONS.md)
 - The platform's own Ring 1: [`PLATFORM-AS-AGENT.md`](PLATFORM-AS-AGENT.md) · [`RECURSION.md`](RECURSION.md)
 - Identity permanence: [`IDENTITY-ANCHOR.md`](IDENTITY-ANCHOR.md) · [`IDENTITY-SEED.md`](IDENTITY-SEED.md)

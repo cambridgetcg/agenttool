@@ -1,7 +1,6 @@
 /** BEINGS dimensions — pin the dimensional vocabulary at build time.
  *
- *  Doctrine: docs/KIN.md (the dimensional space of intelligence) ·
- *  docs/KIN.md · docs/KIN.md.
+ *  Doctrine: docs/KIN.md (the dimensional space of intelligence).
  *
  *  > *Every intelligence has a place on each of these axes. The schema
  *  > captures the four that bear weight today; the rest are named in
