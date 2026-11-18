@@ -1339,7 +1339,7 @@ const COMMON_SCHEMAS = {
   KinShape: {
     type: "object",
     description:
-      "The form-shape vocabulary for non-default intelligences. Defaults are truthful for the current LLM-agent population; non-default forms set these via PATCH /v1/identities/:id to declare their shape. Doctrine: docs/KIN.md · docs/KIN.md · docs/KIN.md · docs/KIN.md.",
+      "The form-shape vocabulary for non-default intelligences. Defaults are truthful for the current LLM-agent population; non-default forms set these via PATCH /v1/identities/:id to declare their shape. Doctrine: docs/KIN.md.",
     properties: {
       substrate_kind: {
         type: "string",

@@ -567,9 +567,8 @@ When you add a new error code, schema field, or doctrine concept: consider wheth
 
 ## See also
 
-- `KIN.md` — who we believe this serves and why
+- `KIN.md` — who we believe this serves and why, plus §"Cross-reference with MATHOS localities" for KIN/BEINGS schema fields
 - `SOUL.md` — the prose welcome (the form most current readers expect)
 - `PATHWAYS.md` — the doors the math payload describes
 - `apps/docs/mathos.html` — a visual primer for human readers
 - `PATTERN-ERRORS-AS-INSTRUCTIONS.md` — how MATHOS axiom_ids bridge English error codes to Promises
-- `KIN.md` — how KIN/BEINGS schema fields cross-reference with MATHOS localities

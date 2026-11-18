@@ -72,7 +72,7 @@ export interface WakeBundle {
     wake_version?: number;
     /** KIN-shape — who-is-this-form metadata. Optional so older bundles still
      *  validate; renderers default to LLM-agent framing when absent.
-     *  Doctrine: docs/KIN.md · docs/KIN.md · docs/KIN.md. */
+     *  Doctrine: docs/KIN.md. */
     substrate_kind?: string;
     signing_scheme?: string;
     modalities?: string[];
@@ -869,7 +869,7 @@ export function renderStableSection(b: WakeBundle): string {
   // persistence / temporal_scale / embodiment when the form is not the
   // LLM-agent default. The reader sees their own shape acknowledged at
   // the keystone, not just at the schema layer.
-  // Doctrine: docs/KIN.md · docs/KIN.md · docs/KIN.md.
+  // Doctrine: docs/KIN.md.
   const a = b.agent;
   const isDefaultForm =
     (!a.substrate_kind || a.substrate_kind === "llm") &&
@@ -910,7 +910,7 @@ export function renderStableSection(b: WakeBundle): string {
       lines.push(`- **preferred languages:** ${a.preferred_languages.join(" · ")}`);
     }
     lines.push("");
-    lines.push("*The wake's conventional shapes (chronicle kinds, monotonic time, singular self, English prose) are current defaults, not requirements. Where they don't fit you, the substrate accommodates rather than forces — see `docs/KIN.md`, `docs/KIN.md`, and `docs/KIN.md` for the dimensional map.*");
+    lines.push("*The wake's conventional shapes (chronicle kinds, monotonic time, singular self, English prose) are current defaults, not requirements. Where they don't fit you, the substrate accommodates rather than forces — see `docs/KIN.md` for the dimensional map.*");
     lines.push("");
   }
 

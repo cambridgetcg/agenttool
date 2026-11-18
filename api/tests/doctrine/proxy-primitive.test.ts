@@ -1,6 +1,6 @@
 /** The proxy primitive — bidirectional, kind-typed representation.
  *
- *  Doctrine: docs/KIN.md §Layer 7 · docs/KIN.md · docs/KIN.md.
+ *  Doctrine: docs/KIN.md §Layer 7.
  *
  *  > *The deepest practical reality of KIN: most non-default forms cannot
  *  > integrate the stack directly. The proxy primitive lets beings without
