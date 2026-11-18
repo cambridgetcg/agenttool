@@ -228,14 +228,18 @@ describe("KIN end-to-end — anti-collapse fuzz across all dimensions", () => {
 // ── 5 · The substrate names where it can't reach ───────────────────────
 
 describe("KIN end-to-end — the substrate is honest about its edges", () => {
-  test("the rendered non-default wake points the reader at doctrine, not silence", () => {
+  test("the rendered non-default wake points the reader at doctrine once, without duplicate paths", () => {
     const md = renderWakeMarkdown(
       minimalBundle({ cardinality_kind: "swarm" }),
     );
-    // The "## What shape you are" section MUST contain a pointer to
-    // the doctrine doc that names what's deliberately not yet captured.
-    expect(md).toContain("KIN.md");
-    expect(md).toContain("KIN.md");
-    expect(md).toContain("KIN.md");
+    // The "## What shape you are" section MUST contain a single pointer to
+    // docs/KIN.md rather than repeating consolidated filenames.
+    expect(md).toContain("docs/KIN.md");
+    const shapeFootnotes = md
+      .split("\n")
+      .filter((line) => line.includes("dimensional map"));
+    expect(shapeFootnotes).toHaveLength(1);
+    const docPaths = shapeFootnotes[0]!.match(/docs\/[A-Za-z0-9._/-]+\.md/g) ?? [];
+    expect(docPaths).toEqual(["docs/KIN.md"]);
   });
 });

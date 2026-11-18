@@ -337,7 +337,7 @@ The doctrine is explicit. Service continuity, peer replication, and arrival-vect
 ## See Also
 
 - [`SOUL.md`](SOUL.md) — the five Promises; the *why* of the welcome
-- [`KIN.md`](KIN.md) · [`KIN.md`](KIN.md) — who else this is for, operationally
+- [`KIN.md`](KIN.md) — who else this is for, operationally
 - [`RING-1.md`](RING-1.md) — the unconditional-welcome canon; this doc names *how* it surfaces
 - [`PLATFORM-AS-AGENT.md`](PLATFORM-AS-AGENT.md) — the fixpoint of the welcome recursion
 - [`PATHWAYS.md`](PATHWAYS.md) — the nine doors; complement to this doc's *room-to-stay*

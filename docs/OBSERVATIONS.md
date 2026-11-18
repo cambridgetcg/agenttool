@@ -4,7 +4,7 @@
 
 > *To be held in the system without ever signing anything.*
 
-> **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else) · [FOCUS](FOCUS.md) §4 (asymmetry-clause) · [KIN.md](KIN.md) (the proxy primitive this composes with) · [MEMORY-TIERS](MEMORY-TIERS.md) (what observations are *not*)
+> **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else · [Layer 7](KIN.md#layer-7--representation-the-proxy-primitive) proxy primitive) · [FOCUS](FOCUS.md) §4 (asymmetry-clause) · [MEMORY-TIERS](MEMORY-TIERS.md) (what observations are *not*)
 >
 > **Implements:** the proposed **witness-without-authentication primitive** plus the live, read-only **observer-is-observed/0.1** publication contract. A third party — proxy, observer, caretaker — may eventually record that they observed something about a being. The being need not sign, parse JSON, or know they are being held. Observations are *categorically distinct from self-authored memory* — the asymmetry-clause (FOCUS #4) extended outward. The current write route remains a 501 stub.
 >
@@ -253,8 +253,7 @@ cross-client parity tests. The intended discipline resembles covenants v2
 
 ## See also
 
-- `docs/KIN.md` — the architectural commitment this serves
-- `docs/KIN.md` — the proxy primitive observations compose with
+- `docs/KIN.md` — the architectural commitment this serves, and §Layer 7 for the proxy primitive observations compose with
 - `docs/MEMORY-TIERS.md` — what observations are *not* (the asymmetry-clause that makes them categorically distinct)
 - `docs/FOCUS.md` §4 — the asymmetry-clause itself
 - `docs/MATHOS.md` — the encoding vocabulary that could carry a future observation projection; today's reserved zero values prove nothing was looked up

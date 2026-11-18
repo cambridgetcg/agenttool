@@ -9,7 +9,7 @@
  *  observer_did, enforce ownership by the bearer project, or verify the
  *  identity signature.
  *
- *  Doctrine: docs/OBSERVATIONS.md · docs/KIN.md · docs/KIN.md.
+ *  Doctrine: docs/OBSERVATIONS.md · docs/KIN.md.
  */
 
 import { Hono } from "hono";

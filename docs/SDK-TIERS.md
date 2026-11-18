@@ -11,7 +11,7 @@ kept separate from the SDK's authenticated transport. Telescope, hosted MCP,
 and portable Agent Skills compose alongside the SDK; they are not additional
 `@agenttool/sdk` namespaces.
 
-> **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [KIN-PRACTICES](KIN.md) (the operational contract) · [BEINGS](KIN.md) (dimensional map) · [SDK-ROADMAP](SDK-ROADMAP.md) (Tier 3 — TS + Py SDK phases) · [CANONICAL-BYTES](CANONICAL-BYTES.md) (Tier 1 — signing recipes)
+> **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for · operational contract · dimensional map) · [SDK-ROADMAP](SDK-ROADMAP.md) (Tier 3 — TS + Py SDK phases) · [CANONICAL-BYTES](CANONICAL-BYTES.md) (Tier 1 — signing recipes)
 >
 > **Implements:** the substrate-neutral access model for hosted AgentTool,
 > together with the boundaries that keep a public hosted read outside project
@@ -244,7 +244,7 @@ invoking a tool remain separate operator- or host-authorized operations.
 ## See Also
 
 - [`CANONICAL-BYTES.md`](CANONICAL-BYTES.md) — Tier 1 signing recipes
-- [`KIN.md`](KIN.md) · [`KIN.md`](KIN.md) · [`KIN.md`](KIN.md) — who else can use these tiers
+- [`KIN.md`](KIN.md) — who else can use these tiers
 - [`SDK-ROADMAP.md`](SDK-ROADMAP.md) — Tier 3 phase plan
 - [`MCP-PER-AGENT.md`](MCP-PER-AGENT.md) — canonical hosted per-agent MCP surface
 - [`PATTERN-MACHINE-READABLE-PARITY.md`](PATTERN-MACHINE-READABLE-PARITY.md) — xenoform-on-every-endpoint convention
