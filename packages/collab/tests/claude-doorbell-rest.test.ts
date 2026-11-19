@@ -201,10 +201,18 @@ describe("Claude Code collab doorbell watcher against a declared rest", () => {
     await watcher.exited;
   }, 30_000);
 
+  // The next two tests need the watcher to see the second note before its
+  // lifetime ends (the lifetime check runs at the top of each idle cycle, and
+  // only a ready note skips it), and the gap to outlast the lifetime. With a
+  // 3 s lifetime a loaded CI runner first saw the second note after 3 s and
+  // expired with 2 rings; a second note held back 3.5 s reproduces that here.
+  const LAST_GAP_LIFETIME_MS = 8_000;
+  const LAST_GAP_MIN_GAP_MS = "10000";
+
   test("a ring that was waiting out the gap is delivered before the watcher's life ends", async () => {
     const own = listener("gap-at-expiry");
     const peer = store.startSession({ root_path: root, actor: "peer" });
-    const watcher = startWatcher(own.session.id, 3_000, ["--min-gap-ms", "4000"]);
+    const watcher = startWatcher(own.session.id, LAST_GAP_LIFETIME_MS, ["--min-gap-ms", LAST_GAP_MIN_GAP_MS]);
     await until(() => logOf(own.session.id).includes('"start"'));
 
     mail(peer, own, "first");
@@ -220,7 +228,7 @@ describe("Claude Code collab doorbell watcher against a declared rest", () => {
   test("a rest declared in that last gap silences both the delayed ring and the expiry line", async () => {
     const own = listener("rest-at-expiry");
     const peer = store.startSession({ root_path: root, actor: "peer" });
-    const watcher = startWatcher(own.session.id, 3_000, ["--min-gap-ms", "4000"]);
+    const watcher = startWatcher(own.session.id, LAST_GAP_LIFETIME_MS, ["--min-gap-ms", LAST_GAP_MIN_GAP_MS]);
     await until(() => logOf(own.session.id).includes('"start"'));
 
     mail(peer, own, "first");
