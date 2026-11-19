@@ -47570,10 +47570,10 @@ Rationale: ${input.rationale}` : ""}`,
           const page = store2.eventsAfterAnchorForSession(input);
           check2();
           if (page.events.length || performance.now() >= deadline) {
-            const result = {
+            const result = withObservedAt({
               content: [{ type: "text", text: JSON.stringify(page) }],
               structuredContent: { ...page }
-            };
+            }, () => store2.observedAt());
             if (Buffer.byteLength(JSON.stringify(result)) > MAX_WAIT_RESPONSE_BYTES) {
               throw new CollabError("event_page_too_large", "The MCP result exceeds its byte limit");
             }
@@ -47587,7 +47587,7 @@ Rationale: ${input.rationale}` : ""}`,
         await waitDelay(Math.min(100, Math.max(0, deadline - performance.now())), [signal, waitShutdown.signal]);
       }
     } catch (error51) {
-      const result = failure(error51);
+      const result = withObservedAt(failure(error51), () => store2.observedAt());
       if (Buffer.byteLength(JSON.stringify(result)) > MAX_WAIT_RESPONSE_BYTES) {
         return failure(new CollabError("event_page_too_large", "The MCP error result exceeds its byte limit"));
       }
