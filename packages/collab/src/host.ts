@@ -240,6 +240,8 @@ export interface HostWaitReceipt {
    */
   skipped_unaddressed_events?: number;
   waited_ms: number;
+  /** time/1 (C3): the journal store's clock when this receipt was written, canonical UTC. */
+  observed_at?: string;
   /**
    * Present when the first unread event exceeds the bounded page and could
    * not be inspected. On an idle receipt it means a standing rest kept the
@@ -435,6 +437,7 @@ export function waitForSessionEvents(
     skipped_own_events: skipped,
     ...(options.addressed ? { skipped_unaddressed_events: unaddressed } : {}),
     waited_ms: Math.max(0, Math.round(clock.now() - started)),
+    observed_at: store.observedAt(),
     ...(held > 0 ? { skipped_held_events: held } : {}),
   });
   const idle = (headSequence: number): HostWaitReceipt => ({

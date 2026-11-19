@@ -1148,6 +1148,8 @@ describe("MCP surface", () => {
     const valid = await callTool(server, "collab_journal_verify", { workspace_id: workspaceId });
     expect(valid.isError).toBeUndefined();
     expect(valid.structuredContent).toEqual({
+      // time/1: every result names the store clock's now.
+      observed_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
       workspace_id: workspaceId,
       chain_valid: true,
       verification_scope: "full_journal",

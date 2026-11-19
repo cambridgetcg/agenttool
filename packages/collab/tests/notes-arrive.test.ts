@@ -619,6 +619,7 @@ describe("not_arrived", () => {
     const unbound = await call(server, "collab_inbox");
     expect(unbound.isError).toBe(true);
     expect(unbound.structuredContent).toEqual({
+      observed_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
       code: "not_arrived",
       message: "This MCP slot has no session yet; arrive first",
       remedy: { tool: "collab_arrive", input: { purpose: "…" } },
@@ -630,9 +631,13 @@ describe("not_arrived", () => {
       tool: "collab_arrive",
       input: { purpose: "…", binding_key: "k9", name: "lead/k9", parent: lead.you.session },
     });
-    // The legacy refusal on an unbound named slot is unchanged.
+    // The legacy refusal on an unbound named slot is unchanged, apart from time/1's observed_at.
     const legacy = await call(server, "collab_next", { workspace_id: lead.you.workspace_id, binding_key: "k9" });
-    expect(legacy.structuredContent).toEqual({ error: "session_not_bound", message: "The selected child binding is not bound" });
+    expect(legacy.structuredContent).toEqual({
+      observed_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
+      error: "session_not_bound",
+      message: "The selected child binding is not bound",
+    });
   });
 });
 

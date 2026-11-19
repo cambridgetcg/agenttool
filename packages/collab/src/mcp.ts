@@ -226,7 +226,7 @@ export function buildCollabMcpServer(
         binding_key: (isNoteVerb(name) ? z.string() : z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/)).optional()
           .describe("Cooperative subagent binding selector; omit for the original default binding. Not authentication."),
       },
-    }, async (input: Record<string, unknown>, ctx: Parameters<typeof callback>[1]) => {
+    }, async (input: Record<string, unknown>, ctx: Parameters<typeof callback>[1]) => withObservedAt(await (async () => {
       const { binding_key, ...args } = input as Record<string, unknown>;
       if (binding_key !== undefined && (typeof binding_key !== "string"
         || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(binding_key))) {
@@ -253,7 +253,7 @@ export function buildCollabMcpServer(
         slots.set(key, slot);
       }
       return requestSlot.run(slot, () => callback(args, ctx));
-    });
+    })(), () => store.observedAt()));
   }) as McpServer["registerTool"];
 
   const waitShutdown = new AbortController();
@@ -1750,6 +1750,34 @@ function publicSessionBinding(binding: BoundSession, seatRef: string | null) {
 function requiredString(value: string | undefined, field: string): string {
   if (!value) throw new CollabError(`invalid_${field}`, `${field} is required in this mode`);
   return value;
+}
+
+/**
+ * time/1 (C3): every tool result names `observed_at`, the store clock's now in
+ * canonical UTC, so every agent reading this journal shares one "now" and can
+ * measure its own clock against it. Additive: a result that already names
+ * `observed_at` (the Notes views) keeps its own, and a text part that is not
+ * the JSON of the structured result is left as it is.
+ */
+function withObservedAt<T>(result: T, now: () => string): T {
+  if (!isRecord(result) || !isRecord(result.structuredContent)) return result;
+  const structured = result.structuredContent;
+  if (Object.hasOwn(structured, "observed_at")) return result;
+  const stamped: Record<string, unknown> = { observed_at: now(), ...structured };
+  const content = Array.isArray(result.content)
+    ? result.content.map((part: unknown) => {
+      if (!isRecord(part) || part.type !== "text" || typeof part.text !== "string") return part;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(part.text);
+      } catch {
+        return part;
+      }
+      if (!isRecord(parsed) || Object.hasOwn(parsed, "observed_at")) return part;
+      return { ...part, text: JSON.stringify(stamped, null, part.text.includes("\n") ? 2 : undefined) };
+    })
+    : result.content;
+  return { ...result, structuredContent: stamped, content } as T;
 }
 
 function success(payload: unknown) {

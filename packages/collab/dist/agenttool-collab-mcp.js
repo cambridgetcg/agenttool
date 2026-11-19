@@ -37627,6 +37627,9 @@ class CollabStoreCore {
   timestamp() {
     return this.now().toISOString();
   }
+  observedAt() {
+    return this.timestamp();
+  }
 }
 function normalizeMutation(input) {
   return { ...input, actor: validateActor(input.actor), idempotency_key: validateIdempotencyKey(input.idempotency_key) };
@@ -46655,7 +46658,7 @@ Legacy session tools: ${legacyInstructions}`
         ...config2.inputSchema,
         binding_key: (isNoteVerb(name) ? exports_external.string() : exports_external.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/)).optional().describe("Cooperative subagent binding selector; omit for the original default binding. Not authentication.")
       }
-    }, async (input, ctx) => {
+    }, async (input, ctx) => withObservedAt(await (async () => {
       const { binding_key, ...args } = input;
       if (binding_key !== undefined && (typeof binding_key !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(binding_key))) {
         return isNoteVerb(name) ? noteFailure(new CollabError("invalid_binding_key", "Invalid binding selector", {
@@ -46675,7 +46678,7 @@ Legacy session tools: ${legacyInstructions}`
         slots.set(key2, slot);
       }
       return requestSlot.run(slot, () => callback(args, ctx));
-    });
+    })(), () => store2.observedAt()));
   };
   const waitShutdown = new AbortController;
   const waits = { active: 0, max: WAITS_PER_ENDPOINT };
@@ -47656,6 +47659,29 @@ function requiredString(value, field) {
   if (!value)
     throw new CollabError(`invalid_${field}`, `${field} is required in this mode`);
   return value;
+}
+function withObservedAt(result, now) {
+  if (!isRecord(result) || !isRecord(result.structuredContent))
+    return result;
+  const structured = result.structuredContent;
+  if (Object.hasOwn(structured, "observed_at"))
+    return result;
+  const stamped = { observed_at: now(), ...structured };
+  const content = Array.isArray(result.content) ? result.content.map((part) => {
+    if (!isRecord(part) || part.type !== "text" || typeof part.text !== "string")
+      return part;
+    let parsed;
+    try {
+      parsed = JSON.parse(part.text);
+    } catch {
+      return part;
+    }
+    if (!isRecord(parsed) || Object.hasOwn(parsed, "observed_at"))
+      return part;
+    return { ...part, text: JSON.stringify(stamped, null, part.text.includes(`
+`) ? 2 : undefined) };
+  }) : result.content;
+  return { ...result, structuredContent: stamped, content };
 }
 function success2(payload) {
   const structured = isRecord(payload) ? payload : { result: payload };

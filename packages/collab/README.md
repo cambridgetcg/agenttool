@@ -514,7 +514,8 @@ It prints one JSON line without the credential and without any event type,
 actor, entity or payload. Exit 0 with `status: "ready"` means at least one
 such event follows `next_anchor`; `status: "idle"` means the deadline passed,
 and `next_anchor` is where to re-arm (past any own events it skipped). Both
-carry `after_anchor`, `head_sequence`, `skipped_own_events` and `waited_ms`.
+carry `after_anchor`, `head_sequence`, `skipped_own_events`, `waited_ms` and
+`observed_at` (the journal store's clock when the receipt was written, canonical UTC).
 `first_event_oversized: true` marks a ready receipt whose first unread event
 exceeded the bounded page and could not be inspected. Read the events through
 the session's MCP tools; the receipt is a doorbell, not a delivery. Errors
