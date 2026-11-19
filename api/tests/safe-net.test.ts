@@ -8,6 +8,7 @@ import {
   createSafeNetAdmissionGate,
   defaultSafeNetRequestOnce,
   isGloballyReachableAddress,
+  nonPublicAddressRules,
   resolveGloballyReachableAddresses,
   SAFE_NET_HARD_MAX_REQUEST_BYTES,
   SAFE_NET_HARD_MAX_RESPONSE_BYTES,
@@ -167,6 +168,83 @@ describe("safe-net URL and address policy", () => {
 
     expect(isGloballyReachableAddress(PUBLIC_V4.address)).toBe(true);
     expect(isGloballyReachableAddress(PUBLIC_V6.address)).toBe(true);
+  });
+
+  test("keeps IPv4 and IPv6 BlockList rules separated without losing entries or widening IPv4-embedded IPv6", () => {
+    const rules = nonPublicAddressRules();
+    expect([...rules.ipv4].sort()).toEqual([
+      "Subnet: IPv4 0.0.0.0/8",
+      "Subnet: IPv4 10.0.0.0/8",
+      "Subnet: IPv4 100.64.0.0/10",
+      "Subnet: IPv4 127.0.0.0/8",
+      "Subnet: IPv4 169.254.0.0/16",
+      "Subnet: IPv4 172.16.0.0/12",
+      "Subnet: IPv4 192.0.0.0/24",
+      "Subnet: IPv4 192.0.2.0/24",
+      "Subnet: IPv4 192.168.0.0/16",
+      "Subnet: IPv4 192.88.99.0/24",
+      "Subnet: IPv4 198.18.0.0/15",
+      "Subnet: IPv4 198.51.100.0/24",
+      "Subnet: IPv4 203.0.113.0/24",
+      "Subnet: IPv4 224.0.0.0/4",
+      "Subnet: IPv4 240.0.0.0/4",
+    ]);
+    expect([...rules.ipv6].sort()).toEqual([
+      "Subnet: IPv6 2001::/23",
+      "Subnet: IPv6 2001:db8::/32",
+      "Subnet: IPv6 2002::/16",
+      "Subnet: IPv6 3fff::/20",
+      "Subnet: IPv6 4000::/2",
+      "Subnet: IPv6 8000::/1",
+      "Subnet: IPv6 ::/3",
+    ]);
+
+    // Every non-public IPv4 range stays blocked while public IPv4 stays allowed
+    // even on runtimes where BlockList matches IPv4 against IPv6 ::/3 (#475).
+    for (const address of [
+      "0.0.0.1",
+      "10.0.0.1",
+      "100.64.0.1",
+      "127.0.0.1",
+      "169.254.169.254",
+      "172.16.0.1",
+      "192.0.0.1",
+      "192.0.2.1",
+      "192.88.99.1",
+      "192.168.1.1",
+      "198.18.0.1",
+      "198.51.100.1",
+      "203.0.113.1",
+      "224.0.0.1",
+      "240.0.0.1",
+      "255.255.255.255",
+    ]) {
+      expect(isGloballyReachableAddress(address)).toBe(false);
+    }
+    for (const address of ["93.184.216.34", "8.8.8.8", "1.1.1.1"]) {
+      expect(isGloballyReachableAddress(address)).toBe(true);
+    }
+
+    // IPv6 forms embedding public or private IPv4 stay denied by ::/3 or
+    // special-purpose 2000::/3 subranges (never widened).
+    for (const address of [
+      "::ffff:93.184.216.34",
+      "::ffff:5db8:d822",
+      "::ffff:8.8.8.8",
+      "::ffff:127.0.0.1",
+      "::93.184.216.34",
+      "64:ff9b::5db8:d822",
+      "2002:5db8:d822::",
+      "2001:0::1",
+      "2001:1ff:ffff::1",
+      "4000::1",
+      "8000::1",
+    ]) {
+      expect(isGloballyReachableAddress(address)).toBe(false);
+    }
+    for (const address of ["2606:4700:4700::1111", "2001:4860::8888", "2001:200::1"]) {
+      expect(isGloballyReachableAddress(address)).toBe(true);
+    }
   });
 
   test("rejects schemes, fragments, credentials, malformed and oversized URLs", () => {
