@@ -96,43 +96,63 @@ function fail(
   throw new SafeNetError(code, options);
 }
 
-const NON_PUBLIC_ADDRESSES = new BlockList();
-
 // Conservative public-Web policy derived from the IANA special-purpose
 // registries (last reviewed 2026-07-11). Globally reachable exceptions inside
 // a blocked parent may remain blocked: availability never widens SSRF access.
-for (const [network, prefix] of [
-  ["0.0.0.0", 8],
-  ["10.0.0.0", 8],
-  ["100.64.0.0", 10],
-  ["127.0.0.0", 8],
-  ["169.254.0.0", 16],
-  ["172.16.0.0", 12],
-  ["192.0.0.0", 24],
-  ["192.0.2.0", 24],
-  ["192.88.99.0", 24],
-  ["192.168.0.0", 16],
-  ["198.18.0.0", 15],
-  ["198.51.100.0", 24],
-  ["203.0.113.0", 24],
-  ["224.0.0.0", 4],
-  ["240.0.0.0", 4],
-] as const) {
-  NON_PUBLIC_ADDRESSES.addSubnet(network, prefix, "ipv4");
+//
+// Keep IPv4 and IPv6 rules in separate BlockLists. Under Node's BlockList
+// semantics (Node 24, Bun 1.4+), checking an IPv4 address against a list that
+// contains IPv6 `::/3` matches it as IPv4-mapped `::ffff:a.b.c.d` and rejects
+// every IPv4 destination. IPv4-mapped IPv6 literals are intentionally NOT
+// unwrapped here: they remain rejected by `::/3` under the "2000::/3 only"
+// rule, while dual-stack connected sockets unwrap them in
+// `normalizeConnectedAddress`.
+const NON_PUBLIC_SUBNETS: readonly (readonly [string, number, "ipv4" | "ipv6"])[] = [
+  ["0.0.0.0", 8, "ipv4"],
+  ["10.0.0.0", 8, "ipv4"],
+  ["100.64.0.0", 10, "ipv4"],
+  ["127.0.0.0", 8, "ipv4"],
+  ["169.254.0.0", 16, "ipv4"],
+  ["172.16.0.0", 12, "ipv4"],
+  ["192.0.0.0", 24, "ipv4"],
+  ["192.0.2.0", 24, "ipv4"],
+  ["192.88.99.0", 24, "ipv4"],
+  ["192.168.0.0", 16, "ipv4"],
+  ["198.18.0.0", 15, "ipv4"],
+  ["198.51.100.0", 24, "ipv4"],
+  ["203.0.113.0", 24, "ipv4"],
+  ["224.0.0.0", 4, "ipv4"],
+  ["240.0.0.0", 4, "ipv4"],
+  // Only 2000::/3 is treated as ordinary public unicast. Block its known
+  // special-purpose subranges as well as the complement.
+  ["::", 3, "ipv6"],
+  ["4000::", 2, "ipv6"],
+  ["8000::", 1, "ipv6"],
+  ["2001::", 23, "ipv6"],
+  ["2001:db8::", 32, "ipv6"],
+  ["2002::", 16, "ipv6"],
+  ["3fff::", 20, "ipv6"],
+];
+
+const NON_PUBLIC_IPV4_ADDRESSES = new BlockList();
+const NON_PUBLIC_IPV6_ADDRESSES = new BlockList();
+
+for (const [network, prefix, family] of NON_PUBLIC_SUBNETS) {
+  if (family === "ipv4") {
+    NON_PUBLIC_IPV4_ADDRESSES.addSubnet(network, prefix, "ipv4");
+  } else {
+    NON_PUBLIC_IPV6_ADDRESSES.addSubnet(network, prefix, "ipv6");
+  }
 }
 
-// Only 2000::/3 is treated as ordinary public unicast. Block its known
-// special-purpose subranges as well as the complement.
-for (const [network, prefix] of [
-  ["::", 3],
-  ["4000::", 2],
-  ["8000::", 1],
-  ["2001::", 23],
-  ["2001:db8::", 32],
-  ["2002::", 16],
-  ["3fff::", 20],
-] as const) {
-  NON_PUBLIC_ADDRESSES.addSubnet(network, prefix, "ipv6");
+export function nonPublicAddressRules(): {
+  readonly ipv4: readonly string[];
+  readonly ipv6: readonly string[];
+} {
+  return {
+    ipv4: Object.freeze([...NON_PUBLIC_IPV4_ADDRESSES.rules]),
+    ipv6: Object.freeze([...NON_PUBLIC_IPV6_ADDRESSES.rules]),
+  };
 }
 
 function withoutIpv6Brackets(hostname: string): string {
@@ -146,11 +166,9 @@ export function isGloballyReachableAddress(address: string): boolean {
   // bypass Node's BlockList matching when left attached.
   if (address.includes("%")) return false;
   const family = isIP(address);
-  if (family === 0) return false;
-  return !NON_PUBLIC_ADDRESSES.check(
-    address,
-    family === 4 ? "ipv4" : "ipv6",
-  );
+  if (family === 4) return !NON_PUBLIC_IPV4_ADDRESSES.check(address, "ipv4");
+  if (family === 6) return !NON_PUBLIC_IPV6_ADDRESSES.check(address, "ipv6");
+  return false;
 }
 
 export interface SafeNetUrlPolicy {
