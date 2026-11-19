@@ -30464,7 +30464,7 @@ import {
   realpathSync,
   statSync
 } from "fs";
-import { isAbsolute as isAbsolute3, relative, resolve as resolve4, sep } from "path";
+import { dirname as dirname3, isAbsolute as isAbsolute3, join as join4, relative, resolve as resolve4, sep } from "path";
 import { spawnSync as spawnSync2 } from "child_process";
 var GIT_TIMEOUT_MS = 5000;
 var MAX_GIT_OUTPUT = 1024 * 1024;
@@ -30488,7 +30488,7 @@ function inspectRepository(rootInput, explicitRepositoryKey, metadataOnly = fals
     throw new CollabError("workspace_not_directory", "Workspace root must be an existing directory", { root_path: requested });
   }
   const requestedRoot = realpathSync(requested);
-  const topLevel = gitOutput(requestedRoot, ["rev-parse", "--show-toplevel"], options);
+  const topLevel = mayFindRepository(requestedRoot) ? gitOutput(requestedRoot, ["rev-parse", "--show-toplevel"], options) : null;
   const rootPath = topLevel && existsSync3(topLevel) ? realpathSync(topLevel) : requestedRoot;
   const explicitKey = explicitRepositoryKey?.trim();
   if (!topLevel) {
@@ -30787,9 +30787,34 @@ function gitCommitExists(rootPath, sha, options = {}) {
     stdio: ["ignore", "ignore", "ignore"],
     env: successorGitEnv()
   }, options);
-  if (result.error)
+  if (spawnFailed(result))
     return null;
   return result.status === 0;
+}
+function mayFindRepository(rootPath) {
+  if (process.env.GIT_DIR || process.env.GIT_WORK_TREE)
+    return true;
+  for (let directory = rootPath;; directory = dirname3(directory)) {
+    try {
+      lstatSync3(join4(directory, ".git"));
+      return true;
+    } catch (error51) {
+      const code = error51.code;
+      if (code !== "ENOENT" && code !== "ENOTDIR")
+        return true;
+    }
+    if (dirname3(directory) === directory)
+      return false;
+  }
+}
+function exitedDespiteTimeout(result) {
+  return result.error?.code === "ETIMEDOUT" && result.status !== null && result.signal == null;
+}
+function spawnFailed(result) {
+  return result.error != null && !exitedDespiteTimeout(result);
+}
+function spawnTimedOut(result) {
+  return result.error?.code === "ETIMEDOUT" && !exitedDespiteTimeout(result);
 }
 function worktreeId(rootPath, fingerprint) {
   return `wt_${sha256(`${rootPath}\x00${fingerprint}`).slice(0, 24)}`;
@@ -30821,8 +30846,8 @@ function runGit(rootPath, args, options) {
     env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" }
   }, options);
   return {
-    ok: result.status === 0 && !result.error,
-    timed_out: result.error?.code === "ETIMEDOUT",
+    ok: result.status === 0 && !spawnFailed(result),
+    timed_out: spawnTimedOut(result),
     stdout: typeof result.stdout === "string" ? result.stdout : ""
   };
 }
@@ -30837,7 +30862,7 @@ function gitBytes(rootPath, args, maxBuffer = MAX_GIT_OUTPUT) {
     stdio: ["ignore", "pipe", "ignore"]
   });
   return {
-    ok: result.status === 0 && !result.error,
+    ok: result.status === 0 && !spawnFailed(result),
     stdout: Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.alloc(0)
   };
 }
@@ -30856,8 +30881,8 @@ function successorGit(rootPath, args, maxBuffer = MAX_GIT_OUTPUT, options = {}) 
     env: successorGitEnv()
   }, options);
   return {
-    ok: result.status === 0 && !result.error,
-    timed_out: result.error?.code === "ETIMEDOUT",
+    ok: result.status === 0 && !spawnFailed(result),
+    timed_out: spawnTimedOut(result),
     stdout: Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.alloc(0)
   };
 }
@@ -30873,7 +30898,7 @@ function successorGitExitCode(rootPath, args) {
     stdio: ["ignore", "ignore", "ignore"],
     env: successorGitEnv()
   });
-  return result.error ? null : result.status;
+  return spawnFailed(result) ? null : result.status;
 }
 function digestUntrackedContent(rootPath, paths) {
   const entries = splitNul(paths);
@@ -31866,22 +31891,22 @@ import {
   unlinkSync as unlinkSync3,
   writeSync
 } from "fs";
-import { dirname as dirname3, join as join4 } from "path";
+import { dirname as dirname4, join as join5 } from "path";
 var SEAL_DIRECTORY = "collab-ballots";
 var BALLOT_ID = /^report_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 var CAST_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 function sealRoot(journalRealpath) {
-  return join4(dirname3(journalRealpath), SEAL_DIRECTORY);
+  return join5(dirname4(journalRealpath), SEAL_DIRECTORY);
 }
 function sealDirectory(journalRealpath, ballotId) {
   if (!BALLOT_ID.test(ballotId))
     throw new CollabError("invalid_ballot_id", "A ballot id is the poll report's id");
-  return join4(sealRoot(journalRealpath), ballotId);
+  return join5(sealRoot(journalRealpath), ballotId);
 }
 function sealPath(journalRealpath, ballotId, castId) {
   if (!CAST_ID.test(castId))
     throw new CollabError("invalid_cast_id", "A cast id is a random uuid");
-  return join4(sealDirectory(journalRealpath, ballotId), `${castId}.json`);
+  return join5(sealDirectory(journalRealpath, ballotId), `${castId}.json`);
 }
 function currentUser() {
   return typeof process.getuid === "function" ? process.getuid() : null;
@@ -31902,13 +31927,13 @@ function privateDirectory(path) {
     chmodSync3(path, 448);
 }
 function writeSealFile(path, seal) {
-  const directory = dirname3(path);
-  privateDirectory(dirname3(directory));
+  const directory = dirname4(path);
+  privateDirectory(dirname4(directory));
   privateDirectory(directory);
   if (existsSync4(path)) {
     throw new CollabError("seal_file_exists", "A seal file with this cast id already exists", { operation: "write_seal_file" });
   }
-  const temporary = join4(directory, `.${randomUUID3()}.tmp`);
+  const temporary = join5(directory, `.${randomUUID3()}.tmp`);
   const descriptor = openSync6(temporary, "wx", 384);
   try {
     writeSync(descriptor, JSON.stringify(seal));
@@ -31965,7 +31990,7 @@ function listSealTemporaries(journalRealpath, ballotId) {
     const directory = sealDirectory(journalRealpath, ballotId);
     if (!existsSync4(directory))
       return [];
-    return readdirSync2(directory).filter((name) => TEMPORARY.test(name)).map((name) => join4(directory, name));
+    return readdirSync2(directory).filter((name) => TEMPORARY.test(name)).map((name) => join5(directory, name));
   } catch {
     return [];
   }
@@ -32004,7 +32029,7 @@ import {
   mkdirSync as mkdirSync4,
   openSync as openSync7
 } from "fs";
-import { dirname as dirname4, isAbsolute as isAbsolute4, join as join5, posix, resolve as resolve5 } from "path";
+import { dirname as dirname5, isAbsolute as isAbsolute4, join as join6, posix, resolve as resolve5 } from "path";
 
 // src/passkey.ts
 import { createHash as createHash4, createPublicKey, verify } from "crypto";
@@ -32279,7 +32304,7 @@ class CollabStoreCore {
     };
     const databasePath = path === ":memory:" ? path : resolve5(path);
     if (databasePath !== ":memory:") {
-      const parent = dirname4(databasePath);
+      const parent = dirname5(databasePath);
       const parentAlreadyExisted = existsSync5(parent);
       mkdirSync4(parent, { recursive: true, mode: 448 });
       if (!parentAlreadyExisted)
@@ -32340,7 +32365,7 @@ class CollabStoreCore {
       throw new CollabError("session_file_path_required", "An explicit credential file path is required for an in-memory database");
     }
     const id = validateId(sessionId, "session_id");
-    return join5(dirname4(this.filesystemPath), "collab-sessions", `${id}.json`);
+    return join6(dirname5(this.filesystemPath), "collab-sessions", `${id}.json`);
   }
   initialize() {
     this.db.exec("PRAGMA foreign_keys = ON");
