@@ -86,9 +86,12 @@ export function parseTimeInstant(value: unknown): string | null {
 
   // Truncate fractional seconds to 3 digits (ms), matching V8.
   const ms = frac === "" ? 0 : Number(frac.slice(0, 3).padEnd(3, "0"));
-  const localMs = Date.UTC(year, month - 1, day, hour, minute, second, ms);
+  // Use setUTCFullYear instead of Date.UTC so years 0001-0099 are not mapped to 1901-1999.
+  const local = new Date(0);
+  local.setUTCFullYear(year, month - 1, day);
+  local.setUTCHours(hour, minute, second, ms);
   const offsetMs = offsetSign * (offsetHour * 60 + offsetMinute) * 60_000;
-  const utcMs = localMs - offsetMs;
+  const utcMs = local.getTime() - offsetMs;
   if (!Number.isFinite(utcMs)) return null;
 
   const utcDate = new Date(utcMs);
