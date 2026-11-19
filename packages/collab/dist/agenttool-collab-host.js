@@ -2454,6 +2454,7 @@ class CollabStoreCore {
   eventReader;
   closed = false;
   ambientReceiptPlan = null;
+  resumeAwaySince = new Map;
   constructor(path, options = {}) {
     this.now = options.now ?? (() => new Date);
     this.migrationFailpoint = options.migration_failpoint;
@@ -3827,8 +3828,10 @@ class CollabStoreCore {
   }
   resumeSession(credential, options = {}) {
     const sessionId = validateId(credential.session_id, "session_id");
+    let lastSeenBeforeResume = "";
     const resumed = this.db.transaction(() => {
       const row = this.authenticateResumeToken(sessionId, credential.session_token);
+      lastSeenBeforeResume = row.last_seen_at;
       const now = this.timestamp();
       this.recordSessionLeaseLapses(row, now);
       const nextGeneration = row.generation + 1;
@@ -3912,6 +3915,10 @@ class CollabStoreCore {
       }
       return handle;
     }).immediate();
+    const carried = this.resumeAwaySince.get(sessionId);
+    if (carried === undefined || lastSeenBeforeResume < carried) {
+      this.resumeAwaySince.set(sessionId, lastSeenBeforeResume);
+    }
     this.tightenFileModes();
     return resumed;
   }
@@ -4003,6 +4010,7 @@ class CollabStoreCore {
         released_leases: releasedLeases
       };
     }).immediate();
+    this.resumeAwaySince.delete(input.session_id);
     this.tightenFileModes();
     return ended;
   }
@@ -6326,13 +6334,17 @@ class CollabStoreCore {
       }
       const eventLimit2 = validateNextEventLimit(input.event_limit);
       this.recordSessionLeaseLapses(authenticated, this.timestamp());
-      this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(this.timestamp(), authenticated.id);
+      const touchedAt = this.timestamp();
+      const away2 = this.awayBeforeTouch(authenticated.id, authenticated.last_seen_at, touchedAt);
+      this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(touchedAt, authenticated.id);
       return {
         row: this.requireCoordinationSessionRow(authenticated.id),
-        event_limit: eventLimit2
+        event_limit: eventLimit2,
+        away: away2
       };
     }).immediate();
     const { row, event_limit: eventLimit } = authenticatedPoll;
+    const away = this.settleAway(row.id, authenticatedPoll.away);
     this.expireElapsedHandoffs(row.workspace_id, "system:clock");
     const read = this.db.transaction(() => {
       const current = this.authenticateSession(input);
@@ -6368,7 +6380,9 @@ class CollabStoreCore {
         reports: reportRows.map(reportFromRow),
         events,
         projection_scope: "snapshot_head",
-        reports_scope: "event_page"
+        reports_scope: "event_page",
+        away_ms: away.away_ms,
+        away_since: away.away_since
       };
     });
     return read.deferred();
@@ -7791,6 +7805,21 @@ class CollabStoreCore {
   observedAt() {
     return this.timestamp();
   }
+  awayBeforeTouch(sessionId, lastSeenAt, now) {
+    const carried = this.resumeAwaySince.get(sessionId);
+    const since = carried !== undefined && carried < lastSeenAt ? carried : lastSeenAt;
+    const elapsed = Date.parse(now) - Date.parse(since);
+    return {
+      away_ms: Number.isFinite(elapsed) && elapsed > 0 ? elapsed : 0,
+      away_since: since,
+      carried: carried !== undefined
+    };
+  }
+  settleAway(sessionId, away) {
+    if (away.carried)
+      this.resumeAwaySince.delete(sessionId);
+    return { away_ms: away.away_ms, away_since: away.away_since };
+  }
 }
 function normalizeMutation(input) {
   return { ...input, actor: validateActor(input.actor), idempotency_key: validateIdempotencyKey(input.idempotency_key) };
@@ -9082,11 +9111,11 @@ class CollabStore extends CollabStoreCore {
     const planned = input.peek ? this.db.transaction(() => {
       const session = this.authenticateSession(input);
       const mark = this.readNoteMarkState(session);
-      return { mark, ...plan(session, mark, false) };
+      return { mark, ...plan(session, mark, false), away: null };
     }).deferred() : (() => {
       const housekept = this.noteHousekeeping(input, (session, mark) => ({ mark, ...plan(session, mark, true) }));
       reveal = housekept.reveal;
-      return housekept.result;
+      return { ...housekept.result, away: housekept.away };
     })();
     return afterHousekeeping(!input.peek, () => this.db.transaction(() => {
       const session = this.authenticateSession(input);
@@ -9112,6 +9141,7 @@ class CollabStore extends CollabStoreCore {
           written: !input.peek
         },
         head_sequence: workspace.event_head_sequence,
+        ...planned.away ? { away: planned.away } : {},
         waiting: planned.waiting ?? this.noteWaiting(session),
         reveal_pending: reveal.pending,
         observed_at: this.timestamp()
@@ -9246,7 +9276,7 @@ class CollabStore extends CollabStoreCore {
   }
   noteThreadForSession(input) {
     const id = validateId(input.id, `${input.kind}_id`);
-    const { result: markState, reveal } = this.noteHousekeeping(input, (session, mark) => {
+    const { result: markState, reveal, away } = this.noteHousekeeping(input, (session, mark) => {
       const now = this.timestamp();
       if (input.kind === "task") {
         const task = this.requireTaskRow(session.workspace_id, id);
@@ -9293,6 +9323,7 @@ class CollabStore extends CollabStoreCore {
           folded: 0,
           mark: markState,
           reveal_pending: reveal.pending,
+          away,
           observed_at: this.timestamp()
         };
       }
@@ -9361,6 +9392,7 @@ class CollabStore extends CollabStoreCore {
         folded: answerEntries.filter((entry) => entry.folded !== null).length,
         mark: markState,
         reveal_pending: reveal.pending,
+        away,
         observed_at: this.timestamp()
       };
     }).deferred());
@@ -9538,12 +9570,13 @@ class CollabStore extends CollabStoreCore {
   }
   noteHousekeeping(credential, apply) {
     let reveal = { revealed: [], pending: [] };
-    const result = this.db.transaction(() => {
+    const housekept = this.db.transaction(() => {
       const authenticated = this.authenticateSession(credential);
       const now = this.timestamp();
       this.recordSessionLeaseLapses(authenticated, now);
       this.expireElapsedHandoffs(authenticated.workspace_id, "system:clock");
       reveal = this.revealBallotsInTransaction(authenticated.workspace_id);
+      const away2 = this.awayBeforeTouch(authenticated.id, authenticated.last_seen_at, now);
       this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(now, authenticated.id);
       const session = this.requireCoordinationSessionRow(authenticated.id);
       const mark = this.readNoteMarkState(session);
@@ -9555,11 +9588,12 @@ class CollabStore extends CollabStoreCore {
             shown_through_sequence = excluded.shown_through_sequence, updated_at = excluded.updated_at
         `).run(session.workspace_id, session.id, mark.sequence, now);
       }
-      return apply(session, mark);
+      return { result: apply(session, mark), away: away2 };
     }).immediate();
+    const away = this.settleAway(credential.session_id, housekept.away);
     this.cleanSeals(reveal.revealed);
     this.tightenFileModes();
-    return { result, reveal };
+    return { result: housekept.result, reveal, away };
   }
   recordNoteShown(session, itemIds, now) {
     for (const itemId of new Set(itemIds)) {

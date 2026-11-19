@@ -59,6 +59,7 @@ import {
   type ProposalStatus,
   type ProposalVoice,
   type CoordinationPresence,
+  type SessionAway,
   type SessionRest,
   type Task,
   type TaskConflict,
@@ -666,12 +667,12 @@ export class CollabStore extends CollabStoreCore {
       ? this.db.transaction(() => {
         const session = this.authenticateSession(input);
         const mark = this.readNoteMarkState(session);
-        return { mark, ...plan(session, mark, false) };
+        return { mark, ...plan(session, mark, false), away: null };
       }).deferred()
       : (() => {
         const housekept = this.noteHousekeeping(input, (session, mark) => ({ mark, ...plan(session, mark, true) }));
         reveal = housekept.reveal;
-        return housekept.result;
+        return { ...housekept.result, away: housekept.away };
       })();
     return afterHousekeeping(!input.peek, () => this.db.transaction(() => {
       const session = this.authenticateSession(input);
@@ -697,6 +698,7 @@ export class CollabStore extends CollabStoreCore {
           written: !input.peek,
         },
         head_sequence: workspace.event_head_sequence,
+        ...(planned.away ? { away: planned.away } : {}),
         waiting: planned.waiting ?? this.noteWaiting(session),
         reveal_pending: reveal.pending,
         observed_at: this.timestamp(),
@@ -893,7 +895,7 @@ export class CollabStore extends CollabStoreCore {
     id: string;
   }): NoteThreadData {
     const id = validateId(input.id, `${input.kind}_id`);
-    const { result: markState, reveal } = this.noteHousekeeping(input, (session, mark) => {
+    const { result: markState, reveal, away } = this.noteHousekeeping(input, (session, mark) => {
       const now = this.timestamp();
       if (input.kind === "task") {
         const task = this.requireTaskRow(session.workspace_id, id);
@@ -940,6 +942,7 @@ export class CollabStore extends CollabStoreCore {
           folded: 0,
           mark: markState,
           reveal_pending: reveal.pending,
+          away,
           observed_at: this.timestamp(),
         };
       }
@@ -1016,6 +1019,7 @@ export class CollabStore extends CollabStoreCore {
         folded: answerEntries.filter((entry) => entry.folded !== null).length,
         mark: markState,
         reveal_pending: reveal.pending,
+        away,
         observed_at: this.timestamp(),
       };
     }).deferred());
@@ -1265,15 +1269,17 @@ export class CollabStore extends CollabStoreCore {
   private noteHousekeeping<T>(
     credential: { session_id: string; session_token: string; generation: number },
     apply: (session: CoordinationSessionRow, mark: NoteMarkState) => T,
-  ): { result: T; reveal: NoteRevealOutcome } {
+  ): { result: T; reveal: NoteRevealOutcome; away: SessionAway } {
     let reveal: NoteRevealOutcome = { revealed: [], pending: [] };
-    const result = this.db.transaction(() => {
+    const housekept = this.db.transaction(() => {
       const authenticated = this.authenticateSession(credential);
       const now = this.timestamp();
       this.recordSessionLeaseLapses(authenticated, now);
       // Nested, so it runs as a savepoint inside this one transaction.
       this.expireElapsedHandoffs(authenticated.workspace_id, "system:clock");
       reveal = this.revealBallotsInTransaction(authenticated.workspace_id);
+      // time/1 (C8): measured before this read touches last_seen_at.
+      const away = this.awayBeforeTouch(authenticated.id, authenticated.last_seen_at, now);
       this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`).run(now, authenticated.id);
       const session = this.requireCoordinationSessionRow(authenticated.id);
       const mark = this.readNoteMarkState(session);
@@ -1285,11 +1291,12 @@ export class CollabStore extends CollabStoreCore {
             shown_through_sequence = excluded.shown_through_sequence, updated_at = excluded.updated_at
         `).run(session.workspace_id, session.id, mark.sequence, now);
       }
-      return apply(session, mark);
+      return { result: apply(session, mark), away };
     }).immediate();
+    const away = this.settleAway(credential.session_id, housekept.away);
     this.cleanSeals(reveal.revealed);
     this.tightenFileModes();
-    return { result, reveal };
+    return { result: housekept.result, reveal, away };
   }
 
   private recordNoteShown(session: CoordinationSessionRow, itemIds: Array<string | null>, now: string): void {
@@ -3331,6 +3338,8 @@ export interface NoteInboxData {
   observed_at: string;
   /** A look-back (collab_inbox since): the sequences it read after and through. The mark did not move. */
   looked_back?: { after: number; through: number };
+  /** time/1 (C8): how long this session was away before this read; absent on a peek, which touches nothing. */
+  away?: SessionAway;
   /**
    * A look-back or a pass with include: "all": events within what was read
    * that are not lines of their own, so the listing is not taken as the
@@ -3363,6 +3372,8 @@ export interface NoteThreadData {
   folded: number;
   /** What the housekeeping did to the read mark: created it from the legacy cursor, or clamped it to the head. */
   mark: { initialised_from: "cursor" | null; clamped: boolean };
+  /** time/1 (C8): how long this session was away before this read. */
+  away: SessionAway;
   /** Reveals the housekeeping tried and could not finish; each stays sealed and is tried again. */
   reveal_pending: NoteRevealOutcome["pending"];
   observed_at: string;

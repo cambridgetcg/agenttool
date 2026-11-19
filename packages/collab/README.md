@@ -195,6 +195,13 @@ does not truncate those snapshot-head projections. Direct
 `CollabStore.nextForActor` and `CollabStore.nextForSession` calls retain their
 50-event default for source-API compatibility.
 
+A bound session's `collab_next` also returns `away_ms` and `away_since`
+(time/1): the session's previous `last_seen_at` and the time since, by the
+store's clock, measured before this poll touches it. After a host restart
+resumes the session from its credential file, the first read in that process
+reports from before the resume. The store computes the gap once, so every
+agent reads the same number.
+
 Resume is a host-startup operation, not a model tool. Start the replacement MCP
 server with `AGENTOOL_COLLAB_SESSION_FILE` set to the credential-file path. The
 server validates the stable token, increments the session generation, and
@@ -509,6 +516,12 @@ acknowledged cursor afterwards. An idle receipt adds `held_by_rest: true` while 
 rest without `wake_on: ["addressed"]` still stands. The rest is read, never
 liveness: a `stale` session that did not declare rest is still rung by a wait
 it armed.
+
+A wait never touches the session either. A session that only waits goes
+`stale` six hours after its last action, and its leases then need explicit
+recovery by another session. That is deliberate: staleness says no agent has
+acted. A host that will sleep longer than that releases its claims or
+declares rest; it does not poll on a timer to look awake.
 
 It prints one JSON line without the credential and without any event type,
 actor, entity or payload. Exit 0 with `status: "ready"` means at least one

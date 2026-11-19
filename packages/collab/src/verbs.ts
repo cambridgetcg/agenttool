@@ -40,6 +40,7 @@ import {
   type ConsentRule,
   type ProposalSetAside,
   type ProposalStatus,
+  type SessionAway,
   type SessionHandle,
 } from "./protocol.js";
 import { hashWorktreeFile, inspectRepository, MAX_CITED_FILE_BYTES } from "./repository.js";
@@ -774,6 +775,53 @@ export function actorPrefixFor(environment: Record<string, string | undefined>):
 export function minutesSince(at: string, observedAt: string): number | null {
   const age = Date.parse(observedAt) - Date.parse(at);
   return Number.isFinite(age) ? Math.max(0, Math.floor(age / 60_000)) : null;
+}
+
+/**
+ * time/1: an elapsed duration for people, in at most two units and rounded
+ * down, as the harness time line and docs/time/vectors.json ("elapsed") write
+ * it: 45s, 19m 55s, 1h 2m, 2d 3h. Never parsed back.
+ */
+export function durationSince(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return "?";
+  const s = Math.floor(ms / 1000);
+  const d = Math.floor(s / 86_400);
+  const h = Math.floor((s % 86_400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s % 60}s`;
+  return `${s}s`;
+}
+
+/** time/1: below this a gap is ordinary between calls and is not said. */
+export const AWAY_LINE_MIN_MS = 10 * 60_000;
+
+/**
+ * time/1 (C8): one line saying how long this session was away, once the gap
+ * reaches AWAY_LINE_MIN_MS, so an agent that wakes re-reads before quoting.
+ * The date is named when the session was last seen on another UTC day.
+ */
+export function awayLine(away: SessionAway | null | undefined): string | null {
+  if (!away || away.away_ms < AWAY_LINE_MIN_MS) return null;
+  const since = away.away_since;
+  const back = new Date(Date.parse(since) + away.away_ms).toISOString();
+  const at = since.slice(0, 10) === back.slice(0, 10)
+    ? `${since.slice(11, 16)}Z`
+    : `${since.slice(0, 10)} ${since.slice(11, 16)}Z`;
+  return `You were away ${durationSince(away.away_ms)} (last seen ${at}); re-read anything you would quote from before.`;
+}
+
+/** time/1 (C8): the away fields on a result, and its line first in advice. */
+function withAway(view: Record<string, unknown>, away: SessionAway | null | undefined): Record<string, unknown> {
+  if (!away) return view;
+  const line = awayLine(away);
+  return {
+    ...view,
+    away_ms: away.away_ms,
+    away_since: away.away_since,
+    ...(line && Array.isArray(view.advice) ? { advice: [line, ...view.advice] } : {}),
+  };
 }
 
 export function durationUntil(at: string, observedAt: string): string {
@@ -2073,6 +2121,9 @@ function inboxResult(
   extras: NoteEntry[] = [],
 ): Record<string, unknown> {
   const data = passes.at(-1)!;
+  // time/1 (C8): the first pass measured the gap; a pass after a wait is moments later.
+  const away = passes[0]!.away;
+  const awayAdvice = awayLine(away);
   const byId = new Map(data.sessions.map((view) => [view.id, view]));
   const me = data.session.id;
   const entries = [...passes.flatMap((pass) => pass.entries), ...extras];
@@ -2141,7 +2192,8 @@ function inboxResult(
     waiting_on_you: data.waiting.map((entry) => formatWaiting(ctx, entry, byId)),
     ...(waited ? { waited } : {}),
     ...revealPendingField(passes.flatMap((pass) => pass.reveal_pending)),
-    advice,
+    ...(away ? { away_ms: away.away_ms, away_since: away.away_since } : {}),
+    advice: awayAdvice ? [awayAdvice, ...advice] : advice,
     next,
   };
 }
@@ -2347,7 +2399,7 @@ function aboutView(
   const thread = ctx.store.noteThreadForSession({ ...credential, kind, id });
   // The thread call has recorded its housekeeping, so a refusal from here on
   // must never say that nothing was written.
-  return afterThreadRead(() => composeAboutView(ctx, thread, format, waitSeconds, sinceGiven));
+  return afterThreadRead(() => withAway(composeAboutView(ctx, thread, format, waitSeconds, sinceGiven), thread.away));
 }
 
 function afterThreadRead<T>(compose: () => T): T {
