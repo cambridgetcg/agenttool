@@ -11,7 +11,7 @@ import {
   realpathSync,
   statSync,
 } from "node:fs";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { spawnSync, type SpawnSyncOptions, type SpawnSyncReturns } from "node:child_process";
 import { CollabError } from "./errors.js";
 import type { RepoCheckpoint } from "./protocol.js";
@@ -76,7 +76,9 @@ export function inspectRepository(
   }
 
   const requestedRoot = realpathSync(requested);
-  const topLevel = gitOutput(requestedRoot, ["rev-parse", "--show-toplevel"], options);
+  const topLevel = mayFindRepository(requestedRoot)
+    ? gitOutput(requestedRoot, ["rev-parse", "--show-toplevel"], options)
+    : null;
   const rootPath = topLevel && existsSync(topLevel) ? realpathSync(topLevel) : requestedRoot;
   const explicitKey = explicitRepositoryKey?.trim();
 
@@ -442,8 +444,52 @@ export function gitCommitExists(rootPath: string, sha: string, options: Reposito
     stdio: ["ignore", "ignore", "ignore"],
     env: successorGitEnv(),
   }, options);
-  if (result.error) return null;
+  if (spawnFailed(result)) return null;
   return result.status === 0;
+}
+
+/**
+ * Whether git's discovery could find a repository from `rootPath`: GIT_DIR or
+ * GIT_WORK_TREE is set, or some directory from `rootPath` up to the filesystem
+ * root holds a `.git` entry (directory, file or link). It looks further than
+ * git does (no GIT_CEILING_DIRECTORIES, no filesystem boundary), so false
+ * means git would find none either. Skipping that spawn matters: git that
+ * exits at once is where Bun 1.3.5 was seen to miss a child's exit in a
+ * synchronous spawn, which can stall the caller (cf3a05bb). A bare repository
+ * has no `.git` entry, and `--show-toplevel` rejects it anyway.
+ */
+function mayFindRepository(rootPath: string): boolean {
+  if (process.env.GIT_DIR || process.env.GIT_WORK_TREE) return true;
+  for (let directory = rootPath; ; directory = dirname(directory)) {
+    try {
+      lstatSync(join(directory, ".git"));
+      return true;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      // Anything but a plain absence (a permission error, say) is left to git.
+      if (code !== "ENOENT" && code !== "ENOTDIR") return true;
+    }
+    if (dirname(directory) === directory) return false;
+  }
+}
+
+/**
+ * Bun can report ETIMEDOUT for a synchronous spawn whose child had already
+ * exited on its own (cf3a05bb; process-tree.ts handles the same for ps). A
+ * child the runtime really killed has no exit status, so a result with a
+ * status and no signal is that exit, whatever error came with it.
+ */
+function exitedDespiteTimeout(result: SpawnSyncReturns<unknown>): boolean {
+  return (result.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT"
+    && result.status !== null && result.signal == null;
+}
+
+function spawnFailed(result: SpawnSyncReturns<unknown>): boolean {
+  return result.error != null && !exitedDespiteTimeout(result);
+}
+
+function spawnTimedOut(result: SpawnSyncReturns<unknown>): boolean {
+  return (result.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT" && !exitedDespiteTimeout(result);
 }
 
 function worktreeId(rootPath: string, fingerprint: string): string {
@@ -477,8 +523,8 @@ function runGit(rootPath: string, args: string[], options: RepositoryProbeOption
     env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
   }, options);
   return {
-    ok: result.status === 0 && !result.error,
-    timed_out: (result.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT",
+    ok: result.status === 0 && !spawnFailed(result),
+    timed_out: spawnTimedOut(result),
     stdout: typeof result.stdout === "string" ? result.stdout : "",
   };
 }
@@ -499,7 +545,7 @@ function gitBytes(
     stdio: ["ignore", "pipe", "ignore"],
   });
   return {
-    ok: result.status === 0 && !result.error,
+    ok: result.status === 0 && !spawnFailed(result),
     stdout: Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.alloc(0),
   };
 }
@@ -530,8 +576,8 @@ function successorGit(
     env: successorGitEnv(),
   }, options);
   return {
-    ok: result.status === 0 && !result.error,
-    timed_out: (result.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT",
+    ok: result.status === 0 && !spawnFailed(result),
+    timed_out: spawnTimedOut(result),
     stdout: Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.alloc(0),
   };
 }
@@ -551,7 +597,7 @@ function successorGitExitCode(rootPath: string, args: string[]): number | null {
     stdio: ["ignore", "ignore", "ignore"],
     env: successorGitEnv(),
   });
-  return result.error ? null : result.status;
+  return spawnFailed(result) ? null : result.status;
 }
 
 function digestUntrackedContent(rootPath: string, paths: Buffer): string | null {

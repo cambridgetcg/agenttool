@@ -18,7 +18,7 @@ import {
   unlinkSync as unlinkSync4,
   writeFileSync as writeFileSync3
 } from "fs";
-import { join as join5 } from "path";
+import { join as join6 } from "path";
 import { parseArgs as parseArgs2 } from "util";
 
 // src/database-path.ts
@@ -1596,7 +1596,7 @@ import {
   mkdirSync as mkdirSync4,
   openSync as openSync5
 } from "fs";
-import { dirname as dirname4, isAbsolute as isAbsolute4, join as join4, posix, resolve as resolve5 } from "path";
+import { dirname as dirname5, isAbsolute as isAbsolute4, join as join5, posix, resolve as resolve5 } from "path";
 
 // src/passkey.ts
 import { createHash as createHash2, createPublicKey, verify } from "crypto";
@@ -1899,7 +1899,7 @@ import {
   realpathSync,
   statSync
 } from "fs";
-import { isAbsolute as isAbsolute3, relative, resolve as resolve4, sep } from "path";
+import { dirname as dirname4, isAbsolute as isAbsolute3, join as join4, relative, resolve as resolve4, sep } from "path";
 import { spawnSync } from "child_process";
 var GIT_TIMEOUT_MS = 5000;
 var MAX_GIT_OUTPUT = 1024 * 1024;
@@ -1923,7 +1923,7 @@ function inspectRepository(rootInput, explicitRepositoryKey, metadataOnly = fals
     throw new CollabError("workspace_not_directory", "Workspace root must be an existing directory", { root_path: requested });
   }
   const requestedRoot = realpathSync(requested);
-  const topLevel = gitOutput(requestedRoot, ["rev-parse", "--show-toplevel"], options);
+  const topLevel = mayFindRepository(requestedRoot) ? gitOutput(requestedRoot, ["rev-parse", "--show-toplevel"], options) : null;
   const rootPath = topLevel && existsSync4(topLevel) ? realpathSync(topLevel) : requestedRoot;
   const explicitKey = explicitRepositoryKey?.trim();
   if (!topLevel) {
@@ -2143,6 +2143,31 @@ function inspectSuccessorCommit(rootPath, commitSha, parentSha) {
   return { ok: true, commit_sha: commitSha, parent_sha: parentSha, changes };
 }
 var MAX_CITED_FILE_BYTES = 16 * 1024 * 1024;
+function mayFindRepository(rootPath) {
+  if (process.env.GIT_DIR || process.env.GIT_WORK_TREE)
+    return true;
+  for (let directory = rootPath;; directory = dirname4(directory)) {
+    try {
+      lstatSync4(join4(directory, ".git"));
+      return true;
+    } catch (error) {
+      const code = error.code;
+      if (code !== "ENOENT" && code !== "ENOTDIR")
+        return true;
+    }
+    if (dirname4(directory) === directory)
+      return false;
+  }
+}
+function exitedDespiteTimeout(result) {
+  return result.error?.code === "ETIMEDOUT" && result.status !== null && result.signal == null;
+}
+function spawnFailed(result) {
+  return result.error != null && !exitedDespiteTimeout(result);
+}
+function spawnTimedOut(result) {
+  return result.error?.code === "ETIMEDOUT" && !exitedDespiteTimeout(result);
+}
 function worktreeId(rootPath, fingerprint) {
   return `wt_${sha2563(`${rootPath}\x00${fingerprint}`).slice(0, 24)}`;
 }
@@ -2173,8 +2198,8 @@ function runGit(rootPath, args, options) {
     env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" }
   }, options);
   return {
-    ok: result.status === 0 && !result.error,
-    timed_out: result.error?.code === "ETIMEDOUT",
+    ok: result.status === 0 && !spawnFailed(result),
+    timed_out: spawnTimedOut(result),
     stdout: typeof result.stdout === "string" ? result.stdout : ""
   };
 }
@@ -2189,7 +2214,7 @@ function gitBytes(rootPath, args, maxBuffer = MAX_GIT_OUTPUT) {
     stdio: ["ignore", "pipe", "ignore"]
   });
   return {
-    ok: result.status === 0 && !result.error,
+    ok: result.status === 0 && !spawnFailed(result),
     stdout: Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.alloc(0)
   };
 }
@@ -2208,8 +2233,8 @@ function successorGit(rootPath, args, maxBuffer = MAX_GIT_OUTPUT, options = {}) 
     env: successorGitEnv()
   }, options);
   return {
-    ok: result.status === 0 && !result.error,
-    timed_out: result.error?.code === "ETIMEDOUT",
+    ok: result.status === 0 && !spawnFailed(result),
+    timed_out: spawnTimedOut(result),
     stdout: Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.alloc(0)
   };
 }
@@ -2225,7 +2250,7 @@ function successorGitExitCode(rootPath, args) {
     stdio: ["ignore", "ignore", "ignore"],
     env: successorGitEnv()
   });
-  return result.error ? null : result.status;
+  return spawnFailed(result) ? null : result.status;
 }
 function digestUntrackedContent(rootPath, paths) {
   const entries = splitNul(paths);
@@ -2440,7 +2465,7 @@ class CollabStoreCore {
     };
     const databasePath = path === ":memory:" ? path : resolve5(path);
     if (databasePath !== ":memory:") {
-      const parent = dirname4(databasePath);
+      const parent = dirname5(databasePath);
       const parentAlreadyExisted = existsSync5(parent);
       mkdirSync4(parent, { recursive: true, mode: 448 });
       if (!parentAlreadyExisted)
@@ -2501,7 +2526,7 @@ class CollabStoreCore {
       throw new CollabError("session_file_path_required", "An explicit credential file path is required for an in-memory database");
     }
     const id = validateId(sessionId, "session_id");
-    return join4(dirname4(this.filesystemPath), "collab-sessions", `${id}.json`);
+    return join5(dirname5(this.filesystemPath), "collab-sessions", `${id}.json`);
   }
   initialize() {
     this.db.exec("PRAGMA foreign_keys = ON");
@@ -13128,7 +13153,7 @@ function addressedItems(db, session, includeSender, after) {
   return addressed.map((row) => ({ ...item(row), from_session_id: row.session_id }));
 }
 function knockLedgerPath(databasePath) {
-  return join5(collabSessionsDirectory(databasePath), "knock-ledger.json");
+  return join6(collabSessionsDirectory(databasePath), "knock-ledger.json");
 }
 function untapped(ledger, sessionId, waiting) {
   const tapped = new Set(ledger.tapped[sessionId] ?? []);
