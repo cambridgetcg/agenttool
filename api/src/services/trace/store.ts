@@ -19,6 +19,7 @@ import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 
 import { db } from "../../db/client";
+import { parseTimeInstantMs } from "../../lib/time-instant";
 import { traces } from "../../db/schema/trace";
 import { identityKeys } from "../../db/schema/identity";
 import { canonicalIdentityId, requireActiveProjectIdentity, resolveProjectSubject, type PartitionOptions } from "../identity/partition";
@@ -233,7 +234,7 @@ export async function validateTracePartition(projectId: string, data: TraceCreat
     }
     if (data.signature) {
       const signedAt = data.metadata?.signed_at;
-      if (data.metadata?.signature_context !== TRACE_SIGNATURE_CONTEXT || typeof signedAt !== "string" || !Number.isFinite(Date.parse(signedAt))) {
+      if (data.metadata?.signature_context !== TRACE_SIGNATURE_CONTEXT || typeof signedAt !== "string" || parseTimeInstantMs(signedAt) === null) {
         throw new HTTPException(400, { message: "A signed trace requires the agent-trace/v1 context and signed_at timestamp." });
       }
       const canonical = canonicalTraceBytes({
