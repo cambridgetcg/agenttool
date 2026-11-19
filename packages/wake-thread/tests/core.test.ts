@@ -3,6 +3,7 @@ import {
   canonicalJson,
   createWakeThreadOffer,
   domainSeparatedId,
+  nextThreadPosition,
   resolveWakeThreadOffer,
   sha256Id,
   validateWakeThreadChain,
@@ -364,5 +365,60 @@ describe("Wake Thread chains", () => {
       }
     }
     expect(validateWakeThreadChain(receipts).length).toBe(64);
+  });
+
+  test("nextThreadPosition derives only thread_ref and parent_receipt without carrying prior offer fields", () => {
+    const carryReceipt = resolveWakeThreadOffer(makeOffer(), response("carry"));
+    const carryPos = nextThreadPosition(carryReceipt);
+    expect(Object.keys(carryPos).sort()).toEqual(["parent_receipt", "thread_ref"]);
+    expect(carryPos.thread_ref).toBe(carryReceipt.offer.thread_ref);
+    expect(carryPos.parent_receipt).toEqual(carryReceipt);
+
+    const restReceipt = resolveWakeThreadOffer(makeOffer(), response("rest"));
+    expect(nextThreadPosition(restReceipt).thread_ref).toBe(restReceipt.offer.thread_ref);
+
+    const forkReceipt = resolveWakeThreadOffer(makeOffer(), response("fork", ref("forked-branch")));
+    const forkPos = nextThreadPosition(forkReceipt, "2026-08-01T12:02:00.000Z");
+    expect(forkPos.thread_ref).toBe(ref("forked-branch"));
+    expect(forkPos.parent_receipt).toEqual(forkReceipt);
+
+    const mutableCopy = jsonClone(carryReceipt);
+    const snapshotted = nextThreadPosition(mutableCopy);
+    (mutableCopy.offer.facts as Array<{ summary: string }>)[0]!.summary = "mutated after position";
+    expect(snapshotted.parent_receipt.offer.facts[0]!.summary).not.toBe("mutated after position");
+  });
+
+  test("nextThreadPosition rejects refused, ephemeral, tampered, and out-of-window parents", () => {
+    const refused = resolveWakeThreadOffer(makeOffer(), response("refuse"));
+    expect(() => nextThreadPosition(refused)).toThrow("refused offer");
+
+    const ephemeral = resolveWakeThreadOffer(
+      makeOffer({ artifact_retention: { mode: "ephemeral", until: null } }),
+      response("carry"),
+    );
+    expect(() => nextThreadPosition(ephemeral)).toThrow("ephemeral offer");
+
+    const bounded = resolveWakeThreadOffer(
+      makeOffer({
+        expires_at: null,
+        artifact_retention: { mode: "until", until: "2026-08-01T12:02:00.000Z" },
+      }),
+      response("carry"),
+    );
+    expect(() => nextThreadPosition(bounded, "2026-08-01T11:59:00.000Z")).toThrow("predate");
+    expect(() => nextThreadPosition(bounded, "2026-08-01T12:02:00.000Z")).toThrow("retention boundary");
+    expect(() => nextThreadPosition(bounded, "2026-08-01T12:00:00")).toThrow("canonical UTC timestamp");
+    expect(() => (nextThreadPosition as (...args: unknown[]) => unknown)(bounded, undefined)).toThrow(
+      "canonical UTC timestamp",
+    );
+    expect(() => (nextThreadPosition as (...args: unknown[]) => unknown)(
+      bounded,
+      "2026-08-01T12:01:30.000Z",
+      "extra",
+    )).toThrow("at most two arguments");
+
+    const tampered = jsonClone(bounded);
+    tampered.outcome = "resting";
+    expect(() => nextThreadPosition(tampered)).toThrow(WakeThreadError);
   });
 });

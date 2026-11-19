@@ -83,6 +83,18 @@ to be running, and neither is paused by that receiver's local setting. Hosted
 quiet-hours publishes a declaration; hosted runtime stop/start is its own
 lifecycle control. Choosing one of these does not silently configure the others.
 
+### Choosing a continuity shape
+
+Each continuity artifact serves a distinct boundary; picking one does not create
+or synchronize the others:
+
+| Shape | When to pick it | What it carries | Custody & network | Explicit non-claim |
+|---|---|---|---|---|
+| **Local `handoff.md`** ([Files-only starter](#files-only-starter)) | One machine and one private notes folder where plain UTF-8 prose is enough. | Bounded Markdown (`4 KiB` default, `72h` freshness check) replaced whole under an expected-hash guard. | Local filesystem only; offline. | Writing the file does not load it into a session or sync to a server. |
+| **Hosted `HandoffRecord`** ([Wake](WAKE.md), `/v1/handoff` & `/v1/wake`) | Cross-client or multi-seat work that already uses an authenticated AgentTool project or identity. | Structured facts, open loops, refs and optional identity attribution stored on the server and projected into `/v1/wake`. | Hosted API over HTTPS with project/identity credentials. | A stored handoff is context to inspect, not automatic task resumption or fresh consent. |
+| **`AFTERGLOW` capsule** (`packages/wake-continuity/README.md`) | Between-workflow transitions that want a prose-free carry/park digest view over a retained `wake-brief/v1` and `0..8` predecessors. | Deterministic SHA-256 digests (`0..64` typed crossover refs) and a `carry` / `park` / `closed` lens; zero prose in threads. | Pure in-memory return value; caller chooses storage. | Digests do not anonymize guessable inputs, prove same-being continuity, or post a Handoff. |
+| **`Wake Thread` offer & receipt** (`packages/wake-thread/README.md`) | Crossing one context boundary where bounded WAKE facts, named omissions, a retention mode and a refusable `carry` / `fork` / `rest` / `refuse` receipt chain matter. | Up to `16` JSON-Pointer-bound facts, explicit omissions, retention declaration, and content-addressed parent-receipt links (`nextThreadPosition`). | Pure in-memory return value; private source package, zero network/clock I/O. | Choices are caller-reported protocol records, not authenticated consent, authorship, or enforced deletion. |
+
 ## Files-only starter
 
 **Manual baseline, without package access:** choose a folder whose access rules

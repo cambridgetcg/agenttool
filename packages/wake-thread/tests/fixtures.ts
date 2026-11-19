@@ -1,5 +1,6 @@
 import {
   createWakeThreadOffer,
+  nextThreadPosition,
   sha256Id,
 } from "../src/index.js";
 import type {
@@ -61,13 +62,9 @@ export function jsonClone<T>(value: T): T {
 }
 
 export function childInput(parent: WakeThreadReceipt, observedAt: string): CreateWakeThreadOfferInput {
-  const threadRef = parent.reported_choice === "fork"
-    ? parent.branch_ref!
-    : parent.offer.thread_ref;
   return offerInput({
     observed_at: observedAt,
     expires_at: null,
-    thread_ref: threadRef,
-    parent_receipt: parent,
+    ...nextThreadPosition(parent, observedAt),
   });
 }
