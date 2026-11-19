@@ -36,13 +36,13 @@ import hashlib
 import json
 import math
 import secrets
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import httpx
 
 from .exceptions import AgentToolError, _error_from_body
 from .seed import DerivedBundle, pow_register_agent_digest
+from ._time import canonical_now
 
 DEFAULT_BASE_URL = "https://api.agenttool.dev"
 DEFAULT_POW_DIFFICULTY = 18
@@ -197,7 +197,7 @@ def sign_register_agent(
     """
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-    ts = timestamp or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+    ts = timestamp or canonical_now()
     canonical = canonical_register_agent_bytes(
         display_name=display_name,
         agent_public_key=agent_public_key,

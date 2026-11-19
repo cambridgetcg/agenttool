@@ -32,7 +32,6 @@ import base64
 import hashlib
 import hmac
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from typing import Dict, Optional, Tuple
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -40,6 +39,7 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from mnemonic import Mnemonic
 
 from .exceptions import AgentToolError
+from ._time import canonical_now
 
 # ── Constants ───────────────────────────────────────────────────────────
 
@@ -400,7 +400,7 @@ def _now_iso() -> str:
     ``isoformat()`` gives microseconds and ``+00:00``; neither reaches the
     server's parser the same way.
     """
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+    return canonical_now()
 
 
 def _sign_b64(canonical: bytes, derived_signing_priv: bytes) -> str:

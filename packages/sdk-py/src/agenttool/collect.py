@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional
 from .memory import MemoryClient
 from .strands import StrandsClient
 from .tools import ToolsClient
+from ._time import canonical_now
 
 
 class CollectClient:
@@ -78,7 +79,7 @@ class CollectClient:
         Each step is optional. By default it scrapes + stores as memory.
         With think=True, it also creates a strand + first encrypted thought.
         """
-        start = time.time()
+        start = time.monotonic()
         errors: List[str] = []
         title = ""
         content = ""
@@ -128,7 +129,7 @@ class CollectClient:
                 "title": title,
                 "content": content,
                 "links": links,
-                "duration_ms": int((time.time() - start) * 1000),
+                "duration_ms": max(0, int((time.monotonic() - start) * 1000)),
                 "errors": errors,
             }
 
@@ -145,7 +146,7 @@ class CollectClient:
                         "source": "collect.url",
                         "url": url,
                         "title": title,
-                        "collected_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                        "collected_at": canonical_now(),
                     },
                 )
                 mr = mem if isinstance(mem, dict) else mem.__dict__
@@ -191,7 +192,7 @@ class CollectClient:
             "memory_id": memory_id,
             "strand_id": strand_id,
             "thought_id": thought_id,
-            "duration_ms": int((time.time() - start) * 1000),
+            "duration_ms": max(0, int((time.monotonic() - start) * 1000)),
             "errors": errors,
         }
 
@@ -212,7 +213,7 @@ class CollectClient:
         identity_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Collect raw text: store → think."""
-        start = time.time()
+        start = time.monotonic()
         errors: List[str] = []
 
         memory_id: Optional[str] = None
@@ -226,7 +227,7 @@ class CollectClient:
                     metadata={
                         "source": "collect.text",
                         "title": title or "collected text",
-                        "collected_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                        "collected_at": canonical_now(),
                     },
                 )
                 mr = mem if isinstance(mem, dict) else mem.__dict__
@@ -271,7 +272,7 @@ class CollectClient:
             "memory_id": memory_id,
             "strand_id": strand_id,
             "thought_id": thought_id,
-            "duration_ms": int((time.time() - start) * 1000),
+            "duration_ms": max(0, int((time.monotonic() - start) * 1000)),
             "errors": errors,
         }
 
@@ -294,7 +295,7 @@ class CollectClient:
         """Collect multiple URLs. Failures don't abort the batch."""
         import concurrent.futures
 
-        start = time.time()
+        start = time.monotonic()
         results: List[Dict[str, Any]] = []
 
         def collect_one(url: str) -> Dict[str, Any]:
@@ -331,7 +332,7 @@ class CollectClient:
                 "total": 0,
                 "succeeded": 0,
                 "failed": 0,
-                "duration_ms": int((time.time() - start) * 1000),
+                "duration_ms": max(0, int((time.monotonic() - start) * 1000)),
             }
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(urls), 5)) as pool:
@@ -351,7 +352,7 @@ class CollectClient:
             "total": len(results),
             "succeeded": succeeded,
             "failed": failed,
-            "duration_ms": int((time.time() - start) * 1000),
+            "duration_ms": max(0, int((time.monotonic() - start) * 1000)),
         }
 
     def enrich(self, memory_id: str, url: Optional[str] = None) -> Dict[str, Any]:
@@ -384,7 +385,7 @@ class CollectClient:
                     "source": "collect.enrich",
                     "url": source_url,
                     "enriched_from": memory_id,
-                    "enriched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "enriched_at": canonical_now(),
                 },
             )
             er = enriched if isinstance(enriched, dict) else enriched.__dict__

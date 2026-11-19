@@ -31,7 +31,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
@@ -39,6 +38,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 )
 
 from .exceptions import AgentToolError, raise_from_response
+from ._time import canonical_now
 from ._url import _path_segment
 
 # ── Types ───────────────────────────────────────────────────────────────
@@ -154,7 +154,7 @@ def _iso_now() -> str:
     ``…T12:00:00Z`` yet read back from the server as ``…T12:00:00.000Z``,
     so the digest could never be recomputed from the row again.
     """
-    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    return canonical_now()
 
 
 # ── GraceClient — HTTP surface ──────────────────────────────────────────

@@ -7,7 +7,6 @@ import hashlib
 import json
 import re
 import time
-from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, TYPE_CHECKING, TypedDict, Union
 
 import httpx
@@ -20,6 +19,7 @@ from .authority import (
     identity_authority_headers,
 )
 from .exceptions import AgentToolError, raise_from_response
+from ._time import format_canonical_utc
 from ._url import _path_segment
 
 _UUID_RE = re.compile(
@@ -902,9 +902,7 @@ class IdentityClient:
             signing_input
         )
         token = f"{signing_input.decode('ascii')}.{_base64url(signature)}"
-        expires_at_iso = datetime.fromtimestamp(
-            expires_at, timezone.utc
-        ).isoformat(timespec="seconds").replace("+00:00", "Z")
+        expires_at_iso = format_canonical_utc(expires_at * 1000)
         return {"token": token, "expires_at": expires_at_iso}
 
     def verify_token(self, token: str, *, audience_did: str) -> Dict[str, Any]:

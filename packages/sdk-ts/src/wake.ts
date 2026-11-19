@@ -376,7 +376,7 @@ export class WakeClient {
     }
 
     const cacheKey = `${format}|${options?.identityId ?? ""}|${profile}`;
-    const now = Date.now();
+    const now = performance.now();
     if (!options?.refresh) {
       const cached = this.cache.get(cacheKey);
       if (cached && cached.expires > now) return cached.data;
