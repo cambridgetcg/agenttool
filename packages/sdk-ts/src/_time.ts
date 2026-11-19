@@ -97,7 +97,7 @@ export function parseTimeInstant(value: unknown): string | null {
   return utcDate.toISOString();
 }
 
-/** Render a non-negative millisecond duration matching `agent-time-hook.mjs`. */
+/** Render a non-negative elapsed millisecond duration matching `agent-time-hook.mjs`. */
 export function formatHumanDuration(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) return "?";
   const s = Math.floor(ms / 1000);
@@ -108,6 +108,15 @@ export function formatHumanDuration(ms: number): string {
   if (h > 0) return `${h}h ${m}m`;
   if (m > 0) return `${m}m ${s % 60}s`;
   return `${s}s`;
+}
+
+/** Render remaining time in ms matching Collab `durationUntil` (ceils to minutes,
+ *  hours + minutes only, never days/seconds, `closed` at or below 0). */
+export function formatTimeLeft(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return "closed";
+  const minutes = Math.ceil(ms / 60_000);
+  const hours = Math.floor(minutes / 60);
+  return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
 }
 
 /** Render a canonical UTC instant in a named IANA zone as `YYYY-MM-DD HH:MM TZ`. */

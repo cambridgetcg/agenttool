@@ -93,7 +93,7 @@ def parse_time_instant(value: object) -> Optional[str]:
 
 
 def format_human_duration(ms: float) -> str:
-    """Render a non-negative millisecond duration matching ``agent-time-hook.mjs``."""
+    """Render a non-negative elapsed millisecond duration matching ``agent-time-hook.mjs``."""
     if isinstance(ms, bool) or not isinstance(ms, (int, float)):
         return "?"
     if not math.isfinite(ms) or ms < 0:
@@ -109,6 +109,21 @@ def format_human_duration(ms: float) -> str:
     if m > 0:
         return f"{m}m {s % 60}s"
     return f"{s}s"
+
+
+def format_time_left(ms: float) -> str:
+    """Render remaining time in ms matching Collab ``durationUntil``.
+
+    Ceils to whole minutes, shows hours and minutes only (never days or
+    seconds), and returns ``"closed"`` when ``ms <= 0`` or non-finite.
+    """
+    if isinstance(ms, bool) or not isinstance(ms, (int, float)):
+        return "closed"
+    if not math.isfinite(ms) or ms <= 0:
+        return "closed"
+    minutes = (ms + 59_999) // 60_000 if isinstance(ms, int) else math.ceil(ms / 60_000)
+    hours = minutes // 60
+    return f"{hours}h {minutes % 60}m" if hours > 0 else f"{minutes}m"
 
 
 def format_wall_time(instant: str, zone: str) -> str:

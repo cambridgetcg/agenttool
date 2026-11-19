@@ -20,6 +20,7 @@ from agenttool._time import (
     canonical_now,
     format_canonical_utc,
     format_human_duration,
+    format_time_left,
     format_wall_time,
     parse_time_instant,
 )
@@ -51,10 +52,16 @@ def test_vectors_instants_parse() -> None:
 
 def test_vectors_durations() -> None:
     for row in _VECTORS["durations"]:
-        assert format_human_duration(row["ms"]) == row["human"]
+        if row["kind"] == "elapsed":
+            assert format_human_duration(row["ms"]) == row["human"]
+        else:
+            assert row["kind"] == "left"
+            assert format_time_left(row["ms"]) == row["human"]
     assert format_human_duration(-1) == "?"
     assert format_human_duration(float("nan")) == "?"
     assert format_human_duration(True) == "?"  # type: ignore[arg-type]
+    assert format_time_left(float("nan")) == "closed"
+    assert format_time_left(True) == "closed"  # type: ignore[arg-type]
 
 
 def test_vectors_wall_london_dst() -> None:

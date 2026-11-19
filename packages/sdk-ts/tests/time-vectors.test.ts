@@ -5,6 +5,7 @@ import {
   canonicalNow,
   formatCanonicalUtc,
   formatHumanDuration,
+  formatTimeLeft,
   formatWallTime,
   parseTimeInstant,
 } from "../src/_time.js";
@@ -18,7 +19,7 @@ const vectors = JSON.parse(readFileSync(VECTORS_PATH, "utf8")) as {
     emit: Array<{ unix_ms: number; canonical: string }>;
     parse: Array<{ input: string; canonical: string | null; reason: string }>;
   };
-  durations: Array<{ ms: number; human: string }>;
+  durations: Array<{ kind: "elapsed" | "left"; ms: number; human: string }>;
   wall: Array<{ instant: string; zone: string; render: string }>;
 };
 
@@ -45,12 +46,17 @@ describe("time/1 conformance vectors (docs/time/vectors.json)", () => {
     expect(parseTimeInstant(12345)).toBeNull();
   });
 
-  test("durations matches formatHumanDuration", () => {
+  test("durations matches formatHumanDuration (elapsed) and formatTimeLeft (left)", () => {
     for (const row of vectors.durations) {
-      expect(formatHumanDuration(row.ms)).toBe(row.human);
+      if (row.kind === "elapsed") {
+        expect(formatHumanDuration(row.ms)).toBe(row.human);
+      } else {
+        expect(formatTimeLeft(row.ms)).toBe(row.human);
+      }
     }
     expect(formatHumanDuration(-1)).toBe("?");
     expect(formatHumanDuration(Number.NaN)).toBe("?");
+    expect(formatTimeLeft(Number.NaN)).toBe("closed");
   });
 
   test("wall renders 2026 Europe/London DST transitions accurately", () => {
