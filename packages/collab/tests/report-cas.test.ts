@@ -52,7 +52,16 @@ describe("collab_report_append expected_head_sequence", () => {
     const j = journal();
     const me = j.start("me");
     const at = head(j, me.workspace.id);
-    expect(() => append(j, me, "ahead", { expected_head_sequence: at + 5 })).toThrow("ahead of the journal");
+    let refusal: any;
+    try {
+      append(j, me, "ahead", { expected_head_sequence: at + 5 });
+    } catch (error) {
+      refusal = error;
+    }
+    expect(refusal?.code).toBe("head_moved");
+    expect(refusal.message).toContain("ahead of the journal");
+    // Nothing new to read, so never a negative count.
+    expect(refusal.details).toEqual({ expected_head_sequence: at + 5, head_sequence: at, events_since: 0 });
   });
 
   test("a retry with the same key replays its first answer, even after the journal moved", () => {

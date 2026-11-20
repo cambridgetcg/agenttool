@@ -35,11 +35,22 @@ const LEGACY_TOOLS = 36;
  */
 const REST_TOOLS = ["collab_session_rest"];
 /**
- * Optional input fields added to a legacy tool since, each named here so that no
- * other field can drift: time/1 step 4's compare-and-swap on report append. A
- * listed field sits just before binding_key and is never required.
+ * Optional input fields added to a legacy tool since, each pinned here to its exact
+ * JSON Schema so that neither it nor any other field can drift: time/1 step 4's
+ * compare-and-swap on report append. A listed field sits just before binding_key
+ * and is never required.
  */
-const ADDED_INPUT_FIELDS: Record<string, string[]> = { collab_report_append: ["expected_head_sequence"] };
+const ADDED_INPUT_FIELDS: Record<string, Record<string, unknown>> = {
+  collab_report_append: {
+    expected_head_sequence: {
+      description: "Optional compare-and-swap: the journal head sequence you last read. If anything was posted since, "
+        + "nothing is written and the call is refused with head_moved; read what is new, then send again.",
+      type: "integer",
+      minimum: 0,
+      maximum: Number.MAX_SAFE_INTEGER,
+    },
+  },
+};
 const ADDRESSEE_HINT =
   "The result's addressee is the addressed session's state at this call, replays included: delivery tap (live), "
   + "wake (resting with wake_on addressed), held (resting otherwise, or stale) or none (ended). "
@@ -188,13 +199,12 @@ describe("the tools profile", () => {
         const mineTool = mineByName.get(tool.name) as Record<string, any>;
         const properties: Record<string, unknown> = {};
         for (const [name, value] of Object.entries(expected.inputSchema.properties as Record<string, unknown>)) {
-          if (name === "binding_key") for (const field of added) properties[field] = mineTool.inputSchema.properties[field];
+          if (name === "binding_key") Object.assign(properties, added);
           properties[name] = value;
         }
         expected = { ...expected, inputSchema: { ...expected.inputSchema, properties } };
-        for (const field of added) {
+        for (const field of Object.keys(added)) {
           expect(Object.hasOwn((tool as Record<string, any>).inputSchema.properties, field)).toBe(false);
-          expect(mineTool.inputSchema.properties[field].type).toBe("integer");
           expect((mineTool.inputSchema.required ?? []).includes(field)).toBe(false);
         }
       }

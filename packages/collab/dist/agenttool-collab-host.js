@@ -7846,7 +7846,7 @@ class CollabStoreCore {
     const head = this.requireWorkspace(workspaceId).event_head_sequence;
     if (head === expected)
       return;
-    throw new CollabError("head_moved", head > expected ? "The journal moved since you read it; read what is new, then send again" : "The expected head is ahead of the journal; read the head, then send again", { expected_head_sequence: expected, head_sequence: head, events_since: head - expected });
+    throw new CollabError("head_moved", head > expected ? "The journal moved since you read it; read what is new, then send again" : "The expected head is ahead of the journal; read the head, then send again", { expected_head_sequence: expected, head_sequence: head, events_since: Math.max(0, head - expected) });
   }
   observedAt() {
     return this.timestamp();

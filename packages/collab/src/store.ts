@@ -8061,7 +8061,8 @@ export class CollabStoreCore {
       head > expected
         ? "The journal moved since you read it; read what is new, then send again"
         : "The expected head is ahead of the journal; read the head, then send again",
-      { expected_head_sequence: expected, head_sequence: head, events_since: head - expected },
+      // Never negative: an expected head ahead of the journal has nothing new to read.
+      { expected_head_sequence: expected, head_sequence: head, events_since: Math.max(0, head - expected) },
     );
   }
 
