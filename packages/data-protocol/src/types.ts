@@ -157,6 +157,18 @@ export interface PutOptions {
   extensions?: JsonObject;
 }
 
+export interface PutStreamOptions extends PutOptions {
+  /**
+   * Exact total plaintext byte length. Auto-derived for Uint8Array, ArrayBuffer,
+   * string, and Blob; required for Iterable/AsyncIterable sources because ADDS 0.1
+   * binds totalPlaintextSize and blockCount into every block's AES-GCM AAD.
+   */
+  plaintextSize?: number;
+  /** Maximum ciphertext blocks encrypted and written concurrently (1..16). Defaults to 1. */
+  concurrency?: number;
+  signal?: AbortSignal;
+}
+
 export interface ShareOptions {
   audience: string;
   audienceBoxPublicKey: Uint8Array;
@@ -176,8 +188,15 @@ export interface GetOptions {
   now?: Date | string | number;
 }
 
+export interface GetStreamOptions extends GetOptions {
+  /** Maximum ciphertext blocks fetched and decrypted ahead in order (1..16). Defaults to 1. */
+  concurrency?: number;
+  signal?: AbortSignal;
+}
+
 export interface InspectOptions {
   maxBytes?: number;
+  signal?: AbortSignal;
 }
 
 export interface VerifyResult {
