@@ -1,24 +1,40 @@
 /**
- * Strict HTTPS 206 Range fetcher and independent BEP 52 piece-layer verifier
- * for transport-hints/v1 (docs/specs/TRANSPORT-HINTS-0.1-DRAFT.md).
+ * Library for strict HTTPS 206 Range fetching and independent BEP 52
+ * piece-layer verification for transport-hints/v1
+ * (docs/specs/TRANSPORT-HINTS-0.1-DRAFT.md).
  *
  * Scope and boundaries:
+ * - Library only (no CLI entry point, no network on import).
  * - Pure HTTPS Range transport only. No BitTorrent wire protocol, no DHT, no
- *   trackers, no peer discovery, no seeder, and no network on module import.
+ *   trackers, no peer discovery, no seeder.
  * - Reuses api/src/services/net/safe-fetch.ts's split IPv4/IPv6 public-address
  *   policy, DNS resolution, pinned TCP/TLS socket transport, and admission gate
  *   inside an explicit manual redirect loop (default max 1 hop, section 7.4) so
  *   that ONLY `Range` and `Accept-Encoding: identity` cross an origin boundary
  *   (HF /resolve/ and GitHub Releases both redirect cross-origin).
+ * - Default egress policy is any globally reachable public HTTPS host; callers
+ *   requiring an origin allowlist should pass `allowUrl`.
  * - Consumer rule (section 9): `subject.size` and `subject.sha256` from the
- *   authority record are the ONLY acceptance criteria. BEP 52 `piecesRoot` and
- *   `pieceLayer` enable per-piece verification and fast mirror failover, never
- *   final acceptance on their own.
+ *   authority record are the ONLY acceptance criteria.
+ *   - `fetchVerifiedArtifactStream` yields **provisional** piece-verified
+ *     chunks (`accepted: false`) before full-file SHA-256 verification completes.
+ *     Callers MUST NOT publish streamed bytes to a final path until the
+ *     generator completes and returns `{ accepted: true }`.
+ *   - For safe disk output, use `fetchVerifiedArtifactToFile`, which writes to
+ *     a private temp file in the target directory, fsyncs and atomically
+ *     publishes ONLY after acceptance, and unlinks the temp file on any error.
+ * - Large-piece caveat (safe-fetch.ts): `defaultSafeNetRequestOnce` caps each
+ *   response at 4,096 socket `data` events (`SAFE_NET_MAX_RESPONSE_FRAGMENTS`)
+ *   and defaults to a 15 s timeout (~9 Mbit/s for a 16 MiB piece). Before
+ *   relying on 16 MiB pieces over slow links or small TLS records, set a larger
+ *   `timeoutMs` and settle fragment headroom with a live transfer test.
  */
 
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { LookupAddress } from "node:dns";
+import { link, lstat, open, rename, unlink, type FileHandle } from "node:fs/promises";
 import { BlockList, isIP } from "node:net";
+import { basename, dirname, join } from "node:path";
 import { performance } from "node:perf_hooks";
 import {
   SAFE_NET_DEFAULT_TIMEOUT_MS,
@@ -50,8 +66,13 @@ export const DEFAULT_HEDGE_DELAY_MS = 250;
 export const MAX_HEDGE_DELAY_MS = 60_000;
 export const DEFAULT_MAX_CONCURRENT_PER_PIECE = 2;
 export const MAX_CONCURRENT_PER_PIECE = 4;
-export const HARD_MAX_REQUEST_BUDGET = 10_000;
+export const DEFAULT_MAX_RETRIES_PER_PIECE = 2;
+export const MAX_RETRIES_PER_PIECE = 5;
+export const DEFAULT_RETRY_DELAY_MS = 200;
+export const MAX_RETRY_DELAY_MS = 10_000;
+export const HARD_MAX_REQUEST_BUDGET = 100_000;
 export const DEFAULT_MAX_MIRROR_ERRORS = 3;
+export const MAX_TRANSFER_TIMEOUT_MS = 3_600_000;
 export const DEFAULT_MAX_IN_MEMORY_BYTES = SAFE_NET_HARD_MAX_RESPONSE_BYTES;
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
@@ -76,11 +97,14 @@ export type TransportHintsFetchErrorCode =
   | "redirect_refused"
   | "connected_address_mismatch"
   | "request_budget_exhausted"
+  | "transfer_timeout"
   | "piece_hash_mismatch"
   | "all_mirrors_failed"
   | "final_size_mismatch"
   | "final_sha256_mismatch"
   | "artifact_too_large"
+  | "output_exists"
+  | "invalid_output_path"
   | "aborted";
 
 export class TransportHintsFetchError extends Error {
@@ -424,11 +448,19 @@ export function verifyBep52Piece(
 // Strict HTTPS 206 Range transport reusing #584 safe-fetch primitives
 // ---------------------------------------------------------------------------
 
+// Sized to cover MAX_RANGE_CONCURRENCY * MAX_CONCURRENT_PER_PIECE (8 * 4 = 32)
+// so maximum allowed caller concurrency cannot starve on local queueing.
 const defaultRangeAdmission = createSafeNetAdmissionGate({
-  maxConcurrent: 16,
-  maxQueued: 64,
-  queueTimeoutMs: 2_000,
+  maxConcurrent: MAX_RANGE_CONCURRENCY * MAX_CONCURRENT_PER_PIECE,
+  maxQueued: 128,
+  queueTimeoutMs: 5_000,
 });
+
+function sanitizeUrlForReceipt(url: URL): string {
+  // Never surface signed redirect query parameters (e.g. X-Amz-Signature) in
+  // receipts, chunks, or error messages.
+  return `${url.origin}${url.pathname}`;
+}
 
 function normalizeConnectedAddress(address: string): string {
   const dotted = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/iu.exec(address);
@@ -466,7 +498,10 @@ function assertPinnedConnectedAddress(
   }
 }
 
-function readSingleHeader(headers: SafeNetHeaders | undefined, lowerName: string): { present: boolean; value: string | null; multiple: boolean } {
+function readSingleHeader(
+  headers: SafeNetHeaders | undefined,
+  lowerName: string,
+): { present: boolean; value: string | null; multiple: boolean } {
   if (!headers) return { present: false, value: null, multiple: false };
   let found: string | null = null;
   let count = 0;
@@ -512,6 +547,42 @@ function raceSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   });
 }
 
+function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
+  if (ms <= 0) {
+    if (signal.aborted) {
+      return Promise.reject(
+        signal.reason instanceof Error
+          ? signal.reason
+          : new TransportHintsFetchError("aborted", "aborted during retry backoff"),
+      );
+    }
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(
+        signal.reason instanceof Error
+          ? signal.reason
+          : new TransportHintsFetchError("aborted", "aborted during retry backoff"),
+      );
+      return;
+    }
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      reject(
+        signal.reason instanceof Error
+          ? signal.reason
+          : new TransportHintsFetchError("aborted", "aborted during retry backoff"),
+      );
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 export interface SafeHttpsRangeRequestOptions {
   readonly url: string;
   readonly first: number;
@@ -536,6 +607,7 @@ export interface SafeHttpsRangeRequestOptions {
 
 export interface SafeHttpsRangeResponse {
   readonly bytes: Uint8Array;
+  /** Final URL origin + pathname with any signed query string stripped. */
   readonly finalUrl: string;
   readonly redirects: number;
   readonly connectedAddress?: string;
@@ -622,7 +694,7 @@ export async function fetchSafeHttpsRange(
       if (options.allowUrl && !options.allowUrl(parsed)) {
         throw new TransportHintsFetchError(
           "redirect_refused",
-          `URL refused by egress policy at hop ${hop}: ${parsed.origin}${parsed.pathname}`,
+          `URL refused by egress policy at hop ${hop}: ${sanitizeUrlForReceipt(parsed)}`,
           { hop, origin: parsed.origin },
         );
       }
@@ -686,12 +758,11 @@ export async function fetchSafeHttpsRange(
             { cause, statusCode: wire.statusCode, hop },
           );
         }
-        // Validate scheme/credentials/private IP immediately before next hop.
         const checkedNext = assertSafeNetUrl(nextUrl, { protocols: ["https:"] });
         if (options.allowUrl && !options.allowUrl(checkedNext)) {
           throw new TransportHintsFetchError(
             "redirect_refused",
-            `redirect target refused by egress policy: ${checkedNext.origin}${checkedNext.pathname}`,
+            `redirect target refused by egress policy: ${sanitizeUrlForReceipt(checkedNext)}`,
             { hop: hop + 1, origin: checkedNext.origin },
           );
         }
@@ -742,7 +813,7 @@ export async function fetchSafeHttpsRange(
       copy.set(body);
       return {
         bytes: copy,
-        finalUrl: parsed.href,
+        finalUrl: sanitizeUrlForReceipt(parsed),
         redirects: hop,
         ...(wire.connectedAddress !== undefined ? { connectedAddress: wire.connectedAddress } : {}),
       };
@@ -760,6 +831,28 @@ export async function fetchSafeHttpsRange(
 
 export type RangeReadStrategy = "sequential" | "hedged";
 
+export interface DefaultRequestBudgetParams {
+  readonly pieceCount: number;
+  readonly maxRedirects: number;
+  readonly mirrorCount: number;
+  readonly maxConcurrentPerPiece: number;
+  readonly maxRetriesPerPiece: number;
+}
+
+/**
+ * Default total HTTP hop budget scaled with piece count, redirect hops per
+ * attempt, hedged mirror width, and per-piece retry headroom, capped at
+ * `HARD_MAX_REQUEST_BUDGET`.
+ */
+export function defaultRequestBudget(params: DefaultRequestBudgetParams): number {
+  const hopsPerAttempt = params.maxRedirects + 1;
+  const attemptsPerPiece = Math.min(params.mirrorCount, params.maxConcurrentPerPiece) + params.maxRetriesPerPiece + 1;
+  return Math.min(
+    HARD_MAX_REQUEST_BUDGET,
+    Math.max(16, params.pieceCount * hopsPerAttempt * attemptsPerPiece + 8),
+  );
+}
+
 export interface VerifiedRangeFetchOptions extends Bep52VerificationPlan {
   /** Ordered HTTPS web-seed / mirror URLs (at least one, no duplicates). */
   readonly mirrors: readonly string[];
@@ -771,15 +864,25 @@ export interface VerifiedRangeFetchOptions extends Bep52VerificationPlan {
   readonly hedgeDelayMs?: number;
   /** Max concurrent mirror attempts per single piece (1..4, default 2). */
   readonly maxConcurrentPerPiece?: number;
-  /** Total HTTP hop budget across the entire transfer (default min(2048, max(pieceCount*3, 8))). */
+  /** Bounded retries per piece for transient errors like 503/timeout (0..5, default 2). */
+  readonly maxRetriesPerPiece?: number;
+  /** Initial backoff delay before first retry in ms (0..10,000, default 200; doubles per retry). */
+  readonly retryDelayMs?: number;
+  /** Total HTTP hop budget across the entire transfer (default from `defaultRequestBudget`). */
   readonly maxRequests?: number;
   /** Consecutive transient errors before disqualifying a mirror (default 3). */
   readonly maxMirrorErrors?: number;
   /** Max redirects per request (default 1, hard max 2 per section 7.4). */
   readonly maxRedirects?: number;
-  /** Per-request timeout in ms (default 15,000). */
+  /**
+   * Per-request timeout in ms (default 15,000, max 120,000).
+   * For 16 MiB pieces on slow links, raise this above the default.
+   */
   readonly timeoutMs?: number;
+  /** Optional whole-transfer wall deadline in ms (1..3,600,000). */
+  readonly transferTimeoutMs?: number;
   readonly signal?: AbortSignal;
+  /** Optional caller egress predicate; default egress allows any public HTTPS host. */
   readonly allowUrl?: (url: URL) => boolean;
   readonly lookup?: SafeNetDnsLookup;
   readonly requestOnce?: SafeNetRequestOnce;
@@ -802,13 +905,14 @@ export interface VerifiedPieceChunk {
   readonly offset: number;
   readonly bytes: Uint8Array;
   readonly mirrorUrl: string;
+  /** Final hop origin + pathname (query string stripped). */
   readonly finalUrl: string;
   readonly redirects: number;
   /** True: passed BEP 52 piece-layer verification. */
   readonly pieceVerified: true;
   /**
-   * False until the stream finishes and returns `VerifiedFetchReceipt` with
-   * full-file `size` and `sha256` acceptance (Consumer Rule section 9.4).
+   * Provisional until the stream completes and returns `VerifiedFetchReceipt`
+   * after full-file `size` and `sha256` acceptance (Consumer Rule section 9.4).
    */
   readonly accepted: false;
 }
@@ -856,6 +960,12 @@ function classifyImmediateDisqualification(error: unknown): string | null {
     if (error.code === "piece_hash_mismatch") return "mirror_served_corrupt_piece";
   }
   if (error instanceof SafeNetError) {
+    // On the real defaultSafeNetRequestOnce wire transport, a 200-only mirror
+    // sending the whole file exceeds maxResponseBytes before returning status,
+    // and a gzip mirror fails safe_net_content_encoding_not_identity before
+    // returning status. Both must disqualify immediately on request #1.
+    if (error.code === "safe_net_response_too_large") return "mirror_response_too_large_not_range";
+    if (error.code === "safe_net_content_encoding_not_identity") return "mirror_non_identity_encoding";
     if (
       error.code === "safe_net_destination_not_public"
       || error.code === "safe_net_protocol_not_allowed"
@@ -866,6 +976,17 @@ function classifyImmediateDisqualification(error: unknown): string | null {
     }
   }
   return null;
+}
+
+function isLocalAdmissionOverload(error: unknown): boolean {
+  return error instanceof SafeNetError && error.code === "safe_net_overloaded";
+}
+
+function isTerminalRunError(error: unknown): boolean {
+  return (
+    error instanceof TransportHintsFetchError
+    && (error.code === "request_budget_exhausted" || error.code === "transfer_timeout")
+  );
 }
 
 function validateMirrors(
@@ -885,11 +1006,11 @@ function validateMirrors(
     if (allowUrl && !allowUrl(parsed)) {
       throw new TransportHintsFetchError(
         "redirect_refused",
-        `mirror URL refused by egress policy: ${parsed.origin}${parsed.pathname}`,
+        `mirror URL refused by egress policy: ${sanitizeUrlForReceipt(parsed)}`,
       );
     }
     if (seen.has(parsed.href)) {
-      throw new TransportHintsFetchError("invalid_options", `duplicate mirror URL: ${parsed.href}`);
+      throw new TransportHintsFetchError("invalid_options", `duplicate mirror URL: ${sanitizeUrlForReceipt(parsed)}`);
     }
     seen.add(parsed.href);
     states.push({
@@ -925,12 +1046,15 @@ function snapshotMirrors(mirrors: readonly MirrorState[]): readonly MirrorReceip
 }
 
 /**
- * Stream verified pieces strictly in order `0 .. pieceCount - 1` using bounded
- * concurrency (`O(pieceLength * concurrency)` RAM) and capped request budgets.
+ * Stream **provisional** piece-verified chunks strictly in order
+ * `0 .. pieceCount - 1` using bounded concurrency (`O(pieceLength * concurrency)`
+ * RAM) and capped request budgets.
  *
- * Each yielded chunk has passed BEP 52 piece-layer verification, but is NOT
- * accepted until the generator completes and returns `VerifiedFetchReceipt`
- * after checking full-file `size` and `expectedSha256` (Consumer Rule 9.4).
+ * Every yielded chunk carries `accepted: false`. Do NOT publish streamed bytes
+ * to a final path until the generator completes and returns
+ * `VerifiedFetchReceipt` (`accepted: true`) after full-file `size` and
+ * `expectedSha256` verification (Consumer Rule section 9.4). For safe disk
+ * output, use `fetchVerifiedArtifactToFile`.
  */
 export async function* fetchVerifiedArtifactStream(
   options: VerifiedRangeFetchOptions,
@@ -967,7 +1091,38 @@ export async function* fetchVerifiedArtifactStream(
       `maxConcurrentPerPiece must be an integer in [1, ${MAX_CONCURRENT_PER_PIECE}]`,
     );
   }
-  const defaultBudget = Math.min(2_048, Math.max(plan.pieceCount * 3, 8));
+  const maxRetriesPerPiece = options.maxRetriesPerPiece ?? DEFAULT_MAX_RETRIES_PER_PIECE;
+  if (
+    !Number.isSafeInteger(maxRetriesPerPiece)
+    || maxRetriesPerPiece < 0
+    || maxRetriesPerPiece > MAX_RETRIES_PER_PIECE
+  ) {
+    throw new TransportHintsFetchError(
+      "invalid_options",
+      `maxRetriesPerPiece must be an integer in [0, ${MAX_RETRIES_PER_PIECE}]`,
+    );
+  }
+  const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
+  if (!Number.isSafeInteger(retryDelayMs) || retryDelayMs < 0 || retryDelayMs > MAX_RETRY_DELAY_MS) {
+    throw new TransportHintsFetchError(
+      "invalid_options",
+      `retryDelayMs must be an integer in [0, ${MAX_RETRY_DELAY_MS}]`,
+    );
+  }
+  const maxRedirects = options.maxRedirects ?? DEFAULT_RANGE_MAX_REDIRECTS;
+  if (!Number.isSafeInteger(maxRedirects) || maxRedirects < 0 || maxRedirects > HARD_MAX_RANGE_REDIRECTS) {
+    throw new TransportHintsFetchError(
+      "invalid_options",
+      `maxRedirects must be an integer in [0, ${HARD_MAX_RANGE_REDIRECTS}]`,
+    );
+  }
+  const defaultBudget = defaultRequestBudget({
+    pieceCount: plan.pieceCount,
+    maxRedirects,
+    mirrorCount: mirrors.length,
+    maxConcurrentPerPiece,
+    maxRetriesPerPiece,
+  });
   const maxRequests = options.maxRequests ?? defaultBudget;
   if (!Number.isSafeInteger(maxRequests) || maxRequests < 1 || maxRequests > HARD_MAX_REQUEST_BUDGET) {
     throw new TransportHintsFetchError(
@@ -979,16 +1134,19 @@ export async function* fetchVerifiedArtifactStream(
   if (!Number.isSafeInteger(maxMirrorErrors) || maxMirrorErrors < 1 || maxMirrorErrors > 100) {
     throw new TransportHintsFetchError("invalid_options", "maxMirrorErrors must be an integer in [1, 100]");
   }
-  const maxRedirects = options.maxRedirects ?? DEFAULT_RANGE_MAX_REDIRECTS;
-  if (!Number.isSafeInteger(maxRedirects) || maxRedirects < 0 || maxRedirects > HARD_MAX_RANGE_REDIRECTS) {
-    throw new TransportHintsFetchError(
-      "invalid_options",
-      `maxRedirects must be an integer in [0, ${HARD_MAX_RANGE_REDIRECTS}]`,
-    );
-  }
   const timeoutMs = options.timeoutMs ?? SAFE_NET_DEFAULT_TIMEOUT_MS;
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 120_000) {
     throw new TransportHintsFetchError("invalid_options", "timeoutMs must be an integer in [1, 120000]");
+  }
+  const transferTimeoutMs = options.transferTimeoutMs;
+  if (
+    transferTimeoutMs !== undefined
+    && (!Number.isSafeInteger(transferTimeoutMs) || transferTimeoutMs < 1 || transferTimeoutMs > MAX_TRANSFER_TIMEOUT_MS)
+  ) {
+    throw new TransportHintsFetchError(
+      "invalid_options",
+      `transferTimeoutMs must be an integer in [1, ${MAX_TRANSFER_TIMEOUT_MS}]`,
+    );
   }
 
   let remainingRequests = maxRequests;
@@ -1007,7 +1165,20 @@ export async function* fetchVerifiedArtifactStream(
     mirror.requests += 1;
   };
 
+  const transferStarted = performance.now();
   const runController = new AbortController();
+  let transferTimer: ReturnType<typeof setTimeout> | undefined;
+  if (transferTimeoutMs !== undefined) {
+    transferTimer = setTimeout(() => {
+      runController.abort(
+        new TransportHintsFetchError(
+          "transfer_timeout",
+          `whole-transfer deadline (${transferTimeoutMs} ms) exceeded`,
+          { transferTimeoutMs },
+        ),
+      );
+    }, transferTimeoutMs);
+  }
   const onExternalAbort = (): void => {
     runController.abort(
       options.signal?.reason instanceof Error
@@ -1017,6 +1188,19 @@ export async function* fetchVerifiedArtifactStream(
   };
   if (options.signal?.aborted) onExternalAbort();
   else options.signal?.addEventListener("abort", onExternalAbort, { once: true });
+
+  const effectiveRequestTimeoutMs = (): number => {
+    if (transferTimeoutMs === undefined) return timeoutMs;
+    const remaining = Math.ceil(transferTimeoutMs - (performance.now() - transferStarted));
+    if (remaining <= 0) {
+      throw new TransportHintsFetchError(
+        "transfer_timeout",
+        `whole-transfer deadline (${transferTimeoutMs} ms) exceeded`,
+        { transferTimeoutMs },
+      );
+    }
+    return Math.max(1, Math.min(timeoutMs, remaining));
+  };
 
   const fetchOnePieceFromMirror = async (
     mirror: MirrorState,
@@ -1032,7 +1216,7 @@ export async function* fetchVerifiedArtifactStream(
         last,
         totalSize: plan.size,
         maxRedirects,
-        timeoutMs,
+        timeoutMs: effectiveRequestTimeoutMs(),
         signal: pieceSignal,
         allowUrl: options.allowUrl,
         lookup: options.lookup,
@@ -1061,11 +1245,18 @@ export async function* fetchVerifiedArtifactStream(
         redirects: response.redirects,
       };
     } catch (error) {
-      if (pieceSignal.aborted || runController.signal.aborted) {
-        // Aborted by caller or because a sibling hedged mirror won — do not penalize this mirror.
+      if (runController.signal.aborted) {
+        throw runController.signal.reason instanceof Error ? runController.signal.reason : error;
+      }
+      if (pieceSignal.aborted) {
+        // Aborted because a sibling hedged mirror won — never blame this mirror.
         throw error;
       }
-      if (error instanceof TransportHintsFetchError && error.code === "request_budget_exhausted") {
+      if (isTerminalRunError(error)) {
+        throw error;
+      }
+      // Local admission queueing is process contention, never a mirror defect.
+      if (isLocalAdmissionOverload(error)) {
         throw error;
       }
       if (error instanceof TransportHintsFetchError && error.code === "status_not_206") {
@@ -1085,7 +1276,7 @@ export async function* fetchVerifiedArtifactStream(
     }
   };
 
-  const fetchPiece = async (pieceIndex: number): Promise<InternalPieceResult> => {
+  const fetchPieceAttempt = async (pieceIndex: number): Promise<InternalPieceResult> => {
     if (runController.signal.aborted) {
       throw runController.signal.reason instanceof Error
         ? runController.signal.reason
@@ -1108,10 +1299,7 @@ export async function* fetchVerifiedArtifactStream(
         try {
           return await fetchOnePieceFromMirror(mirror, pieceIndex, first, last, runController.signal);
         } catch (error) {
-          if (
-            runController.signal.aborted
-            || (error instanceof TransportHintsFetchError && error.code === "request_budget_exhausted")
-          ) {
+          if (runController.signal.aborted || isTerminalRunError(error)) {
             throw error;
           }
           lastError = error;
@@ -1124,9 +1312,6 @@ export async function* fetchVerifiedArtifactStream(
       );
     }
 
-    // Hedged strategy: launch mirror 0, stagger subsequent mirrors by hedgeDelayMs
-    // up to maxConcurrentPerPiece, fail over immediately on any mirror failure,
-    // and abort losing mirrors immediately on first BEP 52 verified hit.
     return await new Promise<InternalPieceResult>((resolve, reject) => {
       const groupController = new AbortController();
       const onRunAbort = (): void => {
@@ -1214,15 +1399,11 @@ export async function* fetchVerifiedArtifactStream(
           .catch((error) => {
             inFlight -= 1;
             if (settled) return;
-            if (
-              runController.signal.aborted
-              || (error instanceof TransportHintsFetchError && error.code === "request_budget_exhausted")
-            ) {
+            if (runController.signal.aborted || isTerminalRunError(error)) {
               finishReject(error);
               return;
             }
             lastError = error;
-            // Immediate failover without waiting for hedgeDelayMs.
             if (hedgeTimer !== undefined) {
               clearTimeout(hedgeTimer);
               hedgeTimer = undefined;
@@ -1237,6 +1418,24 @@ export async function* fetchVerifiedArtifactStream(
     });
   };
 
+  const fetchPiece = async (pieceIndex: number): Promise<InternalPieceResult> => {
+    for (let retry = 0; ; retry += 1) {
+      try {
+        return await fetchPieceAttempt(pieceIndex);
+      } catch (error) {
+        if (runController.signal.aborted || isTerminalRunError(error)) {
+          throw error;
+        }
+        const hasEligible = mirrors.some((m) => m.disqualifiedReason === null);
+        if (!hasEligible || retry >= maxRetriesPerPiece || remainingRequests <= 0) {
+          throw error;
+        }
+        const backoff = Math.min(MAX_RETRY_DELAY_MS, retryDelayMs * (2 ** retry));
+        await abortableSleep(backoff, runController.signal);
+      }
+    }
+  };
+
   const window = new Map<number, Promise<InternalPieceResult>>();
   let nextToSchedule = 0;
 
@@ -1245,7 +1444,6 @@ export async function* fetchVerifiedArtifactStream(
       const idx = nextToSchedule;
       nextToSchedule += 1;
       const task = fetchPiece(idx);
-      // Prevent unhandled rejection if a later piece rejects while awaiting an earlier one.
       task.catch(() => {});
       window.set(idx, task);
     }
@@ -1304,6 +1502,7 @@ export async function* fetchVerifiedArtifactStream(
       mirrors: snapshotMirrors(mirrors),
     });
   } finally {
+    if (transferTimer !== undefined) clearTimeout(transferTimer);
     runController.abort(new TransportHintsFetchError("aborted", "artifact stream closed"));
     if (options.signal) options.signal.removeEventListener("abort", onExternalAbort);
     await Promise.allSettled([...window.values()]);
@@ -1317,9 +1516,9 @@ export interface BufferedVerifiedFetchOptions extends VerifiedRangeFetchOptions 
 }
 
 /**
- * Convenience helper that buffers a bounded artifact in memory and returns
- * `{ bytes, receipt }` ONLY after every BEP 52 piece AND full-file authoritative
- * `size` + `expectedSha256` pass (Consumer Rule section 9.4).
+ * Buffer a bounded artifact in memory and return `{ bytes, receipt }` ONLY
+ * after every BEP 52 piece AND full-file authoritative `size` + `expectedSha256`
+ * pass (Consumer Rule section 9.4).
  */
 export async function fetchVerifiedArtifact(
   options: BufferedVerifiedFetchOptions,
@@ -1332,7 +1531,7 @@ export async function fetchVerifiedArtifact(
   if (plan.size > maxInMemoryBytes) {
     throw new TransportHintsFetchError(
       "artifact_too_large",
-      `artifact size ${plan.size} exceeds maxInMemoryBytes ${maxInMemoryBytes}; use fetchVerifiedArtifactStream instead`,
+      `artifact size ${plan.size} exceeds maxInMemoryBytes ${maxInMemoryBytes}; use fetchVerifiedArtifactToFile or fetchVerifiedArtifactStream instead`,
       { size: plan.size, maxInMemoryBytes },
     );
   }
@@ -1345,5 +1544,129 @@ export async function fetchVerifiedArtifact(
       return { bytes: out, receipt: step.value };
     }
     out.set(step.value.bytes, step.value.offset);
+  }
+}
+
+export interface VerifiedFileFetchOptions extends VerifiedRangeFetchOptions {
+  /** Final destination file path. Parent directory must already exist. */
+  readonly outputPath: string;
+  /** File mode applied before publish (default 0o644). */
+  readonly mode?: number;
+  /** Whether to atomically replace an existing regular file (default false). */
+  readonly overwrite?: boolean;
+}
+
+async function writeAllAt(handle: FileHandle, bytes: Uint8Array, position: number): Promise<void> {
+  let written = 0;
+  while (written < bytes.byteLength) {
+    const res = await handle.write(bytes, written, bytes.byteLength - written, position + written);
+    if (res.bytesWritten <= 0) {
+      throw new Error("short write to temporary file");
+    }
+    written += res.bytesWritten;
+  }
+}
+
+/**
+ * Stream a verified artifact to a private temp file in `dirname(outputPath)`,
+ * fsync, and atomically publish to `outputPath` ONLY AFTER full-file `size` and
+ * `expectedSha256` pass (Consumer Rule section 9.4). Unlinks the temp file on
+ * any error, mismatch, or abort so no unaccepted file ever appears at
+ * `outputPath`.
+ */
+export async function fetchVerifiedArtifactToFile(
+  options: VerifiedFileFetchOptions,
+): Promise<VerifiedFetchReceipt> {
+  if (
+    typeof options.outputPath !== "string"
+    || options.outputPath.length === 0
+    || options.outputPath.includes("\0")
+  ) {
+    throw new TransportHintsFetchError("invalid_output_path", "outputPath must be a non-empty path without NUL bytes");
+  }
+  const mode = options.mode ?? 0o644;
+  if (!Number.isSafeInteger(mode) || mode < 0 || mode > 0o777) {
+    throw new TransportHintsFetchError("invalid_options", "mode must be a valid POSIX file mode (0..0o777)");
+  }
+  const overwrite = options.overwrite ?? false;
+
+  // Validate BEP 52 plan and mirrors BEFORE creating any temp file.
+  validateBep52Plan(options);
+  validateMirrors(options.mirrors, options.allowUrl);
+
+  // Refuse existing path when overwrite === false, and never follow symlinks or overwrite directories.
+  try {
+    const existing = await lstat(options.outputPath);
+    if (existing.isSymbolicLink() || existing.isDirectory()) {
+      throw new TransportHintsFetchError(
+        "invalid_output_path",
+        `outputPath refuses existing ${existing.isSymbolicLink() ? "symlink" : "directory"}`,
+      );
+    }
+    if (!overwrite) {
+      throw new TransportHintsFetchError("output_exists", `outputPath already exists: ${options.outputPath}`);
+    }
+  } catch (error) {
+    if (error instanceof TransportHintsFetchError) throw error;
+    if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") throw error;
+  }
+
+  const dir = dirname(options.outputPath);
+  const name = basename(options.outputPath);
+  const tmpPath = join(dir, `.${name}.tmp-${process.pid}-${randomBytes(8).toString("hex")}`);
+
+  let handle: FileHandle | undefined;
+  let tempRemoved = false;
+  try {
+    handle = await open(tmpPath, "wx", 0o600);
+    const stream = fetchVerifiedArtifactStream(options);
+    let receipt: VerifiedFetchReceipt;
+    while (true) {
+      const step = await stream.next();
+      if (step.done) {
+        receipt = step.value;
+        break;
+      }
+      await writeAllAt(handle, step.value.bytes, step.value.offset);
+    }
+
+    await handle.sync();
+    if (mode !== 0o600) {
+      await handle.chmod(mode);
+    }
+    await handle.close();
+    handle = undefined;
+
+    if (overwrite) {
+      await rename(tmpPath, options.outputPath);
+      tempRemoved = true;
+    } else {
+      try {
+        await link(tmpPath, options.outputPath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException)?.code === "EEXIST") {
+          throw new TransportHintsFetchError("output_exists", `outputPath appeared concurrently: ${options.outputPath}`);
+        }
+        throw error;
+      }
+      await unlink(tmpPath);
+      tempRemoved = true;
+    }
+    return receipt;
+  } finally {
+    if (handle !== undefined) {
+      try {
+        await handle.close();
+      } catch {
+        // Ignore secondary close error on cleanup path.
+      }
+    }
+    if (!tempRemoved) {
+      try {
+        await unlink(tmpPath);
+      } catch {
+        // Temp file may never have been created or already removed.
+      }
+    }
   }
 }

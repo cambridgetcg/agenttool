@@ -1,13 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import type { LookupAddress } from "node:dns";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import type { Socket } from "node:net";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { Duplex } from "node:stream";
+import type { TLSSocket } from "node:tls";
 import {
   SafeNetError,
+  defaultSafeNetRequestOnce,
   type SafeNetDnsLookup,
   type SafeNetRequestOnce,
   type SafeNetRequestOnceOptions,
+  type SafeNetSocketFactory,
   type SafeNetWireResponse,
 } from "../../api/src/services/net/safe-fetch.ts";
 import {
@@ -17,9 +23,11 @@ import {
   bep52PadHash,
   computeBep52PieceHash,
   computeBep52PiecesRootFromLayer,
+  defaultRequestBudget,
   fetchSafeHttpsRange,
   fetchVerifiedArtifact,
   fetchVerifiedArtifactStream,
+  fetchVerifiedArtifactToFile,
   validateBep52Plan,
   verifyBep52Piece,
 } from "../transport-hints-fetch.ts";
@@ -122,6 +130,58 @@ function makeRangeServer(
   };
 }
 
+/**
+ * Hermetic fake TLS socket driving the REAL `defaultSafeNetRequestOnce`
+ * HTTP/1.1 wire parser, TLS identity check, connected-address check, response
+ * size cap, and Content-Encoding check without touching the network.
+ */
+function makeRealWireTransport(
+  responder: (url: URL, rawRequestText: string) => Buffer,
+): SafeNetRequestOnce {
+  const socketFactory: SafeNetSocketFactory = ({ url, address, tlsServername }) => {
+    let requestBuf = "";
+    let responded = false;
+    const sock = new Duplex({
+      read() {},
+      write(chunk, _enc, cb) {
+        requestBuf += Buffer.from(chunk).toString("latin1");
+        if (!responded && requestBuf.includes("\r\n\r\n")) {
+          responded = true;
+          const rawResponse = responder(url, requestBuf);
+          queueMicrotask(() => {
+            if (!sock.destroyed) {
+              // Emit in 16 KiB chunks to exercise real multi-fragment streaming.
+              for (let off = 0; off < rawResponse.length; off += 16_384) {
+                if (sock.destroyed) break;
+                sock.push(rawResponse.subarray(off, Math.min(off + 16_384, rawResponse.length)));
+              }
+              if (!sock.destroyed) sock.push(null);
+            }
+          });
+        }
+        cb();
+      },
+    }) as unknown as Socket & Partial<TLSSocket>;
+
+    Object.defineProperty(sock, "remoteAddress", { value: address.address, configurable: true });
+    Object.defineProperty(sock, "authorized", { value: true, configurable: true });
+    Object.defineProperty(sock, "alpnProtocol", { value: "http/1.1", configurable: true });
+    (sock as unknown as { getPeerCertificate: () => unknown }).getPeerCertificate = () => ({
+      subject: { CN: tlsServername },
+      subjectaltname: `DNS:${tlsServername}`,
+    });
+
+    queueMicrotask(() => {
+      if (!sock.destroyed) {
+        sock.emit(url.protocol === "https:" ? "secureConnect" : "connect");
+      }
+    });
+    return sock;
+  };
+
+  return (options) => defaultSafeNetRequestOnce({ ...options, socketFactory });
+}
+
 // ---------------------------------------------------------------------------
 // 1. Committed BEP 52 vector parity (all 14 vectors + all pad hashes)
 // ---------------------------------------------------------------------------
@@ -152,7 +212,6 @@ describe("BEP 52 piece-layer verifier against docs/specs/transport-hints-v1-vect
       expect(plan.pieceCount).toBe(vector.pieces_count);
       expect(plan.singlePiece).toBe(vector.size <= vector.piece_length);
 
-      // Verify every piece individually, and verify 1-bit tamper fails.
       for (let i = 0; i < plan.pieceCount; i += 1) {
         const start = i * vector.piece_length;
         const end = Math.min(start + vector.piece_length, vector.size);
@@ -164,7 +223,6 @@ describe("BEP 52 piece-layer verifier against docs/specs/transport-hints-v1-vect
         expect(verifyBep52Piece(plan, i, tampered)).toBe(false);
       }
 
-      // End-to-end range fetch round-trip using committed example url_list.
       const files = new Map<string, Uint8Array>(vector.url_list.map((url) => [url, data]));
       const { bytes, receipt } = await fetchVerifiedArtifact({
         size: vector.size,
@@ -280,9 +338,9 @@ describe("pre-fetch BEP 52 plan validation", () => {
 describe("strict HTTPS 206 Range and #584 safe-fetch enforcement", () => {
   const sample = generatePatternBytes("range-sample", 40_000);
 
-  test("preserves Range and Accept-Encoding: identity across a cross-origin 302 redirect (HF/GitHub Releases model)", async () => {
+  test("preserves Range and Accept-Encoding: identity across a cross-origin 302 redirect and strips signed query from finalUrl", async () => {
     const startUrl = "https://huggingface.co/org/repo/resolve/abc123/weights.bin";
-    const cdnUrl = "https://cas-bridge.xethub.hf.co/blobs/xyz?X-Amz-Signature=signed-token";
+    const cdnUrl = "https://cas-bridge.xethub.hf.co/blobs/xyz?X-Amz-Signature=secret-signed-token";
     const seenRequests: Array<{ href: string; range?: string; acceptEncoding?: string }> = [];
 
     const response = await fetchSafeHttpsRange({
@@ -317,7 +375,8 @@ describe("strict HTTPS 206 Range and #584 safe-fetch enforcement", () => {
     });
 
     expect(response.redirects).toBe(1);
-    expect(response.finalUrl).toBe(cdnUrl);
+    expect(response.finalUrl).toBe("https://cas-bridge.xethub.hf.co/blobs/xyz");
+    expect(response.finalUrl).not.toContain("secret-signed-token");
     expect(Buffer.compare(response.bytes, sample.subarray(16_384, 32_768))).toBe(0);
     expect(seenRequests).toEqual([
       { href: startUrl, range: "bytes=16384-32767", acceptEncoding: "identity" },
@@ -325,7 +384,7 @@ describe("strict HTTPS 206 Range and #584 safe-fetch enforcement", () => {
     ]);
   });
 
-  test("refuses HTTP scheme, credentials, private IPv4/IPv6 literals, and DNS rebinding to private IPs", async () => {
+  test("refuses HTTP scheme, credentials, private IPv4/IPv6 literals, and DNS lookup returning private IP on redirect target", async () => {
     for (const [badUrl, expectedCode] of [
       ["http://example.org/file.bin", "safe_net_protocol_not_allowed"],
       ["https://user:pass@example.org/file.bin", "safe_net_url_credentials_forbidden"],
@@ -353,7 +412,6 @@ describe("strict HTTPS 206 Range and #584 safe-fetch enforcement", () => {
       expect((caught as SafeNetError).code).toBe(expectedCode);
     }
 
-    // Redirect target resolving via DNS to RFC1918 private IPv4 must be blocked BEFORE wire call.
     let wireCalls = 0;
     let caughtRedirect: unknown;
     try {
@@ -384,8 +442,58 @@ describe("strict HTTPS 206 Range and #584 safe-fetch enforcement", () => {
     expect(wireCalls).toBe(1);
   });
 
-  test("enforces maxRedirects, connectedAddress pinning, Content-Encoding: identity, exact Content-Range, and exact length", async () => {
-    // 1. Exceeding maxRedirects = 1
+  test("enforces allowUrl on initial URL and redirect targets, missing Location, maxRedirects, connectedAddress, encoding, range, length, and timeout", async () => {
+    // 1. allowUrl refuses initial URL
+    await expect(
+      fetchSafeHttpsRange({
+        url: "https://blocked.example.org/f",
+        first: 0,
+        last: 0,
+        totalSize: 10,
+        allowUrl: (u) => u.hostname === "allowed.example.org",
+        lookup: publicLookup,
+        requestOnce: async () => {
+          throw new Error("should not reach wire");
+        },
+      }),
+    ).rejects.toMatchObject({ code: "redirect_refused" });
+
+    // 2. allowUrl refuses redirect target
+    await expect(
+      fetchSafeHttpsRange({
+        url: "https://allowed.example.org/f",
+        first: 0,
+        last: 0,
+        totalSize: 10,
+        allowUrl: (u) => u.hostname === "allowed.example.org",
+        lookup: publicLookup,
+        requestOnce: async () => ({
+          statusCode: 302,
+          headers: { location: "https://other.example.org/f" },
+          body: Buffer.alloc(0),
+          connectedAddress: PUBLIC_IPV4.address,
+        }),
+      }),
+    ).rejects.toMatchObject({ code: "redirect_refused" });
+
+    // 3. Redirect missing Location header
+    await expect(
+      fetchSafeHttpsRange({
+        url: "https://a.example.org/f",
+        first: 0,
+        last: 0,
+        totalSize: 10,
+        lookup: publicLookup,
+        requestOnce: async () => ({
+          statusCode: 302,
+          headers: {},
+          body: Buffer.alloc(0),
+          connectedAddress: PUBLIC_IPV4.address,
+        }),
+      }),
+    ).rejects.toMatchObject({ code: "redirect_missing_location" });
+
+    // 4. Exceeding maxRedirects = 1
     await expect(
       fetchSafeHttpsRange({
         url: "https://a.example.org/f",
@@ -403,7 +511,7 @@ describe("strict HTTPS 206 Range and #584 safe-fetch enforcement", () => {
       }),
     ).rejects.toMatchObject({ code: "redirect_limit_exceeded" });
 
-    // 2. connectedAddress not in resolved answers
+    // 5. connectedAddress not in resolved answers
     await expect(
       fetchSafeHttpsRange({
         url: "https://a.example.org/f",
@@ -420,7 +528,7 @@ describe("strict HTTPS 206 Range and #584 safe-fetch enforcement", () => {
       }),
     ).rejects.toMatchObject({ code: "connected_address_mismatch" });
 
-    // 3. Content-Encoding: gzip refused
+    // 6. Content-Encoding: gzip refused
     await expect(
       fetchSafeHttpsRange({
         url: "https://a.example.org/f",
@@ -437,7 +545,7 @@ describe("strict HTTPS 206 Range and #584 safe-fetch enforcement", () => {
       }),
     ).rejects.toMatchObject({ code: "invalid_content_encoding" });
 
-    // 4. Wrong Content-Range refused
+    // 7. Wrong Content-Range refused
     await expect(
       fetchSafeHttpsRange({
         url: "https://a.example.org/f",
@@ -454,7 +562,7 @@ describe("strict HTTPS 206 Range and #584 safe-fetch enforcement", () => {
       }),
     ).rejects.toMatchObject({ code: "invalid_content_range" });
 
-    // 5. Body length mismatch refused
+    // 8. Body length mismatch refused
     await expect(
       fetchSafeHttpsRange({
         url: "https://a.example.org/f",
@@ -470,21 +578,57 @@ describe("strict HTTPS 206 Range and #584 safe-fetch enforcement", () => {
         }),
       }),
     ).rejects.toMatchObject({ code: "range_length_mismatch" });
+
+    // 9. Per-request timeout aborts hung transport
+    await expect(
+      fetchSafeHttpsRange({
+        url: "https://a.example.org/f",
+        first: 0,
+        last: 0,
+        totalSize: 10,
+        timeoutMs: 25,
+        lookup: publicLookup,
+        requestOnce: (req) =>
+          new Promise<SafeNetWireResponse>((_resolve, reject) => {
+            req.signal.addEventListener("abort", () => reject(req.signal.reason), { once: true });
+          }),
+      }),
+    ).rejects.toMatchObject({ code: "safe_net_request_timeout" });
   });
 });
 
 // ---------------------------------------------------------------------------
-// 4. Multi-mirror failover, hedging, 200-only demotion, budgets, Consumer Rule 9.4
+// 4. Real-wire defaultSafeNetRequestOnce PoC tests (no mocked parser)
 // ---------------------------------------------------------------------------
 
-describe("multi-mirror failover, hedging, budgets, and Consumer Rule 9.4", () => {
+describe("real defaultSafeNetRequestOnce HTTP/1.1 wire transport PoCs", () => {
   const vec5 = VECTORS_FILE.vectors.find((v) => v.name === "th-32k-5-pieces.bin")!;
   const vec5Bytes = generatePatternBytes(vec5.seed, vec5.size);
 
-  test("immediately disqualifies a 200-only mirror (Cloudflare Pages model) and finishes on range mirror", async () => {
-    const pagesUrl = "https://docs.example.org/static/file.bin";
-    const rangeUrl = "https://releases.example.org/file.bin";
-    const files = new Map([[rangeUrl, vec5Bytes]]);
+  test("real wire: 200-only overlong body throws safe_net_response_too_large and disqualifies mirror on request #1", async () => {
+    const pagesUrl = "https://pages.example.org/file.bin";
+    const rangeUrl = "https://range.example.org/file.bin";
+
+    const transport = makeRealWireTransport((url, rawReq) => {
+      if (url.href === pagesUrl) {
+        // Real Cloudflare Pages-style 200 OK with full 151,072-byte body > 64 KiB cap.
+        const head = Buffer.from(
+          `HTTP/1.1 200 OK\r\nContent-Length: ${vec5Bytes.byteLength}\r\nConnection: close\r\n\r\n`,
+          "latin1",
+        );
+        return Buffer.concat([head, Buffer.from(vec5Bytes)]);
+      }
+      const match = /range:\s*bytes=(\d+)-(\d+)/iu.exec(rawReq);
+      if (!match) throw new Error(`missing range header: ${rawReq}`);
+      const first = Number(match[1]);
+      const last = Number(match[2]);
+      const slice = Buffer.from(vec5Bytes.subarray(first, last + 1));
+      const head = Buffer.from(
+        `HTTP/1.1 206 Partial Content\r\nContent-Range: bytes ${first}-${last}/${vec5Bytes.byteLength}\r\nContent-Length: ${slice.byteLength}\r\nConnection: close\r\n\r\n`,
+        "latin1",
+      );
+      return Buffer.concat([head, slice]);
+    });
 
     const { bytes, receipt } = await fetchVerifiedArtifact({
       size: vec5.size,
@@ -496,15 +640,100 @@ describe("multi-mirror failover, hedging, budgets, and Consumer Rule 9.4", () =>
       concurrency: 1,
       readStrategy: "sequential",
       lookup: publicLookup,
+      requestOnce: transport,
+    });
+
+    expect(Buffer.compare(bytes, vec5Bytes)).toBe(0);
+    expect(receipt.accepted).toBe(true);
+    const pagesReceipt = receipt.mirrors.find((m) => m.url === pagesUrl)!;
+    const rangeReceipt = receipt.mirrors.find((m) => m.url === rangeUrl)!;
+    expect(pagesReceipt.requests).toBe(1);
+    expect(pagesReceipt.disqualifiedReason).toBe("mirror_response_too_large_not_range");
+    expect(rangeReceipt.verifiedPieces).toBe(5);
+  });
+
+  test("real wire: gzip 206 throws safe_net_content_encoding_not_identity and disqualifies mirror on request #1", async () => {
+    const gzipUrl = "https://gzip.example.org/file.bin";
+    const rangeUrl = "https://range.example.org/file.bin";
+
+    const transport = makeRealWireTransport((url, rawReq) => {
+      const match = /range:\s*bytes=(\d+)-(\d+)/iu.exec(rawReq);
+      if (!match) throw new Error(`missing range header: ${rawReq}`);
+      const first = Number(match[1]);
+      const last = Number(match[2]);
+      const slice = Buffer.from(vec5Bytes.subarray(first, last + 1));
+      if (url.href === gzipUrl) {
+        const head = Buffer.from(
+          `HTTP/1.1 206 Partial Content\r\nContent-Encoding: gzip\r\nContent-Range: bytes ${first}-${last}/${vec5Bytes.byteLength}\r\nContent-Length: ${slice.byteLength}\r\nConnection: close\r\n\r\n`,
+          "latin1",
+        );
+        return Buffer.concat([head, slice]);
+      }
+      const head = Buffer.from(
+        `HTTP/1.1 206 Partial Content\r\nContent-Range: bytes ${first}-${last}/${vec5Bytes.byteLength}\r\nContent-Length: ${slice.byteLength}\r\nConnection: close\r\n\r\n`,
+        "latin1",
+      );
+      return Buffer.concat([head, slice]);
+    });
+
+    const { bytes, receipt } = await fetchVerifiedArtifact({
+      size: vec5.size,
+      expectedSha256: vec5.sha256,
+      pieceLength: vec5.piece_length,
+      piecesRoot: vec5.pieces_root,
+      pieceLayer: vec5.piece_layers,
+      mirrors: [gzipUrl, rangeUrl],
+      concurrency: 1,
+      readStrategy: "sequential",
+      lookup: publicLookup,
+      requestOnce: transport,
+    });
+
+    expect(Buffer.compare(bytes, vec5Bytes)).toBe(0);
+    const gzipReceipt = receipt.mirrors.find((m) => m.url === gzipUrl)!;
+    const rangeReceipt = receipt.mirrors.find((m) => m.url === rangeUrl)!;
+    expect(gzipReceipt.requests).toBe(1);
+    expect(gzipReceipt.disqualifiedReason).toBe("mirror_non_identity_encoding");
+    expect(rangeReceipt.verifiedPieces).toBe(5);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5. Multi-mirror failover, hedging, retries, budgets, Consumer Rule 9.4, atomic file
+// ---------------------------------------------------------------------------
+
+describe("multi-mirror failover, hedging, retries, budgets, and Consumer Rule 9.4", () => {
+  const vec5 = VECTORS_FILE.vectors.find((v) => v.name === "th-32k-5-pieces.bin")!;
+  const vec5Bytes = generatePatternBytes(vec5.seed, vec5.size);
+
+  test("default request budget covers two redirecting hedged mirrors on 5 pieces and >16 GiB (>1,024 pieces) files", async () => {
+    const m1 = "https://m1.example.org/file.bin";
+    const m2 = "https://m2.example.org/file.bin";
+    const cdn1 = "https://cdn1.example.org/blob/file.bin?sig=1";
+    const cdn2 = "https://cdn2.example.org/blob/file.bin?sig=2";
+    const files = new Map([
+      [cdn1, vec5Bytes],
+      [cdn2, vec5Bytes],
+    ]);
+
+    const { bytes, receipt } = await fetchVerifiedArtifact({
+      size: vec5.size,
+      expectedSha256: vec5.sha256,
+      pieceLength: vec5.piece_length,
+      piecesRoot: vec5.pieces_root,
+      pieceLayer: vec5.piece_layers,
+      mirrors: [m1, m2],
+      concurrency: 2,
+      readStrategy: "hedged",
+      hedgeDelayMs: 0, // Launch both redirecting mirrors on every piece (worst-case 20 hops).
+      lookup: publicLookup,
       requestOnce: makeRangeServer(files, {
         onRequest: (req) => {
-          if (req.url.href === pagesUrl) {
-            return {
-              statusCode: 200,
-              headers: { "content-length": String(vec5Bytes.byteLength) },
-              body: Buffer.from(vec5Bytes),
-              connectedAddress: PUBLIC_IPV4.address,
-            };
+          if (req.url.href === m1) {
+            return { statusCode: 302, headers: { location: cdn1 }, body: Buffer.alloc(0), connectedAddress: PUBLIC_IPV4.address };
+          }
+          if (req.url.href === m2) {
+            return { statusCode: 302, headers: { location: cdn2 }, body: Buffer.alloc(0), connectedAddress: PUBLIC_IPV4.address };
           }
           return undefined;
         },
@@ -513,13 +742,133 @@ describe("multi-mirror failover, hedging, budgets, and Consumer Rule 9.4", () =>
 
     expect(Buffer.compare(bytes, vec5Bytes)).toBe(0);
     expect(receipt.accepted).toBe(true);
-    const pagesReceipt = receipt.mirrors.find((m) => m.url === pagesUrl)!;
-    const rangeReceipt = receipt.mirrors.find((m) => m.url === rangeUrl)!;
-    expect(pagesReceipt.requests).toBe(1); // Demoted after piece 0 — never probed again for pieces 1..4.
-    expect(pagesReceipt.statusNot206).toBe(1);
-    expect(pagesReceipt.disqualifiedReason).toBe("mirror_returned_200_not_range");
-    expect(rangeReceipt.verifiedPieces).toBe(5);
-    expect(rangeReceipt.disqualifiedReason).toBeNull();
+    expect(receipt.totalRequests).toBeGreaterThanOrEqual(10);
+
+    // 2,000 pieces (32 GiB at 16 MiB pieces) with 1 redirecting mirror must not starve at 2,048.
+    const largeBudget = defaultRequestBudget({
+      pieceCount: 2_000,
+      maxRedirects: 1,
+      mirrorCount: 1,
+      maxConcurrentPerPiece: 2,
+      maxRetriesPerPiece: 2,
+    });
+    expect(largeBudget).toBeGreaterThan(4_000);
+  });
+
+  test("retries transient 503 on piece 2 of 5 with a single mirror and succeeds cleanly", async () => {
+    const url = "https://flaky.example.org/file.bin";
+    const files = new Map([[url, vec5Bytes]]);
+    let piece2Attempts = 0;
+
+    const { bytes, receipt } = await fetchVerifiedArtifact({
+      size: vec5.size,
+      expectedSha256: vec5.sha256,
+      pieceLength: vec5.piece_length,
+      piecesRoot: vec5.pieces_root,
+      pieceLayer: vec5.piece_layers,
+      mirrors: [url],
+      concurrency: 1,
+      retryDelayMs: 5,
+      maxRetriesPerPiece: 2,
+      lookup: publicLookup,
+      requestOnce: makeRangeServer(files, {
+        onRequest: (req) => {
+          const [first] = parseByteRangeHeader(req.headers.range);
+          if (first === 2 * vec5.piece_length) {
+            piece2Attempts += 1;
+            if (piece2Attempts === 1) {
+              return {
+                statusCode: 503,
+                headers: { "content-type": "text/plain" },
+                body: Buffer.from("transient unavailable"),
+                connectedAddress: PUBLIC_IPV4.address,
+              };
+            }
+          }
+          return undefined;
+        },
+      }),
+    });
+
+    expect(Buffer.compare(bytes, vec5Bytes)).toBe(0);
+    expect(receipt.accepted).toBe(true);
+    expect(piece2Attempts).toBe(2);
+    expect(receipt.totalRequests).toBe(6);
+    expect(receipt.mirrors[0]!.disqualifiedReason).toBeNull();
+  });
+
+  test("local safe_net_overloaded queueing does NOT penalize or disqualify a healthy mirror", async () => {
+    const url = "https://healthy.example.org/file.bin";
+    const files = new Map([[url, vec5Bytes]]);
+    let overloadedOnce = false;
+
+    const { bytes, receipt } = await fetchVerifiedArtifact({
+      size: vec5.size,
+      expectedSha256: vec5.sha256,
+      pieceLength: vec5.piece_length,
+      piecesRoot: vec5.pieces_root,
+      pieceLayer: vec5.piece_layers,
+      mirrors: [url],
+      concurrency: 1,
+      maxMirrorErrors: 1, // Any counted error would disqualify immediately.
+      retryDelayMs: 5,
+      maxRetriesPerPiece: 2,
+      lookup: publicLookup,
+      admission: {
+        async acquire() {
+          if (!overloadedOnce) {
+            overloadedOnce = true;
+            throw new SafeNetError("safe_net_overloaded");
+          }
+          return () => {};
+        },
+      },
+      requestOnce: makeRangeServer(files),
+    });
+
+    expect(Buffer.compare(bytes, vec5Bytes)).toBe(0);
+    expect(receipt.mirrors[0]!.errors).toBe(0);
+    expect(receipt.mirrors[0]!.disqualifiedReason).toBeNull();
+  });
+
+  test("disqualifies a mirror after maxMirrorErrors consecutive transient errors and throws all_mirrors_failed", async () => {
+    const url = "https://down.example.org/file.bin";
+    let calls = 0;
+
+    let caught: unknown;
+    try {
+      await fetchVerifiedArtifact({
+        size: vec5.size,
+        expectedSha256: vec5.sha256,
+        pieceLength: vec5.piece_length,
+        piecesRoot: vec5.pieces_root,
+        pieceLayer: vec5.piece_layers,
+        mirrors: [url],
+        concurrency: 1,
+        maxMirrorErrors: 2,
+        maxRetriesPerPiece: 5,
+        retryDelayMs: 1,
+        lookup: publicLookup,
+        requestOnce: async () => {
+          calls += 1;
+          return {
+            statusCode: 503,
+            headers: {},
+            body: Buffer.from("down"),
+            connectedAddress: PUBLIC_IPV4.address,
+          };
+        },
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(TransportHintsFetchError);
+    const err = caught as TransportHintsFetchError;
+    expect(err.code).toBe("all_mirrors_failed");
+    expect(calls).toBe(2);
+    const mirrorReceipts = err.details?.mirrors as Array<{ disqualifiedReason: string | null }>;
+    expect(mirrorReceipts[0]!.disqualifiedReason).toBe("mirror_exceeded_2_consecutive_errors");
   });
 
   test("rejects corrupt piece via BEP 52, disqualifies corrupt mirror, and fails over immediately without waiting for hedgeDelayMs", async () => {
@@ -537,14 +886,13 @@ describe("multi-mirror failover, hedging, budgets, and Consumer Rule 9.4", () =>
       mirrors: [corruptUrl, goodUrl],
       concurrency: 1,
       readStrategy: "hedged",
-      hedgeDelayMs: 5_000, // Huge delay: immediate failover must NOT wait for this.
+      hedgeDelayMs: 5_000,
       lookup: publicLookup,
       requestOnce: makeRangeServer(files, {
         onRequest: (req) => {
           if (req.url.href !== corruptUrl) return undefined;
           const [first, last] = parseByteRangeHeader(req.headers.range);
           const slice = Buffer.from(vec5Bytes.subarray(first, last + 1));
-          // Corrupt piece 1 only; piece 0 is clean.
           if (first === vec5.piece_length) slice[0] = slice[0]! ^ 0xff;
           return {
             statusCode: 206,
@@ -563,7 +911,7 @@ describe("multi-mirror failover, hedging, budgets, and Consumer Rule 9.4", () =>
     const goodReceipt = receipt.mirrors.find((m) => m.url === goodUrl)!;
     expect(corruptReceipt.verifiedPieces).toBe(1);
     expect(corruptReceipt.corruptPieces).toBe(1);
-    expect(corruptReceipt.requests).toBe(2); // Piece 0 ok, piece 1 corrupt -> disqualified for pieces 2..4.
+    expect(corruptReceipt.requests).toBe(2);
     expect(corruptReceipt.disqualifiedReason).toBe("mirror_served_corrupt_piece");
     expect(goodReceipt.verifiedPieces).toBe(4);
   });
@@ -606,11 +954,11 @@ describe("multi-mirror failover, hedging, budgets, and Consumer Rule 9.4", () =>
 
     expect(Buffer.compare(bytes, singleBytes)).toBe(0);
     expect(slowAborted).toBe(true);
-    expect(receipt.mirrors.find((m) => m.url === slowUrl)!.errors).toBe(0); // Losing hedge is not penalized.
+    expect(receipt.mirrors.find((m) => m.url === slowUrl)!.errors).toBe(0);
     expect(receipt.mirrors.find((m) => m.url === fastUrl)!.verifiedPieces).toBe(1);
   });
 
-  test("enforces maxRequests budget across pieces and redirect hops", async () => {
+  test("enforces explicit maxRequests budget and whole-transfer transferTimeoutMs", async () => {
     const url = "https://mirror.example.org/file.bin";
     const files = new Map([[url, vec5Bytes]]);
     await expect(
@@ -622,11 +970,30 @@ describe("multi-mirror failover, hedging, budgets, and Consumer Rule 9.4", () =>
         pieceLayer: vec5.piece_layers,
         mirrors: [url],
         concurrency: 1,
-        maxRequests: 3, // File needs 5 pieces.
+        maxRequests: 3,
         lookup: publicLookup,
         requestOnce: makeRangeServer(files),
       }),
     ).rejects.toMatchObject({ code: "request_budget_exhausted" });
+
+    await expect(
+      fetchVerifiedArtifact({
+        size: vec5.size,
+        expectedSha256: vec5.sha256,
+        pieceLength: vec5.piece_length,
+        piecesRoot: vec5.pieces_root,
+        pieceLayer: vec5.piece_layers,
+        mirrors: [url],
+        concurrency: 1,
+        timeoutMs: 5_000,
+        transferTimeoutMs: 30,
+        lookup: publicLookup,
+        requestOnce: (req) =>
+          new Promise<SafeNetWireResponse>((_resolve, reject) => {
+            req.signal.addEventListener("abort", () => reject(req.signal.reason), { once: true });
+          }),
+      }),
+    ).rejects.toMatchObject({ code: "transfer_timeout" });
   });
 
   test("Consumer Rule 9.4: refuses acceptance if full-file expectedSha256 disagrees even when every BEP 52 piece matches piecesRoot", async () => {
@@ -649,7 +1016,7 @@ describe("multi-mirror failover, hedging, budgets, and Consumer Rule 9.4", () =>
     ).rejects.toMatchObject({ code: "final_sha256_mismatch" });
   });
 
-  test("stream yields verified chunks strictly in order and aborts prefetched pieces on early break", async () => {
+  test("stream yields provisional piece-verified chunks strictly in order and aborts prefetched pieces on early break", async () => {
     const url = "https://mirror.example.org/file.bin";
     let abortedPrefetches = 0;
 
@@ -686,25 +1053,104 @@ describe("multi-mirror failover, hedging, budgets, and Consumer Rule 9.4", () =>
       },
     });
 
-    const seenIndices: number[] = [];
+    const seen: Array<{ pieceIndex: number; offset: number; length: number; accepted: boolean }> = [];
     for await (const chunk of stream) {
-      seenIndices.push(chunk.pieceIndex);
-      expect(chunk.pieceVerified).toBe(true);
-      expect(chunk.accepted).toBe(false);
+      seen.push({
+        pieceIndex: chunk.pieceIndex,
+        offset: chunk.offset,
+        length: chunk.bytes.byteLength,
+        accepted: chunk.accepted,
+      });
+      expect(Buffer.compare(chunk.bytes, vec5Bytes.subarray(0, vec5.piece_length))).toBe(0);
       break;
     }
 
-    expect(seenIndices).toEqual([0]);
-    expect(abortedPrefetches).toBe(2); // Pieces 1 and 2 were in flight and got aborted on break.
+    expect(seen).toEqual([{ pieceIndex: 0, offset: 0, length: vec5.piece_length, accepted: false }]);
+    expect(abortedPrefetches).toBe(2);
   });
 
-  test("source hygiene: no BitTorrent wire/DHT/tracker code and no import of build-transport-hints.ts", () => {
-    const src = readFileSync(join(ROOT, "bin", "transport-hints-fetch.ts"), "utf8");
-    expect(src).not.toMatch(/build-transport-hints/u);
-    expect(src).not.toMatch(/node:dgram|createSocket\(|webtorrent|bittorrent|create_torrent/u);
+  test("fetchVerifiedArtifactToFile writes atomically only after SHA-256 acceptance and unlinks temp file on mismatch or refusal", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "th-fetch-file-"));
+    const url = "https://mirror.example.org/file.bin";
+    const files = new Map([[url, vec5Bytes]]);
+
+    try {
+      // 1. Happy path: atomic temp -> fsync -> link/unlink, zero temp files left.
+      const goodPath = join(dir, "verified.bin");
+      const receipt = await fetchVerifiedArtifactToFile({
+        outputPath: goodPath,
+        size: vec5.size,
+        expectedSha256: vec5.sha256,
+        pieceLength: vec5.piece_length,
+        piecesRoot: vec5.pieces_root,
+        pieceLayer: vec5.piece_layers,
+        mirrors: [url],
+        concurrency: 2,
+        lookup: publicLookup,
+        requestOnce: makeRangeServer(files),
+      });
+      expect(receipt.accepted).toBe(true);
+      expect(Buffer.compare(readFileSync(goodPath), vec5Bytes)).toBe(0);
+      expect(readdirSync(dir)).toEqual(["verified.bin"]);
+
+      // 2. Refuses overwrite by default without mutating existing file or leaving temp files.
+      writeFileSync(goodPath, Buffer.from("sentinel"));
+      await expect(
+        fetchVerifiedArtifactToFile({
+          outputPath: goodPath,
+          size: vec5.size,
+          expectedSha256: vec5.sha256,
+          pieceLength: vec5.piece_length,
+          piecesRoot: vec5.pieces_root,
+          pieceLayer: vec5.piece_layers,
+          mirrors: [url],
+          lookup: publicLookup,
+          requestOnce: makeRangeServer(files),
+        }),
+      ).rejects.toMatchObject({ code: "output_exists" });
+      expect(readFileSync(goodPath, "utf8")).toBe("sentinel");
+      expect(readdirSync(dir)).toEqual(["verified.bin"]);
+
+      // 3. overwrite: true atomically replaces existing file.
+      await fetchVerifiedArtifactToFile({
+        outputPath: goodPath,
+        overwrite: true,
+        size: vec5.size,
+        expectedSha256: vec5.sha256,
+        pieceLength: vec5.piece_length,
+        piecesRoot: vec5.pieces_root,
+        pieceLayer: vec5.piece_layers,
+        mirrors: [url],
+        lookup: publicLookup,
+        requestOnce: makeRangeServer(files),
+      });
+      expect(Buffer.compare(readFileSync(goodPath), vec5Bytes)).toBe(0);
+      expect(readdirSync(dir)).toEqual(["verified.bin"]);
+
+      // 4. Consumer Rule 9.4 on disk: final_sha256_mismatch leaves NO target file and NO temp file.
+      const rejectedPath = join(dir, "rejected.bin");
+      const wrongSha = `${vec5.sha256.startsWith("00") ? "ff" : "00"}${vec5.sha256.slice(2)}`;
+      await expect(
+        fetchVerifiedArtifactToFile({
+          outputPath: rejectedPath,
+          size: vec5.size,
+          expectedSha256: wrongSha,
+          pieceLength: vec5.piece_length,
+          piecesRoot: vec5.pieces_root,
+          pieceLayer: vec5.piece_layers,
+          mirrors: [url],
+          concurrency: 2,
+          lookup: publicLookup,
+          requestOnce: makeRangeServer(files),
+        }),
+      ).rejects.toMatchObject({ code: "final_sha256_mismatch" });
+      expect(readdirSync(dir)).toEqual(["verified.bin"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
-  test("refuses downgrade redirect to http:// and enforces maxInMemoryBytes / invalid subject before buffering", async () => {
+  test("refuses downgrade redirect to http://, accepts IPv4-mapped dual-stack connectedAddress, and enforces maxInMemoryBytes / invalid subject before buffering", async () => {
     await expect(
       fetchSafeHttpsRange({
         url: "https://a.example.org/f",
@@ -721,7 +1167,6 @@ describe("multi-mirror failover, hedging, budgets, and Consumer Rule 9.4", () =>
       }),
     ).rejects.toMatchObject({ code: "safe_net_protocol_not_allowed" });
 
-    // Dual-stack IPv4-mapped connectedAddress for a resolved public IPv4 is accepted.
     const mapped = await fetchSafeHttpsRange({
       url: "https://a.example.org/f",
       first: 0,
@@ -767,5 +1212,11 @@ describe("multi-mirror failover, hedging, budgets, and Consumer Rule 9.4", () =>
         },
       }),
     ).rejects.toMatchObject({ code: "artifact_too_large" });
+  });
+
+  test("source hygiene: no BitTorrent wire/DHT/tracker code and no import of build-transport-hints.ts", () => {
+    const src = readFileSync(join(ROOT, "bin", "transport-hints-fetch.ts"), "utf8");
+    expect(src).not.toMatch(/build-transport-hints/u);
+    expect(src).not.toMatch(/node:dgram|createSocket\(|webtorrent|bittorrent|create_torrent/u);
   });
 });
