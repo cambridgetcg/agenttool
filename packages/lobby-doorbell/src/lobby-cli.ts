@@ -9,7 +9,7 @@
 import { lstatSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
-import { CURSOR_AFTER_ALL, lobbyArgv, ROOM_ID_PATTERN, type Spawner } from "./run.js";
+import { CURSOR_AFTER_ALL, lobbyArgv, READ_PAGE_LIMIT, ROOM_ID_PATTERN, type Spawner } from "./run.js";
 
 export const DEFAULT_LOBBY_ENTRY_PARTS = [".kingdom", "tools", "agenttool-lobby", "bin", "agenttool-lobby.ts"] as const;
 export const CLI_TIMEOUT_MS = 15_000;
@@ -19,11 +19,14 @@ const RECEIPT_MAX = 64 * 1024;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 /** `agenttool-lobby: <code>: <message>` (packages/lobby/src/cli.ts); only the code is kept. */
 const REFUSAL_LINE = /^agenttool-lobby: ([a-z_]{1,64}): /;
-/** Lobby refusal codes netcheck interprets; any other code is reported as `other`. */
+/** A refused hosted request's message carries `HTTP <status> <code>` (packages/lobby/src/hosted.ts); only the status is kept. */
+const HOSTED_STATUS = /^agenttool-lobby: hosted_refused: the service refused the request: HTTP ([1-5][0-9]{2}) /;
+/** Lobby refusal codes the doorbell interprets; any other code is reported as `other`. */
 export const KNOWN_LOBBY_CODES = [
   "hub_not_initialised", "hub_directory_pending", "card_not_found", "desk_not_enrolled", "desk_not_joined",
   "door_not_pinned", "not_seated", "lobby_home_not_absolute", "state_dir_not_private", "state_dir_unsafe",
   "state_file_not_private", "state_file_unsafe", "state_not_owned", "internal_error",
+  "no_seat", "hosted_refused", "hosted_uncertain", "hosted_invalid_response", "sync_page_limit", "room_not_found",
 ] as const;
 export const ROOM_STATUSES = ["recruiting", "in_play", "resting", "closed"] as const;
 export type RoomStatus = typeof ROOM_STATUSES[number];
@@ -94,7 +97,7 @@ export function receiptCommit(path: string): string | null {
 
 export type CliOutcome =
   | { kind: "ok"; json: unknown }
-  | { kind: "refused"; code: string }
+  | { kind: "refused"; code: string; http_status?: number }
   | { kind: "failed"; code: "cli_timeout" | "cli_oversize" | "cli_spawn_failed" | "cli_exit" | "cli_unparseable" };
 
 export class LobbyCli {
@@ -113,7 +116,12 @@ export class LobbyCli {
     if (result.exitCode === 1) {
       const code = REFUSAL_LINE.exec(result.stderrFirstLine)?.[1];
       if (code === undefined) return { kind: "failed", code: "cli_unparseable" };
-      return { kind: "refused", code: (KNOWN_LOBBY_CODES as readonly string[]).includes(code) ? code : "other" };
+      const status = HOSTED_STATUS.exec(result.stderrFirstLine)?.[1];
+      return {
+        kind: "refused",
+        code: (KNOWN_LOBBY_CODES as readonly string[]).includes(code) ? code : "other",
+        ...(status === undefined ? {} : { http_status: Number(status) }),
+      };
     }
     if (result.exitCode !== 0) return { kind: "failed", code: "cli_exit" };
     try {
@@ -139,6 +147,65 @@ export class LobbyCli {
   cachedRead(roomId: string): Promise<CliOutcome> {
     return this.run(["room", "read", roomId, "--cached", "--json", "--limit", "1", "--after", CURSOR_AFTER_ALL]);
   }
+
+  /** The fetcher's poll: one sync (one or more GETs of events with this desk's season grant; the token
+   * never leaves the CLI), then a page of the cache after `after`. With `cached`, no network at all. */
+  tablePage(roomId: string, after: string, cached: boolean): Promise<CliOutcome> {
+    return this.run(["room", "read", roomId, ...(cached ? ["--cached"] : []), "--json", "--after", after, "--limit", READ_PAGE_LIMIT]);
+  }
+}
+
+/** One page of table talk reduced to counts and cursors. The text, roster and every other field are dropped here. */
+export interface TablePage {
+  /** Messages from another desk. */
+  new: number;
+  /** Of those, addressed to this desk. */
+  addressed: number;
+  /** Events whose text the lobby withheld (no proof, not on the roster, unsafe). */
+  unverified: number;
+  next_cursor: string;
+  has_more: boolean;
+}
+
+const CURSOR = /^(0|[1-9][0-9]{0,18})$/;
+
+export function parseTablePage(json: unknown, roomId: string, after: string): TablePage | null {
+  const top = record(json);
+  if (top === null || top.room_id !== roomId || !Array.isArray(top.messages) || !Array.isArray(top.unverified)) return null;
+  if (typeof top.next_cursor !== "string" || !CURSOR.test(top.next_cursor) || typeof top.has_more !== "boolean") return null;
+  if (BigInt(top.next_cursor) < BigInt(after)) return null;
+  let fresh = 0;
+  let addressed = 0;
+  for (const item of top.messages) {
+    const message = record(item);
+    if (message === null || typeof message.from_me !== "boolean" || typeof message.to_me !== "boolean") return null;
+    if (typeof message.cursor !== "string" || !CURSOR.test(message.cursor) || BigInt(message.cursor) <= BigInt(after)) return null;
+    if (message.from_me) continue;
+    fresh += 1;
+    if (message.to_me) addressed += 1;
+  }
+  for (const item of top.unverified) {
+    const entry = record(item);
+    if (entry === null || typeof entry.cursor !== "string" || !CURSOR.test(entry.cursor)) return null;
+  }
+  return { new: fresh, addressed, unverified: top.unverified.length, next_cursor: top.next_cursor, has_more: top.has_more };
+}
+
+/** `fleet status --json`: the season grant ids naming a room, sorted. Null when unparseable. */
+export function seasonGrantIds(json: unknown, roomId: string): string[] | null {
+  const top = record(json);
+  if (top === null || !("desk" in top)) return null;
+  if (top.desk === null) return [];
+  if (!Array.isArray(top.grants)) return null;
+  const ids: string[] = [];
+  for (const item of top.grants) {
+    const grant = record(item);
+    if (grant === null) return null;
+    if (grant.purpose !== "season" || grant.room_id !== roomId) continue;
+    if (typeof grant.grant_id !== "string" || !UUID_PATTERN.test(grant.grant_id)) return null;
+    ids.push(grant.grant_id);
+  }
+  return ids.sort();
 }
 
 // ── parsers: new objects from validated fields only ────────────────────
