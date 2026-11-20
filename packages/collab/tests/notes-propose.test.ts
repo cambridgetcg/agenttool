@@ -196,6 +196,13 @@ describe("collab_propose: the same bytes as collab_proposal_open", () => {
     const unreadable = await refused(server, "collab_propose", { ...TERMS, closes: "soon" });
     expect(unreadable.code).toBe("invalid_closes");
     expect(unreadable.remedy.say).toContain("604800");
+    // time/1: an ISO time needs a zone (no guess at local time) and a real calendar day.
+    const inTwoHours = new Date(now + 2 * 3_600_000).toISOString();
+    const zoneless = await refused(server, "collab_propose", { ...TERMS, closes: inTwoHours.slice(0, 19) });
+    expect(zoneless.code).toBe("invalid_closes");
+    // Date.parse reads hour 24 as the next midnight, inside the window; it is not a time of day.
+    const rolled = await refused(server, "collab_propose", { ...TERMS, closes: "2026-11-12T24:00:00Z" });
+    expect(rolled.code).toBe("invalid_closes");
     expect((await refused(server, "collab_propose", { ...TERMS, extent: "x".repeat(1_001) })).code).toBe("too_long");
     expect(j.count()).toBe(before);
   });

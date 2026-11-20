@@ -383,6 +383,45 @@ function sortValue(value) {
   return value;
 }
 
+// src/time.ts
+var ZONED_INSTANT = /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(?:([Zz])|([+-])(\d{2}):(\d{2}))$/;
+function daysInMonth(year, month) {
+  if (month === 2)
+    return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28;
+  return month === 4 || month === 6 || month === 9 || month === 11 ? 30 : 31;
+}
+function parseZonedInstant(value, options = {}) {
+  if (typeof value !== "string")
+    return null;
+  const match = ZONED_INSTANT.exec(value);
+  if (!match)
+    return null;
+  if (match[6] === undefined && options.seconds !== "optional")
+    return null;
+  if (match[6] === undefined && match[7] !== undefined)
+    return null;
+  const [year, month, day, hour, minute] = match.slice(1, 6).map(Number);
+  const second = Number(match[6] ?? 0);
+  const zulu = match[8] !== undefined;
+  const offsetHours = zulu ? 0 : Number(match[10]);
+  const offsetMinutes = zulu ? 0 : Number(match[11]);
+  if (year < 1 || month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month) || hour > 23 || minute > 59 || second > 59 || offsetHours > 23 || offsetMinutes > 59) {
+    return null;
+  }
+  const millis = Number((match[7] ?? "").slice(0, 3).padEnd(3, "0"));
+  const local = new Date(0);
+  local.setUTCFullYear(year, month - 1, day);
+  local.setUTCHours(hour, minute, second, millis);
+  const sign = match[9] === "-" ? -1 : 1;
+  const instant = local.getTime() - sign * (offsetHours * 60 + offsetMinutes) * 60000;
+  const utcYear = new Date(instant).getUTCFullYear();
+  return Number.isFinite(instant) && utcYear >= 1 && utcYear <= 9999 ? instant : null;
+}
+function minutesSince(at, observedAt) {
+  const age = Date.parse(observedAt) - Date.parse(at);
+  return Number.isFinite(age) ? Math.max(0, Math.floor(age / 60000)) : null;
+}
+
 // src/note.ts
 var NOTE_FORMAT = "collab-note/1";
 var NOTE_ACTS = [
@@ -1025,9 +1064,7 @@ function ballotClosesAt(closes, now) {
       const [days, hours, minutes, seconds] = duration.slice(1).map((part) => Number(part ?? 0));
       closesMs = nowMs + (((days * 24 + hours) * 60 + minutes) * 60 + seconds) * 1000;
     } else if (ISO_INSTANT.test(closes.trim())) {
-      const parsed = Date.parse(closes.trim());
-      if (Number.isFinite(parsed))
-        closesMs = parsed;
+      closesMs = parseZonedInstant(closes.trim(), { seconds: "optional" });
     }
   }
   const window = closesMs === null ? null : closesMs - nowMs;
@@ -2115,7 +2152,7 @@ function inspectSuccessorCommit(rootPath, commitSha, parentSha) {
   if (fields.length / 2 > MAX_SUCCESSOR_PATHS) {
     return refuse2(`Commit ${commitSha} changes more than ${MAX_SUCCESSOR_PATHS} paths`);
   }
-  const budget = { bytes: MAX_SUCCESSOR_BYTES, deadline: Date.now() + MAX_SUCCESSOR_INSPECT_MS };
+  const budget = { bytes: MAX_SUCCESSOR_BYTES, deadline: performance.now() + MAX_SUCCESSOR_INSPECT_MS };
   const changes = [];
   for (let index = 0;index < fields.length; index += 2) {
     const header = RAW_DIFF_HEADER.exec(fields[index].toString("utf8"));
@@ -2130,7 +2167,7 @@ function inspectSuccessorCommit(rootPath, commitSha, parentSha) {
       changes.push({ path, blob_sha256: null });
       continue;
     }
-    if (Date.now() > budget.deadline || budget.bytes <= 0) {
+    if (performance.now() > budget.deadline || budget.bytes <= 0) {
       return refuse2(`Inspecting commit ${commitSha} exceeded its bounds`);
     }
     const content = successorGit(rootPath, ["cat-file", "blob", blob], budget.bytes);
@@ -2258,12 +2295,12 @@ function digestUntrackedContent(rootPath, paths) {
     return null;
   const budget = {
     remainingBytes: MAX_UNTRACKED_BYTES,
-    deadline: Date.now() + MAX_UNTRACKED_HASH_MS
+    deadline: performance.now() + MAX_UNTRACKED_HASH_MS
   };
   const aggregate = createHash4("sha256");
   aggregate.update("agenttool.collab/untracked-state/v1\x00");
   for (const entry of entries) {
-    if (Date.now() > budget.deadline)
+    if (performance.now() > budget.deadline)
       return null;
     if (!safeGitRelativePath(entry))
       return null;
@@ -2279,7 +2316,7 @@ function digestUntrackedContent(rootPath, paths) {
       aggregate.update(entry);
       if (stat.isSymbolicLink()) {
         const target = readlinkSync(absolute, { encoding: "buffer" });
-        if (target.length > budget.remainingBytes || Date.now() > budget.deadline) {
+        if (target.length > budget.remainingBytes || performance.now() > budget.deadline) {
           return null;
         }
         budget.remainingBytes -= target.length;
@@ -2307,12 +2344,12 @@ function digestStableFile(path, budget) {
   try {
     descriptor = openSync4(path, "r");
     const before = fstatSync(descriptor);
-    if (!before.isFile() || before.size > budget.remainingBytes || Date.now() > budget.deadline)
+    if (!before.isFile() || before.size > budget.remainingBytes || performance.now() > budget.deadline)
       return null;
     const hash = createHash4("sha256");
     const buffer = Buffer.allocUnsafe(64 * 1024);
     while (true) {
-      if (Date.now() > budget.deadline)
+      if (performance.now() > budget.deadline)
         return null;
       const count = readSync(descriptor, buffer, 0, buffer.length, null);
       if (count === 0)
@@ -10040,7 +10077,7 @@ class CollabStore extends CollabStoreCore {
       const leftOutAll = views.filter((view) => view.status === "active" && view.liveness === "live" && !listedVoices.has(view.voice_id)).map((view) => ({
         session_id: view.id,
         name: view.actor,
-        last_seen_minutes: Math.max(0, Math.floor((Date.parse(now) - Date.parse(view.last_seen_at)) / 60000))
+        last_seen_minutes: minutesSince(view.last_seen_at, now) ?? 0
       }));
       const leftOut = leftOutAll.slice(0, BALLOT_LEFT_OUT_MAX);
       const body = render(terms);
@@ -11177,10 +11214,6 @@ function cut(text, max) {
 function excerpt(statement) {
   return cut(statement, EXCERPT_MAX);
 }
-function minutesSince(at, observedAt) {
-  const age = Date.parse(observedAt) - Date.parse(at);
-  return Number.isFinite(age) ? Math.max(0, Math.floor(age / 60000)) : null;
-}
 function who(stance) {
   return { session: stance.from_session_id, name: stance.from_actor };
 }
@@ -11346,6 +11379,23 @@ function remoteSoftSpots(receipt, proposalId) {
     ...typeof record.position === "string" ? { position: record.position } : {},
     ...typeof record.proposal_sha256 === "string" ? { proposal_sha256: record.proposal_sha256 } : {}
   };
+}
+
+// src/wall-time.ts
+function wallTimeWithUtc(iso, timeZone) {
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime()))
+    return iso;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+    timeZoneName: "short",
+    ...timeZone ? { timeZone } : {}
+  }).formatToParts(date);
+  const part = (type) => parts.find((entry) => entry.type === type)?.value ?? "";
+  const zone = part("timeZoneName") === "GMT+0" ? "GMT" : part("timeZoneName");
+  return `${part("hour")}:${part("minute")} ${zone} (${date.toISOString().slice(11, 16)}Z)`;
 }
 
 // src/person-desk.ts
@@ -12323,7 +12373,7 @@ async function serveOnce(port, data, io, command, browser, onPost) {
   }
   const pageUrl = `${origin}${path}`;
   io.out(JSON.stringify({ protocol: PERSON_DESK_PROTOCOL, command, status: "open", url: pageUrl, expires_at: expiresAt }));
-  const closes = new Date(expiresAt).toLocaleTimeString();
+  const closes = wallTimeWithUtc(expiresAt);
   io.note?.(browser && io.open?.(pageUrl) ? `Opened the page in your browser. If it did not appear, open ${pageUrl} before ${closes}.` : `Open ${pageUrl} in your browser before ${closes}.`);
   const timer = setTimeout(() => settle({ ok: false, error: new CollabError("ceremony_timeout", "The ceremony page was not used in time") }), CEREMONY_TIMEOUT_MS);
   try {
