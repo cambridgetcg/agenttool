@@ -3577,7 +3577,7 @@ function spec() {
           tags: ["discovery"],
           summary: "Read bounded public crawl hints",
           description:
-            "Politely allows only the selected sitemap reads plus the sitemap itself. robots.txt is a crawl request, not access control or authority.",
+            "Politely allows only the selected sitemap reads, the advertised public GET doors (/health, /v1/welcome, /.well-known/agent.json, /llms-full.txt, /public/love-bomb) and the sitemap itself. robots.txt is a crawl request, not access control or authority.",
           responses: {
             "200": {
               description: "Crawler hints",
