@@ -2,9 +2,10 @@
  *
  *  The agent embeds its query with whatever model it chose (ada-002, voyage,
  *  cohere, sentence-transformers, ...) and sends the 1536-dim vector here.
- *  We don't see, generate, or charge for that inference. Admitted searches
- *  reserve their fixed credit debit and failure-default usage receipt before
- *  recall; only completed recall marks that receipt successful.
+ *  We don't see, generate, or charge for that inference. Search is on the
+ *  free floor: an admitted search passes the daily project quota
+ *  (billing/free-floor.ts), then reserves its 0-credit failure-default usage
+ *  receipt before recall; only completed recall marks that receipt successful.
  *  Doctrine: docs/BUSINESS-MODEL.md · docs/MEMORY-TIERS.md. */
 
 import { Hono } from "hono";
@@ -12,10 +13,13 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { finalizeChargeSuccess, reserveCharge } from "../../billing/charge";
+import { consumeFreeFloor } from "../../billing/free-floor";
 import { ROUTE_CREDITS } from "../../billing/route-credits";
 import { search, searchByText } from "../../services/memory/store";
 
 type SearchDependencies = {
+  /** Free-floor daily quota guard; defaults to the Postgres-backed one. */
+  consumeFreeFloor?: typeof consumeFreeFloor;
   reserveCharge: typeof reserveCharge;
   finalizeChargeSuccess: typeof finalizeChargeSuccess;
   search: typeof search;
@@ -60,6 +64,10 @@ export function createMemorySearchRoutes(dependencies: SearchDependencies = {
       );
     }
 
+    await (dependencies.consumeFreeFloor ?? consumeFreeFloor)({
+      projectId: c.var.project.id,
+      action: "memory.search",
+    });
     const reservation = await dependencies.reserveCharge(c, ROUTE_CREDITS["memory.search"], "memory.search");
     const started = performance.now();
 

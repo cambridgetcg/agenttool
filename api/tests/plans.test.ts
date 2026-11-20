@@ -142,7 +142,8 @@ describe("/public/plans", () => {
       expect(row.path).toBe(x402PayablePathTemplate(source.pattern));
       expect(row.label).toBe(source.label);
       expect(row.credits).toBe(source.credits);
-      expect(row.amount_atomic).toBe(String(source.credits! * ATOMIC_PER_CREDIT));
+      // Free-floor rows (billing/free-floor.ts) price 0 and carry no amount.
+      expect(row.amount_atomic).toBe(source.credits === 0 ? null : String(source.credits! * ATOMIC_PER_CREDIT));
       expect(row.error_codes).toEqual([...source.errorCodes]);
       expect(row.payable).toBe(false);
     }

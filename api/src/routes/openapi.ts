@@ -7424,7 +7424,7 @@ function spec() {
         post: {
           tags: ["memory"],
           summary: "Recall memories by text or an agent-supplied query embedding",
-          description: `Supply query text or a 1536-number query_embedding; the embedding takes precedence if both are supplied. An admitted attempt reserves ${ROUTE_CREDITS["memory.search"]} project credits before recall, including failures after reservation. Idempotency-Key replay is conditional on Redis; without it, repeating POST can charge again. The response mode identifies text or semantic recall.`,
+          description: `Supply query text or a 1536-number query_embedding; the embedding takes precedence if both are supplied. Search is on the free floor: it costs ${ROUTE_CREDITS["memory.search"]} project credits and counts against a daily project quota, checked in Postgres before recall (429 free_floor_quota_reached when used up, 503 free_floor_unavailable when the quota cannot be checked). An admitted attempt counts even if recall then fails. Idempotency-Key replay is conditional on Redis; without it, repeating POST counts again. The response mode identifies text or semantic recall.`,
           parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }],
           requestBody: {
             required: true,

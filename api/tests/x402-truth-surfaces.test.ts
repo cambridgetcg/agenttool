@@ -61,6 +61,11 @@ describe("/public/plans payable_routes", () => {
         status: "retired",
       });
       expect(row.path).not.toContain(":");
+      if (row.credits === 0) {
+        // Free-floor rows (billing/free-floor.ts) carry no amount to pay.
+        expect(row.amount_atomic).toBeNull();
+        continue;
+      }
       expect(BigInt(row.amount_atomic)).toBe(
         BigInt(row.credits) * BigInt(ATOMIC_PER_CREDIT),
       );

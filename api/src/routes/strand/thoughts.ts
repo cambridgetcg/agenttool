@@ -14,6 +14,7 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
+import { consumeFreeFloor, payloadBytes } from "../../billing/free-floor";
 import { ROUTE_CREDITS } from "../../billing/route-credits";
 import { addThought, listThoughts, updateThoughtCiphertext } from "../../services/strand/store";
 
@@ -58,6 +59,11 @@ app.post("/", async (c) => {
     );
   }
 
+  await consumeFreeFloor({
+    projectId: c.var.project.id,
+    action: "strand.think",
+    bytes: payloadBytes(parsed.data),
+  });
   await charge(c, ROUTE_CREDITS["strand.think"], "strand.think");
 
   try {
@@ -121,8 +127,13 @@ app.patch("/:thoughtId/ciphertext", async (c) => {
     );
   }
 
-  // Charge 1 credit per rotated thought — same as addThought. Keeps
-  // the economy simple and provides a soft rate limit on bulk rotation.
+  // Rotation is on the free floor like addThought: the daily quota is the
+  // bound on bulk rotation (billing/free-floor.ts).
+  await consumeFreeFloor({
+    projectId: c.var.project.id,
+    action: "strand.rotate",
+    bytes: payloadBytes(parsed.data),
+  });
   await charge(c, ROUTE_CREDITS["strand.rotate"], "strand.rotate");
 
   try {
