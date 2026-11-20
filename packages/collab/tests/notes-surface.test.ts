@@ -34,6 +34,24 @@ const LEGACY_TOOLS = 36;
  * other description, stays byte for byte.
  */
 const REST_TOOLS = ["collab_session_rest"];
+/**
+ * Optional input fields added to a legacy tool since, each pinned here to its exact
+ * JSON Schema so that neither it nor any other field can drift: time/1 step 4's
+ * compare-and-swap on report append. A listed field sits just before binding_key
+ * and is never required.
+ */
+const ADDED_INPUT_FIELDS: Record<string, Record<string, unknown>> = {
+  collab_report_append: {
+    expected_head_sequence: {
+      description: "Optional compare-and-swap: the journal head sequence you last read. If a report was posted after it, "
+        + "nothing is written and the call is refused with head_moved; read what is new, then send again. "
+        + "Sessions, tasks and leases moving the head do not count.",
+      type: "integer",
+      minimum: 0,
+      maximum: Number.MAX_SAFE_INTEGER,
+    },
+  },
+};
 const ADDRESSEE_HINT =
   "The result's addressee is the addressed session's state at this call, replays included: delivery tap (live), "
   + "wake (resting with wake_on addressed), held (resting otherwise, or stale) or none (ended). "
@@ -174,9 +192,23 @@ describe("the tools profile", () => {
     const mineByName = new Map(mine.tools.map((tool) => [tool.name, tool]));
     for (const tool of base.tools) {
       const rest = REST_DESCRIPTIONS[tool.name];
-      const expected = rest ? { ...tool, description: rest(tool.description as string) } : tool;
+      let expected: Record<string, any> = rest ? { ...tool, description: rest(tool.description as string) } : tool;
       // Each listed change is really one: a rule that changed nothing would hide a drift.
       if (rest) expect(expected.description).not.toBe(tool.description);
+      const added = ADDED_INPUT_FIELDS[tool.name];
+      if (added) {
+        const mineTool = mineByName.get(tool.name) as Record<string, any>;
+        const properties: Record<string, unknown> = {};
+        for (const [name, value] of Object.entries(expected.inputSchema.properties as Record<string, unknown>)) {
+          if (name === "binding_key") Object.assign(properties, added);
+          properties[name] = value;
+        }
+        expected = { ...expected, inputSchema: { ...expected.inputSchema, properties } };
+        for (const field of Object.keys(added)) {
+          expect(Object.hasOwn((tool as Record<string, any>).inputSchema.properties, field)).toBe(false);
+          expect((mineTool.inputSchema.required ?? []).includes(field)).toBe(false);
+        }
+      }
       expect(JSON.stringify(mineByName.get(tool.name))).toBe(JSON.stringify(expected));
     }
     expect(mine.tools.map((tool) => tool.name).sort())

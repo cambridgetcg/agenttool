@@ -1323,6 +1323,11 @@ export function buildCollabMcpServer(
           "Also place this report in the person's inbox at the person desk, for example to ask them something. "
           + "Routing, not access control or authority.",
         ),
+        expected_head_sequence: z.number().int().nonnegative().optional().describe(
+          "Optional compare-and-swap: the journal head sequence you last read. If a report was posted after it, "
+          + "nothing is written and the call is refused with head_moved; read what is new, then send again. "
+          + "Sessions, tasks and leases moving the head do not count.",
+        ),
       },
     },
     async ({ workspace_id, ...input }) => call(() => {

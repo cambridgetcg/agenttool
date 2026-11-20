@@ -142,12 +142,14 @@ function readCloses(ctx: NoteVerbContext, input: ProposeInput): Closes | undefin
   } else if (typeof value === "string" && value.trim() !== "" && DURATION.test(value.trim())) {
     const [, days, hours, minutes, secs] = DURATION.exec(value.trim())!;
     seconds = Number(days ?? 0) * 86_400 + Number(hours ?? 0) * 3_600 + Number(minutes ?? 0) * 60 + Number(secs ?? 0);
-  } else if (typeof value === "string" && parseZonedInstant(value.trim(), { seconds: "optional" }) !== null) {
-    // time/1: a zone is required (no local guess) and the calendar is checked
-    // (no 30 February rolling into March), where Date.parse allowed both.
-    return { at: parseZonedInstant(value.trim(), { seconds: "optional" })! };
   } else {
-    throw new CollabError("invalid_closes", `closes ${JSON.stringify(value)} is not a time collab can read`, { remedy: say });
+    // time/1: an ISO time needs a zone (no local guess) and a real calendar day
+    // (no 30 February rolling into March), where Date.parse allowed both.
+    const at = typeof value === "string" ? parseZonedInstant(value.trim(), { seconds: "optional" }) : null;
+    if (at === null) {
+      throw new CollabError("invalid_closes", `closes ${JSON.stringify(value)} is not a time collab can read`, { remedy: say });
+    }
+    return { at };
   }
   if (!Number.isFinite(seconds)) {
     throw new CollabError("invalid_closes", `closes ${JSON.stringify(value)} is not a time collab can read`, { remedy: say });

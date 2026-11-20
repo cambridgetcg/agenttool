@@ -3793,7 +3793,17 @@ export class CollabStoreCore {
     authority_scope?: string;
     authority_basis?: string;
     to_person?: boolean;
+    /**
+     * Optional compare-and-swap, after BitTorrent BEP 44's `cas`: the journal head
+     * sequence the caller last read. If anything was posted since, nothing is
+     * written and the call is refused with head_moved, so the caller reads what
+     * is new and sends again.
+     */
+    expected_head_sequence?: number;
   }): CollabReport {
+    const expectedHead = input.expected_head_sequence === undefined
+      ? undefined
+      : validateExpectedHeadSequence(input.expected_head_sequence);
     const normalized = {
       task_id: input.task_id ? validateId(input.task_id, "task_id") : null,
       to_session_id: input.to_session_id
@@ -3818,8 +3828,10 @@ export class CollabStoreCore {
       input,
       input.idempotency_key,
       "report.append.v2",
-      normalized,
+      // The expected head joins the request hash only when given, for the same reason.
+      expectedHead === undefined ? normalized : { ...normalized, expected_head_sequence: expectedHead },
       (session) => {
+        if (expectedHead !== undefined) this.requireJournalHead(session.workspace_id, expectedHead);
         this.validateReportInput(session, normalized);
         this.refuseProposalRewrite(normalized);
         return this.appendReportInternal(session, normalized);
@@ -8036,6 +8048,33 @@ export class CollabStoreCore {
   }
 
   /**
+   * The compare in compare-and-swap, inside the writer's transaction: refuse if
+   * a report was posted after the sequence the caller last read. Only reports
+   * count. Sessions resuming, claims and leases move the journal head all the
+   * time, and none of them is a crossing answer. Like BEP 44's error 301, the
+   * refusal says to re-read and try again, and how many reports were missed.
+   */
+  protected requireJournalHead(workspaceId: string, expected: number): void {
+    const head = this.requireWorkspace(workspaceId).event_head_sequence;
+    if (expected > head) {
+      throw new CollabError(
+        "head_moved",
+        "The expected head is ahead of the journal; read the head, then send again",
+        { expected_head_sequence: expected, head_sequence: head, reports_since: 0 },
+      );
+    }
+    const { count } = this.db.query(
+      `SELECT COUNT(*) AS count FROM reports WHERE workspace_id = ? AND event_sequence > ?`,
+    ).get(workspaceId, expected) as { count: number };
+    if (count === 0) return;
+    throw new CollabError(
+      "head_moved",
+      "Reports were posted since you read the journal; read them, then send again",
+      { expected_head_sequence: expected, head_sequence: head, reports_since: count },
+    );
+  }
+
+  /**
    * time/1 (C3): this store's clock, read now, as canonical UTC
    * (`YYYY-MM-DDTHH:MM:SS.sssZ`). Every agent reading the same journal gets
    * the same clock from it, so results and receipts can carry one shared
@@ -8306,6 +8345,13 @@ export function optionalText(value: string | undefined, field: string, max: numb
 
 const REST_UNTIL_PATTERN =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/;
+
+function validateExpectedHeadSequence(value: unknown): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new CollabError("invalid_expected_head_sequence", "expected_head_sequence must be a non-negative integer");
+  }
+  return value;
+}
 
 function validateRestMode(value: unknown): "resting" | "ready" {
   if (value !== "resting" && value !== "ready") {
