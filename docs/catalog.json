@@ -4559,6 +4559,14 @@
       "canonical_path": "docs/specs/README.md"
     },
     {
+      "path": "docs/specs/TRANSPORT-HINTS-0.1-DRAFT.md",
+      "title": "Transport Hints 0.1 — torrent descriptors for files already published by SHA-256 — Working Draft",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/specs/TRANSPORT-HINTS-0.1-DRAFT.md"
+    },
+    {
       "path": "docs/specs/WAKE-1.0-DRAFT.md",
       "title": "Wake 1.0 — Working Draft",
       "type": "reference",

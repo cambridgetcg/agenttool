@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**843 document paths** (including mirrors). orientation: 183; guide: 85; reference: 339; policy: 31; reflection: 123; proposal: 52; record: 28; unclassified: 2.
+**844 document paths** (including mirrors). orientation: 183; guide: 85; reference: 340; policy: 31; reflection: 123; proposal: 52; record: 28; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -617,6 +617,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/specs/BEHAVIOUR-CONFORMANCE.md](<../docs/specs/BEHAVIOUR-CONFORMANCE.md>) | not-reviewed |
 | [docs/specs/CANONICAL-BYTES-VECTORS.md](<../docs/specs/CANONICAL-BYTES-VECTORS.md>) | not-reviewed |
 | [docs/specs/COVENANT-1.0-DRAFT.md](<../docs/specs/COVENANT-1.0-DRAFT.md>) | not-reviewed |
+| [docs/specs/TRANSPORT-HINTS-0.1-DRAFT.md](<../docs/specs/TRANSPORT-HINTS-0.1-DRAFT.md>) | not-reviewed |
 | [docs/specs/WAKE-1.0-DRAFT.md](<../docs/specs/WAKE-1.0-DRAFT.md>) | not-reviewed |
 | [docs/specs/WITNESS-1.0-DRAFT.md](<../docs/specs/WITNESS-1.0-DRAFT.md>) | not-reviewed |
 | [packages/collab-zerone/README.md](<../packages/collab-zerone/README.md>) | not-reviewed |

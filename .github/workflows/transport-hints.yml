@@ -1,0 +1,167 @@
+name: Transport hints
+
+# Cross-checks the transport-hints/v1 builder (bin/build-transport-hints.ts)
+# and its committed vectors against two independent hashers: libtorrent's
+# create_torrent (hashing and parsing only, never a session) and the BEP 52
+# reference creator, fetched by URL and pinned by SHA-256, never vendored. The
+# hashing runs in a network namespace with no network. Nothing is published,
+# tagged or uploaded: the only output is a workflow artifact holding the
+# comparison tables. Contract: docs/specs/TRANSPORT-HINTS-0.1-DRAFT.md, 14.4.
+
+on:
+  pull_request:
+    paths:
+      - bin/build-transport-hints.ts
+      - bin/transport-hints-crosscheck.py
+      - bin/transport-hints-probe.ts
+      - bin/transport-hints-vectors.ts
+      - bin/tests/transport-hints.test.ts
+      - bin/tests/transport-hints-schema.test.ts
+      - docs/specs/TRANSPORT-HINTS-0.1-DRAFT.md
+      - docs/specs/transport-hints-v1.schema.json
+      - docs/specs/transport-hints-v1-vectors.json
+      - .github/workflows/transport-hints.yml
+  # A manual run on a chosen branch; it takes no inputs.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same pull request supersedes its older run; every other
+# event gets a group of its own.
+concurrency:
+  group: transport-hints-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  in-tree:
+    name: Builder, vectors and schema tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Bun 1.3.5
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.5
+      - name: Install the API's locked dependencies for the schema validator
+        working-directory: api
+        run: bun install --frozen-lockfile --ignore-scripts
+      - name: Run the transport-hints tests
+        run: bun test bin/tests/transport-hints.test.ts bin/tests/transport-hints-schema.test.ts
+      - name: Check the committed vectors against the builder
+        run: bun --no-env-file bin/transport-hints-vectors.ts --check
+
+  crosscheck:
+    name: Independent hashers (libtorrent ${{ matrix.libtorrent }} and the BEP 52 reference creator)
+    needs: in-tree
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # Linux x86_64 wheels for CPython 3.13, as listed by
+        # https://pypi.org/pypi/libtorrent/json on 2026-11-14 (cp39 to cp313
+        # manylinux_2_17 wheels, none for 3.14). 2.0.15 was dropped on
+        # 2026-11-20: its Python binding segfaulted (exit 139) at the start of
+        # the cross-check in its first run (run 44715260812), before comparing
+        # anything; 2.1.1 confirmed every field of every vector.
+        include:
+          - libtorrent: "2.1.1"
+            wheel: libtorrent-2.1.1-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+            wheel_sha256: c81d768e04915c1627ac108a6abfa64c740bdd1a1634d5fffcdc56ed6e6d915f
+    env:
+      # 10,177 bytes as read on 2026-11-14. The script has no licence line, so
+      # it is fetched and checked on every run and never copied into the tree.
+      REFERENCE_URL: https://www.bittorrent.org/beps/bep_0052_torrent_creator.py
+      REFERENCE_SHA256: d28ede84d078ad214558f23d2381efbc1465bd3c9ad175b4839477910ba6546e
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Bun 1.3.5
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.5
+      - name: Set up Python 3.13 for the cp313 wheels
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Fetch the pinned wheel and the pinned reference creator (network)
+        env:
+          LT_VERSION: ${{ matrix.libtorrent }}
+          LT_WHEEL: ${{ matrix.wheel }}
+          LT_SHA256: ${{ matrix.wheel_sha256 }}
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: |
+          python3 -I -B -c 'import platform, sys; assert sys.version_info[:2] == (3, 13), sys.version; assert platform.machine() == "x86_64", platform.machine()'
+          env -i PATH="$PATH" LANG=C TZ=UTC python3 -I -B -m venv "$RUNNER_TEMP/th-venv"
+          printf 'libtorrent==%s --hash=sha256:%s\n' "$LT_VERSION" "$LT_SHA256" > "$RUNNER_TEMP/th-requirements.txt"
+          env -i PATH="$PATH" LANG=C TZ=UTC HOME="$RUNNER_TEMP" \
+            "$RUNNER_TEMP/th-venv/bin/python" -I -B -m pip --isolated install \
+            --disable-pip-version-check --no-input --timeout 20 --retries 2 \
+            --require-hashes --only-binary=:all: --no-deps \
+            --report "$RUNNER_TEMP/th-pip-report.json" \
+            -r "$RUNNER_TEMP/th-requirements.txt"
+          "$RUNNER_TEMP/th-venv/bin/python" -I -B -c 'import json, sys
+          report = json.load(open(sys.argv[1]))
+          names = [item["download_info"]["url"].rsplit("/", 1)[-1] for item in report["install"]]
+          assert names == [sys.argv[2]], names
+          print("installed", names[0])' "$RUNNER_TEMP/th-pip-report.json" "$LT_WHEEL"
+          mkdir "$RUNNER_TEMP/th-reference"
+          curl --fail --silent --show-error --proto '=https' --tlsv1.2 --max-time 30 --retry 2 \
+            --output "$RUNNER_TEMP/th-reference/bep_0052_torrent_creator.py" "$REFERENCE_URL"
+          printf '%s  %s\n' "$REFERENCE_SHA256" "$RUNNER_TEMP/th-reference/bep_0052_torrent_creator.py" | sha256sum --check --strict
+      - name: Build the vector torrents twice with the network removed and compare the bytes
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: |
+          bun_path="$(command -v bun)"
+          for build in 1 2; do
+            sudo unshare --net -- setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups -- \
+              env -i PATH=/usr/bin:/bin LANG=C TZ=UTC HOME="$RUNNER_TEMP" \
+              /bin/bash --noprofile --norc -euo pipefail -c '
+                if timeout 5 /bin/bash -c "exec 3<>/dev/tcp/1.1.1.1/443" 2>/dev/null; then
+                  echo "refused: the network is reachable" >&2
+                  exit 1
+                fi
+                echo "no network: a connection to 1.1.1.1 port 443 failed as required"
+                "$1" --no-install --no-env-file bin/transport-hints-vectors.ts --torrents-out "$2"
+              ' build "$bun_path" "$RUNNER_TEMP/th-build-$build"
+          done
+          diff --recursive --brief "$RUNNER_TEMP/th-build-1" "$RUNNER_TEMP/th-build-2"
+          echo "two builds are byte-identical"
+          (cd "$RUNNER_TEMP/th-build-1" && sha256sum -- *.torrent)
+      - name: Cross-check the vectors with the network removed
+        env:
+          LT_VERSION: ${{ matrix.libtorrent }}
+        shell: bash --noprofile --norc -euo pipefail {0}
+        run: |
+          sudo unshare --net -- setpriv --reuid="$(id -u)" --regid="$(id -g)" --clear-groups -- \
+            env -i PATH=/usr/bin:/bin LANG=C TZ=UTC HOME="$RUNNER_TEMP" \
+            GITHUB_ACTIONS="$GITHUB_ACTIONS" RUNNER_ENVIRONMENT="$RUNNER_ENVIRONMENT" \
+            "$RUNNER_TEMP/th-venv/bin/python" -I -B bin/transport-hints-crosscheck.py \
+              --vectors docs/specs/transport-hints-v1-vectors.json \
+              --reference-creator "$RUNNER_TEMP/th-reference/bep_0052_torrent_creator.py" \
+              --builder-torrents "$RUNNER_TEMP/th-build-1" \
+              --expect-libtorrent "$LT_VERSION" \
+              --out "$RUNNER_TEMP/th-tables/libtorrent-$LT_VERSION"
+      - name: Show the tables in the job summary
+        if: always()
+        env:
+          LT_VERSION: ${{ matrix.libtorrent }}
+        shell: bash --noprofile --norc -eo pipefail {0}
+        run: |
+          table="$RUNNER_TEMP/th-tables/libtorrent-$LT_VERSION/crosscheck.md"
+          if [ -f "$table" ]; then cat -- "$table" >> "$GITHUB_STEP_SUMMARY"; fi
+      - name: Upload the tables as a workflow artifact only
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: transport-hints-crosscheck-libtorrent-${{ matrix.libtorrent }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/th-tables/
+          if-no-files-found: warn
+          retention-days: 14
