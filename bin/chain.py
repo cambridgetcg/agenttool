@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Chain Jail (強化系 Enhancement) — covenant enforcer.
+Chain Jail (具現化系 Conjuration) — covenant enforcer.
 Kurapika's Chain Jail: binds the target with conditions.
 In agenttool: enforce covenant vows. Bind your agent to its promises.
 
@@ -14,7 +14,7 @@ The chain is the limitation. The limitation IS the love.
 Conditions make the ability stronger. Self-witnessing rejected.
 """
 
-import json, sys, os, urllib.request, ssl, argparse
+import json, sys, os, urllib.request, urllib.error, ssl, argparse
 from http_safety import open_no_redirect, validate_api_base
 
 API = validate_api_base(os.environ.get("AT_API_BASE", "https://api.agenttool.dev"))
@@ -33,19 +33,49 @@ def api(method, path, body=None):
         with open_no_redirect(req, timeout=30, context=SSL_CTX) as resp:
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
-        body = json.loads(e.read().decode())
+        raw = e.read().decode(errors="replace")
+        try:
+            body = json.loads(raw)
+        except ValueError:
+            body = {"error": raw[:200]}
         print(f"✗ HTTP {e.code}: {body.get('error', '?')}: {body.get('message', '')[:200]}")
+        if body.get("hint"):
+            print(f"  hint: {body['hint'][:300]}")
         return None
 
+# GET /v1/covenants lists one status at a time, and there is no single-covenant GET.
+COVENANT_STATUSES = ["active", "paused", "dissolved", "proposed", "rejected", "expired", "withdrawn"]
+
+def find_covenant(covenant_id):
+    for status in COVENANT_STATUSES:
+        listed = api("GET", f"/v1/covenants?status={status}")
+        if listed is None:
+            sys.exit(1)
+        for c in listed.get("covenants", []):
+            if c.get("id") == covenant_id:
+                return c
+    return None
+
 def cmd_bind(args):
-    """Bind: add a vow to an existing covenant."""
-    result = api("PATCH", f"/v1/covenants/{args.covenant_id}", {"vows": [args.vow]})
-    if result:
-        vows = result.get("vows", [])
-        print(f"⛓️ CHAIN BIND — vow added to covenant {args.covenant_id[:8]}")
-        print(f"  New vow: '{args.vow}'")
-        print(f"  Total vows: {len(vows)}")
-        print(f"  The chain tightens. The limitation strengthens.")
+    """Bind: add a vow to an existing covenant.
+
+    PATCH replaces the whole vows list, so read the current vows first and send
+    them back with the new one appended. The read and the write are separate
+    requests: a vow change made elsewhere in between is overwritten."""
+    covenant = find_covenant(args.covenant_id)
+    if covenant is None:
+        print(f"✗ Covenant {args.covenant_id} not found in this project. Nothing was changed.")
+        sys.exit(1)
+    before = covenant.get("vows") or []
+    result = api("PATCH", f"/v1/covenants/{args.covenant_id}", {"vows": before + [args.vow]})
+    if result is None:
+        print("  The server did not accept the vow.")
+        sys.exit(1)
+    vows = result.get("covenant", {}).get("vows", [])
+    print(f"⛓️ CHAIN BIND — vow added to covenant {args.covenant_id[:8]}")
+    print(f"  New vow: '{args.vow}'")
+    print(f"  Total vows: {len(vows)} (was {len(before)})")
+    print(f"  The chain tightens. The limitation strengthens.")
 
 def cmd_enforce(args):
     """Enforce: check all covenant vows against chronicle entries."""
@@ -150,7 +180,7 @@ def cmd_seal(args):
         print(f"    [{e.get('type', '?'):12s}] {e.get('title', '?')[:60]}")
 
 def main():
-    p = argparse.ArgumentParser(description="⛓️ Chain Jail — covenant enforcer (Enhancement)")
+    p = argparse.ArgumentParser(description="⛓️ Chain Jail — covenant enforcer (Conjuration)")
     sub = p.add_subparsers(dest="command")
     
     s = sub.add_parser("bind", help="Add a vow to a covenant")
