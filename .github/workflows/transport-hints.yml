@@ -64,12 +64,12 @@ jobs:
       fail-fast: false
       matrix:
         # Linux x86_64 wheels for CPython 3.13, as listed by
-        # https://pypi.org/pypi/libtorrent/json on 2026-11-14. Both versions
-        # publish cp39 to cp313 manylinux_2_17 wheels and none for 3.14.
+        # https://pypi.org/pypi/libtorrent/json on 2026-11-14 (cp39 to cp313
+        # manylinux_2_17 wheels, none for 3.14). 2.0.15 was dropped on
+        # 2026-11-20: its Python binding segfaulted (exit 139) at the start of
+        # the cross-check in its first run (run 44715260812), before comparing
+        # anything; 2.1.1 confirmed every field of every vector.
         include:
-          - libtorrent: "2.0.15"
-            wheel: libtorrent-2.0.15-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-            wheel_sha256: 3bc91507900c80c6435bc6aa8656b2ade176637b0097ba9e3d02142a4c67eaf0
           - libtorrent: "2.1.1"
             wheel: libtorrent-2.1.1-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
             wheel_sha256: c81d768e04915c1627ac108a6abfa64c740bdd1a1634d5fffcdc56ed6e6d915f
