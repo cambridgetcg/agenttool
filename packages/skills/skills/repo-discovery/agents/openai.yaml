@@ -1,0 +1,7 @@
+interface:
+  display_name: "Repo Discovery"
+  short_description: "Discover and verify GitHub repos with open standards"
+  default_prompt: "Use $repo-discovery to discover, verify, and integrate open-source GitHub repositories."
+
+policy:
+  allow_implicit_invocation: false
