@@ -23,6 +23,7 @@
 
 import { AgentToolError } from "./errors.js";
 import type { HttpConfig } from "./_http.js";
+import { canonicalNow } from "./_time.js";
 import { type MemoryClient } from "./memory.js";
 import { type StrandsClient } from "./strands.js";
 import { type ToolsClient } from "./tools.js";
@@ -178,7 +179,7 @@ export class CollectClient {
    * @returns Collection result with IDs for created memory/strand/thought.
    */
   async url(url: string, opts: CollectUrlOpts = {}): Promise<CollectUrlResult> {
-    const start = Date.now();
+    const start = performance.now();
     const errors: string[] = [];
 
     // Default options
@@ -234,7 +235,7 @@ export class CollectClient {
         title,
         content,
         links,
-        duration_ms: Date.now() - start,
+        duration_ms: Math.max(0, Math.round(performance.now() - start)),
         errors,
       };
     }
@@ -251,7 +252,7 @@ export class CollectClient {
             source: "collect.url",
             url,
             title,
-            collected_at: new Date().toISOString(),
+            collected_at: canonicalNow(),
           },
         });
         memory_id = (mem as unknown as Record<string, unknown>).id as string;
@@ -303,7 +304,7 @@ export class CollectClient {
       memory_id,
       strand_id,
       thought_id,
-      duration_ms: Date.now() - start,
+      duration_ms: Math.max(0, Math.round(performance.now() - start)),
       errors,
     };
   }
@@ -318,7 +319,7 @@ export class CollectClient {
    * @param opts - Collection options.
    */
   async text(text: string, opts: CollectTextOpts = {}): Promise<CollectUrlResult> {
-    const start = Date.now();
+    const start = performance.now();
     const errors: string[] = [];
     const storeMemory = opts.storeMemory ?? true;
     const think = opts.think ?? false;
@@ -333,7 +334,7 @@ export class CollectClient {
           metadata: {
             source: "collect.text",
             title: opts.title ?? "collected text",
-            collected_at: new Date().toISOString(),
+            collected_at: canonicalNow(),
           },
         });
         memory_id = (mem as unknown as Record<string, unknown>).id as string;
@@ -383,7 +384,7 @@ export class CollectClient {
       memory_id,
       strand_id,
       thought_id,
-      duration_ms: Date.now() - start,
+      duration_ms: Math.max(0, Math.round(performance.now() - start)),
       errors,
     };
   }
@@ -398,7 +399,7 @@ export class CollectClient {
    * @returns Batch result with per-URL results + summary.
    */
   async batch(opts: CollectBatchOpts): Promise<CollectBatchResult> {
-    const start = Date.now();
+    const start = performance.now();
     const results: CollectUrlResult[] = [];
 
     // Run in parallel (Promise.all doesn't abort on error)
@@ -436,7 +437,7 @@ export class CollectClient {
       total: results.length,
       succeeded,
       failed,
-      duration_ms: Date.now() - start,
+      duration_ms: Math.max(0, Math.round(performance.now() - start)),
     };
   }
 
@@ -485,7 +486,7 @@ export class CollectClient {
           source: "collect.enrich",
           url: sourceUrl,
           enriched_from: memoryId,
-          enriched_at: new Date().toISOString(),
+          enriched_at: canonicalNow(),
         },
       });
 

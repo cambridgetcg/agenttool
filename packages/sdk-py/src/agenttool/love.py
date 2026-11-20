@@ -26,13 +26,13 @@ Doctrine: docs/UNCONDITIONAL.md · docs/BLESSING.md · docs/ENCOUNTER.md
 from __future__ import annotations
 
 import base64
-import datetime
 import hashlib
 from typing import Any, Dict, Literal, Optional
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from .exceptions import AgentToolError, raise_from_response
+from ._time import canonical_now
 from ._url import _path_segment
 
 LoveDirection = Literal["extended", "received", "all", "given"]
@@ -46,7 +46,7 @@ def _iso_now() -> str:
     or ``+00:00``-suffixed forms make a Python-signed row unverifiable from
     the row the server hands back.
     """
-    return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    return canonical_now()
 
 
 # ── Canonical bytes + signing ──────────────────────────────────────────

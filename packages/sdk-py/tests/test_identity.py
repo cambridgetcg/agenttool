@@ -475,7 +475,7 @@ class TestAgentTokens:
         public_key.verify(
             signature, f"{header_segment}.{payload_segment}".encode("ascii")
         )
-        assert result["expires_at"] == "2023-11-14T23:13:20Z"
+        assert result["expires_at"] == "2023-11-14T23:13:20.000Z"
 
     def test_issue_token_caps_ttl_at_one_hour(self, at):
         identity = {"id": IDENTITY_ID, "did": f"did:at:{IDENTITY_ID}"}

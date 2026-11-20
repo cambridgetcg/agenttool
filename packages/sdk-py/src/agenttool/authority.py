@@ -7,11 +7,12 @@ from __future__ import annotations
 
 import base64
 import hashlib
-from datetime import datetime, timezone
 from typing import Any, Dict, Mapping, TypedDict, Union
 from urllib.parse import urlsplit
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+from ._time import canonical_now
 
 
 IDENTITY_AUTHORITY_DOMAIN = "identity-authority/v1"
@@ -23,11 +24,7 @@ AUTHORITY_SIGNATURE_HEADER = "X-Agenttool-Authority-Signature"
 
 def authority_timestamp_now() -> str:
     """Default freshness stamp for a proof. The server window is ±5 minutes."""
-    return (
-        datetime.now(timezone.utc)
-        .isoformat(timespec="milliseconds")
-        .replace("+00:00", "Z")
-    )
+    return canonical_now()
 
 
 def authority_request_target(url: str) -> str:

@@ -34,6 +34,12 @@ Not in the 0.23.0 tag; details under "Unreleased" in [`README.md`](README.md).
   carries `"discovery": "retired"`, and `capability=` is ignored.
   `include_nen=True` is unchanged.
 - `GUIDE["warning"]` says discovery is retired instead of naming the route.
+- `identity.issue_token()` `expires_at` and `collect` (`url`, `text`, `enrich`)
+  `collected_at`/`enriched_at` now emit canonical 24-char UTC with millisecond
+  precision (`YYYY-MM-DDTHH:MM:SS.sssZ`), matching `@agenttool/sdk` (the signed
+  JWT `header.payload` bytes in `issue_token()` are unchanged). `collect`
+  `duration_ms` measurements now use `time.monotonic()` instead of wall-clock
+  `time.time()`.
 
 ## 0.23.0 — unreleased
 

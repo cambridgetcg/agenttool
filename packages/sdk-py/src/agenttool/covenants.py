@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
 
 import httpx
@@ -27,6 +26,7 @@ from .crypto import (
     sign_covenant_reject,
     sign_covenant_withdraw,
 )
+from ._time import canonical_now
 from ._url import _path_segment
 
 CovenantStatus = Literal["active", "paused", "dissolved"]
@@ -49,7 +49,7 @@ CovenantBeforeSubmitHook = Callable[[CovenantBeforeSubmitContext], bool]
 
 def _iso_now() -> str:
     """ISO8601 UTC timestamp with millisecond precision + 'Z' suffix — matches TS SDK output."""
-    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    return canonical_now()
 
 
 class CovenantsClient:

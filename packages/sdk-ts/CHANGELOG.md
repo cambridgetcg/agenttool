@@ -37,6 +37,10 @@ Not in the 0.23.0 tag; details under "Unreleased" in [`README.md`](README.md).
   `GUIDE.maps_to` and the Pap Calamity's `walled_by` now match the Python
   strings; the dropped Pap sentence said recipients can mark love primitives
   as spam, which only inbox messages support.
+- `wake` cache TTL checks and `collect` (`url`, `text`, `batch`) `duration_ms`
+  measurements now use monotonic `performance.now()` instead of wall-clock
+  `Date.now()`, matching the Python SDK and preventing wall-clock jumps from
+  expiring cached wakes or skewing durations.
 
 ## 0.23.0 — unreleased
 

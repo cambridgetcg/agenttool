@@ -32,13 +32,13 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timezone
 from types import MappingProxyType
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 from urllib.parse import urlsplit
 
 import httpx
 
+from ._time import canonical_now
 from ._agent_data_id import (
     _js_json_string,
     _utf16_sort_key,
@@ -1474,7 +1474,7 @@ def _identity_keys_path(identity_id: str) -> str:
 
 def _now() -> str:
     """``Date.prototype.toISOString`` spelling: UTC, milliseconds, ``Z``."""
-    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+    return canonical_now()
 
 
 def _mark_window(run: _StoreRun, reason: str) -> None:
