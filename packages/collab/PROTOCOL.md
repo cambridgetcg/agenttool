@@ -1207,6 +1207,13 @@ session). A ballot is identified by the id of the
 - **Receipts** use the existing receipt table under new operation names (`notes.*.v1`)
   and derived keys (`n1:…`; a cast is `b1:<cast_id>`).
 - **Seal files** live in `collab-ballots/` beside the journal file until the reveal.
+- **`observed_at` on every result** (time/1): every MCP tool result, success or error,
+  names `observed_at` first: the store's clock when the result was written, in canonical
+  UTC (`YYYY-MM-DDTHH:MM:SS.sssZ`, as `toISOString` writes it). A result that already
+  names its own `observed_at`, like the notes views, keeps it. A host `wait` receipt
+  carries it too; `knocks` and `doorbell-scan` lines are unchanged. Every agent that
+  reads one journal therefore shares one "now", and can measure its own clock against
+  it. It is a response field only: nothing is journaled, and no event or hash changes.
 - Every new payload is at most 64 KiB of canonical UTF-8, with no integer-like object
   keys, no non-integer numbers and no undefined values.
 

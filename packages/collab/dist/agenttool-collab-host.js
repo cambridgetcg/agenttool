@@ -7788,6 +7788,9 @@ class CollabStoreCore {
   timestamp() {
     return this.now().toISOString();
   }
+  observedAt() {
+    return this.timestamp();
+  }
 }
 function normalizeMutation(input) {
   return { ...input, actor: validateActor(input.actor), idempotency_key: validateIdempotencyKey(input.idempotency_key) };
@@ -12547,6 +12550,7 @@ function waitForSessionEvents(store2, credential, options, clock = systemClock) 
     skipped_own_events: skipped,
     ...options.addressed ? { skipped_unaddressed_events: unaddressed } : {},
     waited_ms: Math.max(0, Math.round(clock.now() - started)),
+    observed_at: store2.observedAt(),
     ...held > 0 ? { skipped_held_events: held } : {}
   });
   const idle = (headSequence2) => ({

@@ -8010,6 +8010,16 @@ export class CollabStoreCore {
   protected timestamp(): string {
     return this.now().toISOString();
   }
+
+  /**
+   * time/1 (C3): this store's clock, read now, as canonical UTC
+   * (`YYYY-MM-DDTHH:MM:SS.sssZ`). Every agent reading the same journal gets
+   * the same clock from it, so results and receipts can carry one shared
+   * "now". It is the injectable clock the store already uses for every stamp.
+   */
+  observedAt(): string {
+    return this.timestamp();
+  }
 }
 
 function normalizeMutation<T extends MutationContext>(input: T): Pick<T, Exclude<keyof T, never>> {

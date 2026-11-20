@@ -454,6 +454,8 @@ describe("agenttool-collab-host wait", () => {
       head_sequence: head.sequence,
       skipped_own_events: 0,
       waited_ms: expect.any(Number),
+      // time/1: the journal store's clock when the receipt was written.
+      observed_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
     });
     for (const hidden of [
       handle.credential.session_token,

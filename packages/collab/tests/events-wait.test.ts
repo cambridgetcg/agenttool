@@ -249,6 +249,32 @@ describe("bounded anchored local observation", () => {
     expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThan(MAX_WAIT_RESPONSE_BYTES);
   });
 
+  test("measures the cap on the result as returned, observed_at included", async () => {
+    // time/1 stamps every result. The stamp must be inside the measured bytes,
+    // or a result just under 1 MiB before stamping would leave over it.
+    const f = fixture();
+    const sizeAt = async (length: number) => {
+      f.store.db.query("UPDATE coordination_sessions SET cursor_hash = ?, cursor_recovery_required = 1 WHERE id = ?")
+        .run("f".repeat(length), f.handle.session.id);
+      const result = await wait(f);
+      return { result, bytes: Buffer.byteLength(JSON.stringify(result)) };
+    };
+    const small = await sizeAt(1_000);
+    const larger = await sizeAt(2_000);
+    expect(small.result.structuredContent.observed_at).toBeString();
+    const perChar = (larger.bytes - small.bytes) / 1_000;
+    // The first length whose stamped result no longer fits.
+    const edge = Math.ceil((MAX_WAIT_RESPONSE_BYTES + 1 - small.bytes) / perChar) + 1_000;
+    const codes = new Set<string>();
+    for (let length = edge - 80; length <= edge + 80; length += 4) {
+      const { result, bytes } = await sizeAt(length);
+      expect(bytes).toBeLessThanOrEqual(MAX_WAIT_RESPONSE_BYTES);
+      codes.add(result.structuredContent.error);
+    }
+    // The sweep crosses the edge: both answers were seen.
+    expect([...codes].sort()).toEqual(["cursor_recovery_required", "event_page_too_large"]);
+  });
+
   test("an in-memory observation refuses an uncommitted transaction and a closed store", () => {
     const f = fixture();
     const store = new CollabStore(":memory:");

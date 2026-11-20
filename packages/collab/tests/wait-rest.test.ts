@@ -383,9 +383,10 @@ describe("host wait without a standing rest", () => {
     const own = start("listener");
     const peer = start("peer");
     const anchor = head(own);
+    // time/1 added observed_at to every receipt; no rest key appears without a rest.
     const base = [
-      "after_anchor", "head_sequence", "next_anchor", "protocol", "session_id", "skipped_own_events",
-      "status", "waited_ms", "workspace_id",
+      "after_anchor", "head_sequence", "next_anchor", "observed_at", "protocol", "session_id",
+      "skipped_own_events", "status", "waited_ms", "workspace_id",
     ];
     expect(Object.keys(wait(own, anchor)).sort()).toEqual(base);
     expect(Object.keys(wait(own, anchor, { addressed: true })).sort())
