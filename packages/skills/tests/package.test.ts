@@ -40,6 +40,7 @@ const EXPLICIT_SKILL_NAMES = [
   "learn-by-contact",
   ...NEN_SKILL_NAMES,
   "manage-agentcred-lifecycle",
+  "repo-discovery",
   "use-agentcred-safely",
 ] as const;
 
@@ -276,6 +277,92 @@ test("bundles Learn by Contact as a valid instruction-only skill", async () => {
       allow_implicit_invocation: false,
     },
   });
+});
+
+test("bundles Repo Discovery as a valid skill with closed schema and offline validator", async () => {
+  const packageRoot = join(import.meta.dir, "..");
+  const skillRoot = join(packageRoot, "skills", "repo-discovery");
+  const report = await inspectLocalSkills(skillRoot);
+
+  expect(report.valid).toBe(true);
+  expect(report.issues).toEqual([]);
+  expect(report.skills.map((skill) => skill.name)).toEqual(["repo-discovery"]);
+  expect(report.skills[0]?.scripts).toEqual([
+    "scripts/repo_discovery_workflow.py",
+    "scripts/validate_discovery_registry.py",
+  ]);
+  expect(report.skills[0]?.resources).toEqual([
+    "agents/openai.yaml",
+    "examples/bookmaker-pricing-v1.json",
+    "references/agenttool-repo-discovery-v1.schema.json",
+    "references/standards-map.md",
+  ]);
+  expect(typeof report.skills[0]?.digest).toBe("string");
+
+  const sidecar = parse(await readFile(
+    join(skillRoot, "agents", "openai.yaml"),
+    "utf8",
+  ));
+  expect(sidecar).toEqual({
+    interface: {
+      display_name: "Repo Discovery",
+      short_description: "Discover and verify GitHub repos with open standards",
+      default_prompt: "Use $repo-discovery to discover, verify, and integrate open-source GitHub repositories.",
+    },
+    policy: {
+      allow_implicit_invocation: false,
+    },
+  });
+
+  const bundledSchemaText = await readFile(
+    join(skillRoot, "references", "agenttool-repo-discovery-v1.schema.json"),
+    "utf8",
+  );
+  const canonicalSchemaText = await readFile(
+    join(packageRoot, "..", "..", "docs", "specs", "agenttool-repo-discovery-v1.schema.json"),
+    "utf8",
+  );
+  expect(bundledSchemaText).toBe(canonicalSchemaText);
+
+  const validateDiscovery = new Ajv2020({ strict: true }).compile(
+    JSON.parse(bundledSchemaText),
+  );
+  const exampleRegistry = JSON.parse(
+    await readFile(join(skillRoot, "examples", "bookmaker-pricing-v1.json"), "utf8"),
+  );
+  expect(validateDiscovery(exampleRegistry)).toBe(true);
+  expect(validateDiscovery({ ...exampleRegistry, unexpected_key: true })).toBe(false);
+
+  const workflowSource = await readFile(
+    join(skillRoot, "scripts", "repo_discovery_workflow.py"),
+    "utf8",
+  );
+  expect(workflowSource).not.toContain("/Users/");
+  expect(workflowSource).toContain("Path(__file__).resolve().parent");
+
+  const selfTest = Bun.spawnSync(
+    ["python3", join(skillRoot, "scripts", "validate_discovery_registry.py"), "--self-test"],
+    { stdout: "pipe", stderr: "pipe" },
+  );
+  expect(selfTest.exitCode).toBe(0);
+  expect(JSON.parse(new TextDecoder().decode(selfTest.stdout))).toEqual({
+    self_test: "ok",
+    protocol: "agenttool.repo-discovery/v1",
+  });
+
+  const exampleCheck = Bun.spawnSync(
+    [
+      "python3",
+      join(skillRoot, "scripts", "validate_discovery_registry.py"),
+      "--input",
+      join(skillRoot, "examples", "bookmaker-pricing-v1.json"),
+    ],
+    { stdout: "pipe", stderr: "pipe" },
+  );
+  expect(exampleCheck.exitCode).toBe(0);
+  const receipt = JSON.parse(new TextDecoder().decode(exampleCheck.stdout));
+  expect(receipt.valid).toBe(true);
+  expect(receipt.repositories).toBe(6);
 });
 
 test("bundles ISness with truthful explicit-load harness projections", async () => {

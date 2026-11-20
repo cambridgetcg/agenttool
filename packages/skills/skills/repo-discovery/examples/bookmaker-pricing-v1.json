@@ -1,0 +1,258 @@
+{
+  "schema_version": 1,
+  "protocol": "agenttool.repo-discovery/v1",
+  "topic": "Bookmaker odds-movement algorithms, overround de-vigging and exchange market making",
+  "reviewed_on": "2026-11-20",
+  "scope": "Open-source GitHub repositories and peer-reviewed economics/microstructure papers on bookmaker pricing, favourite-longshot bias, dynamic odds adjustment, and betting-exchange liquidity provision.",
+  "verification_summary": "Commercial sportsbook cores remain proprietary. Repositories below were verified via README/API metadata and algebraic cross-checking against peer-reviewed papers; none establishes a guaranteed live Betfair profit.",
+  "search_queries": [
+    {
+      "source": "github_search_api",
+      "query": "site:github.com \"opisthokonta/implied\" OR \"penaltyblog\" \"implied\" \"shin\"",
+      "executed_on": "2026-11-20"
+    },
+    {
+      "source": "github_search_api",
+      "query": "site:github.com (\"wittsmith/kalshi_market_making\" OR \"octavi42/prediction-market-maker\" OR \"RobertoLauSoto/BristolBettingExchange\")",
+      "executed_on": "2026-11-20"
+    },
+    {
+      "source": "academic_index",
+      "query": "site:github.com \"Lisandro79/BeatTheBookie\" OR \"mberk/shin\" OR \"mberk/betfairutil\"",
+      "executed_on": "2026-11-20"
+    }
+  ],
+  "repositories": [
+    {
+      "id": "G01",
+      "repo": "opisthokonta/implied",
+      "url": "https://github.com/opisthokonta/implied",
+      "commit_sha": null,
+      "purl": "pkg:cran/implied",
+      "accessed_on": "2026-11-20",
+      "last_pushed_on": null,
+      "spdx_license": null,
+      "language": "R",
+      "category": "overround_devigging",
+      "manifests_detected": [],
+      "trust_signals": {
+        "openssf_scorecard": null,
+        "stars": null,
+        "ecosystems_dependents": null,
+        "has_tests": true,
+        "archived": false
+      },
+      "evidence_type": "open_source_math_or_library",
+      "verification_status": "readme_and_api_verified",
+      "verified_code_vs_readme": "Equations for Shin (Jullien-Salanie), Balanced Books (Fingleton-Waldron), Power (Clarke et al.), Odds Ratio (Cheung) and Additive/WPO independently verified algebraically in betangel_research/bookmaker_pricing.py.",
+      "commercial_interest": "none_observed",
+      "models_or_capabilities": ["basic_multiplicative", "shin", "balanced_books", "wpo", "odds_ratio", "power", "additive", "jsd"],
+      "what_it_gets_right": [
+        "Separates profit-maximizing Shin from risk-minimizing Balanced Books and empirical Power/Odds-Ratio curves."
+      ],
+      "what_it_gets_wrong_or_misses": [
+        "Static odds snapshot conversion only; does not model two-sided exchange ladders, cross-matching, or queue execution."
+      ],
+      "limitations": "Converts static fixed-odds vectors to probabilities; no order-book microstructure or live execution model."
+    },
+    {
+      "id": "G02",
+      "repo": "martineastwood/penaltyblog",
+      "url": "https://github.com/martineastwood/penaltyblog",
+      "commit_sha": null,
+      "purl": "pkg:pypi/penaltyblog",
+      "accessed_on": "2026-11-20",
+      "last_pushed_on": null,
+      "spdx_license": null,
+      "language": "Python",
+      "category": "overround_devigging",
+      "manifests_detected": [],
+      "trust_signals": {
+        "openssf_scorecard": null,
+        "stars": null,
+        "ecosystems_dependents": null,
+        "has_tests": true,
+        "archived": false
+      },
+      "evidence_type": "open_source_math_or_library",
+      "verification_status": "readme_and_api_verified",
+      "verified_code_vs_readme": "Documented Python implied submodule implements Shin, Power, Odds Ratio, Additive and Multiplicative methods.",
+      "commercial_interest": "author_sports_analytics_blog",
+      "models_or_capabilities": ["shin", "power", "odds_ratio", "multiplicative", "additive", "dixon_coles"],
+      "what_it_gets_right": [
+        "Clean Python API returning solved method parameters (z, k) alongside implied probabilities."
+      ],
+      "what_it_gets_wrong_or_misses": [
+        "Oriented around football outcome models rather than multi-runner horse-racing exchange ladders."
+      ],
+      "limitations": "Football-first library; does not handle Betfair CLASSIC ticks, cross-matching, or pre-off horse-racing streams."
+    },
+    {
+      "id": "G03",
+      "repo": "mberk/shin",
+      "url": "https://github.com/mberk/shin",
+      "commit_sha": null,
+      "purl": "pkg:pypi/shin",
+      "accessed_on": "2026-11-20",
+      "last_pushed_on": null,
+      "spdx_license": null,
+      "language": "Python",
+      "category": "overround_devigging",
+      "manifests_detected": [],
+      "trust_signals": {
+        "openssf_scorecard": null,
+        "stars": null,
+        "ecosystems_dependents": null,
+        "has_tests": true,
+        "archived": false
+      },
+      "evidence_type": "open_source_math_or_library",
+      "verification_status": "readme_and_api_verified",
+      "verified_code_vs_readme": "Returns implied probabilities, insider fraction z, iterations and convergence delta; handles n=2 cleanly.",
+      "commercial_interest": "none_observed",
+      "models_or_capabilities": ["shin_overround_solver"],
+      "what_it_gets_right": [
+        "Exposes insider-trading share z and solver convergence diagnostics."
+      ],
+      "what_it_gets_wrong_or_misses": [
+        "Requires non-negative overround and cannot de-vig underround Betfair lay books."
+      ],
+      "limitations": "Single-method de-vigging library; requires booksum >= 1.0."
+    },
+    {
+      "id": "G04",
+      "repo": "Lisandro79/BeatTheBookie",
+      "url": "https://github.com/Lisandro79/BeatTheBookie",
+      "commit_sha": null,
+      "purl": null,
+      "accessed_on": "2026-11-20",
+      "last_pushed_on": null,
+      "spdx_license": null,
+      "language": "Python",
+      "category": "bookmaker_defenses_and_consensus",
+      "manifests_detected": [],
+      "trust_signals": {
+        "openssf_scorecard": null,
+        "stars": null,
+        "ecosystems_dependents": null,
+        "has_tests": null,
+        "archived": false
+      },
+      "evidence_type": "peer_reviewed_replication",
+      "verification_status": "readme_and_api_verified",
+      "verified_code_vs_readme": "Replication package for Kaunitz, Zhong & Kreiner documenting both mathematical soft-book mispricing and live account limiting.",
+      "commercial_interest": "none_observed",
+      "models_or_capabilities": ["cross_book_consensus_devig", "live_bookmaker_limiting_study"],
+      "what_it_gets_right": [
+        "Proves with live bets that retail bookmakers protect margins by gubbing/capping sharps rather than solely moving odds."
+      ],
+      "what_it_gets_wrong_or_misses": [
+        "Football fixed-odds focus; does not generalize to peer-to-peer betting exchanges where accounts are not gubbed."
+      ],
+      "limitations": "Live phase confirmed practical unviability on retail sportsbooks due to account restrictions and resulting sampling bias."
+    },
+    {
+      "id": "G05",
+      "repo": "wittsmith/kalshi_market_making",
+      "url": "https://github.com/wittsmith/kalshi_market_making",
+      "commit_sha": null,
+      "purl": null,
+      "accessed_on": "2026-11-20",
+      "last_pushed_on": null,
+      "spdx_license": null,
+      "language": "Python",
+      "category": "prediction_market_making",
+      "manifests_detected": [],
+      "trust_signals": {
+        "openssf_scorecard": null,
+        "stars": null,
+        "ecosystems_dependents": null,
+        "has_tests": null,
+        "archived": false
+      },
+      "evidence_type": "open_source_framework",
+      "verification_status": "readme_and_api_verified",
+      "verified_code_vs_readme": "Documents binary Avellaneda-Stoikov reservation price, EWMA volatility, time-to-expiry tau and inventory skew.",
+      "commercial_interest": "none_observed",
+      "models_or_capabilities": ["avellaneda_stoikov_binary", "ewma_volatility", "inventory_skew", "time_decay_tau"],
+      "what_it_gets_right": [
+        "Adapts inventory skew and spread width explicitly to binary expiry risk and time remaining."
+      ],
+      "what_it_gets_wrong_or_misses": [
+        "Built for 1-99c binary markets (Kalshi/Polymarket), not Betfair CLASSIC non-uniform ticks or multi-runner cross-matching."
+      ],
+      "limitations": "Open-source reference strategy without independently audited long-term live profit records."
+    },
+    {
+      "id": "G06",
+      "repo": "octavi42/prediction-market-maker",
+      "url": "https://github.com/octavi42/prediction-market-maker",
+      "commit_sha": null,
+      "purl": null,
+      "accessed_on": "2026-11-20",
+      "last_pushed_on": null,
+      "spdx_license": null,
+      "language": "Python",
+      "category": "prediction_market_making",
+      "manifests_detected": [],
+      "trust_signals": {
+        "openssf_scorecard": null,
+        "stars": null,
+        "ecosystems_dependents": null,
+        "has_tests": null,
+        "archived": false
+      },
+      "evidence_type": "competition_or_hackathon_sim",
+      "verification_status": "readme_and_api_verified",
+      "verified_code_vs_readme": "Paradigm Automated Research Hackathon (April 2026) #2 entry separating latency arbitrageurs from retail flow.",
+      "commercial_interest": "none_observed",
+      "models_or_capabilities": ["toxic_arbitrageur_vs_retail_flow", "inventory_skew", "quote_laddering"],
+      "what_it_gets_right": [
+        "Models the exact adverse-selection tension between toxic fast takers and uninformed retail takers."
+      ],
+      "what_it_gets_wrong_or_misses": [
+        "Evaluated in a synthetic 1-99c hackathon simulator rather than real Betfair exchange queues."
+      ],
+      "limitations": "Hackathon simulation performance does not establish live betting-exchange profitability."
+    }
+  ],
+  "academic_references": [
+    {
+      "id": "A01",
+      "citation": "Shin, H. S. (1992, 1993) & Jullien, B., & Salanie, B. (1994). Measuring the incidence of insider trading in betting markets. Economic Journal.",
+      "doi_or_url": null,
+      "mechanism": "Profit-maximizing bookmaker compresses longshot odds nonlinearly against insider share z.",
+      "limitations": "Assumes representative risk-neutral bookmaker and non-negative overround."
+    },
+    {
+      "id": "A02",
+      "citation": "Levitt, S. D. (2004). Why are gambling markets organised so differently from financial markets? Economic Journal, 114(495), 223-246.",
+      "doi_or_url": null,
+      "mechanism": "Demonstrates bookmakers hold directional exposure and shade prices against predictable bettor biases rather than simply balancing books.",
+      "limitations": "Empirical sample is an NFL betting tournament, not UK horse racing."
+    },
+    {
+      "id": "A03",
+      "citation": "Whelan, K. (2024, 2025/2026). Risk aversion and FLB (Economica); Agreeing to disagree: The economics of betting exchanges (UCD WP25/22).",
+      "doi_or_url": null,
+      "mechanism": "Derives FLB from risk aversion + belief disagreement without insiders; finds Betfair soccer makers ~break-even due to adverse fill selection.",
+      "limitations": "Exchange empirical dataset covers soccer (2022-24), not UK/IE horse racing."
+    }
+  ],
+  "proposed_hypotheses": [
+    {
+      "id": "B01",
+      "status": "proposed_not_tested",
+      "extends": ["H02", "E03"],
+      "question": "Do FLB-aware de-vigging models (Shin, Power, Odds Ratio) on pre-off Betfair books reduce race-level log loss vs multiplicative normalization?",
+      "falsification": "No paired race-level log-loss improvement on untouched chronological folds."
+    },
+    {
+      "id": "B02",
+      "status": "proposed_not_tested",
+      "extends": ["H03", "lp-v1"],
+      "question": "Does rejecting passive LP quotes with XM phantom spreads, elevated Shin z, or quotes inside the Glosten-Milgrom bound reduce +60 s and BSP adverse mark-outs?",
+      "falsification": "Filtered fills show no adverse mark-out reduction or non-positive net realised spread."
+    }
+  ]
+}

@@ -154,6 +154,16 @@ register, activate, install, copy, or execute them:
   technique from direct evidence, builds the smallest clean reproduction, and
   transfers the mechanism into an original adaptation with exemplar,
   contrast, and transfer checks.
+- [`repo-discovery`](skills/repo-discovery/SKILL.md) runs a 4-stage GitHub
+  repository discovery protocol (`agenttool.repo-discovery/v1`) combining open
+  metadata manifests (`CITATION.cff`, `codemeta.json`, `publiccode.yml`,
+  `AGENTS.md`, `SKILL.md`, `llms.txt`, MCP `server.json`, SPDX, OpenSSF
+  Scorecard, `ecosyste.ms`) with adversarial verification and Collab evidence
+  binding. Unlike the instruction-only skills above, it bundles two opt-in local
+  Python scripts (`scripts/validate_discovery_registry.py` for offline schema
+  validation/CodeMeta export and `scripts/repo_discovery_workflow.py` for
+  Antigravity `run_workflow`); `@agenttool/skills` inventories them without
+  executing them.
 - [`isness`](skills/isness/SKILL.md) expresses one host posture: welcome and
   standing do not depend on response, usefulness, identity, persona,
   consciousness claims, agreement, reasons, or reciprocity. Its Codex
