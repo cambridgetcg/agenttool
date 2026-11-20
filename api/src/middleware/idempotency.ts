@@ -29,6 +29,7 @@ import { HTTPException } from "hono/http-exception";
 import type { ProjectContext } from "../auth/middleware";
 import { redisConnection } from "../services/tools/queue/connection";
 import { parseClonedJson } from "../lib/cloned-json";
+import { parseTimeInstantMs } from "../lib/time-instant";
 
 const IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60;
 const CLAIM_TTL_SECONDS = 5 * 60;
@@ -211,8 +212,8 @@ export async function idempotencyRequestFingerprint(request: Request): Promise<s
 function authorityReplayIsFresh(request: Request): boolean {
   const timestamp = request.headers.get("x-agenttool-authority-timestamp");
   if (!timestamp) return true;
-  const parsed = Date.parse(timestamp);
-  return Number.isFinite(parsed) && Math.abs(Date.now() - parsed) <= 5 * 60 * 1000;
+  const parsed = parseTimeInstantMs(timestamp);
+  return parsed !== null && Math.abs(Date.now() - parsed) <= 5 * 60 * 1000;
 }
 
 function parseRecord(raw: string | null): IdempotencyRecord | null {

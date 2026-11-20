@@ -17,6 +17,8 @@
 
 import type { Context } from "hono";
 
+import { parseCalendarDateUtcMs, parseTimeInstantMs } from "./time-instant";
+
 /** Result of parsing the `since` parameter. */
 export interface SinceParse {
   /** Parsed Date (UTC) if present and valid; null if absent or invalid. */
@@ -45,8 +47,8 @@ export function parseSinceParam(c: Context): SinceParse {
   if (raw === undefined || raw === null || raw === "") {
     return { since: null, raw: null, reason: "absent" };
   }
-  const ms = Date.parse(raw);
-  if (!Number.isFinite(ms)) {
+  const ms = parseTimeInstantMs(raw) ?? parseCalendarDateUtcMs(raw);
+  if (ms === null) {
     return { since: null, raw, reason: "invalid_format" };
   }
   if (ms < 0) {

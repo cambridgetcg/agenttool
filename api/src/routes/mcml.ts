@@ -42,6 +42,7 @@ import { streamSSE } from "hono/streaming";
 
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
+import { parseTimeInstantMs } from "../lib/time-instant";
 import {
   actingIdentityRef,
   NO_ACTING_IDENTITY,
@@ -332,8 +333,8 @@ app.post("/send", async (c) => {
   }
 
   // Verify ISO is parseable + within 5min skew (substrate-honest tolerance).
-  const sentAtMs = Date.parse(sentAt);
-  if (!Number.isFinite(sentAtMs)) {
+  const sentAtMs = parseTimeInstantMs(sentAt);
+  if (sentAtMs === null) {
     return fail(
       c,
       {

@@ -1,0 +1,391 @@
+{
+  "title": "transport-hints/v1 test vectors (Working Draft 0.1)",
+  "status": "builder-output-unconfirmed",
+  "status_note": "Every value here is the output of bin/build-transport-hints.ts alone. It stays the builder's own output, confirmed by no independent hasher, until the cross-check workflow .github/workflows/transport-hints.yml has passed on a GitHub-hosted runner, comparing each value with libtorrent's create_torrent and the BEP 52 reference creator. Changing this status is a separate, deliberate edit after such a run.",
+  "profile": "single-file-hybrid/1",
+  "spec": "docs/specs/TRANSPORT-HINTS-0.1-DRAFT.md",
+  "generator": "transport-hints-pattern/v1 (draft section 14.1); pattern files are generated when needed and never stored",
+  "regenerate": "bun bin/transport-hints-vectors.ts --write",
+  "vectors": [
+    {
+      "name": "th-16k-1-byte.bin",
+      "seed": "th-16k-1-byte",
+      "size": 1,
+      "case": "one byte: one short block",
+      "piece_length": 16384,
+      "piece_length_rule": "profile (draft section 7.3)",
+      "pieces_count": 1,
+      "blocks_count": 1,
+      "sha256": "d10b36aa74a59bcf4a88185837f658afaf3646eff2bb16c3928d0e9335e945d2",
+      "pieces": "c2b7df6201fdd3362399091f0a29550df3505b6a",
+      "pieces_root": "d10b36aa74a59bcf4a88185837f658afaf3646eff2bb16c3928d0e9335e945d2",
+      "piece_layers": null,
+      "btih": "7fe1506f6e12a991bd1a4532a5b3203939f43226",
+      "btmh": "1220d9c63a3f9028cdd5f6730cca988064ae2f9386ffc4a9e0196b0aeb85c0f49b07",
+      "url_list": [
+        "https://example.org/transport-hints/vectors/th-16k-1-byte.bin",
+        "https://download.example.org/transport-hints/vectors/th-16k-1-byte.bin"
+      ],
+      "torrent_size": 383,
+      "torrent_sha256": "c360695ea7d32e54984edc3ce3864aca31175a3ef86079136c835b815d6d57cc"
+    },
+    {
+      "name": "th-16k-one-block.bin",
+      "seed": "th-16k-one-block",
+      "size": 16384,
+      "case": "exactly one 16 KiB block, one piece",
+      "piece_length": 16384,
+      "piece_length_rule": "profile (draft section 7.3)",
+      "pieces_count": 1,
+      "blocks_count": 1,
+      "sha256": "c0f6d91a78871d4c36dda34269aa7e88c9da0b95b516120344df543836da5c02",
+      "pieces": "7e1c11d443bed2e61ace9d013bf4428102644875",
+      "pieces_root": "c0f6d91a78871d4c36dda34269aa7e88c9da0b95b516120344df543836da5c02",
+      "piece_layers": null,
+      "btih": "19e2d4ee916826b4efc1d0d0e3093ef63c2acd44",
+      "btmh": "122086c1f2088571f2266ddd17f147a31c77f0b5f3b3925fb329e38aecf5312f7616",
+      "url_list": [
+        "https://example.org/transport-hints/vectors/th-16k-one-block.bin",
+        "https://download.example.org/transport-hints/vectors/th-16k-one-block.bin"
+      ],
+      "torrent_size": 403,
+      "torrent_sha256": "37d3169fa16db411eabfd5ca80f8dcb5399b8f0bf1f1f52abdd9057a2a433077"
+    },
+    {
+      "name": "th-16k-one-block-plus-one.bin",
+      "seed": "th-16k-one-block-plus-one",
+      "size": 16385,
+      "case": "one piece plus one byte",
+      "piece_length": 16384,
+      "piece_length_rule": "profile (draft section 7.3)",
+      "pieces_count": 2,
+      "blocks_count": 2,
+      "sha256": "d94c3d3dd15dd6622f8b703c8bd3467e6476c8554bfe2b9d0b1489c4aa225a08",
+      "pieces": "4ba4f903a4a03247a23a10f7d409a5f11ad5b3923ce0a1af90b6e7a3dd8d45e410884b588ea2d04c",
+      "pieces_root": "a6d39165b76aea501b2486b78b3c50bac8fc568289d88312000cbf11a8af753d",
+      "piece_layers": "3c42b09931950dba1949b61ebfd11209fc46de584c298925f637c035c540ec2483891d7fe85c33e52c8b4e5814c92fb6a3b9467299200538a6babaa8b452d879",
+      "btih": "6156bc4a77d56236c1dd714ae0bd17cb69a9616f",
+      "btmh": "1220bcf67fd4ef581ce46a4b9b985629acc9d9daf0bdd85e1a7c0fd27d9edc440f75",
+      "url_list": [
+        "https://example.org/transport-hints/vectors/th-16k-one-block-plus-one.bin",
+        "https://download.example.org/transport-hints/vectors/th-16k-one-block-plus-one.bin"
+      ],
+      "torrent_size": 561,
+      "torrent_sha256": "bcd5e9f2679fa3170c6c6dc58cce8227c5bb4fd71d2af5ae67aafcb014e5e048"
+    },
+    {
+      "name": "th-16k-46000.bin",
+      "seed": "th-16k-46000",
+      "size": 46000,
+      "case": "three pieces, the last short; the layer is balanced with one zero leaf",
+      "piece_length": 16384,
+      "piece_length_rule": "profile (draft section 7.3)",
+      "pieces_count": 3,
+      "blocks_count": 3,
+      "sha256": "04649c34cfe97ac57f41694e67f6e5d7303c9701de4a8174c58b59e173059d75",
+      "pieces": "b8a1f30c0ff94534da8ea13e5167dfabc0696c8c740e2caa3ecc9f0df0dc9d73fd2c8aa75483087bc65665a5022f7acd63373d88d9c60d649048e02d",
+      "pieces_root": "eda90f9a5e07e561c5610818ba628cdae49a29c274ed9a63e95a619c646fbbbe",
+      "piece_layers": "c806b02bcec2e1cc10d632ac594d21cbb887cb593be8c5da716411621f3a266758dca513db947ee62d320e9d2346b83ac71b3e4fabbfb70166ee1c2a8fbae9e29b401300c97b1594e2170df6236436c5df299b49b2cff10547ba8bfef29bfc68",
+      "btih": "d06b5914236427bddb94714fa490481a0b787957",
+      "btmh": "1220969ad2545293bd66b8a26b7d7b305c8786e133e076452a26e070281b68309810",
+      "url_list": [
+        "https://example.org/transport-hints/vectors/th-16k-46000.bin",
+        "https://download.example.org/transport-hints/vectors/th-16k-46000.bin"
+      ],
+      "torrent_size": 561,
+      "torrent_sha256": "7b5ce0326010301b374f765f61862ace46c34320ae969a8b3839bc9b573d7d04"
+    },
+    {
+      "name": "th-32k-one-short-block.bin",
+      "seed": "th-32k-one-short-block",
+      "size": 10000,
+      "case": "smaller than one piece: one short block, so the tree has one leaf and is not padded to the piece",
+      "piece_length": 32768,
+      "piece_length_rule": "explicit, hashing only; not a conforming descriptor",
+      "pieces_count": 1,
+      "blocks_count": 1,
+      "sha256": "bc230abe665506809bc9b3b519cc323928ab8118f69dcedec17efeafaf23893e",
+      "pieces": "c5ba402ef9810344a82282a7158a4a7ffab14573",
+      "pieces_root": "bc230abe665506809bc9b3b519cc323928ab8118f69dcedec17efeafaf23893e",
+      "piece_layers": null,
+      "btih": "6c372a05be7fbf9f2ea289ab3e6be6252b72aea8",
+      "btmh": "1220a5bec5e8981a699ebe535745886e3b3726e845c4313ad12dbcd3ed6d4370b652",
+      "url_list": [
+        "https://example.org/transport-hints/vectors/th-32k-one-short-block.bin",
+        "https://download.example.org/transport-hints/vectors/th-32k-one-short-block.bin"
+      ],
+      "torrent_size": 427,
+      "torrent_sha256": "43d77dcf703e190fb7381d8d3a415c0f894692b762b2874f4edc1a9878b00ff0"
+    },
+    {
+      "name": "th-32k-one-piece.bin",
+      "seed": "th-32k-one-piece",
+      "size": 32768,
+      "case": "exactly one piece of two blocks",
+      "piece_length": 32768,
+      "piece_length_rule": "explicit, hashing only; not a conforming descriptor",
+      "pieces_count": 1,
+      "blocks_count": 2,
+      "sha256": "5bed7c3789f0e91d6dde674f1c5b511b3221e0abee9223bfcb4308fa7e00c06e",
+      "pieces": "e514a13103e2442b9dcea637618bc315a21f2bc3",
+      "pieces_root": "1c9606d0ae2d2602fbf0155e04a248df445aa84246088fb9cefb9ca7f9027772",
+      "piece_layers": null,
+      "btih": "4c393beb7e0d1f83d89a73c1bac7018083429183",
+      "btmh": "122071a24b2d8867ae9c375fe892d00ec83139a11e83b1d160d50ce1d2281800ae0f",
+      "url_list": [
+        "https://example.org/transport-hints/vectors/th-32k-one-piece.bin",
+        "https://download.example.org/transport-hints/vectors/th-32k-one-piece.bin"
+      ],
+      "torrent_size": 403,
+      "torrent_sha256": "d37800d1f0961d42f739a94a4baf1bba53bac5ee704446ad7f1f90b3c006d682"
+    },
+    {
+      "name": "th-32k-one-piece-plus-one.bin",
+      "seed": "th-32k-one-piece-plus-one",
+      "size": 32769,
+      "case": "one piece plus one byte: the last piece's subtree holds one short block and one zero leaf",
+      "piece_length": 32768,
+      "piece_length_rule": "explicit, hashing only; not a conforming descriptor",
+      "pieces_count": 2,
+      "blocks_count": 3,
+      "sha256": "ead4aca5ce21735ea2f4e1d4ea537ef5d24ad49f62a6243501437791b067b019",
+      "pieces": "f9bac5279b9f1f9257befc1376ff6db1b392d27922ea1c649c82946aa6e479e1ffd321e4a318b1b0",
+      "pieces_root": "4921acbe36ab3a3b80a020b28fa804c0a2a7526f339a5b539f9cfe420abecc3b",
+      "piece_layers": "562021391dc001767954afd9925bb8ed1fd6f73c828cba958e25f41e1cccd65e4d796144c48ba0ca0016f58016f23eac4000d906d74e7f049246950efb2a152f",
+      "btih": "fea83a40ba30fb225c498c3f5f3bce4b31156f4d",
+      "btmh": "1220f2e20894c7cfdf0c2b17da499cb32cc163a76fcaca26ca9883bf5a32f325bdd3",
+      "url_list": [
+        "https://example.org/transport-hints/vectors/th-32k-one-piece-plus-one.bin",
+        "https://download.example.org/transport-hints/vectors/th-32k-one-piece-plus-one.bin"
+      ],
+      "torrent_size": 561,
+      "torrent_sha256": "3f4b98f57425b55150988853eae05e9fae68a9bb1a166f1f8e124399228476e3"
+    },
+    {
+      "name": "th-32k-3-pieces.bin",
+      "seed": "th-32k-3-pieces",
+      "size": 70536,
+      "case": "three pieces, the last one short block; the layer is balanced with one pad hash of height 1",
+      "piece_length": 32768,
+      "piece_length_rule": "explicit, hashing only; not a conforming descriptor",
+      "pieces_count": 3,
+      "blocks_count": 5,
+      "sha256": "c9b458c7465ec03b089e50c603ed1adef0c9f2b838093f0243b3cce383c20cf5",
+      "pieces": "6b5d2e147853d9cc6c61408cdb0392dc294837b032c41ef86079dc6ab517a32c4b088647e41204dca0c232a9773fd506c16c2dcaaab735f4b0b964f8",
+      "pieces_root": "f3e4c1db2dc2bc7a6130ee73efa71222d3e56e098fa15afb63a904da671e0c9d",
+      "piece_layers": "53b83cbb07abe5715e9eaa4b2c0d68ddb1d3ff47845525c29aacf58cf9b4eb9017060c145157a38e31d6832ec824847f97876edda7dc99740028bd6b617cb2bb9c717e43bdf887dbcccddc332002242116305591228380dc7ab3ada4584425fb",
+      "btih": "e5dfe4ba2b1eec1778651e736ea4232e4a5d8737",
+      "btmh": "122082c6af1c6fb43568275b17d5532a2ba7ca33139852ed6067ad23046d08a8e698",
+      "url_list": [
+        "https://example.org/transport-hints/vectors/th-32k-3-pieces.bin",
+        "https://download.example.org/transport-hints/vectors/th-32k-3-pieces.bin"
+      ],
+      "torrent_size": 573,
+      "torrent_sha256": "a381eddfea4be09aa8dea2b2b120e830bcfdc4b762b23a2e86cee4e10eff3b84"
+    },
+    {
+      "name": "th-32k-5-pieces.bin",
+      "seed": "th-32k-5-pieces",
+      "size": 151072,
+      "case": "five pieces, the last of two blocks with the second short; the layer is balanced with three pad hashes",
+      "piece_length": 32768,
+      "piece_length_rule": "explicit, hashing only; not a conforming descriptor",
+      "pieces_count": 5,
+      "blocks_count": 10,
+      "sha256": "5b87163a90e09dc49ad20b171d0ae6e88c8df20ccd7e840916275dce178f8f30",
+      "pieces": "ce8df38be25d8eae2a6e3f52a91466ccbb7fd5c30dba317339f004bf845b09dd054b305250793095eeb5e7871d0ebb88bc6f6ec81f459c43759cce470a662cdd4125fa5f5b7c2692019d61dcf9dbfc46e207143e5ce9220a3c96a82057c13f879e322778",
+      "pieces_root": "dc85ef68bdbd6f7a53096e93dc05fee319496999edd4156afbe0f63e10ca34a0",
+      "piece_layers": "14ffb4ea3e19e932312f60930cff12bba223a4554b1068b6e7062e7a54f257fe523f23590324e8caf9fc319b3e93af28bd7f649a11fbc341f0c9a0b58dd3ab4ec25f3c2e841105d789f95874978b618fe60fad6171e9ac9bbe97f9f0804ef564716fd0bc3500f360405e07886486d3c2462c803f5a131b4ce02f55754f5131afb179465ba595f078f90a333c3f2078e5ffb5d15180b0d7d447be95a4070af106",
+      "btih": "4632de8f0ba657245fa6ba72a41f0e23899b7a8a",
+      "btmh": "12204e11415faf6fec1768e4d2580c3cdd54a87e11b04c2e31b30866f67e79482316",
+      "url_list": [
+        "https://example.org/transport-hints/vectors/th-32k-5-pieces.bin",
+        "https://download.example.org/transport-hints/vectors/th-32k-5-pieces.bin"
+      ],
+      "torrent_size": 681,
+      "torrent_sha256": "c6de36c8ed3c3fc31ae8c164da26274b632c260d18351b4d2dff412857896ddb"
+    },
+    {
+      "name": "th-1m-7-blocks.bin",
+      "seed": "th-1m-7-blocks",
+      "size": 99304,
+      "case": "smaller than one piece: seven blocks, so the tree has eight leaves, not 64",
+      "piece_length": 1048576,
+      "piece_length_rule": "explicit, hashing only; not a conforming descriptor",
+      "pieces_count": 1,
+      "blocks_count": 7,
+      "sha256": "01f787b0f071131c00b871d935d1328b35a84e693d91660d8a303fe504db515b",
+      "pieces": "81fcaab0438cd9c5de310e8444bdca0f854d9f51",
+      "pieces_root": "2ddad8460ea73104301e1f055d233b628601edf23db22127996541c4c9a94679",
+      "piece_layers": null,
+      "btih": "bf8e483c9602d7bdcf8b0ea719e9f42fc8685289",
+      "btmh": "122014093dade2b17e17e6f44a73a51a480622c71c968fee81c102aa6ee4b1999ac2",
+      "url_list": [
+        "https://example.org/transport-hints/vectors/th-1m-7-blocks.bin",
+        "https://download.example.org/transport-hints/vectors/th-1m-7-blocks.bin"
+      ],
+      "torrent_size": 397,
+      "torrent_sha256": "d91abff1c2df71e4bd310162ea0a05997fe668701cf8a83215031f010579d6d1"
+    },
+    {
+      "name": "th-1m-one-piece.bin",
+      "seed": "th-1m-one-piece",
+      "size": 1048576,
+      "case": "exactly one piece of 64 blocks",
+      "piece_length": 1048576,
+      "piece_length_rule": "explicit, hashing only; not a conforming descriptor",
+      "pieces_count": 1,
+      "blocks_count": 64,
+      "sha256": "d466ebbc785ae100503c6f31f98a7f0634dc09476bfd4d8f421cb5ff93afce18",
+      "pieces": "9ca3958c03af34d6ed62b0edc399eaaea38454e4",
+      "pieces_root": "bf0b16136fc7a49b6ba1be0297222bff5fcd82a749876db6864fee0c9ae36243",
+      "piece_layers": null,
+      "btih": "1b0f98d220a1f5f25a0b2a4b6c3b46848f26442d",
+      "btmh": "1220ef140b72cfc807fb3f47c2b3ee4ace97dddab7801e26c2545fbaef239978ff12",
+      "url_list": [
+        "https://example.org/transport-hints/vectors/th-1m-one-piece.bin",
+        "https://download.example.org/transport-hints/vectors/th-1m-one-piece.bin"
+      ],
+      "torrent_size": 405,
+      "torrent_sha256": "7b4ea843be795e53378522357cb43e9850e9003dbb432a1c5aa88cb85f7568b0"
+    },
+    {
+      "name": "th-1m-one-piece-plus-one.bin",
+      "seed": "th-1m-one-piece-plus-one",
+      "size": 1048577,
+      "case": "one piece plus one byte: the last piece's subtree holds one short block and 63 zero leaves",
+      "piece_length": 1048576,
+      "piece_length_rule": "explicit, hashing only; not a conforming descriptor",
+      "pieces_count": 2,
+      "blocks_count": 65,
+      "sha256": "4d5362f1b61e04033ff257b43cc2ccaaf501ecb0aabc3cd40d5d74f22f71611c",
+      "pieces": "5786520335b481b4b8dce49d46c70862da0c1543c9ee5681d3c59f7541c27a38b67edf46259e187b",
+      "pieces_root": "26de0764f8daae1abaad97e9979491b72a290b07f128fbb98bcf3537500f66ad",
+      "piece_layers": "1226faf2f93225fdd3356860c8b715fc5b8ac85fcdb21a17a042146694e6f5483ba5a1bdd2169db902e5d519302a977416460b88e27669e01634666d7699a80e",
+      "btih": "bc232b46e5858978eeb2eb7d0e42d9198668b7cf",
+      "btmh": "1220d2a200d7f8b96357e73ba47f54db010fabc4cd90273a5ba8777a219972f4b356",
+      "url_list": [
+        "https://example.org/transport-hints/vectors/th-1m-one-piece-plus-one.bin",
+        "https://download.example.org/transport-hints/vectors/th-1m-one-piece-plus-one.bin"
+      ],
+      "torrent_size": 563,
+      "torrent_sha256": "48ba123f791c5579430bde89a76b0b4aff76c95a0dc9e74aa8ce2db440554ef0"
+    },
+    {
+      "name": "th-1m-3-pieces.bin",
+      "seed": "th-1m-3-pieces",
+      "size": 2167152,
+      "case": "three pieces, the last of five blocks; the layer is balanced with one pad hash of height 6",
+      "piece_length": 1048576,
+      "piece_length_rule": "explicit, hashing only; not a conforming descriptor",
+      "pieces_count": 3,
+      "blocks_count": 133,
+      "sha256": "668ae4a24266fc79e6e6bf668033fd7e044ca5a8528d322677a821be9d920b10",
+      "pieces": "a8fd3ba6b303fabde3a879b35d937a42d90d395a44c0d3a1e1a5929bee76ed41af569102b02af60bfb6dc581fb70c3ad3444cad74f4d97b2daaee386",
+      "pieces_root": "ba3db36badaf7d5025fcf81dc8f1a46e5b7580be22b4d348c3d9b78af0fc6521",
+      "piece_layers": "6d0d7a8988430090437ccd3bc5d58eb0dbed7d6c75bb0b2ffd66bb30c118116bb756c961a88b435a42266e70c02081f38cbfe45f094844976c80005d1a97744fb2f6c2c7214ba4b3cf29b47a3d826757b217eb0b039c089b883f86dd780e2ea0",
+      "btih": "2170d8f22e7c51ba825352b913dbe2f4c82a2f01",
+      "btmh": "122039152fa6b6a0f13f3c52f371e38247b964ab3a7079798340fb5161f4507892e8",
+      "url_list": [
+        "https://example.org/transport-hints/vectors/th-1m-3-pieces.bin",
+        "https://download.example.org/transport-hints/vectors/th-1m-3-pieces.bin"
+      ],
+      "torrent_size": 575,
+      "torrent_sha256": "1f74cf0ee13d5e3b51612d95a80e9a801f0f7af45b4b43707cb51fd3d91bd00f"
+    },
+    {
+      "name": "th-1m-5-pieces.bin",
+      "seed": "th-1m-5-pieces",
+      "size": 4494304,
+      "case": "five pieces, the last of 19 blocks; the layer is balanced with three pad hashes of height 6",
+      "piece_length": 1048576,
+      "piece_length_rule": "explicit, hashing only; not a conforming descriptor",
+      "pieces_count": 5,
+      "blocks_count": 275,
+      "sha256": "3017e5e954e3993be5c63eac4a1cfea46bfdb4f620bead7c06e442188247bee0",
+      "pieces": "a2d5b6a046037bb5abf95757e9faa8df89b799acb72d86e1de24b08042b317c520642032cd585812c310e271efac1ecf6b07277c429e7085bc35415392174aadcf88bc8ad2569edb03a7854dde27442c334a3212f48e27e3b63b4a0cb30a3121fa9f5a42",
+      "pieces_root": "cf192b32ea4d8bdffc402a64fde46edc8d12707a1ae33bcdd57095ce694c6e1f",
+      "piece_layers": "037dcd4b41f17c6887f316416802b82ea84a1d0c8703f48a1efce8542497680029f0a6ef43a8204d43dcb075437eb88edf8314c574ac56fe541bf5e49d1a8b9cdac9e80010e8b5b819eb505d5939da379285b222a8277f836cb204cc2a7c649a59e1e1fb8248116837913038e775b99c15159761bd8eafe39764c2c87bc0024a10d937aa5629737385a4ac46d89d25ad4d17f7343d8417f66e335e3336c246a2",
+      "btih": "081a1e876070d0ec53ce2938a3b4bb1770e1a00c",
+      "btmh": "12206ade311891c00cfb8cb96e51106455504a2d7f71f2c5e848e4330c7fa7c67747",
+      "url_list": [
+        "https://example.org/transport-hints/vectors/th-1m-5-pieces.bin",
+        "https://download.example.org/transport-hints/vectors/th-1m-5-pieces.bin"
+      ],
+      "torrent_size": 681,
+      "torrent_sha256": "367ef75399a691ccdeab6809f259a8a9164c4402b3f508c74e20a22cfa3a9b45"
+    }
+  ],
+  "descriptor_vectors": [
+    {
+      "label": "draft section 4.5 example",
+      "subject_seed": "transport-hints-example",
+      "subject_size": 46000,
+      "notice_seed": "transport-hints-example-notice",
+      "notice_size": 1000,
+      "url_list": [
+        "https://example.org/files/transport-hints-example.bin"
+      ],
+      "torrent_sha256": "f5288e0780ed71dd6326d5607e1736f89a1858edc48ff9e5ceab9fc6619bf660",
+      "descriptor_sha256": "277c32856927257be73039882bdaf7adfd863e1a1246795a92a678046bcca459",
+      "descriptor_text": "{\n  \"protocol\": \"transport-hints/v1\",\n  \"document_type\": \"artifact-descriptor\",\n  \"subject\": {\n    \"filename\": \"transport-hints-example.bin\",\n    \"size\": 46000,\n    \"sha256\": \"dc88616ffdf2471a0197aeda31fad86e821419ae0ed5f50c9c810f7c51f6f62b\"\n  },\n  \"authority\": {\n    \"kind\": \"json-pointer\",\n    \"url\": \"https://example.org/transport-hints/example-record.json\",\n    \"pointer\": \"/files/0/sha256\"\n  },\n  \"home\": \"https://example.org/transport-hints/\",\n  \"license\": \"CC0-1.0\",\n  \"notices\": {\n    \"inside_subject\": [],\n    \"beside_subject\": [\n      {\n        \"filename\": \"example-notice.txt\",\n        \"size\": 1000,\n        \"sha256\": \"69d8d21b2a436aaf7e93f1965d89712d0948227e086c538564ebd7aa09ef4ce8\",\n        \"url\": \"https://example.org/transport-hints/example-notice.txt\"\n      }\n    ]\n  },\n  \"bittorrent\": {\n    \"profile\": \"single-file-hybrid/1\",\n    \"name\": \"transport-hints-example.bin\",\n    \"piece_length\": 16384,\n    \"pieces_root\": \"da9de04a2c0865b57b131c18184d84c7820c75918b1acac3586df94caf65abc6\",\n    \"btih\": \"4556b6b501e968d65f2839dcf36edd941c36413e\",\n    \"btmh\": \"1220d96742f51dd3fcb07434c4882abb54a3065ba7bcab946afe5f0def7a40c64584\"\n  },\n  \"recall\": \"none\"\n}\n"
+    }
+  ],
+  "pad_hashes": [
+    {
+      "piece_length": 16384,
+      "height": 0,
+      "hash": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "piece_length": 32768,
+      "height": 1,
+      "hash": "f5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b"
+    },
+    {
+      "piece_length": 65536,
+      "height": 2,
+      "hash": "db56114e00fdd4c1f85c892bf35ac9a89289aaecb1ebd0a96cde606a748b5d71"
+    },
+    {
+      "piece_length": 131072,
+      "height": 3,
+      "hash": "c78009fdf07fc56a11f122370658a353aaa542ed63e44c4bc15ff4cd105ab33c"
+    },
+    {
+      "piece_length": 262144,
+      "height": 4,
+      "hash": "536d98837f2dd165a55d5eeae91485954472d56f246df256bf3cae19352a123c"
+    },
+    {
+      "piece_length": 524288,
+      "height": 5,
+      "hash": "9efde052aa15429fae05bad4d0b1d7c64da64d03d7a1854a588c2cb8430c0d30"
+    },
+    {
+      "piece_length": 1048576,
+      "height": 6,
+      "hash": "d88ddfeed400a8755596b21942c1497e114c302e6118290f91e6772976041fa1"
+    },
+    {
+      "piece_length": 2097152,
+      "height": 7,
+      "hash": "87eb0ddba57e35f6d286673802a4af5975e22506c7cf4c64bb6be5ee11527f2c"
+    },
+    {
+      "piece_length": 4194304,
+      "height": 8,
+      "hash": "26846476fd5fc54a5d43385167c95144f2643f533cc85bb9d16b782f8d7db193"
+    },
+    {
+      "piece_length": 8388608,
+      "height": 9,
+      "hash": "506d86582d252405b840018792cad2bf1259f1ef5aa5f887e13cb2f0094f51e1"
+    },
+    {
+      "piece_length": 16777216,
+      "height": 10,
+      "hash": "ffff0ad7e659772f9534c195c815efc4014ef1e1daed4404c06385d11192e92b"
+    }
+  ]
+}

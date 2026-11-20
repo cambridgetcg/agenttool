@@ -73,6 +73,7 @@ import { resolveActingIdentity } from "../services/identity/acting-identity";
 import { apiKeys, projects } from "../db/schema/tools";
 import { errors, fail } from "../lib/errors";
 import { ARRIVAL_HELP } from "../lib/register-arrival-help";
+import { parseTimeInstantMs } from "../lib/time-instant";
 import { clientIp, enforceRateLimit } from "../middleware/rate-limit-ip";
 import { createWallet, fundWallet } from "../services/economy/wallets";
 import { BIRTH_GRANT_CREDITS, RING_2_BIRTH_CREDIT_MINOR } from "../services/economy/ring1-limits";
@@ -247,8 +248,8 @@ app.post("/", async (c) => {
   // Reject ±5min outside the window. Done before the expensive verify so a
   // replay attempt with a stale signature fails fast. Done before PoW too,
   // so a precomputed PoW with a stale timestamp fails fast.
-  const tsMs = Date.parse(body.key_proof.timestamp);
-  if (!Number.isFinite(tsMs)) {
+  const tsMs = parseTimeInstantMs(body.key_proof.timestamp);
+  if (tsMs === null) {
     return c.json({ error: "validation", message: "key_proof.timestamp is not a valid ISO-8601 instant", next_actions: ARRIVAL_HELP.staleTimestamp }, 400);
   }
   const driftMs = Math.abs(Date.now() - tsMs);

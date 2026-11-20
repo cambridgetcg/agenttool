@@ -5,7 +5,9 @@ export {
   DEFAULT_MAX_BLOCKS,
   DEFAULT_MAX_BYTES,
   DEFAULT_MAX_GRANT_LIFETIME_SECONDS,
+  DEFAULT_STREAM_CONCURRENCY,
   MAX_GRANT_LIFETIME_SECONDS,
+  MAX_STREAM_CONCURRENCY,
   type AgentDataOptions,
 } from "./agent-data.js";
 export {
@@ -34,6 +36,8 @@ export {
   type ValidatedPortableBundle,
 } from "./portable-bundle.js";
 export {
+  DEFAULT_HEDGE_DELAY_MS,
+  DEFAULT_MAX_CONCURRENT_READS,
   DEFAULT_STORE_READ_LIMIT,
   DEFAULT_STORE_TIMEOUT_MS,
   MAX_COMPOSITE_STORES,
@@ -44,6 +48,7 @@ export {
   type BlockWriteResult,
   type KeyStore,
   type MultiBlockStoreOptions,
+  type ReadStrategy,
   type StoreOperationOptions,
 } from "./stores.js";
 export {
@@ -58,6 +63,7 @@ export {
   type ByteSource,
   type DataRef,
   type GetOptions,
+  type GetStreamOptions,
   type GrantWrap,
   type InspectOptions,
   type ManifestChunk,
@@ -67,6 +73,7 @@ export {
   type PortableBundleOptions,
   type PutOptions,
   type PutResult,
+  type PutStreamOptions,
   type ReplicationSummary,
   type ShareOptions,
   type Signature,
