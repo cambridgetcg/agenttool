@@ -818,7 +818,8 @@ describe("the cross-check workflow", () => {
     const job = workflow.jobs.crosscheck as Json;
     expect(job.needs).toBe("in-tree");
     const include = job.strategy.matrix.include as Json[];
-    expect(include.map((entry) => entry.libtorrent)).toEqual(["2.0.15", "2.1.1"]);
+    // 2.0.15 was dropped on 2026-11-20: its Python binding segfaulted before comparing anything.
+    expect(include.map((entry) => entry.libtorrent)).toEqual(["2.1.1"]);
     const python = (job.steps as Json[]).find((step) => String(step.uses ?? "").startsWith("actions/setup-python@"))!;
     const tag = `cp${String(python.with["python-version"]).replace(".", "")}`;
     expect(tag).toBe("cp313");
