@@ -228,6 +228,16 @@ export interface SessionCursorRecovery {
   expected_cursor_version: number;
 }
 
+/**
+ * time/1 (C8): how long a session was away before this read, by the journal
+ * store's clock, so every agent reads the same gap.
+ */
+export interface SessionAway {
+  away_ms: number;
+  /** The session's last_seen_at before this read (or before a resume this process carried), canonical UTC. */
+  away_since: string;
+}
+
 export interface SessionHandle extends SessionJoinResult {
   credential: SessionCredential;
   cursor_recovery?: SessionCursorRecovery;

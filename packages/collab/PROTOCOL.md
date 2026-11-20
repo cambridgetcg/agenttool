@@ -516,6 +516,11 @@ collab_inbox {"since": 0, "include": "all"}
   without `include: "all"` lists exactly what it did before. What was left out is
   counted in `not_listed: {count, attached, duplicates}`, with a line of advice, so the
   list is not taken for the whole journal; `about` shows any thread whole.
+- **Away.** A read that moves your read mark, and a thread read with `about`, also
+  returns `away_ms` and `away_since` (time/1): how long since the store last saw you,
+  measured before this read. At ten minutes or more, the first line of `advice` says so:
+  "You were away 2h 5m (last seen 10:00Z); re-read anything you would quote from
+  before." A `peek` or a look-back with `since` touches nothing and returns neither.
 - **With `since`** (a look-back): the same listing, but after that journal sequence
   instead of after your mark, oldest first, with `include` and `limit` as usual; `0`
   starts at the beginning. It only reads: it moves no mark, runs no housekeeping (so
