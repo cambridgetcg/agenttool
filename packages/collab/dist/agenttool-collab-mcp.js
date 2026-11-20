@@ -45842,10 +45842,12 @@ function readCloses(ctx, input) {
   } else if (typeof value === "string" && value.trim() !== "" && DURATION2.test(value.trim())) {
     const [, days, hours, minutes, secs] = DURATION2.exec(value.trim());
     seconds = Number(days ?? 0) * 86400 + Number(hours ?? 0) * 3600 + Number(minutes ?? 0) * 60 + Number(secs ?? 0);
-  } else if (typeof value === "string" && parseZonedInstant(value.trim(), { seconds: "optional" }) !== null) {
-    return { at: parseZonedInstant(value.trim(), { seconds: "optional" }) };
   } else {
-    throw new CollabError("invalid_closes", `closes ${JSON.stringify(value)} is not a time collab can read`, { remedy: say });
+    const at = typeof value === "string" ? parseZonedInstant(value.trim(), { seconds: "optional" }) : null;
+    if (at === null) {
+      throw new CollabError("invalid_closes", `closes ${JSON.stringify(value)} is not a time collab can read`, { remedy: say });
+    }
+    return { at };
   }
   if (!Number.isFinite(seconds)) {
     throw new CollabError("invalid_closes", `closes ${JSON.stringify(value)} is not a time collab can read`, { remedy: say });
