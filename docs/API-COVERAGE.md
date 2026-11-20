@@ -376,7 +376,13 @@ revocation. All responses are private and excluded from general response replay.
 A later source candidate, not yet deployed, lets the participant generate its
 own grant token and give the administrator only its SHA-256 (`token_sha256`),
 so issuance returns no token. It also lets a participant leave with a signed
-request that revokes only its own grant.
+request that revokes only its own grant. (That "not yet deployed" wording
+predates the mission contract's 2026-10-18 deployment note and is left
+unreconciled here.) A further source candidate, not deployed and needing a
+migration first, adds renewal inside an administrator-set window: participant
+`POST /renew` issues a born-accepted successor with the same scope, any revoke
+or leave ends the whole chain, and an administrator closes a window with
+`POST /grants/{grant_id}/renewal/close`.
 
 The [mission contract](COLLABORATION-MISSIONS.md) records exact routes, proof
 encoding, credential handling and limits. The service is deployed; a fresh,
