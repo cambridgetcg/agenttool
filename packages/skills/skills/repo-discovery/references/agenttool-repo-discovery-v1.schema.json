@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://docs.agenttool.dev/agenttool-repo-discovery-v1.schema.json",
+  "title": "AgentTool Repo Discovery Registry v1",
+  "description": "Closed schema combining in-repo metadata manifests (CITATION.cff, CodeMeta, publiccode.yml, AGENTS.md, SKILL.md, llms.txt, MCP server.json, A2A agent.json), ecosystem trust signals (SPDX, OpenSSF Scorecard, ecosyste.ms), and epistemic verification (evidence_type, verification_status, commercial_interest, limitations).",
+  "$comment": "Schema validity proves only the closed shape of this discovery registry. It does not establish code safety, license clearance, maintainer identity, benchmark accuracy, execution authority, or profitability.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "protocol",
+    "topic",
+    "reviewed_on",
+    "scope",
+    "verification_summary",
+    "repositories",
+    "proposed_hypotheses"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "protocol": { "const": "agenttool.repo-discovery/v1" },
+    "topic": { "type": "string", "minLength": 3 },
+    "reviewed_on": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "scope": { "type": "string", "minLength": 10 },
+    "verification_summary": { "type": "string", "minLength": 10 },
+    "search_queries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "query", "executed_on"],
+        "properties": {
+          "source": {
+            "enum": [
+              "github_search_api",
+              "github_code_search",
+              "ecosystems_api",
+              "mcp_registry",
+              "web_search",
+              "academic_index"
+            ]
+          },
+          "query": { "type": "string", "minLength": 1 },
+          "executed_on": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          }
+        }
+      }
+    },
+    "repositories": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/repo_card" }
+    },
+    "academic_references": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "citation", "mechanism", "limitations"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^A[0-9]{2,}$" },
+          "citation": { "type": "string", "minLength": 10 },
+          "doi_or_url": { "type": ["string", "null"] },
+          "mechanism": { "type": "string", "minLength": 5 },
+          "limitations": { "type": "string", "minLength": 5 }
+        }
+      }
+    },
+    "proposed_hypotheses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "status", "question", "falsification"],
+        "properties": {
+          "id": { "type": "string", "minLength": 2 },
+          "status": {
+            "enum": [
+              "proposed_not_tested",
+              "preregistered",
+              "tested_positive",
+              "tested_negative",
+              "inconclusive"
+            ]
+          },
+          "extends": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "question": { "type": "string", "minLength": 10 },
+          "falsification": { "type": "string", "minLength": 10 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "repo_card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "repo",
+        "url",
+        "accessed_on",
+        "category",
+        "language",
+        "evidence_type",
+        "verification_status",
+        "commercial_interest",
+        "models_or_capabilities",
+        "limitations"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^G[0-9]{2,}$" },
+        "repo": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "commit_sha": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{7,40}$"
+        },
+        "purl": { "type": ["string", "null"] },
+        "accessed_on": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "last_pushed_on": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "spdx_license": { "type": ["string", "null"] },
+        "language": { "type": "string", "minLength": 1 },
+        "category": { "type": "string", "minLength": 2 },
+        "manifests_detected": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "CITATION.cff",
+              "codemeta.json",
+              "publiccode.yml",
+              "AGENTS.md",
+              "SKILL.md",
+              "llms.txt",
+              "server.json",
+              "agent.json"
+            ]
+          }
+        },
+        "trust_signals": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "openssf_scorecard": {
+              "type": ["number", "null"],
+              "minimum": 0,
+              "maximum": 10
+            },
+            "stars": { "type": ["integer", "null"], "minimum": 0 },
+            "ecosystems_dependents": { "type": ["integer", "null"], "minimum": 0 },
+            "has_tests": { "type": ["boolean", "null"] },
+            "archived": { "type": ["boolean", "null"] }
+          }
+        },
+        "evidence_type": {
+          "enum": [
+            "peer_reviewed_replication",
+            "open_source_math_or_library",
+            "open_source_framework",
+            "academic_simulator",
+            "competition_or_hackathon_sim",
+            "vendor_tutorial_or_sdk",
+            "community_bot_unverified"
+          ]
+        },
+        "verification_status": {
+          "enum": [
+            "code_inspected",
+            "readme_and_api_verified",
+            "metadata_only",
+            "disputed_or_mismatch"
+          ]
+        },
+        "verified_code_vs_readme": { "type": ["string", "null"] },
+        "commercial_interest": { "type": "string", "minLength": 2 },
+        "models_or_capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 2 }
+        },
+        "what_it_gets_right": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "what_it_gets_wrong_or_misses": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "limitations": { "type": "string", "minLength": 10 }
+      }
+    }
+  }
+}

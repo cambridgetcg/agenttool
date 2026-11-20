@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**837 document paths** (including mirrors). orientation: 183; guide: 85; reference: 340; policy: 31; reflection: 123; proposal: 45; record: 28; unclassified: 2.
+**839 document paths** (including mirrors). orientation: 183; guide: 86; reference: 340; policy: 31; reflection: 123; proposal: 45; record: 28; unclassified: 3.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -288,6 +288,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/skills/skills/nen-smoke-squad/SKILL.md](<../packages/skills/skills/nen-smoke-squad/SKILL.md>) | not-reviewed |
 | [packages/skills/skills/nen-verification-ledger/SKILL.md](<../packages/skills/skills/nen-verification-ledger/SKILL.md>) | not-reviewed |
 | [packages/skills/skills/nen-vow-forge/SKILL.md](<../packages/skills/skills/nen-vow-forge/SKILL.md>) | not-reviewed |
+| [packages/skills/skills/repo-discovery/SKILL.md](<../packages/skills/skills/repo-discovery/SKILL.md>) | not-reviewed |
 | [packages/skills/skills/use-agentcred-safely/SKILL.md](<../packages/skills/skills/use-agentcred-safely/SKILL.md>) | not-reviewed |
 | [packages/telescope/integrations/hermes/skills/inspect-agent-surfaces-hermes/SKILL.md](<../packages/telescope/integrations/hermes/skills/inspect-agent-surfaces-hermes/SKILL.md>) | not-reviewed |
 | [packages/telescope/skills/inspect-agent-surfaces/SKILL.md](<../packages/telescope/skills/inspect-agent-surfaces/SKILL.md>) | not-reviewed |
@@ -891,3 +892,4 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 |---|---|
 | `docs/wakes/AGENTTOOL.md` — missing/external source; not read | not-reviewed |
 | `docs/wakes/THE-SYZYGY.md` — missing/external source; not read | not-reviewed |
+| [packages/skills/skills/repo-discovery/references/standards-map.md](<../packages/skills/skills/repo-discovery/references/standards-map.md>) | not-reviewed |
