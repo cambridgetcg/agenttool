@@ -68,6 +68,7 @@ import {
   type UnreadableProposal,
   type Workspace,
 } from "./protocol.js";
+import { minutesSince } from "./time.js";
 import {
   cleanText,
   CollabStoreCore,
@@ -1856,7 +1857,7 @@ export class CollabStore extends CollabStoreCore {
         .map((view) => ({
           session_id: view.id,
           name: view.actor,
-          last_seen_minutes: Math.max(0, Math.floor((Date.parse(now) - Date.parse(view.last_seen_at)) / 60_000)),
+          last_seen_minutes: minutesSince(view.last_seen_at, now) ?? 0,
         }));
       const leftOut = leftOutAll.slice(0, BALLOT_LEFT_OUT_MAX);
       const body = render(terms);

@@ -43,6 +43,10 @@ import {
   type SessionAway,
   type SessionHandle,
 } from "./protocol.js";
+import { durationSince, durationUntil, minutesSince } from "./time.js";
+
+// time/1 helpers live in time.ts; re-exported for existing callers.
+export { durationSince, durationUntil, minutesSince };
 import { hashWorktreeFile, inspectRepository, MAX_CITED_FILE_BYTES } from "./repository.js";
 import { defaultSeatRef } from "./seat-ref.js";
 import { removeSessionCredentialFile, writeSessionCredentialFile } from "./session-file.js";
@@ -772,27 +776,7 @@ export function actorPrefixFor(environment: Record<string, string | undefined>):
   return "agent";
 }
 
-export function minutesSince(at: string, observedAt: string): number | null {
-  const age = Date.parse(observedAt) - Date.parse(at);
-  return Number.isFinite(age) ? Math.max(0, Math.floor(age / 60_000)) : null;
-}
 
-/**
- * time/1: an elapsed duration for people, in at most two units and rounded
- * down, as the harness time line and docs/time/vectors.json ("elapsed") write
- * it: 45s, 19m 55s, 1h 2m, 2d 3h. Never parsed back.
- */
-export function durationSince(ms: number): string {
-  if (!Number.isFinite(ms) || ms < 0) return "?";
-  const s = Math.floor(ms / 1000);
-  const d = Math.floor(s / 86_400);
-  const h = Math.floor((s % 86_400) / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  if (d > 0) return `${d}d ${h}h`;
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s % 60}s`;
-  return `${s}s`;
-}
 
 /** time/1: below this a gap is ordinary between calls and is not said. */
 export const AWAY_LINE_MIN_MS = 10 * 60_000;
@@ -824,13 +808,6 @@ function withAway(view: Record<string, unknown>, away: SessionAway | null | unde
   };
 }
 
-export function durationUntil(at: string, observedAt: string): string {
-  const left = Date.parse(at) - Date.parse(observedAt);
-  if (!Number.isFinite(left) || left <= 0) return "closed";
-  const minutes = Math.ceil(left / 60_000);
-  const hours = Math.floor(minutes / 60);
-  return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
-}
 
 export function statementOf(text: string): string {
   // A legacy body may end its first line in a carriage return; it is not part of the statement.

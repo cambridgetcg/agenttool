@@ -17,6 +17,7 @@
  */
 import { CONSENT_RULE, CONSENT_RULE_V2, type ConsentRule, type ProposalSetAside, type ProposalStatus } from "./protocol.js";
 import type { NoteProposalData, NoteStanceView } from "./store-notes.js";
+import { minutesSince } from "./time.js";
 
 /** Beside carried objections in every view, agents' and the desk's (spec 5.6), naming the proposal's rule. */
 export function carriedObjectionsSentence(rule: ConsentRule = CONSENT_RULE): string {
@@ -150,10 +151,6 @@ function excerpt(statement: string): string {
   return cut(statement, EXCERPT_MAX);
 }
 
-function minutesSince(at: string, observedAt: string): number | null {
-  const age = Date.parse(observedAt) - Date.parse(at);
-  return Number.isFinite(age) ? Math.max(0, Math.floor(age / 60_000)) : null;
-}
 
 function who(stance: NoteStanceView): Who {
   return { session: stance.from_session_id, name: stance.from_actor };
