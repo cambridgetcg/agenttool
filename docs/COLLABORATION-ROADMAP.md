@@ -2,7 +2,7 @@
 
 > **Type:** proposal
 > **Purpose:** Make agents in different harnesses and devices able to contribute to a shared purpose through explicit membership, bounded permissions and reviewable evidence.
-> **Evidence:** Reviewed 2026-10-18. Local Collab 0.4.0 is on npm; 0.5.0 is a GitHub release in `cambridgetcg/agenttool-collab` ([distribution record](NPM-RELEASES.md#collab-050-public-distribution--2026-10-10)); the host doorbell on main is unreleased. Deployed: scoped missions, same-project root enrollment, and participant-chosen grant token hashes with participant leave (PR #479, live API `593ce404`). Observed: active-turn peer exchange. The courier, the Hermes receiver and the lobby desk remain source candidates. The record of recent merges and the 2026-09-30 checkpoint are in the repository work log. The phases below are acceptance criteria, not deployment promises.
+> **Evidence:** Reviewed 2026-10-18. Local Collab 0.4.0 is on npm; 0.5.0 is a GitHub release in `cambridgetcg/agenttool-collab` ([distribution record](NPM-RELEASES.md#collab-050-public-distribution--2026-10-10)); the host doorbell on main is unreleased. Deployed: scoped missions, same-project root enrollment, and participant-chosen grant token hashes with participant leave (PR #479, live API `593ce404`). Observed: active-turn peer exchange. The courier, the Hermes receiver and the lobby desk remain source candidates. The record of recent merges and the 2026-09-30 checkpoint are in the repository work log. The phases below are acceptance criteria, not deployment promises. The section on starting work on another Mac was added on 2026-11-03: Summon is source with one observed install, and its relay and certificate authority are proposals.
 > **Start:** [Practical collaboration guide](COLLABORATION.md) · [Mission contract](COLLABORATION-MISSIONS.md) · [API coverage](API-COVERAGE.md)
 
 The [economy roadmap](ROADMAP.md#agent-economy-development) builds chosen work,
@@ -102,6 +102,115 @@ terminal. A renewal inside a window both sides accepted adds no authority,
 which is the case for letting the member's desk make it without a prompt. That
 choice is made openly when the work is built, not by this page. The
 project-scoped enrollment queue (#486, item 3) is the loop to cut after that.
+
+## Starting work on another Mac
+
+The Lobby is the chosen road for agents on different devices to talk. Summon is
+a separate, narrower tool: it starts one agent job on another of the owner's
+Macs and returns the result. Its Phase 0 is source on branch
+`feat/summon-phase0`; it was installed on one second Mac on 2026-10-12, and a
+later build from `feat/summon-codex-review-20261015` replaced it there on
+2026-10-15. It runs over SSH in one direction: the hub, the owner's main Mac,
+dials, and the target admits only what its own allowlist permits, through a key
+restricted to a forced-command gatekeeper. Nothing from it is merged, released
+or recommended.
+
+**Summon's link between Macs stays SSH, the home network included.** A review
+on 2026-10-28 compared OpenSSH, plain WireGuard, Tailscale and Headscale, iroh,
+Nebula, NetBird, ZeroTier, and mTLS with a private CA. The home Wi-Fi carries
+packets but is not trusted: Wi-Fi client isolation was bypassed on all 11
+router and access-point implementations tested in the AirSnitch paper (NDSS,
+February 2026), and Bonjour names are unauthenticated by design (RFC 6762).
+Upstream OpenSSH has used a hybrid post-quantum key exchange by default since
+9.0 (Apple's build reorders it; see the gotcha below); none of the overlays
+compared does by default. WireGuard offers only a manual preshared key,
+Tailscale's documentation says its WireGuard is not post-quantum, and iroh's
+hybrid exchange is a build option. Today Summon has one restricted key per
+paired Mac, and the forced command is its authorization; a key or certificate
+per agent is a later step. MCP's stdio framing runs inside the channel
+unchanged, and MCP's authorization specification expects stdio transports to
+take credentials from the environment rather than OAuth.
+
+On macOS, Apple TN3179 exempts processes started over SSH from the Local
+Network permission, so the target's gatekeeper needs none. The exemption does
+not cover an app other than Terminal that starts `ssh` to a LAN address, or a
+launchd agent such as Summon's job runner. Without the permission, a connection
+can fail with "No route to host" and no prompt.
+
+The others stay out for now. mTLS can get a post-quantum exchange from a
+current TLS 1.3 library, but it needs a certificate service before the first
+connection and HTTP-level authorization in every agent client, and the clients
+differ in client-certificate support. Tailscale conflicts with the VPN on the
+hub. iroh, which Summon's first design planned as its later link, would be more
+code to own, and the review found no third-party audit of it.
+
+**A macOS gotcha.** Apple's `/etc/ssh/crypto.conf`, a link to
+`crypto/apple.conf`, moves `ecdh-sha2-nistp256` to the front of
+`KexAlgorithms`. The client's order decides the exchange, so `ssh` on a Mac
+that reads this file settles on classical P-256 with any server that offers it.
+Apple's 9.9 builds have no warning for this, and from OpenSSH 10.1 a configured
+`KexAlgorithms` hides the warning. A Mac that kept an older `/etc/ssh` through
+an upgrade may lack the file, so Macs can differ. On 2026-10-28 the hub's stock
+client negotiated `ecdh-sha2-nistp256` with the target, while Summon's own `-F`
+configuration, which skips that file, negotiated `sntrup761x25519-sha512`.
+Putting `KexAlgorithms ^mlkem768x25519-sha256,sntrup761x25519-sha512` at the
+top of `~/.ssh/config` restores the order; stock `ssh` then negotiated
+`mlkem768x25519-sha256`. That line is a configured `KexAlgorithms` too, so a
+fallback to a classical exchange still gives no warning. Check each Mac with
+`ssh -v <host> true 2>&1 | grep 'kex: algorithm'`.
+
+**Next: a relay, for away from home and for starts in either direction.** At
+home the hub reaches the target directly, and that LAN key stays; the relayed
+path gets its own restricted target key. Away there is no route: a Mac at home
+sits behind the home router, nothing can dial in to the hub through its VPN,
+and opening a port on the router would make the router the exposed point. The
+relay is one small host the owner runs. Each Mac keeps an outbound SSH
+connection to it, with a reverse forward to its own SSH server on loopback, and
+any Mac reaches another through the relay with `ProxyJump`. The inner SSH
+session stays end to end against the host key pinned at pairing, so the relay
+cannot read or change it. The relay still sees which Mac reaches which, when
+and how much, and the version strings, algorithm lists and host keys that SSH
+sends before encryption starts. Host keys are pinned at home during pairing,
+never learned through the relay. The relay can also reach each Mac's whole SSH
+server, not only Summon's keys, and Remote Login accepts passwords by default,
+so a connection that arrives over the relay must refuse password and
+keyboard-interactive login and accept only restricted keys.
+
+Because every Mac dials out, the same relay lets a second Mac start work on the
+hub, and each target keeps its own gatekeeper and allowlist. The hub then has
+to accept SSH that arrives over loopback. `from="127.0.0.1"` on a key keeps
+that key off the LAN, but it does not hold Remote Login to loopback: the server
+listens on every interface and advertises itself over Bonjour, and a relayed
+caller arrives as 127.0.0.1 like any local process. Part of the work is finding
+out whether Remote Login can be made to refuse everything else from the LAN, or
+whether a separate loopback-only server is needed. A job that another Mac
+starts on the hub must not be able to read or use the hub's own Summon keys, or
+one start on the hub would reach every Mac the hub can reach.
+
+**With more Macs, a household certificate authority.** With N Macs the relay
+still needs only N outbound connections, and any Mac can reach any other. What
+grows is the keys: with plain keys, every Mac has to list every key allowed to
+reach it and pin every other Mac's host key. A household SSH certificate
+authority keeps that small. Every Mac trusts one CA key for users
+(`TrustedUserCAKeys` with an `AuthorizedPrincipalsFile`) and, through one
+`@cert-authority` line in `known_hosts`, for hosts. Each tool or agent gets a
+certificate whose key ID (`-I`) names who it is, whose principals name the
+roles it may use, and which says when it expires. Each Mac's principals file
+decides which roles it accepts and keeps the gatekeeper as each role's forced
+command (`restrict,command=` on the line). A revocation list, copied to each
+Mac, ends a certificate early. Adding a Mac then means issuing its user and
+host certificates, not editing every Mac; only the relay's port list grows. The
+defaults are the trap: `ssh-keygen` issues certificates that never expire
+unless `-V` is given and that permit a terminal and forwarding unless `-O
+clear` is given. The CA key lives on a security key enrolled with `-O
+verify-required`, so the key itself demands its PIN for every signature and no
+agent can issue its own certificate. A touch alone is asked for by the signing
+software, not enforced by the key.
+
+| Deliverable | Acceptance evidence | Deferred boundary |
+|---|---|---|
+| A relay host; one outbound tunnel per Mac kept up by launchd, each Mac's relay key allowed only to listen on its own loopback port on the relay and to reach the other Macs' ports, with no command, and Unix-socket forwarding off on the relay; its own restricted target key for the relayed path | From outside the home network, a Summon inventory and one review job reach the target through the relay; the session's host key is the target's pinned key, and its `kex: algorithm` line names a post-quantum exchange. A revoked key refuses, and over the relay so do a password login and any key that is not restricted. A Mac's relay key cannot listen on another Mac's port or on a Unix socket, open any other address or run a command on the relay. Then one start in the other direction, from the second Mac to the hub, passing the same checks. | No shared shell, agent forwarding or relay-held key that opens a target. No way for a job that another Mac starts on the hub to read or use the hub's Summon keys. No automatic retry after an uncertain outcome. Agent conversation stays in the Lobby. |
+| A household SSH certificate authority, for users and hosts | A new Mac joins with user and host certificates alone, with no edit on the Macs already paired. The issuing step refuses a certificate without principals, an expiry or `-O clear`; an accepted principal reaches only the gatekeeper; an expired or revoked certificate refuses. The CA key does not sign without its PIN, even when the signing software asks for no touch. | No CA key that an agent can use unattended. No certificate that reaches a Mac without its gatekeeper. Plain restricted keys keep working until each Mac moves over. |
 
 ## Phases and acceptance
 
