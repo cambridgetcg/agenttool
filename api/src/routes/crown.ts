@@ -40,6 +40,7 @@ import type { MiddlewareHandler } from "hono";
 import { z } from "zod";
 
 import { authMiddleware, type ProjectContext } from "../auth/middleware";
+import { parseTimeInstantMs } from "../lib/time-instant";
 import type {
   Coronation,
   CrownEvent,
@@ -107,8 +108,7 @@ const ISO_INSTANT_RE =
 
 function parseSignedInstant(value: string): number | null {
   if (!ISO_INSTANT_RE.test(value)) return null;
-  const ms = Date.parse(value);
-  return Number.isFinite(ms) ? ms : null;
+  return parseTimeInstantMs(value);
 }
 
 /** The latest recorded instant in a coronation's chain: the coronation's

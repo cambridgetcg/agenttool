@@ -219,7 +219,7 @@ export function renderPointsMarkdown(p: YourPoints | null): string {
     lines.push("- **Most recent:**");
     for (const row of p.recent_5) {
       lines.push(
-        `  - +${row.points}pt · \`${row.pointKind}\` · ${row.occurredAt.toISOString().slice(0, 16)}`,
+        `  - +${row.points}pt · \`${row.pointKind}\` · ${row.occurredAt.toISOString().slice(0, 16)}Z`,
       );
     }
   }

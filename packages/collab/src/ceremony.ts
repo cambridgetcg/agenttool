@@ -35,6 +35,7 @@ import { randomBytes } from "node:crypto";
 import { challengeContentBytes, consentRuleFromEnvironment } from "./consent-v2.js";
 import { remoteSoftSpots, softSpotDisplay, type SoftSpotsShown } from "./desk-soft-spots.js";
 import { CollabError } from "./errors.js";
+import { wallTimeWithUtc } from "./wall-time.js";
 import { normalizePasskeyEnrollment } from "./passkey.js";
 import {
   confirmEnrollment,
@@ -511,7 +512,7 @@ async function serveOnce(
   }
   const pageUrl = `${origin}${path}`;
   io.out(JSON.stringify({ protocol: PERSON_DESK_PROTOCOL, command, status: "open", url: pageUrl, expires_at: expiresAt }));
-  const closes = new Date(expiresAt).toLocaleTimeString();
+  const closes = wallTimeWithUtc(expiresAt);
   io.note?.(browser && io.open?.(pageUrl)
     ? `Opened the page in your browser. If it did not appear, open ${pageUrl} before ${closes}.`
     : `Open ${pageUrl} in your browser before ${closes}.`);

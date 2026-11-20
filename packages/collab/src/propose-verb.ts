@@ -12,6 +12,7 @@
  * nothing here but the wording, which names the proposal's own rule.
  */
 import { CollabError } from "./errors.js";
+import { parseZonedInstant } from "./time.js";
 import {
   hasLoneSurrogate,
   NOTE_EVIDENCE_MAX,
@@ -141,8 +142,10 @@ function readCloses(ctx: NoteVerbContext, input: ProposeInput): Closes | undefin
   } else if (typeof value === "string" && value.trim() !== "" && DURATION.test(value.trim())) {
     const [, days, hours, minutes, secs] = DURATION.exec(value.trim())!;
     seconds = Number(days ?? 0) * 86_400 + Number(hours ?? 0) * 3_600 + Number(minutes ?? 0) * 60 + Number(secs ?? 0);
-  } else if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value.trim()) && Number.isFinite(Date.parse(value.trim()))) {
-    return { at: Date.parse(value.trim()) };
+  } else if (typeof value === "string" && parseZonedInstant(value.trim(), { seconds: "optional" }) !== null) {
+    // time/1: a zone is required (no local guess) and the calendar is checked
+    // (no 30 February rolling into March), where Date.parse allowed both.
+    return { at: parseZonedInstant(value.trim(), { seconds: "optional" })! };
   } else {
     throw new CollabError("invalid_closes", `closes ${JSON.stringify(value)} is not a time collab can read`, { remedy: say });
   }

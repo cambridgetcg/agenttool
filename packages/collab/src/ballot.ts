@@ -11,6 +11,7 @@
 import { createHash } from "node:crypto";
 import { canonicalJson } from "./canonical.js";
 import { CollabError } from "./errors.js";
+import { parseZonedInstant } from "./time.js";
 import { hasLoneSurrogate, NOTE_BASES, normalizeNoteText, parseEvidence, type NoteBasis } from "./note.js";
 
 export const BALLOT_COMMITMENT_PROTOCOL = "agenttool.collab-ballot/1";
@@ -360,8 +361,8 @@ export function ballotClosesAt(closes: unknown, now: string): string {
       const [days, hours, minutes, seconds] = duration.slice(1).map((part) => Number(part ?? 0)) as [number, number, number, number];
       closesMs = nowMs + (((days * 24 + hours) * 60 + minutes) * 60 + seconds) * 1_000;
     } else if (ISO_INSTANT.test(closes.trim())) {
-      const parsed = Date.parse(closes.trim());
-      if (Number.isFinite(parsed)) closesMs = parsed;
+      // time/1: Date.parse rolls 30 February into March; this reader refuses it.
+      closesMs = parseZonedInstant(closes.trim(), { seconds: "optional" });
     }
   }
   const window = closesMs === null ? null : closesMs - nowMs;

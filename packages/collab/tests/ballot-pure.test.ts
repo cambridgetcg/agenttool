@@ -134,8 +134,9 @@ describe("purity", () => {
   test("ballot.ts loads no store, filesystem, clock or randomness", () => {
     // Callers pass now, the salt and the cast id, so a reveal on any build
     // recomputes the same commitments and result from the journal alone.
+    // time.ts (time/1's strict reader) is pure too: every time comes from the caller.
     expect(moduleReach("ballot.ts")).toEqual({
-      local: ["ballot.ts", "canonical.ts", "errors.ts", "note.ts"],
+      local: ["ballot.ts", "canonical.ts", "errors.ts", "note.ts", "time.ts"],
       external: ["node:crypto"],
       ambient: [],
     });

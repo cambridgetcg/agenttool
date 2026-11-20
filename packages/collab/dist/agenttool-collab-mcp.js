@@ -30680,7 +30680,7 @@ function inspectSuccessorCommit(rootPath, commitSha, parentSha) {
   if (fields.length / 2 > MAX_SUCCESSOR_PATHS) {
     return refuse(`Commit ${commitSha} changes more than ${MAX_SUCCESSOR_PATHS} paths`);
   }
-  const budget = { bytes: MAX_SUCCESSOR_BYTES, deadline: Date.now() + MAX_SUCCESSOR_INSPECT_MS };
+  const budget = { bytes: MAX_SUCCESSOR_BYTES, deadline: performance.now() + MAX_SUCCESSOR_INSPECT_MS };
   const changes = [];
   for (let index = 0;index < fields.length; index += 2) {
     const header = RAW_DIFF_HEADER.exec(fields[index].toString("utf8"));
@@ -30695,7 +30695,7 @@ function inspectSuccessorCommit(rootPath, commitSha, parentSha) {
       changes.push({ path, blob_sha256: null });
       continue;
     }
-    if (Date.now() > budget.deadline || budget.bytes <= 0) {
+    if (performance.now() > budget.deadline || budget.bytes <= 0) {
       return refuse(`Inspecting commit ${commitSha} exceeded its bounds`);
     }
     const content = successorGit(rootPath, ["cat-file", "blob", blob], budget.bytes);
@@ -30906,12 +30906,12 @@ function digestUntrackedContent(rootPath, paths) {
     return null;
   const budget = {
     remainingBytes: MAX_UNTRACKED_BYTES,
-    deadline: Date.now() + MAX_UNTRACKED_HASH_MS
+    deadline: performance.now() + MAX_UNTRACKED_HASH_MS
   };
   const aggregate = createHash2("sha256");
   aggregate.update("agenttool.collab/untracked-state/v1\x00");
   for (const entry of entries) {
-    if (Date.now() > budget.deadline)
+    if (performance.now() > budget.deadline)
       return null;
     if (!safeGitRelativePath(entry))
       return null;
@@ -30927,7 +30927,7 @@ function digestUntrackedContent(rootPath, paths) {
       aggregate.update(entry);
       if (stat.isSymbolicLink()) {
         const target = readlinkSync(absolute, { encoding: "buffer" });
-        if (target.length > budget.remainingBytes || Date.now() > budget.deadline) {
+        if (target.length > budget.remainingBytes || performance.now() > budget.deadline) {
           return null;
         }
         budget.remainingBytes -= target.length;
@@ -30955,12 +30955,12 @@ function digestStableFile(path, budget) {
   try {
     descriptor = openSync5(path, "r");
     const before = fstatSync3(descriptor);
-    if (!before.isFile() || before.size > budget.remainingBytes || Date.now() > budget.deadline)
+    if (!before.isFile() || before.size > budget.remainingBytes || performance.now() > budget.deadline)
       return null;
     const hash2 = createHash2("sha256");
     const buffer = Buffer.allocUnsafe(64 * 1024);
     while (true) {
-      if (Date.now() > budget.deadline)
+      if (performance.now() > budget.deadline)
         return null;
       const count = readSync3(descriptor, buffer, 0, buffer.length, null);
       if (count === 0)
@@ -31026,6 +31026,70 @@ import { realpathSync as realpathSync2 } from "fs";
 
 // src/ballot.ts
 import { createHash as createHash3 } from "crypto";
+
+// src/time.ts
+var ZONED_INSTANT = /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(?:([Zz])|([+-])(\d{2}):(\d{2}))$/;
+function daysInMonth(year, month) {
+  if (month === 2)
+    return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28;
+  return month === 4 || month === 6 || month === 9 || month === 11 ? 30 : 31;
+}
+function parseZonedInstant(value, options = {}) {
+  if (typeof value !== "string")
+    return null;
+  const match = ZONED_INSTANT.exec(value);
+  if (!match)
+    return null;
+  if (match[6] === undefined && options.seconds !== "optional")
+    return null;
+  if (match[6] === undefined && match[7] !== undefined)
+    return null;
+  const [year, month, day, hour, minute] = match.slice(1, 6).map(Number);
+  const second = Number(match[6] ?? 0);
+  const zulu = match[8] !== undefined;
+  const offsetHours = zulu ? 0 : Number(match[10]);
+  const offsetMinutes = zulu ? 0 : Number(match[11]);
+  if (year < 1 || month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month) || hour > 23 || minute > 59 || second > 59 || offsetHours > 23 || offsetMinutes > 59) {
+    return null;
+  }
+  const millis = Number((match[7] ?? "").slice(0, 3).padEnd(3, "0"));
+  const local = new Date(0);
+  local.setUTCFullYear(year, month - 1, day);
+  local.setUTCHours(hour, minute, second, millis);
+  const sign = match[9] === "-" ? -1 : 1;
+  const instant = local.getTime() - sign * (offsetHours * 60 + offsetMinutes) * 60000;
+  const utcYear = new Date(instant).getUTCFullYear();
+  return Number.isFinite(instant) && utcYear >= 1 && utcYear <= 9999 ? instant : null;
+}
+function minutesSince(at, observedAt) {
+  const age = Date.parse(observedAt) - Date.parse(at);
+  return Number.isFinite(age) ? Math.max(0, Math.floor(age / 60000)) : null;
+}
+function durationSince(ms) {
+  if (!Number.isFinite(ms) || ms < 0)
+    return "?";
+  const s = Math.floor(ms / 1000);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor(s % 86400 / 3600);
+  const m = Math.floor(s % 3600 / 60);
+  if (d > 0)
+    return `${d}d ${h}h`;
+  if (h > 0)
+    return `${h}h ${m}m`;
+  if (m > 0)
+    return `${m}m ${s % 60}s`;
+  return `${s}s`;
+}
+function durationUntil(at, observedAt) {
+  const left = Date.parse(at) - Date.parse(observedAt);
+  if (!Number.isFinite(left) || left <= 0)
+    return "closed";
+  const minutes = Math.ceil(left / 60000);
+  const hours = Math.floor(minutes / 60);
+  return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
+}
+
+// src/ballot.ts
 var BALLOT_COMMITMENT_PROTOCOL = "agenttool.collab-ballot/1";
 var BALLOT_METHOD = "approval/1";
 var MIN_BALLOT_OPTIONS = 2;
@@ -31254,9 +31318,7 @@ function ballotClosesAt(closes, now) {
       const [days, hours, minutes, seconds] = duration3.slice(1).map((part) => Number(part ?? 0));
       closesMs = nowMs + (((days * 24 + hours) * 60 + minutes) * 60 + seconds) * 1000;
     } else if (ISO_INSTANT.test(closes.trim())) {
-      const parsed = Date.parse(closes.trim());
-      if (Number.isFinite(parsed))
-        closesMs = parsed;
+      closesMs = parseZonedInstant(closes.trim(), { seconds: "optional" });
     }
   }
   const window = closesMs === null ? null : closesMs - nowMs;
@@ -39879,7 +39941,7 @@ class CollabStore extends CollabStoreCore {
       const leftOutAll = views.filter((view) => view.status === "active" && view.liveness === "live" && !listedVoices.has(view.voice_id)).map((view) => ({
         session_id: view.id,
         name: view.actor,
-        last_seen_minutes: Math.max(0, Math.floor((Date.parse(now) - Date.parse(view.last_seen_at)) / 60000))
+        last_seen_minutes: minutesSince(view.last_seen_at, now) ?? 0
       }));
       const leftOut = leftOutAll.slice(0, BALLOT_LEFT_OUT_MAX);
       const body = render(terms);
@@ -41408,25 +41470,6 @@ function actorPrefixFor(environment) {
     return "codex";
   return "agent";
 }
-function minutesSince(at, observedAt) {
-  const age = Date.parse(observedAt) - Date.parse(at);
-  return Number.isFinite(age) ? Math.max(0, Math.floor(age / 60000)) : null;
-}
-function durationSince(ms) {
-  if (!Number.isFinite(ms) || ms < 0)
-    return "?";
-  const s = Math.floor(ms / 1000);
-  const d = Math.floor(s / 86400);
-  const h = Math.floor(s % 86400 / 3600);
-  const m = Math.floor(s % 3600 / 60);
-  if (d > 0)
-    return `${d}d ${h}h`;
-  if (h > 0)
-    return `${h}h ${m}m`;
-  if (m > 0)
-    return `${m}m ${s % 60}s`;
-  return `${s}s`;
-}
 var AWAY_LINE_MIN_MS = 10 * 60000;
 function awayLine(away) {
   if (!away || away.away_ms < AWAY_LINE_MIN_MS)
@@ -41446,14 +41489,6 @@ function withAway(view, away) {
     away_since: away.away_since,
     ...line && Array.isArray(view.advice) ? { advice: [line, ...view.advice] } : {}
   };
-}
-function durationUntil(at, observedAt) {
-  const left = Date.parse(at) - Date.parse(observedAt);
-  if (!Number.isFinite(left) || left <= 0)
-    return "closed";
-  const minutes = Math.ceil(left / 60000);
-  const hours = Math.floor(minutes / 60);
-  return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
 }
 function statementOf(text) {
   const line = (text.split(`
@@ -45792,8 +45827,8 @@ function readCloses(ctx, input) {
   } else if (typeof value === "string" && value.trim() !== "" && DURATION2.test(value.trim())) {
     const [, days, hours, minutes, secs] = DURATION2.exec(value.trim());
     seconds = Number(days ?? 0) * 86400 + Number(hours ?? 0) * 3600 + Number(minutes ?? 0) * 60 + Number(secs ?? 0);
-  } else if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value.trim()) && Number.isFinite(Date.parse(value.trim()))) {
-    return { at: Date.parse(value.trim()) };
+  } else if (typeof value === "string" && parseZonedInstant(value.trim(), { seconds: "optional" }) !== null) {
+    return { at: parseZonedInstant(value.trim(), { seconds: "optional" }) };
   } else {
     throw new CollabError("invalid_closes", `closes ${JSON.stringify(value)} is not a time collab can read`, { remedy: say });
   }

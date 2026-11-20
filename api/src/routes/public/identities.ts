@@ -26,6 +26,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 
 import { db } from "../../db/client";
+import { parseTimeInstantMs } from "../../lib/time-instant";
 import { identities, identityKeys } from "../../db/schema/identity";
 import { foundingRootSql, speaksForProject } from "../../services/identity/project-authority";
 import {
@@ -62,8 +63,8 @@ app.post("/by-pubkey", async (c) => {
 
   // Timestamp freshness window. Unlike /v1/identity/recover's durable proof
   // consumption, this discovery lookup remains replayable inside the window.
-  const tsMs = Date.parse(timestamp);
-  if (!Number.isFinite(tsMs)) {
+  const tsMs = parseTimeInstantMs(timestamp);
+  if (tsMs === null) {
     return c.json({ error: "invalid timestamp (expected ISO-8601)" }, 400);
   }
   if (Math.abs(Date.now() - tsMs) > SKEW_MS) {

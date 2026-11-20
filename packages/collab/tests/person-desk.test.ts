@@ -11,6 +11,7 @@ import { runPersonDeskCli, runPersonRemoteCli, type PersonDeskDeps } from "../sr
 import type { PasskeyAssertion, PersonPasskey, SessionHandle } from "../src/protocol.js";
 import { CollabStore } from "../src/store-notes.js";
 import type { TtyPort } from "../src/tty.js";
+import { wallTimeWithUtc } from "../src/wall-time.js";
 
 // Person acts on proposals: terminal and passkey agreement, the person desk,
 // and the person's inbox. Contract:
@@ -689,7 +690,9 @@ describe("ceremonies served by the desk", () => {
       { openTty: terminal("no").openTty },
     );
     expect(ceremony.opened).toEqual([]);
-    expect(ceremony.notes[0]).toBe(`Open ${ceremony.page.href} in your browser before ${new Date(ceremony.data.expires_at).toLocaleTimeString()}.`);
+    // time/1: the closing time names its zone and gives UTC beside it, never a bare local time.
+    expect(ceremony.notes[0]).toBe(`Open ${ceremony.page.href} in your browser before ${wallTimeWithUtc(ceremony.data.expires_at)}.`);
+    expect(ceremony.notes[0]).toMatch(/ \(\d{2}:\d{2}Z\)\.$/);
     await ceremony.post({ credential_id: "x" });
     await ceremony.done;
     expect(desk(["passkey-enroll", "--file=-", "--no-open"]).receipt.error).toBe("usage_error");

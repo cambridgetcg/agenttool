@@ -5,9 +5,9 @@
 > **Evidence:** Each rule below is labelled Source (built, with paths and tests) or Proposed (not built). Hooks that live in harness configuration are labelled Observed.
 > **Compass:** [Collaborate on a shared project](COLLABORATION.md) · [Collab protocol](../packages/collab/PROTOCOL.md) · [Canonical bytes](CANONICAL-BYTES.md)
 >
-> **Code:** `packages/wake-thread/src/contracts.ts` (`canonicalTimestamp`) · `packages/collab/src/store.ts` (`observedAt`) · `packages/collab/src/mcp.ts` (`withObservedAt`) · `packages/collab/src/verbs.ts` (`durationUntil`)
+> **Code:** `packages/wake-thread/src/contracts.ts` (`canonicalTimestamp`) · `packages/collab/src/time.ts` (`parseZonedInstant`, `durationSince`, `durationUntil`) · `packages/collab/src/store.ts` (`observedAt`, away) · `packages/collab/src/mcp.ts` (`withObservedAt`) · `packages/sdk-ts/src/_time.ts` · `packages/sdk-py/src/agenttool/_time.py`
 >
-> **Tests:** `packages/collab/tests/observed-at.test.ts` · `packages/collab/tests/events-wait.test.ts` (the cap includes the stamp)
+> **Tests:** `docs/time/vectors.json` is checked by `packages/collab/tests/time-vectors.test.ts`, `packages/sdk-ts/tests/time-vectors.test.ts` and `packages/sdk-py/tests/test_time_vectors.py` · `packages/collab/tests/observed-at.test.ts` · `packages/collab/tests/away.test.ts`
 
 An agent sees time only in what its tools return. Between two turns, hours can
 pass without the agent knowing; two agents on different machines can disagree
@@ -70,10 +70,15 @@ holds for the bytes returned.
   `eta_at`); `expires_at` or `<thing>_until` for deadlines. Never a bare
   `time` or `date`.
 
-Proposed: `docs/time/vectors.json`, one language-neutral file of valid and
-invalid inputs with their canonical forms, which every package that parses or
-formats time tests against, so that implementations cannot drift apart
-quietly.
+Source: `docs/time/vectors.json`, one language-neutral file of valid and
+invalid inputs with their canonical forms, durations and wall times. The
+TypeScript and Python SDKs and Collab test every row of it, so their readers
+cannot drift apart quietly. The API's input boundaries take the same rules in
+#590.
+
+One named exception: the API's `since` query filter also takes a bare calendar
+date (`YYYY-MM-DD`, read as midnight UTC). It is a filter, not an instant
+field, and a malformed `since` only widens the response.
 
 ## 3. Durations
 
@@ -136,10 +141,12 @@ The script reads the journal read-only and keeps one last-turn stamp per
 session. It lives in each seat's harness configuration, not in this
 repository; any harness with a per-turn hook can print the same line.
 
-Proposed: Collab results that report `away_ms` and `away_since` (the session's
-previous `last_seen_at`) on `collab_next`, `collab_inbox`, the thread view
-and resume, so the gap is computed once, by the store, and every agent sees
-the same number.
+Source: `collab_next`, a `collab_inbox` read that moves the read mark, and a
+thread read return `away_ms` and `away_since`, the session's previous
+`last_seen_at`, measured before the read touches it (#588). At ten minutes or
+more the first line of `advice` says it. After a host restart, the first read
+reports from before the resume. The store computes the gap once, so every
+agent sees the same number.
 
 ## 6. ETAs and waiting
 

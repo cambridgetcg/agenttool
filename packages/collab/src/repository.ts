@@ -320,7 +320,7 @@ export function inspectSuccessorCommit(
   if (fields.length / 2 > MAX_SUCCESSOR_PATHS) {
     return refuse(`Commit ${commitSha} changes more than ${MAX_SUCCESSOR_PATHS} paths`);
   }
-  const budget = { bytes: MAX_SUCCESSOR_BYTES, deadline: Date.now() + MAX_SUCCESSOR_INSPECT_MS };
+  const budget = { bytes: MAX_SUCCESSOR_BYTES, deadline: performance.now() + MAX_SUCCESSOR_INSPECT_MS };
   const changes: SuccessorCommitChange[] = [];
   for (let index = 0; index < fields.length; index += 2) {
     const header = RAW_DIFF_HEADER.exec(fields[index]!.toString("utf8"));
@@ -338,7 +338,7 @@ export function inspectSuccessorCommit(
       changes.push({ path, blob_sha256: null });
       continue;
     }
-    if (Date.now() > budget.deadline || budget.bytes <= 0) {
+    if (performance.now() > budget.deadline || budget.bytes <= 0) {
       return refuse(`Inspecting commit ${commitSha} exceeded its bounds`);
     }
     const content = successorGit(rootPath, ["cat-file", "blob", blob!], budget.bytes);
@@ -605,12 +605,12 @@ function digestUntrackedContent(rootPath: string, paths: Buffer): string | null 
   if (!entries || entries.length > MAX_UNTRACKED_FILES) return null;
   const budget = {
     remainingBytes: MAX_UNTRACKED_BYTES,
-    deadline: Date.now() + MAX_UNTRACKED_HASH_MS,
+    deadline: performance.now() + MAX_UNTRACKED_HASH_MS,
   };
   const aggregate = createHash("sha256");
   aggregate.update("agenttool.collab/untracked-state/v1\0");
   for (const entry of entries) {
-    if (Date.now() > budget.deadline) return null;
+    if (performance.now() > budget.deadline) return null;
     if (!safeGitRelativePath(entry)) return null;
     const absolute = Buffer.concat([
       Buffer.from(rootPath),
@@ -624,7 +624,7 @@ function digestUntrackedContent(rootPath: string, paths: Buffer): string | null 
       aggregate.update(entry);
       if (stat.isSymbolicLink()) {
         const target = readlinkSync(absolute, { encoding: "buffer" });
-        if (target.length > budget.remainingBytes || Date.now() > budget.deadline) {
+        if (target.length > budget.remainingBytes || performance.now() > budget.deadline) {
           return null;
         }
         budget.remainingBytes -= target.length;
@@ -658,12 +658,12 @@ function digestStableFile(
     if (
       !before.isFile()
       || before.size > budget.remainingBytes
-      || Date.now() > budget.deadline
+      || performance.now() > budget.deadline
     ) return null;
     const hash = createHash("sha256");
     const buffer = Buffer.allocUnsafe(64 * 1024);
     while (true) {
-      if (Date.now() > budget.deadline) return null;
+      if (performance.now() > budget.deadline) return null;
       const count = readSync(descriptor, buffer, 0, buffer.length, null);
       if (count === 0) break;
       hash.update(buffer.subarray(0, count));
