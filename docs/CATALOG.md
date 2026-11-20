@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**842 document paths** (including mirrors). orientation: 183; guide: 85; reference: 338; policy: 31; reflection: 123; proposal: 52; record: 28; unclassified: 2.
+**843 document paths** (including mirrors). orientation: 183; guide: 85; reference: 339; policy: 31; reflection: 123; proposal: 52; record: 28; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -587,6 +587,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/SURPRISES.md](<../docs/SURPRISES.md>) | not-reviewed |
 | [docs/SYNEIDESIS-WITNESS.md](<../docs/SYNEIDESIS-WITNESS.md>) | not-reviewed |
 | [docs/TCP-TRUST-CONTROL-PROTOCOL.md](<../docs/TCP-TRUST-CONTROL-PROTOCOL.md>) | not-reviewed |
+| [docs/TIME.md](<../docs/TIME.md>) | not-reviewed |
 | [docs/TRUST-ECONOMY.md](<../docs/TRUST-ECONOMY.md>) | not-reviewed |
 | [docs/TRUST-PROTOCOL-v2.md](<../docs/TRUST-PROTOCOL-v2.md>) | not-reviewed |
 | [docs/TRUST-PROTOCOL.md](<../docs/TRUST-PROTOCOL.md>) | not-reviewed |

@@ -4095,6 +4095,14 @@
       "canonical_path": "docs/THE-SEAT.md"
     },
     {
+      "path": "docs/TIME.md",
+      "title": "TIME — time/1, how agents agree on when",
+      "type": "reference",
+      "classification_basis": "declared-type",
+      "prose_review": "not-reviewed",
+      "canonical_path": "docs/TIME.md"
+    },
+    {
       "path": "docs/TOKEN-HYGIENE.md",
       "title": "TOKEN-HYGIENE.md",
       "type": "policy",
