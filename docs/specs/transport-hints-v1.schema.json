@@ -1,0 +1,481 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://docs.agenttool.dev/specs/transport-hints-v1.schema.json",
+  "title": "Transport Hints v1 (Working Draft 0.1)",
+  "description": "Records that say how a file already published with a SHA-256 can also be fetched as a single-file hybrid BitTorrent v1+v2 torrent. They carry no authority: the SHA-256 in the authority record is the only identity of the bytes, and a torrent hash is never accepted in its place. The artifact-descriptor and descriptor-set documents are closed at every level. The hints-index is the only open document. See TRANSPORT-HINTS-0.1-DRAFT.md.",
+  "$comment": "Working Draft. The profile single-file-hybrid/1 is not frozen, and no descriptor of a real file may be published under this draft. Validators MUST enable format assertion (Ajv 2020 with ajv-formats, as bin/build-love-packages.ts does). Within each closed object, the order of 'properties' below is the serialisation key order of the draft's section 5. Cross-field rules that JSON Schema cannot express are listed in the draft's sections 4.4, 6 and 8.3; schema validity alone is not conformance.",
+  "oneOf": [
+    { "$ref": "#/$defs/artifactDescriptor" },
+    { "$ref": "#/$defs/descriptorSet" },
+    { "$ref": "#/$defs/hintsIndex" }
+  ],
+  "$defs": {
+    "protocol": {
+      "type": "string",
+      "const": "transport-hints/v1"
+    },
+    "sha256Hex": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Lowercase hexadecimal SHA-256 digest, 64 characters, no prefix."
+    },
+    "btih": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "description": "BitTorrent v1 infohash: lowercase hexadecimal SHA-1 of the bencoded info dictionary, 40 characters."
+    },
+    "btmh": {
+      "type": "string",
+      "pattern": "^1220[0-9a-f]{64}$",
+      "description": "BitTorrent v2 infohash as a multihash: '1220' (sha2-256, 32 bytes) followed by the lowercase hexadecimal SHA-256 of the bencoded info dictionary."
+    },
+    "byteSize": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Exact byte length as a non-zero I-JSON-safe integer. Empty files are out of scope."
+    },
+    "httpsUrl": {
+      "type": "string",
+      "format": "uri",
+      "minLength": 12,
+      "maxLength": 2048,
+      "pattern": "^https://(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?/(?!(?:.*/)?\\.\\.?(?:/|$))(?:[A-Za-z0-9._~!$&'()*+,;=:@/-]|%[0-9A-F]{2})*$",
+      "description": "Absolute HTTPS URL written in one spelling: lowercase DNS host name (no IP literal, no port, no userinfo), a path of printable ASCII with uppercase percent-escapes, no dot segments, no query and no fragment. Builders copy URLs exactly and never normalise them."
+    },
+    "webSeedUrl": {
+      "allOf": [
+        { "$ref": "#/$defs/httpsUrl" },
+        {
+          "type": "string",
+          "pattern": "[^/]$"
+        }
+      ],
+      "description": "A web seed: the full URL of the one file. It never ends in '/', so a client never appends the torrent name to it."
+    },
+    "bareFilename": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$",
+      "description": "A bare ASCII filename as the authority record names the file: alphanumerics, dot, underscore, plus and hyphen, starting with an alphanumeric. It is not content identity."
+    },
+    "torrentName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^(?!(?:[Cc][Oo][Nn]|[Pp][Rr][Nn]|[Aa][Uu][Xx]|[Nn][Uu][Ll]|[Cc][Oo][Mm][0-9]|[Ll][Pp][Tt][0-9])(?:\\.|$))[A-Za-z0-9](?:[A-Za-z0-9._+-]*[A-Za-z0-9])?$",
+      "description": "The torrent 'name': a bare ASCII filename of 1 to 200 characters from A-Z, a-z, 0-9, '.', '_', '+' and '-', starting and ending with an alphanumeric, and not a reserved Windows device name. Unique across the estate and never reused for other bytes (not checkable by schema)."
+    },
+    "memberPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?:(?!\\.\\.?/)[A-Za-z0-9._+-]+/)*(?!\\.\\.?$)[A-Za-z0-9._+-]+$",
+      "description": "A normalised POSIX path of a member inside the subject archive, for example package/LICENSE: no leading slash, no empty, '.' or '..' segment."
+    },
+    "spdxLicenseId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^(?!(?:NONE|NOASSERTION)$)(?!(?:LicenseRef|DocumentRef)-)[A-Za-z0-9](?:[A-Za-z0-9.+-]*[A-Za-z0-9+])?$",
+      "description": "One short identifier from the SPDX License List, for example CC0-1.0 or Apache-2.0. Not an expression, not NONE or NOASSERTION, not a LicenseRef. The schema checks the shape only; membership of the list is a consumer check."
+    },
+    "pieceLength": {
+      "type": "integer",
+      "enum": [16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304, 8388608, 16777216],
+      "description": "A power of two from 16 KiB to 16 MiB. The profile further requires the one value its formula gives for subject.size (draft section 7.3)."
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "A calendar date, YYYY-MM-DD."
+    },
+    "dateTime": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+      "description": "A UTC time in whole seconds, YYYY-MM-DDTHH:MM:SSZ."
+    },
+    "subject": {
+      "type": "object",
+      "required": ["filename", "size", "sha256"],
+      "properties": {
+        "filename": { "$ref": "#/$defs/bareFilename" },
+        "size": { "$ref": "#/$defs/byteSize" },
+        "sha256": { "$ref": "#/$defs/sha256Hex" }
+      },
+      "additionalProperties": false,
+      "description": "The file, copied exactly from the authority record. subject.sha256 is the identity of the bytes."
+    },
+    "authority": {
+      "oneOf": [
+        { "$ref": "#/$defs/authorityLovePackage" },
+        { "$ref": "#/$defs/authorityJsonPointer" },
+        { "$ref": "#/$defs/authorityHfResolveEtag" },
+        { "$ref": "#/$defs/authoritySumsLine" },
+        { "$ref": "#/$defs/authorityNonePrior" }
+      ],
+      "description": "Where the record that already publishes subject.sha256 is, and how to read the digest from it."
+    },
+    "authorityLovePackage": {
+      "type": "object",
+      "required": ["kind", "url", "pointer"],
+      "properties": {
+        "kind": { "type": "string", "const": "love-package/v1" },
+        "url": { "$ref": "#/$defs/httpsUrl" },
+        "pointer": { "type": "string", "const": "/artifact/sha256" }
+      },
+      "additionalProperties": false,
+      "description": "A LOVE package manifest. The consumer also requires /artifact/size, /artifact/filename and /license to equal the descriptor's values."
+    },
+    "authorityJsonPointer": {
+      "type": "object",
+      "required": ["kind", "url", "pointer"],
+      "properties": {
+        "kind": { "type": "string", "const": "json-pointer" },
+        "url": { "$ref": "#/$defs/httpsUrl" },
+        "pointer": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 512,
+          "pattern": "^(?:/(?:[A-Za-z0-9._+@:-]|~[01])*)+$",
+          "description": "An RFC 6901 JSON Pointer to a string of 64 lowercase hexadecimal characters."
+        }
+      },
+      "additionalProperties": false
+    },
+    "authorityHfResolveEtag": {
+      "type": "object",
+      "required": ["kind", "url", "header"],
+      "properties": {
+        "kind": { "type": "string", "const": "hf-resolve-etag" },
+        "url": {
+          "allOf": [
+            { "$ref": "#/$defs/httpsUrl" },
+            {
+              "type": "string",
+              "pattern": "^https://huggingface\\.co/(?:datasets/)?[A-Za-z0-9](?:[A-Za-z0-9._-]{0,94}[A-Za-z0-9])?/[A-Za-z0-9](?:[A-Za-z0-9._-]{0,94}[A-Za-z0-9])?/resolve/[0-9a-f]{40}/[^/]"
+            }
+          ],
+          "description": "A commit-pinned /resolve/<40-hex commit>/<path> URL. A branch or tag name in place of the commit is refused."
+        },
+        "header": { "type": "string", "const": "x-linked-etag" }
+      },
+      "additionalProperties": false
+    },
+    "authoritySumsLine": {
+      "type": "object",
+      "required": ["kind", "url"],
+      "properties": {
+        "kind": { "type": "string", "const": "sums-line" },
+        "url": { "$ref": "#/$defs/httpsUrl" }
+      },
+      "additionalProperties": false,
+      "description": "A checksums document in which exactly one line holds a digest and subject.filename."
+    },
+    "authorityNonePrior": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": { "type": "string", "const": "none-prior" }
+      },
+      "additionalProperties": false,
+      "description": "No earlier record of the digest exists; the descriptor is its first public statement. The hashing time is held in the index entry's none_prior.hashed_at, because the descriptor holds no date."
+    },
+    "noticeFile": {
+      "type": "object",
+      "required": ["filename", "size", "sha256", "url"],
+      "properties": {
+        "filename": { "$ref": "#/$defs/bareFilename" },
+        "size": { "$ref": "#/$defs/byteSize" },
+        "sha256": { "$ref": "#/$defs/sha256Hex" },
+        "url": { "$ref": "#/$defs/httpsUrl" }
+      },
+      "additionalProperties": false,
+      "description": "A licence or notice file published beside the subject, identified by its own size and SHA-256, at a commit-pinned or otherwise permanent URL."
+    },
+    "notices": {
+      "type": "object",
+      "required": ["inside_subject", "beside_subject"],
+      "properties": {
+        "inside_subject": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/memberPath" },
+          "description": "Members of the subject archive that carry its licence and notices, sorted ascending by byte value."
+        },
+        "beside_subject": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/noticeFile" },
+          "description": "Separate notice files, sorted ascending by filename, filenames unique."
+        }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        { "properties": { "inside_subject": { "type": "array", "minItems": 1 } } },
+        { "properties": { "beside_subject": { "type": "array", "minItems": 1 } } }
+      ],
+      "description": "Licence and attribution notices that travel with the bytes. At least one is named. These are not the irreversibility notice of the clearance rule."
+    },
+    "bittorrent": {
+      "type": "object",
+      "required": ["profile", "name", "piece_length", "pieces_root", "btih", "btmh"],
+      "properties": {
+        "profile": { "type": "string", "const": "single-file-hybrid/1" },
+        "name": { "$ref": "#/$defs/torrentName" },
+        "piece_length": { "$ref": "#/$defs/pieceLength" },
+        "pieces_root": {
+          "allOf": [{ "$ref": "#/$defs/sha256Hex" }],
+          "description": "BEP 52 merkle root of the file over 16 KiB blocks. It equals subject.sha256 exactly when subject.size is at most 16384."
+        },
+        "btih": { "$ref": "#/$defs/btih" },
+        "btmh": { "$ref": "#/$defs/btmh" }
+      },
+      "additionalProperties": false,
+      "description": "The torrent identifiers. Both infohashes depend only on the bytes, the name and the piece length. No web-seed list, .torrent URL, tracker or date belongs here."
+    },
+    "artifactDescriptor": {
+      "type": "object",
+      "required": ["protocol", "document_type", "subject", "authority", "home", "license", "notices", "bittorrent", "recall"],
+      "properties": {
+        "protocol": { "$ref": "#/$defs/protocol" },
+        "document_type": { "type": "string", "const": "artifact-descriptor" },
+        "subject": { "$ref": "#/$defs/subject" },
+        "authority": { "$ref": "#/$defs/authority" },
+        "home": {
+          "allOf": [{ "$ref": "#/$defs/httpsUrl" }],
+          "description": "The page or record where the publisher keeps the file and its licence."
+        },
+        "license": {
+          "allOf": [{ "$ref": "#/$defs/spdxLicenseId" }],
+          "description": "Spelled as LOVE manifests spell the field. Required and never null: no licence, no descriptor."
+        },
+        "notices": { "$ref": "#/$defs/notices" },
+        "bittorrent": { "$ref": "#/$defs/bittorrent" },
+        "recall": {
+          "type": "string",
+          "const": "none",
+          "description": "A published descriptor and the identifiers in it cannot be recalled."
+        }
+      },
+      "additionalProperties": false,
+      "$comment": "Closed at every level, every field required, so two honest builders given the same inputs emit the same bytes. It holds no date, no web-seed list, no .torrent URL and no field named signature; any such field fails validation."
+    },
+    "descriptorSetEntry": {
+      "type": "object",
+      "required": ["subject_sha256", "descriptor_sha256"],
+      "properties": {
+        "subject_sha256": { "$ref": "#/$defs/sha256Hex" },
+        "descriptor_sha256": { "$ref": "#/$defs/sha256Hex" }
+      },
+      "additionalProperties": false
+    },
+    "descriptorSet": {
+      "type": "object",
+      "required": ["protocol", "document_type", "set_id", "descriptors"],
+      "properties": {
+        "protocol": { "$ref": "#/$defs/protocol" },
+        "document_type": { "type": "string", "const": "descriptor-set" },
+        "set_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$",
+          "description": "A label for one round of listings. It is not a date field and implies no time."
+        },
+        "descriptors": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/descriptorSetEntry" },
+          "description": "Sorted strictly ascending by subject_sha256; one entry per subject."
+        }
+      },
+      "additionalProperties": false,
+      "$comment": "Closed at every level and unsigned. A later, separate signature format may sign these exact bytes; until then nothing about a set may be called signed."
+    },
+    "torrentFile": {
+      "type": "object",
+      "required": ["url", "sha256", "url_list"],
+      "properties": {
+        "url": { "$ref": "#/$defs/httpsUrl" },
+        "sha256": { "$ref": "#/$defs/sha256Hex" },
+        "url_list": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/webSeedUrl" },
+          "description": "The exact url-list inside the .torrent file, in its order."
+        }
+      },
+      "additionalProperties": true,
+      "propertyNames": { "not": { "const": "signature" } }
+    },
+    "observation": {
+      "type": "object",
+      "required": ["at", "by"],
+      "properties": {
+        "at": {
+          "oneOf": [
+            { "$ref": "#/$defs/date" },
+            { "$ref": "#/$defs/dateTime" }
+          ]
+        },
+        "by": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Who or what made the observation, for example a named probe job."
+        }
+      },
+      "additionalProperties": true,
+      "propertyNames": { "not": { "const": "signature" } },
+      "description": "One dated observation. Its other fields are open until a probe format is written."
+    },
+    "replica": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "pattern": "^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$"
+        },
+        "holds_bytes": { "type": "boolean" },
+        "recall": { "type": "string", "minLength": 1, "maxLength": 200 }
+      },
+      "additionalProperties": true,
+      "propertyNames": { "not": { "const": "signature" } },
+      "description": "Another copy of the bytes that the estate knows of, with how (or whether) it can be recalled."
+    },
+    "indexEntry": {
+      "type": "object",
+      "required": ["subject_sha256", "name", "descriptor_sha256", "status"],
+      "properties": {
+        "subject_sha256": { "$ref": "#/$defs/sha256Hex" },
+        "name": { "$ref": "#/$defs/torrentName" },
+        "descriptor_sha256": { "$ref": "#/$defs/sha256Hex" },
+        "status": {
+          "type": "string",
+          "enum": ["listed", "unmaintained", "withdrawn", "superseded"]
+        },
+        "descriptor_url": { "$ref": "#/$defs/httpsUrl" },
+        "clearance_sha256": { "$ref": "#/$defs/sha256Hex" },
+        "irreversibility_notice_sha256": { "$ref": "#/$defs/sha256Hex" },
+        "promise_until": { "$ref": "#/$defs/date" },
+        "torrent": { "$ref": "#/$defs/torrentFile" },
+        "magnet": {
+          "type": "string",
+          "maxLength": 8192,
+          "pattern": "^magnet:\\?xt=urn:btih:[0-9a-f]{40}&xt=urn:btmh:1220[0-9a-f]{64}&dn=[A-Za-z0-9._+-]{1,200}(?:&ws=[A-Za-z0-9._~%-]+)*(?:&xs=[A-Za-z0-9._~%-]+)?$"
+        },
+        "none_prior": {
+          "type": "object",
+          "required": ["hashed_at"],
+          "properties": {
+            "hashed_at": { "$ref": "#/$defs/dateTime" }
+          },
+          "additionalProperties": true,
+          "propertyNames": { "not": { "const": "signature" } },
+          "description": "Present exactly when the descriptor's authority.kind is none-prior: the time the bytes were hashed."
+        },
+        "observations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/observation" }
+        },
+        "other_replicas": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/replica" }
+        },
+        "withdrawn_at": { "$ref": "#/$defs/date" },
+        "superseded_at": { "$ref": "#/$defs/date" },
+        "superseded_by": {
+          "allOf": [{ "$ref": "#/$defs/sha256Hex" }],
+          "description": "descriptor_sha256 of the entry that replaces this one."
+        },
+        "stopped": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+        },
+        "cannot_stop": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+        }
+      },
+      "additionalProperties": true,
+      "propertyNames": { "not": { "const": "signature" } },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "listed" } } },
+          "then": {
+            "properties": {
+              "descriptor_url": true,
+              "clearance_sha256": true,
+              "irreversibility_notice_sha256": true,
+              "promise_until": true,
+              "torrent": true
+            },
+            "required": ["descriptor_url", "clearance_sha256", "irreversibility_notice_sha256", "promise_until", "torrent"]
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "withdrawn" } } },
+          "then": {
+            "properties": {
+              "withdrawn_at": true,
+              "stopped": true,
+              "cannot_stop": true
+            },
+            "required": ["withdrawn_at", "stopped", "cannot_stop"]
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "superseded" } } },
+          "then": {
+            "properties": {
+              "superseded_at": true,
+              "superseded_by": true,
+              "stopped": true,
+              "cannot_stop": true
+            },
+            "required": ["superseded_at", "superseded_by", "stopped", "cannot_stop"]
+          }
+        }
+      ]
+    },
+    "hintsIndex": {
+      "type": "object",
+      "required": ["protocol", "document_type", "version", "previous_sha256", "entries"],
+      "properties": {
+        "protocol": { "$ref": "#/$defs/protocol" },
+        "document_type": { "type": "string", "const": "hints-index" },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "previous_sha256": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/sha256Hex" }
+          ],
+          "description": "SHA-256 of the exact bytes of the previous version as served; null only for version 1."
+        },
+        "entries": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/indexEntry" }
+        }
+      },
+      "additionalProperties": true,
+      "propertyNames": { "not": { "const": "signature" } },
+      "if": { "properties": { "version": { "const": 1 } } },
+      "then": { "properties": { "previous_sha256": { "type": "null" } } },
+      "else": { "properties": { "previous_sha256": { "$ref": "#/$defs/sha256Hex" } } },
+      "$comment": "Open and mutable: unknown fields are allowed at the index, entry and observation levels so the probe and listing formats can grow, but no field may be named signature. Every change is a new version chained by previous_sha256. This part of the schema is a draft target, not a frozen format."
+    }
+  }
+}
