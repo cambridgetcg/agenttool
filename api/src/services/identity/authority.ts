@@ -22,6 +22,7 @@ import { db } from "../../db/client";
 import { identities } from "../../db/schema/identity";
 import { constitutionRootSql, enrolledGuestSql } from "./project-authority";
 import type { GuidedErrorBody } from "../../lib/errors";
+import { parseTimeInstantMs } from "../../lib/time-instant";
 import { composeCanonicalBytes } from "../mathos/encode";
 import { verifyRecoverSignature } from "./crypto";
 import { mutableIdentityPredicate } from "./terminality";
@@ -164,10 +165,10 @@ export function verifyIdentityAuthorityProof(input: {
     return { ok: false, error: "sequence" };
   }
 
-  const timestampMs = Date.parse(input.proof.timestamp);
+  const timestampMs = parseTimeInstantMs(input.proof.timestamp);
   const nowMs = (input.now ?? new Date()).getTime();
   if (
-    !Number.isFinite(timestampMs) ||
+    timestampMs === null ||
     Math.abs(nowMs - timestampMs) > IDENTITY_AUTHORITY_WINDOW_MS
   ) {
     return { ok: false, error: "timestamp" };
@@ -309,10 +310,10 @@ export async function authorizeIdentityRead(input: {
       },
     };
   }
-  const timestampMs = Date.parse(timestamp);
+  const timestampMs = parseTimeInstantMs(timestamp);
   const nowMs = (input.now ?? new Date()).getTime();
   if (
-    !Number.isFinite(timestampMs) ||
+    timestampMs === null ||
     Math.abs(nowMs - timestampMs) > IDENTITY_AUTHORITY_WINDOW_MS
   ) {
     return {
