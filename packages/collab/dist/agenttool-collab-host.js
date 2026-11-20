@@ -7844,9 +7844,13 @@ class CollabStoreCore {
   }
   requireJournalHead(workspaceId, expected) {
     const head = this.requireWorkspace(workspaceId).event_head_sequence;
-    if (head === expected)
+    if (expected > head) {
+      throw new CollabError("head_moved", "The expected head is ahead of the journal; read the head, then send again", { expected_head_sequence: expected, head_sequence: head, reports_since: 0 });
+    }
+    const { count } = this.db.query(`SELECT COUNT(*) AS count FROM reports WHERE workspace_id = ? AND event_sequence > ?`).get(workspaceId, expected);
+    if (count === 0)
       return;
-    throw new CollabError("head_moved", head > expected ? "The journal moved since you read it; read what is new, then send again" : "The expected head is ahead of the journal; read the head, then send again", { expected_head_sequence: expected, head_sequence: head, events_since: Math.max(0, head - expected) });
+    throw new CollabError("head_moved", "Reports were posted since you read the journal; read them, then send again", { expected_head_sequence: expected, head_sequence: head, reports_since: count });
   }
   observedAt() {
     return this.timestamp();

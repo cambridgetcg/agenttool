@@ -1115,13 +1115,18 @@ every voice may still object and the person decides."
 ## Compare-and-swap on report append (time/1 step 4)
 
 `collab_report_append` takes an optional `expected_head_sequence`: the journal head
-sequence the caller last read. It is BitTorrent BEP 44's `cas` applied to the journal.
-Inside the writer's transaction, the head must be exactly that sequence:
+sequence the caller last read. It is BitTorrent BEP 44's `cas` applied to the journal's
+reports. Inside the writer's transaction:
 
-- **The head matches:** the report is written as before.
-- **The head moved:** nothing is written. The call is refused with `head_moved` and
-  `{expected_head_sequence, head_sequence, events_since}`; read what is new, then send
-  again. A refused attempt leaves no receipt, so the retry may reuse its key.
+- **No report was posted after that sequence:** the report is written as before. Sessions
+  resuming, claims, leases and other non-report events move the head constantly, and they
+  do not count.
+- **A report was posted after it:** nothing is written. The call is refused with
+  `head_moved` and `{expected_head_sequence, head_sequence, reports_since}`; read what is
+  new, then send again. A refused attempt leaves no receipt, so the retry may reuse its
+  key.
+- **The expected sequence is ahead of the journal:** refused the same way, with
+  `reports_since: 0`.
 - **A retry with the same key** after a success replays the first answer, whatever the
   head is by then.
 - **The field is absent:** nothing changes. The field joins the request hash only when

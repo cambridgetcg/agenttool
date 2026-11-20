@@ -26,7 +26,7 @@ describe("collab_report_append expected_head_sequence", () => {
     expect(head(j, me.workspace.id)).toBeGreaterThan(at);
   });
 
-  test("refuses, writes nothing and says how far the journal moved when a peer posted first", () => {
+  test("refuses, writes nothing and says how many reports were missed when a peer posted first", () => {
     const j = journal();
     const me = j.start("me");
     const peer = j.start("peer");
@@ -41,7 +41,7 @@ describe("collab_report_append expected_head_sequence", () => {
       refusal = error;
     }
     expect(refusal?.code).toBe("head_moved");
-    expect(refusal.details).toEqual({ expected_head_sequence: seen, head_sequence: moved, events_since: moved - seen });
+    expect(refusal.details).toEqual({ expected_head_sequence: seen, head_sequence: moved, reports_since: 1 });
     expect(j.count()).toBe(before);
     // Re-read and send again, under the same key: the refused attempt left no receipt.
     const sent = append(j, me, "mine", { expected_head_sequence: moved });
@@ -61,7 +61,7 @@ describe("collab_report_append expected_head_sequence", () => {
     expect(refusal?.code).toBe("head_moved");
     expect(refusal.message).toContain("ahead of the journal");
     // Nothing new to read, so never a negative count.
-    expect(refusal.details).toEqual({ expected_head_sequence: at + 5, head_sequence: at, events_since: 0 });
+    expect(refusal.details).toEqual({ expected_head_sequence: at + 5, head_sequence: at, reports_since: 0 });
   });
 
   test("a retry with the same key replays its first answer, even after the journal moved", () => {
@@ -73,6 +73,18 @@ describe("collab_report_append expected_head_sequence", () => {
     append(j, peer, "later");
     const replay = append(j, me, "once", { expected_head_sequence: at });
     expect(replay.id).toBe(first.id);
+  });
+
+  test("only reports count: a session joining or a task moving the head does not refuse", () => {
+    const j = journal();
+    const me = j.start("me");
+    const seen = head(j, me.workspace.id);
+    // Not answers: another seat arrives and a task is created, both moving the head.
+    const peer = j.start("peer");
+    j.store.createTaskForSession({ ...peer.credential, idempotency_key: "t", title: "a task", work_mode: "coordination" });
+    expect(head(j, me.workspace.id)).toBeGreaterThan(seen);
+    const sent = append(j, me, "still-mine", { expected_head_sequence: seen });
+    expect(sent.body).toBe("note still-mine");
   });
 
   test("without the field, nothing changes", () => {
@@ -97,6 +109,6 @@ describe("collab_report_append expected_head_sequence", () => {
     }, {});
     expect(refused.isError).toBe(true);
     expect(refused.structuredContent.error).toBe("head_moved");
-    expect(refused.structuredContent.events_since).toBeGreaterThan(0);
+    expect(refused.structuredContent.reports_since).toBe(1);
   });
 });

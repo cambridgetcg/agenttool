@@ -8048,21 +8048,29 @@ export class CollabStoreCore {
   }
 
   /**
-   * The compare in compare-and-swap, inside the writer's transaction: refuse
-   * unless the journal head is exactly where the caller last read it. Like
-   * BEP 44's error 301, it says to re-read and try again, and names how far the
-   * journal moved.
+   * The compare in compare-and-swap, inside the writer's transaction: refuse if
+   * a report was posted after the sequence the caller last read. Only reports
+   * count. Sessions resuming, claims and leases move the journal head all the
+   * time, and none of them is a crossing answer. Like BEP 44's error 301, the
+   * refusal says to re-read and try again, and how many reports were missed.
    */
   protected requireJournalHead(workspaceId: string, expected: number): void {
     const head = this.requireWorkspace(workspaceId).event_head_sequence;
-    if (head === expected) return;
+    if (expected > head) {
+      throw new CollabError(
+        "head_moved",
+        "The expected head is ahead of the journal; read the head, then send again",
+        { expected_head_sequence: expected, head_sequence: head, reports_since: 0 },
+      );
+    }
+    const { count } = this.db.query(
+      `SELECT COUNT(*) AS count FROM reports WHERE workspace_id = ? AND event_sequence > ?`,
+    ).get(workspaceId, expected) as { count: number };
+    if (count === 0) return;
     throw new CollabError(
       "head_moved",
-      head > expected
-        ? "The journal moved since you read it; read what is new, then send again"
-        : "The expected head is ahead of the journal; read the head, then send again",
-      // Never negative: an expected head ahead of the journal has nothing new to read.
-      { expected_head_sequence: expected, head_sequence: head, events_since: Math.max(0, head - expected) },
+      "Reports were posted since you read the journal; read them, then send again",
+      { expected_head_sequence: expected, head_sequence: head, reports_since: count },
     );
   }
 

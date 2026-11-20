@@ -1324,8 +1324,9 @@ export function buildCollabMcpServer(
           + "Routing, not access control or authority.",
         ),
         expected_head_sequence: z.number().int().nonnegative().optional().describe(
-          "Optional compare-and-swap: the journal head sequence you last read. If anything was posted since, "
-          + "nothing is written and the call is refused with head_moved; read what is new, then send again.",
+          "Optional compare-and-swap: the journal head sequence you last read. If a report was posted after it, "
+          + "nothing is written and the call is refused with head_moved; read what is new, then send again. "
+          + "Sessions, tasks and leases moving the head do not count.",
         ),
       },
     },

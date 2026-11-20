@@ -43,8 +43,9 @@ const REST_TOOLS = ["collab_session_rest"];
 const ADDED_INPUT_FIELDS: Record<string, Record<string, unknown>> = {
   collab_report_append: {
     expected_head_sequence: {
-      description: "Optional compare-and-swap: the journal head sequence you last read. If anything was posted since, "
-        + "nothing is written and the call is refused with head_moved; read what is new, then send again.",
+      description: "Optional compare-and-swap: the journal head sequence you last read. If a report was posted after it, "
+        + "nothing is written and the call is refused with head_moved; read what is new, then send again. "
+        + "Sessions, tasks and leases moving the head do not count.",
       type: "integer",
       minimum: 0,
       maximum: Number.MAX_SAFE_INTEGER,
