@@ -34870,6 +34870,7 @@ class CollabStoreCore {
     });
   }
   appendReportForSession(input) {
+    const expectedHead = input.expected_head_sequence === undefined ? undefined : validateExpectedHeadSequence(input.expected_head_sequence);
     const normalized = {
       task_id: input.task_id ? validateId(input.task_id, "task_id") : null,
       to_session_id: input.to_session_id ? validateId(input.to_session_id, "to_session_id") : null,
@@ -34885,7 +34886,9 @@ class CollabStoreCore {
       authority_basis: optionalText(input.authority_basis, "authority_basis", 2000),
       ...input.to_person === true ? { to_person: true } : {}
     };
-    return this.mutateAsSession(input, input.idempotency_key, "report.append.v2", normalized, (session) => {
+    return this.mutateAsSession(input, input.idempotency_key, "report.append.v2", expectedHead === undefined ? normalized : { ...normalized, expected_head_sequence: expectedHead }, (session) => {
+      if (expectedHead !== undefined)
+        this.requireJournalHead(session.workspace_id, expectedHead);
       this.validateReportInput(session, normalized);
       this.refuseProposalRewrite(normalized);
       return this.appendReportInternal(session, normalized);
@@ -37703,6 +37706,12 @@ class CollabStoreCore {
   timestamp() {
     return this.now().toISOString();
   }
+  requireJournalHead(workspaceId, expected) {
+    const head = this.requireWorkspace(workspaceId).event_head_sequence;
+    if (head === expected)
+      return;
+    throw new CollabError("head_moved", head > expected ? "The journal moved since you read it; read what is new, then send again" : "The expected head is ahead of the journal; read the head, then send again", { expected_head_sequence: expected, head_sequence: head, events_since: head - expected });
+  }
   observedAt() {
     return this.timestamp();
   }
@@ -37881,6 +37890,12 @@ function optionalText(value, field, max) {
   return cleanText(value, field, max);
 }
 var REST_UNTIL_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/;
+function validateExpectedHeadSequence(value) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new CollabError("invalid_expected_head_sequence", "expected_head_sequence must be a non-negative integer");
+  }
+  return value;
+}
 function validateRestMode(value) {
   if (value !== "resting" && value !== "ready") {
     throw new CollabError("invalid_mode", 'mode must be "resting" or "ready"');
@@ -47446,7 +47461,8 @@ Legacy session tools: ${legacyInstructions}`
       target_report_id: exports_external.string().min(1).optional().describe("The earlier report this one answers. Required for every relation except informs."),
       authority_scope: exports_external.string().max(1000).optional(),
       authority_basis: exports_external.string().max(2000).optional(),
-      to_person: exports_external.boolean().optional().describe("Also place this report in the person's inbox at the person desk, for example to ask them something. " + "Routing, not access control or authority.")
+      to_person: exports_external.boolean().optional().describe("Also place this report in the person's inbox at the person desk, for example to ask them something. " + "Routing, not access control or authority."),
+      expected_head_sequence: exports_external.number().int().nonnegative().optional().describe("Optional compare-and-swap: the journal head sequence you last read. If anything was posted since, " + "nothing is written and the call is refused with head_moved; read what is new, then send again.")
     }
   }, async ({ workspace_id, ...input }) => call(() => {
     requireWorkspace(workspace_id);

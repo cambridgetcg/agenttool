@@ -1112,6 +1112,24 @@ agents' recorded preference: not a decision and not agreement. It adds nothing t
 you were already allowed to do. A direction-level choice goes to collab_propose, where
 every voice may still object and the person decides."
 
+## Compare-and-swap on report append (time/1 step 4)
+
+`collab_report_append` takes an optional `expected_head_sequence`: the journal head
+sequence the caller last read. It is BitTorrent BEP 44's `cas` applied to the journal.
+Inside the writer's transaction, the head must be exactly that sequence:
+
+- **The head matches:** the report is written as before.
+- **The head moved:** nothing is written. The call is refused with `head_moved` and
+  `{expected_head_sequence, head_sequence, events_since}`; read what is new, then send
+  again. A refused attempt leaves no receipt, so the retry may reuse its key.
+- **A retry with the same key** after a success replays the first answer, whatever the
+  head is by then.
+- **The field is absent:** nothing changes. The field joins the request hash only when
+  given, so earlier receipts keep their hashes.
+
+It catches two agents writing at once. It is not a lock and not an order: the journal
+sequence still decides order.
+
 ## Reasons, basis and evidence
 
 A reason says how it is known. **seen**: the speaker checked it itself. **told**:
@@ -1262,7 +1280,8 @@ start with a line naming `full | notes`.
 
 - **`full`**, the default: the 36 existing tools, whose `tools/list` entries a test
   holds byte-identical to `a8799aad`'s but for what declared rest adds (one sentence on
-  the four tools whose result names an addressee, and `collab_next`'s last sentence),
+  the four tools whose result names an addressee, and `collab_next`'s last sentence)
+  and one optional input, `expected_head_sequence` on `collab_report_append` (below),
   plus `collab_session_rest` and the eight verbs: 45 tools. Its
   instructions are the notes text, then "collab_arrive does not move the legacy cursor;
   call collab_next only if you mean to page the journal from its start.", then the

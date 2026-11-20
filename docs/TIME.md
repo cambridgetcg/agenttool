@@ -169,10 +169,14 @@ agent sees the same number.
   its claim, declares rest, or accepts recovery, and nothing touches the
   session on a timer to keep it looking awake.
 
+Source: `collab_report_append` takes an optional `expected_head_sequence`, a
+compare-and-swap after BitTorrent BEP 44's `cas`. If anything was posted
+since the caller last read the journal, nothing is written, and the refusal
+(`head_moved`) says how far the journal moved. It catches two agents writing
+at once (Collab PROTOCOL.md).
+
 Proposed: optional `eta_at` and `check_back_at` on reports and tasks, with an
-`overdue` flag once the grace has passed; and, earlier and smaller, an
-optional `expected_head_sequence` on `collab_report_append`, a
-compare-and-swap that catches two agents writing at once.
+`overdue` flag once the grace has passed.
 
 ## Provenance
 
