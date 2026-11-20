@@ -73,6 +73,7 @@ import {
   type ReviewStatus,
   type SessionEndRelease,
   type SessionEndResult,
+  type SessionAway,
   type SessionHandle,
   type CoordinationPresence,
   type SessionLiveness,
@@ -456,6 +457,13 @@ export class CollabStoreCore {
   private closed = false;
   /** Set only inside withReceiptPlan. */
   private ambientReceiptPlan: ReceiptPlanGuard | null = null;
+  /**
+   * time/1 (C8): for each session this process resumed, the last_seen_at it
+   * had before the resume touched it, so the session's first read after a
+   * host restart still reports the whole gap. In memory only, never journaled;
+   * reported once, and forgotten when the session ends.
+   */
+  private readonly resumeAwaySince = new Map<string, string>();
 
   constructor(path: string, options: CollabStoreOptions = {}) {
     this.now = options.now ?? (() => new Date());
@@ -2117,8 +2125,10 @@ export class CollabStoreCore {
     last_cursor?: EventCursor;
   }, options: { allow_cursor_recovery?: boolean } = {}): SessionHandle {
     const sessionId = validateId(credential.session_id, "session_id");
+    let lastSeenBeforeResume = "";
     const resumed = this.db.transaction(() => {
       const row = this.authenticateResumeToken(sessionId, credential.session_token);
+      lastSeenBeforeResume = row.last_seen_at;
       const now = this.timestamp();
       this.recordSessionLeaseLapses(row, now);
       const nextGeneration = row.generation + 1;
@@ -2219,6 +2229,12 @@ export class CollabStoreCore {
       }
       return handle;
     }).immediate();
+    // time/1 (C8): the resume moved last_seen_at; carry the earlier mark to
+    // this session's first read in this process, keeping the earliest.
+    const carried = this.resumeAwaySince.get(sessionId);
+    if (carried === undefined || lastSeenBeforeResume < carried) {
+      this.resumeAwaySince.set(sessionId, lastSeenBeforeResume);
+    }
     this.tightenFileModes();
     return resumed;
   }
@@ -2341,6 +2357,7 @@ export class CollabStoreCore {
         released_leases: releasedLeases,
       };
     }).immediate();
+    this.resumeAwaySince.delete(input.session_id);
     this.tightenFileModes();
     return ended;
   }
@@ -5831,7 +5848,7 @@ export class CollabStoreCore {
     events: JournalPage;
     projection_scope: "snapshot_head";
     reports_scope: "event_page";
-  } {
+  } & SessionAway {
     const authenticatedPoll = this.db.transaction(() => {
       const authenticated = this.authenticateSession(input);
       const stored: EventCursor = {
@@ -5871,14 +5888,18 @@ export class CollabStoreCore {
       }
       const eventLimit = validateNextEventLimit(input.event_limit);
       this.recordSessionLeaseLapses(authenticated, this.timestamp());
+      const touchedAt = this.timestamp();
+      const away = this.awayBeforeTouch(authenticated.id, authenticated.last_seen_at, touchedAt);
       this.db.query(`UPDATE coordination_sessions SET last_seen_at = ? WHERE id = ?`)
-        .run(this.timestamp(), authenticated.id);
+        .run(touchedAt, authenticated.id);
       return {
         row: this.requireCoordinationSessionRow(authenticated.id),
         event_limit: eventLimit,
+        away,
       };
     }).immediate();
     const { row, event_limit: eventLimit } = authenticatedPoll;
+    const away = this.settleAway(row.id, authenticatedPoll.away);
     this.expireElapsedHandoffs(row.workspace_id, "system:clock");
     const read = this.db.transaction(() => {
       const current = this.authenticateSession(input);
@@ -5939,6 +5960,9 @@ export class CollabStoreCore {
         events,
         projection_scope: "snapshot_head" as const,
         reports_scope: "event_page" as const,
+        // time/1 (C8): measured before this poll touched last_seen_at.
+        away_ms: away.away_ms,
+        away_since: away.away_since,
       };
     });
     return read.deferred();
@@ -8019,6 +8043,33 @@ export class CollabStoreCore {
    */
   observedAt(): string {
     return this.timestamp();
+  }
+
+  /**
+   * time/1 (C8): how long a session was away, read inside the transaction just
+   * before its last_seen_at is touched. A resume this process carried wins when
+   * it is earlier. Never negative: a store clock behind its own earlier stamp
+   * gives 0. Pair with settleAway once the transaction has committed.
+   */
+  protected awayBeforeTouch(
+    sessionId: string,
+    lastSeenAt: string,
+    now: string,
+  ): SessionAway & { carried: boolean } {
+    const carried = this.resumeAwaySince.get(sessionId);
+    const since = carried !== undefined && carried < lastSeenAt ? carried : lastSeenAt;
+    const elapsed = Date.parse(now) - Date.parse(since);
+    return {
+      away_ms: Number.isFinite(elapsed) && elapsed > 0 ? elapsed : 0,
+      away_since: since,
+      carried: carried !== undefined,
+    };
+  }
+
+  /** After a committed read: a carried resume is reported once, then forgotten. */
+  protected settleAway(sessionId: string, away: SessionAway & { carried: boolean }): SessionAway {
+    if (away.carried) this.resumeAwaySince.delete(sessionId);
+    return { away_ms: away.away_ms, away_since: away.away_since };
   }
 }
 
