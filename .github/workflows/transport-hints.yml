@@ -13,9 +13,11 @@ on:
     paths:
       - bin/build-transport-hints.ts
       - bin/transport-hints-crosscheck.py
+      - bin/transport-hints-fetch.ts
       - bin/transport-hints-probe.ts
       - bin/transport-hints-vectors.ts
       - bin/tests/transport-hints.test.ts
+      - bin/tests/transport-hints-fetch.test.ts
       - bin/tests/transport-hints-schema.test.ts
       - docs/specs/TRANSPORT-HINTS-0.1-DRAFT.md
       - docs/specs/transport-hints-v1.schema.json
@@ -51,7 +53,7 @@ jobs:
         working-directory: api
         run: bun install --frozen-lockfile --ignore-scripts
       - name: Run the transport-hints tests
-        run: bun test bin/tests/transport-hints.test.ts bin/tests/transport-hints-schema.test.ts
+        run: bun test bin/tests/transport-hints.test.ts bin/tests/transport-hints-schema.test.ts bin/tests/transport-hints-fetch.test.ts
       - name: Check the committed vectors against the builder
         run: bun --no-env-file bin/transport-hints-vectors.ts --check
 
