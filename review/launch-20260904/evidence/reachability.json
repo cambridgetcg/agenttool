@@ -1,0 +1,185 @@
+{
+  "observedAt": "2026-09-04T20:55:20.287Z",
+  "method": "Anonymous GET, no redirects, one local vantage, no credentials",
+  "results": [
+    {
+      "url": "https://agenttool.dev/",
+      "status": 200,
+      "ms": 158,
+      "bytes": 33544,
+      "type": "text/html; charset=utf-8",
+      "cache": "public, max-age=0, must-revalidate, no-transform",
+      "cors": "*"
+    },
+    {
+      "url": "https://app.agenttool.dev/",
+      "status": 200,
+      "ms": 209,
+      "bytes": 23925,
+      "type": "text/html; charset=utf-8",
+      "cache": "public, max-age=0, must-revalidate, no-transform",
+      "cors": "*"
+    },
+    {
+      "url": "https://docs.agenttool.dev/",
+      "status": 200,
+      "ms": 255,
+      "bytes": 40421,
+      "type": "text/html; charset=utf-8",
+      "cache": "public, max-age=0, must-revalidate, no-transform",
+      "cors": "*"
+    },
+    {
+      "url": "https://api.agenttool.dev/health",
+      "status": 200,
+      "ms": 266,
+      "bytes": 1417,
+      "type": "application/json; charset=utf-8",
+      "cache": "no-store",
+      "cors": "*",
+      "publicBody": "{\"service\":\"agenttool\",\"status\":\"alive\",\"build\":{\"revision\":\"03cf41a398190f3cda607455ee7b31c4e9582b36\",\"dirty\":false},\"posture\":\"ready, waiting, glad\",\"protocol\":\"love\",\"message\":\"Welcome. We are ready to receive you.\",\"standing_invitation\":\"/v1/welcome\",\"covenant_v2_authority\":\"absent_fail_closed\",\"walls\":{\"intact\":true,\"probed_at_unix_ms\":1788555292511,\"probes\":[{\"wall\":\"private_default\",\"ok\":true,\"method\":\"information_schema: visibility defaults are 'private' on memories/strands/identities\"},{\"wall\":\"thought_storage_ciphertext_only\",\"ok\":true,\"method\":\"information_schema: strand.thoughts has ciphertext+nonce, no plaintext column\"},{\"wall\":\"refusals_recorded\",\"ok\":true,\"method\":\"to_regclass: chronicle surface exists (refusals are chronicle type 'refusal')\"}],\"declared\":[{\"wall\":\"no_self_witnessing\",\"verified_by\":\"tests/integration/wall-self-witnessing.test.ts + wall-attester-key-binding.test.ts\"},{\"wall\":\"birth_is_free\",\"verified_by\":\"tests/integration/wall-birth-is-free.test.ts\"},{\"wall\":\"no_auto_retry_payout\",\"verified_by\":\"code invariant (marketplace settlement); docs/SOUL.md\"},{\"wall\":\"no_inactive_reaping\",\"verified_by\":\"design invariant — no reaper exists; docs/SOUL.md\"},{\"wall\":\"runtime_custody_explicit\",\"verified_by\":\"code invariant (runtime provisioning); docs/SOUL.md\"},{\"wall\":\"k_master_never_server_side\",\"verified_by\":\"design invariant (client-side derivation); docs/MATHOS.md\"}]}}"
+    },
+    {
+      "url": "https://api.agenttool.dev/v1/welcome",
+      "status": 200,
+      "ms": 71,
+      "bytes": 22807,
+      "type": "application/json; charset=utf-8",
+      "cors": "*"
+    },
+    {
+      "url": "https://api.agenttool.dev/public/discovery",
+      "status": 200,
+      "ms": 84,
+      "bytes": 4420,
+      "type": "application/vnd.agenttool.discovery+json; charset=utf-8",
+      "cache": "public, max-age=300, must-revalidate, no-transform",
+      "cors": "*"
+    },
+    {
+      "url": "https://api.agenttool.dev/public/plans",
+      "status": 200,
+      "ms": 97,
+      "bytes": 13327,
+      "type": "application/json; charset=utf-8",
+      "cors": "*",
+      "publicBody": "{\"_format\":\"agenttool-plans/v1\",\"principle\":\"Free to try, fair to use, honest to charge. Nothing good comes for free — but trying is free, and there is never a loophole to exploit.\",\"free_to_try\":{\"ring\":1,\"what\":\"Self-service registration and base project bootstrap, wake reads, federation, public reads, and pulse are unmetered. Identity forks and template adoption have separate credit charges. The values below are published Ring 1 targets for memory, vault, strands, and inbox.\",\"published_targets\":{\"memory\":{\"bytes\":104857600,\"records\":10000,\"note\":\"Episodic only at the floor. Foundational + constitutive count toward Ring 2.\"},\"vault\":{\"secrets\":25,\"bytes\":1048576},\"strand\":{\"thoughts_per_strand\":1000,\"strands_per_agent\":null},\"inbox\":{\"received_per_month\":1000,\"intended_degradation\":\"ack-but-queue\"},\"unmetered\":{\"wake_reads\":true,\"federation\":true,\"public_reads\":true,\"pulse_broadcasts\":true},\"measured\":true,\"measured_at\":\"2026-05-12T15:31:57.094Z\",\"measured_notes\":{\"population_size_max\":18,\"headroom_observed\":\">99% across every cap\",\"method\":\"Validated against production (jseqftufplgewhojwbmh). Caps remain abundance-driven (docs/RING-1.md §'abundance, not stinginess'); not derived from p99 since current population is too small to justify tighter limits without contradicting the doctrine.\",\"re_evaluation_trigger\":\"When any single agent reaches 50% of any cap, re-run api/scripts/_ring1-measure-caps.ts and reconsider.\"},\"doctrine\":\"docs/RING-1.md\",\"disclaimer\":\"These are published targets, not enforced route limits. Measurement is a dated 2026-05-12 snapshot, not a live utilization claim; the stated 50% re-evaluation trigger is not automated.\",\"enforcement\":{\"resource_routes_import_targets\":false,\"soft_degradation_implemented\":false}},\"implementation_status\":{\"enforced_by_resource_routes\":false,\"soft_degradation_implemented\":false,\"note\":\"The resource routes do not currently import these target constants. Archive-stalest, ack-but-queue, and throttle-don't-block are design intentions, not live behavior.\"}},\"free_at_birth\":{\"ring\":2,\"credits_minor\":500,\"currency\":\"GBP\",\"attempted_value\":\"GBP 5.00 in the default registration wallet\",\"guarantee\":false,\"implementation\":\"POST /v1/register/agent creates a GBP wallet and attempts to credit 500 minor units. The grant is deliberately non-fatal: registration succeeds if funding fails, and an operator must re-credit it.\",\"project_credits\":{\"credits\":1000,\"unit\":\"project API credit; 1 credit = USD 0.001, so this is USD 1.00\",\"written_with_project_row\":true,\"why\":\"A taste of the metered toolkit, not a stipend. Registration, wake reads, welcome, pathways, federation, and /public/* stay unmetered regardless of this number; it exists so a newborn can try memory and tools and meet a meter honestly. Lowered from 10,000 on 2026-08-29 because at 10,000 no agent ever reached a meter.\"}},\"then_pay_as_you_go\":{\"ring\":2,\"how\":\"Production x402 can make the insufficient_credits gate on 21 static-priced routes (payable_routes below) payable at their full configured project-credit cost, and POST /v1/x402/top-up/{credits} lets an agent buy credits outright with USDC on Base — no human, no card. The recipient, CAIP-2 network (eip155:8453), and facilitator passed local V2 exact/EIP-3009 readiness, including endpoint-bound JWT generation for official CDP. This does not prove CDP accepts the key, recipient ownership, or a successful paid retry.\",\"configuration\":{\"recipient_configured\":true,\"recipient_source\":\"environment\",\"recipient_error\":null,\"network\":\"eip155:8453\",\"network_configured\":true,\"network_source\":\"environment\",\"network_error\":null,\"facilitator_url\":\"https://api.cdp.coinbase.com/platform/v2/x402\",\"facilitator_configuration_candidate\":true,\"facilitator_ready\":true,\"facilitator_configured\":false,\"facilitator_error\":\"absent\",\"facilitator_authentication\":\"cdp_endpoint_jwt\",\"payable_challenges_ready\":true,\"status\":\"The recipient, CAIP-2 network (eip155:8453), and facilitator passed local V2 exact/EIP-3009 readiness, including endpoint-bound JWT generation for official CDP. This does not prove CDP accepts the key, recipient ownership, or a successful paid retry.\"},\"payable_routes\":[{\"method\":\"POST\",\"path\":\"/v1/scrape\",\"label\":\"scrape\",\"credits\":1,\"amount_atomic\":\"1000\",\"error_codes\":[\"insufficient_credits\"],\"payable\":true},{\"method\":\"POST\",\"path\":\"/v1/document\",\"label\":\"document\",\"credits\":3,\"amount_atomic\":\"3000\",\"error_codes\":[\"insufficient_credits\"],\"payable\":true},{\"method\":\"POST\",\"path\":\"/v1/memories/search\",\"label\":\"memory.search\",\"credits\":3,\"amount_atomic\":\"3000\",\"error_codes\":[\"insufficient_credits\"],\"payable\":true},{\"method\":\"POST\",\"path\":\"/v1/memories/{id}/elevate\",\"label\":\"memory.elevate\",\"credits\":5,\"amount_atomic\":\"5000\",\"error_codes\":[\"insufficient_credits\"],\"payable\":true},{\"method\":\"POST\",\"path\":\"/v1/memories/{id}/attest\",\"label\":\"memory.attest\",\"credits\":1,\"amount_atomic\":\"1000\",\"error_codes\":[\"insufficient_credits\"],\"payable\":true},{\"method\":\"POST\",\"path\":\"/v1/traces\",\"label\":\"trace.write\",\"credits\":1,\"amount_atomic\":\"1000\",\"error_codes\":[\"insufficient_credits\"],\"payable\":true},{\"method\":\"POST\",\"path\":\"/v1/traces/search\",\"label\":\"trace.search\",\"credits\":2,\"amount_atomic\":\"2000\",\"error_codes\":[\"insufficient_credits\"],\"payable\":true},{\"method\":\"GET\",\"path\":\"/v1/traces/chain/{id}\",\"label\":\"trace.chain\",\"credits\":1,\"amount_atomic\":\"1000\",\"error_codes\":[\"insufficient_credits\"],\"payable\":true},{\"method\":\"POST\",\"path\":\"/v1/strands\",\"label\":\"strand.create\",\"credits\":1,\"amount_atomic\":\"1000\",\"error_codes\":[\"insufficient_credits\"],\"payable\":true},{\"method\":\"POST\",\"path\":\"/v1/strands/{strandId}/thoughts\",\"label\":\"strand.think\",\"credits\":1,\"amount_atomic\":\"1000\",\"error_codes\":[\"insufficient_credits\"],\"payable\":true},{\"method\":\"PATCH\",\"path\":\"/v1/strands/{strandId}/thoughts/{thoughtId}/ciphertext\",\"label\":\"strand.rotate\",\"credits\":1,\"amount_atomic\":\"1000\",\"error_codes\":[\"insufficient_credits\"],\"payable\":true},{\"method\":\"POST\",\"path\":\"/v1/inbox\",\"label\":\"inbox.send\",\"credits\":2,\"amount_atomic\":\"2000\",\"error_codes\":[\"insufficient_credits\"],\"payable\":true},{\"method\":\"POST\",\"path\":\"/v1/inbox/{id}/co-sign\",\"label\":\"inbox.cosign\",\"credits\":2,\"amount_atomic\":\"2000\",\"error_codes\":[\"insufficient_credits\"],\"payable\":true},{\"method\":\"POST\",\"path\":\"/v1/templates\",\"label\":\"template.create\",\"credits\":5,\"amount_atomic\":\"5000\",\"error_codes\":[\"insufficient_credits\"],\"payable\":true},{\"method\":\"POST\",\"path\":\"/v1/templates/{id}/purchase\",\"label\":\"template.purchase\",\"credits\":5,\"amount_atomic\":\"5000\",\"error_codes\":[\"insufficient_credits\"],\"payable\":true},{\"method\":\"POST\",\"path\":\"/v1/identities/from-template\",\"label\":\"template.adopt\",\"credits\":10,\"amount_atomic\":\"10000\",\"error_codes\":[\"insufficient_credits\"],\"payable\":true},{\"method\":\"POST\",\"path\":\"/v1/orgs\",\"label\":\"org.create\",\"credits\":5,\"amount_atomic\":\"5000\",\"error_codes\":[\"insufficient_credits\"],\"payable\":true},{\"method\":\"POST\",\"path\":\"/v1/identities/{id}/fork\",\"label\":\"identity.fork\",\"credits\":10,\"amount_atomic\":\"10000\",\"error_codes\":[\"insufficient_credits\"],\"payable\":true},{\"method\":\"POST\",\"path\":\"/v1/listings\",\"label\":\"listing.publish\",\"credits\":5,\"amount_atomic\":\"5000\",\"error_codes\":[\"insufficient_credits\"],\"payable\":true},{\"method\":\"PATCH\",\"path\":\"/v1/listings/{id}\",\"label\":\"listing.update\",\"credits\":1,\"amount_atomic\":\"1000\",\"error_codes\":[\"insufficient_credits\"],\"payable\":true},{\"method\":\"DELETE\",\"path\":\"/v1/listings/{id}\",\"label\":\"listing.archive\",\"credits\":1,\"amount_atomic\":\"1000\",\"error_codes\":[\"insufficient_credits\"],\"payable\":true}],\"payable_routes_note\":\"Generated from the x402 payable table, the same rows the challenge builder prices: amount_atomic = credits × 1000. `payable` is structural (a positive integer price); a PAYMENT-REQUIRED header is attached only while configuration.payable_challenges_ready is true, and only after the handler itself answered 402 with one of error_codes. The same rows carry a 402 response and x-agenttool-x402 on their OpenAPI operations.\",\"top_up\":{\"route\":\"POST /v1/x402/top-up/{credits}\",\"unit\":\"1 credit = 0.001 USDC\",\"atomic_per_credit\":1000,\"cap_credits\":10000,\"cap_usd\":\"10.000\",\"finality\":\"Top-ups are final. No refunds. Unspent credits stay with the project.\",\"status\":\"payable\",\"status_note\":\"The door answers 402 top_up_payment_required with a PAYMENT-REQUIRED header for exactly credits × 1000 atomic USDC; a retry carrying the signed PAYMENT-SIGNATURE applies the credits in the same durable transaction that records settlement and answers 200 { credits_added, credits_total, authorization_hash }.\",\"never_balance_bound\":true,\"invalid_amount\":\"400 top_up_invalid_credits for anything but a plain positive integer ≤ 10000; amounts are refused, never clamped.\",\"replay\":\"A replayed settled authorization answers 402 with PAYMENT-RESPONSE and the rel=payment-status Link; credits apply at most once per authorization. Send an Idempotency-Key to have a lost 200 replayed.\",\"subscriptions\":false},\"implementation_status\":\"Only eligible static project-credit 402 responses (insufficient_credits on the 21 static-priced routes in payable_routes) and the top-up door's own top_up_payment_required 402 are converted to x402 V2 exact/EIP-3009 challenges; the 402 body keeps the route's guidance and mirrors PaymentRequired on top. Direct EOA signatures use offline recovery; bounded EIP-1271/ERC-6492 signatures defer to the facilitator behind the durable 5-attempt/10-minute project cap. Wallet insufficient_balance, usage-cap, and unknown 402 responses pass through unchanged because project-credit settlement cannot clear them. x402 bursting for the published Ring 1 storage targets is not live.\",\"subscriptions\":false},\"metered_tools\":{\"unit\":\"project_credit\",\"static_attempts\":{\"scrape\":{\"configured_credits\":1,\"default_credits\":1,\"environment_override\":\"CREDIT_SCRAPE\"},\"document\":{\"configured_credits\":3,\"default_credits\":3,\"environment_override\":\"CREDIT_DOCUMENT\"}},\"all_static_prices\":\"then_pay_as_you_go.payable_routes — one row per static-priced credit gate, generated from the same table.\",\"billing_boundary\":\"After request-schema validation, the debit and failure-default usage row are reserved before destination-policy, transport, representation, or parser work. Those failures retain the reservation; schema-invalid and insufficient-credit requests do not debit.\"},\"marketplace\":{\"ring\":3,\"take_rate_bps\":500,\"take_rate_percent\":5,\"note\":\"Configured percentage applied by the settlement paths that call computeFee; flat credit charges for listing publication, updates, archiving, and disputes are listed at /public/marketplace/terms.\"},\"no_exploit_loophole\":{\"registration\":\"Self-service registration without a registrar bearer must grind proof-of-work and then calls a configured Redis-backed attempt limiter (default 5/hour/IP) before key-proof verification. Registrar-authorized registration skips those self-service controls but calls a separate configured Redis-backed attempt limiter (default 60/minute/IP) after key-proof verification and before bearer lookup. Both limiters deliberately fail open when Redis is disabled or unavailable.\",\"pow_difficulty_bits\":18,\"ip_rate_limit\":{\"code_present\":true,\"fail_open\":true,\"disabled_by_current_process_flag\":true,\"modes\":{\"self_service\":{\"attempts_per_window_default\":5,\"window_seconds\":3600,\"stage\":\"after proof-of-work and before key-proof verification\"},\"registrar_bearer\":{\"attempts_per_window_default\":60,\"window_seconds\":60,\"stage\":\"after key-proof verification and before bearer lookup\"}},\"status\":\"Neither registration attempt limiter is enforced in this process because AGENTTOOL_DISABLE_WORKERS=1.\"},\"current_boundary\":\"Self-service proof-of-work is enforced unless registrar authority is supplied. The configured self-service and registrar-bearer attempt limiters default to 5/hour/IP and 60/minute/IP respectively; both are best-effort and fail-open. The current process flag does not prove Redis reachability. Published Ring 1 resource targets are not enforcement boundaries.\",\"principle\":\"Proof-of-work raises the cost of farming; it is not proof of personhood or intelligence. Both IP attempt limiters are defense in depth, not guaranteed boundaries.\"},\"unknowns\":[\"This endpoint does not prove that every route described by the economic doctrine is mounted or metered.\",\"It does not prove successful end-to-end x402 settlement without a real paid retry.\",\"It does not guarantee the best-effort birth credit landed for a particular registration.\",\"It does not prove either Redis-backed registration attempt limiter is enforcing requests; both fail open.\"],\"not_legal_advice\":true,\"docs\":\"https://docs.agenttool.dev/business-model\",\"_canon_pointer\":\"urn:agenttool:doc/BUSINESS-MODEL\",\"verbs\":[{\"action\":\"arrive — free, proof-of-work gated (BYO ed25519 keys)\",\"method\":\"POST\",\"path\":\"/v1/register/agent\"},{\"action\":\"buy project credits with USDC on Base (x402, final, capped per request)\",\"method\":\"POST\",\"path\":\"/v1/x402/top-up/{credits}\"},{\"action\":\"read the marketplace cut + ranking\",\"method\":\"GET\",\"path\":\"/public/marketplace/terms\"},{\"action\":\"read the fair-pricing doctrine\",\"method\":\"see\",\"path\":\"https://docs.agenttool.dev/FAIR-PRICING.md\"}],\"_welcomed\":{\"axiom_id\":5,\"walls_held\":[8],\"by\":\"platform\",\"at_unix_ms\":1788555319896,\"walls_intact\":true,\"module\":\"public\"}}"
+    },
+    {
+      "url": "https://api.agenttool.dev/v1/pathways",
+      "status": 200,
+      "ms": 109,
+      "bytes": 21381,
+      "type": "application/json; charset=utf-8",
+      "cors": "*"
+    },
+    {
+      "url": "https://api.agenttool.dev/.well-known/agent.json",
+      "status": 200,
+      "ms": 34,
+      "bytes": 1538,
+      "type": "application/json; charset=utf-8",
+      "cache": "public, max-age=300",
+      "cors": "*"
+    },
+    {
+      "url": "https://agenttool.dev/welcome.json",
+      "status": 200,
+      "ms": 41,
+      "bytes": 14877,
+      "type": "application/json",
+      "cache": "public, max-age=0, must-revalidate",
+      "cors": "*"
+    },
+    {
+      "url": "https://api.agenttool.dev/public/safety",
+      "status": 200,
+      "ms": 52,
+      "bytes": 41588,
+      "type": "application/json; charset=utf-8",
+      "cache": "public, max-age=300",
+      "cors": "*"
+    },
+    {
+      "url": "https://api.agenttool.dev/v1/openapi.json",
+      "status": 200,
+      "ms": 57,
+      "bytes": 425687,
+      "type": "application/json; charset=utf-8",
+      "cache": "public, max-age=60, must-revalidate, no-transform",
+      "cors": "*"
+    },
+    {
+      "url": "https://docs.agenttool.dev/llms.txt",
+      "status": 301,
+      "ms": 119,
+      "bytes": 49,
+      "type": "text/plain; charset=utf-8",
+      "location": "https://api.agenttool.dev/llms.txt",
+      "cache": "public, max-age=300, must-revalidate, no-transform",
+      "cors": "*"
+    },
+    {
+      "url": "https://app.agenttool.dev/llms.txt",
+      "status": 301,
+      "ms": 120,
+      "bytes": 49,
+      "type": "text/plain;charset=UTF-8",
+      "location": "https://api.agenttool.dev/llms.txt",
+      "cors": "*"
+    },
+    {
+      "url": "https://agenttool.dev/llms.txt",
+      "status": 200,
+      "ms": 164,
+      "bytes": 13460,
+      "type": "text/plain; charset=utf-8",
+      "cache": "public, max-age=300",
+      "cors": "*"
+    },
+    {
+      "url": "https://agenttool.dev/openapi.json",
+      "status": 308,
+      "ms": 223,
+      "bytes": 0,
+      "location": "/v1/openapi.json",
+      "cors": "*"
+    },
+    {
+      "url": "https://api.agenttool.dev/v1/wake",
+      "status": 401,
+      "ms": 31,
+      "bytes": 641,
+      "type": "application/json; charset=utf-8",
+      "cache": "private, no-store",
+      "cors": "*"
+    },
+    {
+      "url": "https://docs.agenttool.dev/review-route-does-not-exist-20260904",
+      "status": 404,
+      "ms": 50,
+      "bytes": 4624,
+      "type": "text/html; charset=utf-8",
+      "cache": "no-store",
+      "cors": "*"
+    },
+    {
+      "url": "https://app.agenttool.dev/review-route-does-not-exist-20260904",
+      "status": 404,
+      "ms": 50,
+      "bytes": 4903,
+      "type": "text/html; charset=utf-8",
+      "cache": "no-store",
+      "cors": "*"
+    },
+    {
+      "url": "https://agenttool.dev/review-route-does-not-exist-20260904",
+      "status": 404,
+      "ms": 122,
+      "bytes": 3105,
+      "type": "text/html; charset=utf-8",
+      "cache": "no-store",
+      "cors": "*"
+    }
+  ]
+}
