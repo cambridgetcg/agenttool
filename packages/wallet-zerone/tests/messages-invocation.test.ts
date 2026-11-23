@@ -120,6 +120,25 @@ describe("AgentTool invocation witness boundary", () => {
     expect(json).not.toContain("<tag>");
   });
 
+  test("refuses projected text ending in a lone high surrogate", () => {
+    for (const patch of [
+      { buyer_did: "did:example:buyer\ud800" },
+      { buyer_did: "\ud800" },
+      { buyer_did: "did:example:\ud800buyer" },
+      { buyer_did: "did:example:\udc00" },
+      { completion_sig: "sig\ud800" },
+    ]) {
+      expect(() => encodeAgentToolInvocationProjection({
+        ...INVOCATION,
+        ...patch,
+      })).toThrow(/lone UTF-16 surrogate/);
+    }
+    expect(() => encodeAgentToolInvocationProjection({
+      ...INVOCATION,
+      buyer_did: "did:example:buyer-😀",
+    })).not.toThrow();
+  });
+
   test("rejects noncanonical or over-broad source URLs", () => {
     const invalidUrls = [
       sourceUrl.replace("https:", "http:"),

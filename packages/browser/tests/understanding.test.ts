@@ -137,6 +137,32 @@ describe("Browser web material", () => {
     ).toThrow("Analyzed text");
   });
 
+  test("refuses text and identifiers ending in a lone high surrogate", () => {
+    expect(() =>
+      createBrowserMaterial(observation({ text: `${pageText}\uD800` })),
+    ).toThrow("Analyzed text");
+    expect(() =>
+      createBrowserMaterial(observation({ text: "\uD800" })),
+    ).toThrow("Analyzed text");
+    expect(() =>
+      createBrowserMaterial(observation({ text: "Experts \uD800say." })),
+    ).toThrow("Analyzed text");
+    expect(() =>
+      createBrowserMaterial(observation({ text: "\uDC00" })),
+    ).toThrow("Analyzed text");
+    expect(() =>
+      createBrowserMaterial(observation({ tabId: "tab_1\uD800" })),
+    ).toThrow("bounded Unicode string");
+    expect(() =>
+      createBrowserMaterial(extract({ content: `${pageText}\uD800` })),
+    ).toThrow("Analyzed text");
+
+    const material = createBrowserMaterial(
+      observation({ text: `${pageText} 😀` }),
+    );
+    expect(material.content.text.endsWith("😀")).toBe(true);
+  });
+
   test("detects material mutation instead of analyzing a stale digest", () => {
     const material = createBrowserMaterial(observation());
     material.content.text = "changed";

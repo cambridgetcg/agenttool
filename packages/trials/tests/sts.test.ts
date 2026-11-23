@@ -191,6 +191,36 @@ describe("privacy-first Hugging Face STS projection", () => {
     expect(JSON.stringify(result.receipt)).not.toContain(highEntropyCanary);
   });
 
+  test("omits report text ending in a lone high surrogate", () => {
+    const loneSurrogateOutcomes = [
+      "The synthetic unit check passed.\uD800",
+      "\uD800",
+      "The synthetic \uD800unit check passed.",
+      "\uDC00",
+    ];
+    const result = projectReportsToSts({
+      session_id: "selection.synthetic.surrogate.001",
+      reports: [
+        ...loneSurrogateOutcomes.map((outcome, index) => ({
+          ...safeReport(`report.synthetic.surrogate-${index}`),
+          outcome,
+        })),
+        {
+          ...safeReport("report.synthetic.limits-surrogate"),
+          limits: "Synthetic local evidence only.\uD800",
+        },
+        {
+          ...safeReport("report.synthetic.pair"),
+          outcome: "The synthetic unit check passed. 😀",
+        },
+      ],
+    });
+    expect(result.receipt.emitted_report_count).toBe(1);
+    expect(result.receipt.omissions).toEqual([
+      { reason: "invalid_shape", count: loneSurrogateOutcomes.length + 1 },
+    ]);
+  });
+
   test("never invokes accessors on rejected report fields", () => {
     let invoked = false;
     const unsafeExtra = safeReport(
