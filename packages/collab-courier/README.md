@@ -9,8 +9,9 @@ Each device retains its own canonical Collab journal. This private Bun 1.3.5
 package composes published `@agenttool/sdk@0.22.1` signing/list contracts with a
 host-selected local Collab MCP process. It publishes nothing, installs no service,
 changes no harness configuration, and activates no channel on import or install.
-It makes no chain call and has no wallet dependency; anchoring and anchor
-evidence belong to the separate `collab-zerone` package.
+It makes no chain call and has no wallet dependency; anchoring belongs to the
+separate `collab-zerone` package; anchor evidence comes from
+`collab_anchor_status` (local sidecar) or `collab-zerone verify`.
 
 ## Disclosure and authority
 
