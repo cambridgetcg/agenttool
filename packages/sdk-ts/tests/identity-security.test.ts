@@ -123,6 +123,30 @@ describe("identity attestation custody", () => {
     })).toThrow(/well-formed Unicode/);
   });
 
+  test("refuses text ending in a lone high surrogate before signing", () => {
+    const options = {
+      subject_id: SUBJECT_ID,
+      attester_id: ATTESTER_ID,
+      kid: KEY_ID,
+      claim: "worked together",
+      evidence: null,
+    };
+    for (const patch of [
+      { claim: "abc\uD800" },
+      { claim: "\uD800" },
+      { claim: "ab\uD800c" },
+      { claim: "\uDC00" },
+      { evidence: "trace:1\uD800" },
+    ]) {
+      expect(() => canonicalIdentityAttestationBytes({ ...options, ...patch }))
+        .toThrow(/well-formed Unicode/);
+    }
+    expect(() => canonicalIdentityAttestationBytes({ ...options, claim: "abc" }))
+      .not.toThrow();
+    expect(() => canonicalIdentityAttestationBytes({ ...options, claim: "😀" }))
+      .not.toThrow();
+  });
+
   test("attest sends only the signed API contract and never a private key", async () => {
     setupFetch(201, { id: "att-1" });
     const at = new AgentTool({ apiKey: "test-key" });

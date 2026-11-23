@@ -155,6 +155,22 @@ describe("POST /v1/bootstrap/elevate — validation surface", () => {
     }
   });
 
+  test("canonical text ending in a lone high surrogate is rejected", () => {
+    for (const request of [
+      { ...VALID_REQUEST, sponsor_did: "did:at:sponsor\ud800" },
+      { ...VALID_REQUEST, claim: "sponsorship\ud800" },
+      { ...VALID_REQUEST, evidence: "proof\ud800" },
+      { ...VALID_REQUEST, evidence: "\udc00" },
+    ]) {
+      expect(elevateSchema.safeParse(request).success).toBe(false);
+    }
+    expect(elevateSchema.safeParse({
+      ...VALID_REQUEST,
+      claim: "sponsorship",
+      evidence: "proof 😀",
+    }).success).toBe(true);
+  });
+
   test("claim limit counts Unicode code points across SDK and API runtimes", () => {
     expect(elevateSchema.safeParse({
       ...VALID_REQUEST,
@@ -216,6 +232,21 @@ describe("bootstrap-elevate/v1 canonical digest", () => {
       ...vector,
       evidence: "bad\ud800text",
     })).toThrow();
+  });
+
+  test("refuses text ending in a lone high surrogate before hashing", () => {
+    for (const patch of [
+      { sponsorDid: "did:at:sponsor\ud800" },
+      { claim: "sponsorship\ud800" },
+      { evidence: "reviewed\ud800" },
+      { evidence: "\udc00" },
+    ]) {
+      expect(() => canonicalBootstrapElevateBytes({ ...vector, ...patch })).toThrow();
+    }
+    expect(() => canonicalBootstrapElevateBytes({
+      ...vector,
+      evidence: "reviewed 😀",
+    })).not.toThrow();
   });
 });
 

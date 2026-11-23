@@ -309,6 +309,27 @@ class TestAttestations:
                 **{**options, "evidence": "broken\ud800text"}
             )
 
+    def test_canonical_payload_rejects_trailing_lone_high_surrogate(self):
+        # Twin of the sdk-ts test: the TypeScript check once let a string
+        # ending in a lone high surrogate through.
+        options = {
+            "subject_id": SUBJECT_ID,
+            "attester_id": IDENTITY_ID,
+            "kid": KEY_ID,
+            "claim": "worked together",
+        }
+        for patch in (
+            {"claim": "abc\ud800"},
+            {"claim": "\ud800"},
+            {"claim": "ab\ud800c"},
+            {"claim": "\udc00"},
+            {"evidence": "trace:1\ud800"},
+        ):
+            with pytest.raises(ValueError, match="well-formed Unicode"):
+                canonical_identity_attestation_bytes(**{**options, **patch})
+        canonical_identity_attestation_bytes(**{**options, "claim": "abc"})
+        canonical_identity_attestation_bytes(**{**options, "claim": "\U0001F600"})
+
     def test_local_signature_verifies_over_canonical_payload(self):
         canonical = canonical_identity_attestation_bytes(
             subject_id=SUBJECT_ID,
