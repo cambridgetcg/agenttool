@@ -41,7 +41,7 @@ export function systemZeronedRunner(bin: string): ZeronedRunner {
 export interface QueryRunLimits {
   /** Combined stdout/stderr budget shared by this verifier's read-only queries. */
   max_output_bytes: number;
-  /** Maximum duration of one query; the courier separately bounds the whole CLI. */
+  /** Maximum duration of one query; a host running the CLI bounds the whole run itself. */
   timeout_ms: number;
 }
 
@@ -59,8 +59,8 @@ export function createReadOnlyTxLookup(bin: string, limits: QueryRunLimits = { m
     if (remaining < 1) return failed();
     try {
       return await new Promise<TxLookup>(resolve => {
-        // Inherit the verifier's group: the courier owns teardown of this
-        // process and all query descendants on every outer completion path.
+        // Inherit the verifier's process group, so a host that runs the CLI
+        // can tear down this process and all query descendants with it.
         const child = spawn(bin, queryTxArgs(network, txHash), { stdio: ["ignore", "pipe", "pipe"], shell: false });
         const chunks: Buffer[] = [];
         let settled = false;
