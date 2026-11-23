@@ -156,7 +156,7 @@ describe("WAKE private cache boundary", () => {
   test("actual WAKE validation and missing-route errors are private no-store", async () => {
     const wakeRouter = (await import("../src/routes/wake")).default;
     const app = new Hono<ProjectContext>();
-    app.use("/v1/wake", wakePrivateCacheBoundary());
+    // Mirrors index.ts: one wildcard mount, which also covers bare /v1/wake.
     app.use("/v1/wake/*", wakePrivateCacheBoundary());
     app.use("/v1/wake", async (c, next) => {
       c.set(

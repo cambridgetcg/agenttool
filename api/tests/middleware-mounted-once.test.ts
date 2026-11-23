@@ -17,7 +17,11 @@
  *     selected once runs at most once per request.
  *
  * The family list is derived from the top-level `app.use` mounts in index.ts,
- * so a new family is covered without editing this file. */
+ * so a new family is covered without editing this file. The derived list can
+ * also shrink: a family whose every auth mount is deleted drops out of it.
+ * Only the families in FORMERLY_PAIRED have a fixed floor here, checked
+ * whatever the scan finds; other authenticated families are covered while
+ * they still have an auth mount. */
 
 import { beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
@@ -215,7 +219,11 @@ const PROBE_SCRIPT = `
   process.exit(0);
 `;
 
-const probes = families.flatMap((family) =>
+/** Families whose unauthenticated refusal is checked: every family with an
+ * auth mount today, plus the fixed floor of formerly paired auth families. */
+const refusalFamilies = [...new Set([...authFamilies, ...FORMERLY_PAIRED[AUTH]!])].sort();
+
+const probes = [...new Set([...families, ...refusalFamilies])].sort().flatMap((family) =>
   ["GET", "POST"].flatMap((method) => [
     { method, path: family },
     { method, path: `${family}/${CHILD}` },
@@ -282,7 +290,7 @@ describe("api/src/index.ts mounts each family's middleware once", () => {
 
   test("every authenticated family refuses a request without a bearer, bare and child", () => {
     const wrong: string[] = [];
-    for (const family of authFamilies) {
+    for (const family of refusalFamilies) {
       for (const method of ["GET", "POST"]) {
         for (const path of [family, `${family}/${CHILD}`]) {
           const expected = PUBLIC_BY_CONTRACT[`${method} ${path}`]?.status ?? 401;
