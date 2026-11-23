@@ -130,7 +130,8 @@ describe("mcml — mounted in index.ts under authMiddleware", () => {
 
   test("import + auth + route mount", () => {
     expect(src).toContain('import mcmlRouter from "./routes/mcml"');
-    expect(src).toContain('app.use("/v1/mcml", authMiddleware)');
+    // Also covers bare /v1/mcml (checked on the assembled app in
+    // tests/middleware-mounted-once.test.ts).
     expect(src).toContain('app.use("/v1/mcml/*", authMiddleware)');
     expect(src).toContain('app.route("/v1/mcml", mcmlRouter)');
   });

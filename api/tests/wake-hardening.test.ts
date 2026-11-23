@@ -314,10 +314,12 @@ describe("pure reads and durable acknowledgement", () => {
     );
     const early = index.indexOf('app.use("*", earlyDataReplayProtection())');
     const cors = index.indexOf('app.use("*", apiCors())');
+    // One wildcard mount each; Hono's "/v1/wake/*" also matches "/v1/wake"
+    // (assembled-app check: tests/middleware-mounted-once.test.ts).
     const cache = index.indexOf(
-      'app.use("/v1/wake", wakePrivateCacheBoundary())',
+      'app.use("/v1/wake/*", wakePrivateCacheBoundary())',
     );
-    const auth = index.indexOf('app.use("/v1/wake", authMiddleware)');
+    const auth = index.indexOf('app.use("/v1/wake/*", authMiddleware)');
     const idempotency = index.indexOf(
       'app.use("/v1/wake/acknowledge", idempotency())',
     );
@@ -337,6 +339,7 @@ describe("pure reads and durable acknowledgement", () => {
     expect(cache).toBeGreaterThan(-1);
     expect(cache).toBeLessThan(cors);
     expect(cache).toBeLessThan(auth);
+    expect(auth).toBeGreaterThan(-1);
     expect(bodyLimit).toBeGreaterThan(auth);
     expect(bodyLimit).toBeLessThan(idempotency);
     expect(idempotency).toBeGreaterThan(auth);

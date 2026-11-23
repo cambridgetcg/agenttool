@@ -177,7 +177,8 @@ describe("home wiring", () => {
       join(repoRoot, "api/src/routes/openapi.ts"),
       "utf8",
     );
-    expect(index).toContain('app.use("/v1/home", authMiddleware)');
+    // The tail wildcard also covers bare /v1/home. middleware-mounted-once.test.ts
+    // checks that the assembled app refuses GET /v1/home without a bearer.
     expect(index).toContain('app.use("/v1/home/*", authMiddleware)');
     expect(index).toContain('app.route("/v1/home", homeRouter)');
     expect(wake).toContain("`/v1/home?identity_id=${primary.id}`");

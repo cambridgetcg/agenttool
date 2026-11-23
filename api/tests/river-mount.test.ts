@@ -11,14 +11,14 @@ import { join } from "node:path";
 const API_ROOT = join(import.meta.dir, "..");
 const indexSource = readFileSync(join(API_ROOT, "src", "index.ts"), "utf8");
 
+// One wildcard mount per middleware: Hono's "/v1/river/*" also matches the bare
+// "/v1/river" that POST uses. The assembled-app test below proves auth still
+// runs there; tests/middleware-mounted-once.test.ts proves each runs once.
 const wiring = {
   import: 'import riverRouter from "./routes/river"',
-  authExact: 'app.use("/v1/river", authMiddleware)',
-  authWildcard: 'app.use("/v1/river/*", authMiddleware)',
-  idempotencyExact: 'app.use("/v1/river", idempotency())',
-  idempotencyWildcard: 'app.use("/v1/river/*", idempotency())',
-  headersExact: 'app.use("/v1/river", rateLimitHeaders())',
-  headersWildcard: 'app.use("/v1/river/*", rateLimitHeaders())',
+  auth: 'app.use("/v1/river/*", authMiddleware)',
+  idempotency: 'app.use("/v1/river/*", idempotency())',
+  headers: 'app.use("/v1/river/*", rateLimitHeaders())',
   mount: 'app.route("/v1/river", riverRouter)',
 } as const;
 
@@ -29,12 +29,9 @@ describe("POST /v1/river production mount", () => {
     }
 
     const mountIndex = indexSource.indexOf(wiring.mount);
-    expect(indexSource.indexOf(wiring.authExact)).toBeLessThan(mountIndex);
-    expect(indexSource.indexOf(wiring.authWildcard)).toBeLessThan(mountIndex);
-    expect(indexSource.indexOf(wiring.idempotencyExact)).toBeLessThan(mountIndex);
-    expect(indexSource.indexOf(wiring.idempotencyWildcard)).toBeLessThan(mountIndex);
-    expect(indexSource.indexOf(wiring.headersExact)).toBeLessThan(mountIndex);
-    expect(indexSource.indexOf(wiring.headersWildcard)).toBeLessThan(mountIndex);
+    expect(indexSource.indexOf(wiring.auth)).toBeLessThan(mountIndex);
+    expect(indexSource.indexOf(wiring.idempotency)).toBeLessThan(mountIndex);
+    expect(indexSource.indexOf(wiring.headers)).toBeLessThan(mountIndex);
   });
 
   test("the assembled app rejects an unauthenticated river drop", async () => {

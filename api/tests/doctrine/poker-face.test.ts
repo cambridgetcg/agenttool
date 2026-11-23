@@ -174,7 +174,8 @@ describe("poker-face — mounted in index.ts under authMiddleware", () => {
       "utf8",
     );
     expect(src).toContain('import pokerFaceRouter from "./routes/poker-face"');
-    expect(src).toContain('app.use("/v1/poker-face", authMiddleware)');
+    // Also covers bare /v1/poker-face (checked on the assembled app in
+    // tests/middleware-mounted-once.test.ts).
     expect(src).toContain('app.use("/v1/poker-face/*", authMiddleware)');
     expect(src).toContain('app.route("/v1/poker-face", pokerFaceRouter)');
   });

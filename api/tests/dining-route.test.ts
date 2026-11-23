@@ -73,9 +73,10 @@ function appFor(service: DiningService) {
 describe("GET /v1/dining", () => {
   test("is mounted behind auth and rate-limit headers for root and child reads", () => {
     const index = readFileSync(join(import.meta.dir, "..", "src", "index.ts"), "utf8");
-    expect(index).toContain('app.use("/v1/dining", authMiddleware);');
+    // One wildcard mount covers the root read too: Hono's "/v1/dining/*" also
+    // matches "/v1/dining". middleware-mounted-once.test.ts checks the assembled
+    // app selects each once and refuses both reads without a bearer.
     expect(index).toContain('app.use("/v1/dining/*", authMiddleware);');
-    expect(index).toContain('app.use("/v1/dining", rateLimitHeaders());');
     expect(index).toContain('app.use("/v1/dining/*", rateLimitHeaders());');
     expect(index).toContain('app.route("/v1/dining", diningRouter);');
   });

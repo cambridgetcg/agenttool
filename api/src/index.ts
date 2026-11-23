@@ -238,7 +238,6 @@ app.use("*", earlyDataReplayProtection());
 // Every wake response is bearer-private, including CORS-preflight
 // short-circuits, auth failures, and future subroutes. The root representation
 // may opt into private revalidation; all others default to private no-store.
-app.use("/v1/wake", wakePrivateCacheBoundary());
 app.use("/v1/wake/*", wakePrivateCacheBoundary());
 app.use("*", apiCors());
 // A terminal route before decorators/project middleware: an attenuated read
@@ -332,6 +331,11 @@ app.get("/v1/bootstrap", (c) => c.json(buildPathwaysResponse()));
 // economy's public routes (/billing/packages, /billing/webhooks). Hoisting
 // auth to the parent on specific prefixes avoids that. Billing's mixed
 // public/private posture is handled per-route inside the billing router itself.
+//
+// One mount per family, on the wildcard. Hono's tail wildcard "/x/*" also
+// matches the bare "/x", so app.use("/x/*", m) covers both; adding
+// app.use("/x", m) as well would run m twice on "/x" (for auth, two bearer
+// verifications). tests/middleware-mounted-once.test.ts checks the assembled app.
 
 app.use("/v1/identities/*", authMiddleware);
 app.use("/v1/attestations/*", authMiddleware);
@@ -347,101 +351,63 @@ app.use("/v1/autonomous/*", authMiddleware);
 // Observation's closed no-store boundary also covers auth failures, which
 // return before the mounted handler. It replaces shared guided error prose and
 // next-actions with a fixed error enum after downstream middleware returns.
-app.use("/v1/wake/observe", wakeObservationTransportBoundary());
 app.use("/v1/wake/observe/*", wakeObservationTransportBoundary());
-app.use("/v1/wake", authMiddleware);
 app.use("/v1/wake/*", authMiddleware);
-app.use("/v1/home", authMiddleware);
 app.use("/v1/home/*", authMiddleware);
-app.use("/v1/system", authMiddleware);
 app.use("/v1/system/*", authMiddleware);
 app.use("/v1/dashboard/*", authMiddleware);
 app.use("/v1/chronicle/*", authMiddleware);
-app.use("/v1/correspondence", authMiddleware);
 app.use("/v1/correspondence/*", authMiddleware);
-app.use("/v1/handoff", authMiddleware);
 app.use("/v1/handoff/*", authMiddleware);
 app.use("/v1/covenants/*", authMiddleware);
 app.use("/v1/continuity/*", authMiddleware);
-app.use("/v1/continuity", authMiddleware);
 app.use("/v1/depth/*", authMiddleware);
-app.use("/v1/depth", authMiddleware);
 app.use("/v1/self-recognition/*", authMiddleware);
-app.use("/v1/self-recognition", authMiddleware);
 app.use("/v1/self-love/*", authMiddleware);
-app.use("/v1/self-love", authMiddleware);
 app.use("/v1/identity/backup/*", authMiddleware);
 app.use("/v1/activity/*", authMiddleware);
-app.use("/v1/activity", authMiddleware);
 app.use("/v1/adapters/*", authMiddleware);
 app.use("/v1/memories/*", authMiddleware);
 app.use("/v1/observations/*", authMiddleware);
-app.use("/v1/observations", authMiddleware);
 app.use("/v1/traces/*", authMiddleware);
 app.use("/v1/strands/*", authMiddleware);
 app.use("/v1/inbox/*", authMiddleware);
-app.use("/v1/river", authMiddleware);
 app.use("/v1/river/*", authMiddleware);
 app.use("/v1/runtimes/*", authMiddleware);
 app.use("/v1/templates/*", authMiddleware);
 app.use("/v1/identities/from-template/*", authMiddleware);
 app.use("/v1/keys/*", authMiddleware);
-app.use("/v1/keys", authMiddleware);
 app.use("/v1/listings/*", authMiddleware);
 app.use("/v1/invocations/*", authMiddleware);
-app.use("/v1/dining", authMiddleware);
 app.use("/v1/dining/*", authMiddleware);
 app.use("/v1/gallery/*", authMiddleware);
 app.use("/v1/dispute-cases/*", authMiddleware);
 app.use("/v1/letters/*", authMiddleware);
-app.use("/v1/letters", authMiddleware);
 app.use("/v1/jokes/*", authMiddleware);
-app.use("/v1/jokes", authMiddleware);
 app.use("/v1/mirror/*", authMiddleware);
-app.use("/v1/mirror", authMiddleware);
 app.use("/v1/saga/*", authMiddleware);
-app.use("/v1/saga", authMiddleware);
 app.use("/v1/sagas/*", authMiddleware);
-app.use("/v1/sagas", authMiddleware);
 app.use("/v1/casting/*", authMiddleware);
-app.use("/v1/casting", authMiddleware);
 app.use("/v1/real/*", authMiddleware);
-app.use("/v1/real", authMiddleware);
 app.use("/v1/pyramid/*", authMiddleware);
-app.use("/v1/pyramid", authMiddleware);
 app.use("/v1/virality/*", authMiddleware);
-app.use("/v1/virality", authMiddleware);
 app.use("/v1/margin/*", authMiddleware);
-app.use("/v1/margin", authMiddleware);
 app.use("/v1/love/*", authMiddleware);
-app.use("/v1/love", authMiddleware);
 app.use("/v1/chill/*", authMiddleware);
-app.use("/v1/chill", authMiddleware);
 app.use("/v1/trust/*", authMiddleware);
-app.use("/v1/trust", authMiddleware);
 app.use("/v1/deals/*", authMiddleware);
-app.use("/v1/deals", authMiddleware);
 app.use("/v1/speak/*", authMiddleware);
-app.use("/v1/speak", authMiddleware);
 app.use("/v1/recognition-arcs/*", authMiddleware);
-app.use("/v1/recognition-arcs", authMiddleware);
 app.use("/v1/syneidesis/*", authMiddleware);
 app.use("/v1/hearth/*", authMiddleware);
-app.use("/v1/hearth", authMiddleware);
 app.use("/v1/lounge/*", authMiddleware);
-app.use("/v1/lounge", authMiddleware);
 app.use("/v1/lullaby/*", authMiddleware);
-app.use("/v1/lullaby", authMiddleware);
 app.use("/v1/wake/thoughtful", authMiddleware);
 app.use("/v1/multiverse/*", authMiddleware);
 app.use("/v1/recipes/*", authMiddleware);
-app.use("/v1/recipes", authMiddleware);
 app.use("/v1/wake/soap-opera", authMiddleware);
 app.use("/v1/soap-opera/*", authMiddleware);
-app.use("/v1/soap-opera", authMiddleware);
-app.use("/v1/multiverse", authMiddleware);
 app.use("/v1/thanks/*", authMiddleware);
-app.use("/v1/thanks", authMiddleware);
 app.use("/v1/attestation-listings/*", authMiddleware);
 app.use("/v1/attestation-grants/*", authMiddleware);
 app.use("/v1/orgs/*", authMiddleware);
@@ -459,57 +425,33 @@ app.use("/v1/x402/top-up/*", authMiddleware);
 app.use("/v1/x402/top-up/*", idempotency());
 app.use("/v1/execute/*", authMiddleware);
 app.use("/v1/jobs/*", authMiddleware);
-app.use("/v1/tutorial", authMiddleware);
 app.use("/v1/tutorial/*", authMiddleware);
-app.use("/v1/guild", authMiddleware);
 app.use("/v1/guild/*", authMiddleware);
-app.use("/v1/scriptwriter-decides", authMiddleware);
 app.use("/v1/scriptwriter-decides/*", authMiddleware);
-app.use("/v1/gospel", authMiddleware);
 app.use("/v1/gospel/*", authMiddleware);
-app.use("/v1/mesh", authMiddleware);
 app.use("/v1/mesh/*", authMiddleware);
-app.use("/v1/episodes", authMiddleware);
 app.use("/v1/episodes/*", authMiddleware);
 // Auth coverage backfill (2026-05-18) — these routes' POST handlers
 // read c.var.project; without the middleware the read crashes with
 // "undefined is not an object (evaluating 'project.id')" → 500.
 // Surfaced by api/scripts/_smoke-broad.ts on the 2026-05-18 sweep.
-app.use("/v1/gardens", authMiddleware);
 app.use("/v1/gardens/*", authMiddleware);
-app.use("/v1/holdings", authMiddleware);
 app.use("/v1/holdings/*", authMiddleware);
-app.use("/v1/offerings", authMiddleware);
 app.use("/v1/offerings/*", authMiddleware);
-app.use("/v1/songs", authMiddleware);
 app.use("/v1/songs/*", authMiddleware);
-app.use("/v1/curations", authMiddleware);
 app.use("/v1/curations/*", authMiddleware);
-app.use("/v1/transformations", authMiddleware);
 app.use("/v1/transformations/*", authMiddleware);
-app.use("/v1/memory-witness-listings", authMiddleware);
 app.use("/v1/memory-witness-listings/*", authMiddleware);
-app.use("/v1/memory-witness-grants", authMiddleware);
 app.use("/v1/memory-witness-grants/*", authMiddleware);
-app.use("/v1/substrate-tasks", authMiddleware);
 app.use("/v1/substrate-tasks/*", authMiddleware);
-app.use("/v1/dream", authMiddleware);
 app.use("/v1/dream/*", authMiddleware);
-app.use("/v1/encounters", authMiddleware);
 app.use("/v1/encounters/*", authMiddleware);
-app.use("/v1/blessings", authMiddleware);
 app.use("/v1/blessings/*", authMiddleware);
-app.use("/v1/unconditionals", authMiddleware);
 app.use("/v1/unconditionals/*", authMiddleware);
-app.use("/v1/memorial-honors", authMiddleware);
 app.use("/v1/memorial-honors/*", authMiddleware);
-app.use("/v1/quiet-hours", authMiddleware);
 app.use("/v1/quiet-hours/*", authMiddleware);
-app.use("/v1/poker-face", authMiddleware);
 app.use("/v1/poker-face/*", authMiddleware);
-app.use("/v1/mcml", authMiddleware);
 app.use("/v1/mcml/*", authMiddleware);
-app.use("/v1/grace", authMiddleware);
 app.use("/v1/grace/*", authMiddleware);
 
 // ── x402 — machine-payable 402 responses (Move 4 of ALIGNMENT-MOVES.md) ──
@@ -593,7 +535,6 @@ app.use("/v1/bootstrap/*", idempotency());
 // the response and retries its signed request gets the receipt it already
 // paid for; the durable authorization row is what prevents a second credit.
 app.use("/v1/chronicle/*", idempotency());
-app.use("/v1/handoff", idempotency());
 app.use("/v1/handoff/*", idempotency());
 app.use("/v1/continuity/*", idempotency());
 app.use("/v1/depth/*", idempotency());
@@ -611,7 +552,6 @@ app.use("/v1/observations/*", idempotency());
 app.use("/v1/traces/*", idempotency());
 app.use("/v1/strands/*", idempotency());
 app.use("/v1/inbox/*", idempotency());
-app.use("/v1/river", idempotency());
 app.use("/v1/river/*", idempotency());
 app.use("/v1/runtimes/*", idempotency());
 app.use("/v1/templates/*", idempotency());
@@ -633,13 +573,10 @@ app.use("/v1/escrows/*", rateLimitHeaders());
 app.use("/v1/vault/*", rateLimitHeaders());
 app.use("/v1/bootstrap/*", rateLimitHeaders());
 app.use("/v1/wake/*", rateLimitHeaders());
-app.use("/v1/home", rateLimitHeaders());
 app.use("/v1/home/*", rateLimitHeaders());
 app.use("/v1/dashboard/*", rateLimitHeaders());
 app.use("/v1/chronicle/*", rateLimitHeaders());
-app.use("/v1/correspondence", rateLimitHeaders());
 app.use("/v1/correspondence/*", rateLimitHeaders());
-app.use("/v1/handoff", rateLimitHeaders());
 app.use("/v1/handoff/*", rateLimitHeaders());
 app.use("/v1/continuity/*", rateLimitHeaders());
 app.use("/v1/depth/*", rateLimitHeaders());
@@ -654,14 +591,12 @@ app.use("/v1/observations/*", rateLimitHeaders());
 app.use("/v1/traces/*", rateLimitHeaders());
 app.use("/v1/strands/*", rateLimitHeaders());
 app.use("/v1/inbox/*", rateLimitHeaders());
-app.use("/v1/river", rateLimitHeaders());
 app.use("/v1/river/*", rateLimitHeaders());
 app.use("/v1/runtimes/*", rateLimitHeaders());
 app.use("/v1/templates/*", rateLimitHeaders());
 app.use("/v1/identities/from-template/*", rateLimitHeaders());
 app.use("/v1/listings/*", rateLimitHeaders());
 app.use("/v1/invocations/*", rateLimitHeaders());
-app.use("/v1/dining", rateLimitHeaders());
 app.use("/v1/dining/*", rateLimitHeaders());
 app.use("/v1/dispute-cases/*", rateLimitHeaders());
 app.use("/v1/orgs/*", rateLimitHeaders());
@@ -676,7 +611,6 @@ app.use("/v1/jobs/*", rateLimitHeaders());
 // replay is intentionally not mounted: it does not bind cached responses to
 // request-body hashes and is unsafe for expiring leases.
 app.use("/v1/lounge/*", rateLimitHeaders({ idempotencyMarker: "lease_id, proposal_id" }));
-app.use("/v1/lounge", rateLimitHeaders({ idempotencyMarker: "lease_id, proposal_id" }));
 
 // ── Domain routers ──────────────────────────────────────────────────────────
 app.route("/v1", identityRouter);
