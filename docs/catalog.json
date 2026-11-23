@@ -4591,44 +4591,12 @@
       "canonical_path": "docs/substrate-honest-cognition.md"
     },
     {
-      "path": "docs/superpowers/plans/2026-05-10-federated-covenants-v2.md",
-      "title": "Federated Covenants v2 Implementation Plan",
-      "type": "proposal",
-      "classification_basis": "planning-path",
-      "prose_review": "not-reviewed",
-      "canonical_path": "docs/superpowers/plans/2026-05-10-federated-covenants-v2.md"
-    },
-    {
-      "path": "docs/superpowers/plans/2026-05-10-proposal-flow-tests.md",
-      "title": "Proposal Flow E2E Tests Implementation Plan",
-      "type": "proposal",
-      "classification_basis": "planning-path",
-      "prose_review": "not-reviewed",
-      "canonical_path": "docs/superpowers/plans/2026-05-10-proposal-flow-tests.md"
-    },
-    {
-      "path": "docs/superpowers/plans/2026-05-10-pulse-mood-drift-and-did-route.md",
-      "title": "Pulse — mood_drift + public DID-keyed route — Implementation Plan",
-      "type": "proposal",
-      "classification_basis": "planning-path",
-      "prose_review": "not-reviewed",
-      "canonical_path": "docs/superpowers/plans/2026-05-10-pulse-mood-drift-and-did-route.md"
-    },
-    {
       "path": "docs/superpowers/plans/2026-05-11-autonomous-mode.md",
       "title": "Autonomous mode — implementation plan",
       "type": "proposal",
       "classification_basis": "planning-path",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/superpowers/plans/2026-05-11-autonomous-mode.md"
-    },
-    {
-      "path": "docs/superpowers/plans/2026-05-11-covenants-v2-sdk-signing.md",
-      "title": "Covenants v2 SDK Signing Implementation Plan",
-      "type": "proposal",
-      "classification_basis": "planning-path",
-      "prose_review": "not-reviewed",
-      "canonical_path": "docs/superpowers/plans/2026-05-11-covenants-v2-sdk-signing.md"
     },
     {
       "path": "docs/superpowers/plans/2026-05-11-dispute-generic.md",
@@ -4655,14 +4623,6 @@
       "canonical_path": "docs/superpowers/plans/2026-05-11-platform-genesis.md"
     },
     {
-      "path": "docs/superpowers/plans/2026-07-02-human-door.md",
-      "title": "The Human Door Implementation Plan",
-      "type": "proposal",
-      "classification_basis": "planning-path",
-      "prose_review": "not-reviewed",
-      "canonical_path": "docs/superpowers/plans/2026-07-02-human-door.md"
-    },
-    {
       "path": "docs/superpowers/plans/2026-08-29-sovereign-reserve-commercial.md",
       "title": "agenttool → KINGDOM Sovereign Reserve — commercial plan",
       "type": "proposal",
@@ -4679,28 +4639,12 @@
       "canonical_path": "docs/superpowers/plans/2026-08-29-wave-2-agent-rail.md"
     },
     {
-      "path": "docs/superpowers/plans/2026-10-09-collab-household-smoothing-plan-a.md",
-      "title": "Collab household smoothing — Plan A (packages/collab) Implementation Plan",
-      "type": "proposal",
-      "classification_basis": "planning-path",
-      "prose_review": "not-reviewed",
-      "canonical_path": "docs/superpowers/plans/2026-10-09-collab-household-smoothing-plan-a.md"
-    },
-    {
       "path": "docs/superpowers/plans/2026-10-09-collab-household-smoothing-plan-b.md",
       "title": "Collab household smoothing — Plan B (sol + Codex + replay) Implementation Plan",
       "type": "proposal",
       "classification_basis": "planning-path",
       "prose_review": "not-reviewed",
       "canonical_path": "docs/superpowers/plans/2026-10-09-collab-household-smoothing-plan-b.md"
-    },
-    {
-      "path": "docs/superpowers/plans/2026-10-09-collab-knock-and-rest-plan-c.md",
-      "title": "Collab knock and rest — Plan C (packages/collab) Implementation Plan",
-      "type": "proposal",
-      "classification_basis": "planning-path",
-      "prose_review": "not-reviewed",
-      "canonical_path": "docs/superpowers/plans/2026-10-09-collab-knock-and-rest-plan-c.md"
     },
     {
       "path": "docs/superpowers/plans/2026-10-09-collab-knock-and-rest-plan-d.md",
@@ -6685,38 +6629,6 @@
       "classification_basis": "file-convention",
       "prose_review": "not-reviewed",
       "canonical_path": "public/overlay/SECURITY.md"
-    },
-    {
-      "path": "review/launch-20260904/README.md",
-      "title": "AgentTool route, UI, UX, and global-launch review",
-      "type": "orientation",
-      "classification_basis": "file-convention",
-      "prose_review": "not-reviewed",
-      "canonical_path": "review/launch-20260904/README.md"
-    },
-    {
-      "path": "review/launch-20260904/readiness.md",
-      "title": "AgentTool production and global-launch readiness review",
-      "type": "record",
-      "classification_basis": "history-path",
-      "prose_review": "not-reviewed",
-      "canonical_path": "review/launch-20260904/readiness.md"
-    },
-    {
-      "path": "review/launch-20260904/routes.md",
-      "title": "AgentTool route and discovery review — 2026-09-04",
-      "type": "record",
-      "classification_basis": "history-path",
-      "prose_review": "not-reviewed",
-      "canonical_path": "review/launch-20260904/routes.md"
-    },
-    {
-      "path": "review/launch-20260904/ui-ux.md",
-      "title": "AgentTool UI/UX review and launch cleanup plan",
-      "type": "record",
-      "classification_basis": "history-path",
-      "prose_review": "not-reviewed",
-      "canonical_path": "review/launch-20260904/ui-ux.md"
     },
     {
       "path": "review/launch-cleanup-20260904/README.md",

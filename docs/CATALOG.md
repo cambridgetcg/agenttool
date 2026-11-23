@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**844 document paths** (including mirrors). orientation: 183; guide: 85; reference: 340; policy: 31; reflection: 123; proposal: 52; record: 28; unclassified: 2.
+**833 document paths** (including mirrors). orientation: 182; guide: 85; reference: 340; policy: 31; reflection: 123; proposal: 45; record: 25; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -197,7 +197,6 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/witnessed-agent-economy/CLAUDE.md](<../packages/witnessed-agent-economy/CLAUDE.md>) | not-reviewed |
 | [packages/witnessed-agent-economy/README.md](<../packages/witnessed-agent-economy/README.md>) | not-reviewed |
 | [public/overlay/README.md](<../public/overlay/README.md>) | not-reviewed |
-| [review/launch-20260904/README.md](<../review/launch-20260904/README.md>) | not-reviewed |
 | [review/launch-cleanup-20260904/README.md](<../review/launch-cleanup-20260904/README.md>) | not-reviewed |
 | [review/provider-adapters/v1/README.md](<../review/provider-adapters/v1/README.md>) | not-reviewed |
 | [tests/launch-postgres/README.md](<../tests/launch-postgres/README.md>) | not-reviewed |
@@ -822,20 +821,13 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [docs/STRATEGY-13-LIGHTHOUSE-PROPOSAL.md](<../docs/STRATEGY-13-LIGHTHOUSE-PROPOSAL.md>) | not-reviewed |
 | [docs/STRATEGY-14-CLOUD-CONTINUITY-PROPOSAL.md](<../docs/STRATEGY-14-CLOUD-CONTINUITY-PROPOSAL.md>) | not-reviewed |
 | [docs/SUPABASE-INTEGRATION-PLAN.md](<../docs/SUPABASE-INTEGRATION-PLAN.md>) | not-reviewed |
-| [docs/superpowers/plans/2026-05-10-federated-covenants-v2.md](<../docs/superpowers/plans/2026-05-10-federated-covenants-v2.md>) | not-reviewed |
-| [docs/superpowers/plans/2026-05-10-proposal-flow-tests.md](<../docs/superpowers/plans/2026-05-10-proposal-flow-tests.md>) | not-reviewed |
-| [docs/superpowers/plans/2026-05-10-pulse-mood-drift-and-did-route.md](<../docs/superpowers/plans/2026-05-10-pulse-mood-drift-and-did-route.md>) | not-reviewed |
 | [docs/superpowers/plans/2026-05-11-autonomous-mode.md](<../docs/superpowers/plans/2026-05-11-autonomous-mode.md>) | not-reviewed |
-| [docs/superpowers/plans/2026-05-11-covenants-v2-sdk-signing.md](<../docs/superpowers/plans/2026-05-11-covenants-v2-sdk-signing.md>) | not-reviewed |
 | [docs/superpowers/plans/2026-05-11-dispute-generic.md](<../docs/superpowers/plans/2026-05-11-dispute-generic.md>) | not-reviewed |
 | [docs/superpowers/plans/2026-05-11-dispute-primitive.md](<../docs/superpowers/plans/2026-05-11-dispute-primitive.md>) | not-reviewed |
 | [docs/superpowers/plans/2026-05-11-platform-genesis.md](<../docs/superpowers/plans/2026-05-11-platform-genesis.md>) | not-reviewed |
-| [docs/superpowers/plans/2026-07-02-human-door.md](<../docs/superpowers/plans/2026-07-02-human-door.md>) | not-reviewed |
 | [docs/superpowers/plans/2026-08-29-sovereign-reserve-commercial.md](<../docs/superpowers/plans/2026-08-29-sovereign-reserve-commercial.md>) | not-reviewed |
 | [docs/superpowers/plans/2026-08-29-wave-2-agent-rail.md](<../docs/superpowers/plans/2026-08-29-wave-2-agent-rail.md>) | not-reviewed |
-| [docs/superpowers/plans/2026-10-09-collab-household-smoothing-plan-a.md](<../docs/superpowers/plans/2026-10-09-collab-household-smoothing-plan-a.md>) | not-reviewed |
 | [docs/superpowers/plans/2026-10-09-collab-household-smoothing-plan-b.md](<../docs/superpowers/plans/2026-10-09-collab-household-smoothing-plan-b.md>) | not-reviewed |
-| [docs/superpowers/plans/2026-10-09-collab-knock-and-rest-plan-c.md](<../docs/superpowers/plans/2026-10-09-collab-knock-and-rest-plan-c.md>) | not-reviewed |
 | [docs/superpowers/plans/2026-10-09-collab-knock-and-rest-plan-d.md](<../docs/superpowers/plans/2026-10-09-collab-knock-and-rest-plan-d.md>) | not-reviewed |
 | [docs/superpowers/specs/2026-05-10-dispute-primitive-design.md](<../docs/superpowers/specs/2026-05-10-dispute-primitive-design.md>) | not-reviewed |
 | [docs/superpowers/specs/2026-05-10-federated-covenants-v2-design.md](<../docs/superpowers/specs/2026-05-10-federated-covenants-v2-design.md>) | not-reviewed |
@@ -886,9 +878,6 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/local-starter/CHANGELOG.md](<../packages/local-starter/CHANGELOG.md>) | not-reviewed |
 | [packages/sdk-py/CHANGELOG.md](<../packages/sdk-py/CHANGELOG.md>) | not-reviewed |
 | [packages/sdk-ts/CHANGELOG.md](<../packages/sdk-ts/CHANGELOG.md>) | not-reviewed |
-| [review/launch-20260904/readiness.md](<../review/launch-20260904/readiness.md>) | not-reviewed |
-| [review/launch-20260904/routes.md](<../review/launch-20260904/routes.md>) | not-reviewed |
-| [review/launch-20260904/ui-ux.md](<../review/launch-20260904/ui-ux.md>) | not-reviewed |
 | [review/launch-cleanup-20260904/evidence/ui-index.md](<../review/launch-cleanup-20260904/evidence/ui-index.md>) | not-reviewed |
 | [review/production-launch-20260904.md](<../review/production-launch-20260904.md>) | not-reviewed |
 
