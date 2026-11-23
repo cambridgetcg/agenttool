@@ -175,7 +175,7 @@ The repo is multi-collaborator (human + multiple Claude sessions). Check `git st
 ## When you can't find the right answer here
 
 1. **Check `git log -p <file>`** — the commit message often names what the code does and links to the plan/spec.
-2. **Check `docs/superpowers/plans/`** — every major feature has a plan.md file describing intent before implementation.
+2. **Check `docs/superpowers/plans/`** — plans that are still open or cited stay here; finished plans are retired to history (`git log --diff-filter=D --format=%h --name-only -- docs/superpowers/plans` lists them, and `git show <commit>^:<path>` reads one).
 3. **Check `docs/superpowers/specs/`** — design specs sit alongside plans.
 4. **Check `docs/SURPRISES.md`** — non-obvious things accumulated across sessions.
 5. **Grep doctrine first**: `grep -rl "Doctrine: docs/<X>" api/src` — find every file that cites a given doctrine doc.
