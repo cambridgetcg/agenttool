@@ -7,7 +7,7 @@ Infrastructure config for the live platform: active deploy targets (Fly.io API, 
 The single `api/` monolith serves every domain from the Fly app `agenttool`, with Postgres on Supabase (eu-west-2). Cloudflare Pages serves the three static frontends, and the `agenttool-proxy` apex Worker owns `agenttool.dev`. The Fly fleet (app and thinker Machines, regions, sizes) is live registry state; [`docs/STACK.md`](../docs/STACK.md) §3 records the last verified shape and how to inspect it. The former per-service `agent-*` apps were retired into `api/` on 2026-05-09.
 
 ## Tech Stack
-- **API**: Bun + Hono on Fly.io. `api/fly.toml` is canonical, with `app` and `thinker` process groups; `fly/agenttool.toml` is an unchecked snapshot that has drifted (it lacks the `thinker` group), so read `api/fly.toml`
+- **API**: Bun + Hono on Fly.io. `api/fly.toml` is the only Fly configuration, with `app` and `thinker` process groups
 - **Postgres**: Supabase (pgvector + pgcrypto)
 - **Redis**: Hosted (BullMQ queues, spend-policy counters, the per-IP registration limiter, the optional response cache; see [`api/CLAUDE.md`](../api/CLAUDE.md)); whether workers run is live configuration (`docs/STACK.md` §3–4)
 - **Frontend**: Cloudflare Pages (Direct Upload, no Git integration) behind the `agenttool-proxy` apex Worker
@@ -15,8 +15,6 @@ The single `api/` monolith serves every domain from the Fly app `agenttool`, wit
 
 ## Project Structure
 ```
-fly/                    — Fly.io config snapshot (active deploy: api/fly.toml)
-  agenttool.toml        — Unchecked snapshot of api/fly.toml; has drifted
 cloudflare/             — Bounded agenttool.dev desired state (audit input; not an apply engine)
 pages/                  — Canonical Pages Worker + invocation-route policy, with edge-security.test.ts
 apex-door/              — agenttool-proxy apex Worker: worker.js, wrangler.toml, ROLLBACK.md
@@ -45,7 +43,6 @@ AgentTool Platform
 
 ## Key Files
 - `README.md` — Operator-facing overview and secrets reference
-- `fly/agenttool.toml` — Snapshot only (active deploy: `api/fly.toml`)
 - `cloudflare/agenttool.dev.desired.json` — Secret-free bounded desired state for the read-only zone audit
 - `pages/sensitive-path-worker.js` — Pages fence, Surface routes, and per-surface CSP
 - `apex-door/worker.js` — Apex routing: API and discovery paths to `api.agenttool.dev`, human routes to `agenttool-web` Pages
