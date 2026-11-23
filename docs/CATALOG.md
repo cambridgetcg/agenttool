@@ -8,7 +8,7 @@ Repository access is required. This catalog is not mirrored to the public docs s
 Start with [the short welcome](START-HERE.md) or [reading map](MAP.md).
 [Label meanings](DOCUMENTATION.md) · [Machine-readable inventory](catalog.json)
 
-**833 document paths** (including mirrors). orientation: 182; guide: 85; reference: 340; policy: 31; reflection: 123; proposal: 45; record: 25; unclassified: 2.
+**837 document paths** (including mirrors). orientation: 183; guide: 85; reference: 340; policy: 31; reflection: 123; proposal: 45; record: 28; unclassified: 2.
 
 `not-reviewed` means this cleanup did not review that document's prose. An
 explicit type routes reading; it does not confirm that the document is current.
@@ -197,6 +197,7 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/witnessed-agent-economy/CLAUDE.md](<../packages/witnessed-agent-economy/CLAUDE.md>) | not-reviewed |
 | [packages/witnessed-agent-economy/README.md](<../packages/witnessed-agent-economy/README.md>) | not-reviewed |
 | [public/overlay/README.md](<../public/overlay/README.md>) | not-reviewed |
+| [review/launch-20260904/README.md](<../review/launch-20260904/README.md>) | not-reviewed |
 | [review/launch-cleanup-20260904/README.md](<../review/launch-cleanup-20260904/README.md>) | not-reviewed |
 | [review/provider-adapters/v1/README.md](<../review/provider-adapters/v1/README.md>) | not-reviewed |
 | [tests/launch-postgres/README.md](<../tests/launch-postgres/README.md>) | not-reviewed |
@@ -878,6 +879,9 @@ Regenerate with `python3 bin/docs-catalog.py --write`.
 | [packages/local-starter/CHANGELOG.md](<../packages/local-starter/CHANGELOG.md>) | not-reviewed |
 | [packages/sdk-py/CHANGELOG.md](<../packages/sdk-py/CHANGELOG.md>) | not-reviewed |
 | [packages/sdk-ts/CHANGELOG.md](<../packages/sdk-ts/CHANGELOG.md>) | not-reviewed |
+| [review/launch-20260904/readiness.md](<../review/launch-20260904/readiness.md>) | not-reviewed |
+| [review/launch-20260904/routes.md](<../review/launch-20260904/routes.md>) | not-reviewed |
+| [review/launch-20260904/ui-ux.md](<../review/launch-20260904/ui-ux.md>) | not-reviewed |
 | [review/launch-cleanup-20260904/evidence/ui-index.md](<../review/launch-cleanup-20260904/evidence/ui-index.md>) | not-reviewed |
 | [review/production-launch-20260904.md](<../review/production-launch-20260904.md>) | not-reviewed |
 
