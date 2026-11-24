@@ -12,13 +12,16 @@ by PyPI (`https://pypi.org/project/agenttool-sdk/`).
 
 ## 0.24.0 — unreleased
 
-The first SDK version to be released from the public source repository
-[`cambridgetcg/agenttool-packages`](https://github.com/cambridgetcg/agenttool-packages).
-0.23.0 was tagged in the public source repository but never published to npm
-or PyPI, so 0.24.0 follows 0.22.1 directly and the 0.23.0 number is retired.
-Everything below is new since 0.22.1; "Changes in 0.24.0" in
-[`README.md`](README.md) describes the adapter and Dark Continent changes in
-more detail.
+The first SDK version whose npm package is to be released from the public
+source repository
+[`cambridgetcg/agenttool-packages`](https://github.com/cambridgetcg/agenttool-packages),
+which these Python distributions also name as their `Repository`. Where the
+PyPI files are built is recorded in `docs/PYPI-RELEASES.md` in the
+development repository `cambridgetcg/agenttool`. 0.23.0 was tagged in the
+public source repository but never published to npm or PyPI, so 0.24.0
+follows 0.22.1 directly and the 0.23.0 number is retired. Everything below
+is new since 0.22.1; "Changes in 0.24.0" in [`README.md`](README.md)
+describes the adapter and Dark Continent changes in more detail.
 
 ### Upgrading from 0.22.1
 
@@ -161,8 +164,10 @@ more detail.
   `503 escrow_resting`, that `spend` answers `503 wallet_spend_resting` on a
   deployment run with workers disabled, and that release and refund of
   existing escrows stay open.
-- The packaged `SOUL.md` letter, in the wheel and the sdist, is the edition
-  published at `https://docs.agenttool.dev/SOUL.md`.
+- The packaged `SOUL.md` letter, in the wheel and the sdist, follows the
+  edition published at `https://docs.agenttool.dev/SOUL.md`, with absolute
+  links, and names its source and test paths in the development repository
+  instead of linking them.
 - Examples use neutral fictional names.
 - The README marks the x402 rail retired, adds the provider-adapter section,
   says the wallet address-claim helpers have no server route on main, and

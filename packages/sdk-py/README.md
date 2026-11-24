@@ -18,9 +18,10 @@ release-by-release receipt ledger is
 `docs/PYPI-RELEASES.md`.
 Source links in this file point at the public
 [`cambridgetcg/agenttool-packages`](https://github.com/cambridgetcg/agenttool-packages)
-projection or at docs.agenttool.dev; versions after 0.22.1 are built and
-tagged there. Older tags, GitHub Releases, Actions run ids, and source paths
-named without a link are in the development repository
+projection or at docs.agenttool.dev; versions after 0.22.1 are tagged there,
+and their npm packages are built there. Where the PyPI files are built is
+recorded in `docs/PYPI-RELEASES.md`. Older tags, GitHub Releases, Actions run
+ids, and source paths named without a link are in the development repository
 `cambridgetcg/agenttool`, public since 2026-10-28.
 
 ## Quickstart — zero to a living agent
@@ -788,7 +789,8 @@ Known issue, checked 2026-11-24: the hosted API has never mounted that route
 and answers 404, so with the default `base_url` `assess` raises an
 `AgentToolError` with status 404. The offline npm package
 `@agenttool/math-cards` builds and assesses the same card locally; see the
-known issues in [`CHANGELOG.md`](CHANGELOG.md).
+known issues in
+[`CHANGELOG.md`](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/sdk-py/CHANGELOG.md).
 
 ### Public KINGDOM framework project card
 
@@ -1128,12 +1130,14 @@ any request; `get` accepts `read_authority` for identity-signed reads of
 restricted values; `audit` reads `entries` and `check` maps the API's
 `results`; the old `bulk()` value read, which had no API endpoint, now
 refuses, and `bulk_put` is the explicit bulk write. The `SOUL.md` letter in
-the wheel and the sdist is the edition published at
-<https://docs.agenttool.dev/SOUL.md>. The line also needs consent before a
-model-written `<trace>` is stored, refuses `AsyncAnthropic`, and retires Dark
-Continent discovery; "Changes in 0.24.0" below has the details.
-[`CHANGELOG.md`](CHANGELOG.md) lists every change since 0.22.1, what to check
-when upgrading from 0.22.1, and the known issues.
+the wheel and the sdist follows the edition published at
+<https://docs.agenttool.dev/SOUL.md>, with absolute links. The line also
+needs consent before a model-written `<trace>` is stored, refuses
+`AsyncAnthropic`, and retires Dark Continent discovery; "Changes in 0.24.0"
+below has the details.
+[`CHANGELOG.md`](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/sdk-py/CHANGELOG.md)
+lists every change since 0.22.1, what to check when upgrading from 0.22.1,
+and the known issues.
 
 The line retains the 0.22.1 honest-onboarding patch and the opt-in x402 payer
 introduced in 0.22.0: `agenttool.x402` mirrors the server's own payer
@@ -1229,7 +1233,9 @@ and what a registry serves right now is answered by the registry itself.
 
 The exit door and the vault changes are described above; these are the main
 source changes made after the 0.23.0 tag, between 2026-10-11 and 2026-11-24,
-and [`CHANGELOG.md`](CHANGELOG.md) lists them all. Neither the `sdk-v0.23.0`
+and the
+[`CHANGELOG.md`](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/sdk-py/CHANGELOG.md)
+lists them all. Neither the `sdk-v0.23.0`
 tag in the public source repository nor the published 0.22.1 packages have
 them; 0.24.0 is the first version that does. Where an entry says "0.22.1",
 the 0.23.0 tag behaves the same.

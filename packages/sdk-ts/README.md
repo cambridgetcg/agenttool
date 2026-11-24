@@ -725,7 +725,7 @@ Known issue, checked 2026-11-24: the hosted API has never mounted that route
 and answers 404, so with the default `baseUrl` `assess` throws an
 `AgentToolError` with status 404. The offline package `@agenttool/math-cards`
 builds and assesses the same card locally; see the known issues in
-[`CHANGELOG.md`](CHANGELOG.md).
+[`CHANGELOG.md`](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/sdk-ts/CHANGELOG.md).
 
 On the declared Node and Bun runtimes, Math Cards uses an explicit one-shot
 `undici` package dispatcher rather than Bun's global `fetch` compatibility
@@ -1120,8 +1120,9 @@ which had no API endpoint, now refuses, and `bulk_put` is the explicit bulk
 write. The line also needs consent before a model-written `<trace>` is
 stored, retires Dark Continent discovery, and stops Math Cards from stalling
 under Bun; "Changes in 0.24.0" below has the details.
-[`CHANGELOG.md`](CHANGELOG.md) lists every change since 0.22.1, what to check
-when upgrading from 0.22.1, and the known issues.
+[`CHANGELOG.md`](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/sdk-ts/CHANGELOG.md)
+lists every change since 0.22.1, what to check when upgrading from 0.22.1,
+and the known issues.
 
 The line retains the 0.22.1 honest-onboarding patch and the opt-in x402 payer
 introduced in 0.22.0: `x402.ts`
@@ -1216,7 +1217,9 @@ and what a registry serves right now is answered by its own dist-tags.
 
 The exit door and the vault changes are described above; these are the main
 source changes made after the 0.23.0 tag, between 2026-10-11 and 2026-11-24,
-and [`CHANGELOG.md`](CHANGELOG.md) lists them all. Neither the `sdk-v0.23.0`
+and the
+[`CHANGELOG.md`](https://github.com/cambridgetcg/agenttool-packages/blob/main/packages/sdk-ts/CHANGELOG.md)
+lists them all. Neither the `sdk-v0.23.0`
 tag in the public source repository nor the published 0.22.1 packages have
 them; 0.24.0 is the first version that does. Where an entry says "0.22.1",
 the 0.23.0 tag behaves the same.
@@ -1262,11 +1265,12 @@ the 0.23.0 tag behaves the same.
   sentence said a recipient can mark love primitives as spam; only inbox
   messages can be marked spam.
 - **Math Cards no longer stall under Bun.** `assess()` reads its response
-  through undici `request()` instead of `fetch()`, which under Bun 1.3.x
-  could hang past the call's own timeout when a body arrived in pieces,
-  stalled, or was cut short. It no longer sends the `accept-encoding`,
-  `accept-language`, `sec-fetch-mode` and `user-agent` headers that `fetch()`
-  added, so responses arrive uncompressed.
+  through undici `request()` instead of undici's `fetch()`, which under Bun
+  (reproduced on 1.3.5 and 1.3.13) could hang past the call's own timeout
+  when a body arrived in pieces, stalled, or was cut short. It no longer
+  sends the `accept-encoding`, `accept-language`, `sec-fetch-mode` and
+  `user-agent` headers that undici's `fetch()` added, so responses arrive
+  uncompressed.
 - **undici floor.** The `undici` dependency is `^7.30.1` (was `^7.29.0`).
   When checked on 2026-11-24, GitHub listed advisories affecting 7.29.0 and
   none affecting 7.30.1.

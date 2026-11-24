@@ -79,8 +79,14 @@ moved yet.
 0.23.0 will not be published: the owner decision of 2026-10-18 skips it for
 0.24.0 (see the [npm record](NPM-RELEASES.md#state-as-of-2026-10-28)).
 0.24.0, re-prepared from current `main` on 2026-11-24, is the next PyPI
-candidate and waits on items 1, 2 and 4 below; PyPI serves 0.22.1 (anonymous
-JSON read, 2026-11-24).
+candidate; PyPI serves 0.22.1 (anonymous JSON read, 2026-11-24). Its route is
+Yu's decision. One is this workflow as it stands: an annotated `sdk-v0.24.0`
+tag on the merged `main` commit here, a dispatch at that tag, and the
+publisher recorded for 0.22.1. The private-repository gap no longer applies
+to it, but it has not run since 2026-09-01. The other is to complete items 1,
+2 and 4 below first, so that the release runs in the public repository. On
+2026-11-24 the `pypi` environment here admitted only `sdk-v*` tags and
+required a reviewer (`cambridgetcg`, self-review allowed).
 
 From source 0.23.0 on, the distributions' `Repository` URL names the public
 repository `cambridgetcg/agenttool-packages` (`EXPECTED_REPOSITORY` in the

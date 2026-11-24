@@ -130,12 +130,14 @@ and Dark Continent changes in more detail.
   API's `results` rows to `{ [name]: exists }`. Both previously read field
   names the API never returned.
 - `MathCardsClient.assess()` reads its response through undici `request()` on
-  the same one-shot direct dispatcher instead of `fetch()`, as the LOVE BOMB
-  reader and the exit door already do. Under Bun 1.3.x, `fetch()` could hang
-  past the call's own timeout when a response body arrived in more than one
-  piece, stalled, or was cut short. The request no longer carries the
-  `accept-encoding`, `accept-language`, `sec-fetch-mode` and `user-agent`
-  headers that `fetch()` added, so responses arrive uncompressed.
+  the same one-shot direct dispatcher instead of undici's `fetch()`, as the
+  LOVE BOMB reader and the exit door already do. Under Bun, undici's
+  `fetch()` could hang past the call's own timeout when a response body
+  arrived in more than one piece, stalled, or was cut short (reproduced here
+  on Bun 1.3.5; the exit door met the same stall on 1.3.13). The request no
+  longer carries the `accept-encoding`, `accept-language`, `sec-fetch-mode`
+  and `user-agent` headers that undici's `fetch()` added, so responses arrive
+  uncompressed.
 - `wake` cache TTL checks and `collect` (`url`, `text`, `batch`) `duration_ms`
   measurements now use monotonic `performance.now()` instead of wall-clock
   `Date.now()`, matching the Python SDK and preventing wall-clock jumps from
