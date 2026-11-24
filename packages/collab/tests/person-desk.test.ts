@@ -362,6 +362,124 @@ describe("person acts with an enrolled passkey", () => {
   });
 });
 
+describe("passkey enrolment on the hash chain", () => {
+  function otherWorkspace(): SessionHandle {
+    const path = join(directory, "other-repo");
+    mkdirSync(path, { recursive: true });
+    return store.startSession({ root_path: path, actor: "elsewhere" });
+  }
+
+  function passkeyEvents(workspaceId: string) {
+    return store.db.query(`
+      SELECT sequence, type, entity_id, actor, session_id, payload_json FROM events
+      WHERE workspace_id = ? AND type LIKE 'person.passkey_%' ORDER BY sequence
+    `).all(workspaceId) as Array<{
+      sequence: number; type: string; entity_id: string; actor: string; session_id: string | null; payload_json: string;
+    }>;
+  }
+
+  function enrolDirect(key: TestPasskey, label?: string) {
+    return store.enrollPersonPasskey({
+      credential_id: key.credentialId, public_key_spki: key.spki, algorithm: -7, rp_id: RP_ID, origin: ORIGIN,
+      ...(label !== undefined ? { label } : {}),
+    });
+  }
+
+  const fingerprintOf = (key: TestPasskey) => sha256(Buffer.from(key.spki, "base64url")).toString("hex");
+
+  test("enrolment and revocation each append one event to every workspace, with public facts only", () => {
+    const here = session("here");
+    const there = otherWorkspace();
+    expect(there.workspace.id).not.toBe(here.workspace.id);
+    const key = makePasskey();
+    // Even a direct store call, with no terminal, leaves the event.
+    enrolDirect(key, "Touch ID");
+    clock = new Date("2026-10-29T00:05:00.000Z");
+    store.revokePersonPasskey(key.credentialId);
+    for (const handle of [here, there]) {
+      const events = passkeyEvents(handle.workspace.id);
+      expect(events.map((event) => [event.type, event.entity_id, event.actor, event.session_id])).toEqual([
+        ["person.passkey_enrolled", key.credentialId, "person:desk", null],
+        ["person.passkey_revoked", key.credentialId, "person:desk", null],
+      ]);
+      // The whole payload, so nothing else (the key itself, a private part) can slip in.
+      expect(JSON.parse(events[0]!.payload_json)).toEqual({
+        fingerprint: fingerprintOf(key),
+        rp_id: RP_ID,
+        origin: ORIGIN,
+        label: "Touch ID",
+        enrolled_at: "2026-10-29T00:00:00.000Z",
+        recorded: "at_enrolment",
+      });
+      expect(JSON.parse(events[1]!.payload_json)).toEqual({
+        fingerprint: fingerprintOf(key),
+        revoked_at: "2026-10-29T00:05:00.000Z",
+      });
+      expect(store.verifyJournal(handle.workspace.id)).toBe(true);
+      for (const event of store.eventsSince(handle.workspace.id).events.filter((item) => item.type.startsWith("person.passkey_"))) {
+        for (const reader of [here, there]) expect(store.eventAddressesSession(event, reader.session.id)).toBe(false);
+      }
+    }
+    // The event is in the chain: changing the recorded fingerprint breaks it.
+    store.db.query(`UPDATE events SET payload_json = replace(payload_json, ?, ?) WHERE type = 'person.passkey_enrolled'`)
+      .run(fingerprintOf(key), "0".repeat(64));
+    expect(store.verifyJournal(here.workspace.id)).toBe(false);
+  });
+
+  test("an unlabelled key has no label field, and a refused enrolment or revocation appends nothing", () => {
+    const here = session("here");
+    const key = makePasskey();
+    enrolDirect(key);
+    expect(JSON.parse(passkeyEvents(here.workspace.id)[0]!.payload_json)).not.toHaveProperty("label");
+    expect(errorCode(() => enrolDirect(key))).toBe("passkey_already_enrolled");
+    expect(errorCode(() => store.revokePersonPasskey("bm90LWVucm9sbGVk"))).toBe("passkey_not_enrolled");
+    expect(passkeyEvents(here.workspace.id)).toHaveLength(1);
+  });
+
+  test("a workspace opened after the enrolment gets it once, just before the key's first act there", () => {
+    const key = makePasskey();
+    enrolDirect(key);
+    const { proposal } = consentedProposal();
+    const id = proposal.proposal.id;
+    const workspace = proposal.proposal.workspace_id;
+    expect(passkeyEvents(workspace)).toEqual([]);
+    // A refused act leaves nothing behind.
+    const wrong = assert(key, "another-challenge");
+    expect(errorCode(() => store.recordPersonActWithPasskey({ proposal_report_id: id, act: "agree", assertion: wrong })))
+      .toBe("passkey_challenge_mismatch");
+    expect(passkeyEvents(workspace)).toEqual([]);
+
+    const agree = store.personActChallenge({ proposal_report_id: id, act: "agree" });
+    store.recordPersonActWithPasskey({ proposal_report_id: id, act: "agree", assertion: assert(key, agree.challenge) });
+    const reject = store.personActChallenge({ proposal_report_id: id, act: "reject", reason: "Not now." });
+    store.recordPersonActWithPasskey({
+      proposal_report_id: id, act: "reject", reason: "Not now.", assertion: assert(key, reject.challenge),
+    });
+    expect(store.eventsSince(workspace).events.slice(-3).map((event) => event.type))
+      .toEqual(["person.passkey_enrolled", "proposal.agreed", "proposal.rejected"]);
+    const [event] = passkeyEvents(workspace);
+    expect(JSON.parse(event!.payload_json)).toMatchObject({ fingerprint: fingerprintOf(key), recorded: "before_first_act" });
+    expect(store.verifyJournal(workspace)).toBe(true);
+  });
+
+  test("a key written straight into the table is journaled as before_first_act, by its own fingerprint", () => {
+    const { proposal } = consentedProposal();
+    const id = proposal.proposal.id;
+    const key = makePasskey();
+    // As an older build, or any same-user process, could: no enrolment event, and a fingerprint that is not the key's.
+    store.db.query(`
+      INSERT INTO person_passkeys (credential_id, public_key_spki, algorithm, rp_id, origin, label, fingerprint, sign_count, enrolled_at, revoked_at)
+      VALUES (?, ?, -7, ?, ?, NULL, ?, 0, '2026-10-01T00:00:00.000Z', NULL)
+    `).run(key.credentialId, key.spki, RP_ID, ORIGIN, "f".repeat(64));
+    const agree = store.personActChallenge({ proposal_report_id: id, act: "agree" });
+    store.recordPersonActWithPasskey({ proposal_report_id: id, act: "agree", assertion: assert(key, agree.challenge) });
+    const [event] = passkeyEvents(proposal.proposal.workspace_id);
+    expect(JSON.parse(event!.payload_json)).toMatchObject({
+      fingerprint: fingerprintOf(key), enrolled_at: "2026-10-01T00:00:00.000Z", recorded: "before_first_act",
+    });
+  });
+});
+
 describe("the person desk and inbox", () => {
   test("notes inform the author without claiming to authenticate the person", () => {
     const { author, proposal } = consentedProposal();

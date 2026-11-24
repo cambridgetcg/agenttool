@@ -22,6 +22,7 @@ import type { CollabEvent, EventCursor } from "../src/protocol.js";
 import { CollabStore } from "../src/store-notes.js";
 import {
   COLLAB_NOTES_EVENT_TYPES,
+  PASSKEY_EVENT_TYPES,
   REST_EVENT_TYPES,
   exerciseFixture,
   FIXTURE_VIEWS,
@@ -497,7 +498,7 @@ const fixture = lazy(async (): Promise<Fixture> => {
   const reader = new CollabStore(readCopy, { now: () => new Date(statusAt) });
   try {
     const reports = listAllReports(reader, manifest.workspace_id);
-    const notes = new Set<string>(COLLAB_NOTES_EVENT_TYPES);
+    const notes = new Set<string>([...COLLAB_NOTES_EVENT_TYPES, ...PASSKEY_EVENT_TYPES]);
     const waiterRouted = allEvents(reader, manifest.workspace_id)
       .filter((event) =>
         event.sequence > manifest.waiter.after_anchor.sequence
@@ -523,7 +524,7 @@ describe("forward-compatibility fixture", () => {
   test("covers every Collab Notes event type this build defines", async () => {
     const { manifest } = await fixture();
     const current = eventTypeUnion(readFileSync(join(packageRoot, "src", "protocol.ts"), "utf8"));
-    const notes = new Set<string>([...COLLAB_NOTES_EVENT_TYPES, ...REST_EVENT_TYPES]);
+    const notes = new Set<string>([...COLLAB_NOTES_EVENT_TYPES, ...REST_EVENT_TYPES, ...PASSKEY_EVENT_TYPES]);
     // A type this build can write must be in the fixture, so older builds meet it.
     for (const type of current.filter((type) => notes.has(type))) expect(manifest.event_types).toContain(type);
     for (const type of manifest.produced_types) expect(manifest.event_types).toContain(type);
@@ -539,10 +540,10 @@ describe("forward-compatibility fixture", () => {
     const base = eventTypeUnion(git(["show", `${golden.sha}:packages/collab/src/protocol.ts`]).stdout);
     const current = eventTypeUnion(readFileSync(join(packageRoot, "src", "protocol.ts"), "utf8"));
     const added = current.filter((type) => !base.includes(type));
-    // The spec's types, and the two that declared rest brought from its own line.
-    const allowed: readonly string[] = [...COLLAB_NOTES_EVENT_TYPES, ...REST_EVENT_TYPES];
+    // The spec's types, the two that declared rest brought from its own line, and passkey enrolment's two.
+    const allowed: readonly string[] = [...COLLAB_NOTES_EVENT_TYPES, ...REST_EVENT_TYPES, ...PASSKEY_EVENT_TYPES];
     for (const type of added) expect(allowed).toContain(type);
-    for (const type of REST_EVENT_TYPES) expect(added).toContain(type);
+    for (const type of [...REST_EVENT_TYPES, ...PASSKEY_EVENT_TYPES]) expect(added).toContain(type);
     for (const type of base) expect(current).toContain(type);
   }, TEST_TIMEOUT_MS);
 
@@ -740,7 +741,7 @@ for (const revision of revisions) {
     // The types this build has never seen: every type added since a8799aad, less the ones it knows.
     const knownNewTypes = new Set<string>(known?.knows_new_types ?? []);
     const unknownToIt = (type: string) =>
-      ([...COLLAB_NOTES_EVENT_TYPES, ...REST_EVENT_TYPES] as readonly string[]).includes(type) && !knownNewTypes.has(type);
+      ([...COLLAB_NOTES_EVENT_TYPES, ...REST_EVENT_TYPES, ...PASSKEY_EVENT_TYPES] as readonly string[]).includes(type) && !knownNewTypes.has(type);
     const directory = join(work, "revisions", revision.sha!);
     const copy = lazy(async () => copyJournal((await fixture()).directory, join(directory, "journal")));
 
@@ -935,7 +936,7 @@ for (const revision of revisions) {
       const inspectedResult = await inspected();
       expect(idle_at).toBe(head);
       expect(head_seen).toBe(head);
-      for (const ring of rings) expect(COLLAB_NOTES_EVENT_TYPES as readonly string[]).not.toContain(ring.type);
+      for (const ring of rings) expect([...COLLAB_NOTES_EVENT_TYPES, ...PASSKEY_EVENT_TYPES] as readonly string[]).not.toContain(ring.type);
       // The host rings exactly where its own store routes events to the waiter.
       expect(rings.map((ring) => ring.sequence)).toEqual(inspectedResult.addressing!.waiter_sequences);
     }, TEST_TIMEOUT_MS);

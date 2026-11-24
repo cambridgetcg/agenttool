@@ -658,7 +658,11 @@ export type CollabEventType =
   | "ballot.opened"
   | "ballot.cast"
   | "ballot.revealed"
-  | "ballot.closed";
+  | "ballot.closed"
+  // The person desk enrolled or revoked a passkey: its public facts, in every
+  // workspace's chain. Addressed to no one, and older builds page over them.
+  | "person.passkey_enrolled"
+  | "person.passkey_revoked";
 
 export interface CollabEvent {
   protocol: CollabProtocol;

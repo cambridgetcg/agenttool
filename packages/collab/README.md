@@ -1030,6 +1030,13 @@ RP ID hash, user presence and user verification, the signature counter, and
 the ES256 signature, then journals the assertion with the public key in the
 event, so the act can be re-verified without this database.
 
+Enrolling or revoking a passkey appends `person.passkey_enrolled` or
+`person.passkey_revoked` to every workspace's hash chain, with the key's SHA-256
+fingerprint and never private material; a workspace opened later gets the
+enrolment just before the key's first act there (`recorded: before_first_act`).
+Compare that fingerprint with the one your own device shows: the events say
+that a key was recorded and when, not who enrolled it.
+
 The ceremony pages come from the installed desk, not from an application that
 agents edit: the page that shows the bytes decides what Touch ID signs, and
 the system prompt names only "localhost". Each page lives at a one-time path

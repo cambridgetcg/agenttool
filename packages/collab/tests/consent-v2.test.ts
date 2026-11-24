@@ -565,6 +565,15 @@ describe("a set-aside with a passkey", () => {
       basis: "user_verified_passkey",
       proof: { public_key_spki: passkey.spki, challenge: issued.challenge, challenge_bytes: issued.challenge_bytes },
     });
+    // Enrolled before this workspace opened: its chain gets the enrolment just before the key's first act.
+    const trail = store.db.query(`
+      SELECT type, json_extract(payload_json, '$.recorded') AS recorded FROM events
+      WHERE type IN ('person.passkey_enrolled', 'proposal.challenge_set_aside') ORDER BY sequence
+    `).all();
+    expect(trail).toEqual([
+      { type: "person.passkey_enrolled", recorded: "before_first_act" },
+      { type: "proposal.challenge_set_aside", recorded: null },
+    ]);
     // The same assertion again, on the same challenge: refused by what changed.
     expect(desk(["set-aside", "--proposal", id, "--challenge", challenge.id, "--reason", "Gone.", "--passkey-assertion", "-"], {
       readStdin: () => JSON.stringify(assertion),

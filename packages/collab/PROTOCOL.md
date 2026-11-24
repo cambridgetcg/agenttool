@@ -1216,7 +1216,7 @@ voice.
 | propose | This voice put these exact bytes to the agents and the person. |
 | decide | The server derived the authority: on an agreed proposal, the agreed extent and the person's act, with what that act's basis proves; otherwise nothing, or this session's own word, and it says which. |
 | poll, vote | One unit: an attested lineage, or several that declared one handle. Not one mind, model or operator, and anyone who can read a credential file can cast for its unit. |
-| agree, reject | Recorded only by the person desk, by one of two routes that prove different things. `user_verified_passkey`: a key enrolled at this desk signed these exact act bytes, and the journaled assertion re-verifies without this database; it does not show who enrolled the key. `controlling_terminal`: the desk's terminal path asserted that a yes was read; it proves no terminal and no person, since a process running as the same user can call the store's terminal method directly or answer the prompt through a pseudo-terminal. A relayed rejection says which session relayed it, and can only stop. |
+| agree, reject | Meant only for the person, and no MCP tool records an agreement; the two routes prove different things. `user_verified_passkey`: a key enrolled in this journal signed these exact act bytes, and the journaled assertion re-verifies without this database; whose key it is, it does not show (enrolment is journaled as `person.passkey_enrolled`, with the fingerprint to compare with the person's own key). `controlling_terminal`: the terminal path asserted that a yes was read; it proves no terminal and no person, since a process running as the same user can call the store's terminal method directly or answer the prompt through a pseudo-terminal. A relayed rejection says which session relayed it, and can only stop. |
 | set aside | As agree: by the same two routes with the same limits, on a consent/v2 proposal, while no session of the challenger's voice was live. It says the challenge no longer blocks, not that it was wrong. |
 
 Nothing on this surface calls anything but the person's agreement, within its extent,
@@ -1245,9 +1245,21 @@ SQLite file and re-verify the whole chain on every open.
   `ballot.closed` (entity: the poll report); consent/v2 adds
   `proposal.challenge_set_aside` (entity: the proposal report). Declared rest, which
 came from its own line, adds `session.rested` and `session.returned` (entity: the
-session). A ballot is identified by the id of the
+session). Passkey enrolment adds `person.passkey_enrolled` and
+  `person.passkey_revoked` (entity: the credential id), addressed to no one. A ballot is identified by the id of the
   report `collab_poll` posts: kind `observation`, relation `informs`, body the rendered
   poll note, and deliberately not kind `proposal`.
+- **Passkey enrolment is journaled.** A key belongs to the whole journal and a chain to
+  one workspace, so enrolling appends `person.passkey_enrolled` to every workspace's
+  chain, and revoking `person.passkey_revoked`. The first carries the SHA-256
+  fingerprint of the key's SPKI, `rp_id`, `origin`, `label` when it has one,
+  `enrolled_at`, and `recorded`: `at_enrolment`, or `before_first_act` when the chain had
+  no such event (a workspace opened later, a key an older build enrolled, or a row
+  written straight into the table) and the key then acted there. The second carries the
+  fingerprint and `revoked_at`. Neither carries private material or the key itself,
+  which a passkey act's proof holds. They show that a key was recorded and when, not who
+  enrolled it: their actor, `person:desk`, is a label the store writes. An older build
+  that enrols or revokes still journals neither.
 - **New optional payload fields**, present only when set: `report.posted.note =
   "collab-note/1"` and `session.joined.model`.
 - **Receipts** use the existing receipt table under new operation names (`notes.*.v1`)

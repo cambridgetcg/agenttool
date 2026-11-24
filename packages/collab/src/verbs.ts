@@ -1822,6 +1822,8 @@ function eventSubject(type: string, taskHandle: string | null, title: string, by
     case "handoff.declined": return `${by} declined your handoff of ${task}.`;
     case "handoff.expired": return `Your handoff of ${task} expired.`;
     case "task.recovered": return `${by} recovered your expired lease on ${task}.`;
+    case "person.passkey_enrolled": return "A passkey enrolment was recorded; the record does not show who enrolled it, and it authorises nothing.";
+    case "person.passkey_revoked": return "A passkey revocation was recorded; the record does not show who revoked it.";
     default: return `${type}${taskHandle ? ` on ${task}` : ""} by ${by}.`;
   }
 }

@@ -5275,6 +5275,7 @@ class CollabStoreCore {
         expected_challenge: derived.challenge
       });
       this.db.query(`UPDATE person_passkeys SET sign_count = ? WHERE credential_id = ?`).run(sign_count, passkey.credential_id);
+      this.journalPasskeyBeforeFirstAct(terms.workspace_id, passkey);
       return this.recordPersonAct({
         workspace_id: terms.workspace_id,
         proposal_report_id: terms.report_id,
@@ -5355,6 +5356,7 @@ class CollabStoreCore {
       const derived = setAsideChallenge(facts.bytes);
       const { sign_count } = verifyPasskeyAssertion({ passkey, assertion, expected_challenge: derived.challenge });
       this.db.query(`UPDATE person_passkeys SET sign_count = ? WHERE credential_id = ?`).run(sign_count, passkey.credential_id);
+      this.journalPasskeyBeforeFirstAct(terms.workspace_id, passkey);
       return this.recordSetAside(terms, challengeId, reason, {
         basis: "user_verified_passkey",
         actor: PERSON_PASSKEY_ACTOR,
@@ -5421,6 +5423,9 @@ class CollabStoreCore {
           fingerprint, sign_count, enrolled_at, revoked_at
         ) VALUES (?, ?, -7, ?, ?, ?, ?, 0, ?, NULL)
       `).run(enrollment.credential_id, enrollment.public_key_spki, enrollment.rp_id, enrollment.origin, enrollment.label, passkeyFingerprint(enrollment.public_key_spki), this.timestamp());
+      const passkey = this.requirePersonPasskey(enrollment.credential_id);
+      for (const workspace of this.listWorkspaces())
+        this.journalPasskeyEnrolment(workspace.id, passkey, "at_enrolment");
     });
     transaction.immediate();
     this.tightenFileModes();
@@ -5437,10 +5442,40 @@ class CollabStoreCore {
       if (changed.changes === 0) {
         throw new CollabError("passkey_not_enrolled", "No active enrolled passkey has this credential id");
       }
+      const passkey = this.requirePersonPasskey(credentialId);
+      for (const workspace of this.listWorkspaces()) {
+        this.appendEvent(workspace.id, "person.passkey_revoked", passkey.credential_id, PERSON_DESK_ACTOR, {
+          fingerprint: passkey.fingerprint,
+          revoked_at: passkey.revoked_at
+        });
+      }
     });
     transaction.immediate();
     this.tightenFileModes();
     return this.listPersonPasskeys().find((key) => key.credential_id === credentialId);
+  }
+  requirePersonPasskey(credentialId) {
+    const row = this.db.query(`SELECT * FROM person_passkeys WHERE credential_id = ?`).get(credentialId);
+    if (!row)
+      throw new CollabError("passkey_not_enrolled", "No enrolled passkey has this credential id");
+    return { ...row, algorithm: -7 };
+  }
+  journalPasskeyEnrolment(workspaceId, passkey, recorded) {
+    this.appendEvent(workspaceId, "person.passkey_enrolled", passkey.credential_id, PERSON_DESK_ACTOR, {
+      fingerprint: passkeyFingerprint(passkey.public_key_spki),
+      rp_id: passkey.rp_id,
+      origin: passkey.origin,
+      ...passkey.label !== null ? { label: passkey.label } : {},
+      enrolled_at: passkey.enrolled_at,
+      recorded
+    });
+  }
+  journalPasskeyBeforeFirstAct(workspaceId, passkey) {
+    const journaled = this.db.query(`
+      SELECT 1 FROM events WHERE workspace_id = ? AND type = 'person.passkey_enrolled' AND entity_id = ? LIMIT 1
+    `).get(workspaceId, passkey.credential_id);
+    if (!journaled)
+      this.journalPasskeyEnrolment(workspaceId, passkey, "before_first_act");
   }
   appendPersonNote(input) {
     const normalized = {
