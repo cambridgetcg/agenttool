@@ -38906,6 +38906,9 @@ class CollabStore extends CollabStoreCore {
       work_mode: options.work_mode ?? "edit"
     });
   }
+  noteBasePrecheck(credential, base) {
+    this.requireExpectedBase({ expected_base_sha: base }, this.captureSessionWorktree(credential).checkpoint);
+  }
   noteCompletePrecheck(credential, input) {
     this.db.transaction(() => {
       const session = this.authenticateSession(credential);
@@ -45013,12 +45016,37 @@ async function takeVerb(ctx, input) {
 function takeBase(value) {
   if (value === undefined || value === null)
     return null;
-  if (typeof value !== "string" || !/^[a-fA-F0-9]{40,64}$/.test(value)) {
+  const given = typeof value === "string" ? value.trim() : null;
+  if (given === "")
+    return null;
+  if (given === null || !/^[a-fA-F0-9]{40,64}$/.test(given)) {
     throw new CollabError("invalid_base", "base is a full commit id: 40 to 64 hexadecimal characters", {
       remedy: { say: "Give base as the full commit id the work starts from (git rev-parse HEAD prints it), or leave it out." }
     });
   }
-  return value.toLowerCase();
+  return given.toLowerCase();
+}
+function observedHead(error51) {
+  return typeof error51.details.observed_head_sha === "string" ? error51.details.observed_head_sha : null;
+}
+function requireBaseAtHead(ctx, credential, base, retryInput) {
+  try {
+    ctx.store.noteBasePrecheck(credential, base);
+  } catch (error51) {
+    if (!(error51 instanceof CollabError) || error51.code !== "expected_base_mismatch")
+      throw error51;
+    const head = observedHead(error51);
+    if (head === null) {
+      const { base: _base, ...withoutBase } = retryInput;
+      throw new CollabError(error51.code, `base ${base} cannot be checked here: no HEAD commit was observed in your session's worktree ` + "(a directory outside Git, or a repository with no commit yet). Leave base out; nothing was written.", { ...error51.details, remedy: withSlot(ctx, { tool: "collab_take", input: withoutBase }) });
+    }
+    throw new CollabError(error51.code, `This task would start from ${base}, and the HEAD of your session's worktree is ${head}. Nothing was written.`, {
+      ...error51.details,
+      remedy: {
+        say: `Check out ${base} in your session's worktree, then send this call again; ` + `or give base ${head} to start from where you are, or leave base out.`
+      }
+    });
+  }
 }
 function normalizedPaths(paths) {
   try {
@@ -45054,6 +45082,8 @@ async function takeNew(ctx, binding, credential, options, advice) {
         if (conflicts.length > 0)
           throw pathConflictRefusal(ctx, workspaceId, conflicts, null);
       }
+      if (options.base)
+        requireBaseAtHead(ctx, credential, options.base, retryInput);
       return ctx.store.withReceiptPlan(plan2.guard, () => ctx.store.createTaskForSession({
         ...credential,
         idempotency_key: plan2.step(1),
@@ -45189,18 +45219,33 @@ async function claimStep(ctx, binding, credential, task, key, guard, retryInput,
       });
     }
     if (error51.code === "expected_base_mismatch") {
-      const expected = String(error51.details.expected_base_sha ?? "");
-      const observed = typeof error51.details.observed_head_sha === "string" ? `is ${error51.details.observed_head_sha}` : "was not observed";
-      throw new CollabError(error51.code, `${handleOf("task", task.id)} starts from ${expected}, and your worktree's HEAD ${observed}.${createdNote}`, {
-        ...error51.details,
-        remedy: { say: `Check out ${expected} in your worktree, then take ${exactRef("task", task.id)} again; or take work that starts from where you are.` }
-      });
+      throw baseMismatchRefusal(ctx, error51, current, retryInput, created, createdNote);
     }
     if (created && error51.code !== "changed_under_you") {
       throw new CollabError(error51.code, `${error51.message}.${createdNote}`, error51.details);
     }
     throw error51;
   }
+}
+function baseMismatchRefusal(ctx, error51, task, retryInput, created, createdNote) {
+  const handle = handleOf("task", task.id);
+  const expected = String(error51.details.expected_base_sha ?? "");
+  const head = observedHead(error51);
+  const observed = head === null ? "no HEAD commit was observed in your session's worktree" : `the HEAD of your session's worktree is ${head}`;
+  if (created) {
+    return new CollabError(error51.code, `${handle} starts from ${expected}, and ${observed}.${createdNote}`, {
+      ...error51.details,
+      remedy: { say: `Check out ${expected} in your session's worktree, then take ${exactRef("task", task.id)} again; or take work that starts from where you are.` }
+    });
+  }
+  const reserved = task.effective_status === "recovery_required" && task.path_scopes.length > 0 ? " The lapsed hold still reserves its paths, so free them first: collab_task_recover with action release (full tool profile), which checks no base." : "";
+  return new CollabError(error51.code, `${handle}'s base is fixed at ${expected}, which its every claim, recovery and handoff acceptance checks, and ${observed}. Nothing was written.`, {
+    ...error51.details,
+    next: withSlot(ctx, { tool: "collab_take", input: retryInput }),
+    remedy: {
+      say: `Leave your own commits where they are. To take this task, send the call in next from a session in a worktree at ${expected} ` + `(git worktree add --detach <path> ${expected}); once it is held, that HEAD may move on. Or make a new task from where you are: ` + `collab_take with title${task.path_scopes.length > 0 ? " and paths" : ""}${head === null ? ", without base" : `, and base ${head} if you want it checked`}.${reserved}`
+    }
+  });
 }
 function safeSession(ctx, workspaceId, id) {
   try {
@@ -46971,7 +47016,7 @@ Legacy session tools: ${legacyInstructions}`
       purpose: exports_external.string().optional().describe("Why you take it, at most 200 characters; written into a new task's description only."),
       review: exports_external.string().optional().describe("required | none: override whether a new task waits for review."),
       because: exports_external.string().optional().describe("Why you recover a lapsed lease (at most 4,000 characters)."),
-      base: exports_external.string().optional().describe("A new task's base: the full commit id (40 to 64 hex) the claim requires your worktree's HEAD to be.")
+      base: exports_external.string().optional().describe("A new task's base: a full commit id (40 to 64 hex) your session's worktree HEAD must be now, and any later claimer's, recoverer's or handoff recipient's too.")
     }
   }, async (input) => noteCall(() => takeVerb(noteContext(), input), input));
   server.registerTool("collab_done", {

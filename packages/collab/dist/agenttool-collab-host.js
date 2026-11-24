@@ -9042,6 +9042,9 @@ class CollabStore extends CollabStoreCore {
       work_mode: options.work_mode ?? "edit"
     });
   }
+  noteBasePrecheck(credential, base) {
+    this.requireExpectedBase({ expected_base_sha: base }, this.captureSessionWorktree(credential).checkpoint);
+  }
   noteCompletePrecheck(credential, input) {
     this.db.transaction(() => {
       const session = this.authenticateSession(credential);
