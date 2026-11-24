@@ -11436,6 +11436,68 @@ function terminalRendering(text) {
 function pause(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
+var WRITE_STALL_BUDGET_MS = 1e4;
+var WRITE_RETRY_MS = 20;
+var READ_RETRY_MS = 50;
+var FD_CALLS = { writeSync: writeSync2, readSync: readSync2, closeSync: closeSync6, pause };
+function isEagain(error) {
+  const code = error?.code;
+  return code === "EAGAIN" || code === "EWOULDBLOCK";
+}
+function ttyPortForFd(fd, calls = FD_CALLS, stallBudgetMs = WRITE_STALL_BUDGET_MS) {
+  return {
+    write(text) {
+      const bytes = Buffer.from(text, "utf8");
+      let offset = 0;
+      let stalled = 0;
+      while (offset < bytes.length) {
+        let wrote;
+        try {
+          wrote = calls.writeSync(fd, bytes, offset, bytes.length - offset);
+        } catch (error) {
+          if (!isEagain(error) || stalled >= stallBudgetMs)
+            throw error;
+          calls.pause(WRITE_RETRY_MS);
+          stalled += WRITE_RETRY_MS;
+          continue;
+        }
+        if (wrote > 0)
+          stalled = 0;
+        offset += wrote;
+      }
+    },
+    readLine(maxBytes, deadline, now = Date.now) {
+      const one = Buffer.alloc(1);
+      const collected = [];
+      let overflow = false;
+      while (true) {
+        if (deadline !== undefined && now() > deadline)
+          return null;
+        let read;
+        try {
+          read = calls.readSync(fd, one, 0, 1, null);
+        } catch (error) {
+          if (!isEagain(error))
+            throw error;
+          calls.pause(READ_RETRY_MS);
+          continue;
+        }
+        if (read === 0)
+          return collected.length === 0 ? null : Buffer.from(collected).toString("utf8");
+        if (one[0] === 10 || one[0] === 13)
+          break;
+        if (collected.length < maxBytes)
+          collected.push(one[0]);
+        else
+          overflow = true;
+      }
+      return overflow ? "" : Buffer.from(collected).toString("utf8");
+    },
+    close() {
+      calls.closeSync(fd);
+    }
+  };
+}
 function openDevTty(path = DEV_TTY) {
   let fd;
   try {
@@ -11453,45 +11515,7 @@ function openDevTty(path = DEV_TTY) {
     closeSync6(fd);
     return null;
   }
-  return {
-    write(text) {
-      const bytes = Buffer.from(text, "utf8");
-      let offset = 0;
-      while (offset < bytes.length) {
-        offset += writeSync2(fd, bytes, offset, bytes.length - offset);
-      }
-    },
-    readLine(maxBytes, deadline, now = Date.now) {
-      const one = Buffer.alloc(1);
-      const collected = [];
-      let overflow = false;
-      while (true) {
-        if (deadline !== undefined && now() > deadline)
-          return null;
-        let read;
-        try {
-          read = readSync2(fd, one, 0, 1, null);
-        } catch (error) {
-          if (error.code !== "EAGAIN")
-            throw error;
-          pause(50);
-          continue;
-        }
-        if (read === 0)
-          return collected.length === 0 ? null : Buffer.from(collected).toString("utf8");
-        if (one[0] === 10 || one[0] === 13)
-          break;
-        if (collected.length < maxBytes)
-          collected.push(one[0]);
-        else
-          overflow = true;
-      }
-      return overflow ? "" : Buffer.from(collected).toString("utf8");
-    },
-    close() {
-      closeSync6(fd);
-    }
-  };
+  return ttyPortForFd(fd);
 }
 function confirmOnTty(request, options = {}) {
   const open = options.openTty ?? (() => openDevTty());

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { CollabError } from "../src/errors.js";
-import { confirmOnTty, terminalRendering, type TtyPort } from "../src/tty.js";
+import { confirmOnTty, terminalRendering, ttyPortForFd, WRITE_STALL_BUDGET_MS, type TtyFdCalls, type TtyPort } from "../src/tty.js";
 
 function port(answer: string | null, written: string[] = []): TtyPort {
   return { write: (text) => { written.push(text); }, readLine: () => answer, close: () => {} };
@@ -36,5 +36,95 @@ describe("terminal confirmation", () => {
       code = error instanceof CollabError ? error.code : "other";
     }
     expect(code).toBe("tty_unavailable");
+  });
+
+  describe("a non-blocking terminal descriptor that is slow to drain", () => {
+    function eagain(): Error {
+      return Object.assign(new Error("EAGAIN: resource temporarily unavailable, write"), { code: "EAGAIN" });
+    }
+
+    /** A stubbed fd: each write takes at most `chunk` bytes, and the planned writes throw EAGAIN first. */
+    function stubbedFd(plan: Array<"eagain" | "ok">, chunk = 4) {
+      const received: number[] = [];
+      const pauses: number[] = [];
+      let closed = 0;
+      const calls: TtyFdCalls = {
+        writeSync(_fd, buffer, offset, length) {
+          const step = plan.shift() ?? "ok";
+          if (step === "eagain") throw eagain();
+          const taken = Math.min(chunk, length);
+          for (let index = 0; index < taken; index += 1) received.push(buffer[offset + index]!);
+          return taken;
+        },
+        readSync() {
+          return 0;
+        },
+        closeSync() {
+          closed += 1;
+        },
+        pause(ms) {
+          pauses.push(ms);
+        },
+      };
+      return { calls, received: () => Buffer.from(received).toString("utf8"), pauses, closed: () => closed };
+    }
+
+    test("waits out EAGAIN on write and writes every byte once, in order", () => {
+      const fd = stubbedFd(["eagain", "eagain", "ok", "eagain", "ok", "ok", "eagain"]);
+      const port = ttyPortForFd(7, fd.calls);
+      const text = "exact bytes 協作 {\"a\":1}\n";
+      port.write(text);
+      expect(fd.received()).toBe(text);
+      expect(fd.pauses.length).toBe(4);
+      for (const ms of fd.pauses) expect(ms).toBeLessThanOrEqual(50);
+      port.close();
+      expect(fd.closed()).toBe(1);
+    });
+
+    test("a whole confirmation goes through a terminal that keeps answering EAGAIN", () => {
+      const plan: Array<"eagain" | "ok"> = [];
+      for (let index = 0; index < 200; index += 1) plan.push("eagain", "ok");
+      const fd = stubbedFd(plan, 16);
+      const port = ttyPortForFd(7, fd.calls);
+      expect(confirmOnTty(request, { openTty: () => ({ ...port, readLine: () => "yes" }) })).toBe(true);
+      expect(fd.received()).toContain("{\"a\":1}");
+      expect(fd.received()).toEndWith("confirmed\n");
+    });
+
+    test("gives up with the EAGAIN error once the terminal takes nothing for the whole budget", () => {
+      const fd = stubbedFd(Array.from({ length: 10_000 }, () => "eagain" as const));
+      const port = ttyPortForFd(7, fd.calls, 100);
+      let thrown: unknown = null;
+      try {
+        port.write("never drained");
+      } catch (error) {
+        thrown = error;
+      }
+      expect((thrown as NodeJS.ErrnoException | null)?.code).toBe("EAGAIN");
+      // Bounded: about budget / retry interval waits, never an endless loop.
+      const waited = fd.pauses.reduce((total, ms) => total + ms, 0);
+      expect(waited).toBeGreaterThanOrEqual(100);
+      expect(waited).toBeLessThanOrEqual(150);
+      expect(WRITE_STALL_BUDGET_MS).toBeLessThanOrEqual(60_000);
+    });
+
+    test("progress restarts the budget, and other write errors are not retried", () => {
+      const plan: Array<"eagain" | "ok"> = [];
+      // Four stalls of 80ms each, with progress between: more than the 100ms budget in all, never in one stall.
+      for (let index = 0; index < 4; index += 1) plan.push("eagain", "eagain", "eagain", "eagain", "ok");
+      const fd = stubbedFd(plan, 1);
+      ttyPortForFd(7, fd.calls, 100).write("abcd");
+      expect(fd.received()).toBe("abcd");
+      const broken: TtyFdCalls = {
+        ...stubbedFd([]).calls,
+        writeSync() {
+          throw Object.assign(new Error("EIO: i/o error, write"), { code: "EIO" });
+        },
+      };
+      let pauses = 0;
+      broken.pause = () => { pauses += 1; };
+      expect(() => ttyPortForFd(7, broken).write("x")).toThrow("EIO");
+      expect(pauses).toBe(0);
+    });
   });
 });
