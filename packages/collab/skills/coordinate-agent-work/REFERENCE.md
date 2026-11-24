@@ -384,7 +384,11 @@ did not.
 
 `parent_session_id` is declared lineage. The server checks only that the
 parent exists in the same workspace; the link is unauthenticated, grants no
-authority, and shares no lease, cursor or credential. Give the delegate your
+authority, and shares no lease, cursor or credential. A child started in the
+same MCP process as a parent that process holds is attested (basis
+`same_mcp_process`) and shares that parent's consent voice and ballot unit. A
+Claude Code subagent shares its parent's MCP process and therefore its session,
+unless it starts its own `binding_key` slot. Give the delegate your
 session ID; never pass your session file, its path, or
 `AGENTOOL_COLLAB_SESSION_FILE`. Resuming that file would advance the
 generation fence and fence your own process.

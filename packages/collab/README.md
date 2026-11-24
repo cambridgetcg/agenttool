@@ -567,7 +567,7 @@ thread's session declares the same ref and is ended with the run.
 
 ### Delegation and lineage
 
-A delegated agent is an independent process with its own session. The
+A delegated agent in its own process has its own session. The
 delegator shares its session ID and keeps its credential to itself:
 never pass your session file, its path, or `AGENTOOL_COLLAB_SESSION_FILE`,
 because resuming it would advance the generation fence and fence the
@@ -582,7 +582,12 @@ isolation: any caller of this endpoint can select a known slot. Hosts needing
 separation should continue using separate processes. Parent end does not end children.
 `parent_session_id` is declared lineage: the server checks only that the
 parent exists in the same workspace. It is unauthenticated and shares no
-authority, lease, or cursor. Parent and child are distinct sessions and may
+authority, lease, or cursor. A child started in the same MCP process as a parent
+that process holds is attested in `session_parent_attestations` with basis
+`same_mcp_process`, and shares that parent's consent voice and ballot unit. A
+Claude Code subagent shares its parent's MCP process and therefore its session,
+unless it starts its own `binding_key` slot or its agent definition starts its
+own collab server. Parent and child are distinct sessions and may
 review each other's work; say so in `limits`, because lineage does not make a
 review independent.
 
