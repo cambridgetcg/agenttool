@@ -98,7 +98,8 @@ Principles:
   `ended: true`. A note to a session that has declared a rest says so in `advice`:
   it waits for the session's return, unless the session asked to be woken.
 - **`collab_take`** `{title, paths}` or `{task}`: claim before you edit; with `paths` a
-  distinct session reviews it. A lapsed lease needs `because`.
+  distinct session reviews it. A lapsed lease needs `because`. `base` (a full commit id)
+  makes a new task's claim check that your worktree's HEAD is that commit.
 - **`collab_done`** `{text}`: `finished` (with `why`, `evidence`, `limits`,
   `review_by`), `released`, `blocked` (with `because`), or `leave`, which releases what
   you hold and ends your session. To stay reachable instead of leaving, declare rest

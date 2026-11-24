@@ -2174,6 +2174,8 @@ export interface TakeInput {
   purpose?: string;
   review?: string;
   because?: string;
+  /** A new task's expected_base_sha: the commit its claim requires the worktree's HEAD to be. */
+  base?: string;
 }
 
 const TASK_TITLE_MAX = 300;
@@ -2201,10 +2203,22 @@ export async function takeVerb(ctx: NoteVerbContext, input: TakeInput): Promise<
       remedy: { say: "Give paths as a list such as [\"src/parser.ts\"]." },
     });
   }
+  const base = takeBase(input.base);
   const advice: string[] = [];
   return hasTitle
-    ? takeNew(ctx, binding, credential, { title: oneLine(input.title, "title", TASK_TITLE_MAX, true)!, purpose, because, review: input.review as "required" | "none" | undefined, paths: input.paths ?? [] }, advice)
-    : takeExisting(ctx, binding, credential, { task: String(input.task), purpose, because, review: input.review, paths: input.paths }, advice);
+    ? takeNew(ctx, binding, credential, { title: oneLine(input.title, "title", TASK_TITLE_MAX, true)!, purpose, because, review: input.review as "required" | "none" | undefined, paths: input.paths ?? [], base }, advice)
+    : takeExisting(ctx, binding, credential, { task: String(input.task), purpose, because, review: input.review, paths: input.paths, base }, advice);
+}
+
+/** A take's base: a full commit id, 40 to 64 hexadecimal characters, kept in lower case; null when not given. */
+function takeBase(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || !/^[a-fA-F0-9]{40,64}$/.test(value)) {
+    throw new CollabError("invalid_base", "base is a full commit id: 40 to 64 hexadecimal characters", {
+      remedy: { say: "Give base as the full commit id the work starts from (git rev-parse HEAD prints it), or leave it out." },
+    });
+  }
+  return value.toLowerCase();
 }
 
 function normalizedPaths(paths: string[]): string[] {
@@ -2223,7 +2237,7 @@ async function takeNew(
   ctx: NoteVerbContext,
   binding: NoteBinding,
   credential: Credential,
-  options: { title: string; purpose: string | null; because: string | null; review?: "required" | "none"; paths: string[] },
+  options: { title: string; purpose: string | null; because: string | null; review?: "required" | "none"; paths: string[]; base: string | null },
   advice: string[],
 ): Promise<Record<string, unknown>> {
   const workspaceId = binding.handle.workspace.id;
@@ -2232,8 +2246,9 @@ async function takeNew(
   const policy = options.review ? (options.review === "required" ? "accepted" as const : "reported" as const)
     : paths.length > 0 ? "accepted" as const : "reported" as const;
   if (options.because) advice.push("because is for recovering a lapsed lease; a new task needs none, so it was not used.");
-  const keyInput = { title: options.title, paths, purpose: options.purpose, review: options.review ?? null };
-  const retryInput = { title: options.title, ...(options.paths.length ? { paths: options.paths } : {}), ...(options.purpose ? { purpose: options.purpose } : {}), ...(options.review ? { review: options.review } : {}) };
+  // base joins the key only when given, so a take without one keeps the key it always had.
+  const keyInput = { title: options.title, paths, purpose: options.purpose, review: options.review ?? null, ...(options.base ? { base: options.base } : {}) };
+  const retryInput = { title: options.title, ...(options.paths.length ? { paths: options.paths } : {}), ...(options.purpose ? { purpose: options.purpose } : {}), ...(options.review ? { review: options.review } : {}), ...(options.base ? { base: options.base } : {}) };
   const { plan, created, claimed, replayed } = await underPlan(ctx, credential, {
     tool: "collab_take",
     input: keyInput,
@@ -2254,6 +2269,7 @@ async function takeNew(
         path_scopes: paths,
         work_mode: workMode,
         completion_policy: policy,
+        ...(options.base ? { expected_base_sha: options.base } : {}),
       }));
     });
     const recorded: RecordedStep[] = [{ step: 1, what: `task ${created.value.id}, created and open`, id: created.value.id }];
@@ -2273,12 +2289,13 @@ async function takeExisting(
   ctx: NoteVerbContext,
   binding: NoteBinding,
   credential: Credential,
-  options: { task: string; purpose: string | null; because: string | null; review?: string; paths?: string[] },
+  options: { task: string; purpose: string | null; because: string | null; review?: string; paths?: string[]; base: string | null },
   advice: string[],
 ): Promise<Record<string, unknown>> {
   const workspaceId = binding.handle.workspace.id;
   const id = ctx.store.resolveNoteRef(workspaceId, "task", options.task).id;
   if (options.paths !== undefined) advice.push("paths apply only to a new task (title); the task keeps its own paths.");
+  if (options.base) advice.push("base applies only to a new task (title); the task keeps its own base.");
   if (options.review !== undefined) advice.push("review applies only to a new task (title); the task keeps its own policy.");
   if (options.purpose) advice.push("purpose is written into a new task's description only; an existing task's description is not changed.");
   const keyInput = { task: id, because: options.because };
@@ -2394,6 +2411,14 @@ async function claimStep(
           tool: "collab_note",
           input: { text: `Is the blocker on ${handleOf("task", task.id)} cleared? I would take it once it is unblocked.`, re: exactRef("task", task.id) },
         }),
+      });
+    }
+    if (error.code === "expected_base_mismatch") {
+      const expected = String(error.details.expected_base_sha ?? "");
+      const observed = typeof error.details.observed_head_sha === "string" ? `is ${error.details.observed_head_sha}` : "was not observed";
+      throw new CollabError(error.code, `${handleOf("task", task.id)} starts from ${expected}, and your worktree's HEAD ${observed}.${createdNote}`, {
+        ...error.details,
+        remedy: { say: `Check out ${expected} in your worktree, then take ${exactRef("task", task.id)} again; or take work that starts from where you are.` },
       });
     }
     if (created && error.code !== "changed_under_you") {
@@ -2542,6 +2567,7 @@ function takeResult(
       paths: task.path_scopes,
       work_mode: task.work_mode,
       completion_policy: task.completion_policy,
+      ...(task.expected_base_sha ? { base: task.expected_base_sha } : {}),
     },
   };
 }

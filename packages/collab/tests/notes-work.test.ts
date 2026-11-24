@@ -686,6 +686,43 @@ describe("refused before anything is written, or not refused at all", () => {
     expect(j.count()).toBe(before);
   });
 
+  test("base becomes a new task's expected_base_sha, which its claim checks; a malformed base writes nothing", async () => {
+    const { j, a, sa } = pair(journal({ git: true }));
+    const head = git(j.root, ["rev-parse", "HEAD"]);
+    const plain = await ok(sa, "collab_take", { title: "No base", paths: ["src/a.ts"] });
+    expect(j.store.getTask(a.workspace.id, plain.ids.task).expected_base_sha).toBeNull();
+    expect(Object.hasOwn(plain.task, "base")).toBe(false);
+    const based = await ok(sa, "collab_take", { title: "From here", paths: ["src/b.ts"], base: head.toUpperCase() });
+    expect(j.store.getTask(a.workspace.id, based.ids.task)).toMatchObject({ expected_base_sha: head, assignee_session_id: a.session.id });
+    expect(based.task).toMatchObject({ base: head, state: "claimed" });
+    // A retry with the same base replays; the key holds the base.
+    const mark = j.count();
+    expect((await ok(sa, "collab_take", { title: "From here", paths: ["src/b.ts"], base: head })).replayed).toBe(true);
+    expect(j.count()).toBe(mark);
+    // A base the worktree is not at: the task is created and open, and the claim says what to check out.
+    const elsewhere = "0".repeat(40);
+    const mismatch = await refused(sa, "collab_take", { title: "From elsewhere", paths: ["src/c.ts"], base: elsewhere });
+    expect(mismatch.code).toBe("expected_base_mismatch");
+    expect(mismatch).toMatchObject({ expected_base_sha: elsewhere, observed_head_sha: head });
+    expect(mismatch.remedy.say).toContain(`Check out ${elsewhere}`);
+    const open = j.store.listTasks(a.workspace.id).find((task) => task.title === "From elsewhere")!;
+    expect(open).toMatchObject({ status: "open", expected_base_sha: elsewhere });
+    expect(mismatch.recorded_steps).toEqual([{ step: 1, what: `task ${open.id}, created and open`, id: open.id }]);
+    // Malformed: refused with a remedy before anything is written.
+    for (const base of ["abc123", "g".repeat(40), "a".repeat(65)]) {
+      const before = j.count();
+      const refusal = await refused(sa, "collab_take", { title: "Bad base", base });
+      expect(refusal.code).toBe("invalid_base");
+      expect(refusal.remedy.say).toContain("git rev-parse HEAD");
+      expect(j.count()).toBe(before);
+    }
+    // With task, base is not used and says so.
+    await ok(sa, "collab_done", { text: "Giving it back.", outcome: "released", task: plain.ids.task });
+    const retaken = await ok(sa, "collab_take", { task: plain.ids.task, base: head });
+    expect(retaken.advice).toContain("base applies only to a new task (title); the task keeps its own base.");
+    expect(j.store.getTask(a.workspace.id, plain.ids.task).expected_base_sha).toBeNull();
+  });
+
   test("a take over paths you already hold says to finish or release that hold, not to ask yourself", async () => {
     const { j, sa } = pair();
     const held = await ok(sa, "collab_take", { title: "Parser", paths: ["src/parser.ts"] });

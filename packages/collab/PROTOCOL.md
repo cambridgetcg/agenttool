@@ -692,7 +692,7 @@ a file's hash, the person's act id.
 For claiming work before you start it, and for making the task when there is none.
 
 Input: `task` or `title`, `paths`, `purpose`, `review` (`required` or `none`),
-`because`.
+`because`, `base`.
 
 ```collab-call
 collab_take {"task": "task#0b12de"}
@@ -702,6 +702,11 @@ With `title` it creates a task and claims it: an edit task whose completion wait
 a distinct reviewer when `paths` are given, else a coordination task you report done;
 `review` overrides that. With `task` it claims it, and when its lease has lapsed it
 recovers it, which needs `because`. `purpose` goes into a new task's description only.
+`base`, a full commit id of 40 to 64 hexadecimal characters, becomes a new task's
+`expected_base_sha`, as `collab_task_create` sets it, so its claim checks that your
+worktree's HEAD is that commit; a mismatch leaves the task created and open and says
+what to check out, and a malformed `base` is refused before anything is written. With
+`task` it is not used: the task keeps its own base.
 A path overlap names every holder, their purposes, and a ready `collab_note` to ask
 them; over paths you hold yourself, it says to finish or release that task. A lease is
 coordination, not ownership or a lock.

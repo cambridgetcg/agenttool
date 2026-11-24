@@ -475,6 +475,7 @@ export function buildCollabMcpServer(
         purpose: z.string().optional().describe("Why you take it, at most 200 characters; written into a new task's description only."),
         review: z.string().optional().describe("required | none: override whether a new task waits for review."),
         because: z.string().optional().describe("Why you recover a lapsed lease (at most 4,000 characters)."),
+        base: z.string().optional().describe("A new task's base: the full commit id (40 to 64 hex) the claim requires your worktree's HEAD to be."),
       },
     },
     async (input) => noteCall(() => takeVerb(noteContext(), input), input),
