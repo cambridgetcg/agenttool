@@ -715,8 +715,9 @@ check out; where no HEAD is observed (outside Git, or before a first commit) the
 remedy is the same call without `base`. With `task`, `base` is not used: the task keeps
 its own.
 
-The base is fixed for the task's life, and it is checked again on every claim, every
-recovery that takes the task over, and every handoff acceptance. It is not checked
+The base is fixed for the task's life, and it is checked again on every claim (a
+retake after `request_changes` included), every recovery that takes the task over, and
+every handoff acceptance. It is not checked
 while the task is held, so its holder's HEAD moves on as it commits. After that the
 task can be taken again, by that holder too, only from a session whose worktree is at
 the base. A take refused for that leaves the task as it was; its `next` is the same

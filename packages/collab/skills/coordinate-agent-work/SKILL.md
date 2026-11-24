@@ -100,7 +100,7 @@ Principles:
 - **`collab_take`** `{title, paths}` or `{task}`: claim before you edit; with `paths` a
   distinct session reviews it. A lapsed lease needs `because`. `base` (a full commit id)
   fixes a new task's base: your worktree's HEAD must be at it now, and again on every
-  later claim, recovery or handoff acceptance, so once you commit, the task is retaken
+  later claim (after `request_changes` too), recovery or handoff acceptance, so once you commit, the task is retaken
   only from a worktree at the base.
 - **`collab_done`** `{text}`: `finished` (with `why`, `evidence`, `limits`,
   `review_by`), `released`, `blocked` (with `because`), or `leave`, which releases what
