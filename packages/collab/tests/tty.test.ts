@@ -125,6 +125,10 @@ describe("terminal confirmation", () => {
       broken.pause = () => { pauses += 1; };
       expect(() => ttyPortForFd(7, broken).write("x")).toThrow("EIO");
       expect(pauses).toBe(0);
+      // A write that takes nothing and does not throw is bounded as well.
+      const silent: TtyFdCalls = { ...broken, writeSync: () => 0 };
+      expect(() => ttyPortForFd(7, silent, 100).write("x")).toThrow("accepted no bytes");
+      expect(pauses).toBe(5);
     });
   });
 });

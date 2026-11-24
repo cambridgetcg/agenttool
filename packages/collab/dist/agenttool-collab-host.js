@@ -276,6 +276,10 @@ var MIN_PROPOSAL_CONSULT_SECONDS = 10 * 60;
 var MAX_PROPOSAL_CONSULT_SECONDS = 7 * 24 * 60 * 60;
 var PERSON_ACT_PROTOCOL = "agenttool.collab-person-act/1";
 var PERSON_SET_ASIDE_PROTOCOL = "agenttool.collab-person-set-aside/1";
+var PERSON_ACT_BASIS_NOTE = "What a person act's basis proves: only user_verified_passkey carries a proof that can be re-verified without " + "this database (the assertion and the key's public key are journaled with the act), and it shows that a key " + "enrolled in this journal signed these bytes, not whose key it is: compare its fingerprint with the person's own. " + "controlling_terminal says the terminal path asserted a yes: it proves no terminal and no person, since a process " + "running as the same user can record one through the store or answer through a pseudo-terminal. " + "relayed_by_session is a session's account, and can only stop work.";
+function personActBasisNote(statuses) {
+  return statuses.some((status) => status.person.acts.length > 0 || (status.set_asides?.length ?? 0) > 0) ? { basis_note: PERSON_ACT_BASIS_NOTE } : {};
+}
 var DEFAULT_WAIT_EVENT_LIMIT = 10;
 var MAX_WAIT_EVENT_LIMIT = 50;
 var MAX_WAIT_PAGE_BYTES = 256 * 1024;
@@ -10678,7 +10682,7 @@ class CollabStore extends CollabStoreCore {
         });
       }
       scope = status.terms.extent;
-      basis = `person agreed by ${status.agreement.basis} to proposal_sha256 ${status.proposal_sha256} (act ${status.agreement.id})`;
+      basis = status.agreement.basis === "controlling_terminal" ? `agreement asserted by controlling_terminal to proposal_sha256 ${status.proposal_sha256} (act ${status.agreement.id}): ` + "the terminal path asserted a yes, which proves no terminal and no person" : `person agreed by ${status.agreement.basis} to proposal_sha256 ${status.proposal_sha256} (act ${status.agreement.id})`;
       personAct = actView(status.agreement);
     } else {
       scope = NOTE_NOTHING_AUTHORISED;
@@ -11451,19 +11455,24 @@ function ttyPortForFd(fd, calls = FD_CALLS, stallBudgetMs = WRITE_STALL_BUDGET_M
       let offset = 0;
       let stalled = 0;
       while (offset < bytes.length) {
-        let wrote;
+        let wrote = 0;
+        let refused = null;
         try {
           wrote = calls.writeSync(fd, bytes, offset, bytes.length - offset);
         } catch (error) {
-          if (!isEagain(error) || stalled >= stallBudgetMs)
+          if (!isEagain(error))
             throw error;
-          calls.pause(WRITE_RETRY_MS);
-          stalled += WRITE_RETRY_MS;
+          refused = error;
+        }
+        if (wrote > 0) {
+          offset += wrote;
+          stalled = 0;
           continue;
         }
-        if (wrote > 0)
-          stalled = 0;
-        offset += wrote;
+        if (stalled >= stallBudgetMs)
+          throw refused ?? new Error("the terminal accepted no bytes");
+        calls.pause(WRITE_RETRY_MS);
+        stalled += WRITE_RETRY_MS;
       }
     },
     readLine(maxBytes, deadline, now = Date.now) {
@@ -11683,6 +11692,7 @@ function openDeskStore(values, env, deps) {
 }
 function runVerb(store2, verb, values, deps, rule) {
   const done = (result) => ({ cancelled: false, result });
+  const actDone = (proposal) => done({ proposal, ...personActBasisNote([proposal]) });
   switch (verb) {
     case "workspaces":
       return done({ workspaces: store2.listWorkspaces() });
@@ -11694,21 +11704,27 @@ function runVerb(store2, verb, values, deps, rule) {
         return done({
           proposal,
           soft_spots: deskSoftSpotsFor(store2, values.workspace, [proposal]),
-          ...setAsideOptionsFor(store2, values.workspace, [proposal])
+          ...setAsideOptionsFor(store2, values.workspace, [proposal]),
+          ...personActBasisNote([proposal])
         });
       }
       const listed = store2.listProposalStatuses(values.workspace, { limit: parseInteger(values.limit, "limit") });
       return done({
         ...listed,
         soft_spots: deskSoftSpotsFor(store2, values.workspace, listed.proposals),
-        ...setAsideOptionsFor(store2, values.workspace, listed.proposals)
+        ...setAsideOptionsFor(store2, values.workspace, listed.proposals),
+        ...personActBasisNote(listed.proposals)
       });
     }
     case "inbox": {
       if (!values.workspace)
         return done({ summary: store2.personInboxSummary() });
       const inbox = store2.personInbox(values.workspace);
-      return done({ inbox, soft_spots: deskSoftSpotsFor(store2, values.workspace, inbox.awaiting_person) });
+      return done({
+        inbox,
+        soft_spots: deskSoftSpotsFor(store2, values.workspace, inbox.awaiting_person),
+        ...personActBasisNote(inbox.awaiting_person)
+      });
     }
     case "challenge": {
       const act = parseDeskAct(values);
@@ -11722,14 +11738,12 @@ function runVerb(store2, verb, values, deps, rule) {
     }
     case "set-aside": {
       if (values["passkey-assertion"] !== undefined) {
-        return done({
-          proposal: store2.recordSetAsideWithPasskey({
-            proposal_report_id: values.proposal,
-            challenge_report_id: values.challenge,
-            reason: values.reason,
-            assertion: readJsonInput(values["passkey-assertion"], deps)
-          })
-        });
+        return actDone(store2.recordSetAsideWithPasskey({
+          proposal_report_id: values.proposal,
+          challenge_report_id: values.challenge,
+          reason: values.reason,
+          assertion: readJsonInput(values["passkey-assertion"], deps)
+        }));
       }
       const challenge = store2.personSetAsideChallenge({
         proposal_report_id: values.proposal,
@@ -11747,30 +11761,26 @@ function runVerb(store2, verb, values, deps, rule) {
       }, { openTty: deps.openTty, now: deps.now });
       if (!confirmed)
         return { cancelled: true };
-      return done({
-        proposal: store2.recordSetAsideAtTerminal({
-          proposal_report_id: status.proposal.id,
-          proposal_sha256: challenge.proposal_sha256,
-          challenge_report_id: challenge.challenge_report_id,
-          challenge_sha256: challenge.challenge_sha256,
-          challenger_last_seen_at: challenge.challenger_last_seen_at,
-          reason: challenge.reason,
-          expected_ai_snapshot: challenge.ai_snapshot
-        })
-      });
+      return actDone(store2.recordSetAsideAtTerminal({
+        proposal_report_id: status.proposal.id,
+        proposal_sha256: challenge.proposal_sha256,
+        challenge_report_id: challenge.challenge_report_id,
+        challenge_sha256: challenge.challenge_sha256,
+        challenger_last_seen_at: challenge.challenger_last_seen_at,
+        reason: challenge.reason,
+        expected_ai_snapshot: challenge.ai_snapshot
+      }));
     }
     case "consent":
     case "reject": {
       const act = verb === "consent" ? "agree" : "reject";
       if (values["passkey-assertion"] !== undefined) {
-        return done({
-          proposal: store2.recordPersonActWithPasskey({
-            proposal_report_id: values.proposal,
-            act,
-            reason: values.reason,
-            assertion: readJsonInput(values["passkey-assertion"], deps)
-          })
-        });
+        return actDone(store2.recordPersonActWithPasskey({
+          proposal_report_id: values.proposal,
+          act,
+          reason: values.reason,
+          assertion: readJsonInput(values["passkey-assertion"], deps)
+        }));
       }
       const challenge = store2.personActChallenge({ proposal_report_id: values.proposal, act, reason: values.reason });
       const status = store2.proposalStatusById(values.proposal);
@@ -11785,15 +11795,13 @@ ${status.proposal_bytes}`;
       }, { openTty: deps.openTty, now: deps.now });
       if (!confirmed)
         return { cancelled: true };
-      return done({
-        proposal: store2.recordPersonActAtTerminal({
-          proposal_report_id: status.proposal.id,
-          proposal_sha256: status.proposal_sha256,
-          act,
-          reason: challenge.reason ?? undefined,
-          expected_ai_snapshot: challenge.ai_snapshot
-        })
-      });
+      return actDone(store2.recordPersonActAtTerminal({
+        proposal_report_id: status.proposal.id,
+        proposal_sha256: status.proposal_sha256,
+        act,
+        reason: challenge.reason ?? undefined,
+        expected_ai_snapshot: challenge.ai_snapshot
+      }));
     }
     case "say":
       return done({

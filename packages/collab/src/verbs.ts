@@ -36,6 +36,7 @@ import type { BallotTerms, ElectorateUnit } from "./ballot.js";
 import {
   CONSENT_RULE,
   CONSENT_RULE_V2,
+  personActBasisNote,
   type CollabReport,
   type ConsentRule,
   type ProposalSetAside,
@@ -2735,6 +2736,9 @@ export const DECISION_DOES_NOT_ESTABLISH = [
   "who or what model wrote it: a session's name and model are self-declared",
   "that the voices were independent: sessions of one model or one operator may err together, and a seat_ref is unverified",
   "that the work stayed inside the extent: collab records what was said, not what was done",
+  "that the person gave the act it rests on: basis controlling_terminal says only that the terminal path " +
+    "asserted a yes, and a process running as the same user can record one through the store or answer through a " +
+    "pseudo-terminal; only user_verified_passkey carries a proof that can be re-verified",
 ] as const;
 
 function retiredPosition(status: ProposalStatus): boolean {
@@ -3026,6 +3030,7 @@ export function proposalFacts(
     fields.replaced_by = { id: status.ai.obsoleted_by_report_id, handle: handleOf("proposal", status.ai.obsoleted_by_report_id) };
   }
   fields.for_the_person = forThePerson(ctx, status, data);
+  Object.assign(fields, personActBasisNote([status]));
   fields.status = status;
   return { fields, advice };
 }

@@ -2621,7 +2621,13 @@ export class CollabStore extends CollabStoreCore {
         );
       }
       scope = status.terms.extent;
-      basis = `person agreed by ${status.agreement.basis} to proposal_sha256 ${status.proposal_sha256} (act ${status.agreement.id})`;
+      // Says what the basis is: the terminal path's assertion, which the
+      // store does not check, so it proves no terminal and no person (PERSON_ACT_BASIS_NOTE). The
+      // stored basis value itself is unchanged.
+      basis = status.agreement.basis === "controlling_terminal"
+        ? `agreement asserted by controlling_terminal to proposal_sha256 ${status.proposal_sha256} (act ${status.agreement.id}): ` +
+          "the terminal path asserted a yes, which proves no terminal and no person"
+        : `person agreed by ${status.agreement.basis} to proposal_sha256 ${status.proposal_sha256} (act ${status.agreement.id})`;
       personAct = actView(status.agreement);
     } else {
       scope = NOTE_NOTHING_AUTHORISED;

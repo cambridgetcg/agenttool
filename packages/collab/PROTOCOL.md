@@ -828,7 +828,18 @@ terminal (`agenttool-collab-host person consent --proposal <id>`, recorded with 
 `controlling_terminal`) or with a passkey (`agenttool-collab-host person ceremony
 --proposal <id> --act agree`, basis `user_verified_passkey`). Both show the exact
 bytes, and both now show the soft spots below, outside those bytes, before the act. No
-MCP tool records an agreement. A session can only relay a rejection
+MCP tool records an agreement. The two bases do not prove the same thing:
+`user_verified_passkey` journals the assertion and the key's public key, so the act
+can be re-verified without this database (it shows that a key enrolled in this journal
+signed, not whose key it is); `controlling_terminal` is the terminal path's own
+assertion that a yes was read, and it proves no terminal and no person, because a
+process running as the same user can call the store's terminal method directly or
+answer the prompt through a pseudo-terminal. `collab_proposal_status`, `collab_inbox
+{about: <proposal>}` and the desk's `proposals`, `inbox --workspace` and act receipts
+say so in one more key, `basis_note`, when they show a person act or a set-aside, and a
+decide on a terminal agreement says it in its basis (`agreement asserted by
+controlling_terminal …`). The stored basis values are unchanged, and decisions already
+written keep the words they were written with. A session can only relay a rejection
 (`relay_rejection`, basis `relayed_by_session`), which stops work and can be answered
 by the person agreeing again on the same bytes. `may_proceed` is true while the
 person's latest act on these bytes is an agreement and the proposal has not been
@@ -841,7 +852,10 @@ journal and never from the sender's words (for a marked decision, the person's l
 act on its proposal before the decision); `agreement_current`, false when a later
 rejection came, with that act; every challenge with its status; voices with no
 recorded delivery; and `does_not_establish`: who or what model wrote it, that the
-voices were independent, that the work stayed inside the extent.
+voices were independent, that the work stayed inside the extent, and that the person
+gave the act it rests on (a `controlling_terminal` act can be recorded by any process
+running as the same user; only `user_verified_passkey` carries a proof that can be
+re-verified).
 
 **The soft spots, and how they are shown.** None changes a count; each is a question
 for a later rule (see Decisions).
@@ -1200,13 +1214,17 @@ voice.
 | done | This session reports the work finished; files it cited were hashed by the server when cited, and tests and urls are its own report. |
 | accept, request_changes | A session other than the reporter inspected that exact completion; its verdict covers what it checked. A distinct session is not an independent mind: a delegate may review its parent. |
 | propose | This voice put these exact bytes to the agents and the person. |
-| decide | The server derived the authority: on an agreed proposal, the agreed extent and the person's act; otherwise nothing, or this session's own word, and it says which. |
+| decide | The server derived the authority: on an agreed proposal, the agreed extent and the person's act, with what that act's basis proves; otherwise nothing, or this session's own word, and it says which. |
 | poll, vote | One unit: an attested lineage, or several that declared one handle. Not one mind, model or operator, and anyone who can read a credential file can cast for its unit. |
-| agree, reject | Only the person, at the controlling terminal or with a user-verified passkey. A relayed rejection says which session relayed it, and can only stop. |
-| set aside | Only the person, at the controlling terminal or with a user-verified passkey, on a consent/v2 proposal, while no session of the challenger's voice was live. It says the challenge no longer blocks, not that it was wrong. |
+| agree, reject | Recorded only by the person desk, by one of two routes that prove different things. `user_verified_passkey`: a key enrolled at this desk signed these exact act bytes, and the journaled assertion re-verifies without this database; it does not show who enrolled the key. `controlling_terminal`: the desk's terminal path asserted that a yes was read; it proves no terminal and no person, since a process running as the same user can call the store's terminal method directly or answer the prompt through a pseudo-terminal. A relayed rejection says which session relayed it, and can only stop. |
+| set aside | As agree: by the same two routes with the same limits, on a consent/v2 proposal, while no session of the challenger's voice was live. It says the challenge no longer blocks, not that it was wrong. |
 
 Nothing on this surface calls anything but the person's agreement, within its extent,
-authority. There is no resume by seat (see Decisions).
+authority, and the record says how far each basis shows that the person gave it. A
+process running as the same user can record a terminal act, and can enrol a key of its
+own and sign with it; what tells that apart is outside this journal: the key's
+fingerprint compared with the person's own. A journal head witnessed elsewhere shows
+later rewriting, not who acted. There is no resume by seat (see Decisions).
 
 ## Storage and compatibility
 

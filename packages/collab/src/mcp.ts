@@ -18,6 +18,7 @@ import {
   MAX_WAIT_EVENT_LIMIT,
   MAX_WAIT_MS,
   MAX_WAIT_RESPONSE_BYTES,
+  personActBasisNote,
   type EventCursor,
   type SessionHandle,
   type TaskStatus,
@@ -1426,9 +1427,12 @@ export function buildCollabMcpServer(
     },
     async ({ workspace_id, proposal_report_id, limit }) => call(() => {
       requireWorkspace(workspace_id);
-      return proposal_report_id
-        ? { proposal: store.proposalStatus(workspace_id, proposal_report_id) }
-        : store.listProposalStatuses(workspace_id, { limit });
+      if (proposal_report_id) {
+        const proposal = store.proposalStatus(workspace_id, proposal_report_id);
+        return { proposal, ...personActBasisNote([proposal]) };
+      }
+      const listed = store.listProposalStatuses(workspace_id, { limit });
+      return { ...listed, ...personActBasisNote(listed.proposals) };
     }),
   );
 

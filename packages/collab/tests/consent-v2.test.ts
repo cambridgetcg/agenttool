@@ -19,6 +19,7 @@ import { buildCollabMcpServer } from "../src/mcp.js";
 import { runPersonDeskCli, runPersonRemoteCli, type PersonDeskDeps } from "../src/person-desk.js";
 import { proposalBytes } from "../src/proposal.js";
 import {
+  PERSON_ACT_BASIS_NOTE,
   CONSENT_RULE,
   CONSENT_RULE_V2,
   type PasskeyAssertion,
@@ -522,6 +523,23 @@ describe("an agreement binds the set-asides it rests on", () => {
     expect(shown.challenge).toBe(sha256(shown.challenge_bytes).toString("base64url"));
     expect(shown.objection).toMatchObject({ id: challenge.id, body: challenge.body, from_actor: "challenger", author_basis: "self_declared" });
     expect(shown.challenger).toMatchObject({ voice_id: expect.any(String), session_ids: [expect.any(String)] });
+  });
+});
+
+describe("what a set-aside's basis proves", () => {
+  test("is said beside a status whose only person record is a set-aside, and in the act's receipt", () => {
+    const { proposal, challenge } = orphanedChallenge();
+    const id = proposal.proposal.id;
+    const view = () => desk(["proposals", "--workspace", proposal.proposal.workspace_id, "--proposal", id]).receipt;
+    expect(view()).not.toHaveProperty("basis_note");
+    setAsideAtTerminal(id, challenge.id);
+    const shown = view();
+    expect(shown.proposal.person.acts).toEqual([]);
+    expect(shown.proposal.set_asides[0].basis).toBe("controlling_terminal");
+    expect(shown.basis_note).toBe(PERSON_ACT_BASIS_NOTE);
+    expect(desk(["reject", "--proposal", id, "--reason", "Not now."], {
+      openTty: () => ({ write: () => {}, readLine: () => "yes", close: () => {} }),
+    }).receipt).toMatchObject({ status: "ok", basis_note: PERSON_ACT_BASIS_NOTE });
   });
 });
 

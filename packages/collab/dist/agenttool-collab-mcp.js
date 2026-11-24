@@ -28869,6 +28869,10 @@ var MIN_PROPOSAL_CONSULT_SECONDS = 10 * 60;
 var MAX_PROPOSAL_CONSULT_SECONDS = 7 * 24 * 60 * 60;
 var PERSON_ACT_PROTOCOL = "agenttool.collab-person-act/1";
 var PERSON_SET_ASIDE_PROTOCOL = "agenttool.collab-person-set-aside/1";
+var PERSON_ACT_BASIS_NOTE = "What a person act's basis proves: only user_verified_passkey carries a proof that can be re-verified without " + "this database (the assertion and the key's public key are journaled with the act), and it shows that a key " + "enrolled in this journal signed these bytes, not whose key it is: compare its fingerprint with the person's own. " + "controlling_terminal says the terminal path asserted a yes: it proves no terminal and no person, since a process " + "running as the same user can record one through the store or answer through a pseudo-terminal. " + "relayed_by_session is a session's account, and can only stop work.";
+function personActBasisNote(statuses) {
+  return statuses.some((status) => status.person.acts.length > 0 || (status.set_asides?.length ?? 0) > 0) ? { basis_note: PERSON_ACT_BASIS_NOTE } : {};
+}
 var DEFAULT_WAIT_EVENT_LIMIT = 10;
 var MAX_WAIT_EVENT_LIMIT = 50;
 var MAX_WAIT_MS = 30000;
@@ -40542,7 +40546,7 @@ class CollabStore extends CollabStoreCore {
         });
       }
       scope = status.terms.extent;
-      basis = `person agreed by ${status.agreement.basis} to proposal_sha256 ${status.proposal_sha256} (act ${status.agreement.id})`;
+      basis = status.agreement.basis === "controlling_terminal" ? `agreement asserted by controlling_terminal to proposal_sha256 ${status.proposal_sha256} (act ${status.agreement.id}): ` + "the terminal path asserted a yes, which proves no terminal and no person" : `person agreed by ${status.agreement.basis} to proposal_sha256 ${status.proposal_sha256} (act ${status.agreement.id})`;
       personAct = actView(status.agreement);
     } else {
       scope = NOTE_NOTHING_AUTHORISED;
@@ -42968,7 +42972,8 @@ var ANNOTATIONS_NOTE = annotationsNote(CONSENT_RULE);
 var DECISION_DOES_NOT_ESTABLISH = [
   "who or what model wrote it: a session's name and model are self-declared",
   "that the voices were independent: sessions of one model or one operator may err together, and a seat_ref is unverified",
-  "that the work stayed inside the extent: collab records what was said, not what was done"
+  "that the work stayed inside the extent: collab records what was said, not what was done",
+  "that the person gave the act it rests on: basis controlling_terminal says only that the terminal path " + "asserted a yes, and a process running as the same user can record one through the store or answer through a " + "pseudo-terminal; only user_verified_passkey carries a proof that can be re-verified"
 ];
 function retiredPosition(status) {
   return status.ai.position === "withdrawn" || status.ai.position === "superseded";
@@ -43159,6 +43164,7 @@ function proposalFacts(ctx, data) {
     fields.replaced_by = { id: status.ai.obsoleted_by_report_id, handle: handleOf("proposal", status.ai.obsoleted_by_report_id) };
   }
   fields.for_the_person = forThePerson(ctx, status, data);
+  Object.assign(fields, personActBasisNote([status]));
   fields.status = status;
   return { fields, advice };
 }
@@ -47531,7 +47537,12 @@ Legacy session tools: ${legacyInstructions}`
     }
   }, async ({ workspace_id, proposal_report_id, limit }) => call(() => {
     requireWorkspace(workspace_id);
-    return proposal_report_id ? { proposal: store2.proposalStatus(workspace_id, proposal_report_id) } : store2.listProposalStatuses(workspace_id, { limit });
+    if (proposal_report_id) {
+      const proposal = store2.proposalStatus(workspace_id, proposal_report_id);
+      return { proposal, ...personActBasisNote([proposal]) };
+    }
+    const listed = store2.listProposalStatuses(workspace_id, { limit });
+    return { ...listed, ...personActBasisNote(listed.proposals) };
   }));
   server.registerTool("collab_proposal_relay_rejection", {
     title: "Relay a person's rejection of a proposal",

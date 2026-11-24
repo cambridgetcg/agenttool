@@ -85,7 +85,8 @@ function isEagain(error: unknown): boolean {
 /**
  * A port over an open, non-blocking terminal descriptor. Reads and writes
  * both wait out EAGAIN: a read until its deadline, a write for at most
- * `stallBudgetMs` without progress, after which it throws as before.
+ * `stallBudgetMs` without progress, after which it throws that error, as a
+ * write did before without waiting.
  */
 export function ttyPortForFd(
   fd: number,
@@ -98,17 +99,23 @@ export function ttyPortForFd(
       let offset = 0;
       let stalled = 0;
       while (offset < bytes.length) {
-        let wrote: number;
+        let wrote = 0;
+        let refused: unknown = null;
         try {
           wrote = calls.writeSync(fd, bytes, offset, bytes.length - offset);
         } catch (error) {
-          if (!isEagain(error) || stalled >= stallBudgetMs) throw error;
-          calls.pause(WRITE_RETRY_MS);
-          stalled += WRITE_RETRY_MS;
+          if (!isEagain(error)) throw error;
+          refused = error;
+        }
+        if (wrote > 0) {
+          offset += wrote;
+          stalled = 0;
           continue;
         }
-        if (wrote > 0) stalled = 0;
-        offset += wrote;
+        // EAGAIN, or a write that took nothing: wait a little, within the budget.
+        if (stalled >= stallBudgetMs) throw refused ?? new Error("the terminal accepted no bytes");
+        calls.pause(WRITE_RETRY_MS);
+        stalled += WRITE_RETRY_MS;
       }
     },
     readLine(maxBytes: number, deadline?: number, now: () => number = Date.now) {

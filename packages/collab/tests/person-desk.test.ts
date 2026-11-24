@@ -8,7 +8,7 @@ import { runCollabHostCli } from "../src/host.js";
 import { personActChallenge, verifyPasskeyAssertion } from "../src/passkey.js";
 import { runCeremonyCli } from "../src/ceremony.js";
 import { runPersonDeskCli, runPersonRemoteCli, type PersonDeskDeps } from "../src/person-desk.js";
-import type { PasskeyAssertion, PersonPasskey, SessionHandle } from "../src/protocol.js";
+import { PERSON_ACT_BASIS_NOTE, type PasskeyAssertion, type PersonPasskey, type SessionHandle } from "../src/protocol.js";
 import { CollabStore } from "../src/store-notes.js";
 import type { TtyPort } from "../src/tty.js";
 import { wallTimeWithUtc } from "../src/wall-time.js";
@@ -433,6 +433,22 @@ describe("the person desk and inbox", () => {
 
     desk(["consent", "--proposal", proposal.proposal.id], { openTty: terminal("yes").openTty });
     expect(desk(["inbox", "--workspace", workspace]).receipt.inbox.awaiting_person).toEqual([]);
+  });
+
+  test("the desk's proposal reads say what a person act's basis proves, once one is shown", () => {
+    const { proposal } = consentedProposal();
+    const workspace = proposal.proposal.workspace_id;
+    const id = proposal.proposal.id;
+    expect(desk(["proposals", "--workspace", workspace, "--proposal", id]).receipt).not.toHaveProperty("basis_note");
+    expect(desk(["proposals", "--workspace", workspace]).receipt).not.toHaveProperty("basis_note");
+    desk(["consent", "--proposal", id], { openTty: terminal("yes").openTty });
+    const one = desk(["proposals", "--workspace", workspace, "--proposal", id]).receipt;
+    expect(one.proposal.agreement.basis).toBe("controlling_terminal");
+    expect(one.basis_note).toBe(PERSON_ACT_BASIS_NOTE);
+    expect(one.soft_spots).toBeDefined();
+    expect(desk(["proposals", "--workspace", workspace]).receipt.basis_note).toBe(PERSON_ACT_BASIS_NOTE);
+    // Nothing awaits the person now, so the inbox shows no act to qualify.
+    expect(desk(["inbox", "--workspace", workspace]).receipt).not.toHaveProperty("basis_note");
   });
 
   test("the host CLI routes person verbs and refuses stray options", () => {

@@ -293,8 +293,10 @@ challenge again.
 
 **What agreement authorises.** Proceed only while
 `mcp_agenttool_collab_proposal_status` shows `may_proceed: true`. That means the
-person agreed to these exact bytes through the person desk, and the proposal is
-still on the table. No MCP tool records a person's act, and nobody relays a yes.
+journal holds an agreement recorded as the person's on these exact bytes, and the
+proposal is still on the table. `basis_note` says what its basis proves: a terminal act
+proves no terminal and no person; only a passkey act carries a proof that can
+be re-verified. No MCP tool records a person's act, and nobody relays a yes.
 Relay only a rejection the person actually gave.
 
 - An agreement covers the `extent` and nothing beyond it.
