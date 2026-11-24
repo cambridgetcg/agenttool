@@ -841,11 +841,14 @@ can be re-verified without this database (it shows that a key enrolled in this j
 signed, not whose key it is); `controlling_terminal` is the terminal path's own
 assertion that a yes was read, and it proves no terminal and no person, because a
 process running as the same user can call the store's terminal method directly or
-answer the prompt through a pseudo-terminal. One more key, `basis_note`, says so
-wherever a person act or a set-aside is shown: in `collab_proposal_status`, in
+answer the prompt through a pseudo-terminal. One more key, `basis_note`, says so in
+these views when they show a person act or a set-aside: `collab_proposal_status`,
 `collab_inbox` and `collab_arrive` (a listed item, something waiting on you, or the
-proposal, set-aside challenge or decision asked about), in a decide's result, and in the
-desk's `proposals`, `inbox --workspace` and act receipts. Those views say an agreement
+proposal, set-aside challenge or decision asked about), a decide's result, and the
+desk's `proposals`, `inbox --workspace` and terminal act receipts. Other results can carry
+an act without it: `collab_proposal_relay_rejection`'s returned status and the desk's
+`withdraw` receipt show the basis alone, and a ceremony act receipt and `collab_arrive`'s
+`open.proposals` show neither. Those views say an agreement
 "was recorded as the person's (basis …)", never that the person agreed, and a decide on
 a terminal agreement says it in its basis (`agreement asserted by controlling_terminal
 …`). The stored basis values are unchanged, and decisions already written keep the words
