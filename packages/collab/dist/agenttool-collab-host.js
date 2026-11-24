@@ -11483,6 +11483,10 @@ function isEagain(error) {
   const code = error?.code;
   return code === "EAGAIN" || code === "EWOULDBLOCK";
 }
+
+class TtyStalledError extends Error {
+  name = "TtyStalledError";
+}
 function ttyPortForFd(fd, calls = FD_CALLS, stallBudgetMs = WRITE_STALL_BUDGET_MS) {
   return {
     write(text) {
@@ -11491,7 +11495,7 @@ function ttyPortForFd(fd, calls = FD_CALLS, stallBudgetMs = WRITE_STALL_BUDGET_M
       let stalled = 0;
       while (offset < bytes.length) {
         let wrote = 0;
-        let refused = null;
+        let refused;
         try {
           wrote = calls.writeSync(fd, bytes, offset, bytes.length - offset);
         } catch (error) {
@@ -11505,7 +11509,7 @@ function ttyPortForFd(fd, calls = FD_CALLS, stallBudgetMs = WRITE_STALL_BUDGET_M
           continue;
         }
         if (stalled >= stallBudgetMs)
-          throw refused ?? new Error("the terminal accepted no bytes");
+          throw new TtyStalledError("the terminal accepted no bytes", { cause: refused });
         calls.pause(WRITE_RETRY_MS);
         stalled += WRITE_RETRY_MS;
       }
@@ -11593,6 +11597,10 @@ function confirmOnTty(request, options = {}) {
 ` : `cancelled; nothing was written
 `);
     return confirmed;
+  } catch (error) {
+    if (!(error instanceof TtyStalledError))
+      throw error;
+    throw new CollabError("tty_unavailable", "The controlling terminal (/dev/tty) stopped taking output (paused with ^S, or not being read), so nothing was written");
   } finally {
     port.close();
   }

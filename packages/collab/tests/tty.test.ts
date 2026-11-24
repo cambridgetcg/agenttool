@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { CollabError } from "../src/errors.js";
-import { confirmOnTty, terminalRendering, ttyPortForFd, WRITE_STALL_BUDGET_MS, type TtyFdCalls, type TtyPort } from "../src/tty.js";
+import { confirmOnTty, terminalRendering, TtyStalledError, ttyPortForFd, WRITE_STALL_BUDGET_MS, type TtyFdCalls, type TtyPort } from "../src/tty.js";
 
 function port(answer: string | null, written: string[] = []): TtyPort {
   return { write: (text) => { written.push(text); }, readLine: () => answer, close: () => {} };
@@ -91,7 +91,7 @@ describe("terminal confirmation", () => {
       expect(fd.received()).toEndWith("confirmed\n");
     });
 
-    test("gives up with the EAGAIN error once the terminal takes nothing for the whole budget", () => {
+    test("gives up as stalled once the terminal takes nothing for the whole budget", () => {
       const fd = stubbedFd(Array.from({ length: 10_000 }, () => "eagain" as const));
       const port = ttyPortForFd(7, fd.calls, 100);
       let thrown: unknown = null;
@@ -100,12 +100,44 @@ describe("terminal confirmation", () => {
       } catch (error) {
         thrown = error;
       }
-      expect((thrown as NodeJS.ErrnoException | null)?.code).toBe("EAGAIN");
+      expect(thrown).toBeInstanceOf(TtyStalledError);
+      expect(((thrown as Error).cause as NodeJS.ErrnoException).code).toBe("EAGAIN");
       // Bounded: about budget / retry interval waits, never an endless loop.
       const waited = fd.pauses.reduce((total, ms) => total + ms, 0);
       expect(waited).toBeGreaterThanOrEqual(100);
       expect(waited).toBeLessThanOrEqual(150);
       expect(WRITE_STALL_BUDGET_MS).toBeLessThanOrEqual(60_000);
+    });
+
+    test("a confirmation on a terminal that stops taking output is tty_unavailable and says nothing was written", () => {
+      const asked = (calls: TtyFdCalls): CollabError => {
+        try {
+          confirmOnTty(request, { openTty: () => ({ ...ttyPortForFd(7, calls, 100), readLine: () => "yes" }) });
+        } catch (error) {
+          return error as CollabError;
+        }
+        throw new Error("the confirmation did not refuse");
+      };
+      // Never takes the prompt at all.
+      const stuck = stubbedFd(Array.from({ length: 10_000 }, () => "eagain" as const));
+      // Takes the prompt, reads a yes, then stalls on the closing "confirmed" line.
+      const late = stubbedFd(["ok", ...Array.from({ length: 10_000 }, () => "eagain" as const)], 1_000_000);
+      for (const fd of [stuck, late]) {
+        const error = asked(fd.calls);
+        expect(error).toBeInstanceOf(CollabError);
+        expect(error.code).toBe("tty_unavailable");
+        expect(error.message).toContain("nothing was written");
+        expect(fd.closed()).toBe(1);
+      }
+      expect(late.received()).toContain("exact bytes");
+      // Any other failure is not dressed up as a missing terminal.
+      const broken: TtyFdCalls = {
+        ...stubbedFd([]).calls,
+        writeSync() {
+          throw Object.assign(new Error("EIO: i/o error, write"), { code: "EIO" });
+        },
+      };
+      expect((asked(broken) as unknown as NodeJS.ErrnoException).code).toBe("EIO");
     });
 
     test("progress restarts the budget, and other write errors are not retried", () => {

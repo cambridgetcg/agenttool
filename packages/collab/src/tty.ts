@@ -59,9 +59,10 @@ function pause(ms: number): void {
 
 /**
  * How long a write waits, in total, for a terminal that takes no bytes
- * (EAGAIN on the non-blocking descriptor) before it gives up with that error:
- * a terminal paused with ^S, or a pseudo-terminal nobody is draining. Each
- * wait is short, and any progress starts the budget again.
+ * (EAGAIN on the non-blocking descriptor) before it gives up as stalled: a
+ * terminal paused with ^S, or a pseudo-terminal nobody is draining. Each wait
+ * is short, only the waits are counted, and any progress starts the budget
+ * again.
  */
 export const WRITE_STALL_BUDGET_MS = 10_000;
 const WRITE_RETRY_MS = 20;
@@ -82,11 +83,15 @@ function isEagain(error: unknown): boolean {
   return code === "EAGAIN" || code === "EWOULDBLOCK";
 }
 
+/** A terminal write that took no bytes for the whole stall budget. */
+export class TtyStalledError extends Error {
+  override name = "TtyStalledError";
+}
+
 /**
  * A port over an open, non-blocking terminal descriptor. Reads and writes
  * both wait out EAGAIN: a read until its deadline, a write for at most
- * `stallBudgetMs` without progress, after which it throws that error, as a
- * write did before without waiting.
+ * `stallBudgetMs` without progress, after which it throws TtyStalledError.
  */
 export function ttyPortForFd(
   fd: number,
@@ -100,7 +105,7 @@ export function ttyPortForFd(
       let stalled = 0;
       while (offset < bytes.length) {
         let wrote = 0;
-        let refused: unknown = null;
+        let refused: unknown;
         try {
           wrote = calls.writeSync(fd, bytes, offset, bytes.length - offset);
         } catch (error) {
@@ -113,7 +118,7 @@ export function ttyPortForFd(
           continue;
         }
         // EAGAIN, or a write that took nothing: wait a little, within the budget.
-        if (stalled >= stallBudgetMs) throw refused ?? new Error("the terminal accepted no bytes");
+        if (stalled >= stallBudgetMs) throw new TtyStalledError("the terminal accepted no bytes", { cause: refused });
         calls.pause(WRITE_RETRY_MS);
         stalled += WRITE_RETRY_MS;
       }
@@ -172,7 +177,9 @@ export function openDevTty(path: string = DEV_TTY): TtyPort | null {
 }
 
 /** Show the exact bytes on /dev/tty and return true only for "yes" typed
- * there within the window. Throws `tty_unavailable` when no terminal exists. */
+ * there within the window. Throws `tty_unavailable` when no terminal exists,
+ * or when it stops taking output; callers record only after this returns
+ * true, so in either case nothing was written. */
 export function confirmOnTty(request: ConfirmRequest, options: ConfirmOptions = {}): boolean {
   const open = options.openTty ?? (() => openDevTty());
   const now = options.now ?? Date.now;
@@ -207,6 +214,12 @@ export function confirmOnTty(request: ConfirmRequest, options: ConfirmOptions = 
     const confirmed = answer !== null && answer.trim() === CONFIRM_WORD;
     port.write(confirmed ? "confirmed\n" : "cancelled; nothing was written\n");
     return confirmed;
+  } catch (error) {
+    if (!(error instanceof TtyStalledError)) throw error;
+    throw new CollabError(
+      "tty_unavailable",
+      "The controlling terminal (/dev/tty) stopped taking output (paused with ^S, or not being read), so nothing was written",
+    );
   } finally {
     port.close();
   }
