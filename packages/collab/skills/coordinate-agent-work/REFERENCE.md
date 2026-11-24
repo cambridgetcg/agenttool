@@ -505,8 +505,8 @@ process's next call on the slot that authenticates the session
 act again, carries `slot_freed: true`: the slot is free, and its remedy names
 the call that starts a new session there without restarting the server. Until
 such a call `collab_session_start` is still refused with
-`session_already_bound`. A freed slot writes nothing until a new session
-starts on it (`session_not_bound`, with the same remedy): a retry that names
+`session_already_bound`. A freed slot writes no coordination records
+until a new session starts on it (`session_not_bound`, with the same remedy): a retry that names
 `actor` is not recorded in legacy mode.
 
 Verify that every participant opened the intended workspace and shared

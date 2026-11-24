@@ -414,7 +414,8 @@ other error frees a slot.
 A freed slot fails closed until a new session starts on it: calls that would
 write, or that need a session, are refused with `session_not_bound` and the
 same remedy (the note verbs with `not_arrived`). A retry that names `actor` is
-not recorded in legacy mode, as it would be after `collab_session_end`. Reads
+not recorded in legacy mode, unlike after `collab_session_end`, which leaves legacy
+mode open. Reads
 that use no session and the presence tools still answer on the default slot.
 
 The host-side `agenttool-collab-host` command ends a session whose process is
