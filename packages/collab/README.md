@@ -401,12 +401,21 @@ stays available while cursor recovery is required.
 
 A session ended outside the MCP process that holds it (by the host command
 below, say), or resumed by another process, leaves that process's slot holding
-a credential that can no longer act. Its next call is refused with
-`session_auth_failed`; when the journal confirms the session is ended or its
-generation moved on, the refusal also frees the slot (`slot_freed: true`) and its
-remedy says a new session can be started there, so `collab_session_start` or
-`collab_arrive` works again without restarting the MCP server. No other error
-frees a slot.
+a credential that can no longer act. Its next call that authenticates the
+session, such as `collab_arrive`, `collab_next` or `collab_session_end`, is
+refused with `session_auth_failed`; when the journal confirms the session is
+ended or its generation moved on, that refusal also frees the slot
+(`slot_freed: true`), and its remedy names the call that starts a new session
+there, without restarting the MCP server. Until such a call,
+`collab_session_start` itself stays refused with `session_already_bound` (its
+remedy says so), and reads that use no session succeed and free nothing. No
+other error frees a slot.
+
+A freed slot fails closed until a new session starts on it: calls that would
+write, or that need a session, are refused with `session_not_bound` and the
+same remedy (the note verbs with `not_arrived`). A retry that names `actor` is
+not recorded in legacy mode, as it would be after `collab_session_end`. Reads
+that use no session and the presence tools still answer on the default slot.
 
 The host-side `agenttool-collab-host` command ends a session whose process is
 gone:

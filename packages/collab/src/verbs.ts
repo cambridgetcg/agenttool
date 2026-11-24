@@ -512,7 +512,9 @@ const SAY_BY_CODE: Record<string, string> = {
   cursor_reset_required:
     "The host must reconcile this session's cursor before it can act again.",
   session_auth_failed:
-    "This session's credentials no longer match the journal (it was ended, or another process resumed it). Arrive again from a new MCP process, or ask the host.",
+    "This session's credentials no longer match the journal (it was ended, or another process resumed it). " +
+    "Call collab_arrive on this slot: if the journal confirms the session is over here, that call's refusal frees the slot " +
+    "(slot_freed), and the next collab_arrive starts a new session. If it frees nothing, ask the host.",
   ambiguous_handle: "Use a longer handle or the full id; the candidates are listed.",
   ambiguous_session: "Use the session id; the candidates are listed.",
   too_many_waits: "Wait for a running wait to finish, or call again with wait_seconds: 0.",

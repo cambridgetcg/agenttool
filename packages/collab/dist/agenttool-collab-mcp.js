@@ -41368,7 +41368,7 @@ function noteSuccess(payload) {
 var SAY_BY_CODE = {
   cursor_recovery_required: "The host must reset this session's cursor (collab_cursor_reset, on the full tool profile) before it can act again.",
   cursor_reset_required: "The host must reconcile this session's cursor before it can act again.",
-  session_auth_failed: "This session's credentials no longer match the journal (it was ended, or another process resumed it). Arrive again from a new MCP process, or ask the host.",
+  session_auth_failed: "This session's credentials no longer match the journal (it was ended, or another process resumed it). " + "Call collab_arrive on this slot: if the journal confirms the session is over here, that call's refusal frees the slot " + "(slot_freed), and the next collab_arrive starts a new session. If it frees nothing, ask the host.",
   ambiguous_handle: "Use a longer handle or the full id; the candidates are listed.",
   ambiguous_session: "Use the session id; the candidates are listed.",
   too_many_waits: "Wait for a running wait to finish, or call again with wait_seconds: 0.",
@@ -46795,6 +46795,13 @@ var localDestructiveMutation = {
   openWorldHint: false
 };
 var WAITS_PER_ENDPOINT = 8;
+var STARTS_SESSION = new Set(["collab_session_start", "collab_arrive"]);
+var PRESENCE_PLANE = new Set([
+  "collab_session_join",
+  "collab_session_heartbeat",
+  "collab_session_leave"
+]);
+var ALREADY_BOUND_REMEDY = "If that session was ended or resumed outside this process, call collab_arrive or collab_next on this slot: " + "its session_auth_failed refusal frees the slot, and a new session can then start.";
 function buildCollabMcpServer(store2, given = {}) {
   const slots = new Map([["", { key: "", binding: given.resumed_session ?? null }]]);
   for (const [key2, binding] of Object.entries(given.resumed_sessions ?? {})) {
@@ -46816,7 +46823,12 @@ function buildCollabMcpServer(store2, given = {}) {
       return requestSlot.getStore().binding;
     },
     set binding(value) {
-      requestSlot.getStore().binding = value;
+      const slot = requestSlot.getStore();
+      slot.binding = value;
+      if (value) {
+        slot.left = null;
+        slot.freed = null;
+      }
     }
   };
   const environment = options.environment ?? process.env;
@@ -46851,8 +46863,12 @@ Legacy session tools: ${legacyInstructions}`
       if (isNoteVerb(name) && name !== "collab_arrive" && (!slot || !slot.binding) && !(name === "collab_done" && slot?.left)) {
         return noteFailure(notArrived(key2, slots.get("")?.binding ?? null));
       }
-      if (key2 && (!slot || !slot.binding) && name !== "collab_session_start" && name !== "collab_arrive" && !(name === "collab_done" && slot?.left)) {
-        return failure(new CollabError("session_not_bound", "The selected child binding is not bound"));
+      if (!slot?.binding && !STARTS_SESSION.has(name) && !(name === "collab_done" && slot?.left)) {
+        const writes = config2.annotations?.readOnlyHint !== true && !PRESENCE_PLANE.has(name);
+        if (slot?.freed && (key2 || writes))
+          return failure(slotFreed(slot, slot.freed));
+        if (key2)
+          return failure(new CollabError("session_not_bound", "The selected child binding is not bound"));
       }
       if (!slot) {
         slot = { key: key2, binding: null };
@@ -46863,36 +46879,54 @@ Legacy session tools: ${legacyInstructions}`
       return bound ? freeEndedSlot(slot, bound, result, isNoteVerb(name)) : result;
     })(), () => store2.observedAt()));
   };
+  const freedFields = (slot, freed, note) => {
+    const what = freed.state === "ended" ? "was ended outside this process" : "was resumed by another process";
+    let start = note ? "collab_arrive" : "collab_session_start";
+    if (slot.key) {
+      const held = [...slots.values()].flatMap((other) => other.binding?.handle.session ?? []);
+      const parent = held.find((session) => session.id === freed.parent_session_id) ?? slots.get("")?.binding?.handle.session;
+      start += note ? ` with purpose, binding_key ${slot.key} and parent ${parent?.id ?? "(a session this MCP process holds: arrive on the default slot first)"}` : ` with root_path, binding_key ${slot.key}, parent_session_id ${parent?.id ?? "(the session it descends from)"} and its own actor`;
+    }
+    const say = `Session ${freed.session_id} ${what}, so this slot no longer holds it: the slot is free, and ${start} ` + "starts a new session on it. Until then this slot writes nothing: it does not fall back to legacy actor mode.";
+    return {
+      slot_freed: true,
+      bound_session: { id: freed.session_id, state: freed.state },
+      remedy: note ? { say } : say
+    };
+  };
+  const slotFreed = (slot, freed) => new CollabError("session_not_bound", "This slot holds no session: its last one ended or was resumed outside this process", freedFields(slot, freed, false));
   const freeEndedSlot = (slot, bound, result, note) => {
-    if (!isRecord(result) || result.isError !== true || slot.binding !== bound)
+    if (!isRecord(result) || result.isError !== true)
       return result;
     const payload = result.structuredContent;
     if (!isRecord(payload) || (note ? payload.code : payload.error) !== "session_auth_failed")
       return result;
     const credential = bound.handle.credential;
-    let current;
-    try {
-      current = store2.getCoordinationSession(credential.session_id);
-    } catch {
-      return result;
+    if (slot.binding === bound) {
+      let current;
+      try {
+        current = store2.getCoordinationSession(credential.session_id);
+      } catch {
+        return result;
+      }
+      if (!current)
+        return result;
+      const ended = current.status === "ended";
+      if (!ended && current.generation === credential.generation)
+        return result;
+      slot.binding = null;
+      slot.left = null;
+      slot.freed = {
+        session_id: credential.session_id,
+        state: ended ? "ended" : "resumed_elsewhere",
+        parent_session_id: bound.handle.session.parent_session_id
+      };
+      if (ended)
+        options.host_binding?.forget(credential.session_id);
     }
-    if (!current)
+    if (slot.freed?.session_id !== credential.session_id)
       return result;
-    const ended = current.status === "ended";
-    if (!ended && current.generation === credential.generation)
-      return result;
-    slot.binding = null;
-    if (ended)
-      options.host_binding?.forget(credential.session_id);
-    const keyed = slot.key ? ` with binding_key ${slot.key}` : "";
-    const what = ended ? `Session ${credential.session_id} was ended outside this process` : `Session ${credential.session_id} was resumed by another process`;
-    const say = note ? `${what}, so this slot no longer holds it: the slot is free, and collab_arrive${keyed} starts a new session on it.` : `${what}, so this slot no longer holds it: the slot is free, and collab_session_start${keyed} starts a new session on it.`;
-    const freed = {
-      ...payload,
-      slot_freed: true,
-      bound_session: { id: credential.session_id, state: ended ? "ended" : "resumed_elsewhere" },
-      remedy: note ? { say } : say
-    };
+    const freed = { ...payload, ...freedFields(slot, slot.freed, note) };
     return {
       ...result,
       structuredContent: freed,
@@ -46914,6 +46948,9 @@ Legacy session tools: ${legacyInstructions}`
   const boundCredential = (allowCursorRecovery = false) => {
     const binding = state.binding;
     if (!binding) {
+      const slot = requestSlot.getStore();
+      if (slot.freed)
+        throw slotFreed(slot, slot.freed);
       throw new CollabError("session_not_bound", "Start a credential-bound session first or provide legacy actor mode explicitly");
     }
     if (binding.handle.cursor_recovery && !allowCursorRecovery) {
@@ -46951,7 +46988,6 @@ Legacy session tools: ${legacyInstructions}`
     binding: () => state.binding,
     bind: (binding) => {
       state.binding = binding;
-      requestSlot.getStore().left = null;
       options.host_binding?.record(binding.handle.session.id, binding.credential_file);
     },
     unbind: (left) => {
@@ -47146,7 +47182,10 @@ Legacy session tools: ${legacyInstructions}`
     }
   }, async (input) => call(() => {
     if (state.binding) {
-      throw new CollabError("session_already_bound", "This MCP process already has a bound session", { session_id: state.binding.handle.session.id });
+      throw new CollabError("session_already_bound", "This MCP process already has a bound session", {
+        session_id: state.binding.handle.session.id,
+        remedy: ALREADY_BOUND_REMEDY
+      });
     }
     if (requestSlot.getStore().key && !input.parent_session_id) {
       throw new CollabError("parent_session_required", "A named child binding requires parent_session_id");
@@ -47239,7 +47278,10 @@ Legacy session tools: ${legacyInstructions}`
     }
   }, async (input) => call(() => {
     if (state.binding) {
-      throw new CollabError("session_already_bound", "A bound MCP process cannot open or register another workspace", { session_id: state.binding.handle.session.id });
+      throw new CollabError("session_already_bound", "A bound MCP process cannot open or register another workspace", {
+        session_id: state.binding.handle.session.id,
+        remedy: ALREADY_BOUND_REMEDY
+      });
     }
     return { workspace: store2.openWorkspace(input) };
   }));

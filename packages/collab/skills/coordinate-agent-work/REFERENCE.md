@@ -496,10 +496,15 @@ for it through `AGENTOOL_COLLAB_SESSION_FILE` rather than start a new one per
 round; in a resumed process do not call `collab_session_start` (it is refused
 with `session_already_bound`). A one-off run ends its session before it exits.
 When a session is ended or resumed outside the MCP process holding it, that
-process's next call on the slot is refused with `session_auth_failed`, and,
-once the journal confirms the credential can never act again, carries
-`slot_freed: true`: the slot is free, and a new session can be started on it
-without restarting the server.
+process's next call on the slot that authenticates the session
+(`collab_arrive`, `collab_next` or `collab_session_end`, say) is refused with
+`session_auth_failed`, and, once the journal confirms the credential can never
+act again, carries `slot_freed: true`: the slot is free, and its remedy names
+the call that starts a new session there without restarting the server. Until
+such a call `collab_session_start` is still refused with
+`session_already_bound`. A freed slot writes nothing until a new session
+starts on it (`session_not_bound`, with the same remedy): a retry that names
+`actor` is not recorded in legacy mode.
 
 Verify that every participant opened the intended workspace and shared
 database. Expect linked Git worktrees to share a repository workspace while
