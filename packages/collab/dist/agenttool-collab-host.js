@@ -6613,6 +6613,14 @@ class CollabStoreCore {
       return row.from_session_id === sessionId;
     return JSON.parse(row.voices_json).some((voice) => voice.voice_id !== row.author_voice_id && voice.live_session_ids.includes(sessionId));
   }
+  decidedOnProposalBefore(workspaceId, proposalReportId, sessionId, beforeSequence) {
+    return this.db.query(`
+      SELECT 1 FROM reports r, json_each(r.evidence_refs_json) ref
+      WHERE r.workspace_id = ? AND r.kind = 'decision' AND r.from_session_id = ?
+        AND r.event_sequence < ? AND ref.value = ?
+      LIMIT 1
+    `).get(workspaceId, sessionId, beforeSequence, `report:${proposalReportId}`) !== null;
+  }
   setAsideAddressesChallenger(challenger, sessionId) {
     if (challenger === null || typeof challenger !== "object")
       return false;
@@ -6666,8 +6674,9 @@ class CollabStoreCore {
         return voices.some((voice) => field(voice, "voice_id") !== payload.author_voice_id && Array.isArray(field(voice, "live_session_ids")) && field(voice, "live_session_ids").includes(sessionId));
       }
       case "proposal.agreed":
-      case "proposal.rejected":
         return this.proposalAddressesSession(event.entity_id, sessionId);
+      case "proposal.rejected":
+        return this.proposalAddressesSession(event.entity_id, sessionId) || this.decidedOnProposalBefore(event.workspace_id, event.entity_id, sessionId, event.sequence);
       case "proposal.challenge_set_aside":
         return this.proposalAddressesSession(event.entity_id, sessionId) || this.setAsideAddressesChallenger(field(payload.set_aside, "challenger"), sessionId);
       case "ballot.opened": {

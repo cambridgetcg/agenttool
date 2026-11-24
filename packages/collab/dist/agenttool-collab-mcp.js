@@ -36477,6 +36477,14 @@ class CollabStoreCore {
       return row.from_session_id === sessionId;
     return JSON.parse(row.voices_json).some((voice) => voice.voice_id !== row.author_voice_id && voice.live_session_ids.includes(sessionId));
   }
+  decidedOnProposalBefore(workspaceId, proposalReportId, sessionId, beforeSequence) {
+    return this.db.query(`
+      SELECT 1 FROM reports r, json_each(r.evidence_refs_json) ref
+      WHERE r.workspace_id = ? AND r.kind = 'decision' AND r.from_session_id = ?
+        AND r.event_sequence < ? AND ref.value = ?
+      LIMIT 1
+    `).get(workspaceId, sessionId, beforeSequence, `report:${proposalReportId}`) !== null;
+  }
   setAsideAddressesChallenger(challenger, sessionId) {
     if (challenger === null || typeof challenger !== "object")
       return false;
@@ -36530,8 +36538,9 @@ class CollabStoreCore {
         return voices.some((voice) => field(voice, "voice_id") !== payload.author_voice_id && Array.isArray(field(voice, "live_session_ids")) && field(voice, "live_session_ids").includes(sessionId));
       }
       case "proposal.agreed":
-      case "proposal.rejected":
         return this.proposalAddressesSession(event.entity_id, sessionId);
+      case "proposal.rejected":
+        return this.proposalAddressesSession(event.entity_id, sessionId) || this.decidedOnProposalBefore(event.workspace_id, event.entity_id, sessionId, event.sequence);
       case "proposal.challenge_set_aside":
         return this.proposalAddressesSession(event.entity_id, sessionId) || this.setAsideAddressesChallenger(field(payload.set_aside, "challenger"), sessionId);
       case "ballot.opened": {
@@ -42117,6 +42126,10 @@ function formatEntry(entry, byId, me, recheck) {
         why = parsed.why;
         evidence = markedEvidence(parsed.evidence, entry, recheck);
         limits = parsed.limits ?? report.limits;
+        if (parsed.purpose)
+          flags.purpose = parsed.purpose;
+        if (parsed.extent)
+          flags.extent = parsed.extent;
         if (parsed.via)
           flags.via = parsed.via;
         if (parsed.act !== act)
@@ -44993,8 +45006,19 @@ async function takeVerb(ctx, input) {
       remedy: { say: 'Give paths as a list such as ["src/parser.ts"].' }
     });
   }
+  const base = takeBase(input.base);
   const advice = [];
-  return hasTitle ? takeNew(ctx, binding, credential, { title: oneLine(input.title, "title", TASK_TITLE_MAX, true), purpose, because, review: input.review, paths: input.paths ?? [] }, advice) : takeExisting(ctx, binding, credential, { task: String(input.task), purpose, because, review: input.review, paths: input.paths }, advice);
+  return hasTitle ? takeNew(ctx, binding, credential, { title: oneLine(input.title, "title", TASK_TITLE_MAX, true), purpose, because, review: input.review, paths: input.paths ?? [], base }, advice) : takeExisting(ctx, binding, credential, { task: String(input.task), purpose, because, review: input.review, paths: input.paths, base }, advice);
+}
+function takeBase(value) {
+  if (value === undefined || value === null)
+    return null;
+  if (typeof value !== "string" || !/^[a-fA-F0-9]{40,64}$/.test(value)) {
+    throw new CollabError("invalid_base", "base is a full commit id: 40 to 64 hexadecimal characters", {
+      remedy: { say: "Give base as the full commit id the work starts from (git rev-parse HEAD prints it), or leave it out." }
+    });
+  }
+  return value.toLowerCase();
 }
 function normalizedPaths(paths) {
   try {
@@ -45015,8 +45039,8 @@ async function takeNew(ctx, binding, credential, options, advice) {
   const policy = options.review ? options.review === "required" ? "accepted" : "reported" : paths.length > 0 ? "accepted" : "reported";
   if (options.because)
     advice.push("because is for recovering a lapsed lease; a new task needs none, so it was not used.");
-  const keyInput = { title: options.title, paths, purpose: options.purpose, review: options.review ?? null };
-  const retryInput = { title: options.title, ...options.paths.length ? { paths: options.paths } : {}, ...options.purpose ? { purpose: options.purpose } : {}, ...options.review ? { review: options.review } : {} };
+  const keyInput = { title: options.title, paths, purpose: options.purpose, review: options.review ?? null, ...options.base ? { base: options.base } : {} };
+  const retryInput = { title: options.title, ...options.paths.length ? { paths: options.paths } : {}, ...options.purpose ? { purpose: options.purpose } : {}, ...options.review ? { review: options.review } : {}, ...options.base ? { base: options.base } : {} };
   const { plan, created, claimed, replayed } = await underPlan(ctx, credential, {
     tool: "collab_take",
     input: keyInput,
@@ -45037,7 +45061,8 @@ async function takeNew(ctx, binding, credential, options, advice) {
         ...options.purpose ? { description: `Purpose: ${options.purpose}` } : {},
         path_scopes: paths,
         work_mode: workMode,
-        completion_policy: policy
+        completion_policy: policy,
+        ...options.base ? { expected_base_sha: options.base } : {}
       }));
     });
     const recorded = [{ step: 1, what: `task ${created2.value.id}, created and open`, id: created2.value.id }];
@@ -45057,6 +45082,8 @@ async function takeExisting(ctx, binding, credential, options, advice) {
   const id = ctx.store.resolveNoteRef(workspaceId, "task", options.task).id;
   if (options.paths !== undefined)
     advice.push("paths apply only to a new task (title); the task keeps its own paths.");
+  if (options.base)
+    advice.push("base applies only to a new task (title); the task keeps its own base.");
   if (options.review !== undefined)
     advice.push("review applies only to a new task (title); the task keeps its own policy.");
   if (options.purpose)
@@ -45161,6 +45188,14 @@ async function claimStep(ctx, binding, credential, task, key, guard, retryInput,
         })
       });
     }
+    if (error51.code === "expected_base_mismatch") {
+      const expected = String(error51.details.expected_base_sha ?? "");
+      const observed = typeof error51.details.observed_head_sha === "string" ? `is ${error51.details.observed_head_sha}` : "was not observed";
+      throw new CollabError(error51.code, `${handleOf("task", task.id)} starts from ${expected}, and your worktree's HEAD ${observed}.${createdNote}`, {
+        ...error51.details,
+        remedy: { say: `Check out ${expected} in your worktree, then take ${exactRef("task", task.id)} again; or take work that starts from where you are.` }
+      });
+    }
     if (created && error51.code !== "changed_under_you") {
       throw new CollabError(error51.code, `${error51.message}.${createdNote}`, error51.details);
     }
@@ -45263,7 +45298,8 @@ function takeResult(ctx, task, options) {
       state: task.effective_status,
       paths: task.path_scopes,
       work_mode: task.work_mode,
-      completion_policy: task.completion_policy
+      completion_policy: task.completion_policy,
+      ...task.expected_base_sha ? { base: task.expected_base_sha } : {}
     }
   };
 }
@@ -46934,7 +46970,8 @@ Legacy session tools: ${legacyInstructions}`
       paths: exports_external.array(exports_external.string()).optional().describe("Repository-relative paths the new task edits."),
       purpose: exports_external.string().optional().describe("Why you take it, at most 200 characters; written into a new task's description only."),
       review: exports_external.string().optional().describe("required | none: override whether a new task waits for review."),
-      because: exports_external.string().optional().describe("Why you recover a lapsed lease (at most 4,000 characters).")
+      because: exports_external.string().optional().describe("Why you recover a lapsed lease (at most 4,000 characters)."),
+      base: exports_external.string().optional().describe("A new task's base: the full commit id (40 to 64 hex) the claim requires your worktree's HEAD to be.")
     }
   }, async (input) => noteCall(() => takeVerb(noteContext(), input), input));
   server.registerTool("collab_done", {
